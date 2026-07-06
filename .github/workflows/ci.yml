@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: typecheck / lint / test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+
+  engine-purity:
+    name: engine banned-token grep (R5.1)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      # Must print nothing (CLAUDE.md Appendix). grep exits 1 on no match = pass.
+      - name: grep packages/engine/src for banned tokens
+        run: |
+          if grep -rnE 'Date\.now|new Date\(|Math\.random|performance\.now|setTimeout|setInterval|process\.env|window\.|document\.|navigator\.|localStorage|fetch\(|console\.|toLocale|Intl\.' packages/engine/src; then
+            echo '::error::Engine purity violation (R5.1/I1): banned token(s) found above.'
+            exit 1
+          fi
+
+  gitleaks:
+    name: gitleaks (full history)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  migrations:
+    name: drizzle migrations on Neon branch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: check for migrations
+        id: has-migrations
+        run: |
+          if [ -d drizzle ] || ls apps/api/drizzle 2>/dev/null; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo '::notice::skipped: no migrations yet (arrives with task P0.3) — this job flips to enforcing when a drizzle/ folder exists.'
+          fi
+      - name: create Neon branch
+        if: steps.has-migrations.outputs.present == 'true'
+        id: neon-branch
+        uses: neondatabase/create-branch-action@v5
+        with:
+          project_id: ${{ secrets.NEON_PROJECT_ID }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch_name: ci-${{ github.run_id }}
+      - uses: pnpm/action-setup@v4
+        if: steps.has-migrations.outputs.present == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.has-migrations.outputs.present == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: apply migrations
+        if: steps.has-migrations.outputs.present == 'true'
+        env:
+          DATABASE_URL: ${{ steps.neon-branch.outputs.db_url }}
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter api migrate
+      - name: delete Neon branch
+        if: always() && steps.has-migrations.outputs.present == 'true'
+        uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ secrets.NEON_PROJECT_ID }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch: ci-${{ github.run_id }}
