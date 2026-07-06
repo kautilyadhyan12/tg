@@ -1,6 +1,22 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P0.5 — PostHog server-side init + DECISIONS.md / RUNBOOK / INCIDENTS.md
+FILES CHANGED:
+  apps/api/src/analytics.ts (new), src/config.ts (+POSTHOG_API_KEY/HOST),
+  src/app.ts (analytics decorator + shutdown), test/analytics.test.ts,
+  DECISIONS.md, RUNBOOK/README.md, INCIDENTS.md, apps/api/package.json (+posthog-node)
+DECISIONS:
+  - Analytics dormant no-op without POSTHOG_API_KEY (same posture as Sentry).
+  - Event names = closed union of the v1 §16 starter taxonomy (13 events).
+  - DECISIONS.md backfilled with all judgment calls since P0.1, incl. the
+    Hetzner-stays / spend-starts-at-P0.4b decision and P0.3's 3 pending gaps.
+OPEN SPEC GAPS: P0.3's three (see DECISIONS.md Pending).
+PHASE 0 STATUS: complete except P0.4b (staging deploy — blocked on Hetzner VPS+domain).
+NEXT TASK: P1.1 — packages/shared Zod schemas verbatim from Part 2 §2 (+ v1 §5.3).
+```
+
+```
 TASK: P0.4a — apps/api Fastify skeleton (deploy half split to P0.4b, needs Hetzner box)
 FILES CHANGED:
   apps/api/src/{config.ts, app.ts, index.ts}, apps/api/test/{smoke.test.ts → config

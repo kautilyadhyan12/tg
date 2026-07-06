@@ -38,6 +38,9 @@ importers:
       postgres:
         specifier: ^3.4.9
         version: 3.4.9
+      posthog-node:
+        specifier: ^5.39.4
+        version: 5.39.4
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -864,6 +867,12 @@ packages:
 
   '@pinojs/redact@0.4.0':
     resolution: {integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==}
+
+  '@posthog/core@1.39.6':
+    resolution: {integrity: sha512-o6ajIwN5zXoNP0D4H/QPmOyibNTUkSyOR6ya7AG5U2ywXx4awo72L2KnCoiZPQM5x/bXv6jPBdimH8M18Ax0aw==}
+
+  '@posthog/types@1.392.1':
+    resolution: {integrity: sha512-Qg6Gl7/1vlr8+gPtBi5gwnLgAgiyFoKOVmTvTtDcvya9cpTwZfna7rQmkGQ4B63CunUYNNbOlqcwiUwUDyTK6w==}
 
   '@rollup/rollup-android-arm-eabi@4.62.2':
     resolution: {integrity: sha512-6o7ZLZK+BeenkZCFNDXqpbjw9bD6nuWonvS/lwQJp7NoVVxm6p3qE7qQ5jGuBjiFsgvqjD8mZAU5oWxTmbOeOg==}
@@ -1774,6 +1783,15 @@ packages:
     resolution: {integrity: sha512-GD3qdB0x1z9xgFI6cdRD6xu2Sp2WCOEoe3mtnyB5Ee0XrrL5Pe+e4CCnJrRMnL1zYtRDZmQQVbvOttLnKDLnaw==}
     engines: {node: '>=12'}
 
+  posthog-node@5.39.4:
+    resolution: {integrity: sha512-+fCQ7htBFRQQFbIzl1T0TA7bDwYyaB9XP308ZFMCUoB5LzTzOFxBa6TYVrxdH/VQl43WXTp6sf0QsG2Z4XlNBg==}
+    engines: {node: ^20.20.0 || >=22.22.0}
+    peerDependencies:
+      rxjs: ^7.0.0
+    peerDependenciesMeta:
+      rxjs:
+        optional: true
+
   prelude-ls@1.2.1:
     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}
     engines: {node: '>= 0.8.0'}
@@ -2555,6 +2573,12 @@ snapshots:
   '@opentelemetry/semantic-conventions@1.41.1': {}
 
   '@pinojs/redact@0.4.0': {}
+
+  '@posthog/core@1.39.6':
+    dependencies:
+      '@posthog/types': 1.392.1
+
+  '@posthog/types@1.392.1': {}
 
   '@rollup/rollup-android-arm-eabi@4.62.2':
     optional: true
@@ -3448,6 +3472,10 @@ snapshots:
       source-map-js: 1.2.1
 
   postgres@3.4.9: {}
+
+  posthog-node@5.39.4:
+    dependencies:
+      '@posthog/core': 1.39.6
 
   prelude-ls@1.2.1: {}
 

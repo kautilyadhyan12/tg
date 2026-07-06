@@ -7,7 +7,14 @@ import rateLimit from "@fastify/rate-limit";
 import sensible from "@fastify/sensible";
 import * as Sentry from "@sentry/node";
 import postgres from "postgres";
+import { createAnalytics, type Analytics } from "./analytics.js";
 import type { AppConfig } from "./config.js";
+
+declare module "fastify" {
+  interface FastifyInstance {
+    analytics: Analytics;
+  }
+}
 
 export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   if (config.SENTRY_DSN !== undefined) {
@@ -76,8 +83,12 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
     });
   });
 
+  const analytics = createAnalytics(config);
+  app.decorate("analytics", analytics);
+
   const sql = postgres(config.DATABASE_URL, { prepare: false, max: 1 });
   app.addHook("onClose", async () => {
+    await analytics.shutdown();
     await sql.end({ timeout: 5 });
   });
 
