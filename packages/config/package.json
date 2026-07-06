@@ -9,8 +9,8 @@
     "./eslint-engine": "./eslint-engine.js"
   },
   "scripts": {
-    "typecheck": "echo no-op (json/js config package)",
-    "lint": "echo no-op",
+    "typecheck": "echo \"no-op: json/js config package\"",
+    "lint": "echo \"no-op: json/js config package\"",
     "test": "vitest run"
   },
   "devDependencies": {
