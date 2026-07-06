@@ -1,6 +1,35 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P0.3 — Drizzle setup + migration 0001_init (Part 4 §3 DDL) + seeds
+FILES CHANGED:
+  apps/api/drizzle.config.ts, apps/api/drizzle/0001_init.sql (+meta/),
+  apps/api/src/db/{index.ts, seed.ts, schema/*.ts (12 domain files + common)},
+  apps/api/test/db.migration.test.ts, apps/api/package.json (scripts+deps)
+DECISIONS:
+  - Deps approved at gate: drizzle-orm, postgres (driver), zod (api runtime); drizzle-kit (dev).
+  - Migration file named 0001_init (drizzle generated 0000; journal tag updated).
+  - Extensions/BRIN/view as raw SQL in the same migration (drizzle-kit can't emit them).
+  - Bare REFERENCES kept as generated (ON DELETE no action) — matches Part 4 §3 DDL
+    literally; §1's "default RESTRICT" is NO ACTION in PG terms (identical unless
+    deferred constraints are used).
+  - Seeded: plans (5 consumer + 6 org INR-monthly rows incl. org_micro_clinic per
+    Part 5 §1.2) + feature_flags {data_backend, engine_rollout, beta_definitions}.
+  - Exercises/definitions/achievements seeds deferred to their owning tasks (need
+    Part 2 §6 catalog + 2B App A METs + badges.py port + P1.8 constants).
+  - Proof: Neon branch (created/deleted via API) — migrate clean, 5/5 tests green.
+OPEN SPEC GAPS (Kd to decide):
+  1. Org intl (USD) + annual (×10) price-book rows: plans has one currency/interval
+     per row, so Part 5 §1.2's USD and annual books need their own codes (e.g.
+     org_micro_us_m / org_micro_in_y?). Part 4's code list doesn't name them.
+  2. Org plans' subscriber `entitlements` = "console features" — shape unspecified;
+     seeded {} for now.
+  3. name_key convention unspecified — used "plan.<code>".
+NEXT TASK: P0.4 — apps/api Fastify skeleton (boot, env config, pino, Sentry,
+/health, trustProxy, CORS, global rate limit) + staging deploy.
+```
+
+```
 TASK: P0.2 — CI pipeline (typecheck · lint · test · gitleaks · Drizzle-on-Neon)
 FILES CHANGED:
   .github/workflows/ci.yml (new)
