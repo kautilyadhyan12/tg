@@ -1,6 +1,24 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P0.2 — CI pipeline (typecheck · lint · test · gitleaks · Drizzle-on-Neon)
+FILES CHANGED:
+  .github/workflows/ci.yml (new)
+  packages/config/package.json (echo scripts quoted — unquoted parens broke Linux sh)
+DECISIONS:
+  - CI jobs: gate (typecheck/lint/test), engine purity grep (R5.1), gitleaks full
+    history, drizzle-migrations-on-Neon-branch (visible skip until P0.3 lands a
+    drizzle/ folder; then auto-enforcing via `pnpm --filter api migrate`).
+  - Workflow token perms: contents+pull-requests read (gitleaks-action needs PR API).
+  - Branch protection UNAVAILABLE: GitHub Free + private repo (403). Green-before-
+    merge is procedural until GitHub Pro or repo goes public. Revisit.
+  - Red/green proof: run 28808343021 red (only the deliberate test), run 28808448318
+    green — both on PR #1.
+OPEN SPEC GAPS: none.
+NEXT TASK: P0.3 — Drizzle setup + migration 0001_init (Part 4 §3 DDL) — 🔴 tier.
+```
+
+```
 TASK: P0.1 — Scaffold monorepo per v1 §4 (pnpm workspaces + Turborepo)
 FILES CHANGED:
   package.json, pnpm-workspace.yaml, turbo.json, .npmrc, tsconfig.json, .gitignore (+.turbo/)
