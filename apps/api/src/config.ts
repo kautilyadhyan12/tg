@@ -9,6 +9,8 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   WEB_ORIGIN: z.string().url(), // exact origin for CORS-with-credentials (Part IV #6)
   SENTRY_DSN: z.string().url().optional(),
+  POSTHOG_API_KEY: z.string().min(1).optional(),
+  POSTHOG_HOST: z.string().url().default("https://app.posthog.com"),
 });
 
 export type AppConfig = Readonly<z.infer<typeof envSchema>>;
