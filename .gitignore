@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Build outputs
+dist/
+build/
+*.log
+.next/
+out/
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.pem
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# ML artifacts (too big for git — download/train on setup)
+backend-ml/model_artifacts/*.pt
+backend-ml/model_artifacts/*.pkl
+backend-ml/model_artifacts/*.bin
+backend-ml/model_artifacts/*.onnx
+backend-ml/model_artifacts/faiss_index/
+ml-training/*/data/
+ml-training/*/checkpoints/
+ml-training/*/wandb/
+ml-training/*/runs/
+
+# Notebooks heavy output
+ml-training/*/notebooks/*.html
+
+# Coverage
+coverage/
+.coverage
+htmlcov/
+
+# Misc
+*.tsbuildinfo

@@ -1,0 +1,56 @@
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+
+const Spinner = () => (
+  <div
+    className="min-h-screen flex items-center justify-center"
+    style={{ background: '#0A0908' }}
+  >
+    <div className="flex flex-col items-center gap-4">
+      <div
+        className="w-12 h-12 rounded-2xl flex items-center justify-center"
+        style={{
+          background: 'linear-gradient(135deg, #FF8A1F, #FFB347)',
+          boxShadow:  '0 0 30px rgba(255,138,31,0.4)',
+          animation:  'pulse 2s ease-in-out infinite',
+        }}
+      >
+        <svg
+          width="24" height="24" viewBox="0 0 24 24"
+          fill="none" stroke="white"
+          strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+        >
+          <path d="M6 4v16M18 4v16M6 12h12M3 8h3M18 8h3M3 16h3M18 16h3" />
+        </svg>
+      </div>
+      <div
+        className="w-6 h-6 border-2 rounded-full animate-spin"
+        style={{
+          borderColor:    'rgba(255,138,31,0.2)',
+          borderTopColor: '#FF8A1F',
+        }}
+      />
+      <p className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>
+        Loading...
+      </p>
+    </div>
+  </div>
+);
+
+export const ProtectedRoute = ({ children, requireOnboarding = true }) => {
+  const { user, loading } = useAuth();
+  if (loading) return <Spinner />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (requireOnboarding && user.onboardingCompleted === false) {
+    return <Navigate to="/onboarding" replace />;
+  }
+  return children;
+};
+
+export const PublicRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+  if (loading) return <Spinner />;
+  if (!user) return children;
+  if (user.onboardingCompleted === false) return <Navigate to="/onboarding" replace />;
+  return <Navigate to="/dashboard" replace />;
+};
