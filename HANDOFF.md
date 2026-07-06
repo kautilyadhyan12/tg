@@ -1,6 +1,27 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P0.4a — apps/api Fastify skeleton (deploy half split to P0.4b, needs Hetzner box)
+FILES CHANGED:
+  apps/api/src/{config.ts, app.ts, index.ts}, apps/api/test/{smoke.test.ts → config
+  tests, app.test.ts}, apps/api/package.json (+fastify stack, tsx, dev script)
+DECISIONS:
+  - Deps approved at gate: fastify, @fastify/{cors,rate-limit,sensible}, pino,
+    @sentry/node (+pino-pretty dev). Added during PROVE: tsx (dev-only TS runner).
+  - CORS origin as [WEB_ORIGIN] array — header only on exact match.
+  - 404s go through a typed not-found handler wrapped in app.rateLimit() so
+    scanning traffic can't bypass the limiter.
+  - Global rate limit 300/min; strict per-route limits arrive with auth (P2.1).
+  - Sentry dormant unless SENTRY_DSN set. env: NODE_ENV/PORT/LOG_LEVEL/
+    DATABASE_URL/WEB_ORIGIN/SENTRY_DSN, parsed once in src/config.ts.
+  - Proof: 14/14 tests green vs Neon branch; real boot via tsx: /health 200 with
+    DB ping, 404 typed shape over HTTP.
+OPEN SPEC GAPS: none new (P0.3's three still open).
+NEXT TASK: P0.4b — Docker/Caddy compose + staging deploy (blocked on Hetzner VPS
++ domain), or P0.5 (PostHog init + DECISIONS.md/RUNBOOK/INCIDENTS files), or P1.1.
+```
+
+```
 TASK: P0.3 — Drizzle setup + migration 0001_init (Part 4 §3 DDL) + seeds
 FILES CHANGED:
   apps/api/drizzle.config.ts, apps/api/drizzle/0001_init.sql (+meta/),
