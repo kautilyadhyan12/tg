@@ -8,6 +8,7 @@ import {
   Plus, Minus, RotateCcw,
 } from 'lucide-react';
 import useCamera from '../hooks/useCamera';
+import TraceRecorderWidget from '../dev/TraceRecorderWidget';
 import usePoseDetection from '../hooks/usePoseDetection';
 import PoseOverlay from '../components/workout/PoseOverlay';
 import ReferenceAnimation from '../components/workout/ReferenceAnimation';
@@ -618,6 +619,10 @@ export default function ActiveWorkout() {
 
   return (
     <>
+    {/* DEV-ONLY (P1.3): renders nothing unless VITE_TRACE_RECORD=1 */}
+    <TraceRecorderWidget
+      exercise={currentExercise?.name?.toLowerCase().replace(/\s+/g, '_') || 'squat'}
+    />
     <div
       className="h-screen flex flex-col overflow-hidden"
       style={{ background: '#0A0908' }}
