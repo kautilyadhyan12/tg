@@ -1,6 +1,32 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P1.2 — golden-trace harness (Part 2 §7) 🔴
+FILES CHANGED:
+  packages/engine/src/harness/{types.ts, trace.ts, replay.ts, assert.ts},
+  src/index.ts (exports), test/{fixtures.ts, harness.test.ts,
+  traces.replay.test.ts, traces/README.md}, scripts/bench.ts,
+  eslint.config.js (purity scoped to src/**), package.json (+scripts, tsx dev,
+  @app/shared as type-only devDep), .github/workflows/ci.yml (+test:traces step)
+DECISIONS:
+  - Pure core in src/harness (no fs/zod — I1 zero-runtime-deps held by making
+    @app/shared a TYPE-ONLY devDependency); file I/O + deep zod validation live
+    in test/ and scripts/ (the Node shell). ESLint purity rules scoped to src/**.
+  - EngineSession interface = §2.4's three event levels + SetSummary, minimal;
+    pipeline cards amend it visibly if needed.
+  - test:traces passes with a LOUD 0-trace notice until P1.3; a committed trace
+    with no engine wired is a deliberate build failure.
+  - Bench scaffold prints p95/heap now; the ≤3ms CI assertion arms in P1.9 (§7.6).
+  - HOLD_TOLERANCE_MS=700 (§7.4) is a named constant in assert.ts.
+  - Purity-grep false positive fixed: comments in src must avoid "document."
+OPEN SPEC GAPS: P0.3's three (unchanged).
+NEXT TASK: P1.3 — recording mode in the CURRENT web app (dev toggle teeing
+PoseFrames to JSONL while the old Python analyzer runs) → record the §7.3/§7.5
+parity fixture matrix. NOTE: touches the OLD frontend as salvage-source; needs
+those files in context.
+```
+
+```
 TASK: P1.1 — packages/shared Zod schemas (Part 2 §2 + v1 §5.3)
 FILES CHANGED:
   packages/shared/src/{pose.ts, events.ts, session.ts, sync.ts, index.ts},
