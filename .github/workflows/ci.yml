@@ -30,6 +30,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
+      - name: golden traces (Part 2 §7.6)
+        run: pnpm --filter @app/engine test:traces
 
   engine-purity:
     name: engine banned-token grep (R5.1)
