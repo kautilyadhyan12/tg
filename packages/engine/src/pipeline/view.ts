@@ -21,27 +21,27 @@ const R_SHOULDER = 12;
 const L_HIP = 23;
 const R_HIP = 24;
 const L_ANKLE = 27;
-const R_ANKLE = 28;
 
-/** Raw single-frame classification (no hysteresis). */
+export const VIEW_MIN_REF_HEIGHT = 1e-4; // angles.py:201 `torso_height < 1e-4`
+
+/** Raw single-frame classification (no hysteresis). Direct port of the legacy
+ *  detect_view (angles.py:171): LEFT shoulder + LEFT ankle form the height
+ *  reference and the LEFT ankle must be usable — §3.3's "one ankle" phrasing
+ *  is looser than the source; the source wins (recorded in DECISIONS.md). */
 export function classifyView(frame: PoseFrame, gate: VisibilityGate): View {
   const kp = frame.kp;
-  const shouldersOk = gate.isUsable(L_SHOULDER) && gate.isUsable(R_SHOULDER);
-  const hipsOk = gate.isUsable(L_HIP) && gate.isUsable(R_HIP);
-  const ankleL = gate.isUsable(L_ANKLE);
-  const ankleR = gate.isUsable(R_ANKLE);
-  if (!shouldersOk || !hipsOk || (!ankleL && !ankleR)) return "unknown";
+  const required = [L_SHOULDER, R_SHOULDER, L_HIP, R_HIP, L_ANKLE];
+  if (!gate.allUsable(required)) return "unknown";
 
   const ls = kp[L_SHOULDER];
   const rs = kp[R_SHOULDER];
   const lh = kp[L_HIP];
   const rh = kp[R_HIP];
-  const ankle = ankleL ? kp[L_ANKLE] : kp[R_ANKLE];
-  const shoulder = ankleL || !ankleR ? ls : rs; // pair the reference vertically on the usable side
-  if (!ls || !rs || !lh || !rh || !ankle || !shoulder) return "unknown";
+  const ankle = kp[L_ANKLE];
+  if (!ls || !rs || !lh || !rh || !ankle) return "unknown";
 
-  const refHeight = Math.abs(ankle[1] - shoulder[1]);
-  if (refHeight <= 1e-6) return "unknown";
+  const refHeight = Math.abs(ankle[1] - ls[1]);
+  if (refHeight < VIEW_MIN_REF_HEIGHT) return "unknown";
   const shoulderWidthNorm = Math.abs(rs[0] - ls[0]) / refHeight;
   const hipWidthNorm = Math.abs(rh[0] - lh[0]) / refHeight;
 

@@ -44,10 +44,17 @@ describe("classifyView thresholds (§3.3)", () => {
     const f = geomFrame(0.09, 0.05); // shoulder norm 0.18: not side (<0.15 fails), not front (>0.20 fails)
     expect(classifyView(f, readyGate(f))).toBe("unknown");
   });
-  it("unknown when both ankles are unusable", () => {
+  it("unknown when the LEFT ankle is unusable — even with a usable right ankle (legacy port)", () => {
     const f = geomFrame(0.05, 0.05);
-    f.kp[27] = [0.5, 0.75, 0, 0.05];
-    f.kp[28] = [0.5, 0.75, 0, 0.05];
+    f.kp[27] = [0.5, 0.75, 0, 0.05]; // left ankle invisible
+    f.kp[28] = [0.5, 0.75, 0, 0.95]; // right ankle fine — Python ignores it
+    expect(classifyView(f, readyGate(f))).toBe("unknown");
+  });
+
+  it("unknown when reference height is degenerate (< 1e-4, angles.py:201)", () => {
+    const f = geomFrame(0.05, 0.05);
+    // collapse left shoulder onto left ankle vertically
+    f.kp[11] = [0.5 - 0.025, 0.75, 0, 0.95];
     expect(classifyView(f, readyGate(f))).toBe("unknown");
   });
 });

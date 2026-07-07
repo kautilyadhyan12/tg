@@ -48,7 +48,7 @@ describe("golden traces (§7.6) — stages 1–3", () => {
       const responses = readFileSync(sidecarPath, "utf8")
         .trim()
         .split("\n")
-        .map((l) => JSON.parse(l) as { view?: string });
+        .map((l) => JSON.parse(l) as { view?: string; keypoints?: number[][] });
       const offset = responses.length - trace.frames.length; // greeting message(s)
 
       const ingest = new IngestStage();
@@ -63,18 +63,28 @@ describe("golden traces (§7.6) — stages 1–3", () => {
         frame.kp.forEach((k, j) => gate.update(j, k[3]));
         const mine = classifyView(frame, gate);
         tracker.update(mine);
-        const py = responses[i + offset]?.view;
+        const resp = responses[i + offset];
+        // Alignment guard: the server echoes the keypoints it analyzed — if
+        // the echo doesn't match this frame, the positional pairing sheared
+        // and every comparison after it would be against the wrong frame.
+        const echo = resp?.keypoints;
+        if (echo?.[0] && frame.kp[0]) {
+          expect(echo[0][0], `sidecar alignment shear at frame ${String(i + 1)} in ${file}`).toBe(
+            frame.kp[0][0],
+          );
+        }
+        const py = resp?.view;
         if (typeof py === "string") {
           viewTotal++;
           if (py === mine) viewAgree++;
         }
       });
 
-      // Real recorded frames: ≥95% must pass ingest (feeder only wrote frames
-      // with a detected person; strictly-increasing t is the main risk).
+      // Feeder-written traces contain only valid, strictly-increasing frames
+      // by construction — assert EXACTLY zero drops (no invented percentage;
+      // a single drop means the feeder or ingest regressed).
       const d = ingest.diagnostics;
-      const validFraction = (d.framesSeen - d.framesDropped) / d.framesSeen;
-      expect(validFraction, `valid fraction for ${file}`).toBeGreaterThanOrEqual(0.95);
+      expect(d.framesDropped, `dropped frames in ${file}`).toBe(0);
 
       // §7.5 parity, I2: view is an enum output — per-frame EXACT match with
       // the Python analyzer (measured 100% across all 9 traces at port time).

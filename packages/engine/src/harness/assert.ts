@@ -36,18 +36,22 @@ export function assertTrace(trace: Trace, result: ReplayResult): TraceFailure[] 
     });
   }
 
-  // Fault multiset: exact; clean traces assert empty.
-  const got = result.summary.faultCounts;
-  const want = expected.faultsExact;
-  const keys = new Set([...Object.keys(got), ...Object.keys(want)]);
-  for (const k of keys) {
-    const g = got[k] ?? 0;
-    const w = want[k] ?? 0;
-    if (g !== w) {
-      failures.push({
-        kind: "faults",
-        message: `fault '${k}': expected ${String(w)}, got ${String(g)}`,
-      });
+  // Fault multiset: exact; clean traces assert empty. faultsPending traces
+  // (legacy→EDS mapping not yet authored, P1.8) are skipped by the CALLER
+  // with a loud notice — asserting {} on them would be a false "clean".
+  if (expected.faultsPending !== true) {
+    const got = result.summary.faultCounts;
+    const want = expected.faultsExact;
+    const keys = new Set([...Object.keys(got), ...Object.keys(want)]);
+    for (const k of keys) {
+      const g = got[k] ?? 0;
+      const w = want[k] ?? 0;
+      if (g !== w) {
+        failures.push({
+          kind: "faults",
+          message: `fault '${k}': expected ${String(w)}, got ${String(g)}`,
+        });
+      }
     }
   }
 

@@ -62,7 +62,11 @@ export class SpikeFilter {
     this.buf[this.head] = value;
     this.head = (this.head + 1) % SPIKE_FILTER_FRAMES;
     if (this.count < SPIKE_FILTER_FRAMES) this.count++;
-    if (this.count < SPIKE_FILTER_FRAMES) return value; // not enough history: pass through
+    // Warm-up (<3 samples): pass through unfiltered. §3.2 doesn't specify
+    // warm-up; a glitch in the first 2 frames of a SET reaches the raw channel
+    // once — harmless because elevation baselines don't exist until the §3.5
+    // standing calibration completes (≥8 frames). Recorded in DECISIONS.md.
+    if (this.count < SPIKE_FILTER_FRAMES) return value;
     const a = this.buf[0] ?? 0;
     const b = this.buf[1] ?? 0;
     const c = this.buf[2] ?? 0;
