@@ -167,15 +167,59 @@ def build_trace(frames, responses, args, video_fps: float) -> tuple[str, dict]:
     return "\n".join(lines) + "\n", header
 
 
+# Folder name -> analyzer exercise key (recordings/<folder>/<clip>.mp4).
+FOLDER_EXERCISE = {
+    "normal squat": "squat",
+    "squat": "squat",
+    "jump squat": "jump_squat",
+    "chair squat": "chair_squat",
+}
+
+
+def view_from_name(name: str):
+    n = name.lower()
+    if "front" in n:
+        return "front"
+    if "side" in n:
+        return "side"
+    return None
+
+
+def scan_recordings(out_dir: Path):
+    """Batch mode: infer exercise from folder, view from filename.
+    Skips clips whose trace already exists; skips unknown folders/views."""
+    jobs = []
+    rec = HERE / "recordings"
+    for folder in sorted(p for p in rec.iterdir() if p.is_dir()):
+        exercise = FOLDER_EXERCISE.get(folder.name.lower())
+        if exercise is None:
+            print(f"SKIP folder (no legacy analyzer / not parity material): {folder.name}")
+            continue
+        for clip in sorted(folder.glob("*.mp4")):
+            view = view_from_name(clip.stem)
+            if view is None:
+                print(f"SKIP {clip.name}: no 'sideview'/'frontview' in the filename")
+                continue
+            if (out_dir / f"{clip.stem}.jsonl").exists():
+                print(f"skip (already processed): {clip.name}")
+                continue
+            jobs.append((clip, exercise, view))
+    return jobs
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("videos", nargs="+", help="video file(s)")
-    ap.add_argument("--exercise", required=True, help="squat | jump_squat | chair_squat")
-    ap.add_argument("--view", required=True, choices=["front", "side"])
+    ap.add_argument("videos", nargs="*", help="video file(s); omit with --scan")
+    ap.add_argument("--scan", action="store_true",
+                    help="process everything new under recordings/ (exercise from folder, view from filename)")
+    ap.add_argument("--exercise", help="squat | jump_squat | chair_squat (explicit mode)")
+    ap.add_argument("--view", choices=["front", "side"], help="explicit mode")
     ap.add_argument("--label", help="trace label; default = video filename stem")
     ap.add_argument("--device", default="phone-video")
     ap.add_argument("--out", default=str(HERE.parent / "packages/engine/test/traces/parity"))
     args = ap.parse_args()
+    if not args.scan and (not args.videos or not args.exercise or not args.view):
+        ap.error("either --scan, or videos with --exercise and --view")
 
     ensure_model()
     token = jwt.encode(
@@ -186,20 +230,32 @@ def main() -> None:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    for video in args.videos:
-        vpath = Path(video)
-        if not vpath.exists():
-            sys.exit(f"not found: {vpath}")
-        label = args.label if (args.label and len(args.videos) == 1) else vpath.stem
-        print(f"== {vpath.name}: extracting (lite model, ~15fps)...")
+    if args.scan:
+        jobs = scan_recordings(out_dir)
+        print(f"scan: {len(jobs)} new clip(s) to process")
+    else:
+        jobs = []
+        for video in args.videos:
+            vpath = Path(video)
+            if not vpath.exists():
+                sys.exit(f"not found: {vpath}")
+            jobs.append((vpath, args.exercise, args.view))
+
+    for vpath, exercise, view in jobs:
+        label = args.label if (args.label and len(jobs) == 1) else vpath.stem
+        print(f"== {vpath.name} [{exercise}/{view}]: extracting (lite model, ~15fps)...")
         frames, video_fps = extract_frames(vpath)
         print(f"   {len(frames)} sampled frames (video fps {video_fps:.1f})")
         if len(frames) < 10:
             print("   SKIP: fewer than 10 frames with a detected person — check framing/lighting")
             continue
         print("   streaming to Python analyzer...")
-        responses = asyncio.run(stream(frames, args.exercise, token))
-        trace_text, header = build_trace(frames, responses, argparse.Namespace(**{**vars(args), "label": label}), video_fps)
+        responses = asyncio.run(stream(frames, exercise, token))
+        trace_text, header = build_trace(
+            frames, responses,
+            argparse.Namespace(**{**vars(args), "label": label, "exercise": exercise, "view": view}),
+            video_fps,
+        )
         trace_file = out_dir / f"{label}.jsonl"
         trace_file.write_text(trace_text, encoding="utf-8")
         sidecar = out_dir / f"{label}.responses.jsonl"
