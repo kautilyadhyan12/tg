@@ -26,7 +26,12 @@ STATE:
     response fields (corrections/form_correct) from the sidecars.
 STILL OPEN FOR P1.3 DONE:
   - §7.5 wants ≥6 squat + 4 jump + 4 chair sessions and front views for the
-    matrix; user chose side-only for now, more clips can be fed anytime
+    matrix; have 3+3+3 side-only. Kd to add ≥7 clips before the P1.8 parity
+    gate (not blocking P1.4–P1.7): squat front-view · squat occlusion walk-out ·
+    squat speed-extremes · jump-squat with NO jump (locks lenient behavior) ·
+    chair-squat front-view · (nice-to-have) jump front-view. Drop in
+    backend-ml/recordings/<exercise>/ and run feed_video.py per HANDOFF above.
+    More clips can be fed anytime
     (rig + feeder are one command each). Bulgarian split squat clips exist in
     recordings/ but are NOT parity material (no legacy rules) — future authoring data.
   - Traces intentionally NOT merged to master yet: test:traces goes red when a
