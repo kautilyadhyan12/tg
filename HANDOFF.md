@@ -1,6 +1,32 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P1.4 — pipeline stages 1–3 (Part 2 §3.1–3.3) 🔴 (branch p1.4-pipeline-1-3,
+stacked on p1.3-recording-mode)
+FILES CHANGED:
+  packages/engine/src/pipeline/{types,ingest,conditioning,view}.ts, src/index.ts,
+  test/pipeline/{ingest,conditioning,view}.test.ts, test/traces.replay.test.ts
+  (now runs stages 1–3 on all traces), test/fixtures.ts (+must helper),
+  scripts/view-parity.ts (diagnostic), backend-ml/feed_video.py (header view =
+  Python-dominant), 4 parity trace headers corrected (view field).
+DECISIONS:
+  - FINDING: 4 of 9 clips' filename view labels were WRONG (angled cameras read
+    as front/unknown). Python's own view outputs are the truth (§7.5);
+    headers now carry the Python-dominant view; feeder derives it automatically.
+  - View-classifier port verified at 100% per-frame agreement with Python
+    across all 9 traces (895 frames) — trace test asserts EXACT per-frame
+    parity (I2, enum output). Never weaken to a percentage.
+  - Smoothing: ≤7 samples AND ≤470ms (§3.2 lag ceiling) — low fps uses fewer
+    samples. Spike filter = median-of-3. Vis hysteresis 0.30/0.15.
+  - Ingest: out-of-order drops do NOT count toward the 3-invalid visibility
+    streak (person may be fully visible).
+  - Rep/fault/score §7.4 asserts still DEFERRED (loud notice) until P1.6.
+OPEN SPEC GAPS: P0.3's three (unchanged).
+NEXT TASK: P1.5 — signal library v1 (22 signals, §3.4) + calibration modules
+(§3.5). 🔴 — needs §3.5 read carefully; signals 1–17 before C2/C3 per §8.2.
+```
+
+```
 TASK: P1.3 — recording mode + parity goldens (IN PROGRESS, branch p1.3-recording-mode)
 STATE:
   - Old stack revived for recording: scripts/dev-recording-rig.ps1 starts

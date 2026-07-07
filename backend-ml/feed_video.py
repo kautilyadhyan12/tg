@@ -142,6 +142,15 @@ def build_trace(frames, responses, args, video_fps: float) -> tuple[str, dict]:
     lo = int(min(scores)) if scores else 0
     hi = int(max(scores)) if scores else 100
     form_correct_all = all(bool(r.get("form_correct", True)) for r in responses if "form_correct" in r)
+    # header view = the Python analyzer's dominant view (§7.5: Python outputs
+    # are the truth), NOT the filename/flag — clips shot at an angle routinely
+    # read as 'front' even when the human called them 'side'.
+    view_counts = {}
+    for r in responses:
+        v = r.get("view")
+        if isinstance(v, str):
+            view_counts[v] = view_counts.get(v, 0) + 1
+    dominant_view = max(view_counts, key=lambda k: view_counts[k]) if view_counts else args.view
     header = {
         "traceVersion": 1,
         "exercise": args.exercise,
@@ -149,7 +158,7 @@ def build_trace(frames, responses, args, video_fps: float) -> tuple[str, dict]:
         "device": args.device,
         "platform": "video-feeder",
         "fps": round(1000.0 / SEND_INTERVAL_MS, 1),
-        "view": args.view,
+        "view": dominant_view,
         "label": args.label,
         "expected": {
             # §7.5(3): expected values ARE the Python outputs.
