@@ -1,3 +1,5 @@
 // @app/shared — Zod schemas, API types, constants (spec v1 §4).
-// Schemas land in P1.1 (PoseFrame, session I/O, events, sync payload — Part 2 §2).
-export {};
+export * from "./pose.js";
+export * from "./events.js";
+export * from "./session.js";
+export * from "./sync.js";

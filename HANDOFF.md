@@ -1,6 +1,23 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P1.1 — packages/shared Zod schemas (Part 2 §2 + v1 §5.3)
+FILES CHANGED:
+  packages/shared/src/{pose.ts, events.ts, session.ts, sync.ts, index.ts},
+  packages/shared/test/schemas.test.ts, DECISIONS.md (+1 precedence entry)
+DECISIONS:
+  - sync sets[] = full §2.4 SetSummary (precedence entry in DECISIONS.md).
+  - sessionInput.definition typed unknown until P1.7 lands the §4 schema.
+  - Constants shipped: KP (frozen BlazePose-33 map), VISIBILITY_THRESHOLD=0.3,
+    MIN_FPS=8/MAX_FPS=40 — each cited to §2.1.
+  - x/y NOT range-clamped in schema (off-screen landmarks exceed [0,1]; engine
+    gates on vis) — vis IS clamped [0,1].
+OPEN SPEC GAPS: P0.3's three (unchanged).
+NEXT TASK: P1.2 — golden-trace harness BEFORE engine (Part 2 §7): JSONL trace
+format, replay runner, §7.4 assertion/tolerance layer, CI wiring, perf scaffold. 🔴
+```
+
+```
 TASK: P0.5 — PostHog server-side init + DECISIONS.md / RUNBOOK / INCIDENTS.md
 FILES CHANGED:
   apps/api/src/analytics.ts (new), src/config.ts (+POSTHOG_API_KEY/HOST),
