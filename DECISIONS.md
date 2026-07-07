@@ -11,6 +11,8 @@ Format: date · spec § affected · decision · reason.
 - 2026-07-07 · v1 §19 · Deployment target stays Hetzner per spec; the VPS is provisioned (and spend starts, ~₹400–1,200/mo) only at P0.4b · owner accepts the cost as the stack's one pre-revenue line item; all other services ride free tiers until real usage.
 - 2026-07-07 · (tooling) · tsx added as api devDep for `pnpm --filter api dev` · TS runner; dev-only.
 
+- 2026-07-07 · Part 2 §2.4 vs v1 §5.3 · Sync payload `sets[]` = the full §2.4 SetSummary (incl. holdMs/calibration/engineVersion/definitionVersion), superseding v1 §5.3's abbreviated example · §2.4 declares SetSummary the only thing leaving the device; Part 2 §10 gate requires byte-match; Part 4 §3.5 persists those fields per set. Approved at P1.1 gate.
+
 ## Pending (SPEC GAPs raised, awaiting Kd)
 
 - Part 5 §1.2 vs Part 4 §3.3: plan-row codes for org USD book and org annual (×10) book — `plans` holds one currency+interval per row; codes like `org_micro_us_m` / `org_micro_in_y` need ratifying before P3.1.
