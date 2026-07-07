@@ -136,15 +136,14 @@ function valgusDelta(c: Ctx, side: "L" | "R"): number | null {
 
 // #16–17 hip/ankle elevation — (baseline_y − y) / torso_height, RAW channel.
 // Positive = rising above standing (§3.4; y increases downward per §2.1).
+// BOTH landmarks required, matching angles.py:297/303 `all(is_visible(...))` —
+// one side occluded ⇒ no decision (I6), exactly like Python.
 function elevation(c: Ctx, li: number, ri: number, baseY: number | undefined): number | null {
   if (c.baseline === null || baseY === undefined) return null;
   const l = pt(c, li);
   const r = pt(c, ri);
-  let y: number | null = null;
-  if (l && r) y = ((l[1] ?? 0) + (r[1] ?? 0)) / 2;
-  else if (l) y = l[1] ?? null;
-  else if (r) y = r[1] ?? null;
-  if (y === null || c.baseline.torsoHeight <= 0) return null;
+  if (!l || !r || c.baseline.torsoHeight <= 0) return null;
+  const y = ((l[1] ?? 0) + (r[1] ?? 0)) / 2;
   return round4((baseY - y) / c.baseline.torsoHeight); // angles.py:299/305
 }
 const hipElevation = (c: Ctx) => elevation(c, I.l_hip, I.r_hip, c.baseline?.hipY);
@@ -175,10 +174,19 @@ function symmetry(l: number | null, r: number | null): number | null {
   return Math.abs(l - r);
 }
 
-/** #21 stillness — windowed (700 ms) mean displacement of hip+shoulder
- *  midpoints, torso-normalized. Stateful: owns its 700 ms sample history. */
+/** #21 stillness — windowed (700 ms) mean displacement of the hip midpoint
+ *  AND the shoulder midpoint (two points, per §3.4's literal wording — a torso
+ *  rotation moves both midpoints even when their centroid stays put),
+ *  torso-normalized. Stateful: owns its 700 ms sample history. */
 export class StillnessTracker {
-  private readonly samples: { t: number; x: number; y: number; torso: number }[] = [];
+  private readonly samples: {
+    t: number;
+    shX: number;
+    shY: number;
+    hipX: number;
+    hipY: number;
+    torso: number;
+  }[] = [];
 
   update(frame: PoseFrame, gate: VisibilityGate): number | null {
     const pts = [I.l_shoulder, I.r_shoulder, I.l_hip, I.r_hip];
@@ -188,10 +196,12 @@ export class StillnessTracker {
     const lh = frame.kp[I.l_hip];
     const rh = frame.kp[I.r_hip];
     if (!ls || !rs || !lh || !rh) return null;
-    const x = (ls[0] + rs[0] + lh[0] + rh[0]) / 4;
-    const y = (ls[1] + rs[1] + lh[1] + rh[1]) / 4;
-    const torso = Math.abs((ls[1] + rs[1]) / 2 - (lh[1] + rh[1]) / 2);
-    this.samples.push({ t: frame.t, x, y, torso });
+    const shX = (ls[0] + rs[0]) / 2;
+    const shY = (ls[1] + rs[1]) / 2;
+    const hipX = (lh[0] + rh[0]) / 2;
+    const hipY = (lh[1] + rh[1]) / 2;
+    const torso = Math.abs(shY - hipY);
+    this.samples.push({ t: frame.t, shX, shY, hipX, hipY, torso });
     while (this.samples.length > 0 && frame.t - (this.samples[0]?.t ?? 0) > STILLNESS_WINDOW_MS) {
       this.samples.shift();
     }
@@ -201,7 +211,9 @@ export class StillnessTracker {
       const a = this.samples[i - 1];
       const b = this.samples[i];
       if (!a || !b) continue;
-      sum += Math.hypot(b.x - a.x, b.y - a.y);
+      sum +=
+        (Math.hypot(b.shX - a.shX, b.shY - a.shY) + Math.hypot(b.hipX - a.hipX, b.hipY - a.hipY)) /
+        2;
     }
     return sum / (this.samples.length - 1) / torso;
   }
@@ -249,15 +261,9 @@ export class SignalComputationError extends Error {
 export class SignalEngine {
   private readonly stillnessTracker = new StillnessTracker();
 
-  constructor(private readonly declared: readonly SignalName[]) {
-    for (const name of declared) {
-      if (SIGNAL_REGISTRY[name].derived === true) {
-        // Declared derived signals are fine — the FSM supplies them in P1.6;
-        // this engine simply never computes them.
-        continue;
-      }
-    }
-  }
+  // Derived signals (cadence) may be declared — the FSM supplies them in
+  // P1.6; compute() simply skips them.
+  constructor(private readonly declared: readonly SignalName[]) {}
 
   compute(
     frame: PoseFrame,

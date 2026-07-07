@@ -1,6 +1,9 @@
 // Geometry primitives (Part 2 §3.4) — ports of the legacy helpers every
 // signal builds on. Formulas are exact: arccos of normalized dot product,
 // degrees; inputs are [x, y] image-space points (y increases downward, §2.1).
+// Inputs arrive from schema-validated PoseFrames via the visibility gate —
+// the `?? 0` component fallbacks are unreachable in practice and exist only
+// to satisfy indexed-access typing; malformed frames never get here (§3.1).
 
 /** Legacy rounding, part of the ported formulas: angles/inclines to 0.1°
  *  (angles.py:62,168), valgus/elevation to 1e-4 (angles.py:275–306). Kept so

@@ -22,12 +22,15 @@ const L_ANKLE = 27;
 const R_ANKLE = 28;
 
 export interface StandingBaseline {
-  valgusL: number | null; // front view only
+  valgusL: number | null; // front view only (8-frame mean)
   valgusR: number | null;
-  hipY: number;
+  hipY: number; // 8-frame means, matching _StandingCalibration
   ankleY: number;
   shoulderY: number;
-  torsoHeight: number; // |shoulder_y − hip_y| (§3.5)
+  /** |avg_ankle_y − avg_shoulder_y| — the Python capture (pose_ws.py:204-207).
+   *  §3.5's prose says |shoulder−hip| but §3.4 row 16 defers to the Python
+   *  capture "exactly", and §7.5 parity forces it. SPEC GAP recorded. */
+  torsoHeight: number;
 }
 
 function midY(kp: PoseFrame["kp"], gate: VisibilityGate, li: number, ri: number): number | null {
@@ -48,6 +51,13 @@ export class StandingCalibration {
   private captured: StandingBaseline | null = null;
   private lastSettledView: View = "unknown";
   private lostSinceT: number | null = null;
+  // Per-frame buffers over the qualifying streak — capture = MEANS, matching
+  // _StandingCalibration (pose_ws.py:150-207), not a last-frame snapshot.
+  private readonly hipBuf: number[] = [];
+  private readonly ankleBuf: number[] = [];
+  private readonly shoulderBuf: number[] = [];
+  private readonly valgusLBuf: number[] = [];
+  private readonly valgusRBuf: number[] = [];
 
   /** valgusRaw: current-frame raw valgus values (null off-front-view). */
   update(
@@ -84,27 +94,49 @@ export class StandingCalibration {
 
     const qualifying = smoothedKneeAvg !== null && smoothedKneeAvg >= STANDING_KNEE_MIN;
     if (!qualifying) {
-      this.streak = 0; // buffer resets on any non-qualifying frame (§3.5)
+      this.clearBuffers(); // buffers reset on any non-qualifying frame (§3.5)
       return;
     }
-    this.streak++;
-    if (this.streak < STANDING_CAPTURE_FRAMES) return;
 
     const hipY = midY(frame.kp, gate, L_HIP, R_HIP);
     const ankleY = midY(frame.kp, gate, L_ANKLE, R_ANKLE);
     const shoulderY = midY(frame.kp, gate, L_SHOULDER, R_SHOULDER);
     if (hipY === null || ankleY === null || shoulderY === null) {
-      this.streak = 0;
+      this.clearBuffers();
       return;
     }
+    this.streak++;
+    this.hipBuf.push(hipY);
+    this.ankleBuf.push(ankleY);
+    this.shoulderBuf.push(shoulderY);
+    // Valgus buffers fill only when both sides are present (front view path).
+    if (valgusL !== null && valgusR !== null) {
+      this.valgusLBuf.push(valgusL);
+      this.valgusRBuf.push(valgusR);
+    }
+    if (this.streak < STANDING_CAPTURE_FRAMES) return;
+
+    const mean = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length;
+    const avgShoulder = mean(this.shoulderBuf);
+    const avgAnkle = mean(this.ankleBuf);
     this.captured = {
-      valgusL,
-      valgusR,
-      hipY,
-      ankleY,
-      shoulderY,
-      torsoHeight: Math.abs(shoulderY - hipY),
+      valgusL: this.valgusLBuf.length > 0 ? mean(this.valgusLBuf) : null,
+      valgusR: this.valgusRBuf.length > 0 ? mean(this.valgusRBuf) : null,
+      hipY: mean(this.hipBuf),
+      ankleY: avgAnkle,
+      shoulderY: avgShoulder,
+      torsoHeight: Math.abs(avgAnkle - avgShoulder), // pose_ws.py:204-207
     };
+    this.clearBuffers();
+  }
+
+  private clearBuffers(): void {
+    this.streak = 0;
+    this.hipBuf.length = 0;
+    this.ankleBuf.length = 0;
+    this.shoulderBuf.length = 0;
+    this.valgusLBuf.length = 0;
+    this.valgusRBuf.length = 0;
   }
 
   get baseline(): StandingBaseline | null {
@@ -122,7 +154,7 @@ export class StandingCalibration {
 
   reset(): void {
     this.captured = null;
-    this.streak = 0;
+    this.clearBuffers();
   }
 }
 

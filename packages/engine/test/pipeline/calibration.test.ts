@@ -55,10 +55,24 @@ describe("C1 standing_baseline (§3.5 port)", () => {
     feed(cal, 1, 165, (STANDING_CAPTURE_FRAMES - 1) * FRAME_MS);
     expect(cal.ready).toBe(true);
     const b = cal.baseline;
-    expect(b?.torsoHeight).toBeCloseTo(0.25, 6); // |0.3 − 0.55|
+    expect(b?.torsoHeight).toBeCloseTo(0.6, 6); // |avg_ankle − avg_shoulder| = |0.9 − 0.3| (pose_ws.py:204-207)
     expect(b?.hipY).toBeCloseTo(0.55, 6);
     expect(b?.ankleY).toBeCloseTo(0.9, 6);
     expect(b?.valgusL).toBeCloseTo(0.02, 6);
+  });
+
+  it("capture is the MEAN over the 8 buffered frames, not a last-frame snapshot", () => {
+    const cal = new StandingCalibration();
+    let t = 0;
+    for (let i = 0; i < STANDING_CAPTURE_FRAMES; i++) {
+      const f = frameAt(t);
+      // valgus varies frame to frame: 0.00, 0.01, ..., 0.07 → mean 0.035
+      cal.update(f, gateFor(f), 165, "front", true, i * 0.01, -(i * 0.01));
+      t += FRAME_MS;
+    }
+    expect(cal.ready).toBe(true);
+    expect(cal.baseline?.valgusL).toBeCloseTo(0.035, 6);
+    expect(cal.baseline?.valgusR).toBeCloseTo(-0.035, 6);
   });
 
   it("non-qualifying frame resets the streak (7 + reset + 8 pattern)", () => {
