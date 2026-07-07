@@ -60,3 +60,7 @@ htmlcov/
 
 # Turborepo
 .turbo/
+
+# P1.3 recording rig — raw videos and the pose model stay out of git
+backend-ml/recordings/
+backend-ml/models/
