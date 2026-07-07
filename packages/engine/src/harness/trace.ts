@@ -7,6 +7,10 @@ import type { PoseFrame } from "@app/shared";
 export interface TraceExpected {
   reps: number;
   faultsExact: Record<string, number>;
+  /** True while the legacy→EDS fault-id mapping hasn't been authored yet
+   *  (P1.8): distinguishes "not yet mapped" from "asserted clean" — the fault
+   *  assertion must SKIP LOUDLY, never treat {} as clean. */
+  faultsPending?: boolean;
   scoreRange: [number, number];
   formCorrectAll: boolean;
   holdMs?: number; // isometrics (§7.4: ±700 ms)

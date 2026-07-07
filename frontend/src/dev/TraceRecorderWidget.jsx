@@ -1,0 +1,73 @@
+/**
+ * DEV-ONLY floating trace-recorder control (P1.3). Renders nothing unless
+ * VITE_TRACE_RECORD=1. Self-contained: fixed-position overlay, no coupling to
+ * ActiveWorkout's layout or state beyond the exercise slug prop.
+ */
+import { useState } from 'react';
+import {
+  TRACE_RECORD_ENABLED,
+  isRecording,
+  startRecording,
+  stopRecording,
+  frameCount,
+} from './traceRecorder';
+
+export default function TraceRecorderWidget({ exercise }) {
+  const [, force] = useState(0);
+  const [summary, setSummary] = useState(null);
+
+  if (!TRACE_RECORD_ENABLED) return null;
+
+  const recording = isRecording();
+
+  const onClick = () => {
+    if (!recording) {
+      startRecording(exercise);
+      setSummary(null);
+    } else {
+      const label = window.prompt('Trace label (e.g. clean_10_reps, fault_shallow, occlusion):', 'unlabeled') || 'unlabeled';
+      const view = window.prompt('View (side / front):', 'side') || 'unknown';
+      const device = window.prompt('Device (e.g. laptop-720p):', 'laptop') || 'unknown';
+      setSummary(stopRecording({ label, view, device }));
+    }
+    force((n) => n + 1);
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        bottom: 12,
+        left: 12,
+        zIndex: 9999,
+        background: 'rgba(0,0,0,0.75)',
+        color: '#fff',
+        padding: '8px 12px',
+        borderRadius: 8,
+        fontSize: 12,
+        fontFamily: 'monospace',
+      }}
+    >
+      <button
+        onClick={onClick}
+        style={{
+          background: recording ? '#d33' : '#2a2',
+          color: '#fff',
+          border: 'none',
+          borderRadius: 4,
+          padding: '4px 10px',
+          cursor: 'pointer',
+        }}
+      >
+        {recording ? `■ stop & download (${frameCount()} frames)` : '● record trace'}
+      </button>
+      <div style={{ marginTop: 4 }}>
+        {recording
+          ? `recording ${exercise}…`
+          : summary
+            ? `saved: ${summary.frames} frames, ${summary.reps} reps @ ${summary.fps}fps`
+            : 'trace recorder (dev)'}
+      </div>
+    </div>
+  );
+}

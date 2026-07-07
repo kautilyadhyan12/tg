@@ -3,7 +3,7 @@ Phase 12 — Gamification API
 Endpoints: badges, challenges, leaderboard, user gamification stats.
 """
 
-from fastapi  import APIRouter, Depends
+from fastapi  import APIRouter, Depends, Query
 from datetime import datetime, timedelta, time
 
 from app.db.mongo                       import get_db

@@ -4,6 +4,12 @@
 import type { FrameResult, PoseFrame, RepEvent, SetSummary } from "@app/shared";
 import type { ReplayableEngine, Trace, TraceHeader } from "../src/index.js";
 
+/** Definite-index access for fixtures (tests ban non-null assertions). */
+export function must<T>(v: T | undefined): T {
+  if (v === undefined) throw new Error("fixture index out of range");
+  return v;
+}
+
 export function makeFrames(count: number, fpsMs = 66.7): PoseFrame[] {
   return Array.from({ length: count }, (_, i) => ({
     t: i * fpsMs,

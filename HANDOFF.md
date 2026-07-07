@@ -1,6 +1,73 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P1.4 — pipeline stages 1–3 (Part 2 §3.1–3.3) 🔴 (branch p1.4-pipeline-1-3,
+stacked on p1.3-recording-mode)
+FILES CHANGED:
+  packages/engine/src/pipeline/{types,ingest,conditioning,view}.ts, src/index.ts,
+  test/pipeline/{ingest,conditioning,view}.test.ts, test/traces.replay.test.ts
+  (now runs stages 1–3 on all traces), test/fixtures.ts (+must helper),
+  scripts/view-parity.ts (diagnostic), backend-ml/feed_video.py (header view =
+  Python-dominant), 4 parity trace headers corrected (view field).
+DECISIONS:
+  - FINDING: 4 of 9 clips' filename view labels were WRONG (angled cameras read
+    as front/unknown). Python's own view outputs are the truth (§7.5);
+    headers now carry the Python-dominant view; feeder derives it automatically.
+  - View-classifier port verified at 100% per-frame agreement with Python
+    across all 9 traces (895 frames) — trace test asserts EXACT per-frame
+    parity (I2, enum output). Never weaken to a percentage.
+  - Smoothing: ≤7 samples AND ≤470ms (§3.2 lag ceiling) — low fps uses fewer
+    samples. Spike filter = median-of-3. Vis hysteresis 0.30/0.15.
+  - Ingest: out-of-order drops do NOT count toward the 3-invalid visibility
+    streak (person may be fully visible).
+  - Rep/fault/score §7.4 asserts still DEFERRED (loud notice) until P1.6.
+OPEN SPEC GAPS: P0.3's three (unchanged).
+NEXT TASK: P1.5 — signal library v1 (22 signals, §3.4) + calibration modules
+(§3.5). 🔴 — needs §3.5 read carefully; signals 1–17 before C2/C3 per §8.2.
+```
+
+```
+TASK: P1.3 — recording mode + parity goldens (IN PROGRESS, branch p1.3-recording-mode)
+STATE:
+  - Old stack revived for recording: scripts/dev-recording-rig.ps1 starts
+    mongo+redis (docker), backend-auth (:3001), backend-ml pose-only (:8000,
+    run_pose_only.py — exercises/users/workouts/gamification/recommendations
+    mounted under /api; progress/coach/nutrition NOT mounted, heavy deps),
+    frontend (:5173). backend-ml venv = Python 3.11 (.venv), deps incl.
+    fastapi/numpy/jose/motor/redis/mediapipe/opencv/websockets.
+  - Mongo seeded with scripts/seed_exercises.py (58 exercises).
+  - Old-code dev fixes (disclosed): gamification.py missing Query import;
+    run_pose_only.py is new dev-only entrypoint.
+  - VIDEO FEEDER (chosen path over live webcam): backend-ml/feed_video.py —
+    lite model @15fps of VIDEO time, streams to pose WS with REAL-TIME pacing
+    (server flood guard is wall-clock; unpaced sends get silently skipped —
+    already fixed once, don't regress), writes §7.1 trace + .responses.jsonl
+    sidecar to packages/engine/test/traces/parity/.
+  - 9 parity traces recorded (3 squat, 3 jump, 3 chair, side view; user
+    provided downloaded clips in backend-ml/recordings/, gitignored).
+    Python outputs ARE the expected values (§7.5), including warts:
+    jump reps often undercounted at 15fps (3-frame debounce vs fast jumps),
+    Jump_Squats_goodform_sideview1 legitimately expects reps=0.
+  - faultsExact left {} in parity traces = "not yet mapped"; P1.8 maps legacy
+    response fields (corrections/form_correct) from the sidecars.
+STILL OPEN FOR P1.3 DONE:
+  - §7.5 wants ≥6 squat + 4 jump + 4 chair sessions and front views for the
+    matrix; have 3+3+3 side-only. Kd to add ≥7 clips before the P1.8 parity
+    gate (not blocking P1.4–P1.7): squat front-view · squat occlusion walk-out ·
+    squat speed-extremes · jump-squat with NO jump (locks lenient behavior) ·
+    chair-squat front-view · (nice-to-have) jump front-view. Drop in
+    backend-ml/recordings/<exercise>/ and run feed_video.py per HANDOFF above.
+    More clips can be fed anytime
+    (rig + feeder are one command each). Bulgarian split squat clips exist in
+    recordings/ but are NOT parity material (no legacy rules) — future authoring data.
+  - Traces intentionally NOT merged to master yet: test:traces goes red when a
+    trace exists without an engine (by design). Keep them on this branch until
+    P1.4–P1.6 wire an engine into test/traces.replay.test.ts.
+NEXT TASK: P1.4 — pipeline stages 1–3 (ingest/validation, smoothing+visibility
+gating, view classifier) per Part 2 §3.1–3.3. 🔴
+```
+
+```
 TASK: P1.2 — golden-trace harness (Part 2 §7) 🔴
 FILES CHANGED:
   packages/engine/src/harness/{types.ts, trace.ts, replay.ts, assert.ts},

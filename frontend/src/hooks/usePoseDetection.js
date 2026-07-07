@@ -30,6 +30,9 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+// DEV-ONLY (P1.3): golden-trace recorder tee. Both calls below are no-ops
+// unless VITE_TRACE_RECORD=1; analysis behavior is untouched either way.
+import { TRACE_RECORD_ENABLED, recordFrame, recordResponse } from '../dev/traceRecorder';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws';
 
@@ -208,6 +211,7 @@ export default function usePoseDetection({ exercise, enabled }) {
           // Strip the server's keypoints field so it never overwrites the
           // fresh local ones.
           const { keypoints: _staleKeypoints, ...rest } = data;
+          if (TRACE_RECORD_ENABLED) recordResponse(rest, performance.now());
           setPoseData((prev) => ({ ...(prev || {}), ...rest }));
         }
       } catch (e) {
@@ -342,6 +346,7 @@ export default function usePoseDetection({ exercise, enabled }) {
           keypoints: keypoints,
           exercise:  exercise,
         }));
+        if (TRACE_RECORD_ENABLED) recordFrame(keypoints, now);
       } catch (_) {
         // WS may have closed between the readyState check and send — ignore
       }
