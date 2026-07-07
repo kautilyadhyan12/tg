@@ -23,6 +23,11 @@ Format: date · spec § affected · decision · reason.
 - 2026-07-07 · (harness) · Trace-replay ingest assertion = exactly 0 dropped frames (feeder-written traces are valid by construction) · replaces an uncited 95% threshold; T3 finding.
 - 2026-07-07 · R3.10 note · Legacy pose WS carries the JWT in the query string; acceptable in the dev rig only — the new API must never put tokens in URLs. (T3 security note.)
 
+- 2026-07-07 · Part 2 §3.4 · Legacy output rounding is part of the ported formulas: angles/inclines round to 0.1° (angles.py:62,168), valgus/elevation to 1e-4 (angles.py:275–306) · downstream FSM/fault parity needs bit-identical inputs; JS half-up vs Python half-even divergence is measure-zero on acos outputs (P1.8a audits). (P1.5.)
+- 2026-07-07 · Part 2 §3.4 · trunk_incline/shin_incline/body_line/elbow_under_shoulder prefer the LEFT landmark pair, fall back right · §3.4 states left-preference for trunk_incline; extended to its sibling side-view signals for consistency; P1.8a audits against Python per signal. (P1.5.)
+- 2026-07-07 · Part 2 §3.5 · C3 floor_reference stillness threshold is definition-declared (⚙) with NO engine default · the spec names no number; inventing one would violate R0.2. (P1.5.)
+- 2026-07-07 · Part 2 §7.5 · Parity comparisons skip byte-identical repeated responses in the sidecars (legacy flood-guard echoes stale results when frames arrive <33 ms apart in wall-clock; 2 such frames exist in chairsquat_sideview_badform) · an echoed response is not an analysis of that frame. (P1.5.)
+
 ## Pending (SPEC GAPs raised, awaiting Kd)
 
 - Part 5 §1.2 vs Part 4 §3.3: plan-row codes for org USD book and org annual (×10) book — `plans` holds one currency+interval per row; codes like `org_micro_us_m` / `org_micro_in_y` need ratifying before P3.1.

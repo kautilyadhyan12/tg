@@ -1,6 +1,28 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P1.5 — signal library v1 (§3.4) + calibration modules (§3.5) 🔴
+FILES CHANGED:
+  packages/engine/src/pipeline/{geometry,signals,calibration}.ts, src/index.ts,
+  test/pipeline/{geometry,signals,calibration,signals.parity}.test.ts
+STATE:
+  - Signals #1–19, #21, #22 implemented; #20 cadence declared derived (FSM
+    supplies it in P1.6; SignalEngine skips it, direct compute throws).
+  - Legacy ROUNDING ported (angles 0.1°, valgus/elevation 4dp) — part of the
+    formula; parity asserts EXACT match with sidecar angles on all 9 traces.
+  - C1 standing_baseline (160°/8 frames, view-flip + >3s-lost invalidation,
+    restore() for §2.3 carry-over), C2 adaptive_target (2 reps, clamp,
+    fallback; fed via onRepComplete — P1.6 FSM calls it), C3 floor_reference
+    (1s stillness; threshold ⚙ definition-declared, no engine default).
+  - Flood-echo skip in parity comparisons (see DECISIONS).
+  - 89/89 engine tests; purity grep clean (beware comment words matching
+    banned tokens: "document.", "window." both bit us).
+NEXT TASK: P1.6 — rep/hold FSMs + fault-rule DSL evaluator + scorer + emission
+(§3.6–3.9) 🔴 — assembles EngineSession; wires cadence, C2 feed, §7.4 asserts
+(reps/scores; faults stay faultsPending until P1.8).
+```
+
+```
 TASK: P1.4 — pipeline stages 1–3 (Part 2 §3.1–3.3) 🔴 (branch p1.4-pipeline-1-3,
 stacked on p1.3-recording-mode)
 FILES CHANGED:
