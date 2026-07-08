@@ -33,6 +33,11 @@ Format: date · spec § affected · decision · reason.
 - 2026-07-07 · R5.5 note · SignalEngine/StillnessTracker allocate small per-frame objects; acceptable until the P1.9 bench gate measures — ring-buffer refactor queued for P1.9 if p95 needs it. (P1.5 T3.)
 - 2026-07-07 · §7.5 harness note · sidecar offset assumes extra lines are a greeting PREFIX; keypoint-echo guard catches shear only on echoing frames. Feeder writes 1 response per frame by construction; if a future recorder drops trailing responses the count mismatch itself flags it. (P1.5 T3.)
 
+- 2026-07-08 · Part 2 §7.5 · P1.6a FINDING: the original 9 goldens were CONTAMINATED — the legacy server keys RepCounter sessions by user:exercise and persists them across connections, so a shared feeder identity leaked rep counts + warm smoothing buffers clip-to-clip (expected.reps were cumulative: 2,4,7…). Feeder now mints a UNIQUE session id per clip; all 9 goldens re-recorded with isolated sessions. Result: full §7.4 rep-count parity, 9/9 traces · never share a session identity across parity clips.
+- 2026-07-08 · Part 2 §3.6 · maxRepMs accepted in config but has NO counting effect (spec assigns it to plausibility validation, not the FSM); countOn:"down" throws NotImplementedError (no legacy source; no §6 exercise needs it yet) · P1.6a.
+- 2026-07-08 · Part 2 §3.6 Mode A · phase timings: `bottom` = duration of the rounded-minimum plateau within the cycle (no invented epsilon — 0.1° rounding creates the plateau naturally); rep durationMs = descent start (left `top`) → count · legacy has no phase timings; §2.4 requires them. P1.6a.
+- 2026-07-08 · §3.1/§2.4 · liveCue key for the visibility hint = "cue.visibility.step_back" pending the Appendix A key catalog task; message KEYS only, never strings (§3.7) · P1.6a.
+
 ## Pending (SPEC GAPs raised, awaiting Kd)
 
 - **SPEC GAP (P1.5, needs ratification at PR #9 merge):** §3.5 says `torso_height = |shoulder_y − hip_y|` but §3.4 row 16 says elevation is normalized "exactly as captured by _StandingCalibration", and the Python capture is `|avg_ankle_y − avg_shoulder_y|` (pose_ws.py:204-207) — the two spec sentences conflict. IMPLEMENTED: the Python capture (shoulder→ankle), because §7.5 parity compares against Python-derived elevations and would otherwise fail by a ~2–2.5× ratio. Merging PR #9 ratifies this; reopen if you read it differently.

@@ -12,3 +12,7 @@ export * from "./pipeline/view.js";
 export * from "./pipeline/geometry.js";
 export * from "./pipeline/signals.js";
 export * from "./pipeline/calibration.js";
+export * from "./pipeline/fsm.js";
+export * from "./pipeline/faults.js";
+export * from "./pipeline/scoring.js";
+export * from "./session.js";
