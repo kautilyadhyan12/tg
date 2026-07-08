@@ -101,6 +101,20 @@ export function createSession(
   const romExtremes: number[] = [];
   let ended: SetSummary | null = null;
   let lastFrameSignals: Partial<Record<SignalName, number | null>> = {};
+  let prevPhase = "top"; // cycle-window tracking (aggregates scope to a cycle)
+
+  /** §2.4: FrameResult carries only the DECLARED signals (the session's
+   *  internal additions — knee_L/R for the bilateral gate — stay internal). */
+  function emittedSignals(
+    values: Partial<Record<SignalName, number | null>>,
+  ): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const name of config.declaredSignals) {
+      const v = values[name];
+      if (typeof v === "number") out[name] = v;
+    }
+    return out;
+  }
 
   function trackAggregates(values: Partial<Record<SignalName, number | null>>): void {
     for (const [name, v] of Object.entries(values)) {
@@ -112,9 +126,18 @@ export function createSession(
     }
   }
 
+  // Widened read view over the per-frame signal map: string-keyed lookups
+  // (DSL refs, scoring inputs) without casts.
+  const frameValue = (name: string): number | null => {
+    const map: Readonly<Partial<Record<string, number | null>>> = lastFrameSignals;
+    return map[name] ?? null;
+  };
+  const isDeclared = (name: string): boolean =>
+    (declared as readonly string[]).includes(name);
+
   function evalCtx(): EvalContext {
     return {
-      frame: (name) => lastFrameSignals[name as SignalName] ?? null,
+      frame: frameValue,
       aggregate: (name, agg: Aggregate) => {
         if (agg === "min") return aggregates.min[name] ?? null;
         if (agg === "max") return aggregates.max[name] ?? null;
@@ -126,13 +149,19 @@ export function createSession(
     };
   }
 
-  /** Aggregate lookup for scoring inputs like "knee_avg_min". */
+  /** Scoring-input lookup. The _(min|max|avg) suffix is an aggregate ONLY when
+   *  the base is a declared signal — otherwise a plain signal whose own name
+   *  ends in _avg (knee_avg) would silently resolve to aggregate("knee","avg")
+   *  = null and deactivate its component (T3 finding; §9.2 linter will also
+   *  reject ambiguous names at authoring time). */
   function scoringInput(input: string): number | null {
     const m = /^(.*)_(min|max|avg)$/.exec(input);
-    if (m?.[1] !== undefined && m[2] !== undefined) {
-      return evalCtx().aggregate(m[1], m[2] as Aggregate);
+    const base = m?.[1];
+    const agg = m?.[2];
+    if (base !== undefined && (agg === "min" || agg === "max" || agg === "avg") && isDeclared(base)) {
+      return evalCtx().aggregate(base, agg);
     }
-    return lastFrameSignals[input as SignalName] ?? null;
+    return frameValue(input);
   }
 
   function processFrame(frame: PoseFrame): FrameResult {
@@ -179,6 +208,15 @@ export function createSession(
 
     const fsmResult = fsm.update(frame.t, metric, other);
 
+    // Rep-aggregate window = the CYCLE (descent begin → completion), not
+    // wall-to-wall frames: standing-around between reps must not leak into the
+    // next rep's _max aggregates (T3 finding; §3.6 "at bottom" semantics).
+    if (prevPhase === "top" && fsmResult.phase !== "top") {
+      aggregates = emptyAggregates();
+      trackAggregates(values); // this frame starts the new cycle
+    }
+    prevPhase = fsmResult.phase;
+
     const frameFaults = faults.evaluateFrame(frame.t, view, fsmResult.phase, evalCtx());
 
     if (fsmResult.completed) {
@@ -216,9 +254,7 @@ export function createSession(
       view,
       visibilityOk: accepted.visibilityOk,
       liveCue: frameFaults.voiceCue,
-      signals: Object.fromEntries(
-        Object.entries(values).filter(([, v]) => v !== null),
-      ) as Record<string, number>,
+      signals: emittedSignals(values),
       calibrationState,
     };
   }

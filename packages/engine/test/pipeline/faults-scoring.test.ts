@@ -79,6 +79,35 @@ describe("FaultEvaluator runtime (§3.7)", () => {
     expect(second.corrections).toHaveLength(1);
   });
 
+  it("phase-scope exit clears the sustain clock (no instant re-fire on re-entry)", () => {
+    const phased = compileRules(
+      [{ id: "lean", when: "trunk_incline > 45", phase: ["descent"], sustainMs: 300, severity: 15, msg: "fault.lean" }],
+      SIGNALS,
+    );
+    const ev = new FaultEvaluator(phased);
+    const lean = ctx({ trunk_incline: 50 });
+    ev.evaluateFrame(0, "side", "descent", lean); // sustain starts
+    ev.evaluateFrame(100, "side", "top", lean); // leaves the scoped phase
+    // re-enter the phase 5s later: sustain must restart, not fire instantly
+    expect(ev.evaluateFrame(5000, "side", "descent", lean).corrections).toHaveLength(0);
+    expect(ev.evaluateFrame(5100, "side", "descent", lean).corrections).toHaveLength(0);
+    expect(ev.evaluateFrame(5320, "side", "descent", lean).corrections).toHaveLength(1);
+  });
+
+  it("frame-scoped severe latches and marks the rep at completion (§3.7)", () => {
+    const withSevere = compileRules(
+      [{ id: "lean", when: "trunk_incline > 45", severe: "trunk_incline > 60", severity: 15, msg: "fault.lean" }],
+      SIGNALS,
+    );
+    const ev = new FaultEvaluator(withSevere);
+    ev.evaluateFrame(0, "side", "descent", ctx({ trunk_incline: 65 })); // severe lean mid-cycle
+    ev.evaluateFrame(100, "side", "ascent", ctx({ trunk_incline: 10 })); // recovered
+    const rep = ev.evaluateRep("side", ctx({}));
+    expect(rep.severe).toBe(true); // the rep is still marked incorrect
+    const rep2 = ev.evaluateRep("side", ctx({})); // latch cleared for next rep
+    expect(rep2.severe).toBe(false);
+  });
+
   it("rep-scoped rule fires once at completion; faultCounts accumulate", () => {
     const ev = new FaultEvaluator(rules);
     const rep = ev.evaluateRep("side", ctx({}, { knee_avg_min: 140 }));

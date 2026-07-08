@@ -20,10 +20,18 @@ export interface FaultRule {
 
 // ── Expression tree ─────────────────────────────────────────────────────────
 export type Aggregate = "min" | "max" | "avg";
+export type CmpOp = "<" | "<=" | ">" | ">=" | "==";
+/** RHS is a number literal or a ref (`target + N` — the grammar's only ref RHS). */
 export type Expr =
-  | { kind: "cmp"; op: "<" | "<=" | ">" | ">=" | "=="; ref: SignalRef; value: number }
+  | { kind: "cmp"; op: CmpOp; ref: SignalRef; rhs: number | SignalRef }
   | { kind: "and"; left: Expr; right: Expr }
   | { kind: "or"; left: Expr; right: Expr };
+
+const CMP_OPS: readonly CmpOp[] = ["<", "<=", ">", ">=", "=="];
+
+function isCmpOp(v: string): v is CmpOp {
+  return (CMP_OPS as readonly string[]).includes(v);
+}
 
 export interface SignalRef {
   signal: string; // base signal name, or "target" (C2)
@@ -113,23 +121,17 @@ export function parseCondition(src: string, knownSignals: readonly string[]): Ex
     }
     const ref = parseRef();
     const op = next();
-    if (op?.t !== "op" || !["<", "<=", ">", ">=", "=="].includes(op.v)) {
+    if (op?.t !== "op" || !isCmpOp(op.v)) {
       throw new DslParseError("expected comparison operator", src);
     }
     const rhsTok = next();
     if (rhsTok?.t === "num") {
-      return { kind: "cmp", op: op.v as "<", ref, value: rhsTok.v };
+      return { kind: "cmp", op: op.v, ref, rhs: rhsTok.v };
     }
     if (rhsTok?.t === "ref") {
-      // `signal > target + 25` form: RHS is a ref — normalize to LHS-minus-RHS
-      // by folding the RHS ref into the comparison via ref-with-offset swap.
+      // `signal > target + 25` form: RHS is a ref with optional offset.
       i--; // put back
-      const rhs = parseRef();
-      // Represent as cmp against 0 with a composite ref is overkill for the
-      // grammar's only RHS-ref use (`target`): encode value from rhs at eval.
-      return { kind: "cmp", op: op.v as "<", ref, value: Number.NaN, rhsRef: rhs } as Expr & {
-        rhsRef: SignalRef;
-      };
+      return { kind: "cmp", op: op.v, ref, rhs: parseRef() };
     }
     throw new DslParseError("expected number or ref after comparison", src);
   }
@@ -179,9 +181,8 @@ export function evaluate(expr: Expr, ctx: EvalContext): boolean | null {
   switch (expr.kind) {
     case "cmp": {
       const lhs = refValue(expr.ref, ctx);
-      const rhsRef = (expr as { rhsRef?: SignalRef }).rhsRef;
-      const rhs = rhsRef ? refValue(rhsRef, ctx) : expr.value;
-      if (lhs === null || rhs === null || Number.isNaN(rhs)) return lhs === null || rhs === null ? null : cmpNum(expr.op, lhs, rhs);
+      const rhs = typeof expr.rhs === "number" ? expr.rhs : refValue(expr.rhs, ctx);
+      if (lhs === null || rhs === null) return null;
       return cmpNum(expr.op, lhs, rhs);
     }
     case "and": {
@@ -239,6 +240,7 @@ export class FaultEvaluator {
   private readonly sustainedSince = new Map<string, number>();
   private readonly firedThisRep = new Set<string>();
   private readonly lastCueT = new Map<string, number>();
+  private severeThisRep = false; // frame-scoped severes latch until rep completion (§3.7)
   readonly faultCounts: Record<string, number> = {};
 
   constructor(private readonly rules: readonly CompiledRule[]) {}
@@ -257,8 +259,15 @@ export class FaultEvaluator {
     const fired: FiredFault[] = [];
     for (const c of this.rules) {
       if (this.isRepScoped(c)) continue;
-      if (c.rule.view !== undefined && c.rule.view !== view) continue;
-      if (c.rule.phase !== undefined && !c.rule.phase.includes(phase)) continue;
+      if (
+        (c.rule.view !== undefined && c.rule.view !== view) ||
+        (c.rule.phase !== undefined && !c.rule.phase.includes(phase))
+      ) {
+        // Out of scope: the condition is NOT persisting — a stale timestamp
+        // here would make sustainMs fire instantly on scope re-entry (§3.7).
+        this.sustainedSince.delete(c.rule.id);
+        continue;
+      }
       const hit = evaluate(c.when, ctx);
       if (hit !== true) {
         this.sustainedSince.delete(c.rule.id);
@@ -268,6 +277,7 @@ export class FaultEvaluator {
       this.sustainedSince.set(c.rule.id, since);
       if (t - since < (c.rule.sustainMs ?? 0)) continue;
       const severe = c.severe !== null && evaluate(c.severe, ctx) === true;
+      if (severe) this.severeThisRep = true; // marks the rep incorrect at completion
       fired.push({ id: c.rule.id, severity: c.rule.severity, severe, msg: c.rule.msg });
       if (!this.firedThisRep.has(c.rule.id)) {
         this.firedThisRep.add(c.rule.id);
@@ -295,7 +305,7 @@ export class FaultEvaluator {
   /** Rep-scoped evaluation at completion. Returns this rep's fault ids + severe flag. */
   evaluateRep(view: string, ctx: EvalContext): { faults: string[]; severe: boolean } {
     const faults: string[] = [...this.firedThisRep];
-    let severe = false;
+    let severe = this.severeThisRep; // frame-scoped severes latched during the cycle
     for (const c of this.rules) {
       if (!this.isRepScoped(c)) continue;
       if (c.rule.view !== undefined && c.rule.view !== view) continue;
@@ -305,9 +315,9 @@ export class FaultEvaluator {
       }
       if (c.severe !== null && evaluate(c.severe, ctx) === true) severe = true;
     }
-    // frame-scoped severes observed during the cycle also mark the rep
     this.firedThisRep.clear();
     this.sustainedSince.clear();
+    this.severeThisRep = false;
     return { faults, severe };
   }
 }
@@ -315,8 +325,12 @@ export class FaultEvaluator {
 export function exprUsesAggregate(expr: Expr): boolean {
   switch (expr.kind) {
     case "cmp": {
-      const rhsRef = (expr as { rhsRef?: SignalRef }).rhsRef;
-      return expr.ref.aggregate !== null || (rhsRef?.aggregate ?? null) !== null || expr.ref.signal === "target" || rhsRef?.signal === "target";
+      const rhs = typeof expr.rhs === "number" ? null : expr.rhs;
+      return (
+        expr.ref.aggregate !== null ||
+        expr.ref.signal === "target" ||
+        (rhs !== null && (rhs.aggregate !== null || rhs.signal === "target"))
+      );
     }
     case "and":
     case "or":
