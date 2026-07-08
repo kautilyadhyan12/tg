@@ -19,6 +19,9 @@ export interface ScoringComponent {
   inactiveBelow?: number;
   /** Evaluate |input| through the curve (valgus magnitude). */
   absolute?: boolean;
+  /** §3.8 valgus rule: positive (outward) drift ⇒ no opinion. Checked on the
+   *  RAW value before `absolute` strips the sign. */
+  inactiveWhenPositiveDrift?: boolean;
 }
 
 /** Evaluate one curve at x. Clamps outside the point range to the end values. */
@@ -44,6 +47,7 @@ export function evaluateCurve(curve: readonly [number, number][], x: number): nu
 
 export function componentScore(comp: ScoringComponent, rawInput: number | null): number | null {
   if (rawInput === null) return null; // no data → no opinion (I6)
+  if (comp.inactiveWhenPositiveDrift === true && rawInput > 0) return null; // §3.8 outward drift
   const x = comp.absolute === true ? Math.abs(rawInput) : rawInput;
   if (comp.inactiveAbove !== undefined && x > comp.inactiveAbove) return null;
   if (comp.inactiveBelow !== undefined && x < comp.inactiveBelow) return null;

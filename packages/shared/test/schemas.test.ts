@@ -101,13 +101,25 @@ describe("engine events (§2.4)", () => {
 });
 
 describe("session input (§2.3)", () => {
-  it("accepts definition + optional calibration carry-over", () => {
+  it("accepts a schema-valid definition + optional calibration carry-over", () => {
     expect(
       sessionInputSchema.parse({
-        definition: { anything: "until P1.7" },
+        definition: {
+          key: "brisk_walking",
+          version: 1,
+          minEngineVersion: "1.0.0",
+          family: "cardio",
+          tracking: "timer",
+          status: "beta",
+        },
         carryOverCalibration: { standingBaseline: 0.42 },
       }),
     ).toBeDefined();
+  });
+  it("rejects a malformed definition (P1.7 tightening of the P1.1 unknown)", () => {
+    expect(
+      sessionInputSchema.safeParse({ definition: { anything: "no longer accepted" } }).success,
+    ).toBe(false);
   });
 });
 

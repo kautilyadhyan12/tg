@@ -32,6 +32,8 @@ jobs:
       - run: pnpm test
       - name: golden traces (Part 2 §7.6)
         run: pnpm --filter @app/engine test:traces
+      - name: definition linter (Part 2 §9.2)
+        run: pnpm --filter @app/engine lint:defs
 
   engine-purity:
     name: engine banned-token grep (R5.1)

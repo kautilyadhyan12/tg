@@ -1,12 +1,12 @@
 // Part 2 §2.3 — session inputs.
 import { z } from "zod";
+import { exerciseDefinitionSchema } from "./definition.js";
 
-// The resolved ExerciseDefinition arrives already parsed and lint-validated.
-// Its full schema is task P1.7 (Part 2 §4); until then it crosses as unknown
-// and tightens there — engine code never trusts it unvalidated.
+// The resolved ExerciseDefinition arrives already parsed and lint-validated
+// (§4 schema, P1.7).
 export const sessionInputSchema = z
   .object({
-    definition: z.unknown(),
+    definition: exerciseDefinitionSchema,
     // Optional carry-over calibration from a previous set of the same exercise
     // in the same workout (set 2 doesn't recalibrate — §2.3).
     carryOverCalibration: z.record(z.string(), z.unknown()).optional(),
