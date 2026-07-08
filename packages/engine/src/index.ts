@@ -9,3 +9,6 @@ export * from "./pipeline/types.js";
 export * from "./pipeline/ingest.js";
 export * from "./pipeline/conditioning.js";
 export * from "./pipeline/view.js";
+export * from "./pipeline/geometry.js";
+export * from "./pipeline/signals.js";
+export * from "./pipeline/calibration.js";

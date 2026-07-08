@@ -23,7 +23,20 @@ Format: date · spec § affected · decision · reason.
 - 2026-07-07 · (harness) · Trace-replay ingest assertion = exactly 0 dropped frames (feeder-written traces are valid by construction) · replaces an uncited 95% threshold; T3 finding.
 - 2026-07-07 · R3.10 note · Legacy pose WS carries the JWT in the query string; acceptable in the dev rig only — the new API must never put tokens in URLs. (T3 security note.)
 
+- 2026-07-07 · Part 2 §3.4 · Legacy output rounding is part of the ported formulas: angles/inclines round to 0.1° (angles.py:62,168), valgus/elevation to 1e-4 (angles.py:275–306) · downstream FSM/fault parity needs bit-identical inputs; JS half-up vs Python half-even divergence is measure-zero on acos outputs (P1.8a audits). (P1.5.)
+- 2026-07-07 · Part 2 §3.4 · trunk_incline/shin_incline/body_line/elbow_under_shoulder prefer the LEFT landmark pair, fall back right · §3.4 states left-preference for trunk_incline; extended to its sibling side-view signals for consistency; P1.8a audits against Python per signal. (P1.5.)
+- 2026-07-07 · Part 2 §3.5 · C3 floor_reference stillness threshold is definition-declared (⚙) with NO engine default · the spec names no number; inventing one would violate R0.2. (P1.5.)
+- 2026-07-07 · Part 2 §7.5 · Parity comparisons skip byte-identical repeated responses in the sidecars (legacy flood-guard echoes stale results when frames arrive <33 ms apart in wall-clock; 2 such frames exist in chairsquat_sideview_badform) · an echoed response is not an analysis of that frame. (P1.5.)
+
+- 2026-07-07 · Part 2 §3.4 row 19 · elbow_under_shoulder divides by CURRENT-FRAME |shoulder_y − hip_y| with no calibration dependency · the §3.4 table lists no calibration for row 19, and planks never arm C1 (knees bent); inference recorded rather than silent. (P1.5 T3.)
+- 2026-07-07 · Part 2 §3.4 #21 · stillness = mean of the TWO midpoint displacements (shoulder midpoint + hip midpoint), spec-literal · a torso rotation moves both midpoints while their centroid can stay still; no legacy source to arbitrate. (P1.5 T3.)
+- 2026-07-07 · R5.5 note · SignalEngine/StillnessTracker allocate small per-frame objects; acceptable until the P1.9 bench gate measures — ring-buffer refactor queued for P1.9 if p95 needs it. (P1.5 T3.)
+- 2026-07-07 · §7.5 harness note · sidecar offset assumes extra lines are a greeting PREFIX; keypoint-echo guard catches shear only on echoing frames. Feeder writes 1 response per frame by construction; if a future recorder drops trailing responses the count mismatch itself flags it. (P1.5 T3.)
+
 ## Pending (SPEC GAPs raised, awaiting Kd)
+
+- **SPEC GAP (P1.5, needs ratification at PR #9 merge):** §3.5 says `torso_height = |shoulder_y − hip_y|` but §3.4 row 16 says elevation is normalized "exactly as captured by _StandingCalibration", and the Python capture is `|avg_ankle_y − avg_shoulder_y|` (pose_ws.py:204-207) — the two spec sentences conflict. IMPLEMENTED: the Python capture (shoulder→ankle), because §7.5 parity compares against Python-derived elevations and would otherwise fail by a ~2–2.5× ratio. Merging PR #9 ratifies this; reopen if you read it differently.
+- **SPEC GAP (P1.5, decision needed by P1.8b):** C2 formula — spec §3.5 mandates mean-of-2-extremes clamped [80,120] (implemented, R0), but legacy chair calibration uses median + 5° buffer, no clamp. §7.5's chair-squat score-±3 parity will compare scores built on DIFFERENT targets. Options: (a) parity gate uses legacy median+5° via a definition override, spec formula ships after parity passes; (b) accept chair score divergence and assert reps only. Recommend (a).
 
 - Part 5 §1.2 vs Part 4 §3.3: plan-row codes for org USD book and org annual (×10) book — `plans` holds one currency+interval per row; codes like `org_micro_us_m` / `org_micro_in_y` need ratifying before P3.1.
 - Part 4 §3.3: org plans' subscriber `entitlements` ("console features") shape unspecified — seeded `{}`.
