@@ -52,7 +52,7 @@ describe("Mode A counting (RepCounter port)", () => {
     expect(r.currentMetric).toBeNull();
     expect(r.repCount).toBe(0);
     // finish the rep normally afterwards — nothing was reset
-    expect(run(fsm, seq.slice(14) as [number, number][], 15 * FRAME)).toBe(1);
+    expect(run(fsm, seq.slice(14), 15 * FRAME)).toBe(1);
   });
 
   it("a 2-frame dip is a flicker, not a rep (min 3 down frames)", () => {

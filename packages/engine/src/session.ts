@@ -104,7 +104,7 @@ export function createSession(
 
   function trackAggregates(values: Partial<Record<SignalName, number | null>>): void {
     for (const [name, v] of Object.entries(values)) {
-      if (v === null || v === undefined) continue;
+      if (typeof v !== "number") continue;
       aggregates.min[name] = Math.min(aggregates.min[name] ?? Number.POSITIVE_INFINITY, v);
       aggregates.max[name] = Math.max(aggregates.max[name] ?? Number.NEGATIVE_INFINITY, v);
       aggregates.sum[name] = (aggregates.sum[name] ?? 0) + v;
