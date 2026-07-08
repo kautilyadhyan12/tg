@@ -1,6 +1,33 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P1.6a — Mode-A FSM + fault DSL + scorer + emission (§3.6–3.9) 🔴
+FILES CHANGED:
+  packages/engine/src/pipeline/{fsm,faults,scoring}.ts, src/session.ts,
+  src/index.ts, test/pipeline/{fsm,faults-scoring}.test.ts,
+  test/parity-configs.ts, test/traces.replay.test.ts (§7.4 ARMED),
+  scripts/fsm-parity-debug.ts, backend-ml/feed_video.py (unique session/clip),
+  all 9 parity traces RE-RECORDED (see DECISIONS: session contamination).
+STATE:
+  - FULL PARITY: 119/119 engine tests — §7.4 rep counts EXACT on all 9 traces,
+    scores in declared ranges, plus view/angle parity. MILESTONE.
+  - ModeAFsm = faithful RepCounter port (smoothing INSIDE the FSM, 7-sample
+    plain mean — distinct from §3.2 conditioner; guards: 3/2 debounce, 450ms,
+    bilateral 150° w/ occlusion fallback, null→hold).
+  - DSL parser/evaluator (§3.7 grammar, parse-once), coaching policy (≤2
+    corrections, worst-voice + cooldown); scoring curves numerically identical
+    to legacy (§3.8), neutral 80 / correct ≥70; session Form Score.
+  - createSession() assembles full EngineSession (harness-compatible),
+    snapshot(), C2 fed on rep completions. Faults still faultsPending (P1.8).
+  - NOT DONE (P1.6b): FSM modes B (hold), C (alternating_sides), D (cadence);
+    hold scoring; HoldTick/HoldEvent emission; cadence signal (#20).
+  - parity-configs.ts = hand-built EngineConfigs citing §8.1 rows; P1.7
+    compiles §4 definitions into EngineConfig and replaces them.
+NEXT TASK: P1.6b (modes B–D) or P1.7 (definition schema + linter) — either
+order works; P1.7 unblocks P1.8a/b (constants inventory + parity defs).
+```
+
+```
 TASK: P1.5 — signal library v1 (§3.4) + calibration modules (§3.5) 🔴
 FILES CHANGED:
   packages/engine/src/pipeline/{geometry,signals,calibration}.ts, src/index.ts,

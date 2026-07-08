@@ -231,11 +231,7 @@ def main() -> None:
         ap.error("either --scan, or videos with --exercise and --view")
 
     ensure_model()
-    token = jwt.encode(
-        {"id": "trace-feeder", "exp": int(time.time()) + 3600},
-        load_ml_jwt_secret(),
-        algorithm="HS256",
-    )
+    secret = load_ml_jwt_secret()
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -252,6 +248,15 @@ def main() -> None:
 
     for vpath, exercise, view in jobs:
         label = args.label if (args.label and len(jobs) == 1) else vpath.stem
+        # UNIQUE session identity per clip: the server keys RepCounter sessions
+        # by user:exercise and persists them across connections — a shared id
+        # leaks rep counts and warm smoothing buffers from clip to clip
+        # (discovered in P1.6a: expected.reps were cumulative across clips).
+        token = jwt.encode(
+            {"id": f"trace-feeder-{label}", "exp": int(time.time()) + 3600},
+            secret,
+            algorithm="HS256",
+        )
         print(f"== {vpath.name} [{exercise}/{view}]: extracting (lite model, ~15fps)...")
         frames, video_fps = extract_frames(vpath)
         print(f"   {len(frames)} sampled frames (video fps {video_fps:.1f})")

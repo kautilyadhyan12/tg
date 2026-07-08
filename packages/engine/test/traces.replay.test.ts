@@ -1,8 +1,7 @@
 // CI trace-replay entry (Part 2 §7.6): replays every trace in test/traces/.
-// P1.4 state: pipeline stages 1–3 exist, so traces are replayed through
-// ingest → conditioning → view with the assertions that are meaningful now.
-// Rep/fault/score assertions (§7.4 via assertTrace) arm in P1.6 when the full
-// EngineSession exists — a LOUD notice marks them deferred, never silent.
+// P1.6a state: the full Mode-A EngineSession exists — §7.4 assertions are
+// ARMED: rep counts exact, scores within the trace's declared range. Faults
+// remain faultsPending (legacy→EDS mapping is P1.8) and skip loudly.
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -11,9 +10,14 @@ import {
   IngestStage,
   ViewTracker,
   VisibilityGate,
+  assertTrace,
   classifyView,
+  createSession,
+  formatFailures,
   parseTrace,
+  replay,
 } from "../src/index.js";
+import { parityConfig } from "./parity-configs.js";
 
 const TRACES_DIR = join(import.meta.dirname, "traces");
 
@@ -31,12 +35,25 @@ describe("golden traces (§7.6) — stages 1–3", () => {
       console.warn("⚠ golden traces: 0 traces — fixtures arrive via the P1.3 feeder.");
     } else {
       console.warn(
-        `ℹ ${String(files.length)} trace(s): stages 1–3 asserted; §7.4 rep/fault/score ` +
-          "assertions DEFERRED until P1.6 wires the full EngineSession.",
+        `ℹ ${String(files.length)} trace(s): §7.4 ARMED (reps exact, scores in range); ` +
+          "fault multisets still faultsPending until P1.8 authors the legacy→EDS mapping.",
       );
     }
     expect(files.length).toBeGreaterThanOrEqual(0);
   });
+
+  for (const file of files) {
+    it(`§7.4 assertions on ${file.split(/[\\/]/).pop() ?? file}`, () => {
+      const trace = parseTrace(readFileSync(file, "utf8"));
+      const session = createSession(parityConfig(trace.header.exercise));
+      const result = replay(session, trace);
+      const failures = assertTrace(trace, result);
+      expect(
+        failures,
+        `\n${formatFailures(trace.header.label, failures)}`,
+      ).toEqual([]);
+    });
+  }
 
   for (const file of files) {
     it(`stages 1–3 on ${file.split(/[\\/]/).pop() ?? file}`, () => {
