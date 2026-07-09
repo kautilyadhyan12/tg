@@ -75,6 +75,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@app/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
       '@hookform/resolvers':
         specifier: ^5.2.2
         version: 5.4.0(react-hook-form@7.81.0(react@19.2.7))
@@ -175,6 +178,9 @@ importers:
       vite:
         specifier: ^8.0.10
         version: 8.1.4(@types/node@22.20.0)(esbuild@0.28.1)(jiti@1.21.7)(tsx@4.23.0)
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.0)(lightningcss@1.32.0)
 
   packages/config:
     devDependencies:

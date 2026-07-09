@@ -1,6 +1,45 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P1.10b-1b — web poseAdapter (on-device engine bridge, v1 §13/D1) 🟡
+              [third slice of P1.10; on branch p1.10a-web-into-monorepo; UNCOMMITTED — awaiting T3]
+FILES CHANGED:
+  apps/web/package.json (+dep @app/engine workspace:*; +devDep vitest ^2.1.8; +"test": "vitest run");
+  apps/web/vitest.config.js (new; node env, src/**/*.test.js);
+  apps/web/src/engine/poseAdapter.js (new — the module);
+  apps/web/src/engine/poseAdapter.test.js (new — 8 tests);
+  apps/web/src/engine/__fixtures__/squat_goodform.jsonl (new — copy of the sqauta_sideview1goodform
+    parity golden; 2 reps, scoreRange [45,100]);
+  pnpm-lock.yaml (vitest for web).
+STATE / DECISIONS:
+  - Adapter API (framework-agnostic, so P1.10b-2's hook is thin glue): getDefinition(key|alias),
+    engineSupports(def) [I4 gate], landmarksToFrame(landmarks,tMs) [§2.2 UN-MIRRORED], startSet(def,setIndex)
+    -> { feed(landmarks,tMs)->FrameResult, onRep, end()->SetSummary, snapshot() }, EngineUnsupportedError.
+  - §2.2 mirroring decided ONCE here: feed provider coords as-is; never flip the landmark array (overlay
+    mirrors, engine does not). Empty/no landmarks -> kp:[] -> engine ingest fail-soft (§3.1).
+  - Time: caller passes tMs into feed(); engine stays wall-clock-free (R5.1). Deterministic + testable.
+  - I4 gate is a local numeric major.minor.patch compare (no semver dep, R1.4); works now that engine + all
+    3 defs agree at 1.0.0 (P1.10b-1a). def needing >engine -> EngineUnsupportedError (never silently runs, R1.3).
+  - Defs imported via @app/engine/definitions/*.json (subpath export from 1a); NO @app/shared / zod import
+    (engine ingest validates plain objects) -> zod@3/4 stays a P1.10c concern, as established.
+  - Verified: web adapter 8/8 tests (incl. golden replay: reps=2, engineVersion 1.0.0, avgFormScore in range,
+    end() idempotent, I4 gate) · web build green (no regression) · new files eslint clean. The engine+JSON
+    resolve/run in web's Vite toolchain is proven by the vitest run (Vite transform).
+  - DEFERRED (flagged, not hacked): set->set carry-over calibration (§2.3) — createSession accepts it but a
+    finished session exposes no baseline export (snapshot has calibrationReady only). Each set recalibrates
+    fresh for now; carry-over needs a small engine method — tracked follow-up.
+  - Golden fixture is a COPY into apps/web (minor drift risk; shared-fixture access not worth a package change now).
+OPEN SPEC GAPS: none new.
+NEXT TASK: P1.10b-2 — rewrite usePoseDetection to drive poseAdapter (delete the WS path, WS_URL, resetReps,
+  recordResponse); wire ActiveWorkout (remove server-baseline rep machinery — engine session is per-set;
+  map FrameResult/RepEvent -> UI; EN message-key map from Appendix A; collect SetSummary[] for P1.10c);
+  exercises with no def (getDefinition null) need a UI fallback decision. jsdom vitest project for hook tests.
+  T3 (P1.10b-1b) CARRY-FORWARDS: (a) caller MUST null-check getDefinition BEFORE startSet — startSet(null,..)
+  throws a raw TypeError; (b) onRep is single-listener (engine SETS, not appends) — register exactly once;
+  (c) CI Node >=22 (root engines) satisfies import.meta.dirname used in the adapter test.
+```
+
+```
 TASK: P1.10b-1a — engine defs to v1 §4 home + engine v1 (prep for the web engine-swap) 🟡
               [second slice of P1.10; on branch p1.10a-web-into-monorepo; T3-reviewed clean]
 FILES CHANGED:
