@@ -43,7 +43,12 @@ Format: date · spec § affected · decision · reason.
 - 2026-07-08 · R5.5 · perf-deferral note extended to FaultEvaluator.evaluateFrame (per-frame array+sort+find) and trackAggregates (Object.entries/frame) — same P1.9 bench-gate bucket as SignalEngine/StillnessTracker.
 - 2026-07-08 · §3.7 DSL · grammar superset: LHS refs also accept `+ N` offsets (spec shows offsets only on `target`) · harmless; the §9.2 linter must reject LHS offsets and ambiguous _min/_max/_avg-suffixed names at authoring time (P1.7).
 
+- 2026-07-09 · Part 2 §4/§3.8 (T3 P1.7) · Scoring components carry their §4 `view` scope through compile and scoreRep gates on the CURRENT view (mirrors fault rules) — never rely on a signal happening to be null off-view. floor_reference definitions refuse to compile until C3 is wired (no stub-that-succeeds).
+- 2026-07-09 · §9.2 note · CI lint:defs runs without localeKeys/fixtureCount, so the locale-membership and live-fixture-gate rules are latent until publish tooling supplies them (commented in scripts/lint-defs.ts).
+
 ## Pending (SPEC GAPs raised, awaiting Kd)
+
+- **SPEC GAP (P1.7→P1.8b): squat rep metric.** §4's worked example authors `rep.metric: "knee_avg"` (and §3.4 says legacy _analyze_squat used knee_avg for FORM), but legacy rep COUNTING used left_knee with right fallback (rep_counter.py joint config). The P1.7 equivalence test proves compile machinery with a knee_L override; which metric the shipped squat definition uses — and whether knee_avg counts identically on the goldens — is P1.8b's explicit deliverable.
 
 - **P1.8b gate debt (T3 P1.6a):** (a) §7.5's strict per-rep score ±3-vs-Python comparison is NOT yet asserted — current traces assert only the §7.4 scoreRange; P1.8b must add the ±3 check against sidecar scores. (b) Fault multisets have zero trace coverage until the legacy→EDS mapping is authored (faultsPending). (c) Phase timings are asserted only structurally; a tolerance must be declared before any trace asserts them (§7.4 names none). (d) Kd should spot-check 2–3 re-recorded goldens' expected.reps against the raw videos (gate and fixtures changed in the same PR).
 

@@ -26,10 +26,11 @@ function compileScoring(def: ExerciseDefinition): ScoringComponent[] | undefined
     return {
       component: c.component,
       input: absMatch?.[1] ?? c.input,
-      curve: c.curve.map(([x, y]) => [x, y] as [number, number]),
+      curve: c.curve,
       ...(absMatch ? { absolute: true } : {}),
       ...(c.inactiveAbove !== undefined ? { inactiveAbove: c.inactiveAbove } : {}),
       ...(c.inactiveWhenPositiveDrift === true ? { inactiveWhenPositiveDrift: true } : {}),
+      ...(c.view !== undefined ? { view: c.view } : {}), // §4 view scope → scoreRep gate
     };
   });
 }
@@ -58,6 +59,11 @@ export function compileDefinition(
     );
   }
 
+  if (def.calibration?.some((c) => c.module === "floor_reference") === true) {
+    // No stub-that-succeeds (R1.3): the session has no C3 wiring yet — refuse
+    // rather than silently dropping the module.
+    throw new NotImplementedError("calibration module floor_reference");
+  }
   const scoring = compileScoring(def);
   // Re-shape shared fault rules: drop explicitly-undefined optionals so the
   // object satisfies exactOptionalPropertyTypes without casts.

@@ -221,7 +221,7 @@ export function createSession(
 
     if (fsmResult.completed) {
       const repFaults = faults.evaluateRep(view, evalCtx());
-      const rep = scoreRep(scoringComponents, scoringInput, repFaults.severe, config.scoreFloor);
+      const rep = scoreRep(scoringComponents, scoringInput, repFaults.severe, config.scoreFloor, view);
       if (repFaults.severe) severeInSet = true;
       repScores.push(rep.score);
       romExtremes.push(fsmResult.completed.romExtreme);

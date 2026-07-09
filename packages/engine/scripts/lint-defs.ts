@@ -22,6 +22,9 @@ for (const root of roots) {
       console.error(`✗ ${file}: schema: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
       continue;
     }
+    // NOTE: runs without localeKeys/fixtureCount — the §9.2 locale-membership
+    // and live-fixture-gate rules are latent here until publish tooling
+    // supplies those inputs (DECISIONS 2026-07-09). Not full §9.2 enforcement.
     const issues = lintDefinition(parsed.data);
     if (issues.length > 0) {
       failed = true;

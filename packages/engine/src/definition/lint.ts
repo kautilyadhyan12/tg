@@ -53,10 +53,7 @@ export function lintDefinition(def: ExerciseDefinition, opts: LintOptions = {}):
         add(block, `tracking:"timer" definitions must not carry '${block}' (§4)`);
       }
     }
-    if (def.setup?.cameraHint === undefined) {
-      // timer entries need no camera — but a pose entry without one is below.
-    }
-    return issues; // nothing else applies to timer entries
+    return issues; // nothing else applies to timer entries (no camera ⇒ no hint required)
   }
 
   // Pose entries: required engine blocks.
@@ -129,9 +126,9 @@ export function lintDefinition(def: ExerciseDefinition, opts: LintOptions = {}):
         else throw e;
       }
     }
-    if (rule.severe !== undefined && rule.when === "") {
-      add(field, "severe without a base fault condition (§9.2)");
-    }
+    // §9.2's "severe without a base fault" is structurally unrepresentable
+    // here: the schema requires a non-empty `when` on every rule, so a severe
+    // expression always has a base condition. No runtime check needed.
     if (opts.localeKeys && !opts.localeKeys.includes(rule.msg)) {
       add(field + ".msg", `message key '${rule.msg}' absent from the locale table (§9.2)`);
     }

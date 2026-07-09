@@ -22,6 +22,9 @@ export interface ScoringComponent {
   /** §3.8 valgus rule: positive (outward) drift ⇒ no opinion. Checked on the
    *  RAW value before `absolute` strips the sign. */
   inactiveWhenPositiveDrift?: boolean;
+  /** View scope (§4): the component has no opinion outside its view —
+   *  mirrors the fault-rule view contract. */
+  view?: "front" | "side";
 }
 
 /** Evaluate one curve at x. Clamps outside the point range to the end values. */
@@ -64,9 +67,13 @@ export function scoreRep(
   inputValue: (input: string) => number | null,
   hasSevereFault: boolean,
   floor = 0,
+  currentView?: "front" | "side" | "unknown",
 ): RepScore {
   const active: number[] = [];
   for (const comp of components) {
+    // View-scoped components have no opinion outside their view (§4) — same
+    // contract as fault rules; never rely on a signal happening to be null.
+    if (comp.view !== undefined && comp.view !== currentView) continue;
     const s = componentScore(comp, inputValue(comp.input));
     if (s !== null) active.push(s);
   }

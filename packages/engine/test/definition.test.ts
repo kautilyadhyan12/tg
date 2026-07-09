@@ -126,9 +126,13 @@ describe("compile (§4 → EngineConfig) + parity equivalence", () => {
   });
 
   it("definition-driven session counts EXACTLY like the legacy config on the squat goldens", () => {
-    // §8.1 note: the definition adds minRepMs 900 (spec-mandated); the legacy
-    // Python floor is 450 — for parity equivalence we compile a variant with
-    // the definition's minRepMs removed (booked P1.8b gate debt).
+    // TWO deliberate deviations from the worked example, both booked as P1.8b
+    // parity questions (DECISIONS Pending):
+    //  1. minRepMs stripped — definition says 900, legacy floor is 450;
+    //  2. metric knee_L — the §4 example authors knee_avg, but legacy
+    //     rep_counter counted on left_knee (right fallback). This test proves
+    //     the COMPILE MACHINERY reproduces legacy counts; whether the shipped
+    //     squat definition uses knee_avg or knee_L is P1.8b's call.
     const parityDef = exerciseDefinitionSchema.parse(
       defWith({ rep: { ...squatDef.rep, minRepMs: undefined, metric: "knee_L" } }),
     );
