@@ -1,6 +1,37 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P1.8a — constants inventory (§8.1 table ONLY; NO code) 🔴
+DELIVERABLE: docs/port/P1.8a-constants-inventory.md — the complete §8.1
+  constant-preservation table from form_analyzer.py + rep_counter.py, APPROVED
+  by Kd 2026-07-09 (reviewed against the Python). Every numeric threshold with
+  name · value · units · Python source line · target definition field.
+FILES CHANGED: docs/port/P1.8a-constants-inventory.md (new), HANDOFF.md.
+  (No engine/shared/api code touched — P1.8a is a review artifact by design,
+  CLAUDE.md Part I §7(d). PR #11 / P1.7 already MERGED — nothing to merge.)
+KEY OUTPUTS FOR P1.8b (all in the doc):
+  - FOOTNOTE 1: bilateral gate value 150° but STRICT `<` (not `≤`); keep
+    bilateralGate:150, engine applies `<` (parity; DECISIONS 2026-07-08).
+  - FOOTNOTE 2 (the crux): legacy COUNTING joint = left_knee (+right fallback);
+    legacy FORM metric = knee_avg. squat.v5.json ships rep.metric:knee_avg for
+    counting — P1.8b MUST prove knee_avg counts bit-identically to left_knee on
+    the 9 goldens (DECISIONS Pending SPEC GAP), or switch metric.
+  - FLAG: SQUAT_LOCKOUT_KNEE_MAX=178 is DEAD (no check uses it) — P1.8b does NOT
+    invent a lockout fault (R0.2).
+  - FLAG: jump valgus DIVERGES — severe −0.25 (not −0.30) + inline
+    `100+worst*200` (not _score_valgus). Author jump valgus from jump-local values.
+  - Chair C2 target formula still a SPEC GAP (median+5° legacy vs §3.5
+    mean-of-2 clamp[80,120]); needed before chair score-±3 parity (DECISIONS).
+NOT COMMITTED yet — p1.7-definition-schema branch is stale (PR #11 merged);
+  Kd to decide branch/commit (docs-only; suggest fresh p1.8b branch carries it).
+NEXT TASK: P1.8b 🔴 — express squat, jump-squat, chair-squat as §4 definitions
+  using ONLY this approved table → §7.5 parity gate green. Fresh chat, T4 port
+  template + T3 review before merge. P1.8b also owes the DECISIONS Pending
+  "P1.8b gate debt": per-rep score ±3-vs-Python assert, fault-multiset trace
+  coverage, phase-timing tolerance, Kd rep spot-check.
+```
+
+```
 TASK: P1.7 — definition schema + linter (§4, §9.2) + bundle load 🔴
 FILES CHANGED:
   packages/shared/src/{definition.ts (new), session.ts (definition now typed),
