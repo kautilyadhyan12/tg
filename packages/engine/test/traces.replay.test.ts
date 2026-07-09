@@ -1,25 +1,51 @@
 // CI trace-replay entry (Part 2 §7.6): replays every trace in test/traces/.
-// P1.6a state: the full Mode-A EngineSession exists — §7.4 assertions are
-// ARMED: rep counts exact, scores within the trace's declared range. Faults
-// remain faultsPending (legacy→EDS mapping is P1.8) and skip loudly.
+// P1.8b state: the parity exercises now run through COMPILED §4 definition
+// documents (test/definitions/{squat,jump_squat,chair_squat}.json), authored
+// from the P1.8a constant-preservation table — the hand-built parity-configs.ts
+// is retired. §7.4 assertions ARMED: rep counts exact (I2), scores within the
+// trace's declared range. Faults remain faultsPending (the legacy→EDS fault
+// mapping needs the jump airborne-state / chair target-relative template work,
+// tracked in DECISIONS) and skip loudly.
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { poseFrameSchema } from "@app/shared";
+import { exerciseDefinitionSchema, poseFrameSchema, type ExerciseDefinition } from "@app/shared";
 import {
   IngestStage,
   ViewTracker,
   VisibilityGate,
   assertTrace,
   classifyView,
+  compileDefinition,
   createSession,
   formatFailures,
+  lintDefinition,
   parseTrace,
   replay,
 } from "../src/index.js";
-import { parityConfig } from "./parity-configs.js";
 
 const TRACES_DIR = join(import.meta.dirname, "traces");
+const DEFS_DIR = join(import.meta.dirname, "definitions");
+
+const defCache = new Map<string, ExerciseDefinition>();
+/** Load, schema-parse and lint the §4 definition for an exercise. A definition
+ *  that fails the linter is not a valid engine input (§9.2), so the parity gate
+ *  refuses to run on it — never silently. */
+function definitionFor(exercise: string): ExerciseDefinition {
+  const cached = defCache.get(exercise);
+  if (cached) return cached;
+  const raw: unknown = JSON.parse(readFileSync(join(DEFS_DIR, `${exercise}.json`), "utf8"));
+  const def = exerciseDefinitionSchema.parse(raw);
+  const issues = lintDefinition(def);
+  if (issues.length > 0) {
+    throw new Error(
+      `definition ${exercise}.json failed the linter:\n` +
+        issues.map((i) => `  ${i.field}: ${i.message}`).join("\n"),
+    );
+  }
+  defCache.set(exercise, def);
+  return def;
+}
 
 function listTraceFiles(): string[] {
   return readdirSync(TRACES_DIR, { recursive: true, encoding: "utf8" })
@@ -27,25 +53,50 @@ function listTraceFiles(): string[] {
     .map((f) => join(TRACES_DIR, f));
 }
 
-describe("golden traces (§7.6) — stages 1–3", () => {
+// §7.5 / Part 0 #4: the parity fixture matrix requires these per-exercise
+// minimum recorded sessions before certification. The repo is short of this
+// (Option-B scope: drive the CURRENT clips green now; Kd records the rest).
+// This is TRACKED DEBT, surfaced loudly here — NOT a red gate (do not block on
+// it per the P1.8b card) — and recorded in DECISIONS.
+const CERT_MINIMUMS: Record<string, number> = { squat: 6, jump_squat: 4, chair_squat: 4 };
+
+describe("golden traces (§7.6) — compiled definitions", () => {
   const files = listTraceFiles();
 
-  it("reports trace inventory", () => {
+  it("reports §7.5 parity trace inventory and certification shortfall", () => {
     if (files.length === 0) {
       console.warn("⚠ golden traces: 0 traces — fixtures arrive via the P1.3 feeder.");
-    } else {
+      return;
+    }
+    const counts = new Map<string, number>();
+    for (const f of files) {
+      const trace = parseTrace(readFileSync(f, "utf8"));
+      const ex = trace.header.exercise;
+      counts.set(ex, (counts.get(ex) ?? 0) + 1);
+      // Meaningful (non-tautological) check: every present trace must map to a
+      // definition we can compile — no orphan fixtures.
+      expect(() => compileDefinition(definitionFor(ex), 1), `no compilable definition for ${ex}`).not.toThrow();
+    }
+    const shortfalls = Object.entries(CERT_MINIMUMS)
+      .map(([ex, need]) => ({ ex, have: counts.get(ex) ?? 0, need }))
+      .filter((c) => c.have < c.need);
+    if (shortfalls.length > 0) {
       console.warn(
-        `ℹ ${String(files.length)} trace(s): §7.4 ARMED (reps exact, scores in range); ` +
-          "fault multisets still faultsPending until P1.8 authors the legacy→EDS mapping.",
+        "⚠ §7.5 certification NOT met (Option-B follow-up — record remaining clips): " +
+          shortfalls.map((c) => `${c.ex} ${String(c.have)}/${String(c.need)}`).join(", "),
       );
     }
-    expect(files.length).toBeGreaterThanOrEqual(0);
+    console.warn(
+      `ℹ ${String(files.length)} trace(s) via compiled §4 definitions: §7.4 ARMED ` +
+        "(reps exact, scores in range); fault multisets still faultsPending.",
+    );
   });
 
   for (const file of files) {
     it(`§7.4 assertions on ${file.split(/[\\/]/).pop() ?? file}`, () => {
       const trace = parseTrace(readFileSync(file, "utf8"));
-      const session = createSession(parityConfig(trace.header.exercise));
+      const config = compileDefinition(definitionFor(trace.header.exercise), 1);
+      const session = createSession(config);
       const result = replay(session, trace);
       const failures = assertTrace(trace, result);
       expect(

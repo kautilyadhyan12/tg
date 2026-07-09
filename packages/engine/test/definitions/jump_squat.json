@@ -1,0 +1,48 @@
+{
+  "key": "jump_squat",
+  "aliases": ["jump_squats"],
+  "version": 1,
+  "minEngineVersion": "1.0.0",
+  "family": "squat_pattern",
+  "tracking": "pose",
+  "views": ["front", "side"],
+  "preferredView": "side",
+  "requireView": false,
+  "calibration": [{ "module": "standing_baseline" }],
+  "signals": ["knee_L", "knee_R", "knee_avg", "trunk_incline", "valgus_delta_L", "valgus_delta_R"],
+  "rep": {
+    "mode": "alternating_threshold",
+    "metric": "knee_L",
+    "upAt": 160,
+    "downAt": 130,
+    "countOn": "up",
+    "bilateralGate": 150
+  },
+  "phases": ["standing", "descent", "bottom", "ascent"],
+  "faults": [
+    {
+      "id": "knee_valgus",
+      "view": "front",
+      "phase": ["descent", "ascent"],
+      "when": "valgus_delta_L_min < -0.15",
+      "severe": "valgus_delta_L_min < -0.25",
+      "perRep": true,
+      "severity": 20,
+      "msg": "fault.jump_squat.valgus"
+    }
+  ],
+  "scoring": {
+    "components": [
+      {
+        "component": "depth",
+        "input": "knee_avg_min",
+        "curve": [[90, 100], [140, 40]],
+        "inactiveAbove": 155
+      }
+    ],
+    "neutral": 80,
+    "correctAt": 70
+  },
+  "setup": { "cameraHint": "setup.jump_squat.camera" },
+  "status": "beta"
+}

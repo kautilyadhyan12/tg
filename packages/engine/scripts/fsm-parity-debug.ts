@@ -1,8 +1,8 @@
 // Frame-by-frame FSM diff vs Python (P1.6a debugging; Node shell).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ModeAFsm, SignalEngine, VisibilityGate, parseTrace } from "../src/index.js";
-import { parityConfig } from "../test/parity-configs.js";
+import { ModeAFsm, SignalEngine, VisibilityGate, compileDefinition, parseTrace } from "../src/index.js";
+import { exerciseDefinitionSchema } from "@app/shared";
 
 const name = process.argv[2] ?? "squat_sideview2goodform";
 const dir = join(import.meta.dirname, "../test/traces/parity");
@@ -10,7 +10,10 @@ const trace = parseTrace(readFileSync(join(dir, `${name}.jsonl`), "utf8"));
 const resp = readFileSync(join(dir, `${name}.responses.jsonl`), "utf8").trim().split("\n")
   .map((l) => JSON.parse(l) as { rep_count?: number; state?: string; current_angle?: number | null; is_active?: boolean });
 const off = resp.length - trace.frames.length;
-const cfg = parityConfig(trace.header.exercise);
+const defRaw: unknown = JSON.parse(
+  readFileSync(join(import.meta.dirname, "../test/definitions", `${trace.header.exercise}.json`), "utf8"),
+);
+const cfg = compileDefinition(exerciseDefinitionSchema.parse(defRaw), 1);
 const fsm = new ModeAFsm(cfg.rep);
 const gate = new VisibilityGate(33);
 const sig = new SignalEngine(["knee_L", "knee_R"]);

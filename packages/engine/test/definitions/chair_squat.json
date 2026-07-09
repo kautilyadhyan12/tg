@@ -1,0 +1,58 @@
+{
+  "key": "chair_squat",
+  "aliases": ["chair_squats"],
+  "version": 1,
+  "minEngineVersion": "1.0.0",
+  "family": "squat_pattern",
+  "tracking": "pose",
+  "views": ["front", "side"],
+  "preferredView": "side",
+  "requireView": false,
+  "calibration": [
+    { "module": "standing_baseline" },
+    { "module": "adaptive_target", "clamp": [80, 120], "fallback": 100, "observeReps": 2 }
+  ],
+  "signals": ["knee_L", "knee_R", "knee_avg", "trunk_incline", "valgus_delta_L", "valgus_delta_R"],
+  "rep": {
+    "mode": "alternating_threshold",
+    "metric": "knee_L",
+    "upAt": 155,
+    "downAt": 110,
+    "countOn": "up",
+    "bilateralGate": 150
+  },
+  "phases": ["standing", "descent", "bottom", "ascent"],
+  "faults": [
+    {
+      "id": "knee_valgus",
+      "view": "front",
+      "phase": ["descent", "ascent"],
+      "when": "valgus_delta_L_min < -0.15",
+      "severe": "valgus_delta_L_min < -0.30",
+      "perRep": true,
+      "severity": 20,
+      "msg": "fault.chair_squat.valgus"
+    }
+  ],
+  "scoring": {
+    "components": [
+      {
+        "component": "depth",
+        "input": "knee_avg_min",
+        "curve": [[110, 100], [125, 40], [155, 0]],
+        "inactiveAbove": 155
+      },
+      {
+        "component": "valgus",
+        "input": "abs(valgus_delta_L_min)",
+        "view": "front",
+        "curve": [[0.15, 100], [0.3, 0]],
+        "inactiveWhenPositiveDrift": true
+      }
+    ],
+    "neutral": 80,
+    "correctAt": 70
+  },
+  "setup": { "cameraHint": "setup.chair_squat.camera" },
+  "status": "beta"
+}
