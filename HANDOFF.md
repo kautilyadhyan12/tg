@@ -1,6 +1,36 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P1.10a — migrate web SPA into the monorepo (v1 §4/§13 "migrated in place") 🟡
+              [first slice of P1.10; UNCOMMITTED — T3-reviewed clean]
+FILES CHANGED:
+  frontend/ -> apps/web/ (git mv, 306 renames); apps/web/package.json (name
+  "frontend" -> "web"); removed frontend/package-lock.json + stale node_modules/dist;
+  package.json (root lint -> "turbo run lint --filter=!web"); DECISIONS.md (lint-gate
+  entry + re-entry trigger); scripts/dev-recording-rig.ps1 (path frontend -> apps\web,
+  npm run dev -> corepack pnpm dev); pnpm-lock.yaml (regen: web is now a workspace member).
+STATE / DECISIONS:
+  - Scope = the MOVE only. Did NOT wire @app/engine/@app/shared into web, and did NOT
+    touch engine/api/shared logic — that's P1.10b.
+  - Web held OUT of the workspace lint gate (strangler-fig): salvage SPA has 90 pre-
+    existing eslint errors; mass-fixing forbidden (R1.1 + migration stance), a red CI
+    destroys the gate's signal. web has no typecheck/test scripts, so it's fully ungated
+    for now. Re-entry trigger recorded: drop --filter=!web once web adopts the strict
+    packages/config presets in P1.10b→P2. (DECISIONS.md 2026-07-09.)
+  - Verified: pnpm --filter web build green (Vite 8, 3362 modules); in-scope lint +
+    typecheck green; pnpm install --frozen-lockfile clean; apps/web/.env untracked &
+    ignored (root .gitignore:27); no other broken frontend/ refs in CI/infra/docker/scripts.
+  - T3 (independent, fresh chat) PASSED: no rule violations; one finding = this HANDOFF
+    block was missing (now added).
+OPEN SPEC GAPS: none for P1.10a.
+NEXT TASK: P1.10b — engine adapter (MediaPipe -> PoseFrame, un-mirrored coords §2.2) +
+  usePoseDetection swap to @app/engine + ActiveWorkout wiring + delete WS path. FIRST
+  DECISION at its plan gate: align the workspace on ONE zod (web zod@4 vs @app/shared
+  zod@3) — a cross-package bump touching api/engine, needs Kd approval (R1.4). Adopting
+  web onto the strict tsconfig/eslint presets here also trips the lint re-entry trigger.
+```
+
+```
 TASK: P1.9 — fuzz pass + performance gate (§7.6 / I5, I6) 🔴  [MERGED 2e8aab3]
 FILES CHANGED:
   packages/engine/test/{fuzz.test.ts, perf.test.ts} (new), vitest.config.ts (new:
