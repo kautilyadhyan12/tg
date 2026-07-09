@@ -1,0 +1,77 @@
+{
+  "key": "squat",
+  "aliases": ["squats"],
+  "version": 5,
+  "minEngineVersion": "1.0.0",
+  "family": "squat_pattern",
+  "tracking": "pose",
+  "views": ["front", "side"],
+  "preferredView": "side",
+  "requireView": false,
+  "calibration": [{ "module": "standing_baseline" }],
+  "signals": ["knee_avg", "knee_L", "knee_R", "trunk_incline", "valgus_delta_L", "valgus_delta_R"],
+  "rep": {
+    "mode": "alternating_threshold",
+    "metric": "knee_avg",
+    "upAt": 160,
+    "downAt": 100,
+    "countOn": "up",
+    "minRepMs": 900,
+    "maxRepMs": 12000,
+    "bilateralGate": 150
+  },
+  "phases": ["standing", "descent", "bottom", "ascent"],
+  "faults": [
+    {
+      "id": "shallow_depth",
+      "when": "knee_avg_min > 130",
+      "perRep": true,
+      "severity": 25,
+      "msg": "fault.squat.depth"
+    },
+    {
+      "id": "trunk_lean",
+      "when": "trunk_incline > 45",
+      "sustainMs": 300,
+      "severe": "trunk_incline > 60",
+      "severity": 20,
+      "msg": "fault.squat.lean"
+    },
+    {
+      "id": "knee_valgus",
+      "view": "front",
+      "phase": ["descent", "ascent"],
+      "when": "valgus_delta_L_min < -0.15",
+      "severe": "valgus_delta_L_min < -0.30",
+      "perRep": true,
+      "severity": 20,
+      "msg": "fault.squat.valgus"
+    }
+  ],
+  "scoring": {
+    "components": [
+      {
+        "component": "depth",
+        "input": "knee_avg_min",
+        "curve": [[100, 100], [130, 30], [155, 0]],
+        "inactiveAbove": 155
+      },
+      {
+        "component": "trunk",
+        "input": "trunk_incline",
+        "curve": [[45, 100], [75, 0]]
+      },
+      {
+        "component": "valgus",
+        "input": "abs(valgus_delta_L_min)",
+        "view": "front",
+        "curve": [[0.15, 100], [0.3, 0]],
+        "inactiveWhenPositiveDrift": true
+      }
+    ],
+    "neutral": 80,
+    "correctAt": 70
+  },
+  "setup": { "cameraHint": "setup.squat.camera" },
+  "status": "beta"
+}

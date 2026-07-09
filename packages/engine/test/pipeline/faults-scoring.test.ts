@@ -144,3 +144,17 @@ describe("scoring (§3.8 — numerically identical curves)", () => {
     expect(sessionFormScore([{ avgFormScore: null, reps: 5 }])).toBeNull();
   });
 });
+
+describe("scoring view scope (§4, T3 P1.7 finding A)", () => {
+  it("a front-scoped component has NO opinion in side view even when its input resolves", () => {
+    const comps = [
+      { component: "depth", input: "knee_avg_min", curve: [[100, 100], [155, 0]] as [number, number][] },
+      { component: "valgus", input: "valgus_delta_L_min", view: "front" as const, curve: [[0.15, 100], [0.3, 0]] as [number, number][], absolute: true },
+    ];
+    const inputs = (name: string) => (name === "knee_avg_min" ? 100 : -0.5); // valgus WOULD score 0
+    const side = scoreRep(comps, inputs, false, 0, "side");
+    expect(side.score).toBe(100); // depth only — valgus gated out by view
+    const front = scoreRep(comps, inputs, false, 0, "front");
+    expect(front.score).toBe(50); // both active: (100 + 0) / 2
+  });
+});

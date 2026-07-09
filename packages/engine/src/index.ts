@@ -10,6 +10,8 @@ export * from "./pipeline/ingest.js";
 export * from "./pipeline/conditioning.js";
 export * from "./pipeline/view.js";
 export * from "./pipeline/geometry.js";
+export * from "./definition/lint.js";
+export * from "./definition/compile.js";
 export * from "./pipeline/signals.js";
 export * from "./pipeline/calibration.js";
 export * from "./pipeline/fsm.js";

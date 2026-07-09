@@ -14,6 +14,7 @@
     "lint": "eslint src test",
     "test": "vitest run",
     "test:traces": "vitest run test/traces.replay.test.ts",
+    "lint:defs": "tsx scripts/lint-defs.ts",
     "bench": "tsx scripts/bench.ts"
   },
   "devDependencies": {

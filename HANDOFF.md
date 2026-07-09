@@ -1,6 +1,35 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P1.7 — definition schema + linter (§4, §9.2) + bundle load 🔴
+FILES CHANGED:
+  packages/shared/src/{definition.ts (new), session.ts (definition now typed),
+  index.ts}, packages/shared/test/schemas.test.ts (P1.1 placeholder updated),
+  packages/engine/src/definition/{lint.ts, compile.ts}, src/index.ts,
+  src/pipeline/scoring.ts (+inactiveWhenPositiveDrift), test/definition.test.ts,
+  test/definitions/squat.v5.json, scripts/lint-defs.ts, package.json
+  (+lint:defs), .github/workflows/ci.yml (+lint:defs step)
+DECISIONS/RECONSTRUCTIONS (worked example is "abbreviated" per §4):
+  - Spec's `valgus_delta_min` refs → `valgus_delta_L_min` (§3.4 library has
+    only L/R variants; unqualified name doesn't exist). P1.8b may switch to a
+    worst-of-both-sides composite if the constants inventory demands it.
+  - Fixture status "beta" not "live" (live requires ≥6 fixtures in the linter).
+  - bilateralGate in definitions is a NUMBER (§4 example) but only the
+    engine-global 150 is accepted in v1 — compile throws on anything else.
+  - "gps" tracking rejected (reserved, §4 v1.1).
+  - Compile equivalence test uses minRepMs-stripped variant (900 vs legacy 450
+    floor — booked P1.8b debt).
+PROOF: worked example lints clean, compiles, and counts IDENTICALLY to the
+hand-built legacy config on all 3 squat goldens. 140/140 engine tests,
+15/15 shared. lint:defs in CI.
+NEXT TASK: P1.8a — constants inventory (SEPARATE CHAT, deliverable = the §8.1
+table ONLY, from form_analyzer.py + RepCounter configs, for Kd review).
+Remaining before P1 exit: P1.8b (definitions to parity green), P1.6b (modes
+B–D), P1.9 (fuzz+perf), P1.10 (web swap). Kd still owes ~7 §7.5 clips + the
+golden spot-check (DECISIONS Pending).
+```
+
+```
 TASK: P1.6a — Mode-A FSM + fault DSL + scorer + emission (§3.6–3.9) 🔴
 FILES CHANGED:
   packages/engine/src/pipeline/{fsm,faults,scoring}.ts, src/session.ts,
