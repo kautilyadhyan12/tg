@@ -13,7 +13,7 @@ const FRAMES = 10 * 60 * 15; // 9000
 const FPS_MS = 1000 / 15;
 
 const def = exerciseDefinitionSchema.parse(
-  JSON.parse(readFileSync(join(import.meta.dirname, "../test/definitions/squat.json"), "utf8")),
+  JSON.parse(readFileSync(join(import.meta.dirname, "../src/definitions/squat.json"), "utf8")),
 );
 const src = parseTrace(
   readFileSync(join(import.meta.dirname, "../test/traces/parity/sqauta_sideview1goodform.jsonl"), "utf8"),

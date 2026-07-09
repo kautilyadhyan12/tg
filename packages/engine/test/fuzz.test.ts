@@ -15,7 +15,7 @@ import { compileDefinition, createSession, parseTrace } from "../src/index.js";
 import { must } from "./fixtures.js";
 
 const PARITY = join(import.meta.dirname, "traces", "parity");
-const DEFS = join(import.meta.dirname, "definitions");
+const DEFS = join(import.meta.dirname, "../src/definitions");
 const FPS_MS = 1000 / 15;
 
 type KP = [number, number, number, number];

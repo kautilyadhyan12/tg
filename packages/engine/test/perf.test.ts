@@ -17,7 +17,7 @@ import { exerciseDefinitionSchema, type ExerciseDefinition, type PoseFrame } fro
 import { compileDefinition, createSession, parseTrace } from "../src/index.js";
 import { must } from "./fixtures.js";
 
-const DEFS = join(import.meta.dirname, "definitions");
+const DEFS = join(import.meta.dirname, "../src/definitions");
 const PARITY = join(import.meta.dirname, "traces", "parity");
 const FPS_MS = 1000 / 15;
 const FRAMES = 10 * 60 * 15; // 9000 = 10 min @15fps (§7.6)

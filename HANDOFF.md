@@ -1,6 +1,35 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P1.10b-1a — engine defs to v1 §4 home + engine v1 (prep for the web engine-swap) 🟡
+              [second slice of P1.10; on branch p1.10a-web-into-monorepo; T3-reviewed clean]
+FILES CHANGED:
+  git mv packages/engine/test/definitions/{squat,jump_squat,chair_squat}.json ->
+    packages/engine/src/definitions/  (CANONICAL def home is now src/definitions per v1 §4;
+    squat.v5.json STAYS in test/definitions — P1.7 worked-example fixture, DECISIONS 2026-07-09);
+  packages/engine/package.json (exports += "./definitions/*": "./src/definitions/*"; version 1.0.0);
+  packages/engine/src/session.ts (ENGINE_VERSION "0.1.0" -> "1.0.0");
+  repointed consumers: test/{traces.replay,fuzz,perf}.test.ts, scripts/{bench,fsm-parity-debug}.ts;
+  test/fixtures.ts (scriptedEngine mock now imports ENGINE_VERSION instead of stale "0.0.1" — T3 finding).
+STATE / DECISIONS:
+  - engineVersion, package version, and all 3 defs' minEngineVersion now AGREE at 1.0.0 (I4: engineVersion =
+    "semver of the package"; every spec example uses 1.0.0; Part 2 §10 = "engine v1"). Closes a prior
+    incoherence (defs required 1.0.0 while the engine stamped 0.1.0) — this is what P1.10b-1b's I4 gate needs.
+  - Defs exposed to the web build via the package subpath export (data-only; Vite bundles JSON). The eventual
+    runtime path is the P2.2 catalog bundle API (Part 2 §9.3); the static export is the P1.10b bridge.
+  - Verified: engine typecheck 0 · 146/146 tests (traces §7.4 + fuzz + perf) · lint:defs 4 ok · eslint 0 ·
+    R5.1 purity grep clean · git mv changed zero def bytes (P1.8b parity byte-intact, T3-confirmed).
+  - Historical DECISIONS.md:50 / HANDOFF.md older blocks still cite the old test/definitions path — left as
+    append-only history; THIS block records the new canonical src/definitions home going forward.
+OPEN SPEC GAPS: none new. Pre-existing (NOT this task): §7.5 trace-count cert still 3/6+3/4+3/4 (Option-B debt,
+  DECISIONS 2026-07-09) — traces pass as a report, but Part 2 §10 "parity green" is not fully certified.
+NEXT TASK: P1.10b-1b — web poseAdapter (MediaPipe->PoseFrame, un-mirrored §2.2; per-set createSession; I4
+  minEngineVersion gate; endSet->SetSummary) + add vitest to apps/web + adapter test replaying a golden.
+  Imports @app/engine (createSession/compileDefinition) + @app/engine/definitions/*.json. zod stays deferred
+  (P1.10c, when @app/shared VALUE schemas are imported by the sync client).
+```
+
+```
 TASK: P1.10a — migrate web SPA into the monorepo (v1 §4/§13 "migrated in place") 🟡
               [first slice of P1.10; UNCOMMITTED — T3-reviewed clean]
 FILES CHANGED:

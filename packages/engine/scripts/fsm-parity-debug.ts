@@ -11,7 +11,7 @@ const resp = readFileSync(join(dir, `${name}.responses.jsonl`), "utf8").trim().s
   .map((l) => JSON.parse(l) as { rep_count?: number; state?: string; current_angle?: number | null; is_active?: boolean });
 const off = resp.length - trace.frames.length;
 const defRaw: unknown = JSON.parse(
-  readFileSync(join(import.meta.dirname, "../test/definitions", `${trace.header.exercise}.json`), "utf8"),
+  readFileSync(join(import.meta.dirname, "../src/definitions", `${trace.header.exercise}.json`), "utf8"),
 );
 const cfg = compileDefinition(exerciseDefinitionSchema.parse(defRaw), 1);
 const fsm = new ModeAFsm(cfg.rep);

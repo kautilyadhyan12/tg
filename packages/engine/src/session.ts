@@ -24,7 +24,7 @@ import {
 } from "./pipeline/faults.js";
 import { scoreRep, type ScoringComponent } from "./pipeline/scoring.js";
 
-export const ENGINE_VERSION = "0.1.0"; // I4: stamped on every emitted session
+export const ENGINE_VERSION = "1.0.0"; // I4: semver of the package, stamped on every emitted session (P1 = engine v1, Part 2 §10)
 
 /** Internal engine configuration — P1.7 compiles §4 definition documents into
  *  this shape; parity tests hand-build it from the §8.1 constants. */

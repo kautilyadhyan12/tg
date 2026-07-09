@@ -1,6 +1,6 @@
 // CI trace-replay entry (Part 2 §7.6): replays every trace in test/traces/.
 // P1.8b state: the parity exercises now run through COMPILED §4 definition
-// documents (test/definitions/{squat,jump_squat,chair_squat}.json), authored
+// documents (src/definitions/{squat,jump_squat,chair_squat}.json — v1 §4 home), authored
 // from the P1.8a constant-preservation table — the hand-built parity-configs.ts
 // is retired. §7.4 assertions ARMED: rep counts exact (I2), scores within the
 // trace's declared range. Faults remain faultsPending (the legacy→EDS fault
@@ -25,7 +25,7 @@ import {
 } from "../src/index.js";
 
 const TRACES_DIR = join(import.meta.dirname, "traces");
-const DEFS_DIR = join(import.meta.dirname, "definitions");
+const DEFS_DIR = join(import.meta.dirname, "../src/definitions");
 
 const defCache = new Map<string, ExerciseDefinition>();
 /** Load, schema-parse and lint the §4 definition for an exercise. A definition
