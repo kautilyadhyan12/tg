@@ -1,6 +1,59 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P1.9 — fuzz pass + performance gate (§7.6 / I5, I6) 🔴  [MERGED 2e8aab3]
+FILES CHANGED:
+  packages/engine/test/{fuzz.test.ts, perf.test.ts} (new), vitest.config.ts (new:
+  forks + --expose-gc), scripts/bench.ts (real engine now), package.json
+  (+test:fuzz/test:perf), DECISIONS.md.
+STATE / DECISIONS:
+  - PERF: real squat engine, 9000-frame (10min@15fps) replay. p95 ≈ 0.03 ms
+    (~100× under 3 ms). The 3 ms CI assertion is a REGRESSION TRIPWIRE; the true
+    ≤3 ms mid-Android (₹12k) budget (I5) is verified at the P5 §3.2 device spike.
+  - HEAP: strict <5 MB with FORCED GC (≈ −25.8 MB, reproducible) is what CI runs
+    (vitest.config.ts exposes gc). The loose <40 MB fallback is NOISY (−5..+25 MB)
+    — not a stable number. R5.5 ring-buffer refactor MEASURED UNNECESSARY (garbage
+    fully reclaimed); that deferral is closed.
+  - FUZZ: seeded (mulberry32) NaN / dropout / 8–40 fps jitter on squat/chair/jump
+    goldens (40 seeds × 4 variants) + a recovery case. Invariants hold: no throw
+    (I6), reps never exceed the clean baseline, counting recovers after dropout.
+    Confirms the 2026-07-08 debounce decision (raw frame counts don't let jitter
+    inflate counts).
+  - NO src/ changes. T3-reviewed in a SEPARATE chat: found the strict heap gate
+    wasn't wired to CI (fixed via vitest.config --expose-gc) + DECISIONS heap
+    figures were cherry-picked (corrected). Re-proven green.
+PROOF: 146/146 engine tests (perf line shows gc=forced strict path), tsc 0,
+  lint 0, purity grep clean.
+NEXT TASK: P1.10 🟡 — web swap. LAST engine-phase task; after it, Phase 1 is done.
+```
+
+```
+TASK: P1.8b — squat/jump/chair as §4 definitions (§4–8) 🔴  [MERGED 0228c06]
+FILES CHANGED:
+  packages/engine/test/definitions/{squat.json (v6), jump_squat.json,
+  chair_squat.json} (new), test/traces.replay.test.ts (compiled defs + §7.5
+  count-shortfall warn), test/parity-configs.ts (DELETED),
+  scripts/fsm-parity-debug.ts (repointed to compiled defs), DECISIONS.md.
+STATE / DECISIONS:
+  - FOOTNOTE 2 RESOLVED by measurement: metric = knee_L (+knee_R fallback) for
+    ALL three. knee_avg matches the 3 squat goldens but UNDERCOUNTS chair (2→1)
+    and jump (2→0). squat.json v6 supersedes squat.v5.json's illustrative
+    knee_avg AND drops the unported minRepMs:900 / maxRepMs:12000.
+  - Only SQUAT is scored faithfully. jump (airborne-gated) + chair (target-
+    relative depth) scoring is NOT expressible in the current template → interim
+    scorers, filed as 2 SPEC GAPs → P4. Chair C2 = option (b): reps+scoreRange.
+    The ±3-vs-Python assertion has no defined extraction rule → deferred.
+  - OPTION B (Kd's call): land the current 9 clips green (reps + view +
+    scoreRange). Faults / ±3 / full 6+4+4 session count deferred as tracked P4
+    debt; G3 signed off. §7.5 shortfall (have 3+3+3) now WARNS loudly in
+    traces.replay (was a tautology).
+  - T3-reviewed in a SEPARATE chat: caught unported minRepMs (V1) + DECISIONS
+    accuracy holes — all fixed before merge.
+PROOF: 141/141 engine tests, tsc 0, lint 0, purity grep clean.
+NEXT TASK: P1.9 — fuzz pass + perf gate (§7.6).
+```
+
+```
 TASK: P1.8a — constants inventory (§8.1 table ONLY; NO code) 🔴
 DELIVERABLE: docs/port/P1.8a-constants-inventory.md — the complete §8.1
   constant-preservation table from form_analyzer.py + rep_counter.py, APPROVED
