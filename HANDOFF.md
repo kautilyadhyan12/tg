@@ -1,6 +1,56 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P1.10b-2a — usePoseDetection driven by the engine; WS path deleted (v1 §13/D1) 🟡
+              [fourth slice of P1.10; on branch p1.10a-web-into-monorepo; UNCOMMITTED — awaiting T3]
+FILES CHANGED:
+  apps/web/src/engine/messages.en.js (new — Appendix A EN catalog + translate());
+  apps/web/src/engine/frameMapping.js (new — FrameResult -> old poseData display shape, v1 §13);
+  apps/web/src/engine/sessionController.js (new — per-set engine lifecycle, factored out of React,
+    + log-only fallback);
+  apps/web/src/hooks/usePoseDetection.js (REWRITTEN — WS path DELETED; drives SessionController);
+  apps/web/src/engine/{messages,frameMapping,sessionController}.test.js (new — 9 tests).
+STATE / DECISIONS:
+  - WS path GONE from the hook: WS_URL, connect/disconnect/reconnect/onmessage, resetReps,
+    recordResponse all removed (v1 §5.3 "replaces pose_ws.py entirely"; Part 2 §10 "delete the WS path").
+    Kept dev recordFrame (raw PoseFrame tee, VITE_TRACE_RECORD only).
+  - HOOK API CHANGED: was {poseData,keypointsData,connected,connect,disconnect,startStreaming,resetReps};
+    NOW {poseData,keypointsData,analysisAvailable,error,startStreaming,stop} + props {exercise,setIndex,
+    enabled,onSetComplete}. poseData keeps the OLD display shape (rep_count/state/corrections/form_correct/
+    is_active/person_detected/view/form_score) so ActiveWorkout "mostly doesn't notice" (v1 §13).
+  - >>> ActiveWorkout is STRANDED until P1.10b-2b <<< it still calls connect()/disconnect()/connected.
+    Build passes (JS), unit tests pass, but the app does NOT run end-to-end until 2b rewires ActiveWorkout.
+    Deliberate a/b split; the Part 2 §10 offline-workout Done-gate is proven in 2b, not here.
+  - One engine session PER SET (§3.9): effect keyed on (exercise,setIndex) — NOT enabled, so pause stops
+    FEEDING, not the set. Cleanup emits the previous SetSummary via onSetComplete.
+  - Log-only mode (Part 6 §3.6) for exercises with no def (getDefinition null) AND for I4-incompatible defs
+    (EngineUnsupportedError caught -> log-only): manual counting, no grading, honest "still counts". A real
+    compile/authoring error is NOT swallowed (rethrown).
+  - Message keys -> EN from Appendix A (verbatim where given; chair/jump valgus reuse squat's copy;
+    cue.visibility.step_back = Appendix A fault.body.visibility string). setup.*.camera use the §4 pattern copy.
+  - Time (performance.now) lives in the hook, passed INTO the controller/engine (R5.1). Adapter/engine wall-clock-free.
+  - Verified: web 17/17 tests (adapter 8 + messages 3 + frameMapping 4 + sessionController 2, incl. golden
+    replay reps=2 + log-only) · web build green (engine now bundled via the hook) · eslint clean on new/changed files.
+  - NO jsdom/testing-library added: the real logic is in the pure controller/mappers (tested); the hook is thin
+    React glue, integration-proven by the app in 2b.
+  - T3 PASSED (fresh chat): no rule violations. One in-slice fix applied — SessionController.endSet() returns
+    null when the set was never fed a frame (guards phantom reps:0 summaries from StrictMode dev remounts /
+    setup-screen exercise switches, so P1.10c's onSetComplete-based sync queue never sees junk). 18/18 tests.
+OPEN SPEC GAPS: none (log-only fallback resolved by Part 6 §3.6, not a decision).
+NEXT TASK: P1.10b-2b — rewire ActiveWorkout to the new hook: pass setIndex + onSetComplete; REMOVE the
+  server-baseline rep machinery (repBaselineRef/pendingBaselineRef/lastServerCountRef — engine count is
+  per-set); reps from poseData.rep_count, per-rep form from RepEvent via poseData.form_score; render log-only
+  UI when !analysisAvailable (manual controls already exist); collect SetSummary[] (onSetComplete) for P1.10c;
+  keep workoutService.completeSession (old backend) until P2.8. Then the Part 2 §10 offline-workout Done-gate.
+  T3 (2a) CARRY-FORWARDS for 2b: ActiveWorkout still destructures/calls connected/connect()/disconnect()
+  (runtime TypeError until rewired); "End workout" MUST bump setIndex or unmount to finalize the LAST set —
+  stop() tears down the camera WITHOUT ending the set (by design); form_score is now the last rep's score held
+  across frames (not per-frame) — drop the state==='down' && form_score>0 buffer, read RepEvent scores;
+  person_detected has TWO sources (poseData.person_detected=visibilityOk vs keypointsData.person_detected=
+  landmarks>0) — pick deliberately per UI element.
+```
+
+```
 TASK: P1.10b-1b — web poseAdapter (on-device engine bridge, v1 §13/D1) 🟡
               [third slice of P1.10; on branch p1.10a-web-into-monorepo; UNCOMMITTED — awaiting T3]
 FILES CHANGED:
