@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "workout_sets_workout_set_uq" ON "workout_sets" USING btree ("workout_id","set_index");

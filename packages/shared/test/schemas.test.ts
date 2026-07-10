@@ -143,4 +143,26 @@ describe("workout sync payload (v1 §5.3)", () => {
     expect(workoutSyncPayloadSchema.safeParse({ ...payload, platform: "tv" }).success).toBe(false);
     expect(workoutSyncPayloadSchema.safeParse({ ...payload, extra: true }).success).toBe(false);
   });
+  // Part 4 §3.5 column-type bounds + upsert-key integrity (P1.10d T3): values
+  // that would overflow PG smallint/int4, duplicate the (workout_id, set_index)
+  // key, or create an empty engine workout must fail at the schema, not as a
+  // server 500 (which the client's retry policy would treat as transient).
+  it("rejects DDL overflows: setIndex/reps > smallint, durationMs > int4", () => {
+    const withSet = (over: Record<string, number>) => ({
+      ...payload,
+      sets: [{ ...validSetSummary, ...over }],
+    });
+    expect(workoutSyncPayloadSchema.safeParse(withSet({ setIndex: 32768 })).success).toBe(false);
+    expect(workoutSyncPayloadSchema.safeParse(withSet({ reps: 32768 })).success).toBe(false);
+    expect(
+      workoutSyncPayloadSchema.safeParse(withSet({ durationMs: 2_147_483_648 })).success,
+    ).toBe(false);
+  });
+  it("rejects duplicate setIndex (would silently drop rows in the §3.5 upsert)", () => {
+    const dup = { ...payload, sets: [validSetSummary, { ...validSetSummary }] };
+    expect(workoutSyncPayloadSchema.safeParse(dup).success).toBe(false);
+  });
+  it("rejects empty sets (all-log-only workouts are never synced — DECISIONS 2026-07-10)", () => {
+    expect(workoutSyncPayloadSchema.safeParse({ ...payload, sets: [] }).success).toBe(false);
+  });
 });

@@ -1,6 +1,57 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P1.10d — minimal POST /v1/workouts/sync in apps/api (Part 4 §3.5; closes Part 2 §10 "then syncs") 🟡
+              [on branch p1.10a-web-into-monorepo; UNCOMMITTED — awaiting Kd's DB-gated PROVE + T3]
+FILES CHANGED:
+  apps/api/drizzle/0002_workout_sets_uq.sql (+meta 0001_snapshot, journal entry) — ONE line:
+    CREATE UNIQUE INDEX workout_sets_workout_set_uq ON workout_sets (workout_id, set_index);
+  apps/api/src/db/schema/training.ts (uniqueIndex mirror);
+  apps/api/src/modules/workouts/{schemas,repo,service,routes}.ts (new — R7.1 module layout;
+    contract re-exported from @app/shared, R7.2);
+  apps/api/src/app.ts (route registration); src/config.ts (+SYNC_DEV_USER_ID, refused in prod);
+  apps/api/src/db/seed.ts (3-exercise minimal seed); apps/api/package.json (+@app/shared);
+  apps/api/test/workouts.sync.test.ts (new — 9 tests, DATABASE_URL-gated); pnpm-lock.yaml;
+  DECISIONS.md (5 entries 2026-07-10); HANDOFF.md.
+STATE / DECISIONS (all approved at plan gate; full text in DECISIONS.md):
+  - AUTH SEAM: SYNC_DEV_USER_ID (dev/test only; config boot throws if set in production).
+    NOTE: the previously-cited "2A DECISIONS entry" never existed — now actually recorded.
+  - §3.5 upsert implemented from §3.5 prose (R4.5's §4 pointer is dangling — recorded);
+    ownership checked AFTER the workout upsert (read-back beats check-then-insert TOCTOU);
+    foreign workoutId → 404 (R3.2), tested with rows-untouched assertion.
+  - Unknown slug: skip set + quality_flags 'unknown_exercise', NEVER a parking 4xx (client
+    R10.3 interplay). kcal null until P2.6. Aggregates server-derived from persisted sets.
+  - Idempotency-Key required and must equal body workoutId (mismatch/missing → 400).
+    Concurrent duplicate POSTs tested (cross-tab case from P1.10c T3): one workout, no 500.
+VERIFIED: api typecheck 0 · lint 0 · PROVE run BY KD against a Neon branch (p110d-test):
+  migration 0002 applied cleanly · full api suite 26/26 GREEN including all 9 sync tests
+  (happy path, validation 400, idem-key mismatch, retry no-op, concurrent duplicates → one
+  workout, cross-tenant 404 rows-untouched, unknown-slug skip+flag, 401 dark, prod-seam
+  refusal) + the 4 migration tests re-proving seed idempotency with the new exercises rows.
+  PROVE-run fixes applied along the way (slow WAN to ap-southeast-1): sync-test beforeAll
+  timeout 60s (matches the migration test's 30s seed budget); afterAll guards app-undefined
+  so a dead hook doesn't mask its own failure.
+T3 PASSED (fresh chat) with 4 findings — ALL FIXED, all local gates re-proven green
+  (shared 19/19 with 3 new schema tests · api typecheck/lint/unit clean · web 47/47):
+  (1) missing DDL bounds → shared schema now enforces smallint/int4 maxima (a PG overflow
+      was a 500, which the client retries forever — poison-pill queue halt);
+  (2) duplicate setIndex desynced server aggregates via ON CONFLICT DO NOTHING → rejected
+      at the schema (superRefine uniqueness);
+  (3) seam honored when NODE_ENV merely omitted (defaults to development) → gate inverted:
+      raw-env explicit development/test required, omitted case tested;
+  (4) sets:[] created an empty engine workout the P1.10c decision forbids → .min(1).
+  T3 NOTES: 404-vs-201 is a weak existence oracle for guessed ids — accepted (uuid v4,
+  R3.2's own prescription); changed-retry-same-id is silently discarded as duplicate —
+  §3.5's no-op contract, by design.
+OPEN SPEC GAPS: none new (the R4.5 dangling pointer is recorded as a correction, not a gap).
+NEXT: Kd re-runs the DB-gated suite (validation/seam tests changed) → commit → the Part 2 §10 END-TO-END
+  PROVE: apps/web/.env VITE_API_URL=http://localhost:3000 · api running with SYNC_DEV_USER_ID
+  set to a seeded user + DATABASE_URL · do a workout with the api STOPPED · start it ·
+  watch the queue flush (Network tab: POST /v1/workouts/sync with Idempotency-Key) ·
+  verify the workouts/workout_sets rows. That demonstration closes Phase 1.
+```
+
+```
 TASK: P1.10c — offline summary queue + sync client in apps/web (R10.2/R10.3; the "then syncs" half) 🟡
               [on branch p1.10a-web-into-monorepo; UNCOMMITTED — awaiting T3]
 FILES CHANGED:

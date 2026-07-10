@@ -23,6 +23,7 @@
     "vitest": "^2.1.8"
   },
   "dependencies": {
+    "@app/shared": "workspace:*",
     "@fastify/cors": "^11.2.0",
     "@fastify/rate-limit": "^11.1.0",
     "@fastify/sensible": "^6.0.4",

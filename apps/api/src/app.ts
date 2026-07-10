@@ -8,6 +8,7 @@ import sensible from "@fastify/sensible";
 import * as Sentry from "@sentry/node";
 import postgres from "postgres";
 import { createAnalytics, type Analytics } from "./analytics.js";
+import { registerWorkoutRoutes } from "./modules/workouts/routes.js";
 import type { AppConfig } from "./config.js";
 
 declare module "fastify" {
@@ -96,6 +97,8 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
     await sql`SELECT 1`;
     return { status: "ok" };
   });
+
+  registerWorkoutRoutes(app, { sql, config });
 
   return app;
 }
