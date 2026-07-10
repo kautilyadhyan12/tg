@@ -35,6 +35,30 @@ describe("SessionController — engine mode (def exists)", () => {
   });
 });
 
+describe("SessionController — occluded legs (sitting-at-desk bug)", () => {
+  // 33 valid keypoints, but every leg joint (hips/knees/ankles/feet, 23–32)
+  // has near-zero visibility — MediaPipe's output when only a face is in frame.
+  const legsHiddenLandmarks = () =>
+    Array.from({ length: 33 }, (_, i) => ({
+      x: 0.5,
+      y: 0.3,
+      z: 0,
+      visibility: i >= 23 ? 0.01 : 1.0,
+    }));
+
+  it("shows the step-back cue and withdraws the form verdict instead of 'Good Form'", () => {
+    const c = new SessionController();
+    c.startSet("squat", 1);
+    let d;
+    for (let i = 0; i < 5; i++) d = c.feed(legsHiddenLandmarks(), i * 67, true);
+    expect(d.form_correct).toBeNull(); // no verdict — nothing is measured
+    expect(d.corrections[0]).toMatch(/step back/i);
+    expect(d.rep_count).toBe(0); // and nothing ever counts
+    // A set that never measured anything reports no score.
+    expect(c.endSet().avgFormScore).toBeNull();
+  });
+});
+
 describe("SessionController — no phantom summaries (T3 P1.10b-2a)", () => {
   it("endSet returns null when the set was never fed a frame", () => {
     const c = new SessionController();

@@ -1,6 +1,33 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P1.10b-2c — PROVE-run fix: occluded-legs honesty + regression-trace class 🟡
+              [on branch p1.10a-web-into-monorepo; UNCOMMITTED — awaiting T3]
+CONTEXT: Kd's real-browser PROVE run "failed"; diagnosis via live recordings (P1.3 recorder) showed:
+  (1) sitting at desk = engine correctly counts 0 (fail-soft works) but UI showed "Good Form 100%" — REAL BUG;
+  (2) real squats: only 4 of ~10 cycles crossed the ported 100° depth threshold — counting is CORRECT per the
+      validated legacy constants (shallow-rep UX = P4 §9.1 tuning, not touched, R5.4);
+  (3) chair/jump counting non-jumps/no-chair = legacy parity, already-logged P4 SPEC GAPs;
+  (4) the live "3 reps sitting" was chair_squat counting real sit-down/stand-up motions (correct).
+FILES CHANGED:
+  packages/engine/test/traces/regression/squat_sitting_idle_desk_nocount.jsonl (new golden — Kd's live
+    sitting recording, 600 frames, expected reps 0; header exercise corrected squats->squat);
+  packages/engine/test/traces.replay.test.ts (parity vs regression split: sidecar-less traces get full §7.4
+    assertions but are excluded from §7.5 cert counts + stage-parity checks);
+  apps/web/src/engine/poseAdapter.js (startSet now also returns metricSignals = compiled metric + fallback);
+  apps/web/src/engine/sessionController.js (metric-unusable streak >= 3 frames + visibilityOk -> corrections=
+    ["cannot see your legs clearly — step back..."], form_correct=null; engine untouched — it was already
+    correct, only the presentation lied);
+  apps/web/src/engine/sessionController.test.js (+1 test: occluded legs -> cue, no verdict, 0 reps);
+  DECISIONS.md (two entries, 2026-07-10).
+VERIFIED: engine 147 tests green incl. the new regression golden (20 trace tests; cert counts unchanged 3/6+3/4+3/4
+  — regression traces correctly not parity evidence) · web 25/25 · build green · engine+web lint clean · typecheck 0.
+OPEN SPEC GAPS: none new. NOTE for P5: consider moving the legs-cue into engine §3.2 when mobile lands.
+NEXT: Kd re-runs the browser PROVE (expect: sitting -> "step back" warning + no Good Form; deep squats count,
+  shallow don't). Then P1.10c (offline queue + sync client; zod 3-vs-4 decision).
+```
+
+```
 TASK: P1.10b-2b — ActiveWorkout rewired to the engine hook; swap complete (v1 §13/D1) 🟡
               [fifth/final P1.10b slice; on branch p1.10a-web-into-monorepo; UNCOMMITTED — awaiting T3]
 FILES CHANGED:

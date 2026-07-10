@@ -9,6 +9,17 @@ import {
   startSet as adapterStartSet,
 } from "./poseAdapter.js";
 import { frameToDisplay } from "./frameMapping.js";
+import { translate } from "./messages.en.js";
+
+// §3.1's rule, applied at the signal level: after this many consecutive frames
+// where the exercise's rep-metric joints are unusable (occluded legs — the
+// frames themselves are valid, so the engine's ingest-level visibilityOk stays
+// true), the UI shows the legacy "cannot see your legs clearly — step back"
+// cue instead of a false "Good Form". Mirrors the legacy form_analyzer leg-
+// visibility warning that the port had narrowed to ingest-invalid frames only
+// (found via the sitting_idle live recording — its regression golden pins the
+// no-counting half; this constant drives the honest-UI half).
+const METRIC_UNUSABLE_STREAK = 3;
 
 // Log-only display (Part 6 §3.6): no analysis for this exercise — the screen
 // falls back to manual rep counting, honestly, and the workout still counts.
@@ -34,6 +45,8 @@ export class SessionController {
     this._lastRepScore = null;
     this._repScores = [];
     this._framesFed = 0;
+    this._metricSignals = [];
+    this._metricUnusableStreak = 0;
   }
 
   get analysisAvailable() {
@@ -47,11 +60,14 @@ export class SessionController {
     this._lastRepScore = null;
     this._repScores = [];
     this._framesFed = 0;
+    this._metricSignals = [];
+    this._metricUnusableStreak = 0;
     this._session = null;
     this._analysisAvailable = false;
     if (def == null) return; // no definition yet → log-only (Part 6 §3.6)
     try {
       this._session = adapterStartSet(def, setIndex);
+      this._metricSignals = this._session.metricSignals;
       this._analysisAvailable = true;
       this._session.onRep((e) => {
         this._lastRepScore = e.score;
@@ -75,7 +91,21 @@ export class SessionController {
     if (this._session == null) return logOnlyDisplay(keypointsPresent);
     this._framesFed += 1;
     const fr = this._session.feed(landmarks, tMs);
-    return { ...frameToDisplay(fr), form_score: this._lastRepScore };
+    const display = { ...frameToDisplay(fr), form_score: this._lastRepScore };
+
+    // Honest degradation when the measured joints are occluded: the engine
+    // already refuses to count (metric null → FSM holds), but with no fault
+    // firing the UI would read "Good Form" while seeing only a face. Surface
+    // the legacy legs warning and withdraw the form verdict instead.
+    const metricUsable = this._metricSignals.some(
+      (name) => typeof fr.signals[name] === "number",
+    );
+    this._metricUnusableStreak = metricUsable ? 0 : this._metricUnusableStreak + 1;
+    if (fr.visibilityOk && this._metricUnusableStreak >= METRIC_UNUSABLE_STREAK) {
+      display.form_correct = null; // no verdict — nothing is being measured
+      display.corrections = [translate("cue.visibility.step_back")];
+    }
+    return display;
   }
 
   /** Per-rep scores observed so far this set (engine RepEvent.score, §2.4). */

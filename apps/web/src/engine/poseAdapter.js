@@ -75,8 +75,13 @@ export function startSet(def, setIndex) {
   if (!engineSupports(def)) {
     throw new EngineUnsupportedError(def.key, def.minEngineVersion, ENGINE_VERSION);
   }
-  const session = createSession(compileDefinition(def, setIndex));
+  const config = compileDefinition(def, setIndex);
+  const session = createSession(config);
   return {
+    /** The rep metric signal (+ compiled fallback): when none of these appear
+     *  in FrameResult.signals, the joints the exercise is measured by are not
+     *  usable this frame — the caller surfaces the §3.1 "step back" cue. */
+    metricSignals: [config.metric, ...(config.metricFallback ? [config.metricFallback] : [])],
     feed(landmarks, tMs) {
       return session.processFrame(landmarksToFrame(landmarks, tMs));
     },
