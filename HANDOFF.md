@@ -44,11 +44,17 @@ T3 PASSED (fresh chat) with 4 findings — ALL FIXED, all local gates re-proven 
   R3.2's own prescription); changed-retry-same-id is silently discarded as duplicate —
   §3.5's no-op contract, by design.
 OPEN SPEC GAPS: none new (the R4.5 dangling pointer is recorded as a correction, not a gap).
-NEXT: Kd re-runs the DB-gated suite (validation/seam tests changed) → commit → the Part 2 §10 END-TO-END
-  PROVE: apps/web/.env VITE_API_URL=http://localhost:3000 · api running with SYNC_DEV_USER_ID
-  set to a seeded user + DATABASE_URL · do a workout with the api STOPPED · start it ·
-  watch the queue flush (Network tab: POST /v1/workouts/sync with Idempotency-Key) ·
-  verify the workouts/workout_sets rows. That demonstration closes Phase 1.
+COMMITTED: 2fad025 (after DB-gated PROVE 9/9 green on the Neon branch).
+== PART 2 §10 END-TO-END GATE: CLOSED (Kd, live browser, 2026-07-10 21:00) ==
+  Real squat workout on localhost:5173 (old rig up for auth only, new api on :3000 with the
+  SYNC_DEV_USER_ID seam) → engine counted 5 reps on-device → sync POST fired from
+  syncClient.js with Idempotency-Key → Status 201 → Neon row verified in SQL editor:
+  workout 7c51a51f-7a8c-428d-8c06-6bf6d186d64f · 1 set · 5 reps · form 100 · flags {}.
+  PHASE 1 (P1.1–P1.10d) IS COMPLETE.
+NEXT: Phase 2 (P2.1 — auth module port into apps/api; R3.7 is the porting spec; the sync
+  route's seam block gets replaced by real cookie authn and the cross-tenant test re-proven).
+  Cleanup for Kd (non-blocking): delete the p110d-test Neon branch when done poking at it;
+  the seam env vars live only in that one terminal session (nothing persisted).
 ```
 
 ```
