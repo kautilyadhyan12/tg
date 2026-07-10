@@ -14,6 +14,7 @@ import PoseOverlay from '../components/workout/PoseOverlay';
 import ReferenceAnimation from '../components/workout/ReferenceAnimation';
 import { workoutService } from '../api/workoutApi';
 import { getItem, removeItem } from '../utils/storage';
+import { queueWorkoutSync } from '../sync/syncClient';
 import { accumulateSummary, averageFormScore, createSummaryLog } from './activeWorkoutEngine';
 import {
   speakExercise, speakCorrection,
@@ -80,6 +81,15 @@ export default function ActiveWorkout() {
   // during a workout (live keypoints); the previous top-level getItem() call
   // re-read and JSON.parsed localStorage on every single render.
   const [sessionData] = useState(() => getItem('active_session', null));
+  // P1.10c sync identity, fixed once per workout: the client-generated
+  // workoutId IS the idempotency key (v1 §5.3 / Part 4 §3.5), so it must
+  // survive re-renders; startedAt is the wall-clock workout start.
+  // crypto.randomUUID needs a secure context — always true on any reachable
+  // workout path, because getUserMedia (the camera) has the same requirement.
+  const [syncIdentity] = useState(() => ({
+    workoutId: crypto.randomUUID(),
+    startedAt: new Date().toISOString(),
+  }));
 
   const [exercises]        = useState(sessionData?.exercises || []);
   const [currentIndex,     setCurrentIndex]     = useState(0);
@@ -511,6 +521,16 @@ export default function ActiveWorkout() {
     // from the collected §2.4 SetSummaries). Log-only sets contribute nothing;
     // all-log-only workouts send 0, exactly as the old screen did.
     const avgForm = averageFormScore(setSummariesRef.current) ?? 0;
+
+    // P1.10c: queue the engine-verified workout for POST /v1/workouts/sync
+    // (offline-safe localStorage queue; flush is fire-and-forget). Independent
+    // of the legacy completeSession below — neither one's failure drops or
+    // duplicates the other. All-log-only workouts are skipped inside.
+    queueWorkoutSync({
+      workoutId: syncIdentity.workoutId,
+      startedAt: syncIdentity.startedAt,
+      summaries: setSummariesRef.current.summaries,
+    });
 
     try {
       await workoutService.completeSession(sessionData.sessionId, {

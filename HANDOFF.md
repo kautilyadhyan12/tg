@@ -1,6 +1,77 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P1.10c — offline summary queue + sync client in apps/web (R10.2/R10.3; the "then syncs" half) 🟡
+              [on branch p1.10a-web-into-monorepo; UNCOMMITTED — awaiting T3]
+FILES CHANGED:
+  apps/web/package.json (− zod@^4.4.1 [vestigial, zero imports in src — proven by grep];
+    + @app/shared workspace:*); pnpm-lock.yaml;
+  apps/web/src/sync/syncQueue.js (new — localStorage queue, keyed by workoutId, injectable
+    storage/keys; per-user key via utils/storage userKey);
+  apps/web/src/sync/syncClient.js (new — buildSyncPayload + postSync + queueWorkoutSync +
+    flush triggers);
+  apps/web/src/sync/{syncQueue,syncClient}.test.js (new — 17 tests);
+  apps/web/src/pages/ActiveWorkout.jsx (syncIdentity = {workoutId: crypto.randomUUID(),
+    startedAt} fixed once per mount; queueWorkoutSync call in handleWorkoutComplete AFTER the
+    existing 200ms last-set finalize wait; legacy completeSession untouched, independent);
+  DECISIONS.md (4 entries, 2026-07-10).
+STATE / DECISIONS (all approved at plan gate):
+  - ZOD: option A — workspace stays zod@3; web's zod@4 removed (unused). shared/api/engine untouched.
+  - Payload = workoutSyncPayloadSchema (@app/shared) verbatim: platform 'web', engineVersion from
+    summaries[0], defsVersion = STATIC_DEFS_BUNDLE_VERSION = 1 (no bundle until P2.2 — DECISIONS),
+    sets = SetSummaries VERBATIM (setIndex non-contiguous ordinal preserved), traceSample null.
+    Validated (safeParse) BEFORE enqueue; invalid → parked, never sent/dropped.
+  - Queue: enqueue replaces same-workoutId IN PLACE (no dup, no reorder); flush removes an entry
+    ONLY after 2xx; transient (network/5xx/401/408/429) → retain + HALT; other 4xx → parked list
+    (workout_sync_parked.v1) + continue; single in-flight flush guard; corrupt JSON → treated
+    empty, never throws. Keys: userKey('workout_sync_queue.v1') — per-user, same convention as
+    the rest of the app (guest-bucket caveat inherited from utils/storage until P2 auth).
+  - Sync POST: dedicated axios instance (baseURL VITE_API_URL — NEW env var, unset in dev until
+    P1.10d; a failed POST just stays queued), withCredentials only (R10.1 httpOnly-cookie style) —
+    deliberately NOT mlApi (its interceptor injects localStorage bearer + redirects to /login on
+    401). Idempotency-Key = workoutId on every attempt (R10.2); retries ONLY via the queue.
+  - Flush triggers: after enqueue, window 'online' event, module load (module-scope in syncClient,
+    window-guarded; note: runs when the workout bundle loads, not at app boot — revisit if an
+    App-level init ever exists).
+  - All-log-only workouts skipped (no summaries → nothing engine-verified; DECISIONS).
+VERIFIED (post-T3-fixes): web 47/47 tests (22 new: FIFO, in-place dedupe, retain+halt,
+  park-and-continue, 401/408/429 transient, retry→exactly-one-POST, concurrent-flush single-run,
+  enqueue-mid-flush rerun, replace-mid-POST survival, quota-write failure reported,
+  requeueParked, corrupt-storage, contract byte-match [.strict parse deep-equals payload + JSON
+  round-trip], non-contiguous setIndex verbatim, Idempotency-Key header, no-VITE_API_URL no-op,
+  offline→online round trip) · build green (3406 modules; @app/shared TS bundles fine under
+  Vite) · sync files eslint clean · ActiveWorkout pre-existing lint errors unchanged at 9
+  (zero new).
+T3 PASSED (fresh chat) with findings — ALL FIXED, re-proven 47/47 + build green:
+  (1) enqueue-during-in-flight-flush liveness: flush() now loops while a rerun was requested
+      (a mid-run joiner or a replaced-entry survivor sets the flag) — a workout enqueued during
+      the online-event flush is sent by that same flush, not stranded until the next trigger;
+  (2) VITE_API_URL unset would POST to the web origin and its 404 would PERMANENTLY PARK every
+      workout: flushSyncQueue() now no-ops (treat-as-offline, queue kept) when the env var is
+      falsy — this was the finding that would have failed the P1.10d PROVE;
+  (3) parked entries were write-only: requeueParked() added (recovery/console path, tested);
+  (4) writeList quota failure was swallowed: enqueue/park return false, queueWorkoutSync
+      reports { queued:false, reason:'storage' } instead of claiming success;
+  (5) TOCTOU: success-removal now removes only the exact bytes sent; a same-id replacement that
+      landed mid-POST survives and triggers a rerun pass (tested);
+  (6) park() now replaces same-id in place like enqueue; ZodError log trimmed to path/code;
+      engineVersion-homogeneity + crypto.randomUUID-secure-context comments added.
+T3 NOTES CARRIED FORWARD:
+  - P1.10d: cross-tab duplicate POSTs are possible (in-flight guard is per-tab) — Part 4 §3.5's
+    ON CONFLICT (id) upsert is LOAD-BEARING for dedupe, not just retry hygiene.
+  - P2.1: guest-bucket attribution — queue key derives from the LEGACY localStorage accessToken
+    (userKey) while the POST authenticates by cookie; a guest-queued workout would flush under
+    whichever account's cookie is present. Resolve when real auth lands (per-user key must come
+    from the cookie session, or queue flushes only when authenticated).
+OPEN SPEC GAPS: none new.
+NEXT: commit (T3 done). Then P1.10d — minimal POST /v1/workouts/sync in apps/api
+  (Part 4 §3.5 verbatim upsert: workout ON CONFLICT (id) DO NOTHING, sets keyed
+  (workout_id, set_index); 2A auth seam per DECISIONS — endpoint built+tested, live authn P2.1).
+  P1.10d PROVE closes the Part 2 §10 "full workout with the API server off, THEN SYNCS" gate:
+  set VITE_API_URL, run api locally, do an offline workout, watch the queue flush on reconnect.
+```
+
+```
 TASK: P1.10b-2c — PROVE-run fix: occluded-legs honesty + regression-trace class 🟡
               [on branch p1.10a-web-into-monorepo; UNCOMMITTED — awaiting T3]
 CONTEXT: Kd's real-browser PROVE run "failed"; diagnosis via live recordings (P1.3 recorder) showed:

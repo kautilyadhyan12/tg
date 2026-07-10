@@ -78,6 +78,9 @@ importers:
       '@app/engine':
         specifier: workspace:*
         version: link:../../packages/engine
+      '@app/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@hookform/resolvers':
         specifier: ^5.2.2
         version: 5.4.0(react-hook-form@7.81.0(react@19.2.7))
@@ -135,9 +138,6 @@ importers:
       recharts:
         specifier: ^3.8.1
         version: 3.9.2(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react-is@19.2.7)(react@19.2.7)(redux@5.0.1)
-      zod:
-        specifier: ^4.4.1
-        version: 4.4.3
       zustand:
         specifier: ^5.0.12
         version: 5.0.14(@types/react@19.2.17)(immer@11.1.11)(react@19.2.7)(use-sync-external-store@1.6.0(react@19.2.7))
