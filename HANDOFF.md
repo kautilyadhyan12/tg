@@ -1,6 +1,47 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P1.10b-2b — ActiveWorkout rewired to the engine hook; swap complete (v1 §13/D1) 🟡
+              [fifth/final P1.10b slice; on branch p1.10a-web-into-monorepo; UNCOMMITTED — awaiting T3]
+FILES CHANGED:
+  apps/web/src/pages/ActiveWorkout.jsx (rewired — analysis-coupled regions only, no page split per v1 §1.3);
+  apps/web/src/pages/activeWorkoutEngine.js (new — pure summary-log accumulation + form average);
+  apps/web/src/pages/activeWorkoutEngine.test.js (new — 6 tests).
+STATE / DECISIONS:
+  - Server-baseline rep machinery DELETED (repBaselineRef/pendingBaselineRef/lastServerCountRef/setRepsRef/
+    repFormBufRef + the backwards-reset re-anchor logic): engine sessions are per-set, rep_count IS the set count.
+  - engineSetKey (monotonic, workout-global): bumped on next-set, next-exercise, manual reset (with
+    discardNextSummaryRef so a redone set never double-counts), and ONCE in handleWorkoutComplete to finalize
+    the LAST set (stop() deliberately doesn't end a set) — then a 200ms wait lets the effect cleanup emit the
+    summary before refs are read (T3-2a carry-forward honored). summary.setIndex = workout-global ordinal.
+  - Per-rep form now from SetSummary.repScores via accumulateSummary (per-frame state==='down' sampling
+    deleted — form_score semantics changed in 2a). form_accuracy = averageFormScore(log) ?? 0.
+  - Log-only mode (Part 6 §3.6) rendered: amber "Log-only" pill (Eye/EyeOff replaces the WS Wifi pill),
+    "+1 Rep" manual counter + honest "your workout still counts" copy; form badge hidden when form_correct
+    is null; debug rows: reps(engine) + mode. person_detected pick: badge uses poseData.person_detected
+    (engine visibilityOk); overlay keeps keypointsData (raw landmarks) — per the T3-2a note.
+  - completeSession (old backend) KEPT verbatim until P2.8; SetSummaries held in setSummariesRef for P1.10c.
+  - Verified: 24/24 web tests · build green · new files eslint clean · ActiveWorkout pre-existing lint errors
+    12 -> 9 (salvage patterns remain per P1.10a gate decision; my additions introduce zero new errors).
+  - PROVE (Kd, real browser): corepack pnpm --filter web dev with backends OFF -> squat workout -> reps/cues
+    from the engine, log-only for an unported exercise, completeSession fails gracefully offline. This is the
+    Part 2 §10 "full workout with the API server off" half; "then syncs" lands with P1.10c.
+  - T3 PASSED (fresh chat) with ONE confirmed bug, FIXED: the manual-reset discard is now keyed
+    (discardSetKeyRef = the reset set's engineSetKey; drop iff summary.setIndex matches) — the old one-shot
+    boolean could stick when a reset happened before any frame reached the engine (zero-frame guard emits no
+    summary) and would then swallow the NEXT genuine set. Keys are never reused, so a stale entry is inert.
+  - T3 notes carried: (a) the 200ms wait in handleWorkoutComplete is sound (scheduler-based, fires in hidden
+    tabs) but heuristic — flushSync(() => setEngineSetKey(...)) is the deterministic alternative if it ever
+    flakes; (b) summary.setIndex SKIPS a number on every manual reset — an opaque, NON-CONTIGUOUS ordinal;
+    P1.10c must not assume contiguity.
+OPEN SPEC GAPS: none.
+NEXT TASK: P1.10c — offline summary queue (localStorage, keyed by workoutId, flush-order preserved, R10.3)
+  + sync client (Idempotency-Key = workoutId, R10.2) consuming setSummariesRef's log via the
+  workoutSyncPayloadSchema (@app/shared) — THE ZOD 3-vs-4 DECISION LANDS HERE. Then P1.10d minimal
+  POST /v1/workouts/sync (Part 4 §3.5 upsert, 2A auth seam per DECISIONS).
+```
+
+```
 TASK: P1.10b-2a — usePoseDetection driven by the engine; WS path deleted (v1 §13/D1) 🟡
               [fourth slice of P1.10; on branch p1.10a-web-into-monorepo; UNCOMMITTED — awaiting T3]
 FILES CHANGED:
