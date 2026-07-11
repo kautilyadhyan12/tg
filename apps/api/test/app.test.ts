@@ -13,6 +13,7 @@ const config = loadConfig({
   DATABASE_URL: realDbUrl ?? "postgres://nobody:nothing@127.0.0.1:1/void",
   WEB_ORIGIN,
   LOG_LEVEL: "error",
+  JWT_SECRET: "app-test-secret-0123456789abcdef-32!", // required since P2.1
 });
 
 const app = await buildApp(config);

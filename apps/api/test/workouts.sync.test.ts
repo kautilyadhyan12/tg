@@ -1,6 +1,8 @@
-// P1.10d — POST /v1/workouts/sync route + repo tests against a REAL Postgres
-// (R9.2 — no SQL mocks). DATABASE_URL-gated like db.migration.test.ts: skips
-// visibly when unset; requires migrations 0001+0002 and the seed applied.
+// P1.10d/P2.1 — POST /v1/workouts/sync route + repo tests against a REAL
+// Postgres (R9.2 — no SQL mocks). DATABASE_URL-gated like db.migration.test.ts:
+// skips visibly when unset; requires migrations 0001–0003 and the seed applied.
+// P2.1: the SYNC_DEV_USER_ID seam is GONE — every request authenticates with a
+// real cookie obtained via /v1/auth (the P1.10d carry-forward re-proof).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
@@ -10,10 +12,7 @@ import { seed } from "../src/db/seed.js";
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
 
-// Fixture identities (uuid v4 shapes, fixed for reproducibility; rows are
-// cleaned up per run keyed on these ids).
-const USER_A = "11111111-1111-4111-8111-111111111111";
-const USER_B = "22222222-2222-4222-8222-222222222222";
+const PASSWORD = "sync-Test-password-1";
 
 const set = (setIndex: number, extra: Record<string, unknown> = {}) => ({
   exercise: "squat",
@@ -43,27 +42,15 @@ const payload = (workoutId: string, sets: unknown[]) => ({
   traceSample: null,
 });
 
-const inject = (
-  app: Awaited<ReturnType<typeof buildApp>>,
-  body: unknown,
-  headers: Record<string, string>,
-) =>
-  app.inject({
-    method: "POST",
-    url: "/v1/workouts/sync",
-    headers: { "content-type": "application/json", ...headers },
-    payload: JSON.stringify(body),
-  });
+type App = Awaited<ReturnType<typeof buildApp>>;
 
-const post = (
-  app: Awaited<ReturnType<typeof buildApp>>,
-  body: { workoutId: string },
-) => inject(app, body, { "idempotency-key": body.workoutId });
-
-d("POST /v1/workouts/sync (real Postgres)", () => {
+d("POST /v1/workouts/sync (real Postgres, real cookie authn)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
-  let app: Awaited<ReturnType<typeof buildApp>> | undefined;
-  const api = (): Awaited<ReturnType<typeof buildApp>> => {
+  let app: App | undefined;
+  let cookieA = ""; // accessToken values from real logins
+  let cookieB = "";
+  let userA = "";
+  const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
     return app;
   };
@@ -72,21 +59,63 @@ d("POST /v1/workouts/sync (real Postgres)", () => {
     NODE_ENV: "test",
     DATABASE_URL: url ?? "",
     WEB_ORIGIN: "http://localhost:5173",
+    JWT_SECRET: "sync-test-secret-0123456789abcdef-32",
+    LOG_LEVEL: "error",
   };
 
-  // 60s: a full seed pass over a WAN connection to the Neon branch (the
-  // migration test budgets 30s for the same seed; this hook also inserts
-  // fixtures and boots the app).
+  const inject = (
+    body: unknown,
+    headers: Record<string, string>,
+    accessToken: string | null = cookieA,
+  ) =>
+    api().inject({
+      method: "POST",
+      url: "/v1/workouts/sync",
+      headers: { "content-type": "application/json", ...headers },
+      cookies: accessToken === null ? {} : { accessToken },
+      payload: JSON.stringify(body),
+    });
+
+  const post = (body: { workoutId: string }, accessToken: string | null = cookieA) =>
+    inject(body, { "idempotency-key": body.workoutId }, accessToken);
+
+  /** Register + login a fixture user through the real auth module. */
+  const session = async (email: string, name: string): Promise<{ userId: string; access: string }> => {
+    const reg = await api().inject({
+      method: "POST",
+      url: "/v1/auth/register",
+      headers: { "content-type": "application/json" },
+      payload: JSON.stringify({ email, password: PASSWORD, displayName: name }),
+    });
+    if (reg.statusCode !== 201) throw new Error(`register failed: ${reg.body}`);
+    const { userId } = reg.json<{ userId: string }>();
+    const login = await api().inject({
+      method: "POST",
+      url: "/v1/auth/login",
+      headers: { "content-type": "application/json" },
+      payload: JSON.stringify({ email, password: PASSWORD }),
+    });
+    if (login.statusCode !== 200) throw new Error(`login failed: ${login.body}`);
+    const access = login.cookies.find((c) => c.name === "accessToken")?.value ?? "";
+    return { userId, access };
+  };
+
+  // 90s: a full seed pass over a WAN connection to the Neon branch, plus two
+  // register(bcrypt cost 10)+login round-trips (P1.10d budgeted 60s pre-auth).
   beforeAll(async () => {
     await seed(url ?? ""); // idempotent; provides the 3 exercise rows
-    await sql`
-      INSERT INTO users (id, display_name) VALUES
-        (${USER_A}, 'sync-test-a'), (${USER_B}, 'sync-test-b')
-      ON CONFLICT (id) DO NOTHING`;
-    // Clean slate for fixture users (FK cascade removes their sets).
-    await sql`DELETE FROM workouts WHERE user_id IN (${USER_A}, ${USER_B})`;
-    app = await buildApp(loadConfig({ ...baseEnv, SYNC_DEV_USER_ID: USER_A }));
-  }, 60_000);
+    // Workouts FK is RESTRICT: a prior run's workouts must go before its users.
+    await sql`DELETE FROM workouts WHERE user_id IN
+      (SELECT id FROM users WHERE email LIKE 'p21-sync-%@example.com')`;
+    await sql`DELETE FROM users WHERE email LIKE 'p21-sync-%@example.com'`;
+    app = await buildApp(loadConfig(baseEnv));
+    const a = await session("p21-sync-a@example.com", "sync-test-a");
+    const b = await session("p21-sync-b@example.com", "sync-test-b");
+    userA = a.userId;
+    cookieA = a.access;
+    cookieB = b.access;
+    await sql`DELETE FROM workouts WHERE user_id IN (${a.userId}, ${b.userId})`;
+  }, 90_000);
 
   afterAll(async () => {
     // app is undefined if beforeAll died — don't mask the real failure.
@@ -94,34 +123,26 @@ d("POST /v1/workouts/sync (real Postgres)", () => {
     await sql.end({ timeout: 5 });
   });
 
-  it("401s when the auth seam is unset (production posture)", async () => {
-    const dark = await buildApp(loadConfig(baseEnv));
+  it("401 dark with no cookie (production posture — the P1.10d seam is gone)", async () => {
     const wid = "aaaaaaaa-0000-4000-8000-000000000000";
-    const res = await post(dark, payload(wid, [set(1)]));
+    const res = await post(payload(wid, [set(1)]), null);
     expect(res.statusCode).toBe(401);
-    await dark.close();
   });
 
-  it("config refuses the seam in production AND when NODE_ENV is merely omitted", () => {
-    expect(() =>
-      loadConfig({ ...baseEnv, NODE_ENV: "production", SYNC_DEV_USER_ID: USER_A }),
-    ).toThrow(/SYNC_DEV_USER_ID/);
-    // Omitted NODE_ENV defaults to "development" — the seam must still refuse
-    // (a prod box that forgot NODE_ENV must not silently authenticate; T3).
-    const noNodeEnv = { DATABASE_URL: baseEnv.DATABASE_URL, WEB_ORIGIN: baseEnv.WEB_ORIGIN };
-    expect(() => loadConfig({ ...noNodeEnv, SYNC_DEV_USER_ID: USER_A })).toThrow(
-      /SYNC_DEV_USER_ID/,
-    );
+  it("401 with a garbage access token", async () => {
+    const wid = "aaaaaaaa-0000-4000-8000-000000000001";
+    const res = await post(payload(wid, [set(1)]), "not-a-jwt");
+    expect(res.statusCode).toBe(401);
   });
 
   it("happy path: 201, workout + sets persisted verbatim, aggregates derived", { timeout: 30_000 }, async () => {
     const wid = "aaaaaaaa-1111-4111-8111-000000000001";
-    const res = await post(api(),payload(wid, [set(1), set(2), set(4, { reps: 3, avgFormScore: 90, repScores: [90, 90, 91] })]));
+    const res = await post(payload(wid, [set(1), set(2), set(4, { reps: 3, avgFormScore: 90, repScores: [90, 90, 91] })]));
     expect(res.statusCode).toBe(201);
     expect(res.json<Record<string, unknown>>()).toEqual({ workoutId: wid, status: "created" });
 
     const [w] = await sql`SELECT * FROM workouts WHERE id = ${wid}`;
-    expect(w?.["user_id"]).toBe(USER_A);
+    expect(w?.["user_id"]).toBe(userA);
     expect(w?.["sets_count"]).toBe(3);
     expect(w?.["total_reps"]).toBe(13);
     expect(w?.["avg_form_score"]).toBe(86); // round((84+84+90)/3)
@@ -150,7 +171,7 @@ d("POST /v1/workouts/sync (real Postgres)", () => {
       payload(wid, []), // empty engine workout must not be creatable (DECISIONS)
     ];
     for (const bad of cases) {
-      const res = await post(api(), bad as { workoutId: string });
+      const res = await inject(bad, { "idempotency-key": wid });
       expect(res.statusCode).toBe(400);
     }
     const rows = await sql`SELECT 1 FROM workouts WHERE id = ${wid}`;
@@ -160,18 +181,18 @@ d("POST /v1/workouts/sync (real Postgres)", () => {
   it("Idempotency-Key mismatch / missing → 400", async () => {
     const wid = "aaaaaaaa-1111-4111-8111-000000000003";
     const body = payload(wid, [set(1)]);
-    const mismatch = await inject(api(),body, { "idempotency-key": "aaaaaaaa-1111-4111-8111-000000000099" });
+    const mismatch = await inject(body, { "idempotency-key": "aaaaaaaa-1111-4111-8111-000000000099" });
     expect(mismatch.statusCode).toBe(400);
-    const missing = await inject(api(),body, {});
+    const missing = await inject(body, {});
     expect(missing.statusCode).toBe(400);
   });
 
   it("retried sync is a no-op: same POST twice → one workout, one set of rows", { timeout: 30_000 }, async () => {
     const wid = "aaaaaaaa-1111-4111-8111-000000000004";
     const body = payload(wid, [set(1), set(2)]);
-    const first = await post(api(),body);
+    const first = await post(body);
     expect(first.statusCode).toBe(201);
-    const second = await post(api(),body);
+    const second = await post(body);
     expect(second.statusCode).toBe(200);
     expect(second.json<Record<string, unknown>>()).toEqual({ workoutId: wid, status: "duplicate" });
     const [w] = await sql`SELECT count(*)::int AS n FROM workouts WHERE id = ${wid}`;
@@ -183,7 +204,7 @@ d("POST /v1/workouts/sync (real Postgres)", () => {
   it("concurrent duplicate POSTs: exactly one workout, no 500 (T3 P1.10c: cross-tab flush)", { timeout: 30_000 }, async () => {
     const wid = "aaaaaaaa-1111-4111-8111-000000000005";
     const body = payload(wid, [set(1)]);
-    const results = await Promise.all([post(api(),body), post(api(),body), post(api(),body)]);
+    const results = await Promise.all([post(body), post(body), post(body)]);
     for (const r of results) expect([200, 201]).toContain(r.statusCode);
     const [w] = await sql`SELECT count(*)::int AS n FROM workouts WHERE id = ${wid}`;
     const [s] = await sql`SELECT count(*)::int AS n FROM workout_sets WHERE workout_id = ${wid}`;
@@ -191,22 +212,20 @@ d("POST /v1/workouts/sync (real Postgres)", () => {
     expect(s?.["n"]).toBe(1);
   });
 
-  it("cross-tenant denial: user B posting user A's workoutId → 404, rows untouched", { timeout: 30_000 }, async () => {
+  it("cross-tenant denial END-TO-END: user B's real cookie posting user A's workoutId → 404, rows untouched (P2.1 re-proof)", { timeout: 30_000 }, async () => {
     const wid = "aaaaaaaa-1111-4111-8111-000000000006";
-    await post(api(),payload(wid, [set(1)])); // owned by USER_A
-    const appB = await buildApp(loadConfig({ ...baseEnv, SYNC_DEV_USER_ID: USER_B }));
-    const res = await post(appB, payload(wid, [set(1), set(2)]));
+    await post(payload(wid, [set(1)])); // owned by A (cookie A)
+    const res = await post(payload(wid, [set(1), set(2)]), cookieB);
     expect(res.statusCode).toBe(404);
     const [s] = await sql`SELECT count(*)::int AS n FROM workout_sets WHERE workout_id = ${wid}`;
     expect(s?.["n"]).toBe(1); // B's extra set was NOT attached to A's workout
-    await appB.close();
-    // NOTE for P2.1: with real authn this case must be re-proven end-to-end
-    // (cookie of B, workout of A) — here the seam substitutes the identity.
+    const [w] = await sql`SELECT user_id FROM workouts WHERE id = ${wid}`;
+    expect(w?.["user_id"]).toBe(userA); // ownership unchanged
   });
 
   it("unknown exercise slug: workout accepted (200-class, NOT a parking 4xx), set skipped + flagged", { timeout: 30_000 }, async () => {
     const wid = "aaaaaaaa-1111-4111-8111-000000000007";
-    const res = await post(api(),payload(wid, [set(1), set(2, { exercise: "not_in_catalog" })]));
+    const res = await post(payload(wid, [set(1), set(2, { exercise: "not_in_catalog" })]));
     expect(res.statusCode).toBe(201);
     const [w] = await sql`
       SELECT sets_count, total_reps, quality_flags FROM workouts WHERE id = ${wid}`;

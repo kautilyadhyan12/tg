@@ -53,6 +53,29 @@ export const authIdentities = pgTable(
   (t) => [unique("auth_identities_provider_subject_uq").on(t.provider, t.subject)],
 );
 
+// P2.1 GAP-3 (DECISIONS 2026-07-11): storage for hashed one-time tokens
+// (email verification, password reset — R3.7: stored as SHA-256, raw token
+// only ever in the email link). Part 4 §3.1 had no columns for these; the
+// old Mongo User model did. Approved migration 0003.
+export const oneTimeTokens = pgTable(
+  "one_time_tokens",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    purpose: text("purpose").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check("one_time_tokens_purpose_check", sql`${t.purpose} IN ('verify_email','password_reset')`),
+    index("one_time_tokens_user_purpose_idx").on(t.userId, t.purpose),
+  ],
+);
+
 export const refreshTokens = pgTable(
   "refresh_tokens", // rotation + reuse detection (v1 §6.1)
   {

@@ -2,14 +2,26 @@
 // from P2.1 on; here only platform concerns: logging, CORS, rate limit,
 // error mapping, /health.
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
+import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import sensible from "@fastify/sensible";
 import * as Sentry from "@sentry/node";
 import postgres from "postgres";
 import { createAnalytics, type Analytics } from "./analytics.js";
+import type { EmailSender } from "./modules/auth/email.js";
+import { registerAuthenticate } from "./modules/auth/plugin.js";
+import { AuthError } from "./modules/auth/service.js";
+import { registerAuthRoutes } from "./modules/auth/routes.js";
 import { registerWorkoutRoutes } from "./modules/workouts/routes.js";
 import type { AppConfig } from "./config.js";
+
+/** Test-only seams (GAP-5 DECISIONS 2026-07-11): production callers pass
+ *  nothing; tests inject a capturing EmailSender to reach raw one-time tokens
+ *  (they are stored only as SHA-256 — unreachable via the DB by design). */
+export interface BuildAppOverrides {
+  emailSender?: EmailSender;
+}
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -17,7 +29,10 @@ declare module "fastify" {
   }
 }
 
-export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
+export async function buildApp(
+  config: AppConfig,
+  overrides: BuildAppOverrides = {},
+): Promise<FastifyInstance> {
   if (config.SENTRY_DSN !== undefined) {
     Sentry.init({ dsn: config.SENTRY_DSN, environment: config.NODE_ENV });
   }
@@ -40,6 +55,10 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   });
 
   await app.register(sensible);
+  // Cookie parse/serialize only — session cookies are set explicitly by the
+  // auth routes with the GAP-2 flags; no cookie signing (values are a JWT and
+  // an opaque random, both self-authenticating).
+  await app.register(cookie);
   await app.register(cors, {
     // Array form: the header is emitted only on an exact match — a foreign
     // Origin gets nothing. '*' would silently break credentialed cookies (Part IV #6).
@@ -77,9 +96,15 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
       });
       return;
     }
+    // 4xx messages pass through only from an allowlist of client-safe sources:
+    // our typed AuthError and Fastify/plugin-authored FST_* errors. Anything
+    // else with a sub-500 statusCode gets a generic body (T3 2026-07-11 —
+    // arbitrary err.message was never authored for clients).
+    const clientSafe =
+      err instanceof AuthError || (typeof err.code === "string" && err.code.startsWith("FST_"));
     void reply.status(status).send({
-      error: err.code, // FastifyError always carries a code (e.g. FST_ERR_VALIDATION)
-      message: err.message,
+      error: clientSafe ? err.code : "request_error",
+      message: clientSafe ? err.message : "Request could not be processed",
       requestId: req.id,
     });
   });
@@ -98,7 +123,13 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
     return { status: "ok" };
   });
 
-  registerWorkoutRoutes(app, { sql, config });
+  registerAuthenticate(app, { sql, config });
+  registerAuthRoutes(app, {
+    sql,
+    config,
+    ...(overrides.emailSender !== undefined ? { emailSender: overrides.emailSender } : {}),
+  });
+  registerWorkoutRoutes(app, { sql });
 
   return app;
 }

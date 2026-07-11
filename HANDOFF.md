@@ -1,6 +1,87 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P2.1 — auth module port into apps/api (R3.7 = the porting spec) 🟡
+              [branch p2.1-auth-module; UNCOMMITTED — awaiting Kd's DB-gated PROVE + T3]
+FILES CHANGED:
+  apps/api/drizzle/0003_one_time_tokens.sql (+meta 0002_snapshot, journal) — SQL reviewed
+    by Kd BEFORE other code (T5); drizzle-kit emitted "0002_" prefix (idx-numbered),
+    renamed to 0003 + journal tag fixed (same convention skew as 0001);
+  apps/api/src/db/schema/identity.ts (+one_time_tokens);
+  packages/shared/src/auth.ts (new — request/response contracts) + index.ts export;
+  apps/api/src/modules/auth/{schemas,tokens,repo,service,routes,plugin,email,rateLimit}.ts
+    (new — R7.1 layout; plugin = the `authenticate` preHandler decorator; rateLimit =
+    PROVE-run fix, see below);
+  apps/api/src/config.ts (+JWT_SECRET min32, ACCESS_TTL_MIN=15 [v1 §6.1], REFRESH_TTL_DAYS=30
+    [jwtHelper.js:26]; SYNC_DEV_USER_ID seam DELETED with its prod-refusal gate);
+  apps/api/src/app.ts (@fastify/cookie; authenticate + auth routes registered;
+    buildApp gains a test-only overrides param {emailSender} — GAP-5 seam);
+  apps/api/src/modules/workouts/routes.ts (seam block → authenticate preHandler;
+    config dep dropped);
+  apps/api/package.json (+bcryptjs@3, jsonwebtoken@9, @fastify/cookie@11;
+    dev +@types/jsonwebtoken — all approved at plan gate); pnpm-lock.yaml;
+  apps/api/test/auth.unit.test.ts (new, 12 tests — no DB: HS256 pinning incl. HS512/none/
+    foreign-secret/expired, refresh-type rejection incl. the OLD {id,type:'refresh'} shape,
+    timing-equalizer via hasher spy, config fail-fast, seam-gone proof);
+  apps/api/test/auth.routes.test.ts (new, 18 tests — DATABASE_URL-gated);
+  apps/api/test/workouts.sync.test.ts (rewritten: real register+login cookies replace the
+    seam; cross-tenant 404 re-proven END-TO-END with user B's real cookie; 9 tests);
+  apps/api/test/{smoke,app,analytics}.test.ts (+JWT_SECRET in env fixtures);
+  DECISIONS.md (9 entries 2026-07-11); HANDOFF.md.
+STATE / DECISIONS (all ruled at plan gate; full text in DECISIONS.md):
+  GAP-1 bcrypt-only (argon2id = explicit deferred follow-up card) · GAP-2 sameSite
+  none+secure prod / lax dev-test · GAP-3 one_time_tokens migration (CASCADE deviation
+  recorded) · GAP-4 dual-keyed in-memory rate limits (Redis owed at P2.4) · GAP-5
+  log-only EmailSender, tokens captured via injected sender in tests · GAP-6 lockout
+  dropped (rate limiter covers; removes lockout-DoS) · tokens cookie-only, none in bodies ·
+  emailVerified derived from consumed verify_email token (no users column in §3.1).
+  LEGACY FIXTURE: hash generated with backend-auth/node_modules/bcryptjs@2.4.3 hashSync
+  cost 10 — pinned as a literal in auth.routes.test.ts (Part IV #11).
+CONSEQUENCE (approved, NOT a bug): deleting SYNC_DEV_USER_ID means the live browser→sync
+  demo goes dark until P2.8 (web still logs into the OLD backend, so it can never carry a
+  new-API cookie; every sync POST will 401 and the client queue will retain — nothing lost
+  per R10.3, it flushes at cutover). That is the correct production posture. Do NOT
+  misread 401s-with-a-growing-queue as a bug in a later chat.
+VERIFIED (PROVE run, Neon branch p21-test, auto-delete 1 day, 2026-07-11): migrations
+  incl. 0003 applied clean · typecheck 0 · lint 0 · FULL api suite 56/56 GREEN, zero
+  DB-skips (18 auth routes incl. legacy-hash fixture + reuse-kills-family + all 3 rate
+  limits; 9 sync incl. END-TO-END cross-tenant 404 with user B's real cookie; 4 migration;
+  25 unit) · shared typecheck + 19/19 · engine-purity and red-flag greps print nothing ·
+  Neon credentials confirmed absent from all files (env-only) · gitleaks not installed on
+  the dev box — runs in CI (P0.2) on push.
+PROVE-RUN FIXES (2 findings, both fixed then 56/56):
+  (1) REAL BUG: @fastify/rate-limit's internal rateLimitRan symbol makes every per-route
+      limiter silently NO-OP after the global limiter runs (and two stacked limiters can
+      never both count) → all three auth rate limits were dead. Replaced with a
+      dependency-free dual-bucket fixed-window preHandler (modules/auth/rateLimit.ts);
+      ported numbers and GAP-4 semantics unchanged; DECISIONS correction recorded.
+  (2) Test-only: fixture cleanup deleted users before their workouts (RESTRICT FK) and
+      the auth suite's p21-% pattern also matched the sync suite's users → workouts
+      deleted first in both suites.
+T3 PASSED (fresh chat, 2026-07-11) with 5 findings — ALL FIXED, suite re-proven 58/58
+  GREEN on the Neon branch (2 new regression tests):
+  (1) GATE-BLOCKING: refresh rotation was find-then-rotate — two concurrent presentations
+      of one token could both mint live successors, defeating §3.1 "reuse kills the
+      family" → rotation now atomic (revoke WHERE revoked_at IS NULL RETURNING inside the
+      insert transaction); losing the race = reuse → family revoked incl. the winner's
+      fresh token. Regression test: concurrent duplicate refresh.
+  (2) Superseded one-time tokens were marked used_at (= "consumed") — a future
+      resend-verification would fake-verify every requester → supersession now sets
+      expires_at=now(); used_at means consumed ONLY. Regression test added.
+  (3) R4.6: inline locale/units SELECT in service → folded into repo findUserBy* (also
+      kills a redundant round-trip).
+  (4) Cookie-name literals duplicated → hoisted to tokens.ts. Refresh cookie path scoped
+      to /v1/auth (T3 suggestion, DECISIONS) — the 30-day token no longer travels on
+      every API request.
+  (5) R8.1: 4xx error mapper echoed any err.message → allowlist (AuthError + FST_*);
+      everything else gets a generic body.
+OPEN SPEC GAPS: none (all six ruled at the plan gate).
+NEXT: Kd 5-min review (Part VI) → commit → P2.2 (users/profile + catalog read APIs).
+  ⚠ QUEUE ITEM (T3 gate note, DECISIONS): the argon2id-with-rehash-on-login card (GAP-1
+  deferral) MUST be scheduled as its own P2 card BEFORE P2.8 cutover.
+```
+
+```
 TASK: P1.10d — minimal POST /v1/workouts/sync in apps/api (Part 4 §3.5; closes Part 2 §10 "then syncs") 🟡
               [on branch p1.10a-web-into-monorepo; UNCOMMITTED — awaiting Kd's DB-gated PROVE + T3]
 FILES CHANGED:

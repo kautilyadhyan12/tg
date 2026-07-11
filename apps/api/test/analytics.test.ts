@@ -6,6 +6,7 @@ import { loadConfig } from "../src/config.js";
 const baseEnv = {
   DATABASE_URL: "postgres://user:pw@localhost:5432/db",
   WEB_ORIGIN: "http://localhost:5173",
+  JWT_SECRET: "analytics-test-secret-0123456789abcd-32", // required since P2.1
 };
 
 describe("analytics", () => {

@@ -5,6 +5,7 @@ import { loadConfig } from "../src/config.js";
 const validEnv = {
   DATABASE_URL: "postgres://user:pw@localhost:5432/db",
   WEB_ORIGIN: "http://localhost:5173",
+  JWT_SECRET: "smoke-test-secret-0123456789abcdef-32", // required since P2.1
 };
 
 describe("loadConfig", () => {

@@ -15,6 +15,13 @@
       "when": 1783687869475,
       "tag": "0002_workout_sets_uq",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783739398952,
+      "tag": "0003_one_time_tokens",
+      "breakpoints": true
     }
   ]
 }
