@@ -18,6 +18,7 @@ import type { UsersEmailSender } from "./modules/users/email.js";
 import { UsersError } from "./modules/users/service.js";
 import { registerUserRoutes } from "./modules/users/routes.js";
 import { registerExerciseRoutes } from "./modules/exercises/routes.js";
+import { registerGamificationRoutes } from "./modules/gamification/routes.js";
 import type { AppConfig } from "./config.js";
 
 /** Test-only seams (GAP-5 DECISIONS 2026-07-11): production callers pass
@@ -142,6 +143,7 @@ export async function buildApp(
     ...(overrides.usersEmailSender !== undefined ? { emailSender: overrides.usersEmailSender } : {}),
   });
   registerExerciseRoutes(app, { sql });
+  registerGamificationRoutes(app, { sql });
 
   return app;
 }

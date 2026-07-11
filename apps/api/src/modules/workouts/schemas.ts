@@ -3,8 +3,21 @@
 // module surface stays self-describing.
 import { z } from "zod";
 
-export { workoutSyncPayloadSchema } from "@app/shared";
-export type { WorkoutSyncPayload } from "@app/shared";
+export { workoutSyncPayloadSchema, workoutListQuerySchema, progressQuerySchema } from "@app/shared";
+export type {
+  WorkoutSyncPayload,
+  WorkoutListQuery,
+  WorkoutPage,
+  WorkoutDetail,
+  ProgressQuery,
+  ProgressPeriod,
+  ProgressOverview,
+  ProgressTrend,
+  ProgressWeekly,
+  ProgressHeatmap,
+  ProgressDistribution,
+  PersonalRecords,
+} from "@app/shared";
 
 export const syncResponseSchema = z
   .object({

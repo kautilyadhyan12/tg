@@ -31,29 +31,35 @@ export interface SyncOutcome {
   skippedSets: number;
 }
 
-/** slug -> exercises.id for every distinct slug in the payload. */
+export interface ExerciseRef {
+  id: string;
+  met: number; // Part 4 §3.4; the 2B §2.2 calorie input
+}
+
+/** slug -> {id, met} for every distinct slug in the payload. */
 export async function getExerciseIdsBySlug(
   sql: Sql,
   slugs: readonly string[],
-): Promise<ReadonlyMap<string, string>> {
+): Promise<ReadonlyMap<string, ExerciseRef>> {
   if (slugs.length === 0) return new Map();
-  const rows = await sql<{ id: string; slug: string }[]>`
-    SELECT id, slug FROM exercises WHERE slug = ANY(${[...slugs]})`;
-  return new Map(rows.map((r) => [r.slug, r.id]));
+  const rows = await sql<{ id: string; slug: string; met: string }[]>`
+    SELECT id, slug, met FROM exercises WHERE slug = ANY(${[...slugs]})`;
+  return new Map(rows.map((r) => [r.slug, { id: r.id, met: Number(r.met) }]));
 }
 
 export async function syncWorkout(
   sql: Sql,
   userId: string,
   payload: WorkoutSyncPayload,
-  exerciseIdBySlug: ReadonlyMap<string, string>,
+  exerciseIdBySlug: ReadonlyMap<string, ExerciseRef>,
+  kcal: { point: number; calcVersion: number },
 ): Promise<SyncOutcome> {
   const known = payload.sets.filter((s) => exerciseIdBySlug.has(s.exercise));
   const skippedSets = payload.sets.length - known.length;
 
   // Workout-level aggregates derived SERVER-SIDE from the persisted sets
-  // (R3.1) — never trusted as separate client fields. kcal_point /
-  // kcal_calc_version stay null until the 2B §2.2 port (DECISIONS 2026-07-10).
+  // (R3.1) — never trusted as separate client fields. kcal computed by the
+  // service (2B §2.2 port, P2.3) and stored with its calc version.
   const totalReps = known.reduce((acc, s) => acc + s.reps, 0);
   const durationMs = known.reduce((acc, s) => acc + s.durationMs, 0);
   const scored = known.filter((s) => s.avgFormScore !== null);
@@ -67,11 +73,13 @@ export async function syncWorkout(
     const inserted = await tx`
       INSERT INTO workouts (id, user_id, started_at, platform, engine_version,
                             bundle_version, sets_count, total_reps,
-                            avg_form_score, duration_ms, quality_flags)
+                            avg_form_score, duration_ms, quality_flags,
+                            kcal_point, kcal_calc_version)
       VALUES (${payload.workoutId}, ${userId}, ${payload.startedAt},
               ${payload.platform}, ${payload.engineVersion},
               ${payload.defsVersion}, ${known.length}, ${totalReps},
-              ${avgFormScore}, ${durationMs}, ${qualityFlags})
+              ${avgFormScore}, ${durationMs}, ${qualityFlags},
+              ${kcal.point}, ${kcal.calcVersion})
       ON CONFLICT (id) DO NOTHING`;
 
     // Ownership is checked AFTER the upsert against the authoritative row, so
@@ -82,7 +90,7 @@ export async function syncWorkout(
     if (owner[0]?.user_id !== userId) throw new ForeignWorkoutError();
 
     for (const s of known) {
-      const exerciseId = exerciseIdBySlug.get(s.exercise);
+      const exerciseId = exerciseIdBySlug.get(s.exercise)?.id;
       if (exerciseId === undefined) continue; // unreachable: `known` is pre-filtered
       await tx`
         INSERT INTO workout_sets (workout_id, user_id, exercise_id, started_at,
@@ -105,4 +113,271 @@ export async function syncWorkout(
       skippedSets,
     };
   });
+}
+
+// ── history reads (v1 §6.1 "history, PRs"; Part 4 §3.5 indexes) ─────────────
+
+export interface WorkoutRow {
+  id: string;
+  startedAt: Date;
+  platform: string;
+  setsCount: number;
+  totalReps: number;
+  avgFormScore: number | null;
+  durationMs: number | null;
+  kcalPoint: number | null;
+  kcalCalcVersion: number | null;
+  qualityFlags: string[];
+  engineVersion: string;
+  bundleVersion: number | null;
+}
+
+interface WorkoutDbRow {
+  id: string;
+  started_at: Date;
+  platform: string;
+  sets_count: number;
+  total_reps: number;
+  avg_form_score: number | null;
+  duration_ms: number | null;
+  kcal_point: number | null;
+  kcal_calc_version: number | null;
+  quality_flags: string[];
+  engine_version: string;
+  bundle_version: number | null;
+}
+
+const toWorkoutRow = (r: WorkoutDbRow): WorkoutRow => ({
+  id: r.id,
+  startedAt: r.started_at,
+  platform: r.platform,
+  setsCount: r.sets_count,
+  totalReps: r.total_reps,
+  avgFormScore: r.avg_form_score,
+  durationMs: r.duration_ms,
+  kcalPoint: r.kcal_point,
+  kcalCalcVersion: r.kcal_calc_version,
+  qualityFlags: r.quality_flags,
+  engineVersion: r.engine_version,
+  bundleVersion: r.bundle_version,
+});
+
+/** Keyset page on (started_at, id) DESC — the §3.5 history index order.
+ *  Fetches limit+1 (service derives nextCursor). */
+export async function listWorkouts(
+  sql: Sql,
+  userId: string,
+  input: { limit: number; cursor: { startedAt: Date; id: string } | null },
+): Promise<WorkoutRow[]> {
+  const rows = await sql<WorkoutDbRow[]>`
+    SELECT id, started_at, platform, sets_count, total_reps, avg_form_score,
+           duration_ms, kcal_point, kcal_calc_version, quality_flags,
+           engine_version, bundle_version
+    FROM workouts
+    WHERE user_id = ${userId}
+      AND (${input.cursor === null}
+           OR (started_at, id) < (${input.cursor?.startedAt ?? null}, ${input.cursor?.id ?? null}))
+    ORDER BY started_at DESC, id DESC
+    LIMIT ${input.limit + 1}`;
+  return rows.map(toWorkoutRow);
+}
+
+export interface SetRow {
+  setIndex: number;
+  exerciseSlug: string;
+  view: string | null;
+  reps: number;
+  holdMs: number | null;
+  durationMs: number;
+  avgFormScore: number | null;
+  repScores: number[];
+  faultCounts: unknown;
+  tempoMsAvg: number | null;
+  romStats: unknown;
+  engineVersion: string;
+  definitionVersion: number;
+}
+
+/** Detail keyed (id, userId) — a foreign id reads as absent (R3.2). */
+export async function getWorkoutDetail(
+  sql: Sql,
+  userId: string,
+  workoutId: string,
+): Promise<{ workout: WorkoutRow; sets: SetRow[] } | null> {
+  const rows = await sql<WorkoutDbRow[]>`
+    SELECT id, started_at, platform, sets_count, total_reps, avg_form_score,
+           duration_ms, kcal_point, kcal_calc_version, quality_flags,
+           engine_version, bundle_version
+    FROM workouts WHERE id = ${workoutId} AND user_id = ${userId}`;
+  const w = rows[0];
+  if (w === undefined) return null;
+  const sets = await sql<
+    {
+      set_index: number;
+      slug: string;
+      view: string | null;
+      reps: number;
+      hold_ms: number | null;
+      duration_ms: number;
+      avg_form_score: number | null;
+      rep_scores: number[] | null;
+      fault_counts: unknown;
+      tempo_ms_avg: number | null;
+      rom_stats: unknown;
+      engine_version: string;
+      definition_version: number;
+    }[]
+  >`
+    SELECT s.set_index, e.slug, s.view, s.reps, s.hold_ms, s.duration_ms,
+           s.avg_form_score, s.rep_scores, s.fault_counts, s.tempo_ms_avg,
+           s.rom_stats, s.engine_version, s.definition_version
+    FROM workout_sets s JOIN exercises e ON e.id = s.exercise_id
+    WHERE s.workout_id = ${workoutId} AND s.user_id = ${userId}
+    ORDER BY s.set_index ASC`;
+  return {
+    workout: toWorkoutRow(w),
+    sets: sets.map((s) => ({
+      setIndex: s.set_index,
+      exerciseSlug: s.slug,
+      view: s.view,
+      reps: s.reps,
+      holdMs: s.hold_ms,
+      durationMs: s.duration_ms,
+      avgFormScore: s.avg_form_score,
+      repScores: s.rep_scores ?? [],
+      faultCounts: s.fault_counts,
+      tempoMsAvg: s.tempo_ms_avg,
+      romStats: s.rom_stats,
+      engineVersion: s.engine_version,
+      definitionVersion: s.definition_version,
+    })),
+  };
+}
+
+// ── progress aggregates (progress.py ports; day/hour buckets in the user's
+//    timezone — Part 7 §3.1 rule, DECISIONS P2.3 GAP-3; timeZone is a
+//    safeTimeZone-validated IANA name, always a parameterized VALUE) ────────
+
+export interface OverviewAgg {
+  totalWorkouts: number;
+  totalKcal: number;
+  totalDurationMs: number;
+  avgFormScore: number | null;
+}
+
+export async function getOverviewAgg(
+  sql: Sql,
+  userId: string,
+  since: Date | null,
+): Promise<OverviewAgg> {
+  const [r] = await sql<
+    { n: string; kcal: string; dur: string; form: string | null }[]
+  >`
+    SELECT count(*) AS n, coalesce(sum(kcal_point), 0) AS kcal,
+           coalesce(sum(duration_ms), 0) AS dur, avg(avg_form_score) AS form
+    FROM workouts
+    WHERE user_id = ${userId} AND (${since === null} OR started_at >= ${since})`;
+  return {
+    totalWorkouts: Number(r?.n ?? 0),
+    totalKcal: Number(r?.kcal ?? 0),
+    totalDurationMs: Number(r?.dur ?? 0),
+    avgFormScore: r?.form == null ? null : Math.round(Number(r.form)),
+  };
+}
+
+export async function getDailyTrend(
+  sql: Sql,
+  userId: string,
+  since: Date | null,
+  timeZone: string,
+): Promise<{ date: string; kcal: number; workouts: number }[]> {
+  const rows = await sql<{ day: string; kcal: string; n: string }[]>`
+    SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day,
+           coalesce(sum(kcal_point), 0) AS kcal, count(*) AS n
+    FROM workouts
+    WHERE user_id = ${userId} AND (${since === null} OR started_at >= ${since})
+    GROUP BY day ORDER BY day ASC`;
+  return rows.map((r) => ({ date: r.day, kcal: Number(r.kcal), workouts: Number(r.n) }));
+}
+
+export async function getWeeklyTrend(
+  sql: Sql,
+  userId: string,
+  since: Date | null,
+  timeZone: string,
+): Promise<{ isoYear: number; isoWeek: number; workouts: number; kcal: number }[]> {
+  const rows = await sql<{ iso_year: string; iso_week: string; n: string; kcal: string }[]>`
+    SELECT extract(isoyear FROM started_at AT TIME ZONE ${timeZone}) AS iso_year,
+           extract(week FROM started_at AT TIME ZONE ${timeZone}) AS iso_week,
+           count(*) AS n, coalesce(sum(kcal_point), 0) AS kcal
+    FROM workouts
+    WHERE user_id = ${userId} AND (${since === null} OR started_at >= ${since})
+    GROUP BY iso_year, iso_week ORDER BY iso_year ASC, iso_week ASC`;
+  return rows.map((r) => ({
+    isoYear: Number(r.iso_year),
+    isoWeek: Number(r.iso_week),
+    workouts: Number(r.n),
+    kcal: Number(r.kcal),
+  }));
+}
+
+export async function getFamilyDistribution(
+  sql: Sql,
+  userId: string,
+  since: Date | null,
+): Promise<{ family: string; sets: number }[]> {
+  const rows = await sql<{ family: string; n: string }[]>`
+    SELECT e.family, count(*) AS n
+    FROM workout_sets s JOIN exercises e ON e.id = s.exercise_id
+    WHERE s.user_id = ${userId} AND (${since === null} OR s.started_at >= ${since})
+    GROUP BY e.family ORDER BY n DESC, e.family ASC`;
+  return rows.map((r) => ({ family: r.family, sets: Number(r.n) }));
+}
+
+export interface RecordRef {
+  workoutId: string;
+  value: number;
+}
+
+async function topWorkoutBy(
+  sql: Sql,
+  userId: string,
+  column: "kcal_point" | "duration_ms" | "avg_form_score",
+): Promise<RecordRef | null> {
+  // Fixed column set — identifiers never come from input (R3.8).
+  const rows =
+    column === "kcal_point"
+      ? await sql<{ id: string; v: number | null }[]>`
+          SELECT id, kcal_point AS v FROM workouts
+          WHERE user_id = ${userId} AND kcal_point IS NOT NULL
+          ORDER BY kcal_point DESC, started_at DESC LIMIT 1`
+      : column === "duration_ms"
+        ? await sql<{ id: string; v: number | null }[]>`
+            SELECT id, duration_ms AS v FROM workouts
+            WHERE user_id = ${userId} AND duration_ms IS NOT NULL
+            ORDER BY duration_ms DESC, started_at DESC LIMIT 1`
+        : await sql<{ id: string; v: number | null }[]>`
+            SELECT id, avg_form_score AS v FROM workouts
+            WHERE user_id = ${userId} AND avg_form_score IS NOT NULL
+            ORDER BY avg_form_score DESC, started_at DESC LIMIT 1`;
+  const r = rows[0];
+  return r === undefined || r.v === null ? null : { workoutId: r.id, value: r.v };
+}
+
+export async function getPersonalRecords(
+  sql: Sql,
+  userId: string,
+): Promise<{
+  maxKcalWorkout: RecordRef | null;
+  longestWorkout: RecordRef | null;
+  bestAvgForm: RecordRef | null;
+  totalWorkouts: number;
+}> {
+  const [maxKcalWorkout, longestWorkout, bestAvgForm, count] = await Promise.all([
+    topWorkoutBy(sql, userId, "kcal_point"),
+    topWorkoutBy(sql, userId, "duration_ms"),
+    topWorkoutBy(sql, userId, "avg_form_score"),
+    sql<{ n: string }[]>`SELECT count(*) AS n FROM workouts WHERE user_id = ${userId}`,
+  ]);
+  return { maxKcalWorkout, longestWorkout, bestAvgForm, totalWorkouts: Number(count[0]?.n ?? 0) };
 }
