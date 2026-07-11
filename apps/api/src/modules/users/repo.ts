@@ -100,6 +100,24 @@ export async function updateProfile(
   });
 }
 
+export interface UserSyncContext {
+  weightKg: number | null;
+  timezone: string | null;
+}
+
+/** Weight (2B §2.2 calorie lever) + timezone (Part 7 §3.1 day-bucketing) for
+ *  the workouts/gamification sync path. No status filter: sync is already
+ *  behind authenticate (active-only), and reads must not flap mid-request. */
+export async function getSyncContext(sql: Sql, userId: string): Promise<UserSyncContext> {
+  const rows = await sql<{ weight_kg: string | null; timezone: string | null }[]>`
+    SELECT weight_kg, timezone FROM users WHERE id = ${userId}`;
+  const r = rows[0];
+  return {
+    weightKg: r?.weight_kg == null ? null : Number(r.weight_kg),
+    timezone: r?.timezone ?? null,
+  };
+}
+
 export interface DeletedUserRow {
   email: string | null;
   displayName: string;

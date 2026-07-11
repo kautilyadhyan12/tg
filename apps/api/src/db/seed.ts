@@ -11,7 +11,9 @@ import chairSquatDef from "@app/engine/definitions/chair_squat.json" with { type
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { bundleSha256 } from "../modules/exercises/bundle.js";
+import { ACHIEVEMENTS } from "../modules/gamification/badges.js";
 import {
+  achievements,
   definitionBundles,
   exerciseDefinitions,
   exercises,
@@ -249,6 +251,17 @@ async function seedAll(db: SeedDb): Promise<void> {
     await db.insert(exercises).values(ex).onConflictDoNothing({ target: exercises.slug });
   }
   await seedDefinitions(db);
+  // P2.3: achievements catalog (Part 4 §3.8 "seeded from badges.py port").
+  // Upsert on code: criteria fixes propagate; earned rows are untouched.
+  for (const a of ACHIEVEMENTS) {
+    await db
+      .insert(achievements)
+      .values({ code: a.code, nameKey: a.nameKey, criteria: a.criteria, icon: a.icon })
+      .onConflictDoUpdate({
+        target: achievements.code,
+        set: { nameKey: a.nameKey, criteria: a.criteria, icon: a.icon },
+      });
+  }
 }
 
 // P2.2 A2 (approved): the three P1.8b definitions, seeded 'live' with each

@@ -147,7 +147,10 @@ d("POST /v1/workouts/sync (real Postgres, real cookie authn)", () => {
     expect(w?.["total_reps"]).toBe(13);
     expect(w?.["avg_form_score"]).toBe(86); // round((84+84+90)/3)
     expect(w?.["duration_ms"]).toBe(63000);
-    expect(w?.["kcal_point"]).toBeNull(); // 2B §2.2 deferred (DECISIONS)
+    // P2.3: 2B §2.2 kcal now computed at sync — 3 sets × (6.0 MET × 70 kg
+    // fallback × 21000/3.6e6 h) = 7.35 → 7.
+    expect(w?.["kcal_point"]).toBe(7);
+    expect(w?.["kcal_calc_version"]).toBe(1);
     expect(w?.["bundle_version"]).toBe(1);
 
     const sets = await sql<

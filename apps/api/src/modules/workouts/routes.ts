@@ -2,11 +2,38 @@
 // R3.3: authenticate (P2.1 preHandler — replaced the SYNC_DEV_USER_ID seam) →
 // parse → idempotency header check → handler. Entitlement/quota/per-route rate
 // limits are not metered on this path in v1; the global limiter applies.
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
-import { workoutSyncPayloadSchema } from "./schemas.js";
+import type { z } from "zod";
+import { progressQuerySchema, workoutListQuerySchema, workoutSyncPayloadSchema } from "./schemas.js";
+import * as service from "./service.js";
 import { handleWorkoutSync } from "./service.js";
 import { ForeignWorkoutError } from "./repo.js";
+
+/** Zod-parse the querystring; 400 with issue paths/codes only (R3.10).
+ *  Generic over the schema so .default() outputs stay non-optional. */
+function parseQuery<S extends z.ZodTypeAny>(
+  schema: S,
+  req: FastifyRequest,
+  reply: FastifyReply,
+): z.output<S> | null {
+  const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(req.query);
+  if (!parsed.success) {
+    void reply.status(400).send({
+      error: "validation_error",
+      message: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.code}`).join("; "),
+      requestId: req.id,
+    });
+    return null;
+  }
+  return parsed.data;
+}
+
+function authedUserId(req: FastifyRequest): string {
+  const userId = req.authUser?.id;
+  if (userId === undefined) throw new Error("authenticate preHandler did not run");
+  return userId;
+}
 
 export function registerWorkoutRoutes(app: FastifyInstance, deps: { sql: Sql }): void {
   app.post("/v1/workouts/sync", { preHandler: [app.authenticate] }, async (req, reply) => {
@@ -59,5 +86,61 @@ export function registerWorkoutRoutes(app: FastifyInstance, deps: { sql: Sql }):
       }
       throw err; // central error mapper handles 5xx (R8.1)
     }
+  });
+
+  // ── history (v1 §6.1; R3.3 order: authn → parse → handler; R7.3 cursor) ──
+  app.get("/v1/workouts", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const query = parseQuery(workoutListQuerySchema, req, reply);
+    if (query === null) return;
+    const page = await service.listWorkouts(deps.sql, authedUserId(req), query);
+    return reply.status(200).send(page);
+  });
+
+  app.get<{ Params: { id: string } }>("/v1/workouts/:id", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const { id } = req.params;
+    const notFound = () =>
+      reply.status(404).send({ error: "not_found", message: "workout not found", requestId: req.id });
+    // Non-uuid ids read as absent (same 404 as a foreign id — R3.2, no oracle).
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return notFound();
+    }
+    const detail = await service.getWorkout(deps.sql, authedUserId(req), id);
+    if (detail === null) return notFound();
+    return reply.status(200).send(detail);
+  });
+
+  // ── progress (progress.py ports) ─────────────────────────────────────────
+  app.get("/v1/progress/overview", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const query = parseQuery(progressQuerySchema, req, reply);
+    if (query === null) return;
+    return reply.status(200).send(await service.progressOverview(deps.sql, authedUserId(req), query.period));
+  });
+
+  app.get("/v1/progress/trend", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const query = parseQuery(progressQuerySchema, req, reply);
+    if (query === null) return;
+    return reply.status(200).send(await service.progressTrend(deps.sql, authedUserId(req), query.period));
+  });
+
+  app.get("/v1/progress/weekly", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const query = parseQuery(progressQuerySchema, req, reply);
+    if (query === null) return;
+    return reply.status(200).send(await service.progressWeekly(deps.sql, authedUserId(req), query.period));
+  });
+
+  app.get("/v1/progress/heatmap", { preHandler: [app.authenticate] }, async (req, reply) => {
+    return reply.status(200).send(await service.progressHeatmap(deps.sql, authedUserId(req)));
+  });
+
+  app.get("/v1/progress/distribution", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const query = parseQuery(progressQuerySchema, req, reply);
+    if (query === null) return;
+    return reply
+      .status(200)
+      .send(await service.progressDistribution(deps.sql, authedUserId(req), query.period));
+  });
+
+  app.get("/v1/progress/records", { preHandler: [app.authenticate] }, async (req, reply) => {
+    return reply.status(200).send(await service.personalRecords(deps.sql, authedUserId(req)));
   });
 }

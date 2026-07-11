@@ -8,3 +8,15 @@
 8e0b3204430fcf2fa348fee9b9b67fa50f8c1971:apps/api/test/auth.routes.test.ts:generic-api-key:20
 8e0b3204430fcf2fa348fee9b9b67fa50f8c1971:apps/api/test/auth.routes.test.ts:generic-api-key:23
 8e0b3204430fcf2fa348fee9b9b67fa50f8c1971:apps/api/test/auth.routes.test.ts:generic-api-key:50
+
+# P2.3 (2026-07-11): gitleaks generic-api-key false-positives on achievement
+# nameKey STRINGS ("achievement.streak_30" etc.) in badges.ts — message keys,
+# not secrets. Inline gitleaks:allow added in the follow-up commit; these pin
+# the pre-marker blob from 6f0c38c.
+6f0c38c450e1a080e57602a5b10f9cfc7b9ef6a4:apps/api/src/modules/gamification/badges.ts:generic-api-key:35
+6f0c38c450e1a080e57602a5b10f9cfc7b9ef6a4:apps/api/src/modules/gamification/badges.ts:generic-api-key:36
+6f0c38c450e1a080e57602a5b10f9cfc7b9ef6a4:apps/api/src/modules/gamification/badges.ts:generic-api-key:37
+6f0c38c450e1a080e57602a5b10f9cfc7b9ef6a4:apps/api/src/modules/gamification/badges.ts:generic-api-key:38
+6f0c38c450e1a080e57602a5b10f9cfc7b9ef6a4:apps/api/src/modules/gamification/badges.ts:generic-api-key:41
+6f0c38c450e1a080e57602a5b10f9cfc7b9ef6a4:apps/api/src/modules/gamification/badges.ts:generic-api-key:42
+6f0c38c450e1a080e57602a5b10f9cfc7b9ef6a4:apps/api/src/modules/gamification/badges.ts:generic-api-key:45

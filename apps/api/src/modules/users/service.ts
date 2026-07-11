@@ -14,6 +14,15 @@ import type { UsersEmailSender } from "./email.js";
 import * as repo from "./repo.js";
 import type { UpdateProfileRequest, UserProfile } from "./schemas.js";
 
+/** Narrow service-interface export (R7.1) for workouts/gamification: the
+ *  users-owned columns the sync path needs (P2.3). */
+export async function getUserSyncContext(
+  sql: Sql,
+  userId: string,
+): Promise<repo.UserSyncContext> {
+  return await repo.getSyncContext(sql, userId);
+}
+
 /** Typed failure for the central error mapper (R8.1); message client-safe. */
 export class UsersError extends Error {
   readonly statusCode: number;

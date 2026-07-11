@@ -1,6 +1,60 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P2.3 — workouts (history/PRs/kcal) + progress + gamification ports 🟡
+              [branch p2.3-workouts-gamification; PROVE green 101/101 on Neon branch
+               p22-test (reused), ZERO skips — full P2.1+P2.2 regression + 29 new
+               tests; engine 147/147 + shared 19/19 re-proven. T3 DONE (fresh chat):
+               2 gate-blockers FIXED — (1) §3.5 retroactive restore was silently
+               violated: streak now RECOMPUTED each sync by replaying the full
+               distinct-activity-day history (pure replayActivityDays fold; longest
+               floored at stored value); (2) gamification hook now runs
+               UNCONDITIONALLY (was gated on 'created' — a hook crash after the
+               workout commit lost the streak forever; replay+upsert = idempotent).
+               Finding 3 fixed (platform cast → Zod parse). Nits fixed: strict uuid
+               cursor regex, safeTimeZone re-exported via gamification service,
+               badges.py hour citations. §3.5 timezone-travel rule NOT implemented —
+               owed on the tz-capture card (DECISIONS). Regression tests: unit
+               replay-restore + replay-freeze-spend; route late-offline-restore +
+               erased-streak-heals-on-retry.]
+FILES CHANGED:
+  packages/shared/src/{workouts,progress,gamification}.ts (new contracts) + index;
+  apps/api/src/modules/gamification/ (new — R7.1): streak.ts (PURE Part 7 §3 machine:
+    TZ calendar days via dayInTz/safeTimeZone, freeze earn 1-per-7 cap 3, lazy
+    auto-spend = advance last_activity_date per covered day, reset keeps the bank +
+    longest), badges.ts (18 achievements from badges.py, criteria jsonb {stat,gte,
+    minWorkouts?}, evaluator reads missing stats as 0), repo (FOR UPDATE streak row,
+    ON CONFLICT awards, SQL stats), service (onWorkoutSynced / reconciledStreak /
+    getMe), routes (GET /v1/gamification/me);
+  apps/api/src/modules/workouts/: calories.ts (2B §2.2 port: kcal=MET×kg×h,
+    KCAL_CALC_VERSION=1, DEFAULT_WEIGHT_KG=70, ACTIVE-only per GAP-2), repo
+    (getExerciseIdsBySlug now returns {id,met}; sync stores kcal; history keyset
+    (started_at,id) DESC; detail; progress aggregates — AT TIME ZONE param), service
+    (kcal at sync + gamification hook on status==='created' only; history cursor
+    `<iso>|<uuid>`, malformed→first page; progress.py ports incl. consistency
+    min(100,round(n/days*100)), 'all'→0), routes (GET /v1/workouts[/:id],
+    /v1/progress/{overview,trend,weekly,heatmap,distribution,records});
+  users repo/service: getUserSyncContext (weight+timezone service export);
+  seed: achievements upsert-on-code; app.ts: gamification routes registered;
+  test/gamification.unit.test.ts (15 pure: streak edges incl. IST boundary, badges,
+    kcal), test/workouts.history.test.ts (10, RELATIVE fixture dates so streak
+    reconciliation can't rot the suite), workouts.sync.test.ts kcal assertion
+    updated (null→7: this task IS the deferred kcal port).
+DECISIONS (7, ruled at gate): XP deferred (Part 4 has no storage — GAP-1) · kcal
+  active-only v1 (payload carries no rest — GAP-2) · TZ fallback UTC until capture
+  card (GAP-3) · variety badges = F1–F12 families (GAP-4) · freeze auto-spend lazy,
+  sweep+push → notifications/BullMQ card (GAP-5) · history ungated until P2.4
+  entitlements (GAP-6) · deferrals: measurements→P2.6, predictions→2B §5 card,
+  challenges ("tables now, screens later"), leaderboards→P4.x, streak nudges→P5.
+NO migration; NO new deps.
+QUEUE (unchanged obligations): argon2id before P2.8 · DPDP Day-14 cascade + export
+  workers (BullMQ) · Redis rate-limit swap at P2.4 · challenges/leaderboards/XP cards.
+OPEN SPEC GAPS: none.
+NEXT: T3 on this diff (fresh chat) → merge → P2.4 (entitlement resolver + quota
+  middleware — brings Redis).
+```
+
+```
 TASK: P2.2 — users/profile module + exercises/catalog read APIs 🟡
               [MERGED to master @ e6631a1 via PR #15, 2026-07-11; commits 2029226
                (module) + dd5b4ed (T3 fixes). PROVE green 76/76 on Neon branch
