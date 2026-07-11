@@ -3,6 +3,7 @@
 // exercised in both passing and failing directions before a real engine exists.
 import type { FrameResult, PoseFrame, RepEvent, SetSummary } from "@app/shared";
 import type { ReplayableEngine, Trace, TraceHeader } from "../src/index.js";
+import { ENGINE_VERSION } from "../src/index.js";
 
 /** Definite-index access for fixtures (tests ban non-null assertions). */
 export function must<T>(v: T | undefined): T {
@@ -97,7 +98,7 @@ export function scriptedEngine(script: ScriptedBehavior): ReplayableEngine {
         view: "side",
         holdMs: script.holdMs ?? null,
         calibration: null,
-        engineVersion: "0.0.1",
+        engineVersion: ENGINE_VERSION,
         definitionVersion: 1,
       };
     },

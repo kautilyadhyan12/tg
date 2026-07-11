@@ -10,6 +10,7 @@ import {
   smallint,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { createdAt } from "./common.js";
@@ -72,6 +73,9 @@ export const workoutSets = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
+    // Part 4 §3.5 sync contract: sets are "keyed (workout_id, set_index)" and
+    // upserted — ON CONFLICT requires this uniqueness (migration 0002).
+    uniqueIndex("workout_sets_workout_set_uq").on(t.workoutId, t.setIndex),
     index("workout_sets_workout_idx").on(t.workoutId),
     index("workout_sets_user_started_idx").on(t.userId, t.startedAt.desc()), // exercise-mix, form trend per member
     index("workout_sets_exercise_started_idx").on(t.exerciseId, t.startedAt.desc()), // Part 2 §9.4 per-definition telemetry

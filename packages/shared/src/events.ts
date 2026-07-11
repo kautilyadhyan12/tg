@@ -54,24 +54,31 @@ export const holdEventSchema = z
   .strict();
 export type HoldEvent = z.infer<typeof holdEventSchema>;
 
+// Upper bounds = the Part 4 §3.5 column types these fields land in
+// (set_index/reps → smallint; duration_ms/hold_ms/tempo_ms_avg/
+// definition_version → int4). Values Zod would pass but PG would overflow
+// must be a 400 at the boundary, never a 500 in the route (P1.10d T3).
+export const SMALLINT_MAX = 32_767;
+export const INT4_MAX = 2_147_483_647;
+
 // SetSummary — at set end; THE only thing that leaves the device (§2.4,
 // byte-compatible with v1 §5.3; Part 4 §3.5 stores these fields per set).
 export const setSummarySchema = z
   .object({
     exercise: z.string(), // exercise slug
-    setIndex: z.number().int().positive(),
-    reps: z.number().int().nonnegative(),
-    durationMs: z.number().int().nonnegative(),
+    setIndex: z.number().int().positive().max(SMALLINT_MAX),
+    reps: z.number().int().nonnegative().max(SMALLINT_MAX),
+    durationMs: z.number().int().nonnegative().max(INT4_MAX),
     avgFormScore: z.number().int().min(0).max(100).nullable(), // null: no scored reps (e.g. timer tracking)
     repScores: z.array(z.number().int().min(0).max(100)),
     faultCounts: z.record(z.string(), z.number().int().positive()),
-    tempoMsAvg: z.number().int().nonnegative().nullable(),
+    tempoMsAvg: z.number().int().nonnegative().max(INT4_MAX).nullable(),
     romStats: z.record(z.string(), z.number()).nullable(),
     view: viewSchema,
-    holdMs: z.number().int().nonnegative().nullable(), // isometrics: qualifying hold time
+    holdMs: z.number().int().nonnegative().max(INT4_MAX).nullable(), // isometrics: qualifying hold time
     calibration: z.record(z.string(), z.unknown()).nullable(),
     engineVersion: z.string(),
-    definitionVersion: z.number().int().positive(),
+    definitionVersion: z.number().int().positive().max(INT4_MAX),
   })
   .strict();
 export type SetSummary = z.infer<typeof setSummarySchema>;

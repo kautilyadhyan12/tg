@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play, Pause, SkipForward, Square,
-  Volume2, VolumeX, Wifi, WifiOff,
+  Volume2, VolumeX, Eye, EyeOff,
   CheckCircle, AlertCircle, Timer,
   Plus, Minus, RotateCcw,
 } from 'lucide-react';
@@ -14,6 +14,8 @@ import PoseOverlay from '../components/workout/PoseOverlay';
 import ReferenceAnimation from '../components/workout/ReferenceAnimation';
 import { workoutService } from '../api/workoutApi';
 import { getItem, removeItem } from '../utils/storage';
+import { queueWorkoutSync } from '../sync/syncClient';
+import { accumulateSummary, averageFormScore, createSummaryLog } from './activeWorkoutEngine';
 import {
   speakExercise, speakCorrection,
   speakProgress, speakRest, speakSetStart, speakComplete,
@@ -79,6 +81,15 @@ export default function ActiveWorkout() {
   // during a workout (live keypoints); the previous top-level getItem() call
   // re-read and JSON.parsed localStorage on every single render.
   const [sessionData] = useState(() => getItem('active_session', null));
+  // P1.10c sync identity, fixed once per workout: the client-generated
+  // workoutId IS the idempotency key (v1 §5.3 / Part 4 §3.5), so it must
+  // survive re-renders; startedAt is the wall-clock workout start.
+  // crypto.randomUUID needs a secure context — always true on any reachable
+  // workout path, because getUserMedia (the camera) has the same requirement.
+  const [syncIdentity] = useState(() => ({
+    workoutId: crypto.randomUUID(),
+    startedAt: new Date().toISOString(),
+  }));
 
   const [exercises]        = useState(sessionData?.exercises || []);
   const [currentIndex,     setCurrentIndex]     = useState(0);
@@ -93,7 +104,6 @@ export default function ActiveWorkout() {
   // Live diagnostic readout — dev builds only. Production users should never
   // see joint angles / analyzer internals by default (still toggleable).
   const [showDebug,        setShowDebug]        = useState(import.meta.env.DEV);
-  const [lastRepCount,     setLastRepCount]     = useState(0);
   const [videoSize,        setVideoSize]        = useState({ w: 640, h: 480 });
   const [setCompleteAnim,  setSetCompleteAnim]  = useState(false);
 
@@ -117,25 +127,21 @@ export default function ActiveWorkout() {
   // re-renders correctly from fresh state. Mirroring both into refs (same
   // pattern as currentSetRef/currentIndexRef above) makes them always
   // current regardless of which render's closure is executing.
-  const repFormScoresRef   = useRef([]);
   const elapsedSecsRef     = useRef(0);
-  // The server's RepCounter counts CONTINUOUSLY: it is keyed by user+exercise,
-  // persists across WebSocket reconnects, and is never cleared between sets or
-  // even between workouts. Its absolute value is therefore meaningless to us —
-  // only the DELTA since the current set began matters. We capture a per-set
-  // baseline (the server's count at the moment the set starts) and compute
-  // reps THIS set = serverCount − baseline. `pendingBaselineRef` marks that we
-  // still need to capture that baseline from the first frame of the new set.
-  const repBaselineRef     = useRef(0);   // server rep_count at the start of this set
-  const setRepsRef         = useRef(0);   // reps completed in the current set
-  const pendingBaselineRef = useRef(true);// capture baseline on first frame of a set
-  const lastServerCountRef = useRef(0);   // previous server rep_count, to detect a
-                                          // backend-side counter reset (count going
-                                          // backwards) without losing rep progress
-  const settingUpRef       = useRef(false);
-  // Form-score samples for the rep currently in progress (see effect). Only
-  // one buffer now — the rule-based analyzer is the sole form signal.
-  const repFormBufRef      = useRef([]);
+  // Engine era (P1.10b): the on-device engine runs ONE session per set (§3.9),
+  // so rep_count is already per-set — the old server-baseline machinery
+  // (persistent cross-set counter, baseline capture, backwards-reset detection)
+  // is gone. Engine SetSummaries (§2.4) accumulate in setSummariesRef — held
+  // for the P1.10c offline sync queue — and per-rep form scores come from
+  // them, not from per-frame sampling.
+  const setSummariesRef        = useRef(createSummaryLog());
+  // Key of a manually reset (redone) set whose summary must be dropped. Keyed —
+  // not a one-shot flag — because a reset BEFORE any frame reached the engine
+  // emits no summary at all (zero-frame guard), and a stuck flag would then
+  // silently swallow the NEXT genuine set (T3 P1.10b-2b finding). Keys are
+  // monotonic and never reused, so a stale entry here is inert.
+  const discardSetKeyRef       = useRef(null);
+  const lastRepCountRef        = useRef(0);     // previous engine rep_count → beep once per new rep
 
   const currentExercise = exercises[currentIndex];
   // Per-exercise manual override of the rep target, editable mid-workout. Keyed
@@ -152,7 +158,6 @@ export default function ActiveWorkout() {
   // Keep refs synced with state
   useEffect(() => { currentSetRef.current   = currentSet;   }, [currentSet]);
   useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
-  useEffect(() => { repFormScoresRef.current = repFormScores; }, [repFormScores]);
   useEffect(() => { elapsedSecsRef.current   = elapsedSecs;   }, [elapsedSecs]);
 
   const {
@@ -160,13 +165,34 @@ export default function ActiveWorkout() {
     startCamera, stopCamera,
   } = useCamera();
 
+  // One engine session per (exercise, engineSetKey): bumping the key finalizes
+  // the current set (its §2.4 SetSummary is emitted via onSetComplete) and
+  // starts a fresh session. Monotonic across the workout, so summary.setIndex
+  // is the workout-global set ordinal.
+  const [engineSetKey, setEngineSetKey] = useState(1);
+
+  const handleSetSummary = useCallback((summary) => {
+    if (summary?.setIndex === discardSetKeyRef.current) {
+      discardSetKeyRef.current = null;
+      return; // the manually reset (redone) set — must not double-count
+    }
+    accumulateSummary(setSummariesRef.current, summary);
+    setRepFormScores([...setSummariesRef.current.repScores]);
+  }, []);
+
   const {
-    poseData, keypointsData, connected,
-    connect, disconnect, startStreaming,
+    poseData, keypointsData, analysisAvailable,
+    startStreaming, stop,
   } = usePoseDetection({
     exercise: currentExercise?.name?.toLowerCase().replace(/\s+/g, '_') || 'squat',
+    setIndex: engineSetKey,
     enabled:  !paused && phase === 'workout',
+    onSetComplete: handleSetSummary,
   });
+
+  // A new engine session counts from 0 again — every engineSetKey bump site
+  // (rest-complete, next-exercise, manual reset) also resets the rep display
+  // explicitly, so no reset-in-effect is needed.
 
   useEffect(() => {
     if (!sessionData) { navigate('/workout/builder'); return; }
@@ -174,18 +200,12 @@ export default function ActiveWorkout() {
     startCamera(preferredCam).then((stream) => {
       if (stream) {
         setTimeout(() => {
-          connect();
           if (videoRef.current) startStreaming(videoRef.current);
-          // No server reset needed: the first rep frame of the first set is
-          // captured as this set's baseline (see the poseData effect below), so
-          // any leftover server count from a previous workout is absorbed rather
-          // than mistaken for already-completed reps.
-          pendingBaselineRef.current = true;
         }, 1000);
       }
     });
     speakExercise(currentExercise?.name || 'workout');
-    return () => { stopCamera(); disconnect(); };
+    return () => { stopCamera(); stop(); };
   }, []);
 
   useEffect(() => {
@@ -299,85 +319,31 @@ export default function ActiveWorkout() {
 
   useEffect(() => {
     if (!poseData || paused || phase !== 'workout') return;
-    // ── Form scoring sample collection ────────────────────────────────────────
-    // poseData.form_score is the rule-based analyzer's score — the only form
-    // signal in the app now. Collect samples ONLY during the active part of a
-    // rep (state === 'down'), so standing/idle frames (where depth isn't being
-    // scored and the analyzer reports a neutral ~80, not a real measurement)
-    // never pollute the rep's average. Each rep's samples are finalised into
-    // one score when the rep is counted.
-    if (poseData.state === 'down' && poseData.form_score > 0) {
-      repFormBufRef.current.push(poseData.form_score);
-    }
+    if (poseData.logOnly) return; // log-only (Part 6 §3.6): manual counting owns the reps
 
     // Corrections only when form is actually off; voice.js throttles further.
+    // corrections[0] is the translated Appendix-A cue string (engine emits keys).
     if (poseData.corrections?.length > 0 && voiceOn && poseData.form_correct === false) {
       speakCorrection(poseData.corrections[0], currentExercise?.name);
     }
 
-    // ── Per-set rep counting (baseline-relative) ──────────────────────────────
-    // Never trust the server's ABSOLUTE rep_count (see the ref declarations
-    // above — it persists across sets and workouts). The FIRST frame we see
-    // after a set/exercise transition defines this set's baseline and counts
-    // nothing. Every later frame contributes reps = serverCount − baseline.
-    // This makes a stale/leftover count (e.g. 12 left over from a previous set
-    // or workout, or a reset that never landed) impossible to misread as
-    // "set already complete" — which was causing sets to be skipped.
-    const serverCount = poseData.rep_count || 0;
-
-    if (pendingBaselineRef.current) {
-      pendingBaselineRef.current = false;
-      repBaselineRef.current     = serverCount;
-      lastServerCountRef.current = serverCount;
-      setRepsRef.current         = 0;
-      setSetReps(0);
-      repFormBufRef.current      = [];
-      return;
-    }
-
-    // The server's rep counter lives in memory and is monotonic — within a set
-    // it only ever climbs. So if the reported count suddenly goes BACKWARDS, the
-    // counter was reset or replaced on the server (most commonly: the dev backend
-    // runs `uvicorn --reload`, and a file change restarts the worker, wiping its
-    // in-memory counters — the next frame then starts a fresh counter at 0).
-    //
-    // The old behaviour zeroed the display here, which threw away the reps you'd
-    // already done and forced you to redo the set. Instead, re-anchor the baseline
-    // so your completed reps are PRESERVED and counting just continues from where
-    // you were — the reset becomes invisible.
-    if (serverCount < lastServerCountRef.current) {
-      repBaselineRef.current     = serverCount - setRepsRef.current;
-      lastServerCountRef.current = serverCount;
-      return;
-    }
-    lastServerCountRef.current = serverCount;
-
-    const repsThisSet = Math.max(0, serverCount - repBaselineRef.current);
-
-    if (repsThisSet > setRepsRef.current) {
-      setRepsRef.current = repsThisSet;
-      setSetReps(repsThisSet);
+    // ── Per-set rep counting, straight from the engine ────────────────────────
+    // One engine session per set (§3.9) means rep_count IS this set's count —
+    // the old baseline/delta machinery for the persistent server counter is gone.
+    // Per-rep form scores arrive with the SetSummary (handleSetSummary), not
+    // from per-frame sampling.
+    const reps = poseData.rep_count || 0;
+    if (reps > lastRepCountRef.current) {
+      lastRepCountRef.current = reps;
+      setSetReps(reps);
       playRepBeep();
 
-      // Finalise the form score for the rep that just completed — average of
-      // the rule-based scores collected while state === 'down'. One score
-      // per rep; idle time never enters the average.
-      const _samples = repFormBufRef.current;
-      let _repForm = null;
-      if (_samples.length > 0) {
-        _repForm = Math.round(_samples.reduce((a, b) => a + b, 0) / _samples.length);
-      }
-      repFormBufRef.current = [];
-      if (_repForm !== null) {
-        setRepFormScores((prev) => [...prev, Math.max(0, Math.min(100, _repForm))]);
+      const remaining = targetReps - reps;
+      if (voiceOn && (remaining <= 2 || reps % 3 === 0)) {
+        speakProgress(reps, targetReps, currentExercise?.name);
       }
 
-      const remaining = targetReps - repsThisSet;
-      if (voiceOn && (remaining <= 2 || repsThisSet % 3 === 0)) {
-        speakProgress(repsThisSet, targetReps, currentExercise?.name);
-      }
-
-      if (repsThisSet >= targetReps) handleSetComplete();
+      if (reps >= targetReps) handleSetComplete();
     }
   }, [poseData]);
 
@@ -387,14 +353,25 @@ export default function ActiveWorkout() {
     setVoiceEnabled(v);
   };
 
-  // Manual reset of the CURRENT set's reps to 0. Purely client-side: marking the
-  // baseline pending makes the next pose frame re-anchor to the server's current
-  // count, so the display counts up from 0 again. No server round-trip, so it
-  // can't race with the persistent server counter (which stays where it is).
+  // Manual reset of the CURRENT set's reps to 0. Engine era: a redo means a
+  // FRESH per-set session (re-key), and the discarded partial set's summary is
+  // dropped so a redone set never double-counts in the workout log.
   const handleManualRepReset = () => {
-    setRepsRef.current         = 0;
     setSetReps(0);
-    pendingBaselineRef.current = true;
+    lastRepCountRef.current = 0;
+    if (analysisAvailable) {
+      discardSetKeyRef.current = engineSetKey; // this key's summary (if any) is the discarded set
+      setEngineSetKey((k) => k + 1);
+    }
+  };
+
+  // Log-only mode (Part 6 §3.6): the user counts their own reps — honest manual
+  // counting, no grading, and the workout still counts.
+  const handleManualRep = () => {
+    const n = setReps + 1;
+    setSetReps(n);
+    playRepBeep();
+    if (n >= targetReps) handleSetComplete();
   };
 
   // Adjust the rep target for the current exercise live during the workout.
@@ -446,9 +423,9 @@ export default function ActiveWorkout() {
     if (restLeadsToRef.current === 'next_set') {
       currentSetRef.current += 1;
       setCurrentSet((s) => s + 1);
-      setRepsRef.current   = 0;
+      setEngineSetKey((k) => k + 1);   // fresh engine session for the new set (§3.9)
       setSetReps(0);
-      pendingBaselineRef.current = true;   // re-baseline on the new set's first frame
+      lastRepCountRef.current = 0;
       setPhase('workout');
       if (voiceOn) speakSetStart();
     } else {
@@ -503,9 +480,9 @@ export default function ActiveWorkout() {
     currentSetRef.current   = 1;
     setCurrentIndex(next);
     setCurrentSet(1);
-    setRepsRef.current   = 0;
+    setEngineSetKey((k) => k + 1);   // finalize the old exercise's set, start fresh
     setSetReps(0);
-    pendingBaselineRef.current = true;   // re-baseline on the new exercise's first frame
+    lastRepCountRef.current = 0;
     setPhase('workout');
     if (voiceOn) speakExercise(exercises[next]?.name);
   };
@@ -520,24 +497,40 @@ export default function ActiveWorkout() {
     clearInterval(timerRef.current);
     clearInterval(restRef.current);
     stopCamera();
-    disconnect();
+    stop();
     if (voiceOn) speakComplete();
+
+    // Finalize the LAST set: stop() tears down the camera loop but deliberately
+    // does NOT end the engine set — re-keying does (the hook's per-set effect
+    // cleanup emits its SetSummary via onSetComplete). The short wait lets
+    // React commit and run that cleanup before the scores are read below
+    // (T3 P1.10b-2a carry-forward: without this the last set is silently lost).
+    setEngineSetKey((k) => k + 1);
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     // Read from refs, not state — this function is invoked through
     // handleSetComplete's memoized closure, which can be pinned to an early
-    // render where repFormScores/elapsedSecs were still their initial
-    // values. The refs above are kept current via useEffect (or, for the
-    // two below, updated directly every tick) regardless of which render's
-    // closure ends up calling this function.
-    const finalFormScores = repFormScoresRef.current;
+    // render where state was still its initial value (see the currentSetRef
+    // comment above). The refs are always current.
     const finalElapsedSecs = elapsedSecsRef.current;
     const finalActiveSecondsByExercise = activeSecondsByExerciseRef.current;
     const finalActiveEffortSecs = activeEffortSecsRef.current;
     const finalRestSeconds = restSecondsTotalRef.current;
 
-    const avgForm = finalFormScores.length > 0
-      ? Math.round(finalFormScores.reduce((a, b) => a + b, 0) / finalFormScores.length)
-      : 0;
+    // Workout form average from every engine-scored rep (per-rep scores come
+    // from the collected §2.4 SetSummaries). Log-only sets contribute nothing;
+    // all-log-only workouts send 0, exactly as the old screen did.
+    const avgForm = averageFormScore(setSummariesRef.current) ?? 0;
+
+    // P1.10c: queue the engine-verified workout for POST /v1/workouts/sync
+    // (offline-safe localStorage queue; flush is fire-and-forget). Independent
+    // of the legacy completeSession below — neither one's failure drops or
+    // duplicates the other. All-log-only workouts are skipped inside.
+    queueWorkoutSync({
+      workoutId: syncIdentity.workoutId,
+      startedAt: syncIdentity.startedAt,
+      summaries: setSummariesRef.current.summaries,
+    });
 
     try {
       await workoutService.completeSession(sessionData.sessionId, {
@@ -573,7 +566,7 @@ export default function ActiveWorkout() {
   const handleStop = () => {
     if (window.confirm('Stop workout? Progress will be lost.')) {
       stopCamera();
-      disconnect();
+      stop();
       clearInterval(timerRef.current);
       clearInterval(restRef.current);
       removeItem('active_session');
@@ -665,16 +658,16 @@ export default function ActiveWorkout() {
           <div
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
             style={{
-              background: connected ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-              border:     connected ? '1px solid rgba(34,197,94,0.2)' : '1px solid rgba(239,68,68,0.2)',
-              color:      connected ? '#4ade80' : '#f87171',
+              background: analysisAvailable ? 'rgba(34,197,94,0.1)' : 'rgba(251,191,36,0.1)',
+              border:     analysisAvailable ? '1px solid rgba(34,197,94,0.2)' : '1px solid rgba(251,191,36,0.2)',
+              color:      analysisAvailable ? '#4ade80' : '#fbbf24',
             }}
           >
-            {connected
-              ? <Wifi    className="w-3 h-3" />
-              : <WifiOff className="w-3 h-3" />
+            {analysisAvailable
+              ? <Eye    className="w-3 h-3" />
+              : <EyeOff className="w-3 h-3" />
             }
-            {connected ? 'Connected' : 'Offline'}
+            {analysisAvailable ? 'AI form check' : 'Log-only'}
           </div>
           <div className="flex items-center gap-1.5 text-sm font-mono"
                style={{ color: 'rgba(255,255,255,0.70)' }}>
@@ -751,7 +744,7 @@ export default function ActiveWorkout() {
             </div>
           )}
 
-          {poseData?.person_detected && (
+          {poseData?.person_detected && poseData?.form_correct != null && (
             <div
               className="absolute top-3 left-3 px-3 py-1.5 rounded-xl text-xs font-bold"
               style={{
@@ -795,9 +788,9 @@ export default function ActiveWorkout() {
                 <Row label="view detected" value={view ?? '—'} color={viewColor} />
                 <Row label="form score" value={poseData?.form_score != null ? `${poseData.form_score}%` : '—'} />
                 <Row label="state" value={poseData?.state ?? '—'} />
-                <Row label="reps(server)" value={poseData?.rep_count ?? 0} />
+                <Row label="reps(engine)" value={poseData?.rep_count ?? '—'} />
                 <Row label="joints seen" value={`${visible}/33`} color={visible >= 28 ? '#4ade80' : '#fbbf24'} />
-                <Row label="WS" value={connected ? 'connected' : 'offline'} color={connected ? '#4ade80' : '#f87171'} />
+                <Row label="mode" value={analysisAvailable ? 'engine' : 'log-only'} color={analysisAvailable ? '#4ade80' : '#fbbf24'} />
               </div>
             );
           })()}
@@ -916,6 +909,24 @@ export default function ActiveWorkout() {
                 }}
               />
             </div>
+            {!analysisAvailable && (
+              <>
+                <button
+                  onClick={handleManualRep}
+                  className="w-full mt-2 py-2 rounded-xl text-sm font-semibold text-white"
+                  style={{
+                    background: 'rgba(255,255,255,0.08)',
+                    border:     '1px solid rgba(255,255,255,0.12)',
+                  }}
+                >
+                  +1 Rep
+                </button>
+                <p className="text-2xs mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  Form checking isn't available for this exercise yet — your workout
+                  still counts.
+                </p>
+              </>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2 flex-shrink-0">

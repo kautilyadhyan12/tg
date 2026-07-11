@@ -1,12 +1,12 @@
 // CI trace-replay entry (Part 2 §7.6): replays every trace in test/traces/.
 // P1.8b state: the parity exercises now run through COMPILED §4 definition
-// documents (test/definitions/{squat,jump_squat,chair_squat}.json), authored
+// documents (src/definitions/{squat,jump_squat,chair_squat}.json — v1 §4 home), authored
 // from the P1.8a constant-preservation table — the hand-built parity-configs.ts
 // is retired. §7.4 assertions ARMED: rep counts exact (I2), scores within the
 // trace's declared range. Faults remain faultsPending (the legacy→EDS fault
 // mapping needs the jump airborne-state / chair target-relative template work,
 // tracked in DECISIONS) and skip loudly.
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { exerciseDefinitionSchema, poseFrameSchema, type ExerciseDefinition } from "@app/shared";
@@ -25,7 +25,7 @@ import {
 } from "../src/index.js";
 
 const TRACES_DIR = join(import.meta.dirname, "traces");
-const DEFS_DIR = join(import.meta.dirname, "definitions");
+const DEFS_DIR = join(import.meta.dirname, "../src/definitions");
 
 const defCache = new Map<string, ExerciseDefinition>();
 /** Load, schema-parse and lint the §4 definition for an exercise. A definition
@@ -53,6 +53,14 @@ function listTraceFiles(): string[] {
     .map((f) => join(TRACES_DIR, f));
 }
 
+/** Parity traces (P1.3 feeder) carry a .responses.jsonl sidecar of legacy
+ *  Python outputs and get the §7.5 stage-parity checks. Regression traces
+ *  (recorded live on-device, post-swap — no Python exists to compare against)
+ *  get the full §7.4 behavioral assertions only. */
+function hasSidecar(file: string): boolean {
+  return existsSync(file.replace(/\.jsonl$/, ".responses.jsonl"));
+}
+
 // §7.5 / Part 0 #4: the parity fixture matrix requires these per-exercise
 // minimum recorded sessions before certification. The repo is short of this
 // (Option-B scope: drive the CURRENT clips green now; Kd records the rest).
@@ -72,7 +80,9 @@ describe("golden traces (§7.6) — compiled definitions", () => {
     for (const f of files) {
       const trace = parseTrace(readFileSync(f, "utf8"));
       const ex = trace.header.exercise;
-      counts.set(ex, (counts.get(ex) ?? 0) + 1);
+      // Only parity sessions (Python sidecar) count toward §7.5 certification;
+      // live regression fixtures are extra coverage, not parity evidence.
+      if (hasSidecar(f)) counts.set(ex, (counts.get(ex) ?? 0) + 1);
       // Meaningful (non-tautological) check: every present trace must map to a
       // definition we can compile — no orphan fixtures.
       expect(() => compileDefinition(definitionFor(ex), 1), `no compilable definition for ${ex}`).not.toThrow();
@@ -106,7 +116,7 @@ describe("golden traces (§7.6) — compiled definitions", () => {
     });
   }
 
-  for (const file of files) {
+  for (const file of files.filter(hasSidecar)) {
     it(`stages 1–3 on ${file.split(/[\\/]/).pop() ?? file}`, () => {
       const trace = parseTrace(readFileSync(file, "utf8"));
       for (const frame of trace.frames) poseFrameSchema.parse(frame); // deep check (Node shell)

@@ -13,8 +13,8 @@ Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\backend-
 Write-Host "3/4 backend-ml pose-only (:8000)..."
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\backend-ml'; .venv\Scripts\python run_pose_only.py"
 
-Write-Host "4/4 frontend (:5173)..."
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\frontend'; npm run dev"
+Write-Host "4/4 web (:5173)..."
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\apps\web'; corepack pnpm dev"
 
 Start-Sleep -Seconds 6
 Start-Process "http://localhost:5173"

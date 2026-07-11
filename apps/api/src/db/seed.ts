@@ -4,7 +4,7 @@
 // Exercises / definitions / achievements seeds land with their own tasks
 // (need Part 2 §6 catalog, ported constants, badges.py port).
 import { createDb } from "./index.js";
-import { featureFlags, plans } from "./schema/index.js";
+import { exercises, featureFlags, plans } from "./schema/index.js";
 
 // Part 4 §3.3 canonical entitlements JSON — every key present, defaults explicit.
 const proEntitlements = {
@@ -173,6 +173,18 @@ const planRows: PlanSeed[] = [
   },
 ];
 
+// P1.10d minimal exercises seed (DECISIONS 2026-07-10): ONLY the three engine
+// exercises the sync path can receive today — the full Part 2 §6 catalog seed
+// stays deferred to its owning task. Values cited: family/tier from Part 2 §6
+// Tier-1 table (all F1, T1); MET from Part 2B Appendix A (Squats 6.0✱,
+// Jump Squats 8.0, Chair Squats 5.0✱ — ✱ = preserved from calories.py).
+// name_key follows the plans convention ("plan.<code>" → "exercise.<slug>").
+const exerciseRows = [
+  { slug: "squat", nameKey: "exercise.squat", family: "F1", tier: "T1", met: "6.0" },
+  { slug: "jump_squat", nameKey: "exercise.jump_squat", family: "F1", tier: "T1", met: "8.0" },
+  { slug: "chair_squat", nameKey: "exercise.chair_squat", family: "F1", tier: "T1", met: "5.0" },
+];
+
 // Part 4 §8: feature_flags seed — {data_backend, engine_rollout, beta_definitions}.
 const flagRows = [
   { key: "data_backend", rules: {} },
@@ -206,6 +218,9 @@ export async function seed(databaseUrl: string): Promise<void> {
   }
   for (const flag of flagRows) {
     await db.insert(featureFlags).values(flag).onConflictDoNothing();
+  }
+  for (const ex of exerciseRows) {
+    await db.insert(exercises).values(ex).onConflictDoNothing({ target: exercises.slug });
   }
 }
 

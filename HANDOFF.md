@@ -1,6 +1,350 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P1.10d — minimal POST /v1/workouts/sync in apps/api (Part 4 §3.5; closes Part 2 §10 "then syncs") 🟡
+              [on branch p1.10a-web-into-monorepo; UNCOMMITTED — awaiting Kd's DB-gated PROVE + T3]
+FILES CHANGED:
+  apps/api/drizzle/0002_workout_sets_uq.sql (+meta 0001_snapshot, journal entry) — ONE line:
+    CREATE UNIQUE INDEX workout_sets_workout_set_uq ON workout_sets (workout_id, set_index);
+  apps/api/src/db/schema/training.ts (uniqueIndex mirror);
+  apps/api/src/modules/workouts/{schemas,repo,service,routes}.ts (new — R7.1 module layout;
+    contract re-exported from @app/shared, R7.2);
+  apps/api/src/app.ts (route registration); src/config.ts (+SYNC_DEV_USER_ID, refused in prod);
+  apps/api/src/db/seed.ts (3-exercise minimal seed); apps/api/package.json (+@app/shared);
+  apps/api/test/workouts.sync.test.ts (new — 9 tests, DATABASE_URL-gated); pnpm-lock.yaml;
+  DECISIONS.md (5 entries 2026-07-10); HANDOFF.md.
+STATE / DECISIONS (all approved at plan gate; full text in DECISIONS.md):
+  - AUTH SEAM: SYNC_DEV_USER_ID (dev/test only; config boot throws if set in production).
+    NOTE: the previously-cited "2A DECISIONS entry" never existed — now actually recorded.
+  - §3.5 upsert implemented from §3.5 prose (R4.5's §4 pointer is dangling — recorded);
+    ownership checked AFTER the workout upsert (read-back beats check-then-insert TOCTOU);
+    foreign workoutId → 404 (R3.2), tested with rows-untouched assertion.
+  - Unknown slug: skip set + quality_flags 'unknown_exercise', NEVER a parking 4xx (client
+    R10.3 interplay). kcal null until P2.6. Aggregates server-derived from persisted sets.
+  - Idempotency-Key required and must equal body workoutId (mismatch/missing → 400).
+    Concurrent duplicate POSTs tested (cross-tab case from P1.10c T3): one workout, no 500.
+VERIFIED: api typecheck 0 · lint 0 · PROVE run BY KD against a Neon branch (p110d-test):
+  migration 0002 applied cleanly · full api suite 26/26 GREEN including all 9 sync tests
+  (happy path, validation 400, idem-key mismatch, retry no-op, concurrent duplicates → one
+  workout, cross-tenant 404 rows-untouched, unknown-slug skip+flag, 401 dark, prod-seam
+  refusal) + the 4 migration tests re-proving seed idempotency with the new exercises rows.
+  PROVE-run fixes applied along the way (slow WAN to ap-southeast-1): sync-test beforeAll
+  timeout 60s (matches the migration test's 30s seed budget); afterAll guards app-undefined
+  so a dead hook doesn't mask its own failure.
+T3 PASSED (fresh chat) with 4 findings — ALL FIXED, all local gates re-proven green
+  (shared 19/19 with 3 new schema tests · api typecheck/lint/unit clean · web 47/47):
+  (1) missing DDL bounds → shared schema now enforces smallint/int4 maxima (a PG overflow
+      was a 500, which the client retries forever — poison-pill queue halt);
+  (2) duplicate setIndex desynced server aggregates via ON CONFLICT DO NOTHING → rejected
+      at the schema (superRefine uniqueness);
+  (3) seam honored when NODE_ENV merely omitted (defaults to development) → gate inverted:
+      raw-env explicit development/test required, omitted case tested;
+  (4) sets:[] created an empty engine workout the P1.10c decision forbids → .min(1).
+  T3 NOTES: 404-vs-201 is a weak existence oracle for guessed ids — accepted (uuid v4,
+  R3.2's own prescription); changed-retry-same-id is silently discarded as duplicate —
+  §3.5's no-op contract, by design.
+OPEN SPEC GAPS: none new (the R4.5 dangling pointer is recorded as a correction, not a gap).
+COMMITTED: 2fad025 (after DB-gated PROVE 9/9 green on the Neon branch).
+== PART 2 §10 END-TO-END GATE: CLOSED (Kd, live browser, 2026-07-10 21:00) ==
+  Real squat workout on localhost:5173 (old rig up for auth only, new api on :3000 with the
+  SYNC_DEV_USER_ID seam) → engine counted 5 reps on-device → sync POST fired from
+  syncClient.js with Idempotency-Key → Status 201 → Neon row verified in SQL editor:
+  workout 7c51a51f-7a8c-428d-8c06-6bf6d186d64f · 1 set · 5 reps · form 100 · flags {}.
+  PHASE 1 (P1.1–P1.10d) IS COMPLETE.
+NEXT: Phase 2 (P2.1 — auth module port into apps/api; R3.7 is the porting spec; the sync
+  route's seam block gets replaced by real cookie authn and the cross-tenant test re-proven).
+  Cleanup for Kd (non-blocking): delete the p110d-test Neon branch when done poking at it;
+  the seam env vars live only in that one terminal session (nothing persisted).
+```
+
+```
+TASK: P1.10c — offline summary queue + sync client in apps/web (R10.2/R10.3; the "then syncs" half) 🟡
+              [on branch p1.10a-web-into-monorepo; UNCOMMITTED — awaiting T3]
+FILES CHANGED:
+  apps/web/package.json (− zod@^4.4.1 [vestigial, zero imports in src — proven by grep];
+    + @app/shared workspace:*); pnpm-lock.yaml;
+  apps/web/src/sync/syncQueue.js (new — localStorage queue, keyed by workoutId, injectable
+    storage/keys; per-user key via utils/storage userKey);
+  apps/web/src/sync/syncClient.js (new — buildSyncPayload + postSync + queueWorkoutSync +
+    flush triggers);
+  apps/web/src/sync/{syncQueue,syncClient}.test.js (new — 17 tests);
+  apps/web/src/pages/ActiveWorkout.jsx (syncIdentity = {workoutId: crypto.randomUUID(),
+    startedAt} fixed once per mount; queueWorkoutSync call in handleWorkoutComplete AFTER the
+    existing 200ms last-set finalize wait; legacy completeSession untouched, independent);
+  DECISIONS.md (4 entries, 2026-07-10).
+STATE / DECISIONS (all approved at plan gate):
+  - ZOD: option A — workspace stays zod@3; web's zod@4 removed (unused). shared/api/engine untouched.
+  - Payload = workoutSyncPayloadSchema (@app/shared) verbatim: platform 'web', engineVersion from
+    summaries[0], defsVersion = STATIC_DEFS_BUNDLE_VERSION = 1 (no bundle until P2.2 — DECISIONS),
+    sets = SetSummaries VERBATIM (setIndex non-contiguous ordinal preserved), traceSample null.
+    Validated (safeParse) BEFORE enqueue; invalid → parked, never sent/dropped.
+  - Queue: enqueue replaces same-workoutId IN PLACE (no dup, no reorder); flush removes an entry
+    ONLY after 2xx; transient (network/5xx/401/408/429) → retain + HALT; other 4xx → parked list
+    (workout_sync_parked.v1) + continue; single in-flight flush guard; corrupt JSON → treated
+    empty, never throws. Keys: userKey('workout_sync_queue.v1') — per-user, same convention as
+    the rest of the app (guest-bucket caveat inherited from utils/storage until P2 auth).
+  - Sync POST: dedicated axios instance (baseURL VITE_API_URL — NEW env var, unset in dev until
+    P1.10d; a failed POST just stays queued), withCredentials only (R10.1 httpOnly-cookie style) —
+    deliberately NOT mlApi (its interceptor injects localStorage bearer + redirects to /login on
+    401). Idempotency-Key = workoutId on every attempt (R10.2); retries ONLY via the queue.
+  - Flush triggers: after enqueue, window 'online' event, module load (module-scope in syncClient,
+    window-guarded; note: runs when the workout bundle loads, not at app boot — revisit if an
+    App-level init ever exists).
+  - All-log-only workouts skipped (no summaries → nothing engine-verified; DECISIONS).
+VERIFIED (post-T3-fixes): web 47/47 tests (22 new: FIFO, in-place dedupe, retain+halt,
+  park-and-continue, 401/408/429 transient, retry→exactly-one-POST, concurrent-flush single-run,
+  enqueue-mid-flush rerun, replace-mid-POST survival, quota-write failure reported,
+  requeueParked, corrupt-storage, contract byte-match [.strict parse deep-equals payload + JSON
+  round-trip], non-contiguous setIndex verbatim, Idempotency-Key header, no-VITE_API_URL no-op,
+  offline→online round trip) · build green (3406 modules; @app/shared TS bundles fine under
+  Vite) · sync files eslint clean · ActiveWorkout pre-existing lint errors unchanged at 9
+  (zero new).
+T3 PASSED (fresh chat) with findings — ALL FIXED, re-proven 47/47 + build green:
+  (1) enqueue-during-in-flight-flush liveness: flush() now loops while a rerun was requested
+      (a mid-run joiner or a replaced-entry survivor sets the flag) — a workout enqueued during
+      the online-event flush is sent by that same flush, not stranded until the next trigger;
+  (2) VITE_API_URL unset would POST to the web origin and its 404 would PERMANENTLY PARK every
+      workout: flushSyncQueue() now no-ops (treat-as-offline, queue kept) when the env var is
+      falsy — this was the finding that would have failed the P1.10d PROVE;
+  (3) parked entries were write-only: requeueParked() added (recovery/console path, tested);
+  (4) writeList quota failure was swallowed: enqueue/park return false, queueWorkoutSync
+      reports { queued:false, reason:'storage' } instead of claiming success;
+  (5) TOCTOU: success-removal now removes only the exact bytes sent; a same-id replacement that
+      landed mid-POST survives and triggers a rerun pass (tested);
+  (6) park() now replaces same-id in place like enqueue; ZodError log trimmed to path/code;
+      engineVersion-homogeneity + crypto.randomUUID-secure-context comments added.
+T3 NOTES CARRIED FORWARD:
+  - P1.10d: cross-tab duplicate POSTs are possible (in-flight guard is per-tab) — Part 4 §3.5's
+    ON CONFLICT (id) upsert is LOAD-BEARING for dedupe, not just retry hygiene.
+  - P2.1: guest-bucket attribution — queue key derives from the LEGACY localStorage accessToken
+    (userKey) while the POST authenticates by cookie; a guest-queued workout would flush under
+    whichever account's cookie is present. Resolve when real auth lands (per-user key must come
+    from the cookie session, or queue flushes only when authenticated).
+OPEN SPEC GAPS: none new.
+NEXT: commit (T3 done). Then P1.10d — minimal POST /v1/workouts/sync in apps/api
+  (Part 4 §3.5 verbatim upsert: workout ON CONFLICT (id) DO NOTHING, sets keyed
+  (workout_id, set_index); 2A auth seam per DECISIONS — endpoint built+tested, live authn P2.1).
+  P1.10d PROVE closes the Part 2 §10 "full workout with the API server off, THEN SYNCS" gate:
+  set VITE_API_URL, run api locally, do an offline workout, watch the queue flush on reconnect.
+```
+
+```
+TASK: P1.10b-2c — PROVE-run fix: occluded-legs honesty + regression-trace class 🟡
+              [on branch p1.10a-web-into-monorepo; UNCOMMITTED — awaiting T3]
+CONTEXT: Kd's real-browser PROVE run "failed"; diagnosis via live recordings (P1.3 recorder) showed:
+  (1) sitting at desk = engine correctly counts 0 (fail-soft works) but UI showed "Good Form 100%" — REAL BUG;
+  (2) real squats: only 4 of ~10 cycles crossed the ported 100° depth threshold — counting is CORRECT per the
+      validated legacy constants (shallow-rep UX = P4 §9.1 tuning, not touched, R5.4);
+  (3) chair/jump counting non-jumps/no-chair = legacy parity, already-logged P4 SPEC GAPs;
+  (4) the live "3 reps sitting" was chair_squat counting real sit-down/stand-up motions (correct).
+FILES CHANGED:
+  packages/engine/test/traces/regression/squat_sitting_idle_desk_nocount.jsonl (new golden — Kd's live
+    sitting recording, 600 frames, expected reps 0; header exercise corrected squats->squat);
+  packages/engine/test/traces.replay.test.ts (parity vs regression split: sidecar-less traces get full §7.4
+    assertions but are excluded from §7.5 cert counts + stage-parity checks);
+  apps/web/src/engine/poseAdapter.js (startSet now also returns metricSignals = compiled metric + fallback);
+  apps/web/src/engine/sessionController.js (metric-unusable streak >= 3 frames + visibilityOk -> corrections=
+    ["cannot see your legs clearly — step back..."], form_correct=null; engine untouched — it was already
+    correct, only the presentation lied);
+  apps/web/src/engine/sessionController.test.js (+1 test: occluded legs -> cue, no verdict, 0 reps);
+  DECISIONS.md (two entries, 2026-07-10).
+VERIFIED: engine 147 tests green incl. the new regression golden (20 trace tests; cert counts unchanged 3/6+3/4+3/4
+  — regression traces correctly not parity evidence) · web 25/25 · build green · engine+web lint clean · typecheck 0.
+OPEN SPEC GAPS: none new. NOTE for P5: consider moving the legs-cue into engine §3.2 when mobile lands.
+NEXT: Kd re-runs the browser PROVE (expect: sitting -> "step back" warning + no Good Form; deep squats count,
+  shallow don't). Then P1.10c (offline queue + sync client; zod 3-vs-4 decision).
+```
+
+```
+TASK: P1.10b-2b — ActiveWorkout rewired to the engine hook; swap complete (v1 §13/D1) 🟡
+              [fifth/final P1.10b slice; on branch p1.10a-web-into-monorepo; UNCOMMITTED — awaiting T3]
+FILES CHANGED:
+  apps/web/src/pages/ActiveWorkout.jsx (rewired — analysis-coupled regions only, no page split per v1 §1.3);
+  apps/web/src/pages/activeWorkoutEngine.js (new — pure summary-log accumulation + form average);
+  apps/web/src/pages/activeWorkoutEngine.test.js (new — 6 tests).
+STATE / DECISIONS:
+  - Server-baseline rep machinery DELETED (repBaselineRef/pendingBaselineRef/lastServerCountRef/setRepsRef/
+    repFormBufRef + the backwards-reset re-anchor logic): engine sessions are per-set, rep_count IS the set count.
+  - engineSetKey (monotonic, workout-global): bumped on next-set, next-exercise, manual reset (with
+    discardNextSummaryRef so a redone set never double-counts), and ONCE in handleWorkoutComplete to finalize
+    the LAST set (stop() deliberately doesn't end a set) — then a 200ms wait lets the effect cleanup emit the
+    summary before refs are read (T3-2a carry-forward honored). summary.setIndex = workout-global ordinal.
+  - Per-rep form now from SetSummary.repScores via accumulateSummary (per-frame state==='down' sampling
+    deleted — form_score semantics changed in 2a). form_accuracy = averageFormScore(log) ?? 0.
+  - Log-only mode (Part 6 §3.6) rendered: amber "Log-only" pill (Eye/EyeOff replaces the WS Wifi pill),
+    "+1 Rep" manual counter + honest "your workout still counts" copy; form badge hidden when form_correct
+    is null; debug rows: reps(engine) + mode. person_detected pick: badge uses poseData.person_detected
+    (engine visibilityOk); overlay keeps keypointsData (raw landmarks) — per the T3-2a note.
+  - completeSession (old backend) KEPT verbatim until P2.8; SetSummaries held in setSummariesRef for P1.10c.
+  - Verified: 24/24 web tests · build green · new files eslint clean · ActiveWorkout pre-existing lint errors
+    12 -> 9 (salvage patterns remain per P1.10a gate decision; my additions introduce zero new errors).
+  - PROVE (Kd, real browser): corepack pnpm --filter web dev with backends OFF -> squat workout -> reps/cues
+    from the engine, log-only for an unported exercise, completeSession fails gracefully offline. This is the
+    Part 2 §10 "full workout with the API server off" half; "then syncs" lands with P1.10c.
+  - T3 PASSED (fresh chat) with ONE confirmed bug, FIXED: the manual-reset discard is now keyed
+    (discardSetKeyRef = the reset set's engineSetKey; drop iff summary.setIndex matches) — the old one-shot
+    boolean could stick when a reset happened before any frame reached the engine (zero-frame guard emits no
+    summary) and would then swallow the NEXT genuine set. Keys are never reused, so a stale entry is inert.
+  - T3 notes carried: (a) the 200ms wait in handleWorkoutComplete is sound (scheduler-based, fires in hidden
+    tabs) but heuristic — flushSync(() => setEngineSetKey(...)) is the deterministic alternative if it ever
+    flakes; (b) summary.setIndex SKIPS a number on every manual reset — an opaque, NON-CONTIGUOUS ordinal;
+    P1.10c must not assume contiguity.
+OPEN SPEC GAPS: none.
+NEXT TASK: P1.10c — offline summary queue (localStorage, keyed by workoutId, flush-order preserved, R10.3)
+  + sync client (Idempotency-Key = workoutId, R10.2) consuming setSummariesRef's log via the
+  workoutSyncPayloadSchema (@app/shared) — THE ZOD 3-vs-4 DECISION LANDS HERE. Then P1.10d minimal
+  POST /v1/workouts/sync (Part 4 §3.5 upsert, 2A auth seam per DECISIONS).
+```
+
+```
+TASK: P1.10b-2a — usePoseDetection driven by the engine; WS path deleted (v1 §13/D1) 🟡
+              [fourth slice of P1.10; on branch p1.10a-web-into-monorepo; UNCOMMITTED — awaiting T3]
+FILES CHANGED:
+  apps/web/src/engine/messages.en.js (new — Appendix A EN catalog + translate());
+  apps/web/src/engine/frameMapping.js (new — FrameResult -> old poseData display shape, v1 §13);
+  apps/web/src/engine/sessionController.js (new — per-set engine lifecycle, factored out of React,
+    + log-only fallback);
+  apps/web/src/hooks/usePoseDetection.js (REWRITTEN — WS path DELETED; drives SessionController);
+  apps/web/src/engine/{messages,frameMapping,sessionController}.test.js (new — 9 tests).
+STATE / DECISIONS:
+  - WS path GONE from the hook: WS_URL, connect/disconnect/reconnect/onmessage, resetReps,
+    recordResponse all removed (v1 §5.3 "replaces pose_ws.py entirely"; Part 2 §10 "delete the WS path").
+    Kept dev recordFrame (raw PoseFrame tee, VITE_TRACE_RECORD only).
+  - HOOK API CHANGED: was {poseData,keypointsData,connected,connect,disconnect,startStreaming,resetReps};
+    NOW {poseData,keypointsData,analysisAvailable,error,startStreaming,stop} + props {exercise,setIndex,
+    enabled,onSetComplete}. poseData keeps the OLD display shape (rep_count/state/corrections/form_correct/
+    is_active/person_detected/view/form_score) so ActiveWorkout "mostly doesn't notice" (v1 §13).
+  - >>> ActiveWorkout is STRANDED until P1.10b-2b <<< it still calls connect()/disconnect()/connected.
+    Build passes (JS), unit tests pass, but the app does NOT run end-to-end until 2b rewires ActiveWorkout.
+    Deliberate a/b split; the Part 2 §10 offline-workout Done-gate is proven in 2b, not here.
+  - One engine session PER SET (§3.9): effect keyed on (exercise,setIndex) — NOT enabled, so pause stops
+    FEEDING, not the set. Cleanup emits the previous SetSummary via onSetComplete.
+  - Log-only mode (Part 6 §3.6) for exercises with no def (getDefinition null) AND for I4-incompatible defs
+    (EngineUnsupportedError caught -> log-only): manual counting, no grading, honest "still counts". A real
+    compile/authoring error is NOT swallowed (rethrown).
+  - Message keys -> EN from Appendix A (verbatim where given; chair/jump valgus reuse squat's copy;
+    cue.visibility.step_back = Appendix A fault.body.visibility string). setup.*.camera use the §4 pattern copy.
+  - Time (performance.now) lives in the hook, passed INTO the controller/engine (R5.1). Adapter/engine wall-clock-free.
+  - Verified: web 17/17 tests (adapter 8 + messages 3 + frameMapping 4 + sessionController 2, incl. golden
+    replay reps=2 + log-only) · web build green (engine now bundled via the hook) · eslint clean on new/changed files.
+  - NO jsdom/testing-library added: the real logic is in the pure controller/mappers (tested); the hook is thin
+    React glue, integration-proven by the app in 2b.
+  - T3 PASSED (fresh chat): no rule violations. One in-slice fix applied — SessionController.endSet() returns
+    null when the set was never fed a frame (guards phantom reps:0 summaries from StrictMode dev remounts /
+    setup-screen exercise switches, so P1.10c's onSetComplete-based sync queue never sees junk). 18/18 tests.
+OPEN SPEC GAPS: none (log-only fallback resolved by Part 6 §3.6, not a decision).
+NEXT TASK: P1.10b-2b — rewire ActiveWorkout to the new hook: pass setIndex + onSetComplete; REMOVE the
+  server-baseline rep machinery (repBaselineRef/pendingBaselineRef/lastServerCountRef — engine count is
+  per-set); reps from poseData.rep_count, per-rep form from RepEvent via poseData.form_score; render log-only
+  UI when !analysisAvailable (manual controls already exist); collect SetSummary[] (onSetComplete) for P1.10c;
+  keep workoutService.completeSession (old backend) until P2.8. Then the Part 2 §10 offline-workout Done-gate.
+  T3 (2a) CARRY-FORWARDS for 2b: ActiveWorkout still destructures/calls connected/connect()/disconnect()
+  (runtime TypeError until rewired); "End workout" MUST bump setIndex or unmount to finalize the LAST set —
+  stop() tears down the camera WITHOUT ending the set (by design); form_score is now the last rep's score held
+  across frames (not per-frame) — drop the state==='down' && form_score>0 buffer, read RepEvent scores;
+  person_detected has TWO sources (poseData.person_detected=visibilityOk vs keypointsData.person_detected=
+  landmarks>0) — pick deliberately per UI element.
+```
+
+```
+TASK: P1.10b-1b — web poseAdapter (on-device engine bridge, v1 §13/D1) 🟡
+              [third slice of P1.10; on branch p1.10a-web-into-monorepo; UNCOMMITTED — awaiting T3]
+FILES CHANGED:
+  apps/web/package.json (+dep @app/engine workspace:*; +devDep vitest ^2.1.8; +"test": "vitest run");
+  apps/web/vitest.config.js (new; node env, src/**/*.test.js);
+  apps/web/src/engine/poseAdapter.js (new — the module);
+  apps/web/src/engine/poseAdapter.test.js (new — 8 tests);
+  apps/web/src/engine/__fixtures__/squat_goodform.jsonl (new — copy of the sqauta_sideview1goodform
+    parity golden; 2 reps, scoreRange [45,100]);
+  pnpm-lock.yaml (vitest for web).
+STATE / DECISIONS:
+  - Adapter API (framework-agnostic, so P1.10b-2's hook is thin glue): getDefinition(key|alias),
+    engineSupports(def) [I4 gate], landmarksToFrame(landmarks,tMs) [§2.2 UN-MIRRORED], startSet(def,setIndex)
+    -> { feed(landmarks,tMs)->FrameResult, onRep, end()->SetSummary, snapshot() }, EngineUnsupportedError.
+  - §2.2 mirroring decided ONCE here: feed provider coords as-is; never flip the landmark array (overlay
+    mirrors, engine does not). Empty/no landmarks -> kp:[] -> engine ingest fail-soft (§3.1).
+  - Time: caller passes tMs into feed(); engine stays wall-clock-free (R5.1). Deterministic + testable.
+  - I4 gate is a local numeric major.minor.patch compare (no semver dep, R1.4); works now that engine + all
+    3 defs agree at 1.0.0 (P1.10b-1a). def needing >engine -> EngineUnsupportedError (never silently runs, R1.3).
+  - Defs imported via @app/engine/definitions/*.json (subpath export from 1a); NO @app/shared / zod import
+    (engine ingest validates plain objects) -> zod@3/4 stays a P1.10c concern, as established.
+  - Verified: web adapter 8/8 tests (incl. golden replay: reps=2, engineVersion 1.0.0, avgFormScore in range,
+    end() idempotent, I4 gate) · web build green (no regression) · new files eslint clean. The engine+JSON
+    resolve/run in web's Vite toolchain is proven by the vitest run (Vite transform).
+  - DEFERRED (flagged, not hacked): set->set carry-over calibration (§2.3) — createSession accepts it but a
+    finished session exposes no baseline export (snapshot has calibrationReady only). Each set recalibrates
+    fresh for now; carry-over needs a small engine method — tracked follow-up.
+  - Golden fixture is a COPY into apps/web (minor drift risk; shared-fixture access not worth a package change now).
+OPEN SPEC GAPS: none new.
+NEXT TASK: P1.10b-2 — rewrite usePoseDetection to drive poseAdapter (delete the WS path, WS_URL, resetReps,
+  recordResponse); wire ActiveWorkout (remove server-baseline rep machinery — engine session is per-set;
+  map FrameResult/RepEvent -> UI; EN message-key map from Appendix A; collect SetSummary[] for P1.10c);
+  exercises with no def (getDefinition null) need a UI fallback decision. jsdom vitest project for hook tests.
+  T3 (P1.10b-1b) CARRY-FORWARDS: (a) caller MUST null-check getDefinition BEFORE startSet — startSet(null,..)
+  throws a raw TypeError; (b) onRep is single-listener (engine SETS, not appends) — register exactly once;
+  (c) CI Node >=22 (root engines) satisfies import.meta.dirname used in the adapter test.
+```
+
+```
+TASK: P1.10b-1a — engine defs to v1 §4 home + engine v1 (prep for the web engine-swap) 🟡
+              [second slice of P1.10; on branch p1.10a-web-into-monorepo; T3-reviewed clean]
+FILES CHANGED:
+  git mv packages/engine/test/definitions/{squat,jump_squat,chair_squat}.json ->
+    packages/engine/src/definitions/  (CANONICAL def home is now src/definitions per v1 §4;
+    squat.v5.json STAYS in test/definitions — P1.7 worked-example fixture, DECISIONS 2026-07-09);
+  packages/engine/package.json (exports += "./definitions/*": "./src/definitions/*"; version 1.0.0);
+  packages/engine/src/session.ts (ENGINE_VERSION "0.1.0" -> "1.0.0");
+  repointed consumers: test/{traces.replay,fuzz,perf}.test.ts, scripts/{bench,fsm-parity-debug}.ts;
+  test/fixtures.ts (scriptedEngine mock now imports ENGINE_VERSION instead of stale "0.0.1" — T3 finding).
+STATE / DECISIONS:
+  - engineVersion, package version, and all 3 defs' minEngineVersion now AGREE at 1.0.0 (I4: engineVersion =
+    "semver of the package"; every spec example uses 1.0.0; Part 2 §10 = "engine v1"). Closes a prior
+    incoherence (defs required 1.0.0 while the engine stamped 0.1.0) — this is what P1.10b-1b's I4 gate needs.
+  - Defs exposed to the web build via the package subpath export (data-only; Vite bundles JSON). The eventual
+    runtime path is the P2.2 catalog bundle API (Part 2 §9.3); the static export is the P1.10b bridge.
+  - Verified: engine typecheck 0 · 146/146 tests (traces §7.4 + fuzz + perf) · lint:defs 4 ok · eslint 0 ·
+    R5.1 purity grep clean · git mv changed zero def bytes (P1.8b parity byte-intact, T3-confirmed).
+  - Historical DECISIONS.md:50 / HANDOFF.md older blocks still cite the old test/definitions path — left as
+    append-only history; THIS block records the new canonical src/definitions home going forward.
+OPEN SPEC GAPS: none new. Pre-existing (NOT this task): §7.5 trace-count cert still 3/6+3/4+3/4 (Option-B debt,
+  DECISIONS 2026-07-09) — traces pass as a report, but Part 2 §10 "parity green" is not fully certified.
+NEXT TASK: P1.10b-1b — web poseAdapter (MediaPipe->PoseFrame, un-mirrored §2.2; per-set createSession; I4
+  minEngineVersion gate; endSet->SetSummary) + add vitest to apps/web + adapter test replaying a golden.
+  Imports @app/engine (createSession/compileDefinition) + @app/engine/definitions/*.json. zod stays deferred
+  (P1.10c, when @app/shared VALUE schemas are imported by the sync client).
+```
+
+```
+TASK: P1.10a — migrate web SPA into the monorepo (v1 §4/§13 "migrated in place") 🟡
+              [first slice of P1.10; UNCOMMITTED — T3-reviewed clean]
+FILES CHANGED:
+  frontend/ -> apps/web/ (git mv, 306 renames); apps/web/package.json (name
+  "frontend" -> "web"); removed frontend/package-lock.json + stale node_modules/dist;
+  package.json (root lint -> "turbo run lint --filter=!web"); DECISIONS.md (lint-gate
+  entry + re-entry trigger); scripts/dev-recording-rig.ps1 (path frontend -> apps\web,
+  npm run dev -> corepack pnpm dev); pnpm-lock.yaml (regen: web is now a workspace member).
+STATE / DECISIONS:
+  - Scope = the MOVE only. Did NOT wire @app/engine/@app/shared into web, and did NOT
+    touch engine/api/shared logic — that's P1.10b.
+  - Web held OUT of the workspace lint gate (strangler-fig): salvage SPA has 90 pre-
+    existing eslint errors; mass-fixing forbidden (R1.1 + migration stance), a red CI
+    destroys the gate's signal. web has no typecheck/test scripts, so it's fully ungated
+    for now. Re-entry trigger recorded: drop --filter=!web once web adopts the strict
+    packages/config presets in P1.10b→P2. (DECISIONS.md 2026-07-09.)
+  - Verified: pnpm --filter web build green (Vite 8, 3362 modules); in-scope lint +
+    typecheck green; pnpm install --frozen-lockfile clean; apps/web/.env untracked &
+    ignored (root .gitignore:27); no other broken frontend/ refs in CI/infra/docker/scripts.
+  - T3 (independent, fresh chat) PASSED: no rule violations; one finding = this HANDOFF
+    block was missing (now added).
+OPEN SPEC GAPS: none for P1.10a.
+NEXT TASK: P1.10b — engine adapter (MediaPipe -> PoseFrame, un-mirrored coords §2.2) +
+  usePoseDetection swap to @app/engine + ActiveWorkout wiring + delete WS path. FIRST
+  DECISION at its plan gate: align the workspace on ONE zod (web zod@4 vs @app/shared
+  zod@3) — a cross-package bump touching api/engine, needs Kd approval (R1.4). Adopting
+  web onto the strict tsconfig/eslint presets here also trips the lint re-entry trigger.
+```
+
+```
 TASK: P1.9 — fuzz pass + performance gate (§7.6 / I5, I6) 🔴  [MERGED 2e8aab3]
 FILES CHANGED:
   packages/engine/test/{fuzz.test.ts, perf.test.ts} (new), vitest.config.ts (new:
