@@ -3,8 +3,21 @@
 // Idempotent: upsert on plans.code / feature_flags.key — running twice is a no-op.
 // Exercises / definitions / achievements seeds land with their own tasks
 // (need Part 2 §6 catalog, ported constants, badges.py port).
-import { createDb } from "./index.js";
-import { exercises, featureFlags, plans } from "./schema/index.js";
+import { desc, eq, inArray } from "drizzle-orm";
+import { exerciseDefinitionSchema } from "@app/shared";
+import squatDef from "@app/engine/definitions/squat.json" with { type: "json" };
+import jumpSquatDef from "@app/engine/definitions/jump_squat.json" with { type: "json" };
+import chairSquatDef from "@app/engine/definitions/chair_squat.json" with { type: "json" };
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import { bundleSha256 } from "../modules/exercises/bundle.js";
+import {
+  definitionBundles,
+  exerciseDefinitions,
+  exercises,
+  featureFlags,
+  plans,
+} from "./schema/index.js";
 
 // Part 4 §3.3 canonical entitlements JSON — every key present, defaults explicit.
 const proEntitlements = {
@@ -193,7 +206,20 @@ const flagRows = [
 ];
 
 export async function seed(databaseUrl: string): Promise<void> {
-  const db = createDb(databaseUrl);
+  // Own the client so callers (tests) don't leak a connection — createDb
+  // has no close seam.
+  const client = postgres(databaseUrl, { prepare: false, max: 1 });
+  const db = drizzle(client);
+  try {
+    await seedAll(db);
+  } finally {
+    await client.end({ timeout: 5 });
+  }
+}
+
+type SeedDb = ReturnType<typeof drizzle>;
+
+async function seedAll(db: SeedDb): Promise<void> {
   for (const row of planRows) {
     await db
       .insert(plans)
@@ -221,6 +247,58 @@ export async function seed(databaseUrl: string): Promise<void> {
   }
   for (const ex of exerciseRows) {
     await db.insert(exercises).values(ex).onConflictDoNothing({ target: exercises.slug });
+  }
+  await seedDefinitions(db);
+}
+
+// P2.2 A2 (approved): the three P1.8b definitions, seeded 'live' with each
+// document's own version field (squat is v6 after parity tuning — the bundle
+// schema requires manifest version == document version, so "version 1" from
+// the plan note would be incoherent for squat; the DOCUMENT is authoritative,
+// verbatim from packages/engine/src/definitions — R5.7 immutability). One
+// live bundle row is built from these pointers (Part 2 §9.3, Part 4 §3.4);
+// idempotent: same content hash → no new bundle row.
+const definitionDocs = [squatDef, jumpSquatDef, chairSquatDef].map((doc) =>
+  // JSON files are external input at this boundary (R2.3).
+  exerciseDefinitionSchema.parse(doc),
+);
+
+async function seedDefinitions(db: SeedDb): Promise<void> {
+  const slugs = definitionDocs.map((d) => d.key);
+  const exRows = await db
+    .select({ id: exercises.id, slug: exercises.slug })
+    .from(exercises)
+    .where(inArray(exercises.slug, slugs));
+  const idBySlug = new Map(exRows.map((r) => [r.slug, r.id]));
+
+  for (const doc of definitionDocs) {
+    const exerciseId = idBySlug.get(doc.key);
+    if (exerciseId === undefined) throw new Error(`definitions seed: no exercises row for '${doc.key}'`);
+    await db
+      .insert(exerciseDefinitions)
+      .values({
+        exerciseId,
+        version: doc.version,
+        status: "live",
+        definition: doc,
+        minEngineVersion: doc.minEngineVersion,
+        publishedAt: new Date(),
+      })
+      .onConflictDoNothing({
+        target: [exerciseDefinitions.exerciseId, exerciseDefinitions.version],
+      });
+  }
+
+  const manifest = Object.fromEntries(definitionDocs.map((d) => [d.key, d.version]));
+  const sha256 = bundleSha256({ channel: "live", manifest, definitions: definitionDocs });
+  const latest = await db
+    .select({ sha256: definitionBundles.sha256 })
+    .from(definitionBundles)
+    .where(eq(definitionBundles.channel, "live"))
+    .orderBy(desc(definitionBundles.bundleVersion))
+    .limit(1);
+  if (latest[0]?.sha256 !== sha256) {
+    await db.insert(definitionBundles).values({ channel: "live", sha256, manifest });
   }
 }
 

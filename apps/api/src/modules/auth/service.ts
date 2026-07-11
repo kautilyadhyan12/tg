@@ -288,6 +288,40 @@ export async function changePassword(
   return await issueSession(deps, userId, meta);
 }
 
+// ── narrow service-interface exports for the users module (P2.2, R7.1) ──────
+// Cross-module calls go through these — never through this module's repo or
+// tables. one_time_tokens / refresh_tokens stay auth-owned.
+
+/** Part 4 §5.2: the undo window is 14 days — the token lives exactly that long. */
+const RESTORE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+
+export async function isUserEmailVerified(sql: Sql, userId: string): Promise<boolean> {
+  return await repo.isEmailVerified(sql, userId);
+}
+
+/** Mints + stores (hashed) a restore_account token; returns the raw token for
+ *  the undo email. Supersedes any previous unused restore token (repo semantics). */
+export async function issueRestoreToken(sql: Sql, userId: string): Promise<string> {
+  const rawToken = mintOpaqueToken();
+  await repo.createOneTimeToken(sql, {
+    userId,
+    purpose: "restore_account",
+    tokenHash: sha256Hex(rawToken),
+    expiresAt: new Date(Date.now() + RESTORE_TTL_MS),
+  });
+  return rawToken;
+}
+
+/** Atomic single-use consume; null = unknown/used/expired (uniformly). */
+export async function consumeRestoreToken(sql: Sql, rawToken: string): Promise<string | null> {
+  return await repo.consumeOneTimeToken(sql, "restore_account", sha256Hex(rawToken));
+}
+
+/** "Log out everywhere" — Part 4 §5.2 Day 0: all refresh tokens revoked. */
+export async function revokeAllSessions(sql: Sql, userId: string): Promise<void> {
+  await repo.revokeAllRefreshTokens(sql, userId);
+}
+
 // ── me ──────────────────────────────────────────────────────────────────────
 
 export async function getMe(deps: AuthDeps, userId: string): Promise<AuthUser> {

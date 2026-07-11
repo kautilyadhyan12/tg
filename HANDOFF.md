@@ -1,6 +1,58 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P2.2 — users/profile module + exercises/catalog read APIs 🟡
+              [branch p2.2-users-catalog; PROVE green 74/74 on Neon branch p22-test,
+               ZERO skips (full P2.1 auth regression included); awaiting PR CI + T3 —
+               T3 is now required for ALL tasks (Kd ruling 2026-07-11, in DECISIONS)]
+FILES CHANGED:
+  apps/api/drizzle/0004_restore_account_purpose.sql (+meta 0003_snapshot, journal) —
+    one_time_tokens purpose CHECK widened to +'restore_account'; SQL reviewed by Kd
+    BEFORE other code (T5); same idx-vs-name prefix skew as 0001/0003;
+  apps/api/src/db/schema/identity.ts (CHECK widened to match);
+  packages/shared/src/{users,catalog}.ts (new contracts) + index.ts exports;
+  apps/api/src/modules/users/{schemas,repo,service,routes,email}.ts (new — R7.1):
+    GET/PATCH/DELETE /v1/users/me + POST /v1/users/me/restore (unauthed by nature,
+    5/hr dual limiter, uniform 400s); DPDP Day-0 (Part 4 §5.2): soft delete + close
+    gym_members + drop push_tokens (one tx) + revoke sessions + undo email with
+    hashed 14-day restore_account token; window enforced in DB AND by token TTL;
+    GAP-2: changed non-null weightKg appends body_measurements (source manual);
+  apps/api/src/modules/exercises/{schemas,repo,service,routes,bundle}.ts (new):
+    GET /v1/exercises (live-only, keyset cursor on slug) + GET
+    /v1/exercise-definitions?since= (Part 2 §9.3 / v1 §5.2): stored sha256 = ETag
+    (GAP-1: sha256-only, canonical key-sorted serialization in bundle.ts),
+    If-None-Match + since → 304; beta_definitions flag rules {"userIds":[...]}
+    (GAP-3) safeParse default-to-live, beta falls back to live if no beta bundle;
+    read-only — publishing is P4; bundles immutable, rollback = new row;
+  apps/api/src/modules/auth/repo.ts (OneTimePurpose +'restore_account') and
+    service.ts (+4 narrow exports for users: isUserEmailVerified, issueRestoreToken,
+    consumeRestoreToken, revokeAllSessions — R7.1 service-interface crossing);
+  apps/api/src/db/seed.ts — seeds the 3 engine definition JSONs (Zod-parsed,
+    DOCUMENT's own version: squat v6, jump/chair v1, DB status 'live', docs
+    verbatim) + one live bundle row; idempotent (same sha → no new row); seed()
+    now owns/closes its client so tests can call it;
+  apps/api/{package.json,tsconfig.json} — @app/engine workspace dep +
+    resolveJsonModule (JSON single-source from engine);
+  apps/api/src/app.ts — register users/exercises routes, UsersError in the 4xx
+    allowlist, usersEmailSender test override;
+  apps/api/test/{users,exercises}.routes.test.ts (new, DATABASE_URL-gated,
+    p22u-/p22e- prefixes; covers CORRECTION-2 deleted-user 401 on authenticate AND
+    refresh, cross-user denial, weight history, restore window, live-only catalog,
+    pagination walk, ETag/304s, beta allowlist + malformed-rules fail-closed,
+    seed idempotency ×2); DECISIONS.md +8 entries.
+DECISIONS: 0004 widening · A1 split (Day-14 cascade + export workers = QUEUED
+  BullMQ card before launch, alongside argon2id pre-P2.8 card) · GAP-1 sha256-only ·
+  GAP-2 weight history · GAP-3 flag shape · locale{en,hi,as}/units{metric,imperial} ·
+  doc-version seeding · T3-for-ALL-tasks ruling.
+GOTCHA (test-only, PROVE run): fastify 400s a body-less request that carries
+  content-type application/json (FST_ERR_CTP_EMPTY_JSON_BODY) — inject helpers must
+  set the header only WITH a payload.
+OPEN SPEC GAPS: none. Redis rate-limit swap still owed at P2.4.
+NEXT: T3 on this diff (fresh chat) → merge → P2.3 workouts history/progress/
+  gamification ports.
+```
+
+```
 TASK: P2.1 — auth module port into apps/api (R3.7 = the porting spec) 🟡
               [MERGED to master @ dad2f2a via PR #14, all 4 CI checks green, 2026-07-11;
                commits 8e0b320 (module) + d902248 (gitleaks false-positive fix: inline

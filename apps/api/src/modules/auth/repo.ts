@@ -22,7 +22,8 @@ export interface RefreshTokenRow {
   revokedAt: Date | null;
 }
 
-export type OneTimePurpose = "verify_email" | "password_reset";
+// 'restore_account' added by migration 0004 (P2.2 CORRECTION 1; Part 4 §5.2 undo flow).
+export type OneTimePurpose = "verify_email" | "password_reset" | "restore_account";
 
 interface UserAuthDbRow {
   id: string;

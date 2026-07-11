@@ -5,3 +5,5 @@ export * from "./events.js";
 export * from "./session.js";
 export * from "./sync.js";
 export * from "./definition.js";
+export * from "./users.js";
+export * from "./catalog.js";
