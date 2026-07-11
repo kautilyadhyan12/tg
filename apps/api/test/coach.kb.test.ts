@@ -46,6 +46,15 @@ describe("chunker (knowledge_base.py:45-85 port)", () => {
     expect(chunkText("")).toEqual([]);
     expect(chunkText("\n\n  \n\n")).toEqual([]);
   });
+
+  it("CRLF separators chunk IDENTICALLY to LF (the /\\n\\s*\\n/ relaxation; T3 P2.5a)", () => {
+    // Multi-chunk input so paragraph boundaries + overlap carry are exercised.
+    const lf = `${para("alpha", 100)}\n\n${para("beta", 300)}\n\n${para("gamma", 300)}`;
+    const crlf = lf.replace(/\n/g, "\r\n");
+    expect(chunkText(crlf)).toEqual(chunkText(lf));
+    // And the boundary is real (this input actually splits).
+    expect(chunkText(lf).length).toBeGreaterThan(1);
+  });
 });
 
 describe("fake embedder", () => {

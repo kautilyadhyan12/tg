@@ -1,8 +1,12 @@
-// P2.5a — chunker, ported from knowledge_base.py:45-85 VERBATIM (constants
-// and packing algorithm; R0/Part 2 §8 spirit — port, don't re-derive):
-// paragraph-pack toward a 500-WORD target with a 50-word overlap carried
-// from the previous chunk; oversized paragraphs word-split with the same
-// overlap stride. Word = whitespace token, exactly like str.split().
+// P2.5a — chunker, ported from knowledge_base.py:45-85 (constants and packing
+// algorithm preserved; port, don't re-derive): paragraph-pack toward a
+// 500-WORD target with a 50-word overlap carried from the previous chunk;
+// oversized paragraphs word-split with the same overlap stride. Word =
+// whitespace token, exactly like str.split().
+// ONE intentional relaxation (T3 P2.5a, DECISIONS): the paragraph split is
+// /\n\s*\n/ + trim, not Python's literal "\n\n" — identical result on LF
+// input, and robust to CRLF (autocrlf working trees) and blank lines that
+// carry whitespace. Proven by the CRLF==LF chunker test.
 
 export const CHUNK_SIZE_WORDS = 500; // knowledge_base.py:45 chunk_size
 export const CHUNK_OVERLAP_WORDS = 50; // knowledge_base.py:45 overlap

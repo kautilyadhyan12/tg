@@ -9,7 +9,8 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 import { chunkText } from "./chunk.js";
-import { createMiniLmEmbedder, type Embedder } from "./embedder.js";
+import { createMiniLmEmbedder } from "./embedder.adapter.js";
+import type { Embedder } from "./embedder.js";
 import { deleteStaleChunks, upsertChunk } from "./repo.js";
 
 const KNOWLEDGE_DIR = join(dirname(fileURLToPath(import.meta.url)), "knowledge");
