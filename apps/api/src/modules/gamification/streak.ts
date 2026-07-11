@@ -80,9 +80,11 @@ export function reconcile(state: StreakState, today: string): StreakState {
   return { ...state, current: 0 };
 }
 
-/** ≥1 synced qualifying session on `day` (§3.1). Older-than-last days
- *  (offline backfill) are a no-op — history can't retroactively grow a
- *  streak the user already lost. */
+/** One fold step over ASCENDING activity days. Days ≤ lastActivityDate are
+ *  a no-op at THIS level only — retroactive restores (Part 7 §3.5: "offline
+ *  workouts arriving late can restore a 'lost' streak") happen by replaying
+ *  the full day history through replayActivityDays, which the sync path
+ *  always does. */
 export function recordActivity(state: StreakState, day: string): StreakState {
   const s = reconcile(state, day);
   if (s.lastActivityDate !== null && dayDiff(s.lastActivityDate, day) <= 0) return s;
@@ -96,4 +98,16 @@ export function recordActivity(state: StreakState, day: string): StreakState {
     lastActivityDate: day,
     freezesAvailable: Math.min(FREEZE_CAP, s.freezesAvailable + earned),
   };
+}
+
+/** Part 7 §3.5: streak state is a pure function of the user's qualifying-
+ *  activity day history — "the sweep re-runs affected days idempotently".
+ *  Deterministic fold over sorted distinct days: gaps spend freezes banked
+ *  at that point in the replay (or reset), exactly as they would have live.
+ *  A late offline day fills its gap on the next replay → retroactive
+ *  restore for free. */
+export function replayActivityDays(days: readonly string[]): StreakState {
+  let s = EMPTY_STREAK;
+  for (const day of [...days].sort()) s = recordActivity(s, day);
+  return s;
 }

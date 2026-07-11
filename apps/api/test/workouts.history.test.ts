@@ -285,6 +285,32 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     expect((await inject({ method: "GET", url: "/v1/progress/trend?nope=1", access: cookieA })).statusCode).toBe(400);
   });
 
+  it("late offline workout RESTORES a lost streak (Part 7 §3.5 replay — T3 finding 1)", { timeout: 60_000 }, async () => {
+    // B works out on day-3 and day-1: the day-2 gap means current = 1.
+    await sync(crypto.randomUUID(), daysAgoIso(3), [squatSet(1)], cookieB);
+    await sync(crypto.randomUUID(), daysAgoIso(1), [squatSet(1)], cookieB);
+    let [s] = await sql<{ current: number }[]>`SELECT current FROM streaks WHERE user_id = ${userB}`;
+    expect(s?.current).toBe(1);
+    // The missing day arrives late from an offline queue → replay bridges it.
+    await sync(crypto.randomUUID(), daysAgoIso(2), [squatSet(1)], cookieB);
+    [s] = await sql<{ current: number }[]>`SELECT current FROM streaks WHERE user_id = ${userB}`;
+    expect(s?.current).toBe(3);
+  });
+
+  it("hook failure heals on retry: erased streak state is recomputed by a duplicate sync (T3 finding 2)", { timeout: 30_000 }, async () => {
+    // Simulate "workout committed, hook crashed before persisting": the
+    // workout rows exist but the streak row does not.
+    await sql`DELETE FROM streaks WHERE user_id = ${userA}`;
+    const id = workoutIds[0];
+    if (id === undefined) throw new Error("fixture ordering");
+    const res = await sync(id, daysAgoIso(2), [squatSet(1), squatSet(2)]);
+    expect(res.json<{ status: string }>().status).toBe("duplicate"); // retry path
+    const [s] = await sql<{ current: number; longest: number }[]>`
+      SELECT current, longest FROM streaks WHERE user_id = ${userA}`;
+    expect(s?.current).toBe(3); // fully recomputed from history
+    expect(s?.longest).toBe(3);
+  });
+
   it("GET /v1/gamification/me: streak + earned achievements; lazy freeze reconciliation runs (GAP-5)", { timeout: 30_000 }, async () => {
     const me = await inject({ method: "GET", url: "/v1/gamification/me", access: cookieA });
     expect(me.statusCode).toBe(200);

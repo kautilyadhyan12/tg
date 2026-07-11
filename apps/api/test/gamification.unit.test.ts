@@ -8,6 +8,7 @@ import {
   dayInTz,
   reconcile,
   recordActivity,
+  replayActivityDays,
   safeTimeZone,
   type StreakState,
 } from "../src/modules/gamification/streak.js";
@@ -37,9 +38,27 @@ describe("streak machine (Part 7 §3)", () => {
     expect(s.longest).toBe(2);
   });
 
-  it("older-than-last activity (offline backfill) is a no-op", () => {
+  it("older-than-last day is a no-op at the FOLD level (replay handles backfills)", () => {
     const s1 = recordActivity(EMPTY_STREAK, "2026-07-10");
     expect(recordActivity(s1, "2026-07-08")).toEqual(s1);
+  });
+
+  it("replay (§3.5): a late offline day retroactively RESTORES a lost streak", () => {
+    // Without 07-11 the gap resets at 07-12…
+    expect(replayActivityDays(["2026-07-10", "2026-07-09", "2026-07-12"]).current).toBe(1);
+    // …the backfilled day bridges it (input order must not matter).
+    const restored = replayActivityDays(["2026-07-12", "2026-07-09", "2026-07-11", "2026-07-10"]);
+    expect(restored.current).toBe(4);
+    expect(restored.longest).toBe(4);
+  });
+
+  it("replay spends replay-time freezes across gaps, exactly as live would have", () => {
+    // 7 consecutive days bank one freeze; the single missed day after is covered.
+    const days = ["2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05",
+      "2026-06-06", "2026-06-07", "2026-06-09"]; // 06-08 missed
+    const s = replayActivityDays(days);
+    expect(s.current).toBe(8);
+    expect(s.freezesAvailable).toBe(0); // earned on day 7, spent on the miss
   });
 
   it("one missed day with a freeze banked: §3.2 auto-spend keeps the streak", () => {

@@ -3,9 +3,20 @@
 ```
 TASK: P2.3 — workouts (history/PRs/kcal) + progress + gamification ports 🟡
               [branch p2.3-workouts-gamification; PROVE green 101/101 on Neon branch
-               p22-test (reused), ZERO skips — full P2.1+P2.2 regression + 25 new
-               tests; engine 147/147 + shared 19/19 re-proven; awaiting Kd review +
-               T3 (required for ALL tasks)]
+               p22-test (reused), ZERO skips — full P2.1+P2.2 regression + 29 new
+               tests; engine 147/147 + shared 19/19 re-proven. T3 DONE (fresh chat):
+               2 gate-blockers FIXED — (1) §3.5 retroactive restore was silently
+               violated: streak now RECOMPUTED each sync by replaying the full
+               distinct-activity-day history (pure replayActivityDays fold; longest
+               floored at stored value); (2) gamification hook now runs
+               UNCONDITIONALLY (was gated on 'created' — a hook crash after the
+               workout commit lost the streak forever; replay+upsert = idempotent).
+               Finding 3 fixed (platform cast → Zod parse). Nits fixed: strict uuid
+               cursor regex, safeTimeZone re-exported via gamification service,
+               badges.py hour citations. §3.5 timezone-travel rule NOT implemented —
+               owed on the tz-capture card (DECISIONS). Regression tests: unit
+               replay-restore + replay-freeze-spend; route late-offline-restore +
+               erased-streak-heals-on-retry.]
 FILES CHANGED:
   packages/shared/src/{workouts,progress,gamification}.ts (new contracts) + index;
   apps/api/src/modules/gamification/ (new — R7.1): streak.ts (PURE Part 7 §3 machine:

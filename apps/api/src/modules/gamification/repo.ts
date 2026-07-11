@@ -72,6 +72,20 @@ export async function awardAchievements(sql: Sql, userId: string, codes: string[
   }
 }
 
+/** Distinct qualifying-activity days ('YYYY-MM-DD', user TZ) — the §3.5
+ *  replay input. Today: workouts; runs/F12 sessions join the UNION when
+ *  their modules land. timeZone is safeTimeZone-validated, bound as a value. */
+export async function getActivityDays(
+  tx: TransactionSql,
+  userId: string,
+  timeZone: string,
+): Promise<string[]> {
+  const rows = await tx<{ day: string }[]>`
+    SELECT DISTINCT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day
+    FROM workouts WHERE user_id = ${userId} ORDER BY day ASC`;
+  return rows.map((r) => r.day);
+}
+
 /** Badge-evaluator stats from PG (badges.py stats keys, SQL-derived).
  *  timeZone is a validated IANA name (safeTimeZone) — parameterized value,
  *  used only for the §3.1 user-local day/hour bucketing. */
@@ -92,6 +106,7 @@ export async function getStats(
     SELECT count(*) AS total_workouts,
            coalesce(sum(kcal_point), 0) AS total_kcal,
            count(*) FILTER (WHERE avg_form_score = 100) AS perfect_form_count,
+           -- badges.py:129 "before 8am" / :137 "after 9pm" (R0.4)
            count(*) FILTER (WHERE extract(hour FROM started_at AT TIME ZONE ${timeZone}) < 8)
              AS morning_workouts,
            count(*) FILTER (WHERE extract(hour FROM started_at AT TIME ZONE ${timeZone}) >= 21)

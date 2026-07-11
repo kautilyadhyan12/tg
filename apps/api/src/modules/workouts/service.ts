@@ -7,8 +7,9 @@ import type { Sql } from "postgres";
 import {
   onWorkoutSynced,
   reconciledStreak,
+  safeTimeZone,
 } from "../gamification/service.js";
-import { safeTimeZone } from "../gamification/streak.js";
+import { z } from "zod";
 import { getUserSyncContext } from "../users/service.js";
 import { KCAL_CALC_VERSION, kcalPointForSets } from "./calories.js";
 import * as repo from "./repo.js";
@@ -46,12 +47,11 @@ export async function handleWorkoutSync(
 
   const outcome = await repo.syncWorkout(sql, userId, payload, exerciseBySlug, kcal);
 
-  // Gamification only on first persistence: a retried sync must not
-  // re-register activity or re-run awards (they're idempotent anyway —
-  // belt and braces).
-  if (outcome.status === "created") {
-    await onWorkoutSynced({ sql }, userId, new Date(payload.startedAt), ctx.timezone);
-  }
+  // UNCONDITIONAL (T3 P2.3 finding 2): the workout commit and this hook are
+  // not atomic, so a throw here followed by a client retry (which reads
+  // 'duplicate') must still re-run it. Safe because the hook recomputes the
+  // streak from history and awards upsert — idempotent by construction (R3.5).
+  await onWorkoutSynced({ sql }, userId, ctx.timezone);
 
   return { workoutId: payload.workoutId, status: outcome.status, skippedSets: outcome.skippedSets };
 }
@@ -66,14 +66,21 @@ function parseCursor(cursor: string | undefined): { startedAt: Date; id: string 
   if (sep === -1) return null;
   const startedAt = new Date(cursor.slice(0, sep));
   const id = cursor.slice(sep + 1);
-  if (Number.isNaN(startedAt.getTime()) || !/^[0-9a-f-]{36}$/i.test(id)) return null;
+  // Strict uuid shape (T3 P2.3 nit): a looser pattern let 36 hex-ish chars
+  // through to the PG uuid cast → 500, breaking this function's contract.
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (Number.isNaN(startedAt.getTime()) || !uuidRe.test(id)) return null;
   return { startedAt, id };
 }
+
+// Parse, don't cast (R2.2/R2.3; T3 P2.3 finding 3): the DB CHECK constrains
+// platform, and this re-proves it at runtime on the way out.
+const platformSchema = z.enum(["web", "android", "ios"]);
 
 const toListItem = (w: repo.WorkoutRow) => ({
   id: w.id,
   startedAt: w.startedAt.toISOString(),
-  platform: w.platform as "web" | "android" | "ios", // CHECK-constrained (Part 4 §3.5)
+  platform: platformSchema.parse(w.platform),
   setsCount: w.setsCount,
   totalReps: w.totalReps,
   avgFormScore: w.avgFormScore,
