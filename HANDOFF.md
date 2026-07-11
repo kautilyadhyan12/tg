@@ -2,10 +2,15 @@
 
 ```
 TASK: P2.4 — entitlement resolver + quota middleware 🟡
-              [branch p2.4-entitlements-quotas; PROVE green 124/124 on Neon branch
+              [MERGED to master @ 6b131db via PR #17, 2026-07-11; commits 39336eb
+               (module) + 07835b2 (T3 fixes). PROVE green 125/125 on Neon branch
                p22-test (reused), ZERO skips — full P2.1–P2.3 regression (incl. auth
-               rate-limit suite on the NEW Redis store) + 19 new tests; awaiting Kd
-               review + T3 (required for ALL tasks)]
+               rate-limit suite on the NEW Redis store) + 20 new tests. T3 DONE
+               (fresh chat): 1 robustness fix (unguarded JSON.parse out of the
+               resolver → now self-heals to DB, never 500s /me+gate+coach-open;
+               +corrupt-cache regression test) + 1 observability nit (rate-limit
+               fail-open now warns); free period='all' consistency-over-90d-floor
+               confirmed intended (DECISIONS), not drift.]
 FILES CHANGED:
   NEW DEP: ioredis ^5 (approved at gate, R1.4) — BullMQ needs it later anyway;
   apps/api/src/redis.ts (NEW): RedisLike seam (v1 §7.2 keys) — createIoRedis
