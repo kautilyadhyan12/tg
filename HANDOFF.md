@@ -2,9 +2,16 @@
 
 ```
 TASK: P2.2 — users/profile module + exercises/catalog read APIs 🟡
-              [branch p2.2-users-catalog; PROVE green 74/74 on Neon branch p22-test,
-               ZERO skips (full P2.1 auth regression included); awaiting PR CI + T3 —
-               T3 is now required for ALL tasks (Kd ruling 2026-07-11, in DECISIONS)]
+              [branch p2.2-users-catalog; PROVE green 76/76 on Neon branch p22-test,
+               ZERO skips (full P2.1 auth regression included); T3 DONE (fresh chat,
+               7 findings): 1 real bug FIXED (since>= 304'd across channels — global
+               version sequence; now exact-match only + channel-flip regression test),
+               catalog now schema-parsed not cast, email-error logs class-only, DELETE
+               message no longer promises an unsent email, whole-bundle-swap-superset
+               + memberships-stay-closed-on-restore RULED in DECISIONS (Kd may veto),
+               pinned-non-live-version serving test added; parseBody/parseQuery
+               duplication noted for next module. T3 required for ALL tasks from now
+               on (Kd ruling 2026-07-11, in DECISIONS)]
 FILES CHANGED:
   apps/api/drizzle/0004_restore_account_purpose.sql (+meta 0003_snapshot, journal) —
     one_time_tokens purpose CHECK widened to +'restore_account'; SQL reviewed by Kd

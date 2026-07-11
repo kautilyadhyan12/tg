@@ -127,7 +127,9 @@ export async function softDeleteUser(sql: Sql, userId: string): Promise<DeletedU
 
 /** Undo inside the 14-day window (Part 4 §5.2): only a soft-deleted row whose
  *  deleted_at is younger than 14 days flips back. The window is enforced HERE
- *  as well as by the token TTL — belt and braces. */
+ *  as well as by the token TTL — belt and braces. Gym memberships closed at
+ *  Day 0 deliberately STAY closed (rejoin by code) — auto-reopen could exceed
+ *  seat caps (DECISIONS 2026-07-11, T3 finding 4; revisit at P3.10). */
 export async function restoreUser(sql: Sql, userId: string): Promise<boolean> {
   const rows = await sql<{ id: string }[]>`
     UPDATE users SET status = 'active', deleted_at = NULL

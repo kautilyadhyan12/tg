@@ -9,6 +9,7 @@ import { z } from "zod";
 import * as repo from "./repo.js";
 import {
   bundleResponseSchema,
+  catalogPageSchema,
   type CatalogListQuery,
   type CatalogPage,
   type DefinitionBundle,
@@ -29,28 +30,23 @@ export async function getCatalogPage(
   const hasMore = rows.length > query.limit;
   const items = hasMore ? rows.slice(0, query.limit) : rows;
   const last = items[items.length - 1];
-  return {
-    items: items.map((r) => ({
-      slug: r.slug,
-      nameKey: r.nameKey,
-      family: r.family,
-      // CHECK constraints guarantee these; the response schema re-proves them.
-      tier: r.tier as "T1" | "T2" | "T3",
-      tracking: r.tracking as "pose" | "timer",
-      met: r.met,
-      difficulty: r.difficulty,
-      equipment: r.equipment,
-      muscles: r.muscles,
-    })),
+  // parse, don't cast (R2.3/R2.2; T3 2026-07-11 finding 2): DB rows are
+  // outside the type system — the shared schema runtime-proves tier/tracking
+  // (the CHECK constraints make failure impossible unless the DB drifted,
+  // which is exactly when we WANT the 500).
+  return catalogPageSchema.parse({
+    items,
     nextCursor: hasMore && last !== undefined ? last.slug : null,
-  };
+  });
 }
 
 const betaRulesSchema = z.object({ userIds: z.array(z.string().uuid()) });
 const manifestSchema = z.record(z.string(), z.number().int().positive());
 
 /** §9.3: beta channel only for allowlisted users; anything else — flag
- *  missing, rules malformed, empty — resolves to live. */
+ *  missing, rules malformed, empty — resolves to live. Beta is a WHOLE-bundle
+ *  swap: beta bundles must be authored as supersets of live (DECISIONS
+ *  2026-07-11, T3 finding 3; enforced by P4 publishing tooling). */
 export async function resolveChannel(deps: ExercisesDeps, userId: string): Promise<"live" | "beta"> {
   const rules = await repo.getFlagRules(deps.sql, "beta_definitions");
   const parsed = betaRulesSchema.safeParse(rules);
@@ -78,7 +74,13 @@ export async function getBundle(
   let row = await repo.latestBundle(deps.sql, channel);
   if (row === null && channel === "beta") row = await repo.latestBundle(deps.sql, "live");
   if (row === null) return { kind: "none" };
-  if (since !== undefined && since >= row.bundleVersion) {
+  // EXACT match only (T3 2026-07-11 finding 1): bundle_version is ONE global
+  // identity sequence across BOTH channels, so >= would strand a client whose
+  // channel flipped (e.g. unflagged from beta holding beta v6 vs live v5 —
+  // permanent 304 on stale content). Same-channel monotonicity still holds:
+  // a newer row of this channel always has a larger version, so equality is
+  // exactly "you already hold this channel's newest".
+  if (since !== undefined && since === row.bundleVersion) {
     return { kind: "not_modified", bundleVersion: row.bundleVersion, sha256: row.sha256 };
   }
 

@@ -55,10 +55,13 @@ export function registerUserRoutes(
   });
 
   app.delete("/v1/users/me", { preHandler: [app.authenticate] }, async (req, reply) => {
-    await service.deleteAccount(usersDeps, authedUserId(req));
+    const { emailSent } = await service.deleteAccount(usersDeps, authedUserId(req));
+    // T3 2026-07-11 finding 6: don't promise an email that wasn't sent
+    // (OAuth-only accounts have no address; sender may also have failed).
     return reply.status(200).send({
-      message:
-        "Account scheduled for deletion. You have 14 days to undo via the link we emailed you.",
+      message: emailSent
+        ? "Account scheduled for deletion. You have 14 days to undo via the link we emailed you."
+        : "Account scheduled for deletion. It will be permanently removed after 14 days.",
     });
   });
 

@@ -84,6 +84,7 @@ d("exercises routes (real Postgres)", () => {
     await sql`DELETE FROM users WHERE email LIKE 'p22e-%@example.com'`;
     await sql`DELETE FROM exercises WHERE slug IN ('zz_p22_hidden')`;
     await sql`DELETE FROM definition_bundles WHERE channel = 'beta'`;
+    await sql`DELETE FROM exercise_definitions WHERE version = 999`;
     await sql`UPDATE feature_flags SET rules = '{}'::jsonb WHERE key = 'beta_definitions'`;
 
     // Seed twice — the definitions/bundle seed must be idempotent (A2).
@@ -108,6 +109,7 @@ d("exercises routes (real Postgres)", () => {
     if (app !== undefined) await app.close();
     await sql`DELETE FROM exercises WHERE slug IN ('zz_p22_hidden')`;
     await sql`DELETE FROM definition_bundles WHERE channel = 'beta'`;
+    await sql`DELETE FROM exercise_definitions WHERE version = 999`;
     await sql`UPDATE feature_flags SET rules = '{}'::jsonb WHERE key = 'beta_definitions'`;
     await sql.end({ timeout: 5 });
   });
@@ -228,6 +230,59 @@ d("exercises routes (real Postgres)", () => {
     const fallback = await get("/v1/exercise-definitions", { cookies: flagged.cookies });
     expect(fallback.statusCode).toBe(200);
     expect((JSON.parse(fallback.body) as BundleBody).channel).toBe("live");
+  });
+
+  it("channel flip: a since value from the OTHER channel never 304s (T3 finding 1)", { timeout: 60_000 }, async () => {
+    const unflagged = await makeUser("p22e-flipped@example.com");
+    // The beta test above inserted a beta bundle AFTER the live one, so its
+    // bundle_version is the global max. Old >=-comparison would 304 an
+    // unflagged (live-channel) user presenting that beta version — stranding
+    // a client that just lost the beta flag on stale beta content.
+    const betaV = (await sql<{ v: number | null }[]>`
+      SELECT max(bundle_version) AS v FROM definition_bundles WHERE channel = 'beta'`)[0]?.v;
+    if (betaV === undefined || betaV === null) throw new Error("beta bundle fixture missing");
+
+    const res = await get(`/v1/exercise-definitions?since=${String(betaV)}`, {
+      cookies: unflagged.cookies,
+    });
+    expect(res.statusCode).toBe(200); // NOT 304 — different channel, must re-serve
+    const bundle = JSON.parse(res.body) as BundleBody;
+    expect(bundle.channel).toBe("live");
+
+    // Same-channel exactness still holds.
+    const exact = await get(`/v1/exercise-definitions?since=${String(bundle.bundleVersion)}`, {
+      cookies: unflagged.cookies,
+    });
+    expect(exact.statusCode).toBe(304);
+  });
+
+  it("a manifest pinning a non-live-status definition version still serves it (immutability/pinning)", { timeout: 60_000 }, async () => {
+    const flagged = await makeUser("p22e-pinned@example.com");
+    const liveRes = await get("/v1/exercise-definitions", { cookies: flagged.cookies });
+    const live = JSON.parse(liveRes.body) as BundleBody;
+    const squatDoc = live.definitions.find((d) => d.key === "squat");
+    if (squatDoc === undefined) throw new Error("live bundle lost its squat");
+
+    // A retired DB row: bundles pin (slug, version) — the row's status must
+    // not matter to serving (rollback bundles point at superseded versions).
+    const doc999 = { ...squatDoc, version: 999 };
+    await sql`
+      INSERT INTO exercise_definitions (exercise_id, version, status, definition, min_engine_version)
+      SELECT id, 999, 'retired', ${sql.json(doc999)}, '1.0.0' FROM exercises WHERE slug = 'squat'
+      ON CONFLICT DO NOTHING`;
+    const manifest = { squat: 999 };
+    const sha = bundleSha256({ channel: "beta", manifest, definitions: [doc999] });
+    await sql`
+      INSERT INTO definition_bundles (channel, sha256, manifest)
+      VALUES ('beta', ${sha}, ${sql.json(manifest)})`;
+    await sql`
+      UPDATE feature_flags SET rules = ${sql.json({ userIds: [flagged.userId] })}
+      WHERE key = 'beta_definitions'`;
+
+    const res = await get("/v1/exercise-definitions", { cookies: flagged.cookies });
+    expect(res.statusCode).toBe(200);
+    const bundle = JSON.parse(res.body) as BundleBody;
+    expect(bundle.definitions.map((d) => [d.key, d.version])).toEqual([["squat", 999]]);
   });
 
   it("seed idempotency held: exactly the expected live bundle rows exist", { timeout: 30_000 }, async () => {

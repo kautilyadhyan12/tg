@@ -68,22 +68,37 @@ export async function updateProfile(
  *  (repo, one tx), revoke every session (auth service), then the undo email.
  *  Idempotent: deleting an already-deleted account is a quiet success —
  *  DELETE must never be an oracle or a retry hazard (R3.5 spirit). */
-export async function deleteAccount(deps: UsersDeps, userId: string): Promise<void> {
+export async function deleteAccount(
+  deps: UsersDeps,
+  userId: string,
+): Promise<{ emailSent: boolean }> {
   const deleted = await repo.softDeleteUser(deps.sql, userId);
-  if (deleted === null) return;
+  // Already deleted: idempotent no-op — and no second undo email.
+  if (deleted === null) return { emailSent: false };
   await revokeAllSessions(deps.sql, userId);
   const rawToken = await issueRestoreToken(deps.sql, userId);
   if (deleted.email !== null) {
     try {
       await deps.emailSender.sendAccountDeletionEmail(deleted.email, deleted.displayName, rawToken);
+      return { emailSent: true };
     } catch (err) {
-      // R2.5/R3.10: event name + userId only — never token/address.
-      deps.log.warn({ err, event: "email.account_deletion.send_failed", userId }, "email send failed");
+      // R3.10 (T3 2026-07-11 finding 5): provider errors routinely echo the
+      // recipient address / message content — log the error CLASS only,
+      // never the raw error object from the email path.
+      deps.log.warn(
+        {
+          errName: err instanceof Error ? err.name : typeof err,
+          event: "email.account_deletion.send_failed",
+          userId,
+        },
+        "email send failed",
+      );
+      return { emailSent: false };
     }
-  } else {
-    // OAuth-only account without an email: no undo channel — log the event.
-    deps.log.warn({ event: "account_deletion.no_email", userId }, "deletion without undo email");
   }
+  // OAuth-only account without an email: no undo channel — log the event.
+  deps.log.warn({ event: "account_deletion.no_email", userId }, "deletion without undo email");
+  return { emailSent: false };
 }
 
 /** Undo (Part 4 §5.2): token consume and window check are BOTH enforced;
