@@ -27,16 +27,29 @@ export function createDualRateLimit(
 ): (req: FastifyRequest, reply: FastifyReply) => Promise<void> {
   const windowSeconds = Math.max(1, Math.ceil(opts.windowMs / 1000));
 
-  const hit = async (dimension: "ip" | "id", value: string): Promise<boolean> => {
+  const hit = async (
+    req: FastifyRequest,
+    dimension: "ip" | "id",
+    value: string,
+  ): Promise<boolean> => {
     const count = await opts.redis.incrWithTtl(`rl:${opts.name}:${dimension}:${value}`, windowSeconds);
-    if (count === null) return true; // Redis down → fail open (header comment)
+    if (count === null) {
+      // Redis down → fail open, but NEVER silently (T3 P2.4): a silent
+      // fail-open disables auth throttling with zero signal. The global
+      // @fastify/rate-limit floor still applies.
+      req.log.warn(
+        { event: "ratelimit.open_redis_down", limiter: opts.name, dimension },
+        "rate limiter failing open (Redis unavailable)",
+      );
+      return true;
+    }
     return count <= opts.max;
   };
 
   return async (req, reply) => {
-    const ipOk = await hit("ip", req.ip);
+    const ipOk = await hit(req, "ip", req.ip);
     const id = opts.identifier(req);
-    const idOk = id === null ? true : await hit("id", id);
+    const idOk = id === null ? true : await hit(req, "id", id);
     if (!ipOk || !idOk) {
       // Same client-facing shape as the global limiter's 429 (R8.1).
       await reply.status(429).send({

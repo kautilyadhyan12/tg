@@ -229,6 +229,17 @@ d("entitlements + quotas + history gate (real Postgres)", () => {
     expect(fullRecords.json<{ totalWorkouts: number }>().totalWorkouts).toBe(2);
   });
 
+  it("a CORRUPT cache value self-heals to DB resolution, never 500s (T3 P2.4)", { timeout: 30_000 }, async () => {
+    // Poison the cache with non-JSON, then with valid-JSON-wrong-shape.
+    await redis.setex("ent:" + userB, 60, "}{ not json");
+    const r1 = await inject({ url: "/v1/entitlements/me", access: cookieB });
+    expect(r1.statusCode).toBe(200);
+    await redis.setex("ent:" + userB, 60, JSON.stringify({ source: "bogus", nope: 1 }));
+    const r2 = await inject({ url: "/v1/entitlements/me", access: cookieB });
+    expect(r2.statusCode).toBe(200);
+    expect(r2.json<{ source: string }>().source).toBe("gym_membership"); // re-resolved from DB
+  });
+
   it("/v1/entitlements/me requires authentication", { timeout: 30_000 }, async () => {
     expect((await inject({ url: "/v1/entitlements/me" })).statusCode).toBe(401);
   });

@@ -79,7 +79,17 @@ export async function getEntitlements(
 ): Promise<EntitlementsMe> {
   const hit = await deps.redis.get(cacheKey(userId));
   if (hit !== null) {
-    const parsed = cachedSchema.safeParse(JSON.parse(hit)); // cache = external input (R2.3)
+    // Cache is external input (R2.3): a corrupt/old-format/manually-poked
+    // value must NOT throw out of the resolver (T3 P2.4 — that would 500
+    // /me, the history gate, and the coach fail-open path). Any parse or
+    // schema failure is treated as a miss → DB re-resolve + re-cache below.
+    let raw: unknown = null;
+    try {
+      raw = JSON.parse(hit);
+    } catch {
+      raw = null;
+    }
+    const parsed = cachedSchema.safeParse(raw);
     if (parsed.success) return parsed.data;
   }
   const [freeDoc, candidates] = await Promise.all([
