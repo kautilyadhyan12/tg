@@ -2,8 +2,9 @@
 
 ```
 TASK: P2.2 — users/profile module + exercises/catalog read APIs 🟡
-              [branch p2.2-users-catalog; PROVE green 76/76 on Neon branch p22-test,
-               ZERO skips (full P2.1 auth regression included); T3 DONE (fresh chat,
+              [MERGED to master @ e6631a1 via PR #15, 2026-07-11; commits 2029226
+               (module) + dd5b4ed (T3 fixes). PROVE green 76/76 on Neon branch
+               p22-test, ZERO skips (full P2.1 auth regression included); T3 DONE (fresh chat,
                7 findings): 1 real bug FIXED (since>= 304'd across channels — global
                version sequence; now exact-match only + channel-flip regression test),
                catalog now schema-parsed not cast, email-error logs class-only, DELETE
