@@ -2,7 +2,9 @@
 
 ```
 TASK: P2.1 — auth module port into apps/api (R3.7 = the porting spec) 🟡
-              [branch p2.1-auth-module; UNCOMMITTED — awaiting Kd's DB-gated PROVE + T3]
+              [MERGED to master @ dad2f2a via PR #14, all 4 CI checks green, 2026-07-11;
+               commits 8e0b320 (module) + d902248 (gitleaks false-positive fix: inline
+               gitleaks:allow on dummy test fixtures + .gitleaksignore fingerprints)]
 FILES CHANGED:
   apps/api/drizzle/0003_one_time_tokens.sql (+meta 0002_snapshot, journal) — SQL reviewed
     by Kd BEFORE other code (T5); drizzle-kit emitted "0002_" prefix (idx-numbered),
