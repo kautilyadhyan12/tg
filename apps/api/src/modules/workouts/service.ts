@@ -9,6 +9,8 @@ import {
   reconciledStreak,
   safeTimeZone,
 } from "../gamification/service.js";
+import { getEntitlements } from "../entitlements/service.js";
+import type { RedisLike } from "../../redis.js";
 import { z } from "zod";
 import { getUserSyncContext } from "../users/service.js";
 import { KCAL_CALC_VERSION, kcalPointForSets } from "./calories.js";
@@ -58,6 +60,28 @@ export async function handleWorkoutSync(
 
 // ── history ──────────────────────────────────────────────────────────────────
 
+export interface ReadDeps {
+  sql: Sql;
+  redis: RedisLike;
+}
+
+/** Part 4 §0.2 read-gate (P2.4 GAP-4/GAP-6): free plans see history_days
+ *  days back; -1 = unlimited. Reads the keystone resolver (v1 §8) — never
+ *  its own idea of the plan. */
+async function historyGate(
+  deps: ReadDeps,
+  userId: string,
+): Promise<{ floor: Date | null; limitedToDays: number | null }> {
+  const { entitlements } = await getEntitlements(deps, userId);
+  const days = entitlements.history_days;
+  if (days === -1) return { floor: null, limitedToDays: null };
+  return { floor: new Date(Date.now() - days * 86_400_000), limitedToDays: days };
+}
+
+/** Later of the requested window and the plan floor. */
+const clamp = (since: Date | null, floor: Date | null): Date | null =>
+  floor === null ? since : since === null || floor > since ? floor : since;
+
 /** Opaque-ish cursor: `<startedAt ISO>|<uuid>`. Malformed → null (treated as
  *  first page — never a 500 from a hand-edited cursor). */
 function parseCursor(cursor: string | undefined): { startedAt: Date; id: string } | null {
@@ -91,13 +115,15 @@ const toListItem = (w: repo.WorkoutRow) => ({
 });
 
 export async function listWorkouts(
-  sql: Sql,
+  deps: ReadDeps,
   userId: string,
   query: WorkoutListQuery,
 ): Promise<WorkoutPage> {
-  const rows = await repo.listWorkouts(sql, userId, {
+  const gate = await historyGate(deps, userId);
+  const rows = await repo.listWorkouts(deps.sql, userId, {
     limit: query.limit,
     cursor: parseCursor(query.cursor),
+    since: gate.floor,
   });
   const hasMore = rows.length > query.limit;
   const items = hasMore ? rows.slice(0, query.limit) : rows;
@@ -105,6 +131,7 @@ export async function listWorkouts(
   return {
     items: items.map(toListItem),
     nextCursor: hasMore && last !== undefined ? `${last.startedAt.toISOString()}|${last.id}` : null,
+    limitedToDays: gate.limitedToDays,
   };
 }
 
@@ -175,20 +202,22 @@ async function userTz(sql: Sql, userId: string): Promise<string> {
 }
 
 export async function progressOverview(
-  sql: Sql,
+  deps: ReadDeps,
   userId: string,
   period: ProgressPeriod,
 ): Promise<ProgressOverview> {
   const now = new Date();
-  const since = sinceFor(period, now);
+  const gate = await historyGate(deps, userId);
+  const since = clamp(sinceFor(period, now), gate.floor);
   const [agg, streak] = await Promise.all([
-    repo.getOverviewAgg(sql, userId, since),
+    repo.getOverviewAgg(deps.sql, userId, since),
     (async () => {
-      const ctx = await getUserSyncContext(sql, userId);
-      return reconciledStreak({ sql }, userId, ctx.timezone);
+      const ctx = await getUserSyncContext(deps.sql, userId);
+      return reconciledStreak({ sql: deps.sql }, userId, ctx.timezone);
     })(),
   ]);
-  // progress.py:63-69: bounded periods only; min 100; 'all' reports 0.
+  // progress.py:63-69: bounded periods only; min 100; 'all' reports 0 —
+  // unless the plan floor bounds it anyway (then days = the visible window).
   const days = since === null ? null : Math.max(1, Math.round((now.getTime() - since.getTime()) / 86_400_000));
   const consistencyPct = days === null ? 0 : Math.min(100, Math.round((agg.totalWorkouts / days) * 100));
   return {
@@ -199,50 +228,64 @@ export async function progressOverview(
     currentStreak: streak.current,
     longestStreak: streak.longest,
     consistencyPct,
+    limitedToDays: gate.limitedToDays,
   };
 }
 
 export async function progressTrend(
-  sql: Sql,
+  deps: ReadDeps,
   userId: string,
   period: ProgressPeriod,
 ): Promise<ProgressTrend> {
-  const points = await repo.getDailyTrend(sql, userId, sinceFor(period, new Date()), await userTz(sql, userId));
-  return { points };
+  const gate = await historyGate(deps, userId);
+  const since = clamp(sinceFor(period, new Date()), gate.floor);
+  const points = await repo.getDailyTrend(deps.sql, userId, since, await userTz(deps.sql, userId));
+  return { points, limitedToDays: gate.limitedToDays };
 }
 
 export async function progressWeekly(
-  sql: Sql,
+  deps: ReadDeps,
   userId: string,
   period: ProgressPeriod,
 ): Promise<ProgressWeekly> {
-  const points = await repo.getWeeklyTrend(sql, userId, sinceFor(period, new Date()), await userTz(sql, userId));
-  return { points };
+  const gate = await historyGate(deps, userId);
+  const since = clamp(sinceFor(period, new Date()), gate.floor);
+  const points = await repo.getWeeklyTrend(deps.sql, userId, since, await userTz(deps.sql, userId));
+  return { points, limitedToDays: gate.limitedToDays };
 }
 
-/** Last 365 days fixed (progress.py:194). */
-export async function progressHeatmap(sql: Sql, userId: string): Promise<ProgressHeatmap> {
-  const since = new Date(Date.now() - 365 * 86_400_000);
-  const days = await repo.getDailyTrend(sql, userId, since, await userTz(sql, userId));
-  return { days: days.map((d) => ({ date: d.date, count: d.workouts, kcal: d.kcal })) };
+/** Last 365 days fixed (progress.py:194), plan-clamped (P2.4). */
+export async function progressHeatmap(deps: ReadDeps, userId: string): Promise<ProgressHeatmap> {
+  const gate = await historyGate(deps, userId);
+  const since = clamp(new Date(Date.now() - 365 * 86_400_000), gate.floor);
+  const days = await repo.getDailyTrend(deps.sql, userId, since, await userTz(deps.sql, userId));
+  return {
+    days: days.map((d) => ({ date: d.date, count: d.workouts, kcal: d.kcal })),
+    limitedToDays: gate.limitedToDays,
+  };
 }
 
 export async function progressDistribution(
-  sql: Sql,
+  deps: ReadDeps,
   userId: string,
   period: ProgressPeriod,
 ): Promise<ProgressDistribution> {
-  const families = await repo.getFamilyDistribution(sql, userId, sinceFor(period, new Date()));
-  return { families };
+  const gate = await historyGate(deps, userId);
+  const since = clamp(sinceFor(period, new Date()), gate.floor);
+  const families = await repo.getFamilyDistribution(deps.sql, userId, since);
+  return { families, limitedToDays: gate.limitedToDays };
 }
 
-export async function personalRecords(sql: Sql, userId: string): Promise<PersonalRecords> {
+export async function personalRecords(deps: ReadDeps, userId: string): Promise<PersonalRecords> {
+  const gate = await historyGate(deps, userId);
   const [records, streak] = await Promise.all([
-    repo.getPersonalRecords(sql, userId),
+    repo.getPersonalRecords(deps.sql, userId, gate.floor),
     (async () => {
-      const ctx = await getUserSyncContext(sql, userId);
-      return reconciledStreak({ sql }, userId, ctx.timezone);
+      const ctx = await getUserSyncContext(deps.sql, userId);
+      return reconciledStreak({ sql: deps.sql }, userId, ctx.timezone);
     })(),
   ]);
-  return { ...records, longestStreak: streak.longest };
+  // longestStreak stays ungated: streaks are identity, not history reads
+  // (Part 7 §3.3 "longest is displayed forever").
+  return { ...records, longestStreak: streak.longest, limitedToDays: gate.limitedToDays };
 }

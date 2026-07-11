@@ -9,6 +9,7 @@ import { progressQuerySchema, workoutListQuerySchema, workoutSyncPayloadSchema }
 import * as service from "./service.js";
 import { handleWorkoutSync } from "./service.js";
 import { ForeignWorkoutError } from "./repo.js";
+import type { RedisLike } from "../../redis.js";
 
 /** Zod-parse the querystring; 400 with issue paths/codes only (R3.10).
  *  Generic over the schema so .default() outputs stay non-optional. */
@@ -35,7 +36,8 @@ function authedUserId(req: FastifyRequest): string {
   return userId;
 }
 
-export function registerWorkoutRoutes(app: FastifyInstance, deps: { sql: Sql }): void {
+export function registerWorkoutRoutes(app: FastifyInstance, deps: { sql: Sql; redis: RedisLike }): void {
+  const readDeps: service.ReadDeps = { sql: deps.sql, redis: deps.redis };
   app.post("/v1/workouts/sync", { preHandler: [app.authenticate] }, async (req, reply) => {
     const userId = req.authUser?.id;
     if (userId === undefined) throw new Error("authenticate preHandler did not run");
@@ -92,7 +94,7 @@ export function registerWorkoutRoutes(app: FastifyInstance, deps: { sql: Sql }):
   app.get("/v1/workouts", { preHandler: [app.authenticate] }, async (req, reply) => {
     const query = parseQuery(workoutListQuerySchema, req, reply);
     if (query === null) return;
-    const page = await service.listWorkouts(deps.sql, authedUserId(req), query);
+    const page = await service.listWorkouts(readDeps, authedUserId(req), query);
     return reply.status(200).send(page);
   });
 
@@ -113,23 +115,23 @@ export function registerWorkoutRoutes(app: FastifyInstance, deps: { sql: Sql }):
   app.get("/v1/progress/overview", { preHandler: [app.authenticate] }, async (req, reply) => {
     const query = parseQuery(progressQuerySchema, req, reply);
     if (query === null) return;
-    return reply.status(200).send(await service.progressOverview(deps.sql, authedUserId(req), query.period));
+    return reply.status(200).send(await service.progressOverview(readDeps, authedUserId(req), query.period));
   });
 
   app.get("/v1/progress/trend", { preHandler: [app.authenticate] }, async (req, reply) => {
     const query = parseQuery(progressQuerySchema, req, reply);
     if (query === null) return;
-    return reply.status(200).send(await service.progressTrend(deps.sql, authedUserId(req), query.period));
+    return reply.status(200).send(await service.progressTrend(readDeps, authedUserId(req), query.period));
   });
 
   app.get("/v1/progress/weekly", { preHandler: [app.authenticate] }, async (req, reply) => {
     const query = parseQuery(progressQuerySchema, req, reply);
     if (query === null) return;
-    return reply.status(200).send(await service.progressWeekly(deps.sql, authedUserId(req), query.period));
+    return reply.status(200).send(await service.progressWeekly(readDeps, authedUserId(req), query.period));
   });
 
   app.get("/v1/progress/heatmap", { preHandler: [app.authenticate] }, async (req, reply) => {
-    return reply.status(200).send(await service.progressHeatmap(deps.sql, authedUserId(req)));
+    return reply.status(200).send(await service.progressHeatmap(readDeps, authedUserId(req)));
   });
 
   app.get("/v1/progress/distribution", { preHandler: [app.authenticate] }, async (req, reply) => {
@@ -137,10 +139,10 @@ export function registerWorkoutRoutes(app: FastifyInstance, deps: { sql: Sql }):
     if (query === null) return;
     return reply
       .status(200)
-      .send(await service.progressDistribution(deps.sql, authedUserId(req), query.period));
+      .send(await service.progressDistribution(readDeps, authedUserId(req), query.period));
   });
 
   app.get("/v1/progress/records", { preHandler: [app.authenticate] }, async (req, reply) => {
-    return reply.status(200).send(await service.personalRecords(deps.sql, authedUserId(req)));
+    return reply.status(200).send(await service.personalRecords(readDeps, authedUserId(req)));
   });
 }

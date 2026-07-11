@@ -7,6 +7,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
 import type { AppConfig } from "../../config.js";
+import type { RedisLike } from "../../redis.js";
 import type { EmailSender } from "./email.js";
 import { createDualRateLimit } from "./rateLimit.js";
 import {
@@ -92,7 +93,7 @@ function identifierFrom(req: FastifyRequest): string | null {
 
 export function registerAuthRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; config: AppConfig; emailSender?: EmailSender },
+  deps: { sql: Sql; config: AppConfig; redis: RedisLike; emailSender?: EmailSender },
 ): void {
   const authDeps: service.AuthDeps = {
     sql: deps.sql,
@@ -107,8 +108,20 @@ export function registerAuthRoutes(
   // :17-18 (5/hr reset). Custom dual-bucket limiter — @fastify/rate-limit
   // cannot run after the global limiter (rateLimit.ts explains; PROVE-run fix).
   const HOUR_MS = 60 * 60 * 1000;
-  const authLimit = createDualRateLimit({ max: 20, windowMs: HOUR_MS, identifier: identifierFrom });
-  const resetLimit = createDualRateLimit({ max: 5, windowMs: HOUR_MS, identifier: identifierFrom });
+  const authLimit = createDualRateLimit({
+    name: "auth",
+    max: 20,
+    windowMs: HOUR_MS,
+    identifier: identifierFrom,
+    redis: deps.redis,
+  });
+  const resetLimit = createDualRateLimit({
+    name: "reset",
+    max: 5,
+    windowMs: HOUR_MS,
+    identifier: identifierFrom,
+    redis: deps.redis,
+  });
 
   app.post("/v1/auth/register", { preHandler: [authLimit] }, async (req, reply) => {
     const input = parseBody(registerRequestSchema, req, reply);

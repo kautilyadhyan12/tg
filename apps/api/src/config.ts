@@ -19,12 +19,20 @@ const envSchema = z.object({
   // default ('30d', jwtHelper.js:26). Part 0 rule 4: values quoted, not recalled.
   ACCESS_TTL_MIN: z.coerce.number().int().positive().default(15),
   REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(30),
+  // P2.4: quota counters + entitlement cache (v1 §7.2). Optional in dev/test
+  // (in-memory adapter); REQUIRED in production — refinement below.
+  REDIS_URL: z.string().url().optional(),
 });
 
 export type AppConfig = Readonly<z.infer<typeof envSchema>>;
 
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
-  const parsed = envSchema.safeParse(env);
+  const parsed = envSchema
+    .refine((c) => c.NODE_ENV !== "production" || c.REDIS_URL !== undefined, {
+      path: ["REDIS_URL"],
+      message: "REDIS_URL is required in production (quotas/entitlement cache)",
+    })
+    .safeParse(env);
   if (!parsed.success) {
     const issues = parsed.error.issues
       .map((i) => `${i.path.join(".")}: ${i.message}`)

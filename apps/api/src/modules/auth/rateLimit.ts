@@ -1,51 +1,42 @@
-// P2.1 GAP-4 (DECISIONS 2026-07-11, corrected): @fastify/rate-limit marks each
-// request with an internal rateLimitRan symbol, so after the GLOBAL limiter
-// runs, any per-route limiter from the same plugin silently no-ops — and two
-// stacked limiters (per-IP AND per-identifier, R3.7) can never both run.
-// PROVEN by the PROVE run (3 red rate-limit tests). This is the replacement:
-// a dependency-free dual-bucket fixed-window limiter. In-memory =
-// SINGLE-INSTANCE-ONLY; the Redis swap is owed at P2.4 (unchanged).
+// P2.1 GAP-4 (custom dual-bucket limiter — @fastify/rate-limit's stacked
+// limiters silently no-op; see DECISIONS 2026-07-11 GAP-4 CORRECTION).
+// P2.4: the store moved behind the RedisLike seam (v1 §7.2 `rl:*` keys),
+// paying the "Redis swap owed at P2.4" debt — multi-instance-correct when
+// REDIS_URL is set; the in-memory adapter keeps the old single-instance
+// behavior in dev/test. Fixed window starts at the first hit (INCR sets the
+// TTL once), same semantics as the P2.1 Map impl.
+// Redis DOWN → fail OPEN with a log: auth availability wins for a blip; the
+// global @fastify/rate-limit floor still applies (R3.7 numbers unchanged).
 import type { FastifyReply, FastifyRequest } from "fastify";
-
-interface Bucket {
-  count: number;
-  resetAt: number;
-}
+import type { RedisLike } from "../../redis.js";
 
 export interface DualRateLimitOptions {
+  /** Namespaces this limiter's keys: rl:{name}:ip:… / rl:{name}:id:… */
+  name: string;
   /** Max requests per window, counted independently per IP and per identifier. */
   max: number;
   windowMs: number;
   /** Extracts the identifier (normalized email) from the request; return null
    *  to count only the IP dimension. */
   identifier: (req: FastifyRequest) => string | null;
+  redis: RedisLike;
 }
-
-const SWEEP_THRESHOLD = 10_000; // spoofed-IP floods must not grow the map forever
 
 export function createDualRateLimit(
   opts: DualRateLimitOptions,
 ): (req: FastifyRequest, reply: FastifyReply) => Promise<void> {
-  const buckets = new Map<string, Bucket>();
+  const windowSeconds = Math.max(1, Math.ceil(opts.windowMs / 1000));
 
-  const hit = (key: string, now: number): boolean => {
-    const b = buckets.get(key);
-    if (b === undefined || b.resetAt <= now) {
-      buckets.set(key, { count: 1, resetAt: now + opts.windowMs });
-      return true;
-    }
-    b.count += 1;
-    return b.count <= opts.max;
+  const hit = async (dimension: "ip" | "id", value: string): Promise<boolean> => {
+    const count = await opts.redis.incrWithTtl(`rl:${opts.name}:${dimension}:${value}`, windowSeconds);
+    if (count === null) return true; // Redis down → fail open (header comment)
+    return count <= opts.max;
   };
 
   return async (req, reply) => {
-    const now = Date.now();
-    if (buckets.size > SWEEP_THRESHOLD) {
-      for (const [k, b] of buckets) if (b.resetAt <= now) buckets.delete(k);
-    }
-    const ipOk = hit(`ip:${req.ip}`, now);
+    const ipOk = await hit("ip", req.ip);
     const id = opts.identifier(req);
-    const idOk = id === null ? true : hit(`id:${id}`, now);
+    const idOk = id === null ? true : await hit("id", id);
     if (!ipOk || !idOk) {
       // Same client-facing shape as the global limiter's 429 (R8.1).
       await reply.status(429).send({
