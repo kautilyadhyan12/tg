@@ -1,6 +1,56 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P2.5a — coach KB ingestion + pgvector retrieval 🟡 (P2.5 split, part a)
+              [branch p2.5a-coach-kb; PROVE green 133/133 on Neon branch p22-test
+               (reused), ZERO skips — full P2.1–P2.4 regression + 8 new KB tests;
+               PLUS real deliverable ran: `pnpm --filter api coach:ingest` embedded
+               14 chunks from 5 guides at 384-dim into pgvector; real-MiniLM
+               semantic spot-check confirmed (squat→form_guides, protein→nutrition,
+               sore→recovery top-1). Awaiting Kd review + T3 (required all tasks)]
+FILES CHANGED:
+  NEW DEP: @huggingface/transformers (approved, R1.4) — local all-MiniLM-L6-v2
+    (Transformers.js/ONNX), pulls onnxruntime-node + sharp;
+  apps/api/src/modules/coach/knowledge/*.md (5 guides copied VERBATIM from
+    backend-ml/app/ai/rag/knowledge — v1 §7.4 "re-ingest the 5 docs", not Chroma);
+  coach/chunk.ts (knowledge_base.py:45-85 port: 500-word target / 50 overlap /
+    big-para word-split, constants cited);
+  coach/embedder.ts (Embedder seam: createMiniLmEmbedder — lazy pipeline, mean-
+    pool+L2-normalize = sentence-transformers defaults, dim guard=384;
+    createFakeEmbedder — deterministic FNV bag-of-words so CI proves ranking
+    without ONNX);
+  coach/repo.ts (ONLY kb_chunks toucher: upsertChunk ON CONFLICT (doc,
+    chunk_index), deleteStaleChunks for shrunken docs, searchChunks cosine `<=>`
+    SEQ SCAN per §3.7 "no ANN index", embedding as parameterized ::vector cast
+    R3.8, meta shape-checked R2.3);
+  coach/retrieve.ts (retriever.py port: top_k=3 coach.py:70, formatContext
+    verbatim retriever.py:42-53);
+  coach/ingest.ts (v1 §7.4 port; idempotent upsert+prune; CLI
+    `pnpm --filter api coach:ingest`, DATABASE_URL-gated; downloads+caches ~90MB
+    weights first run — DECISIONS GAP-2);
+  apps/api/package.json (+coach:ingest script);
+  test/coach.kb.test.ts (5 pure chunker/embedder + 3 Neon ingest/retrieval
+    incl. idempotency ×2 and stale-tail prune).
+DECISIONS (4): GAP-1 local MiniLM embedder (same model as salvage, honors 384
+  pin, zero per-embed cost, no 2nd hot-path call) · GAP-2 weights cached at
+  ingest not vendored · GAP-3 non-streaming coach v1 · GAP-5 Groq price = config
+  constant citing public list (lands in P2.5b) · split ruling (P2.5b = Groq
+  gateway + metered chat + api_cost_events + threads; OpenRouter FALLBACK is
+  in-spec per v1 §6.1 and ships in P2.5b — corrected the plan's deferral).
+NO migration (kb_chunks + vector(384) already in 0001).
+CI NOTE: coach.kb.test.ts DB portion uses the FAKE embedder (no ONNX in CI); real
+  MiniLM proven by the ops ingest run + spot-check, logged above. If CI lacks the
+  transformers native deps, only the ingest CLI (an ops step) is affected, not
+  the suite.
+OPEN SPEC GAPS: none.
+NEXT: T3 on this diff → merge → P2.5b (Groq gateway: fetch to OpenAI-compatible
+  endpoint, Zod-parsed R2.12; Groq→OpenRouter fallback v1 §6.1; system-prompt
+  port coach.py:25-59 + prompt version; requireQuota("coach") FIRST real wiring;
+  api_cost_events per call w/ gym resolved at spend time; exact-match answer
+  cache; coach_threads/messages + thread CRUD; non-streaming).
+```
+
+```
 TASK: P2.4 — entitlement resolver + quota middleware 🟡
               [MERGED to master @ 6b131db via PR #17, 2026-07-11; commits 39336eb
                (module) + 07835b2 (T3 fixes). PROVE green 125/125 on Neon branch
