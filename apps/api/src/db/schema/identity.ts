@@ -71,7 +71,7 @@ export const oneTimeTokens = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
-    check("one_time_tokens_purpose_check", sql`${t.purpose} IN ('verify_email','password_reset')`),
+    check("one_time_tokens_purpose_check", sql`${t.purpose} IN ('verify_email','password_reset','restore_account')`),
     index("one_time_tokens_user_purpose_idx").on(t.userId, t.purpose),
   ],
 );

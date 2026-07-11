@@ -24,6 +24,7 @@
     "vitest": "^2.1.8"
   },
   "dependencies": {
+    "@app/engine": "workspace:*",
     "@app/shared": "workspace:*",
     "@fastify/cookie": "11.0.2",
     "@fastify/cors": "^11.2.0",

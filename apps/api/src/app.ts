@@ -14,6 +14,10 @@ import { registerAuthenticate } from "./modules/auth/plugin.js";
 import { AuthError } from "./modules/auth/service.js";
 import { registerAuthRoutes } from "./modules/auth/routes.js";
 import { registerWorkoutRoutes } from "./modules/workouts/routes.js";
+import type { UsersEmailSender } from "./modules/users/email.js";
+import { UsersError } from "./modules/users/service.js";
+import { registerUserRoutes } from "./modules/users/routes.js";
+import { registerExerciseRoutes } from "./modules/exercises/routes.js";
 import type { AppConfig } from "./config.js";
 
 /** Test-only seams (GAP-5 DECISIONS 2026-07-11): production callers pass
@@ -21,6 +25,7 @@ import type { AppConfig } from "./config.js";
  *  (they are stored only as SHA-256 — unreachable via the DB by design). */
 export interface BuildAppOverrides {
   emailSender?: EmailSender;
+  usersEmailSender?: UsersEmailSender;
 }
 
 declare module "fastify" {
@@ -101,7 +106,9 @@ export async function buildApp(
     // else with a sub-500 statusCode gets a generic body (T3 2026-07-11 —
     // arbitrary err.message was never authored for clients).
     const clientSafe =
-      err instanceof AuthError || (typeof err.code === "string" && err.code.startsWith("FST_"));
+      err instanceof AuthError ||
+      err instanceof UsersError ||
+      (typeof err.code === "string" && err.code.startsWith("FST_"));
     void reply.status(status).send({
       error: clientSafe ? err.code : "request_error",
       message: clientSafe ? err.message : "Request could not be processed",
@@ -130,6 +137,11 @@ export async function buildApp(
     ...(overrides.emailSender !== undefined ? { emailSender: overrides.emailSender } : {}),
   });
   registerWorkoutRoutes(app, { sql });
+  registerUserRoutes(app, {
+    sql,
+    ...(overrides.usersEmailSender !== undefined ? { emailSender: overrides.usersEmailSender } : {}),
+  });
+  registerExerciseRoutes(app, { sql });
 
   return app;
 }
