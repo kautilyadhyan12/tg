@@ -15,12 +15,12 @@ const d = describe.skipIf(url === undefined || url === "");
 // REAL legacy hash, generated with the OLD repo's own dependency
 // (backend-auth/node_modules/bcryptjs@2.4.3, hashSync cost 10) — proves the
 // bcryptjs→bcryptjs@3 format compatibility with a fixture, not an assumption
-// (Part IV #11). Password: 'legacy-Correct-Horse-9'.
-const LEGACY_HASH = "$2a$10$7RC6CyqeX8NLXY51YsTnvuFry32m77n7UwzWC5ukii0/bwoXmUSVO";
-const LEGACY_PASSWORD = "legacy-Correct-Horse-9";
+// (Part IV #11). Password: 'legacy-Correct-Horse-9'. gitleaks:allow
+const LEGACY_HASH = "$2a$10$7RC6CyqeX8NLXY51YsTnvuFry32m77n7UwzWC5ukii0/bwoXmUSVO"; // gitleaks:allow
+const LEGACY_PASSWORD = "legacy-Correct-Horse-9"; // dummy fixture, gitleaks:allow
 const LEGACY_EMAIL = "p21-legacy@example.com";
 
-const PASSWORD = "a-Perfectly-fine-pw-1";
+const PASSWORD = "a-Perfectly-fine-pw-1"; // dummy fixture, gitleaks:allow
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 
@@ -47,7 +47,7 @@ const baseEnv = {
   NODE_ENV: "test",
   DATABASE_URL: url ?? "",
   WEB_ORIGIN: "http://localhost:5173",
-  JWT_SECRET: "routes-test-secret-0123456789abcdef-32",
+  JWT_SECRET: "routes-test-secret-0123456789abcdef-32", // dummy test value, gitleaks:allow
   LOG_LEVEL: "error",
 };
 
