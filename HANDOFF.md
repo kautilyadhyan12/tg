@@ -2,9 +2,11 @@
 
 ```
 TASK: P2.3 — workouts (history/PRs/kcal) + progress + gamification ports 🟡
-              [branch p2.3-workouts-gamification; PROVE green 101/101 on Neon branch
-               p22-test (reused), ZERO skips — full P2.1+P2.2 regression + 29 new
-               tests; engine 147/147 + shared 19/19 re-proven. T3 DONE (fresh chat):
+              [MERGED to master @ b8c90b4 via PR #16, 2026-07-11; commits 6f0c38c
+               (module) + b1ea1a2 (gitleaks false-positive fix) + ff48e6c (T3 fixes).
+               PROVE green 105/105 on Neon branch p22-test (reused), ZERO skips —
+               full P2.1+P2.2 regression + 29 new tests; engine 147/147 + shared
+               19/19 re-proven. T3 DONE (fresh chat):
                2 gate-blockers FIXED — (1) §3.5 retroactive restore was silently
                violated: streak now RECOMPUTED each sync by replaying the full
                distinct-activity-day history (pure replayActivityDays fold; longest
