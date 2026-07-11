@@ -1,31 +1,17 @@
-// P1.10d — POST /v1/workouts/sync (v1 §5.3; Part 4 §3.5). Route order per
-// R3.3 as far as the pre-P2.1 seam allows: authenticate → parse → idempotency
-// header check → handler. Entitlement/quota/per-route rate limits are not
-// metered on this path in v1; the global limiter applies.
+// P1.10d/P2.1 — POST /v1/workouts/sync (v1 §5.3; Part 4 §3.5). Route order per
+// R3.3: authenticate (P2.1 preHandler — replaced the SYNC_DEV_USER_ID seam) →
+// parse → idempotency header check → handler. Entitlement/quota/per-route rate
+// limits are not metered on this path in v1; the global limiter applies.
 import type { FastifyInstance } from "fastify";
 import type { Sql } from "postgres";
-import type { AppConfig } from "../../config.js";
 import { workoutSyncPayloadSchema } from "./schemas.js";
 import { handleWorkoutSync } from "./service.js";
 import { ForeignWorkoutError } from "./repo.js";
 
-export function registerWorkoutRoutes(
-  app: FastifyInstance,
-  deps: { sql: Sql; config: AppConfig },
-): void {
-  app.post("/v1/workouts/sync", async (req, reply) => {
-    // AUTH SEAM (DECISIONS 2026-07-10): SYNC_DEV_USER_ID authenticates every
-    // request in dev/test; unset (always true in production — config boot
-    // refuses it there) the route answers 401 until P2.1 wires cookie authn.
-    // P2.1 replaces exactly this block with the real authenticate preHandler.
-    const userId = deps.config.SYNC_DEV_USER_ID;
-    if (userId === undefined) {
-      return reply.status(401).send({
-        error: "unauthorized",
-        message: "authentication required",
-        requestId: req.id,
-      });
-    }
+export function registerWorkoutRoutes(app: FastifyInstance, deps: { sql: Sql }): void {
+  app.post("/v1/workouts/sync", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const userId = req.authUser?.id;
+    if (userId === undefined) throw new Error("authenticate preHandler did not run");
 
     const parsed = workoutSyncPayloadSchema.safeParse(req.body);
     if (!parsed.success) {

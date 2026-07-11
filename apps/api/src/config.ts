@@ -11,10 +11,14 @@ const envSchema = z.object({
   SENTRY_DSN: z.string().url().optional(),
   POSTHOG_API_KEY: z.string().min(1).optional(),
   POSTHOG_HOST: z.string().url().default("https://app.posthog.com"),
-  // P1.10d auth seam (DECISIONS 2026-07-10): when set (dev/test ONLY), sync
-  // requests authenticate as this user; unset = the route answers 401 and
-  // stays dark until P2.1 wires real cookie authn.
-  SYNC_DEV_USER_ID: z.string().uuid().optional(),
+  // P2.1 auth. An unset secret must never silently sign tokens (ported
+  // jwtHelper.js fail-loud); 32+ chars so HS256 isn't brute-forceable.
+  JWT_SECRET: z.string().min(32),
+  // v1 §6.1: "JWT access (15 min) + rotating refresh tokens"; the 30-day
+  // refresh lifetime ports the audited backend-auth's JWT_REFRESH_EXPIRES_IN
+  // default ('30d', jwtHelper.js:26). Part 0 rule 4: values quoted, not recalled.
+  ACCESS_TTL_MIN: z.coerce.number().int().positive().default(15),
+  REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(30),
 });
 
 export type AppConfig = Readonly<z.infer<typeof envSchema>>;
@@ -26,19 +30,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       .map((i) => `${i.path.join(".")}: ${i.message}`)
       .join("; ");
     throw new Error(`Invalid environment: ${issues}`);
-  }
-  // Seam gate checks the RAW env, not the parsed value: NODE_ENV defaults to
-  // "development" when omitted, so a prod box that forgot to set it must NOT
-  // silently honor the seam — allowed only when dev/test is EXPLICIT
-  // (P1.10d T3 finding; R3.3).
-  if (
-    parsed.data.SYNC_DEV_USER_ID !== undefined &&
-    env["NODE_ENV"] !== "development" &&
-    env["NODE_ENV"] !== "test"
-  ) {
-    throw new Error(
-      "Invalid environment: SYNC_DEV_USER_ID requires an EXPLICIT NODE_ENV of development or test (R3.3)",
-    );
   }
   return Object.freeze(parsed.data);
 }

@@ -1,0 +1,10 @@
+# Pinned false positives ONLY (P2.1, 2026-07-11): dummy test fixtures in
+# commit 8e0b320, whose blobs predate the inline `gitleaks:allow` markers now
+# present on those lines (full-history scans still see the old blobs).
+# Values are hard-coded fakes: test JWT secrets and fixture passwords —
+# verified non-secrets at T3. Never add a real-secret fingerprint here (R3.6).
+8e0b3204430fcf2fa348fee9b9b67fa50f8c1971:apps/api/test/smoke.test.ts:generic-api-key:8
+8e0b3204430fcf2fa348fee9b9b67fa50f8c1971:apps/api/test/auth.routes.test.ts:generic-api-key:18
+8e0b3204430fcf2fa348fee9b9b67fa50f8c1971:apps/api/test/auth.routes.test.ts:generic-api-key:20
+8e0b3204430fcf2fa348fee9b9b67fa50f8c1971:apps/api/test/auth.routes.test.ts:generic-api-key:23
+8e0b3204430fcf2fa348fee9b9b67fa50f8c1971:apps/api/test/auth.routes.test.ts:generic-api-key:50
