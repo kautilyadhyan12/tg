@@ -10,3 +10,4 @@ export * from "./catalog.js";
 export * from "./workouts.js";
 export * from "./progress.js";
 export * from "./gamification.js";
+export * from "./entitlements.js";

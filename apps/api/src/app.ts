@@ -19,6 +19,8 @@ import { UsersError } from "./modules/users/service.js";
 import { registerUserRoutes } from "./modules/users/routes.js";
 import { registerExerciseRoutes } from "./modules/exercises/routes.js";
 import { registerGamificationRoutes } from "./modules/gamification/routes.js";
+import { registerEntitlementRoutes } from "./modules/entitlements/routes.js";
+import { createIoRedis, createMemoryRedis, type RedisLike } from "./redis.js";
 import type { AppConfig } from "./config.js";
 
 /** Test-only seams (GAP-5 DECISIONS 2026-07-11): production callers pass
@@ -27,6 +29,9 @@ import type { AppConfig } from "./config.js";
 export interface BuildAppOverrides {
   emailSender?: EmailSender;
   usersEmailSender?: UsersEmailSender;
+  /** Tests inject the in-memory adapter (with its `down` switch) to drive
+   *  fail-open/fail-closed paths deterministically (P2.4). */
+  redis?: RedisLike;
 }
 
 declare module "fastify" {
@@ -121,8 +126,14 @@ export async function buildApp(
   app.decorate("analytics", analytics);
 
   const sql = postgres(config.DATABASE_URL, { prepare: false, max: 1 });
+  // P2.4: REDIS_URL → real Redis; otherwise the in-memory adapter (config
+  // fail-fast makes REDIS_URL mandatory in production).
+  const redis =
+    overrides.redis ??
+    (config.REDIS_URL !== undefined ? createIoRedis(config.REDIS_URL) : createMemoryRedis());
   app.addHook("onClose", async () => {
     await analytics.shutdown();
+    await redis.close();
     await sql.end({ timeout: 5 });
   });
 
@@ -135,15 +146,18 @@ export async function buildApp(
   registerAuthRoutes(app, {
     sql,
     config,
+    redis,
     ...(overrides.emailSender !== undefined ? { emailSender: overrides.emailSender } : {}),
   });
-  registerWorkoutRoutes(app, { sql });
+  registerWorkoutRoutes(app, { sql, redis });
   registerUserRoutes(app, {
     sql,
+    redis,
     ...(overrides.usersEmailSender !== undefined ? { emailSender: overrides.usersEmailSender } : {}),
   });
   registerExerciseRoutes(app, { sql });
   registerGamificationRoutes(app, { sql });
+  registerEntitlementRoutes(app, { sql, redis });
 
   return app;
 }

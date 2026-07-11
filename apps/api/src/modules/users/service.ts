@@ -10,6 +10,8 @@ import {
   issueRestoreToken,
   revokeAllSessions,
 } from "../auth/service.js";
+import type { RedisLike } from "../../redis.js";
+import { bustEntitlements } from "../entitlements/service.js";
 import type { UsersEmailSender } from "./email.js";
 import * as repo from "./repo.js";
 import type { UpdateProfileRequest, UserProfile } from "./schemas.js";
@@ -37,6 +39,7 @@ export class UsersError extends Error {
 
 export interface UsersDeps {
   sql: Sql;
+  redis: RedisLike;
   emailSender: UsersEmailSender;
   log: FastifyBaseLogger;
 }
@@ -85,6 +88,8 @@ export async function deleteAccount(
   // Already deleted: idempotent no-op — and no second undo email.
   if (deleted === null) return { emailSent: false };
   await revokeAllSessions(deps.sql, userId);
+  // Memberships just closed = an entitlement change → bust (§4.1/§10 seam).
+  await bustEntitlements(deps.redis, userId);
   const rawToken = await issueRestoreToken(deps.sql, userId);
   if (deleted.email !== null) {
     try {

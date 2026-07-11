@@ -167,7 +167,12 @@ const toWorkoutRow = (r: WorkoutDbRow): WorkoutRow => ({
 export async function listWorkouts(
   sql: Sql,
   userId: string,
-  input: { limit: number; cursor: { startedAt: Date; id: string } | null },
+  input: {
+    limit: number;
+    cursor: { startedAt: Date; id: string } | null;
+    /** Part 4 §0.2 history read-gate floor (P2.4); null = unlimited. */
+    since: Date | null;
+  },
 ): Promise<WorkoutRow[]> {
   const rows = await sql<WorkoutDbRow[]>`
     SELECT id, started_at, platform, sets_count, total_reps, avg_form_score,
@@ -175,6 +180,7 @@ export async function listWorkouts(
            engine_version, bundle_version
     FROM workouts
     WHERE user_id = ${userId}
+      AND (${input.since === null} OR started_at >= ${input.since})
       AND (${input.cursor === null}
            OR (started_at, id) < (${input.cursor?.startedAt ?? null}, ${input.cursor?.id ?? null}))
     ORDER BY started_at DESC, id DESC
@@ -343,6 +349,7 @@ async function topWorkoutBy(
   sql: Sql,
   userId: string,
   column: "kcal_point" | "duration_ms" | "avg_form_score",
+  since: Date | null,
 ): Promise<RecordRef | null> {
   // Fixed column set — identifiers never come from input (R3.8).
   const rows =
@@ -350,15 +357,18 @@ async function topWorkoutBy(
       ? await sql<{ id: string; v: number | null }[]>`
           SELECT id, kcal_point AS v FROM workouts
           WHERE user_id = ${userId} AND kcal_point IS NOT NULL
+            AND (${since === null} OR started_at >= ${since})
           ORDER BY kcal_point DESC, started_at DESC LIMIT 1`
       : column === "duration_ms"
         ? await sql<{ id: string; v: number | null }[]>`
             SELECT id, duration_ms AS v FROM workouts
             WHERE user_id = ${userId} AND duration_ms IS NOT NULL
+              AND (${since === null} OR started_at >= ${since})
             ORDER BY duration_ms DESC, started_at DESC LIMIT 1`
         : await sql<{ id: string; v: number | null }[]>`
             SELECT id, avg_form_score AS v FROM workouts
             WHERE user_id = ${userId} AND avg_form_score IS NOT NULL
+              AND (${since === null} OR started_at >= ${since})
             ORDER BY avg_form_score DESC, started_at DESC LIMIT 1`;
   const r = rows[0];
   return r === undefined || r.v === null ? null : { workoutId: r.id, value: r.v };
@@ -367,6 +377,7 @@ async function topWorkoutBy(
 export async function getPersonalRecords(
   sql: Sql,
   userId: string,
+  since: Date | null,
 ): Promise<{
   maxKcalWorkout: RecordRef | null;
   longestWorkout: RecordRef | null;
@@ -374,10 +385,12 @@ export async function getPersonalRecords(
   totalWorkouts: number;
 }> {
   const [maxKcalWorkout, longestWorkout, bestAvgForm, count] = await Promise.all([
-    topWorkoutBy(sql, userId, "kcal_point"),
-    topWorkoutBy(sql, userId, "duration_ms"),
-    topWorkoutBy(sql, userId, "avg_form_score"),
-    sql<{ n: string }[]>`SELECT count(*) AS n FROM workouts WHERE user_id = ${userId}`,
+    topWorkoutBy(sql, userId, "kcal_point", since),
+    topWorkoutBy(sql, userId, "duration_ms", since),
+    topWorkoutBy(sql, userId, "avg_form_score", since),
+    sql<{ n: string }[]>`
+      SELECT count(*) AS n FROM workouts
+      WHERE user_id = ${userId} AND (${since === null} OR started_at >= ${since})`,
   ]);
   return { maxKcalWorkout, longestWorkout, bestAvgForm, totalWorkouts: Number(count[0]?.n ?? 0) };
 }

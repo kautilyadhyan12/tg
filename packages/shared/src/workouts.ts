@@ -28,6 +28,9 @@ export type WorkoutListItem = z.infer<typeof workoutListItemSchema>;
 export const workoutPageSchema = z.object({
   items: z.array(workoutListItemSchema),
   nextCursor: z.string().nullable(),
+  /** Part 4 §0.2 history read-gate (P2.4 GAP-4): non-null = results were
+   *  clamped to this many days by the caller's plan; null = unlimited. */
+  limitedToDays: z.number().int().nullable(),
 });
 export type WorkoutPage = z.infer<typeof workoutPageSchema>;
 

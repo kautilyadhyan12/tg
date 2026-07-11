@@ -1,6 +1,64 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P2.4 — entitlement resolver + quota middleware 🟡
+              [branch p2.4-entitlements-quotas; PROVE green 124/124 on Neon branch
+               p22-test (reused), ZERO skips — full P2.1–P2.3 regression (incl. auth
+               rate-limit suite on the NEW Redis store) + 19 new tests; awaiting Kd
+               review + T3 (required for ALL tasks)]
+FILES CHANGED:
+  NEW DEP: ioredis ^5 (approved at gate, R1.4) — BullMQ needs it later anyway;
+  apps/api/src/redis.ts (NEW): RedisLike seam (v1 §7.2 keys) — createIoRedis
+    (real; INCR+EXPIRE-NX Lua, fail-soft returns null) + createMemoryRedis
+    (deterministic, injectable clock, `down` outage switch for tests); modules
+    depend on RedisLike, never ioredis;
+  apps/api/src/config.ts: +REDIS_URL (optional dev/test, REQUIRED in prod via
+    .refine fail-fast);
+  packages/shared/src/entitlements.ts (NEW): canonical §3.3 entitlements Zod —
+    EVERY key .default()ed to the FREE value (R6.5 survive old rows); metered
+    feature {window,limit}; EntitlementsMe {entitlements, source};
+  apps/api/src/modules/entitlements/ (NEW, R7.1): repo (Part 4 §4.1 candidate
+    SQL VERBATIM + free-plan base), service (mergeEntitlements pure fn: free
+    base → highest-rank overlay, equal-rank per-key max/OR/all>tier, GAP-1
+    whole-block replacement across windows; getEntitlements cached 60s
+    ent:{userId}; bustEntitlements = §4.1/§10 seam), routes (GET
+    /v1/entitlements/me), schemas;
+  apps/api/src/modules/quotas/ (NEW): service — requireQuota(feature)
+    preHandler porting quotas.py VERBATIM (atomic INCR+TTL quota:{feature}:
+    {user}:{yyyymmdd|yyyymm}, +60s slack, increment-before-run, coach
+    fail-OPEN / meal_scan+route_gen fail-CLOSED 503, 429 with resetsAt);
+    wired to real routes in P2.5/P2.6;
+  auth/rateLimit.ts: store moved behind RedisLike (rl:{name}:{ip|id} keys) —
+    pays the P2.1 "Redis swap owed at P2.4" debt; fail-open on Redis-down;
+    per-route limiters now pass name+redis (auth/routes.ts, users/routes.ts);
+  users/service.ts: account deletion busts entitlements (memberships closed);
+  workouts service/repo: history read-gate (Part 4 §0.2; GAP-6 debt) — free
+    plans clamp reads to history_days back, responses carry explicit
+    limitedToDays (GAP-4); reads the keystone resolver, never its own idea;
+    all read fns take ReadDeps {sql,redis};
+  packages/shared/{workouts,progress}.ts: +limitedToDays on page/all progress
+    shapes; app.ts: redis adapter created (or overrides.redis for tests),
+    passed to every module, closed onClose;
+  test/entitlements.unit.test.ts (11: merge matrix incl. cross-window + sparse
+    defaults, quota key/reset, in-memory adapter incl. down-switch),
+    test/entitlements.routes.test.ts (8, DB-gated: free resolve, coach 5/mo→429,
+    Redis-down coach-open/meal-closed-503, cache-hold+bust-flips, cross-user
+    no-leak, gym member_entitlements grant, history gate free-90 vs pro-unlimited).
+DECISIONS (6): GAP-1 whole-block merge across windows · GAP-2 no server exercise
+  block (clients gate; P4.y flags) · GAP-3 /v1/entitlements/me added · GAP-4
+  limitedToDays explicit field · GAP-5 pilot-provider sub fixtures pre-P3 ·
+  ioredis approved + Redis prod-required/dev-optional.
+NO migration. Compose already had redis:7-alpine.
+QUEUE (remaining P2 obligations): argon2id before P2.8 · DPDP Day-14 cascade +
+  export workers (BullMQ) · timezone-capture card (+ §3.5 tz-travel rule) ·
+  challenges/leaderboards/XP cards. requireQuota + api_cost_events wiring lands
+  with coach/nutrition/geo (P2.5/P2.6).
+OPEN SPEC GAPS: none.
+NEXT: T3 on this diff (fresh chat) → merge → P2.5 (coach: Groq behind the quota
+  gateway + api_cost_events; Chroma→pgvector; re-ingest 5 KB guides).
+```
+
+```
 TASK: P2.3 — workouts (history/PRs/kcal) + progress + gamification ports 🟡
               [MERGED to master @ b8c90b4 via PR #16, 2026-07-11; commits 6f0c38c
                (module) + b1ea1a2 (gitleaks false-positive fix) + ff48e6c (T3 fixes).

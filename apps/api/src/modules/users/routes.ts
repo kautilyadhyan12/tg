@@ -8,6 +8,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
 import { createDualRateLimit } from "../auth/rateLimit.js";
+import type { RedisLike } from "../../redis.js";
 import { createLogOnlyUsersEmailSender, type UsersEmailSender } from "./email.js";
 import { restoreAccountRequestSchema, updateProfileRequestSchema } from "./schemas.js";
 import * as service from "./service.js";
@@ -28,10 +29,11 @@ function parseBody<T>(schema: z.ZodType<T>, req: FastifyRequest, reply: FastifyR
 
 export function registerUserRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; emailSender?: UsersEmailSender },
+  deps: { sql: Sql; redis: RedisLike; emailSender?: UsersEmailSender },
 ): void {
   const usersDeps: service.UsersDeps = {
     sql: deps.sql,
+    redis: deps.redis,
     emailSender: deps.emailSender ?? createLogOnlyUsersEmailSender(app.log),
     log: app.log,
   };
@@ -67,9 +69,11 @@ export function registerUserRoutes(
 
   // 5/hr — the reset-class limit (rateLimiter.js:17-18 ported at P2.1; GAP-4).
   const restoreLimit = createDualRateLimit({
+    name: "restore",
     max: 5,
     windowMs: 60 * 60 * 1000,
     identifier: () => null, // body carries only the token — never key a bucket on a secret
+    redis: deps.redis,
   });
 
   app.post("/v1/users/me/restore", { preHandler: [restoreLimit] }, async (req, reply) => {

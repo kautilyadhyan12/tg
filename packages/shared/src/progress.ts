@@ -15,6 +15,11 @@ export type ProgressQuery = z.infer<typeof progressQuerySchema>;
  *  →kcal point values (banding per 2B §2.3 is display). consistencyPct =
  *  min(100, round(workouts/days×100)) for bounded periods, 0 for 'all'
  *  (progress.py:63-69 verbatim). */
+/** Part 4 §0.2 read-gate flag (P2.4 GAP-4), on every progress read: non-null
+ *  = aggregates cover at most this many days (plan clamp); null = the full
+ *  requested window. */
+const limitedToDays = z.number().int().nullable();
+
 export const progressOverviewSchema = z.object({
   totalWorkouts: z.number().int(),
   totalKcal: z.number().int(),
@@ -23,6 +28,7 @@ export const progressOverviewSchema = z.object({
   currentStreak: z.number().int(),
   longestStreak: z.number().int(),
   consistencyPct: z.number().int(),
+  limitedToDays,
 });
 export type ProgressOverview = z.infer<typeof progressOverviewSchema>;
 
@@ -33,7 +39,7 @@ export const trendPointSchema = z.object({
   kcal: z.number().int(),
   workouts: z.number().int(),
 });
-export const progressTrendSchema = z.object({ points: z.array(trendPointSchema) });
+export const progressTrendSchema = z.object({ points: z.array(trendPointSchema), limitedToDays });
 export type ProgressTrend = z.infer<typeof progressTrendSchema>;
 
 export const weeklyPointSchema = z.object({
@@ -42,12 +48,13 @@ export const weeklyPointSchema = z.object({
   workouts: z.number().int(),
   kcal: z.number().int(),
 });
-export const progressWeeklySchema = z.object({ points: z.array(weeklyPointSchema) });
+export const progressWeeklySchema = z.object({ points: z.array(weeklyPointSchema), limitedToDays });
 export type ProgressWeekly = z.infer<typeof progressWeeklySchema>;
 
 /** Last 365 days (progress.py:194). */
 export const progressHeatmapSchema = z.object({
   days: z.array(z.object({ date: z.string(), count: z.number().int(), kcal: z.number().int() })),
+  limitedToDays,
 });
 export type ProgressHeatmap = z.infer<typeof progressHeatmapSchema>;
 
@@ -55,6 +62,7 @@ export type ProgressHeatmap = z.infer<typeof progressHeatmapSchema>;
  *  DECISIONS P2.3 GAP-4). Counted per SET, the granular unit we store. */
 export const progressDistributionSchema = z.object({
   families: z.array(z.object({ family: z.string(), sets: z.number().int() })),
+  limitedToDays,
 });
 export type ProgressDistribution = z.infer<typeof progressDistributionSchema>;
 
@@ -68,5 +76,6 @@ export const personalRecordsSchema = z.object({
   bestAvgForm: recordRefSchema, // value = avg_form_score
   totalWorkouts: z.number().int(),
   longestStreak: z.number().int(),
+  limitedToDays,
 });
 export type PersonalRecords = z.infer<typeof personalRecordsSchema>;
