@@ -1,6 +1,66 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P2.6a — nutrition (Part 2B §3 pipeline) + body_measurements CRUD 🟡
+              [branch p2.6a-nutrition; PROVE green 165/165 on FRESH Neon branch
+               p26a-test (migrations 0001–0005 applied), ZERO skips — full
+               P2.1–P2.5 regression + 13 new nutrition tests. Built across two
+               sessions: the ruled implementation chat hit its rate limit
+               mid-task; this session VERIFIED every ruling against the code and
+               COMPLETED 3 gaps it left. Awaiting Kd review + T3 (required all).]
+MIGRATION 0005 (SQL approved via ruling before code): meal_logs.origin text
+  NOT NULL DEFAULT 'manual' CHECK (origin IN ('photo','manual')) — the
+  photo-vs-manual discriminator Part 4 §3.6 lacked (R4.2: SQL-filtered ⇒ real
+  column; one_time_tokens precedent). Journal idx 4 = 0005_meal_logs_origin.
+WHAT SHIPPED (module apps/api/src/modules/nutrition/, R7.1):
+  vision.adapter.ts — §3.2 Stage-1 identify-only contract (temp 0, JSON mode,
+    .strict() schema with NO kcal/grams/macro fields — a reply smuggling them
+    FAILS parse and keeps usage for the ledger); MEAL_VISION_MODEL default
+    scout-17b (deprecation 2026-07-17 recorded — swap lever, not scope change);
+  portion-priors.ts — Appendix B verbatim (containers/countables/densities);
+    resolvePortion rungs: reliable count → 1 user_dishware → 3 regional prior →
+    4 default (single-value collapse, no invented ±); rung 2 anchor DEFERRED;
+  foods.ts — 130-row curated table ported 1:1 from food_database.py with
+    source lines (count VERIFIED against the Python file);
+  openfoodfacts.adapter.ts — usda.py port (misnamed salvage: it IS OFF);
+    Search-a-licious → legacy CGI fallback, Zod-parsed, degrade-to-empty;
+    EXEMPT from cost ledger (ruled: zero-cost, 24h Redis-cached);
+  service.ts — five-stage orchestration; §3.5 RETAKE: parse-fail/poor-quality
+    → single-use user-bound hashed Redis token (10 min TTL) that bypasses ONE
+    quota increment, can't chain, fails closed; scan draft in Redis (scanToken,
+    10 min); vision cost = BigInt 110k/340k micro-USD/1M (Groq Scout list);
+    ledger row standalone at scan time (no companion rows exist — ruled);
+    photo NEVER persisted/logged anywhere (2B §3.4 guarantee, ruled precedence
+    over v1 §6.1's R2 path);
+  routes.ts — analyze-photo (authn → validateScan[magic bytes jpeg/png/webp,
+    10MB decoded, base64 strict, retake consume] → meter[skipped on retake] —
+    400 never meters); meals POST = UNION photo-confirm{scanToken}|manual
+    {mealName} (GAP-2 — manual path COMPLETED this session); meals list/get/
+    patch/delete; dishware CRUD; body-measurements CRUD (nutrition owns them
+    per Part 4 §3.6 — moved OUT of users); foods search;
+  repo.ts — sole DB toucher; corrections written at confirm AND PATCH
+    (meal_name/taken_at/items diffs, originals preserved — P4 doctrine);
+    users.weight_kg synced to latest measurement (SUPERSEDES P2.2 GAP-2 —
+    profile PATCH no longer appends history; DECISIONS);
+  gamification repo/service — total_meals + photo_meals_logged (origin='photo')
+    now real SQL; onMealLogged awards first_meal/photo_meal (badge hook
+    failure degrades with a warn, never breaks the meal save).
+COMPLETED THIS SESSION (gaps the rate-limited chat left): manual meal path
+  (GAP-2) · takenAt ≤24h-future bound (GAP-3) on confirm/manual/patch ·
+  .strict() query schemas · +3 tests (manual meal + badge separation,
+  future-takenAt 400, Redis-down fail-closed 503 with provider never called).
+KNOWN DEBT (disclosed): the inherited files use a compressed one-liner style
+  unlike the rest of the repo — lint/typecheck clean, left for T3 to judge
+  (reformat = pure churn risk mid-task).
+DECISIONS: 10 P2.6a rulings + P2.2 GAP-2 supersession + manual-path note.
+OPEN SPEC GAPS: none. IFCT pack, rung-2 anchor scaling, bias adaptation,
+  onboarding-fields storage = queued follow-ups (ruled).
+NEXT: T3 on this diff (fresh chat) → merge → P2.6b (geo read-side: two-layer
+  geocode cache, ORS route_gen fail-closed + cost events, runs/saved_routes
+  browse; run RECORDING is mobile P5).
+```
+
+```
 TASK: P2.5b — coach gateway + metered chat 🟡 (P2.5 split, part b — completes P2.5)
               [MERGED to master @ ed53f8d via PR #19, 2026-07-12; commits 80c322e
                (module) + e825ef9 (T3 fixes). PROVE green 152/152 on Neon branch

@@ -29,6 +29,13 @@
       "when": 1783759610078,
       "tag": "0004_restore_account_purpose",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783848149730,
+      "tag": "0005_meal_logs_origin",
+      "breakpoints": true
     }
   ]
 }

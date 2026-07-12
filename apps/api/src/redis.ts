@@ -12,7 +12,10 @@ export interface RedisLike {
   incrWithTtl(key: string, ttlSeconds: number): Promise<number | null>;
   /** null = missing OR backend down (callers treat both as cache miss). */
   get(key: string): Promise<string | null>;
-  setex(key: string, ttlSeconds: number, value: string): Promise<void>;
+  /** true = stored; false = backend down. */
+  setex(key: string, ttlSeconds: number, value: string): Promise<boolean>;
+  /** Atomic get+delete. undefined = absent, null = backend down. */
+  take(key: string): Promise<string | undefined | null>;
   del(key: string): Promise<void>;
   close(): Promise<void>;
 }
@@ -23,6 +26,10 @@ const INCR_TTL_LUA = `
 local c = redis.call('INCR', KEYS[1])
 if c == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
 return c`;
+const TAKE_LUA = `
+local v = redis.call('GET', KEYS[1])
+if v then redis.call('DEL', KEYS[1]) end
+return v`;
 
 export function createIoRedis(url: string): RedisLike {
   const client = new Redis(url, {
@@ -31,8 +38,10 @@ export function createIoRedis(url: string): RedisLike {
     lazyConnect: false,
   });
   client.defineCommand("incrWithTtl", { numberOfKeys: 1, lua: INCR_TTL_LUA });
+  client.defineCommand("take", { numberOfKeys: 1, lua: TAKE_LUA });
   const asIncr = client as Redis & {
     incrWithTtl(key: string, ttl: string): Promise<number>;
+    take(key: string): Promise<string | null>;
   };
   return {
     async incrWithTtl(key, ttlSeconds) {
@@ -52,8 +61,16 @@ export function createIoRedis(url: string): RedisLike {
     async setex(key, ttlSeconds, value) {
       try {
         await client.setex(key, ttlSeconds, value);
+        return true;
       } catch {
-        /* cache write loss is acceptable by design */
+        return false;
+      }
+    },
+    async take(key) {
+      try {
+        return (await asIncr.take(key)) ?? undefined;
+      } catch {
+        return null;
       }
     },
     async del(key) {
@@ -102,9 +119,16 @@ export function createMemoryRedis(clock: () => number = Date.now): RedisLike & {
       return Promise.resolve(live(key)?.value ?? null);
     },
     async setex(key, ttlSeconds, value) {
-      if (this.down) return;
+      if (this.down) return false;
       store.set(key, { value, expiresAt: clock() + ttlSeconds * 1000 });
-      return Promise.resolve();
+      return Promise.resolve(true);
+    },
+    async take(key) {
+      if (this.down) return null;
+      const value = live(key)?.value;
+      if (value === undefined) return Promise.resolve(undefined);
+      store.delete(key);
+      return Promise.resolve(value);
     },
     async del(key) {
       if (this.down) return;

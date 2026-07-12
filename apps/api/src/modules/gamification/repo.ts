@@ -121,6 +121,10 @@ export async function getStats(
     SELECT count(DISTINCT e.family) AS families_tried
     FROM workout_sets s JOIN exercises e ON e.id = s.exercise_id
     WHERE s.user_id = ${userId}`;
+  const [meals] = await sql<{ total_meals: string; photo_meals_logged: string }[]>`
+    SELECT count(*) AS total_meals,
+           count(*) FILTER (WHERE origin = 'photo') AS photo_meals_logged
+    FROM meal_logs WHERE user_id = ${userId}`;
   return {
     total_workouts: Number(agg?.total_workouts ?? 0),
     total_kcal: Number(agg?.total_kcal ?? 0),
@@ -129,6 +133,7 @@ export async function getStats(
     night_workouts: Number(agg?.night_workouts ?? 0),
     avg_form_last5: form?.avg_form_last5 === null || form === undefined ? 0 : Number(form.avg_form_last5),
     families_tried: Number(fam?.families_tried ?? 0),
-    // meal/coach/photo stats: 0 until P2.5/P2.6 land (badges.ts note).
+    total_meals: Number(meals?.total_meals ?? 0),
+    photo_meals_logged: Number(meals?.photo_meals_logged ?? 0),
   };
 }
