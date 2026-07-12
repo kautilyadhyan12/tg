@@ -143,7 +143,7 @@ d("coach chat + threads (real Postgres, fake provider)", () => {
     >`SELECT role, model, tokens_in, tokens_out, cost_micro FROM coach_messages
       WHERE thread_id = ${body.threadId} ORDER BY created_at ASC`;
     expect(msgs.map((m) => m.role)).toEqual(["user", "assistant"]);
-    expect(msgs[1]?.model).toBe("llama-3.1-8b-instant#p1"); // prompt versioning
+    expect(msgs[1]?.model).toBe("llama-3.1-8b-instant#p2"); // prompt versioning
     expect(msgs[1]?.tokens_in).toBe(100);
     expect(msgs[1]?.tokens_out).toBe(200);
     expect(msgs[1]?.cost_micro).toBe("21"); // (100·50000+200·80000)/1e6
@@ -201,6 +201,54 @@ d("coach chat + threads (real Postgres, fake provider)", () => {
     const body = sixth.json<{ error: string; resetsAt: string }>();
     expect(body.error).toBe("quota_exceeded");
     expect(new Date(body.resetsAt).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it("a 400 does NOT consume a quota slot (T3 finding 1: validate before meter)", { timeout: 60_000 }, async () => {
+    const u = await session("p25b-badreq@example.com");
+    // Five malformed requests (>2000 chars) — all 400, none should meter.
+    for (let i = 0; i < 5; i++) {
+      const bad = await chat("x".repeat(2001), u.access);
+      expect(bad.statusCode).toBe(400);
+    }
+    // All 5 real monthly slots must still be available.
+    for (let i = 1; i <= 5; i++) {
+      const r = await chat(`badreq distinct question ${String(i)}`, u.access);
+      expect(r.statusCode).toBe(200);
+    }
+    const sixth = await chat("badreq distinct question 6", u.access);
+    expect(sixth.statusCode).toBe(429); // meter counted only the 5 valid ones
+  });
+
+  it("answer cache does NOT leak across different profiles (T3 finding 2)", { timeout: 60_000 }, async () => {
+    // A sets a weight, then asks a nutrition question → answer cached under
+    // A's profile fingerprint.
+    const a = await session("p25b-weighted@example.com");
+    await api().inject({
+      method: "PATCH",
+      url: "/v1/users/me",
+      headers: { "content-type": "application/json" },
+      cookies: { accessToken: a.access },
+      payload: JSON.stringify({ weightKg: 95 }),
+    });
+    const callsBefore = provider.calls.length;
+    const q = "how many grams of protein should I target each day";
+    const aRes = await chat(q, a.access);
+    expect(aRes.statusCode).toBe(200);
+    expect(aRes.json<{ cached: boolean }>().cached).toBe(false);
+    expect(provider.calls.length).toBe(callsBefore + 1);
+
+    // B (no weight set → different fingerprint) asks the SAME question: must
+    // NOT get A's cached answer — a real provider call fires.
+    const b = await session("p25b-noweight@example.com");
+    const bRes = await chat(q, b.access);
+    expect(bRes.statusCode).toBe(200);
+    expect(bRes.json<{ cached: boolean }>().cached).toBe(false);
+    expect(provider.calls.length).toBe(callsBefore + 2); // B did NOT hit A's cache
+
+    // A re-asks (same profile) → cache hit, no new provider call.
+    const aAgain = await chat(q, a.access);
+    expect(aAgain.json<{ cached: boolean }>().cached).toBe(true);
+    expect(provider.calls.length).toBe(callsBefore + 2);
   });
 
   it("gym member: cost event carries gym_id resolved at spend time + costs:gym bump (§3.10, v1 §9.3)", { timeout: 60_000 }, async () => {

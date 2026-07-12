@@ -4,17 +4,20 @@
 // GAP-1 (DECISIONS 2026-07-12): the old profile block's fitnessLevel/goals/
 // equipment/age/medicalConditions have NO Part 4 storage — those lines are
 // OMITTED (not invented); the block carries only what exists today.
-export const PROMPT_VERSION = 1;
+// T3 P2.5b (finding 2): displayName is NOT included — it changes no advice and
+// was the identity-leak vector under the global answer cache. Only units and
+// weightKg remain (they change the ANSWER), and both are folded into the cache
+// key so a per-weight answer is never served to a different-weight user.
+export const PROMPT_VERSION = 2; // bumped: prompt shape changed (name removed)
 
 export interface PromptProfile {
-  displayName: string;
   units: string;
   weightKg: number | null;
 }
 
 export function buildSystemPrompt(profile: PromptProfile): string {
-  // coach.py:36-44 shape, reduced to stored fields (GAP-1).
-  let profileBlock = `USER PROFILE:\n- Name: ${profile.displayName}\n- Preferred units: ${profile.units}`;
+  // coach.py:36-44 shape, reduced to answer-affecting stored fields.
+  let profileBlock = `USER PROFILE:\n- Preferred units: ${profile.units}`;
   if (profile.weightKg !== null) {
     profileBlock += `\n- Body weight: ${String(profile.weightKg)} kg`;
   }

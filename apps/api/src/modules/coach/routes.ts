@@ -12,8 +12,18 @@ import type { ChatProvider } from "./llm.adapter.js";
 import { createGroqProvider, createOpenRouterProvider } from "./llm.adapter.js";
 import { createMiniLmEmbedder } from "./embedder.adapter.js";
 import { coachChatRequestSchema, coachThreadListQuerySchema } from "./schemas.js";
+import type { CoachChatRequest } from "./schemas.js";
 import * as service from "./service.js";
 import { buildProvider } from "./service.js";
+
+// The parsed chat body is stashed here by the validation preHandler so it is
+// checked BEFORE requireQuota meters (T3 P2.5b finding 1: a 400 must never
+// burn a quota slot). Keyed by request identity — no global mutable state.
+declare module "fastify" {
+  interface FastifyRequest {
+    coachChatInput?: CoachChatRequest;
+  }
+}
 
 function parse<S extends z.ZodTypeAny>(
   schema: S,
@@ -69,14 +79,29 @@ export function registerCoachRoutes(
     model: deps.config.COACH_MODEL,
     log: app.log,
   };
+  app.decorateRequest("coachChatInput", undefined);
+
+  // Validate the body BEFORE metering (finding 1): a 400 here stops the chain
+  // and never reaches requireQuota.
+  const validateChatBody = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const input = parse(coachChatRequestSchema, req.body, req, reply);
+    if (input === null) return; // parse already sent the 400
+    req.coachChatInput = input;
+  };
 
   app.post(
     "/v1/coach/chat",
-    // R3.3: authn → quota (coach = fail-open; limits from entitlements).
-    { preHandler: [app.authenticate, requireQuota("coach", { sql: deps.sql, redis: deps.redis })] },
+    // R3.3: authn → validate → quota (coach = fail-open; limits from entitlements).
+    {
+      preHandler: [
+        app.authenticate,
+        validateChatBody,
+        requireQuota("coach", { sql: deps.sql, redis: deps.redis }),
+      ],
+    },
     async (req, reply) => {
-      const input = parse(coachChatRequestSchema, req.body, req, reply);
-      if (input === null) return;
+      const input = req.coachChatInput;
+      if (input === undefined) throw new Error("validateChatBody preHandler did not run");
       const result = await service.chat(coachDeps, authedUserId(req), input);
       return reply.status(200).send(result);
     },

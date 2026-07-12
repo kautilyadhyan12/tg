@@ -139,7 +139,11 @@ export interface MessageRow {
 }
 
 /** Oldest-first tail of the thread (routers/coach.py:33 sends last 12 to the
- *  model; the detail view reads more). */
+ *  model; the detail view reads more).
+ *  INVARIANT (T3 P2.5b): keyed by thread_id only — every caller MUST first
+ *  prove ownership via getThread/createThread (both user_id-scoped). Do not
+ *  call this on a thread id that hasn't been ownership-checked, or another
+ *  user's messages leak. */
 export async function getRecentMessages(
   sql: Sql,
   threadId: string,
@@ -165,9 +169,22 @@ export interface AssistantMeta {
   costMicro: bigint;
 }
 
-/** One exchange, atomically: user + assistant rows, thread freshness bump,
- *  and the GAP-4 cap (delete-oldest beyond 200 — the old $slice semantics,
- *  routers/coach.py:34/128). */
+export interface CostEvent {
+  userId: string;
+  gymId: string | null;
+  feature: string;
+  provider: string;
+  units: number;
+  unitType: string;
+  costMicro: bigint;
+}
+
+/** One exchange, atomically (T3 P2.5b finding 3): user + assistant rows,
+ *  thread freshness bump, the GAP-4 cap (delete-oldest beyond 200 — the old
+ *  $slice semantics, routers/coach.py:34/128), AND — when a real provider
+ *  call was made — the api_cost_events ledger row, all in ONE transaction.
+ *  A spent call therefore never persists messages without its cost row.
+ *  costEvent omitted on the cache-hit path (no spend, no ledger — approved). */
 export const STORED_HISTORY_MESSAGES = 200; // routers/coach.py:34
 
 export async function appendExchange(
@@ -176,6 +193,7 @@ export async function appendExchange(
   userContent: string,
   assistantContent: string,
   meta: AssistantMeta,
+  costEvent?: CostEvent,
 ): Promise<void> {
   await sql.begin(async (tx) => {
     // clock_timestamp(), not now(): now() is transaction-stable, which would
@@ -195,6 +213,12 @@ export async function appendExchange(
       DELETE FROM coach_messages WHERE id IN (
         SELECT id FROM coach_messages WHERE thread_id = ${threadId}
         ORDER BY created_at DESC, id DESC OFFSET ${STORED_HISTORY_MESSAGES})`;
+    if (costEvent !== undefined) {
+      await tx`
+        INSERT INTO api_cost_events (user_id, gym_id, feature, provider, units, unit_type, cost_micro)
+        VALUES (${costEvent.userId}, ${costEvent.gymId}, ${costEvent.feature}, ${costEvent.provider},
+                ${costEvent.units}, ${costEvent.unitType}, ${costEvent.costMicro.toString()}::bigint)`;
+    }
   });
 }
 
@@ -208,22 +232,4 @@ export async function getLiveGymId(sql: Sql, userId: string): Promise<string | n
     WHERE m.user_id = ${userId} AND m.removed_at IS NULL
     LIMIT 1`;
   return rows[0]?.gym_id ?? null;
-}
-
-export async function insertCostEvent(
-  sql: Sql,
-  e: {
-    userId: string;
-    gymId: string | null;
-    feature: string;
-    provider: string;
-    units: number;
-    unitType: string;
-    costMicro: bigint;
-  },
-): Promise<void> {
-  await sql`
-    INSERT INTO api_cost_events (user_id, gym_id, feature, provider, units, unit_type, cost_micro)
-    VALUES (${e.userId}, ${e.gymId}, ${e.feature}, ${e.provider}, ${e.units},
-            ${e.unitType}, ${e.costMicro.toString()}::bigint)`;
 }

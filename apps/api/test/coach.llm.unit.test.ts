@@ -81,19 +81,20 @@ describe("cost math (DECISIONS GAP-5 price constants)", () => {
   });
 });
 
-describe("prompt port (coach.py:25-59; GAP-1 omit-missing-fields)", () => {
-  it("carries only stored profile fields and the verbatim rules", () => {
-    const p = buildSystemPrompt({ displayName: "Kd", units: "metric", weightKg: 72.5 });
-    expect(p).toContain("- Name: Kd");
+describe("prompt port (coach.py:25-59; GAP-1 omit-missing-fields, T3 finding 2)", () => {
+  it("carries only answer-affecting stored fields; NO displayName (leak vector)", () => {
+    const p = buildSystemPrompt({ units: "metric", weightKg: 72.5 });
+    expect(p).toContain("- Preferred units: metric");
     expect(p).toContain("- Body weight: 72.5 kg");
     expect(p).toContain("never make up information");
     expect(p).not.toContain("Fitness level"); // GAP-1: no storage, no line
-    const noWeight = buildSystemPrompt({ displayName: "Kd", units: "metric", weightKg: null });
+    expect(p).not.toContain("Name:"); // finding 2: identity out of the prompt
+    const noWeight = buildSystemPrompt({ units: "metric", weightKg: null });
     expect(noWeight).not.toContain("Body weight");
   });
 
   it("user turn wraps context verbatim (coach.py:84-87) and the version is tagged", () => {
     expect(buildUserMessage("CTX", "Q?")).toBe("CONTEXT FROM KNOWLEDGE BASE:\nCTX\n\nQUESTION: Q?");
-    expect(PROMPT_VERSION).toBe(1);
+    expect(PROMPT_VERSION).toBe(2); // bumped when the prompt shape changed
   });
 });

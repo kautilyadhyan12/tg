@@ -24,10 +24,12 @@ export const PRICE_MICRO_PER_1M_IN = 50_000; // $0.05 / 1M input tokens
 export const PRICE_MICRO_PER_1M_OUT = 80_000; // $0.08 / 1M output tokens
 
 export function costMicro(tokensIn: number, tokensOut: number): bigint {
-  // Integer math end-to-end (R6.1 spirit); one rounding at the end.
-  return BigInt(
-    Math.round((tokensIn * PRICE_MICRO_PER_1M_IN + tokensOut * PRICE_MICRO_PER_1M_OUT) / 1_000_000),
-  );
+  // Pure BigInt — no float ever touches money (R6.1; T3 P2.5b). Round-half-up
+  // via +half-divisor before the integer division.
+  const scaled =
+    BigInt(tokensIn) * BigInt(PRICE_MICRO_PER_1M_IN) +
+    BigInt(tokensOut) * BigInt(PRICE_MICRO_PER_1M_OUT);
+  return (scaled + 500_000n) / 1_000_000n;
 }
 
 const LLM_HISTORY_MESSAGES = 12; // routers/coach.py:33
@@ -66,9 +68,19 @@ export function buildProvider(
 
 const normalizeQuestion = (q: string): string => q.trim().toLowerCase().replace(/\s+/g, " ");
 
-const cacheKey = (model: string, question: string): string =>
+/** T3 P2.5b (finding 2): the answer cache is global for cost-saving, but the
+ *  prompt is parameterized by the fields that change the ANSWER (units,
+ *  weight → nutrition numbers). A cache shared across users MUST key on those,
+ *  or user A's weight-derived answer leaks to user B. displayName was dropped
+ *  from the prompt entirely (advice-irrelevant, pure identity-leak vector), so
+ *  it is NOT in the fingerprint. Free/no-weight users (the majority) share one
+ *  key → the cost saving is preserved for them. */
+const profileFingerprint = (units: string, weightKg: number | null): string =>
+  `${units}|${weightKg === null ? "-" : String(weightKg)}`;
+
+const cacheKey = (model: string, question: string, profileFp: string): string =>
   `coach:ans:${createHash("sha256")
-    .update(`${String(PROMPT_VERSION)}|${model}|${normalizeQuestion(question)}`)
+    .update(`${String(PROMPT_VERSION)}|${model}|${profileFp}|${normalizeQuestion(question)}`)
     .digest("hex")}`;
 
 const cachedAnswerSchema = z.object({ content: z.string().min(1) });
@@ -92,8 +104,13 @@ export async function chat(
     threadId = await repo.createThread(deps.sql, userId, input.message.slice(0, THREAD_TITLE_CHARS));
   }
 
+  // Profile drives the prompt AND the cache key (finding 2) — load it first.
+  // Via the users service interface (R7.1); only stored fields (GAP-1).
+  const profile = await getUserSyncContext(deps.sql, userId);
+  const profileFp = profileFingerprint(profile.units, profile.weightKg);
+
   // Exact-match answer cache (v1 §6.1): hit = no provider call, no cost event.
-  const key = cacheKey(deps.model, input.message);
+  const key = cacheKey(deps.model, input.message, profileFp);
   const hit = await deps.redis.get(key);
   if (hit !== null) {
     let raw: unknown = null;
@@ -114,13 +131,11 @@ export async function chat(
     }
   }
 
-  // RAG + prompt (coach.py:62-89 flow). Profile via the users service
-  // interface (R7.1) — only stored fields reach the prompt (GAP-1).
-  const profile = await getUserSyncContext(deps.sql, userId);
+  // RAG + prompt (coach.py:62-89 flow).
   const chunks = await retrieve(deps.sql, deps.embedder, input.message);
   const history = await repo.getRecentMessages(deps.sql, threadId, LLM_HISTORY_MESSAGES);
   const messages = [
-    { role: "system" as const, content: buildSystemPrompt({ displayName: profile.displayName, units: profile.units, weightKg: profile.weightKg }) },
+    { role: "system" as const, content: buildSystemPrompt({ units: profile.units, weightKg: profile.weightKg }) },
     ...history.map((m) => ({ role: m.role, content: m.content })),
     { role: "user" as const, content: buildUserMessage(formatContext(chunks), input.message) },
   ];
@@ -137,25 +152,36 @@ export async function chat(
     throw err;
   }
 
+  // v1 §9.3: EVERY external call → one ledger row. The message rows and the
+  // ledger row commit in ONE transaction (T3 P2.5b finding 3) — a spent call
+  // can never persist messages without its cost row, or vice-versa. gym_id is
+  // resolved at spend time (§3.10) before the tx (a read). The residual
+  // "Groq spent but total DB failure" edge is inherent to a non-transactional
+  // external call — an outbox is the eventual answer (billing/worker phase).
   const cost = costMicro(result.tokensIn, result.tokensOut);
-  await repo.appendExchange(deps.sql, threadId, input.message, result.content, {
-    model: `${result.model}#p${String(PROMPT_VERSION)}`, // prompt versioning (v1 §6.1)
-    tokensIn: result.tokensIn,
-    tokensOut: result.tokensOut,
-    costMicro: cost,
-  });
-
-  // v1 §9.3: EVERY external call → one ledger row + the gym cost counter.
   const gymId = await repo.getLiveGymId(deps.sql, userId);
-  await repo.insertCostEvent(deps.sql, {
-    userId,
-    gymId,
-    feature: "coach",
-    provider: result.provider,
-    units: result.tokensIn + result.tokensOut,
-    unitType: "tokens",
-    costMicro: cost,
-  });
+  await repo.appendExchange(
+    deps.sql,
+    threadId,
+    input.message,
+    result.content,
+    {
+      model: `${result.model}#p${String(PROMPT_VERSION)}`, // prompt versioning (v1 §6.1)
+      tokensIn: result.tokensIn,
+      tokensOut: result.tokensOut,
+      costMicro: cost,
+    },
+    {
+      userId,
+      gymId,
+      feature: "coach",
+      provider: result.provider,
+      units: result.tokensIn + result.tokensOut,
+      unitType: "tokens",
+      costMicro: cost,
+    },
+  );
+
   if (gymId !== null) {
     const month = new Date().toISOString().slice(0, 7).replace("-", "");
     await deps.redis.incrWithTtl(`costs:gym:${gymId}:${month}`, 40 * 24 * 60 * 60);
