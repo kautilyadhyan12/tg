@@ -1,6 +1,6 @@
-// P2.2 — users repo: the ONLY file that touches the users profile columns,
-// body_measurements (GAP-2 weight history), and — until their owning modules
-// exist (gyms: P3.10; notifications: P5) — the gym_members close and
+// P2.6a — users repo owns profile columns only. body_measurements moved to
+// nutrition (Part 4 §3.6). Until their modules exist (gyms: P3.10;
+// notifications: P5), this file also owns gym_members close and
 // push_tokens delete that Part 4 §5.2 Day 0 requires. Auth-owned tables
 // (refresh_tokens, one_time_tokens) are NEVER touched here — the users
 // service goes through auth's service interface (R7.1).
@@ -52,19 +52,16 @@ export async function getProfile(sql: Sql, userId: string): Promise<ProfileRow |
   return rows[0] === undefined ? null : toProfile(rows[0]);
 }
 
-/** Applies the PATCH inside one transaction; when weightKg changes to a new
- *  non-null value, a body_measurements row is appended (GAP-2 ruling — Part 4
- *  §3.1: "history in body_measurements"). Returns null if the user is not
- *  active (deleted mid-flight). Column names come from a fixed allowlist
- *  below, never from input (R3.8). */
+/** Applies a profile-only PATCH. Measurement history is written exclusively
+ * through the nutrition service (Part 4 §3.6). */
 export async function updateProfile(
   sql: Sql,
   userId: string,
   patch: UpdateProfileRequest,
 ): Promise<ProfileRow | null> {
   return await sql.begin(async (tx) => {
-    const prevRows = await tx<{ weight_kg: string | null }[]>`
-      SELECT weight_kg FROM users
+    const prevRows = await tx<{ id: string }[]>`
+      SELECT id FROM users
       WHERE id = ${userId} AND status = 'active' FOR UPDATE`;
     const prev = prevRows[0];
     if (prev === undefined) return null;
@@ -86,16 +83,6 @@ export async function updateProfile(
     const updated = rows[0];
     if (updated === undefined) return null;
 
-    const prevWeight = prev.weight_kg === null ? null : Number(prev.weight_kg);
-    if (
-      patch.weightKg !== undefined &&
-      patch.weightKg !== null &&
-      patch.weightKg !== prevWeight
-    ) {
-      await tx`
-        INSERT INTO body_measurements (user_id, measured_at, weight_kg, source)
-        VALUES (${userId}, now(), ${patch.weightKg}, 'manual')`;
-    }
     return toProfile(updated);
   });
 }

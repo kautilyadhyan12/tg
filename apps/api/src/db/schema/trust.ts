@@ -2,6 +2,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -32,13 +33,17 @@ export const mealLogs = pgTable(
     carbsG: numeric("carbs_g", { precision: 6, scale: 1 }),
     fatG: numeric("fat_g", { precision: 6, scale: 1 }),
     confirmed: boolean("confirmed").notNull().default(false),
+    origin: text("origin").notNull().default("manual"),
     portionSource: text("portion_source").notNull(), // worst rung used: user_dishware|anchor|regional_prior|default|legacy
     nutritionSources: text("nutrition_sources").array().notNull(), // e.g. {ifct,usda}
     calcVersion: smallint("calc_version").notNull(),
     legacyMongoId: text("legacy_mongo_id").unique(),
     createdAt: createdAt(),
   },
-  (t) => [index("meal_logs_user_taken_idx").on(t.userId, t.takenAt.desc())],
+  (t) => [
+    index("meal_logs_user_taken_idx").on(t.userId, t.takenAt.desc()),
+    check("meal_logs_origin_check", sql`${t.origin} IN ('photo','manual')`),
+  ],
 );
 
 export const userDishware = pgTable("user_dishware", {

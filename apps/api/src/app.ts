@@ -24,6 +24,8 @@ import { CoachError } from "./modules/coach/service.js";
 import { registerEntitlementRoutes } from "./modules/entitlements/routes.js";
 import { createIoRedis, createMemoryRedis, type RedisLike } from "./redis.js";
 import type { AppConfig } from "./config.js";
+import { registerNutritionRoutes, type NutritionRouteOverrides } from "./modules/nutrition/routes.js";
+import { NutritionError } from "./modules/nutrition/service.js";
 
 /** Test-only seams (GAP-5 DECISIONS 2026-07-11): production callers pass
  *  nothing; tests inject a capturing EmailSender to reach raw one-time tokens
@@ -36,6 +38,8 @@ export interface BuildAppOverrides {
   redis?: RedisLike;
   /** P2.5b: fake ChatProvider/Embedder — tests never call Groq or load ONNX. */
   coach?: CoachRouteOverrides;
+  /** P2.6a: tests inject fake vision and OpenFoodFacts providers. */
+  nutrition?: NutritionRouteOverrides;
 }
 
 declare module "fastify" {
@@ -109,6 +113,7 @@ export async function buildApp(
       err instanceof AuthError ||
       err instanceof UsersError ||
       err instanceof CoachError ||
+      err instanceof NutritionError ||
       (typeof err.code === "string" && err.code.startsWith("FST_"));
     if (clientSafe) {
       if (status >= 500) {
@@ -179,6 +184,7 @@ export async function buildApp(
   registerGamificationRoutes(app, { sql });
   registerCoachRoutes(app, { sql, redis, config }, overrides.coach ?? {});
   registerEntitlementRoutes(app, { sql, redis });
+  registerNutritionRoutes(app, { sql, redis, config }, overrides.nutrition ?? {});
 
   return app;
 }

@@ -47,6 +47,19 @@ export async function onWorkoutSynced(
   return state;
 }
 
+/** P2.6a meal hook: meal stats now come from meal_logs (origin is a real
+ * column, never JSONB-filtered). Awards are idempotent upserts. */
+export async function onMealLogged(
+  deps: GamificationDeps,
+  userId: string,
+  timezone: string | null,
+): Promise<void> {
+  const stats = await repo.getStats(deps.sql, userId, safeTimeZone(timezone));
+  const streak = await reconciledStreak(deps, userId, timezone);
+  const codes = earnedCodes({ ...stats, current_streak: streak.current });
+  await repo.awardAchievements(deps.sql, userId, codes);
+}
+
 /** Read-side lazy reconciliation (DECISIONS GAP-5): freezes owed for missed
  *  days are spent NOW so the user always reads post-sweep truth; persisted
  *  only when something changed. */

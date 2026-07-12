@@ -1,0 +1,2 @@
+ALTER TABLE "meal_logs" ADD COLUMN "origin" text DEFAULT 'manual' NOT NULL;--> statement-breakpoint
+ALTER TABLE "meal_logs" ADD CONSTRAINT "meal_logs_origin_check" CHECK ("meal_logs"."origin" IN ('photo','manual'));

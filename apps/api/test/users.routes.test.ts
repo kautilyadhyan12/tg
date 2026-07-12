@@ -155,7 +155,7 @@ d("users routes (real Postgres)", () => {
     expect((JSON.parse(after.body) as { user: { emailVerified: boolean } }).user.emailVerified).toBe(true);
   });
 
-  it("PATCH updates prefs; changed weight appends body_measurements (GAP-2); same/null weight appends nothing", { timeout: 30_000 }, async () => {
+  it("PATCH updates profile weight without touching nutrition-owned body_measurements", { timeout: 30_000 }, async () => {
     const { userId, cookies } = await makeUser("p22u-patch@example.com");
     const res = await inject({
       method: "PATCH",
@@ -183,23 +183,25 @@ d("users routes (real Postgres)", () => {
     const count = async () =>
       (await sql<{ n: string }[]>`
         SELECT count(*) AS n FROM body_measurements WHERE user_id = ${userId}`)[0]?.n;
-    expect(await count()).toBe("1");
+    // P2.6a: users is profile-only; measurement history is owned by
+    // /v1/nutrition/body-measurements.
+    expect(await count()).toBe("0");
 
     // Same weight again → no new history row.
     const same = await inject({ method: "PATCH", url: "/v1/users/me", cookies, body: { weightKg: 72.5 } });
     expect(same.statusCode).toBe(200);
-    expect(await count()).toBe("1");
+    expect(await count()).toBe("0");
 
     // Changed weight → appended.
     const changed = await inject({ method: "PATCH", url: "/v1/users/me", cookies, body: { weightKg: 73 } });
     expect(changed.statusCode).toBe(200);
-    expect(await count()).toBe("2");
+    expect(await count()).toBe("0");
 
     // Clearing to null → profile null, nothing appended (DECISIONS P2.2 GAP-2).
     const cleared = await inject({ method: "PATCH", url: "/v1/users/me", cookies, body: { weightKg: null } });
     expect(cleared.statusCode).toBe(200);
     expect((JSON.parse(cleared.body) as { user: { weightKg: null } }).user.weightKg).toBeNull();
-    expect(await count()).toBe("2");
+    expect(await count()).toBe("0");
   });
 
   it("PATCH rejects unknown keys, bad enum values, and an empty body", { timeout: 30_000 }, async () => {

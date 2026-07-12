@@ -37,6 +37,21 @@ d("0001_init on a real database", () => {
     expect(views.map((v) => v["viewname"] as string)).toContain("org_member_stats");
   });
 
+  it("0005 adds meal origin with a default and strict CHECK", async () => {
+    const columns = await sql`
+      SELECT column_default, is_nullable FROM information_schema.columns
+      WHERE table_schema='public' AND table_name='meal_logs' AND column_name='origin'`;
+    expect(columns[0]?.["column_default"]).toContain("manual");
+    expect(columns[0]?.["is_nullable"]).toBe("NO");
+    const owner = await sql<{ id: string }[]>`INSERT INTO users (display_name) VALUES ('p26a-origin-check') RETURNING id`;
+    const ownerId = owner[0]?.id;
+    if (ownerId === undefined) throw new Error("origin-check fixture insert failed");
+    await expect(sql`INSERT INTO meal_logs
+      (user_id,taken_at,items,kcal_point,kcal_low,kcal_high,portion_source,nutrition_sources,calc_version,origin)
+      VALUES (${ownerId},now(),'[]',0,0,0,'default',ARRAY['curated'],1,'invalid')`).rejects.toMatchObject({ code: "23514" });
+    await sql`DELETE FROM users WHERE id=${ownerId}`;
+  });
+
   // 120s: two full seed passes = many sequential round-trips over a WAN
   // pooler; 30s flaked once under load (P2.5a PROVE) — headroom, not a bug.
   it("seed is idempotent and matches the Part 5 §1 price book", { timeout: 120_000 }, async () => {
