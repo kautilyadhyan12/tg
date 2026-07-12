@@ -2,10 +2,20 @@
 
 ```
 TASK: P2.5b — coach gateway + metered chat 🟡 (P2.5 split, part b — completes P2.5)
-              [branch p2.5b-coach-chat; PROVE green 150/150 on Neon branch p22-test
-               (reused), ZERO skips — full P2.1–P2.5a regression + 16 new (6 pure
-               adapter/cost/prompt + 10 DB-gated chat/threads); shared 19/19 +
-               engine 147/147 re-proven. Awaiting Kd review + T3 (required all)]
+              [MERGED to master @ ed53f8d via PR #19, 2026-07-12; commits 80c322e
+               (module) + e825ef9 (T3 fixes). PROVE green 152/152 on Neon branch
+               p22-test (reused), ZERO skips — full P2.1–P2.5a regression + 18 new
+               (6 pure adapter/cost/prompt + 12 DB-gated chat/threads); shared
+               19/19 + engine 147/147 re-proven. T3 DONE (fresh chat): 3 real
+               findings ALL FIXED — (1) validate-before-meter (a 400 no longer
+               burns a free quota slot); (2) global answer-cache PRIVACY LEAK
+               closed (GAP-3 premise was false — prompt carried displayName +
+               weightKg; displayName dropped from prompt, units+weightKg folded
+               into the cache key, PROMPT_VERSION 1→2); (3) api_cost_events written
+               in the SAME tx as the message rows (a spent call can't escape the
+               ledger); + BigInt cost math (no float near money); +2 regression
+               tests. Idempotency-key/per-route-rate-limit = recorded FOLLOW-UP for
+               P2.8 client-wiring.]
 FILES CHANGED (NO migration, NO new deps — fetch not SDKs):
   packages/shared/src/coach.ts (chat/thread contracts; 2000-char cap =
     routers/coach.py:32) + index export;
