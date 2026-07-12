@@ -79,3 +79,151 @@ export async function searchChunks(
     };
   });
 }
+
+// ── threads & messages (P2.5b; Part 4 §3.7 tables) ──────────────────────────
+// Every thread read/write is keyed (id, user_id) — foreign id reads as
+// absent (R3.2). api_cost_events (§3.10) and the gym_members spend-time
+// lookup are metering/tenancy tables with no owning module yet — written
+// here like prior tasks' disclosed crossings.
+
+export interface ThreadRow {
+  id: string;
+  title: string | null;
+  lastMessageAt: Date | null;
+}
+
+export async function createThread(sql: Sql, userId: string, title: string): Promise<string> {
+  const rows = await sql<{ id: string }[]>`
+    INSERT INTO coach_threads (user_id, title, last_message_at)
+    VALUES (${userId}, ${title}, now()) RETURNING id`;
+  const id = rows[0]?.id;
+  if (id === undefined) throw new Error("thread insert returned no row");
+  return id;
+}
+
+export async function getThread(sql: Sql, userId: string, threadId: string): Promise<ThreadRow | null> {
+  const rows = await sql<{ id: string; title: string | null; last_message_at: Date | null }[]>`
+    SELECT id, title, last_message_at FROM coach_threads
+    WHERE id = ${threadId} AND user_id = ${userId}`;
+  const r = rows[0];
+  return r === undefined ? null : { id: r.id, title: r.title, lastMessageAt: r.last_message_at };
+}
+
+/** Keyset page on (last_message_at, id) DESC. Fetches limit+1. */
+export async function listThreads(
+  sql: Sql,
+  userId: string,
+  input: { limit: number; cursor: { lastMessageAt: Date; id: string } | null },
+): Promise<ThreadRow[]> {
+  const rows = await sql<{ id: string; title: string | null; last_message_at: Date | null }[]>`
+    SELECT id, title, last_message_at FROM coach_threads
+    WHERE user_id = ${userId}
+      AND (${input.cursor === null}
+           OR (last_message_at, id) < (${input.cursor?.lastMessageAt ?? null}, ${input.cursor?.id ?? null}))
+    ORDER BY last_message_at DESC NULLS LAST, id DESC
+    LIMIT ${input.limit + 1}`;
+  return rows.map((r) => ({ id: r.id, title: r.title, lastMessageAt: r.last_message_at }));
+}
+
+/** Tenancy-scoped delete; false = not yours/absent (route answers 404). */
+export async function deleteThread(sql: Sql, userId: string, threadId: string): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    DELETE FROM coach_threads WHERE id = ${threadId} AND user_id = ${userId} RETURNING id`;
+  return rows.length > 0;
+}
+
+export interface MessageRow {
+  role: "user" | "assistant";
+  content: string;
+  createdAt: Date;
+}
+
+/** Oldest-first tail of the thread (routers/coach.py:33 sends last 12 to the
+ *  model; the detail view reads more). */
+export async function getRecentMessages(
+  sql: Sql,
+  threadId: string,
+  limit: number,
+): Promise<MessageRow[]> {
+  const rows = await sql<{ role: string; content: string; created_at: Date }[]>`
+    SELECT role, content, created_at FROM (
+      SELECT role, content, created_at FROM coach_messages
+      WHERE thread_id = ${threadId} AND role IN ('user','assistant')
+      ORDER BY created_at DESC, id DESC LIMIT ${limit}) tail
+    ORDER BY created_at ASC`;
+  return rows.map((r) => ({
+    role: r.role === "assistant" ? "assistant" : "user",
+    content: r.content,
+    createdAt: r.created_at,
+  }));
+}
+
+export interface AssistantMeta {
+  model: string;
+  tokensIn: number | null;
+  tokensOut: number | null;
+  costMicro: bigint;
+}
+
+/** One exchange, atomically: user + assistant rows, thread freshness bump,
+ *  and the GAP-4 cap (delete-oldest beyond 200 — the old $slice semantics,
+ *  routers/coach.py:34/128). */
+export const STORED_HISTORY_MESSAGES = 200; // routers/coach.py:34
+
+export async function appendExchange(
+  sql: Sql,
+  threadId: string,
+  userContent: string,
+  assistantContent: string,
+  meta: AssistantMeta,
+): Promise<void> {
+  await sql.begin(async (tx) => {
+    // clock_timestamp(), not now(): now() is transaction-stable, which would
+    // give both rows the SAME created_at and make user/assistant order
+    // ambiguous on read-back.
+    await tx`
+      INSERT INTO coach_messages (thread_id, role, content, created_at)
+      VALUES (${threadId}, 'user', ${userContent}, clock_timestamp())`;
+    // cost_micro travels as text→::bigint (postgres.js doesn't parameterize
+    // JS bigint by default); stays bigint in the TS domain (R6.1 spirit).
+    await tx`
+      INSERT INTO coach_messages (thread_id, role, content, model, tokens_in, tokens_out, cost_micro, created_at)
+      VALUES (${threadId}, 'assistant', ${assistantContent}, ${meta.model},
+              ${meta.tokensIn}, ${meta.tokensOut}, ${meta.costMicro.toString()}::bigint, clock_timestamp())`;
+    await tx`UPDATE coach_threads SET last_message_at = now() WHERE id = ${threadId}`;
+    await tx`
+      DELETE FROM coach_messages WHERE id IN (
+        SELECT id FROM coach_messages WHERE thread_id = ${threadId}
+        ORDER BY created_at DESC, id DESC OFFSET ${STORED_HISTORY_MESSAGES})`;
+  });
+}
+
+/** Live gym at spend time (Part 4 §3.10: "gym resolved via live membership
+ *  at spend time; null for direct consumers"). */
+export async function getLiveGymId(sql: Sql, userId: string): Promise<string | null> {
+  const rows = await sql<{ gym_id: string }[]>`
+    SELECT m.gym_id FROM gym_members m
+    JOIN subscriptions s ON s.owner_type = 'gym' AND s.owner_id = m.gym_id
+                         AND s.status IN ('trialing','active','past_due')
+    WHERE m.user_id = ${userId} AND m.removed_at IS NULL
+    LIMIT 1`;
+  return rows[0]?.gym_id ?? null;
+}
+
+export async function insertCostEvent(
+  sql: Sql,
+  e: {
+    userId: string;
+    gymId: string | null;
+    feature: string;
+    provider: string;
+    units: number;
+    unitType: string;
+    costMicro: bigint;
+  },
+): Promise<void> {
+  await sql`
+    INSERT INTO api_cost_events (user_id, gym_id, feature, provider, units, unit_type, cost_micro)
+    VALUES (${e.userId}, ${e.gymId}, ${e.feature}, ${e.provider}, ${e.units},
+            ${e.unitType}, ${e.costMicro.toString()}::bigint)`;
+}

@@ -19,6 +19,8 @@ import { UsersError } from "./modules/users/service.js";
 import { registerUserRoutes } from "./modules/users/routes.js";
 import { registerExerciseRoutes } from "./modules/exercises/routes.js";
 import { registerGamificationRoutes } from "./modules/gamification/routes.js";
+import { registerCoachRoutes, type CoachRouteOverrides } from "./modules/coach/routes.js";
+import { CoachError } from "./modules/coach/service.js";
 import { registerEntitlementRoutes } from "./modules/entitlements/routes.js";
 import { createIoRedis, createMemoryRedis, type RedisLike } from "./redis.js";
 import type { AppConfig } from "./config.js";
@@ -32,6 +34,8 @@ export interface BuildAppOverrides {
   /** Tests inject the in-memory adapter (with its `down` switch) to drive
    *  fail-open/fail-closed paths deterministically (P2.4). */
   redis?: RedisLike;
+  /** P2.5b: fake ChatProvider/Embedder — tests never call Groq or load ONNX. */
+  coach?: CoachRouteOverrides;
 }
 
 declare module "fastify" {
@@ -95,6 +99,28 @@ export async function buildApp(
   // Central error mapper (R8.1): typed errors → HTTP; internals never leak.
   app.setErrorHandler((err: FastifyError, req, reply) => {
     const status = err.statusCode ?? 500;
+    // Client-safe allowlist: our typed module errors (messages authored for
+    // clients) and Fastify/plugin-authored FST_* errors. These pass through
+    // with THEIR OWN status — including a typed 503 like CoachError's
+    // "coach_unavailable" (P2.5b: an expected-operational outage, warn-logged,
+    // no Sentry — collapsing it to a generic 500 would misreport an upstream
+    // provider blip as an app crash).
+    const clientSafe =
+      err instanceof AuthError ||
+      err instanceof UsersError ||
+      err instanceof CoachError ||
+      (typeof err.code === "string" && err.code.startsWith("FST_"));
+    if (clientSafe) {
+      if (status >= 500) {
+        req.log.warn({ code: err.code, requestId: req.id }, "typed operational failure");
+      }
+      void reply.status(status).send({
+        error: err.code,
+        message: err.message,
+        requestId: req.id,
+      });
+      return;
+    }
     if (status >= 500) {
       req.log.error({ err, requestId: req.id }, "unhandled error");
       if (config.SENTRY_DSN !== undefined) {
@@ -107,17 +133,11 @@ export async function buildApp(
       });
       return;
     }
-    // 4xx messages pass through only from an allowlist of client-safe sources:
-    // our typed AuthError and Fastify/plugin-authored FST_* errors. Anything
-    // else with a sub-500 statusCode gets a generic body (T3 2026-07-11 —
-    // arbitrary err.message was never authored for clients).
-    const clientSafe =
-      err instanceof AuthError ||
-      err instanceof UsersError ||
-      (typeof err.code === "string" && err.code.startsWith("FST_"));
+    // Non-allowlisted sub-500: generic body (T3 2026-07-11 — arbitrary
+    // err.message was never authored for clients).
     void reply.status(status).send({
-      error: clientSafe ? err.code : "request_error",
-      message: clientSafe ? err.message : "Request could not be processed",
+      error: "request_error",
+      message: "Request could not be processed",
       requestId: req.id,
     });
   });
@@ -157,6 +177,7 @@ export async function buildApp(
   });
   registerExerciseRoutes(app, { sql });
   registerGamificationRoutes(app, { sql });
+  registerCoachRoutes(app, { sql, redis, config }, overrides.coach ?? {});
   registerEntitlementRoutes(app, { sql, redis });
 
   return app;

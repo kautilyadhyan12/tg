@@ -11,3 +11,4 @@ export * from "./workouts.js";
 export * from "./progress.js";
 export * from "./gamification.js";
 export * from "./entitlements.js";
+export * from "./coach.js";
