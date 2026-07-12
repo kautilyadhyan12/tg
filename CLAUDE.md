@@ -90,6 +90,36 @@ Task cards in Part III carry a tier. 🟡 moderate tasks use the standard loop a
 
 ---
 
+# PART I.5 — VERIFICATION DOCTRINE (operator-added 2026-07-12; binding on every chat)
+
+Added after a real incident: a planning chat asserted the curated food table had
+168 rows; it has 130. The claim was stated as fact without counting. These rules
+make that class of error structurally hard:
+
+V1. **No number without a command.** Any count, size, version, line number, price,
+    threshold, or "the file contains X" claim about THIS repo or the salvage code
+    must be produced by a tool invocation (grep -c, wc, a test, a SELECT) run in
+    THIS chat, with its output shown. If you cannot run it, prefix the claim with
+    "UNVERIFIED:". An unverified number in a plan is treated as wrong by default.
+V2. **Quote, don't recall.** Spec values are copied from the open file and cited
+    §-and-line, never reproduced from memory (restates Part 0 rule 4 — it applies
+    to plans and chat prose, not just code).
+V3. **Plans name their evidence.** Every factual premise in a PLAN carries its
+    source: a file read this session, a command output, or a DECISIONS/HANDOFF
+    line. A premise with no source is a SPEC GAP question, not a fact.
+V4. **Re-derive nothing that exists.** Before describing repo state (tables,
+    endpoints, exports, test counts), read the current file or run the command —
+    never infer it from an earlier task's description.
+V5. **Uncertainty is said out loud.** "I believe / probably / should be" are
+    banned in front of verifiable claims — verify, or mark UNVERIFIED.
+V6. Mistakes will still happen. The safety net stays: plan-gate → PROVE with real
+    pasted output → T3 in a fresh chat. Nothing above replaces those.
+V7. **Merge protocol** (added after PR #20 was merged pre-T3-fix): Kd merges only
+    after the chat explicitly writes "READY TO MERGE" — which it may do only when
+    CI is green AND every T3 finding is resolved and pushed.
+
+---
+
 # PART II — Standing rules for the implementing model (binding, numbered)
 
 You are implementing the AI Home Gym spec set. These rules are non-negotiable. When any rule conflicts with being fast or agreeable, the rule wins.

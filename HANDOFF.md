@@ -2,7 +2,10 @@
 
 ```
 TASK: P2.6a — nutrition (Part 2B §3 pipeline) + body_measurements CRUD 🟡
-              [branch p2.6a-nutrition; PROVE green 165/165 on FRESH Neon branch
+              [MERGED to master via PR #20 (module, 34438bf) + PR #21 (T3 fixes,
+               2bd5fbc — #20 was merged early by mistake before the T3 push; the
+               follow-up PR carried exactly the fix commit; final master state is
+               COMPLETE @ 47d3fe9, 2026-07-12). PROVE green 170/170 on FRESH Neon branch
                p26a-test (migrations 0001–0005 applied), ZERO skips — full
                P2.1–P2.5 regression + 13 new nutrition tests. Built across two
                sessions: the ruled implementation chat hit its rate limit
