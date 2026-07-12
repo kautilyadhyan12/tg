@@ -1,6 +1,64 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P2.5b — coach gateway + metered chat 🟡 (P2.5 split, part b — completes P2.5)
+              [branch p2.5b-coach-chat; PROVE green 150/150 on Neon branch p22-test
+               (reused), ZERO skips — full P2.1–P2.5a regression + 16 new (6 pure
+               adapter/cost/prompt + 10 DB-gated chat/threads); shared 19/19 +
+               engine 147/147 re-proven. Awaiting Kd review + T3 (required all)]
+FILES CHANGED (NO migration, NO new deps — fetch not SDKs):
+  packages/shared/src/coach.ts (chat/thread contracts; 2000-char cap =
+    routers/coach.py:32) + index export;
+  apps/api/src/config.ts (+GROQ_API_KEY? OPENROUTER_API_KEY? COACH_MODEL
+    default llama-3.1-8b-instant — key unset ⇒ coach 503s, app unaffected);
+  coach/llm.adapter.ts (R2.2 adapter: OpenAI-compatible fetch, Zod-parsed
+    R2.12; ProviderError{retriable}: 429/5xx/network/malformed retriable,
+    4xx-our-fault surfaces; withFallback = v1 §6.1 Groq→OpenRouter; ported
+    budget temperature 0.7 / max_tokens 800 = coach.py:96-97);
+  coach/prompt.ts (coach.py:25-59 port, PROMPT_VERSION=1 tagged on every
+    assistant row as model#pN; GAP-1: only stored fields, missing lines
+    OMITTED); coach/service.ts (chat orchestration: cache→RAG→provider→
+    persist→ledger; costMicro integer micro-USD single-round; CoachError;
+    GLOBAL answer cache key sha256(version|model|normalized q), 24h, hits
+    skip provider+ledger, quota already counted); coach/repo.ts additions
+    (threads/messages keyed (id,user_id) R3.2; appendExchange one tx with
+    clock_timestamp() ordering + 200-cap delete-oldest = coach.py $slice;
+    getLiveGymId = §3.10 spend-time membership; insertCostEvent);
+  coach/routes.ts (POST /v1/coach/chat = FIRST real requireQuota wiring,
+    R3.3 authn→quota→parse→handler; thread list/get/delete, cursor, 404s);
+  coach/schemas.ts; app.ts (coach wiring + BuildAppOverrides.coach{chatProvider,
+  embedder} + ERROR-MAPPER CHANGE: typed client-safe errors now keep their
+    OWN status incl. 5xx — CoachError 503 was being collapsed to generic 500;
+    operational 5xx = warn-log, NO Sentry; unhandled errors unchanged);
+  users/repo.ts getSyncContext +displayName/units (prompt profile via the
+    R7.1 service export — no dummy-deps hack);
+  test/coach.llm.unit.test.ts + test/coach.chat.test.ts (fake provider/
+    embedder via overrides; covers fallback matrix, free-5/mo→429 w/ resetsAt,
+    cache hit = no provider call + no cost event, gym_id attribution +
+    costs:gym bump, provider-down 503 nothing stored, no-key 503 app healthy,
+    cross-tenant 404s, >2000 chars 400).
+DECISIONS (5, ruled at gate): GAP-1 prompt omits unstored onboarding fields
+  (storage = queued ruled card, also feeds P2.6) · GAP-2 model default ·
+  GAP-3 global cache · GAP-4 200-msg cap all tiers · GAP-5 Groq public price
+  constants (50k/80k micro-USD per 1M in/out), fallback priced same until an
+  OpenRouter line lands.
+PROVE FIX (disclosed): central error mapper collapsed ALL ≥500 to generic
+  internal_error — misreported CoachError's intentional 503; fixed as above,
+  caught by 2 tests.
+OPS NOTE: production needs GROQ_API_KEY (+optional OPENROUTER_API_KEY) in the
+  deploy env + escrow doc; coach:ingest must run once per environment before
+  chat retrieval has context.
+QUEUE: argon2id before P2.8 · DPDP Day-14+export workers (BullMQ) · tz-capture
+  card (+§3.5 tz-travel) · onboarding-fields card (GAP-1) · challenges/
+  leaderboards/XP cards. usage_daily nightly rollup (v1 §7.2) still unowned —
+  lands with the BullMQ/workers card.
+OPEN SPEC GAPS: none.
+NEXT: T3 on this diff (fresh chat) → merge → P2.6 (nutrition per Part 2B §3
+  pipeline: one vision call, portion resolver, display standard; geo/running
+  read side + geocode cache).
+```
+
+```
 TASK: P2.5a — coach KB ingestion + pgvector retrieval 🟡 (P2.5 split, part a)
               [MERGED to master @ ba753d4 via PR #18, 2026-07-12; commits 94eb8ae
                (module) + b0d7532 (T3 fixes) + 42f9ff9 (test-infra housekeeping).

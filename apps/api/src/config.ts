@@ -22,6 +22,12 @@ const envSchema = z.object({
   // P2.4: quota counters + entitlement cache (v1 §7.2). Optional in dev/test
   // (in-memory adapter); REQUIRED in production — refinement below.
   REDIS_URL: z.string().url().optional(),
+  // P2.5b: coach LLM gateway (v1 §6.1 "Groq primary → OpenRouter fallback").
+  // GROQ_API_KEY unset = coach feature 503s cleanly, rest of the app runs;
+  // OPENROUTER_API_KEY unset = fallback simply not attempted.
+  GROQ_API_KEY: z.string().min(1).optional(),
+  OPENROUTER_API_KEY: z.string().min(1).optional(),
+  COACH_MODEL: z.string().min(1).default("llama-3.1-8b-instant"), // salvage default (GAP-2)
 });
 
 export type AppConfig = Readonly<z.infer<typeof envSchema>>;
