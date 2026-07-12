@@ -87,7 +87,15 @@ export type DishwareInput = z.infer<typeof dishwareInputSchema>;
 export type PatchDishware = z.infer<typeof patchDishwareSchema>;
 
 export const bodyMeasurementInputSchema = z.object({
-  measuredAt: z.string().datetime(), weightKg: z.number().positive().lt(1000).multipleOf(0.01).nullable().optional(),
+  // Same ≤24h-future bound as takenAt (T3 P2.6a: a measurement dated 2099
+  // would pin users.weight_kg as the "latest" forever).
+  measuredAt: z
+    .string()
+    .datetime()
+    .refine((v) => Date.parse(v) <= Date.now() + 24 * 60 * 60 * 1000, {
+      message: "must not be more than 24h in the future",
+    }),
+  weightKg: z.number().positive().lt(1000).multipleOf(0.01).nullable().optional(),
   metrics: z.record(z.number().finite().nonnegative()).default({}), source: z.literal("manual").default("manual"),
 }).strict();
 export const patchBodyMeasurementSchema = bodyMeasurementInputSchema.partial().refine((v) => Object.keys(v).length > 0, { message: "at least one field required" });

@@ -53,7 +53,12 @@ export async function buildApp(
   overrides: BuildAppOverrides = {},
 ): Promise<FastifyInstance> {
   if (config.SENTRY_DSN !== undefined) {
-    Sentry.init({ dsn: config.SENTRY_DSN, environment: config.NODE_ENV });
+    // VERIFIED (P2.6a T3): no request-data integration is registered and
+    // sendDefaultPii stays default-false — captureException below attaches
+    // only {requestId}, never request bodies. This is load-bearing for the
+    // 2B §3.4 never-persisted photo guarantee (a body-attaching integration
+    // would leak imageBase64 on any 5xx from /v1/nutrition/analyze-photo).
+    Sentry.init({ dsn: config.SENTRY_DSN, environment: config.NODE_ENV, sendDefaultPii: false });
   }
 
   const app = Fastify({
