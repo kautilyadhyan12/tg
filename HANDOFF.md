@@ -2,12 +2,26 @@
 
 ```
 TASK: P2.5a — coach KB ingestion + pgvector retrieval 🟡 (P2.5 split, part a)
-              [branch p2.5a-coach-kb; PROVE green 133/133 on Neon branch p22-test
-               (reused), ZERO skips — full P2.1–P2.4 regression + 8 new KB tests;
-               PLUS real deliverable ran: `pnpm --filter api coach:ingest` embedded
-               14 chunks from 5 guides at 384-dim into pgvector; real-MiniLM
-               semantic spot-check confirmed (squat→form_guides, protein→nutrition,
-               sore→recovery top-1). Awaiting Kd review + T3 (required all tasks)]
+              [MERGED to master @ ba753d4 via PR #18, 2026-07-12; commits 94eb8ae
+               (module) + b0d7532 (T3 fixes) + 42f9ff9 (test-infra housekeeping).
+               PROVE green 134/134 on Neon branch p22-test (reused), ZERO skips —
+               full P2.1–P2.4 regression + 9 new KB tests; PLUS real deliverable
+               ran: `pnpm --filter api coach:ingest` embedded 14 chunks from 5
+               guides at 384-dim into pgvector; real-MiniLM semantic spot-check
+               confirmed (squat→form_guides, protein→nutrition, sore→recovery
+               top-1). T3 DONE (fresh chat): R2.2 double-cast resolved by
+               splitting the wrapper into embedder.adapter.ts — then the cast
+               proved UNNECESSARY (library overload structurally assignable,
+               zero casts remain); chunker "VERBATIM" claim corrected (the
+               /\n\s*\n/ CRLF relaxation is now documented + DECISIONS +
+               CRLF==LF boundary test); distance-metric rationale corrected in
+               DECISIONS (cosine-on-normalized is the conventional MiniLM
+               choice, NOT sentence-transformers' encode() default, and NOT
+               bit-identical to old Chroma L2-on-raw — rankings can differ in
+               principle, spot-check validated); rejected-pipeline-load now
+               retries. HOUSEKEEPING (Kd-approved, own commit): vitest DB-run
+               parallelism capped at 4 workers + seed test 120s budget —
+               measured unbounded ~90s flaky / serial ~547s / capped 79s green.]
 FILES CHANGED:
   NEW DEP: @huggingface/transformers (approved, R1.4) — local all-MiniLM-L6-v2
     (Transformers.js/ONNX), pulls onnxruntime-node + sharp;
