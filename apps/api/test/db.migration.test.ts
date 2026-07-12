@@ -37,8 +37,9 @@ d("0001_init on a real database", () => {
     expect(views.map((v) => v["viewname"] as string)).toContain("org_member_stats");
   });
 
-  // 30s: two full seed passes over a WAN connection to the Neon branch.
-  it("seed is idempotent and matches the Part 5 §1 price book", { timeout: 30_000 }, async () => {
+  // 120s: two full seed passes = many sequential round-trips over a WAN
+  // pooler; 30s flaked once under load (P2.5a PROVE) — headroom, not a bug.
+  it("seed is idempotent and matches the Part 5 §1 price book", { timeout: 120_000 }, async () => {
     await seed(url ?? "");
     const first = await sql`SELECT count(*)::int AS n FROM plans`;
     await seed(url ?? "");
