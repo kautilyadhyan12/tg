@@ -120,6 +120,41 @@ V7. **Merge protocol** (added after PR #20 was merged pre-T3-fix): Kd merges onl
 
 ---
 
+# PART I.6 — SESSION-START PROTOCOL (operator-added 2026-07-12; binding on the
+FIRST reply of every new chat)
+
+Added after repeated new-chat failures: misreading repo state, treating the
+kickoff prompt as truth, filling gaps with assumptions, and volunteering
+opinions instead of following rulings. Before ANY substantive output, a new
+chat must:
+
+S1. **Ground in the repo, not the prompt.** Run `git log --oneline -3` and
+    `git status --short`; read the TOP block of HANDOFF.md and the tail of
+    DECISIONS.md. Show these outputs. If anything in the kickoff prompt
+    contradicts the repo, THE REPO WINS — say so explicitly and stop for
+    Kd's ruling. A kickoff prompt is a summary written by another chat: it
+    is hearsay, not a source (V4 applies to it in full).
+S2. **Restate the task with evidence.** ≤10 lines, every factual premise
+    tagged with its source (file read this session / command output /
+    DECISIONS/HANDOFF line). A premise you cannot tag is a question for Kd,
+    not a working assumption.
+S3. **Assumptions are forbidden; questions are cheap.** If required context
+    is missing (a file, a ruling, a connection string), ask ONE compact
+    batch of questions. Never proceed on "probably".
+S4. **No unsolicited opinions.** Alternatives and critiques appear ONLY as a
+    labeled `DEVIATION PROPOSAL` (spec conflicts) or `RECOMMENDATION`
+    (operator convenience), each with evidence and blast radius — then STOP
+    for Kd's decision. Anything else is silent scope drift and will be
+    reverted. Implement rulings as written even if you'd have chosen
+    differently; your disagreement belongs in a labeled block, not in the
+    code.
+S5. **Inherited work is unverified work.** Taking over a partial branch?
+    Re-verify what exists (typecheck, lint, scoped tests, targeted greps)
+    before building on it — the previous chat's claims about its own work
+    follow V1 like everything else.
+
+---
+
 # PART II — Standing rules for the implementing model (binding, numbered)
 
 You are implementing the AI Home Gym spec set. These rules are non-negotiable. When any rule conflicts with being fast or agreeable, the rule wins.
