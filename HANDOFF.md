@@ -49,9 +49,23 @@ COMPLETED THIS SESSION (gaps the rate-limited chat left): manual meal path
   (GAP-2) · takenAt ≤24h-future bound (GAP-3) on confirm/manual/patch ·
   .strict() query schemas · +3 tests (manual meal + badge separation,
   future-takenAt 400, Redis-down fail-closed 503 with provider never called).
-KNOWN DEBT (disclosed): the inherited files use a compressed one-liner style
-  unlike the rest of the repo — lint/typecheck clean, left for T3 to judge
-  (reformat = pure churn risk mid-task).
+T3 DONE (fresh chat, 6 findings + R9 gaps — ALL RESOLVED): (1) kcalPoint now
+  CLAMPED inside its own rounded range (§3.3; was strandable outside a
+  collapsed range); (2) gamification cross-table reads RULED as the read-only
+  stats-aggregator exception (DECISIONS); (3) PATCH grams edits preserve each
+  item's rung + correction rows stamped with the ORIGINAL's rung (Stage-5
+  telemetry integrity); (4) dishware/measurement handlers now call real
+  service seams, not repo re-exports; (5) the compressed one-liner style was
+  REFORMATTED to house style (repo/service/routes — the tenancy WHEREs must
+  be reviewable at a glance); (6) measuredAt got the same ≤24h-future bound
+  (far-future rows would pin users.weight_kg forever). Sentry VERIFIED: no
+  request-data integration, sendDefaultPii pinned false — imageBase64 cannot
+  leak on 5xx (DECISIONS). Ledger residuals ruled (no-completion = no row;
+  two-statement gym+insert; retake eaten by transient 500 — all DECISIONS).
+  +9 tests: OFF adapter matrix (kJ→kcal, array names, CGI fallback,
+  malformed→[]), thali/density resolver branches, §3.3 point-in-range pin
+  (unit + end-to-end), cross-user meal DELETE + foreign scanToken + foreign
+  retake token, corrections for items/taken_at edits + confirm-time diff.
 DECISIONS: 10 P2.6a rulings + P2.2 GAP-2 supersession + manual-path note.
 OPEN SPEC GAPS: none. IFCT pack, rung-2 anchor scaling, bias adaptation,
   onboarding-fields storage = queued follow-ups (ruled).

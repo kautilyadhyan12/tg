@@ -31,6 +31,47 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect(visionCostMicro(100, 200)).toBe(79n);
   });
 
+  it("resolver covers thali_section weight-prior and density-class branches (T3 R9 gap)", () => {
+    // thali_section prior is GRAMS (100–150), not ml×density (Appendix B).
+    expect(
+      resolvePortion({ canonicalHint: "dal", container: "thali_section", fillLevel: 1, sizeClass: null, count: null }, [], 100),
+    ).toEqual({ gramsPoint: 125, gramsRange: [100, 150], portionSource: "regional_prior" });
+    // Density classes over the same katori: thin rasam 0.95 vs thick sabzi 1.1.
+    const thin = resolvePortion({ canonicalHint: "rasam", container: "standard_katori", fillLevel: 1, sizeClass: null, count: null }, [], 100);
+    const thick = resolvePortion({ canonicalHint: "dry_sabzi", container: "standard_katori", fillLevel: 1, sizeClass: null, count: null }, [], 100);
+    expect(thin.gramsRange).toEqual([Math.round(150 * 0.95), Math.round(200 * 0.95)]);
+    expect(thick.gramsRange).toEqual([Math.round(150 * 1.1), Math.round(200 * 1.1)]);
+  });
+
+  it("OpenFoodFacts adapter: kJ→kcal, array names, fallback URL, malformed → [] (T3 R9 gap)", async () => {
+    const { createOpenFoodFactsProvider } = await import("../src/modules/nutrition/openfoodfacts.adapter.js");
+    // kJ fallback (energy_100g is kJ) + array product_name (Search-a-licious).
+    const hit = { hits: [{ product_name: ["Paneer Cubes", "alt"], nutriments: { energy_100g: 1230 }, serving_size: "30 g" }] };
+    const p1 = createOpenFoodFactsProvider(() => Promise.resolve(new Response(JSON.stringify(hit), { status: 200 })));
+    const foods1 = await p1.search("paneer", 5);
+    expect(foods1[0]?.name).toBe("Paneer Cubes");
+    expect(foods1[0]?.kcal).toBeCloseTo(1230 / 4.184, 3);
+    expect(foods1[0]?.serving).toBe(30);
+    // First URL fails → legacy CGI fallback answers with `products`.
+    let calls = 0;
+    const p2 = createOpenFoodFactsProvider(() => {
+      calls++;
+      if (calls === 1) return Promise.resolve(new Response("oops", { status: 503 }));
+      return Promise.resolve(
+        new Response(JSON.stringify({ products: [{ product_name: "Dal Fry", nutriments: { "energy-kcal_100g": 120 } }] }), { status: 200 }),
+      );
+    });
+    const foods2 = await p2.search("dal", 5);
+    expect(calls).toBe(2);
+    expect(foods2[0]?.name).toBe("Dal Fry");
+    expect(foods2[0]?.kcal).toBe(120);
+    // Malformed / network-down on both → defined degrade to [].
+    const p3 = createOpenFoodFactsProvider(() => Promise.reject(new Error("ECONNRESET")));
+    expect(await p3.search("anything", 5)).toEqual([]);
+    const p4 = createOpenFoodFactsProvider(() => Promise.resolve(new Response("not json", { status: 200 })));
+    expect(await p4.search("anything", 5)).toEqual([]);
+  });
+
   it("strictly rejects a vision reply that smuggles kcal into an item and retains usage for ledger", async () => {
     const fetchImpl: typeof fetch = () => Promise.resolve(new Response(JSON.stringify({
       choices: [{ message: { content: JSON.stringify({ meal_name: "Dal", cuisine_guess: "north_indian", items: [{ name: "Dal", canonical_hint: "dal", container: null, fill_level: null, size_class: null, count: null, confidence: "high", kcal: 100 }], scale_anchors: [], unknown_items: [], photo_quality: "good" }) } }],
