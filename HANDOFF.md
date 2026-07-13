@@ -1,8 +1,9 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
-TASK: P2.6b — geo/running READ-plan side 🟡 [PROVE GREEN + T3 CLEAN; READY TO
-              MERGE, not yet committed/merged as of this block]
+TASK: P2.6b — geo/running READ-plan side 🟡 [MERGED to master via PR #22
+              (commit 31698a3; final master 20d530c, 2026-07-13). PROVE green
+              184/184 on Neon branch p26b-test, T3 clean (1 R9 finding resolved).]
 SCOPE SHIPPED (new module apps/api/src/modules/geo/, R7.1):
   ors.adapter.ts — OpenRouteService round_trip provider, plain fetch + Zod
     (NO SDK, vision.adapter precedent); ports routing_provider.py
