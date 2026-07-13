@@ -1,6 +1,61 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P2.6b — geo/running READ-plan side 🟡 [PROVE GREEN + T3 CLEAN; READY TO
+              MERGE, not yet committed/merged as of this block]
+SCOPE SHIPPED (new module apps/api/src/modules/geo/, R7.1):
+  ors.adapter.ts — OpenRouteService round_trip provider, plain fetch + Zod
+    (NO SDK, vision.adapter precedent); ports routing_provider.py
+    _call_ors/_parse_ors_feature/_normalize_route/_ors_extras_fraction
+    ([lng,lat]→[lat,lng], native metres, waytype/surface fractions, loop).
+    MOCK generator NOT ported (G2 — fabricated geodata; fail-closed).
+  geocode.ts — two-layer geocode cache seam: Redis `geo:{lat3}:{lng3}` over the
+    geo_cache Postgres floor, 3-dp rounding (v1 §6.1/§7.2). RESOLVER-LESS by
+    design (G1); live provider + endpoint defer to P5 (geocode-on-save = mobile,
+    v1 §12). Exercised by the fake-resolver integration test.
+  repo.ts — sole DB toucher: runs read (list summary w/o polyline, detail w/
+    polyline), saved_routes CRUD, geo_cache get/upsert, insertRouteGenCostEvent
+    + module-local getLiveGymId (dup'd from nutrition, R7.1 disclosed).
+  service.ts — generateRoutes (fail-closed: no-key/ORS-blip → GeoError 503, no
+    mock; seeds 11+i*37; one cost row per successful ORS call), saved_routes +
+    runs read seams.
+  routes.ts — thin. Generate order: authn → validateGenerate (400 never meters)
+    → requireQuota("route_gen") → handler. Endpoints: POST /v1/geo/routes/
+    generate; POST/GET/GET/DELETE /v1/geo/saved-routes[/:id]; GET /v1/geo/runs;
+    GET /v1/geo/runs/:id. cost.ts = ORS_ROUTE_COST_MICRO=0n (cited).
+  errors.ts — GeoError (added to app.ts error-mapper allowlist).
+  packages/shared/src/geo.ts — request/response Zod (R7.2); config.ts +ORS_API_KEY
+    optional (GROQ precedent); app.ts registers geo + overrides.geo seam.
+NO MIGRATION: all four geo tables (runs/saved_routes/run_schedules/geo_cache)
+  already exist in 0001_init.sql (verified this session). Read-side card.
+RULINGS (all in DECISIONS 2026-07-13): CORRECTION 1 targetKm gt=0/le=42.2/def 5.0
+  ported verbatim (no floor); CORRECTION 2/G3 count 1–5 def 3, 1 quota slot/req +
+  1 cost row/ORS call; G1 cache seam resolver-less by design; G2 mock dropped,
+  503 fail-closed; G3 scoring+weather deferred (engine/P5); G4 run_schedules
+  deferred, runs read-only (record/sync = P5); ORS cost=0 call-count row; splits
+  omitted from runs read (unspecified jsonb, P5 owns writer).
+PROVE (GREEN, Neon branch p26b-test, migrations 0001–0005 applied via
+  drizzle-kit migrate): FULL suite 20 files / 184 tests PASSED, 0 failed, 0
+  skipped = the 170 P2.1–P2.6a regression INTACT + 14 new geo tests (geo.unit 5
+  + geo.routes 9). Explicitly verified: count=3 → 1 quota slot + 3 cost rows +
+  seeds [11,48,85]; no-key & Redis-down both 503 with provider never called;
+  free monthly limit 2 → 3rd req 429; saved_routes + runs cross-tenant 404;
+  polyline detail-only; two-layer geocode cache miss→backfill / Redis-hit /
+  PG-floor-hit; saved_routes pagination page-2 cursor round-trip. typecheck +
+  lint clean, red-flag greps clean.
+T3 (independent fresh chat, CLEAN): ZERO R0–R11 violations, ZERO security
+  defects. One R9 coverage finding — geo pagination boundary untested — RESOLVED
+  this session (added the page-2 nextCursor round-trip test; green above).
+  Reviewer confirmed all deferrals (G1–G4) sound.
+OPEN SPEC GAPS: none (G1–G4 all ruled by Kd at the gate).
+DEFERRED TO P5: run recording/sync (runs write), route SCORING (scoring.py →
+  @app/engine), WEATHER (check_weather), live reverse-geocode provider +
+  endpoint, run_schedules CRUD, running XP/streak/badges (running.py record path).
+NEXT: commit the P2.6b diff on a feature branch → browser PR (no gh CLI) → Kd
+  merges → P3 (money & orgs) or remaining P2 cutover per Kd.
+```
+
+```
 TASK: P2.6a — nutrition (Part 2B §3 pipeline) + body_measurements CRUD 🟡
               [MERGED to master via PR #20 (module, 34438bf) + PR #21 (T3 fixes,
                2bd5fbc — #20 was merged early by mistake before the T3 push; the
