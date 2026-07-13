@@ -5,6 +5,7 @@
 import type { Sql } from "postgres";
 import type { MongoReader } from "./mongo.js";
 import { uuidv5 } from "./uuid5.js";
+import { transformWorkout } from "./collections/workouts.js";
 
 export interface CountGate {
   collection: string;
@@ -47,4 +48,44 @@ export async function verifyBcrypt(mongo: MongoReader, sql: Sql, sampleSize = 20
   // A set with no password users (all-OAuth) is vacuously OK — the gate must
   // not fail for having nothing to sample (T3 finding 5).
   return { sampled: samples.length, intact, ok: intact === samples.length };
+}
+
+// ── P2.7c workouts gates ────────────────────────────────────────────────────
+
+export interface WorkoutsVerification {
+  workouts: CountGate; // mongo = MIGRATABLE sessions (Mongo − skipped); pg = matched by UUIDv5 id
+  sets: CountGate; // mongo = Σ prescribed sets over RESOLVABLE names; pg = rows on migrated workouts
+  streaks: CountGate; // mongo = migrated users with ≥1 workout; pg = streaks rows for them
+  ok: boolean;
+}
+
+/** Streams Mongo ONCE, re-derives expected via the tested pure transform
+ *  (verifies the DB WRITE path, not just the transform), and compares to PG.
+ *  The workouts gate is honest w.r.t. fail-soft skipping: a session the
+ *  transform rejects (null) is excluded from `mongo`, so `pg === mongo` holds
+ *  when nothing skipped, and any insert error surfaces as `pg < mongo`
+ *  (Kd correction). `idBySlug` is the same map the run used. */
+export async function verifyWorkouts(
+  mongo: MongoReader,
+  sql: Sql,
+  idBySlug: ReadonlyMap<string, string>,
+): Promise<WorkoutsVerification> {
+  const workoutIds: string[] = [];
+  const userIds = new Set<string>();
+  let expectedSets = 0;
+  await mongo.each("workout_sessions", (doc) => {
+    const row = transformWorkout(doc, idBySlug);
+    if (row === null) return;
+    workoutIds.push(row.id);
+    userIds.add(row.userId);
+    expectedSets += row.setsCount;
+  });
+  const uids = [...userIds];
+  const [w] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM workouts WHERE id = ANY(${workoutIds})`;
+  const [s] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM workout_sets WHERE workout_id = ANY(${workoutIds})`;
+  const [st] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM streaks WHERE user_id = ANY(${uids})`;
+  const workouts: CountGate = { collection: "workouts", mongo: workoutIds.length, pg: w?.n ?? 0, ok: (w?.n ?? 0) === workoutIds.length };
+  const sets: CountGate = { collection: "workout_sets", mongo: expectedSets, pg: s?.n ?? 0, ok: (s?.n ?? 0) === expectedSets };
+  const streaks: CountGate = { collection: "streaks", mongo: uids.length, pg: st?.n ?? 0, ok: (st?.n ?? 0) === uids.length };
+  return { workouts, sets, streaks, ok: workouts.ok && sets.ok && streaks.ok };
 }
