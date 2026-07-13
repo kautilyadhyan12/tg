@@ -2,8 +2,9 @@
 
 ```
 TASK: P2.7a + P2.7b — Mongo→PG migration (inventory + harness + users) 🔴
-      [PROVE GREEN + T3 CLEAN (6 findings, all resolved & re-proven); READY TO
-       MERGE. Uncommitted. NOT merged.]
+      [MERGED via PR #23 (commit 0808d2d; final master 346528b, 2026-07-13).
+       PROVE green on Neon p26b-test; T3 clean (6 findings resolved). Full
+       suite 197/197.]
 DECISIONS (all 2026-07-13, Kd-ruled): full migration BUILT per §7 (approach B —
   a DEVIATION to skip it was raised and REJECTED); PRODUCTION starts CLEAN (dev
   data NOT imported — the migration is a verified correctness artifact); UUIDv5
