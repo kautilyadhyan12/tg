@@ -1,6 +1,43 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P2.7a + P2.7b — Mongo→PG migration (inventory + harness + users) 🔴
+      [PROVE GREEN + T3 CLEAN (6 findings, all resolved & re-proven); READY TO
+       MERGE. Uncommitted. NOT merged.]
+DECISIONS (all 2026-07-13, Kd-ruled): full migration BUILT per §7 (approach B —
+  a DEVIATION to skip it was raised and REJECTED); PRODUCTION starts CLEAN (dev
+  data NOT imported — the migration is a verified correctness artifact); UUIDv5
+  in-house (NAMESPACE_AIHG=4fc832e8-4827-4475-bf8a-e72cc4b611c7); mongodb devDep
+  approved (A); running_schedules deferred (rule shape unspecified, n=1).
+GROUND TRUTH (live dev Mongo `aihg-mongo`, db ai_home_gym, scanned this session):
+  users:18 (ONE merged auth+ml+onboarding collection; 17 pw, 1 google) ·
+  workout_sessions:230 (exercises[] are PRESCRIPTIONS {id,name,category,sets,
+  reps,rest}; 0/230 have per-set perf → workout_sets unroll = expand sets count,
+  all engine cols NULL) · workout_templates:0 · meal_logs:16 · coach_conv:11 ·
+  body_measurements:1 · running 8/17/1 · exercises:58 (not migrated, re-seeded).
+  active_seconds_by_exercise NOT stored → §7 kcal recompute impossible (keep
+  stored value). Full data-verified map: apps/api/tools/migrate-mongo/INVENTORY.md.
+SHIPPED (apps/api/tools/migrate-mongo/): uuid5.ts (RFC-4122 v5, no dep) · weight.ts
+  (KG_PER_LB port, NULL not 70) · mongo.ts (read-only, _id→hex) · pg.ts · verify.ts
+  (§7 count + bcrypt gates) · run.ts (tsx CLI: dry-run/--apply) · collections/
+  users.ts (transform + idempotent insert; gamification recompute DEFERRED to a
+  post-workouts stage). Tests: migrate.uuid5 (RFC vector), migrate.users (pure),
+  migrate.idempotency (DB-gated). Config: tsconfig+lint include tools/; mongodb devDep.
+PROVE (live Mongo → Neon p26b-test): dry-run read=18/transformed=18/skip=0;
+  --apply inserted=18, VERIFY count 18=18 (countDocuments, exact) ok, bcrypt
+  17/17 intact; re-apply inserted=0 (idempotent). T3: 6 findings fixed
+  (gate uses exact count; ON CONFLICT (id) + per-row fail-soft; Invalid-Date/
+  bad-email/weight-overflow hardened). typecheck+lint clean. Full suite 197/197.
+REMAINING P2.7 STAGES (owed, all rulings pre-approved with defaults in INVENTORY.md
+  "Rulings still owed"): P2.7c workouts→workouts+sets (prescription unroll, kcal
+  keep-stored) + gamification recompute (streaks/user_achievements); P2.7d meals
+  + body_measurements; P2.7e coach + running (schedules deferred); P2.7f full
+  verify gates + cutover (P2.8). Old Mongo container is running for these.
+OPEN SPEC GAPS: none (G-rule = running_schedules deferred).
+NEXT: T3 on this diff (fresh chat) → commit+PR → merge → P2.7c.
+```
+
+```
 TASK: P2.6b — geo/running READ-plan side 🟡 [MERGED to master via PR #22
               (commit 31698a3; final master 20d530c, 2026-07-13). PROVE green
               184/184 on Neon branch p26b-test, T3 clean (1 R9 finding resolved).]
