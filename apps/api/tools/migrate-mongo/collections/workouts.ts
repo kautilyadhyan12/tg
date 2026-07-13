@@ -65,7 +65,10 @@ export interface WorkoutRow {
   avgFormScore: number | null;
   durationMs: number | null;
   kcalPoint: number | null;
-  kcalCalcVersion: number; // 0 = legacy keep-stored (G-kcal)
+  // 0 = legacy keep-stored. DEVIATION from §7's calc_version=1 recompute: the
+  // MET input (active_seconds_by_exercise) was never persisted, so a recompute
+  // would zero out every workout — G-kcal ruling, DECISIONS 2026-07-13 (T3-A).
+  kcalCalcVersion: number;
   setsCount: number;
   totalReps: number;
   qualityFlags: string[];
@@ -77,7 +80,8 @@ export interface WorkoutRow {
 /** Pure transform — null when the doc is too malformed to migrate (missing
  *  `started_at`, which is NOT NULL; caller logs + counts skipped). `idBySlug`
  *  is slug→exercises.id for the SEEDED catalog; a name whose slug is absent is
- *  skipped + flagged (self-heals on a re-run once P4 seeds it, GAP1=a). */
+ *  skipped + flagged (GAP1=a). Picking it up after P4 needs a CLEAN re-migrate,
+ *  not an incremental re-run (T3-B; see exerciseNames.ts / DECISIONS). */
 export function transformWorkout(
   doc: unknown,
   idBySlug: ReadonlyMap<string, string>,

@@ -2,8 +2,12 @@
 // The 230 legacy workouts reference EXACTLY 14 distinct exercise names
 // (live-scanned this task). Resolution at migration is name→slug→exercises.id;
 // a name whose slug has NO seeded catalog row today is SKIPPED + quality-flagged
-// 'unknown_exercise' (mirrors the sync path, modules/workouts/repo.ts:70) and
-// RESOLVES AUTOMATICALLY on an idempotent re-run once P4 seeds its catalog row.
+// 'unknown_exercise' (mirrors the sync path, modules/workouts/repo.ts:70). To
+// pick it up after P4 seeds its catalog row, do a CLEAN re-migrate (clear the
+// workout tables, re-run) — NOT an incremental re-run, which does NOT self-heal
+// (global set_index would shift + collide, and parent aggregates are ON CONFLICT
+// DO NOTHING; T3-B, DECISIONS 2026-07-13). Production starts empty, so this is a
+// dev/test correctness artifact only.
 //
 // This is a REVIEWED CONSTANTS TABLE (P1.8a precedent), NOT a mechanical
 // derivation: the seeded slugs are SINGULAR ("squat", seed.ts:198) while the
@@ -30,8 +34,8 @@
 //
 // Rows 4–11 name the canonical catalog slug the P4 seed is EXPECTED to use; if
 // P4 seeds a different slug, THIS row is the single reconciliation point (edit
-// here, re-run — the migration is idempotent). Rows 12–14 have no catalog entry
-// and stay permanently skipped (quality-flagged, never a user-facing rejection).
+// here, then clean re-migrate). Rows 12–14 have no catalog entry and stay
+// permanently skipped (quality-flagged, never a user-facing rejection).
 
 /** Legacy display name → catalog slug for all 14 live names. Frozen table. */
 export const NAME_TO_SLUG: Readonly<Record<string, string>> = {
