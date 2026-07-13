@@ -26,6 +26,8 @@ import { createIoRedis, createMemoryRedis, type RedisLike } from "./redis.js";
 import type { AppConfig } from "./config.js";
 import { registerNutritionRoutes, type NutritionRouteOverrides } from "./modules/nutrition/routes.js";
 import { NutritionError } from "./modules/nutrition/service.js";
+import { registerGeoRoutes, type GeoRouteOverrides } from "./modules/geo/routes.js";
+import { GeoError } from "./modules/geo/errors.js";
 
 /** Test-only seams (GAP-5 DECISIONS 2026-07-11): production callers pass
  *  nothing; tests inject a capturing EmailSender to reach raw one-time tokens
@@ -40,6 +42,9 @@ export interface BuildAppOverrides {
   coach?: CoachRouteOverrides;
   /** P2.6a: tests inject fake vision and OpenFoodFacts providers. */
   nutrition?: NutritionRouteOverrides;
+  /** P2.6b: tests inject a fake ORS route provider (and the reserved-for-P5
+   *  geocode resolver) — no test calls the real OpenRouteService. */
+  geo?: GeoRouteOverrides;
 }
 
 declare module "fastify" {
@@ -119,6 +124,7 @@ export async function buildApp(
       err instanceof UsersError ||
       err instanceof CoachError ||
       err instanceof NutritionError ||
+      err instanceof GeoError ||
       (typeof err.code === "string" && err.code.startsWith("FST_"));
     if (clientSafe) {
       if (status >= 500) {
@@ -190,6 +196,7 @@ export async function buildApp(
   registerCoachRoutes(app, { sql, redis, config }, overrides.coach ?? {});
   registerEntitlementRoutes(app, { sql, redis });
   registerNutritionRoutes(app, { sql, redis, config }, overrides.nutrition ?? {});
+  registerGeoRoutes(app, { sql, redis, config }, overrides.geo ?? {});
 
   return app;
 }

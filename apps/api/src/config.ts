@@ -30,6 +30,10 @@ const envSchema = z.object({
   COACH_MODEL: z.string().min(1).default("llama-3.1-8b-instant"), // salvage default (GAP-2)
   // P2.6a ruled default; swap lever for Scout's announced 2026-07-17 deprecation.
   MEAL_VISION_MODEL: z.string().min(1).default("meta-llama/llama-4-scout-17b-16e-instruct"),
+  // P2.6b: geo route generation via ORS (v1 §6.1). Unset = route generation
+  // 503s cleanly (fail-closed, GROQ_API_KEY precedent); the browse/read side
+  // (saved_routes, runs) works without it.
+  ORS_API_KEY: z.string().min(1).optional(),
 });
 
 export type AppConfig = Readonly<z.infer<typeof envSchema>>;
