@@ -1,6 +1,48 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P2.7c — Mongo→PG migration: workouts + workout_sets + gamification recompute 🔴
+      [MERGED via PR #24 (commits 53e94a9 + 73d37f8; merge f2cf0a7, final master
+       f2cf0a7, 2026-07-13). PROVE green on live Mongo → Neon p26b-test; T3 (fresh
+       chat) 2 findings, BOTH resolved + pushed. 7 pure + 2 DB-gated tests green.]
+DECISIONS (2026-07-13, Kd-ruled): GAP1=(a) explicit 14-name→slug map
+  (exerciseNames.ts, reviewed constants table — seeded slugs are singular vs
+  legacy plurals); unseeded names skipped + 'unknown_exercise' flagged. GAP2
+  workout_sets.duration_ms=0. GAP3 workouts UUIDv5-only traceability (NO schema
+  change). G-kcal (T3-A): DEVIATION from §7 — kcal recompute IMPOSSIBLE
+  (active_seconds_by_exercise never persisted, per-set duration_ms=0 → recompute
+  zeroes kcal), so keep stored calories_burned at calc_version=0; ratifies the
+  P2.7a "pending" note. Re-run correction (T3-B): an INCREMENTAL re-run does NOT
+  self-heal skipped names (global set_index shifts+collides; parent aggregates
+  ON CONFLICT DO NOTHING) — to pick up P4-seeded names, do a CLEAN re-migrate
+  (clear workout tables, re-run). Same-seed re-run IS a true no-op (tested).
+GROUND TRUTH (live Mongo, scanned this session): 230 workout_sessions (0 missing
+  started_at), 14 distinct exercise names (3 seeded: squat/jump_squat/chair_squat),
+  262 items, 625 total prescribed sets, 356 RESOLVABLE (269 skipped), 3 distinct
+  users with workouts (all present in the 18 migrated users). exercises[] are
+  prescriptions {id,name,sets,reps} — 0/230 carry per-set perf.
+SHIPPED (apps/api/tools/migrate-mongo/): exerciseNames.ts (NAME_TO_SLUG reviewed
+  table) · collections/workouts.ts (transformWorkout pure + insertWorkout
+  idempotent [workout ON CONFLICT (id), sets ON CONFLICT (workout_id,set_index)]
+  + loadExerciseIds) · verify.ts +verifyWorkouts (workouts/sets/streaks gates,
+  re-derive expected via the tested transform) · run.ts (users→workouts→recompute
+  →verify; recompute REUSES gamification/service onWorkoutSynced, not reimpl) ·
+  mongo.ts (reader now normalizes ALL top-level ObjectId→hex, was _id only).
+  Tests: migrate.workouts (7 pure: unroll/mapping/guards/determinism),
+  migrate.workouts.idempotency (2 DB-gated: unroll+idempotency+recompute; hook
+  timeout raised to 120s for remote-Neon seed).
+PROVE (live Mongo → Neon p26b-test): dry-run users 18/230 workouts/269 sets
+  skipped; --apply VERIFY all ok (users 18=18, bcrypt 17/17, workouts 230=230,
+  sets 356=356, streaks 3=3); re-apply inserted=0 (idempotent). typecheck+lint
+  clean. Local secrets in apps/api/.env (gitignored) for future stages.
+REMAINING P2.7 STAGES: P2.7d meal_logs+body_measurements; P2.7e coach+running
+  (schedules deferred, G-rule); P2.7f full verify gates + cutover (P2.8). Old
+  Mongo container (aihg-mongo) still running for these.
+OPEN SPEC GAPS: none.
+NEXT: P2.7d (meals + body_measurements). Old Mongo live; Neon p26b-test seeded.
+```
+
+```
 TASK: P2.7a + P2.7b — Mongo→PG migration (inventory + harness + users) 🔴
       [MERGED via PR #23 (commit 0808d2d; final master 346528b, 2026-07-13).
        PROVE green on Neon p26b-test; T3 clean (6 findings resolved). Full
