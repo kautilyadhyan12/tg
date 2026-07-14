@@ -11,7 +11,14 @@ import {
   signAccessToken,
   verifyAccessToken,
 } from "../src/modules/auth/tokens.js";
-import { AuthError, login, type AuthDeps, type PasswordHasher } from "../src/modules/auth/service.js";
+import {
+  argon2idHasher,
+  AuthError,
+  DUMMY_HASH,
+  login,
+  type AuthDeps,
+  type PasswordHasher,
+} from "../src/modules/auth/service.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 
 const SECRET = "unit-test-secret-0123456789abcdef-32+";
@@ -102,15 +109,54 @@ describe("opaque tokens", () => {
   });
 });
 
+describe("argon2idHasher (verify-by-algo, needsRehash — v1 §6.1)", () => {
+  // REAL bcrypt hash (bcryptjs cost 10) — the same fixture the routes suite
+  // uses; proves argon2idHasher.verify still accepts legacy bcrypt hashes.
+  const BCRYPT_HASH = "$2a$10$7RC6CyqeX8NLXY51YsTnvuFry32m77n7UwzWC5ukii0/bwoXmUSVO"; // gitleaks:allow
+  const BCRYPT_PASSWORD = "legacy-Correct-Horse-9"; // dummy fixture, gitleaks:allow
+
+  it("produces argon2id hashes with the OWASP params (m=19456,t=2,p=1)", async () => {
+    const h = await argon2idHasher.hash("some-Password-1");
+    expect(h).toMatch(/^\$argon2id\$/);
+    expect(h).toContain("m=19456,t=2,p=1");
+  });
+
+  it("DUMMY_HASH is argon2id (timing equalizer)", () => {
+    expect(DUMMY_HASH).toMatch(/^\$argon2id\$/);
+  });
+
+  it("verifies a REAL bcrypt hash under algo 'bcrypt'; rejects a wrong password", async () => {
+    expect(await argon2idHasher.verify(BCRYPT_PASSWORD, BCRYPT_HASH, "bcrypt")).toBe(true);
+    expect(await argon2idHasher.verify("wrong-password-x", BCRYPT_HASH, "bcrypt")).toBe(false);
+  });
+
+  it("round-trips an argon2id hash under algo 'argon2id'; rejects a wrong password", async () => {
+    const h = await argon2idHasher.hash("round-Trip-2");
+    expect(await argon2idHasher.verify("round-Trip-2", h, "argon2id")).toBe(true);
+    expect(await argon2idHasher.verify("nope-3", h, "argon2id")).toBe(false);
+  });
+
+  it("needsRehash: bcrypt/null → upgrade, argon2id → no-op", () => {
+    expect(argon2idHasher.needsRehash("bcrypt")).toBe(true);
+    expect(argon2idHasher.needsRehash(null)).toBe(true);
+    expect(argon2idHasher.needsRehash("argon2id")).toBe(false);
+  });
+});
+
 describe("login timing equalizer (authController.js:14-18 port)", () => {
   const emailSender: EmailSender = {
     sendVerificationEmail: () => Promise.resolve(),
     sendPasswordResetEmail: () => Promise.resolve(),
   };
 
-  it("unknown email STILL runs one bcrypt compare, then the uniform 401", async () => {
-    const compare = vi.fn<PasswordHasher["compare"]>().mockResolvedValue(true);
-    const hasher: PasswordHasher = { hash: () => Promise.reject(new Error("unused")), compare };
+  it("unknown email STILL runs one dummy verify, then the uniform 401", async () => {
+    const verify = vi.fn<PasswordHasher["verify"]>().mockResolvedValue(true);
+    const hasher: PasswordHasher = {
+      algo: "argon2id",
+      hash: () => Promise.reject(new Error("unused")),
+      verify,
+      needsRehash: () => false,
+    };
     // sql stub: user lookup returns no rows (unknown email). Runtime-guarded
     // narrow (R2.2): login's only sql use on this path is one tagged-template
     // SELECT, which this callable satisfies.
@@ -120,7 +166,7 @@ describe("login timing equalizer (authController.js:14-18 port)", () => {
     await expect(
       login(deps, { email: "nobody@example.com", password: "wrong-password" }, { ip: null, userAgent: null }),
     ).rejects.toMatchObject({ statusCode: 401, code: "invalid_credentials" });
-    expect(compare).toHaveBeenCalledTimes(1); // the dummy-hash compare ran
+    expect(verify).toHaveBeenCalledTimes(1); // the dummy-hash verify ran
   });
 
   it("AuthError carries client-safe fields only", () => {

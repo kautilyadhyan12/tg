@@ -19,7 +19,7 @@ import {
   verifyEmailRequestSchema,
 } from "./schemas.js";
 import * as service from "./service.js";
-import { bcryptHasher } from "./service.js";
+import { argon2idHasher } from "./service.js";
 import { createLogOnlyEmailSender } from "./email.js";
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "./tokens.js";
 
@@ -99,7 +99,7 @@ export function registerAuthRoutes(
     sql: deps.sql,
     config: deps.config,
     emailSender: deps.emailSender ?? createLogOnlyEmailSender(app.log),
-    hasher: bcryptHasher,
+    hasher: argon2idHasher,
     log: app.log,
   };
 
