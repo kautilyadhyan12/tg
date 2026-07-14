@@ -6,6 +6,11 @@ import { useTransition } from '../context/TransitionContext';
 import { Eye, EyeOff, Dumbbell, ArrowRight, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+// Google OAuth is deferred: the new API has no /v1/auth/google yet (v1 §6.1
+// lists it, but P2.1 shipped email/password only). Re-enabled by its own
+// web-repoint card; this flag keeps the button in place meanwhile.
+const GOOGLE_LOGIN_ENABLED = false;
+
 const PERKS = [
   'Real-time AI form correction',
   'Automatic rep counting',
@@ -345,6 +350,8 @@ export default function Register() {
             </motion.button>
           </form>
 
+          {GOOGLE_LOGIN_ENABLED && (
+            <>
           {/* Or divider */}
           <div className="flex items-center gap-3 my-5">
             <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
@@ -380,6 +387,8 @@ export default function Register() {
             </svg>
             Continue with Google
           </motion.button>
+            </>
+          )}
 
           {/* Divider */}
           <div className="flex items-center gap-3 my-6">

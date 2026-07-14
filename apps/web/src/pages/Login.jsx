@@ -6,6 +6,11 @@ import { useTransition } from '../context/TransitionContext';
 import { Eye, EyeOff, Dumbbell, ArrowRight, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+// Google OAuth is deferred: the new API has no /v1/auth/google yet (v1 §6.1
+// lists it, but P2.1 shipped email/password only). Re-enabled by its own
+// web-repoint card; this flag keeps the button in place meanwhile.
+const GOOGLE_LOGIN_ENABLED = false;
+
 export default function Login() {
   const { login }  = useAuth();
   const navigate   = useNavigate();
@@ -190,6 +195,8 @@ export default function Login() {
             </motion.button>
           </form>
 
+          {GOOGLE_LOGIN_ENABLED && (
+            <>
           {/* Or divider */}
           <div className="flex items-center gap-3 my-5">
             <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
@@ -225,6 +232,8 @@ export default function Login() {
             </svg>
             Continue with Google
           </motion.button>
+            </>
+          )}
 
           {/* Divider */}
           <div className="flex items-center gap-3 my-6">

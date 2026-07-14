@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { useTransition } from '../context/TransitionContext';
 import { userService } from '../api/userApi';
-import authApi from '../api/authApi';
+import { authService } from '../api/authApi';
 import mlApi from '../api/mlApi';
 
 const TABS = [
@@ -368,20 +368,18 @@ function AccountTab({ profile }) {
     if (pwForm.newPw.length < 8)         { toast.error('Password must be at least 8 characters'); return; }
     setPwLoading(true);
     try {
-      const token = localStorage.getItem('accessToken');
-      const res   = await fetch('http://localhost:3001/api/auth/change-password', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ currentPassword: pwForm.current, newPassword: pwForm.newPw }),
+      // New API: cookie-authed POST /v1/auth/change-password → 200 { message }
+      // (throws on non-2xx via axios; no localStorage token, no data.success).
+      await authService.changePassword({
+        currentPassword: pwForm.current,
+        newPassword: pwForm.newPw,
       });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.message);
       toast.success('Password changed successfully');
       setPwSaved(true);
       setPwForm({ current: '', newPw: '', confirm: '' });
       setTimeout(() => setPwSaved(false), 2000);
     } catch (err) {
-      toast.error(err.message || 'Failed to change password');
+      toast.error(err.response?.data?.message || err.message || 'Failed to change password');
     } finally {
       setPwLoading(false);
     }

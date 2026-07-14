@@ -1,8 +1,13 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../api/authApi';
-import mlApi from '../api/mlApi';
 
 const AuthContext = createContext(null);
+
+// Interim compat shim: the new API user shape (v1 §6.1) exposes `displayName`,
+// but 6 display sites still read `user.fullName`. Alias it here so this auth
+// card stays contained; the users/profile card migrates those sites and drops
+// this. (New shape: { id, email, displayName, emailVerified, locale, units }.)
+const normalizeUser = (u) => (u ? { ...u, fullName: u.displayName } : u);
 
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
@@ -39,63 +44,43 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   // ── Restore session on mount ──────────────────────────────────────────────
+  // Cookies are httpOnly (v1 §6.1) — JS can't inspect them, so we always ask
+  // the server who we are. /v1/auth/me carries the access cookie; if it is
+  // expired the authApi interceptor rotates via /v1/auth/refresh and retries.
+  // A genuine 401 (no valid session) → logged out, no localStorage to clear.
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-    mlApi.get('/users/profile')
-      .then((res) => {
-        setUser(res.data.user);
-      })
-      .catch((err) => {
-        // Only destroy the session when the SERVER says the token is bad
-        // (401/403). A network blip or a server restart during app open is
-        // NOT a reason to log the user out — previously any error wiped the
-        // tokens and forced a re-login. Keeping them means a simple refresh
-        // restores the session once connectivity returns.
-        const status = err?.response?.status;
-        if (status === 401 || status === 403) {
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-        }
-        setUser(null);
-      })
+    authService.getMe()
+      .then((res) => setUser(normalizeUser(res.data.user)))
+      .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 
   // ── Login ─────────────────────────────────────────────────────────────────
+  // The server sets the httpOnly access + refresh cookies and returns { user }
+  // only — no tokens in the body (DECISIONS 2026-07-11; shared authUserSchema).
   const login = async (email, password) => {
     const res = await authService.login({ email, password });
-
-    localStorage.setItem('accessToken', res.data.accessToken);
-    if (res.data.refreshToken) {
-      localStorage.setItem('refreshToken', res.data.refreshToken);
-    }
-
-    setUser(res.data.user);
+    setUser(normalizeUser(res.data.user));
     return res.data;
   };
 
   // ── Register ──────────────────────────────────────────────────────────────
+  // New API field is `displayName` (shared registerRequestSchema); the form
+  // still collects `fullName`, so map it here.
   const register = async (fullName, email, password) => {
-    const res = await authService.register({ fullName, email, password });
+    const res = await authService.register({ email, password, displayName: fullName });
     return res.data;
   };
 
   // ── Logout ────────────────────────────────────────────────────────────────
   const logout = async () => {
     try {
-      await authService.logout();
+      await authService.logout(); // server clears the httpOnly cookies
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      // Note: user-specific data (workout_builder etc) is kept
-      // It is stored under user_${userId}_${key} so it won't
-      // interfere with other users
+      // Per-user app data (workout_builder etc) is kept — stored under
+      // user_${userId}_${key}, it won't interfere with other users.
       setUser(null);
     }
   };

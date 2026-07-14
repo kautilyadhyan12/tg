@@ -9,7 +9,6 @@ import AppLayout from './components/common/AppLayout';
 
 // Pages
 import Login           from './pages/Login';
-import GoogleAuthSuccess from './pages/GoogleAuthSuccess';
 import Register        from './pages/Register';
 import ForgotPassword  from './pages/ForgotPassword';
 import Onboarding      from './pages/Onboarding';
@@ -58,7 +57,8 @@ export default function App() {
             <Route path="/forgot-password" element={
               <PublicRoute><ForgotPassword /></PublicRoute>
             } />
-            <Route path="/auth/google/success" element={<GoogleAuthSuccess />} />
+            {/* Google OAuth (/auth/google/success) deferred to its own web-repoint
+                card — the new API has no /v1/auth/google yet (v1 §6.1). */}
 
             {/* ── Onboarding ────────────────────────────────────────────── */}
             <Route path="/onboarding" element={
