@@ -273,11 +273,12 @@ export async function verifyParity(
   const samples: { workoutId: string; expectedUser: string }[] = [];
   await mongo.each("workout_sessions", (doc) => {
     if (samples.length >= 20) return;
-    const id = doc["_id"];
-    const uidRaw = doc["user_id"];
-    if (typeof id === "string" && typeof uidRaw === "string") {
-      samples.push({ workoutId: uuidv5(id), expectedUser: uuidv5(uidRaw) });
-    }
+    // Sample only MIGRATABLE workouts (transform-accepted). A skipped session is
+    // legitimately absent from PG and must NOT read as a cross-ref failure (T3
+    // finding A — fail-closed false failure). row.id/row.userId are the exact
+    // deterministic PG values, so this verifies the UUIDv5 user mapping.
+    const row = transformWorkout(doc, idBySlug);
+    if (row !== null) samples.push({ workoutId: row.id, expectedUser: row.userId });
   });
   let crossRefOk = true;
   for (const s of samples) {
