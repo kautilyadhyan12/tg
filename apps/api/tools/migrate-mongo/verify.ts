@@ -8,6 +8,8 @@ import { uuidv5 } from "./uuid5.js";
 import { transformWorkout } from "./collections/workouts.js";
 import { transformMeal } from "./collections/meals.js";
 import { transformBody } from "./collections/body.js";
+import { transformCoach } from "./collections/coach.js";
+import { transformRun, transformRoute } from "./collections/running.js";
 
 export interface CountGate {
   collection: string;
@@ -118,4 +120,49 @@ export async function verifyNutrition(mongo: MongoReader, sql: Sql): Promise<Nut
   const meals: CountGate = { collection: "meal_logs", mongo: expectedMeals, pg: m?.n ?? 0, ok: (m?.n ?? 0) === expectedMeals };
   const body: CountGate = { collection: "body_measurements", mongo: expectedBody, pg: b?.n ?? 0, ok: (b?.n ?? 0) === expectedBody };
   return { meals, body, ok: meals.ok && body.ok };
+}
+
+// ── P2.7e coach + running gates ─────────────────────────────────────────────
+
+export interface CoachRunningVerification {
+  threads: CountGate;
+  messages: CountGate;
+  runs: CountGate;
+  routes: CountGate;
+  ok: boolean;
+}
+
+/** Threads/runs/routes carry legacy_mongo_id; coach_messages does not, so its
+ *  migrated rows are counted via membership in migrated threads. Expected is
+ *  re-derived through the tested transforms (verifies the write path). */
+export async function verifyCoachRunning(mongo: MongoReader, sql: Sql): Promise<CoachRunningVerification> {
+  let expectedThreads = 0;
+  let expectedMessages = 0;
+  await mongo.each("coach_conversations", (doc) => {
+    const d = transformCoach(doc);
+    if (d === null) return;
+    expectedThreads += 1;
+    expectedMessages += d.messages.length;
+  });
+  let expectedRuns = 0;
+  await mongo.each("running_sessions", (doc) => {
+    if (transformRun(doc) !== null) expectedRuns += 1;
+  });
+  let expectedRoutes = 0;
+  await mongo.each("running_routes", (doc) => {
+    if (transformRoute(doc) !== null) expectedRoutes += 1;
+  });
+
+  const [t] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM coach_threads WHERE legacy_mongo_id IS NOT NULL`;
+  const [msg] = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM coach_messages
+    WHERE thread_id IN (SELECT id FROM coach_threads WHERE legacy_mongo_id IS NOT NULL)`;
+  const [r] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM runs WHERE legacy_mongo_id IS NOT NULL`;
+  const [sr] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM saved_routes WHERE legacy_mongo_id IS NOT NULL`;
+
+  const threads: CountGate = { collection: "coach_threads", mongo: expectedThreads, pg: t?.n ?? 0, ok: (t?.n ?? 0) === expectedThreads };
+  const messages: CountGate = { collection: "coach_messages", mongo: expectedMessages, pg: msg?.n ?? 0, ok: (msg?.n ?? 0) === expectedMessages };
+  const runs: CountGate = { collection: "runs", mongo: expectedRuns, pg: r?.n ?? 0, ok: (r?.n ?? 0) === expectedRuns };
+  const routes: CountGate = { collection: "saved_routes", mongo: expectedRoutes, pg: sr?.n ?? 0, ok: (sr?.n ?? 0) === expectedRoutes };
+  return { threads, messages, runs, routes, ok: threads.ok && messages.ok && runs.ok && routes.ok };
 }
