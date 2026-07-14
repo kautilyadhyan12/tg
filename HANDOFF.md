@@ -1,6 +1,48 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P2.7f — Mongo→PG migration: verify gates + prod runbook 🟡 (migration CAPSTONE)
+      [MERGED via PR #27 (commits 5dc736d + 3e0bcd8; merge e43119b, final master
+       e43119b, 2026-07-13). PROVE green (--verify-only on rebuilt Neon); T3
+       (fresh chat) 1 finding FIXED + 1 advisory recorded. 4 pure tests green.]
+      *** P2.7 Mongo→PG MIGRATION COMPLETE — all six stages (a–f) merged. ***
+SCOPE (Kd-confirmed, DECISIONS 2026-07-13): P2.7f = strengthened §7 verify gates
+  + a P2.8 cutover RUNBOOK document — NOT the live cutover. It repoints/freezes/
+  decommissions NOTHING. (DECISIONS:194 defines the split as "verify gates + prod
+  runbook"; live cutover is P2.8, premature — see PREREQUISITES below.)
+SHIPPED: verify.ts +comparePerUser (pure) +verifyParity — PER-USER count parity
+  across workouts/sets/meals/coach_messages/runs + UUIDv5 cross-ref spot-check
+  (workout→user, samples only transform-accepted workouts after T3-A). run.ts
+  +--verify-only mode (gates, NO writes) + elapsed-time log (§7 timing). RUNBOOK/
+  cutover.md (the P2.8 procedure + prereq checklist; "flip data_backend" = the
+  seeded feature_flags row, not an env var). Test: migrate.parity (4 pure,
+  comparePerUser incl. swapped-but-equal-total case).
+PROVE (--verify-only, live Mongo → Neon holding ALL six stages): every gate ok,
+  per_user_mismatches=0, crossref_sampled=20 crossref_ok=true, elapsed ~12s.
+  typecheck+lint clean.
+T3 (DECISIONS 2026-07-13): finding A FIXED (cross-ref sampled all sessions
+  regardless of migratability → a skipped session's absence-from-PG was a
+  fail-closed FALSE failure; now samples transform-accepted only). Advisory
+  recorded: workouts/sets per-user scoping is by migrated-user (no legacy_mongo_id
+  column) so a MIXED db (migrated + native workouts for one user) could false-
+  mismatch — harmless on greenfield/verified-dev, no fix.
+FULL RUN CHEATSHEET (all stages, idempotent; env in apps/api/.env):
+  corepack pnpm --filter api exec drizzle-kit migrate         # schema
+  corepack pnpm --filter api exec tsx src/db/seed.ts          # reference data
+  corepack pnpm --filter api exec tsx tools/migrate-mongo/run.ts [--apply|--verify-only]
+NEXT — P2.8 CUTOVER (the actual go-live; SEPARATE task, BLOCKED on prerequisites):
+  (1) argon2id rehash-on-login card (DECISIONS 2026-07-11, owed before P2.8).
+  (2) apps/web repointed to the new API — today only syncClient.js → new API;
+      authApi/coachApi/mlApi/nutritionApi still → OLD backend-auth/backend-ml.
+  Then execute RUNBOOK/cutover.md (freeze → final --apply → --verify-only gates →
+  flip data_backend flag → unfreeze → Mongo read-only 30d → decommission old).
+  backend-auth/backend-ml/ml-training stay in-repo as the salvage source for the
+  UNBUILT Phases 3–6 (money, exercise line, mobile, pilots) — do NOT delete yet.
+OPEN SPEC GAPS: none. Old Mongo container (aihg-mongo) still running; Neon
+  p26b-test rebuilt this session holds a complete verified migration.
+```
+
+```
 TASK: P2.7e — Mongo→PG migration: coach + running (schedules deferred) 🔴
       [MERGED via PR #26 (commits f535f72 + 150b86f; merge e848147, final master
        e848147, 2026-07-13). PROVE green on live Mongo → Neon; T3 (fresh chat)
