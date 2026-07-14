@@ -1,6 +1,62 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P2.7e — Mongo→PG migration: coach + running (schedules deferred) 🔴
+      [MERGED via PR #26 (commits f535f72 + 150b86f; merge e848147, final master
+       e848147, 2026-07-13). PROVE green on live Mongo → Neon; T3 (fresh chat)
+       CLEAN — no violations, 3 advisories (1 fixed, 2 recorded). 10 pure + 3
+       DB-gated tests green.]
+DECISIONS (2026-07-13, Kd-ruled): GAP-F (G-poly) polyline is opaque text
+  (shared/geo.ts:38 "opaque text passthrough" z.string()) → legacy path/coords
+  [lat,lng] arrays JSON.stringify'd, no encoder invented. GAP-G defer
+  running_schedules (rule jsonb shape unspecified, n=1, 'cancelled'). GAP-H NOT
+  NULL defaults: runs.duration_s=round(min*60) or 0, distance_m=round(km*1000),
+  kcal_point=round(cal) or null, kcal_calc_version=0, source='mobile', splits
+  jsonb or null; saved_routes.name=label or 'Legacy route', skip route on empty
+  coords. GAP-I (ORDERING BUG, caught at plan review) all 11 convs have tied
+  per-message timestamps + read path sorts (created_at DESC, id DESC) with a
+  HASH UUIDv5 id → coach_messages.created_at = anchor + arrayIndex ms (anchor =
+  first msg ts / updated_at / epoch) so created_at is strictly monotonic per
+  thread. No gamification step (coach/runs don't feed getStats).
+GROUND TRUTH (live Mongo, scanned this session): coach_conversations 11 (32
+  messages; roles only user/assistant ∈ CHECK; 0 empty content; 2 distinct
+  users). running_sessions 8 (duration_min/calories/splits missing in 2 each —
+  guarded). running_routes 17 (0 missing coords/label). running_schedules 1
+  (deferred). All user_ids among the 18 migrated. BSON types verified (no
+  string-as-number). coach_messages has NO legacy_mongo_id (verify via thread
+  membership); threads/runs/saved_routes DO.
+SHIPPED (apps/api/tools/migrate-mongo/): collections/coach.ts (transformCoach +
+  insertCoach, thread+messages in one tx, GAP-I anchor+index created_at) ·
+  collections/running.ts (transformRun/transformRoute + inserts; asJsonValue for
+  splits jsonb, workouts precedent) · verify.ts +verifyCoachRunning (threads/
+  messages/runs/routes) · run.ts (coach → runs → saved_routes; run_schedules
+  deferred log). Tests: migrate.coach (5 pure incl. ordering + role/content
+  guards), migrate.running (5 pure), migrate.coach-running.idempotency (3
+  DB-gated: ordering read-back via REAL getRecentMessages, polyline round-trip,
+  idempotency).
+PROVE (live Mongo → Neon): full --apply VERIFY all ok — coach_threads 11=11,
+  coach_messages 32=32, runs 8=8, saved_routes 17=17 (+ all prior stages).
+  typecheck+lint clean.
+⚠ NEON BRANCH WAS RESET this session (free-tier): symptom = "password
+  authentication failed" + new endpoint host (ep-summer-union → ep-plain-thunder),
+  and the schema was WIPED. Recovered idempotently: drizzle-kit migrate → seed →
+  full --apply (repopulated ALL stages). apps/api/.env now holds the new
+  connection string. So the Neon test DB currently holds a COMPLETE verified
+  migration of every P2.7 stage — a good state for P2.7f's end-to-end verify.
+T3 ADVISORIES (DECISIONS 2026-07-13; NOT blockers): (1) migrated saved_routes
+  store JSON coord-array polyline vs native client-encoded — a future map decoder
+  must handle both (spec-ruled GAP-F, prod empty; accepted). (2) FIXED — ordering
+  test now uses the real getRecentMessages path. (3) pre-existing: live coach read
+  path has no id tiebreaker on equal created_at (out of scope, future coach task).
+REMAINING P2.7 STAGES: P2.7f — full verify gates + cutover (P2.8): web .env →
+  new API only, freeze Mongo read-only, decommission old backend-auth/backend-ml.
+  LAST stage. Old Mongo container (aihg-mongo) still running.
+OPEN SPEC GAPS: none.
+NEXT: P2.7f (final verify gates + cutover). Neon test DB holds all stages;
+  apps/api/.env has the current (post-reset) connection string.
+```
+
+```
 TASK: P2.7d — Mongo→PG migration: meal_logs + body_measurements 🔴
       [MERGED via PR #25 (commits d8c5b73 + b39b0c0; merge 8627a23, final master
        8627a23, 2026-07-13). PROVE green on live Mongo → Neon p26b-test; T3 (fresh
