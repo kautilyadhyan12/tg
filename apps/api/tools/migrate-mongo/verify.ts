@@ -6,6 +6,8 @@ import type { Sql } from "postgres";
 import type { MongoReader } from "./mongo.js";
 import { uuidv5 } from "./uuid5.js";
 import { transformWorkout } from "./collections/workouts.js";
+import { transformMeal } from "./collections/meals.js";
+import { transformBody } from "./collections/body.js";
 
 export interface CountGate {
   collection: string;
@@ -88,4 +90,32 @@ export async function verifyWorkouts(
   const sets: CountGate = { collection: "workout_sets", mongo: expectedSets, pg: s?.n ?? 0, ok: (s?.n ?? 0) === expectedSets };
   const streaks: CountGate = { collection: "streaks", mongo: uids.length, pg: st?.n ?? 0, ok: (st?.n ?? 0) === uids.length };
   return { workouts, sets, streaks, ok: workouts.ok && sets.ok && streaks.ok };
+}
+
+// ── P2.7d meals + body gates ────────────────────────────────────────────────
+
+export interface NutritionVerification {
+  meals: CountGate; // mongo = MIGRATABLE meals (transform-accepted); pg = rows carrying a legacy_mongo_id
+  body: CountGate;
+  ok: boolean;
+}
+
+/** Both target tables carry `legacy_mongo_id`, so migrated rows are isolable
+ *  directly (nutrition-module inserts leave it NULL). Expected = transform-
+ *  accepted count (honest w.r.t. fail-soft skipping); insert errors surface as
+ *  pg < mongo. */
+export async function verifyNutrition(mongo: MongoReader, sql: Sql): Promise<NutritionVerification> {
+  let expectedMeals = 0;
+  await mongo.each("meal_logs", (doc) => {
+    if (transformMeal(doc) !== null) expectedMeals += 1;
+  });
+  let expectedBody = 0;
+  await mongo.each("body_measurements", (doc) => {
+    if (transformBody(doc) !== null) expectedBody += 1;
+  });
+  const [m] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM meal_logs WHERE legacy_mongo_id IS NOT NULL`;
+  const [b] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM body_measurements WHERE legacy_mongo_id IS NOT NULL`;
+  const meals: CountGate = { collection: "meal_logs", mongo: expectedMeals, pg: m?.n ?? 0, ok: (m?.n ?? 0) === expectedMeals };
+  const body: CountGate = { collection: "body_measurements", mongo: expectedBody, pg: b?.n ?? 0, ok: (b?.n ?? 0) === expectedBody };
+  return { meals, body, ok: meals.ok && body.ok };
 }
