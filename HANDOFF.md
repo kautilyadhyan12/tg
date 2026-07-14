@@ -2,8 +2,13 @@
 
 ```
 TASK: argon2id rehash-on-login 🔴 (the P2.1 GAP-1 deferral; owed before P2.8 cutover)
-      [branch argon2id-rehash; IMPLEMENTED + PROVE GREEN; T3 PENDING (fresh chat),
-       NOT MERGED. Do NOT merge until T3 findings resolved + "READY TO MERGE".]
+      [MERGED via PR #28 (commit 2f178bb; merge 67b0ba7, final master 67b0ba7,
+       2026-07-14). PROVE green (typecheck/lint, unit 17/17, DB-gated routes
+       20/20 incl. rehash-flip). T3 (fresh chat) CLEAN — no violations, no
+       blocking findings; the mixed-population timing residual + the
+       algorithm:2 const-enum workaround confirmed as deliberate documented
+       decisions, not findings.]
+      *** P2.8 cutover PREREQUISITE (1 of 2) now SATISFIED. ***
 SPEC: v1 §6.1 ("upgrade to argon2id on next login"), R3.7. Kd approved the plan.
 DEP: +@node-rs/argon2 (prebuilt binaries, no node-gyp; win32-x64 + linux-x64
   prebuilts resolved at install). bcryptjs KEPT (verifies legacy hashes).
