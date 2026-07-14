@@ -4,10 +4,15 @@
 // tenant data leaves this file unscoped (R3.2).
 import type { Sql } from "postgres";
 
+/** The password-hash algorithms users.hash_algo may hold (identity.ts §3.1
+ *  CHECK). Owned here because it types the DB row; the service imports it. */
+export type HashAlgo = "bcrypt" | "argon2id";
+
 export interface UserAuthRow {
   id: string;
   email: string | null;
   passwordHash: string | null;
+  hashAlgo: HashAlgo | null;
   displayName: string;
   status: string;
   locale: string;
@@ -29,16 +34,24 @@ interface UserAuthDbRow {
   id: string;
   email: string | null;
   password_hash: string | null;
+  hash_algo: string | null;
   display_name: string;
   status: string;
   locale: string;
   units: string;
 }
 
+/** users.hash_algo is nullable text. A non-null password_hash always carries a
+ *  valid algo (migration invariant, tools/migrate-mongo/collections/users.ts:65);
+ *  anything unexpected maps to null and the service fails such a login closed. */
+const toHashAlgo = (v: string | null): HashAlgo | null =>
+  v === "bcrypt" || v === "argon2id" ? v : null;
+
 const userAuthColumns = (row: UserAuthDbRow): UserAuthRow => ({
   id: row.id,
   email: row.email,
   passwordHash: row.password_hash,
+  hashAlgo: toHashAlgo(row.hash_algo),
   displayName: row.display_name,
   status: row.status,
   locale: row.locale,
@@ -47,14 +60,14 @@ const userAuthColumns = (row: UserAuthDbRow): UserAuthRow => ({
 
 export async function findUserByEmail(sql: Sql, email: string): Promise<UserAuthRow | null> {
   const rows = await sql<UserAuthDbRow[]>`
-    SELECT id, email, password_hash, display_name, status, locale, units
+    SELECT id, email, password_hash, hash_algo, display_name, status, locale, units
     FROM users WHERE email = ${email}`; // citext: case-insensitive match
   return rows[0] === undefined ? null : userAuthColumns(rows[0]);
 }
 
 export async function findUserById(sql: Sql, userId: string): Promise<UserAuthRow | null> {
   const rows = await sql<UserAuthDbRow[]>`
-    SELECT id, email, password_hash, display_name, status, locale, units
+    SELECT id, email, password_hash, hash_algo, display_name, status, locale, units
     FROM users WHERE id = ${userId}`;
   return rows[0] === undefined ? null : userAuthColumns(rows[0]);
 }
@@ -62,12 +75,12 @@ export async function findUserById(sql: Sql, userId: string): Promise<UserAuthRo
 /** null = email already taken (23505 on users_email_unique). */
 export async function createUser(
   sql: Sql,
-  input: { email: string; passwordHash: string; displayName: string },
+  input: { email: string; passwordHash: string; algo: HashAlgo; displayName: string },
 ): Promise<string | null> {
   try {
     const rows = await sql<{ id: string }[]>`
       INSERT INTO users (email, password_hash, hash_algo, display_name)
-      VALUES (${input.email}, ${input.passwordHash}, 'bcrypt', ${input.displayName})
+      VALUES (${input.email}, ${input.passwordHash}, ${input.algo}, ${input.displayName})
       RETURNING id`;
     return rows[0]?.id ?? null;
   } catch (err) {
@@ -81,9 +94,14 @@ function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && "code" in err && err.code === "23505";
 }
 
-export async function setPasswordHash(sql: Sql, userId: string, passwordHash: string): Promise<void> {
+export async function setPasswordHash(
+  sql: Sql,
+  userId: string,
+  passwordHash: string,
+  algo: HashAlgo,
+): Promise<void> {
   await sql`
-    UPDATE users SET password_hash = ${passwordHash}, hash_algo = 'bcrypt'
+    UPDATE users SET password_hash = ${passwordHash}, hash_algo = ${algo}
     WHERE id = ${userId}`;
 }
 

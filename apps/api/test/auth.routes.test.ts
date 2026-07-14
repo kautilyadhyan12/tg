@@ -102,8 +102,13 @@ d("auth routes (real Postgres)", () => {
     await sql.end({ timeout: 5 });
   });
 
-  // ── legacy hash fixture (Part IV #11, hard requirement) ──────────────────
-  it("verifies a REAL legacy bcryptjs@2.4.3 hash on login", { timeout: 30_000 }, async () => {
+  // ── legacy hash fixture + rehash-on-login (Part IV #11; v1 §6.1) ──────────
+  it("verifies a REAL legacy bcryptjs hash on login, then rehashes it to argon2id", { timeout: 30_000 }, async () => {
+    // Pre-state: the fixture was inserted as bcrypt.
+    const [before] = await sql<{ hash_algo: string; password_hash: string }[]>`
+      SELECT hash_algo, password_hash FROM users WHERE email = ${LEGACY_EMAIL}`;
+    expect(before?.hash_algo).toBe("bcrypt");
+
     const res = await post(api(), "/v1/auth/login", {
       email: LEGACY_EMAIL,
       password: LEGACY_PASSWORD,
@@ -112,10 +117,30 @@ d("auth routes (real Postgres)", () => {
     const cookies = cookieMap(res);
     expect(cookies["accessToken"]).toBeTruthy();
     expect(cookies["refreshToken"]).toBeTruthy();
+
+    // Rehash-on-login upgraded the stored hash to argon2id (awaited before the
+    // response, so it is observable now).
+    const [after] = await sql<{ hash_algo: string; password_hash: string }[]>`
+      SELECT hash_algo, password_hash FROM users WHERE email = ${LEGACY_EMAIL}`;
+    expect(after?.hash_algo).toBe("argon2id");
+    expect(after?.password_hash).toMatch(/^\$argon2id\$/);
+    const upgraded = after?.password_hash;
+
+    // Second login with the SAME password still works AND is a no-op: the hash
+    // is byte-identical (needsRehash false → no re-write).
+    const res2 = await post(api(), "/v1/auth/login", {
+      email: LEGACY_EMAIL,
+      password: LEGACY_PASSWORD,
+    });
+    expect(res2.statusCode).toBe(200);
+    const [after2] = await sql<{ hash_algo: string; password_hash: string }[]>`
+      SELECT hash_algo, password_hash FROM users WHERE email = ${LEGACY_EMAIL}`;
+    expect(after2?.hash_algo).toBe("argon2id");
+    expect(after2?.password_hash).toBe(upgraded);
   });
 
   // ── register ──────────────────────────────────────────────────────────────
-  it("register: 201, bcrypt cost >= 10 stored, verification token hashed in DB", { timeout: 30_000 }, async () => {
+  it("register: 201, argon2id hash stored, verification token hashed in DB", { timeout: 30_000 }, async () => {
     const res = await post(api(), "/v1/auth/register", {
       email: "p21-alice@example.com",
       password: PASSWORD,
@@ -127,8 +152,8 @@ d("auth routes (real Postgres)", () => {
     const [u] = await sql<
       { password_hash: string; hash_algo: string }[]
     >`SELECT password_hash, hash_algo FROM users WHERE id = ${userId}`;
-    expect(u?.hash_algo).toBe("bcrypt");
-    expect(u?.password_hash).toMatch(/^\$2[aby]\$10\$/); // cost 10 (R3.7 >= 10)
+    expect(u?.hash_algo).toBe("argon2id");
+    expect(u?.password_hash).toMatch(/^\$argon2id\$/); // v1 §6.1: new users are argon2id
     expect(u?.password_hash).not.toContain(PASSWORD);
 
     // One-time token stored as SHA-256 of the mailed raw token, never raw.

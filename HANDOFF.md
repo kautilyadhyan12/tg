@@ -1,6 +1,42 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: argon2id rehash-on-login 🔴 (the P2.1 GAP-1 deferral; owed before P2.8 cutover)
+      [branch argon2id-rehash; IMPLEMENTED + PROVE GREEN; T3 PENDING (fresh chat),
+       NOT MERGED. Do NOT merge until T3 findings resolved + "READY TO MERGE".]
+SPEC: v1 §6.1 ("upgrade to argon2id on next login"), R3.7. Kd approved the plan.
+DEP: +@node-rs/argon2 (prebuilt binaries, no node-gyp; win32-x64 + linux-x64
+  prebuilts resolved at install). bcryptjs KEPT (verifies legacy hashes).
+SHIPPED (5 source + 2 test files, no migration — hash_algo CHECK already allows
+  'argon2id', identity.ts:37):
+  · service.ts: PasswordHasher now { algo, hash, verify(pw,hash,algo),
+    needsRehash(algo) }; bcryptHasher→argon2idHasher (verify dispatches
+    bcrypt.compare vs argon2.verify — NB argon2.verify(hash,password) hash-first);
+    DUMMY_HASH→argon2id (exported for test); login → verify-by-algo + BEST-EFFORT
+    rehash-on-login (swallow+log, awaited, never fails a valid login);
+    changePassword + resetPassword verify-by-algo & write hasher.algo.
+  · repo.ts: type HashAlgo; hashAlgo added to UserAuthRow/UserAuthDbRow/mapper +
+    BOTH SELECTs (findUserByEmail:50, findUserById:57); toHashAlgo guard;
+    createUser + setPasswordHash take an algo param (were hardcoded 'bcrypt').
+  · routes.ts: wire argon2idHasher.
+  · auth.unit.test.ts: fake→new interface; +5 tests (verify-by-algo, needsRehash,
+    DUMMY_HASH is argon2id, OWASP params). auth.routes.test.ts: register asserts
+    argon2id; legacy-hash test EXTENDED to prove the bcrypt→argon2id flip +
+    2nd-login no-op.
+PROVE (all green this session): typecheck 0, lint 0, unit 17/17, DB-gated routes
+  20/20 (Neon; incl. the rehash-flip test: legacy bcrypt verified → upgraded to
+  argon2id → re-login byte-identical no-op). Red-flag greps clean.
+DECISIONS (2026-07-14): argon2id params (OWASP), const-enum→literal 2, best-effort
+  awaited-swallow rehash, DUMMY_HASH mixed-population timing limitation (accepted,
+  self-healing), null-algo fail-closed, no migration. See DECISIONS.md tail.
+NEXT: (1) T3 in a FRESH chat on `git diff master...argon2id-rehash`; resolve every
+  finding + push. (2) then READY TO MERGE → PR → CI green → merge. (3) THEN P2.8
+  cutover is unblocked on this prerequisite (still also needs apps/web repointed:
+  authApi/coachApi/mlApi/nutritionApi → new API; only syncClient does today).
+OPEN SPEC GAPS: none.
+```
+
+```
 TASK: P2.7f — Mongo→PG migration: verify gates + prod runbook 🟡 (migration CAPSTONE)
       [MERGED via PR #27 (commits 5dc736d + 3e0bcd8; merge e43119b, final master
        e43119b, 2026-07-13). PROVE green (--verify-only on rebuilt Neon); T3
