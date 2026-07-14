@@ -1,6 +1,52 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: P2.7d — Mongo→PG migration: meal_logs + body_measurements 🔴
+      [MERGED via PR #25 (commits d8c5b73 + b39b0c0; merge 8627a23, final master
+       8627a23, 2026-07-13). PROVE green on live Mongo → Neon p26b-test; T3 (fresh
+       chat) CLEAN — no violations, 2 advisories recorded. 10 pure + 3 DB-gated
+       tests green.]
+DECISIONS (2026-07-13, Kd-ruled): GAP-A (the meal item) meal_logs.items is NOT
+  NULL jsonb re-validated by @app/shared mealItemSchema on EVERY read → build ONE
+  synthetic item: gramsPoint=100/gramsRange=[70,130] (placeholder), portionSource=
+  'legacy' (honest flag; IS in the enum), nutritionSource='curated' (enum lacks a
+  legacy value); row nutrition_sources=['legacy_model']. GAP-B drop meal_type/
+  fiber_g/notes/quantity. GAP-C origin='manual' (no structured photo field). GAP-D
+  body → users.weight_kg refresh to latest measurement (overwrites P2.7b weight).
+  GAP-E re-run onMealLogged per meal-user (idempotent badge award; lazily
+  reconciles streak to today). Meal row fixed: confirmed=true, kcal ±30% band,
+  portion_source='legacy', calc_version=0, legacy_mongo_id=_id, ON CONFLICT (id).
+GROUND TRUTH (live Mongo, scanned this session): meal_logs 16 (ONE user
+  6a0d468a…, also a P2.7c workout user; keys meal_type/food_name/quantity/kcal/
+  protein_g/carbs_g/fat_g/fiber_g/notes/consumed_at). body_measurements 1 (same
+  user; weight_kg=75 + 7 *_cm + body_fat_pct). Both targets HAVE legacy_mongo_id.
+SHIPPED (apps/api/tools/migrate-mongo/): collections/meals.ts (transformMeal pure
+  + insertMeal idempotent; ONE mealItemSchema-valid item) · collections/body.ts
+  (transformBody + insertBody + refreshUserWeight, mirrors nutrition/repo.ts
+  refreshWeight verbatim) · verify.ts +verifyNutrition (meals/body via
+  legacy_mongo_id, re-derived through the tested transform) · run.ts (meals →
+  body(+weight refresh) → meal gamification onMealLogged). Tests: migrate.meals
+  (6 pure incl. mealItemSchema.parse guard), migrate.body (4 pure),
+  migrate.nutrition.idempotency (3 DB-gated: schema-valid read-back + idempotency
+  + weight refresh + first_meal once).
+PROVE (live Mongo → Neon p26b-test): dry-run meals 16/body 1/0 skipped; --apply
+  meals inserted 16, body 1, weight_refreshed_users=1, meal gamification users=1,
+  VERIFY meals 16=16 + body 1=1 ok (all prior gates still ok). typecheck+lint
+  clean. Local secrets in apps/api/.env (gitignored).
+T3 ADVISORIES (recorded, DECISIONS 2026-07-13; NOT blockers): (1) editing a
+  MIGRATED meal later erodes provenance — nutrition/repo.ts updateMeal worst()/
+  sources() don't recognize 'legacy'/'legacy_model' → a PATCH rewrites them to
+  'user_dishware'/['curated']. Pre-existing P2.6a code, out of scope, accepted
+  (prod starts empty). (2) verifyNutrition is count-only (per the ruled count-gate
+  doctrine), lighter than §7:911-914's checksums.
+REMAINING P2.7 STAGES: P2.7e coach_conversations→coach_threads+coach_messages +
+  running_* (running_schedules deferred, G-rule); P2.7f full verify gates +
+  cutover (P2.8). Old Mongo container (aihg-mongo) still running.
+OPEN SPEC GAPS: none.
+NEXT: P2.7e (coach + running). Old Mongo live; Neon p26b-test seeded.
+```
+
+```
 TASK: P2.7c — Mongo→PG migration: workouts + workout_sets + gamification recompute 🔴
       [MERGED via PR #24 (commits 53e94a9 + 73d37f8; merge f2cf0a7, final master
        f2cf0a7, 2026-07-13). PROVE green on live Mongo → Neon p26b-test; T3 (fresh
