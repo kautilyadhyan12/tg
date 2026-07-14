@@ -17,7 +17,7 @@ import { insertMeal, transformMeal } from "./collections/meals.js";
 import { insertBody, refreshUserWeight, transformBody } from "./collections/body.js";
 import { insertCoach, transformCoach } from "./collections/coach.js";
 import { insertRoute, insertRun, transformRoute, transformRun } from "./collections/running.js";
-import { verifyBcrypt, verifyCoachRunning, verifyNutrition, verifyUsersCount, verifyWorkouts } from "./verify.js";
+import { verifyBcrypt, verifyCoachRunning, verifyNutrition, verifyParity, verifyUsersCount, verifyWorkouts } from "./verify.js";
 import { onMealLogged, onWorkoutSynced } from "../../src/modules/gamification/service.js";
 
 const envSchema = z.object({
@@ -26,12 +26,18 @@ const envSchema = z.object({
 });
 
 async function main(): Promise<void> {
-  const apply = process.argv.includes("--apply");
+  // --verify-only: run the gates against the current DB with NO writes (the
+  // runbook's re-verify step). It forces apply=false, so every insert/recompute
+  // block is skipped while the stage reads still report dry-run counts.
+  const verifyOnly = process.argv.includes("--verify-only");
+  const apply = process.argv.includes("--apply") && !verifyOnly;
+  const startedAtMs = Date.now(); // tool timing only (not engine) — §7 <single-digit-min target
   const env = envSchema.safeParse(process.env);
   if (!env.success) {
     console.error("Missing env: MONGO_URI and/or DATABASE_URL. (secrets never printed)");
     process.exit(2);
   }
+  console.log(`mode: ${verifyOnly ? "verify-only (no writes)" : apply ? "apply" : "dry-run"}`);
   const mongo = await connectMongo(env.data.MONGO_URI);
   const sql = connectPg(env.data.DATABASE_URL);
   try {
@@ -302,12 +308,13 @@ async function main(): Promise<void> {
     console.log(`run_schedules: deferred (GAP-G — rule shape unspecified) mode=${apply ? "apply" : "dry-run"}`);
 
     // ── verify ────────────────────────────────────────────────────────────
-    if (apply) {
+    if (apply || verifyOnly) {
       const count = await verifyUsersCount(mongo, sql);
       const bcrypt = await verifyBcrypt(mongo, sql);
       const w = await verifyWorkouts(mongo, sql, idBySlug);
       const n = await verifyNutrition(mongo, sql);
       const cr = await verifyCoachRunning(mongo, sql);
+      const p = await verifyParity(mongo, sql, idBySlug);
       console.log(`VERIFY users count: mongo=${String(count.mongo)} pg=${String(count.pg)} ok=${String(count.ok)}`);
       console.log(`VERIFY bcrypt: sampled=${String(bcrypt.sampled)} intact=${String(bcrypt.intact)} ok=${String(bcrypt.ok)}`);
       console.log(`VERIFY workouts: migratable=${String(w.workouts.mongo)} pg=${String(w.workouts.pg)} ok=${String(w.workouts.ok)}`);
@@ -319,11 +326,17 @@ async function main(): Promise<void> {
       console.log(`VERIFY coach_messages: expected=${String(cr.messages.mongo)} pg=${String(cr.messages.pg)} ok=${String(cr.messages.ok)}`);
       console.log(`VERIFY runs: migratable=${String(cr.runs.mongo)} pg=${String(cr.runs.pg)} ok=${String(cr.runs.ok)}`);
       console.log(`VERIFY saved_routes: migratable=${String(cr.routes.mongo)} pg=${String(cr.routes.pg)} ok=${String(cr.routes.ok)}`);
-      if (!count.ok || !bcrypt.ok || !w.ok || !n.ok || !cr.ok) {
+      // §7 deep gate: per-user parity + UUIDv5 cross-ref (workout→user).
+      console.log(`VERIFY parity: per_user_mismatches=${String(p.mismatches.length)} crossref_sampled=${String(p.crossRefSampled)} crossref_ok=${String(p.crossRefOk)} ok=${String(p.ok)}`);
+      for (const m of p.mismatches) {
+        console.error(`  PARITY MISMATCH ${m.entity} user=${m.userId} mongo=${String(m.mongo)} pg=${String(m.pg)}`);
+      }
+      if (!count.ok || !bcrypt.ok || !w.ok || !n.ok || !cr.ok || !p.ok) {
         console.error("VERIFY FAILED");
         process.exitCode = 1;
       }
     }
+    console.log(`elapsed: ${((Date.now() - startedAtMs) / 1000).toFixed(1)}s (§7 target: single-digit minutes)`);
   } finally {
     await mongo.close();
     await sql.end({ timeout: 5 });

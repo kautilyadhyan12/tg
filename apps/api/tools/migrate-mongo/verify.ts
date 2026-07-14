@@ -166,3 +166,130 @@ export async function verifyCoachRunning(mongo: MongoReader, sql: Sql): Promise<
   const routes: CountGate = { collection: "saved_routes", mongo: expectedRoutes, pg: sr?.n ?? 0, ok: (sr?.n ?? 0) === expectedRoutes };
   return { threads, messages, runs, routes, ok: threads.ok && messages.ok && runs.ok && routes.ok };
 }
+
+// ── P2.7f deep parity gate (§7:911-914) ─────────────────────────────────────
+// Beyond the aggregate count gates: PER-USER count parity (a mis-attributed
+// row that keeps the total right is caught here) + a UUIDv5 cross-reference
+// spot-check. Both sides are re-derived through the tested transforms.
+
+export interface ParityMismatch {
+  entity: string;
+  userId: string;
+  mongo: number;
+  pg: number;
+}
+
+/** Pure per-user comparison: any user whose Mongo count != PG count (a missing
+ *  user on either side counts as 0) is a mismatch. */
+export function comparePerUser(
+  entity: string,
+  mongoByUser: ReadonlyMap<string, number>,
+  pgByUser: ReadonlyMap<string, number>,
+): ParityMismatch[] {
+  const users = new Set<string>([...mongoByUser.keys(), ...pgByUser.keys()]);
+  const out: ParityMismatch[] = [];
+  for (const u of users) {
+    const m = mongoByUser.get(u) ?? 0;
+    const p = pgByUser.get(u) ?? 0;
+    if (m !== p) out.push({ entity, userId: u, mongo: m, pg: p });
+  }
+  return out;
+}
+
+const bump = (map: Map<string, number>, key: string, by = 1): void => {
+  map.set(key, (map.get(key) ?? 0) + by);
+};
+
+export interface ParityVerification {
+  mismatches: ParityMismatch[];
+  crossRefSampled: number;
+  crossRefOk: boolean;
+  ok: boolean;
+}
+
+/** Per-user parity across workouts/sets/meals/coach_messages/runs + a sampled
+ *  UUIDv5 cross-ref (a migrated workout's PG user_id equals uuidv5 of the source
+ *  workout's user_id). idBySlug is needed for the sets unroll count. */
+export async function verifyParity(
+  mongo: MongoReader,
+  sql: Sql,
+  idBySlug: ReadonlyMap<string, string>,
+): Promise<ParityVerification> {
+  // Mongo per-user counts (keyed by uuidv5(user_id)) via the tested transforms.
+  const mWorkouts = new Map<string, number>();
+  const mSets = new Map<string, number>();
+  await mongo.each("workout_sessions", (doc) => {
+    const row = transformWorkout(doc, idBySlug);
+    if (row === null) return;
+    bump(mWorkouts, row.userId);
+    bump(mSets, row.userId, row.setsCount);
+  });
+  const mMeals = new Map<string, number>();
+  await mongo.each("meal_logs", (doc) => {
+    const row = transformMeal(doc);
+    if (row !== null) bump(mMeals, row.userId);
+  });
+  const mMsgs = new Map<string, number>();
+  await mongo.each("coach_conversations", (doc) => {
+    const d = transformCoach(doc);
+    if (d !== null) bump(mMsgs, d.thread.userId, d.messages.length);
+  });
+  const mRuns = new Map<string, number>();
+  await mongo.each("running_sessions", (doc) => {
+    const row = transformRun(doc);
+    if (row !== null) bump(mRuns, row.userId);
+  });
+
+  // PG per-user counts, scoped to migrated users/rows.
+  const toMap = (rows: readonly { user_id: string; n: number }[]): Map<string, number> =>
+    new Map(rows.map((r) => [r.user_id, r.n]));
+  // workouts/workout_sets have no legacy_mongo_id, so scope them to migrated
+  // users (a foreign, non-migrated workout must not read as a parity mismatch).
+  const migratedRows = await sql<{ id: string }[]>`SELECT id FROM users WHERE legacy_mongo_id IS NOT NULL`;
+  const migratedIds = migratedRows.map((r) => r.id);
+  const pWorkouts = toMap(await sql<{ user_id: string; n: number }[]>`
+    SELECT user_id, count(*)::int AS n FROM workouts WHERE user_id = ANY(${migratedIds}) GROUP BY user_id`);
+  const pSets = toMap(await sql<{ user_id: string; n: number }[]>`
+    SELECT user_id, count(*)::int AS n FROM workout_sets WHERE user_id = ANY(${migratedIds}) GROUP BY user_id`);
+  const pMeals = toMap(await sql<{ user_id: string; n: number }[]>`
+    SELECT user_id, count(*)::int AS n FROM meal_logs WHERE legacy_mongo_id IS NOT NULL GROUP BY user_id`);
+  const pMsgs = toMap(await sql<{ user_id: string; n: number }[]>`
+    SELECT t.user_id, count(*)::int AS n FROM coach_messages m
+    JOIN coach_threads t ON t.id = m.thread_id
+    WHERE t.legacy_mongo_id IS NOT NULL GROUP BY t.user_id`);
+  const pRuns = toMap(await sql<{ user_id: string; n: number }[]>`
+    SELECT user_id, count(*)::int AS n FROM runs WHERE legacy_mongo_id IS NOT NULL GROUP BY user_id`);
+
+  const mismatches = [
+    ...comparePerUser("workouts", mWorkouts, pWorkouts),
+    ...comparePerUser("workout_sets", mSets, pSets),
+    ...comparePerUser("meals", mMeals, pMeals),
+    ...comparePerUser("coach_messages", mMsgs, pMsgs),
+    ...comparePerUser("runs", mRuns, pRuns),
+  ];
+
+  // UUIDv5 cross-ref spot-check (§7 "workout→user"): a sampled migrated
+  // workout's stored user_id must equal uuidv5 of the source doc's user_id.
+  const samples: { workoutId: string; expectedUser: string }[] = [];
+  await mongo.each("workout_sessions", (doc) => {
+    if (samples.length >= 20) return;
+    // Sample only MIGRATABLE workouts (transform-accepted). A skipped session is
+    // legitimately absent from PG and must NOT read as a cross-ref failure (T3
+    // finding A — fail-closed false failure). row.id/row.userId are the exact
+    // deterministic PG values, so this verifies the UUIDv5 user mapping.
+    const row = transformWorkout(doc, idBySlug);
+    if (row !== null) samples.push({ workoutId: row.id, expectedUser: row.userId });
+  });
+  let crossRefOk = true;
+  for (const s of samples) {
+    const rows = await sql<{ user_id: string }[]>`SELECT user_id FROM workouts WHERE id = ${s.workoutId}`;
+    if (rows[0]?.user_id !== s.expectedUser) crossRefOk = false;
+  }
+
+  return {
+    mismatches,
+    crossRefSampled: samples.length,
+    crossRefOk,
+    ok: mismatches.length === 0 && crossRefOk,
+  };
+}
