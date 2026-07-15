@@ -1,13 +1,19 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../api/authApi';
+import { setCurrentUserId } from '../utils/storage';
+import { flushSyncQueue } from '../sync/syncClient';
 
 const AuthContext = createContext(null);
 
-// Interim compat shim: the new API user shape (v1 §6.1) exposes `displayName`,
-// but 6 display sites still read `user.fullName`. Alias it here so this auth
-// card stays contained; the users/profile card migrates those sites and drops
-// this. (New shape: { id, email, displayName, emailVerified, locale, units }.)
-const normalizeUser = (u) => (u ? { ...u, fullName: u.displayName } : u);
+/** Publish the session's user id to the per-user storage layer BEFORE the app
+ *  renders with it: localStorage buckets (and the offline sync queue) are keyed
+ *  by it, and it is no longer derivable from a token (httpOnly cookies, v1
+ *  §6.1). Then kick the app-load flush — syncClient can no longer do that at
+ *  import time, because the id arrives asynchronously (see syncClient.js). */
+const adoptSession = (user) => {
+  setCurrentUserId(user?.id ?? null);
+  if (user) flushSyncQueue().catch(() => {});
+};
 
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
@@ -50,8 +56,14 @@ export function AuthProvider({ children }) {
   // A genuine 401 (no valid session) → logged out, no localStorage to clear.
   useEffect(() => {
     authService.getMe()
-      .then((res) => setUser(normalizeUser(res.data.user)))
-      .catch(() => setUser(null))
+      .then((res) => {
+        adoptSession(res.data.user);
+        setUser(res.data.user);
+      })
+      .catch(() => {
+        adoptSession(null);
+        setUser(null);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -60,7 +72,8 @@ export function AuthProvider({ children }) {
   // only — no tokens in the body (DECISIONS 2026-07-11; shared authUserSchema).
   const login = async (email, password) => {
     const res = await authService.login({ email, password });
-    setUser(normalizeUser(res.data.user));
+    adoptSession(res.data.user);
+    setUser(res.data.user);
     return res.data;
   };
 
@@ -80,7 +93,10 @@ export function AuthProvider({ children }) {
       console.error('Logout error:', err);
     } finally {
       // Per-user app data (workout_builder etc) is kept — stored under
-      // user_${userId}_${key}, it won't interfere with other users.
+      // user_${userId}_${key}, it won't interfere with other users. Dropping
+      // the id back to 'guest' is what stops the next account on this browser
+      // from reading it (or flushing this user's queued workouts).
+      adoptSession(null);
       setUser(null);
     }
   };

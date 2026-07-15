@@ -146,11 +146,11 @@ export default function Sidebar({ collapsed = false, setCollapsed = () => {} }) 
                 color:      '#FF8A1F',
               }}
             >
-              {user?.fullName?.charAt(0).toUpperCase()}
+              {user?.displayName?.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-white text-xs font-semibold truncate">
-                {user?.fullName}
+                {user?.displayName}
               </p>
               <div className="flex items-center gap-1 mt-0.5">
                 <Flame className="w-2.5 h-2.5" style={{ color: '#FF8A1F' }} />
@@ -185,7 +185,7 @@ export default function Sidebar({ collapsed = false, setCollapsed = () => {} }) 
             }}
             onClick={() => setCollapsed(false)}
           >
-            {user?.fullName?.charAt(0).toUpperCase()}
+            {user?.displayName?.charAt(0).toUpperCase()}
           </div>
         </div>
       )}

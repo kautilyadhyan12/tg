@@ -133,7 +133,7 @@ export default function Running() {
   };
 
   const upcoming = schedules.filter((s) => !s.is_past);
-  const name = user?.fullName?.split(' ')[0] || 'runner';
+  const name = user?.displayName?.split(' ')[0] || 'runner';
   const streak = stats?.running_streak ?? 0;
 
   const activity = {};

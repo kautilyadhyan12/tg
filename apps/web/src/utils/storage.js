@@ -4,38 +4,24 @@
  * so different users on the same browser never share data.
  */
 
-// ── base64url-safe JWT payload decode ────────────────────────────────────────
-// JWTs are base64URL-encoded ('-' and '_' instead of '+' and '/', no '=').
-// Plain atob() THROWS on those characters, and the old catch fell back to
-// 'guest' — meaning users whose token payload happened to contain '-' or '_'
-// (random chance, depends on their id bits) silently had all their data
-// saved under the shared 'guest' bucket, colliding with other accounts on
-// the same device. Normalize to standard base64 before decoding.
-function decodeJwtPayload(token) {
-  const part = token.split('.')[1];
-  if (!part) return null;
-  let b64 = part.replace(/-/g, '+').replace(/_/g, '/');
-  while (b64.length % 4 !== 0) b64 += '=';
-  return JSON.parse(atob(b64));
-}
+// ── the signed-in user's id ──────────────────────────────────────────────────
+// Pushed in by AuthContext (setCurrentUserId) on session restore / login /
+// logout. This used to be decoded from a localStorage JWT, but the web repoint
+// moved sessions to httpOnly cookies (v1 §6.1) which JS cannot read — so the id
+// MUST be supplied by the auth layer. Without it getUserId() would return
+// 'guest' for everyone and every account on a device would share one bucket,
+// including the offline sync queue (syncQueue.js keys on userKey) — which would
+// let one user's queued workouts flush under another's session.
+// NOTE: because the id now arrives asynchronously (after /v1/auth/me), any
+// flush trigger must run AFTER auth resolves — see syncClient.js.
+let _currentUserId = 'guest';
 
-// Cache the decode per token string — userKey() runs on every storage call.
-let _cachedToken = null;
-let _cachedUserId = 'guest';
-
-export const getUserId = () => {
-  try {
-    const token = localStorage.getItem('accessToken');
-    if (!token) return 'guest';
-    if (token === _cachedToken) return _cachedUserId;
-    const payload = decodeJwtPayload(token);
-    _cachedToken = token;
-    _cachedUserId = String(payload?.id || payload?._id || 'guest');
-    return _cachedUserId;
-  } catch {
-    return 'guest';
-  }
+/** Set by AuthContext whenever the session changes. Falsy id → 'guest'. */
+export const setCurrentUserId = (id) => {
+  _currentUserId = id ? String(id) : 'guest';
 };
+
+export const getUserId = () => _currentUserId;
 
 export const userKey = (key) => `user_${getUserId()}_${key}`;
 

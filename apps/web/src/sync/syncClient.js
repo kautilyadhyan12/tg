@@ -88,12 +88,21 @@ export function queueWorkoutSync({ workoutId, startedAt, summaries }) {
   return { queued: true };
 }
 
-// Flush triggers beyond enqueue-time: app load and connectivity regained.
+// Flush triggers beyond enqueue-time: connectivity regained, and app load.
 // (Module-scope by design — this module is bundled with the workout screens;
 // guard keeps node-env unit tests import-safe.)
+//
+// The app-load flush USED to fire here at import time. That worked only while
+// the user id was decodable synchronously from a localStorage JWT: the queue is
+// keyed per-user (syncQueue → storage.userKey), and after the web repoint the id
+// arrives asynchronously from /v1/auth/me (httpOnly cookies, v1 §6.1). Flushing
+// at import would therefore read the 'guest' bucket and silently never flush the
+// signed-in user's queued workouts. AuthContext now kicks the app-load flush
+// once the id is known. The 'online' listener stays: it fires long after auth in
+// any real session, and pre-auth it can only touch the (empty) guest bucket —
+// workout screens are behind ProtectedRoute.
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {
     flushSyncQueue().catch(() => {});
   });
-  flushSyncQueue().catch(() => {});
 }

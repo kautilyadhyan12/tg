@@ -259,7 +259,7 @@ export default function Dashboard() {
               {greeting}
             </p>
             <h1 className="text-4xl font-bold tracking-tighter" style={{ color: 'rgba(255,255,255,0.95)' }}>
-              {user?.fullName?.split(' ')[0] || 'Athlete'}
+              {user?.displayName?.split(' ')[0] || 'Athlete'}
             </h1>
             {s.streak > 0 && (
               <div className="flex items-center gap-1.5 mt-2">

@@ -1,6 +1,61 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: web repoint — Card 2: per-user storage keying + displayName migration 🔴
+      [branch web-repoint. PROVE green (automated). T3 PENDING. NOT MERGED —
+       same branch strategy as Card 1: merges only at the P2.8 cutover.]
+WHY THIS CARD IS MOSTLY A BUG FIX: Card 2 was planned as "users/profile
+  repoint", but grounding proved that surface is BLOCKED by the onboarding-
+  storage gap (below), and that Card 1 had introduced a real regression. So the
+  card = that fix + the promised shim removal. Kd-ruled scope; nothing deleted.
+*** CARD-1 REGRESSION FIXED (the important part) ***
+  utils/storage.js getUserId() decoded the JWT from localStorage.accessToken to
+  key EVERY per-user bucket. Card 1's httpOnly cookies made the token unreadable
+  → getUserId() returned 'guest' for everyone. syncQueue.js:13 keys the OFFLINE
+  QUEUE on userKey, so on a shared browser user A's unflushed workouts sat in the
+  bucket B flushes under B's cookie → mis-attributed workouts (vs R10.3).
+  FIX: storage.setCurrentUserId(id), pushed by AuthContext on getMe/login/logout.
+  Card 1's T3 saw storage.js:28 but mis-classified it as Bearer-null breakage.
+SHIPPED (7 files + 1 test): utils/storage.js (setCurrentUserId/getUserId, JWT
+  decode deleted) · context/AuthContext.jsx (adoptSession = set id + kick flush;
+  normalizeUser shim DELETED) · sync/syncClient.js (module-scope app-load flush
+  REMOVED — declared plan amendment: it ran at import, pre-auth, so it read the
+  'guest' bucket; AuthContext kicks it post-auth now; 'online' listener stays) ·
+  Sidebar.jsx:149,153,188 + Coach.jsx:519 + Dashboard.jsx:262 + Running.jsx:136
+  (user?.fullName → user?.displayName). NEW: utils/storage.test.js (4 tests).
+PROVE: 30 passed / 1 failed — the 1 is PRE-EXISTING ON MASTER (verified by
+  stashing: identical failure): syncClient.test.js's "no-op when VITE_API_URL is
+  not configured" fails locally because vitest loads apps/web/.env which SETS
+  VITE_API_URL; passes in CI (no .env committed). Not touched (R1.1).
+  vite build ok. Lint: my new files 0; changed files match the master baseline
+  EXACTLY (AuthContext 6→6, Sidebar 2→2, Coach 5→5, Dashboard 0→0, Running 2→2)
+  — zero new problems; the web is lint-dirty on master independently.
+  UNTESTED (honest): the adoptSession→flushSyncQueue coupling needs jsdom/RTL,
+  which the web lacks (node-only vitest) — manual smoke only.
+*** OWED / KNOWN, DO NOT TREAT AS BUGS ***
+  (a) ONBOARDING-STORAGE GAP is the real blocker and is the NEXT CARD. v1
+      §6.1:442 gives the users module "onboarding data" but Part 4 defines NO
+      storage for it, and P2.7 dropped those Mongo fields ("no target; the queued
+      onboarding-storage gap", INVENTORY.md:45). It also blocks RECOMMENDATIONS:
+      Part 2B §4.1:358's scorer is goal 40 · difficulty 20 · equipment 20 ·
+      duration 10 — exactly the dropped fields. So the Onboarding wizard, both
+      Settings profile forms, the avatar, and the 3 onboarding gate sites stay on
+      the OLD backend, untouched. NOTHING IS DELETED. Build the storage (T5: SQL
+      to Kd first; shape derivable from INVENTORY.md:45 + Part 2B §4).
+      HARD BLOCKER before the old backend is decommissioned at P2.8.
+  (b) LEGACY BUCKET ORPHANING → owed by the P2.8 RUNBOOK (Kd-ruled defer):
+      existing buckets are keyed by the old Mongo ObjectId, the app now uses the
+      new UUID → drafts + unflushed queued workouts orphan at cutover. Runbook
+      must drain queues pre-cutover or accept the loss explicitly.
+  (c) Still-old clients (mlApi/coachApi/nutritionApi + Settings delete-account)
+      still send `Bearer null` — their own cards. DELETE /v1/users/me exists but
+      takes NO body while the web sends {password}; left out of Card 2 (that
+      would weaken re-auth) — needs a ruling in its card.
+NEXT: onboarding-storage API card (T5) → then remaining web cards ③–⑦ → P2.8.
+OPEN SPEC GAPS: the onboarding-storage gap (a) — recorded, ruled, queued.
+```
+
+```
 TASK: web repoint — Card 1: auth → httpOnly-cookie on the new /v1 API 🔴
       [branch web-repoint, commit 44f847c. PROVE green (automated). T3 (fresh
        chat) found NO code/security violations; its findings were R11

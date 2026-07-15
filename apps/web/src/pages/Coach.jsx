@@ -516,7 +516,7 @@ export default function Coach() {
                   <Sparkles className="w-7 h-7 text-white" />
                 </div>
                 <h2 className="text-2xl font-bold tracking-tight text-white mb-2">
-                  Hi {user?.fullName?.split(' ')[0] || 'there'} 👋
+                  Hi {user?.displayName?.split(' ')[0] || 'there'} 👋
                 </h2>
                 <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
                   I'm your AI fitness coach. Ask me anything about training,
