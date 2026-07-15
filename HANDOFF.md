@@ -1,6 +1,72 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: onboarding-storage — fitness-profile storage on the new API 🔴 (schema+migration)
+      [branch onboarding-storage off master@1857be7. PROVE green (local pgvector
+       Postgres — see PROVE ENV below). T3 DONE (fresh chat, Part I §7c): no
+       blocking violations; 1 advisory FIXED (PUT {} test → suite 251→252). NOT
+       MERGED — READY TO MERGE is BLOCKED on two Kd actions: (a) mint a new Neon
+       branch + connection string so the migration-on-Neon CI job can go green
+       (current branch dead, 28P01 — Part I §6/V7 require CI green pre-merge);
+       (b) accept the DPDP process-only guard + T3's queue-promotion of the
+       Day-14/export worker (health-data exposure once merged). Both below.]
+WHY: v1 §6.1:442 assigns onboarding data to `users` but Part 4 defines no storage;
+  P2.7 DROPped the 13 Mongo fields (INVENTORY.md:45) and Part 2B §4.1:358's scorer
+  has nothing to read; the web wizard still POSTs to old backend-ml. Hard P2.8
+  blocker. API-only + additive → merges to master NORMALLY (unlike web-repoint).
+SHIPPED (11 files): drizzle/0006_user_fitness_profiles.sql (+ meta/0005_snapshot,
+  _journal tag) — NEW 1:1 table user_fitness_profiles (user_id PK, FK CASCADE
+  flagged; Kd chose Option B over users-columns) · db/schema/identity.ts (table +
+  the DPDP warning comment) · shared/src/users.ts (ported enums verbatim from
+  backend-auth User.js:44-98; Kd-approved bounds; onboardingCompleted added to
+  userProfileSchema; FitnessProfile/put schemas; updatedAt nullable = never-saved)
+  · users/{schemas,repo,service,routes}.ts — GET/PUT /v1/users/me/fitness-profile
+  (PUT = full-doc replace, absent→NULL, idempotent, active-only atomic upsert via
+  INSERT…SELECT…ON CONFLICT; GET returns EMPTY profile not 404; /v1/users/me now
+  LEFT JOINs onboarding_completed, COALESCE false) · test/users.fitness.routes
+  .test.ts (9) · db.migration.test.ts (+1: 0006 DDL — PK, CHECKs, NULL-passes,
+  cascade).
+DECISIONS.md: 11 entries — placement, ported value sets, invented-not-spec bounds,
+  fitness_level NULL not 'beginner', PUT semantics ({} clears profile — accepted),
+  empty-profile GET, onboardingCompleted scope addition, DPDP CORRECTION (below),
+  active-only upsert, no-duplicate arrays, the drizzle numbering trap.
+*** DPDP CORRECTION (plan premise falsified mid-card) *** The FK CASCADE never
+  fires on account deletion: Part 4 §5.2:829 ANONYMIZES users to a tombstone,
+  never deletes. user_fitness_profiles holds medical_conditions (HEALTH DATA) —
+  it MUST be added to the §5.2 Day-14 explicit DELETE list AND the JSON-export
+  list, both owned by the QUEUED Day-14/export worker card (DECISIONS 2026-07-11).
+  Recorded in DECISIONS + schema comment so that card inherits it.
+TRAP (repo-wide, recorded in DECISIONS): drizzle-kit numbers from journal idx
+  (0-based) but this repo's files are idx+1 → EVERY generated migration collides
+  and must be renamed (file + journal tag; snapshot keeps drizzle's idx).
+  Precedent verified: commit 34438bf.
+PROVE ENV (Neon was DEAD — 28P01, free-tier branch reset AGAIN, same as
+  HANDOFF:123): stood up LOCAL docker pgvector/pgvector:pg16 as `aihg-pg-prove`,
+  port 54329, DATABASE_URL=postgresql://postgres:prove@localhost:54329/aihg_test.
+  Container left running for T3/re-PROVE. drizzle-kit migrate applied 6/6;
+  constraints verified by query.
+PROVE (real output, full suite, POST-T3): `DATABASE_URL=... corepack pnpm
+  --filter api exec vitest run` → 33 files / 252 passed / 0 failed / 0 skipped
+  (251→252: the added PUT {} test). Scoped: users.fitness 10/10, db.migration
+  6/6, users.routes 8/8. typecheck (shared+api) clean; eslint (touched files,
+  both pkgs) clean; red-flag greps clean.
+T3 (fresh chat, 2026-07-15): NO blocking violations. Advisory 1 (R9.2, PUT {}
+  test) FIXED. Advisory 2 (R11.4, container-lifetime caveat) informational.
+  Security pass clean. DPDP ESCALATION → see the two Kd-decision entries in
+  DECISIONS.md tail.
+OPEN SPEC GAPS: none.
+NEXT (Kd actions, then merge): (a) mint a new Neon branch + connection string
+  (Neon console), put it in apps/api/.env, push so CI's migration-on-Neon job
+  runs green; (b) rule on the DPDP queue-promotion recommendation. Once CI is
+  green AND (b) is ruled, the implementing chat writes READY TO MERGE → PR to
+  master (this card is API-only + additive → normal merge, NOT the web-repoint
+  branch). After merge: apply 0006 + seed to the new Neon branch.
+PROVE CONTAINER left running: aihg-pg-prove (docker, pgvector/pgvector:pg16,
+  :54329, migrations 0001-0006 applied) — for re-PROVE. `docker rm -f
+  aihg-pg-prove` to clean up.
+```
+
+```
 TASK: argon2id rehash-on-login 🔴 (the P2.1 GAP-1 deferral; owed before P2.8 cutover)
       [MERGED via PR #28 (commit 2f178bb; merge 67b0ba7, final master 67b0ba7,
        2026-07-14). PROVE green (typecheck/lint, unit 17/17, DB-gated routes

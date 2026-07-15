@@ -5,6 +5,7 @@ import {
   check,
   index,
   inet,
+  integer,
   numeric,
   pgTable,
   text,
@@ -93,4 +94,58 @@ export const refreshTokens = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("refresh_tokens_user_family_idx").on(t.userId, t.familyId)],
+);
+
+// onboarding-storage card (DECISIONS 2026-07-15): the onboarding/fitness
+// profile. v1 §6.1:442 assigns "onboarding data" to the `users` module but
+// Part 4 defines NO storage for it, so the P2.7 migration DROPped these Mongo
+// fields (tools/migrate-mongo/INVENTORY.md:45) and Part 2B §4.1:358's scorer
+// (goal 40 · difficulty 20 · equipment 20 · duration 10) has nothing to read.
+// This table is that storage. Kd-approved shape; every value set is PORTED
+// verbatim from the salvage source (backend-auth/src/models/User.js:44-98) —
+// none re-derived (R0.2).
+//
+// 1:1 with users (user_id is the PK, not a surrogate id). ON DELETE CASCADE is
+// FLAGGED per Part 4 §1's deletion policy: a fitness profile is meaningless
+// without its user. NOTE it is defense-in-depth ONLY, never the DPDP mechanism:
+// §5.2 ANONYMIZES the users row to a tombstone rather than deleting it, so this
+// cascade never fires on account deletion. This table MUST be added to the
+// §5.2 Day-14 explicit DELETE list and to the JSON-export list — both owned by
+// the queued Day-14/export worker card (DECISIONS 2026-07-11). It holds
+// medical_conditions (health data, sensitive under DPDP).
+//
+// Units are normalized to metric at the boundary, matching users.weight_kg
+// (Part 4 §3.1) and the INVENTORY.md:45 XFORM convention; users.units drives
+// display. Weight lives on users.weight_kg and is NOT duplicated here.
+export const userFitnessProfiles = pgTable(
+  "user_fitness_profiles",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    age: integer("age"),
+    gender: text("gender"),
+    heightCm: numeric("height_cm", { precision: 5, scale: 2 }),
+    targetWeightKg: numeric("target_weight_kg", { precision: 5, scale: 2 }),
+    fitnessLevel: text("fitness_level"), // NULL until answered — unanswered is not 'beginner' (Kd-approved)
+    fitnessGoals: text("fitness_goals").array(), // value set enforced in Zod, per the catalog.ts equipment/muscles precedent
+    exerciseFrequency: integer("exercise_frequency"), // days per week
+    availableEquipment: text("available_equipment").array(), // value set enforced in Zod
+    sessionDurationMin: integer("session_duration_min"), // minutes
+    preferredWorkoutTime: text("preferred_workout_time"),
+    medicalConditions: text("medical_conditions"), // health data — see the DPDP note above
+    onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    // Part 4 §1: enums are text + CHECK, never PG enums. NULL passes each CHECK
+    // (IN yields NULL, not false) — deliberate: the wizard may be partial.
+    check("user_fitness_profiles_gender_check", sql`${t.gender} IN ('male','female','other','prefer_not_to_say')`),
+    check("user_fitness_profiles_fitness_level_check", sql`${t.fitnessLevel} IN ('beginner','intermediate','advanced')`),
+    check(
+      "user_fitness_profiles_preferred_workout_time_check",
+      sql`${t.preferredWorkoutTime} IN ('morning','afternoon','evening')`,
+    ),
+  ],
 );
