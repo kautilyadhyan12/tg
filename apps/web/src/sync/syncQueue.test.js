@@ -2,6 +2,7 @@
 // never drops or duplicates a workout). Node env: storage + keys injected.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { enqueue, flush, park, peekQueue, peekParked, requeueParked } from './syncQueue';
+import { setCurrentUserId } from '../utils/storage';
 
 function fakeStorage(initial = {}) {
   const map = new Map(Object.entries(initial));
@@ -19,9 +20,41 @@ let opts;
 beforeEach(() => {
   storage = fakeStorage();
   opts = { storage, queueKey: 'q', parkedKey: 'p' };
+  setCurrentUserId('user-a'); // a signed-in owner for the flush-identity guard
 });
 
 const httpError = (status) => Object.assign(new Error(`http ${status}`), { response: { status } });
+
+// T3 (Card 2): the queue key is bound at run start, but identity is bound at
+// SEND time — postSync carries whatever httpOnly cookie is ambient. A session
+// change mid-run must never send user A's queued workouts under user B.
+describe('flush identity binding (R10.3)', () => {
+  it('abandons the run when the session changes mid-flush', async () => {
+    enqueue(payload('a1'), opts);
+    enqueue(payload('a2'), opts);
+    const sent = [];
+    const post = vi.fn(async (entry) => {
+      sent.push(entry.workoutId);
+      setCurrentUserId('user-b'); // A logs out, B logs in while we're awaiting
+    });
+
+    await flush(post, opts);
+
+    expect(sent).toEqual(['a1']); // stopped before sending a2 under B
+    expect(post).toHaveBeenCalledTimes(1);
+    // a2 is neither dropped nor sent — it stays queued for its real owner.
+    expect(peekQueue(opts).map((p) => p.workoutId)).toEqual(['a2']);
+  });
+
+  it('drains normally while the session is stable', async () => {
+    enqueue(payload('a1'), opts);
+    enqueue(payload('a2'), opts);
+    const post = vi.fn(async () => {});
+    await flush(post, opts);
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(peekQueue(opts)).toEqual([]);
+  });
+});
 
 describe('enqueue', () => {
   it('preserves FIFO order', () => {

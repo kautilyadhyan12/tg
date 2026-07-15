@@ -10,7 +10,7 @@
 // pill): the entry moves to a parked list — still in localStorage, never
 // dropped (R10.3) — and the flush continues.
 
-import { userKey } from '../utils/storage';
+import { getUserId, userKey } from '../utils/storage';
 
 export const QUEUE_KEY = 'workout_sync_queue.v1';
 export const PARKED_KEY = 'workout_sync_parked.v1';
@@ -154,12 +154,22 @@ export function flush(post, opts = {}) {
 
 async function flushRun(post, opts) {
   const { storage, queueKey, parkedKey } = resolveOpts(opts);
+  // The queue KEY is bound once, here — but identity is bound at SEND time:
+  // postSync carries whatever httpOnly session cookie is ambient when the POST
+  // goes out, and it has no user binding of its own. So if the session changes
+  // mid-run (logout + a different login while this loop is awaiting), we would
+  // keep draining user A's bucket while the server attributes those workouts to
+  // whoever is signed in now. Bind the run to its owner and abandon it the
+  // moment identity moves; the new user's own flush handles their own bucket.
+  // (T3, Card 2 — the residual half of the 'guest'-bucket hazard.)
+  const owner = getUserId();
   // Snapshot of workoutIds to attempt in this run, in order; each payload is
   // re-read fresh at send time so a replaced entry sends its latest version.
   const order = readList(storage, queueKey).map((p) => p.workoutId);
   for (const workoutId of order) {
     const entry = readList(storage, queueKey).find((p) => p.workoutId === workoutId);
     if (!entry) continue;
+    if (getUserId() !== owner) return; // session moved — never send under it
     try {
       await post(entry);
       removeFromQueue(storage, queueKey, entry);

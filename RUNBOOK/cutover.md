@@ -16,8 +16,25 @@ the operational wrapper around it.
 
 ## Prerequisites (all must be true before starting)
 
-- [ ] **argon2id rehash-on-login** shipped (DECISIONS 2026-07-11, owed before
-      P2.8) — else migrated users stay bcrypt with no upgrade path.
+- [x] **argon2id rehash-on-login** shipped — MERGED 2026-07-14 (PR #28, merge
+      `67b0ba7`); bcrypt users upgrade transparently on next login.
+- [ ] **Onboarding storage exists on the new API.** HARD BLOCKER for
+      decommissioning the old backend: `apps/web`'s Onboarding wizard still POSTs
+      `/users/onboarding` to `backend-ml`, and Part 4 defines NO storage for that
+      data (P2.7 dropped it — INVENTORY.md:45 "the queued onboarding-storage
+      gap"). It also gates recommendations (Part 2B §4.1: the scorer IS goal /
+      difficulty / equipment / duration). Turning the old backend off before this
+      lands silently breaks onboarding + recommendations. (DECISIONS 2026-07-15.)
+- [ ] **Drain the offline sync queues BEFORE cutover** (legacy-bucket orphaning,
+      DECISIONS 2026-07-15). Per-user localStorage buckets — including the
+      offline workout queue — are keyed `user_<id>_*`. Pre-cutover that `<id>` is
+      the **old Mongo ObjectId** (decoded from the old JWT); after it is the
+      **new UUID** (§7 uuidv5 mapping), so any unflushed workouts and
+      WorkoutBuilder drafts orphan under an address the app no longer reads.
+      Mitigation is only needed for a **data-carrying** cutover (dev/test): have
+      clients flush/sync while the OLD stack is still up, or accept the loss
+      explicitly. **On greenfield prod (the note above) this is a non-issue** —
+      no users, no buckets.
 - [ ] **Web app repointed to the new API.** Today `apps/web` is split:
       `syncClient.js` → `VITE_API_URL` (new), but `authApi/coachApi/mlApi/
       nutritionApi` still → `VITE_AUTH_API_URL` / `VITE_ML_API_URL` (old). All

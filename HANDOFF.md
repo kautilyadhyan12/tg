@@ -2,8 +2,10 @@
 
 ```
 TASK: web repoint — Card 2: per-user storage keying + displayName migration 🔴
-      [branch web-repoint. PROVE green (automated). T3 PENDING. NOT MERGED —
-       same branch strategy as Card 1: merges only at the P2.8 cutover.]
+      [branch web-repoint. PROVE green (automated). T3 (fresh chat) DONE — found
+       1 REAL correctness bug (flush identity race) + doc/accuracy fixes; ALL
+       RESOLVED, see T3 RESOLUTION below. NOT MERGED — same branch strategy as
+       Card 1: merges only at the P2.8 cutover.]
 WHY THIS CARD IS MOSTLY A BUG FIX: Card 2 was planned as "users/profile
   repoint", but grounding proved that surface is BLOCKED by the onboarding-
   storage gap (below), and that Card 1 had introduced a real regression. So the
@@ -23,15 +25,42 @@ SHIPPED (7 files + 1 test): utils/storage.js (setCurrentUserId/getUserId, JWT
   'guest' bucket; AuthContext kicks it post-auth now; 'online' listener stays) ·
   Sidebar.jsx:149,153,188 + Coach.jsx:519 + Dashboard.jsx:262 + Running.jsx:136
   (user?.fullName → user?.displayName). NEW: utils/storage.test.js (4 tests).
-PROVE: 30 passed / 1 failed — the 1 is PRE-EXISTING ON MASTER (verified by
-  stashing: identical failure): syncClient.test.js's "no-op when VITE_API_URL is
-  not configured" fails locally because vitest loads apps/web/.env which SETS
-  VITE_API_URL; passes in CI (no .env committed). Not touched (R1.1).
-  vite build ok. Lint: my new files 0; changed files match the master baseline
-  EXACTLY (AuthContext 6→6, Sidebar 2→2, Coach 5→5, Dashboard 0→0, Running 2→2)
-  — zero new problems; the web is lint-dirty on master independently.
+PROVE (FULL suite — `corepack pnpm --filter web exec vitest run`):
+  57 passed / 1 failed (58 tests, 9 files). The 1 is PRE-EXISTING ON MASTER
+  (verified by stashing: identical failure): syncClient.test.js's "no-op when
+  VITE_API_URL is not configured" fails locally because vitest loads
+  apps/web/.env which SETS VITE_API_URL; passes in CI (no .env committed). Not
+  touched (R1.1). vite build ok. Lint: every file I touched → 0; the files I
+  only renamed a token in match the master baseline EXACTLY (AuthContext 6→6,
+  Sidebar 2→2, Coach 5→5, Dashboard 0→0, Running 2→2) — zero new problems; the
+  web is lint-dirty on master independently.
+  V1 NOTE: this block first said "30 passed / 1 failed" — that was a FILTERED
+  run (`vitest run storage sync authApi`) reported as if it were the suite. T3
+  caught it. Numbers here are now the full suite; quote the command with them.
   UNTESTED (honest): the adoptSession→flushSyncQueue coupling needs jsdom/RTL,
   which the web lacks (node-only vitest) — manual smoke only.
+T3 RESOLUTION (all findings closed):
+  · FIXED (real bug, R10.3): flushRun bound the queue KEY at run start but
+    identity binds at SEND time (postSync carries the ambient cookie), so a
+    logout+login mid-run kept draining A's bucket while the server attributed
+    the workouts to B — the residual half of this card's own hazard. flushRun
+    now captures `owner = getUserId()` and returns before any post() if identity
+    moved; abandoned entries stay queued (not dropped, not sent). Regression
+    test added AND proven to fail without the guard (sent ['a1','a2'] vs ['a1']).
+  · FIXED (docs): the "AuthContext kicks the flush" comment implied equivalence
+    with the removed import-time flush. It is NOT equivalent — if /v1/auth/me
+    fails at app load, no flush runs that page-session. Accepted + recorded as a
+    liveness delay (never data loss); comment + DECISIONS corrected.
+  · FIXED (docs): the orphaning entry read as a PRODUCTION hazard. It is
+    dev/test-only — prod launches with an EMPTY db (cutover.md:11-13). Corrected,
+    and it is now a real CHECKBOX in RUNBOOK/cutover.md (that file already
+    existed; "owed by a future card" is how such items get lost — T3's point).
+  · REPORTED not fixed (R1.1): syncApi has NO timeout (syncClient.js:21-25) — a
+    hung POST holds a run open; the owner check makes that harmless, so it is
+    left for the sync card. AND: AuthContext exports `setUser` raw (:123) and
+    GoogleAuthSuccess.jsx:37 calls it, bypassing adoptSession → would key a
+    Google user to 'guest'. UNREACHABLE today (route deleted) — but the Google
+    OAuth card MUST adopt via adoptSession or stop exporting setUser.
 *** OWED / KNOWN, DO NOT TREAT AS BUGS ***
   (a) ONBOARDING-STORAGE GAP is the real blocker and is the NEXT CARD. v1
       §6.1:442 gives the users module "onboarding data" but Part 4 defines NO
