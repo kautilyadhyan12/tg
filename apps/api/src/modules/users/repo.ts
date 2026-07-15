@@ -5,8 +5,13 @@
 // (refresh_tokens, one_time_tokens) are NEVER touched here — the users
 // service goes through auth's service interface (R7.1).
 // Every query is keyed by the owning userId (R3.2).
-import type { Sql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 import type { UpdateProfileRequest } from "./schemas.js";
+
+/** Reads that run both standalone and inside a tx. postgres.js's Sql and
+ *  TransactionSql are siblings, not sub/supertypes — neither is assignable to
+ *  the other — so a shared read helper must accept the union. */
+type SqlOrTx = Sql | TransactionSql;
 
 export interface ProfileRow {
   id: string;
@@ -17,6 +22,7 @@ export interface ProfileRow {
   timezone: string | null;
   weightKg: number | null;
   leaderboardOptOut: boolean;
+  onboardingCompleted: boolean;
   createdAt: Date;
 }
 
@@ -29,6 +35,7 @@ interface ProfileDbRow {
   timezone: string | null;
   weight_kg: string | null; // numeric arrives as string
   leaderboard_opt_out: boolean;
+  onboarding_completed: boolean;
   created_at: Date;
 }
 
@@ -41,15 +48,26 @@ const toProfile = (r: ProfileDbRow): ProfileRow => ({
   timezone: r.timezone,
   weightKg: r.weight_kg === null ? null : Number(r.weight_kg),
   leaderboardOptOut: r.leaderboard_opt_out,
+  onboardingCompleted: r.onboarding_completed,
   createdAt: r.created_at,
 });
 
-export async function getProfile(sql: Sql, userId: string): Promise<ProfileRow | null> {
+/** The one profile read. onboarding_completed lives on user_fitness_profiles
+ *  (onboarding-storage card), so it arrives by LEFT JOIN and COALESCEs to false
+ *  for a user who has not started onboarding — no row is the common case. */
+async function selectProfile(sql: SqlOrTx, userId: string): Promise<ProfileRow | null> {
   const rows = await sql<ProfileDbRow[]>`
-    SELECT id, email, display_name, locale, units, timezone,
-           weight_kg, leaderboard_opt_out, created_at
-    FROM users WHERE id = ${userId} AND status = 'active'`;
+    SELECT u.id, u.email, u.display_name, u.locale, u.units, u.timezone,
+           u.weight_kg, u.leaderboard_opt_out, u.created_at,
+           COALESCE(f.onboarding_completed, false) AS onboarding_completed
+    FROM users u
+    LEFT JOIN user_fitness_profiles f ON f.user_id = u.id
+    WHERE u.id = ${userId} AND u.status = 'active'`;
   return rows[0] === undefined ? null : toProfile(rows[0]);
+}
+
+export async function getProfile(sql: Sql, userId: string): Promise<ProfileRow | null> {
+  return await selectProfile(sql, userId);
 }
 
 /** Applies a profile-only PATCH. Measurement history is written exclusively
@@ -75,16 +93,145 @@ export async function updateProfile(
     if (patch.weightKg !== undefined) cols["weight_kg"] = patch.weightKg;
     if (patch.leaderboardOptOut !== undefined) cols["leaderboard_opt_out"] = patch.leaderboardOptOut;
 
-    const rows = await tx<ProfileDbRow[]>`
+    // RETURNING cannot carry the joined onboarding_completed, so the row is
+    // re-read through the one profile select — same tx, so it stays atomic.
+    const rows = await tx<{ id: string }[]>`
       UPDATE users SET ${tx(cols)}
       WHERE id = ${userId} AND status = 'active'
-      RETURNING id, email, display_name, locale, units, timezone,
-                weight_kg, leaderboard_opt_out, created_at`;
-    const updated = rows[0];
-    if (updated === undefined) return null;
+      RETURNING id`;
+    if (rows[0] === undefined) return null;
 
-    return toProfile(updated);
+    return await selectProfile(tx, userId);
   });
+}
+
+// ── onboarding / fitness profile (onboarding-storage card) ──────────────────
+
+export interface FitnessProfileRow {
+  age: number | null;
+  gender: string | null;
+  heightCm: number | null;
+  targetWeightKg: number | null;
+  fitnessLevel: string | null;
+  fitnessGoals: string[];
+  exerciseFrequency: number | null;
+  availableEquipment: string[];
+  sessionDurationMin: number | null;
+  preferredWorkoutTime: string | null;
+  medicalConditions: string | null;
+  onboardingCompleted: boolean;
+  updatedAt: Date;
+}
+
+interface FitnessProfileDbRow {
+  age: number | null;
+  gender: string | null;
+  height_cm: string | null; // numeric arrives as string
+  target_weight_kg: string | null;
+  fitness_level: string | null;
+  fitness_goals: string[] | null;
+  exercise_frequency: number | null;
+  available_equipment: string[] | null;
+  session_duration_min: number | null;
+  preferred_workout_time: string | null;
+  medical_conditions: string | null;
+  onboarding_completed: boolean;
+  updated_at: Date;
+}
+
+const toFitnessProfile = (r: FitnessProfileDbRow): FitnessProfileRow => ({
+  age: r.age,
+  gender: r.gender,
+  heightCm: r.height_cm === null ? null : Number(r.height_cm),
+  targetWeightKg: r.target_weight_kg === null ? null : Number(r.target_weight_kg),
+  fitnessLevel: r.fitness_level,
+  fitnessGoals: r.fitness_goals ?? [],
+  exerciseFrequency: r.exercise_frequency,
+  availableEquipment: r.available_equipment ?? [],
+  sessionDurationMin: r.session_duration_min,
+  preferredWorkoutTime: r.preferred_workout_time,
+  medicalConditions: r.medical_conditions,
+  onboardingCompleted: r.onboarding_completed,
+  updatedAt: r.updated_at,
+});
+
+/** Null when the user has not started onboarding (no row) — the common case;
+ *  the service turns that into the empty profile. Keyed on userId (R3.2). */
+export async function getFitnessProfile(
+  sql: Sql,
+  userId: string,
+): Promise<FitnessProfileRow | null> {
+  const rows = await sql<FitnessProfileDbRow[]>`
+    SELECT age, gender, height_cm, target_weight_kg, fitness_level,
+           fitness_goals, exercise_frequency, available_equipment,
+           session_duration_min, preferred_workout_time, medical_conditions,
+           onboarding_completed, updated_at
+    FROM user_fitness_profiles WHERE user_id = ${userId}`;
+  return rows[0] === undefined ? null : toFitnessProfile(rows[0]);
+}
+
+/** Full-document upsert (PUT semantics): an absent field is written as NULL, so
+ *  the same body twice yields the same row — idempotent by construction (R3.5),
+ *  which is why no Idempotency-Key is needed here.
+ *
+ *  INSERT…SELECT-from-users is what enforces "active user only" ATOMICALLY: a
+ *  deleted user's SELECT yields no row, so nothing inserts, no conflict fires,
+ *  and RETURNING is empty → null. A check-then-insert would be a TOCTOU race
+ *  against a concurrent account deletion. The FK guarantees the user EXISTS but
+ *  says nothing about status, since §5.2 soft-deletes. */
+export async function upsertFitnessProfile(
+  sql: Sql,
+  userId: string,
+  input: FitnessProfileWrite,
+): Promise<FitnessProfileRow | null> {
+  const rows = await sql<FitnessProfileDbRow[]>`
+    INSERT INTO user_fitness_profiles
+      (user_id, age, gender, height_cm, target_weight_kg, fitness_level,
+       fitness_goals, exercise_frequency, available_equipment,
+       session_duration_min, preferred_workout_time, medical_conditions,
+       onboarding_completed, updated_at)
+    SELECT u.id, ${input.age}, ${input.gender}, ${input.heightCm},
+           ${input.targetWeightKg}, ${input.fitnessLevel}, ${input.fitnessGoals},
+           ${input.exerciseFrequency}, ${input.availableEquipment},
+           ${input.sessionDurationMin}, ${input.preferredWorkoutTime},
+           ${input.medicalConditions}, ${input.onboardingCompleted}, now()
+    FROM users u WHERE u.id = ${userId} AND u.status = 'active'
+    ON CONFLICT (user_id) DO UPDATE SET
+      age = EXCLUDED.age,
+      gender = EXCLUDED.gender,
+      height_cm = EXCLUDED.height_cm,
+      target_weight_kg = EXCLUDED.target_weight_kg,
+      fitness_level = EXCLUDED.fitness_level,
+      fitness_goals = EXCLUDED.fitness_goals,
+      exercise_frequency = EXCLUDED.exercise_frequency,
+      available_equipment = EXCLUDED.available_equipment,
+      session_duration_min = EXCLUDED.session_duration_min,
+      preferred_workout_time = EXCLUDED.preferred_workout_time,
+      medical_conditions = EXCLUDED.medical_conditions,
+      onboarding_completed = EXCLUDED.onboarding_completed,
+      updated_at = now()
+    RETURNING age, gender, height_cm, target_weight_kg, fitness_level,
+              fitness_goals, exercise_frequency, available_equipment,
+              session_duration_min, preferred_workout_time, medical_conditions,
+              onboarding_completed, updated_at`;
+  return rows[0] === undefined ? null : toFitnessProfile(rows[0]);
+}
+
+/** The write shape the repo accepts: every field resolved to a value or NULL by
+ *  the service, so the repo never re-implements PUT's absent→NULL rule. */
+export interface FitnessProfileWrite {
+  age: number | null;
+  gender: string | null;
+  heightCm: number | null;
+  targetWeightKg: number | null;
+  fitnessLevel: string | null;
+  fitnessGoals: string[];
+  exerciseFrequency: number | null;
+  availableEquipment: string[];
+  sessionDurationMin: number | null;
+  preferredWorkoutTime: string | null;
+  medicalConditions: string | null;
+  onboardingCompleted: boolean;
 }
 
 export interface UserSyncContext {

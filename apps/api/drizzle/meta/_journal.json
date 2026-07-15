@@ -36,6 +36,13 @@
       "when": 1783848149730,
       "tag": "0005_meal_logs_origin",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784108802418,
+      "tag": "0006_user_fitness_profiles",
+      "breakpoints": true
     }
   ]
 }

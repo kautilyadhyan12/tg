@@ -52,6 +52,45 @@ d("0001_init on a real database", () => {
     await sql`DELETE FROM users WHERE id=${ownerId}`;
   });
 
+  it("0006 adds user_fitness_profiles: 1:1 PK, ported CHECKs, cascade", async () => {
+    // 1:1 with users — user_id IS the PK, no surrogate id.
+    const pk = await sql`
+      SELECT a.attname FROM pg_index i
+      JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+      WHERE i.indrelid = 'user_fitness_profiles'::regclass AND i.indisprimary`;
+    expect(pk.map((r) => r["attname"] as string)).toEqual(["user_id"]);
+
+    const owner = await sql<{ id: string }[]>`
+      INSERT INTO users (display_name) VALUES ('ofp-ddl-check') RETURNING id`;
+    const ownerId = owner[0]?.id;
+    if (ownerId === undefined) throw new Error("fitness-profile fixture insert failed");
+
+    // Each CHECK holds the value set ported from the old Mongo model.
+    for (const [col, bad] of [
+      ["gender", "yes"],
+      ["fitness_level", "expert"],
+      ["preferred_workout_time", "midnight"],
+    ] as const) {
+      await expect(
+        sql`INSERT INTO user_fitness_profiles (user_id, ${sql(col)}) VALUES (${ownerId}, ${bad})`,
+      ).rejects.toMatchObject({ code: "23514" });
+    }
+
+    // NULL passes every CHECK — the wizard may save a partial profile.
+    await sql`INSERT INTO user_fitness_profiles (user_id) VALUES (${ownerId})`;
+    const defaulted = await sql`
+      SELECT onboarding_completed FROM user_fitness_profiles WHERE user_id = ${ownerId}`;
+    expect(defaulted[0]?.["onboarding_completed"]).toBe(false);
+
+    // FK is ON DELETE CASCADE. NB this fires on a HARD delete only; Part 4 §5.2
+    // tombstones the users row instead, so the Day-14 worker must delete this
+    // table explicitly (DECISIONS 2026-07-15).
+    await sql`DELETE FROM users WHERE id = ${ownerId}`;
+    const orphans = await sql<{ n: string }[]>`
+      SELECT count(*)::text AS n FROM user_fitness_profiles WHERE user_id = ${ownerId}`;
+    expect(orphans[0]?.n).toBe("0");
+  });
+
   // 120s: two full seed passes = many sequential round-trips over a WAN
   // pooler; 30s flaked once under load (P2.5a PROVE) — headroom, not a bug.
   it("seed is idempotent and matches the Part 5 §1 price book", { timeout: 120_000 }, async () => {

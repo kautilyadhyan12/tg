@@ -14,7 +14,13 @@ import type { RedisLike } from "../../redis.js";
 import { bustEntitlements } from "../entitlements/service.js";
 import type { UsersEmailSender } from "./email.js";
 import * as repo from "./repo.js";
-import type { UpdateProfileRequest, UserProfile } from "./schemas.js";
+import { fitnessProfileSchema } from "./schemas.js";
+import type {
+  FitnessProfile,
+  PutFitnessProfileRequest,
+  UpdateProfileRequest,
+  UserProfile,
+} from "./schemas.js";
 
 /** Narrow service-interface export (R7.1) for workouts/gamification: the
  *  users-owned columns the sync path needs (P2.3). */
@@ -55,6 +61,7 @@ async function toUserProfile(sql: Sql, row: repo.ProfileRow): Promise<UserProfil
     timezone: row.timezone,
     weightKg: row.weightKg,
     leaderboardOptOut: row.leaderboardOptOut,
+    onboardingCompleted: row.onboardingCompleted,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -74,6 +81,69 @@ export async function updateProfile(
   const row = await repo.updateProfile(deps.sql, userId, patch);
   if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
   return await toUserProfile(deps.sql, row);
+}
+
+// ── onboarding / fitness profile (onboarding-storage card) ──────────────────
+
+/** A user who has never saved onboarding has no row. That is the common case,
+ *  not an error, so it reads as the empty profile — never a 404. */
+const EMPTY_FITNESS_PROFILE: FitnessProfile = {
+  age: null,
+  gender: null,
+  heightCm: null,
+  targetWeightKg: null,
+  fitnessLevel: null,
+  fitnessGoals: [],
+  exerciseFrequency: null,
+  availableEquipment: [],
+  sessionDurationMin: null,
+  preferredWorkoutTime: null,
+  medicalConditions: null,
+  onboardingCompleted: false,
+  updatedAt: null,
+};
+
+/** The repo returns the enum columns as plain strings (that is all Postgres
+ *  tells us). Re-parsing through the shared schema narrows them to their unions
+ *  WITHOUT an `as` cast (R2.2) and turns a row that violates the 0006 CHECKs —
+ *  e.g. a future migration widening a CHECK without updating the enum — into a
+ *  loud failure instead of malformed data served to the client (R1.3). */
+function toFitnessProfile(row: repo.FitnessProfileRow | null): FitnessProfile {
+  if (row === null) return EMPTY_FITNESS_PROFILE;
+  return fitnessProfileSchema.parse({ ...row, updatedAt: row.updatedAt.toISOString() });
+}
+
+export async function getFitnessProfile(
+  deps: UsersDeps,
+  userId: string,
+): Promise<FitnessProfile> {
+  return toFitnessProfile(await repo.getFitnessProfile(deps.sql, userId));
+}
+
+/** PUT = full-document replace: absent field → NULL. The absent→NULL rule lives
+ *  HERE (once), so the repo takes a fully-resolved write shape. */
+export async function putFitnessProfile(
+  deps: UsersDeps,
+  userId: string,
+  body: PutFitnessProfileRequest,
+): Promise<FitnessProfile> {
+  const row = await repo.upsertFitnessProfile(deps.sql, userId, {
+    age: body.age ?? null,
+    gender: body.gender ?? null,
+    heightCm: body.heightCm ?? null,
+    targetWeightKg: body.targetWeightKg ?? null,
+    fitnessLevel: body.fitnessLevel ?? null,
+    fitnessGoals: body.fitnessGoals ?? [],
+    exerciseFrequency: body.exerciseFrequency ?? null,
+    availableEquipment: body.availableEquipment ?? [],
+    sessionDurationMin: body.sessionDurationMin ?? null,
+    preferredWorkoutTime: body.preferredWorkoutTime ?? null,
+    medicalConditions: body.medicalConditions ?? null,
+    onboardingCompleted: body.onboardingCompleted ?? false,
+  });
+  // No row = the user was deleted mid-request (the upsert is active-only).
+  if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
+  return toFitnessProfile(row);
 }
 
 /** Part 4 §5.2 Day 0: soft-delete + close memberships + drop push tokens
