@@ -1,6 +1,61 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: web repoint — Card 1: auth → httpOnly-cookie on the new /v1 API 🔴
+      [branch web-repoint, commit 44f847c. PROVE green (automated). T3 (fresh
+       chat) found NO code/security violations; its findings were R11
+       documentation only — CLOSED by this block + the DECISIONS 2026-07-15
+       section. NOT MERGED and must not be: see BRANCH STRATEGY below.]
+SPEC: v1 §6.1:439 (auth = "rotating refresh tokens (httpOnly cookie on web)"),
+  §13:763 (SPA changes — does NOT itemize this repoint), §18:856. Prerequisite
+  for P2.8 ("web runs 100% on the new API", §22/line 991).
+WHY THIS IS NOT A CONFIG FLIP: the web ran the OLD model (localStorage
+  access/refresh + Bearer on every client); the new API is cookie-only with no
+  tokens in any body (shared/src/auth.ts:52). So it's an auth-model rewrite,
+  decomposed into cards ①auth ②users/profile ③progress/gamification/exercises
+  ④coach ⑤nutrition ⑥running/geo ⑦recommendation-or-drop. This is ①.
+BRANCH STRATEGY (Kd-ruled, DECISIONS 2026-07-15): auth is all-or-nothing, so the
+  moment it flips, every not-yet-repointed client loses its localStorage token.
+  ALL web-repoint cards are commits on ONE branch `web-repoint` (each with its
+  own T3); it merges to master ONLY when the web fully runs on the new API =
+  the P2.8 cutover. master stays deployable (old-backend web) until then.
+SHIPPED (6 files + 1 test): authApi.js (baseURL→VITE_API_URL, /v1/auth/* paths,
+  Bearer request-interceptor REMOVED, reactive 401→POST /v1/auth/refresh→retry-
+  once interceptor [single shared refresh on concurrent 401s; login/refresh
+  excluded; loop- + window-guarded redirect], +changePassword) · AuthContext.jsx
+  (mount→/v1/auth/me, login sets {user} only, register maps fullName→displayName,
+  logout stops touching tokens, normalizeUser fullName compat shim) · Login.jsx +
+  Register.jsx (Google behind GOOGLE_LOGIN_ENABLED=false) · App.jsx (Google route
+  + import removed) · Settings.jsx (change-password → cookie authService).
+  NEW: api/authApi.test.js (5 interceptor tests, node env + mock adapter).
+PROVE: authApi tests 5/5; `vite build` ok (3415 modules); the 6 changed files
+  lint-clean. NOTE web lint is RED overall — 73 PRE-EXISTING errors on master in
+  untouched salvage files (10 in Settings.jsx: Date.now purity, setState-in-
+  effect); this card adds none. MANUAL BROWSER SMOKE NOT YET RUN (a chat can't
+  drive a browser) — owed by Kd: API WEB_ORIGIN=http://localhost:5173 + API on
+  :3000, web VITE_API_URL=http://localhost:3000 → register/login → cookies set
+  (DevTools→Application→Cookies) → reload keeps session → logout clears.
+*** KNOWN-BROKEN INTERIM ON THIS BRANCH (by design; do NOT treat as bugs) ***
+  (a) ONBOARDING IS NEVER ENFORCED: authUserSchema has no onboardingCompleted
+      (it's a users-module field, v1 §6.1:442), so ProtectedRoute.jsx:44,:54 and
+      Login.jsx:33 all compare undefined === false → false. Fails OPEN. RESTORING
+      IT IS OWED BY CARD ② when /v1/users/me supplies the field.
+  (b) STILL-OLD CLIENTS SEND `Bearer null` and break: mlApi.js:10, coachApi.js:17,
+      nutritionApi.js:31, utils/storage.js:28, Settings.jsx:401 (delete-account).
+      Each is repointed by its own card. Card 1 PROVE must NOT be expected to
+      exercise coach / ML-profile / nutrition / delete-account.
+  (c) pages/GoogleAuthSuccess.jsx is ORPHANED dead code (no route/import) that
+      still writes localStorage.setItem('accessToken') (:31) and calls the wrong
+      /auth/me path (:35). Unreachable → inert. The Google-OAuth card must
+      rewrite or delete it.
+NEXT: Card ② users/profile (repoint userApi/profile reads+writes to /v1/users/me;
+  restore onboarding gating; migrate the 6 user?.fullName sites and DROP the
+  normalizeUser shim). Then ③–⑦, then P2.8 cutover per RUNBOOK/cutover.md.
+OPEN SPEC GAPS: none. v1 §13 doesn't itemize the repoint; §6.1/§18 fix the auth
+  model and the card ordering is an implementation choice (Kd-ruled auth-first).
+```
+
+```
 TASK: argon2id rehash-on-login 🔴 (the P2.1 GAP-1 deferral; owed before P2.8 cutover)
       [MERGED via PR #28 (commit 2f178bb; merge 67b0ba7, final master 67b0ba7,
        2026-07-14). PROVE green (typecheck/lint, unit 17/17, DB-gated routes
