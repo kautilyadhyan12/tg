@@ -16,8 +16,23 @@ the operational wrapper around it.
 
 ## Prerequisites (all must be true before starting)
 
-- [ ] **argon2id rehash-on-login** shipped (DECISIONS 2026-07-11, owed before
+- [x] **argon2id rehash-on-login** shipped (DECISIONS 2026-07-11, owed before
       P2.8) — else migrated users stay bcrypt with no upgrade path.
+      DONE: merged 2026-07-15 via PR #28 (merge 67b0ba7).
+- [ ] **DPDP Day-14 hard-delete + JSON-export worker** shipped (Part 4 §5.2).
+      **HARD GATE — do not cut over without it.** §5.2 tombstones the `users`
+      row rather than deleting it, so NO FK cascade collects user-owned PII;
+      §5.2's explicit Day-14 DELETE list is the only mechanism, and the worker
+      that runs it does not exist yet (DECISIONS 2026-07-11: queued, needs
+      BullMQ — which is NOT installed, and there is no worker mode yet).
+      Until it ships, a deleted user's data persists indefinitely — including
+      `user_fitness_profiles.medical_conditions` (**health data**, sensitive
+      under DPDP), which the onboarding-storage card added on 2026-07-16.
+      That card was merged ONLY on the accepted condition that this worker is
+      promoted and lands before real users exist — cutover IS that moment
+      (DECISIONS 2026-07-16). The worker must cover BOTH §5.2 lists:
+      the hard DELETE list and the JSON-export list. It must include
+      `user_fitness_profiles` in both.
 - [ ] **Web app repointed to the new API.** Today `apps/web` is split:
       `syncClient.js` → `VITE_API_URL` (new), but `authApi/coachApi/mlApi/
       nutritionApi` still → `VITE_AUTH_API_URL` / `VITE_ML_API_URL` (old). All
