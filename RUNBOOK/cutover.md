@@ -60,6 +60,14 @@ the operational wrapper around it.
       - [ ] Workout history calendar (WorkoutCalendar → workoutApi.getHistory)
             — /v1/workouts EXISTS; the client repoint is owed to a web card
             (found out-of-scope during Card 3, R1.1).
+      - [ ] **Groq model migration (HARD DATE: before 2026-08-16)** — Groq is
+            decommissioning `llama-3.1-8b-instant` (our COACH_MODEL default,
+            config.ts:30) on 2026-08-16; after that the coach goes dark. Own
+            small API card: flip the default (Groq recommends GPT OSS 20B),
+            re-quote the model-specific price constants (service.ts:23-24)
+            from groq.com/pricing per Part 0 rule 4, sanity-check answers.
+            This is date-gated, not launch-gated — do it even if cutover
+            slips. (DECISIONS 2026-07-16.)
       - [ ] Coach chat retry protection (DECISIONS 2026-07-12 P2.5b T3 minor;
             Kd D1(b) 2026-07-16) — /v1/coach/chat accepts a client-generated
             Idempotency-Key + gets a short-window per-route cap. Without it a

@@ -29,7 +29,7 @@ describe('coachService repoint (Card 4)', () => {
     await coachService.listThreads();
     await coachService.getThread('t-1');
     await coachService.deleteThread('t-1');
-    expect(seen[0]).toMatchObject({ url: '/v1/coach/threads', method: 'get', params: { limit: 20 } });
+    expect(seen[0]).toMatchObject({ url: '/v1/coach/threads', method: 'get', params: { limit: 50 } });
     expect(seen[1]).toMatchObject({ url: '/v1/coach/threads/t-1', method: 'get' });
     expect(seen[2]).toMatchObject({ url: '/v1/coach/threads/t-1', method: 'delete' });
   });

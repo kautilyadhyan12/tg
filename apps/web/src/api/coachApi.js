@@ -18,8 +18,10 @@
 import authApi from './authApi';
 
 export const coachService = {
-  /** {items: [{id, title, lastMessageAt}], nextCursor} — newest first. */
-  listThreads: (limit = 20) => authApi.get('/v1/coach/threads', { params: { limit } }),
+  /** {items: [{id, title, lastMessageAt}], nextCursor} — newest first.
+   *  50 = the schema max (T3 Card 4 obs.1, Kd-ruled: covers any realistic
+   *  user; a "load more" via nextCursor is a small later card if ever needed). */
+  listThreads: (limit = 50) => authApi.get('/v1/coach/threads', { params: { limit } }),
 
   /** {id, title, messages: [{role, content, createdAt}]} or 404. */
   getThread: (id) => authApi.get(`/v1/coach/threads/${id}`),
