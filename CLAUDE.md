@@ -19,6 +19,36 @@ is the PREVIOUS version. Treat it as a SALVAGE SOURCE, not a template.
 - When in doubt about old-vs-new, the spec is the tie-breaker. If the spec is
   silent, ask — never default to "what the old code did."
 
+**NO FEATURE IS EVER REMOVED, HIDDEN, OR "REDUCED TO WHAT THE BACKEND HAS"
+WITHOUT AN EXPLICIT KD RULING MADE IN RESPONSE TO A CITED OPTION. A missing
+backend surface is NEVER a reason to shrink the UI — the UI component STAYS
+UNTOUCHED on the old backend (the Card-1/2 precedent: Onboarding/Settings,
+"nothing deleted; all owed") and the endpoint gap is recorded as an OWED CARD.
+The cutover runbook's "endpoints must exist for each feature" prerequisite is
+the enforcement: P2.8 cannot run until every owed endpoint exists. A chat that
+proposes hiding/removing UI must, in the same breath, cite the DECISIONS line
+or spec § that sequences that feature's backend — no citation, no proposal.**
+(Operator-added 2026-07-16 after a chat recommended "reduce the UI to what the
+backend has" for gamification/predictions surfaces whose deferral was already
+Kd-ruled and sequenced in DECISIONS 2026-07-11 and CLAUDE.md P4.x — the
+recommendation was framed as removal instead of citing the existing rulings.)
+
+**GROUNDING BEFORE EVERY DECISION AND EVERY RECOMMENDATION — NO EXCEPTIONS.
+Before proposing, recommending, planning, or deciding ANYTHING, the chat MUST
+have read, IN THIS SESSION: (1) the spec §§ the task touches, (2) this file's
+rules for the domain, (3) the ENTIRE DECISIONS.md — every ruling, because any
+one of them may already answer the question, (4) HANDOFF.md's top block, and
+(5) RUNBOOK/cutover.md's prerequisites when the work affects the migration.
+Reading the spec but skipping DECISIONS.md is NOT grounded — DECISIONS.md IS
+the operator's case law and it OVERRIDES a chat's fresh judgment every time.
+A recommendation that contradicts or ignores an existing DECISIONS line is
+void, and re-asking Kd to rule on something DECISIONS already rules on is a
+protocol failure, not diligence. If any of these files was not read this
+session, the only permitted output is reading it — not an opinion.**
+(Operator-added 2026-07-16 after the same incident: the chat had read the spec
+and verified endpoints but had NOT re-read DECISIONS.md's P2.3 entries, and so
+re-litigated four questions Kd had already ruled on 2026-07-11.)
+
 
 # AI Home Gym — Implementation Playbook for Opus 4.8
 
