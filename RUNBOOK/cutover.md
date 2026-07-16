@@ -82,6 +82,21 @@ the operational wrapper around it.
             from groq.com/pricing per Part 0 rule 4, sanity-check answers.
             This is date-gated, not launch-gated — do it even if cutover
             slips. (DECISIONS 2026-07-16.)
+      - [ ] **Vision model migration (HARD DATE: 2026-07-17 — already due)** —
+            Groq emailed 2026-07-16: `meta-llama/llama-4-scout-17b-16e-instruct`
+            (MEAL_VISION_MODEL default, DECISIONS 2026-07-12 P2.6a) is
+            decommissioned 2026-07-17; after that meal-photo scans fail. The
+            ONLY vision-capable Groq replacement (console.groq.com/docs/vision,
+            checked 2026-07-16): `qwen/qwen3.6-27b` at $0.60/1M in + $3.00/1M
+            out (groq.com/pricing 2026-07-16; Part 0 rule 4 — re-quote at the
+            card, encode as 600_000/3_000_000 micro-USD). Own small API card:
+            flip the default, re-quote the vision price constants
+            (vision cost constants, nutrition module), sanity-check analyses
+            on real meal photos. INTERIM: the `MEAL_VISION_MODEL` env override
+            (the designed swap lever) keeps dev working — cost rows priced at
+            the old constants until the card lands (dev-only, accepted).
+            Do this WITH or BEFORE the coach model card (2026-08-16) — one
+            Groq visit for both.
       - [ ] Coach chat retry protection (DECISIONS 2026-07-12 P2.5b T3 minor;
             Kd D1(b) 2026-07-16) — /v1/coach/chat accepts a client-generated
             Idempotency-Key + gets a short-window per-route cap. Without it a
@@ -90,6 +105,24 @@ the operational wrapper around it.
             Card 4 wired it; the API side is its own small card and MUST land
             before real traffic. Client change is one header line
             (apps/web/src/api/coachApi.js notes where).
+      - [ ] **Nutrition targets/remaining** (MacroRings + "Remaining today",
+            web Card 5a, D2 Kd-ruled 2026-07-16) — the new API has no targets
+            surface (v1 §6.1's nutrition module is photo pipeline + lookup
+            only); the page keeps reading the OLD backend's Mifflin-St Jeor
+            calculator interim (broken on the branch, the gamification
+            pattern). Its new-API card is now BUILDABLE: the formula's inputs
+            (age/gender/height/goals/frequency) live in
+            `user_fitness_profiles` since PR #30; weight on `users.weight_kg`.
+            NB meal TYPE is derived display-only from `takenAt` time-of-day
+            (D1(a), Kd-ruled; boundaries revised at the 5a smoke: <11
+            breakfast · 11–16 lunch · 16–19 snack · 19–22 dinner · else
+            snack). Kd asked for a user override at the 5a smoke → D1(c) is
+            now OWED: a `mealType` field on the meals API (small card).
+            Interim: Card 5b adds an edit-takenAt control (PATCH exists).
+      - [ ] **Dishware management UI** (Part 2B §3.2 rung 1) — the API is
+            fully built (P2.6a: /v1/nutrition/dishware CRUD + the portion
+            resolver reads it) but NO screen registers dishware. Owed to
+            Card 5b (Kd raised it at the 5a smoke).
       - [ ] `limitedToDays` surfaced in the Progress UI (T3 Card 3) — every
             /v1/progress read returns the plan-clamp field (progress.ts:18-21,
             the P2.4 history gate) and the page ignores it, so a free-plan

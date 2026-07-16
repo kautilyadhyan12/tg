@@ -1,6 +1,42 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: web repoint — Card 5a: nutrition photo→confirm + client rewrite 🟡
+      [branch web-repoint, COMMITTED + SMOKE PASSED (gates done). NOT MERGED —
+       branch merges at P2.8. Same-chat continuation by Kd instruction.]
+SHIPPED (web): api/nutritionApi.js REWRITTEN on the Card-1 cookie client
+  (analyzePhoto base64 JSON — last raw fetch+Bearer deleted; confirmMeal /
+  logManualMeal / previewMeal / searchFoods / meals CRUD; getTargets +
+  legacy searchFood/logMeal stay mlApi, documented) · pages/Nutrition.jsx
+  (photo→confirm flow: editable grams + ×N stepper + LIVE server preview +
+  spelled-out macro labels + retake/429 states; today list = client-filtered
+  /v1/nutrition/meals page bucketed by D1(a) times <11/16/19/22; totals =
+  summed server numbers; targets/remaining = D2 old-backend interim) · NEW
+  api/nutritionApi.test.js (9) · RUNBOOK/cutover.md owed lines (nutrition
+  targets card · mealType override field D1(c) · dishware UI → 5b · vision
+  model hard-date entry).
+FOUR MASTER PRs SHIPPED MID-CARD (each PROVEd + T3'd in fresh chats, all
+  merged + merged back into web-repoint): #34 vision swap qwen/qwen3.6-27b +
+  format-tolerant evidence parsing (smoke caught: BOTH real models 422'd every
+  scan; fixtures verbatim) · free meal_scan quota 3/month→2/day (Kd ruling) ·
+  /v1/nutrition/meals/preview live-preview endpoint (T3 caught + fixed the
+  OFF-draft divergence; preview==save proven by test) · exact-kcal display
+  (Kd DEVIATION ruling superseding §3.3 round-to-10).
+PROVE (real output): web suite 72/73 passed (the 1 = pre-existing syncClient
+  env quirk, HANDOFF Card 2); vite build ✓; lint parity vs branch baseline
+  (same 7 pre-existing Nutrition.jsx errors, line-shifted). api suite 262/262
+  on Neon ×2 after each API PR.
+SMOKE (Kd, full pass 2026-07-16): scan→analysis→stepper ×3 live update→
+  confirm→Snack section→F5 persists→delete→F5 gone; exact kcal re-verified.
+NEXT: Card 5b (manual entry UI on searchFoods/logManualMeal + dishware
+  management UI + edit-takenAt control + weekly summary client-sum). Then
+  6 running/geo · 7 recommendation-or-drop · owed: workoutApi calendar,
+  limitedToDays UI, coach idempotency API card, mealType field card,
+  nutrition targets card, DPDP Day-14 worker (promoted), Settings/Onboarding
+  wiring, Groq COACH_MODEL migration (hard date 2026-08-16).
+```
+
+```
 TASK: web repoint — Card 4: coach 🟡
       [branch web-repoint. PROVE green (below). T3 in a fresh chat OWED before
        done. NOT MERGED — branch merges at P2.8. Same-chat continuation by Kd
