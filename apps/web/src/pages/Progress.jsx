@@ -165,9 +165,16 @@ export default function Progress() {
         setOverview(overviewRes.data);
         setCalories(caloriesRes.data.points);
         // Weekly points carry {isoYear, isoWeek}; the chart wants one label.
-        setWeekly(weeklyRes.data.points.map((p) => ({
+        // When the window spans ISO years (1y/all), Wnn alone is ambiguous —
+        // two different July "W29"s would collide (T3 Card 3 f.3), so the
+        // label carries the year whenever more than one is present.
+        const weeklyPoints = weeklyRes.data.points;
+        const spansYears = new Set(weeklyPoints.map((p) => p.isoYear)).size > 1;
+        setWeekly(weeklyPoints.map((p) => ({
           ...p,
-          week: `W${String(p.isoWeek).padStart(2, '0')}`,
+          week: spansYears
+            ? `W${String(p.isoWeek).padStart(2, '0')} ’${String(p.isoYear).slice(-2)}`
+            : `W${String(p.isoWeek).padStart(2, '0')}`,
         })));
         // Heatmap arrives as an ARRAY of {date, count, kcal}; the calendar
         // grid looks days up by date string, so index it.

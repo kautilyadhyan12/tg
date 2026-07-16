@@ -60,6 +60,11 @@ the operational wrapper around it.
       - [ ] Workout history calendar (WorkoutCalendar → workoutApi.getHistory)
             — /v1/workouts EXISTS; the client repoint is owed to a web card
             (found out-of-scope during Card 3, R1.1).
+      - [ ] `limitedToDays` surfaced in the Progress UI (T3 Card 3) — every
+            /v1/progress read returns the plan-clamp field (progress.ts:18-21,
+            the P2.4 history gate) and the page ignores it, so a free-plan
+            user sees "Last year" over 30-day data. Must render an honest
+            clamp notice before cutover ships plan-gated UI to real users.
 - [ ] New API deployed and healthy (`/health` green); `data_backend` feature
       flag present (seeded, `seed.ts`).
 - [ ] Secrets in the deploy platform (escrow: `DATABASE_URL`, `MONGO_URI`,

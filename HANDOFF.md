@@ -34,6 +34,12 @@ PROVE (real output): full web suite `corepack pnpm --filter web exec vitest
 UNTESTED (honest): the JSX adaptations (Progress.jsx, MeasurementsTracker) have
   no unit coverage — node-env vitest, no jsdom (adding it = new deps, R1.4;
   same gap Card 2 recorded). Needs the manual browser smoke vs the local API.
+T3 (fresh chat, 2026-07-16): 4 findings, 0 R0/R3 violations; NO-REMOVAL
+  inventory mechanically verified. f.1 weightKg-rounding/metrics-clamp FIXED ·
+  f.3 weekly year-label FIXED · f.4 limitedToDays → owed line in cutover.md ·
+  f.2 latest-tiles-over-60-rows ACCEPTED+recorded (DECISIONS). measuredAt
+  client-clock note recorded. Post-fix PROVE: suite 60/61 (same pre-existing
+  1), build green, lint parity held.
 OPEN SPEC GAPS: none new. Sequencing flag recorded (DECISIONS): P4 leaderboard
   vs cutover.md:41 — decide at the cutover checkbox.
 NEXT: T3 (fresh chat) on this diff → resolve → then Card ④ (coach). Also

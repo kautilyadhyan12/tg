@@ -41,8 +41,26 @@ function LogForm({ onSaved, latest }) {
       const payload = { measuredAt: new Date().toISOString(), metrics: {} };
       for (const [k, v] of Object.entries(form)) {
         if (v === '' || v === undefined) continue;
-        if (k === 'weight_kg') payload.weightKg = parseFloat(v);
-        else payload.metrics[k] = parseFloat(v);
+        // Contract rails (nutrition.ts): weightKg is .multipleOf(0.01) and
+        // metrics values are finite().nonnegative() — the free-typed number
+        // input guarantees neither (75.555, -1), and a violation is a 400
+        // behind a generic toast. Round/guard here instead (T3 Card 3 f.1).
+        const n = Math.round(parseFloat(v) * 100) / 100;
+        if (!Number.isFinite(n) || n < 0) {
+          toast.error('Measurements must be positive numbers');
+          setLoading(false);
+          return;
+        }
+        if (k === 'weight_kg') {
+          if (n === 0 || n >= 1000) { // schema: .positive().lt(1000)
+            toast.error('Enter a valid weight');
+            setLoading(false);
+            return;
+          }
+          payload.weightKg = n;
+        } else {
+          payload.metrics[k] = n;
+        }
       }
       await progressService.logMeasurement(payload);
       toast.success('Measurements saved');
