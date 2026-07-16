@@ -14,7 +14,7 @@ import { CURATED_FOODS, findCurated, searchCurated } from "./foods.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { resolvePortion } from "./portion-priors.js";
 import * as repo from "./repo.js";
-import type { ConfirmMealRequest, ManualMealRequest, PatchMealRequest } from "./schemas.js";
+import type { ConfirmMealRequest, ManualMealRequest, MealPreview, PatchMealRequest, PreviewMealRequest } from "./schemas.js";
 import { VisionProviderError, type VisionProvider, type VisionResult } from "./vision.adapter.js";
 
 // Vision-swap card 2026-07-16: Qwen3.6 27B public list price, integer micro-USD
@@ -402,6 +402,21 @@ export async function createManualMeal(deps: NutritionDeps, userId: string, inpu
   });
   await awardMealBadges(deps, userId);
   return asMeal(row);
+}
+
+/** Kd-approved 2026-07-16 (Card-5a smoke): live preview — identical item
+ *  arithmetic to createManualMeal (findFood → nutritionItem → totals), but
+ *  NOTHING persists and NO quota is consumed (curated/cached lookups only,
+ *  no AI spend). The client shows these numbers live instead of computing
+ *  its own (2B anti-hallucination). */
+export async function previewMeal(deps: NutritionDeps, input: PreviewMealRequest): Promise<MealPreview> {
+  const items: MealItem[] = [];
+  for (const chosen of input.items) {
+    const food = await findFood(deps, chosen.canonical);
+    if (food === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
+    items.push(nutritionItem(food, chosen.grams, [chosen.grams, chosen.grams], "default"));
+  }
+  return { items, totals: totals(items) };
 }
 
 // ── reads / edits ────────────────────────────────────────────────────────────

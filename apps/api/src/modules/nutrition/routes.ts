@@ -19,6 +19,7 @@ import {
   patchBodyMeasurementSchema,
   patchDishwareSchema,
   patchMealRequestSchema,
+  previewMealRequestSchema,
 } from "./schemas.js";
 import * as service from "./service.js";
 import { createVisionProvider, type VisionProvider } from "./vision.adapter.js";
@@ -177,6 +178,15 @@ export function registerNutritionRoutes(
     const q = parse(foodSearchQuerySchema, req.query, req, reply);
     if (q === null) return;
     return reply.send({ items: await service.searchFoods(nutritionDeps, q.q, q.limit) });
+  });
+
+  /** Live preview (Kd-approved 2026-07-16): server-computed nutrition for
+   *  proposed grams, nothing persisted, NO quota (no AI call — curated-table
+   *  math; the §9.3 ledger meters spend, and there is none here). */
+  app.post("/v1/nutrition/meals/preview", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const v = parse(previewMealRequestSchema, req.body, req, reply);
+    if (v === null) return;
+    return reply.send(await service.previewMeal(nutritionDeps, v));
   });
 
   // Photo confirm (scanToken) or manual entry (mealName) — GAP-2 ruling.
