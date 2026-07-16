@@ -414,7 +414,7 @@ function PhotoModal({ open, onClose, onSave }) {
         );
         setPreview(null);
       } else if (err.response?.status === 429) {
-        toast.error('Monthly photo-scan limit reached.');
+        toast.error('Daily photo-scan limit reached.');
         setPreview(null);
       } else {
         toast.error(err.message || 'Photo analysis failed');
@@ -425,30 +425,41 @@ function PhotoModal({ open, onClose, onSave }) {
     }
   };
 
+  // Every grams field must hold a usable value before preview/confirm — a
+  // cleared or zero field must never silently fall back to the AI estimate
+  // (T3 Card 5a: what is sent must be what the user sees).
+  const gramsValid =
+    analysis !== null &&
+    analysis.items.every((item, i) => {
+      const v = parseFloat(grams[i]);
+      return Number.isFinite(v) && v > 0;
+    });
+
   // Live server preview (Kd-approved): whenever grams change, ask the SERVER
   // what the nutrition would be — the browser never computes it. Debounced;
   // failures degrade silently to the analysis estimates (e.g. old API).
   useEffect(() => {
-    if (!analysis) return undefined;
+    if (!analysis || !gramsValid) return undefined;
+    let cancelled = false; // T3 Card 5a: drop out-of-order/stale responses
     const timer = setTimeout(async () => {
       try {
         const res = await nutritionService.previewMeal({
           scanToken: analysis.scanToken,
           items: analysis.items.map((item, i) => ({
             canonical: item.canonical,
-            grams: parseFloat(grams[i]) || item.gramsPoint,
+            grams: parseFloat(grams[i]),
           })),
         });
-        setLive(res.data);
+        if (!cancelled) setLive(res.data);
       } catch {
-        setLive(null);
+        if (!cancelled) setLive(null);
       }
     }, 300);
-    return () => clearTimeout(timer);
-  }, [analysis, grams]);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [analysis, grams, gramsValid]);
 
   const handleConfirm = async () => {
-    if (!analysis || saving) return;
+    if (!analysis || saving || !gramsValid) return;
     setSaving(true);
     try {
       await nutritionService.confirmMeal({
@@ -456,7 +467,7 @@ function PhotoModal({ open, onClose, onSave }) {
         takenAt: new Date().toISOString(),
         items: analysis.items.map((item, i) => ({
           canonical: item.canonical,
-          grams: parseFloat(grams[i]) || item.gramsPoint,
+          grams: parseFloat(grams[i]),
         })),
       });
       toast.success(`Logged ${analysis.mealName || 'meal'}`);
@@ -703,15 +714,15 @@ function PhotoModal({ open, onClose, onSave }) {
 
                     <button
                       onClick={handleConfirm}
-                      disabled={saving}
+                      disabled={saving || !gramsValid}
                       className="w-full py-2.5 rounded-xl font-semibold text-sm text-white"
                       style={{
                         background: 'linear-gradient(135deg, #FF8A1F, #FFB347)',
                         boxShadow:  '0 4px 16px rgba(255,138,31,0.25)',
-                        opacity:    saving ? 0.6 : 1,
+                        opacity:    saving || !gramsValid ? 0.6 : 1,
                       }}
                     >
-                      {saving ? 'Saving…' : 'Confirm & log meal'}
+                      {saving ? 'Saving…' : gramsValid ? 'Confirm & log meal' : 'Enter grams for every item'}
                     </button>
                   </div>
                 )}
