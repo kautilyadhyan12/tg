@@ -10,7 +10,11 @@ import type { z } from "zod";
 import { createDualRateLimit } from "../auth/rateLimit.js";
 import type { RedisLike } from "../../redis.js";
 import { createLogOnlyUsersEmailSender, type UsersEmailSender } from "./email.js";
-import { restoreAccountRequestSchema, updateProfileRequestSchema } from "./schemas.js";
+import {
+  putFitnessProfileRequestSchema,
+  restoreAccountRequestSchema,
+  updateProfileRequestSchema,
+} from "./schemas.js";
 import * as service from "./service.js";
 
 /** Zod-parse a body; 400 with issue paths/codes only — never echo values (R3.10). */
@@ -54,6 +58,22 @@ export function registerUserRoutes(
     if (patch === null) return;
     const user = await service.updateProfile(usersDeps, authedUserId(req), patch);
     return reply.status(200).send({ user });
+  });
+
+  // onboarding/fitness profile (onboarding-storage card). Tenancy as above: no
+  // id param exists, so a caller can only ever address their own row (R3.2).
+  app.get("/v1/users/me/fitness-profile", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const fitnessProfile = await service.getFitnessProfile(usersDeps, authedUserId(req));
+    return reply.status(200).send({ fitnessProfile });
+  });
+
+  // PUT, not POST: full-document replace, idempotent by construction — the same
+  // body twice yields the same row, so no Idempotency-Key is needed (R3.5).
+  app.put("/v1/users/me/fitness-profile", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const body = parseBody(putFitnessProfileRequestSchema, req, reply);
+    if (body === null) return;
+    const fitnessProfile = await service.putFitnessProfile(usersDeps, authedUserId(req), body);
+    return reply.status(200).send({ fitnessProfile });
   });
 
   app.delete("/v1/users/me", { preHandler: [app.authenticate] }, async (req, reply) => {

@@ -19,6 +19,36 @@ is the PREVIOUS version. Treat it as a SALVAGE SOURCE, not a template.
 - When in doubt about old-vs-new, the spec is the tie-breaker. If the spec is
   silent, ask — never default to "what the old code did."
 
+**NO FEATURE IS EVER REMOVED, HIDDEN, OR "REDUCED TO WHAT THE BACKEND HAS"
+WITHOUT AN EXPLICIT KD RULING MADE IN RESPONSE TO A CITED OPTION. A missing
+backend surface is NEVER a reason to shrink the UI — the UI component STAYS
+UNTOUCHED on the old backend (the Card-1/2 precedent: Onboarding/Settings,
+"nothing deleted; all owed") and the endpoint gap is recorded as an OWED CARD.
+The cutover runbook's "endpoints must exist for each feature" prerequisite is
+the enforcement: P2.8 cannot run until every owed endpoint exists. A chat that
+proposes hiding/removing UI must, in the same breath, cite the DECISIONS line
+or spec § that sequences that feature's backend — no citation, no proposal.**
+(Operator-added 2026-07-16 after a chat recommended "reduce the UI to what the
+backend has" for gamification/predictions surfaces whose deferral was already
+Kd-ruled and sequenced in DECISIONS 2026-07-11 and CLAUDE.md P4.x — the
+recommendation was framed as removal instead of citing the existing rulings.)
+
+**GROUNDING BEFORE EVERY DECISION AND EVERY RECOMMENDATION — NO EXCEPTIONS.
+Before proposing, recommending, planning, or deciding ANYTHING, the chat MUST
+have read, IN THIS SESSION: (1) the spec §§ the task touches, (2) this file's
+rules for the domain, (3) the ENTIRE DECISIONS.md — every ruling, because any
+one of them may already answer the question, (4) HANDOFF.md's top block, and
+(5) RUNBOOK/cutover.md's prerequisites when the work affects the migration.
+Reading the spec but skipping DECISIONS.md is NOT grounded — DECISIONS.md IS
+the operator's case law and it OVERRIDES a chat's fresh judgment every time.
+A recommendation that contradicts or ignores an existing DECISIONS line is
+void, and re-asking Kd to rule on something DECISIONS already rules on is a
+protocol failure, not diligence. If any of these files was not read this
+session, the only permitted output is reading it — not an opinion.**
+(Operator-added 2026-07-16 after the same incident: the chat had read the spec
+and verified endpoints but had NOT re-read DECISIONS.md's P2.3 entries, and so
+re-litigated four questions Kd had already ruled on 2026-07-11.)
+
 
 # AI Home Gym — Implementation Playbook for Opus 4.8
 
@@ -63,11 +93,22 @@ PROVE → a chat cannot run your repo. The model ends with the EXACT commands to
         The engine has zero runtime deps by design (I1), so this works.
 AUDIT → model outputs the self-audit table (rule → pass/fail/N-A) and the
         universal DoD checklist from Part II R11.
+SMOKE → (Kd-added 2026-07-16; REQUIRED for any card that changes user-facing
+        behavior — web/mobile screens, API responses a screen consumes.) The
+        model hands Kd a numbered browser click-through with an explicit
+        ✅-expectation per step, run against the LOCAL api + web dev servers;
+        Kd reports pass/fail per step; failures are fixed (R9.5: failing test
+        first where a test can express it) before the card is "done". This is
+        NOT optional polish: unit suites run through fastify.inject() and
+        node-vitest, which BYPASS the browser entirely — the Card 4 smoke
+        caught a CORS preflight bug (browser DELETE/PATCH/PUT dead app-wide)
+        that 250+ green tests were structurally incapable of seeing. A card
+        whose UI cannot be reached yet states that explicitly instead.
 REVIEW→ you run the 5-minute checklist in Part VI yourself. Re-run the
         commands yourself at least for money/auth/engine code.
 COMMIT→ small commit, message references the task card ID and spec §.
 ```
-Nothing merges without PROVE and REVIEW. This loop is where "no bugs" actually comes from — the spec's golden traces, test matrices, and CI gates only protect you if unverified code never lands.
+Nothing merges without PROVE and REVIEW — and no user-facing card is "done" without its SMOKE. This loop is where "no bugs" actually comes from — the spec's golden traces, test matrices, and CI gates only protect you if unverified code never lands.
 
 ## 3. What goes into a session's context
 Every task chat gets: this playbook (via Project knowledge or upload) · the task card pasted in the prompt · **only** the spec files that card's Attach line lists · the **current contents of every source file being modified** (uploaded or pasted — the model cannot see your disk, and editing a file from memory of a previous chat is forbidden). Never attach all 182 pages, the raw PDF, or the old code zip — precision of attention beats volume of context; the spec was split into nine files for exactly this reason.

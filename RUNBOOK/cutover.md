@@ -16,15 +16,15 @@ the operational wrapper around it.
 
 ## Prerequisites (all must be true before starting)
 
-- [x] **argon2id rehash-on-login** shipped — MERGED 2026-07-14 (PR #28, merge
-      `67b0ba7`); bcrypt users upgrade transparently on next login.
-- [ ] **Onboarding storage exists on the new API.** HARD BLOCKER for
-      decommissioning the old backend: `apps/web`'s Onboarding wizard still POSTs
-      `/users/onboarding` to `backend-ml`, and Part 4 defines NO storage for that
-      data (P2.7 dropped it — INVENTORY.md:45 "the queued onboarding-storage
-      gap"). It also gates recommendations (Part 2B §4.1: the scorer IS goal /
-      difficulty / equipment / duration). Turning the old backend off before this
-      lands silently breaks onboarding + recommendations. (DECISIONS 2026-07-15.)
+- [x] **argon2id rehash-on-login** shipped (DECISIONS 2026-07-11, owed before
+      P2.8) — else migrated users stay bcrypt with no upgrade path.
+      DONE: merged 2026-07-15 via PR #28 (merge 67b0ba7).
+- [x] **Onboarding storage exists on the new API.** Was a HARD BLOCKER (Part 4
+      defined no storage; P2.7 dropped the fields — INVENTORY.md:45).
+      DONE: merged 2026-07-16 via PR #30 (`user_fitness_profiles`, migration
+      0006, GET/PUT /v1/users/me/fitness-profile, onboardingCompleted on
+      /v1/users/me). NB the WEB side (wizard/Settings/gate wiring) is still
+      old-backend — owed in the list below.
 - [ ] **Drain the offline sync queues BEFORE cutover** (legacy-bucket orphaning,
       DECISIONS 2026-07-15). Per-user localStorage buckets — including the
       offline workout queue — are keyed `user_<id>_*`. Pre-cutover that `<id>` is
@@ -35,6 +35,20 @@ the operational wrapper around it.
       clients flush/sync while the OLD stack is still up, or accept the loss
       explicitly. **On greenfield prod (the note above) this is a non-issue** —
       no users, no buckets.
+- [ ] **DPDP Day-14 hard-delete + JSON-export worker** shipped (Part 4 §5.2).
+      **HARD GATE — do not cut over without it.** §5.2 tombstones the `users`
+      row rather than deleting it, so NO FK cascade collects user-owned PII;
+      §5.2's explicit Day-14 DELETE list is the only mechanism, and the worker
+      that runs it does not exist yet (DECISIONS 2026-07-11: queued, needs
+      BullMQ — which is NOT installed, and there is no worker mode yet).
+      Until it ships, a deleted user's data persists indefinitely — including
+      `user_fitness_profiles.medical_conditions` (**health data**, sensitive
+      under DPDP), which the onboarding-storage card added on 2026-07-16.
+      That card was merged ONLY on the accepted condition that this worker is
+      promoted and lands before real users exist — cutover IS that moment
+      (DECISIONS 2026-07-16). The worker must cover BOTH §5.2 lists:
+      the hard DELETE list and the JSON-export list. It must include
+      `user_fitness_profiles` in both.
 - [ ] **Web app repointed to the new API.** Today `apps/web` is split:
       `syncClient.js` → `VITE_API_URL` (new), but `authApi/coachApi/mlApi/
       nutritionApi` still → `VITE_AUTH_API_URL` / `VITE_ML_API_URL` (old). All

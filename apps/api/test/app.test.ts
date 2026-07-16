@@ -41,6 +41,25 @@ describe("api skeleton", () => {
     expect(res.headers["access-control-allow-credentials"]).toBe("true");
   });
 
+  it("CORS: preflight allows DELETE/PATCH/PUT — the API's own route surface", async () => {
+    // Found by the Card 4 browser smoke (2026-07-16): @fastify/cors v11
+    // defaults methods to 'GET,HEAD,POST', so every browser DELETE/PATCH/PUT
+    // (coach thread delete, PATCH /v1/users/me, measurements CRUD, DPDP
+    // DELETE /v1/users/me) failed preflight and never left the browser.
+    // inject() bypasses CORS, which is why no route test ever saw it.
+    for (const method of ["DELETE", "PATCH", "PUT"]) {
+      const res = await app.inject({
+        method: "OPTIONS",
+        url: "/v1/users/me",
+        headers: { origin: WEB_ORIGIN, "access-control-request-method": method },
+      });
+      expect(
+        res.headers["access-control-allow-methods"],
+        `preflight must allow ${method}`,
+      ).toContain(method);
+    }
+  });
+
   it("CORS: foreign origin gets no allow-origin", async () => {
     const res = await app.inject({
       method: "OPTIONS",

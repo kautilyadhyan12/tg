@@ -222,6 +222,76 @@ NEXT: Card ② users/profile (repoint userApi/profile reads+writes to /v1/users/
   normalizeUser shim). Then ③–⑦, then P2.8 cutover per RUNBOOK/cutover.md.
 OPEN SPEC GAPS: none. v1 §13 doesn't itemize the repoint; §6.1/§18 fix the auth
   model and the card ordering is an implementation choice (Kd-ruled auth-first).
+TASK: onboarding-storage — fitness-profile storage on the new API 🔴 (schema+migration)
+      [branch onboarding-storage off master@1857be7 → PR #30. T3 DONE (fresh
+       chat, Part I §7c): no blocking violations; 1 advisory FIXED (PUT {} test
+       → suite 251→252). CI GREEN (all 4 checks, run #95). PROVE re-run against
+       REAL Neon: 33 files / 252 passed. DPDP escalation RULED: accept + promote
+       the Day-14/export worker card. READY TO MERGE — awaiting Kd's merge click.]
+WHY: v1 §6.1:442 assigns onboarding data to `users` but Part 4 defines no storage;
+  P2.7 DROPped the 13 Mongo fields (INVENTORY.md:45) and Part 2B §4.1:358's scorer
+  has nothing to read; the web wizard still POSTs to old backend-ml. Hard P2.8
+  blocker. API-only + additive → merges to master NORMALLY (unlike web-repoint).
+SHIPPED (11 files): drizzle/0006_user_fitness_profiles.sql (+ meta/0005_snapshot,
+  _journal tag) — NEW 1:1 table user_fitness_profiles (user_id PK, FK CASCADE
+  flagged; Kd chose Option B over users-columns) · db/schema/identity.ts (table +
+  the DPDP warning comment) · shared/src/users.ts (ported enums verbatim from
+  backend-auth User.js:44-98; Kd-approved bounds; onboardingCompleted added to
+  userProfileSchema; FitnessProfile/put schemas; updatedAt nullable = never-saved)
+  · users/{schemas,repo,service,routes}.ts — GET/PUT /v1/users/me/fitness-profile
+  (PUT = full-doc replace, absent→NULL, idempotent, active-only atomic upsert via
+  INSERT…SELECT…ON CONFLICT; GET returns EMPTY profile not 404; /v1/users/me now
+  LEFT JOINs onboarding_completed, COALESCE false) · test/users.fitness.routes
+  .test.ts (9) · db.migration.test.ts (+1: 0006 DDL — PK, CHECKs, NULL-passes,
+  cascade).
+DECISIONS.md: 11 entries — placement, ported value sets, invented-not-spec bounds,
+  fitness_level NULL not 'beginner', PUT semantics ({} clears profile — accepted),
+  empty-profile GET, onboardingCompleted scope addition, DPDP CORRECTION (below),
+  active-only upsert, no-duplicate arrays, the drizzle numbering trap.
+*** DPDP CORRECTION (plan premise falsified mid-card) *** The FK CASCADE never
+  fires on account deletion: Part 4 §5.2:829 ANONYMIZES users to a tombstone,
+  never deletes. user_fitness_profiles holds medical_conditions (HEALTH DATA) —
+  it MUST be added to the §5.2 Day-14 explicit DELETE list AND the JSON-export
+  list, both owned by the QUEUED Day-14/export worker card (DECISIONS 2026-07-11).
+  Recorded in DECISIONS + schema comment so that card inherits it.
+TRAP (repo-wide, recorded in DECISIONS): drizzle-kit numbers from journal idx
+  (0-based) but this repo's files are idx+1 → EVERY generated migration collides
+  and must be renamed (file + journal tag; snapshot keeps drizzle's idx).
+  Precedent verified: commit 34438bf.
+PROVE ENV (Neon was DEAD mid-card — 28P01, free-tier branch reset AGAIN, 3rd
+  time, cf. HANDOFF:123): PROVEd first on LOCAL docker pgvector/pgvector:pg16
+  (`aihg-pg-prove`, :54329) while blocked. Neon LATER REPAIRED (see DECISIONS
+  tail): new string in apps/api/.env (ep-wispy-rain), 6/6 migrations + seed
+  applied to PRIMARY, 44 tables — final PROVE ran against REAL Neon.
+*** ROOT CAUSE of PR #30's red CI (NOT this card's SQL) *** Neon's PRIMARY
+  branch was EMPTY (0 tables) after the reset; CI branches FROM primary, so the
+  migrations job cloned an empty DB and died in <1s. The GitHub NEON_API_KEY was
+  always FINE. Prior PRs stayed green only because they added no migration.
+  LESSON: green CI on a no-migration PR proves nothing about Neon's schema —
+  after any Neon reset, repair primary (migrate + seed) FIRST.
+PROVE (real output, full suite, POST-T3, against REAL NEON): `DATABASE_URL=...
+  corepack pnpm --filter api exec vitest run` → 33 files / 252 passed / 0 failed
+  / 0 skipped (251→252: the added PUT {} test). Scoped (local): users.fitness
+  10/10, db.migration 6/6, users.routes 8/8. typecheck (shared+api) clean;
+  eslint (touched files, both pkgs) clean; red-flag greps clean.
+CI: run #95 all 4 green — typecheck/lint/test · engine grep · gitleaks ·
+  drizzle migrations on Neon branch (58s = actually executing, vs 1s death).
+T3 (fresh chat, 2026-07-15): NO blocking violations. Advisory 1 (R9.2, PUT {}
+  test) FIXED. Advisory 2 (R11.4, container-lifetime caveat) informational.
+  Security pass clean. DPDP ESCALATION → see the two Kd-decision entries in
+  DECISIONS.md tail.
+OPEN SPEC GAPS: none.
+NEXT: **Day-14 hard-delete + JSON-export worker (Part 4 §5.2)** — PROMOTED to
+  next-priority as the accepted price of merging this card (DECISIONS tail). It
+  must add user_fitness_profiles to BOTH the Day-14 explicit DELETE list and the
+  export list, and must land before real users exist (i.e. before/with P2.8).
+  Then: P2.8 cutover still needs the web repoint (branch web-repoint, cards ②-⑦
+  unbuilt) — the wizard/Settings/gate sites that consume THIS card's endpoint are
+  owed there. NB the onboarding gate on web-repoint stays inert until a web card
+  reads the now-available userProfile.onboardingCompleted.
+PROVE CONTAINER: aihg-pg-prove (docker pgvector/pgvector:pg16, :54329) left
+  running; `docker rm -f aihg-pg-prove` to clean up. Neon is repaired, so local
+  PROVE can use apps/api/.env directly again.
 ```
 
 ```
