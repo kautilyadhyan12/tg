@@ -19,6 +19,20 @@ is the PREVIOUS version. Treat it as a SALVAGE SOURCE, not a template.
 - When in doubt about old-vs-new, the spec is the tie-breaker. If the spec is
   silent, ask — never default to "what the old code did."
 
+**NO FEATURE IS EVER REMOVED, HIDDEN, OR "REDUCED TO WHAT THE BACKEND HAS"
+WITHOUT AN EXPLICIT KD RULING MADE IN RESPONSE TO A CITED OPTION. A missing
+backend surface is NEVER a reason to shrink the UI — the UI component STAYS
+UNTOUCHED on the old backend (the Card-1/2 precedent: Onboarding/Settings,
+"nothing deleted; all owed") and the endpoint gap is recorded as an OWED CARD.
+The cutover runbook's "endpoints must exist for each feature" prerequisite is
+the enforcement: P2.8 cannot run until every owed endpoint exists. A chat that
+proposes hiding/removing UI must, in the same breath, cite the DECISIONS line
+or spec § that sequences that feature's backend — no citation, no proposal.**
+(Operator-added 2026-07-16 after a chat recommended "reduce the UI to what the
+backend has" for gamification/predictions surfaces whose deferral was already
+Kd-ruled and sequenced in DECISIONS 2026-07-11 and CLAUDE.md P4.x — the
+recommendation was framed as removal instead of citing the existing rulings.)
+
 
 # AI Home Gym — Implementation Playbook for Opus 4.8
 
