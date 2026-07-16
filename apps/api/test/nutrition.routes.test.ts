@@ -35,6 +35,42 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
 
   it("manual meal (GAP-2): no scanToken, items via food search, origin=manual, badge fires without photo badge",async()=>{const m=await session("p26a-manual@example.com");const created=await inject("POST","/v1/nutrition/meals",m.access,{mealName:"Lunch dal and rice",takenAt:new Date().toISOString(),items:[{canonical:"dal_lentil_curry",grams:150},{canonical:"rice_white_cooked",grams:200}]});expect(created.statusCode,created.body).toBe(201);const meal=created.json<{meal:{origin:string;totals:{kcalPoint:number};items:{nutritionSource:string}[]}}>().meal;expect(meal.origin).toBe("manual");const round10=(v:number):number=>Math.round(v/10)*10;const clamp=(kcalPer100:number,grams:number):number=>{const low=round10(kcalPer100*grams/100);return Math.min(Math.max(Math.round(kcalPer100*grams/100),low),low);};expect(meal.totals.kcalPoint).toBe(clamp(110,150)+clamp(130,200));expect(meal.items.every((i)=>i.nutritionSource==="curated")).toBe(true);const earned=await sql<{code:string}[]>`SELECT code FROM user_achievements WHERE user_id=${m.userId}`;const codes=earned.map((v)=>v.code);expect(codes).toContain("first_meal");expect(codes).not.toContain("photo_meal");const unknown=await inject("POST","/v1/nutrition/meals",m.access,{mealName:"Mystery",takenAt:new Date().toISOString(),items:[{canonical:"definitely_not_a_food_xyz",grams:100}]});expect(unknown.statusCode).toBe(400);},30_000);
 
+  // Preview endpoint (Kd-approved 2026-07-16 at the Card-5a smoke): the SERVER
+  // answers "what would these grams be?" live, without saving — the client
+  // never computes nutrition (2B). No quota (curated-table math, no AI spend).
+  it("preview computes server-side nutrition without persisting or metering",async()=>{const before=await sql<{n:string}[]>`SELECT count(*) AS n FROM meal_logs WHERE user_id=${userA}`;const res=await inject("POST","/v1/nutrition/meals/preview",cookieA,{items:[{canonical:"dal_lentil_curry",grams:150},{canonical:"rice_white_cooked",grams:200}]});expect(res.statusCode,res.body).toBe(200);const preview=res.json<{items:{kcalPoint:number;proteinG:number}[];totals:{kcalPoint:number}}>();const round10=(v:number):number=>Math.round(v/10)*10;const clamp=(kcalPer100:number,grams:number):number=>{const low=round10(kcalPer100*grams/100);return Math.min(Math.max(Math.round(kcalPer100*grams/100),low),low);};expect(preview.totals.kcalPoint).toBe(clamp(110,150)+clamp(130,200));expect(preview.items).toHaveLength(2);const after=await sql<{n:string}[]>`SELECT count(*) AS n FROM meal_logs WHERE user_id=${userA}`;expect(after[0]?.n).toBe(before[0]?.n);},30_000);
+  it("preview consumes no meal_scan quota in either window",async()=>{const read=async()=>[await redis.get(quotaKey("meal_scan",userA,"day",new Date())),await redis.get(quotaKey("meal_scan",userA,"month",new Date()))];const before=await read();expect((await inject("POST","/v1/nutrition/meals/preview",cookieA,{items:[{canonical:"dal_lentil_curry",grams:100}]})).statusCode).toBe(200);expect(await read()).toEqual(before);},30_000);
+  it("preview: unknown food is 400, unauthenticated is 401, .strict() boundary rejects extra keys and bad grams",async()=>{expect((await inject("POST","/v1/nutrition/meals/preview",cookieA,{items:[{canonical:"definitely_not_a_food_xyz",grams:100}]})).statusCode).toBe(400);expect((await inject("POST","/v1/nutrition/meals/preview","",{items:[{canonical:"dal_lentil_curry",grams:100}]})).statusCode).toBe(401);expect((await inject("POST","/v1/nutrition/meals/preview",cookieA,{items:[{canonical:"dal_lentil_curry",grams:100}],smuggled:true})).statusCode).toBe(400);expect((await inject("POST","/v1/nutrition/meals/preview",cookieA,{items:[{canonical:"dal_lentil_curry",grams:-1}]})).statusCode).toBe(400);},30_000);
+
+  // T3 finding (nutrition-preview): for OFF-sourced photo items the preview
+  // MUST equal what confirm saves — both must read the same draft snapshot,
+  // and previewing must not consume the single-use draft.
+  it("preview with scanToken matches the confirmed meal exactly for an OFF-sourced draft item",async()=>{
+    const offFood={canonical:"off_test_dish",name:"Test Dish",kcal:200,proteinG:10,carbsG:20,fatG:5,fiberG:0,serving:100,unit:"g",source:"openfoodfacts" as const};
+    const offVision=fakeVision();offVision.queue.push({...goodEvidence,meal_name:"Test dish plate",items:[{name:"Test Dish",canonical_hint:"off test dish",container:null,fill_level:null,size_class:null,count:1,confidence:"high"}]});
+    const app3=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:offVision,foodSearchProvider:{search:()=>Promise.resolve([offFood])}}});
+    try{
+      const login=async(email:string)=>{await app3.inject({method:"POST",url:"/v1/auth/register",headers:{"content-type":"application/json"},payload:JSON.stringify({email,password:PASSWORD,displayName:"P26a OFF"})});const l=await app3.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email,password:PASSWORD})});return l.cookies.find((c)=>c.name==="accessToken")?.value??"";};
+      const access=await login("p26a-off@example.com");
+      const call=(url:string,body:unknown)=>app3.inject({method:"POST",url,headers:{"content-type":"application/json"},cookies:{accessToken:access},payload:JSON.stringify(body)});
+      const scan=await call("/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
+      expect(scan.statusCode,scan.body).toBe(200);
+      const draft=scan.json<{scanToken:string;items:{canonical:string}[]}>();
+      expect(draft.items[0]?.canonical).toBe("off_test_dish");
+      const items=[{canonical:"off_test_dish",grams:250}];
+      const preview=await call("/v1/nutrition/meals/preview",{scanToken:draft.scanToken,items});
+      expect(preview.statusCode,preview.body).toBe(200);
+      const previewed=preview.json<{items:{kcalPoint:number;portionSource:string}[];totals:Record<string,number>}>();
+      // Previewing must NOT consume the draft: confirm still succeeds after it.
+      const confirmed=await call("/v1/nutrition/meals",{scanToken:draft.scanToken,takenAt:new Date().toISOString(),items});
+      expect(confirmed.statusCode,confirmed.body).toBe(201);
+      const meal=confirmed.json<{meal:{items:{kcalPoint:number;portionSource:string}[];totals:Record<string,number>}}>().meal;
+      expect(previewed.totals).toEqual(meal.totals);
+      expect(previewed.items[0]?.kcalPoint).toBe(meal.items[0]?.kcalPoint);
+      expect(previewed.items[0]?.portionSource).toBe(meal.items[0]?.portionSource);
+    }finally{await app3.close();}
+  },30_000);
+
   it("takenAt more than 24h in the future is a 400 (GAP-3)",async()=>{const future=new Date(Date.now()+25*60*60*1000).toISOString();const res=await inject("POST","/v1/nutrition/meals",cookieA,{mealName:"Time travel",takenAt:future,items:[{canonical:"dal_lentil_curry",grams:100}]});expect(res.statusCode).toBe(400);},30_000);
 
   it("Redis down: meal_scan fails CLOSED with 503 and the provider is never called (quotas.py doctrine)",async()=>{const downRedis=createMemoryRedis();const vision2=fakeVision();const app2=await buildApp(loadConfig(env),{redis:downRedis,nutrition:{visionProvider:vision2,foodSearchProvider:noExternal}});try{const login=await app2.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email:"p26a-alice@example.com",password:PASSWORD})});const access=login.cookies.find((c)=>c.name==="accessToken")?.value??"";downRedis.down=true;const res=await app2.inject({method:"POST",url:"/v1/nutrition/analyze-photo",headers:{"content-type":"application/json"},cookies:{accessToken:access},payload:JSON.stringify({imageBase64:jpeg,mimeType:"image/jpeg"})});expect(res.statusCode).toBe(503);expect(vision2.calls).toBe(0);}finally{await app2.close();}},30_000);

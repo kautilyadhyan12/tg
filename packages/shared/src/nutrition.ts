@@ -64,6 +64,20 @@ export type ManualMealRequest = z.infer<typeof manualMealRequestSchema>;
 export const createMealRequestSchema = z.union([confirmMealRequestSchema, manualMealRequestSchema]);
 export type CreateMealRequest = z.infer<typeof createMealRequestSchema>;
 
+/** Kd-approved 2026-07-16 (Card-5a smoke): live nutrition preview — the
+ *  SERVER computes "what would these grams be?" without persisting, so the
+ *  client can show live numbers while never doing nutrition arithmetic (2B).
+ *  scanToken (photo flow) resolves foods from the SAME draft snapshot the
+ *  confirm will use — preview must equal saved values (T3 finding); without
+ *  it (manual flow) foods resolve via search like createManualMeal. */
+export const previewMealRequestSchema = z.object({
+  items: chosenItemsSchema,
+  scanToken: z.string().min(32).max(256).optional(),
+}).strict();
+export type PreviewMealRequest = z.infer<typeof previewMealRequestSchema>;
+export const mealPreviewSchema = z.object({ items: z.array(mealItemSchema), totals: mealTotalsSchema });
+export type MealPreview = z.infer<typeof mealPreviewSchema>;
+
 export const patchMealRequestSchema = z.object({
   mealName: z.string().trim().min(1).max(200).optional(), takenAt: takenAtSchema.optional(),
   items: chosenItemsSchema.optional(),

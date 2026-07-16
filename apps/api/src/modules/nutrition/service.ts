@@ -14,7 +14,7 @@ import { CURATED_FOODS, findCurated, searchCurated } from "./foods.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { resolvePortion } from "./portion-priors.js";
 import * as repo from "./repo.js";
-import type { ConfirmMealRequest, ManualMealRequest, PatchMealRequest } from "./schemas.js";
+import type { ConfirmMealRequest, ManualMealRequest, MealPreview, PatchMealRequest, PreviewMealRequest } from "./schemas.js";
 import { VisionProviderError, type VisionProvider, type VisionResult } from "./vision.adapter.js";
 
 // Vision-swap card 2026-07-16: Qwen3.6 27B public list price, integer micro-USD
@@ -340,12 +340,7 @@ export async function analyzePhoto(
 
 // ── Stage 4: confirm / manual entry ──────────────────────────────────────────
 
-async function takeDraft(deps: NutritionDeps, userId: string, value: string): Promise<Draft> {
-  const raw = await deps.redis.take(scanKey(userId, value));
-  if (raw === null) {
-    throw new NutritionError(503, "nutrition_unavailable", "Meal confirmation is temporarily unavailable.");
-  }
-  if (raw === undefined) throw new NutritionError(400, "invalid_scan", "Invalid or expired scan token.");
+function parseDraft(raw: string, userId: string): Draft {
   let json: unknown;
   try {
     json = JSON.parse(raw);
@@ -357,6 +352,25 @@ async function takeDraft(deps: NutritionDeps, userId: string, value: string): Pr
     throw new NutritionError(400, "invalid_scan", "Invalid or expired scan token.");
   }
   return parsed.data;
+}
+
+async function takeDraft(deps: NutritionDeps, userId: string, value: string): Promise<Draft> {
+  const raw = await deps.redis.take(scanKey(userId, value));
+  if (raw === null) {
+    throw new NutritionError(503, "nutrition_unavailable", "Meal confirmation is temporarily unavailable.");
+  }
+  if (raw === undefined) throw new NutritionError(400, "invalid_scan", "Invalid or expired scan token.");
+  return parseDraft(raw, userId);
+}
+
+/** Non-destructive draft read for preview — get, never take: the single-use
+ *  confirm draft must survive any number of previews. RedisLike.get conflates
+ *  missing and backend-down as null; preview degrades to 400 either way (the
+ *  client falls back to the analysis estimates). */
+async function peekDraft(deps: NutritionDeps, userId: string, value: string): Promise<Draft> {
+  const raw = await deps.redis.get(scanKey(userId, value));
+  if (raw === null) throw new NutritionError(400, "invalid_scan", "Invalid or expired scan token.");
+  return parseDraft(raw, userId);
 }
 
 export async function confirmMeal(deps: NutritionDeps, userId: string, input: ConfirmMealRequest): Promise<Meal> {
@@ -385,15 +399,25 @@ export async function confirmMeal(deps: NutritionDeps, userId: string, input: Co
   return asMeal(row);
 }
 
-/** GAP-2 ruling: manual logging — items resolve via food search; grams are
- *  user-chosen so ranges collapse; origin='manual'. */
-export async function createManualMeal(deps: NutritionDeps, userId: string, input: ManualMealRequest): Promise<Meal> {
+/** Search-resolved items for the manual flow — ONE implementation shared by
+ *  createManualMeal and previewMeal (T3: divergence here is a trust bug). */
+async function resolveChosenItems(
+  deps: NutritionDeps,
+  chosenItems: readonly { canonical: string; grams: number }[],
+): Promise<MealItem[]> {
   const items: MealItem[] = [];
-  for (const chosen of input.items) {
+  for (const chosen of chosenItems) {
     const food = await findFood(deps, chosen.canonical);
     if (food === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
     items.push(nutritionItem(food, chosen.grams, [chosen.grams, chosen.grams], "default"));
   }
+  return items;
+}
+
+/** GAP-2 ruling: manual logging — items resolve via food search; grams are
+ *  user-chosen so ranges collapse; origin='manual'. */
+export async function createManualMeal(deps: NutritionDeps, userId: string, input: ManualMealRequest): Promise<Meal> {
+  const items = await resolveChosenItems(deps, input.items);
   const row = await repo.createMeal(deps.sql, userId, {
     takenAt: new Date(input.takenAt),
     mealName: input.mealName,
@@ -402,6 +426,35 @@ export async function createManualMeal(deps: NutritionDeps, userId: string, inpu
   });
   await awardMealBadges(deps, userId);
   return asMeal(row);
+}
+
+/** Kd-approved 2026-07-16 (Card-5a smoke): live preview — NOTHING persists,
+ *  NO quota (no AI spend; food lookups are curated/cache-fronted). PREVIEW
+ *  MUST EQUAL WHAT CONFIRM WOULD SAVE (T3 finding): with a scanToken, foods
+ *  resolve from the SAME draft snapshot confirmMeal will read (peeked, never
+ *  taken — the single-use draft survives previews) with the estimate's rung
+ *  preserved, mirroring confirmMeal exactly; without one, items resolve via
+ *  resolveChosenItems, mirroring createManualMeal exactly. */
+export async function previewMeal(
+  deps: NutritionDeps,
+  userId: string,
+  input: PreviewMealRequest,
+): Promise<MealPreview> {
+  if (input.scanToken === undefined) {
+    const items = await resolveChosenItems(deps, input.items);
+    return { items, totals: totals(items) };
+  }
+  const draft = await peekDraft(deps, userId, input.scanToken);
+  const items: MealItem[] = [];
+  for (const chosen of input.items) {
+    const food = draft.foods.find((f) => f.canonical === chosen.canonical);
+    const estimate = draft.items.find((i) => i.canonical === chosen.canonical);
+    if (food === undefined || estimate === undefined) {
+      throw new NutritionError(400, "invalid_item", "A previewed item was not part of this scan.");
+    }
+    items.push(nutritionItem(food, chosen.grams, [chosen.grams, chosen.grams], estimate.portionSource));
+  }
+  return { items, totals: totals(items) };
 }
 
 // ── reads / edits ────────────────────────────────────────────────────────────
