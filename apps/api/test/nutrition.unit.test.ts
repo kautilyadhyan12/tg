@@ -127,6 +127,31 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect((await mk("Medium")).evidence.items[0]?.confidence).toBe("medium");
   });
 
+  it("passes reasoning_effort none ONLY for qwen/ models (T3 advisory: pin the prefix coupling)", async () => {
+    const bodies: unknown[] = [];
+    const capture: typeof fetch = (_url, init) => {
+      if (typeof init?.body !== "string") throw new Error("expected string body");
+      bodies.push(JSON.parse(init.body));
+      return Promise.resolve(new Response(JSON.stringify({
+        choices: [{ message: { content: JSON.stringify({ meal_name: "x", cuisine_guess: null, items: [], scale_anchors: [], unknown_items: [], photo_quality: "good" }) } }],
+        model: "m", usage: { prompt_tokens: 1, completion_tokens: 1 },
+      }), { status: 200, headers: { "content-type": "application/json" } }));
+    };
+    await createVisionProvider("dummy-key", "qwen/qwen3.6-27b", capture).analyze("AA==", "image/jpeg"); // gitleaks:allow
+    await createVisionProvider("dummy-key", "meta-llama/other", capture).analyze("AA==", "image/jpeg"); // gitleaks:allow
+    expect(bodies[0]).toMatchObject({ reasoning_effort: "none" });
+    expect(bodies[1]).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("a numeric-STRING confidence still fails closed (T3 advisory: degrade, never guess)", async () => {
+    const provider = createVisionProvider("dummy-key", "m", wrap({ // gitleaks:allow
+      meal_name: "x", cuisine_guess: null,
+      items: [{ name: "x", canonical_hint: "x", container: null, fill_level: null, size_class: null, count: null, confidence: "0.9" }],
+      scale_anchors: [], unknown_items: [], photo_quality: "good",
+    }));
+    await expect(provider.analyze("AA==", "image/jpeg")).rejects.toThrow("vision malformed evidence shape");
+  });
+
   it("strictly rejects a vision reply that smuggles kcal into an item and retains usage for ledger", async () => {
     const fetchImpl: typeof fetch = () => Promise.resolve(new Response(JSON.stringify({
       choices: [{ message: { content: JSON.stringify({ meal_name: "Dal", cuisine_guess: "north_indian", items: [{ name: "Dal", canonical_hint: "dal", container: null, fill_level: null, size_class: null, count: null, confidence: "high", kcal: 100 }], scale_anchors: [], unknown_items: [], photo_quality: "good" }) } }],
