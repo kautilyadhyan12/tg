@@ -186,7 +186,7 @@ export function registerNutritionRoutes(
   app.post("/v1/nutrition/meals/preview", { preHandler: [app.authenticate] }, async (req, reply) => {
     const v = parse(previewMealRequestSchema, req.body, req, reply);
     if (v === null) return;
-    return reply.send(await service.previewMeal(nutritionDeps, v));
+    return reply.send(await service.previewMeal(nutritionDeps, authedUserId(req), v));
   });
 
   // Photo confirm (scanToken) or manual entry (mealName) — GAP-2 ruling.
