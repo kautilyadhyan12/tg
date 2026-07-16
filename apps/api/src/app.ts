@@ -93,6 +93,11 @@ export async function buildApp(
     // Origin gets nothing. '*' would silently break credentialed cookies (Part IV #6).
     origin: [config.WEB_ORIGIN],
     credentials: true,
+    // @fastify/cors v11 defaults to 'GET,HEAD,POST' — which silently refused
+    // every browser DELETE/PATCH/PUT at preflight (coach thread delete, user
+    // PATCH, DPDP account DELETE, measurements CRUD). Found by the Card 4
+    // browser smoke; inject() tests bypass CORS so no route test saw it.
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
   });
   await app.register(rateLimit, {
     global: true,

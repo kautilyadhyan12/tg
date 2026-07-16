@@ -93,11 +93,22 @@ PROVE → a chat cannot run your repo. The model ends with the EXACT commands to
         The engine has zero runtime deps by design (I1), so this works.
 AUDIT → model outputs the self-audit table (rule → pass/fail/N-A) and the
         universal DoD checklist from Part II R11.
+SMOKE → (Kd-added 2026-07-16; REQUIRED for any card that changes user-facing
+        behavior — web/mobile screens, API responses a screen consumes.) The
+        model hands Kd a numbered browser click-through with an explicit
+        ✅-expectation per step, run against the LOCAL api + web dev servers;
+        Kd reports pass/fail per step; failures are fixed (R9.5: failing test
+        first where a test can express it) before the card is "done". This is
+        NOT optional polish: unit suites run through fastify.inject() and
+        node-vitest, which BYPASS the browser entirely — the Card 4 smoke
+        caught a CORS preflight bug (browser DELETE/PATCH/PUT dead app-wide)
+        that 250+ green tests were structurally incapable of seeing. A card
+        whose UI cannot be reached yet states that explicitly instead.
 REVIEW→ you run the 5-minute checklist in Part VI yourself. Re-run the
         commands yourself at least for money/auth/engine code.
 COMMIT→ small commit, message references the task card ID and spec §.
 ```
-Nothing merges without PROVE and REVIEW. This loop is where "no bugs" actually comes from — the spec's golden traces, test matrices, and CI gates only protect you if unverified code never lands.
+Nothing merges without PROVE and REVIEW — and no user-facing card is "done" without its SMOKE. This loop is where "no bugs" actually comes from — the spec's golden traces, test matrices, and CI gates only protect you if unverified code never lands.
 
 ## 3. What goes into a session's context
 Every task chat gets: this playbook (via Project knowledge or upload) · the task card pasted in the prompt · **only** the spec files that card's Attach line lists · the **current contents of every source file being modified** (uploaded or pasted — the model cannot see your disk, and editing a file from memory of a previous chat is forbidden). Never attach all 182 pages, the raw PDF, or the old code zip — precision of attention beats volume of context; the spec was split into nine files for exactly this reason.
