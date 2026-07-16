@@ -1,6 +1,47 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: web repoint — Card 3: progress + measurements 🟡
+      [branch web-repoint. PROVE green (below). T3 in a fresh chat still OWED
+       before this card counts as done. NOT MERGED — branch merges at P2.8.]
+PROCESS: ran in the onboarding-storage chat by explicit Kd instruction (Part I
+  §1 deviation, recorded in DECISIONS). Grounded on-branch per S1 first.
+SCOPE AS IMPLEMENTED (amendment declared, DECISIONS 2026-07-16): repointed the
+  Progress page (6 chart reads → /v1/progress/*, @app/shared shapes) and
+  MeasurementsTracker (→ /v1/nutrition/body-measurements, Part 4 §3.6; flat
+  rows rebuilt from {items[].metrics}, `latest` derived client-side, POST =
+  .strict() {measuredAt, weightKg?, metrics{}}). NOT repointed — NO-REMOVAL
+  rule, no new-API surface exists (client headers + cutover.md owed lines):
+  gamificationApi (XP/badges-catalog/challenges/leaderboard — P2.3 rulings) ·
+  exerciseApi (names/instructions/media/search absent from Part 4 §3.4
+  catalog) · getPredictions (2B §5 card) · workoutApi/WorkoutCalendar
+  (endpoint EXISTS, client repoint owed — found out-of-scope, R1.1).
+SHIPPED (7 files): api/progressApi.js (authApi client; predictions stays
+  mlApi) · api/gamificationApi.js + api/exerciseApi.js (header docs only, no
+  behavior change) · pages/Progress.jsx (contract field names; records list
+  built client-side; heatmap array→map; weekly Wnn label; hours from
+  totalDurationMs) · components/progress/MeasurementsTracker.jsx ·
+  NEW api/progressApi.test.js (3: paths+params exact incl. .strict()-safe
+  no-param reads; measurements CRUD; predictions-stays-old guard) ·
+  RUNBOOK/cutover.md (owed-endpoints block under the web-repoint
+  prerequisite; NB master's copy diverged via PR #31 — expect a trivial
+  merge conflict at cutover, both edits are list inserts).
+PROVE (real output): full web suite `corepack pnpm --filter web exec vitest
+  run` → 60 passed / 1 failed of 61 — the 1 is the PRE-EXISTING syncClient
+  .env quirk (HANDOFF Card 2: identical on master, passes in CI). vite build
+  ✓ 42s. Lint: touched files vs branch baseline IDENTICAL (same 3 pre-existing
+  MeasurementsTracker errors, line-shifted; api files + Progress.jsx clean).
+UNTESTED (honest): the JSX adaptations (Progress.jsx, MeasurementsTracker) have
+  no unit coverage — node-env vitest, no jsdom (adding it = new deps, R1.4;
+  same gap Card 2 recorded). Needs the manual browser smoke vs the local API.
+OPEN SPEC GAPS: none new. Sequencing flag recorded (DECISIONS): P4 leaderboard
+  vs cutover.md:41 — decide at the cutover checkbox.
+NEXT: T3 (fresh chat) on this diff → resolve → then Card ④ (coach). Also
+  owed from Card 3 findings: workoutApi/WorkoutCalendar repoint (trivial,
+  endpoint exists) — fold into a web card, do NOT absorb silently.
+```
+
+```
 TASK: web repoint — Card 2: per-user storage keying + displayName migration 🔴
       [branch web-repoint. PROVE green (automated). T3 (fresh chat) DONE — found
        1 REAL correctness bug (flush identity race) + doc/accuracy fixes; ALL

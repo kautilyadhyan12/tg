@@ -81,7 +81,7 @@ function ActivityHeatmap({ heatmap }) {
                   key={dateStr}
                   title={
                     data
-                      ? `${dateStr}: ${data.count} workout(s), ${data.calories} kcal`
+                      ? `${dateStr}: ${data.count} workout(s), ${data.kcal} kcal`
                       : dateStr
                   }
                   className={`w-3 h-3 rounded-sm ${colors[level]}
@@ -161,12 +161,31 @@ export default function Progress() {
           progressService.getPersonalRecords(),
         ]);
 
-        setOverview(overviewRes.data.overview);
-        setCalories(caloriesRes.data.data);
-        setWeekly(weeklyRes.data.data);
-        setHeatmap(heatmapRes.data.heatmap);
-        setCategories(categoriesRes.data.data);
-        setRecords(recordsRes.data.records);
+        // New /v1 API (Card 3): responses are @app/shared progress.ts shapes.
+        setOverview(overviewRes.data);
+        setCalories(caloriesRes.data.points);
+        // Weekly points carry {isoYear, isoWeek}; the chart wants one label.
+        setWeekly(weeklyRes.data.points.map((p) => ({
+          ...p,
+          week: `W${String(p.isoWeek).padStart(2, '0')}`,
+        })));
+        // Heatmap arrives as an ARRAY of {date, count, kcal}; the calendar
+        // grid looks days up by date string, so index it.
+        setHeatmap(Object.fromEntries(
+          heatmapRes.data.days.map((d) => [d.date, d]),
+        ));
+        setCategories(categoriesRes.data.families);
+        // records is an OBJECT of refs now — build the display list here
+        // (labels/emoji are the client's per the contract's own comment).
+        const r = recordsRes.data;
+        const fmtMs = (ms) => `${Math.round(ms / 60000)} min`;
+        setRecords([
+          r.maxKcalWorkout && { icon: '🔥', label: 'Most calories in a workout', value: `${r.maxKcalWorkout.value} kcal` },
+          r.longestWorkout && { icon: '⏱️', label: 'Longest workout',            value: fmtMs(r.longestWorkout.value) },
+          r.bestAvgForm    && { icon: '🎯', label: 'Best average form',          value: `${r.bestAvgForm.value}%` },
+          { icon: '🏋️', label: 'Total workouts', value: r.totalWorkouts },
+          { icon: '📆', label: 'Longest streak', value: `${r.longestStreak} days` },
+        ].filter(Boolean));
       } catch (err) {
         console.error(err);
         toast.error('Failed to load progress data');
@@ -177,7 +196,7 @@ export default function Progress() {
     fetchAll();
   }, [period]);
 
-  const isEmpty = !loading && overview?.total_workouts === 0;
+  const isEmpty = !loading && overview?.totalWorkouts === 0;
 
   return (
     <div className="min-h-screen p-6 relative">
@@ -257,26 +276,26 @@ export default function Progress() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard
                   icon={Dumbbell} label="Workouts"
-                  value={overview?.total_workouts || 0}
+                  value={overview?.totalWorkouts || 0}
                   sub={`in ${PERIODS.find(p => p.value === period)?.label}`}
                   color="bg-primary-600"
                 />
                 <StatCard
                   icon={Clock} label="Time Trained"
-                  value={`${overview?.total_hours || 0}h`}
-                  sub={`${Math.round((overview?.total_hours || 0) * 60)} minutes`}
+                  value={`${((overview?.totalDurationMs || 0) / 3_600_000).toFixed(1)}h`}
+                  sub={`${Math.round((overview?.totalDurationMs || 0) / 60_000)} minutes`}
                   color="bg-blue-600"
                 />
                 <StatCard
                   icon={Flame} label="Calories"
-                  value={overview?.total_calories || 0}
+                  value={overview?.totalKcal || 0}
                   sub="kcal burned"
                   color="bg-orange-600"
                 />
                 <StatCard
                   icon={Zap} label="Streak"
-                  value={`${overview?.current_streak || 0} days`}
-                  sub={`Longest: ${overview?.longest_streak || 0} days`}
+                  value={`${overview?.currentStreak || 0} days`}
+                  sub={`Longest: ${overview?.longestStreak || 0} days`}
                   color="bg-yellow-600"
                 />
               </div>
@@ -344,7 +363,7 @@ export default function Progress() {
                           cursor={{ stroke: '#6366f1', strokeWidth: 1, strokeDasharray: '4 4' }}
                         />
                         <Area
-                          type="monotone" dataKey="calories" name="Calories"
+                          type="monotone" dataKey="kcal" name="Calories"
                           stroke="#6366f1" strokeWidth={2.5}
                           fill="url(#calGrad)"
                           dot={{ fill: '#6366f1', strokeWidth: 0, r: 3 }}
@@ -423,7 +442,7 @@ export default function Progress() {
                     <ResponsiveContainer width="100%" height={220}>
                       <PieChart>
                         <Pie
-                          data={categories} dataKey="count" nameKey="category"
+                          data={categories} dataKey="sets" nameKey="family"
                           cx="50%" cy="50%"
                           outerRadius={80} innerRadius={40} paddingAngle={3}
                         >
@@ -476,18 +495,18 @@ export default function Progress() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-white font-semibold">Consistency</h3>
                   <span className="text-primary-400 font-bold text-lg">
-                    {overview?.consistency || 0}%
+                    {overview?.consistencyPct || 0}%
                   </span>
                 </div>
                 <div className="h-3 bg-dark-300 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-primary-600
                                to-primary-400 rounded-full transition-all duration-500"
-                    style={{ width: `${overview?.consistency || 0}%` }}
+                    style={{ width: `${overview?.consistencyPct || 0}%` }}
                   />
                 </div>
                 <p className="text-gray-500 text-xs mt-2">
-                  You worked out {overview?.total_workouts || 0} times in the selected period
+                  You worked out {overview?.totalWorkouts || 0} times in the selected period
                 </p>
               </div>
 

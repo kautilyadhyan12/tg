@@ -35,9 +35,14 @@ function LogForm({ onSaved, latest }) {
     if (!hasData) { toast.error('Enter at least one measurement'); return; }
     setLoading(true);
     try {
-      const payload = {};
+      // New /v1 API (Card 3): @app/shared bodyMeasurementInputSchema (.strict())
+      // — weight is a first-class column (Part 4 §3.6 mirrors it into
+      // users.weight_kg); every other measurement rides the metrics record.
+      const payload = { measuredAt: new Date().toISOString(), metrics: {} };
       for (const [k, v] of Object.entries(form)) {
-        if (v !== '' && v !== undefined) payload[k] = parseFloat(v);
+        if (v === '' || v === undefined) continue;
+        if (k === 'weight_kg') payload.weightKg = parseFloat(v);
+        else payload.metrics[k] = parseFloat(v);
       }
       await progressService.logMeasurement(payload);
       toast.success('Measurements saved');
@@ -173,9 +178,26 @@ export default function MeasurementsTracker() {
 
   const load = async () => {
     try {
+      // New /v1 API (Card 3): {items: [{id, measuredAt, weightKg, metrics}],
+      // nextCursor}, newest first. Flatten each row back to the flat metric
+      // keys this component was built around, and derive `latest` here — the
+      // old backend precomputed it; the new contract is data-shaped and leaves
+      // display aggregation to the client.
       const res = await progressService.getMeasurements(60);
-      setMeasurements(res.data.measurements || []);
-      setLatest(res.data.latest || {});
+      const rows = (res.data.items || []).map((m) => ({
+        id: m.id,
+        measured_at: m.measuredAt,
+        ...(m.weightKg != null ? { weight_kg: m.weightKg } : {}),
+        ...m.metrics,
+      }));
+      const latestByMetric = {};
+      for (const row of rows) { // newest first: first non-null value wins
+        for (const { key } of METRICS) {
+          if (latestByMetric[key] == null && row[key] != null) latestByMetric[key] = row[key];
+        }
+      }
+      setMeasurements(rows);
+      setLatest(latestByMetric);
     } catch (err) {
       console.error('Failed to load measurements:', err);
     } finally {

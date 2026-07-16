@@ -39,6 +39,27 @@ the operational wrapper around it.
       `syncClient.js` → `VITE_API_URL` (new), but `authApi/coachApi/mlApi/
       nutritionApi` still → `VITE_AUTH_API_URL` / `VITE_ML_API_URL` (old). All
       must move to the new API and its endpoints must exist for each feature.
+      **OWED ENDPOINTS (web-repoint Card 3 inventory, 2026-07-16) — each of
+      these UI surfaces still calls the OLD backend because its new-API home
+      does not exist; per the NO-REMOVAL rule (CLAUDE.md MIGRATION STANCE),
+      P2.8 is blocked until every line has a new-API surface and its consumer
+      is repointed:**
+      - [ ] XP/levels display (GamificationStrip, Achievements) — XP storage
+            deferred by DECISIONS 2026-07-11 P2.3 GAP-1; needs its ruled card.
+      - [ ] Badge catalog + challenges screens — "tables now, screens later"
+            (DECISIONS 2026-07-11 P2.3 carve); needs catalog/challenges reads.
+      - [ ] Leaderboard (GamificationStrip, Achievements) — P4.x card
+            (Redis ZSET, v1 §14). NB the playbook sequences P4 AFTER P2.8 —
+            either a minimal read lands early or Kd explicitly accepts a dark
+            window; DECIDE AT THIS CHECKBOX, do not silently flip it.
+      - [ ] Predictions (PredictionsSection) — 2B §5 card (P2.3 carve).
+      - [ ] Exercise library content: display names, instructions, media,
+            server-side search (ExerciseLibrary) — the Part 4 §3.4 catalog is
+            data-only (nameKey/family/tier/met…); exercise copy/media surface
+            is owed (P4 production line / Part 2 Appendix A localization).
+      - [ ] Workout history calendar (WorkoutCalendar → workoutApi.getHistory)
+            — /v1/workouts EXISTS; the client repoint is owed to a web card
+            (found out-of-scope during Card 3, R1.1).
 - [ ] New API deployed and healthy (`/health` green); `data_backend` feature
       flag present (seeded, `seed.ts`).
 - [ ] Secrets in the deploy platform (escrow: `DATABASE_URL`, `MONGO_URI`,
