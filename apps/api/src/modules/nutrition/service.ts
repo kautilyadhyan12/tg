@@ -17,10 +17,11 @@ import * as repo from "./repo.js";
 import type { ConfirmMealRequest, ManualMealRequest, PatchMealRequest } from "./schemas.js";
 import { VisionProviderError, type VisionProvider, type VisionResult } from "./vision.adapter.js";
 
-// DECISIONS 2026-07-12: Groq Scout public list price, integer micro-USD per
-// 1M tokens ($0.11 in / $0.34 out), one-line updatable; BigInt end-to-end.
-export const VISION_INPUT_MICRO_USD_PER_MILLION = 110_000n;
-export const VISION_OUTPUT_MICRO_USD_PER_MILLION = 340_000n;
+// Vision-swap card 2026-07-16: Qwen3.6 27B public list price, integer micro-USD
+// per 1M tokens ($0.60 in / $3.00 out, groq.com/pricing quoted 2026-07-16),
+// one-line updatable; BigInt end-to-end. (Supersedes the Scout $0.11/$0.34.)
+export const VISION_INPUT_MICRO_USD_PER_MILLION = 600_000n;
+export const VISION_OUTPUT_MICRO_USD_PER_MILLION = 3_000_000n;
 export const RETAKE_TTL_SECONDS = 10 * 60;
 const SCAN_TTL_SECONDS = RETAKE_TTL_SECONDS;
 const FOOD_CACHE_TTL_SECONDS = 24 * 60 * 60;
