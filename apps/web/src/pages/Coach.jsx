@@ -424,7 +424,7 @@ export default function Coach() {
                                 (real data, nothing invented). */}
                             {conv.lastMessageAt
                               ? formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: true })
-                              : 'New Chat'}
+                              : 'No messages yet' /* T3 Card 4: title fallback already says "New Chat" */}
                           </p>
                         </div>
                         <span
