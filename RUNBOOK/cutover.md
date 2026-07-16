@@ -60,6 +60,14 @@ the operational wrapper around it.
       - [ ] Workout history calendar (WorkoutCalendar → workoutApi.getHistory)
             — /v1/workouts EXISTS; the client repoint is owed to a web card
             (found out-of-scope during Card 3, R1.1).
+      - [ ] Coach chat retry protection (DECISIONS 2026-07-12 P2.5b T3 minor;
+            Kd D1(b) 2026-07-16) — /v1/coach/chat accepts a client-generated
+            Idempotency-Key + gets a short-window per-route cap. Without it a
+            client retry double-charges quota, re-calls Groq, and duplicates
+            messages. The ruling ties this to "when the client is wired" —
+            Card 4 wired it; the API side is its own small card and MUST land
+            before real traffic. Client change is one header line
+            (apps/web/src/api/coachApi.js notes where).
       - [ ] `limitedToDays` surfaced in the Progress UI (T3 Card 3) — every
             /v1/progress read returns the plan-clamp field (progress.ts:18-21,
             the P2.4 history gate) and the page ignores it, so a free-plan

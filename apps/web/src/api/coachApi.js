@@ -1,36 +1,34 @@
-import mlApi from './mlApi';
-
-const ML_BASE = import.meta.env.VITE_ML_API_URL || 'http://localhost:8000/api';
+// P2.8 web repoint (Card 4) — coach on the NEW /v1 API via the Card-1 cookie
+// client (httpOnly session; no tokens in JS). Shapes are @app/shared coach.ts,
+// sent as the schema objects directly — no wrapper.
+//
+// NON-STREAMING by ruling (DECISIONS 2026-07-11 P2.5 GAP-3): one complete
+// response per question = exact token/cost accounting + exact-match
+// cacheability; a streaming card can follow post-cutover. The old raw-fetch
+// streaming path (Bearer token from localStorage, __CONV_ID__ line protocol)
+// is deleted with it.
+//
+// RETRY PROTECTION OWED (DECISIONS 2026-07-12 P2.5b T3 minor; Kd D1(b),
+// 2026-07-16): /v1/coach/chat has no Idempotency-Key yet — a client retry
+// would double-charge quota and duplicate messages. The blocking checkbox
+// lives in RUNBOOK/cutover.md; when the API accepts a key, sendMessage grows
+// one header line here. Until then: no automatic retry of this POST exists
+// (authApi's 401-refresh replay is safe — a 401 is rejected before the
+// handler runs, so the question was never processed).
+import authApi from './authApi';
 
 export const coachService = {
-  // List recent conversations
-  listConversations: () => mlApi.get('/coach/conversations'),
+  /** {items: [{id, title, lastMessageAt}], nextCursor} — newest first. */
+  listThreads: (limit = 20) => authApi.get('/v1/coach/threads', { params: { limit } }),
 
-  // Get one full conversation
-  getConversation: (id) => mlApi.get(`/coach/conversations/${id}`),
+  /** {id, title, messages: [{role, content, createdAt}]} or 404. */
+  getThread: (id) => authApi.get(`/v1/coach/threads/${id}`),
 
-  // Delete a conversation
-  deleteConversation: (id) => mlApi.delete(`/coach/conversations/${id}`),
+  deleteThread: (id) => authApi.delete(`/v1/coach/threads/${id}`),
 
-  // Send a message — returns a streaming Response (use fetch directly for streaming)
-  streamChat: async (message, conversationId = null) => {
-    const token = localStorage.getItem('accessToken');
-    const response = await fetch(`${ML_BASE}/coach/chat`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type':  'application/json',
-      },
-      body: JSON.stringify({
-        message,
-        conversation_id: conversationId,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Chat failed: ${response.status}`);
-    }
-
-    return response;
-  },
+  /** POST /v1/coach/chat → {threadId, reply, cached}. Body is .strict()
+   *  (coachChatRequestSchema); threadId is OMITTED — never sent as
+   *  null/undefined — when starting a new thread. */
+  sendMessage: (message, threadId = null) =>
+    authApi.post('/v1/coach/chat', threadId ? { message, threadId } : { message }),
 };

@@ -1,6 +1,44 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: web repoint — Card 4: coach 🟡
+      [branch web-repoint. PROVE green (below). T3 in a fresh chat OWED before
+       done. NOT MERGED — branch merges at P2.8. Same-chat continuation by Kd
+       instruction (Part I §1 deviation, recorded).]
+SHIPPED (4 files + 1 test): api/coachApi.js (REWRITTEN on the Card-1 cookie
+  client: listThreads/getThread/deleteThread/sendMessage → /v1/coach/*;
+  .strict() chat body with threadId OMITTED for new threads; old raw-fetch
+  streaming path + localStorage Bearer DELETED) · pages/Coach.jsx (stream loop
+  → one awaited request, typing indicator preserved via the empty-assistant
+  placeholder; threadId from response replaces __CONV_ID__; 429 renders a
+  quota message not a fake error; sidebar preview line → formatDistanceToNow
+  (lastMessageAt) per D2(a)) · RUNBOOK/cutover.md (+1 BLOCKING checkbox: coach
+  chat Idempotency-Key + per-route cap, D1(b) — the DECISIONS 2026-07-12
+  follow-up that came due when this card wired the client; API side is its own
+  small card, client change is one documented header line) · NEW
+  api/coachApi.test.js (3: paths/methods, strict-safe body both shapes,
+  usage-pattern guard: no fetch(/localStorage./mlApi import).
+KD RULINGS THIS CARD: D1(b) checkbox-not-inline-API-change · D2(a) last-active
+  time replaces the preview snippet. NON-STREAMING send cites the existing
+  P2.5 GAP-3 ruling — not a removal.
+PROVE (real output): full web suite 63 passed / 1 failed of 64 — the 1 is the
+  PRE-EXISTING syncClient .env quirk (identical on master, passes in CI).
+  vite build ✓. Lint: Coach.jsx 4 baseline errors → 1 (3 died with the deleted
+  stream loop; the 1 is untouched pre-existing); coachApi.js + test clean.
+UNTESTED (honest): Coach.jsx handlers have no unit coverage (node-env vitest,
+  no jsdom — the recorded gap). Manual browser smoke owed: send a question
+  (new thread minted), reply renders complete, sidebar shows relative time,
+  6th free question shows the quota message, delete works.
+OPEN SPEC GAPS: none new.
+NEXT: T3 (fresh chat) on this diff (base 27e9255) → resolve → Card 5
+  (nutrition). Remaining after that: 6 running/geo · 7 recommendation-or-drop
+  · owed: workoutApi calendar, limitedToDays UI, coach idempotency API card,
+  DPDP Day-14/export worker (promoted), Settings/Onboarding wizard wiring
+  (onboarding-storage endpoint EXISTS on master since PR #30 — the web side
+  is still old-backend).
+```
+
+```
 TASK: web repoint — Card 3: progress + measurements 🟡
       [branch web-repoint. PROVE green (below). T3 in a fresh chat still OWED
        before this card counts as done. NOT MERGED — branch merges at P2.8.]

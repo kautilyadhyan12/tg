@@ -6,6 +6,7 @@ import {
   Sparkles, Loader2, User as UserIcon,
   PanelLeft, X,
 } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 import { coachService } from '../api/coachApi';
 import { useAuth } from '../context/AuthContext';
 
@@ -124,8 +125,9 @@ export default function Coach() {
   const loadConversations = async () => {
     setLoadingConvs(true);
     try {
-      const res = await coachService.listConversations();
-      setConversations(res.data.conversations || []);
+      // New /v1 API (Card 4): {items: [{id, title, lastMessageAt}], nextCursor}
+      const res = await coachService.listThreads();
+      setConversations(res.data.items || []);
     } catch (err) {
       console.error('Failed to load conversations:', err);
     } finally {
@@ -136,8 +138,9 @@ export default function Coach() {
   const loadConversation = async (id) => {
     if (streaming) return;
     try {
-      const res = await coachService.getConversation(id);
-      setMessages(res.data.conversation.messages || []);
+      // New /v1 API (Card 4): the thread detail object directly.
+      const res = await coachService.getThread(id);
+      setMessages(res.data.messages || []);
       setActiveId(id);
       setSidebarOpen(false);   // Auto-close sidebar after selection
     } catch (err) {
@@ -157,7 +160,7 @@ export default function Coach() {
     e.stopPropagation();
     if (!window.confirm('Delete this conversation?')) return;
     try {
-      await coachService.deleteConversation(id);
+      await coachService.deleteThread(id);
       setConversations((prev) => prev.filter((c) => c.id !== id));
       if (activeId === id) {
         setActiveId(null);
@@ -168,7 +171,7 @@ export default function Coach() {
     }
   };
 
-  // ── Send message and stream response ────────────────────────────────────────
+  // ── Send message (non-streaming — DECISIONS 2026-07-11 P2.5 GAP-3) ─────────
   const sendMessage = async (messageText) => {
     const text = (messageText || input).trim();
     if (!text || streaming) return;
@@ -180,62 +183,34 @@ export default function Coach() {
     const userMsg = { role: 'user', content: text };
     setMessages((prev) => [...prev, userMsg]);
 
-    // Add empty assistant message that we'll stream into
+    // Empty assistant placeholder: MessageBubble renders it as the typing
+    // indicator (isStreaming) until the complete reply arrives.
     setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
 
-    let currentConvId = activeId;
-
     try {
-      const response = await coachService.streamChat(text, activeId);
-      const reader   = response.body.getReader();
-      const decoder  = new TextDecoder();
+      // New /v1 API (Card 4): one complete response — {threadId, reply, cached}.
+      const res = await coachService.sendMessage(text, activeId);
+      const { threadId, reply } = res.data;
+      if (!activeId) setActiveId(threadId); // server minted a new thread
 
-      let buffer       = '';
-      let gotConvId    = false;
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        buffer += chunk;
-
-        // Parse conversation_id from first line
-        if (!gotConvId && buffer.includes('\n')) {
-          const lines     = buffer.split('\n');
-          const firstLine = lines[0];
-
-          if (firstLine.startsWith('__CONV_ID__:')) {
-            currentConvId = firstLine.replace('__CONV_ID__:', '');
-            buffer        = lines.slice(1).join('\n');
-            gotConvId     = true;
-            setActiveId(currentConvId);
-          } else {
-            gotConvId = true;
-          }
-        }
-
-        // Update last message with accumulated text
-        setMessages((prev) => {
-          const updated = [...prev];
-          if (updated.length > 0 && updated[updated.length - 1].role === 'assistant') {
-            updated[updated.length - 1] = {
-              role:    'assistant',
-              content: buffer,
-            };
-          }
-          return updated;
-        });
-      }
-    } catch (err) {
-      console.error('Streaming error:', err);
       setMessages((prev) => {
         const updated = [...prev];
         if (updated.length > 0 && updated[updated.length - 1].role === 'assistant') {
-          updated[updated.length - 1] = {
-            role:    'assistant',
-            content: 'Sorry, I ran into an error. Please try again.',
-          };
+          updated[updated.length - 1] = { role: 'assistant', content: reply };
+        }
+        return updated;
+      });
+    } catch (err) {
+      console.error('Coach chat error:', err);
+      // The new API meters coach questions (v1 §9.3): a 429 is the plan quota,
+      // not a fault — say so instead of a fake "error".
+      const content = err.response?.status === 429
+        ? 'You’ve used all your coach questions for this period. Your quota resets soon — or upgrade for more.'
+        : 'Sorry, I ran into an error. Please try again.';
+      setMessages((prev) => {
+        const updated = [...prev];
+        if (updated.length > 0 && updated[updated.length - 1].role === 'assistant') {
+          updated[updated.length - 1] = { role: 'assistant', content };
         }
         return updated;
       });
@@ -444,7 +419,12 @@ export default function Coach() {
                           </p>
                           <p className="text-2xs mt-0.5 truncate"
                              style={{ color: 'rgba(255,255,255,0.35)' }}>
-                            {conv.preview || 'No messages'}
+                            {/* Card 4 D2(a): the new list item carries no
+                                preview snippet — show last activity instead
+                                (real data, nothing invented). */}
+                            {conv.lastMessageAt
+                              ? formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: true })
+                              : 'New Chat'}
                           </p>
                         </div>
                         <span
