@@ -171,7 +171,6 @@ async function findFood(deps: NutritionDeps, query: string): Promise<FoodReferen
 // ── Stage-3 arithmetic + §3.3 display standard ───────────────────────────────
 
 const round1 = (v: number): number => Math.round(v * 10) / 10;
-const round10 = (v: number): number => Math.round(v / 10) * 10;
 
 function nutritionItem(
   food: FoodReference,
@@ -180,11 +179,12 @@ function nutritionItem(
   portionSource: "user_dishware" | "regional_prior" | "default",
 ): MealItem {
   const scale = gramsPoint / 100;
-  const kcalLow = Math.max(0, round10((food.kcal * gramsRange[0]) / 100));
-  const kcalHigh = Math.max(0, round10((food.kcal * gramsRange[1]) / 100));
-  // §3.3: the range is rounded to 10; the point must live INSIDE its own
-  // range (T3 P2.6a finding 1 — a collapsed range like [170,170] previously
-  // stranded an unrounded point of 165 outside it).
+  // Kd DEVIATION ruling 2026-07-16 (supersedes §3.3's round-to-10 display
+  // standard): kcal are exact integers — 2 apples read 187, not 190. The
+  // point still lives INSIDE its own range (T3 P2.6a finding 1); with whole-
+  // kcal rounding the clamp is only reachable on adversarial float edges.
+  const kcalLow = Math.max(0, Math.round((food.kcal * gramsRange[0]) / 100));
+  const kcalHigh = Math.max(0, Math.round((food.kcal * gramsRange[1]) / 100));
   const kcalPoint = Math.min(Math.max(Math.round(food.kcal * scale), kcalLow), kcalHigh);
   return {
     name: food.name,
