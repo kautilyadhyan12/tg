@@ -36,7 +36,10 @@ const proEntitlements = {
 const freeEntitlements = {
   exercises: { mode: "tier", tier: "T1" },
   coach: { window: "month", limit: 5 },
-  meal_scan: { window: "month", limit: 3 },
+  // Kd ruling 2026-07-16 (DEVIATION from the Part 5 §1 price book's 3/month,
+  // raised at the Card-5a smoke): free tier = 2 scans/day. Cost noted at the
+  // ruling: ~60/month ≈ $0.10/free user at Qwen prices vs ~$0.005 before.
+  meal_scan: { window: "day", limit: 2 },
   route_gen: { window: "month", limit: 2 },
   history_days: 90, // read-gate, not deletion (Part 4 §0.2)
   programs: "starter",
