@@ -28,9 +28,14 @@ export interface MeasurementRow {
   createdAt: Date;
 }
 
+export type MealType = "breakfast" | "lunch" | "dinner" | "snack";
+const toMealType = (v: string | null): MealType | null =>
+  v === "breakfast" || v === "lunch" || v === "dinner" || v === "snack" ? v : null;
+
 export interface MealRow {
   id: string;
   takenAt: Date;
+  mealType: MealType | null;
   mealName: string | null;
   items: MealItem[];
   kcalPoint: number;
@@ -48,6 +53,8 @@ export interface MealRow {
 
 export interface MealWrite {
   takenAt: Date;
+  /** User-chosen label (Kd ruling 2026-07-17); null = unlabeled. */
+  mealType: MealType | null;
   mealName: string;
   items: MealItem[];
   origin: "photo" | "manual";
@@ -62,6 +69,7 @@ const parseItems = (value: unknown): MealItem[] => mealItemSchema.array().parse(
 interface MealDbRow {
   id: string;
   taken_at: Date;
+  meal_type: string | null;
   meal_name: string | null;
   items: unknown;
   kcal_point: number;
@@ -80,6 +88,7 @@ interface MealDbRow {
 const toMeal = (r: MealDbRow): MealRow => ({
   id: r.id,
   takenAt: r.taken_at,
+  mealType: toMealType(r.meal_type),
   mealName: r.meal_name,
   items: parseItems(r.items),
   kcalPoint: r.kcal_point,
@@ -145,15 +154,15 @@ export async function createMeal(sql: Sql, userId: string, input: MealWrite): Pr
   return await sql.begin(async (tx) => {
     const t = totals(input.items);
     const rows = await tx<MealDbRow[]>`
-      INSERT INTO meal_logs (user_id, taken_at, meal_name, items,
+      INSERT INTO meal_logs (user_id, taken_at, meal_type, meal_name, items,
                              kcal_point, kcal_low, kcal_high,
                              protein_g, carbs_g, fat_g,
                              confirmed, origin, portion_source, nutrition_sources, calc_version)
-      VALUES (${userId}, ${input.takenAt}, ${input.mealName}, ${tx.json(input.items)},
+      VALUES (${userId}, ${input.takenAt}, ${input.mealType}, ${input.mealName}, ${tx.json(input.items)},
               ${t.kcalPoint}, ${t.kcalLow}, ${t.kcalHigh},
               ${t.proteinG}, ${t.carbsG}, ${t.fatG},
               true, ${input.origin}, ${worst(input.items)}, ${sources(input.items)}, 1)
-      RETURNING id, taken_at, meal_name, items, kcal_point, kcal_low, kcal_high,
+      RETURNING id, taken_at, meal_type, meal_name, items, kcal_point, kcal_low, kcal_high,
              protein_g, carbs_g, fat_g, confirmed, origin, portion_source,
              nutrition_sources, calc_version`;
     const row = rows[0];
@@ -175,7 +184,7 @@ export async function createMeal(sql: Sql, userId: string, input: MealWrite): Pr
 
 export async function getMeal(sql: Sql, userId: string, id: string): Promise<MealRow | null> {
   const rows = await sql<MealDbRow[]>`
-    SELECT id, taken_at, meal_name, items, kcal_point, kcal_low, kcal_high,
+    SELECT id, taken_at, meal_type, meal_name, items, kcal_point, kcal_low, kcal_high,
              protein_g, carbs_g, fat_g, confirmed, origin, portion_source,
              nutrition_sources, calc_version FROM meal_logs
     WHERE id = ${id} AND user_id = ${userId}`;
@@ -189,7 +198,7 @@ export async function listMeals(
   cursor: { at: Date; id: string } | null,
 ): Promise<MealRow[]> {
   const rows = await sql<MealDbRow[]>`
-    SELECT id, taken_at, meal_name, items, kcal_point, kcal_low, kcal_high,
+    SELECT id, taken_at, meal_type, meal_name, items, kcal_point, kcal_low, kcal_high,
              protein_g, carbs_g, fat_g, confirmed, origin, portion_source,
              nutrition_sources, calc_version FROM meal_logs
     WHERE user_id = ${userId}
@@ -204,7 +213,7 @@ export async function listMeals(
 export async function updateMeal(sql: Sql, userId: string, id: string, next: MealWrite): Promise<MealRow | null> {
   return await sql.begin(async (tx) => {
     const beforeRows = await tx<MealDbRow[]>`
-      SELECT id, taken_at, meal_name, items, kcal_point, kcal_low, kcal_high,
+      SELECT id, taken_at, meal_type, meal_name, items, kcal_point, kcal_low, kcal_high,
              protein_g, carbs_g, fat_g, confirmed, origin, portion_source,
              nutrition_sources, calc_version FROM meal_logs
       WHERE id = ${id} AND user_id = ${userId} FOR UPDATE`;
@@ -231,9 +240,12 @@ export async function updateMeal(sql: Sql, userId: string, id: string, next: Mea
         VALUES (${id}, 'items', ${tx.json(before.items)}, ${tx.json(next.items)}, ${originalRung})`;
     }
 
+    // meal_type edits get no corrections row: the label is user preference,
+    // not a Stage-5 estimation-telemetry signal (2B corrections doctrine).
     const rows = await tx<MealDbRow[]>`
       UPDATE meal_logs SET
         taken_at = ${next.takenAt},
+        meal_type = ${next.mealType},
         meal_name = ${next.mealName},
         items = ${tx.json(next.items)},
         kcal_point = ${t.kcalPoint}, kcal_low = ${t.kcalLow}, kcal_high = ${t.kcalHigh},
@@ -241,7 +253,7 @@ export async function updateMeal(sql: Sql, userId: string, id: string, next: Mea
         portion_source = ${worst(next.items)},
         nutrition_sources = ${sources(next.items)}
       WHERE id = ${id} AND user_id = ${userId}
-      RETURNING id, taken_at, meal_name, items, kcal_point, kcal_low, kcal_high,
+      RETURNING id, taken_at, meal_type, meal_name, items, kcal_point, kcal_low, kcal_high,
              protein_g, carbs_g, fat_g, confirmed, origin, portion_source,
              nutrition_sources, calc_version`;
     const row = rows[0];
