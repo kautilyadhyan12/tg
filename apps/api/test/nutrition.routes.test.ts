@@ -117,6 +117,27 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     }finally{await app5.close();}
   },30_000);
 
+  // Kd ruling 2026-07-17: mealType is a user-chosen label; takenAt stays the
+  // exact real time. Nullable; PATCH null clears; invalid values 400.
+  it("mealType: stored on create, patchable, clearable, invalid rejected",async()=>{
+    const m=await session("p26a-mealtype@example.com");
+    const created=await inject("POST","/v1/nutrition/meals",m.access,{mealName:"Late dal",takenAt:new Date().toISOString(),mealType:"dinner",items:[{canonical:"dal_lentil_curry",grams:150}]});
+    expect(created.statusCode,created.body).toBe(201);
+    const meal=created.json<{meal:{id:string;mealType:string|null}}>().meal;
+    expect(meal.mealType).toBe("dinner");
+    const relabeled=await inject("PATCH",`/v1/nutrition/meals/${meal.id}`,m.access,{mealType:"lunch"});
+    expect(relabeled.json<{meal:{mealType:string|null}}>().meal.mealType).toBe("lunch");
+    // takenAt edit does NOT disturb the label (the whole point of the ruling).
+    const timeEdit=await inject("PATCH",`/v1/nutrition/meals/${meal.id}`,m.access,{takenAt:new Date(Date.now()-3600_000).toISOString()});
+    expect(timeEdit.json<{meal:{mealType:string|null}}>().meal.mealType).toBe("lunch");
+    const cleared=await inject("PATCH",`/v1/nutrition/meals/${meal.id}`,m.access,{mealType:null});
+    expect(cleared.json<{meal:{mealType:string|null}}>().meal.mealType).toBeNull();
+    expect((await inject("POST","/v1/nutrition/meals",m.access,{mealName:"Bad",takenAt:new Date().toISOString(),mealType:"brunch",items:[{canonical:"dal_lentil_curry",grams:100}]})).statusCode).toBe(400);
+    // Unlabeled create stays null (no default invented).
+    const plain=await inject("POST","/v1/nutrition/meals",m.access,{mealName:"Plain",takenAt:new Date().toISOString(),items:[{canonical:"dal_lentil_curry",grams:100}]});
+    expect(plain.json<{meal:{mealType:string|null}}>().meal.mealType).toBeNull();
+  },30_000);
+
   it("takenAt more than 24h in the future is a 400 (GAP-3)",async()=>{const future=new Date(Date.now()+25*60*60*1000).toISOString();const res=await inject("POST","/v1/nutrition/meals",cookieA,{mealName:"Time travel",takenAt:future,items:[{canonical:"dal_lentil_curry",grams:100}]});expect(res.statusCode).toBe(400);},30_000);
 
   it("Redis down: meal_scan fails CLOSED with 503 and the provider is never called (quotas.py doctrine)",async()=>{const downRedis=createMemoryRedis();const vision2=fakeVision();const app2=await buildApp(loadConfig(env),{redis:downRedis,nutrition:{visionProvider:vision2,foodSearchProvider:noExternal}});try{const login=await app2.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email:"p26a-alice@example.com",password:PASSWORD})});const access=login.cookies.find((c)=>c.name==="accessToken")?.value??"";downRedis.down=true;const res=await app2.inject({method:"POST",url:"/v1/nutrition/analyze-photo",headers:{"content-type":"application/json"},cookies:{accessToken:access},payload:JSON.stringify({imageBase64:jpeg,mimeType:"image/jpeg"})});expect(res.statusCode).toBe(503);expect(vision2.calls).toBe(0);}finally{await app2.close();}},30_000);

@@ -24,6 +24,10 @@ export const mealLogs = pgTable(
       .notNull()
       .references(() => users.id),
     takenAt: timestamp("taken_at", { withTimezone: true }).notNull(),
+    // Kd DEVIATION ruling 2026-07-17 (Card-5b smoke; supersedes the D1
+    // time-bucket interim): meal type is a USER-CHOSEN label, nullable —
+    // takenAt stays the exact real time and never encodes the section.
+    mealType: text("meal_type"),
     mealName: text("meal_name"),
     items: jsonb("items").notNull(), // [{name, canonical, grams_point, grams_range:[lo,hi], portion_source, nutrition_source, kcal, protein_g, carbs_g, fat_g}]
     kcalPoint: integer("kcal_point").notNull(),
@@ -43,6 +47,7 @@ export const mealLogs = pgTable(
   (t) => [
     index("meal_logs_user_taken_idx").on(t.userId, t.takenAt.desc()),
     check("meal_logs_origin_check", sql`${t.origin} IN ('photo','manual')`),
+    check("meal_logs_meal_type_check", sql`${t.mealType} IN ('breakfast','lunch','dinner','snack')`),
   ],
 );
 

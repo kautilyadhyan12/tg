@@ -249,6 +249,7 @@ function nutritionItem(
 const asMeal = (r: repo.MealRow): Meal => ({
   id: r.id,
   takenAt: r.takenAt.toISOString(),
+  mealType: r.mealType,
   mealName: r.mealName,
   items: r.items,
   totals: {
@@ -434,6 +435,7 @@ export async function confirmMeal(deps: NutritionDeps, userId: string, input: Co
   }
   const row = await repo.createMeal(deps.sql, userId, {
     takenAt: new Date(input.takenAt),
+    mealType: input.mealType ?? null,
     mealName: draft.mealName,
     items,
     origin: "photo",
@@ -464,6 +466,7 @@ export async function createManualMeal(deps: NutritionDeps, userId: string, inpu
   const items = await resolveChosenItems(deps, input.items);
   const row = await repo.createMeal(deps.sql, userId, {
     takenAt: new Date(input.takenAt),
+    mealType: input.mealType ?? null,
     mealName: input.mealName,
     items,
     origin: "manual",
@@ -544,6 +547,8 @@ export async function patchMeal(
   }
   const row = await repo.updateMeal(deps.sql, userId, id, {
     takenAt: input.takenAt === undefined ? before.takenAt : new Date(input.takenAt),
+    // undefined = keep; explicit null = clear the label.
+    mealType: input.mealType === undefined ? before.mealType : input.mealType,
     mealName: input.mealName ?? before.mealName ?? "Meal",
     items,
     origin: before.origin,
