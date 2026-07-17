@@ -430,9 +430,10 @@ async function peekDraft(deps: NutritionDeps, userId: string, value: string): Pr
  *  an EXTRA the user added by search (the oats-with-milk case) — resolved via
  *  findFood at rung 'default'; the canonical cache makes OFF foods loggable
  *  here too. `original` is the item's pre-edit draft estimate, or null for an
- *  extra (an extra has no estimate, so it only appears in the items-vs-original
- *  diff as an addition → a Stage-5 correction row). ONE implementation for
- *  confirm and preview so live math cannot diverge from what is saved (T3). */
+ *  extra (an extra was never estimated, so it is EXCLUDED from the Stage-5
+ *  correction pair entirely — an addition is not an estimate error; DECISIONS
+ *  2026-07-17). ONE implementation for confirm and preview so live math cannot
+ *  diverge from what is saved (T3). */
 async function resolveDraftItem(
   deps: NutritionDeps,
   draft: Draft,
@@ -452,19 +453,14 @@ async function resolveDraftItem(
   return { item: nutritionItem(extra, chosen.grams, [chosen.grams, chosen.grams], "default"), original: null };
 }
 
-export async function confirmMeal(deps: NutritionDeps, userId: string, input: ConfirmMealRequest): Promise<Meal> {
-  // Resolve EVERYTHING before consuming the single-use draft (T3 Card 5c).
-  // takeDraft is destructive, so resolving after it meant one unresolvable
-  // item (an added ingredient whose canonical has aged out of the food cache)
-  // destroyed the scan: the 400 left the user with a dead scanToken and no way
-  // back except another photo — a fresh vision call and another quota unit.
-  const draft = await readDraft(deps, userId, input.scanToken);
-  if (draft === null) {
-    // get() cannot tell "expired" from "Redis down"; take() can, and reports
-    // 503-vs-400 correctly. There is nothing to lose — the draft is unreadable.
-    await takeDraft(deps, userId, input.scanToken);
-    throw new NutritionError(400, "invalid_scan", "Invalid or expired scan token.");
-  }
+/** Resolve every chosen item against the draft (extras included) into the meal
+ *  items plus the estimated-only Stage-5 correction pair. Pure w.r.t. Redis —
+ *  it does not consume the draft, so a rejection here never burns the scan. */
+async function buildConfirmItems(
+  deps: NutritionDeps,
+  draft: Draft,
+  input: ConfirmMealRequest,
+): Promise<{ items: MealItem[]; originalItems: MealItem[]; correctedItems: MealItem[] }> {
   const items: MealItem[] = [];
   const originalItems: MealItem[] = [];
   const correctedItems: MealItem[] = [];
@@ -479,21 +475,54 @@ export async function confirmMeal(deps: NutritionDeps, userId: string, input: Co
       correctedItems.push(item);
     }
   }
-  // Everything that could reject has passed — NOW consume the draft. This is
-  // still the atomic single-use gate: two concurrent confirms both read, but
-  // only one take() returns the draft; the loser gets its 400 here.
-  await takeDraft(deps, userId, input.scanToken);
+  return { items, originalItems, correctedItems };
+}
+
+async function persistConfirm(
+  deps: NutritionDeps,
+  userId: string,
+  input: ConfirmMealRequest,
+  draft: Draft,
+  built: { items: MealItem[]; originalItems: MealItem[]; correctedItems: MealItem[] },
+): Promise<Meal> {
   const row = await repo.createMeal(deps.sql, userId, {
-    correctedItems,
+    correctedItems: built.correctedItems,
     takenAt: new Date(input.takenAt),
     mealType: input.mealType ?? null,
     mealName: draft.mealName,
-    items,
+    items: built.items,
     origin: "photo",
-    originalItems,
+    originalItems: built.originalItems,
   });
   await awardMealBadges(deps, userId);
   return asMeal(row);
+}
+
+export async function confirmMeal(deps: NutritionDeps, userId: string, input: ConfirmMealRequest): Promise<Meal> {
+  // Resolve EVERYTHING before consuming the single-use draft (T3 Card 5c).
+  // takeDraft is destructive, so resolving after it meant one unresolvable
+  // item (an added ingredient whose canonical has aged out of the food cache)
+  // destroyed the scan: the 400 left the user with a dead scanToken and no way
+  // back except another photo — a fresh vision call and another quota unit.
+  const peeked = await readDraft(deps, userId, input.scanToken);
+  if (peeked !== null) {
+    const built = await buildConfirmItems(deps, peeked, input);
+    // Everything that could reject has passed — NOW consume the draft. Still
+    // the atomic single-use gate: two concurrent confirms both read, but only
+    // one take() returns the draft; the loser gets its 400 here.
+    await takeDraft(deps, userId, input.scanToken);
+    return await persistConfirm(deps, userId, input, peeked, built);
+  }
+  // get() returned null: the draft is expired, OR Redis was momentarily down.
+  // take()'s Lua GET+DEL distinguishes them (undefined → 400, null → 503) and,
+  // if Redis flapped back up in the window, returns the LIVE draft — which we
+  // must not discard by blindly throwing 400 (T3 F3: that path was added to
+  // stop scans being burned, and would itself burn a recovered one). Build
+  // from the taken draft (already consumed, so a resolve failure here burns it
+  // — accepted only in this rare flap window).
+  const recovered = await takeDraft(deps, userId, input.scanToken);
+  const built = await buildConfirmItems(deps, recovered, input);
+  return await persistConfirm(deps, userId, input, recovered, built);
 }
 
 /** Search-resolved items for the manual flow — ONE implementation shared by

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
-import { createMemoryRedis } from "../src/redis.js";
+import { createMemoryRedis, type RedisLike } from "../src/redis.js";
 import { quotaKey } from "../src/modules/quotas/service.js";
 import type { VisionEvidence, VisionProvider, VisionResult } from "../src/modules/nutrition/vision.adapter.js";
 import type { FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
@@ -192,6 +192,37 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       const corr=await sql<{portion_source:string|null}[]>`SELECT portion_source FROM meal_log_corrections WHERE meal_log_id=${meal.id}`;
       expect(corr).toHaveLength(0);
     }finally{await a.close();}
+  },30_000);
+
+  // T3 Card 5c F3: the confirm classification branch must NOT discard a draft
+  // that take() successfully recovers. Simulate a Redis flap where get() is
+  // momentarily blind (returns null) but take()'s Lua GET+DEL still sees the
+  // key — confirmMeal must build from the recovered draft, not 400 it away.
+  it("a confirm whose readDraft.get is blind but take() recovers the draft still succeeds (F3 flap)",async()=>{
+    const base=createMemoryRedis();
+    let blindGets=1; // blind for exactly the confirm's first draft get, then normal
+    const flaky:RedisLike={
+      incrWithTtl:(k,t)=>base.incrWithTtl(k,t),
+      // The draft key (`meal-scan:`) reads null once — the "Redis momentarily
+      // down" moment. take() below still sees it: the flap recovered.
+      get:(k)=>k.startsWith("meal-scan:")&&blindGets-->0?Promise.resolve(null):base.get(k),
+      setex:(k,t,v)=>base.setex(k,t,v),
+      take:(k)=>base.take(k),
+      del:(k)=>base.del(k),
+      close:()=>base.close(),
+    };
+    const app6=await buildApp(loadConfig(env),{redis:flaky,nutrition:{visionProvider:fakeVision(),foodSearchProvider:noExternal}});
+    try{
+      await app6.inject({method:"POST",url:"/v1/auth/register",headers:{"content-type":"application/json"},payload:JSON.stringify({email:"p26a-flap@example.com",password:PASSWORD,displayName:"P26a Flap"})});
+      const l=await app6.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email:"p26a-flap@example.com",password:PASSWORD})});
+      const access=l.cookies.find((c)=>c.name==="accessToken")?.value??"";
+      const c=(url:string,body:unknown)=>app6.inject({method:"POST",url,headers:{"content-type":"application/json"},cookies:{accessToken:access},payload:JSON.stringify(body)});
+      const scan=await c("/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
+      const draft=scan.json<{scanToken:string;items:{canonical:string}[]}>();
+      const confirmed=await c("/v1/nutrition/meals",{scanToken:draft.scanToken,takenAt:new Date().toISOString(),items:draft.items.map((i)=>({canonical:i.canonical,grams:100}))});
+      // The blind get would have 400'd on the old code; the recovered take saves it.
+      expect(confirmed.statusCode,confirmed.body).toBe(201);
+    }finally{await app6.close();}
   },30_000);
 
   // The other half of T3 finding 2: when the user BOTH corrects the estimate

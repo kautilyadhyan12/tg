@@ -25,7 +25,6 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect(findCurated("flatbread")?.canonical).toBe("roti_chapati");
     expect(findCurated("chapati")?.canonical).toBe("roti_chapati");
     expect(findCurated("phulka")?.canonical).toBe("roti_chapati");
-    expect(findCurated("curd")?.canonical).toBe("greek_yogurt_plain");
     expect(findCurated("aloo")?.canonical).toBe("potato_baked");
     expect(findCurated("rajma")?.canonical).toBe("kidney_beans_cooked");
     expect(findCurated("capsicum")?.canonical).toBe("bell_pepper");
@@ -41,6 +40,18 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect(findCurated("Pizza Slice")?.canonical).toBe("pizza_cheese");
     expect(findCurated("Aloo Paratha")).toBeNull();
     expect(findCurated("Beef Stew")).toBeNull();
+    // T3 F1 (the regression this card SHIPPED): a temperature/freshness word is
+    // NOT arrangement — stripping it changed food identity, and the bare head
+    // then fuzzy-matched ACROSS word boundaries ("tea" inside s-TEA-k, "ham"
+    // inside HAM-burger). Both must drop honestly, never mis-resolve.
+    expect(findCurated("Hot Tea")).toBeNull();          // was → steak
+    expect(findCurated("Hot Chocolate")).toBeNull();    // was → dark chocolate
+    expect(findCurated("Ham Slice")).toBeNull();        // "ham" ⊄ hamburger by token
+    expect(findCurated("Iced Coffee")).toBeNull();
+    // T3 advisory: curd/dahi mapped to GREEK yogurt overstate protein ~3× (a
+    // real macro lie) — dropped in favour of an honest miss (DECISIONS).
+    expect(findCurated("curd")).toBeNull();
+    expect(findCurated("dahi")).toBeNull();
     // A prototype key is not an alias (T3 finding 4).
     expect(findCurated("constructor")).toBeNull();
     expect(findCurated("__proto__")).toBeNull();

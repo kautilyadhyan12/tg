@@ -52,8 +52,11 @@ const FOOD_ALIASES = new Map<string, string>(Object.entries({
   phulka: "roti_chapati", rotli: "roti_chapati", fulka: "roti_chapati",
   // dal spellings
   daal: "dal_lentil_curry", dhal: "dal_lentil_curry", dahl: "dal_lentil_curry",
-  // curd / yogurt
-  curd: "greek_yogurt_plain", dahi: "greek_yogurt_plain", yoghurt: "greek_yogurt_plain",
+  // NB curd/dahi/yoghurt are DELIBERATELY NOT aliased to greek_yogurt_plain
+  // (T3 Card 5c advisory): Indian curd/dahi is set yogurt at ~3 g protein/100 g
+  // vs Greek yogurt's ~10 g, so the alias would save a ~3× protein overstatement
+  // — a real macro lie under a card whose ruling is honest-drop-over-wrong-data.
+  // An honest "couldn't match" (add it manually) is the correct outcome.
   // staples under local names
   aloo: "potato_baked", alu: "potato_baked",
   chawal: "rice_white_cooked", bhaat: "rice_white_cooked",
@@ -66,25 +69,44 @@ const FOOD_ALIASES = new Map<string, string>(Object.entries({
 
 // Vision returns DESCRIPTIVE names, not bare synonyms — the reported bug was
 // canonical_hint "Flatbread Stack", not "flatbread" (T3 Card 5c finding 1).
-// These words are pure arrangement/quantity/presentation and are NEVER a food,
-// so dropping them can only reveal the real head noun. We deliberately do NOT
-// probe arbitrary tokens: "Aloo Paratha" would then resolve to potato, and a
-// WRONG food is worse than an honest "couldn't match it" (Card 5b's empty
-// state; a preparation word like "stew" stays out for the same reason —
-// stripping it would turn "Beef Stew" into ground beef).
+// These words are PURE arrangement/quantity/presentation and are NEVER part of
+// a food's identity, so dropping them can only reveal the real head noun.
+// DELIBERATELY EXCLUDED (T3 F1): temperature/freshness/state words —
+// hot/warm/iced/fresh/plain/homemade — because they DO change identity ("hot
+// chocolate" ≠ chocolate bar, "iced coffee" ≠ black coffee), exactly the class
+// "stew" is kept out for. And we never probe arbitrary tokens: "Aloo Paratha"
+// would resolve to potato, and a WRONG food is worse than an honest miss
+// (Card 5b's empty state).
 const NOISE_WORDS: ReadonlySet<string> = new Set([
   "stack", "stacks", "pile", "piles", "plate", "plates", "plateful", "bowl", "bowls",
   "serving", "servings", "portion", "portions", "piece", "pieces", "slice", "slices",
-  "helping", "helpings", "fresh", "homemade", "plain", "hot", "warm", "of", "with",
-  "a", "an", "the",
+  "helping", "helpings", "of", "with", "a", "an", "the",
 ]);
+
+const toTokens = (slugged: string): string[] => slugged.split("_").filter((w) => w !== "");
 
 /** Slug with the noise words removed; null when nothing (or everything) went. */
 function denoise(slugged: string): string | null {
-  const kept = slugged.split("_").filter((w) => w !== "" && !NOISE_WORDS.has(w));
+  const kept = toTokens(slugged).filter((w) => !NOISE_WORDS.has(w));
   if (kept.length === 0) return null;
   const rebuilt = kept.join("_");
   return rebuilt === slugged ? null : rebuilt;
+}
+
+/** Token-BOUNDARY substring match for the denoised retry (T3 F1): a stripped
+ *  head must match a canonical only on whole `_`-tokens, never mid-word —
+ *  "tea" is a token of nothing, so it can no longer land inside s-TEA-k, nor
+ *  "ham" inside HAM-burger. Matches when one token list is a prefix of the
+ *  other ("pizza" ⇒ pizza_cheese; "chicken curry" ⇒ chicken_curry). */
+function byTokenBoundary(slugged: string): CuratedFood | undefined {
+  const qt = toTokens(slugged);
+  if (qt.length === 0) return undefined;
+  return CURATED_FOODS.find((f) => {
+    const ct = toTokens(f.canonical);
+    const n = Math.min(qt.length, ct.length);
+    for (let i = 0; i < n; i++) if (qt[i] !== ct[i]) return false;
+    return true;
+  });
 }
 
 /** Alias lookup on the slug, then on its de-noised form ("flatbread_stack" →
@@ -117,8 +139,11 @@ export function findCurated(query: string): CuratedFood | null {
   const stripped = denoise(q);
   return (
     bySubstring(q) ??
-    // "Pizza Slice" → "pizza" → pizza_cheese; noise never hides a real head.
-    (stripped === null ? undefined : bySubstring(stripped)) ??
+    // "Pizza Slice" → "pizza" → pizza_cheese. The denoised retry uses
+    // TOKEN-BOUNDARY matching, not bySubstring's cross-word includes, so a
+    // stripped head can never fuzzy-match mid-word (T3 F1: "Hot Tea" → "tea"
+    // must not become steak).
+    (stripped === null ? undefined : byTokenBoundary(stripped)) ??
     searchCurated(query, 1)[0] ??
     null
   );
