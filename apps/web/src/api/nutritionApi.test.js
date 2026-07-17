@@ -138,6 +138,57 @@ describe('nutritionService repoint (Card 5a)', () => {
     expect(src.match(/mlApi\.(get|post|patch|delete)/g)).toEqual(['mlApi.get']);
   });
 
+  // ── Card 5c: meal composition + change-label ────────────────────────────────
+  it('add-ingredient PATCHes the existing items plus the new one (Card 5c)', async () => {
+    const seen = recordRequests(authApi);
+    // The add-ingredient UI resends the saved meal's items at their stored
+    // grams and appends the picked food — PATCH replaces the whole array.
+    await nutritionService.updateMeal('m-1', {
+      items: [
+        { canonical: 'oats_dry', grams: 40 },
+        { canonical: 'milk_whole', grams: 200 },
+      ],
+    });
+    expect(seen[0]).toMatchObject({ url: '/v1/nutrition/meals/m-1', method: 'patch' });
+    expect(JSON.parse(seen[0].data)).toEqual({
+      items: [
+        { canonical: 'oats_dry', grams: 40 },
+        { canonical: 'milk_whole', grams: 200 },
+      ],
+    });
+  });
+
+  it('mealType relabel PATCHes the label, and null CLEARS it (Card 5c)', async () => {
+    const seen = recordRequests(authApi);
+    await nutritionService.updateMeal('m-1', { mealType: 'lunch' });
+    // null must survive as an explicit null — the contract's clear signal.
+    // (patchMealRequestSchema: mealType is .nullable().optional(); the
+    // omit-when-falsy trick used for confirm/manual would break clearing.)
+    await nutritionService.updateMeal('m-1', { mealType: null });
+    expect(JSON.parse(seen[0].data)).toEqual({ mealType: 'lunch' });
+    expect(JSON.parse(seen[1].data)).toEqual({ mealType: null });
+  });
+
+  // HONEST SCOPE (T3 Card 5c): this pins the client's request SHAPE against a
+  // recorder — it says nothing about the server accepting it. Extras beyond the
+  // scan draft are 400 `invalid_item` until the `meal-composition` API branch
+  // lands (its own route tests prove the server side). Green here + red in a
+  // browser is exactly the Card-4 CORS class of gap, so the SMOKE for this card
+  // MUST run after that merge.
+  it('confirm/preview carry EXTRA items beyond the scan draft (Card 5c)', async () => {
+    const seen = recordRequests(authApi);
+    // The photo modal sends drafted items AND user-added ones in one array;
+    // the server resolves the extras by canonical.
+    const items = [
+      { canonical: 'oats_dry', grams: 40 },
+      { canonical: 'milk_whole', grams: 200 },
+    ];
+    await nutritionService.previewMeal({ scanToken: 'x'.repeat(40), items });
+    await nutritionService.confirmMeal({ scanToken: 'x'.repeat(40), takenAt: '2026-07-17T08:00:00.000Z', items, mealType: 'breakfast' });
+    expect(JSON.parse(seen[0].data).items).toEqual(items);
+    expect(JSON.parse(seen[1].data)).toMatchObject({ items, mealType: 'breakfast' });
+  });
+
   it('dishware CRUD hits /v1/nutrition/dishware (Card 5b)', async () => {
     const seen = recordRequests(authApi);
     await nutritionService.listDishware();

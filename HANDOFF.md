@@ -1,6 +1,58 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: web repoint — Card 5c: meal composition + synonyms + change-label 🟡
+      [API half on branch `meal-composition` (PUSHED, PR OWED TO KD, NOT
+       merged). Web half on web-repoint, COMMITTED. SMOKE NOT YET RUN —
+       it is BLOCKED on the API merge (see BLOCKER below).]
+SCOPE RE-CUT (Kd-approved at the plan gate, recorded in DECISIONS): 5c =
+  meal COMPOSITION + food synonyms + change-label + 5b stale-guards.
+  DISHWARE IN-FLOW split out to its OWN card ⑤c2 (needs a portion-math API
+  contract, not a UI tweak) — owed in cutover.md, nothing dropped.
+  NB the kickoff prompt claimed this split was already ruled; the repo had
+  no record (S1 — the prompt is hearsay), so it was re-confirmed with Kd.
+SHIPPED (API, branch `meal-composition`, 3 commits, api 271/271 on Neon):
+  confirm+preview accept EXTRA items beyond the scan draft (rung 'default',
+  unknown → 400; ONE shared resolveDraftItem so preview == save) · food
+  synonym aliases + noise-word pass + prompt nudge · NO schema change, no
+  migration.
+SHIPPED (web, web-repoint): shared FoodPicker (3 search surfaces, + the 5b
+  stale-guard) · PhotoModal "+ Add an ingredient" (extras ride the same
+  confirm/preview payload; zero-match analyses are now confirmable) ·
+  AddMealModal DUAL MODE (adds an ingredient to a SAVED meal via existing
+  PATCH) · MealRow change-label control (null clears) + ingredient summary
+  line · contract bounds (10000g / 30 items) quoted, gated, explained.
+T3 ×3 (fresh subagents) — EIGHT real findings, all fixed. The two that
+  matter: (1) the alias table did NOT fix its own bug — it keyed on the
+  whole query, so findCurated("Flatbread Stack") (the REPORTED input) was
+  still NULL while the test asserted "flatbread", a straw man. Fixed with a
+  noise-word pass; deliberately NOT token probing ("Aloo Paratha" would
+  become potato — a wrong food is worse than an honest drop). (2) additions
+  were being recorded as ESTIMATE errors, charging the added item's mass to
+  the rung that estimated the drafted items, and an all-additions confirm
+  hit worst([]) → fabricated 'user_dishware'. Fixed via correctedItems.
+  Also: a rejected confirm burned the scan (forcing a re-photo + quota) —
+  now read → resolve → take.
+PROVE (real output): api 271/271 on Neon ×2 · web 76/77 (the 1 = the known
+  pre-existing syncClient env quirk) · vite build ✓ · web lint 6 vs the
+  7-error baseline (net −1).
+>>> BLOCKER / NEXT ACTIONS, IN ORDER:
+  1. KD MERGES the `meal-composition` PR (link in the chat; branch pushed).
+  2. `git checkout web-repoint && git merge master` (DECISIONS conflicts are
+     append-append: keep both).
+  3. THEN run the SMOKE — it CANNOT pass before step 2: extras are 400
+     `invalid_item` on this branch's server, so "+ Add an ingredient" is
+     inert until the merge. The nutritionApi extras test pins the client
+     SHAPE only and says nothing about the server (comment says so — the
+     Card-4 CORS class of gap).
+NEXT CARDS: ⑤c2 dishware in-flow + portion API · ⑤d previous-days view ·
+  desktop webcam capture · nutrition targets card · then 6 running/geo · 7
+  recommendation-or-drop · owed: workoutApi calendar, limitedToDays UI,
+  coach idempotency card, DPDP Day-14 worker (promoted), Settings/
+  Onboarding wiring, Groq COACH_MODEL migration (HARD DATE 2026-08-16).
+```
+
+```
 TASK: web repoint — Card 5b: manual entry + meal-type wiring 🟡
       [branch web-repoint, COMMITTED + SMOKE PASSED ×3 rounds (gates done).
        NOT MERGED — branch merges at P2.8. Same-chat continuation, Kd.]

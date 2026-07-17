@@ -123,13 +123,28 @@ the operational wrapper around it.
             Kd re-ruled at the 5b smoke: a standalone dishware card was
             built and REJECTED — it must live inside the add-food and
             photo flows, and the chosen dishware must drive the server's
-            portion math, which needs a small API surface). Card 5c, with:
-            change-label control on meal rows (PATCH mealType exists) and
-            the manual-modal stale-response guards (5b T3 advisories).
-      - [ ] **Food synonym/alias matching** (Card-5b smoke, the roti case:
+            portion math, which needs a small API surface).
+            **NOW CARD ⑤c2** (split out of ⑤c, Kd-approved 2026-07-17 —
+            DECISIONS): driving server-side portion math from a chosen
+            dishware needs its own contract design, not a UI tweak. The
+            dishware client fns + tests already exist (kept by 5b for
+            exactly this). NOT dropped — owed here.
+      - [x] **Food synonym/alias matching** (Card-5b smoke, the roti case:
             vision said "Flatbread Stack", curated knows "Roti" → zero
-            matches, 0 kcal). Small API card: alias table on curated foods
-            + prompt nudge toward common Indian food names.
+            matches, 0 kcal). DONE: Card ⑤c API (branch `meal-composition`)
+            — FOOD_ALIASES + a noise-word pass so the vision's DESCRIPTIVE
+            names resolve, + the MEAL_VISION_PROMPT nudge.
+            **RESIDUAL, recorded (DECISIONS 2026-07-17):** descriptive names
+            whose head noun we stock but the substring pass misses still
+            drop honestly — "Margherita Pizza" → no match; so do plurals
+            ("Plate of Rotis"). Closing those needs a fuzzier matcher, which
+            trades honest-drops for wrong-guesses — a Kd product call, not a
+            silent widening. Watch the real-photo smokes.
+      - [x] **Meal composition — add/remove ingredients** (Card ⑤c): photo
+            confirm/preview accept items the AI never saw (oats + milk), and
+            saved meals take a new ingredient via the existing PATCH. Also
+            the change-label control on meal rows (the 5b-owed one) and the
+            5b stale-guard advisories.
       - [ ] **Previous-days meal view** (Card 5d) — data is stored forever;
             the page shows today only. Screen + date navigation, client-side
             over the existing cursor list.
