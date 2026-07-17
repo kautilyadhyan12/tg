@@ -42,7 +42,11 @@ row("Ramen (cooked)",436,10,63,16,2,100,"g",163),row("Pad Thai",192,8,30,5,2,100
 // plus common Indian/English synonyms the curated table's English labels miss.
 // Only synonyms the existing substring match CANNOT reach are listed here
 // (e.g. "biryani"→biryani_chicken already resolves by substring, so it is not).
-const FOOD_ALIASES: Readonly<Record<string, string>> = {
+// A Map, not an object literal: a user-controlled key like "constructor" or
+// "__proto__" indexes an object literal into Object.prototype and hands back a
+// Function, which the `Readonly<Record<string,string>>` type flatly denies
+// (T3 Card 5c finding 4). Map.get is sound and prototype-free.
+const FOOD_ALIASES = new Map<string, string>(Object.entries({
   // roti family — the trigger
   roti: "roti_chapati", chapati: "roti_chapati", flatbread: "roti_chapati",
   phulka: "roti_chapati", rotli: "roti_chapati", fulka: "roti_chapati",
@@ -58,22 +62,64 @@ const FOOD_ALIASES: Readonly<Record<string, string>> = {
   rajma: "kidney_beans_cooked",
   capsicum: "bell_pepper", maize: "corn_cooked", groundnut: "peanuts",
   prawns: "shrimp_cooked", prawn: "shrimp_cooked",
-};
+}));
+
+// Vision returns DESCRIPTIVE names, not bare synonyms — the reported bug was
+// canonical_hint "Flatbread Stack", not "flatbread" (T3 Card 5c finding 1).
+// These words are pure arrangement/quantity/presentation and are NEVER a food,
+// so dropping them can only reveal the real head noun. We deliberately do NOT
+// probe arbitrary tokens: "Aloo Paratha" would then resolve to potato, and a
+// WRONG food is worse than an honest "couldn't match it" (Card 5b's empty
+// state; a preparation word like "stew" stays out for the same reason —
+// stripping it would turn "Beef Stew" into ground beef).
+const NOISE_WORDS: ReadonlySet<string> = new Set([
+  "stack", "stacks", "pile", "piles", "plate", "plates", "plateful", "bowl", "bowls",
+  "serving", "servings", "portion", "portions", "piece", "pieces", "slice", "slices",
+  "helping", "helpings", "fresh", "homemade", "plain", "hot", "warm", "of", "with",
+  "a", "an", "the",
+]);
+
+/** Slug with the noise words removed; null when nothing (or everything) went. */
+function denoise(slugged: string): string | null {
+  const kept = slugged.split("_").filter((w) => w !== "" && !NOISE_WORDS.has(w));
+  if (kept.length === 0) return null;
+  const rebuilt = kept.join("_");
+  return rebuilt === slugged ? null : rebuilt;
+}
+
+/** Alias lookup on the slug, then on its de-noised form ("flatbread_stack" →
+ *  "flatbread" → roti_chapati). */
+function aliasTargetFor(slugged: string): string | undefined {
+  const direct = FOOD_ALIASES.get(slugged);
+  if (direct !== undefined) return direct;
+  const stripped = denoise(slugged);
+  return stripped === null ? undefined : FOOD_ALIASES.get(stripped);
+}
 
 export function searchCurated(query: string, limit: number): CuratedFood[] {
   const q = query.toLowerCase().trim();
-  const aliasTarget = FOOD_ALIASES[slug(q)];
+  const aliasTarget = aliasTargetFor(slug(q));
   return CURATED_FOODS.map((food) => { const name = food.name.toLowerCase(); const score = name === q ? 100 : food.canonical === aliasTarget ? 90 : name.startsWith(q) ? 80 : name.includes(q) ? 50 : q.split(/\s+/).every((word) => name.includes(word)) ? 30 : 0; return { food, score }; }).filter((v) => v.score > 0).sort((a, b) => b.score - a.score).slice(0, limit).map((v) => v.food);
 }
+
+const bySubstring = (q: string): CuratedFood | undefined =>
+  CURATED_FOODS.find((f) => f.canonical === q || f.canonical.includes(q) || q.includes(f.canonical));
 
 export function findCurated(query: string): CuratedFood | null {
   const q = slug(query);
   // Alias first: a synonym must beat the fuzzy substring pass (which is exactly
   // what misses "flatbread"/"aloo"/"curd" today).
-  const aliasTarget = FOOD_ALIASES[q];
+  const aliasTarget = aliasTargetFor(q);
   if (aliasTarget !== undefined) {
     const hit = CURATED_FOODS.find((f) => f.canonical === aliasTarget);
     if (hit !== undefined) return hit;
   }
-  return CURATED_FOODS.find((f) => f.canonical === q || f.canonical.includes(q) || q.includes(f.canonical)) ?? searchCurated(query, 1)[0] ?? null;
+  const stripped = denoise(q);
+  return (
+    bySubstring(q) ??
+    // "Pizza Slice" → "pizza" → pizza_cheese; noise never hides a real head.
+    (stripped === null ? undefined : bySubstring(stripped)) ??
+    searchCurated(query, 1)[0] ??
+    null
+  );
 }

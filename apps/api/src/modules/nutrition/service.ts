@@ -449,13 +449,20 @@ export async function confirmMeal(deps: NutritionDeps, userId: string, input: Co
   const draft = await takeDraft(deps, userId, input.scanToken);
   const items: MealItem[] = [];
   const originalItems: MealItem[] = [];
+  const correctedItems: MealItem[] = [];
   for (const chosen of input.items) {
     const { item, original } = await resolveDraftItem(deps, draft, chosen);
     items.push(item);
-    // An extra item has no original — it surfaces in the diff as an addition.
-    if (original !== null) originalItems.push(original);
+    // Only ESTIMATED items form the Stage-5 correction pair. An added item was
+    // never estimated, so it belongs to the meal but not to the estimate-error
+    // signal (T3 Card 5c; DECISIONS 2026-07-12 T3 finding 3).
+    if (original !== null) {
+      originalItems.push(original);
+      correctedItems.push(item);
+    }
   }
   const row = await repo.createMeal(deps.sql, userId, {
+    correctedItems,
     takenAt: new Date(input.takenAt),
     mealType: input.mealType ?? null,
     mealName: draft.mealName,

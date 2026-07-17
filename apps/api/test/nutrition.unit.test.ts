@@ -18,6 +18,10 @@ describe("P2.6a nutrition pure pipeline", () => {
   // Stack" → 0 curated matches → 0 kcal) plus common Indian/English synonyms
   // the curated table's English labels miss. Naming metadata only.
   it("resolves synonym aliases to curated canonicals without breaking exact hits (Card 5c)", () => {
+    // THE REPORTED INPUT (cutover.md:129-132): vision emitted the descriptive
+    // "Flatbread Stack", not the bare synonym — pinning "flatbread" alone was a
+    // straw man that passed while the real bug stayed live (T3 finding 1).
+    expect(findCurated("Flatbread Stack")?.canonical).toBe("roti_chapati");
     expect(findCurated("flatbread")?.canonical).toBe("roti_chapati");
     expect(findCurated("chapati")?.canonical).toBe("roti_chapati");
     expect(findCurated("phulka")?.canonical).toBe("roti_chapati");
@@ -31,6 +35,15 @@ describe("P2.6a nutrition pure pipeline", () => {
     // an aliased food surfaces in the search dropdown too.
     expect(searchCurated("flatbread", 5).some((f) => f.canonical === "roti_chapati")).toBe(true);
     expect(searchCurated("aloo", 5).some((f) => f.canonical === "potato_baked")).toBe(true);
+    // Noise words reveal a real head noun but NEVER invent one: a compound dish
+    // whose head we don't stock still drops honestly (Card 5b's empty state) —
+    // "Aloo Paratha" must NOT become potato, and "Beef Stew" not ground beef.
+    expect(findCurated("Pizza Slice")?.canonical).toBe("pizza_cheese");
+    expect(findCurated("Aloo Paratha")).toBeNull();
+    expect(findCurated("Beef Stew")).toBeNull();
+    // A prototype key is not an alias (T3 finding 4).
+    expect(findCurated("constructor")).toBeNull();
+    expect(findCurated("__proto__")).toBeNull();
   });
 
   it("the vision prompt nudges toward common local food names (Card 5c)", () => {

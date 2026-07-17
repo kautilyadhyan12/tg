@@ -155,7 +155,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     try{
       const scan=await call("POST","/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
       expect(scan.statusCode,scan.body).toBe(200);
-      const draft=scan.json<{scanToken:string;items:{canonical:string}[]}>();
+      const draft=scan.json<{scanToken:string;items:{canonical:string;gramsPoint:number}[]}>();
       // draft = dal + roti; the user adds milk (curated, NOT in the draft).
       const items=[...draft.items.map((i)=>({canonical:i.canonical,grams:120})),{canonical:"milk_whole",grams:200}];
       // Preview includes the extra and does NOT consume the single-use draft.
@@ -172,9 +172,52 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       expect(meal.items.find((i)=>i.canonical==="milk_whole")?.portionSource).toBe("default");
       // preview equals what confirm saved.
       expect(previewed.totals).toEqual(meal.totals);
-      // the addition is recorded as an items correction (2 originals → 3 items).
-      const corr=await sql<{field:string}[]>`SELECT field FROM meal_log_corrections WHERE meal_log_id=${meal.id}`;
-      expect(corr.some((r)=>r.field==="items")).toBe(true);
+    }finally{await a.close();}
+  },30_000);
+
+  // T3 finding 2, degenerate case: a confirm whose items are ALL additions
+  // (every drafted item deselected) estimated nothing, so there is no
+  // correction and no rung to stamp. Without the guard, worst([]) falls through
+  // every .some() and fabricates the BEST rung ('user_dishware') — a row
+  // claiming user-dishware produced a corrected-away estimate that never was.
+  it("an all-additions confirm writes NO correction row (worst([]) can never fabricate a rung)",async()=>{
+    const {app:a,call}=await freshApp("p26a-comp4@example.com");
+    try{
+      const scan=await call("POST","/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
+      const draft=scan.json<{scanToken:string}>();
+      const confirmed=await call("POST","/v1/nutrition/meals",{scanToken:draft.scanToken,takenAt:new Date().toISOString(),items:[{canonical:"milk_whole",grams:200}]});
+      expect(confirmed.statusCode,confirmed.body).toBe(201);
+      const meal=confirmed.json<{meal:{id:string;items:{canonical:string}[]}}>().meal;
+      expect(meal.items.map((i)=>i.canonical)).toEqual(["milk_whole"]);
+      const corr=await sql<{portion_source:string|null}[]>`SELECT portion_source FROM meal_log_corrections WHERE meal_log_id=${meal.id}`;
+      expect(corr).toHaveLength(0);
+    }finally{await a.close();}
+  },30_000);
+
+  // The other half of T3 finding 2: when the user BOTH corrects the estimate
+  // and adds an item, the correction row covers the estimated items ONLY —
+  // stamped with the rung that produced the corrected-away number.
+  it("a corrected estimate + an added item: the correction records the estimate only, never the addition",async()=>{
+    const {app:a,call}=await freshApp("p26a-comp3@example.com");
+    try{
+      const scan=await call("POST","/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
+      const draft=scan.json<{scanToken:string;items:{canonical:string;gramsPoint:number}[]}>();
+      const items=[...draft.items.map((i)=>({canonical:i.canonical,grams:i.gramsPoint+37})),{canonical:"milk_whole",grams:200}];
+      const confirmed=await call("POST","/v1/nutrition/meals",{scanToken:draft.scanToken,takenAt:new Date().toISOString(),items});
+      expect(confirmed.statusCode,confirmed.body).toBe(201);
+      const meal=confirmed.json<{meal:{id:string;items:unknown[]}}>().meal;
+      expect(meal.items).toHaveLength(3);
+      const rows=await sql<{field:string;original:{canonical:string}[];corrected:{canonical:string}[];portion_source:string|null}[]>`
+        SELECT field,original,corrected,portion_source FROM meal_log_corrections WHERE meal_log_id=${meal.id} AND field='items'`;
+      expect(rows).toHaveLength(1);
+      const row=rows[0];
+      // Both sides carry the 2 ESTIMATED items; milk appears on neither.
+      expect(row?.original.map((i)=>i.canonical)).toEqual(draft.items.map((i)=>i.canonical));
+      expect(row?.corrected.map((i)=>i.canonical)).toEqual(draft.items.map((i)=>i.canonical));
+      expect(row?.corrected.some((i)=>i.canonical==="milk_whole")).toBe(false);
+      // stamped with the ESTIMATE's rung (dal/roti resolve via regional priors),
+      // never the added item's 'default'.
+      expect(row?.portion_source).toBe("regional_prior");
     }finally{await a.close();}
   },30_000);
 
