@@ -1,6 +1,36 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: web repoint — Card 5b: manual entry + meal-type wiring 🟡
+      [branch web-repoint, COMMITTED + SMOKE PASSED ×3 rounds (gates done).
+       NOT MERGED — branch merges at P2.8. Same-chat continuation, Kd.]
+SHIPPED (web): AddMealModal on the new API (searchFoods per-100g · grams +
+  ×N stepper with typed-grams rebase · LIVE server preview · one
+  logManualMeal; legacy mlApi searchFood/logMeal DELETED — only getTargets
+  remains on mlApi, D2 interim) · meal sections = stored mealType label
+  (chips + section-+ set it; exact takenAt always; unlabeled → time-bucket
+  display fallback; time-edit never moves labeled meals) · standalone
+  dishware card REMOVED (Kd ruling — returns IN-FLOW in 5c) · Remaining
+  falls back to MacroRings' defaults · zero-matched-analysis honest empty
+  state (the roti case) · nutritionApi: dishware CRUD fns (for 5c),
+  mealType threading; tests updated (10).
+THREE MASTER PRs SHIPPED MID-CARD (each PROVEd + T3'd fresh-chat, merged +
+  merged back): manual-off-foods (search results canonical-cached; T3:
+  off_* no curated-hijack, barcode-unique canonicals, physical per-100g
+  bounds) · meal-type-field (migration 0007 meal_logs.meal_type, Kd SQL
+  review; contracts + repo/service; 265/265) · (5a era: vision swap, 2/day
+  quota, preview endpoint, exact kcal — see the 5a block).
+PROVE: web 73/74 (the 1 = pre-existing syncClient env quirk) · lint parity
+  (same 7 pre-existing) · build ✓ · api 265/265 on Neon after each PR.
+NEXT: Card 5c (dishware IN-FLOW + portion API + change-label control +
+  stale-guards) · food synonym/alias API card (roti case) · Card 5d
+  (previous-days view) · then 6 running/geo · 7 recommendation-or-drop ·
+  owed: workoutApi calendar, limitedToDays UI, coach idempotency card,
+  nutrition targets card, DPDP Day-14 worker (promoted), Settings/
+  Onboarding wiring, Groq COACH_MODEL migration (HARD DATE 2026-08-16).
+```
+
+```
 TASK: web repoint — Card 5a: nutrition photo→confirm + client rewrite 🟡
       [branch web-repoint, COMMITTED + SMOKE PASSED (gates done). NOT MERGED —
        branch merges at P2.8. Same-chat continuation by Kd instruction.]

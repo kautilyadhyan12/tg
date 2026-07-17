@@ -119,10 +119,22 @@ the operational wrapper around it.
             snack). Kd asked for a user override at the 5a smoke → D1(c) is
             now OWED: a `mealType` field on the meals API (small card).
             Interim: Card 5b adds an edit-takenAt control (PATCH exists).
-      - [ ] **Dishware management UI** (Part 2B §3.2 rung 1) — the API is
-            fully built (P2.6a: /v1/nutrition/dishware CRUD + the portion
-            resolver reads it) but NO screen registers dishware. Owed to
-            Card 5b (Kd raised it at the 5a smoke).
+      - [ ] **Dishware IN-FLOW UI + portion API** (Part 2B §3.2 rung 1;
+            Kd re-ruled at the 5b smoke: a standalone dishware card was
+            built and REJECTED — it must live inside the add-food and
+            photo flows, and the chosen dishware must drive the server's
+            portion math, which needs a small API surface). Card 5c, with:
+            change-label control on meal rows (PATCH mealType exists) and
+            the manual-modal stale-response guards (5b T3 advisories).
+      - [ ] **Food synonym/alias matching** (Card-5b smoke, the roti case:
+            vision said "Flatbread Stack", curated knows "Roti" → zero
+            matches, 0 kcal). Small API card: alias table on curated foods
+            + prompt nudge toward common Indian food names.
+      - [ ] **Previous-days meal view** (Card 5d) — data is stored forever;
+            the page shows today only. Screen + date navigation, client-side
+            over the existing cursor list.
+      - [ ] Desktop webcam capture for meal photos (phones already open the
+            camera via the input's capture attribute) — enhancement, 5c/5d.
       - [ ] `limitedToDays` surfaced in the Progress UI (T3 Card 3) — every
             /v1/progress read returns the plan-clamp field (progress.ts:18-21,
             the P2.4 history gate) and the page ignores it, so a free-plan

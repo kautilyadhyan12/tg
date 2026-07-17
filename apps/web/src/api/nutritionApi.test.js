@@ -86,17 +86,27 @@ describe('nutritionService repoint (Card 5a)', () => {
     });
   });
 
-  it('logManualMeal posts the manual union arm (mealName, no scanToken)', async () => {
+  it('logManualMeal posts the manual union arm (mealName, no scanToken); mealType present when chosen, omitted when not', async () => {
     const seen = recordRequests(authApi);
     await nutritionService.logManualMeal({
       mealName: 'Evening snack',
       takenAt: '2026-07-16T17:30:00.000Z',
+      mealType: 'snack',
+      items: [{ canonical: 'apple', grams: 120 }],
+    });
+    await nutritionService.logManualMeal({
+      mealName: 'Unlabeled',
+      takenAt: '2026-07-16T17:30:00.000Z',
+      mealType: null,
       items: [{ canonical: 'apple', grams: 120 }],
     });
     const body = JSON.parse(seen[0].data);
     expect(body.mealName).toBe('Evening snack');
+    expect(body.mealType).toBe('snack');
     expect('scanToken' in body).toBe(false);
     expect(body.items).toEqual([{ canonical: 'apple', grams: 120 }]);
+    // .strict(): null label is OMITTED, never sent as null.
+    expect('mealType' in JSON.parse(seen[1].data)).toBe(false);
   });
 
   it('dataUrlToBase64 strips the data-URL prefix and passes bare base64 through', () => {
@@ -123,9 +133,22 @@ describe('nutritionService repoint (Card 5a)', () => {
     expect(src).not.toMatch(/fetch\s*\(/);
     expect(src).not.toMatch(/localStorage\s*[.[]/);
     expect(src).not.toMatch(/VITE_ML_API_URL/);
-    // D2 interim + Card-5b legacy pair: exactly three mlApi call sites.
-    expect(src.match(/mlApi\.(get|post|patch|delete)/g)).toEqual([
-      'mlApi.get', 'mlApi.get', 'mlApi.post',
-    ]);
+    // Card 5b: the legacy searchFood/logMeal pair is DELETED — the only
+    // remaining mlApi call is the D2 targets interim.
+    expect(src.match(/mlApi\.(get|post|patch|delete)/g)).toEqual(['mlApi.get']);
+  });
+
+  it('dishware CRUD hits /v1/nutrition/dishware (Card 5b)', async () => {
+    const seen = recordRequests(authApi);
+    await nutritionService.listDishware();
+    await nutritionService.createDishware({ label: 'my dal bowl', containerClass: 'bowl', volumeMl: 250 });
+    await nutritionService.updateDishware('d-1', { volumeMl: 300 });
+    await nutritionService.deleteDishware('d-1');
+    expect(seen[0]).toMatchObject({ url: '/v1/nutrition/dishware', method: 'get', params: { limit: 50 } });
+    expect('cursor' in seen[0].params).toBe(false);
+    expect(seen[1].method).toBe('post');
+    expect(JSON.parse(seen[1].data)).toEqual({ label: 'my dal bowl', containerClass: 'bowl', volumeMl: 250 });
+    expect(seen[2]).toMatchObject({ url: '/v1/nutrition/dishware/d-1', method: 'patch' });
+    expect(seen[3]).toMatchObject({ url: '/v1/nutrition/dishware/d-1', method: 'delete' });
   });
 });

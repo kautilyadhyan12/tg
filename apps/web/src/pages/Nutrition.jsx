@@ -20,11 +20,18 @@ const MEAL_TYPES = [
 // ── Single logged meal row ────────────────────────────────────────────────────
 // Card 5a: new /v1 meal shape — {id, takenAt, mealName, items, totals}.
 // totals are SERVER-computed (2B: client never does nutrition arithmetic).
-function MealRow({ meal, onDelete }) {
+// Card 5b: editable time fixes a mistaken timestamp. For LABELED meals
+// (mealType, migration 0007) the section never moves with the time; only
+// unlabeled meals re-bucket. A change-label control is owed to Card 5c.
+function MealRow({ meal, onDelete, onEditTime }) {
+  const [editingTime, setEditingTime] = useState(false);
   const time = meal.takenAt
     ? new Date(meal.takenAt).toLocaleTimeString([], {
         hour: '2-digit', minute: '2-digit',
       })
+    : '';
+  const timeValue = meal.takenAt
+    ? `${String(new Date(meal.takenAt).getHours()).padStart(2, '0')}:${String(new Date(meal.takenAt).getMinutes()).padStart(2, '0')}`
     : '';
   const name = meal.mealName || meal.items?.[0]?.name || 'Meal';
   const t = meal.totals || {};
@@ -43,9 +50,32 @@ function MealRow({ meal, onDelete }) {
           <p className="text-sm font-semibold text-white truncate">
             {name}
           </p>
-          <span className="text-2xs" style={{ color: 'rgba(255,255,255,0.30)' }}>
-            {time}
-          </span>
+          {editingTime ? (
+            <input
+              type="time"
+              defaultValue={timeValue}
+              autoFocus
+              onBlur={() => setEditingTime(false)}
+              onChange={(e) => {
+                if (e.target.value) {
+                  onEditTime(meal, e.target.value);
+                  setEditingTime(false);
+                }
+              }}
+              className="text-2xs px-1 rounded"
+              style={{ background: 'rgba(255,255,255,0.06)', color: '#fff', border: '1px solid rgba(255,255,255,0.10)' }}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditingTime(true)}
+              title="Change meal time"
+              className="text-2xs underline decoration-dotted"
+              style={{ color: 'rgba(255,255,255,0.30)', background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              {time}
+            </button>
+          )}
         </div>
         <p className="text-2xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
           {Math.round(t.kcalPoint || 0)} kcal · Protein {Math.round(t.proteinG || 0)}g
@@ -65,7 +95,7 @@ function MealRow({ meal, onDelete }) {
 }
 
 // ── Meal type section ─────────────────────────────────────────────────────────
-function MealSection({ mealType, meals, onAdd, onDelete }) {
+function MealSection({ mealType, meals, onAdd, onDelete, onEditTime }) {
   const Icon = mealType.icon;
   // Display-summing SERVER-computed per-meal totals (D3 doctrine).
   const total = meals.reduce((sum, m) => sum + (m.totals?.kcalPoint || 0), 0);
@@ -109,7 +139,7 @@ function MealSection({ mealType, meals, onAdd, onDelete }) {
       <div className="space-y-1">
         <AnimatePresence>
           {meals.map((m) => (
-            <MealRow key={m.id} meal={m} onDelete={onDelete} />
+            <MealRow key={m.id} meal={m} onDelete={onDelete} onEditTime={onEditTime} />
           ))}
         </AnimatePresence>
         {meals.length === 0 && (
@@ -124,12 +154,22 @@ function MealSection({ mealType, meals, onAdd, onDelete }) {
 }
 
 // ── Food search & add modal ───────────────────────────────────────────────────
+// Card 5b: manual entry on the NEW /v1 API. Search results are PER 100 g
+// (camelCase); the user picks GRAMS (seeded from the food's serving size, ×N
+// stepper); nutrition shown live from the server preview and saved via ONE
+// logManualMeal — the browser never computes nutrition (2B).
 function AddMealModal({ open, mealType, onClose, onSave }) {
   const [query,    setQuery]    = useState('');
   const [results,  setResults]  = useState([]);
   const [loading,  setLoading]  = useState(false);
   const [selected, setSelected] = useState(null);
-  const [quantity, setQuantity] = useState(1);
+  const [grams,    setGrams]    = useState('');
+  const [count,    setCount]    = useState(1);
+  // Stepper base: the serving size, replaced by whatever the user last TYPED
+  // (T3 5b finding 2 — same rule as the photo modal's bases).
+  const [base,     setBase]     = useState(100);
+  const [live,     setLive]     = useState(null);
+  const [saving,   setSaving]   = useState(false);
   const searchRef = useRef(null);
 
   useEffect(() => {
@@ -137,7 +177,10 @@ function AddMealModal({ open, mealType, onClose, onSave }) {
       setQuery('');
       setResults([]);
       setSelected(null);
-      setQuantity(1);
+      setGrams('');
+      setCount(1);
+      setLive(null);
+      setSaving(false);
       setTimeout(() => searchRef.current?.focus(), 100);
     }
   }, [open]);
@@ -145,13 +188,13 @@ function AddMealModal({ open, mealType, onClose, onSave }) {
   useEffect(() => {
     if (!query || query.length < 2) {
       setResults([]);
-      return;
+      return undefined;
     }
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await nutritionService.searchFood(query, 15);
-        setResults(res.data.results || []);
+        const res = await nutritionService.searchFoods(query, 15);
+        setResults(res.data.items || []);
       } catch (err) {
         console.error('Search failed:', err);
       } finally {
@@ -161,25 +204,63 @@ function AddMealModal({ open, mealType, onClose, onSave }) {
     return () => clearTimeout(timer);
   }, [query]);
 
-  const handleSave = async () => {
+  const gramsValid = Number.isFinite(parseFloat(grams)) && parseFloat(grams) > 0;
+
+  // Live server preview for the chosen grams (manual arm — no scanToken).
+  // Stale responses are dropped; failures degrade to no numbers shown.
+  // `shownLive` (not state clearing) hides the preview while grams are
+  // invalid — no synchronous setState in the effect body.
+  const shownLive = selected && gramsValid ? live : null;
+  useEffect(() => {
+    if (!selected || !gramsValid) return undefined;
+    let stale = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await nutritionService.previewMeal({
+          items: [{ canonical: selected.canonical, grams: parseFloat(grams) }],
+        });
+        if (!stale) setLive(res.data);
+      } catch {
+        if (!stale) setLive(null);
+      }
+    }, 300);
+    return () => { stale = true; clearTimeout(timer); };
+  }, [selected, grams, gramsValid]);
+
+  const pick = (food) => {
+    setSelected(food);
+    setCount(1);
+    setLive(null); // never show the previous food's numbers
+    setBase(food.serving || 100);
+    setGrams(String(food.serving || 100)); // seed with the serving size
+  };
+
+  const step = (delta) => {
     if (!selected) return;
-    const meal = {
-      meal_type:   mealType,
-      food_name:   selected.name,
-      quantity:    quantity,
-      kcal:        selected.kcal      * quantity,
-      protein_g:   selected.protein_g * quantity,
-      carbs_g:     selected.carbs_g   * quantity,
-      fat_g:       selected.fat_g     * quantity,
-      fiber_g:     (selected.fiber_g || 0) * quantity,
-    };
+    const n = Math.min(30, Math.max(1, count + delta));
+    setCount(n);
+    setGrams(String(Math.min(10000, Math.round(n * base))));
+  };
+
+  const handleSave = async () => {
+    if (!selected || !gramsValid || saving) return;
+    setSaving(true);
     try {
-      await nutritionService.logMeal(meal);
+      await nutritionService.logManualMeal({
+        mealName: selected.name,
+        takenAt: new Date().toISOString(), // exact real time, always
+        // The section whose + opened this modal is the user's chosen label
+        // (stored meal_type — Kd ruling 2026-07-17; nothing time-derived).
+        mealType,
+        items: [{ canonical: selected.canonical, grams: parseFloat(grams) }],
+      });
       toast.success(`Added ${selected.name}`);
       onSave();
       onClose();
     } catch (err) {
-      toast.error('Failed to log meal');
+      toast.error(err.response?.status === 400 ? 'That food could not be logged.' : 'Failed to log meal');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -266,7 +347,7 @@ function AddMealModal({ open, mealType, onClose, onSave }) {
               {results.map((r, i) => (
                 <button
                   key={i}
-                  onClick={() => setSelected(r)}
+                  onClick={() => pick(r)}
                   className="w-full text-left rounded-xl p-3 transition-all"
                   style={{
                     background: selected === r
@@ -284,11 +365,11 @@ function AddMealModal({ open, mealType, onClose, onSave }) {
                       </p>
                       <p className="text-2xs mt-0.5"
                          style={{ color: 'rgba(255,255,255,0.45)' }}>
-                        {r.kcal} kcal · P {r.protein_g}g
-                        · C {r.carbs_g}g · F {r.fat_g}g
+                        {Math.round(r.kcal)} kcal · Protein {Math.round(r.proteinG)}g
+                        · Carbs {Math.round(r.carbsG)}g · Fat {Math.round(r.fatG)}g
                         <span className="ml-1"
                               style={{ color: 'rgba(255,255,255,0.25)' }}>
-                          / {r.serving_size}{r.serving_unit}
+                          / 100 g
                         </span>
                       </p>
                     </div>
@@ -302,45 +383,71 @@ function AddMealModal({ open, mealType, onClose, onSave }) {
             </div>
           </div>
 
-          {/* Quantity + Save */}
+          {/* Amount + live server preview + Save */}
           {selected && (
             <div className="p-5"
                  style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-2 mb-3">
                 <p className="text-xs font-medium"
                    style={{ color: 'rgba(255,255,255,0.60)' }}>
-                  Quantity:
+                  Amount:
                 </p>
+                <button type="button" onClick={() => step(-1)}
+                        className="w-6 h-6 rounded-md"
+                        style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>−</button>
+                <span className="w-6 text-center text-xs text-white">×{count}</span>
+                <button type="button" onClick={() => step(1)}
+                        className="w-6 h-6 rounded-md"
+                        style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>+</button>
                 <input
                   type="number"
-                  value={quantity}
-                  onChange={(e) => setQuantity(Math.max(0.1, parseFloat(e.target.value) || 1))}
-                  step="0.5"
-                  min="0.1"
-                  className="w-20 px-3 py-1.5 rounded-lg text-sm focus:outline-none"
+                  value={grams}
+                  min="1"
+                  max="10000"
+                  onChange={(e) => {
+                    setGrams(e.target.value);
+                    // Typed grams become the new ×1 base (T3 5b finding 2).
+                    const typed = parseFloat(e.target.value);
+                    if (Number.isFinite(typed) && typed > 0) {
+                      setBase(typed);
+                      setCount(1);
+                    }
+                  }}
+                  className="w-20 px-3 py-1.5 rounded-lg text-sm text-right focus:outline-none"
                   style={{
                     background: 'rgba(255,255,255,0.06)',
                     border:     '1px solid rgba(255,255,255,0.08)',
                     color:      '#fff',
                   }}
                 />
-                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.40)' }}>
-                  × {selected.serving_size}{selected.serving_unit}
-                </p>
+                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.40)' }}>g</p>
                 <p className="ml-auto text-sm font-bold"
                    style={{ color: '#FF8A1F' }}>
-                  {Math.round(selected.kcal * quantity)} kcal
+                  {shownLive ? `${shownLive.totals.kcalPoint} kcal` : '…'}
                 </p>
               </div>
+              {shownLive && (
+                <p className="text-2xs mb-3"
+                   style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  Protein {Math.round(shownLive.totals.proteinG)}g
+                  · Carbs {Math.round(shownLive.totals.carbsG)}g
+                  · Fat {Math.round(shownLive.totals.fatG)}g
+                  <span className="ml-1" style={{ color: 'rgba(255,255,255,0.30)' }}>
+                    — calculated by the server for your amount
+                  </span>
+                </p>
+              )}
               <button
                 onClick={handleSave}
+                disabled={saving || !gramsValid}
                 className="w-full py-2.5 rounded-xl font-semibold text-sm text-white"
                 style={{
                   background: 'linear-gradient(135deg, #FF8A1F, #FFB347)',
                   boxShadow:  '0 4px 16px rgba(255,138,31,0.25)',
+                  opacity:    saving || !gramsValid ? 0.6 : 1,
                 }}
               >
-                Add to {MEAL_TYPES.find(m => m.id === mealType)?.label}
+                {saving ? 'Saving…' : gramsValid ? `Add ${selected.name}` : 'Enter grams'}
               </button>
             </div>
           )}
@@ -361,6 +468,12 @@ function PhotoModal({ open, onClose, onSave }) {
   const [preview,     setPreview]     = useState(null);
   const [grams,       setGrams]       = useState({});
   const [counts,      setCounts]      = useState({});
+  // Stepper base per item: the AI's per-unit grams, replaced by whatever the
+  // user last TYPED (T3 5a advisory — stepping must not discard typed grams).
+  const [bases,       setBases]       = useState({});
+  // "Log as": the user-chosen mealType LABEL (stored via migration 0007);
+  // null = unlabeled. takenAt is always the exact real time either way.
+  const [logAs,       setLogAs]       = useState(null);
   const [live,        setLive]        = useState(null);
   const [retakeToken, setRetakeToken] = useState(null);
   const [retakeMsg,   setRetakeMsg]   = useState(null);
@@ -374,6 +487,8 @@ function PhotoModal({ open, onClose, onSave }) {
       setAnalyzing(false);
       setGrams({});
       setCounts({});
+      setBases({});
+      setLogAs(null);
       setLive(null);
       setRetakeToken(null);
       setRetakeMsg(null);
@@ -388,6 +503,7 @@ function PhotoModal({ open, onClose, onSave }) {
     setPreview(URL.createObjectURL(file));
     setAnalyzing(true);
     setAnalysis(null);
+    setLogAs(null); // a fresh analysis starts unlabeled (T3 5b advisory)
     setRetakeMsg(null);
 
     try {
@@ -399,9 +515,11 @@ function PhotoModal({ open, onClose, onSave }) {
       // typing grams directly. The server computes ALL nutrition from grams.
       const g = {};
       const c = {};
-      res.data.items.forEach((item, i) => { g[i] = String(item.gramsPoint); c[i] = 1; });
+      const b = {};
+      res.data.items.forEach((item, i) => { g[i] = String(item.gramsPoint); c[i] = 1; b[i] = item.gramsPoint; });
       setGrams(g);
       setCounts(c);
+      setBases(b);
       setLive(null);
     } catch (err) {
       if (err.response?.status === 422) {
@@ -428,8 +546,11 @@ function PhotoModal({ open, onClose, onSave }) {
   // Every grams field must hold a usable value before preview/confirm — a
   // cleared or zero field must never silently fall back to the AI estimate
   // (T3 Card 5a: what is sent must be what the user sees).
+  // T3 5b: an empty-items analysis must never enable confirm or fire a
+  // preview — chosenItemsSchema.min(1) would 400 the []-items request.
   const gramsValid =
     analysis !== null &&
+    analysis.items.length > 0 &&
     analysis.items.every((item, i) => {
       const v = parseFloat(grams[i]);
       return Number.isFinite(v) && v > 0;
@@ -464,7 +585,8 @@ function PhotoModal({ open, onClose, onSave }) {
     try {
       await nutritionService.confirmMeal({
         scanToken: analysis.scanToken,
-        takenAt: new Date().toISOString(),
+        takenAt: new Date().toISOString(), // exact real time, always
+        mealType: logAs, // user-chosen label; null = unlabeled (omitted)
         items: analysis.items.map((item, i) => ({
           canonical: item.canonical,
           grams: parseFloat(grams[i]),
@@ -627,7 +749,7 @@ function PhotoModal({ open, onClose, onSave }) {
                                   onClick={() => {
                                     const n = Math.max(1, (counts[i] ?? 1) - 1);
                                     setCounts({ ...counts, [i]: n });
-                                    setGrams({ ...grams, [i]: String(Math.min(10000, Math.round(n * item.gramsPoint))) });
+                                    setGrams({ ...grams, [i]: String(Math.min(10000, Math.round(n * (bases[i] ?? item.gramsPoint)))) });
                                   }}
                                   className="w-6 h-6 rounded-md"
                                   style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}
@@ -640,7 +762,7 @@ function PhotoModal({ open, onClose, onSave }) {
                                   onClick={() => {
                                     const n = Math.min(30, (counts[i] ?? 1) + 1);
                                     setCounts({ ...counts, [i]: n });
-                                    setGrams({ ...grams, [i]: String(Math.min(10000, Math.round(n * item.gramsPoint))) });
+                                    setGrams({ ...grams, [i]: String(Math.min(10000, Math.round(n * (bases[i] ?? item.gramsPoint)))) });
                                   }}
                                   className="w-6 h-6 rounded-md"
                                   style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}
@@ -655,7 +777,15 @@ function PhotoModal({ open, onClose, onSave }) {
                                   value={grams[i] ?? ''}
                                   min="1"
                                   max="10000"
-                                  onChange={(e) => setGrams({ ...grams, [i]: e.target.value })}
+                                  onChange={(e) => {
+                                    setGrams({ ...grams, [i]: e.target.value });
+                                    // Typed grams become the new ×1 base.
+                                    const typed = parseFloat(e.target.value);
+                                    if (Number.isFinite(typed) && typed > 0) {
+                                      setBases({ ...bases, [i]: typed });
+                                      setCounts({ ...counts, [i]: 1 });
+                                    }
+                                  }}
                                   className="w-16 px-2 py-1 rounded-lg text-xs text-right focus:outline-none"
                                   style={{
                                     background: 'rgba(255,255,255,0.06)',
@@ -680,6 +810,26 @@ function PhotoModal({ open, onClose, onSave }) {
                       </p>
                     )}
 
+                    {/* Card-5b smoke (Kd): AI saw food but NOTHING matched
+                        our food data ("Flatbread Stack" ≠ Roti) — say so
+                        honestly instead of a 0-kcal box + dead Confirm. */}
+                    {analysis.items.length === 0 && (
+                      <div className="rounded-xl p-4 mb-4 text-center"
+                           style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.20)' }}>
+                        <p className="text-sm font-semibold mb-1"
+                           style={{ color: 'rgba(251,191,36,0.85)' }}>
+                          We saw the food but couldn't match it to our
+                          nutrition data.
+                        </p>
+                        <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.50)' }}>
+                          Please add it manually with the + button on a meal
+                          section — this scan used no quota worth worrying
+                          about, and we're improving name matching.
+                        </p>
+                      </div>
+                    )}
+
+                    {analysis.items.length > 0 && (<>
                     <div
                       className="rounded-xl p-3 mb-4"
                       style={{
@@ -705,6 +855,25 @@ function PhotoModal({ open, onClose, onSave }) {
                       </p>
                     </div>
 
+                    {/* Log as: Breakfast/Lunch/Snack/Dinner (default = now) */}
+                    <div className="flex gap-2 mb-3">
+                      {MEAL_TYPES.map((mt) => (
+                        <button
+                          key={mt.id}
+                          type="button"
+                          onClick={() => setLogAs(logAs === mt.id ? null : mt.id)}
+                          className="flex-1 py-1.5 rounded-lg text-2xs font-semibold transition-all"
+                          style={{
+                            background: logAs === mt.id ? `${mt.color}20` : 'rgba(255,255,255,0.03)',
+                            border: logAs === mt.id ? `1px solid ${mt.color}50` : '1px solid rgba(255,255,255,0.05)',
+                            color: logAs === mt.id ? mt.color : 'rgba(255,255,255,0.50)',
+                          }}
+                        >
+                          {mt.label}
+                        </button>
+                      ))}
+                    </div>
+
                     <p className="text-2xs mb-3"
                        style={{ color: 'rgba(255,255,255,0.40)' }}>
                       {live
@@ -724,6 +893,7 @@ function PhotoModal({ open, onClose, onSave }) {
                     >
                       {saving ? 'Saving…' : gramsValid ? 'Confirm & log meal' : 'Enter grams for every item'}
                     </button>
+                    </>)}
                   </div>
                 )}
               </div>
@@ -735,13 +905,10 @@ function PhotoModal({ open, onClose, onSave }) {
   );
 }
 
-// ── D1(a), Kd-ruled (Card 5a; boundaries revised at the 5a smoke): the new
-// model stores no meal type — buckets are DISPLAY-ONLY, derived from the
-// meal's own timestamp. Nothing invented into the data. before 11 =
-// breakfast · 11–16 = lunch · 16–19 = snack · 19–22 = dinner · else snack
-// (local time, matching the times the user sees on each row). A user-chosen
-// override needs a mealType API field — owed in RUNBOOK/cutover.md; an
-// edit-takenAt control (field + PATCH already exist) is owed to Card 5b.
+// ── Fallback buckets for UNLABELED meals only (Kd ruling 2026-07-17:
+// mealType is the stored user-chosen label; this time derivation survives
+// purely as the display fallback for rows without one). before 11 =
+// breakfast · 11–16 = lunch · 16–19 = snack · 19–22 = dinner · else snack.
 function bucketOf(takenAt) {
   const h = new Date(takenAt).getHours();
   if (h < 11) return 'breakfast';
@@ -809,6 +976,21 @@ export default function Nutrition() {
     }
   };
 
+  // Card 5b: change a meal's time — keeps the date, swaps HH:MM; the server
+  // stores it and the D1(a) bucket follows on reload.
+  const handleEditTime = async (meal, hhmm) => {
+    try {
+      const [h, m] = hhmm.split(':').map(Number);
+      const at = new Date(meal.takenAt);
+      at.setHours(h, m, 0, 0);
+      await nutritionService.updateMeal(meal.id, { takenAt: at.toISOString() });
+      toast.success('Meal time updated');
+      loadData();
+    } catch (err) {
+      toast.error('Failed to update the time');
+    }
+  };
+
   // Totals = SUM of each meal's SERVER-computed totals (D3 doctrine: the
   // client displays and sums server numbers, it never derives nutrition).
   // Keys stay snake_case — MacroRings + the remaining card read that shape.
@@ -829,15 +1011,27 @@ export default function Nutrition() {
   };
 
   // Same display formula the old backend used (nutrition.py:346-350).
+  // While the D2 targets interim is dark, fall back to the SAME defaults
+  // MacroRings renders (its own longstanding fallbacks) so the two cards
+  // agree instead of Remaining showing zeros (Card-5b smoke, Kd).
+  const t = {
+    kcal:      targets.kcal      || 2000,
+    protein_g: targets.protein_g || 150,
+    carbs_g:   targets.carbs_g   || 250,
+    fat_g:     targets.fat_g     || 65,
+  };
   const remaining = {
-    kcal:      Math.max(0, Math.round((targets.kcal      || 0) - totals.kcal)),
-    protein_g: Math.max(0, Math.round((targets.protein_g || 0) - totals.protein_g)),
-    carbs_g:   Math.max(0, Math.round((targets.carbs_g   || 0) - totals.carbs_g)),
-    fat_g:     Math.max(0, Math.round((targets.fat_g     || 0) - totals.fat_g)),
+    kcal:      Math.max(0, Math.round(t.kcal      - totals.kcal)),
+    protein_g: Math.max(0, Math.round(t.protein_g - totals.protein_g)),
+    carbs_g:   Math.max(0, Math.round(t.carbs_g   - totals.carbs_g)),
+    fat_g:     Math.max(0, Math.round(t.fat_g     - totals.fat_g)),
   };
 
+  // Sections group by the USER-CHOSEN label (meal_type, Kd ruling
+  // 2026-07-17); unlabeled meals (older rows, photo confirms without a chip)
+  // fall back to the time-of-day bucket for display only.
   const byType = meals.reduce((acc, m) => {
-    const key = bucketOf(m.takenAt);
+    const key = m.mealType || bucketOf(m.takenAt);
     (acc[key] = acc[key] || []).push(m);
     return acc;
   }, {});
@@ -992,6 +1186,7 @@ export default function Nutrition() {
                   ))}
                 </div>
               </motion.div>
+
             </div>
 
             {/* ── Right: Meal sections ──────────────────────────────────────── */}
@@ -1003,6 +1198,7 @@ export default function Nutrition() {
                   meals={byType[mt.id] || []}
                   onAdd={(id) => setAddModal({ open: true, mealType: id })}
                   onDelete={handleDelete}
+                  onEditTime={handleEditTime}
                 />
               ))}
             </div>

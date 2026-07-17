@@ -14,9 +14,9 @@
 // RUNBOOK/cutover.md): getTargets below still rides mlApi. It feeds from
 // user_fitness_profiles once its new-API card lands (exists since PR #30).
 //
-// STILL OLD-BACKEND UNTIL CARD 5b (manual-entry UI card): searchFood/logMeal
-// legacy functions kept for AddMealModal — NO-REMOVAL rule; 5b rewires that
-// modal onto searchFoods/logManualMeal below and deletes the legacy pair.
+// Card 5b: AddMealModal now rides searchFoods/logManualMeal below — the
+// legacy mlApi searchFood/logMeal pair is deleted as promised at 5a. The one
+// remaining mlApi call is getTargets (D2 interim).
 import authApi from './authApi';
 import mlApi from './mlApi';
 
@@ -69,9 +69,13 @@ export const nutritionService = {
   },
 
   /** Photo confirm — ONE request creates the whole meal (replaces the old
-   *  N× logMeal loop). Body is confirmMealRequestSchema (.strict()). */
-  confirmMeal: ({ scanToken, takenAt, items }) =>
-    authApi.post('/v1/nutrition/meals', { scanToken, takenAt, items: toChosenItems(items) }),
+   *  N× logMeal loop). Body is confirmMealRequestSchema (.strict()).
+   *  mealType = the user-chosen label (Kd ruling 2026-07-17); omit = unlabeled. */
+  confirmMeal: ({ scanToken, takenAt, items, mealType }) =>
+    authApi.post('/v1/nutrition/meals', {
+      scanToken, takenAt, items: toChosenItems(items),
+      ...(mealType ? { mealType } : {}), // .strict(): omit, never null
+    }),
 
   /** Live preview (Kd-approved 2026-07-16): the SERVER computes nutrition for
    *  proposed grams without saving — the client never does nutrition math.
@@ -86,8 +90,11 @@ export const nutritionService = {
 
   /** Manual entry (Card 5b UI) — manualMealRequestSchema (.strict()).
    *  Server resolves canonicals via food search and computes all macros. */
-  logManualMeal: ({ mealName, takenAt, items }) =>
-    authApi.post('/v1/nutrition/meals', { mealName, takenAt, items: toChosenItems(items) }),
+  logManualMeal: ({ mealName, takenAt, items, mealType }) =>
+    authApi.post('/v1/nutrition/meals', {
+      mealName, takenAt, items: toChosenItems(items),
+      ...(mealType ? { mealType } : {}),
+    }),
 
   /** {items: FoodReference[]} — macros are PER 100 g; camelCase
    *  (proteinG/carbsG/fatG), canonical is the confirm/manual key. limit ≤50. */
@@ -106,13 +113,19 @@ export const nutritionService = {
   /** patchMealRequestSchema (.strict(), ≥1 field). */
   updateMeal: (id, patch) => authApi.patch(`/v1/nutrition/meals/${id}`, patch),
 
+  // ── Dishware (Part 2B §3.2 rung 1; Card 5b UI) — once registered, the
+  //    photo pipeline's portion resolver uses these server-side. ────────────
+  /** {items: [{id, label, containerClass, volumeMl, foodHint, createdAt}], nextCursor} */
+  listDishware: (limit = 50, cursor) =>
+    authApi.get('/v1/nutrition/dishware', { params: cursor ? { limit, cursor } : { limit } }),
+  /** dishwareInputSchema (.strict()): {label ≤100, containerClass ≤80,
+   *  volumeMl int ≤10000, foodHint? ≤120}. */
+  createDishware: (input) => authApi.post('/v1/nutrition/dishware', input),
+  updateDishware: (id, patch) => authApi.patch(`/v1/nutrition/dishware/${id}`, patch),
+  deleteDishware: (id) => authApi.delete(`/v1/nutrition/dishware/${id}`), // 204
+
   // ── OLD BACKEND (interim; see header) ─────────────────────────────────────
   /** D2 interim: {success, targets: {kcal, protein_g, carbs_g, fat_g}} from
    *  the legacy Mifflin-St Jeor calculator (backend-ml nutrition.py:98). */
   getTargets: () => mlApi.get('/nutrition/targets'),
-
-  /** Card 5b rewires AddMealModal off these two, then deletes them. */
-  searchFood: (query, limit = 10) =>
-    mlApi.get('/nutrition/search', { params: { q: query, limit } }),
-  logMeal: (meal) => mlApi.post('/nutrition/meals', meal),
 };
