@@ -4,6 +4,11 @@ import { z } from "zod";
 export const portionSourceSchema = z.enum(["user_dishware", "regional_prior", "default", "legacy"]);
 export const nutritionSourceSchema = z.enum(["curated", "openfoodfacts"]);
 export const mealOriginSchema = z.enum(["photo", "manual"]);
+/** Kd ruling 2026-07-17 (Card-5b smoke; supersedes the D1 time-bucket
+ *  interim): the section is a USER-CHOSEN label stored on the meal —
+ *  takenAt stays the exact real time and never encodes it. */
+export const mealTypeSchema = z.enum(["breakfast", "lunch", "dinner", "snack"]);
+export type MealType = z.infer<typeof mealTypeSchema>;
 
 const gramRangeSchema = z.tuple([z.number().positive(), z.number().positive()]);
 
@@ -49,6 +54,7 @@ const chosenItemsSchema = z
 
 export const confirmMealRequestSchema = z.object({
   scanToken: z.string().min(32).max(256), takenAt: takenAtSchema,
+  mealType: mealTypeSchema.optional(),
   items: chosenItemsSchema,
 }).strict();
 export type ConfirmMealRequest = z.infer<typeof confirmMealRequestSchema>;
@@ -57,6 +63,7 @@ export type ConfirmMealRequest = z.infer<typeof confirmMealRequestSchema>;
  *  entry). Items resolve through food search; origin = 'manual'. */
 export const manualMealRequestSchema = z.object({
   mealName: z.string().trim().min(1).max(200), takenAt: takenAtSchema,
+  mealType: mealTypeSchema.optional(),
   items: chosenItemsSchema,
 }).strict();
 export type ManualMealRequest = z.infer<typeof manualMealRequestSchema>;
@@ -80,12 +87,14 @@ export type MealPreview = z.infer<typeof mealPreviewSchema>;
 
 export const patchMealRequestSchema = z.object({
   mealName: z.string().trim().min(1).max(200).optional(), takenAt: takenAtSchema.optional(),
+  mealType: mealTypeSchema.nullable().optional(), // null clears the label
   items: chosenItemsSchema.optional(),
 }).strict().refine((v) => Object.keys(v).length > 0, { message: "at least one field required" });
 export type PatchMealRequest = z.infer<typeof patchMealRequestSchema>;
 
 export const mealSchema = z.object({
-  id: z.string().uuid(), takenAt: z.string(), mealName: z.string().nullable(), items: z.array(mealItemSchema),
+  id: z.string().uuid(), takenAt: z.string(), mealType: mealTypeSchema.nullable(),
+  mealName: z.string().nullable(), items: z.array(mealItemSchema),
   totals: mealTotalsSchema, confirmed: z.boolean(), origin: mealOriginSchema,
   portionSource: z.enum(["user_dishware", "regional_prior", "default", "legacy"]),
   nutritionSources: z.array(z.string()), calcVersion: z.number().int(),
