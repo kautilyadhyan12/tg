@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CURATED_FOODS, findCurated } from "../src/modules/nutrition/foods.js";
+import { CURATED_FOODS, findCurated, searchCurated } from "../src/modules/nutrition/foods.js";
 import { CONTAINER_PRIORS, COUNTABLE_PRIORS, DENSITY_G_PER_ML, resolvePortion } from "../src/modules/nutrition/portion-priors.js";
 import { MEAL_VISION_PROMPT, createVisionProvider } from "../src/modules/nutrition/vision.adapter.js";
 import { VISION_INPUT_MICRO_USD_PER_MILLION, VISION_OUTPUT_MICRO_USD_PER_MILLION, visionCostMicro } from "../src/modules/nutrition/service.js";
@@ -12,6 +12,29 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect(findCurated("dal")?.kcal).toBe(110);
     expect(findCurated("paneer")?.proteinG).toBe(18);
     expect(findCurated("idli")?.serving).toBe(30);
+  });
+
+  // Card 5c — food name aliases: the Card-5b smoke roti case ("Flatbread
+  // Stack" → 0 curated matches → 0 kcal) plus common Indian/English synonyms
+  // the curated table's English labels miss. Naming metadata only.
+  it("resolves synonym aliases to curated canonicals without breaking exact hits (Card 5c)", () => {
+    expect(findCurated("flatbread")?.canonical).toBe("roti_chapati");
+    expect(findCurated("chapati")?.canonical).toBe("roti_chapati");
+    expect(findCurated("phulka")?.canonical).toBe("roti_chapati");
+    expect(findCurated("curd")?.canonical).toBe("greek_yogurt_plain");
+    expect(findCurated("aloo")?.canonical).toBe("potato_baked");
+    expect(findCurated("rajma")?.canonical).toBe("kidney_beans_cooked");
+    expect(findCurated("capsicum")?.canonical).toBe("bell_pepper");
+    // aliases never disturb the exact-name hits the row-inventory test pins.
+    expect(findCurated("roti")?.sourceLine).toBe(151);
+    expect(findCurated("dal")?.kcal).toBe(110);
+    // an aliased food surfaces in the search dropdown too.
+    expect(searchCurated("flatbread", 5).some((f) => f.canonical === "roti_chapati")).toBe(true);
+    expect(searchCurated("aloo", 5).some((f) => f.canonical === "potato_baked")).toBe(true);
+  });
+
+  it("the vision prompt nudges toward common local food names (Card 5c)", () => {
+    expect(MEAL_VISION_PROMPT.toLowerCase()).toContain("roti");
   });
 
   it("copies Appendix B priors and resolves count > dishware > regional > default", () => {

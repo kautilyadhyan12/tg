@@ -140,6 +140,62 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
 
   it("takenAt more than 24h in the future is a 400 (GAP-3)",async()=>{const future=new Date(Date.now()+25*60*60*1000).toISOString();const res=await inject("POST","/v1/nutrition/meals",cookieA,{mealName:"Time travel",takenAt:future,items:[{canonical:"dal_lentil_curry",grams:100}]});expect(res.statusCode).toBe(400);},30_000);
 
+  // Card 5c — meal composition. These run on FRESH app instances (own
+  // in-memory rate limiter + redis, the OFF-test precedent above) so they cost
+  // nothing against the shared per-IP auth budget (DECISIONS 2026-07-11 GAP-4).
+  async function freshApp(email:string){const a=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:fakeVision(),foodSearchProvider:noExternal}});await a.inject({method:"POST",url:"/v1/auth/register",headers:{"content-type":"application/json"},payload:JSON.stringify({email,password:PASSWORD,displayName:"P26a Comp"})});const l=await a.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email,password:PASSWORD})});const access=l.cookies.find((c)=>c.name==="accessToken")?.value??"";const call=(method:"GET"|"POST"|"PATCH"|"DELETE",url:string,body?:unknown)=>a.inject({method,url,cookies:{accessToken:access},headers:body===undefined?{}:{"content-type":"application/json"},...(body===undefined?{}:{payload:JSON.stringify(body)})});return{app:a,call};}
+
+  // A photo CONFIRM may carry EXTRA items the user added by search beyond the
+  // scan draft (the oats-with-milk case). The extra resolves via findFood at
+  // rung 'default'; the originalItems-vs-items diff records the addition as a
+  // Stage-5 correction (no new plumbing). Preview reads the same draft so live
+  // math == what is saved; the draft survives the preview.
+  it("confirm/preview accept an EXTRA item beyond the scan draft; addition is a Stage-5 correction",async()=>{
+    const {app:a,call}=await freshApp("p26a-comp1@example.com");
+    try{
+      const scan=await call("POST","/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
+      expect(scan.statusCode,scan.body).toBe(200);
+      const draft=scan.json<{scanToken:string;items:{canonical:string}[]}>();
+      // draft = dal + roti; the user adds milk (curated, NOT in the draft).
+      const items=[...draft.items.map((i)=>({canonical:i.canonical,grams:120})),{canonical:"milk_whole",grams:200}];
+      // Preview includes the extra and does NOT consume the single-use draft.
+      const preview=await call("POST","/v1/nutrition/meals/preview",{scanToken:draft.scanToken,items});
+      expect(preview.statusCode,preview.body).toBe(200);
+      const previewed=preview.json<{totals:Record<string,number>;items:{canonical:string}[]}>();
+      expect(previewed.items.map((i)=>i.canonical)).toContain("milk_whole");
+      const confirmed=await call("POST","/v1/nutrition/meals",{scanToken:draft.scanToken,takenAt:new Date().toISOString(),items});
+      expect(confirmed.statusCode,confirmed.body).toBe(201);
+      const meal=confirmed.json<{meal:{id:string;totals:Record<string,number>;items:{canonical:string;portionSource:string}[]}}>().meal;
+      expect(meal.items).toHaveLength(3);
+      expect(meal.items.map((i)=>i.canonical)).toContain("milk_whole");
+      // added item is rung 'default' (it had no draft estimate).
+      expect(meal.items.find((i)=>i.canonical==="milk_whole")?.portionSource).toBe("default");
+      // preview equals what confirm saved.
+      expect(previewed.totals).toEqual(meal.totals);
+      // the addition is recorded as an items correction (2 originals → 3 items).
+      const corr=await sql<{field:string}[]>`SELECT field FROM meal_log_corrections WHERE meal_log_id=${meal.id}`;
+      expect(corr.some((r)=>r.field==="items")).toBe(true);
+    }finally{await a.close();}
+  },30_000);
+
+  it("an EXTRA item with an unknown canonical 400s the confirm; and mealType persists through a photo confirm (5b T3 advisory)",async()=>{
+    const {app:a,call}=await freshApp("p26a-comp2@example.com");
+    try{
+      // 1) unknown extra → 400 (never a silent drop).
+      const scan1=await call("POST","/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
+      const d1=scan1.json<{scanToken:string;items:{canonical:string}[]}>();
+      const bad=[...d1.items.map((i)=>({canonical:i.canonical,grams:100})),{canonical:"definitely_not_a_food_xyz",grams:100}];
+      expect((await call("POST","/v1/nutrition/meals",{scanToken:d1.scanToken,takenAt:new Date().toISOString(),items:bad})).statusCode).toBe(400);
+      // 2) a photo confirm carries the user-chosen mealType label (fresh redis
+      //    → the 2/day scan budget covers this second scan).
+      const scan2=await call("POST","/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
+      const d2=scan2.json<{scanToken:string;items:{canonical:string}[]}>();
+      const confirmed=await call("POST","/v1/nutrition/meals",{scanToken:d2.scanToken,takenAt:new Date().toISOString(),mealType:"breakfast",items:d2.items.map((i)=>({canonical:i.canonical,grams:100}))});
+      expect(confirmed.statusCode,confirmed.body).toBe(201);
+      expect(confirmed.json<{meal:{mealType:string|null}}>().meal.mealType).toBe("breakfast");
+    }finally{await a.close();}
+  },30_000);
+
   it("Redis down: meal_scan fails CLOSED with 503 and the provider is never called (quotas.py doctrine)",async()=>{const downRedis=createMemoryRedis();const vision2=fakeVision();const app2=await buildApp(loadConfig(env),{redis:downRedis,nutrition:{visionProvider:vision2,foodSearchProvider:noExternal}});try{const login=await app2.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email:"p26a-alice@example.com",password:PASSWORD})});const access=login.cookies.find((c)=>c.name==="accessToken")?.value??"";downRedis.down=true;const res=await app2.inject({method:"POST",url:"/v1/nutrition/analyze-photo",headers:{"content-type":"application/json"},cookies:{accessToken:access},payload:JSON.stringify({imageBase64:jpeg,mimeType:"image/jpeg"})});expect(res.statusCode).toBe(503);expect(vision2.calls).toBe(0);}finally{await app2.close();}},30_000);
 
   it("cross-user: B cannot DELETE A's meal, confirm a foreign scanToken, or spend a foreign retake token (T3 R9 gap)",async()=>{

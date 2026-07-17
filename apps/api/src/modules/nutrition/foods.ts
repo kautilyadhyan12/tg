@@ -35,12 +35,45 @@ row("Butter chicken",220,14,8,15,1,100,"g",156),row("Biryani (chicken)",200,9,26
 row("Ramen (cooked)",436,10,63,16,2,100,"g",163),row("Pad Thai",192,8,30,5,2,100,"g",164),row("Spring roll",138,5,21,4,2,50,"roll",165),row("Dumplings (pork)",200,8,26,7,2,100,"g",166),row("Pho (beef)",350,25,45,8,2,400,"bowl",167),
 ];
 
+// Card 5c — food name aliases. Each key (a slug) on the LEFT resolves to a
+// curated canonical on the RIGHT. Naming metadata ONLY (no kcal/macros); every
+// row is a deliberate, reviewed judgment call (DECISIONS 2026-07-17). Fixes the
+// Card-5b smoke's "roti photo → 'Flatbread Stack' → 0 matches → 0 kcal" case
+// plus common Indian/English synonyms the curated table's English labels miss.
+// Only synonyms the existing substring match CANNOT reach are listed here
+// (e.g. "biryani"→biryani_chicken already resolves by substring, so it is not).
+const FOOD_ALIASES: Readonly<Record<string, string>> = {
+  // roti family — the trigger
+  roti: "roti_chapati", chapati: "roti_chapati", flatbread: "roti_chapati",
+  phulka: "roti_chapati", rotli: "roti_chapati", fulka: "roti_chapati",
+  // dal spellings
+  daal: "dal_lentil_curry", dhal: "dal_lentil_curry", dahl: "dal_lentil_curry",
+  // curd / yogurt
+  curd: "greek_yogurt_plain", dahi: "greek_yogurt_plain", yoghurt: "greek_yogurt_plain",
+  // staples under local names
+  aloo: "potato_baked", alu: "potato_baked",
+  chawal: "rice_white_cooked", bhaat: "rice_white_cooked",
+  anda: "egg_whole_large",
+  chana: "chickpeas_cooked", chhole: "chickpeas_cooked", chole: "chickpeas_cooked",
+  rajma: "kidney_beans_cooked",
+  capsicum: "bell_pepper", maize: "corn_cooked", groundnut: "peanuts",
+  prawns: "shrimp_cooked", prawn: "shrimp_cooked",
+};
+
 export function searchCurated(query: string, limit: number): CuratedFood[] {
   const q = query.toLowerCase().trim();
-  return CURATED_FOODS.map((food) => { const name = food.name.toLowerCase(); const score = name === q ? 100 : name.startsWith(q) ? 80 : name.includes(q) ? 50 : q.split(/\s+/).every((word) => name.includes(word)) ? 30 : 0; return { food, score }; }).filter((v) => v.score > 0).sort((a, b) => b.score - a.score).slice(0, limit).map((v) => v.food);
+  const aliasTarget = FOOD_ALIASES[slug(q)];
+  return CURATED_FOODS.map((food) => { const name = food.name.toLowerCase(); const score = name === q ? 100 : food.canonical === aliasTarget ? 90 : name.startsWith(q) ? 80 : name.includes(q) ? 50 : q.split(/\s+/).every((word) => name.includes(word)) ? 30 : 0; return { food, score }; }).filter((v) => v.score > 0).sort((a, b) => b.score - a.score).slice(0, limit).map((v) => v.food);
 }
 
 export function findCurated(query: string): CuratedFood | null {
   const q = slug(query);
+  // Alias first: a synonym must beat the fuzzy substring pass (which is exactly
+  // what misses "flatbread"/"aloo"/"curd" today).
+  const aliasTarget = FOOD_ALIASES[q];
+  if (aliasTarget !== undefined) {
+    const hit = CURATED_FOODS.find((f) => f.canonical === aliasTarget);
+    if (hit !== undefined) return hit;
+  }
   return CURATED_FOODS.find((f) => f.canonical === q || f.canonical.includes(q) || q.includes(f.canonical)) ?? searchCurated(query, 1)[0] ?? null;
 }

@@ -418,20 +418,42 @@ async function peekDraft(deps: NutritionDeps, userId: string, value: string): Pr
   return parseDraft(raw, userId);
 }
 
+/** Photo confirm/preview item resolution (Card 5c — meal composition). A
+ *  chosen item either belongs to the scan draft (its rung is preserved) or is
+ *  an EXTRA the user added by search (the oats-with-milk case) — resolved via
+ *  findFood at rung 'default'; the canonical cache makes OFF foods loggable
+ *  here too. `original` is the item's pre-edit draft estimate, or null for an
+ *  extra (an extra has no estimate, so it only appears in the items-vs-original
+ *  diff as an addition → a Stage-5 correction row). ONE implementation for
+ *  confirm and preview so live math cannot diverge from what is saved (T3). */
+async function resolveDraftItem(
+  deps: NutritionDeps,
+  draft: Draft,
+  chosen: { canonical: string; grams: number },
+): Promise<{ item: MealItem; original: MealItem | null }> {
+  const food = draft.foods.find((f) => f.canonical === chosen.canonical);
+  const estimate = draft.items.find((i) => i.canonical === chosen.canonical);
+  if (food !== undefined && estimate !== undefined) {
+    return {
+      // User-chosen grams collapse the range; the ESTIMATE's rung is preserved.
+      item: nutritionItem(food, chosen.grams, [chosen.grams, chosen.grams], estimate.portionSource),
+      original: nutritionItem(food, estimate.gramsPoint, estimate.gramsRange, estimate.portionSource),
+    };
+  }
+  const extra = await findFood(deps, chosen.canonical);
+  if (extra === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
+  return { item: nutritionItem(extra, chosen.grams, [chosen.grams, chosen.grams], "default"), original: null };
+}
+
 export async function confirmMeal(deps: NutritionDeps, userId: string, input: ConfirmMealRequest): Promise<Meal> {
   const draft = await takeDraft(deps, userId, input.scanToken);
   const items: MealItem[] = [];
   const originalItems: MealItem[] = [];
   for (const chosen of input.items) {
-    const food = draft.foods.find((f) => f.canonical === chosen.canonical);
-    const estimate = draft.items.find((i) => i.canonical === chosen.canonical);
-    if (food === undefined || estimate === undefined) {
-      throw new NutritionError(400, "invalid_item", "A confirmed item was not part of this scan.");
-    }
-    originalItems.push(nutritionItem(food, estimate.gramsPoint, estimate.gramsRange, estimate.portionSource));
-    // User-chosen grams collapse the range; the ESTIMATE's rung is preserved
-    // (the correction row records what the rung originally produced).
-    items.push(nutritionItem(food, chosen.grams, [chosen.grams, chosen.grams], estimate.portionSource));
+    const { item, original } = await resolveDraftItem(deps, draft, chosen);
+    items.push(item);
+    // An extra item has no original — it surfaces in the diff as an addition.
+    if (original !== null) originalItems.push(original);
   }
   const row = await repo.createMeal(deps.sql, userId, {
     takenAt: new Date(input.takenAt),
@@ -494,12 +516,9 @@ export async function previewMeal(
   const draft = await peekDraft(deps, userId, input.scanToken);
   const items: MealItem[] = [];
   for (const chosen of input.items) {
-    const food = draft.foods.find((f) => f.canonical === chosen.canonical);
-    const estimate = draft.items.find((i) => i.canonical === chosen.canonical);
-    if (food === undefined || estimate === undefined) {
-      throw new NutritionError(400, "invalid_item", "A previewed item was not part of this scan.");
-    }
-    items.push(nutritionItem(food, chosen.grams, [chosen.grams, chosen.grams], estimate.portionSource));
+    // Same resolution as confirmMeal (extras included) so preview == save.
+    const { item } = await resolveDraftItem(deps, draft, chosen);
+    items.push(item);
   }
   return { items, totals: totals(items) };
 }
