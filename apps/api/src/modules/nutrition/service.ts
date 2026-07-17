@@ -408,14 +408,21 @@ async function takeDraft(deps: NutritionDeps, userId: string, value: string): Pr
   return parseDraft(raw, userId);
 }
 
-/** Non-destructive draft read for preview — get, never take: the single-use
- *  confirm draft must survive any number of previews. RedisLike.get conflates
- *  missing and backend-down as null; preview degrades to 400 either way (the
- *  client falls back to the analysis estimates). */
-async function peekDraft(deps: NutritionDeps, userId: string, value: string): Promise<Draft> {
+/** Non-destructive draft read — get, never take: the single-use confirm draft
+ *  must survive previews (and a rejected confirm). RedisLike.get conflates
+ *  missing and backend-down as null, so callers that need to tell those apart
+ *  fall through to takeDraft, whose Lua GET+DEL does distinguish them. */
+async function readDraft(deps: NutritionDeps, userId: string, value: string): Promise<Draft | null> {
   const raw = await deps.redis.get(scanKey(userId, value));
-  if (raw === null) throw new NutritionError(400, "invalid_scan", "Invalid or expired scan token.");
-  return parseDraft(raw, userId);
+  return raw === null ? null : parseDraft(raw, userId);
+}
+
+/** Preview's read: degrades to 400 whether the draft is missing or Redis is
+ *  down (the client falls back to the analysis estimates either way). */
+async function peekDraft(deps: NutritionDeps, userId: string, value: string): Promise<Draft> {
+  const draft = await readDraft(deps, userId, value);
+  if (draft === null) throw new NutritionError(400, "invalid_scan", "Invalid or expired scan token.");
+  return draft;
 }
 
 /** Photo confirm/preview item resolution (Card 5c — meal composition). A
@@ -446,7 +453,18 @@ async function resolveDraftItem(
 }
 
 export async function confirmMeal(deps: NutritionDeps, userId: string, input: ConfirmMealRequest): Promise<Meal> {
-  const draft = await takeDraft(deps, userId, input.scanToken);
+  // Resolve EVERYTHING before consuming the single-use draft (T3 Card 5c).
+  // takeDraft is destructive, so resolving after it meant one unresolvable
+  // item (an added ingredient whose canonical has aged out of the food cache)
+  // destroyed the scan: the 400 left the user with a dead scanToken and no way
+  // back except another photo — a fresh vision call and another quota unit.
+  const draft = await readDraft(deps, userId, input.scanToken);
+  if (draft === null) {
+    // get() cannot tell "expired" from "Redis down"; take() can, and reports
+    // 503-vs-400 correctly. There is nothing to lose — the draft is unreadable.
+    await takeDraft(deps, userId, input.scanToken);
+    throw new NutritionError(400, "invalid_scan", "Invalid or expired scan token.");
+  }
   const items: MealItem[] = [];
   const originalItems: MealItem[] = [];
   const correctedItems: MealItem[] = [];
@@ -461,6 +479,10 @@ export async function confirmMeal(deps: NutritionDeps, userId: string, input: Co
       correctedItems.push(item);
     }
   }
+  // Everything that could reject has passed — NOW consume the draft. This is
+  // still the atomic single-use gate: two concurrent confirms both read, but
+  // only one take() returns the draft; the loser gets its 400 here.
+  await takeDraft(deps, userId, input.scanToken);
   const row = await repo.createMeal(deps.sql, userId, {
     correctedItems,
     takenAt: new Date(input.takenAt),

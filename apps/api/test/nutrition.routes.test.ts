@@ -221,21 +221,27 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     }finally{await a.close();}
   },30_000);
 
-  it("an EXTRA item with an unknown canonical 400s the confirm; and mealType persists through a photo confirm (5b T3 advisory)",async()=>{
+  // T3 Card 5c: a rejected confirm must NOT consume the scan. takeDraft is
+  // destructive, so resolving items after it meant one unresolvable ingredient
+  // killed the scanToken outright — the user's only way back was another photo
+  // (a fresh vision call + another quota unit) to fix one bad item.
+  it("an EXTRA item with an unknown canonical 400s the confirm WITHOUT burning the scan; mealType persists through a photo confirm (5b T3 advisory)",async()=>{
     const {app:a,call}=await freshApp("p26a-comp2@example.com");
     try{
+      const scan=await call("POST","/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
+      const d=scan.json<{scanToken:string;items:{canonical:string}[]}>();
+      const good=d.items.map((i)=>({canonical:i.canonical,grams:100}));
       // 1) unknown extra → 400 (never a silent drop).
-      const scan1=await call("POST","/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
-      const d1=scan1.json<{scanToken:string;items:{canonical:string}[]}>();
-      const bad=[...d1.items.map((i)=>({canonical:i.canonical,grams:100})),{canonical:"definitely_not_a_food_xyz",grams:100}];
-      expect((await call("POST","/v1/nutrition/meals",{scanToken:d1.scanToken,takenAt:new Date().toISOString(),items:bad})).statusCode).toBe(400);
-      // 2) a photo confirm carries the user-chosen mealType label (fresh redis
-      //    → the 2/day scan budget covers this second scan).
-      const scan2=await call("POST","/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
-      const d2=scan2.json<{scanToken:string;items:{canonical:string}[]}>();
-      const confirmed=await call("POST","/v1/nutrition/meals",{scanToken:d2.scanToken,takenAt:new Date().toISOString(),mealType:"breakfast",items:d2.items.map((i)=>({canonical:i.canonical,grams:100}))});
+      const bad=[...good,{canonical:"definitely_not_a_food_xyz",grams:100}];
+      expect((await call("POST","/v1/nutrition/meals",{scanToken:d.scanToken,takenAt:new Date().toISOString(),items:bad})).statusCode).toBe(400);
+      // 2) …and the SAME scanToken still works once the bad item is dropped —
+      //    the whole point: fixing a typo must not cost another photo. This
+      //    doubles as the mealType-through-photo-confirm assertion.
+      const confirmed=await call("POST","/v1/nutrition/meals",{scanToken:d.scanToken,takenAt:new Date().toISOString(),mealType:"breakfast",items:good});
       expect(confirmed.statusCode,confirmed.body).toBe(201);
       expect(confirmed.json<{meal:{mealType:string|null}}>().meal.mealType).toBe("breakfast");
+      // 3) the draft IS single-use: a replay of the now-consumed token 400s.
+      expect((await call("POST","/v1/nutrition/meals",{scanToken:d.scanToken,takenAt:new Date().toISOString(),items:good})).statusCode).toBe(400);
     }finally{await a.close();}
   },30_000);
 
