@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
-import { dataUrlToBase64, nutritionService, toChosenItems } from './nutritionApi';
+import { composeAddIngredient, dataUrlToBase64, nutritionService, toChosenItems } from './nutritionApi';
 
 function recordRequests(api) {
   const seen = [];
@@ -139,15 +139,35 @@ describe('nutritionService repoint (Card 5a)', () => {
   });
 
   // ── Card 5c: meal composition + change-label ────────────────────────────────
-  it('add-ingredient PATCHes the existing items plus the new one (Card 5c)', async () => {
+  it('composeAddIngredient keeps EVERY existing item (at stored grams) + appends the new one (Card 5c)', () => {
+    // This is the real add-ingredient logic — a bug here silently REWRITES a
+    // saved meal, so it is tested directly, not via a hand-built array (T3).
+    const existing = [
+      { canonical: 'oats_dry', gramsPoint: 40, name: 'Oats', kcalPoint: 156 },
+      { canonical: 'banana', gramsPoint: 120, name: 'Banana', kcalPoint: 107 },
+    ];
+    const out = composeAddIngredient(existing, { canonical: 'milk_whole', grams: 200 });
+    // all originals survive, mapped to {canonical, grams:gramsPoint}, extra fields dropped
+    expect(out).toEqual([
+      { canonical: 'oats_dry', grams: 40 },
+      { canonical: 'banana', grams: 120 },
+      { canonical: 'milk_whole', grams: 200 },
+    ]);
+    // the new item is always last, and nothing is lost
+    expect(out).toHaveLength(existing.length + 1);
+    expect(out.at(-1)).toEqual({ canonical: 'milk_whole', grams: 200 });
+    // a meal with no items yet (defensive) still yields just the new one
+    expect(composeAddIngredient(undefined, { canonical: 'egg_whole_large', grams: 50 }))
+      .toEqual([{ canonical: 'egg_whole_large', grams: 50 }]);
+  });
+
+  it('updateMeal sends the composed items to the meals PATCH (Card 5c wiring)', async () => {
     const seen = recordRequests(authApi);
-    // The add-ingredient UI resends the saved meal's items at their stored
-    // grams and appends the picked food — PATCH replaces the whole array.
     await nutritionService.updateMeal('m-1', {
-      items: [
-        { canonical: 'oats_dry', grams: 40 },
+      items: composeAddIngredient(
+        [{ canonical: 'oats_dry', gramsPoint: 40 }],
         { canonical: 'milk_whole', grams: 200 },
-      ],
+      ),
     });
     expect(seen[0]).toMatchObject({ url: '/v1/nutrition/meals/m-1', method: 'patch' });
     expect(JSON.parse(seen[0].data)).toEqual({

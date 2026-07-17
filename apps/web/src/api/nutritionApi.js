@@ -41,6 +41,19 @@ export function toChosenItems(items) {
   }));
 }
 
+/** Card 5c add-ingredient: the meals PATCH replaces the WHOLE items array, so
+ *  compose the meal's existing items (kept at their stored `gramsPoint`) with
+ *  the newly picked one. Pure + unit-tested precisely because a bug here —
+ *  dropping or mis-mapping an existing item — would silently REWRITE a saved
+ *  meal, not just fail loudly. `existing` is the Meal.items shape from the API
+ *  ({canonical, gramsPoint, …}); `added` is {canonical, grams}. */
+export function composeAddIngredient(existing, added) {
+  return [
+    ...(existing || []).map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })),
+    { canonical: added.canonical, grams: added.grams },
+  ];
+}
+
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

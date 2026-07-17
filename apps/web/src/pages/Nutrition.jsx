@@ -6,7 +6,7 @@ import {
   Sparkles, Check, Tag,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { nutritionService } from '../api/nutritionApi';
+import { nutritionService, composeAddIngredient } from '../api/nutritionApi';
 import MacroRings from '../components/nutrition/MacroRings';
 
 // Quoted from @app/shared nutrition.ts chosenItemsSchema — the contract's own
@@ -138,9 +138,12 @@ function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient }) {
         </button>
         <button
           onClick={() => onAddIngredient(meal)}
-          title="Add an ingredient to this meal"
-          className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg"
-          style={{ color: 'rgba(255,255,255,0.45)' }}
+          disabled={(meal.items?.length || 0) >= MAX_ITEMS}
+          title={(meal.items?.length || 0) >= MAX_ITEMS
+            ? `This meal already holds the most items (${MAX_ITEMS})`
+            : 'Add an ingredient to this meal'}
+          className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg disabled:cursor-not-allowed"
+          style={{ color: (meal.items?.length || 0) >= MAX_ITEMS ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.45)' }}
         >
           <Plus className="w-3.5 h-3.5" />
         </button>
@@ -402,13 +405,11 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
     try {
       if (meal) {
         // Add-ingredient mode: PATCH replaces the whole items array, so resend
-        // the existing items at their stored grams plus the new one. The server
-        // preserves each existing item's portion rung and re-computes totals.
+        // the existing items at their stored grams plus the new one (composed by
+        // a pure, unit-tested helper — silently dropping an existing item here
+        // would wipe a meal). The server preserves each item's rung.
         await nutritionService.updateMeal(meal.id, {
-          items: [
-            ...(meal.items || []).map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })),
-            { canonical: selected.canonical, grams: gramsNum },
-          ],
+          items: composeAddIngredient(meal.items, { canonical: selected.canonical, grams: gramsNum }),
         });
         toast.success(`Added ${selected.name} to ${meal.mealName || 'the meal'}`);
       } else {
@@ -702,7 +703,9 @@ function PhotoModal({ open, onClose, onSave }) {
           scanToken: analysis.scanToken,
           items: payloadItems,
         });
-        if (!cancelled) setLive(res.data);
+        // Stamp the result with the payload it priced, so a response that
+        // lands after a further edit is not shown as current (T3 5c honesty).
+        if (!cancelled) setLive({ data: res.data, key: payloadKey });
       } catch {
         if (!cancelled) setLive(null);
       }
@@ -712,6 +715,12 @@ function PhotoModal({ open, onClose, onSave }) {
     // render so it cannot be a dep itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysis, payloadKey, gramsValid]);
+
+  // T3 5c: a number is only "live" if it priced the CURRENT payload. A result
+  // for a stale payload (mid-debounce, or after a grams edit made gramsValid
+  // false) must NOT be shown — the card's rule is withhold-until-the-server-
+  // answers, and with extras present a stale total is not what will be saved.
+  const liveNow = live !== null && live.key === payloadKey ? live.data : null;
 
   const handleConfirm = async () => {
     if (!analysis || saving || !gramsValid) return;
@@ -862,7 +871,7 @@ function PhotoModal({ open, onClose, onSave }) {
                         // meal is still exactly what the AI saw — once the
                         // user has added an ingredient the row must wait for
                         // the server rather than show a stale price (T3 5c).
-                        const shown = live?.items?.[i] ?? (extras.length === 0 ? item : null);
+                        const shown = liveNow?.items?.[i] ?? (extras.length === 0 ? item : null);
                         return (
                         <div key={i}
                              className="p-2.5 rounded-xl"
@@ -953,7 +962,7 @@ function PhotoModal({ open, onClose, onSave }) {
                       {/* Card 5c: ingredients the AI never saw (oats → milk).
                           Same grams/stepper rules; the SERVER prices them. */}
                       {extras.map((x, j) => {
-                        const shown = live?.items?.[analysis.items.length + j];
+                        const shown = liveNow?.items?.[analysis.items.length + j];
                         return (
                           <div key={`${x.food.canonical}-${j}`} className="p-2.5 rounded-xl"
                                style={{ background: 'rgba(255,138,31,0.05)', border: '1px solid rgba(255,138,31,0.15)' }}>
@@ -1100,7 +1109,7 @@ function PhotoModal({ open, onClose, onSave }) {
                           number — wait for the server rather than show a total
                           lower than what we are about to save. */}
                       {(() => {
-                        const t = live?.totals ?? (extras.length === 0 ? analysis.totals : null);
+                        const t = liveNow?.totals ?? (extras.length === 0 ? analysis.totals : null);
                         if (t === null) {
                           return (
                             <>
@@ -1115,7 +1124,7 @@ function PhotoModal({ open, onClose, onSave }) {
                         return (
                           <>
                             <p className="text-xs font-semibold mb-1" style={{ color: 'rgba(255,138,31,0.85)' }}>
-                              {live ? 'TOTAL (updates as you adjust)' : 'ESTIMATED TOTAL'}
+                              {liveNow ? 'TOTAL (updates as you adjust)' : 'ESTIMATED TOTAL'}
                             </p>
                             <p className="text-xl font-bold tracking-tight" style={{ color: '#FF8A1F' }}>
                               {t.kcalLow === t.kcalHigh ? `${t.kcalPoint} kcal` : `${t.kcalLow}–${t.kcalHigh} kcal`}
@@ -1149,7 +1158,7 @@ function PhotoModal({ open, onClose, onSave }) {
 
                     <p className="text-2xs mb-3"
                        style={{ color: 'rgba(255,255,255,0.40)' }}>
-                      {live
+                      {liveNow
                         ? 'All numbers are calculated by the server for your chosen amounts.'
                         : "Numbers above are the AI's first estimate — final nutrition is recalculated from your grams when you save."}
                     </p>
