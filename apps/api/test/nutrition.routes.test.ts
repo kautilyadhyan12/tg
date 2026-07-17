@@ -97,6 +97,26 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     }finally{await app4.close();}
   },30_000);
 
+  // T3 (manual-off-foods) violation 1: an OFF slug EMBEDDING a curated
+  // canonical (off_banana_chips ⊃ banana) must save the OFF macros the search
+  // displayed — never hijack to curated banana via the fuzzy substring match.
+  it("an off_ canonical embedding a curated slug saves the OFF food, not the curated hijack",async()=>{
+    const chips={canonical:"off_banana_chips",name:"Banana Chips",kcal:519,proteinG:2.3,carbsG:58,fatG:34,fiberG:7.7,serving:30,unit:"g",source:"openfoodfacts" as const};
+    const provider={search:(q:string)=>Promise.resolve(q==="banana chips"?[chips]:[])};
+    const app5=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:fakeVision(),foodSearchProvider:provider}});
+    try{
+      await app5.inject({method:"POST",url:"/v1/auth/register",headers:{"content-type":"application/json"},payload:JSON.stringify({email:"p26a-off3@example.com",password:PASSWORD,displayName:"P26a OFF3"})});
+      const l=await app5.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email:"p26a-off3@example.com",password:PASSWORD})});
+      const access=l.cookies.find((c)=>c.name==="accessToken")?.value??"";
+      await app5.inject({method:"GET",url:"/v1/nutrition/foods?q=banana%20chips",cookies:{accessToken:access}});
+      const created=await app5.inject({method:"POST",url:"/v1/nutrition/meals",headers:{"content-type":"application/json"},cookies:{accessToken:access},payload:JSON.stringify({mealName:"Chips",takenAt:new Date().toISOString(),items:[{canonical:"off_banana_chips",grams:100}]})});
+      expect(created.statusCode,created.body).toBe(201);
+      const meal=created.json<{meal:{totals:{kcalPoint:number};items:{nutritionSource:string}[]}}>().meal;
+      expect(meal.totals.kcalPoint).toBe(519); // OFF chips, NOT curated banana's 89
+      expect(meal.items[0]?.nutritionSource).toBe("openfoodfacts");
+    }finally{await app5.close();}
+  },30_000);
+
   it("takenAt more than 24h in the future is a 400 (GAP-3)",async()=>{const future=new Date(Date.now()+25*60*60*1000).toISOString();const res=await inject("POST","/v1/nutrition/meals",cookieA,{mealName:"Time travel",takenAt:future,items:[{canonical:"dal_lentil_curry",grams:100}]});expect(res.statusCode).toBe(400);},30_000);
 
   it("Redis down: meal_scan fails CLOSED with 503 and the provider is never called (quotas.py doctrine)",async()=>{const downRedis=createMemoryRedis();const vision2=fakeVision();const app2=await buildApp(loadConfig(env),{redis:downRedis,nutrition:{visionProvider:vision2,foodSearchProvider:noExternal}});try{const login=await app2.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email:"p26a-alice@example.com",password:PASSWORD})});const access=login.cookies.find((c)=>c.name==="accessToken")?.value??"";downRedis.down=true;const res=await app2.inject({method:"POST",url:"/v1/nutrition/analyze-photo",headers:{"content-type":"application/json"},cookies:{accessToken:access},payload:JSON.stringify({imageBase64:jpeg,mimeType:"image/jpeg"})});expect(res.statusCode).toBe(503);expect(vision2.calls).toBe(0);}finally{await app2.close();}},30_000);

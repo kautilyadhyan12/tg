@@ -65,11 +65,13 @@ export interface NutritionDeps {
 const foodSchema = z.object({
   canonical: z.string(),
   name: z.string(),
-  kcal: z.number(),
-  proteinG: z.number(),
-  carbsG: z.number(),
-  fatG: z.number(),
-  fiberG: z.number(),
+  // Physical per-100g bounds (T3 manual-off-foods): a cached entry breaching
+  // them fails the parse and degrades to a re-search, never into a meal.
+  kcal: z.number().min(0).max(1000),
+  proteinG: z.number().min(0).max(100),
+  carbsG: z.number().min(0).max(100),
+  fatG: z.number().min(0).max(100),
+  fiberG: z.number().min(0).max(100),
   serving: z.number(),
   unit: z.string(),
   source: z.enum(["curated", "openfoodfacts"]),
@@ -147,9 +149,15 @@ const foodRefKey = (canonical: string): string => `food:ref:${digest(canonical.t
  *  slug is ours, not their product name). So each returned food is also
  *  cached individually under its canonical. */
 async function rememberFoods(deps: NutritionDeps, foods: readonly FoodReference[]): Promise<void> {
-  for (const food of foods) {
-    await deps.redis.setex(foodRefKey(food.canonical), FOOD_CACHE_TTL_SECONDS, JSON.stringify(food));
-  }
+  // First-wins within a batch: if OFF ever yields same-canonical products
+  // (code-less fallback slugs), the entry the user SEES ranked first is the
+  // one that must resolve on save (T3 manual-off-foods).
+  const seen = new Set<string>();
+  await Promise.all(
+    foods
+      .filter((food) => (seen.has(food.canonical) ? false : (seen.add(food.canonical), true)))
+      .map((food) => deps.redis.setex(foodRefKey(food.canonical), FOOD_CACHE_TTL_SECONDS, JSON.stringify(food))),
+  );
 }
 
 async function canonicalCached(deps: NutritionDeps, canonical: string): Promise<FoodReference | null> {
@@ -190,10 +198,15 @@ export async function searchFoods(deps: NutritionDeps, query: string, limit: num
 }
 
 async function findFood(deps: NutritionDeps, query: string): Promise<FoodReference | null> {
-  const local = findCurated(query);
-  if (local !== null) return local;
-  // Canonical-keyed cache first (foods a search already returned — the
-  // manual-log path); full-text search is the last resort.
+  // T3 (manual-off-foods): an off_* canonical must NEVER resolve through
+  // findCurated's fuzzy substring match — off_banana_chips would hijack to
+  // curated "banana" and save macros different from what search displayed.
+  if (!query.startsWith("off_")) {
+    const local = findCurated(query);
+    if (local !== null) return local;
+  }
+  // Canonical-keyed cache (foods a search already returned — the manual-log
+  // path); full-text search is the last resort.
   const remembered = await canonicalCached(deps, query);
   if (remembered !== null) return remembered;
   return (await cachedExternal(deps, query, 1))[0] ?? null;
