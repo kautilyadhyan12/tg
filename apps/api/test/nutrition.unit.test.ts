@@ -53,6 +53,19 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect(foods1[0]?.name).toBe("Paneer Cubes");
     expect(foods1[0]?.kcal).toBeCloseTo(1230 / 4.184, 3);
     expect(foods1[0]?.serving).toBe(30);
+    // No code → name-slug canonical (fallback).
+    expect(foods1[0]?.canonical).toBe("off_paneer_cubes");
+    // T3 manual-off-foods: barcode makes canonicals UNIQUE per product, and
+    // physically impossible per-100g values are dropped, never served.
+    const hit2 = { hits: [
+      { code: "8901063014312", product_name: "Peanut Butter", nutriments: { "energy-kcal_100g": 588 } },
+      { code: 8901063999999, product_name: "Peanut Butter", nutriments: { "energy-kcal_100g": 612 } },
+      { product_name: "Prank Bar", nutriments: { "energy-kcal_100g": 1e9 } },
+    ] };
+    const p5 = createOpenFoodFactsProvider(() => Promise.resolve(new Response(JSON.stringify(hit2), { status: 200 })));
+    const foods5 = await p5.search("peanut butter", 5);
+    expect(foods5.map((f) => f.canonical)).toEqual(["off_8901063014312", "off_8901063999999"]);
+    expect(foods5.some((f) => f.name === "Prank Bar")).toBe(false);
     // First URL fails → legacy CGI fallback answers with `products`.
     let calls = 0;
     const p2 = createOpenFoodFactsProvider(() => {
