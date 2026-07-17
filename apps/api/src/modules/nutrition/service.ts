@@ -139,6 +139,30 @@ export async function consumeRetake(deps: NutritionDeps, userId: string, value: 
 
 // ── food search (Stage 3 sources: curated → cached OpenFoodFacts) ───────────
 
+const foodRefKey = (canonical: string): string => `food:ref:${digest(canonical.toLowerCase())}`;
+
+/** Card-5b smoke finding: every food a search RETURNS must stay resolvable by
+ *  its canonical afterwards — the manual-log/preview path looks foods up by
+ *  canonical, and an OFF slug full-text-searched against OFF misses (the
+ *  slug is ours, not their product name). So each returned food is also
+ *  cached individually under its canonical. */
+async function rememberFoods(deps: NutritionDeps, foods: readonly FoodReference[]): Promise<void> {
+  for (const food of foods) {
+    await deps.redis.setex(foodRefKey(food.canonical), FOOD_CACHE_TTL_SECONDS, JSON.stringify(food));
+  }
+}
+
+async function canonicalCached(deps: NutritionDeps, canonical: string): Promise<FoodReference | null> {
+  const raw = await deps.redis.get(foodRefKey(canonical));
+  if (raw === null) return null;
+  try {
+    const parsed = foodSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 async function cachedExternal(deps: NutritionDeps, query: string, limit: number): Promise<FoodReference[]> {
   const key = `food:off:${digest(`${query.toLowerCase()}:${String(limit)}`)}`;
   const cached = await deps.redis.get(key);
@@ -151,7 +175,10 @@ async function cachedExternal(deps: NutritionDeps, query: string, limit: number)
     }
   }
   const found = await deps.foods.search(query, limit);
-  if (found.length > 0) await deps.redis.setex(key, FOOD_CACHE_TTL_SECONDS, JSON.stringify(found));
+  if (found.length > 0) {
+    await deps.redis.setex(key, FOOD_CACHE_TTL_SECONDS, JSON.stringify(found));
+    await rememberFoods(deps, found);
+  }
   return found;
 }
 
@@ -165,6 +192,10 @@ export async function searchFoods(deps: NutritionDeps, query: string, limit: num
 async function findFood(deps: NutritionDeps, query: string): Promise<FoodReference | null> {
   const local = findCurated(query);
   if (local !== null) return local;
+  // Canonical-keyed cache first (foods a search already returned — the
+  // manual-log path); full-text search is the last resort.
+  const remembered = await canonicalCached(deps, query);
+  if (remembered !== null) return remembered;
   return (await cachedExternal(deps, query, 1))[0] ?? null;
 }
 

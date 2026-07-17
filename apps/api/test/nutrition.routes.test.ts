@@ -71,6 +71,32 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     }finally{await app3.close();}
   },30_000);
 
+  // Card-5b smoke finding: an OFF food shown by /v1/nutrition/foods could not
+  // be LOGGED manually — findFood full-text-searched the canonical slug and
+  // missed. Search results must stay resolvable by canonical afterwards.
+  it("a food returned by search is manually loggable by its canonical (OFF slug)",async()=>{
+    const offFood={canonical:"off_moong_dal_x",name:"Moong Dal",kcal:476,proteinG:21,carbsG:51,fatG:21,fiberG:0,serving:100,unit:"g",source:"openfoodfacts" as const};
+    // Provider answers ONLY the human query — a canonical-slug query misses,
+    // exactly like the real OFF full-text search.
+    const provider={search:(q:string)=>Promise.resolve(q==="moong dal"?[offFood]:[])};
+    const app4=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:fakeVision(),foodSearchProvider:provider}});
+    try{
+      await app4.inject({method:"POST",url:"/v1/auth/register",headers:{"content-type":"application/json"},payload:JSON.stringify({email:"p26a-off2@example.com",password:PASSWORD,displayName:"P26a OFF2"})});
+      const l=await app4.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email:"p26a-off2@example.com",password:PASSWORD})});
+      const access=l.cookies.find((c)=>c.name==="accessToken")?.value??"";
+      const searched=await app4.inject({method:"GET",url:"/v1/nutrition/foods?q=moong%20dal",cookies:{accessToken:access}});
+      expect(searched.statusCode).toBe(200);
+      expect(searched.json<{items:{canonical:string}[]}>().items.some((f)=>f.canonical==="off_moong_dal_x")).toBe(true);
+      const items=[{canonical:"off_moong_dal_x",grams:150}];
+      const preview=await app4.inject({method:"POST",url:"/v1/nutrition/meals/preview",headers:{"content-type":"application/json"},cookies:{accessToken:access},payload:JSON.stringify({items})});
+      expect(preview.statusCode,preview.body).toBe(200);
+      const created=await app4.inject({method:"POST",url:"/v1/nutrition/meals",headers:{"content-type":"application/json"},cookies:{accessToken:access},payload:JSON.stringify({mealName:"Moong Dal",takenAt:new Date().toISOString(),items})});
+      expect(created.statusCode,created.body).toBe(201);
+      const meal=created.json<{meal:{totals:{kcalPoint:number}}}>().meal;
+      expect(meal.totals.kcalPoint).toBe(Math.round(476*150/100));
+    }finally{await app4.close();}
+  },30_000);
+
   it("takenAt more than 24h in the future is a 400 (GAP-3)",async()=>{const future=new Date(Date.now()+25*60*60*1000).toISOString();const res=await inject("POST","/v1/nutrition/meals",cookieA,{mealName:"Time travel",takenAt:future,items:[{canonical:"dal_lentil_curry",grams:100}]});expect(res.statusCode).toBe(400);},30_000);
 
   it("Redis down: meal_scan fails CLOSED with 503 and the provider is never called (quotas.py doctrine)",async()=>{const downRedis=createMemoryRedis();const vision2=fakeVision();const app2=await buildApp(loadConfig(env),{redis:downRedis,nutrition:{visionProvider:vision2,foodSearchProvider:noExternal}});try{const login=await app2.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email:"p26a-alice@example.com",password:PASSWORD})});const access=login.cookies.find((c)=>c.name==="accessToken")?.value??"";downRedis.down=true;const res=await app2.inject({method:"POST",url:"/v1/nutrition/analyze-photo",headers:{"content-type":"application/json"},cookies:{accessToken:access},payload:JSON.stringify({imageBase64:jpeg,mimeType:"image/jpeg"})});expect(res.statusCode).toBe(503);expect(vision2.calls).toBe(0);}finally{await app2.close();}},30_000);
