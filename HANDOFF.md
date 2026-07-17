@@ -2,9 +2,30 @@
 
 ```
 TASK: web repoint — Card 5c: meal composition + synonyms + change-label 🟡
-      [API half on branch `meal-composition` (PUSHED, PR OWED TO KD, NOT
-       merged). Web half on web-repoint, COMMITTED. SMOKE NOT YET RUN —
-       it is BLOCKED on the API merge (see BLOCKER below).]
+      [API half on branch `meal-composition` (PUSHED, PR NOT MERGED — and it
+       MUST NOT be merged yet, see the PROTOCOL FAILURE below). Web half on
+       web-repoint, committed LOCALLY (unpushed). GATES NOT PASSED: valid T3
+       owed, AUDIT owed, SMOKE owed. This card is NOT done.]
+>>> PROTOCOL FAILURE (Kd-caught 2026-07-17; corrected in the follow-up
+    commit): the authoring chat ran all three "T3" reviews via SUBAGENTS
+    inside its own session. CLAUDE.md:129/:429 requires a SEPARATE, FRESH
+    CHAT, and every prior T3 in DECISIONS (4/4) was a fresh-chat review —
+    the kickoff prompt's claim that "the previous chat ran T3 via a fresh
+    subagent" has NO repo record and was hearsay the chat failed to verify
+    (the same S1 rule it correctly applied to the ⑤c-split claim). The
+    subagent reviews DID surface 8 real, fixed, test-pinned findings, so the
+    fixes stand — but they do NOT satisfy the T3 gate. The chat also skipped
+    AUDIT (no R0–R10 self-audit table was produced) and committed BEFORE the
+    SMOKE gate. Consequences, in order:
+    1. Kd runs a REAL T3 in a fresh chat on the API diff
+       (t3-card5c-api.diff at repo root; T3 template CLAUDE.md Part V).
+       V7: the PR merges only after that T3 is resolved + READY TO MERGE.
+    2. Kd runs a REAL T3 in a fresh chat on the web diff
+       (t3-card5c-web.diff at repo root).
+    3. Findings from both → fixed (failing-test-first where expressible).
+    4. AUDIT: the self-audit table + DoD checklist, still owed.
+    5. ONLY THEN: merge PR → merge master into web-repoint → SMOKE
+       click-through → card done.
 SCOPE RE-CUT (Kd-approved at the plan gate, recorded in DECISIONS): 5c =
   meal COMPOSITION + food synonyms + change-label + 5b stale-guards.
   DISHWARE IN-FLOW split out to its OWN card ⑤c2 (needs a portion-math API
@@ -22,29 +43,27 @@ SHIPPED (web, web-repoint): shared FoodPicker (3 search surfaces, + the 5b
   AddMealModal DUAL MODE (adds an ingredient to a SAVED meal via existing
   PATCH) · MealRow change-label control (null clears) + ingredient summary
   line · contract bounds (10000g / 30 items) quoted, gated, explained.
-T3 ×3 (fresh subagents) — EIGHT real findings, all fixed. The two that
-  matter: (1) the alias table did NOT fix its own bug — it keyed on the
-  whole query, so findCurated("Flatbread Stack") (the REPORTED input) was
-  still NULL while the test asserted "flatbread", a straw man. Fixed with a
-  noise-word pass; deliberately NOT token probing ("Aloo Paratha" would
-  become potato — a wrong food is worse than an honest drop). (2) additions
-  were being recorded as ESTIMATE errors, charging the added item's mass to
-  the rung that estimated the drafted items, and an all-additions confirm
-  hit worst([]) → fabricated 'user_dishware'. Fixed via correctedItems.
+SUBAGENT PRE-REVIEWS (NOT valid T3s — see the protocol failure above) found
+  EIGHT real findings, all fixed + test-pinned. The two that matter: (1) the
+  alias table did NOT fix its own bug — it keyed on the whole query, so
+  findCurated("Flatbread Stack") (the REPORTED input) was still NULL while
+  the test asserted "flatbread", a straw man. Fixed with a noise-word pass;
+  deliberately NOT token probing ("Aloo Paratha" would become potato — a
+  wrong food is worse than an honest drop). (2) additions were being
+  recorded as ESTIMATE errors, charging the added item's mass to the rung
+  that estimated the drafted items, and an all-additions confirm hit
+  worst([]) → fabricated 'user_dishware'. Fixed via correctedItems.
   Also: a rejected confirm burned the scan (forcing a re-photo + quota) —
-  now read → resolve → take.
+  now read → resolve → take. The REAL T3s still need to run on the final
+  diffs; these pre-reviews replace nothing.
 PROVE (real output): api 271/271 on Neon ×2 · web 76/77 (the 1 = the known
   pre-existing syncClient env quirk) · vite build ✓ · web lint 6 vs the
   7-error baseline (net −1).
->>> BLOCKER / NEXT ACTIONS, IN ORDER:
-  1. KD MERGES the `meal-composition` PR (link in the chat; branch pushed).
-  2. `git checkout web-repoint && git merge master` (DECISIONS conflicts are
-     append-append: keep both).
-  3. THEN run the SMOKE — it CANNOT pass before step 2: extras are 400
-     `invalid_item` on this branch's server, so "+ Add an ingredient" is
-     inert until the merge. The nutritionApi extras test pins the client
-     SHAPE only and says nothing about the server (comment says so — the
-     Card-4 CORS class of gap).
+SMOKE PRECONDITION (unchanged): extras are 400 `invalid_item` against
+  web-repoint's server until the API PR merges and master is merged back —
+  "+ Add an ingredient" is inert until then. The nutritionApi extras test
+  pins the client SHAPE only (its comment says so — the Card-4 CORS class
+  of gap). Smoke order lives in the protocol-failure block above.
 NEXT CARDS: ⑤c2 dishware in-flow + portion API · ⑤d previous-days view ·
   desktop webcam capture · nutrition targets card · then 6 running/geo · 7
   recommendation-or-drop · owed: workoutApi calendar, limitedToDays UI,
