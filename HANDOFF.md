@@ -16,16 +16,24 @@ TASK: web repoint — Card 5c: meal composition + synonyms + change-label 🟡
     subagent reviews DID surface 8 real, fixed, test-pinned findings, so the
     fixes stand — but they do NOT satisfy the T3 gate. The chat also skipped
     AUDIT (no R0–R10 self-audit table was produced) and committed BEFORE the
-    SMOKE gate. Consequences, in order:
-    1. Kd runs a REAL T3 in a fresh chat on the API diff
-       (t3-card5c-api.diff at repo root; T3 template CLAUDE.md Part V).
-       V7: the PR merges only after that T3 is resolved + READY TO MERGE.
-    2. Kd runs a REAL T3 in a fresh chat on the web diff
-       (t3-card5c-web.diff at repo root).
-    3. Findings from both → fixed (failing-test-first where expressible).
-    4. AUDIT: the self-audit table + DoD checklist, still owed.
-    5. ONLY THEN: merge PR → merge master into web-repoint → SMOKE
-       click-through → card done.
+    SMOKE gate. Consequences, in order (STATUS as of 2026-07-18):
+    1. ✅ Kd ran the REAL T3 (fresh chat) on the API diff → 3 findings + 1
+       advisory, ALL REAL (the biggest: findCurated("Hot Tea")→steak — a
+       wrong-food path the card itself shipped, which the subagent runs
+       missed). All fixed failing-test-first; DECISIONS records each.
+    2. ✅ Kd ran the REAL T3 (fresh chat) on the web diff → 3 actionable
+       findings, all fixed (MAX_ITEMS gate on saved-meal add; real
+       composeAddIngredient unit test; stale-live withheld via payload-key
+       match). DECISIONS records each.
+    3. ✅ Fixed + committed: API d5843ad/8653996 (pushed), web a09ae0f.
+    4. ✅ AUDIT table delivered in-chat at resolution (2026-07-18).
+    5. ⏳ REMAINING, in order: PR CI green (V7's closing gate — the full
+       272-suite could not complete locally, Kd's DNS flapped mid-run; every
+       failure ENOTFOUND, zero assertion failures; nutrition 36/36 + unit
+       13/13 + typecheck + lint green locally) → Kd merges PR → merge master
+       into web-repoint (DECISIONS conflicts are append-append: keep both) →
+       ONE combined SMOKE click-through (incl. re-smoke of the rewritten 5b
+       manual flow — see the web T3 resolution note) → card done.
 SCOPE RE-CUT (Kd-approved at the plan gate, recorded in DECISIONS): 5c =
   meal COMPOSITION + food synonyms + change-label + 5b stale-guards.
   DISHWARE IN-FLOW split out to its OWN card ⑤c2 (needs a portion-math API
