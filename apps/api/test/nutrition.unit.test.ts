@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CURATED_FOODS, findCurated, searchCurated } from "../src/modules/nutrition/foods.js";
-import { CONTAINER_PRIORS, COUNTABLE_PRIORS, DENSITY_G_PER_ML, resolvePortion } from "../src/modules/nutrition/portion-priors.js";
+import { CONTAINER_PRIORS, COUNTABLE_PRIORS, DENSITY_G_PER_ML, dishwareGrams, resolvePortion } from "../src/modules/nutrition/portion-priors.js";
 import { MEAL_VISION_PROMPT, createVisionProvider } from "../src/modules/nutrition/vision.adapter.js";
 import { VISION_INPUT_MICRO_USD_PER_MILLION, VISION_OUTPUT_MICRO_USD_PER_MILLION, visionCostMicro } from "../src/modules/nutrition/service.js";
 
@@ -65,6 +65,28 @@ describe("P2.6a nutrition pure pipeline", () => {
 
   it("the vision prompt nudges toward common local food names (Card 5c)", () => {
     expect(MEAL_VISION_PROMPT.toLowerCase()).toContain("roti");
+  });
+
+  // Card 5c2: the confirm-time dishware arm and the scan-time rung-1 resolver
+  // MUST compute grams identically — dishwareGrams is the one shared formula
+  // (volume × fill × density), so a bowl measured in the photo flow and the
+  // same bowl chosen at confirm can never disagree.
+  it("dishwareGrams equals the resolver's saved-dishware rung for the same inputs (Card 5c2)", () => {
+    // dal = medium density (1.0): 180 × 0.75 × 1.0 = 135.
+    expect(dishwareGrams(180, 0.75, "dal")).toBe(135);
+    // thick sabzi density 1.1: 200 × 1 × 1.1 = 220; thin rasam 0.95: 150 × 0.5 × 0.95 = 71.
+    expect(dishwareGrams(200, 1, "dry_sabzi")).toBe(220);
+    expect(dishwareGrams(150, 0.5, "rasam")).toBe(71);
+    // Equality with the resolver's rung-1 branch on the SAME dish + fill + food.
+    for (const [vol, fill, hint] of [[180, 0.75, "dal"], [250, 0.5, "sabzi"], [150, 1, "rasam"]] as const) {
+      const viaResolver = resolvePortion(
+        { canonicalHint: hint, container: "my_bowl", fillLevel: fill, sizeClass: null, count: null },
+        [{ containerClass: "my_bowl", volumeMl: vol, foodHint: null }],
+        100,
+      );
+      expect(viaResolver.gramsPoint).toBe(dishwareGrams(vol, fill, hint));
+      expect(viaResolver.portionSource).toBe("user_dishware");
+    }
   });
 
   it("copies Appendix B priors and resolves count > dishware > regional > default", () => {

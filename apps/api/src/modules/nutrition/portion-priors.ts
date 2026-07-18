@@ -38,6 +38,14 @@ const countKey = (hint: string): string | null => {
   return null;
 };
 
+/** Grams from a saved dish: volume(ml) × fill(0–1) × food density. The ONE
+ *  place both the scan-time rung-1 resolver (below) and the confirm-time
+ *  dishware arm (service.ts, Card 5c2) compute this, so a bowl measured in the
+ *  photo flow and the same bowl chosen at confirm can never disagree. */
+export function dishwareGrams(volumeMl: number, fillLevel: number, canonicalHint: string): number {
+  return Math.round(volumeMl * fillLevel * density(canonicalHint));
+}
+
 /** Stage 2 approved rungs: reliable count, 1, 3, 4. Anchor scaling is deferred. */
 export function resolvePortion(e: PortionEvidence, dishware: readonly SavedDishware[], defaultGrams: number): PortionResult {
   const ck = countKey(e.canonicalHint);
@@ -50,8 +58,7 @@ export function resolvePortion(e: PortionEvidence, dishware: readonly SavedDishw
   if (e.container !== null) {
     const saved = dishware.find((d) => d.containerClass === e.container && (d.foodHint === null || e.canonicalHint.includes(d.foodHint)));
     if (saved !== undefined) {
-      const fill = e.fillLevel ?? 1;
-      const grams = Math.round(saved.volumeMl * fill * density(e.canonicalHint));
+      const grams = dishwareGrams(saved.volumeMl, e.fillLevel ?? 1, e.canonicalHint);
       return { gramsPoint: grams, gramsRange: [grams, grams], portionSource: "user_dishware" };
     }
     const prior = containerPriors[e.container];
