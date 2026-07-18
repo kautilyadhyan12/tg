@@ -58,8 +58,16 @@ export interface MealWrite {
   mealName: string;
   items: MealItem[];
   origin: "photo" | "manual";
-  /** Confirm-time pre-edit estimates; a diff writes a corrections row. */
+  /** Confirm-time pre-edit estimates for the ESTIMATED items only; a diff
+   *  against correctedItems writes a corrections row. */
   originalItems?: MealItem[];
+  /** The user's confirmed values for exactly those estimated items — NOT the
+   *  whole meal. Card 5c: items the user ADDED by search were never estimated,
+   *  so they are excluded here; folding them in would charge their mass to the
+   *  draft's rung and corrupt the Stage-5 signal (DECISIONS 2026-07-12 T3
+   *  finding 3: the stamp is "the rung that produced the corrected-away
+   *  number"). Defaults to items when absent (the manual/no-extras path). */
+  correctedItems?: MealItem[];
 }
 
 // Stored jsonb was written by our own parser, so failure = DB drift → 500
@@ -171,11 +179,19 @@ export async function createMeal(sql: Sql, userId: string, input: MealWrite): Pr
     // 2B Stage 5: a confirm that changed the estimate records the correction —
     // stamped with the ORIGINAL estimate's rung (T3 P2.6a finding 3: the rung
     // that produced the wrong number is the telemetry signal, not the user's
-    // corrected state).
-    if (input.originalItems !== undefined && JSON.stringify(input.originalItems) !== JSON.stringify(input.items)) {
+    // corrected state). Card 5c: the diff is estimate-vs-confirmed for the
+    // ESTIMATED items only. An empty originalItems means nothing was estimated
+    // (an all-added meal), so there is no correction and no rung to stamp —
+    // worst([]) would otherwise fabricate the BEST rung ('user_dishware').
+    const corrected = input.correctedItems ?? input.items;
+    if (
+      input.originalItems !== undefined &&
+      input.originalItems.length > 0 &&
+      JSON.stringify(input.originalItems) !== JSON.stringify(corrected)
+    ) {
       await tx`
         INSERT INTO meal_log_corrections (meal_log_id, field, original, corrected, portion_source)
-        VALUES (${row.id}, 'items', ${tx.json(input.originalItems)}, ${tx.json(input.items)},
+        VALUES (${row.id}, 'items', ${tx.json(input.originalItems)}, ${tx.json(corrected)},
                 ${worst(input.originalItems)})`;
     }
     return toMeal(row);
