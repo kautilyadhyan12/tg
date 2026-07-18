@@ -376,6 +376,43 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     }finally{await owner.app.close();await stranger.app.close();}
   },30_000);
 
+  it("dishware arm is bounds-symmetric with the grams arm: a round-to-0 and an >10000g result both 400 (T3 F1)",async()=>{
+    const {app:a,call}=await freshApp("p26a-dish5@example.com");
+    try{
+      // 1 ml dish × 0.25 fill → rounds to 0 g → would breach mealItemSchema.positive.
+      const tiny=await call("POST","/v1/nutrition/dishware",{label:"thimble",containerClass:"x",volumeMl:1});
+      const tinyId=tiny.json<{dishware:{id:string}}>().dishware.id;
+      expect((await call("POST","/v1/nutrition/meals",{mealName:"z",takenAt:new Date().toISOString(),items:[{canonical:"dal_lentil_curry",dishwareId:tinyId,fillLevel:0.25}]})).statusCode).toBe(400);
+      // 10000 ml × full × thick(1.1) = 11000 g → over the grams arm's 10000 cap.
+      const huge=await call("POST","/v1/nutrition/dishware",{label:"vat",containerClass:"x",volumeMl:10000});
+      const hugeId=huge.json<{dishware:{id:string}}>().dishware.id;
+      expect((await call("POST","/v1/nutrition/meals",{mealName:"z",takenAt:new Date().toISOString(),items:[{canonical:"dry_sabzi",dishwareId:hugeId,fillLevel:1}]})).statusCode).toBe(400);
+    }finally{await a.close();}
+  },30_000);
+
+  it("PATCH re-measures a saved meal's item with dishware → grams recomputed, rung user_dishware (T3 F2)",async()=>{
+    const {app:a,call}=await freshApp("p26a-dish6@example.com");
+    try{
+      const dish=await call("POST","/v1/nutrition/dishware",{label:"My katori",containerClass:"standard_katori",volumeMl:200});
+      const dishwareId=dish.json<{dishware:{id:string}}>().dishware.id;
+      // start with a grams-based manual meal, then PATCH the item to a dishware measure.
+      const created=await call("POST","/v1/nutrition/meals",{mealName:"Dal",takenAt:new Date().toISOString(),items:[{canonical:"dal_lentil_curry",grams:150}]});
+      const mealId=created.json<{meal:{id:string}}>().meal.id;
+      const patched=await call("PATCH",`/v1/nutrition/meals/${mealId}`,{items:[{canonical:"dal_lentil_curry",dishwareId,fillLevel:0.5}]});
+      expect(patched.statusCode,patched.body).toBe(200);
+      const item=patched.json<{meal:{items:{gramsPoint:number;portionSource:string}[]}}>().meal.items[0];
+      expect(item?.gramsPoint).toBe(Math.round(200*0.5*1.0)); // 100 g
+      expect(item?.portionSource).toBe("user_dishware");
+      // a foreign dishwareId on PATCH is denied too (tenancy holds on this path).
+      const stranger=await freshApp("p26a-dish7@example.com");
+      try{
+        const s=await stranger.call("POST","/v1/nutrition/dishware",{label:"theirs",containerClass:"x",volumeMl:300});
+        const sId=s.json<{dishware:{id:string}}>().dishware.id;
+        expect((await call("PATCH",`/v1/nutrition/meals/${mealId}`,{items:[{canonical:"dal_lentil_curry",dishwareId:sId,fillLevel:0.5}]})).statusCode).toBe(400);
+      }finally{await stranger.app.close();}
+    }finally{await a.close();}
+  },30_000);
+
   it("photo confirm accepts a dishware-arm item on a drafted food (in-flow bowl measure)",async()=>{
     const {app:a,call}=await freshApp("p26a-dish4@example.com");
     try{

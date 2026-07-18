@@ -439,11 +439,16 @@ async function normalizeChosen(
   if ("dishwareId" in chosen) {
     const dish = await repo.getDishware(deps.sql, userId, chosen.dishwareId);
     if (dish === null) throw new NutritionError(400, "unknown_dishware", "Dishware not found.");
-    return {
-      canonical: chosen.canonical,
-      grams: dishwareGrams(dish.volumeMl, chosen.fillLevel, chosen.canonical),
-      dishwareRung: "user_dishware",
-    };
+    const grams = dishwareGrams(dish.volumeMl, chosen.fillLevel, chosen.canonical);
+    // Keep the dishware arm SYMMETRIC with the grams arm's bounds
+    // (chosenItemsSchema: positive, ≤10_000). A round-to-0 (tiny dish × low
+    // fill) would otherwise persist a MealItem the shared contract declares
+    // impossible (gramsPoint.positive) — unrenderable on read (T3 F1); an
+    // >10_000 result would bypass the cap the grams arm enforces at the schema.
+    if (grams < 1 || grams > 10_000) {
+      throw new NutritionError(400, "portion_out_of_range", "That portion is too small or too large to log — pick a different fill or enter grams.");
+    }
+    return { canonical: chosen.canonical, grams, dishwareRung: "user_dishware" };
   }
   return { canonical: chosen.canonical, grams: chosen.grams, dishwareRung: null };
 }
