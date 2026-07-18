@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
-import { createMemoryRedis } from "../src/redis.js";
+import { createMemoryRedis, type RedisLike } from "../src/redis.js";
 import { quotaKey } from "../src/modules/quotas/service.js";
 import type { VisionEvidence, VisionProvider, VisionResult } from "../src/modules/nutrition/vision.adapter.js";
 import type { FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
@@ -139,6 +139,142 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   },30_000);
 
   it("takenAt more than 24h in the future is a 400 (GAP-3)",async()=>{const future=new Date(Date.now()+25*60*60*1000).toISOString();const res=await inject("POST","/v1/nutrition/meals",cookieA,{mealName:"Time travel",takenAt:future,items:[{canonical:"dal_lentil_curry",grams:100}]});expect(res.statusCode).toBe(400);},30_000);
+
+  // Card 5c — meal composition. These run on FRESH app instances (own
+  // in-memory rate limiter + redis, the OFF-test precedent above) so they cost
+  // nothing against the shared per-IP auth budget (DECISIONS 2026-07-11 GAP-4).
+  async function freshApp(email:string){const a=await buildApp(loadConfig(env),{redis:createMemoryRedis(),nutrition:{visionProvider:fakeVision(),foodSearchProvider:noExternal}});await a.inject({method:"POST",url:"/v1/auth/register",headers:{"content-type":"application/json"},payload:JSON.stringify({email,password:PASSWORD,displayName:"P26a Comp"})});const l=await a.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email,password:PASSWORD})});const access=l.cookies.find((c)=>c.name==="accessToken")?.value??"";const call=(method:"GET"|"POST"|"PATCH"|"DELETE",url:string,body?:unknown)=>a.inject({method,url,cookies:{accessToken:access},headers:body===undefined?{}:{"content-type":"application/json"},...(body===undefined?{}:{payload:JSON.stringify(body)})});return{app:a,call};}
+
+  // A photo CONFIRM may carry EXTRA items the user added by search beyond the
+  // scan draft (the oats-with-milk case). The extra resolves via findFood at
+  // rung 'default'; the originalItems-vs-items diff records the addition as a
+  // Stage-5 correction (no new plumbing). Preview reads the same draft so live
+  // math == what is saved; the draft survives the preview.
+  it("confirm/preview accept an EXTRA item beyond the scan draft; addition is a Stage-5 correction",async()=>{
+    const {app:a,call}=await freshApp("p26a-comp1@example.com");
+    try{
+      const scan=await call("POST","/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
+      expect(scan.statusCode,scan.body).toBe(200);
+      const draft=scan.json<{scanToken:string;items:{canonical:string;gramsPoint:number}[]}>();
+      // draft = dal + roti; the user adds milk (curated, NOT in the draft).
+      const items=[...draft.items.map((i)=>({canonical:i.canonical,grams:120})),{canonical:"milk_whole",grams:200}];
+      // Preview includes the extra and does NOT consume the single-use draft.
+      const preview=await call("POST","/v1/nutrition/meals/preview",{scanToken:draft.scanToken,items});
+      expect(preview.statusCode,preview.body).toBe(200);
+      const previewed=preview.json<{totals:Record<string,number>;items:{canonical:string}[]}>();
+      expect(previewed.items.map((i)=>i.canonical)).toContain("milk_whole");
+      const confirmed=await call("POST","/v1/nutrition/meals",{scanToken:draft.scanToken,takenAt:new Date().toISOString(),items});
+      expect(confirmed.statusCode,confirmed.body).toBe(201);
+      const meal=confirmed.json<{meal:{id:string;totals:Record<string,number>;items:{canonical:string;portionSource:string}[]}}>().meal;
+      expect(meal.items).toHaveLength(3);
+      expect(meal.items.map((i)=>i.canonical)).toContain("milk_whole");
+      // added item is rung 'default' (it had no draft estimate).
+      expect(meal.items.find((i)=>i.canonical==="milk_whole")?.portionSource).toBe("default");
+      // preview equals what confirm saved.
+      expect(previewed.totals).toEqual(meal.totals);
+    }finally{await a.close();}
+  },30_000);
+
+  // T3 finding 2, degenerate case: a confirm whose items are ALL additions
+  // (every drafted item deselected) estimated nothing, so there is no
+  // correction and no rung to stamp. Without the guard, worst([]) falls through
+  // every .some() and fabricates the BEST rung ('user_dishware') — a row
+  // claiming user-dishware produced a corrected-away estimate that never was.
+  it("an all-additions confirm writes NO correction row (worst([]) can never fabricate a rung)",async()=>{
+    const {app:a,call}=await freshApp("p26a-comp4@example.com");
+    try{
+      const scan=await call("POST","/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
+      const draft=scan.json<{scanToken:string}>();
+      const confirmed=await call("POST","/v1/nutrition/meals",{scanToken:draft.scanToken,takenAt:new Date().toISOString(),items:[{canonical:"milk_whole",grams:200}]});
+      expect(confirmed.statusCode,confirmed.body).toBe(201);
+      const meal=confirmed.json<{meal:{id:string;items:{canonical:string}[]}}>().meal;
+      expect(meal.items.map((i)=>i.canonical)).toEqual(["milk_whole"]);
+      const corr=await sql<{portion_source:string|null}[]>`SELECT portion_source FROM meal_log_corrections WHERE meal_log_id=${meal.id}`;
+      expect(corr).toHaveLength(0);
+    }finally{await a.close();}
+  },30_000);
+
+  // T3 Card 5c F3: the confirm classification branch must NOT discard a draft
+  // that take() successfully recovers. Simulate a Redis flap where get() is
+  // momentarily blind (returns null) but take()'s Lua GET+DEL still sees the
+  // key — confirmMeal must build from the recovered draft, not 400 it away.
+  it("a confirm whose readDraft.get is blind but take() recovers the draft still succeeds (F3 flap)",async()=>{
+    const base=createMemoryRedis();
+    let blindGets=1; // blind for exactly the confirm's first draft get, then normal
+    const flaky:RedisLike={
+      incrWithTtl:(k,t)=>base.incrWithTtl(k,t),
+      // The draft key (`meal-scan:`) reads null once — the "Redis momentarily
+      // down" moment. take() below still sees it: the flap recovered.
+      get:(k)=>k.startsWith("meal-scan:")&&blindGets-->0?Promise.resolve(null):base.get(k),
+      setex:(k,t,v)=>base.setex(k,t,v),
+      take:(k)=>base.take(k),
+      del:(k)=>base.del(k),
+      close:()=>base.close(),
+    };
+    const app6=await buildApp(loadConfig(env),{redis:flaky,nutrition:{visionProvider:fakeVision(),foodSearchProvider:noExternal}});
+    try{
+      await app6.inject({method:"POST",url:"/v1/auth/register",headers:{"content-type":"application/json"},payload:JSON.stringify({email:"p26a-flap@example.com",password:PASSWORD,displayName:"P26a Flap"})});
+      const l=await app6.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email:"p26a-flap@example.com",password:PASSWORD})});
+      const access=l.cookies.find((c)=>c.name==="accessToken")?.value??"";
+      const c=(url:string,body:unknown)=>app6.inject({method:"POST",url,headers:{"content-type":"application/json"},cookies:{accessToken:access},payload:JSON.stringify(body)});
+      const scan=await c("/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
+      const draft=scan.json<{scanToken:string;items:{canonical:string}[]}>();
+      const confirmed=await c("/v1/nutrition/meals",{scanToken:draft.scanToken,takenAt:new Date().toISOString(),items:draft.items.map((i)=>({canonical:i.canonical,grams:100}))});
+      // The blind get would have 400'd on the old code; the recovered take saves it.
+      expect(confirmed.statusCode,confirmed.body).toBe(201);
+    }finally{await app6.close();}
+  },30_000);
+
+  // The other half of T3 finding 2: when the user BOTH corrects the estimate
+  // and adds an item, the correction row covers the estimated items ONLY —
+  // stamped with the rung that produced the corrected-away number.
+  it("a corrected estimate + an added item: the correction records the estimate only, never the addition",async()=>{
+    const {app:a,call}=await freshApp("p26a-comp3@example.com");
+    try{
+      const scan=await call("POST","/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
+      const draft=scan.json<{scanToken:string;items:{canonical:string;gramsPoint:number}[]}>();
+      const items=[...draft.items.map((i)=>({canonical:i.canonical,grams:i.gramsPoint+37})),{canonical:"milk_whole",grams:200}];
+      const confirmed=await call("POST","/v1/nutrition/meals",{scanToken:draft.scanToken,takenAt:new Date().toISOString(),items});
+      expect(confirmed.statusCode,confirmed.body).toBe(201);
+      const meal=confirmed.json<{meal:{id:string;items:unknown[]}}>().meal;
+      expect(meal.items).toHaveLength(3);
+      const rows=await sql<{field:string;original:{canonical:string}[];corrected:{canonical:string}[];portion_source:string|null}[]>`
+        SELECT field,original,corrected,portion_source FROM meal_log_corrections WHERE meal_log_id=${meal.id} AND field='items'`;
+      expect(rows).toHaveLength(1);
+      const row=rows[0];
+      // Both sides carry the 2 ESTIMATED items; milk appears on neither.
+      expect(row?.original.map((i)=>i.canonical)).toEqual(draft.items.map((i)=>i.canonical));
+      expect(row?.corrected.map((i)=>i.canonical)).toEqual(draft.items.map((i)=>i.canonical));
+      expect(row?.corrected.some((i)=>i.canonical==="milk_whole")).toBe(false);
+      // stamped with the ESTIMATE's rung (dal/roti resolve via regional priors),
+      // never the added item's 'default'.
+      expect(row?.portion_source).toBe("regional_prior");
+    }finally{await a.close();}
+  },30_000);
+
+  // T3 Card 5c: a rejected confirm must NOT consume the scan. takeDraft is
+  // destructive, so resolving items after it meant one unresolvable ingredient
+  // killed the scanToken outright — the user's only way back was another photo
+  // (a fresh vision call + another quota unit) to fix one bad item.
+  it("an EXTRA item with an unknown canonical 400s the confirm WITHOUT burning the scan; mealType persists through a photo confirm (5b T3 advisory)",async()=>{
+    const {app:a,call}=await freshApp("p26a-comp2@example.com");
+    try{
+      const scan=await call("POST","/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
+      const d=scan.json<{scanToken:string;items:{canonical:string}[]}>();
+      const good=d.items.map((i)=>({canonical:i.canonical,grams:100}));
+      // 1) unknown extra → 400 (never a silent drop).
+      const bad=[...good,{canonical:"definitely_not_a_food_xyz",grams:100}];
+      expect((await call("POST","/v1/nutrition/meals",{scanToken:d.scanToken,takenAt:new Date().toISOString(),items:bad})).statusCode).toBe(400);
+      // 2) …and the SAME scanToken still works once the bad item is dropped —
+      //    the whole point: fixing a typo must not cost another photo. This
+      //    doubles as the mealType-through-photo-confirm assertion.
+      const confirmed=await call("POST","/v1/nutrition/meals",{scanToken:d.scanToken,takenAt:new Date().toISOString(),mealType:"breakfast",items:good});
+      expect(confirmed.statusCode,confirmed.body).toBe(201);
+      expect(confirmed.json<{meal:{mealType:string|null}}>().meal.mealType).toBe("breakfast");
+      // 3) the draft IS single-use: a replay of the now-consumed token 400s.
+      expect((await call("POST","/v1/nutrition/meals",{scanToken:d.scanToken,takenAt:new Date().toISOString(),items:good})).statusCode).toBe(400);
+    }finally{await a.close();}
+  },30_000);
 
   it("Redis down: meal_scan fails CLOSED with 503 and the provider is never called (quotas.py doctrine)",async()=>{const downRedis=createMemoryRedis();const vision2=fakeVision();const app2=await buildApp(loadConfig(env),{redis:downRedis,nutrition:{visionProvider:vision2,foodSearchProvider:noExternal}});try{const login=await app2.inject({method:"POST",url:"/v1/auth/login",headers:{"content-type":"application/json"},payload:JSON.stringify({email:"p26a-alice@example.com",password:PASSWORD})});const access=login.cookies.find((c)=>c.name==="accessToken")?.value??"";downRedis.down=true;const res=await app2.inject({method:"POST",url:"/v1/nutrition/analyze-photo",headers:{"content-type":"application/json"},cookies:{accessToken:access},payload:JSON.stringify({imageBase64:jpeg,mimeType:"image/jpeg"})});expect(res.statusCode).toBe(503);expect(vision2.calls).toBe(0);}finally{await app2.close();}},30_000);
 

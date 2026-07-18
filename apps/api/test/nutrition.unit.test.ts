@@ -1,17 +1,70 @@
 import { describe, expect, it } from "vitest";
-import { CURATED_FOODS, findCurated } from "../src/modules/nutrition/foods.js";
+import { CURATED_FOODS, findCurated, searchCurated } from "../src/modules/nutrition/foods.js";
 import { CONTAINER_PRIORS, COUNTABLE_PRIORS, DENSITY_G_PER_ML, resolvePortion } from "../src/modules/nutrition/portion-priors.js";
 import { MEAL_VISION_PROMPT, createVisionProvider } from "../src/modules/nutrition/vision.adapter.js";
 import { VISION_INPUT_MICRO_USD_PER_MILLION, VISION_OUTPUT_MICRO_USD_PER_MILLION, visionCostMicro } from "../src/modules/nutrition/service.js";
 
 describe("P2.6a nutrition pure pipeline", () => {
-  it("preserves all 130 curated rows with unique source lines", () => {
-    expect(CURATED_FOODS).toHaveLength(130);
-    expect(new Set(CURATED_FOODS.map((f) => f.sourceLine)).size).toBe(130);
+  it("preserves the curated rows with unique source lines (130 salvage + the Kd curd row)", () => {
+    // 130 from food_database.py + 1 Kd-approved USDA row (Curd / Dahi,
+    // sourceLine 0 = non-salvage; DECISIONS 2026-07-18).
+    expect(CURATED_FOODS).toHaveLength(131);
+    expect(new Set(CURATED_FOODS.map((f) => f.sourceLine)).size).toBe(131);
     expect(findCurated("roti")?.sourceLine).toBe(151);
     expect(findCurated("dal")?.kcal).toBe(110);
     expect(findCurated("paneer")?.proteinG).toBe(18);
     expect(findCurated("idli")?.serving).toBe(30);
+  });
+
+  // Card 5c — food name aliases: the Card-5b smoke roti case ("Flatbread
+  // Stack" → 0 curated matches → 0 kcal) plus common Indian/English synonyms
+  // the curated table's English labels miss. Naming metadata only.
+  it("resolves synonym aliases to curated canonicals without breaking exact hits (Card 5c)", () => {
+    // THE REPORTED INPUT (cutover.md:129-132): vision emitted the descriptive
+    // "Flatbread Stack", not the bare synonym — pinning "flatbread" alone was a
+    // straw man that passed while the real bug stayed live (T3 finding 1).
+    expect(findCurated("Flatbread Stack")?.canonical).toBe("roti_chapati");
+    expect(findCurated("flatbread")?.canonical).toBe("roti_chapati");
+    expect(findCurated("chapati")?.canonical).toBe("roti_chapati");
+    expect(findCurated("phulka")?.canonical).toBe("roti_chapati");
+    expect(findCurated("aloo")?.canonical).toBe("potato_baked");
+    expect(findCurated("rajma")?.canonical).toBe("kidney_beans_cooked");
+    expect(findCurated("capsicum")?.canonical).toBe("bell_pepper");
+    // aliases never disturb the exact-name hits the row-inventory test pins.
+    expect(findCurated("roti")?.sourceLine).toBe(151);
+    expect(findCurated("dal")?.kcal).toBe(110);
+    // an aliased food surfaces in the search dropdown too.
+    expect(searchCurated("flatbread", 5).some((f) => f.canonical === "roti_chapati")).toBe(true);
+    expect(searchCurated("aloo", 5).some((f) => f.canonical === "potato_baked")).toBe(true);
+    // Noise words reveal a real head noun but NEVER invent one: a compound dish
+    // whose head we don't stock still drops honestly (Card 5b's empty state) —
+    // "Aloo Paratha" must NOT become potato, and "Beef Stew" not ground beef.
+    expect(findCurated("Pizza Slice")?.canonical).toBe("pizza_cheese");
+    expect(findCurated("Aloo Paratha")).toBeNull();
+    expect(findCurated("Beef Stew")).toBeNull();
+    // T3 F1 (the regression this card SHIPPED): a temperature/freshness word is
+    // NOT arrangement — stripping it changed food identity, and the bare head
+    // then fuzzy-matched ACROSS word boundaries ("tea" inside s-TEA-k, "ham"
+    // inside HAM-burger). Both must drop honestly, never mis-resolve.
+    expect(findCurated("Hot Tea")).toBeNull();          // was → steak
+    expect(findCurated("Hot Chocolate")).toBeNull();    // was → dark chocolate
+    expect(findCurated("Ham Slice")).toBeNull();        // "ham" ⊄ hamburger by token
+    expect(findCurated("Iced Coffee")).toBeNull();
+    // T3 advisory RESOLVED (Kd, DECISIONS 2026-07-18): curd/dahi no longer
+    // alias to GREEK yogurt (that was a ~3× protein lie). A real Curd / Dahi
+    // row was added, so they resolve to their OWN honest macros — never Greek
+    // yogurt's 10 g protein.
+    expect(findCurated("curd")?.canonical).toBe("curd_dahi");
+    expect(findCurated("dahi")?.canonical).toBe("curd_dahi");
+    expect(findCurated("curd")?.proteinG).toBe(3.5);
+    expect(findCurated("curd")?.proteinG).not.toBe(10); // not Greek yogurt
+    // A prototype key is not an alias (T3 finding 4).
+    expect(findCurated("constructor")).toBeNull();
+    expect(findCurated("__proto__")).toBeNull();
+  });
+
+  it("the vision prompt nudges toward common local food names (Card 5c)", () => {
+    expect(MEAL_VISION_PROMPT.toLowerCase()).toContain("roti");
   });
 
   it("copies Appendix B priors and resolves count > dishware > regional > default", () => {

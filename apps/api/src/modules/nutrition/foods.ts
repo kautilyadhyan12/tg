@@ -33,14 +33,126 @@ row("Popcorn (plain)",387,12,78,4.5,14,30,"cup",144),row("Honey",304,.3,82,0,.2,
 row("Roti / Chapati",297,11,46,7.5,5,40,"roti",151),row("Naan",310,9,55,6,2,90,"naan",152),row("Dal (lentil curry)",110,6,18,1.5,4,100,"g",153),row("Paneer",296,18,4,23,0,100,"g",154),row("Chicken curry",175,14,6,11,1,100,"g",155),
 row("Butter chicken",220,14,8,15,1,100,"g",156),row("Biryani (chicken)",200,9,26,7,1.5,100,"g",157),row("Samosa",308,5,32,18,3,50,"samosa",158),row("Idli",39,2,8,.1,.4,30,"idli",159),row("Dosa (plain)",168,3.9,30,3.7,1,75,"dosa",160),
 row("Ramen (cooked)",436,10,63,16,2,100,"g",163),row("Pad Thai",192,8,30,5,2,100,"g",164),row("Spring roll",138,5,21,4,2,50,"roll",165),row("Dumplings (pork)",200,8,26,7,2,100,"g",166),row("Pho (beef)",350,25,45,8,2,400,"bowl",167),
+// Kd-approved 2026-07-18, NOT from food_database.py (sourceLine 0 = no salvage
+// line): plain Indian curd/dahi, per 100 g from USDA SR #01116 "Yogurt, plain,
+// whole milk" (61/3.5/4.7/3.3) — dahi is fermented whole milk, so its macros
+// track whole milk, NOT Greek yogurt. Added so "curd"/"dahi" resolve by
+// substring to their OWN honest ~3.5 g protein instead of the removed alias's
+// Greek-yogurt 10 g (a ~3× overstatement; T3 advisory, DECISIONS 2026-07-18).
+row("Curd / Dahi",61,3.5,4.7,3.3,0,100,"g",0),
 ];
+
+// Card 5c — food name aliases. Each key (a slug) on the LEFT resolves to a
+// curated canonical on the RIGHT. Naming metadata ONLY (no kcal/macros); every
+// row is a deliberate, reviewed judgment call (DECISIONS 2026-07-17). Fixes the
+// Card-5b smoke's "roti photo → 'Flatbread Stack' → 0 matches → 0 kcal" case
+// plus common Indian/English synonyms the curated table's English labels miss.
+// Only synonyms the existing substring match CANNOT reach are listed here
+// (e.g. "biryani"→biryani_chicken already resolves by substring, so it is not).
+// A Map, not an object literal: a user-controlled key like "constructor" or
+// "__proto__" indexes an object literal into Object.prototype and hands back a
+// Function, which the `Readonly<Record<string,string>>` type flatly denies
+// (T3 Card 5c finding 4). Map.get is sound and prototype-free.
+const FOOD_ALIASES = new Map<string, string>(Object.entries({
+  // roti family — the trigger
+  roti: "roti_chapati", chapati: "roti_chapati", flatbread: "roti_chapati",
+  phulka: "roti_chapati", rotli: "roti_chapati", fulka: "roti_chapati",
+  // dal spellings
+  daal: "dal_lentil_curry", dhal: "dal_lentil_curry", dahl: "dal_lentil_curry",
+  // NB curd/dahi are NOT aliased to greek_yogurt_plain (T3 Card 5c advisory):
+  // Indian curd/dahi is set yogurt at ~3.5 g protein/100 g vs Greek yogurt's
+  // ~10 g, so that alias saved a ~3× protein overstatement. Instead a real
+  // "Curd / Dahi" curated row was added (Kd, DECISIONS 2026-07-18), so both
+  // "curd" and "dahi" now resolve by SUBSTRING to canonical "curd_dahi" with
+  // their own honest macros — no alias entry needed here.
+  // staples under local names
+  aloo: "potato_baked", alu: "potato_baked",
+  chawal: "rice_white_cooked", bhaat: "rice_white_cooked",
+  anda: "egg_whole_large",
+  chana: "chickpeas_cooked", chhole: "chickpeas_cooked", chole: "chickpeas_cooked",
+  rajma: "kidney_beans_cooked",
+  capsicum: "bell_pepper", maize: "corn_cooked", groundnut: "peanuts",
+  prawns: "shrimp_cooked", prawn: "shrimp_cooked",
+}));
+
+// Vision returns DESCRIPTIVE names, not bare synonyms — the reported bug was
+// canonical_hint "Flatbread Stack", not "flatbread" (T3 Card 5c finding 1).
+// These words are PURE arrangement/quantity/presentation and are NEVER part of
+// a food's identity, so dropping them can only reveal the real head noun.
+// DELIBERATELY EXCLUDED (T3 F1): temperature/freshness/state words —
+// hot/warm/iced/fresh/plain/homemade — because they DO change identity ("hot
+// chocolate" ≠ chocolate bar, "iced coffee" ≠ black coffee), exactly the class
+// "stew" is kept out for. And we never probe arbitrary tokens: "Aloo Paratha"
+// would resolve to potato, and a WRONG food is worse than an honest miss
+// (Card 5b's empty state).
+const NOISE_WORDS: ReadonlySet<string> = new Set([
+  "stack", "stacks", "pile", "piles", "plate", "plates", "plateful", "bowl", "bowls",
+  "serving", "servings", "portion", "portions", "piece", "pieces", "slice", "slices",
+  "helping", "helpings", "of", "with", "a", "an", "the",
+]);
+
+const toTokens = (slugged: string): string[] => slugged.split("_").filter((w) => w !== "");
+
+/** Slug with the noise words removed; null when nothing (or everything) went. */
+function denoise(slugged: string): string | null {
+  const kept = toTokens(slugged).filter((w) => !NOISE_WORDS.has(w));
+  if (kept.length === 0) return null;
+  const rebuilt = kept.join("_");
+  return rebuilt === slugged ? null : rebuilt;
+}
+
+/** Token-BOUNDARY substring match for the denoised retry (T3 F1): a stripped
+ *  head must match a canonical only on whole `_`-tokens, never mid-word —
+ *  "tea" is a token of nothing, so it can no longer land inside s-TEA-k, nor
+ *  "ham" inside HAM-burger. Matches when one token list is a prefix of the
+ *  other ("pizza" ⇒ pizza_cheese; "chicken curry" ⇒ chicken_curry). */
+function byTokenBoundary(slugged: string): CuratedFood | undefined {
+  const qt = toTokens(slugged);
+  if (qt.length === 0) return undefined;
+  return CURATED_FOODS.find((f) => {
+    const ct = toTokens(f.canonical);
+    const n = Math.min(qt.length, ct.length);
+    for (let i = 0; i < n; i++) if (qt[i] !== ct[i]) return false;
+    return true;
+  });
+}
+
+/** Alias lookup on the slug, then on its de-noised form ("flatbread_stack" →
+ *  "flatbread" → roti_chapati). */
+function aliasTargetFor(slugged: string): string | undefined {
+  const direct = FOOD_ALIASES.get(slugged);
+  if (direct !== undefined) return direct;
+  const stripped = denoise(slugged);
+  return stripped === null ? undefined : FOOD_ALIASES.get(stripped);
+}
 
 export function searchCurated(query: string, limit: number): CuratedFood[] {
   const q = query.toLowerCase().trim();
-  return CURATED_FOODS.map((food) => { const name = food.name.toLowerCase(); const score = name === q ? 100 : name.startsWith(q) ? 80 : name.includes(q) ? 50 : q.split(/\s+/).every((word) => name.includes(word)) ? 30 : 0; return { food, score }; }).filter((v) => v.score > 0).sort((a, b) => b.score - a.score).slice(0, limit).map((v) => v.food);
+  const aliasTarget = aliasTargetFor(slug(q));
+  return CURATED_FOODS.map((food) => { const name = food.name.toLowerCase(); const score = name === q ? 100 : food.canonical === aliasTarget ? 90 : name.startsWith(q) ? 80 : name.includes(q) ? 50 : q.split(/\s+/).every((word) => name.includes(word)) ? 30 : 0; return { food, score }; }).filter((v) => v.score > 0).sort((a, b) => b.score - a.score).slice(0, limit).map((v) => v.food);
 }
+
+const bySubstring = (q: string): CuratedFood | undefined =>
+  CURATED_FOODS.find((f) => f.canonical === q || f.canonical.includes(q) || q.includes(f.canonical));
 
 export function findCurated(query: string): CuratedFood | null {
   const q = slug(query);
-  return CURATED_FOODS.find((f) => f.canonical === q || f.canonical.includes(q) || q.includes(f.canonical)) ?? searchCurated(query, 1)[0] ?? null;
+  // Alias first: a synonym must beat the fuzzy substring pass (which is exactly
+  // what misses "flatbread"/"aloo"/"curd" today).
+  const aliasTarget = aliasTargetFor(q);
+  if (aliasTarget !== undefined) {
+    const hit = CURATED_FOODS.find((f) => f.canonical === aliasTarget);
+    if (hit !== undefined) return hit;
+  }
+  const stripped = denoise(q);
+  return (
+    bySubstring(q) ??
+    // "Pizza Slice" → "pizza" → pizza_cheese. The denoised retry uses
+    // TOKEN-BOUNDARY matching, not bySubstring's cross-word includes, so a
+    // stripped head can never fuzzy-match mid-word (T3 F1: "Hot Tea" → "tea"
+    // must not become steak).
+    (stripped === null ? undefined : byTokenBoundary(stripped)) ??
+    searchCurated(query, 1)[0] ??
+    null
+  );
 }

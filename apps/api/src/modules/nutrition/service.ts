@@ -408,41 +408,121 @@ async function takeDraft(deps: NutritionDeps, userId: string, value: string): Pr
   return parseDraft(raw, userId);
 }
 
-/** Non-destructive draft read for preview — get, never take: the single-use
- *  confirm draft must survive any number of previews. RedisLike.get conflates
- *  missing and backend-down as null; preview degrades to 400 either way (the
- *  client falls back to the analysis estimates). */
-async function peekDraft(deps: NutritionDeps, userId: string, value: string): Promise<Draft> {
+/** Non-destructive draft read — get, never take: the single-use confirm draft
+ *  must survive previews (and a rejected confirm). RedisLike.get conflates
+ *  missing and backend-down as null, so callers that need to tell those apart
+ *  fall through to takeDraft, whose Lua GET+DEL does distinguish them. */
+async function readDraft(deps: NutritionDeps, userId: string, value: string): Promise<Draft | null> {
   const raw = await deps.redis.get(scanKey(userId, value));
-  if (raw === null) throw new NutritionError(400, "invalid_scan", "Invalid or expired scan token.");
-  return parseDraft(raw, userId);
+  return raw === null ? null : parseDraft(raw, userId);
 }
 
-export async function confirmMeal(deps: NutritionDeps, userId: string, input: ConfirmMealRequest): Promise<Meal> {
-  const draft = await takeDraft(deps, userId, input.scanToken);
+/** Preview's read: degrades to 400 whether the draft is missing or Redis is
+ *  down (the client falls back to the analysis estimates either way). */
+async function peekDraft(deps: NutritionDeps, userId: string, value: string): Promise<Draft> {
+  const draft = await readDraft(deps, userId, value);
+  if (draft === null) throw new NutritionError(400, "invalid_scan", "Invalid or expired scan token.");
+  return draft;
+}
+
+/** Photo confirm/preview item resolution (Card 5c — meal composition). A
+ *  chosen item either belongs to the scan draft (its rung is preserved) or is
+ *  an EXTRA the user added by search (the oats-with-milk case) — resolved via
+ *  findFood at rung 'default'; the canonical cache makes OFF foods loggable
+ *  here too. `original` is the item's pre-edit draft estimate, or null for an
+ *  extra (an extra was never estimated, so it is EXCLUDED from the Stage-5
+ *  correction pair entirely — an addition is not an estimate error; DECISIONS
+ *  2026-07-17). ONE implementation for confirm and preview so live math cannot
+ *  diverge from what is saved (T3). */
+async function resolveDraftItem(
+  deps: NutritionDeps,
+  draft: Draft,
+  chosen: { canonical: string; grams: number },
+): Promise<{ item: MealItem; original: MealItem | null }> {
+  const food = draft.foods.find((f) => f.canonical === chosen.canonical);
+  const estimate = draft.items.find((i) => i.canonical === chosen.canonical);
+  if (food !== undefined && estimate !== undefined) {
+    return {
+      // User-chosen grams collapse the range; the ESTIMATE's rung is preserved.
+      item: nutritionItem(food, chosen.grams, [chosen.grams, chosen.grams], estimate.portionSource),
+      original: nutritionItem(food, estimate.gramsPoint, estimate.gramsRange, estimate.portionSource),
+    };
+  }
+  const extra = await findFood(deps, chosen.canonical);
+  if (extra === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
+  return { item: nutritionItem(extra, chosen.grams, [chosen.grams, chosen.grams], "default"), original: null };
+}
+
+/** Resolve every chosen item against the draft (extras included) into the meal
+ *  items plus the estimated-only Stage-5 correction pair. Pure w.r.t. Redis —
+ *  it does not consume the draft, so a rejection here never burns the scan. */
+async function buildConfirmItems(
+  deps: NutritionDeps,
+  draft: Draft,
+  input: ConfirmMealRequest,
+): Promise<{ items: MealItem[]; originalItems: MealItem[]; correctedItems: MealItem[] }> {
   const items: MealItem[] = [];
   const originalItems: MealItem[] = [];
+  const correctedItems: MealItem[] = [];
   for (const chosen of input.items) {
-    const food = draft.foods.find((f) => f.canonical === chosen.canonical);
-    const estimate = draft.items.find((i) => i.canonical === chosen.canonical);
-    if (food === undefined || estimate === undefined) {
-      throw new NutritionError(400, "invalid_item", "A confirmed item was not part of this scan.");
+    const { item, original } = await resolveDraftItem(deps, draft, chosen);
+    items.push(item);
+    // Only ESTIMATED items form the Stage-5 correction pair. An added item was
+    // never estimated, so it belongs to the meal but not to the estimate-error
+    // signal (T3 Card 5c; DECISIONS 2026-07-12 T3 finding 3).
+    if (original !== null) {
+      originalItems.push(original);
+      correctedItems.push(item);
     }
-    originalItems.push(nutritionItem(food, estimate.gramsPoint, estimate.gramsRange, estimate.portionSource));
-    // User-chosen grams collapse the range; the ESTIMATE's rung is preserved
-    // (the correction row records what the rung originally produced).
-    items.push(nutritionItem(food, chosen.grams, [chosen.grams, chosen.grams], estimate.portionSource));
   }
+  return { items, originalItems, correctedItems };
+}
+
+async function persistConfirm(
+  deps: NutritionDeps,
+  userId: string,
+  input: ConfirmMealRequest,
+  draft: Draft,
+  built: { items: MealItem[]; originalItems: MealItem[]; correctedItems: MealItem[] },
+): Promise<Meal> {
   const row = await repo.createMeal(deps.sql, userId, {
+    correctedItems: built.correctedItems,
     takenAt: new Date(input.takenAt),
     mealType: input.mealType ?? null,
     mealName: draft.mealName,
-    items,
+    items: built.items,
     origin: "photo",
-    originalItems,
+    originalItems: built.originalItems,
   });
   await awardMealBadges(deps, userId);
   return asMeal(row);
+}
+
+export async function confirmMeal(deps: NutritionDeps, userId: string, input: ConfirmMealRequest): Promise<Meal> {
+  // Resolve EVERYTHING before consuming the single-use draft (T3 Card 5c).
+  // takeDraft is destructive, so resolving after it meant one unresolvable
+  // item (an added ingredient whose canonical has aged out of the food cache)
+  // destroyed the scan: the 400 left the user with a dead scanToken and no way
+  // back except another photo — a fresh vision call and another quota unit.
+  const peeked = await readDraft(deps, userId, input.scanToken);
+  if (peeked !== null) {
+    const built = await buildConfirmItems(deps, peeked, input);
+    // Everything that could reject has passed — NOW consume the draft. Still
+    // the atomic single-use gate: two concurrent confirms both read, but only
+    // one take() returns the draft; the loser gets its 400 here.
+    await takeDraft(deps, userId, input.scanToken);
+    return await persistConfirm(deps, userId, input, peeked, built);
+  }
+  // get() returned null: the draft is expired, OR Redis was momentarily down.
+  // take()'s Lua GET+DEL distinguishes them (undefined → 400, null → 503) and,
+  // if Redis flapped back up in the window, returns the LIVE draft — which we
+  // must not discard by blindly throwing 400 (T3 F3: that path was added to
+  // stop scans being burned, and would itself burn a recovered one). Build
+  // from the taken draft (already consumed, so a resolve failure here burns it
+  // — accepted only in this rare flap window).
+  const recovered = await takeDraft(deps, userId, input.scanToken);
+  const built = await buildConfirmItems(deps, recovered, input);
+  return await persistConfirm(deps, userId, input, recovered, built);
 }
 
 /** Search-resolved items for the manual flow — ONE implementation shared by
@@ -494,12 +574,9 @@ export async function previewMeal(
   const draft = await peekDraft(deps, userId, input.scanToken);
   const items: MealItem[] = [];
   for (const chosen of input.items) {
-    const food = draft.foods.find((f) => f.canonical === chosen.canonical);
-    const estimate = draft.items.find((i) => i.canonical === chosen.canonical);
-    if (food === undefined || estimate === undefined) {
-      throw new NutritionError(400, "invalid_item", "A previewed item was not part of this scan.");
-    }
-    items.push(nutritionItem(food, chosen.grams, [chosen.grams, chosen.grams], estimate.portionSource));
+    // Same resolution as confirmMeal (extras included) so preview == save.
+    const { item } = await resolveDraftItem(deps, draft, chosen);
+    items.push(item);
   }
   return { items, totals: totals(items) };
 }
