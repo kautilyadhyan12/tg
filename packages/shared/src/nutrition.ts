@@ -47,10 +47,22 @@ const takenAtSchema = z
     message: "must not be more than 24h in the future",
   });
 
-const chosenItemsSchema = z
-  .array(z.object({ canonical: z.string().min(1).max(120), grams: z.number().positive().max(10_000) }).strict())
-  .min(1)
-  .max(30);
+// Card 5c2 — dishware portions. An item's amount is given EITHER as grams
+// directly, OR "measured with my dishware": a saved dish id + how full it was
+// (fillLevel in (0,1]; the UI offers ¼/½/¾/full). The SERVER turns the dishware
+// arm into grams (volume × fill × density) using the SAME math the scan-time
+// portion resolver uses (rung 'user_dishware'), so the client still never does
+// nutrition arithmetic (2B). Both arms are .strict(), so a hybrid item
+// ({canonical, grams, dishwareId}) is rejected by the union — no ambiguity.
+const gramsItemSchema = z
+  .object({ canonical: z.string().min(1).max(120), grams: z.number().positive().max(10_000) })
+  .strict();
+const dishwareItemSchema = z
+  .object({ canonical: z.string().min(1).max(120), dishwareId: z.string().uuid(), fillLevel: z.number().positive().max(1) })
+  .strict();
+export const chosenItemSchema = z.union([gramsItemSchema, dishwareItemSchema]);
+export type ChosenItem = z.infer<typeof chosenItemSchema>;
+const chosenItemsSchema = z.array(chosenItemSchema).min(1).max(30);
 
 export const confirmMealRequestSchema = z.object({
   scanToken: z.string().min(32).max(256), takenAt: takenAtSchema,

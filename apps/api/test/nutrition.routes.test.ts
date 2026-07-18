@@ -333,4 +333,65 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   },30_000);
 
   it("dishware and body measurement CRUD are tenant-scoped; measurement owns current weight",async()=>{const dish=await inject("POST","/v1/nutrition/dishware",cookieA,{label:"My katori",containerClass:"standard_katori",volumeMl:180});dishId=dish.json<{dishware:{id:string}}>().dishware.id;expect((await inject("PATCH",`/v1/nutrition/dishware/${dishId}`,cookieB,{volumeMl:999})).statusCode).toBe(404);const measurement=await inject("POST","/v1/nutrition/body-measurements",cookieA,{measuredAt:new Date().toISOString(),weightKg:72.5,metrics:{waist_cm:80}});measurementId=measurement.json<{measurement:{id:string}}>().measurement.id;expect((await sql<{weight_kg:string|null}[]>`SELECT weight_kg FROM users WHERE id=${userA}`)[0]?.weight_kg).toBe("72.50");expect((await inject("DELETE",`/v1/nutrition/body-measurements/${measurementId}`,cookieB)).statusCode).toBe(404);expect((await inject("DELETE",`/v1/nutrition/body-measurements/${measurementId}`,cookieA)).statusCode).toBe(204);expect((await sql<{weight_kg:string|null}[]>`SELECT weight_kg FROM users WHERE id=${userA}`)[0]?.weight_kg).toBeNull();},30_000);
+
+  // Card 5c2 — dishware portions: an item's amount can be "my dish, this full"
+  // instead of grams; the SERVER computes grams (volume × fill × density) at
+  // rung 'user_dishware', the same math the scan resolver uses.
+  it("a manual/preview item measured with saved dishware is server-priced at rung user_dishware",async()=>{
+    const {app:a,call}=await freshApp("p26a-dish1@example.com");
+    try{
+      // dal density = medium (1.0); 180 ml × 0.75 full × 1.0 = 135 g.
+      const dish=await call("POST","/v1/nutrition/dishware",{label:"My dal katori",containerClass:"standard_katori",volumeMl:180});
+      const dishwareId=dish.json<{dishware:{id:string}}>().dishware.id;
+      const item={canonical:"dal_lentil_curry",dishwareId,fillLevel:0.75};
+      // preview must equal what save writes (the standing trust rule).
+      const preview=await call("POST","/v1/nutrition/meals/preview",{items:[item]});
+      expect(preview.statusCode,preview.body).toBe(200);
+      const pv=preview.json<{items:{gramsPoint:number;portionSource:string;kcalPoint:number}[]}>().items[0];
+      expect(pv?.gramsPoint).toBe(135);
+      expect(pv?.portionSource).toBe("user_dishware");
+      expect(pv?.kcalPoint).toBe(Math.round(110*135/100)); // dal 110 kcal/100g
+      const created=await call("POST","/v1/nutrition/meals",{mealName:"Dal",takenAt:new Date().toISOString(),items:[item]});
+      expect(created.statusCode,created.body).toBe(201);
+      const saved=created.json<{meal:{items:{gramsPoint:number;portionSource:string;kcalPoint:number}[]}}>().meal.items[0];
+      expect(saved).toEqual(pv);
+    }finally{await a.close();}
+  },30_000);
+
+  it("dishware arm: foreign dishwareId 400s (tenancy); a hybrid grams+dishware item is rejected",async()=>{
+    const owner=await freshApp("p26a-dish2@example.com");
+    const stranger=await freshApp("p26a-dish3@example.com");
+    try{
+      const dish=await owner.call("POST","/v1/nutrition/dishware",{label:"mine",containerClass:"standard_katori",volumeMl:200});
+      const dishwareId=dish.json<{dishware:{id:string}}>().dishware.id;
+      // the STRANGER cannot resolve the owner's dishware → 400, not someone else's grams.
+      const foreign=await stranger.call("POST","/v1/nutrition/meals",{mealName:"x",takenAt:new Date().toISOString(),items:[{canonical:"dal_lentil_curry",dishwareId,fillLevel:0.5}]});
+      expect(foreign.statusCode).toBe(400);
+      // a hybrid item ({canonical,grams,dishwareId}) matches NEITHER strict arm → 400.
+      const hybrid=await owner.call("POST","/v1/nutrition/meals",{mealName:"x",takenAt:new Date().toISOString(),items:[{canonical:"dal_lentil_curry",grams:100,dishwareId,fillLevel:0.5}]});
+      expect(hybrid.statusCode).toBe(400);
+      // fillLevel out of (0,1] → 400.
+      const badFill=await owner.call("POST","/v1/nutrition/meals",{mealName:"x",takenAt:new Date().toISOString(),items:[{canonical:"dal_lentil_curry",dishwareId,fillLevel:1.5}]});
+      expect(badFill.statusCode).toBe(400);
+    }finally{await owner.app.close();await stranger.app.close();}
+  },30_000);
+
+  it("photo confirm accepts a dishware-arm item on a drafted food (in-flow bowl measure)",async()=>{
+    const {app:a,call}=await freshApp("p26a-dish4@example.com");
+    try{
+      const dish=await call("POST","/v1/nutrition/dishware",{label:"My katori",containerClass:"standard_katori",volumeMl:200});
+      const dishwareId=dish.json<{dishware:{id:string}}>().dishware.id;
+      const scan=await call("POST","/v1/nutrition/analyze-photo",{imageBase64:jpeg,mimeType:"image/jpeg"});
+      const draft=scan.json<{scanToken:string;items:{canonical:string}[]}>();
+      // measure the drafted "dal" with the katori, keep the roti in grams.
+      const items=draft.items.map((i)=>i.canonical==="dal_lentil_curry"
+        ? {canonical:i.canonical,dishwareId,fillLevel:0.5}
+        : {canonical:i.canonical,grams:80});
+      const confirmed=await call("POST","/v1/nutrition/meals",{scanToken:draft.scanToken,takenAt:new Date().toISOString(),items});
+      expect(confirmed.statusCode,confirmed.body).toBe(201);
+      const dal=confirmed.json<{meal:{items:{canonical:string;gramsPoint:number;portionSource:string}[]}}>().meal.items.find((i)=>i.canonical==="dal_lentil_curry");
+      expect(dal?.gramsPoint).toBe(Math.round(200*0.5*1.0)); // 100 g
+      expect(dal?.portionSource).toBe("user_dishware");
+    }finally{await a.close();}
+  },30_000);
 });

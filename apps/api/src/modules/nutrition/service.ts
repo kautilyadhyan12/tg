@@ -6,13 +6,13 @@ import { createHash, randomBytes } from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
-import type { Meal, MealItem } from "@app/shared";
+import type { ChosenItem, Meal, MealItem } from "@app/shared";
 import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
 import { getUserSyncContext } from "../users/service.js";
 import { CURATED_FOODS, findCurated, searchCurated } from "./foods.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
-import { resolvePortion } from "./portion-priors.js";
+import { dishwareGrams, resolvePortion } from "./portion-priors.js";
 import * as repo from "./repo.js";
 import type { ConfirmMealRequest, ManualMealRequest, MealPreview, PatchMealRequest, PreviewMealRequest } from "./schemas.js";
 import { VisionProviderError, type VisionProvider, type VisionResult } from "./vision.adapter.js";
@@ -425,32 +425,62 @@ async function peekDraft(deps: NutritionDeps, userId: string, value: string): Pr
   return draft;
 }
 
+/** Card 5c2: reduce a chosen item (grams arm OR dishware arm) to concrete
+ *  grams. The dishware arm looks its dish up TENANT-SCOPED — a foreign or
+ *  missing id 400s, never resolves another user's dish — and computes grams
+ *  via the shared `dishwareGrams` helper (the same math the scan-time rung-1
+ *  resolver uses), forcing rung 'user_dishware'. The grams arm passes through
+ *  with no rung override (dishwareRung null → the caller's own rung applies). */
+async function normalizeChosen(
+  deps: NutritionDeps,
+  userId: string,
+  chosen: ChosenItem,
+): Promise<{ canonical: string; grams: number; dishwareRung: "user_dishware" | null }> {
+  if ("dishwareId" in chosen) {
+    const dish = await repo.getDishware(deps.sql, userId, chosen.dishwareId);
+    if (dish === null) throw new NutritionError(400, "unknown_dishware", "Dishware not found.");
+    return {
+      canonical: chosen.canonical,
+      grams: dishwareGrams(dish.volumeMl, chosen.fillLevel, chosen.canonical),
+      dishwareRung: "user_dishware",
+    };
+  }
+  return { canonical: chosen.canonical, grams: chosen.grams, dishwareRung: null };
+}
+
 /** Photo confirm/preview item resolution (Card 5c — meal composition). A
- *  chosen item either belongs to the scan draft (its rung is preserved) or is
- *  an EXTRA the user added by search (the oats-with-milk case) — resolved via
- *  findFood at rung 'default'; the canonical cache makes OFF foods loggable
- *  here too. `original` is the item's pre-edit draft estimate, or null for an
- *  extra (an extra was never estimated, so it is EXCLUDED from the Stage-5
- *  correction pair entirely — an addition is not an estimate error; DECISIONS
- *  2026-07-17). ONE implementation for confirm and preview so live math cannot
- *  diverge from what is saved (T3). */
+ *  chosen item either belongs to the scan draft (its rung is preserved unless
+ *  the user re-measured it with a dish) or is an EXTRA the user added by search
+ *  (the oats-with-milk case) — resolved via findFood at rung 'default'; the
+ *  canonical cache makes OFF foods loggable here too. `original` is the item's
+ *  pre-edit draft estimate, or null for an extra (an extra was never estimated,
+ *  so it is EXCLUDED from the Stage-5 correction pair entirely — an addition is
+ *  not an estimate error; DECISIONS 2026-07-17). ONE implementation for confirm
+ *  and preview so live math cannot diverge from what is saved (T3). */
 async function resolveDraftItem(
   deps: NutritionDeps,
+  userId: string,
   draft: Draft,
-  chosen: { canonical: string; grams: number },
+  chosen: ChosenItem,
 ): Promise<{ item: MealItem; original: MealItem | null }> {
-  const food = draft.foods.find((f) => f.canonical === chosen.canonical);
-  const estimate = draft.items.find((i) => i.canonical === chosen.canonical);
+  const norm = await normalizeChosen(deps, userId, chosen);
+  const food = draft.foods.find((f) => f.canonical === norm.canonical);
+  const estimate = draft.items.find((i) => i.canonical === norm.canonical);
   if (food !== undefined && estimate !== undefined) {
+    // User-chosen amount collapses the range; a dishware measure overrides the
+    // rung to 'user_dishware', otherwise the estimate's rung is preserved.
+    const rung = norm.dishwareRung ?? estimate.portionSource;
     return {
-      // User-chosen grams collapse the range; the ESTIMATE's rung is preserved.
-      item: nutritionItem(food, chosen.grams, [chosen.grams, chosen.grams], estimate.portionSource),
+      item: nutritionItem(food, norm.grams, [norm.grams, norm.grams], rung),
       original: nutritionItem(food, estimate.gramsPoint, estimate.gramsRange, estimate.portionSource),
     };
   }
-  const extra = await findFood(deps, chosen.canonical);
+  const extra = await findFood(deps, norm.canonical);
   if (extra === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
-  return { item: nutritionItem(extra, chosen.grams, [chosen.grams, chosen.grams], "default"), original: null };
+  return {
+    item: nutritionItem(extra, norm.grams, [norm.grams, norm.grams], norm.dishwareRung ?? "default"),
+    original: null,
+  };
 }
 
 /** Resolve every chosen item against the draft (extras included) into the meal
@@ -458,6 +488,7 @@ async function resolveDraftItem(
  *  it does not consume the draft, so a rejection here never burns the scan. */
 async function buildConfirmItems(
   deps: NutritionDeps,
+  userId: string,
   draft: Draft,
   input: ConfirmMealRequest,
 ): Promise<{ items: MealItem[]; originalItems: MealItem[]; correctedItems: MealItem[] }> {
@@ -465,7 +496,7 @@ async function buildConfirmItems(
   const originalItems: MealItem[] = [];
   const correctedItems: MealItem[] = [];
   for (const chosen of input.items) {
-    const { item, original } = await resolveDraftItem(deps, draft, chosen);
+    const { item, original } = await resolveDraftItem(deps, userId, draft, chosen);
     items.push(item);
     // Only ESTIMATED items form the Stage-5 correction pair. An added item was
     // never estimated, so it belongs to the meal but not to the estimate-error
@@ -506,7 +537,7 @@ export async function confirmMeal(deps: NutritionDeps, userId: string, input: Co
   // back except another photo — a fresh vision call and another quota unit.
   const peeked = await readDraft(deps, userId, input.scanToken);
   if (peeked !== null) {
-    const built = await buildConfirmItems(deps, peeked, input);
+    const built = await buildConfirmItems(deps, userId, peeked, input);
     // Everything that could reject has passed — NOW consume the draft. Still
     // the atomic single-use gate: two concurrent confirms both read, but only
     // one take() returns the draft; the loser gets its 400 here.
@@ -521,7 +552,7 @@ export async function confirmMeal(deps: NutritionDeps, userId: string, input: Co
   // from the taken draft (already consumed, so a resolve failure here burns it
   // — accepted only in this rare flap window).
   const recovered = await takeDraft(deps, userId, input.scanToken);
-  const built = await buildConfirmItems(deps, recovered, input);
+  const built = await buildConfirmItems(deps, userId, recovered, input);
   return await persistConfirm(deps, userId, input, recovered, built);
 }
 
@@ -529,13 +560,15 @@ export async function confirmMeal(deps: NutritionDeps, userId: string, input: Co
  *  createManualMeal and previewMeal (T3: divergence here is a trust bug). */
 async function resolveChosenItems(
   deps: NutritionDeps,
-  chosenItems: readonly { canonical: string; grams: number }[],
+  userId: string,
+  chosenItems: readonly ChosenItem[],
 ): Promise<MealItem[]> {
   const items: MealItem[] = [];
   for (const chosen of chosenItems) {
-    const food = await findFood(deps, chosen.canonical);
+    const norm = await normalizeChosen(deps, userId, chosen);
+    const food = await findFood(deps, norm.canonical);
     if (food === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
-    items.push(nutritionItem(food, chosen.grams, [chosen.grams, chosen.grams], "default"));
+    items.push(nutritionItem(food, norm.grams, [norm.grams, norm.grams], norm.dishwareRung ?? "default"));
   }
   return items;
 }
@@ -543,7 +576,7 @@ async function resolveChosenItems(
 /** GAP-2 ruling: manual logging — items resolve via food search; grams are
  *  user-chosen so ranges collapse; origin='manual'. */
 export async function createManualMeal(deps: NutritionDeps, userId: string, input: ManualMealRequest): Promise<Meal> {
-  const items = await resolveChosenItems(deps, input.items);
+  const items = await resolveChosenItems(deps, userId, input.items);
   const row = await repo.createMeal(deps.sql, userId, {
     takenAt: new Date(input.takenAt),
     mealType: input.mealType ?? null,
@@ -568,14 +601,14 @@ export async function previewMeal(
   input: PreviewMealRequest,
 ): Promise<MealPreview> {
   if (input.scanToken === undefined) {
-    const items = await resolveChosenItems(deps, input.items);
+    const items = await resolveChosenItems(deps, userId, input.items);
     return { items, totals: totals(items) };
   }
   const draft = await peekDraft(deps, userId, input.scanToken);
   const items: MealItem[] = [];
   for (const chosen of input.items) {
-    // Same resolution as confirmMeal (extras included) so preview == save.
-    const { item } = await resolveDraftItem(deps, draft, chosen);
+    // Same resolution as confirmMeal (extras + dishware included) so preview == save.
+    const { item } = await resolveDraftItem(deps, userId, draft, chosen);
     items.push(item);
   }
   return { items, totals: totals(items) };
@@ -611,15 +644,18 @@ export async function patchMeal(
   if (input.items !== undefined) {
     items = [];
     for (const chosen of input.items) {
-      const food = await findFood(deps, chosen.canonical);
+      const norm = await normalizeChosen(deps, userId, chosen);
+      const food = await findFood(deps, norm.canonical);
       if (food === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
       // T3 P2.6a finding 3: a grams edit must PRESERVE the item's existing
       // rung (same rule as confirmMeal) — only items new to the meal are
       // 'default'. 'legacy'/'anchor' rows can't re-enter the item enum; they
-      // normalize to 'default'.
-      const prior = before.items.find((i) => i.canonical === chosen.canonical)?.portionSource;
-      const rung = prior === "user_dishware" || prior === "regional_prior" ? prior : "default";
-      items.push(nutritionItem(food, chosen.grams, [chosen.grams, chosen.grams], rung));
+      // normalize to 'default'. Card 5c2: re-measuring with a dish overrides
+      // the rung to 'user_dishware'.
+      const prior = before.items.find((i) => i.canonical === norm.canonical)?.portionSource;
+      const preserved = prior === "user_dishware" || prior === "regional_prior" ? prior : "default";
+      const rung = norm.dishwareRung ?? preserved;
+      items.push(nutritionItem(food, norm.grams, [norm.grams, norm.grams], rung));
     }
   }
   const row = await repo.updateMeal(deps.sql, userId, id, {
