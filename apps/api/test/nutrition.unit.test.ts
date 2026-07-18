@@ -5,9 +5,11 @@ import { MEAL_VISION_PROMPT, createVisionProvider } from "../src/modules/nutriti
 import { VISION_INPUT_MICRO_USD_PER_MILLION, VISION_OUTPUT_MICRO_USD_PER_MILLION, visionCostMicro } from "../src/modules/nutrition/service.js";
 
 describe("P2.6a nutrition pure pipeline", () => {
-  it("preserves all 130 curated rows with unique source lines", () => {
-    expect(CURATED_FOODS).toHaveLength(130);
-    expect(new Set(CURATED_FOODS.map((f) => f.sourceLine)).size).toBe(130);
+  it("preserves the curated rows with unique source lines (130 salvage + the Kd curd row)", () => {
+    // 130 from food_database.py + 1 Kd-approved USDA row (Curd / Dahi,
+    // sourceLine 0 = non-salvage; DECISIONS 2026-07-18).
+    expect(CURATED_FOODS).toHaveLength(131);
+    expect(new Set(CURATED_FOODS.map((f) => f.sourceLine)).size).toBe(131);
     expect(findCurated("roti")?.sourceLine).toBe(151);
     expect(findCurated("dal")?.kcal).toBe(110);
     expect(findCurated("paneer")?.proteinG).toBe(18);
@@ -48,10 +50,14 @@ describe("P2.6a nutrition pure pipeline", () => {
     expect(findCurated("Hot Chocolate")).toBeNull();    // was → dark chocolate
     expect(findCurated("Ham Slice")).toBeNull();        // "ham" ⊄ hamburger by token
     expect(findCurated("Iced Coffee")).toBeNull();
-    // T3 advisory: curd/dahi mapped to GREEK yogurt overstate protein ~3× (a
-    // real macro lie) — dropped in favour of an honest miss (DECISIONS).
-    expect(findCurated("curd")).toBeNull();
-    expect(findCurated("dahi")).toBeNull();
+    // T3 advisory RESOLVED (Kd, DECISIONS 2026-07-18): curd/dahi no longer
+    // alias to GREEK yogurt (that was a ~3× protein lie). A real Curd / Dahi
+    // row was added, so they resolve to their OWN honest macros — never Greek
+    // yogurt's 10 g protein.
+    expect(findCurated("curd")?.canonical).toBe("curd_dahi");
+    expect(findCurated("dahi")?.canonical).toBe("curd_dahi");
+    expect(findCurated("curd")?.proteinG).toBe(3.5);
+    expect(findCurated("curd")?.proteinG).not.toBe(10); // not Greek yogurt
     // A prototype key is not an alias (T3 finding 4).
     expect(findCurated("constructor")).toBeNull();
     expect(findCurated("__proto__")).toBeNull();

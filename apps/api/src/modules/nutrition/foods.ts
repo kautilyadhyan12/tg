@@ -33,6 +33,13 @@ row("Popcorn (plain)",387,12,78,4.5,14,30,"cup",144),row("Honey",304,.3,82,0,.2,
 row("Roti / Chapati",297,11,46,7.5,5,40,"roti",151),row("Naan",310,9,55,6,2,90,"naan",152),row("Dal (lentil curry)",110,6,18,1.5,4,100,"g",153),row("Paneer",296,18,4,23,0,100,"g",154),row("Chicken curry",175,14,6,11,1,100,"g",155),
 row("Butter chicken",220,14,8,15,1,100,"g",156),row("Biryani (chicken)",200,9,26,7,1.5,100,"g",157),row("Samosa",308,5,32,18,3,50,"samosa",158),row("Idli",39,2,8,.1,.4,30,"idli",159),row("Dosa (plain)",168,3.9,30,3.7,1,75,"dosa",160),
 row("Ramen (cooked)",436,10,63,16,2,100,"g",163),row("Pad Thai",192,8,30,5,2,100,"g",164),row("Spring roll",138,5,21,4,2,50,"roll",165),row("Dumplings (pork)",200,8,26,7,2,100,"g",166),row("Pho (beef)",350,25,45,8,2,400,"bowl",167),
+// Kd-approved 2026-07-18, NOT from food_database.py (sourceLine 0 = no salvage
+// line): plain Indian curd/dahi, per 100 g from USDA SR #01116 "Yogurt, plain,
+// whole milk" (61/3.5/4.7/3.3) — dahi is fermented whole milk, so its macros
+// track whole milk, NOT Greek yogurt. Added so "curd"/"dahi" resolve by
+// substring to their OWN honest ~3.5 g protein instead of the removed alias's
+// Greek-yogurt 10 g (a ~3× overstatement; T3 advisory, DECISIONS 2026-07-18).
+row("Curd / Dahi",61,3.5,4.7,3.3,0,100,"g",0),
 ];
 
 // Card 5c — food name aliases. Each key (a slug) on the LEFT resolves to a
@@ -52,11 +59,12 @@ const FOOD_ALIASES = new Map<string, string>(Object.entries({
   phulka: "roti_chapati", rotli: "roti_chapati", fulka: "roti_chapati",
   // dal spellings
   daal: "dal_lentil_curry", dhal: "dal_lentil_curry", dahl: "dal_lentil_curry",
-  // NB curd/dahi/yoghurt are DELIBERATELY NOT aliased to greek_yogurt_plain
-  // (T3 Card 5c advisory): Indian curd/dahi is set yogurt at ~3 g protein/100 g
-  // vs Greek yogurt's ~10 g, so the alias would save a ~3× protein overstatement
-  // — a real macro lie under a card whose ruling is honest-drop-over-wrong-data.
-  // An honest "couldn't match" (add it manually) is the correct outcome.
+  // NB curd/dahi are NOT aliased to greek_yogurt_plain (T3 Card 5c advisory):
+  // Indian curd/dahi is set yogurt at ~3.5 g protein/100 g vs Greek yogurt's
+  // ~10 g, so that alias saved a ~3× protein overstatement. Instead a real
+  // "Curd / Dahi" curated row was added (Kd, DECISIONS 2026-07-18), so both
+  // "curd" and "dahi" now resolve by SUBSTRING to canonical "curd_dahi" with
+  // their own honest macros — no alias entry needed here.
   // staples under local names
   aloo: "potato_baked", alu: "potato_baked",
   chawal: "rice_white_cooked", bhaat: "rice_white_cooked",
