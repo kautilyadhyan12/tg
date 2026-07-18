@@ -318,6 +318,16 @@ export async function listDishware(
   return rows.map(toDishware);
 }
 
+/** Single dish by id, tenant-scoped (Card 5c2 dishware arm). A foreign id
+ *  returns null → the caller 400s; never leaks another user's dish. */
+export async function getDishware(sql: Sql, userId: string, id: string): Promise<DishwareRow | null> {
+  const rows = await sql<DishwareDbRow[]>`
+    SELECT id, label, container_class, volume_ml, food_hint, created_at FROM user_dishware
+    WHERE id = ${id} AND user_id = ${userId}`;
+  const r = rows[0];
+  return r === undefined ? null : toDishware(r);
+}
+
 export async function createDishware(sql: Sql, userId: string, v: DishwareInput): Promise<DishwareRow> {
   const rows = await sql<DishwareDbRow[]>`
     INSERT INTO user_dishware (user_id, label, container_class, volume_ml, food_hint)
