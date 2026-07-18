@@ -161,6 +161,32 @@ describe('nutritionService repoint (Card 5a)', () => {
       .toEqual([{ canonical: 'egg_whole_large', grams: 50 }]);
   });
 
+  // ── Card 5c2: the dishware arm ({dishwareId, fillLevel}) survives the helpers ──
+  it('toChosenItems keeps the dishware arm intact and clamps fill to (0,1]; grams arm unchanged', () => {
+    expect(toChosenItems([
+      { canonical: 'dal', dishwareId: 'd-1', fillLevel: 0.75 },   // dishware arm passes through
+      { canonical: 'rice', grams: 180.4 },                         // grams arm still rounds
+      { canonical: 'ghee', dishwareId: 'd-2', fillLevel: 5 },      // fill clamped to 1
+      { canonical: 'oil', dishwareId: 'd-3', fillLevel: 0 },       // 0 → floored to 0.01 (contract: >0)
+    ])).toEqual([
+      { canonical: 'dal', dishwareId: 'd-1', fillLevel: 0.75 },
+      { canonical: 'rice', grams: 180 },
+      { canonical: 'ghee', dishwareId: 'd-2', fillLevel: 1 },
+      { canonical: 'oil', dishwareId: 'd-3', fillLevel: 0.01 },
+    ]);
+  });
+
+  it('composeAddIngredient appends a dishware-arm ingredient without touching existing items (Card 5c2)', () => {
+    const out = composeAddIngredient(
+      [{ canonical: 'oats_dry', gramsPoint: 40 }],
+      { canonical: 'milk_whole', dishwareId: 'd-9', fillLevel: 0.5 },
+    );
+    expect(out).toEqual([
+      { canonical: 'oats_dry', grams: 40 },
+      { canonical: 'milk_whole', dishwareId: 'd-9', fillLevel: 0.5 },
+    ]);
+  });
+
   it('updateMeal sends the composed items to the meals PATCH (Card 5c wiring)', async () => {
     const seen = recordRequests(authApi);
     await nutritionService.updateMeal('m-1', {

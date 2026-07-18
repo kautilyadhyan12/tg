@@ -32,13 +32,25 @@ export function dataUrlToBase64(dataUrl) {
   return comma === -1 ? dataUrl : dataUrl.slice(comma + 1);
 }
 
-/** Clamp confirm items to the .strict() contract: grams positive ≤10000,
- *  rounded to a sane precision. Exported for the unit test (pure). */
+/** Clamp/normalise each item to ONE of the .strict() contract arms
+ *  (@app/shared chosenItemsSchema): the grams arm {canonical, grams} (positive
+ *  ≤10000, rounded) OR the Card-5c2 dishware arm {canonical, dishwareId,
+ *  fillLevel} (measure with a saved dish; the SERVER turns it into grams). An
+ *  item carrying a dishwareId takes the dishware arm; anything else takes
+ *  grams. Exported for the unit test (pure). */
 export function toChosenItems(items) {
-  return items.map(({ canonical, grams }) => ({
-    canonical,
-    grams: Math.min(10000, Math.max(1, Math.round(Number(grams) || 0))),
-  }));
+  // Clamp fill into the contract's (0,1]. Invalid/missing → the minimum, NEVER
+  // "full" — assuming a full bowl would fabricate a portion (Kd's no-invented-
+  // default ruling); the UI always supplies a ¼–full preset anyway.
+  const clampFill = (v) => {
+    const f = Number(v);
+    return Number.isFinite(f) && f > 0 ? Math.min(1, f) : 0.01;
+  };
+  return items.map((it) =>
+    it.dishwareId
+      ? { canonical: it.canonical, dishwareId: it.dishwareId, fillLevel: clampFill(it.fillLevel) }
+      : { canonical: it.canonical, grams: Math.min(10000, Math.max(1, Math.round(Number(it.grams) || 0))) },
+  );
 }
 
 /** Card 5c add-ingredient: the meals PATCH replaces the WHOLE items array, so
@@ -46,11 +58,14 @@ export function toChosenItems(items) {
  *  the newly picked one. Pure + unit-tested precisely because a bug here —
  *  dropping or mis-mapping an existing item — would silently REWRITE a saved
  *  meal, not just fail loudly. `existing` is the Meal.items shape from the API
- *  ({canonical, gramsPoint, …}); `added` is {canonical, grams}. */
+ *  ({canonical, gramsPoint, …}); `added` is {canonical, grams} OR the Card-5c2
+ *  dishware arm {canonical, dishwareId, fillLevel}. */
 export function composeAddIngredient(existing, added) {
   return [
     ...(existing || []).map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })),
-    { canonical: added.canonical, grams: added.grams },
+    added.dishwareId
+      ? { canonical: added.canonical, dishwareId: added.dishwareId, fillLevel: added.fillLevel }
+      : { canonical: added.canonical, grams: added.grams },
   ];
 }
 

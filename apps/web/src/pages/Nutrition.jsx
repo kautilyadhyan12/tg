@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Plus, Trash2, Camera, X, Loader2,
   Flame, Coffee, UtensilsCrossed, Sandwich, Cookie,
-  Sparkles, Check, Tag,
+  Sparkles, Check, Tag, CookingPot,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { nutritionService, composeAddIngredient } from '../api/nutritionApi';
@@ -14,6 +14,22 @@ import MacroRings from '../components/nutrition/MacroRings';
 // Display/affordance gates only: the server re-validates every request.
 const MAX_GRAMS = 10000;
 const MAX_ITEMS = 30;
+
+// Card 5c2 — "measure with my dish". The three save-a-bowl presets are the
+// MIDPOINTS of Part 2B Appendix B's katori/bowl volume classes (small katori
+// 100–150 · standard katori 150–200 · large katori/bowl 250–300 ml) — cited,
+// never invented. containerClass = the class name so the scan resolver's rung-1
+// can auto-match the same dish in a future photo.
+const BOWL_SIZES = [
+  { label: 'Small',  volumeMl: 125, containerClass: 'small_katori' },
+  { label: 'Medium', volumeMl: 175, containerClass: 'standard_katori' },
+  { label: 'Large',  volumeMl: 275, containerClass: 'large_katori' },
+];
+// Kd ruling: the user must say how full — no invented "full" default. ¼/½/¾/Full.
+const FILL_LEVELS = [
+  { label: '¼', value: 0.25 }, { label: '½', value: 0.5 },
+  { label: '¾', value: 0.75 }, { label: 'Full', value: 1 },
+];
 
 // ── Meal type config ──────────────────────────────────────────────────────────
 const MEAL_TYPES = [
@@ -220,6 +236,161 @@ function MealSection({ mealType, meals, onAdd, onDelete, onEditTime, onRelabel, 
   );
 }
 
+// ── Card 5c2: "measure with my dish" ─────────────────────────────────────────
+// Pick one of your saved bowls + how full it was (or save a new bowl), instead
+// of typing grams. Reports {dishwareId, fillLevel} up; the SERVER turns that
+// into grams (2B — the browser never does the math). Kd ruling: shown as
+// tap-to-pick choices EVERY time, never auto-applied — a user may use a
+// different bowl each meal.
+function DishMeasure({ dishware, value, onChange, onSaved }) {
+  const [showSave, setShowSave] = useState(false);
+  const [name,     setName]     = useState('');
+  const [size,     setSize]     = useState(null); // a BOWL_SIZES entry, or 'custom'
+  const [customMl, setCustomMl] = useState('');
+  const [saving,   setSaving]   = useState(false);
+
+  const resetSave = () => { setShowSave(false); setName(''); setSize(null); setCustomMl(''); };
+
+  const saveBowl = async () => {
+    const volumeMl = size === 'custom' ? Math.round(parseFloat(customMl)) : size?.volumeMl;
+    if (!Number.isFinite(volumeMl) || volumeMl <= 0 || volumeMl > MAX_GRAMS || saving) return;
+    setSaving(true);
+    try {
+      const res = await nutritionService.createDishware({
+        label: name.trim() || `${size === 'custom' ? 'My dish' : size.label} bowl`,
+        containerClass: size === 'custom' ? 'custom' : size.containerClass,
+        volumeMl,
+      });
+      const saved = res.data.dishware;
+      onSaved(saved);                                   // parent refreshes the list
+      onChange({ dishwareId: saved.id, fillLevel: value?.fillLevel ?? null });
+      resetSave();
+    } catch {
+      toast.error('Could not save that dish');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const customValid = size === 'custom'
+    && Number.isFinite(parseFloat(customMl)) && parseFloat(customMl) > 0 && parseFloat(customMl) <= MAX_GRAMS;
+  const canSaveBowl = size !== null && (size !== 'custom' || customValid);
+
+  return (
+    <div className="rounded-xl p-3 mt-1"
+         style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+      {/* Your saved bowls (tap to pick — every time, never auto-applied). */}
+      {dishware.length > 0 && (
+        <>
+          <p className="text-2xs mb-1.5" style={{ color: 'rgba(255,255,255,0.45)' }}>Which dish?</p>
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {dishware.map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => onChange({ dishwareId: d.id, fillLevel: value?.fillLevel ?? null })}
+                className="px-2.5 py-1 rounded-lg text-2xs font-semibold"
+                style={{
+                  background: value?.dishwareId === d.id ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
+                  border: value?.dishwareId === d.id ? '1px solid rgba(255,138,31,0.40)' : '1px solid rgba(255,255,255,0.06)',
+                  color: value?.dishwareId === d.id ? '#FF8A1F' : 'rgba(255,255,255,0.65)',
+                }}
+              >
+                {d.label} · {d.volumeMl} ml
+              </button>
+            ))}
+            {!showSave && (
+              <button type="button" onClick={() => setShowSave(true)}
+                      className="px-2.5 py-1 rounded-lg text-2xs font-semibold flex items-center gap-1"
+                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,138,31,0.35)', color: '#FF8A1F' }}>
+                <Plus className="w-3 h-3" /> New dish
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Save a new bowl — auto-open when the user has none yet. */}
+      {(showSave || dishware.length === 0) && (
+        <div className="mb-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
+              {dishware.length === 0 ? 'Save your first dish' : 'Save a new dish'}
+            </p>
+            {dishware.length > 0 && (
+              <button type="button" onClick={resetSave} className="p-0.5" style={{ color: 'rgba(255,255,255,0.40)' }}>
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+          <input
+            value={name} onChange={(e) => setName(e.target.value)}
+            placeholder="Name (e.g. my dal katori)"
+            className="w-full px-2.5 py-1.5 rounded-lg text-2xs mb-2 focus:outline-none"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff' }}
+          />
+          <div className="flex gap-1.5 mb-2">
+            {BOWL_SIZES.map((b) => (
+              <button key={b.label} type="button" onClick={() => setSize(b)}
+                      className="flex-1 py-1.5 rounded-lg text-2xs font-semibold"
+                      style={{
+                        background: size?.label === b.label ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
+                        border: size?.label === b.label ? '1px solid rgba(255,138,31,0.40)' : '1px solid rgba(255,255,255,0.06)',
+                        color: size?.label === b.label ? '#FF8A1F' : 'rgba(255,255,255,0.60)',
+                      }}>
+                {b.label}<br /><span style={{ opacity: 0.6 }}>{b.volumeMl} ml</span>
+              </button>
+            ))}
+            <button type="button" onClick={() => setSize('custom')}
+                    className="flex-1 py-1.5 rounded-lg text-2xs font-semibold"
+                    style={{
+                      background: size === 'custom' ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
+                      border: size === 'custom' ? '1px solid rgba(255,138,31,0.40)' : '1px solid rgba(255,255,255,0.06)',
+                      color: size === 'custom' ? '#FF8A1F' : 'rgba(255,255,255,0.60)',
+                    }}>
+              Type ml
+            </button>
+          </div>
+          {size === 'custom' && (
+            <input
+              type="number" value={customMl} min="1" max={MAX_GRAMS}
+              onChange={(e) => setCustomMl(e.target.value)} placeholder="Volume in ml"
+              className="w-full px-2.5 py-1.5 rounded-lg text-2xs mb-2 focus:outline-none"
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff' }}
+            />
+          )}
+          <button type="button" onClick={saveBowl} disabled={!canSaveBowl || saving}
+                  className="w-full py-1.5 rounded-lg text-2xs font-semibold"
+                  style={{ background: 'rgba(255,138,31,0.15)', border: '1px solid rgba(255,138,31,0.30)', color: '#FF8A1F', opacity: !canSaveBowl || saving ? 0.5 : 1 }}>
+            {saving ? 'Saving…' : 'Save this dish'}
+          </button>
+        </div>
+      )}
+
+      {/* How full? — required (Kd ruling). Only meaningful once a dish is picked. */}
+      {value?.dishwareId && (
+        <>
+          <p className="text-2xs mb-1.5" style={{ color: 'rgba(255,255,255,0.45)' }}>How full?</p>
+          <div className="flex gap-1.5">
+            {FILL_LEVELS.map((f) => (
+              <button key={f.value} type="button"
+                      onClick={() => onChange({ dishwareId: value.dishwareId, fillLevel: f.value })}
+                      className="flex-1 py-1.5 rounded-lg text-2xs font-semibold"
+                      style={{
+                        background: value.fillLevel === f.value ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
+                        border: value.fillLevel === f.value ? '1px solid rgba(255,138,31,0.40)' : '1px solid rgba(255,255,255,0.06)',
+                        color: value.fillLevel === f.value ? '#FF8A1F' : 'rgba(255,255,255,0.60)',
+                      }}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Reusable food search + result list ───────────────────────────────────────
 // Card 5c: THREE surfaces now search foods (new manual meal · add-ingredient to
 // a photo scan · add-ingredient to a saved meal), so the search lives here once
@@ -345,6 +516,13 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
   const [base,     setBase]     = useState(100);
   const [live,     setLive]     = useState(null);
   const [saving,   setSaving]   = useState(false);
+  // Card 5c2: grams (default) vs "measure with my dish".
+  const [dishware,    setDishware]    = useState([]);
+  const [measureMode, setMeasureMode] = useState('grams'); // 'grams' | 'dish'
+  const [measure,     setMeasure]     = useState(null);     // {dishwareId, fillLevel}
+
+  const loadDishware = () =>
+    nutritionService.listDishware().then((r) => setDishware(r.data.items || [])).catch(() => {});
 
   useEffect(() => {
     if (open) {
@@ -353,6 +531,9 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
       setCount(1);
       setLive(null);
       setSaving(false);
+      setMeasureMode('grams');
+      setMeasure(null);
+      loadDishware();
     }
   }, [open]);
 
@@ -363,26 +544,35 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
     ? `Enter ${MAX_GRAMS.toLocaleString()} g or less`
     : null;
 
-  // Live server preview for the chosen grams (manual arm — no scanToken).
-  // Stale responses are dropped; failures degrade to no numbers shown.
-  // `shownLive` (not state clearing) hides the preview while grams are
-  // invalid — no synchronous setState in the effect body.
-  const shownLive = selected && gramsValid ? live : null;
+  // The payload item is EITHER the grams arm or the dishware arm (Card 5c2).
+  // Dish mode needs both a dish AND a fill (Kd: fill is required, no default).
+  const dishReady  = measureMode === 'dish' && !!measure?.dishwareId && !!measure?.fillLevel;
+  const chosenItem = !selected
+    ? null
+    : measureMode === 'dish'
+      ? (dishReady ? { canonical: selected.canonical, dishwareId: measure.dishwareId, fillLevel: measure.fillLevel } : null)
+      : (gramsValid ? { canonical: selected.canonical, grams: gramsNum } : null);
+
+  // Live server preview for the chosen amount (manual arm — no scanToken). The
+  // server prices grams OR the dishware measure identically (2B). Stale
+  // responses dropped; failures degrade to no numbers.
+  const chosenKey = JSON.stringify(chosenItem);
   useEffect(() => {
-    if (!selected || !gramsValid) return undefined;
+    if (chosenItem === null) { setLive(null); return undefined; }
     let stale = false;
     const timer = setTimeout(async () => {
       try {
-        const res = await nutritionService.previewMeal({
-          items: [{ canonical: selected.canonical, grams: parseFloat(grams) }],
-        });
+        const res = await nutritionService.previewMeal({ items: [chosenItem] });
         if (!stale) setLive(res.data);
       } catch {
         if (!stale) setLive(null);
       }
     }, 300);
     return () => { stale = true; clearTimeout(timer); };
-  }, [selected, grams, gramsValid]);
+    // chosenKey is a complete value-serialisation of chosenItem (grams/dish).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chosenKey]);
+  const shownLive = chosenItem !== null ? live : null;
 
   const pick = (food) => {
     setSelected(food);
@@ -400,7 +590,7 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
   };
 
   const handleSave = async () => {
-    if (!selected || !gramsValid || saving) return;
+    if (chosenItem === null || saving) return;
     setSaving(true);
     try {
       if (meal) {
@@ -409,7 +599,7 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
         // a pure, unit-tested helper — silently dropping an existing item here
         // would wipe a meal). The server preserves each item's rung.
         await nutritionService.updateMeal(meal.id, {
-          items: composeAddIngredient(meal.items, { canonical: selected.canonical, grams: gramsNum }),
+          items: composeAddIngredient(meal.items, chosenItem),
         });
         toast.success(`Added ${selected.name} to ${meal.mealName || 'the meal'}`);
       } else {
@@ -419,7 +609,7 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
           // The section whose + opened this modal is the user's chosen label
           // (stored meal_type — Kd ruling 2026-07-17; nothing time-derived).
           mealType,
-          items: [{ canonical: selected.canonical, grams: gramsNum }],
+          items: [chosenItem],
         });
         toast.success(`Added ${selected.name}`);
       }
@@ -498,72 +688,86 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
           {selected && (
             <div className="p-5"
                  style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-              <div className="flex items-center gap-2 mb-3">
-                <p className="text-xs font-medium"
-                   style={{ color: 'rgba(255,255,255,0.60)' }}>
-                  Amount:
-                </p>
-                <button type="button" onClick={() => step(-1)}
-                        className="w-6 h-6 rounded-md"
-                        style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>−</button>
-                <span className="w-6 text-center text-xs text-white">×{count}</span>
-                <button type="button" onClick={() => step(1)}
-                        className="w-6 h-6 rounded-md"
-                        style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>+</button>
-                <input
-                  type="number"
-                  value={grams}
-                  min="1"
-                  max="10000"
-                  onChange={(e) => {
-                    setGrams(e.target.value);
-                    // Typed grams become the new ×1 base (T3 5b finding 2).
-                    const typed = parseFloat(e.target.value);
-                    if (Number.isFinite(typed) && typed > 0) {
-                      setBase(typed);
-                      setCount(1);
-                    }
-                  }}
-                  className="w-20 px-3 py-1.5 rounded-lg text-sm text-right focus:outline-none"
-                  style={{
-                    background: 'rgba(255,255,255,0.06)',
-                    border:     '1px solid rgba(255,255,255,0.08)',
-                    color:      '#fff',
-                  }}
-                />
-                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.40)' }}>g</p>
-                <p className="ml-auto text-sm font-bold"
-                   style={{ color: '#FF8A1F' }}>
-                  {shownLive ? `${shownLive.totals.kcalPoint} kcal` : '…'}
-                </p>
+              {/* Card 5c2: type grams, or measure with your dish. */}
+              <div className="flex gap-1.5 mb-3">
+                <button type="button" onClick={() => setMeasureMode('grams')}
+                        className="flex-1 py-1.5 rounded-lg text-2xs font-semibold"
+                        style={{
+                          background: measureMode === 'grams' ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
+                          border: measureMode === 'grams' ? '1px solid rgba(255,138,31,0.40)' : '1px solid rgba(255,255,255,0.06)',
+                          color: measureMode === 'grams' ? '#FF8A1F' : 'rgba(255,255,255,0.55)',
+                        }}>
+                  Type grams
+                </button>
+                <button type="button" onClick={() => setMeasureMode('dish')}
+                        className="flex-1 py-1.5 rounded-lg text-2xs font-semibold flex items-center justify-center gap-1"
+                        style={{
+                          background: measureMode === 'dish' ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
+                          border: measureMode === 'dish' ? '1px solid rgba(255,138,31,0.40)' : '1px solid rgba(255,255,255,0.06)',
+                          color: measureMode === 'dish' ? '#FF8A1F' : 'rgba(255,255,255,0.55)',
+                        }}>
+                  <CookingPot className="w-3 h-3" /> Measure with my dish
+                </button>
               </div>
+
+              {measureMode === 'grams' ? (
+                <div className="flex items-center gap-2 mb-3">
+                  <p className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.60)' }}>Amount:</p>
+                  <button type="button" onClick={() => step(-1)}
+                          className="w-6 h-6 rounded-md"
+                          style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>−</button>
+                  <span className="w-6 text-center text-xs text-white">×{count}</span>
+                  <button type="button" onClick={() => step(1)}
+                          className="w-6 h-6 rounded-md"
+                          style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>+</button>
+                  <input
+                    type="number" value={grams} min="1" max="10000"
+                    onChange={(e) => {
+                      setGrams(e.target.value);
+                      const typed = parseFloat(e.target.value);
+                      if (Number.isFinite(typed) && typed > 0) { setBase(typed); setCount(1); }
+                    }}
+                    className="w-20 px-3 py-1.5 rounded-lg text-sm text-right focus:outline-none"
+                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff' }}
+                  />
+                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.40)' }}>g</p>
+                  <p className="ml-auto text-sm font-bold" style={{ color: '#FF8A1F' }}>
+                    {shownLive ? `${shownLive.totals.kcalPoint} kcal` : '…'}
+                  </p>
+                </div>
+              ) : (
+                <DishMeasure dishware={dishware} value={measure} onChange={setMeasure} onSaved={loadDishware} />
+              )}
+
               {shownLive && (
-                <p className="text-2xs mb-3"
+                <p className="text-2xs my-3"
                    style={{ color: 'rgba(255,255,255,0.45)' }}>
-                  Protein {Math.round(shownLive.totals.proteinG)}g
-                  · Carbs {Math.round(shownLive.totals.carbsG)}g
-                  · Fat {Math.round(shownLive.totals.fatG)}g
+                  {shownLive.totals.kcalPoint} kcal · Protein {Math.round(shownLive.totals.proteinG)}g
+                  · Carbs {Math.round(shownLive.totals.carbsG)}g · Fat {Math.round(shownLive.totals.fatG)}g
                   <span className="ml-1" style={{ color: 'rgba(255,255,255,0.30)' }}>
                     — calculated by the server for your amount
                   </span>
                 </p>
               )}
-              {gramsError && (
-                <p className="text-2xs mb-3" style={{ color: 'rgba(251,191,36,0.85)' }}>
-                  {gramsError}
+              {measureMode === 'grams' && gramsError && (
+                <p className="text-2xs mb-3" style={{ color: 'rgba(251,191,36,0.85)' }}>{gramsError}</p>
+              )}
+              {measureMode === 'dish' && !dishReady && (
+                <p className="text-2xs my-3" style={{ color: 'rgba(255,255,255,0.40)' }}>
+                  Pick a dish and how full it was — we'll work out the grams.
                 </p>
               )}
               <button
                 onClick={handleSave}
-                disabled={saving || !gramsValid}
-                className="w-full py-2.5 rounded-xl font-semibold text-sm text-white"
+                disabled={saving || chosenItem === null}
+                className="w-full py-2.5 rounded-xl font-semibold text-sm text-white mt-1"
                 style={{
                   background: 'linear-gradient(135deg, #FF8A1F, #FFB347)',
                   boxShadow:  '0 4px 16px rgba(255,138,31,0.25)',
-                  opacity:    saving || !gramsValid ? 0.6 : 1,
+                  opacity:    saving || chosenItem === null ? 0.6 : 1,
                 }}
               >
-                {saving ? 'Saving…' : gramsError ? 'Amount is too large' : gramsValid ? `Add ${selected.name}` : 'Enter grams'}
+                {saving ? 'Saving…' : gramsError ? 'Amount is too large' : chosenItem !== null ? `Add ${selected.name}` : (measureMode === 'dish' ? 'Pick a dish & fill' : 'Enter grams')}
               </button>
             </div>
           )}
@@ -599,7 +803,15 @@ function PhotoModal({ open, onClose, onSave }) {
   // as the drafted items, and the server resolves them by canonical.
   const [extras,      setExtras]      = useState([]);
   const [adding,      setAdding]      = useState(false);
+  // Card 5c2: per drafted-item "measure with my dish". itemMeasures[i] present
+  // (even {}) means that item is in dish mode; its value is {dishwareId,
+  // fillLevel}. Extras carry their own `measure` on the extra object.
+  const [dishware,     setDishware]     = useState([]);
+  const [itemMeasures, setItemMeasures] = useState({});
   const fileRef = useRef(null);
+
+  const loadDishware = () =>
+    nutritionService.listDishware().then((r) => setDishware(r.data.items || [])).catch(() => {});
 
   useEffect(() => {
     if (open) {
@@ -616,6 +828,8 @@ function PhotoModal({ open, onClose, onSave }) {
       setSaving(false);
       setExtras([]);
       setAdding(false);
+      setItemMeasures({});
+      loadDishware();
     }
   }, [open]);
 
@@ -629,6 +843,7 @@ function PhotoModal({ open, onClose, onSave }) {
     setLogAs(null); // a fresh analysis starts unlabeled (T3 5b advisory)
     setExtras([]);  // …and carries no ingredients from a previous photo
     setAdding(false);
+    setItemMeasures({}); // …and no dish measures from a previous photo
     setRetakeMsg(null);
 
     try {
@@ -668,34 +883,39 @@ function PhotoModal({ open, onClose, onSave }) {
     }
   };
 
-  // The confirm/preview payload: the AI's items PLUS anything the user added.
-  // Card 5c — the server accepts extras beyond the draft and resolves them by
-  // canonical, so both lists travel as one `items` array.
-  const payloadItems = analysis === null ? [] : [
-    ...analysis.items.map((item, i) => ({ canonical: item.canonical, grams: parseFloat(grams[i]) })),
-    ...extras.map((x) => ({ canonical: x.food.canonical, grams: parseFloat(x.grams) })),
+  // Each item resolves to ONE contract arm: the grams arm {canonical, grams}
+  // OR the Card-5c2 dishware arm {canonical, dishwareId, fillLevel}. An item is
+  // in dish mode when it has a `measure` (a present itemMeasures[i], or an
+  // extra's own .measure); dish mode is valid only once BOTH a dish and a fill
+  // are chosen (Kd: fill required). A grams field must hold a usable value —
+  // a cleared/zero field never silently falls back to the AI estimate (T3 5a).
+  const resolveArm = (canonical, gramsStr, measure) => {
+    if (measure) {
+      const ok = !!measure.dishwareId && !!measure.fillLevel;
+      return { item: ok ? { canonical, dishwareId: measure.dishwareId, fillLevel: measure.fillLevel } : null, valid: ok };
+    }
+    const g = parseFloat(gramsStr);
+    const ok = Number.isFinite(g) && g > 0 && g <= MAX_GRAMS;
+    return { item: ok ? { canonical, grams: g } : null, valid: ok, tooLarge: Number.isFinite(g) && g > MAX_GRAMS };
+  };
+  const resolved = analysis === null ? [] : [
+    ...analysis.items.map((item, i) => resolveArm(item.canonical, grams[i], itemMeasures[i])),
+    ...extras.map((x) => resolveArm(x.food.canonical, x.grams, x.measure)),
   ];
-
-  // Every grams field must hold a usable value before preview/confirm — a
-  // cleared or zero field must never silently fall back to the AI estimate
-  // (T3 Card 5a: what is sent must be what the user sees).
-  // T3 5b: a []-items request would 400 on chosenItemsSchema.min(1) — but an
-  // analysis that matched NOTHING is now confirmable once the user adds an
-  // ingredient themselves, which is the whole point of this card.
-  const gramsValid =
-    analysis !== null &&
-    payloadItems.length > 0 &&
-    payloadItems.every((it) => Number.isFinite(it.grams) && it.grams > 0 && it.grams <= MAX_GRAMS);
-  // 5b T3 advisory (owed to this card): say WHY the button is dead — "Enter
-  // grams for every item" is a lie when the user plainly entered 20000.
-  const gramsTooLarge = payloadItems.some((it) => Number.isFinite(it.grams) && it.grams > MAX_GRAMS);
+  // T3 5b: a []-items request 400s on min(1) — but a zero-match analysis is
+  // confirmable once the user adds an ingredient, the whole point of Card 5c.
+  const allValid = resolved.length > 0 && resolved.every((r) => r.valid);
+  const payloadItems = allValid ? resolved.map((r) => r.item) : [];
+  // 5b T3 advisory: say WHY the button is dead — "Enter grams for every item"
+  // is a lie when the user plainly entered 20000.
+  const gramsTooLarge = resolved.some((r) => r.tooLarge);
 
   // Live server preview (Kd-approved): whenever grams change, ask the SERVER
   // what the nutrition would be — the browser never computes it. Debounced;
   // failures degrade silently to the analysis estimates (e.g. old API).
   const payloadKey = JSON.stringify(payloadItems);
   useEffect(() => {
-    if (!analysis || !gramsValid) return undefined;
+    if (!analysis || !allValid) return undefined;
     let cancelled = false; // T3 Card 5a: drop out-of-order/stale responses
     const timer = setTimeout(async () => {
       try {
@@ -714,7 +934,7 @@ function PhotoModal({ open, onClose, onSave }) {
     // payloadKey covers grams AND extras by value; payloadItems is rebuilt each
     // render so it cannot be a dep itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analysis, payloadKey, gramsValid]);
+  }, [analysis, payloadKey, allValid]);
 
   // T3 5c: a number is only "live" if it priced the CURRENT payload. A result
   // for a stale payload (mid-debounce, or after a grams edit made gramsValid
@@ -723,7 +943,7 @@ function PhotoModal({ open, onClose, onSave }) {
   const liveNow = live !== null && live.key === payloadKey ? live.data : null;
 
   const handleConfirm = async () => {
-    if (!analysis || saving || !gramsValid) return;
+    if (!analysis || saving || !allValid) return;
     setSaving(true);
     try {
       await nutritionService.confirmMeal({
@@ -896,65 +1116,72 @@ function PhotoModal({ open, onClose, onSave }) {
                                 ? 'Calculating…'
                                 : `Protein ${Math.round(shown.proteinG)}g · Carbs ${Math.round(shown.carbsG)}g · Fat ${Math.round(shown.fatG)}g`}
                             </p>
-                            <div className="flex items-center gap-2">
-                              {/* Count stepper: multiplies the AI's per-unit
-                                  grams (count × gramsPoint) — portion scaling
-                                  only; nutrition math stays on the server. */}
-                              <div className="flex items-center gap-1 text-2xs"
-                                   style={{ color: 'rgba(255,255,255,0.45)' }}>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const n = Math.max(1, (counts[i] ?? 1) - 1);
-                                    setCounts({ ...counts, [i]: n });
-                                    setGrams({ ...grams, [i]: String(Math.min(10000, Math.round(n * (bases[i] ?? item.gramsPoint)))) });
-                                  }}
-                                  className="w-6 h-6 rounded-md"
-                                  style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}
-                                >
-                                  −
-                                </button>
-                                <span className="w-6 text-center text-xs text-white">×{counts[i] ?? 1}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const n = Math.min(30, (counts[i] ?? 1) + 1);
-                                    setCounts({ ...counts, [i]: n });
-                                    setGrams({ ...grams, [i]: String(Math.min(10000, Math.round(n * (bases[i] ?? item.gramsPoint)))) });
-                                  }}
-                                  className="w-6 h-6 rounded-md"
-                                  style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}
-                                >
-                                  +
+                            {itemMeasures[i] === undefined ? (
+                              <div className="flex items-center gap-2">
+                                {/* Count stepper: multiplies the AI's per-unit
+                                    grams (count × gramsPoint) — portion scaling
+                                    only; nutrition math stays on the server. */}
+                                <div className="flex items-center gap-1 text-2xs"
+                                     style={{ color: 'rgba(255,255,255,0.45)' }}>
+                                  <button type="button"
+                                    onClick={() => {
+                                      const n = Math.max(1, (counts[i] ?? 1) - 1);
+                                      setCounts({ ...counts, [i]: n });
+                                      setGrams({ ...grams, [i]: String(Math.min(10000, Math.round(n * (bases[i] ?? item.gramsPoint)))) });
+                                    }}
+                                    className="w-6 h-6 rounded-md"
+                                    style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>−</button>
+                                  <span className="w-6 text-center text-xs text-white">×{counts[i] ?? 1}</span>
+                                  <button type="button"
+                                    onClick={() => {
+                                      const n = Math.min(30, (counts[i] ?? 1) + 1);
+                                      setCounts({ ...counts, [i]: n });
+                                      setGrams({ ...grams, [i]: String(Math.min(10000, Math.round(n * (bases[i] ?? item.gramsPoint)))) });
+                                    }}
+                                    className="w-6 h-6 rounded-md"
+                                    style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}>+</button>
+                                </div>
+                                <label className="flex items-center gap-1.5 text-2xs"
+                                       style={{ color: 'rgba(255,255,255,0.45)' }}>
+                                  <input
+                                    type="number" value={grams[i] ?? ''} min="1" max="10000"
+                                    onChange={(e) => {
+                                      setGrams({ ...grams, [i]: e.target.value });
+                                      const typed = parseFloat(e.target.value);
+                                      if (Number.isFinite(typed) && typed > 0) {
+                                        setBases({ ...bases, [i]: typed });
+                                        setCounts({ ...counts, [i]: 1 });
+                                      }
+                                    }}
+                                    className="w-16 px-2 py-1 rounded-lg text-xs text-right focus:outline-none"
+                                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: '#fff' }}
+                                  />
+                                  g
+                                </label>
+                                {/* Card 5c2: measure this item with my dish instead. */}
+                                <button type="button" title="Measure with my dish"
+                                        onClick={() => setItemMeasures({ ...itemMeasures, [i]: {} })}
+                                        className="p-1 rounded-md" style={{ color: 'rgba(255,138,31,0.8)' }}>
+                                  <CookingPot className="w-3.5 h-3.5" />
                                 </button>
                               </div>
-                              <label className="flex items-center gap-1.5 text-2xs"
-                                     style={{ color: 'rgba(255,255,255,0.45)' }}>
-                                <input
-                                  type="number"
-                                  value={grams[i] ?? ''}
-                                  min="1"
-                                  max="10000"
-                                  onChange={(e) => {
-                                    setGrams({ ...grams, [i]: e.target.value });
-                                    // Typed grams become the new ×1 base.
-                                    const typed = parseFloat(e.target.value);
-                                    if (Number.isFinite(typed) && typed > 0) {
-                                      setBases({ ...bases, [i]: typed });
-                                      setCounts({ ...counts, [i]: 1 });
-                                    }
-                                  }}
-                                  className="w-16 px-2 py-1 rounded-lg text-xs text-right focus:outline-none"
-                                  style={{
-                                    background: 'rgba(255,255,255,0.06)',
-                                    border:     '1px solid rgba(255,255,255,0.10)',
-                                    color:      '#fff',
-                                  }}
-                                />
-                                g
-                              </label>
-                            </div>
+                            ) : (
+                              <button type="button"
+                                      onClick={() => { const m = { ...itemMeasures }; delete m[i]; setItemMeasures(m); }}
+                                      className="text-2xs font-semibold px-2 py-1 rounded-md"
+                                      style={{ color: '#FF8A1F', background: 'rgba(255,138,31,0.10)', border: '1px solid rgba(255,138,31,0.20)' }}>
+                                ← back to grams
+                              </button>
+                            )}
                           </div>
+                          {itemMeasures[i] !== undefined && (
+                            <DishMeasure
+                              dishware={dishware}
+                              value={itemMeasures[i]}
+                              onChange={(v) => setItemMeasures({ ...itemMeasures, [i]: v })}
+                              onSaved={loadDishware}
+                            />
+                          )}
                         </div>
                         );
                       })}
@@ -1165,21 +1392,21 @@ function PhotoModal({ open, onClose, onSave }) {
 
                     <button
                       onClick={handleConfirm}
-                      disabled={saving || !gramsValid}
+                      disabled={saving || !allValid}
                       className="w-full py-2.5 rounded-xl font-semibold text-sm text-white"
                       style={{
                         background: 'linear-gradient(135deg, #FF8A1F, #FFB347)',
                         boxShadow:  '0 4px 16px rgba(255,138,31,0.25)',
-                        opacity:    saving || !gramsValid ? 0.6 : 1,
+                        opacity:    saving || !allValid ? 0.6 : 1,
                       }}
                     >
                       {saving
                         ? 'Saving…'
                         : gramsTooLarge
                           ? `Amounts must be ${MAX_GRAMS.toLocaleString()} g or less`
-                          : gramsValid
+                          : allValid
                             ? 'Confirm & log meal'
-                            : 'Enter grams for every item'}
+                            : 'Pick grams or a dish for every item'}
                     </button>
                     </>)}
                   </div>
