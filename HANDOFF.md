@@ -2,10 +2,16 @@
 
 ```
 TASK: web repoint — Card 5c: meal composition + synonyms + change-label 🟡
-      [API half on branch `meal-composition` (PUSHED, PR NOT MERGED — and it
-       MUST NOT be merged yet, see the PROTOCOL FAILURE below). Web half on
-       web-repoint, committed LOCALLY (unpushed). GATES NOT PASSED: valid T3
-       owed, AUDIT owed, SMOKE owed. This card is NOT done.]
+      [DONE 2026-07-18 — ALL GATES PASSED. PR #40 merged to master (CI green
+       on final commit 437f042 incl. the Curd/Dahi row); master merged back
+       into web-repoint (append-append DECISIONS kept both); valid fresh-chat
+       T3s on BOTH diffs resolved; AUDIT delivered; SMOKE PASSED (Kd, every
+       step ✅ — see DECISIONS). Branch still merges only at P2.8.]
+NEXT: Card ⑤c2 (dishware IN-FLOW + portion API — the split-out half) ·
+      ⑤d previous-days view · nutrition targets card · owed T3 residuals
+      (bySubstring cross-word includes; removals-telemetry; API canonical
+      dedupe — DECISIONS 2026-07-18) · Groq COACH_MODEL migration
+      (HARD DATE 2026-08-16, cutover.md).
 >>> PROTOCOL FAILURE (Kd-caught 2026-07-17; corrected in the follow-up
     commit): the authoring chat ran all three "T3" reviews via SUBAGENTS
     inside its own session. CLAUDE.md:129/:429 requires a SEPARATE, FRESH
