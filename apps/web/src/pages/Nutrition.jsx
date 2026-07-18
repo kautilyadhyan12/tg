@@ -563,7 +563,9 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
     const timer = setTimeout(async () => {
       try {
         const res = await nutritionService.previewMeal({ items: [chosenItem] });
-        if (!stale) setLive(res.data);
+        // Stamp with the payload it priced (T3 5c2) so a result for a PREVIOUS
+        // amount/dish is never shown as current — displayed must equal saved.
+        if (!stale) setLive({ data: res.data, key: chosenKey });
       } catch {
         if (!stale) setLive(null);
       }
@@ -572,7 +574,8 @@ function AddMealModal({ open, mealType, meal, onClose, onSave }) {
     // chosenKey is a complete value-serialisation of chosenItem (grams/dish).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chosenKey]);
-  const shownLive = chosenItem !== null ? live : null;
+  // Only "live" when it priced the CURRENT payload; otherwise withhold ("…").
+  const shownLive = live?.key === chosenKey ? live.data : null;
 
   const pick = (food) => {
     setSelected(food);
@@ -1091,7 +1094,14 @@ function PhotoModal({ open, onClose, onSave }) {
                         // meal is still exactly what the AI saw — once the
                         // user has added an ingredient the row must wait for
                         // the server rather than show a stale price (T3 5c).
-                        const shown = liveNow?.items?.[i] ?? (extras.length === 0 ? item : null);
+                        // Fall back to the AI's own estimate ONLY while the meal
+                        // is still exactly what the AI saw (no extras) AND this
+                        // item is still on the AI's grams (not a dish measure) —
+                        // the AI's grams estimate can never equal a dish price,
+                        // so a dish-mode row must wait for the server, not show a
+                        // number that isn't what will be saved (T3 5c2 F1).
+                        const shown = liveNow?.items?.[i]
+                          ?? (extras.length === 0 && itemMeasures[i] === undefined ? item : null);
                         return (
                         <div key={i}
                              className="p-2.5 rounded-xl"
