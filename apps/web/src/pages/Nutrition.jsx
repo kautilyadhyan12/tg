@@ -46,8 +46,11 @@ const MEAL_TYPES = [
 // (mealType, migration 0007) the section never moves with the time; only
 // unlabeled meals re-bucket.
 // Card 5c: the change-label control (owed by 5b) and per-meal "add ingredient".
-function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient }) {
+// Card 5c2 (Kd smoke ask): tap the name to rename a logged meal (PATCH mealName
+// already exists — no API change).
+function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient, onRename }) {
   const [editingTime, setEditingTime] = useState(false);
+  const [editingName, setEditingName] = useState(false);
   const [labelOpen,   setLabelOpen]   = useState(false);
   const time = meal.takenAt
     ? new Date(meal.takenAt).toLocaleTimeString([], {
@@ -71,9 +74,35 @@ function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient }) {
     >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold text-white truncate">
-            {name}
-          </p>
+          {editingName ? (
+            <input
+              type="text"
+              defaultValue={name}
+              autoFocus
+              onBlur={() => setEditingName(false)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const v = e.target.value.trim();
+                  if (v && v !== name) onRename(meal, v);
+                  setEditingName(false);
+                } else if (e.key === 'Escape') {
+                  setEditingName(false);
+                }
+              }}
+              className="text-sm font-semibold px-1.5 py-0.5 rounded min-w-0 flex-1"
+              style={{ background: 'rgba(255,255,255,0.06)', color: '#fff', border: '1px solid rgba(255,138,31,0.30)' }}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditingName(true)}
+              title="Rename this meal"
+              className="text-sm font-semibold text-white truncate text-left"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            >
+              {name}
+            </button>
+          )}
           {editingTime ? (
             <input
               type="time"
@@ -177,7 +206,7 @@ function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient }) {
 }
 
 // ── Meal type section ─────────────────────────────────────────────────────────
-function MealSection({ mealType, meals, onAdd, onDelete, onEditTime, onRelabel, onAddIngredient }) {
+function MealSection({ mealType, meals, onAdd, onDelete, onEditTime, onRelabel, onAddIngredient, onRename }) {
   const Icon = mealType.icon;
   // Display-summing SERVER-computed per-meal totals (D3 doctrine).
   const total = meals.reduce((sum, m) => sum + (m.totals?.kcalPoint || 0), 0);
@@ -222,7 +251,7 @@ function MealSection({ mealType, meals, onAdd, onDelete, onEditTime, onRelabel, 
         <AnimatePresence>
           {meals.map((m) => (
             <MealRow key={m.id} meal={m} onDelete={onDelete} onEditTime={onEditTime}
-                     onRelabel={onRelabel} onAddIngredient={onAddIngredient} />
+                     onRelabel={onRelabel} onAddIngredient={onAddIngredient} onRename={onRename} />
           ))}
         </AnimatePresence>
         {meals.length === 0 && (
@@ -1168,11 +1197,15 @@ function PhotoModal({ open, onClose, onSave }) {
                                   />
                                   g
                                 </label>
-                                {/* Card 5c2: measure this item with my dish instead. */}
-                                <button type="button" title="Measure with my dish"
+                                {/* Card 5c2: measure this item with my dish
+                                    instead. A LABELED pill, not a bare icon, so
+                                    a first-time user can see the option (Kd
+                                    smoke ask — discoverability). */}
+                                <button type="button" title="Measure with my dish instead of grams"
                                         onClick={() => setItemMeasures({ ...itemMeasures, [i]: {} })}
-                                        className="p-1 rounded-md" style={{ color: 'rgba(255,138,31,0.8)' }}>
-                                  <CookingPot className="w-3.5 h-3.5" />
+                                        className="flex items-center gap-1 px-2 py-1 rounded-md text-2xs font-semibold whitespace-nowrap flex-shrink-0"
+                                        style={{ color: '#FF8A1F', background: 'rgba(255,138,31,0.10)', border: '1px solid rgba(255,138,31,0.20)' }}>
+                                  <CookingPot className="w-3 h-3" /> my dish
                                 </button>
                               </div>
                             ) : (
@@ -1535,6 +1568,18 @@ export default function Nutrition() {
     }
   };
 
+  // Card 5c2 (Kd smoke ask): rename a logged meal. PATCH mealName already
+  // exists (patchMealRequestSchema); the API trims + bounds it (1–200).
+  const handleRename = async (meal, mealName) => {
+    try {
+      await nutritionService.updateMeal(meal.id, { mealName });
+      toast.success('Meal renamed');
+      loadData();
+    } catch {
+      toast.error('Failed to rename the meal');
+    }
+  };
+
   // Totals = SUM of each meal's SERVER-computed totals (D3 doctrine: the
   // client displays and sums server numbers, it never derives nutrition).
   // Keys stay snake_case — MacroRings + the remaining card read that shape.
@@ -1745,6 +1790,7 @@ export default function Nutrition() {
                   onEditTime={handleEditTime}
                   onRelabel={handleRelabel}
                   onAddIngredient={(meal) => setAddModal({ open: true, mealType: meal.mealType, meal })}
+                  onRename={handleRename}
                 />
               ))}
             </div>
