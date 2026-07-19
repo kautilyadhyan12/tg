@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
-import { composeAddIngredient, dataUrlToBase64, nutritionService, toChosenItems } from './nutritionApi';
+import { composeAddIngredient, dataUrlToBase64, nutritionService, toChosenItems, walkMealsForDay } from './nutritionApi';
 
 function recordRequests(api) {
   const seen = [];
@@ -233,6 +233,99 @@ describe('nutritionService repoint (Card 5a)', () => {
     await nutritionService.confirmMeal({ scanToken: 'x'.repeat(40), takenAt: '2026-07-17T08:00:00.000Z', items, mealType: 'breakfast' });
     expect(JSON.parse(seen[0].data).items).toEqual(items);
     expect(JSON.parse(seen[1].data)).toMatchObject({ items, mealType: 'breakfast' });
+  });
+
+  // ── Card 5d: previous-days page-walk ────────────────────────────────────────
+  // Local-day window [start, end) for an arbitrary day; meals are built at
+  // explicit LOCAL times so the epoch comparison is TZ-consistent with the
+  // window (both derive from the same local midnight).
+  describe('walkMealsForDay (Card 5d page-walk)', () => {
+    const DAY = new Date(2026, 6, 15);          // Jul 15 2026, local midnight
+    const start = DAY.getTime();
+    const end = start + 24 * 60 * 60 * 1000;
+    const at = (y, mo, d, h, mi = 0) => new Date(y, mo, d, h, mi).toISOString();
+    const meal = (id, iso) => ({ id, takenAt: iso });
+
+    it('returns only the day’s meals from a single final page (no next cursor)', async () => {
+      let calls = 0;
+      const fetchPage = async () => {
+        calls += 1;
+        return {
+          items: [
+            meal('a', at(2026, 6, 15, 20)),  // in-day
+            meal('b', at(2026, 6, 15, 9)),   // in-day
+            meal('c', at(2026, 6, 14, 23)),  // previous day
+          ],
+          nextCursor: null,
+        };
+      };
+      const { meals, truncated } = await walkMealsForDay(fetchPage, start, end);
+      expect(meals.map((m) => m.id)).toEqual(['a', 'b']);
+      expect(truncated).toBe(false);
+      expect(calls).toBe(1);
+    });
+
+    it('stops once a page reaches older-than-day data — never over-fetches', async () => {
+      const pages = [
+        { items: [meal('n1', at(2026, 6, 16, 10)), meal('d1', at(2026, 6, 15, 12))], nextCursor: 'c1' },
+        { items: [meal('d2', at(2026, 6, 15, 8)),  meal('o1', at(2026, 6, 14, 20))], nextCursor: 'c2' },
+        { items: [meal('o2', at(2026, 6, 13, 10))], nextCursor: 'c3' }, // must NOT be fetched
+      ];
+      let calls = 0;
+      const fetchPage = async () => pages[calls++];
+      const { meals, truncated } = await walkMealsForDay(fetchPage, start, end);
+      expect(meals.map((m) => m.id)).toEqual(['d1', 'd2']);
+      expect(truncated).toBe(false);
+      expect(calls).toBe(2);
+    });
+
+    it('day window is [00:00, next 00:00): start included, end excluded', async () => {
+      const fetchPage = async () => ({
+        items: [
+          meal('startEdge', new Date(start).toISOString()),   // exactly 00:00 → in
+          meal('endEdge',   new Date(end).toISOString()),     // exactly next 00:00 → out
+          meal('lastMs',    new Date(end - 1).toISOString()),  // 23:59:59.999 → in
+        ],
+        nextCursor: null,
+      });
+      const { meals } = await walkMealsForDay(fetchPage, start, end);
+      expect(meals.map((m) => m.id).sort()).toEqual(['lastMs', 'startEdge']);
+    });
+
+    it('hitting the page cap before older data sets truncated', async () => {
+      // Every page is newer than the day and keeps a cursor → the walk never
+      // reaches older data; the cap is the only thing that stops it.
+      let calls = 0;
+      const fetchPage = async () => {
+        calls += 1;
+        return { items: [meal('newer', at(2026, 6, 16, 10))], nextCursor: 'more' };
+      };
+      const { meals, truncated } = await walkMealsForDay(fetchPage, start, end, 3);
+      expect(truncated).toBe(true);
+      expect(meals).toEqual([]);   // nothing was in-day
+      expect(calls).toBe(3);       // exactly the cap
+    });
+  });
+
+  it('listMealsForDay walks listMeals pages for the day, passing the cursor through', async () => {
+    const today = new Date();
+    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+    const isoAt = (base, h) => { const d = new Date(base); d.setHours(h, 0, 0, 0); return d.toISOString(); };
+    const seenCursors = [];
+    let call = 0;
+    authApi.defaults.adapter = async (config) => {
+      call += 1;
+      seenCursors.push(config.params?.cursor);
+      const data = call === 1
+        ? { items: [{ id: 'today', takenAt: isoAt(today, 10) }], nextCursor: 'CUR' }
+        : { items: [{ id: 'yest',  takenAt: isoAt(yesterday, 10) }], nextCursor: null };
+      return { data, status: 200, statusText: '', headers: {}, config, request: {} };
+    };
+    const { meals, truncated } = await nutritionService.listMealsForDay(today);
+    // page 1's today meal is collected; page 2 is yesterday (older) → stop.
+    expect(meals.map((m) => m.id)).toEqual(['today']);
+    expect(truncated).toBe(false);
+    expect(seenCursors).toEqual([undefined, 'CUR']);
   });
 
   it('dishware CRUD hits /v1/nutrition/dishware (Card 5b)', async () => {

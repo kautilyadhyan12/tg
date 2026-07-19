@@ -1,6 +1,30 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: Card ⑤d — previous-days meal view 🟡  [DONE 2026-07-19, all gates]
+  WEB (web-repoint): the Nutrition page gains day navigation (‹ / › / date
+  picker) to look back at earlier days. NO API change — listMealsForDay
+  page-walks the existing newest-first GET /v1/nutrition/meals (cursor opaque,
+  no date filter) until it passes the local day; cap 10 pages then an honest
+  "couldn't load back this far". Past days: logging affordances HIDDEN (takenAt
+  is always now, Kd 2026-07-17); per-meal edits STAY; left card becomes "Eaten
+  on this day"; MacroRings KEPT (Kd ruled keep 2026-07-19).
+  T3 (FRESH CHAT, Kd): zero violations; independently verified taken_at DESC
+  ordering is the correctness linchpin. F1 stale-response race + F2 truncated-
+  vs-empty honesty + a date-bar-in-loading-gate finding all fixed. SMOKE-folded
+  meal-row fixes (Kd asks): rename-on-blur BUG fixed (onBlur discarded the edit,
+  NO PATCH ever fired — proven by the api log), always-visible ✏️ pencil + row
+  action buttons (were hover-only). web 84/85 (1 = known syncClient env quirk);
+  build ✓; lint 7/0 baseline parity. SMOKE PASSED (Kd, every step ✅). Cost:
+  ZERO paid calls (paginated GETs only).
+NEXT CARDS: nutrition targets card (buildable since PR #30, user_fitness_
+  profiles) · desktop webcam capture · owed T3 residuals (bySubstring cross-word;
+  removals-telemetry; API canonical dedupe) · limitedToDays in Progress UI ·
+  HARD DATE Groq COACH_MODEL + vision model migration before 2026-08-16
+  (cutover.md) — coach/vision go dark after.
+```
+
+```
 TASK: Card ⑤c2 — dishware in-flow + portion API 🟡  [DONE 2026-07-18, all gates]
   API (branch dishware-portion-api → PR merged to master, CI green): each meal
   item is now a strict UNION — grams arm {canonical,grams} OR dishware arm

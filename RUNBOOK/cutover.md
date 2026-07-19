@@ -145,9 +145,13 @@ the operational wrapper around it.
             saved meals take a new ingredient via the existing PATCH. Also
             the change-label control on meal rows (the 5b-owed one) and the
             5b stale-guard advisories.
-      - [ ] **Previous-days meal view** (Card 5d) — data is stored forever;
-            the page shows today only. Screen + date navigation, client-side
-            over the existing cursor list.
+      - [x] **Previous-days meal view** (Card 5d) — DONE 2026-07-19: the
+            Nutrition page gains ‹/›/date-picker day navigation; listMealsForDay
+            page-walks the existing cursor list (NO API change, no date filter
+            added; cap 10 pages then an honest "couldn't load back this far").
+            Past days hide logging (takenAt=now, Kd 2026-07-17), keep per-meal
+            edits, show "Eaten on this day"; MacroRings kept (Kd ruled keep).
+            Fresh-chat T3 (zero violations) + SMOKE passed (DECISIONS 2026-07-19).
       - [ ] Desktop webcam capture for meal photos (phones already open the
             camera via the input's capture attribute) — enhancement, 5c/5d.
       - [ ] `limitedToDays` surfaced in the Progress UI (T3 Card 3) — every

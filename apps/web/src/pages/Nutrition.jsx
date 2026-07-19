@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Plus, Trash2, Camera, X, Loader2,
   Flame, Coffee, UtensilsCrossed, Sandwich, Cookie,
-  Sparkles, Check, Tag, CookingPot,
+  Sparkles, Check, Tag, CookingPot, Pencil,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { nutritionService, composeAddIngredient } from '../api/nutritionApi';
@@ -52,6 +52,10 @@ function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient, onRen
   const [editingTime, setEditingTime] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [labelOpen,   setLabelOpen]   = useState(false);
+  // Distinguishes an Escape-cancel from a click-away/Enter save on the rename
+  // input, so blur commits (the previous onBlur silently discarded the edit —
+  // the smoke bug where a rename reverted with no PATCH ever sent).
+  const nameCancelRef = useRef(false);
   const time = meal.takenAt
     ? new Date(meal.takenAt).toLocaleTimeString([], {
         hour: '2-digit', minute: '2-digit',
@@ -79,15 +83,20 @@ function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient, onRen
               type="text"
               defaultValue={name}
               autoFocus
-              onBlur={() => setEditingName(false)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
+              // Single commit path: blur saves (Enter and click-away both blur),
+              // Escape flags a cancel so blur skips the save. Fixes the smoke bug
+              // where clicking away discarded the edit without ever PATCHing.
+              onBlur={(e) => {
+                if (!nameCancelRef.current) {
                   const v = e.target.value.trim();
                   if (v && v !== name) onRename(meal, v);
-                  setEditingName(false);
-                } else if (e.key === 'Escape') {
-                  setEditingName(false);
                 }
+                nameCancelRef.current = false;
+                setEditingName(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.target.blur();
+                else if (e.key === 'Escape') { nameCancelRef.current = true; e.target.blur(); }
               }}
               className="text-sm font-semibold px-1.5 py-0.5 rounded min-w-0 flex-1"
               style={{ background: 'rgba(255,255,255,0.06)', color: '#fff', border: '1px solid rgba(255,138,31,0.30)' }}
@@ -95,12 +104,14 @@ function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient, onRen
           ) : (
             <button
               type="button"
-              onClick={() => setEditingName(true)}
+              onClick={() => { nameCancelRef.current = false; setEditingName(true); }}
               title="Rename this meal"
-              className="text-sm font-semibold text-white truncate text-left"
+              className="flex items-center gap-1 text-sm font-semibold text-white min-w-0 text-left"
               style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
             >
-              {name}
+              <span className="truncate">{name}</span>
+              {/* Always-visible pencil so first-time users know the name is editable. */}
+              <Pencil className="w-3 h-3 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.35)' }} />
             </button>
           )}
           {editingTime ? (
@@ -176,7 +187,7 @@ function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient, onRen
         <button
           onClick={() => setLabelOpen((v) => !v)}
           title={meal.mealType ? 'Change which section this meal is in' : 'Give this meal a section label'}
-          className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg"
+          className="p-1.5 rounded-lg"
           style={{ color: labelOpen ? '#FF8A1F' : 'rgba(255,255,255,0.45)' }}
         >
           <Tag className="w-3.5 h-3.5" />
@@ -187,7 +198,7 @@ function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient, onRen
           title={(meal.items?.length || 0) >= MAX_ITEMS
             ? `This meal already holds the most items (${MAX_ITEMS})`
             : 'Add an ingredient to this meal'}
-          className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg disabled:cursor-not-allowed"
+          className="p-1.5 rounded-lg disabled:cursor-not-allowed"
           style={{ color: (meal.items?.length || 0) >= MAX_ITEMS ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.45)' }}
         >
           <Plus className="w-3.5 h-3.5" />
@@ -195,7 +206,7 @@ function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient, onRen
         <button
           onClick={() => onDelete(meal.id)}
           title="Delete this meal"
-          className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg"
+          className="p-1.5 rounded-lg"
           style={{ color: 'rgba(239,68,68,0.7)' }}
         >
           <Trash2 className="w-3.5 h-3.5" />
@@ -206,7 +217,7 @@ function MealRow({ meal, onDelete, onEditTime, onRelabel, onAddIngredient, onRen
 }
 
 // ── Meal type section ─────────────────────────────────────────────────────────
-function MealSection({ mealType, meals, onAdd, onDelete, onEditTime, onRelabel, onAddIngredient, onRename }) {
+function MealSection({ mealType, meals, canAdd, onAdd, onDelete, onEditTime, onRelabel, onAddIngredient, onRename }) {
   const Icon = mealType.icon;
   // Display-summing SERVER-computed per-meal totals (D3 doctrine).
   const total = meals.reduce((sum, m) => sum + (m.totals?.kcalPoint || 0), 0);
@@ -235,17 +246,21 @@ function MealSection({ mealType, meals, onAdd, onDelete, onEditTime, onRelabel, 
             </p>
           </div>
         </div>
-        <button
-          onClick={() => onAdd(mealType.id)}
-          className="w-8 h-8 rounded-lg flex items-center justify-center
-                     transition-all"
-          style={{
-            background: 'rgba(255,138,31,0.10)',
-            border:     '1px solid rgba(255,138,31,0.20)',
-          }}
-        >
-          <Plus className="w-4 h-4" style={{ color: '#FF8A1F' }} />
-        </button>
+        {/* Card 5d: manual "+" only on Today — a new meal stamps the current
+            time (Kd ruling 2026-07-17). Past-day rows stay fully editable. */}
+        {canAdd && (
+          <button
+            onClick={() => onAdd(mealType.id)}
+            className="w-8 h-8 rounded-lg flex items-center justify-center
+                       transition-all"
+            style={{
+              background: 'rgba(255,138,31,0.10)',
+              border:     '1px solid rgba(255,138,31,0.20)',
+            }}
+          >
+            <Plus className="w-4 h-4" style={{ color: '#FF8A1F' }} />
+          </button>
+        )}
       </div>
       <div className="space-y-1">
         <AnimatePresence>
@@ -1476,12 +1491,37 @@ function bucketOf(takenAt) {
   return 'snack';
 }
 
-function isToday(takenAt) {
-  const d = new Date(takenAt);
-  const now = new Date();
-  return d.getFullYear() === now.getFullYear()
-    && d.getMonth() === now.getMonth()
-    && d.getDate() === now.getDate();
+// ── Card 5d: local-day helpers for the previous-days view ─────────────────────
+// All day math is client-LOCAL calendar days (same convention as the old
+// isToday filter this replaces, and the meal sections' own display buckets).
+function startOfDay(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+function isSameDay(a, b) {
+  return startOfDay(a).getTime() === startOfDay(b).getTime();
+}
+function addDays(d, n) {
+  const x = startOfDay(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+// "Today" / "Yesterday" / "Wed, 16 Jul" for the date bar.
+function dayLabel(date) {
+  const today = new Date();
+  if (isSameDay(date, today)) return 'Today';
+  if (isSameDay(date, addDays(today, -1))) return 'Yesterday';
+  return date.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+}
+// <input type="date"> wants a LOCAL YYYY-MM-DD (toISOString would shift the day
+// for anyone west of UTC); parse it back as a local date, never UTC.
+function toDateInputValue(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function parseDateInput(v) {
+  const [y, m, d] = v.split('-').map(Number);
+  return new Date(y, m - 1, d);
 }
 
 // ── Main Nutrition page ───────────────────────────────────────────────────────
@@ -1489,22 +1529,53 @@ export default function Nutrition() {
   const [meals,          setMeals]           = useState([]);
   const [targets,        setTargets]         = useState({});
   const [loading,        setLoading]         = useState(true);
+  // Card 5d: which local day the page is showing (default today). Navigation
+  // (‹ / › / date picker) changes this; `truncated` = the day sits deeper in
+  // history than the page-walk cap reaches (honest "couldn't load that far").
+  const [selectedDate,   setSelectedDate]    = useState(() => startOfDay(new Date()));
+  const [truncated,      setTruncated]       = useState(false);
   // `meal` set = add-ingredient-to-a-saved-meal mode (Card 5c).
   const [addModal,       setAddModal]        = useState({ open: false, mealType: null, meal: null });
   const [photoModalOpen, setPhotoModalOpen]  = useState(false);
 
-  const loadData = async () => {
+  const viewingToday = isSameDay(selectedDate, new Date());
+  // Card 5d (T3 F1): the newest-day request wins. Rapid ‹/› navigation fires
+  // overlapping page-walks; without this a slower earlier response could resolve
+  // last and paint the wrong day's meals under the current label. Every loadData
+  // stamps the day it is fetching; results for a superseded day are dropped.
+  const latestDayReq = useRef(null);
+
+  // Card 5d: the meals list has no server date filter, so nutritionService
+  // walks the newest-first pages until it passes `date` (see nutritionApi.js).
+  // Defaults to the currently selected day so mutation handlers (delete/rename/
+  // …) refresh whatever day is on screen. `date` is passed explicitly by
+  // goToDay so navigation fetches the target day before the re-render lands.
+  const loadData = async (date = selectedDate) => {
+    const reqKey = startOfDay(date).getTime();
+    latestDayReq.current = reqKey;
     try {
-      // First page (100 = 5× the busiest day) newest-first; today is a
-      // client-side display filter — same precedent as measurements `latest`.
-      const res = await nutritionService.listMeals(100);
-      setMeals((res.data.items || []).filter((m) => isToday(m.takenAt)));
+      const { meals: dayMeals, truncated: trunc } = await nutritionService.listMealsForDay(date);
+      if (latestDayReq.current !== reqKey) return; // a newer navigation superseded this
+      setMeals(dayMeals);
+      setTruncated(trunc);
     } catch (err) {
+      if (latestDayReq.current !== reqKey) return;  // abandoned day — don't toast
       console.error('Failed to load meals:', err);
       toast.error('Failed to load nutrition data');
     } finally {
-      setLoading(false);
+      if (latestDayReq.current === reqKey) setLoading(false); // newer request owns the spinner
     }
+  };
+
+  // Navigate to another day. Never past today (no future meals can exist —
+  // takenAt is always the real current time, Kd ruling 2026-07-17).
+  const goToDay = (date) => {
+    const d = startOfDay(date);
+    if (d.getTime() > startOfDay(new Date()).getTime()) return;
+    if (isSameDay(d, selectedDate)) return;
+    setSelectedDate(d);
+    setLoading(true);
+    loadData(d);
   };
 
   // D2 interim (Kd-ruled): targets still come from the OLD backend's
@@ -1520,9 +1591,13 @@ export default function Nutrition() {
     }
   };
 
+  // Mount only: loads TODAY (loadData's default) once. Every day change goes
+  // through goToDay, which fetches the target day explicitly — so this effect
+  // must not re-run on selectedDate, and loadData is intentionally excluded.
   useEffect(() => {
     loadData();
     loadTargets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleDelete = async (mealId) => {
@@ -1711,37 +1786,54 @@ export default function Nutrition() {
               <h1 className="text-3xl font-bold tracking-tighter text-white mb-2">
                 Fuel Your Training
               </h1>
-              <button
-                onClick={() => setPhotoModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl
-                           font-semibold text-sm text-white"
-                style={{
-                  background: 'rgba(255,138,31,0.15)',
-                  border:     '1px solid rgba(255,138,31,0.30)',
-                  backdropFilter: 'blur(10px)',
-                }}
-              >
-                <Camera className="w-4 h-4" />
-                <Sparkles className="w-3 h-3" />
-                Log meal from photo
-              </button>
+              {/* Card 5d: logging is only offered on Today — a new meal always
+                  stamps the real current time (Kd ruling 2026-07-17), so it
+                  would land under today, not the past day being viewed. */}
+              {viewingToday ? (
+                <button
+                  onClick={() => setPhotoModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl
+                             font-semibold text-sm text-white"
+                  style={{
+                    background: 'rgba(255,138,31,0.15)',
+                    border:     '1px solid rgba(255,138,31,0.30)',
+                    backdropFilter: 'blur(10px)',
+                  }}
+                >
+                  <Camera className="w-4 h-4" />
+                  <Sparkles className="w-3 h-3" />
+                  Log meal from photo
+                </button>
+              ) : (
+                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                  Viewing a past day · switch to Today to log a meal
+                </p>
+              )}
             </div>
           </div>
         </motion.div>
 
-        {loading ? (
-          <div className="card-glass flex items-center justify-center py-16">
-            <Loader2 className="w-5 h-5 animate-spin"
-                     style={{ color: 'rgba(255,138,31,0.5)' }} />
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Card 5d (T3): the date bar stays mounted across day changes — only
+            each column's CONTENT swaps to a spinner during a walk — so the ‹/›
+            arrows stay clickable and the F1 overlapping-request guard is
+            reachable through rapid stepping. */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
             {/* ── Left: Macro rings + remaining ─────────────────────────────── */}
             <div className="lg:col-span-1 space-y-4">
-              <MacroRings totals={totals} targets={targets} />
+              {loading ? (
+                <div className="card-glass flex items-center justify-center py-16">
+                  <Loader2 className="w-5 h-5 animate-spin"
+                           style={{ color: 'rgba(255,138,31,0.5)' }} />
+                </div>
+              ) : (
+                <>
+                  <MacroRings totals={totals} targets={targets} />
 
-              {/* Remaining card */}
+              {/* Card 5d: on Today this is "Remaining today" (target − eaten);
+                  on a past day "remaining" is meaningless, so it becomes an
+                  "Eaten on this day" total. MacroRings above stays either way
+                  (the selected day's totals vs the goal). */}
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1752,16 +1844,24 @@ export default function Nutrition() {
                   <Flame className="w-4 h-4" style={{ color: '#FF8A1F' }} />
                   <h3 className="text-sm font-semibold"
                       style={{ color: 'rgba(255,255,255,0.80)' }}>
-                    Remaining today
+                    {viewingToday ? 'Remaining today' : 'Eaten on this day'}
                   </h3>
                 </div>
                 <div className="space-y-2.5">
-                  {[
-                    { label: 'Calories', value: remaining.kcal,      unit: 'kcal', color: '#FF8A1F' },
-                    { label: 'Protein',  value: remaining.protein_g, unit: 'g',    color: '#4ade80' },
-                    { label: 'Carbs',    value: remaining.carbs_g,   unit: 'g',    color: '#60a5fa' },
-                    { label: 'Fat',      value: remaining.fat_g,     unit: 'g',    color: '#fbbf24' },
-                  ].map((r) => (
+                  {(viewingToday
+                    ? [
+                        { label: 'Calories', value: remaining.kcal,      unit: 'kcal', color: '#FF8A1F' },
+                        { label: 'Protein',  value: remaining.protein_g, unit: 'g',    color: '#4ade80' },
+                        { label: 'Carbs',    value: remaining.carbs_g,   unit: 'g',    color: '#60a5fa' },
+                        { label: 'Fat',      value: remaining.fat_g,     unit: 'g',    color: '#fbbf24' },
+                      ]
+                    : [
+                        { label: 'Calories', value: totals.kcal,      unit: 'kcal', color: '#FF8A1F' },
+                        { label: 'Protein',  value: totals.protein_g, unit: 'g',    color: '#4ade80' },
+                        { label: 'Carbs',    value: totals.carbs_g,   unit: 'g',    color: '#60a5fa' },
+                        { label: 'Fat',      value: totals.fat_g,     unit: 'g',    color: '#fbbf24' },
+                      ]
+                  ).map((r) => (
                     <div key={r.label} className="flex justify-between items-center">
                       <span className="text-xs"
                             style={{ color: 'rgba(255,255,255,0.50)' }}>
@@ -1775,27 +1875,105 @@ export default function Nutrition() {
                   ))}
                 </div>
               </motion.div>
-
+                </>
+              )}
             </div>
 
-            {/* ── Right: Meal sections ──────────────────────────────────────── */}
+            {/* ── Right: date bar + meal sections ───────────────────────────── */}
             <div className="lg:col-span-2 space-y-4">
-              {MEAL_TYPES.map((mt) => (
-                <MealSection
-                  key={mt.id}
-                  mealType={mt}
-                  meals={byType[mt.id] || []}
-                  onAdd={(id) => setAddModal({ open: true, mealType: id, meal: null })}
-                  onDelete={handleDelete}
-                  onEditTime={handleEditTime}
-                  onRelabel={handleRelabel}
-                  onAddIngredient={(meal) => setAddModal({ open: true, mealType: meal.mealType, meal })}
-                  onRename={handleRename}
-                />
-              ))}
+
+              {/* Card 5d: day navigation. ‹ goes back, › forward (never past
+                  today), and the date picker jumps to any past day. */}
+              <div className="card-glass flex items-center justify-between !py-2.5">
+                <button
+                  type="button"
+                  onClick={() => goToDay(addDays(selectedDate, -1))}
+                  title="Previous day"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-lg"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.75)' }}
+                >
+                  ‹
+                </button>
+                <div className="flex flex-col items-center gap-1">
+                  <p className="text-sm font-semibold text-white">{dayLabel(selectedDate)}</p>
+                  <input
+                    type="date"
+                    value={toDateInputValue(selectedDate)}
+                    max={toDateInputValue(new Date())}
+                    onChange={(e) => e.target.value && goToDay(parseDateInput(e.target.value))}
+                    className="text-2xs px-1.5 py-0.5 rounded"
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.55)', colorScheme: 'dark' }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => goToDay(addDays(selectedDate, 1))}
+                  disabled={viewingToday}
+                  title={viewingToday ? 'This is the latest day' : 'Next day'}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-lg"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.75)', opacity: viewingToday ? 0.35 : 1 }}
+                >
+                  ›
+                </button>
+              </div>
+
+              {loading ? (
+                <div className="card-glass flex items-center justify-center py-16">
+                  <Loader2 className="w-5 h-5 animate-spin"
+                           style={{ color: 'rgba(255,138,31,0.5)' }} />
+                </div>
+              ) : (
+              <>
+              {/* Card 5d (T3 F2): the page-walk stops at a cap (only reached
+                  with hundreds of newer meals), so `truncated` means it never
+                  got back to this day — the client CANNOT know the day is empty.
+                  Three cases, never asserting an emptiness we didn't verify:
+                   • truncated + nothing found → "couldn't load back this far"
+                     ONLY (no sections, which would each falsely say "none").
+                   • truncated + some found   → the partial banner + sections.
+                   • not truncated            → the true empty state or sections. */}
+              {truncated && meals.length === 0 ? (
+                <div className="card-glass text-center py-10">
+                  <p className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                    This day is deep in your history — couldn’t load back this far.
+                    Pick a more recent day.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {truncated && (
+                    <p className="text-2xs text-center" style={{ color: 'rgba(255,255,255,0.40)' }}>
+                      Showing the most recent meals for this day — some older entries may not be loaded.
+                    </p>
+                  )}
+                  {!viewingToday && meals.length === 0 ? (
+                    <div className="card-glass text-center py-10">
+                      <p className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                        No meals logged on this day.
+                      </p>
+                    </div>
+                  ) : (
+                    MEAL_TYPES.map((mt) => (
+                      <MealSection
+                        key={mt.id}
+                        mealType={mt}
+                        meals={byType[mt.id] || []}
+                        canAdd={viewingToday}
+                        onAdd={(id) => setAddModal({ open: true, mealType: id, meal: null })}
+                        onDelete={handleDelete}
+                        onEditTime={handleEditTime}
+                        onRelabel={handleRelabel}
+                        onAddIngredient={(meal) => setAddModal({ open: true, mealType: meal.mealType, meal })}
+                        onRename={handleRename}
+                      />
+                    ))
+                  )}
+                </>
+              )}
+              </>
+              )}
             </div>
           </div>
-        )}
       </div>
 
       {/* Modals */}

@@ -69,6 +69,42 @@ export function composeAddIngredient(existing, added) {
   ];
 }
 
+// ── Card 5d: previous-days view ───────────────────────────────────────────────
+// The meals list has NO server date filter — @app/shared nutritionListQuerySchema
+// is {limit, cursor} only, and the cursor is an opaque contract token — so to
+// show a past day we walk the newest-first pages until we have passed that day.
+// At ~5 meals/day the cap (10 pages × 100) covers ~6 months of history before an
+// honest "couldn't load that far back" fallback; a server-side date filter is the
+// documented upgrade path (RUNBOOK/cutover.md) if history ever runs deeper.
+export const MEAL_PAGE_SIZE = 100;
+export const MAX_MEAL_PAGES = 10;
+
+/** Collect the meals whose takenAt is in [dayStartMs, dayEndMs) by walking
+ *  newest-first pages via the injected `fetchPage(cursor) → {items, nextCursor}`.
+ *  Stops as soon as a page reaches data older than the day (newest-first means
+ *  every later page is older still), when the cursor is exhausted, or when the
+ *  page cap is hit — the last of which sets `truncated`. Pure w.r.t. the
+ *  fetcher; unit-tested directly. */
+export async function walkMealsForDay(fetchPage, dayStartMs, dayEndMs, maxPages = MAX_MEAL_PAGES) {
+  const meals = [];
+  let cursor;
+  let pages = 0;
+  for (;;) {
+    if (pages >= maxPages) return { meals, truncated: true };
+    const page = await fetchPage(cursor);
+    const items = page?.items || [];
+    pages += 1;
+    let reachedOlder = false;
+    for (const m of items) {
+      const t = new Date(m.takenAt).getTime();
+      if (t >= dayStartMs && t < dayEndMs) meals.push(m);
+      if (t < dayStartMs) reachedOlder = true;
+    }
+    if (reachedOlder || !page?.nextCursor) return { meals, truncated: false };
+    cursor = page.nextCursor;
+  }
+}
+
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -133,6 +169,22 @@ export const nutritionService = {
    *  SERVER-computed totals {kcalPoint, kcalLow, kcalHigh, proteinG, …}. */
   listMeals: (limit = 100, cursor) =>
     authApi.get('/v1/nutrition/meals', { params: cursor ? { limit, cursor } : { limit } }),
+
+  /** Card 5d: meals logged on the LOCAL day containing `date`. Walks the
+   *  newest-first list (no server date filter exists) and returns
+   *  {meals, truncated}; truncated = the page cap was hit before older data,
+   *  i.e. this day is deeper in history than the walk loads. */
+  listMealsForDay: async (date, maxPages = MAX_MEAL_PAGES) => {
+    const start = new Date(date); start.setHours(0, 0, 0, 0);
+    const end = new Date(start); end.setDate(end.getDate() + 1);
+    return walkMealsForDay(
+      async (cursor) => {
+        const res = await nutritionService.listMeals(MEAL_PAGE_SIZE, cursor);
+        return { items: res.data.items || [], nextCursor: res.data.nextCursor };
+      },
+      start.getTime(), end.getTime(), maxPages,
+    );
+  },
 
   getMeal: (id) => authApi.get(`/v1/nutrition/meals/${id}`),
 
