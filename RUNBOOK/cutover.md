@@ -23,8 +23,8 @@ the operational wrapper around it.
       defined no storage; P2.7 dropped the fields — INVENTORY.md:45).
       DONE: merged 2026-07-16 via PR #30 (`user_fitness_profiles`, migration
       0006, GET/PUT /v1/users/me/fitness-profile, onboardingCompleted on
-      /v1/users/me). NB the WEB side (wizard/Settings/gate wiring) is still
-      old-backend — owed in the list below.
+      /v1/users/me). WEB wizard + onboarding-gate wiring DONE 2026-07-19 (Card 6,
+      DECISIONS); Settings' profile forms are STILL old-backend — owed line below.
 - [ ] **Drain the offline sync queues BEFORE cutover** (legacy-bucket orphaning,
       DECISIONS 2026-07-15). Per-user localStorage buckets — including the
       offline workout queue — are keyed `user_<id>_*`. Pre-cutover that `<id>` is
@@ -169,6 +169,17 @@ the operational wrapper around it.
             the P2.4 history gate) and the page ignores it, so a free-plan
             user sees "Last year" over 30-day data. Must render an honest
             clamp notice before cutover ships plan-gated UI to real users.
+      - [ ] **Settings profile forms → new API** (Card 6 left this; DECISIONS
+            2026-07-19). Settings.jsx still reads/writes the profile via legacy
+            mlApi — `/users/profile` (lines ~87/237/635/657) and
+            `/users/reset-onboarding` (line ~392) — and carries a now-DEAD
+            `userService` import (line 11) to clean up. Card 6 repointed the
+            onboarding WIZARD + the gate, so the profile is now split across two
+            backends until this lands: repoint Settings' two profile forms to
+            PATCH /v1/users/me + PUT /v1/users/me/fitness-profile (reuse Card 6's
+            `toFitnessProfilePayload`), and reset-onboarding via `PUT {}` (the
+            full-clear semantics, DECISIONS 2026-07-15). ~80% of Settings' fields
+            are the same onboarding fields, so the wizard's mapper is reusable.
 - [ ] New API deployed and healthy (`/health` green); `data_backend` feature
       flag present (seeded, `seed.ts`).
 - [ ] Secrets in the deploy platform (escrow: `DATABASE_URL`, `MONGO_URI`,

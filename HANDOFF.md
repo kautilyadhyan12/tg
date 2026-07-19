@@ -1,6 +1,31 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: Card ⑥ — onboarding wizard → new API + gate restore 🟡  [DONE 2026-07-19]
+  WEB (web-repoint): the getting-started wizard (Onboarding.jsx) repointed from
+  backend-ml to the new /v1 API — PUT /v1/users/me/fitness-profile (full-doc
+  replace) + PATCH /v1/users/me for weight. AuthContext enriches the session
+  user with onboardingCompleted (GET /v1/users/me) so the gate (ProtectedRoute/
+  Login) enforces onboarding again — a Card-1 regression (it was enforced for
+  NOBODY). Pure mapper (unit convert + 2dp round) unit-tested. SMOKE caught two
+  real bugs: the ft/cm 400 (switching units left a stale value → 175 ft = 5334
+  cm, rejected only after all 5 steps) → fixed with unit-CONVERTING selects +
+  LIVE inline range validation (red message + disabled Continue as you type);
+  and the "Skip for now" dead-end (gate bounced it back) → button removed,
+  onboarding now required. T3 (FRESH CHAT): zero violations; fixed a health-data
+  console leak (medicalConditions was logged). web 93/94 (1 = known syncClient
+  env quirk); build ✓; lint 6/0 parity. SMOKE PASSED (Kd, every step ✅). No API
+  change, no migration.
+NEXT CARDS: Settings profile repoint (STILL on old mlApi — owed line in
+  cutover.md; dead userService import to clean up there) · Groq COACH_MODEL
+  migration (HARD DATE before 2026-08-16) · nutrition targets card (now
+  UNBLOCKED — the wizard populates user_fitness_profiles) · workout history
+  calendar repoint · limitedToDays in Progress UI · owed T3 residuals
+  (bySubstring cross-word; removals-telemetry; API canonical dedupe) ·
+  real-phone mobile-web camera smoke (owed, DECISIONS 2026-07-19).
+```
+
+```
 TASK: Card ⑤d — previous-days meal view 🟡  [DONE 2026-07-19, all gates]
   WEB (web-repoint): the Nutrition page gains day navigation (‹ / › / date
   picker) to look back at earlier days. NO API change — listMealsForDay

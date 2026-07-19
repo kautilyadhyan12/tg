@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../api/authApi';
+import { userService } from '../api/userApi';
 import { setCurrentUserId } from '../utils/storage';
 import { flushSyncQueue } from '../sync/syncClient';
 
@@ -13,6 +14,22 @@ const AuthContext = createContext(null);
 const adoptSession = (user) => {
   setCurrentUserId(user?.id ?? null);
   if (user) flushSyncQueue().catch(() => {});
+};
+
+// Card 6: the onboarding gate flag lives on the users module, not the auth view
+// (authUserSchema omits it by design — v1 §6.1:442), so /v1/auth/me and login
+// never carry it. Fetch it from /v1/users/me so ProtectedRoute/PublicRoute/Login
+// can enforce onboarding again (a Card-1 regression: with the field absent the
+// `=== false` gates saw undefined and enforced it for nobody). Fails OPEN
+// (undefined) on any error — a profile-read blip must never trap a logged-in
+// user; the gate stays exactly as permissive as it is today on failure.
+const fetchOnboardingFlag = async () => {
+  try {
+    const res = await userService.getProfile();
+    return res.data.user?.onboardingCompleted;
+  } catch {
+    return undefined;
+  }
 };
 
 export const useAuth = () => {
@@ -56,9 +73,14 @@ export function AuthProvider({ children }) {
   // A genuine 401 (no valid session) → logged out, no localStorage to clear.
   useEffect(() => {
     authService.getMe()
-      .then((res) => {
-        adoptSession(res.data.user);
-        setUser(res.data.user);
+      .then(async (res) => {
+        const authUser = res.data.user;
+        adoptSession(authUser);                     // flush timing UNCHANGED (bound to getMe)
+        // Enrich with the gate flag BEFORE loading clears, so ProtectedRoute
+        // never renders once with onboardingCompleted===undefined (gate open)
+        // and then redirects — the `finally` below awaits this.
+        const onboardingCompleted = await fetchOnboardingFlag();
+        setUser({ ...authUser, onboardingCompleted });
       })
       .catch(() => {
         adoptSession(null);
@@ -72,9 +94,15 @@ export function AuthProvider({ children }) {
   // only — no tokens in the body (DECISIONS 2026-07-11; shared authUserSchema).
   const login = async (email, password) => {
     const res = await authService.login({ email, password });
-    adoptSession(res.data.user);
-    setUser(res.data.user);
-    return res.data;
+    const authUser = res.data.user;
+    adoptSession(authUser);
+    // Enrich with the onboarding gate flag so Login.jsx can route to the wizard
+    // vs the dashboard, and ProtectedRoute sees it immediately (login returns
+    // authUserSchema, which omits it — same reason as session restore above).
+    const onboardingCompleted = await fetchOnboardingFlag();
+    const user = { ...authUser, onboardingCompleted };
+    setUser(user);
+    return { ...res.data, user };
   };
 
   // ── Register ──────────────────────────────────────────────────────────────

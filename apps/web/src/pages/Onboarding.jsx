@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
-import { userService } from '../api/userApi';
+import { userService, toFitnessProfilePayload, heightToCm, weightToKg, convertHeight, convertWeight } from '../api/userApi';
 import toast from 'react-hot-toast';
 import {
   User, Ruler, Target, Dumbbell,
@@ -168,6 +168,25 @@ export default function Onboarding() {
   const update = (field, value) =>
     setFormData((prev) => ({ ...prev, [field]: value }));
 
+  // Card 6: switching a unit must CONVERT the value already in the box, not
+  // leave it (175 cm silently becoming 175 ft = 5334 cm → the server's 300 cm
+  // cap rejects it, the "Failed to save profile" bug). Conversion + rounding
+  // live in userApi (pure + unit-tested). Weight and target weight share the
+  // one unit, so both convert together.
+  const changeHeightUnit = (newUnit) =>
+    setFormData((prev) => (prev.heightUnit === newUnit ? prev : {
+      ...prev,
+      heightUnit: newUnit,
+      heightValue: convertHeight(prev.heightValue, newUnit),
+    }));
+  const changeWeightUnit = (newUnit) =>
+    setFormData((prev) => (prev.weightUnit === newUnit ? prev : {
+      ...prev,
+      weightUnit: newUnit,
+      weightValue: convertWeight(prev.weightValue, newUnit),
+      targetWeightValue: convertWeight(prev.targetWeightValue, newUnit),
+    }));
+
   const toggleMulti = (field, value) => {
     setFormData((prev) => {
       const arr = prev[field];
@@ -224,34 +243,63 @@ export default function Onboarding() {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      const payload = {
-        age:    parseInt(formData.age),
-        gender: formData.gender,
-        height: { value: parseFloat(formData.heightValue), unit: formData.heightUnit },
-        weight: { value: parseFloat(formData.weightValue), unit: formData.weightUnit },
-        ...(formData.targetWeightValue && {
-          targetWeight: { value: parseFloat(formData.targetWeightValue), unit: formData.weightUnit },
-        }),
-        fitnessLevel:         formData.fitnessLevel,
-        exerciseFrequency:    formData.exerciseFrequency,
-        medicalConditions:    formData.medicalConditions,
-        fitnessGoals:         formData.fitnessGoals,
-        availableEquipment:   formData.availableEquipment,
-        sessionDuration:      formData.sessionDuration,
-        preferredWorkoutTime: formData.preferredWorkoutTime,
-      };
-
-      const res = await userService.completeOnboarding(payload);
-      updateUser({ onboardingCompleted: true, ...res.data.user });
+      // Card 6: onboarding now writes to the new /v1 API (was backend-ml).
+      // Weight lives on users.weight_kg (Part 4 §3.1), the rest on
+      // user_fitness_profiles. Save weight FIRST so onboarding is only marked
+      // complete once it is stored — a failed profile PUT then leaves the gate
+      // closed and the user retries (both writes are idempotent: same body
+      // twice = same rows).
+      const weightKg = weightToKg(formData.weightValue, formData.weightUnit);
+      if (weightKg !== null) {
+        await userService.updateProfile({ weightKg });
+      }
+      await userService.putFitnessProfile({
+        ...toFitnessProfilePayload(formData),
+        onboardingCompleted: true, // flips the gate (PUT is a full-doc replace)
+      });
+      updateUser({ onboardingCompleted: true });
       toast.success('Profile set up! Let\'s get started 💪');
       navigate('/dashboard');
     } catch (err) {
-      console.error(err);
-      toast.error('Failed to save profile. Please try again.');
+      // Log the MESSAGE only, never `err` — the axios error carries config.data,
+      // i.e. the PUT body with medicalConditions (health data). It must not land
+      // in the browser console (R3.10 / DPDP; T3 finding).
+      console.error('Onboarding save failed:', err?.message);
+      // A 400 means a value is out of range — point the user at what to check
+      // instead of a dead-end "try again" (the ft/cm mix-up class of error).
+      toast.error(
+        err.response?.status === 400
+          ? 'Some values look out of range — please check your age, height, and weight.'
+          : 'Failed to save profile. Please try again.',
+      );
     } finally {
       setLoading(false);
     }
   };
+
+  // Card 6: LIVE range checks — recomputed every render, so the message shows
+  // the instant a value goes out of the API's accepted range (heightCm 50–300,
+  // weightKg 1–999) as the user types, not after all 5 steps. Only flags a
+  // NON-EMPTY field (an empty box is "not filled yet", handled separately).
+  const hCm = heightToCm(formData.heightValue, formData.heightUnit);
+  const heightError = formData.heightValue && (hCm === null || hCm < 50 || hCm > 300)
+    ? (formData.heightUnit === 'ft'
+        ? 'That height looks off — enter about 1.7–9.8 ft (e.g. 5.75)'
+        : 'That height looks off — enter 50–300 cm')
+    : null;
+  const wKg = weightToKg(formData.weightValue, formData.weightUnit);
+  const weightError = formData.weightValue && (wKg === null || wKg <= 0 || wKg >= 1000)
+    ? (formData.weightUnit === 'lbs'
+        ? 'That weight looks off — enter 1–2200 lbs'
+        : 'That weight looks off — enter 1–999 kg')
+    : null;
+  const tKg = weightToKg(formData.targetWeightValue, formData.weightUnit);
+  const targetError = formData.targetWeightValue && (tKg === null || tKg <= 0 || tKg >= 1000)
+    ? 'That target weight looks off — please check it'
+    : null;
+  // Step 1's Continue is blocked while any value is out of range (Kd: a wrong
+  // value must not be accepted) — the inline message says exactly what to fix.
+  const step1Blocked = step === 1 && (heightError || weightError || targetError);
 
   const renderStep = () => {
     switch (step) {
@@ -299,18 +347,27 @@ export default function Onboarding() {
                   type="number"
                   value={formData.heightValue}
                   onChange={(e) => update('heightValue', e.target.value)}
-                  placeholder={formData.heightUnit === 'cm' ? '175' : '5.9'}
+                  placeholder={formData.heightUnit === 'cm' ? '175' : '5.75'}
                   className="input-field flex-1"
+                  style={heightError ? { borderColor: '#f87171' } : undefined}
                 />
                 <select
                   value={formData.heightUnit}
-                  onChange={(e) => update('heightUnit', e.target.value)}
+                  onChange={(e) => changeHeightUnit(e.target.value)}
                   className="bg-dark-100 border border-white/10 rounded-xl px-3 text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="cm">cm</option>
                   <option value="ft">ft</option>
                 </select>
               </div>
+              {/* Card 6: live range message (shows as you type) OR the ft hint. */}
+              {heightError ? (
+                <p className="text-2xs mt-1" style={{ color: '#f87171' }}>{heightError}</p>
+              ) : formData.heightUnit === 'ft' && (
+                <p className="text-2xs mt-1" style={{ color: 'rgba(255,255,255,0.40)' }}>
+                  Decimal feet — e.g. 5.75 = 5 ft 9 in
+                </p>
+              )}
             </div>
 
             <div>
@@ -322,16 +379,20 @@ export default function Onboarding() {
                   onChange={(e) => update('weightValue', e.target.value)}
                   placeholder={formData.weightUnit === 'kg' ? '70' : '154'}
                   className="input-field flex-1"
+                  style={weightError ? { borderColor: '#f87171' } : undefined}
                 />
                 <select
                   value={formData.weightUnit}
-                  onChange={(e) => update('weightUnit', e.target.value)}
+                  onChange={(e) => changeWeightUnit(e.target.value)}
                   className="bg-dark-100 border border-white/10 rounded-xl px-3 text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="kg">kg</option>
                   <option value="lbs">lbs</option>
                 </select>
               </div>
+              {weightError && (
+                <p className="text-2xs mt-1" style={{ color: '#f87171' }}>{weightError}</p>
+              )}
             </div>
 
             <div>
@@ -346,11 +407,15 @@ export default function Onboarding() {
                   onChange={(e) => update('targetWeightValue', e.target.value)}
                   placeholder={formData.weightUnit === 'kg' ? '65' : '143'}
                   className="input-field flex-1"
+                  style={targetError ? { borderColor: '#f87171' } : undefined}
                 />
                 <div className="bg-dark-100 border border-white/10 rounded-xl px-4 flex items-center text-gray-400 text-sm">
                   {formData.weightUnit}
                 </div>
               </div>
+              {targetError && (
+                <p className="text-2xs mt-1" style={{ color: '#f87171' }}>{targetError}</p>
+              )}
             </div>
           </div>
         );
@@ -408,6 +473,7 @@ export default function Onboarding() {
                 onChange={(e) => update('medicalConditions', e.target.value)}
                 placeholder="e.g. Lower back pain, knee injury, asthma..."
                 rows={3}
+                maxLength={2000}
                 className="input-field resize-none"
               />
               <p className="text-gray-500 text-xs mt-1">
@@ -637,7 +703,8 @@ export default function Onboarding() {
             {step < STEPS.length ? (
               <button
                 onClick={goNext}
-                className="btn-primary flex-1 flex items-center justify-center gap-2"
+                disabled={!!step1Blocked}
+                className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Continue
                 <ChevronRight className="w-4 h-4" />
@@ -659,17 +726,9 @@ export default function Onboarding() {
               </button>
             )}
           </div>
-
-          {step === 1 && (
-            <div className="max-w-lg mx-auto text-center mt-2">
-              <button
-                onClick={() => navigate('/dashboard')}
-                className="text-gray-500 text-sm hover:text-gray-400 transition-colors"
-              >
-                Skip for now
-              </button>
-            </div>
-          )}
+          {/* Card 6: "Skip for now" removed — onboarding is now enforced by the
+              gate (ProtectedRoute), so skipping to /dashboard just bounced the
+              user straight back here (T3 dead-end finding; Kd ruled remove). */}
         </div>
 
       </div>
