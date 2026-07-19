@@ -119,16 +119,16 @@ the operational wrapper around it.
             snack). Kd asked for a user override at the 5a smoke → D1(c) is
             now OWED: a `mealType` field on the meals API (small card).
             Interim: Card 5b adds an edit-takenAt control (PATCH exists).
-      - [ ] **Dishware IN-FLOW UI + portion API** (Part 2B §3.2 rung 1;
-            Kd re-ruled at the 5b smoke: a standalone dishware card was
-            built and REJECTED — it must live inside the add-food and
-            photo flows, and the chosen dishware must drive the server's
-            portion math, which needs a small API surface).
-            **NOW CARD ⑤c2** (split out of ⑤c, Kd-approved 2026-07-17 —
-            DECISIONS): driving server-side portion math from a chosen
-            dishware needs its own contract design, not a UI tweak. The
-            dishware client fns + tests already exist (kept by 5b for
-            exactly this). NOT dropped — owed here.
+      - [x] **Dishware IN-FLOW UI + portion API** (Part 2B §3.2 rung 1;
+            Kd re-ruled at the 5b smoke: dishware must live inside the
+            add-food and photo flows, driving the server's portion math).
+            DONE as Card ⑤c2 (2026-07-18): API dishware arm
+            {canonical,dishwareId,fillLevel} on every meal write (merged to
+            master via the dishware-portion-api PR; shared dishwareGrams
+            helper; tenant-scoped; bounds-symmetric); web "measure with my
+            dish" in both modals + save-a-bowl (Appendix-B midpoints). Both
+            diffs fresh-chat-T3'd, SMOKE PASSED (DECISIONS 2026-07-18). Kd
+            ruling recorded: ASK EVERY TIME, never auto-apply.
       - [x] **Food synonym/alias matching** (Card-5b smoke, the roti case:
             vision said "Flatbread Stack", curated knows "Roti" → zero
             matches, 0 kcal). DONE: Card ⑤c API (branch `meal-composition`)
