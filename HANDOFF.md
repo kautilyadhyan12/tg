@@ -1,6 +1,31 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: Card ⑤c2 — dishware in-flow + portion API 🟡  [DONE 2026-07-18, all gates]
+  API (branch dishware-portion-api → PR merged to master, CI green): each meal
+  item is now a strict UNION — grams arm {canonical,grams} OR dishware arm
+  {canonical,dishwareId,fillLevel}. Server prices the dishware arm via the
+  SHARED dishwareGrams(volume×fill×density) helper the scan resolver already
+  uses (can't-disagree), rung user_dishware, tenant-scoped lookup, bounds
+  symmetric with the grams arm. NO migration, NO scan-response change (Kd
+  ruling: ASK EVERY TIME, never auto-apply — deviation from 2B §3.2 Stage 5).
+  api 278/278 on Neon.
+  WEB (web-repoint): shared DishMeasure (saved-bowl chips + save-new-bowl with
+  Appendix-B midpoints 125/175/275 ml or type-ml + ¼/½/¾/full). AddMealModal
+  grams↔dish toggle; PhotoModal per-item "🍲 my dish" pill. Helpers pass the
+  dishware arm through. Plus Kd smoke asks: tap-to-rename a logged meal, and
+  the discoverable labeled pill. web 79/80 (1 = known syncClient quirk).
+  T3: BOTH diffs reviewed in FRESH CHATS by Kd (never subagents). API T3 → 2
+  fixed (0g/>10000g bound; PATCH dishware test). Web T3 → 2 fixed (dish rows
+  never show the AI estimate on the degraded path; AddMealModal preview
+  key-stamped). SMOKE PASSED (Kd, every step ✅). Cost: ZERO paid calls added.
+NEXT CARDS: ⑤d previous-days meal view · nutrition targets card (buildable
+  since PR #30) · desktop webcam capture · owed T3 residuals (bySubstring
+  cross-word; removals-telemetry; API canonical dedupe) · HARD DATE Groq
+  COACH_MODEL migration before 2026-08-16 (cutover.md) — coach goes dark after.
+```
+
+```
 TASK: web repoint — Card 5c: meal composition + synonyms + change-label 🟡
       [DONE 2026-07-18 — ALL GATES PASSED. PR #40 merged to master (CI green
        on final commit 437f042 incl. the Curd/Dahi row); master merged back
