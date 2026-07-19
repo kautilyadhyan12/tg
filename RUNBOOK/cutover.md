@@ -82,21 +82,16 @@ the operational wrapper around it.
             from groq.com/pricing per Part 0 rule 4, sanity-check answers.
             This is date-gated, not launch-gated — do it even if cutover
             slips. (DECISIONS 2026-07-16.)
-      - [ ] **Vision model migration (HARD DATE: 2026-07-17 — already due)** —
-            Groq emailed 2026-07-16: `meta-llama/llama-4-scout-17b-16e-instruct`
-            (MEAL_VISION_MODEL default, DECISIONS 2026-07-12 P2.6a) is
-            decommissioned 2026-07-17; after that meal-photo scans fail. The
-            ONLY vision-capable Groq replacement (console.groq.com/docs/vision,
-            checked 2026-07-16): `qwen/qwen3.6-27b` at $0.60/1M in + $3.00/1M
-            out (groq.com/pricing 2026-07-16; Part 0 rule 4 — re-quote at the
-            card, encode as 600_000/3_000_000 micro-USD). Own small API card:
-            flip the default, re-quote the vision price constants
-            (vision cost constants, nutrition module), sanity-check analyses
-            on real meal photos. INTERIM: the `MEAL_VISION_MODEL` env override
-            (the designed swap lever) keeps dev working — cost rows priced at
-            the old constants until the card lands (dev-only, accepted).
-            Do this WITH or BEFORE the coach model card (2026-08-16) — one
-            Groq visit for both.
+      - [x] **Vision model migration** — **DONE** (during web Card 5a,
+            DECISIONS 2026-07-16; checkbox was STALE, corrected 2026-07-19
+            after verifying the CODE, not the doc). Groq decommissioned
+            `meta-llama/llama-4-scout-17b-16e-instruct` on 2026-07-17;
+            `MEAL_VISION_MODEL` now defaults to `qwen/qwen3.6-27b`
+            (config.ts:34) and the vision price constants ARE re-quoted to
+            600_000n / 3_000_000n micro-USD ($0.60/1M in, $3.00/1M out,
+            groq.com/pricing 2026-07-16 — nutrition/service.ts:23-24), so the
+            "cost rows priced at the old constants" interim note here no
+            longer applied. Live-verified through the real adapter.
       - [ ] Coach chat retry protection (DECISIONS 2026-07-12 P2.5b T3 minor;
             Kd D1(b) 2026-07-16) — /v1/coach/chat accepts a client-generated
             Idempotency-Key + gets a short-window per-route cap. Without it a
@@ -152,8 +147,23 @@ the operational wrapper around it.
             Past days hide logging (takenAt=now, Kd 2026-07-17), keep per-meal
             edits, show "Eaten on this day"; MacroRings kept (Kd ruled keep).
             Fresh-chat T3 (zero violations) + SMOKE passed (DECISIONS 2026-07-19).
-      - [ ] Desktop webcam capture for meal photos (phones already open the
-            camera via the input's capture attribute) — enhancement, 5c/5d.
+      - [x] ~~Desktop webcam capture for meal photos~~ — **WON'T BUILD**
+            (Kd ruled 2026-07-19, DECISIONS). Not a removal: no meal-photo
+            webcam was ever built (`useCamera` serves the workout/pose path
+            only), and Part 2B §3 mandates no capture mechanism. Nobody is
+            blocked — `capture` is ignored on desktop, so the file picker
+            already works there. A laptop webcam is a WORSE input to 2B's
+            monocular portion problem and would burn paid vision calls on
+            poor-quality photos. Does NOT block P2.8.
+      - [ ] **Mobile-web camera smoke on a REAL phone** (owed, Kd deferred
+            2026-07-19) — the claim "the file input opens the camera on
+            phones" (DECISIONS 2026-07-17) is UNVERIFIED: every smoke so far
+            ran on desktop. The webcam ruling above makes mobile web the
+            PRIMARY meal-capture path, so this needs one real-device run:
+            `vite dev --host`, `VITE_API_URL` + API `WEB_ORIGIN` on the LAN
+            address (a phone resolves `localhost` to itself; CORS is
+            exact-origin + credentials). Also settles the recorded
+            `capture`-vs-photo-library trade-off (options A/B/C in DECISIONS).
       - [ ] `limitedToDays` surfaced in the Progress UI (T3 Card 3) — every
             /v1/progress read returns the plan-clamp field (progress.ts:18-21,
             the P2.4 history gate) and the page ignores it, so a free-plan
