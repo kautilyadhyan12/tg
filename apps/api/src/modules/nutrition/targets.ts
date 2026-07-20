@@ -26,6 +26,7 @@
 // R7.1, and the T3 round-1 fix was incomplete without it.
 import {
   missingTargetInputSchema,
+  nutritionTargetsResponseSchema,
   type MissingTargetInput,
   type NutritionTargets,
   type NutritionTargetsResponse,
@@ -62,8 +63,15 @@ const DEFAULT_ACTIVITY = 1.55;
  *
  *  DERIVED from the shared contract, never re-declared (R7.2) — the response
  *  shape lives once in packages/shared and this list must not be able to drift
- *  from the `missing[]` values the client is typed against. */
-export const REQUIRED_TARGET_INPUTS = missingTargetInputSchema.options;
+ *  from the `missing[]` values the client is typed against.
+ *
+ *  Copied and frozen, not aliased: zod 3's `.options` getter hands back the
+ *  schema's own internal array, so exporting it directly made the shared
+ *  contract mutable at runtime — a consumer's `.sort()` would reorder it in
+ *  place (T3 round 3 F10). */
+export const REQUIRED_TARGET_INPUTS: readonly MissingTargetInput[] = Object.freeze([
+  ...missingTargetInputSchema.options,
+]);
 
 export interface TargetInputs {
   age: number | null;
@@ -89,7 +97,21 @@ export interface ResolvedTargetInputs {
 }
 
 export function missingTargetInputs(input: TargetInputs): MissingTargetInput[] {
-  return REQUIRED_TARGET_INPUTS.filter((key) => input[key] === null);
+  // `satisfies` makes enum COVERAGE a compile-time check (T3 round 3 F1). The
+  // previous `input[key] === null` filter only caught the enum SHRINKING: a key
+  // added to the shared enum whose TargetInputs field is non-nullable (e.g.
+  // fitnessGoals) would compile, never compare equal to null, and so be
+  // silently unenforced — a "required" input that never blocks a target.
+  // Now: a new enum key missing from this literal fails the build, and one
+  // whose value cannot be absent fails the Record's nullable constraint.
+  const required = {
+    age: input.age,
+    gender: input.gender,
+    heightCm: input.heightCm,
+    weightKg: input.weightKg,
+    exerciseFrequency: input.exerciseFrequency,
+  } satisfies Record<MissingTargetInput, number | string | null>;
+  return REQUIRED_TARGET_INPUTS.filter((key) => required[key] === null);
 }
 
 export function calculateTargets(input: ResolvedTargetInputs): NutritionTargets {
@@ -133,9 +155,15 @@ export function calculateTargets(input: ResolvedTargetInputs): NutritionTargets 
 }
 
 /** The one entry point the service uses: targets, or an honest account of what
- *  the user still has to fill in. Never both — the shared contract's refine()
- *  rejects either impossible pairing. */
+ *  the user still has to fill in. Never both — enforced HERE by parsing through
+ *  the shared contract's refine(), so every caller gets the guarantee. (T3
+ *  round 3 F3: the parse used to live only in the service, while this exported,
+ *  directly-unit-tested function promised an enforcement it did not perform.) */
 export function resolveTargets(input: TargetInputs): NutritionTargetsResponse {
+  return nutritionTargetsResponseSchema.parse(resolveTargetsUnchecked(input));
+}
+
+function resolveTargetsUnchecked(input: TargetInputs): NutritionTargetsResponse {
   // THE decision, taken once, off the derived list (T3 round 2): an earlier
   // version gated on its own hand-written null chain, which could disagree
   // with REQUIRED_TARGET_INPUTS if the shared enum ever lost a key.
@@ -145,11 +173,13 @@ export function resolveTargets(input: TargetInputs): NutritionTargetsResponse {
   const { age, gender, heightCm, weightKg, exerciseFrequency } = input;
   if (age === null || gender === null || heightCm === null || weightKg === null || exerciseFrequency === null) {
     // Unreachable while REQUIRED_TARGET_INPUTS covers every field the
-    // calculator reads — this is the type bridge (R2.2 bans a cast). It is
-    // also the drift alarm: drop a key from the shared enum and the old code
-    // would have computed a target with that null coerced to 0 — a fabricated
-    // number, the one outcome this card exists to prevent. Fail loud (R1.3);
-    // a 500 is strictly better than a plausible-looking wrong calorie goal.
+    // calculator reads — this is the type bridge (R2.2 bans a cast). It also
+    // alarms on enum SHRINK specifically: drop a key from the shared enum and
+    // the old code would have computed a target with that null coerced to 0 —
+    // a fabricated number, the one outcome this card exists to prevent. (Enum
+    // GROWTH is caught earlier, at the `satisfies` in missingTargetInputs;
+    // this chain does not cover it — T3 round 3 F2 corrected the overclaim.)
+    // Fail loud (R1.3): a 500 beats a plausible-looking wrong calorie goal.
     throw new Error("targets: REQUIRED_TARGET_INPUTS does not cover every calculator input");
   }
   return {

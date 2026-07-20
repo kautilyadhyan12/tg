@@ -270,7 +270,15 @@ describe("nutrition targets (ported calculator, nutrition.py:98-179)", () => {
   // null coerced to 0.
   it("keeps the required-input list at exactly the five Kd-ruled fields", () => {
     expect(REQUIRED_TARGET_INPUTS).toEqual(["age", "gender", "heightCm", "weightKg", "exerciseFrequency"]);
-    expect(missingTargetInputSchema.options).toEqual(REQUIRED_TARGET_INPUTS);
+    // The second assertion here was `expect(x).toEqual(x)` again (T3 round 3
+    // F11) — deleted rather than reworded. The literal above is the guard.
+  });
+
+  // T3 round 3 F10: `.options` returns zod's own internal array, so exporting
+  // it unfrozen let any consumer reorder the shared contract in place.
+  it("exposes the required-input list as a frozen copy, not the schema's array", () => {
+    expect(Object.isFrozen(REQUIRED_TARGET_INPUTS)).toBe(true);
+    expect(REQUIRED_TARGET_INPUTS).not.toBe(missingTargetInputSchema.options);
   });
 
   // The contract's refine(), which the TYPES cannot express — both impossible
