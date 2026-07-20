@@ -8,9 +8,10 @@ import {
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { useTransition } from '../context/TransitionContext';
-import { userService } from '../api/userApi';
+import { userService, heightToCm, weightToKg, convertHeight, convertWeight, mergeFitnessProfile } from '../api/userApi';
 import { authService } from '../api/authApi';
-import mlApi from '../api/mlApi';
+import mlApi from '../api/mlApi'; // KEPT: avatar/profile-picture only — no new-API home (owed card)
+import Select from '../components/common/Select';
 
 const TABS = [
   { id: 'profile',       label: 'Profile',       icon: User    },
@@ -30,6 +31,12 @@ const inputStyle = {
   border:     '1.5px solid rgba(255,138,31,0.30)',
   color:      '#fff',
   boxShadow:  '0 0 10px rgba(255,138,31,0.08)',
+  // Keeps browser-drawn bits of native inputs dark (number spinners, autofill)
+  // instead of light against this UI. The dropdowns themselves no longer rely
+  // on it — they use the custom <Select>, because the OS paints a native
+  // popup's hovered row with the system accent (blue) and CSS cannot override
+  // that. (Kd smoke finding, Card 7.)
+  colorScheme: 'dark',
 };
 
 function SaveBtn({ loading, saved }) {
@@ -65,39 +72,63 @@ function Field({ label, hint, children }) {
 
 // ── Profile tab ───────────────────────────────────────────────────────────────
 function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
+  // Card 7: init from the new-API shape (metric; name is displayName).
   const [form, setForm] = useState({
-    fullName:     profile.fullName            || '',
-    age:          profile.age                 || '',
-    gender:       profile.gender              || 'male',
-    height:       profile.height?.value       || '',
-    heightUnit:   profile.height?.unit        || 'cm',
-    weight:       profile.weight?.value       || '',
-    weightUnit:   profile.weight?.unit        || 'kg',
-    targetWeight: profile.targetWeight?.value || '',
+    fullName:     profile.displayName    || '',
+    age:          profile.age            || '',
+    // T3 F2: NO fabricated default — the shared schema is explicit that an
+    // unanswered field stays NULL ("unanswered is not 'beginner'", users.ts).
+    gender:       profile.gender         || '',
+    height:       profile.heightCm       || '',
+    heightUnit:   'cm',
+    weight:       profile.weightKg       || '',
+    weightUnit:   'kg',
+    targetWeight: profile.targetWeightKg || '',
   });
   const [loading, setLoading] = useState(false);
   const [saved,   setSaved]   = useState(false);
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
+  // Converting unit switch (reuse Card 6) so a value in the box isn't silently
+  // reinterpreted (175 cm → 175 ft = 5334 cm → the server's 300 cm cap 400s).
+  const changeHeightUnit = (u) =>
+    setForm((f) => (f.heightUnit === u ? f : { ...f, heightUnit: u, height: convertHeight(f.height, u) }));
+  const changeWeightUnit = (u) =>
+    setForm((f) => (f.weightUnit === u ? f
+      : { ...f, weightUnit: u, weight: convertWeight(f.weight, u), targetWeight: convertWeight(f.targetWeight, u) }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await mlApi.patch('/users/profile', {
-        fullName:     form.fullName,
-        age:          parseInt(form.age) || undefined,
-        gender:       form.gender,
-        height:       { value: parseFloat(form.height)       || 0, unit: form.heightUnit },
-        weight:       { value: parseFloat(form.weight)       || 0, unit: form.weightUnit },
-        targetWeight: { value: parseFloat(form.targetWeight) || 0, unit: form.weightUnit },
-      });
+      // name + weight → /v1/users/me; age/gender/height/target → the fitness
+      // profile via a MERGE (preserve the fitness-prefs the other form owns +
+      // keep onboardingCompleted true). Weight/name skipped when blank so the
+      // .strict()/min(1) PATCH body never 400s on an empty field.
+      // T3 F4: the PUT runs FIRST because it is the call that rejects
+      // out-of-range user input — so a validation failure leaves NOTHING
+      // committed, rather than half-saving name/weight and reporting failure.
+      const age = parseInt(form.age, 10);
+      await userService.putFitnessProfile(mergeFitnessProfile(profile, {
+        age: Number.isFinite(age) ? age : null,
+        gender: form.gender || null,
+        heightCm: heightToCm(form.height, form.heightUnit),
+        targetWeightKg: weightToKg(form.targetWeight, form.weightUnit),
+      }));
+      const patch = {};
+      if (form.fullName.trim()) patch.displayName = form.fullName.trim();
+      const wKg = weightToKg(form.weight, form.weightUnit);
+      if (wKg !== null) patch.weightKg = wKg;
+      if (Object.keys(patch).length) await userService.updateProfile(patch);
+
       toast.success('Profile updated');
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       onSaved();
-    } catch {
-      toast.error('Failed to update profile');
+    } catch (err) {
+      toast.error(err?.response?.status === 400
+        ? 'Some values look out of range — please check your age, height and weight.'
+        : 'Failed to update profile');
     } finally {
       setLoading(false);
     }
@@ -119,18 +150,24 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
         <Field label="Age">
           <input type="number" value={form.age}
             onChange={(e) => set('age', e.target.value)}
-            min={10} max={100}
+            min={13} max={120}
             className="input-field" style={inputStyle} />
         </Field>
 
         <Field label="Gender">
-          <select value={form.gender}
-            onChange={(e) => set('gender', e.target.value)}
-            className="input-field" style={inputStyle}>
-            <option value="male">Male</option>
-            <option value="female">Female</option>
-            <option value="other">Other</option>
-          </select>
+          <Select
+            value={form.gender}
+            onChange={(v) => set('gender', v)}
+            ariaLabel="Gender"
+            style={inputStyle}
+            options={[
+              { value: '',                  label: 'Not set' },
+              { value: 'male',              label: 'Male' },
+              { value: 'female',            label: 'Female' },
+              { value: 'other',             label: 'Other' },
+              { value: 'prefer_not_to_say', label: 'Prefer not to say' },
+            ]}
+          />
         </Field>
 
         <Field label="Height">
@@ -138,12 +175,14 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
             <input type="number" value={form.height}
               onChange={(e) => set('height', e.target.value)}
               className="input-field flex-1" style={inputStyle} />
-            <select value={form.heightUnit}
-              onChange={(e) => set('heightUnit', e.target.value)}
-              className="input-field w-20" style={inputStyle}>
-              <option value="cm">cm</option>
-              <option value="ft">ft</option>
-            </select>
+            <Select
+              value={form.heightUnit}
+              onChange={changeHeightUnit}
+              ariaLabel="Height unit"
+              className="w-24"
+              style={inputStyle}
+              options={[{ value: 'cm', label: 'cm' }, { value: 'ft', label: 'ft' }]}
+            />
           </div>
         </Field>
 
@@ -152,12 +191,14 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
             <input type="number" value={form.weight}
               onChange={(e) => set('weight', e.target.value)}
               className="input-field flex-1" style={inputStyle} />
-            <select value={form.weightUnit}
-              onChange={(e) => set('weightUnit', e.target.value)}
-              className="input-field w-20" style={inputStyle}>
-              <option value="kg">kg</option>
-              <option value="lbs">lbs</option>
-            </select>
+            <Select
+              value={form.weightUnit}
+              onChange={changeWeightUnit}
+              ariaLabel="Weight unit"
+              className="w-24"
+              style={inputStyle}
+              options={[{ value: 'kg', label: 'kg' }, { value: 'lbs', label: 'lbs' }]}
+            />
           </div>
         </Field>
 
@@ -183,6 +224,10 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
 
 // ── Fitness tab ───────────────────────────────────────────────────────────────
 function FitnessTab({ profile, onSaved }) {
+  // Card 7: these MUST be the new-API enums (fitnessGoalSchema/equipmentSchema),
+  // same set the getting-started wizard uses — the old list had values the new
+  // system rejects (core_strength; barbell/machine) and old names (bands,
+  // pullup_bar) that would 400 on save. Kd ruled: align to the supported set.
   const GOALS = [
     { id: 'weight_loss',    label: 'Weight Loss',     icon: '🔥' },
     { id: 'muscle_gain',    label: 'Muscle Gain',     icon: '💪' },
@@ -191,26 +236,27 @@ function FitnessTab({ profile, onSaved }) {
     { id: 'stress_relief',  label: 'Stress Relief',   icon: '😌' },
     { id: 'general_fitness',label: 'General Fitness', icon: '⚡' },
     { id: 'posture',        label: 'Posture',         icon: '🎯' },
-    { id: 'core_strength',  label: 'Core Strength',   icon: '🏋️' },
   ];
 
   const EQUIPMENT = [
-    { id: 'none',        label: 'No Equipment' },
-    { id: 'dumbbells',   label: 'Dumbbells'    },
-    { id: 'bands',       label: 'Bands'        },
-    { id: 'kettlebells', label: 'Kettlebells'  },
-    { id: 'pullup_bar',  label: 'Pull-up Bar'  },
-    { id: 'barbell',     label: 'Barbell'      },
-    { id: 'machine',     label: 'Machines'     },
+    { id: 'none',             label: 'No Equipment'     },
+    { id: 'dumbbells',        label: 'Dumbbells'        },
+    { id: 'resistance_bands', label: 'Resistance Bands' },
+    { id: 'kettlebells',      label: 'Kettlebells'      },
+    { id: 'pull_up_bar',      label: 'Pull-up Bar'      },
   ];
 
+  // Card 7: init from the new-API shape (sessionDurationMin).
   const [form, setForm] = useState({
-    fitnessLevel:         profile.fitnessLevel         || 'beginner',
+    // T3 F2: NO fabricated defaults — the shared schema is explicit that an
+    // unanswered field stays NULL ("unanswered is not 'beginner'", users.ts).
+    // Empty/null here → the save sends null, not an invented answer.
+    fitnessLevel:         profile.fitnessLevel         || '',
     fitnessGoals:         profile.fitnessGoals         || [],
     availableEquipment:   profile.availableEquipment   || [],
-    sessionDuration:      profile.sessionDuration      || 30,
-    preferredWorkoutTime: profile.preferredWorkoutTime || 'morning',
-    exerciseFrequency:    profile.exerciseFrequency    || 3,
+    sessionDuration:      profile.sessionDurationMin   ?? null,
+    preferredWorkoutTime: profile.preferredWorkoutTime || '',
+    exerciseFrequency:    profile.exerciseFrequency    ?? null,
     medicalConditions:    profile.medicalConditions    || '',
   });
   const [loading, setLoading] = useState(false);
@@ -234,15 +280,18 @@ function FitnessTab({ profile, onSaved }) {
     e.preventDefault();
     setLoading(true);
     try {
-      await mlApi.patch('/users/profile', {
-        fitnessLevel:         form.fitnessLevel,
+      // MERGE: preserve the basic-info fields the other form owns (age/gender/
+      // height/target) + keep onboardingCompleted true; override only the prefs.
+      const med = (form.medicalConditions || '').trim();
+      await userService.putFitnessProfile(mergeFitnessProfile(profile, {
+        fitnessLevel:         form.fitnessLevel || null,
         fitnessGoals:         form.fitnessGoals,
         availableEquipment:   form.availableEquipment,
-        sessionDuration:      form.sessionDuration,
-        preferredWorkoutTime: form.preferredWorkoutTime,
-        exerciseFrequency:    form.exerciseFrequency,
-        medicalConditions:    form.medicalConditions,
-      });
+        sessionDurationMin:   Number.isFinite(form.sessionDuration) ? form.sessionDuration : null,
+        preferredWorkoutTime: form.preferredWorkoutTime || null,
+        exerciseFrequency:    Number.isFinite(form.exerciseFrequency) ? form.exerciseFrequency : null,
+        medicalConditions:    med === '' ? null : med,
+      }));
       toast.success('Fitness preferences updated');
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -302,10 +351,13 @@ function FitnessTab({ profile, onSaved }) {
       </Field>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label={`Session Duration — ${form.sessionDuration} min`}>
+        {/* T3 F2: the slider always has a position, so an UNSET duration keeps
+            state null (saved as null) and is labelled "Not set" — the 30 below
+            is display-only until the user actually moves it. */}
+        <Field label={`Session Duration — ${form.sessionDuration === null ? 'Not set' : `${form.sessionDuration} min`}`}>
           <input type="range" min={15} max={120} step={15}
-            value={form.sessionDuration}
-            onChange={(e) => setForm((f) => ({ ...f, sessionDuration: parseInt(e.target.value) }))}
+            value={form.sessionDuration ?? 30}
+            onChange={(e) => setForm((f) => ({ ...f, sessionDuration: parseInt(e.target.value, 10) }))}
             className="w-full accent-amber-500" />
           <div className="flex justify-between text-2xs mt-1"
                style={{ color: 'rgba(255,255,255,0.30)' }}>
@@ -314,24 +366,31 @@ function FitnessTab({ profile, onSaved }) {
         </Field>
 
         <Field label="Preferred Workout Time">
-          <select value={form.preferredWorkoutTime}
-            onChange={(e) => setForm((f) => ({ ...f, preferredWorkoutTime: e.target.value }))}
-            className="input-field" style={inputStyle}>
-            <option value="morning">Morning (5am–12pm)</option>
-            <option value="afternoon">Afternoon (12pm–5pm)</option>
-            <option value="evening">Evening (5pm–10pm)</option>
-            <option value="night">Night (10pm–5am)</option>
-          </select>
+          <Select
+            value={form.preferredWorkoutTime}
+            onChange={(v) => setForm((f) => ({ ...f, preferredWorkoutTime: v }))}
+            ariaLabel="Preferred workout time"
+            style={inputStyle}
+            options={[
+              { value: '',          label: 'Not set' },
+              { value: 'morning',   label: 'Morning (5am–12pm)' },
+              { value: 'afternoon', label: 'Afternoon (12pm–5pm)' },
+              { value: 'evening',   label: 'Evening (5pm–10pm)' },
+            ]}
+          />
         </Field>
 
         <Field label="Weekly Workout Target">
-          <select value={form.exerciseFrequency}
-            onChange={(e) => setForm((f) => ({ ...f, exerciseFrequency: parseInt(e.target.value) }))}
-            className="input-field" style={inputStyle}>
-            {[1,2,3,4,5,6,7].map((n) => (
-              <option key={n} value={n}>{n} day{n !== 1 ? 's' : ''} / week</option>
-            ))}
-          </select>
+          <Select
+            value={form.exerciseFrequency ?? ''}
+            onChange={(v) => setForm((f) => ({ ...f, exerciseFrequency: v === '' ? null : v }))}
+            ariaLabel="Weekly workout target"
+            style={inputStyle}
+            options={[
+              { value: '', label: 'Not set' },
+              ...[1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: n, label: `${n} day${n !== 1 ? 's' : ''} / week` })),
+            ]}
+          />
         </Field>
 
         <Field label="Medical Conditions / Notes"
@@ -339,6 +398,7 @@ function FitnessTab({ profile, onSaved }) {
           <textarea value={form.medicalConditions}
             onChange={(e) => setForm((f) => ({ ...f, medicalConditions: e.target.value }))}
             rows={3} placeholder="e.g. lower back pain, knee injury"
+            maxLength={2000}
             className="input-field resize-none" style={inputStyle} />
         </Field>
       </div>
@@ -351,8 +411,8 @@ function FitnessTab({ profile, onSaved }) {
 }
 
 // ── Account tab ───────────────────────────────────────────────────────────────
-function AccountTab({ profile }) {
-  const { logout } = useAuth();
+function AccountTab({ profile, onSaved }) {
+  const { logout, updateUser } = useAuth();
   const { triggerTransition } = useTransition();
   const [pwForm,         setPwForm]         = useState({ current: '', newPw: '', confirm: '' });
   const [pwLoading,      setPwLoading]      = useState(false);
@@ -386,11 +446,23 @@ function AccountTab({ profile }) {
   };
 
   const handleResetOnboarding = async () => {
-    if (!window.confirm('This will redirect you to the onboarding wizard next visit. Continue?')) return;
+    if (!window.confirm('This clears your fitness profile and sends you through the getting-started wizard again (blank). Continue?')) return;
     setResetLoading(true);
     try {
-      await mlApi.post('/users/reset-onboarding');
-      toast.success('Onboarding reset. Refresh to go through it again.');
+      // Card 7 (Kd ruled WIPE): PUT {} is the full-clear — it wipes every
+      // fitness-profile field AND sets onboarding_completed → false
+      // (DECISIONS 2026-07-15). Weight (users.weight_kg) is a separate column
+      // used elsewhere and is intentionally NOT cleared here.
+      await userService.putFitnessProfile({});
+      // T3 F1: the parent's cached `profile` is now STALE (the row is wiped).
+      // Without this refresh, opening the Fitness tab and saving would merge
+      // against the stale copy and silently re-write every wiped field —
+      // including onboardingCompleted:true — undoing the reset. Flip the
+      // context flag too so the gate (ProtectedRoute) sends the user to the
+      // wizard immediately instead of waiting for a manual refresh.
+      await onSaved();
+      updateUser({ onboardingCompleted: false });
+      toast.success('Onboarding reset — taking you through it again.');
     } catch { toast.error('Failed to reset onboarding'); }
     finally   { setResetLoading(false); }
   };
@@ -631,15 +703,31 @@ export default function Settings() {
   const fileRef = useRef(null);
 
   const loadProfile = async () => {
+    // Card 7: profile now comes from the new API — /v1/users/me (name, weight,
+    // onboardingCompleted) merged with /v1/users/me/fitness-profile (age, goals,
+    // …). Flat merge; both carry onboardingCompleted (same value).
     try {
-      const res = await mlApi.get('/users/profile');
-      setProfile(res.data.user);
-      setAvatar(res.data.user?.profilePicture || '');
+      const [meRes, fpRes] = await Promise.all([
+        userService.getProfile(),
+        userService.getFitnessProfile(),
+      ]);
+      setProfile({ ...fpRes.data.fitnessProfile, ...meRes.data.user });
     } catch (err) {
-      console.error('Failed to load profile:', err);
+      console.error('Failed to load profile:', err?.message);
       toast.error('Failed to load profile');
     } finally {
       setLoading(false);
+    }
+    // Avatar still lives on the OLD backend (no new-API home — owed card).
+    // Isolated so its failure (old backend down on this branch) never blocks
+    // the profile load above.
+    try {
+      const av = await mlApi.get('/users/profile');
+      setAvatar(av.data.user?.profilePicture || '');
+    } catch (err) {
+      // Expected on this branch (old backend down); logged rather than
+      // swallowed so a genuine fault is still visible (R2.5).
+      console.debug('avatar unavailable:', err?.message);
     }
   };
 
@@ -839,7 +927,7 @@ export default function Settings() {
                     />
                   )}
                   {tab === 'fitness'       && <FitnessTab       profile={profile} onSaved={loadProfile} />}
-                  {tab === 'account'       && <AccountTab       profile={profile} />}
+                  {tab === 'account'       && <AccountTab       profile={profile} onSaved={loadProfile} />}
                   {tab === 'notifications' && <NotificationsTab />}
                 </motion.div>
               </AnimatePresence>

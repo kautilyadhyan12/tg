@@ -74,6 +74,39 @@ export function toFitnessProfilePayload(formData) {
   };
 }
 
+/** Card 7 (Settings): the fitness-profile PUT is a FULL replace, and the two
+ *  Settings forms each edit only PART of it — so a form must send the CURRENT
+ *  profile with only its own fields overridden, or it wipes the other form's.
+ *  It must ALSO always CARRY onboardingCompleted explicitly, because the server
+ *  sets it to false when the flag is omitted (service.ts:142) — otherwise
+ *  saving Settings would bounce the user back to the wizard. It carries the
+ *  CURRENT value rather than a hard `true`, so a save that lands right after a
+ *  reset-onboarding (profile wiped, flag false) cannot silently re-onboard the
+ *  user; `true` is only the fallback when the flag is unknown (T3 F1 residual).
+ *
+ *  `current` = the fitnessProfileSchema shape from GET (or null before load);
+ *  `edits` = a partial of the same. undefined edits are ignored (they keep the
+ *  current value); an explicit null clears that field. Pure + unit-tested. */
+export function mergeFitnessProfile(current, edits) {
+  const base = {
+    age: current?.age ?? null,
+    gender: current?.gender ?? null,
+    heightCm: current?.heightCm ?? null,
+    targetWeightKg: current?.targetWeightKg ?? null,
+    fitnessLevel: current?.fitnessLevel ?? null,
+    fitnessGoals: current?.fitnessGoals ?? [],
+    exerciseFrequency: current?.exerciseFrequency ?? null,
+    availableEquipment: current?.availableEquipment ?? [],
+    sessionDurationMin: current?.sessionDurationMin ?? null,
+    preferredWorkoutTime: current?.preferredWorkoutTime ?? null,
+    medicalConditions: current?.medicalConditions ?? null,
+  };
+  const defined = Object.fromEntries(
+    Object.entries(edits || {}).filter(([, v]) => v !== undefined),
+  );
+  return { ...base, ...defined, onboardingCompleted: current?.onboardingCompleted ?? true };
+}
+
 export const userService = {
   /** {user: userProfileSchema} — carries onboardingCompleted + weightKg etc. */
   getProfile: () => authApi.get('/v1/users/me'),

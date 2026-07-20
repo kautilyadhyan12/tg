@@ -245,6 +245,19 @@
     margin: 0;
   }
 
+  /* The native <select> popup is browser-drawn and ignores the field's own
+     styling, so a dropdown rendered against the dark UI looked like a stray
+     white list. `color-scheme: dark` (set on the field) makes the popup dark;
+     these pin it to the app's palette instead of a generic grey. */
+  select.input-field option {
+    background: #0A0908;
+    color: rgba(255, 255, 255, 0.90);
+  }
+  select.input-field option:checked {
+    background: rgba(255, 138, 31, 0.20);
+    color: #fff;
+  }
+
   .badge {
     @apply inline-flex items-center gap-1 px-2.5 py-0.5
            rounded-full text-2xs font-semibold;

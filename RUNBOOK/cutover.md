@@ -169,17 +169,30 @@ the operational wrapper around it.
             the P2.4 history gate) and the page ignores it, so a free-plan
             user sees "Last year" over 30-day data. Must render an honest
             clamp notice before cutover ships plan-gated UI to real users.
-      - [ ] **Settings profile forms → new API** (Card 6 left this; DECISIONS
-            2026-07-19). Settings.jsx still reads/writes the profile via legacy
-            mlApi — `/users/profile` (lines ~87/237/635/657) and
-            `/users/reset-onboarding` (line ~392) — and carries a now-DEAD
-            `userService` import (line 11) to clean up. Card 6 repointed the
-            onboarding WIZARD + the gate, so the profile is now split across two
-            backends until this lands: repoint Settings' two profile forms to
-            PATCH /v1/users/me + PUT /v1/users/me/fitness-profile (reuse Card 6's
-            `toFitnessProfilePayload`), and reset-onboarding via `PUT {}` (the
-            full-clear semantics, DECISIONS 2026-07-15). ~80% of Settings' fields
-            are the same onboarding fields, so the wizard's mapper is reusable.
+      - [x] **Settings profile forms → new API** — DONE 2026-07-20 (Card 7,
+            DECISIONS). Both profile forms + reset-onboarding now run on
+            PATCH /v1/users/me + PUT /v1/users/me/fitness-profile via a
+            read-modify-write merge (the PUT is a full replace and each form
+            owns only part of it); option lists aligned to the new-API enums;
+            reset = `PUT {}` full wipe (Kd-ruled). Fresh-chat T3 (7 findings,
+            all fixed) + SMOKE passed. The dead `userService` import is gone.
+      - [ ] **Avatar / profile-picture storage on the new API** (owed out of
+            Card 7, 2026-07-20). Command-verified: NO `profilePicture`/avatar
+            field exists in the shared schema or the `users` DDL, so the picture
+            upload is the ONE Settings surface still on legacy mlApi
+            (`/users/profile`, load + PATCH) — kept per the no-removal rule and
+            broken-on-branch like the gamification surfaces.
+            **Scope must include the security this path currently lacks (T3):**
+            it base64-inlines a 2 MB image into a JSON PATCH; R3.9 requires
+            magic-byte content-type validation (not extension), a size cap,
+            storage in R2 under SERVER-generated keys, and delivery via signed
+            URLs/CDN. Do NOT inherit the current shape at cutover.
+      - [ ] Onboarding wizard's native unit dropdowns → the shared
+            `components/common/Select` built in Card 7 (small polish). A native
+            `<select>` popup is OS-drawn and its hovered row uses the system
+            accent (blue) which CSS cannot override — Settings' five dropdowns
+            were moved; the wizard's cm/ft + kg/lbs pickers were left untouched
+            rather than folded silently into Card 7.
 - [ ] New API deployed and healthy (`/health` green); `data_backend` feature
       flag present (seeded, `seed.ts`).
 - [ ] Secrets in the deploy platform (escrow: `DATABASE_URL`, `MONGO_URI`,

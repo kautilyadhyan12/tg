@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
-import { heightToCm, weightToKg, convertHeight, convertWeight, toFitnessProfilePayload, userService } from './userApi';
+import { heightToCm, weightToKg, convertHeight, convertWeight, toFitnessProfilePayload, mergeFitnessProfile, userService } from './userApi';
 
 function recordRequests(api) {
   const seen = [];
@@ -117,6 +117,74 @@ describe('userService repoint (Card 6)', () => {
       'gender', 'heightCm', 'medicalConditions', 'preferredWorkoutTime',
       'sessionDurationMin', 'targetWeightKg',
     ]);
+  });
+
+  // ── Card 7: read-modify-write merge (the two Settings traps) ──────────────────
+  describe('mergeFitnessProfile', () => {
+    const current = {
+      age: 25, gender: 'male', heightCm: 175, targetWeightKg: 70,
+      fitnessLevel: 'beginner', fitnessGoals: ['muscle_gain'], exerciseFrequency: 3,
+      availableEquipment: ['dumbbells'], sessionDurationMin: 30,
+      preferredWorkoutTime: 'morning', medicalConditions: null,
+    };
+
+    it('overrides ONLY the edited fields and preserves everything else (no wipe)', () => {
+      // the "basic info" form edits age/gender/height/target only — the fitness
+      // fields (level/goals/equipment/…) must survive untouched.
+      const out = mergeFitnessProfile(current, { age: 26, heightCm: 178 });
+      expect(out.age).toBe(26);
+      expect(out.heightCm).toBe(178);
+      expect(out.fitnessGoals).toEqual(['muscle_gain']);       // NOT wiped
+      expect(out.availableEquipment).toEqual(['dumbbells']);   // NOT wiped
+      expect(out.fitnessLevel).toBe('beginner');               // NOT wiped
+      expect(out.gender).toBe('male');                         // untouched current
+    });
+
+    it('ALWAYS carries onboardingCompleted explicitly (the un-onboard trap)', () => {
+      // the server sets it false when OMITTED (service.ts:142) → a Settings save
+      // would kick the user to the wizard. Every merge must carry the flag.
+      expect(mergeFitnessProfile({ ...current, onboardingCompleted: true }, { medicalConditions: 'asthma' })
+        .onboardingCompleted).toBe(true);
+      expect(mergeFitnessProfile(null, {}).onboardingCompleted).toBe(true); // unknown → safe default
+    });
+
+    it('does NOT re-onboard a user whose profile was just reset (carries false)', () => {
+      // right after reset-onboarding the row is wiped and the flag is false; a
+      // save landing in that window must not silently undo the reset (T3 F1).
+      const justReset = { ...current, onboardingCompleted: false };
+      expect(mergeFitnessProfile(justReset, { fitnessLevel: 'advanced' }).onboardingCompleted).toBe(false);
+    });
+
+    it('undefined edits keep the current value; explicit null clears that field', () => {
+      expect(mergeFitnessProfile(current, { age: undefined }).age).toBe(25);   // kept
+      expect(mergeFitnessProfile(current, { targetWeightKg: null }).targetWeightKg).toBe(null); // cleared
+    });
+
+    it('emits ONLY the 12 contract keys, even from the flat-merged profile (.strict() guard)', () => {
+      // Production passes {...fitnessProfile, ...user} — which carries id, email,
+      // displayName, weightKg, updatedAt … A naive {...current, ...edits} would
+      // forward those into the .strict() PUT body and 400. This pins the key set
+      // so that regression can never ship green (T3 done-gate finding).
+      const flatMerged = {
+        ...current,
+        id: 'u-1', email: 'a@b.c', displayName: 'Nm', emailVerified: true,
+        locale: 'en', units: 'metric', timezone: 'UTC', weightKg: 72,
+        leaderboardOptOut: false, onboardingCompleted: true, updatedAt: '2026-07-19T00:00:00.000Z',
+      };
+      expect(Object.keys(mergeFitnessProfile(flatMerged, {})).sort()).toEqual([
+        'age', 'availableEquipment', 'exerciseFrequency', 'fitnessGoals', 'fitnessLevel',
+        'gender', 'heightCm', 'medicalConditions', 'onboardingCompleted',
+        'preferredWorkoutTime', 'sessionDurationMin', 'targetWeightKg',
+      ]);
+    });
+
+    it('handles a null current (never-onboarded) → all-null base + the edits', () => {
+      const out = mergeFitnessProfile(null, { fitnessLevel: 'advanced' });
+      expect(out.fitnessLevel).toBe('advanced');
+      expect(out.age).toBe(null);
+      expect(out.fitnessGoals).toEqual([]);
+      expect(out.onboardingCompleted).toBe(true);
+    });
   });
 
   // ── The 4 calls hit the right /v1 surface ────────────────────────────────────

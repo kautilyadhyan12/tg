@@ -1,6 +1,38 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: Card ⑦ — Settings profile forms → new API 🟡  [DONE 2026-07-20]
+  WEB (web-repoint): Settings' two profile forms + reset-onboarding repointed
+  off backend-ml. Load = GET /v1/users/me + /fitness-profile (flat-merged);
+  name/weight → PATCH /v1/users/me; the rest → PUT fitness-profile through a
+  read-modify-write `mergeFitnessProfile` — the PUT is a FULL replace and each
+  form owns only PART of it, so a naive save would WIPE the other form's data,
+  and an omitted onboardingCompleted sets it FALSE (service.ts:142) and bounces
+  the user to the wizard. Both traps unit-tested AND proven live.
+  Option lists ALIGNED to the new-API enums (Kd ruled): dropped core_strength /
+  barbell / machine / night, renamed bands→resistance_bands, pullup_bar→
+  pull_up_bar. Reset-onboarding = PUT {} full wipe (Kd ruled); weight NOT
+  cleared (separate column). AVATAR cannot move — no profilePicture field
+  exists anywhere on the new API (command-verified) — stays on old backend,
+  OWED card in cutover.md incl. its unmet R3.9 upload security.
+  T3 (FRESH CHAT): 7 findings, ALL fixed — reset-undone-by-next-save (F1),
+  fabricated defaults the schema forbids (F2), age bounds (F3), partial write
+  (F4), empty catch (F5), uncapped medical notes (F6), missing gender option
+  (F7) — plus a done-gate test gap (merge tests fed a clean object, not the
+  flat merge) now pinned by a key-set assertion.
+  Kd smoke ask: native <select> popups are OS-drawn (un-stylable blue hover) →
+  new shared components/common/Select.jsx; all 5 Settings dropdowns use it.
+  web 99/100 (1 = known env quirk); build ✓; lint 4 on Settings (DOWN from its
+  5 baseline). SMOKE PASSED (Kd, every step ✅).
+NEXT CARDS: avatar storage (owed, incl. R3.9) · Onboarding wizard's native unit
+  dropdowns → the new Select (small) · Groq COACH_MODEL migration (HARD DATE
+  before 2026-08-16) · nutrition targets (UNBLOCKED — profile now written from
+  both wizard AND Settings) · workout history calendar repoint · limitedToDays
+  in Progress UI · DPDP Day-14 worker (HARD GATE, doc-promoted) · real-phone
+  mobile-web camera smoke.
+```
+
+```
 TASK: Card ⑥ — onboarding wizard → new API + gate restore 🟡  [DONE 2026-07-19]
   WEB (web-repoint): the getting-started wizard (Onboarding.jsx) repointed from
   backend-ml to the new /v1 API — PUT /v1/users/me/fitness-profile (full-doc
