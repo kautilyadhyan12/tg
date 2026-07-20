@@ -22,12 +22,14 @@
 // the measure-zero divergence class already ruled at DECISIONS 2026-07-07.
 // As in the salvage, all arithmetic stays in floats and rounds ONCE at the end.
 
+// Through the module's own seam (./schemas.js), not straight from @app/shared —
+// R7.1, and the T3 round-1 fix was incomplete without it.
 import {
   missingTargetInputSchema,
   type MissingTargetInput,
   type NutritionTargets,
   type NutritionTargetsResponse,
-} from "@app/shared";
+} from "./schemas.js";
 
 /** Days per week → activity multiplier (nutrition.py:140-141). The salvage's
  *  other map — the "1-2"/"3-4"/"5-6"/"daily" strings at :132-137 — is
@@ -131,13 +133,25 @@ export function calculateTargets(input: ResolvedTargetInputs): NutritionTargets 
 }
 
 /** The one entry point the service uses: targets, or an honest account of what
- *  the user still has to fill in. Never both. */
+ *  the user still has to fill in. Never both — the shared contract's refine()
+ *  rejects either impossible pairing. */
 export function resolveTargets(input: TargetInputs): NutritionTargetsResponse {
+  // THE decision, taken once, off the derived list (T3 round 2): an earlier
+  // version gated on its own hand-written null chain, which could disagree
+  // with REQUIRED_TARGET_INPUTS if the shared enum ever lost a key.
   const missing = missingTargetInputs(input);
+  if (missing.length > 0) return { targets: null, missing };
+
   const { age, gender, heightCm, weightKg, exerciseFrequency } = input;
-  // Narrowed field-by-field rather than cast — R2.2 bans `as` here.
-  if (age === null || gender === null || heightCm === null || weightKg === null || exerciseFrequency === null)
-    return { targets: null, missing };
+  if (age === null || gender === null || heightCm === null || weightKg === null || exerciseFrequency === null) {
+    // Unreachable while REQUIRED_TARGET_INPUTS covers every field the
+    // calculator reads — this is the type bridge (R2.2 bans a cast). It is
+    // also the drift alarm: drop a key from the shared enum and the old code
+    // would have computed a target with that null coerced to 0 — a fabricated
+    // number, the one outcome this card exists to prevent. Fail loud (R1.3);
+    // a 500 is strictly better than a plausible-looking wrong calorie goal.
+    throw new Error("targets: REQUIRED_TARGET_INPUTS does not cover every calculator input");
+  }
   return {
     targets: calculateTargets({ age, gender, heightCm, weightKg, exerciseFrequency, fitnessGoals: input.fitnessGoals }),
     missing,

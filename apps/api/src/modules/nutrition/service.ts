@@ -15,6 +15,7 @@ import { CURATED_FOODS, findCurated, searchCurated } from "./foods.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { dishwareGrams, resolvePortion } from "./portion-priors.js";
 import * as repo from "./repo.js";
+import { nutritionTargetsResponseSchema } from "./schemas.js";
 import type { ConfirmMealRequest, ManualMealRequest, MealPreview, NutritionTargetsResponse, PatchMealRequest, PreviewMealRequest } from "./schemas.js";
 import { VisionProviderError, type VisionProvider, type VisionResult } from "./vision.adapter.js";
 
@@ -288,7 +289,12 @@ const totals = (items: readonly MealItem[]) => ({
  *  server-side from stored profile data, never from anything the client sends).
  *  Returns targets OR the list of details still missing — never a default. */
 export async function getTargets(deps: NutritionDeps, userId: string): Promise<NutritionTargetsResponse> {
-  return resolveTargets(await getUserTargetContext(deps.sql, userId));
+  // Runtime-parsed through the shared contract (the P2.2 T3 precedent for
+  // catalog responses). Not ceremony: the null-exactly-when-missing rule is a
+  // refine(), which TYPES CANNOT EXPRESS — the impossible pairing typechecks
+  // fine and only this parse catches it. Throwing beats returning a response
+  // that tells a user to fill in nothing.
+  return nutritionTargetsResponseSchema.parse(resolveTargets(await getUserTargetContext(deps.sql, userId)));
 }
 
 /** Shared badge hook: failure degrades with a warn — a meal save must never

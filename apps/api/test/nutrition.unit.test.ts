@@ -3,7 +3,7 @@ import { CURATED_FOODS, findCurated, searchCurated } from "../src/modules/nutrit
 import { CONTAINER_PRIORS, COUNTABLE_PRIORS, DENSITY_G_PER_ML, dishwareGrams, resolvePortion } from "../src/modules/nutrition/portion-priors.js";
 import { MEAL_VISION_PROMPT, createVisionProvider } from "../src/modules/nutrition/vision.adapter.js";
 import { VISION_INPUT_MICRO_USD_PER_MILLION, VISION_OUTPUT_MICRO_USD_PER_MILLION, visionCostMicro } from "../src/modules/nutrition/service.js";
-import { missingTargetInputSchema } from "@app/shared";
+import { missingTargetInputSchema, nutritionTargetsResponseSchema } from "@app/shared";
 import { ACTIVITY_BY_FREQUENCY, REQUIRED_TARGET_INPUTS, calculateTargets, missingTargetInputs, resolveTargets } from "../src/modules/nutrition/targets.js";
 
 describe("P2.6a nutrition pure pipeline", () => {
@@ -261,13 +261,28 @@ describe("nutrition targets (ported calculator, nutrition.py:98-179)", () => {
     expect(ACTIVITY_BY_FREQUENCY).toEqual({ 1: 1.2, 2: 1.375, 3: 1.375, 4: 1.55, 5: 1.55, 6: 1.725, 7: 1.9 });
   });
 
-  // R7.2 (T3 finding): the required-input list is DERIVED from the shared
-  // contract rather than declared a second time, so it cannot drift from the
-  // `missing[]` values the client is typed against. This is a GUARD, not a
-  // reproduction — the two lists happened to coincide when the duplication
-  // existed, which is exactly why nothing caught it.
-  it("derives the required-input list from the shared contract, never a parallel copy", () => {
-    expect(REQUIRED_TARGET_INPUTS).toEqual(missingTargetInputSchema.options);
+  // R7.2 (T3 round 1) — the required-input list is DERIVED from the shared
+  // contract, not declared twice. Asserted against the LITERAL five, because
+  // round 2 caught the first version comparing the derivation to itself
+  // (`expect(x).toEqual(x)`, unfailable). Changing the shared enum must break
+  // a test deliberately: these five are a Kd ruling, not an implementation
+  // detail, and dropping one silently would let a target be computed from a
+  // null coerced to 0.
+  it("keeps the required-input list at exactly the five Kd-ruled fields", () => {
+    expect(REQUIRED_TARGET_INPUTS).toEqual(["age", "gender", "heightCm", "weightKg", "exerciseFrequency"]);
+    expect(missingTargetInputSchema.options).toEqual(REQUIRED_TARGET_INPUTS);
+  });
+
+  // The contract's refine(), which the TYPES cannot express — both impossible
+  // pairings typecheck fine and were accepted by the bare shape (T3 round 2).
+  it("rejects both impossible target/missing pairings at the contract boundary", () => {
+    const t = { bmr: 1320, tdee: 2046, kcal: 1646, proteinG: 120, carbsG: 189, fatG: 46 };
+    expect(nutritionTargetsResponseSchema.safeParse({ targets: t, missing: [] }).success).toBe(true);
+    expect(nutritionTargetsResponseSchema.safeParse({ targets: null, missing: ["age"] }).success).toBe(true);
+    // No targets AND nothing missing — a prompt that names no fields.
+    expect(nutritionTargetsResponseSchema.safeParse({ targets: null, missing: [] }).success).toBe(false);
+    // Targets computed despite an unmet input — a fabricated number.
+    expect(nutritionTargetsResponseSchema.safeParse({ targets: t, missing: ["age"] }).success).toBe(false);
   });
 
   // female → −161 (:127). Hand-computed: bmr = 10·60 + 6.25·165 − 5·30 − 161 =

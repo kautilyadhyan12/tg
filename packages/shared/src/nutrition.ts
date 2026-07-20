@@ -154,10 +154,16 @@ export const nutritionTargetsSchema = z.object({
   carbsG: z.number().int(),
   fatG: z.number().int(),
 }).strict();
+// The EXACTLY is enforced, not merely asserted (T3 round 2): both impossible
+// states — targets with an unmet input, and no targets with nothing missing —
+// were accepted by the bare shape. The second is the dangerous one: a client
+// would render an "add your details" prompt naming no details.
 export const nutritionTargetsResponseSchema = z.object({
   targets: nutritionTargetsSchema.nullable(),
   missing: z.array(missingTargetInputSchema),
-}).strict();
+}).strict().refine((r) => (r.targets === null) === (r.missing.length > 0), {
+  message: "targets must be null exactly when missing is non-empty",
+});
 export type MissingTargetInput = z.infer<typeof missingTargetInputSchema>;
 export type NutritionTargets = z.infer<typeof nutritionTargetsSchema>;
 export type NutritionTargetsResponse = z.infer<typeof nutritionTargetsResponseSchema>;
