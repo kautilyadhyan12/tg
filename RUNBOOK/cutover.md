@@ -114,8 +114,9 @@ the operational wrapper around it.
             snack). Kd asked for a user override at the 5a smoke → D1(c) is
             now OWED: a `mealType` field on the meals API (small card).
             Interim: Card 5b adds an edit-takenAt control (PATCH exists).
-            **API HALF DONE 2026-07-20** (`nutrition-targets-api`, merged to
-            master): `GET /v1/nutrition/targets` ports the Mifflin-St Jeor
+            **API HALF BUILT 2026-07-20, PR PENDING** (branch
+            `nutrition-targets-api` — NOT yet on master; check before relying
+            on it): `GET /v1/nutrition/targets` ports the Mifflin-St Jeor
             calculator, reading `user_fitness_profiles` + `users.weight_kg`.
             It returns `{targets, missing[]}` and **never invents a target** —
             Kd ruled an incomplete profile must NAME the missing details, not
