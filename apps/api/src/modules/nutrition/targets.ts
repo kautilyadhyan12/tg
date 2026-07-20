@@ -97,20 +97,32 @@ export interface ResolvedTargetInputs {
 }
 
 export function missingTargetInputs(input: TargetInputs): MissingTargetInput[] {
-  // `satisfies` makes enum COVERAGE a compile-time check (T3 round 3 F1). The
-  // previous `input[key] === null` filter only caught the enum SHRINKING: a key
-  // added to the shared enum whose TargetInputs field is non-nullable (e.g.
-  // fitnessGoals) would compile, never compare equal to null, and so be
-  // silently unenforced — a "required" input that never blocks a target.
-  // Now: a new enum key missing from this literal fails the build, and one
-  // whose value cannot be absent fails the Record's nullable constraint.
+  // `satisfies` makes enum COVERAGE a compile-time check. A plain
+  // `input[key] === null` filter caught only the enum SHRINKING: a key added to
+  // the shared enum whose TargetInputs field cannot BE null would compile,
+  // never compare equal to null, and so be silently unenforced — a "required"
+  // input that never blocks a target.
+  //
+  // The constraint asserts NULLABILITY, not a value union (T3 round 4 F1): the
+  // round-3 version used `Record<MissingTargetInput, number | string | null>`,
+  // which rejected its own worked example (`fitnessGoals: string[]`) by
+  // array-ness while still admitting any non-nullable `string` or `number` —
+  // it closed the example, not the class. `null extends TargetInputs[K]` is the
+  // real question, so a non-nullable field now collapses to `never` and fails
+  // the build. Probed both ways before and after.
   const required = {
     age: input.age,
     gender: input.gender,
     heightCm: input.heightCm,
     weightKg: input.weightKg,
     exerciseFrequency: input.exerciseFrequency,
-  } satisfies Record<MissingTargetInput, number | string | null>;
+  } satisfies {
+    [K in MissingTargetInput]: K extends keyof TargetInputs
+      ? null extends TargetInputs[K]
+        ? TargetInputs[K]
+        : never
+      : never;
+  };
   return REQUIRED_TARGET_INPUTS.filter((key) => required[key] === null);
 }
 
