@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { nutritionTargetsResponseSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis, type RedisLike } from "../src/redis.js";
@@ -453,8 +454,14 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     // Complete: the SAME golden the unit test hand-computes, now end-to-end
     // through real storage (a contract mismatch would show here, not there).
     expect((await inject("PATCH","/v1/users/me",t.access,{weightKg:60})).statusCode).toBe(200);
-    expect((await inject("GET","/v1/nutrition/targets",t.access)).json())
-      .toEqual({targets:{bmr:1320,tdee:2046,kcal:1646,proteinG:120,carbsG:189,fatG:46},missing:[]});
+    const done=await inject("GET","/v1/nutrition/targets",t.access);
+    expect(done.json()).toEqual({targets:{bmr:1320,tdee:2046,kcal:1646,proteinG:120,carbsG:189,fatG:46},missing:[]});
+
+    // R7.2 (T3 finding): both arms are parsed through the SHARED contract, so
+    // the route's shape and the client's types cannot drift apart silently.
+    // .strict() means an extra key here would fail, not be quietly carried.
+    expect(nutritionTargetsResponseSchema.safeParse(done.json()).success).toBe(true);
+    expect(nutritionTargetsResponseSchema.safeParse(empty.json()).success).toBe(true);
 
     // Tenancy: this route takes no id, so the proof is that a second user with
     // a different profile gets THEIR numbers and neither leaks into the other.

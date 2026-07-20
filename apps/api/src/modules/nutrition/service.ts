@@ -10,12 +10,12 @@ import type { ChosenItem, Meal, MealItem } from "@app/shared";
 import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
 import { getUserSyncContext, getUserTargetContext } from "../users/service.js";
-import { resolveTargets, type TargetsResult } from "./targets.js";
+import { resolveTargets } from "./targets.js";
 import { CURATED_FOODS, findCurated, searchCurated } from "./foods.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { dishwareGrams, resolvePortion } from "./portion-priors.js";
 import * as repo from "./repo.js";
-import type { ConfirmMealRequest, ManualMealRequest, MealPreview, PatchMealRequest, PreviewMealRequest } from "./schemas.js";
+import type { ConfirmMealRequest, ManualMealRequest, MealPreview, NutritionTargetsResponse, PatchMealRequest, PreviewMealRequest } from "./schemas.js";
 import { VisionProviderError, type VisionProvider, type VisionResult } from "./vision.adapter.js";
 
 // Vision-swap card 2026-07-16: Qwen3.6 27B public list price, integer micro-USD
@@ -287,7 +287,7 @@ const totals = (items: readonly MealItem[]) => ({
 /** Daily calorie + macro targets for the signed-in user (R3.1: derived
  *  server-side from stored profile data, never from anything the client sends).
  *  Returns targets OR the list of details still missing — never a default. */
-export async function getTargets(deps: NutritionDeps, userId: string): Promise<TargetsResult> {
+export async function getTargets(deps: NutritionDeps, userId: string): Promise<NutritionTargetsResponse> {
   return resolveTargets(await getUserTargetContext(deps.sql, userId));
 }
 

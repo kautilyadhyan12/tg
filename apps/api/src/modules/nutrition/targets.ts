@@ -22,6 +22,13 @@
 // the measure-zero divergence class already ruled at DECISIONS 2026-07-07.
 // As in the salvage, all arithmetic stays in floats and rounds ONCE at the end.
 
+import {
+  missingTargetInputSchema,
+  type MissingTargetInput,
+  type NutritionTargets,
+  type NutritionTargetsResponse,
+} from "@app/shared";
+
 /** Days per week → activity multiplier (nutrition.py:140-141). The salvage's
  *  other map — the "1-2"/"3-4"/"5-6"/"daily" strings at :132-137 — is
  *  UNREACHABLE on new data: `user_fitness_profiles.exercise_frequency` is an
@@ -36,17 +43,25 @@ export const ACTIVITY_BY_FREQUENCY: Readonly<Record<number, number>> = {
   7: 1.9,
 };
 
-/** The salvage's `.get(frequency, 1.55)` fallback (:143). Unreachable through
- *  the API (Zod + the DB CHECK bound frequency to 1-7) but kept so an
- *  out-of-range integer degrades to the ported default instead of NaN (I6). */
+/** The salvage's `.get(frequency, 1.55)` fallback (:143). The WRITE path bounds
+ *  frequency to 1-7 in Zod (users.ts:141) — but there is deliberately no DB
+ *  CHECK on `exercise_frequency` (migration 0006 declares a bare integer; the
+ *  table's only CHECKs are gender/fitness_level/preferred_workout_time), and
+ *  P2.7-migrated rows never pass through Zod at all. So this fallback IS
+ *  reachable, and it keeps an out-of-range integer degrading to the ported
+ *  default instead of NaN (I6). (T3 finding: an earlier comment here claimed a
+ *  DB CHECK that does not exist.) */
 const DEFAULT_ACTIVITY = 1.55;
 
 /** Kd ruling (this card): all five move the number materially — frequency
  *  alone swings it ~700 kcal (1.2 vs 1.9). `fitnessGoals` is NOT required: the
  *  salvage has a real no-adjustment branch (:152-153), so an empty list is an
- *  answer, not an omission. */
-export const REQUIRED_TARGET_INPUTS = ["age", "gender", "heightCm", "weightKg", "exerciseFrequency"] as const;
-export type MissingTargetInput = (typeof REQUIRED_TARGET_INPUTS)[number];
+ *  answer, not an omission.
+ *
+ *  DERIVED from the shared contract, never re-declared (R7.2) — the response
+ *  shape lives once in packages/shared and this list must not be able to drift
+ *  from the `missing[]` values the client is typed against. */
+export const REQUIRED_TARGET_INPUTS = missingTargetInputSchema.options;
 
 export interface TargetInputs {
   age: number | null;
@@ -57,6 +72,10 @@ export interface TargetInputs {
   fitnessGoals: string[];
 }
 
+// NutritionTargets / MissingTargetInput / NutritionTargetsResponse are NOT
+// declared here — they are the shared contract (R7.2). TargetInputs above is
+// genuinely internal: it is the calculator's INPUT, never serialized.
+
 /** Every required input present — the shape `calculateTargets` can act on. */
 export interface ResolvedTargetInputs {
   age: number;
@@ -65,20 +84,6 @@ export interface ResolvedTargetInputs {
   weightKg: number;
   exerciseFrequency: number;
   fitnessGoals: string[];
-}
-
-export interface NutritionTargets {
-  bmr: number;
-  tdee: number;
-  kcal: number;
-  proteinG: number;
-  carbsG: number;
-  fatG: number;
-}
-
-export interface TargetsResult {
-  targets: NutritionTargets | null;
-  missing: MissingTargetInput[];
 }
 
 export function missingTargetInputs(input: TargetInputs): MissingTargetInput[] {
@@ -127,7 +132,7 @@ export function calculateTargets(input: ResolvedTargetInputs): NutritionTargets 
 
 /** The one entry point the service uses: targets, or an honest account of what
  *  the user still has to fill in. Never both. */
-export function resolveTargets(input: TargetInputs): TargetsResult {
+export function resolveTargets(input: TargetInputs): NutritionTargetsResponse {
   const missing = missingTargetInputs(input);
   const { age, gender, heightCm, weightKg, exerciseFrequency } = input;
   // Narrowed field-by-field rather than cast — R2.2 bans `as` here.

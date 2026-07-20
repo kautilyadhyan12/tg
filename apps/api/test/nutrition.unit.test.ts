@@ -3,7 +3,8 @@ import { CURATED_FOODS, findCurated, searchCurated } from "../src/modules/nutrit
 import { CONTAINER_PRIORS, COUNTABLE_PRIORS, DENSITY_G_PER_ML, dishwareGrams, resolvePortion } from "../src/modules/nutrition/portion-priors.js";
 import { MEAL_VISION_PROMPT, createVisionProvider } from "../src/modules/nutrition/vision.adapter.js";
 import { VISION_INPUT_MICRO_USD_PER_MILLION, VISION_OUTPUT_MICRO_USD_PER_MILLION, visionCostMicro } from "../src/modules/nutrition/service.js";
-import { ACTIVITY_BY_FREQUENCY, calculateTargets, missingTargetInputs, resolveTargets } from "../src/modules/nutrition/targets.js";
+import { missingTargetInputSchema } from "@app/shared";
+import { ACTIVITY_BY_FREQUENCY, REQUIRED_TARGET_INPUTS, calculateTargets, missingTargetInputs, resolveTargets } from "../src/modules/nutrition/targets.js";
 
 describe("P2.6a nutrition pure pipeline", () => {
   it("preserves the curated rows with unique source lines (130 salvage + the Kd curd row)", () => {
@@ -258,6 +259,15 @@ describe("P2.6a nutrition pure pipeline", () => {
 describe("nutrition targets (ported calculator, nutrition.py:98-179)", () => {
   it("preserves the activity multiplier table verbatim (nutrition.py:140-141)", () => {
     expect(ACTIVITY_BY_FREQUENCY).toEqual({ 1: 1.2, 2: 1.375, 3: 1.375, 4: 1.55, 5: 1.55, 6: 1.725, 7: 1.9 });
+  });
+
+  // R7.2 (T3 finding): the required-input list is DERIVED from the shared
+  // contract rather than declared a second time, so it cannot drift from the
+  // `missing[]` values the client is typed against. This is a GUARD, not a
+  // reproduction — the two lists happened to coincide when the duplication
+  // existed, which is exactly why nothing caught it.
+  it("derives the required-input list from the shared contract, never a parallel copy", () => {
+    expect(REQUIRED_TARGET_INPUTS).toEqual(missingTargetInputSchema.options);
   });
 
   // female → −161 (:127). Hand-computed: bmr = 10·60 + 6.25·165 − 5·30 − 161 =
