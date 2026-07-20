@@ -1,0 +1,140 @@
+// Nutrition targets — a verbatim port of the Mifflin-St Jeor calculator in
+// backend-ml/app/routers/nutrition.py:98-179 (`calculate_targets`).
+//
+// Part 0 rule 4 / R5.4: every constant carries its source line. Nothing here is
+// re-derived, re-tuned, or "improved" — the goldens in nutrition.unit.test.ts
+// are hand-computed from these same lines.
+//
+// DELIBERATELY NOT PORTED:
+//  · the lbs→kg (:115-118) and ft→cm (:120-123) branches — legacy Mongo stored
+//    {value, unit} documents; the new API is metric-only (users.weight_kg,
+//    user_fitness_profiles.height_cm), so there is no unit to inspect.
+//  · the weight 70 / height 170 / age 25 / gender "male" defaults (:103-106)
+//    and the `using_defaults` output flag (:178). A fabricated target renders
+//    identically to a real one, which is the exact class of default the Card-7
+//    F2 ruling struck down. Kd ruled (this card) that a profile missing any
+//    required input yields NO targets and an honest list of what is missing.
+//  · fiber_g (:176) and water_ml (:177) — command-verified: nothing in
+//    apps/web/src renders a fibre or water target, so porting them would add
+//    dead surface (R1.1).
+//
+// ROUNDING: Python's round() is half-to-even and JS Math.round is half-up —
+// the measure-zero divergence class already ruled at DECISIONS 2026-07-07.
+// As in the salvage, all arithmetic stays in floats and rounds ONCE at the end.
+
+/** Days per week → activity multiplier (nutrition.py:140-141). The salvage's
+ *  other map — the "1-2"/"3-4"/"5-6"/"daily" strings at :132-137 — is
+ *  UNREACHABLE on new data: `user_fitness_profiles.exercise_frequency` is an
+ *  integer column (identity.ts:132), so only these keys can ever arrive. */
+export const ACTIVITY_BY_FREQUENCY: Readonly<Record<number, number>> = {
+  1: 1.2,
+  2: 1.375,
+  3: 1.375,
+  4: 1.55,
+  5: 1.55,
+  6: 1.725,
+  7: 1.9,
+};
+
+/** The salvage's `.get(frequency, 1.55)` fallback (:143). Unreachable through
+ *  the API (Zod + the DB CHECK bound frequency to 1-7) but kept so an
+ *  out-of-range integer degrades to the ported default instead of NaN (I6). */
+const DEFAULT_ACTIVITY = 1.55;
+
+/** Kd ruling (this card): all five move the number materially — frequency
+ *  alone swings it ~700 kcal (1.2 vs 1.9). `fitnessGoals` is NOT required: the
+ *  salvage has a real no-adjustment branch (:152-153), so an empty list is an
+ *  answer, not an omission. */
+export const REQUIRED_TARGET_INPUTS = ["age", "gender", "heightCm", "weightKg", "exerciseFrequency"] as const;
+export type MissingTargetInput = (typeof REQUIRED_TARGET_INPUTS)[number];
+
+export interface TargetInputs {
+  age: number | null;
+  gender: string | null;
+  heightCm: number | null;
+  weightKg: number | null;
+  exerciseFrequency: number | null;
+  fitnessGoals: string[];
+}
+
+/** Every required input present — the shape `calculateTargets` can act on. */
+export interface ResolvedTargetInputs {
+  age: number;
+  gender: string;
+  heightCm: number;
+  weightKg: number;
+  exerciseFrequency: number;
+  fitnessGoals: string[];
+}
+
+export interface NutritionTargets {
+  bmr: number;
+  tdee: number;
+  kcal: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+}
+
+export interface TargetsResult {
+  targets: NutritionTargets | null;
+  missing: MissingTargetInput[];
+}
+
+export function missingTargetInputs(input: TargetInputs): MissingTargetInput[] {
+  return REQUIRED_TARGET_INPUTS.filter((key) => input[key] === null);
+}
+
+export function calculateTargets(input: ResolvedTargetInputs): NutritionTargets {
+  const { age, gender, heightCm, weightKg, exerciseFrequency, fitnessGoals } = input;
+
+  // BMR, Mifflin-St Jeor (:126-129). ONLY "female" takes −161; male, other and
+  // prefer_not_to_say all fall to the salvage's `else` (+5). Mifflin-St Jeor
+  // defines two formulas, so inventing a third for the non-binary values would
+  // be re-deriving a constant — recorded in DECISIONS rather than guessed.
+  const bmr = 10 * weightKg + 6.25 * heightCm - 5 * age + (gender === "female" ? -161 : 5);
+
+  const tdee = bmr * (ACTIVITY_BY_FREQUENCY[exerciseFrequency] ?? DEFAULT_ACTIVITY); // :143,:145
+
+  // Goal adjustment (:148-153): weight_loss is tested FIRST.
+  const goals = new Set(fitnessGoals);
+  const adjusted = goals.has("weight_loss")
+    ? tdee - 400
+    : goals.has("muscle_gain")
+      ? tdee + 300
+      : tdee;
+  const kcal = Math.max(adjusted, 1200); // :155
+
+  // Macro split (:158-167). NB the protein branch tests muscle_gain FIRST —
+  // the OPPOSITE precedence to the kcal adjustment above. With both goals set
+  // they disagree by design of the original: kcal cuts 400 while protein uses
+  // the bulking 2.2 g/kg. Ported as-is and pinned by a unit test; "tidying" it
+  // into consistency would change behaviour without a ruling (R5.4).
+  const proteinPerKg = goals.has("muscle_gain") ? 2.2 : goals.has("weight_loss") ? 2.0 : 1.6;
+  const proteinG = weightKg * proteinPerKg;
+  const fatG = (kcal * 0.25) / 9;
+  const carbsG = (kcal - proteinG * 4 - fatG * 9) / 4;
+
+  return {
+    bmr: Math.round(bmr),
+    tdee: Math.round(tdee),
+    kcal: Math.round(kcal),
+    proteinG: Math.round(proteinG),
+    carbsG: Math.round(Math.max(carbsG, 50)), // :174
+    fatG: Math.round(fatG),
+  };
+}
+
+/** The one entry point the service uses: targets, or an honest account of what
+ *  the user still has to fill in. Never both. */
+export function resolveTargets(input: TargetInputs): TargetsResult {
+  const missing = missingTargetInputs(input);
+  const { age, gender, heightCm, weightKg, exerciseFrequency } = input;
+  // Narrowed field-by-field rather than cast — R2.2 bans `as` here.
+  if (age === null || gender === null || heightCm === null || weightKg === null || exerciseFrequency === null)
+    return { targets: null, missing };
+  return {
+    targets: calculateTargets({ age, gender, heightCm, weightKg, exerciseFrequency, fitnessGoals: input.fitnessGoals }),
+    missing,
+  };
+}

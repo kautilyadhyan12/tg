@@ -9,7 +9,8 @@ import { z } from "zod";
 import type { ChosenItem, Meal, MealItem } from "@app/shared";
 import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
-import { getUserSyncContext } from "../users/service.js";
+import { getUserSyncContext, getUserTargetContext } from "../users/service.js";
+import { resolveTargets, type TargetsResult } from "./targets.js";
 import { CURATED_FOODS, findCurated, searchCurated } from "./foods.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
 import { dishwareGrams, resolvePortion } from "./portion-priors.js";
@@ -282,6 +283,13 @@ const totals = (items: readonly MealItem[]) => ({
   carbsG: round1(items.reduce((n, i) => n + i.carbsG, 0)),
   fatG: round1(items.reduce((n, i) => n + i.fatG, 0)),
 });
+
+/** Daily calorie + macro targets for the signed-in user (R3.1: derived
+ *  server-side from stored profile data, never from anything the client sends).
+ *  Returns targets OR the list of details still missing — never a default. */
+export async function getTargets(deps: NutritionDeps, userId: string): Promise<TargetsResult> {
+  return resolveTargets(await getUserTargetContext(deps.sql, userId));
+}
 
 /** Shared badge hook: failure degrades with a warn — a meal save must never
  *  break on gamification (event name + id only, R3.10). */
