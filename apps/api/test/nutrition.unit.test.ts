@@ -357,6 +357,20 @@ describe("nutrition targets (ported calculator, nutrition.py:98-179)", () => {
   // number materially, and the salvage's 70 kg / 170 cm / 25 y / "male"
   // defaults (:103-106) are exactly the fabrication the Card-7 F2 ruling
   // struck down. An empty goal list is a real answer (:152-153), not missing.
+  // T3 round 5: `=== null` missed `undefined`, so an OPTIONAL required field
+  // would never have been reported — the same F1 failure, fourth shape. This
+  // test enumerates the CLASS (null · undefined · key absent), because rounds
+  // 3 and 4 each verified only the single mutation the previous round named.
+  it("treats every shape of absence as missing, not just an explicit null", () => {
+    const base = { age: 30, gender: "female", heightCm: 165, weightKg: 60, exerciseFrequency: 4, fitnessGoals: [] };
+    expect(missingTargetInputs(base)).toEqual([]);
+    expect(missingTargetInputs({ ...base, age: null })).toEqual(["age"]);
+    expect(missingTargetInputs({ ...base, age: undefined as unknown as null })).toEqual(["age"]);
+    const ageAbsent: Record<string, unknown> = { ...base };
+    delete ageAbsent["age"];
+    expect(missingTargetInputs(ageAbsent as unknown as typeof base)).toEqual(["age"]);
+  });
+
   it("reports every missing required input, and treats empty goals as answered", () => {
     const complete = { age: 30, gender: "female", heightCm: 165, weightKg: 60, exerciseFrequency: 4, fitnessGoals: [] };
     expect(missingTargetInputs(complete)).toEqual([]);

@@ -123,7 +123,14 @@ export function missingTargetInputs(input: TargetInputs): MissingTargetInput[] {
         : never
       : never;
   };
-  return REQUIRED_TARGET_INPUTS.filter((key) => required[key] === null);
+  // `== null`, not `=== null` (T3 round 5): `null extends string | null |
+  // undefined` is TRUE, so the mapped type above admits an OPTIONAL field —
+  // and `undefined === null` is false, so an absent value would never be
+  // reported missing. Today every field arrives `?? null` from
+  // users/service.ts, so nothing is broken; a sixth field added there without
+  // the `?? null` would have been. Loose null-check covers both absences and
+  // is the existing repo idiom (users/repo.ts:255).
+  return REQUIRED_TARGET_INPUTS.filter((key) => required[key] == null);
 }
 
 export function calculateTargets(input: ResolvedTargetInputs): NutritionTargets {
