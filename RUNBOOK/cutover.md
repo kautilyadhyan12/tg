@@ -114,6 +114,20 @@ the operational wrapper around it.
             snack). Kd asked for a user override at the 5a smoke → D1(c) is
             now OWED: a `mealType` field on the meals API (small card).
             Interim: Card 5b adds an edit-takenAt control (PATCH exists).
+            **API HALF DONE 2026-07-20** (`nutrition-targets-api`, merged to
+            master): `GET /v1/nutrition/targets` ports the Mifflin-St Jeor
+            calculator, reading `user_fitness_profiles` + `users.weight_kg`.
+            It returns `{targets, missing[]}` and **never invents a target** —
+            Kd ruled an incomplete profile must NAME the missing details, not
+            show a generic 2000. **The WEB half is what remains** and this
+            checkbox stays UNTICKED until it lands; it must (a) repoint off
+            mlApi, (b) rename snake_case→camelCase (`protein_g`→`proteinG` —
+            a straight swap yields undefined macros that silently render as
+            the fallback), (c) consume `missing[]` for the honest empty state,
+            and (d) DELETE the fabricating `|| 2000/150/250/65` defaults, whose
+            Card-5b approval is now superseded (see the ⚠ marker in
+            DECISIONS.md). A browser SMOKE is owed with it — the API card
+            shipped no reachable UI and correctly claimed none.
       - [x] **Dishware IN-FLOW UI + portion API** (Part 2B §3.2 rung 1;
             Kd re-ruled at the 5b smoke: dishware must live inside the
             add-food and photo flows, driving the server's portion math).
