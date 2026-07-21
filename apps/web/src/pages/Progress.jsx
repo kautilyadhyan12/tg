@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import PredictionsSection from '../components/progress/PredictionsSection';
 import { progressService } from '../api/progressApi';
+import { PERIODS, clampNotice, heatmapCaption, recordsNote } from './progressClamp';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -9,7 +10,7 @@ import {
 } from 'recharts';
 import {
   Flame, Clock, Dumbbell, Target,
-  Trophy, TrendingUp, Calendar, Zap,
+  Trophy, TrendingUp, Calendar, Zap, Info,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import WorkoutCalendar from '../components/progress/WorkoutCalendar';
@@ -17,14 +18,6 @@ import MeasurementsTracker from '../components/progress/MeasurementsTracker';
 import { format, parseISO, eachDayOfInterval, subDays } from 'date-fns';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const PERIODS = [
-  { value: '7d',  label: '7 Days'   },
-  { value: '30d', label: '30 Days'  },
-  { value: '90d', label: '90 Days'  },
-  { value: '1y',  label: '1 Year'   },
-  { value: 'all', label: 'All Time' },
-];
-
 const PIE_COLORS = [
   '#6366f1', '#22c55e', '#f59e0b', '#ec4899',
   '#06b6d4', '#8b5cf6', '#ef4444', '#84cc16',
@@ -37,10 +30,16 @@ const CHART_STYLE = {
 };
 
 // ── Activity heatmap ──────────────────────────────────────────────────────────
-function ActivityHeatmap({ heatmap }) {
+function ActivityHeatmap({ heatmap, windowDays }) {
   const today = new Date();
-  const start = subDays(today, 364);
-  const days  = eachDayOfInterval({ start, end: today });
+  // Draw exactly the window the heading claims. Previously hard-coded to 364
+  // regardless of the plan clamp, so a gated user got a YEAR of squares under
+  // a "Last 90 Days" heading — 53 columns wide, hence the horizontal scroll.
+  const start = subDays(today, Math.max(windowDays, 1) - 1);
+  // Pad back to the week boundary so every ROW is one weekday (GitHub-style):
+  // chunking a raw day list into 7s puts an arbitrary weekday in each row.
+  const gridStart = subDays(start, start.getDay());
+  const days = eachDayOfInterval({ start: gridStart, end: today });
 
   const getLevel = (dateStr) => {
     const d = heatmap[dateStr];
@@ -67,22 +66,46 @@ function ActivityHeatmap({ heatmap }) {
     }
   });
 
+  // Month label above the column where each new month first appears.
+  const monthLabels = weeks.map((wk, wi) => {
+    const first = wk[0];
+    if (first === undefined) return null;
+    const prev = wi === 0 ? null : weeks[wi - 1]?.[0];
+    const isNew = prev == null || first.getMonth() !== prev.getMonth();
+    return isNew && first <= today ? format(first, 'MMM') : null;
+  });
+
   return (
     <div className="overflow-x-auto">
       <div className="flex gap-1 min-w-max">
+        {/* Weekday gutter — Mon/Wed/Fri only, as GitHub does, so the labels
+            do not crowd the 12px cells. */}
+        <div className="flex flex-col gap-1 mr-1 mt-[18px]">
+          {['', 'Mon', '', 'Wed', '', 'Fri', ''].map((d, i) => (
+            <div key={i} className="h-3 text-[9px] leading-3 text-gray-500 text-right pr-1"
+                 style={{ width: '1.9rem' }}>
+              {d}
+            </div>
+          ))}
+        </div>
         {weeks.map((wk, wi) => (
           <div key={wi} className="flex flex-col gap-1">
+            <div className="h-[14px] text-[9px] leading-[14px] text-gray-500 whitespace-nowrap">
+              {monthLabels[wi]}
+            </div>
             {wk.map((day) => {
               const dateStr = format(day, 'yyyy-MM-dd');
               const level   = getLevel(dateStr);
               const data    = heatmap[dateStr];
+              // Cells before the window start exist only to align the rows.
+              if (day < start) return <div key={dateStr} className="w-3 h-3" />;
               return (
                 <div
                   key={dateStr}
                   title={
                     data
-                      ? `${dateStr}: ${data.count} workout(s), ${data.kcal} kcal`
-                      : dateStr
+                      ? `${format(day, 'd MMM yyyy')} — ${data.count} workout${data.count === 1 ? '' : 's'}, ${data.kcal} kcal`
+                      : `${format(day, 'd MMM yyyy')} — no workouts`
                   }
                   className={`w-3 h-3 rounded-sm ${colors[level]}
                               transition-colors hover:ring-1
@@ -143,6 +166,14 @@ export default function Progress() {
   const [heatmap,    setHeatmap]    = useState({});
   const [categories, setCategories] = useState([]);
   const [records,    setRecords]    = useState([]);
+  // The plan's history read-gate, as reported by /v1/progress (Part 4 §0.2).
+  // null = unlimited. Taken from the OVERVIEW response: all six carry the same
+  // gate value, so reading one avoids six states that can never disagree.
+  const [limitedToDays, setLimitedToDays] = useState(null);
+  // Fires ONLY when the plan window actually cuts the requested one — the
+  // server reports limitedToDays unconditionally, so "not null" is not the
+  // same question (workouts/service.ts:134). See progressClamp.js.
+  const clamp = clampNotice(period, limitedToDays);
   const [loading,    setLoading]    = useState(true);
 
   useEffect(() => {
@@ -163,6 +194,7 @@ export default function Progress() {
 
         // New /v1 API (Card 3): responses are @app/shared progress.ts shapes.
         setOverview(overviewRes.data);
+        setLimitedToDays(overviewRes.data.limitedToDays ?? null);
         setCalories(caloriesRes.data.points);
         // Weekly points carry {isoYear, isoWeek}; the chart wants one label.
         // When the window spans ISO years (1y/all), Wnn alone is ambiguous —
@@ -256,6 +288,26 @@ export default function Progress() {
             </div>
           </div>
 
+          {/* Plan history read-gate (Part 4 §0.2). Shown ONLY when the plan
+              window actually cuts the requested one. The wording is deliberate:
+              this is a READ GATE, NOT DELETION (seed.ts:44; repo.ts adds
+              `AND started_at >= since` and nothing deletes a workout), so it
+              must not imply lost history — the older workouts are saved and
+              reappear the moment the plan allows it. No upsell here; selling is
+              the paywall card's job. */}
+          {clamp.show && !isEmpty && (
+            <div
+              className="flex items-start gap-2 rounded-xl px-4 py-3 mb-2"
+              style={{ background: 'rgba(255,138,31,0.10)' }}
+            >
+              <Info className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: '#FF8A1F' }} />
+              <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.70)' }}>
+                Your plan shows {clamp.caption}, so this view stops there.
+                Older workouts are still saved.
+              </p>
+            </div>
+          )}
+
           {/* ── Loading skeleton ────────────────────────────────────────────── */}
           {loading ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -284,7 +336,7 @@ export default function Progress() {
                 <StatCard
                   icon={Dumbbell} label="Workouts"
                   value={overview?.totalWorkouts || 0}
-                  sub={`in ${PERIODS.find(p => p.value === period)?.label}`}
+                  sub={`in ${clamp.caption}`}
                   color="bg-primary-600"
                 />
                 <StatCard
@@ -435,9 +487,9 @@ export default function Progress() {
                 <div className="card">
                   <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
                     <Calendar className="w-5 h-5 text-primary-400" />
-                    Activity — Last 365 Days
+                    Activity — {heatmapCaption(limitedToDays)}
                   </h3>
-                  <ActivityHeatmap heatmap={heatmap} />
+                  <ActivityHeatmap heatmap={heatmap} windowDays={limitedToDays ?? 365} />
                 </div>
 
                 {categories.length > 0 && (
@@ -483,6 +535,16 @@ export default function Progress() {
                     <Trophy className="w-5 h-5 text-yellow-400" />
                     Personal Records
                   </h3>
+                  {/* This endpoint takes NO period — it is gated at every one
+                      (service.ts:281), so the period-driven notice above can
+                      never speak for it. longestStreak is deliberately ungated
+                      (:288-290), hence the carve-out rather than a flat
+                      card-level window. */}
+                  {recordsNote(limitedToDays) !== null && (
+                    <p className="text-xs mb-4" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                      {recordsNote(limitedToDays)}
+                    </p>
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {records.map((record, i) => (
                       <div key={i} className="flex items-center gap-3 p-4 bg-dark-200 rounded-2xl">
@@ -513,7 +575,7 @@ export default function Progress() {
                   />
                 </div>
                 <p className="text-gray-500 text-xs mt-2">
-                  You worked out {overview?.totalWorkouts || 0} times in the selected period
+                  You worked out {overview?.totalWorkouts || 0} times in {clamp.show ? clamp.caption : 'the selected period'}
                 </p>
               </div>
 

@@ -169,11 +169,22 @@ then; none may be hidden or reduced to close the gap.
       NOT implemented — streak replay uses only the current `users.timezone`.
       Shielded today only because everyone is UTC; both must land together.
       (DECISIONS 2026-07-11 P2.3 GAP-3 + the §3.5 note.)
-- [ ] 🟡 **`limitedToDays` surfaced in the Progress UI.** Every `/v1/progress`
-      read returns the plan-clamp field and the page ignores it, so a free-plan
-      user sees "Last year" over 30-day data. Shipping plan-gated UI to real
-      users without an honest clamp notice misrepresents the P2.4 history gate.
-      (T3 Card 3, DECISIONS 2026-07-16.)
+- [x] 🟡 **`limitedToDays` surfaced in the Progress UI** — DONE 2026-07-21.
+      Every `/v1/progress` read returns the plan-clamp field and the page
+      ignored it entirely, so a free-plan user saw "1 Year" over 90 days of
+      data. Now: a notice under the period buttons, and the caption corrected
+      to the window actually shown. **The clamp is compared against the
+      REQUESTED window, never rendered on `limitedToDays !== null`** — the
+      server reports it unconditionally (7d also returns 90), so the naive
+      check would warn about a limit that is not limiting.
+      Its fresh-chat T3 caught that the notice closed only HALF of f.4: the
+      heatmap and personal-records endpoints take NO period and are gated
+      anyway, so their own headings still lied at the three periods where the
+      notice correctly stays quiet. Both now caption from their own window
+      (`heatmapCaption` / `recordsNote`), with `longestStreak` carved out
+      because it is deliberately ungated. Copy states the history is SAVED —
+      it is a read gate, not deletion. SMOKE passed.
+      (T3 Card 3 f.4, owed 2026-07-16 → closed by the Progress-clamp card.)
 - [ ] 🟡 **Real-phone mobile-web camera smoke.** The claim "the file input opens
       the camera on phones" is UNVERIFIED (V1) — every smoke to date ran on
       Kd's desktop. The desktop-webcam ruling makes mobile web the PRIMARY
