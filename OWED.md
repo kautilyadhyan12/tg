@@ -125,12 +125,54 @@ then; none may be hidden or reduced to close the gap.
       extension), a size cap, R2 storage under SERVER-generated keys, and
       signed-URL/CDN delivery. Do NOT inherit the current shape at cutover.
       (DECISIONS 2026-07-20, Card 7.)
-- [ ] 🔴 **Coach chat retry protection.** `/v1/coach/chat` has no per-route rate
-      limit and accepts no Idempotency-Key, so a client retry double-charges
-      quota, re-calls Groq, and duplicates messages. The ruling tied this to
-      "when the client is wired" — Card 4 wired it, so the API side is now due.
-      Client change is one header line (coachApi.js notes where).
-      (DECISIONS 2026-07-12 P2.5b T3; Kd D1(b) 2026-07-16.)
+- [ ] 🔴 **Coach chat retry protection — API half BUILT, in review.**
+      `/v1/coach/chat` had no per-route rate limit and accepted no
+      Idempotency-Key, so a client retry opened a second thread, spent a second
+      quota slot, and duplicated the messages. The API half now takes an
+      optional `Idempotency-Key` and carries a 10-message/minute per-user cap,
+      both placed BEFORE `requireQuota` (which increments the counter itself) —
+      branch `coach-idempotency`, NOT yet merged. Tick this line with the PR
+      number when it lands. (DECISIONS 2026-07-12 P2.5b T3; Kd D1(b)
+      2026-07-16; design + Kd-approved numbers, DECISIONS 2026-07-21 on that
+      branch.) **The three lines below are what it does NOT close.**
+- [ ] 🔴 **Coach "Try again" control — the client half, and it is NOT one line.**
+      **This line previously said "Client change is one header line
+      (coachApi.js notes where)". That was WRONG and is corrected here**
+      (verified 2026-07-21; `coachApi.js`'s own header comment carried the same
+      wrong note and is corrected too). `Coach.jsx` clears the message box on
+      send and never restores it on failure, and there is NO retry affordance
+      anywhere — so a key minted inside `sendMessage` would differ on every
+      attempt and dedupe nothing, and the user's only route back is retyping,
+      which is a new message. What is actually needed: a real **"Try again"**
+      control on the failed reply that resends with the SAME key. Kd ruled
+      2026-07-21 to build it properly rather than ship the ineffective
+      one-liner. Web-only, on this branch, after the API half merges. Owed with
+      it: a browser SMOKE — send, fail, Try again → ONE conversation, ONE
+      question spent.
+- [ ] 🟡 **Empty conversation left behind by a failed coach message.**
+      PRE-EXISTING, found 2026-07-21 while verifying the card above, not
+      introduced by it. `repo.createThread` commits on its own BEFORE the
+      provider is called and messages are appended only on success, so a
+      message that fails after that point leaves an empty thread in the sidebar
+      **even if the user never retries**. Scope, verified: only for the FIRST
+      message of a new conversation, and never when the coach is unconfigured
+      (that 503 precedes creation). The retry path now RESUMES such a thread, so
+      only the never-retried case remains. Proper fix = create the thread in the
+      same transaction as the exchange, which touches the `api_cost_events`
+      ledger transaction (DECISIONS 2026-07-12 T3 finding 3) — its own card, not
+      a drive-by.
+- [ ] 🟡❓ **A coach question is spent even when the provider never answers —
+      needs a Kd ruling.** `requireQuota` increments BEFORE the handler runs
+      (the ported quotas.py doctrine, "a request that fails later still
+      consumed a slot"), so a Groq failure costs a free user one of their five
+      monthly questions and returns nothing; a retry spends another, because it
+      does real work. **Newly REACHABLE rather than theoretical:** Groq's free
+      tier allows 6,000 tokens/minute and a real coach call measures ~2,573
+      tokens (from this project's own `api_cost_events` rows), i.e. about two
+      questions a minute before Groq refuses. Refunding the slot when no answer
+      was produced is a small, contained change to the coach route's failure
+      path — but it changes ported behaviour, so it is Kd's call, not a chat's.
+      (DECISIONS 2026-07-21.)
 
 ### Legal / operational gates
 - [ ] 🔴🟡 **DPDP Day-14 hard-delete + JSON-export worker.** §5.2 ANONYMIZES the

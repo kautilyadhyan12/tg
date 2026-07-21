@@ -105,8 +105,14 @@ the operational wrapper around it.
             client retry double-charges quota, re-calls Groq, and duplicates
             messages. The ruling ties this to "when the client is wired" —
             Card 4 wired it; the API side is its own small card and MUST land
-            before real traffic. Client change is one header line
-            (apps/web/src/api/coachApi.js notes where).
+            before real traffic. **API half BUILT on branch
+            `coach-idempotency`, not yet merged.** The client half is NOT the
+            "one header line" this checkbox used to claim (corrected
+            2026-07-21): Coach.jsx clears the box on send and offers no retry
+            affordance, so a key minted per send would differ on every attempt
+            and dedupe nothing — it needs a real "Try again" control that
+            resends the SAME key. Do not price this gate item as a one-liner.
+            Full scope + the two related items in OWED.md.
       - [x] **Nutrition targets/remaining** (MacroRings + "Remaining today",
             web Card 5a, D2 Kd-ruled 2026-07-16) — the new API has no targets
             surface (v1 §6.1's nutrition module is photo pipeline + lookup
