@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
-import { heightToCm, weightToKg, convertHeight, convertWeight, toFitnessProfilePayload, mergeFitnessProfile, timezoneUpdate, userService } from './userApi';
+import { heightToCm, weightToKg, convertHeight, convertWeight, toFitnessProfilePayload, mergeFitnessProfile, resetTimezoneSync, syncTimezone, timezoneUpdate, userService } from './userApi';
 
 function recordRequests(api) {
   const seen = [];
@@ -210,6 +210,47 @@ describe('userService repoint (Card 6)', () => {
     expect(src).not.toMatch(/localStorage\s*[.[]/);
   });
 
+  // ── syncTimezone: the write itself ────────────────────────────────────────
+  // T3 F2: the duplicate-PATCH bug was fixed with NO regression test, and the
+  // excuse ("invisible to node-vitest, it needs two concurrent mounts") was
+  // OVERCLAIMED — the window is plain single-threaded JS with no DOM in it.
+  // Exporting syncTimezone makes it testable here, today.
+  describe('syncTimezone', () => {
+    afterEach(() => resetTimezoneSync());
+
+    it('writes ONCE when two callers race (login + session restore)', async () => {
+      const seen = recordRequests(authApi);
+      await Promise.all([syncTimezone(null), syncTimezone(null)]);
+      expect(seen.filter((r) => r.method === 'patch')).toHaveLength(1);
+    });
+
+    // T3 F1, the live defect: the guard was module-level and never reset, so on
+    // a SHARED BROWSER the second account signed in during one page load never
+    // got its timezone — this card's own bug, reintroduced for everyone after
+    // the first user. No travel needed; a gym front-desk laptop triggers it.
+    it('writes again for the next account after a logout reset', async () => {
+      const seen = recordRequests(authApi);
+      await syncTimezone(null);
+      resetTimezoneSync();               // what logout must do
+      await syncTimezone(null);          // a DIFFERENT user, also unset
+      expect(seen.filter((r) => r.method === 'patch')).toHaveLength(2);
+    });
+
+    // T3 F3: the profile read failing is NOT the same as the server having no
+    // timezone. Conflating them makes a transient GET blip cause a write —
+    // precisely when the client knows least.
+    it('writes nothing when the stored value is unknown (the read failed)', async () => {
+      const seen = recordRequests(authApi);
+      await syncTimezone(undefined);
+      expect(seen.filter((r) => r.method === 'patch')).toHaveLength(0);
+    });
+
+    it('never rejects when the write fails — a valid session must survive it', async () => {
+      authApi.defaults.adapter = () => Promise.reject(new Error('offline'));
+      await expect(syncTimezone(null)).resolves.toBeUndefined();
+    });
+  });
+
   // ── Timezone capture ──────────────────────────────────────────────────────
   // The web never captured a timezone, so users.timezone stayed null and every
   // user bucketed as UTC (DECISIONS 2026-07-11 P2.3 GAP-3) — streaks and
@@ -236,6 +277,15 @@ describe('userService repoint (Card 6)', () => {
         expect(timezoneUpdate('Europe/London', bad)).toBeNull();
       expect(timezoneUpdate(null, 'x'.repeat(65))).toBeNull(); // schema max(64)
       expect(timezoneUpdate(null, 'x'.repeat(64))).toBe('x'.repeat(64)); // boundary
+    });
+
+    // T3 F4: `stored` was type-guarded nowhere, so a non-string threw inside a
+    // void-discarded promise — an unhandled rejection. The web does not
+    // Zod-parse the profile response, so nothing upstream guarantees a string.
+    it('survives a non-string stored value instead of throwing into the void', () => {
+      for (const bad of [42, {}, [], true])
+        expect(() => timezoneUpdate(bad, 'Asia/Kolkata')).not.toThrow();
+      expect(timezoneUpdate(42, 'Asia/Kolkata')).toBe('Asia/Kolkata');
     });
 
     it('trims, because the contract trims and a stored " Asia/Kolkata" would loop forever', () => {

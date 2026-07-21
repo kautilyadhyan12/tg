@@ -148,5 +148,47 @@ export function timezoneUpdate(stored, detected) {
   if (typeof detected !== 'string') return null;
   const zone = detected.trim();
   if (zone === '' || zone.length > 64) return null;
-  return zone === (stored ?? '').trim() ? null : zone;
+  // `stored` is type-guarded too (T3 F4): the web does not Zod-parse the
+  // profile response, so nothing upstream guarantees a string — and the caller
+  // discards this promise, so a throw here became an unhandled rejection.
+  const current = typeof stored === 'string' ? stored.trim() : '';
+  return zone === current ? null : zone;
+}
+
+// Guard against the DUPLICATE write Kd's smoke caught: login() and the
+// session-restore effect both adopt a session and both read the profile before
+// either write lands, so both saw a null timezone and both wrote.
+let timezoneSynced = false;
+
+/** Cleared on LOGOUT (T3 F1 — the live defect). The guard was module-level and
+ *  never reset, so on a shared browser the SECOND account signed in during one
+ *  page load never got its timezone written: this card's own bug, reintroduced
+ *  for every account after the first. A gym front-desk laptop triggers it; no
+ *  timezone travel required. */
+export function resetTimezoneSync() {
+  timezoneSynced = false;
+}
+
+/** Report WHERE the browser is so the SERVER can bucket days correctly.
+ *
+ *  `stored` is the profile's timezone: a string, `null` (server has none), or
+ *  `undefined` (WE DO NOT KNOW — the profile read failed). Only the first two
+ *  are actionable; writing on `undefined` would fire a PATCH exactly when the
+ *  client knows least (T3 F3).
+ *
+ *  BEST-EFFORT: a failure is logged and never breaks an otherwise-valid
+ *  session (the argon2 rehash-on-login precedent). Never rejects. */
+export async function syncTimezone(stored) {
+  if (stored === undefined) return;
+  const next = timezoneUpdate(stored, detectTimezone());
+  if (next === null) return;
+  // Latch BEFORE the await so a concurrent caller cannot slip through.
+  if (timezoneSynced) return;
+  timezoneSynced = true;
+  try {
+    await userService.updateProfile({ timezone: next });
+  } catch (err) {
+    // Message only — the error object carries the request config (R3.10).
+    console.error('timezone sync failed:', err?.message);
+  }
 }

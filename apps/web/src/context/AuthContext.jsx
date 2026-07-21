@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../api/authApi';
-import { detectTimezone, timezoneUpdate, userService } from '../api/userApi';
+import { resetTimezoneSync, syncTimezone, userService } from '../api/userApi';
 import { setCurrentUserId } from '../utils/storage';
 import { flushSyncQueue } from '../sync/syncClient';
 
@@ -34,41 +34,12 @@ const fetchProfileFacts = async () => {
       timezone: res.data.user?.timezone ?? null,
     };
   } catch {
-    return { onboardingCompleted: undefined, timezone: null };
+    // timezone UNDEFINED, not null (T3 F3): a failed read is not the same as
+    // "the server has none", and conflating them makes a transient blip write.
+    return { onboardingCompleted: undefined, timezone: undefined };
   }
 };
 
-/** Report WHERE the browser is, so the SERVER can bucket days correctly
- *  (streaks, "today"). Nobody sent a timezone until this shipped, so
- *  users.timezone stayed null and every user bucketed as UTC — streaks rolling
- *  over at the wrong local hour for everyone outside UTC (DECISIONS 2026-07-11
- *  P2.3 GAP-3; playbook trap #8).
- *
- *  The client only REPORTS its zone; every day boundary is still computed
- *  server-side. The trap is client-side day maths, which this does not add.
- *
- *  BEST-EFFORT, like the argon2 rehash-on-login: a failure is logged and never
- *  breaks an otherwise-valid session. Writes only when the value actually
- *  changed, so a page load is not a write. */
-let timezoneSynced = false;
-const syncTimezone = async (storedTimezone) => {
-  const next = timezoneUpdate(storedTimezone, detectTimezone());
-  if (next === null) return;
-  // Once per page load (Kd's smoke caught TWO PATCHes on first login): login()
-  // and the session-restore effect BOTH adopt a session, and both read the
-  // profile before either write lands — so both saw a null timezone and both
-  // wrote. Same value twice, so harmless, but a duplicate write every first
-  // login. The guard is set BEFORE the await so the second caller cannot slip
-  // through the window.
-  if (timezoneSynced) return;
-  timezoneSynced = true;
-  try {
-    await userService.updateProfile({ timezone: next });
-  } catch (err) {
-    // Message only — the error object carries the request config (R3.10).
-    console.error('timezone sync failed:', err?.message);
-  }
-};
 
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
@@ -171,6 +142,10 @@ export function AuthProvider({ children }) {
       // from reading it (or flushing this user's queued workouts).
       adoptSession(null);
       setUser(null);
+      // The next account on this browser must get its OWN timezone written
+      // (T3 F1): without this the second user of a shared laptop stays
+      // UTC-bucketed for the rest of the page load.
+      resetTimezoneSync();
     }
   };
 
