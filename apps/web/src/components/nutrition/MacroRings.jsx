@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 
 // ── Single animated ring ──────────────────────────────────────────────────────
 function Ring({ size = 90, stroke = 8, percent, color, label, value, unit, target }) {
@@ -56,15 +57,85 @@ function Ring({ size = 90, stroke = 8, percent, color, label, value, unit, targe
   );
 }
 
-// ── Full macro rings panel ────────────────────────────────────────────────────
-export default function MacroRings({ totals, targets }) {
-  const safeTargets = targets || {};
-  const safeTotals  = totals  || {};
+// ── Honest empty state ───────────────────────────────────────────────────────
+// Kd's exact-data rule: a target we cannot compute is not shown as a number.
+// It names the fields the SERVER said are missing, so the user knows exactly
+// what to add rather than hunting through Settings.
+function NoTargets({ missingInputs }) {
+  const list = missingInputs.length > 0
+    ? missingInputs.length === 1
+      ? missingInputs[0]
+      : `${missingInputs.slice(0, -1).join(', ')} and ${missingInputs[missingInputs.length - 1]}`
+    : null;
+  return (
+    <div className="card-glass">
+      <h3 className="text-sm font-semibold mb-3"
+          style={{ color: 'rgba(255,255,255,0.80)' }}>
+        Today's Macros
+      </h3>
+      <p className="text-xs leading-relaxed mb-4"
+         style={{ color: 'rgba(255,255,255,0.55)' }}>
+        {list === null
+          ? 'Add your profile details to see your daily calorie and macro targets.'
+          : `Add your ${list} to see your daily calorie and macro targets.`}
+      </p>
+      <Link
+        to="/settings"
+        className="inline-block text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
+        style={{ color: '#FF8A1F', backgroundColor: 'rgba(255,138,31,0.12)' }}
+      >
+        Go to Settings
+      </Link>
+    </div>
+  );
+}
 
-  const kcalTarget    = safeTargets.kcal      || 2000;
-  const proteinTarget = safeTargets.protein_g || 150;
-  const carbsTarget   = safeTargets.carbs_g   || 250;
-  const fatTarget     = safeTargets.fat_g     || 65;
+// ── Could not load ───────────────────────────────────────────────────────────
+// Distinct from NoTargets ON PURPOSE (T3 F1): this one blames the request, not
+// the user. Blaming the profile for our own failure would send someone to
+// Settings to fix something that is not broken.
+function TargetsUnavailable() {
+  return (
+    <div className="card-glass">
+      <h3 className="text-sm font-semibold mb-3"
+          style={{ color: 'rgba(255,255,255,0.80)' }}>
+        Today's Macros
+      </h3>
+      <p className="text-xs leading-relaxed"
+         style={{ color: 'rgba(255,255,255,0.55)' }}>
+        Couldn&apos;t load your targets just now. Refresh to try again — your
+        logged meals are unaffected.
+      </p>
+    </div>
+  );
+}
+
+// ── Full macro rings panel ────────────────────────────────────────────────────
+export default function MacroRings({ totals, targets, missingInputs = [] }) {
+  const safeTotals = totals || {};
+
+  // THREE states, and they must NOT collapse (T3 F1 — the first version used
+  // `== null` here, which swallowed `undefined` into the null branch and so
+  // told a user with a perfectly complete profile to "add your details",
+  // sending them to Settings to fix nothing. That is exactly the fabricated
+  // claim toDisplayTargets' contract promises never to make; the three-state
+  // model survived the mapper and died at its only consumer):
+  //   null      → the SERVER said this profile cannot produce a target
+  //   undefined → we could not read the answer (parent renders only after the
+  //               request settles, so undefined here means it failed)
+  //
+  // The former `|| 2000 / 150 / 250 / 65` fallbacks are DELETED (Kd ruling,
+  // nutrition-targets card). They predate a real calculator, when targets were
+  // dark for everyone; with one live they would fire ONLY for the
+  // incomplete-profile user — precisely the person who must not be shown a
+  // stranger's calorie goal rendered identically to their own.
+  if (targets === null) return <NoTargets missingInputs={missingInputs} />;
+  if (targets === undefined) return <TargetsUnavailable />;
+
+  const kcalTarget    = targets.kcal;
+  const proteinTarget = targets.protein_g;
+  const carbsTarget   = targets.carbs_g;
+  const fatTarget     = targets.fat_g;
 
   const kcalPct    = (safeTotals.kcal       / kcalTarget)    * 100 || 0;
   const proteinPct = (safeTotals.protein_g  / proteinTarget) * 100 || 0;

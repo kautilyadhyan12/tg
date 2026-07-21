@@ -2,13 +2,13 @@
 // exact paths/methods/params, the .strict()-safe bodies (retakeToken OMITTED
 // when absent; confirm vs manual union discriminates on scanToken/mealName),
 // grams clamping to the contract bounds, base64 prefix stripping, and the
-// usage guard: no raw fetch / localStorage; mlApi survives ONLY for the D2
-// interim (getTargets) + the Card-5b legacy pair (searchFood/logMeal).
+// usage guard: no raw fetch / localStorage, and NO mlApi at all — the targets
+// card repointed getTargets, the file's last old-backend call.
 import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
-import { composeAddIngredient, dataUrlToBase64, nutritionService, toChosenItems, walkMealsForDay } from './nutritionApi';
+import { composeAddIngredient, dataUrlToBase64, missingTargetLabels, nutritionService, toChosenItems, toDisplayTargets, walkMealsForDay } from './nutritionApi';
 
 function recordRequests(api) {
   const seen = [];
@@ -133,9 +133,14 @@ describe('nutritionService repoint (Card 5a)', () => {
     expect(src).not.toMatch(/fetch\s*\(/);
     expect(src).not.toMatch(/localStorage\s*[.[]/);
     expect(src).not.toMatch(/VITE_ML_API_URL/);
-    // Card 5b: the legacy searchFood/logMeal pair is DELETED — the only
-    // remaining mlApi call is the D2 targets interim.
-    expect(src.match(/mlApi\.(get|post|patch|delete)/g)).toEqual(['mlApi.get']);
+    // The targets card repointed getTargets — the file's LAST old-backend
+    // call — so nutritionApi now runs entirely on the new /v1 API. Both
+    // vectors are pinned: no IMPORT (an unused one would be dead code a
+    // later reader might revive) and no CALL. Deliberately not a bare
+    // /mlApi/ grep — the header names the retired client to explain the
+    // history, and prose is not a dependency.
+    expect(src).not.toMatch(/from\s+['"][^'"]*mlApi['"]/);
+    expect(src).not.toMatch(/mlApi\s*[.[]/);
   });
 
   // ── Card 5c: meal composition + change-label ────────────────────────────────
@@ -340,5 +345,74 @@ describe('nutritionService repoint (Card 5a)', () => {
     expect(JSON.parse(seen[1].data)).toEqual({ label: 'my dal bowl', containerClass: 'bowl', volumeMl: 250 });
     expect(seen[2]).toMatchObject({ url: '/v1/nutrition/dishware/d-1', method: 'patch' });
     expect(seen[3]).toMatchObject({ url: '/v1/nutrition/dishware/d-1', method: 'delete' });
+  });
+
+  // ── Nutrition targets (the web half of the Mifflin-St Jeor card) ──────────
+  it('getTargets hits the NEW /v1 endpoint', async () => {
+    const seen = recordRequests(authApi);
+    await nutritionService.getTargets();
+    expect(seen[0]).toMatchObject({ url: '/v1/nutrition/targets', method: 'get' });
+  });
+
+  // THE SILENT TRAP. The API returns camelCase (proteinG); MacroRings and the
+  // Remaining card read snake_case (protein_g). A straight repoint yields
+  // undefined, which `|| 150` used to render as a plausible fake number rather
+  // than an error — so the bug would look like success. Pinned per macro.
+  it('toDisplayTargets renames every macro to the snake_case the cards read', () => {
+    const mapped = toDisplayTargets({
+      targets: { bmr: 1320, tdee: 2046, kcal: 1646, proteinG: 120, carbsG: 189, fatG: 46 },
+      missing: [],
+    });
+    expect(mapped).toEqual({ kcal: 1646, protein_g: 120, carbs_g: 189, fat_g: 46 });
+    for (const key of ['kcal', 'protein_g', 'carbs_g', 'fat_g']) expect(mapped[key]).not.toBeUndefined();
+  });
+
+  // Three DISTINCT states. `{}` used to mean both "not loaded yet" and "no
+  // targets" — the fabricated defaults hid the difference, and collapsing them
+  // again would flash the honest state at every user while targets are still
+  // in flight (the targets fetch does not own the page spinner).
+  it('toDisplayTargets keeps "no targets" (null) distinct from "not loaded" (undefined)', () => {
+    expect(toDisplayTargets({ targets: null, missing: ['age'] })).toBeNull();
+    expect(toDisplayTargets(undefined)).toBeUndefined();
+    expect(toDisplayTargets(null)).toBeUndefined();
+    // A malformed/absent payload must NOT masquerade as "profile incomplete" —
+    // that would tell a user to fill in fields they have already filled in.
+    expect(toDisplayTargets({})).toBeUndefined();
+  });
+
+  // T3 F4: the container was type-checked but the VALUES were not, so a
+  // targets object short one macro yielded `fat_g: undefined` → the ring
+  // rendered "/ undefinedg" and Remaining rendered NaN, which `|| 0` turned
+  // into a confident "0g left" invented from nothing — this card's own thesis,
+  // one field short. Not producible by today's .strict() API; defence in depth.
+  it('toDisplayTargets rejects a payload missing or corrupting any macro', () => {
+    const good = { kcal: 1646, proteinG: 120, carbsG: 189, fatG: 46 };
+    expect(toDisplayTargets({ targets: good, missing: [] })).not.toBeUndefined();
+    for (const key of ['kcal', 'proteinG', 'carbsG', 'fatG']) {
+      const short = { ...good }; delete short[key];
+      expect(toDisplayTargets({ targets: short, missing: [] })).toBeUndefined();
+      expect(toDisplayTargets({ targets: { ...good, [key]: null }, missing: [] })).toBeUndefined();
+      expect(toDisplayTargets({ targets: { ...good, [key]: 'x' }, missing: [] })).toBeUndefined();
+      expect(toDisplayTargets({ targets: { ...good, [key]: NaN }, missing: [] })).toBeUndefined();
+    }
+  });
+
+  // T3 F5: `(missing ?? []).map` threw on a non-array, and the throw landed
+  // AFTER setTargets had already stored good targets — so the catch discarded
+  // real numbers and showed the prompt instead.
+  it('missingTargetLabels survives a non-array without throwing', () => {
+    for (const bad of [null, undefined, 'age', 42, {}]) {
+      expect(() => missingTargetLabels(bad)).not.toThrow();
+      expect(missingTargetLabels(bad)).toEqual([]);
+    }
+  });
+
+  it('missingTargetLabels renders plain English, never raw field names', () => {
+    expect(missingTargetLabels(['age', 'gender', 'heightCm', 'weightKg', 'exerciseFrequency']))
+      .toEqual(['age', 'gender', 'height', 'weight', 'workouts per week']);
+    expect(missingTargetLabels([])).toEqual([]);
+    // An unknown key (a future sixth input) is passed through rather than
+    // dropped — silently omitting it would name fewer fields than are needed.
+    expect(missingTargetLabels(['somethingNew'])).toEqual(['somethingNew']);
   });
 });

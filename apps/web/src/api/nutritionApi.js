@@ -9,16 +9,20 @@
 //   The SERVER computes all kcal/macros — the client never does nutrition
 //   arithmetic (2B anti-hallucination rule; DECISIONS 2026-07-12 P2.6a).
 //
-// INTERIM ON OLD BACKEND (D2, Kd-ruled Card 5a; the gamification pattern —
-// broken on this branch, owed a "nutrition targets" card in
-// RUNBOOK/cutover.md): getTargets below still rides mlApi. It feeds from
-// user_fitness_profiles once its new-API card lands (exists since PR #30).
-//
-// Card 5b: AddMealModal now rides searchFoods/logManualMeal below — the
-// legacy mlApi searchFood/logMeal pair is deleted as promised at 5a. The one
-// remaining mlApi call is getTargets (D2 interim).
+// The D2 interim is CLOSED: getTargets was the file's last old-backend call
+// and now rides the new GET /v1/nutrition/targets (PR #42, the Mifflin-St Jeor
+// port). nutritionApi runs entirely on the new API — no mlApi import remains,
+// pinned by the usage-guard test.
 import authApi from './authApi';
-import mlApi from './mlApi';
+
+/** The Nutrition page's left column WAITS on the targets request (its spinner
+ *  can no longer clear on the meals fetch alone, or the honest prompt would
+ *  flash at every user). authApi sets no global timeout, so an unbounded
+ *  request here would spin that column forever even though meals returned
+ *  (T3 F3). On timeout the request rejects and the column degrades to the
+ *  "couldn't load your targets" state. Scoped to this call — changing the
+ *  shared client's default is a separate decision. */
+const TARGETS_TIMEOUT_MS = 10_000;
 
 /** Contract bounds, quoted from @app/shared nutrition.ts (never invented):
  *  image ≤10 MB decoded, mime ∈ jpeg|png|webp (analyzeMealPhotoRequestSchema);
@@ -204,8 +208,60 @@ export const nutritionService = {
   updateDishware: (id, patch) => authApi.patch(`/v1/nutrition/dishware/${id}`, patch),
   deleteDishware: (id) => authApi.delete(`/v1/nutrition/dishware/${id}`), // 204
 
-  // ── OLD BACKEND (interim; see header) ─────────────────────────────────────
-  /** D2 interim: {success, targets: {kcal, protein_g, carbs_g, fat_g}} from
-   *  the legacy Mifflin-St Jeor calculator (backend-ml nutrition.py:98). */
-  getTargets: () => mlApi.get('/nutrition/targets'),
+  /** Daily calorie + macro targets, computed SERVER-side from the stored
+   *  profile. Bounded by TARGETS_TIMEOUT_MS. Returns {targets, missing[]} — `targets` is null exactly when
+   *  `missing` is non-empty, because the server refuses to invent a goal for
+   *  an incomplete profile (Kd ruling). Map with toDisplayTargets below. */
+  getTargets: () => authApi.get('/v1/nutrition/targets', { timeout: TARGETS_TIMEOUT_MS }),
 };
+
+// ── targets display mapping ─────────────────────────────────────────────────
+// The API speaks camelCase (proteinG); MacroRings and the Remaining card read
+// snake_case (protein_g). Renaming HERE, once, keeps that seam in one place —
+// and it is the card's silent trap: a missed rename yields `undefined`, which
+// the old `|| 150` fallbacks rendered as a plausible fake number instead of an
+// error, so the bug would have looked like success.
+
+/** THREE distinct states, deliberately (the fabricated defaults used to hide
+ *  the difference):
+ *    undefined → not loaded yet, or an unreadable response  → show nothing yet
+ *    null      → loaded; the profile cannot produce a target → honest prompt
+ *    object    → real, server-computed targets                → render them
+ *  A malformed payload maps to `undefined`, NEVER null: telling a user their
+ *  profile is incomplete when we simply failed to read the response would be
+ *  a fabricated claim of its own. */
+export function toDisplayTargets(response) {
+  if (response === null || typeof response !== 'object') return undefined;
+  if (!('targets' in response)) return undefined;
+  const t = response.targets;
+  if (t === null) return null;
+  if (t === undefined || typeof t !== 'object') return undefined;
+  // Validate the VALUES, not just the container (T3 F4): a payload short one
+  // macro used to yield `fat_g: undefined`, which rendered as "/ undefinedg"
+  // on the ring and as a confident "0g left" in Remaining — a number invented
+  // from nothing, i.e. this card's own thesis one field short. Today's API
+  // cannot produce it (.strict() + z.number().int()); this is defence in depth,
+  // and an unusable payload degrades to `undefined` (unavailable), never
+  // `null` (which would blame the user's profile).
+  const mapped = { kcal: t.kcal, protein_g: t.proteinG, carbs_g: t.carbsG, fat_g: t.fatG };
+  return Object.values(mapped).every((v) => typeof v === 'number' && Number.isFinite(v))
+    ? mapped
+    : undefined;
+}
+
+/** Field names the user would recognise. An unknown key passes through rather
+ *  than being dropped — naming fewer fields than are actually required would
+ *  send someone to Settings to fix the wrong thing. */
+const TARGET_INPUT_LABELS = {
+  age: 'age',
+  gender: 'gender',
+  heightCm: 'height',
+  weightKg: 'weight',
+  exerciseFrequency: 'workouts per week',
+};
+export function missingTargetLabels(missing) {
+  // Array.isArray, not `?? []` (T3 F5): a non-array threw, and the throw landed
+  // AFTER the caller had already stored good targets — so the catch discarded
+  // real numbers and showed the prompt instead.
+  return (Array.isArray(missing) ? missing : []).map((key) => TARGET_INPUT_LABELS[key] ?? key);
+}

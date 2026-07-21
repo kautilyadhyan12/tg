@@ -6,7 +6,7 @@ import {
   Sparkles, Check, Tag, CookingPot, Pencil,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { nutritionService, composeAddIngredient } from '../api/nutritionApi';
+import { nutritionService, composeAddIngredient, missingTargetLabels, toDisplayTargets } from '../api/nutritionApi';
 import MacroRings from '../components/nutrition/MacroRings';
 
 // Quoted from @app/shared nutrition.ts chosenItemsSchema — the contract's own
@@ -1527,7 +1527,15 @@ function parseDateInput(v) {
 // ── Main Nutrition page ───────────────────────────────────────────────────────
 export default function Nutrition() {
   const [meals,          setMeals]           = useState([]);
-  const [targets,        setTargets]         = useState({});
+  // Which profile fields the server says are still needed (plain English),
+  // plus whether the targets request has come back at all — the page spinner
+  // is owned by the MEALS fetch, so without this the honest prompt would
+  // flash at everyone while targets are still in flight.
+  const [missingInputs,  setMissingInputs]   = useState([]);
+  const [targetsLoaded,  setTargetsLoaded]   = useState(false);
+  // undefined = not loaded yet · null = profile can't produce a target ·
+  // object = real server-computed targets (toDisplayTargets owns the mapping).
+  const [targets,        setTargets]         = useState(undefined);
   const [loading,        setLoading]         = useState(true);
   // Card 5d: which local day the page is showing (default today). Navigation
   // (‹ / › / date picker) changes this; `truncated` = the day sits deeper in
@@ -1578,16 +1586,28 @@ export default function Nutrition() {
     loadData(d);
   };
 
-  // D2 interim (Kd-ruled): targets still come from the OLD backend's
-  // Mifflin-St Jeor calculator — the gamification pattern, broken on this
-  // branch until its new-API card (owed in RUNBOOK/cutover.md). Failure
-  // degrades to no targets, never an error toast.
+  // Targets are SERVER-computed (GET /v1/nutrition/targets, the Mifflin-St
+  // Jeor port). The server returns targets:null + missing[] for a profile it
+  // cannot compute from, and we keep that distinct from "not loaded yet" —
+  // collapsing them is what the deleted 2000/150/250/65 fallbacks used to
+  // hide. A failed request degrades to undefined (show nothing), never null
+  // (which would wrongly tell the user their profile is incomplete).
   const loadTargets = async () => {
     try {
       const res = await nutritionService.getTargets();
-      setTargets(res.data?.targets || {});
-    } catch {
-      setTargets({});
+      setTargets(toDisplayTargets(res.data));
+      setMissingInputs(missingTargetLabels(res.data?.missing));
+    } catch (err) {
+      // Never `null` here — that would blame the user's profile for our own
+      // failure. `undefined` renders MacroRings' "couldn't load" state.
+      setTargets(undefined);
+      setMissingInputs([]);
+      // Logged, not swallowed (T3): the left column now WAITS on this request,
+      // so a silent failure was both invisible and load-bearing. Message only —
+      // the error object carries the request config (R3.10).
+      console.error('targets load failed:', err?.message);
+    } finally {
+      setTargetsLoaded(true);
     }
   };
 
@@ -1674,21 +1694,23 @@ export default function Nutrition() {
     fat_g:     Math.round(summed.fat_g),
   };
 
-  // Same display formula the old backend used (nutrition.py:346-350).
-  // While the D2 targets interim is dark, fall back to the SAME defaults
-  // MacroRings renders (its own longstanding fallbacks) so the two cards
-  // agree instead of Remaining showing zeros (Card-5b smoke, Kd).
-  const t = {
-    kcal:      targets.kcal      || 2000,
-    protein_g: targets.protein_g || 150,
-    carbs_g:   targets.carbs_g   || 250,
-    fat_g:     targets.fat_g     || 65,
-  };
-  const remaining = {
-    kcal:      Math.max(0, Math.round(t.kcal      - totals.kcal)),
-    protein_g: Math.max(0, Math.round(t.protein_g - totals.protein_g)),
-    carbs_g:   Math.max(0, Math.round(t.carbs_g   - totals.carbs_g)),
-    fat_g:     Math.max(0, Math.round(t.fat_g     - totals.fat_g)),
+  // Same display formula the old backend used (nutrition.py:346-350) — a
+  // subtraction of two SERVER-computed numbers for display, which D2/D3
+  // expressly allow; the 2B ban is on the browser deriving nutrition.
+  // The 2000/150/250/65 fallbacks are GONE (Kd ruling, targets card): with a
+  // real calculator live they would only ever fire for the incomplete-profile
+  // user, i.e. exactly the person who must not be shown someone else's goal.
+  // No targets → no Remaining card at all (the honest state renders instead).
+  // `=== null`, not `== null` (T3 F2): `undefined` means the request failed,
+  // not that the profile lacks a target. Both suppress this card — there is no
+  // target to subtract from either way — but MacroRings above tells the two
+  // apart, and conflating them here would have made the false "add your
+  // details" prompt the sole explanation of a network blip.
+  const remaining = targets === null || targets === undefined ? null : {
+    kcal:      Math.max(0, Math.round(targets.kcal      - totals.kcal)),
+    protein_g: Math.max(0, Math.round(targets.protein_g - totals.protein_g)),
+    carbs_g:   Math.max(0, Math.round(targets.carbs_g   - totals.carbs_g)),
+    fat_g:     Math.max(0, Math.round(targets.fat_g     - totals.fat_g)),
   };
 
   // Sections group by the USER-CHOSEN label (meal_type, Kd ruling
@@ -1821,19 +1843,29 @@ export default function Nutrition() {
 
             {/* ── Left: Macro rings + remaining ─────────────────────────────── */}
             <div className="lg:col-span-1 space-y-4">
-              {loading ? (
+              {/* The spinner waits for BOTH fetches: `loading` is owned by the
+                  MEALS request, and targets is a separate parallel call. Gating
+                  on `loading` alone would render this column before targets
+                  arrive and flash the "add your details" prompt at every user
+                  with a complete profile. */}
+              {loading || !targetsLoaded ? (
                 <div className="card-glass flex items-center justify-center py-16">
                   <Loader2 className="w-5 h-5 animate-spin"
                            style={{ color: 'rgba(255,138,31,0.5)' }} />
                 </div>
               ) : (
                 <>
-                  <MacroRings totals={totals} targets={targets} />
+                  <MacroRings totals={totals} targets={targets} missingInputs={missingInputs} />
 
               {/* Card 5d: on Today this is "Remaining today" (target − eaten);
                   on a past day "remaining" is meaningless, so it becomes an
-                  "Eaten on this day" total. MacroRings above stays either way
-                  (the selected day's totals vs the goal). */}
+                  "Eaten on this day" total.
+                  Targets card: with no target, "Remaining" cannot be computed
+                  at all, so on TODAY this card is hidden and MacroRings' honest
+                  prompt above is the single explanation (two prompts would be
+                  nagging). A PAST day still renders — "Eaten on this day" is
+                  pure server-summed totals and needs no target. */}
+              {(viewingToday && remaining === null) ? null : (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1875,6 +1907,7 @@ export default function Nutrition() {
                   ))}
                 </div>
               </motion.div>
+              )}
                 </>
               )}
             </div>
