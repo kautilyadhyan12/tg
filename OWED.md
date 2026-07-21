@@ -158,17 +158,24 @@ then; none may be hidden or reduced to close the gap.
 
 ## 🟡 Needed before real users, not before cutover
 
-- [ ] 🟡 **Timezone capture.** **THE SECOND AUDIT MISS — owed since 2026-07-11,
-      tracked NOWHERE until now.** The web never captures a timezone, so
-      `users.timezone` is null and day-bucketing falls back to UTC for
-      EVERYONE. Streaks and "today" therefore roll over at the wrong local hour
-      for every user outside UTC — which is all of them, this being a Jorhat
-      pilot. Trap #8 in the playbook is precisely this.
-      Scope also includes the §3.5 **timezone-travel rule** (a day is kept if it
-      qualifies in either the stored-at-the-time TZ or the new one), which is
-      NOT implemented — streak replay uses only the current `users.timezone`.
-      Shielded today only because everyone is UTC; both must land together.
-      (DECISIONS 2026-07-11 P2.3 GAP-3 + the §3.5 note.)
+- [x] 🟡 **Timezone capture** — DONE 2026-07-21 (the second audit miss, owed
+      since 2026-07-11). The web now reports the browser's IANA zone on session
+      adoption, so `users.timezone` is real and day-bucketing stops falling back
+      to UTC — streaks had been rolling over at the wrong local hour for every
+      user outside UTC (05:30 IST, in a Jorhat pilot). Pure web card: the PATCH
+      has accepted `timezone` since P2.2. Writes only on a real change;
+      best-effort; the client reports its zone and never computes a day
+      boundary. Kd's smoke caught a duplicate write on first login (login and
+      session-restore both firing) — guarded. SMOKE passed, and the stored
+      value was verified written BY THE BROWSER on an untouched account.
+- [ ] 🟡 **Timezone TRAVEL rule (§3.5) — still owed, deliberately NOT absorbed
+      by the capture card.** "A day is kept if it qualifies in either the
+      stored-at-the-time TZ or the new one" is not implemented: streak replay
+      uses only the CURRENT `users.timezone`, so a user who moves between zones
+      can lose a day that legitimately qualified under their old one. This was
+      shielded while every user was UTC; capturing real zones makes it
+      reachable, which is why it is now its own line rather than a footnote.
+      (DECISIONS 2026-07-11 P2.3 T3 note.)
 - [x] 🟡 **`limitedToDays` surfaced in the Progress UI** — DONE 2026-07-21.
       Every `/v1/progress` read returns the plan-clamp field and the page
       ignored it entirely, so a free-plan user saw "1 Year" over 90 days of

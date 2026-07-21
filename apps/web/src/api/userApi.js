@@ -112,8 +112,41 @@ export const userService = {
   getProfile: () => authApi.get('/v1/users/me'),
   /** updateProfileRequestSchema (.strict(), ≥1 field). Weight lives here. */
   updateProfile: (patch) => authApi.patch('/v1/users/me', patch),
+
   /** {fitnessProfile: fitnessProfileSchema} — all-nulls when never onboarded. */
   getFitnessProfile: () => authApi.get('/v1/users/me/fitness-profile'),
   /** putFitnessProfileRequestSchema — FULL replace; caller adds onboardingCompleted. */
   putFitnessProfile: (body) => authApi.put('/v1/users/me/fitness-profile', body),
 };
+
+// ── Timezone capture ────────────────────────────────────────────────────────
+// The web never sent one, so `users.timezone` stayed null and the server
+// bucketed EVERY user as UTC (DECISIONS 2026-07-11 P2.3 GAP-3) — streaks and
+// "today" rolling over at the wrong local hour for anyone outside UTC, which
+// in a Jorhat pilot is everyone. Playbook trap #8 names this exact failure.
+//
+// Day maths stays entirely server-side: the client reports WHERE it is and
+// never computes a day boundary itself.
+
+/** The browser's IANA zone, or null if it cannot say. Never guesses — an
+ *  unreadable environment must leave the stored value alone, since assuming a
+ *  zone is precisely what caused the bug. */
+export function detectTimezone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** The value to PATCH, or null for "leave it". Null on agreement so a page
+ *  load is not a write; trimmed because the contract trims (users.ts:40) and a
+ *  stored " Asia/Kolkata" would otherwise never compare equal and would
+ *  re-PATCH forever; length-capped to the schema's max(64) so a bizarre value
+ *  degrades to silence instead of a 400. */
+export function timezoneUpdate(stored, detected) {
+  if (typeof detected !== 'string') return null;
+  const zone = detected.trim();
+  if (zone === '' || zone.length > 64) return null;
+  return zone === (stored ?? '').trim() ? null : zone;
+}

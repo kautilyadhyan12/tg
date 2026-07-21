@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../api/authApi';
-import { userService } from '../api/userApi';
+import { detectTimezone, timezoneUpdate, userService } from '../api/userApi';
 import { setCurrentUserId } from '../utils/storage';
 import { flushSyncQueue } from '../sync/syncClient';
 
@@ -23,12 +23,50 @@ const adoptSession = (user) => {
 // `=== false` gates saw undefined and enforced it for nobody). Fails OPEN
 // (undefined) on any error — a profile-read blip must never trap a logged-in
 // user; the gate stays exactly as permissive as it is today on failure.
-const fetchOnboardingFlag = async () => {
+/** One profile read, two facts — the onboarding gate flag and the stored
+ *  timezone. Kept as ONE request because both are needed on every session
+ *  adoption and the profile already carries both. */
+const fetchProfileFacts = async () => {
   try {
     const res = await userService.getProfile();
-    return res.data.user?.onboardingCompleted;
+    return {
+      onboardingCompleted: res.data.user?.onboardingCompleted,
+      timezone: res.data.user?.timezone ?? null,
+    };
   } catch {
-    return undefined;
+    return { onboardingCompleted: undefined, timezone: null };
+  }
+};
+
+/** Report WHERE the browser is, so the SERVER can bucket days correctly
+ *  (streaks, "today"). Nobody sent a timezone until this shipped, so
+ *  users.timezone stayed null and every user bucketed as UTC — streaks rolling
+ *  over at the wrong local hour for everyone outside UTC (DECISIONS 2026-07-11
+ *  P2.3 GAP-3; playbook trap #8).
+ *
+ *  The client only REPORTS its zone; every day boundary is still computed
+ *  server-side. The trap is client-side day maths, which this does not add.
+ *
+ *  BEST-EFFORT, like the argon2 rehash-on-login: a failure is logged and never
+ *  breaks an otherwise-valid session. Writes only when the value actually
+ *  changed, so a page load is not a write. */
+let timezoneSynced = false;
+const syncTimezone = async (storedTimezone) => {
+  const next = timezoneUpdate(storedTimezone, detectTimezone());
+  if (next === null) return;
+  // Once per page load (Kd's smoke caught TWO PATCHes on first login): login()
+  // and the session-restore effect BOTH adopt a session, and both read the
+  // profile before either write lands — so both saw a null timezone and both
+  // wrote. Same value twice, so harmless, but a duplicate write every first
+  // login. The guard is set BEFORE the await so the second caller cannot slip
+  // through the window.
+  if (timezoneSynced) return;
+  timezoneSynced = true;
+  try {
+    await userService.updateProfile({ timezone: next });
+  } catch (err) {
+    // Message only — the error object carries the request config (R3.10).
+    console.error('timezone sync failed:', err?.message);
   }
 };
 
@@ -79,8 +117,11 @@ export function AuthProvider({ children }) {
         // Enrich with the gate flag BEFORE loading clears, so ProtectedRoute
         // never renders once with onboardingCompleted===undefined (gate open)
         // and then redirects — the `finally` below awaits this.
-        const onboardingCompleted = await fetchOnboardingFlag();
+        const { onboardingCompleted, timezone } = await fetchProfileFacts();
         setUser({ ...authUser, onboardingCompleted });
+        // Fire-and-forget AFTER the gate flag has landed: a best-effort write
+        // must never delay rendering or hold the loading spinner open.
+        void syncTimezone(timezone);
       })
       .catch(() => {
         adoptSession(null);
@@ -99,9 +140,13 @@ export function AuthProvider({ children }) {
     // Enrich with the onboarding gate flag so Login.jsx can route to the wizard
     // vs the dashboard, and ProtectedRoute sees it immediately (login returns
     // authUserSchema, which omits it — same reason as session restore above).
-    const onboardingCompleted = await fetchOnboardingFlag();
+    const { onboardingCompleted, timezone } = await fetchProfileFacts();
     const user = { ...authUser, onboardingCompleted };
     setUser(user);
+    // Login is the FIRST session a new account gets, so it is where a timezone
+    // is usually captured for the first time. Fire-and-forget: the login
+    // resolves on its own timing regardless (best-effort, as above).
+    void syncTimezone(timezone);
     return { ...res.data, user };
   };
 

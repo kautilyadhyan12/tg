@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
-import { heightToCm, weightToKg, convertHeight, convertWeight, toFitnessProfilePayload, mergeFitnessProfile, userService } from './userApi';
+import { heightToCm, weightToKg, convertHeight, convertWeight, toFitnessProfilePayload, mergeFitnessProfile, timezoneUpdate, userService } from './userApi';
 
 function recordRequests(api) {
   const seen = [];
@@ -208,5 +208,39 @@ describe('userService repoint (Card 6)', () => {
     expect(src).not.toMatch(/VITE_ML_API_URL/);
     expect(src).not.toMatch(/fetch\s*\(/);
     expect(src).not.toMatch(/localStorage\s*[.[]/);
+  });
+
+  // ── Timezone capture ──────────────────────────────────────────────────────
+  // The web never captured a timezone, so users.timezone stayed null and every
+  // user bucketed as UTC (DECISIONS 2026-07-11 P2.3 GAP-3) — streaks and
+  // "today" rolling over at the wrong local hour for everyone outside UTC,
+  // which in a Jorhat pilot is everyone. Playbook trap #8.
+  describe('timezoneUpdate', () => {
+    it('returns the detected zone when the server has none', () => {
+      expect(timezoneUpdate(null, 'Asia/Kolkata')).toBe('Asia/Kolkata');
+    });
+
+    it('returns null when the server already agrees — no write on every page load', () => {
+      expect(timezoneUpdate('Asia/Kolkata', 'Asia/Kolkata')).toBeNull();
+    });
+
+    it('returns the new zone when the user has moved', () => {
+      expect(timezoneUpdate('Europe/London', 'Asia/Kolkata')).toBe('Asia/Kolkata');
+    });
+
+    // Never write something the contract would 400 on, and never overwrite a
+    // good stored value with a guess: an unreadable environment means "leave
+    // it alone", not "assume UTC" (assuming is what caused the bug).
+    it('writes nothing when the browser cannot tell us, or the value is unusable', () => {
+      for (const bad of [undefined, null, '', '   ', 42, {}])
+        expect(timezoneUpdate('Europe/London', bad)).toBeNull();
+      expect(timezoneUpdate(null, 'x'.repeat(65))).toBeNull(); // schema max(64)
+      expect(timezoneUpdate(null, 'x'.repeat(64))).toBe('x'.repeat(64)); // boundary
+    });
+
+    it('trims, because the contract trims and a stored " Asia/Kolkata" would loop forever', () => {
+      expect(timezoneUpdate('Asia/Kolkata', '  Asia/Kolkata  ')).toBeNull();
+      expect(timezoneUpdate(null, '  Asia/Kolkata  ')).toBe('Asia/Kolkata');
+    });
   });
 });
