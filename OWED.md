@@ -66,9 +66,43 @@ then; none may be hidden or reduced to close the gap.
       Owed to the P4 production line / Part 2 Appendix A localization.
       (DECISIONS 2026-07-16, Card 3.)
 - [ ] 🔴 **Workout history calendar** (WorkoutCalendar → workoutApi.getHistory).
-      **The cheapest one left: `/v1/workouts` ALREADY EXISTS**, so this is a
-      pure client repoint with no API work — the same shape as web Cards 3–7.
-      Found out of scope during Card 3 (R1.1). (DECISIONS 2026-07-16.)
+      **BLOCKED — NOT a client repoint. Do not pick this up as a quick win.**
+      `/v1/workouts` exists, which is why this was twice (wrongly) recommended
+      as the cheapest card left; existence is not usability, and three separate
+      blockers were found only on the third check (2026-07-21):
+      1. **THE BLOCKER — the new API holds only a SUBSET of workouts.**
+         `syncClient.js:72` — `if (!summaries || summaries.length === 0) return
+         { queued:false, reason:'log-only' }` — so an all-log-only workout
+         (no engine-scored sets) is deliberately never synced (the ruling at
+         DECISIONS 2026-07-10 P1.10c: with no SetSummaries there is nothing
+         engine-verified to send, and `sets: []` would record an empty engine
+         workout). Meanwhile `ActiveWorkout.jsx:536` still writes EVERY workout
+         to the old backend via `completeSession`. Repointing the calendar
+         today would therefore BLANK every hand-logged day — history showing
+         less training than actually happened. **Unblocks only when the workout
+         WRITE path moves to the new API, which is cutover work itself.**
+      2. The list item carries no exercise breakdown (`workoutListItemSchema`:
+         setsCount/totalReps only). Exercise identity lives on the per-workout
+         DETAIL endpoint (N+1 for a month view) and as SLUGS — display names
+         are the separate owed "exercise library content" card.
+      3. `/v1/workouts` is a keyset cursor list with no month filter, so a
+         month view needs the page-walk pattern from Card 5d.
+      Also fix while here: `workoutApi.js` declares **`getHistory` TWICE** in
+      one object literal (lines 5 and 9) — the second silently wins, so the
+      `(limit)` variant is dead code and a footgun.
+- [ ] ⚪ **XP display in the workout calendar — CURRENTLY DEAD, do not "restore"
+      it.** WorkoutCalendar renders XP behind `session.xp_earned > 0`, but the
+      old backend NEVER WRITES `xp_earned` onto a workout: the completion
+      handler computes it, `$inc`s the USER's total and returns it in that one
+      response (workouts.py:221-259, :311), while the session `$set`
+      (:192-203) stores only completed/calories/duration/active_seconds/
+      form_accuracy/exercises/completed_at. `/history` then projects a field
+      that was never written (:373) and reads `s.get("xp_earned", 0)` → 0 for
+      every workout, so the block has never rendered for anyone. **The
+      no-removal rule is therefore NOT engaged** — there is no live feature to
+      preserve when the calendar eventually moves. Any real XP display is
+      gated on the XP-storage card above (P2.3 GAP-1), not on this.
+      (Found 2026-07-21 while planning the calendar card.)
 - [ ] 🔴 **Google login** (`GOOGLE_LOGIN_ENABLED=false`, Login.jsx/Register.jsx).
       **THE AUDIT MISS — owed since 2026-07-15 and tracked NOWHERE until now.**
       v1 §6.1:438 lists Google OAuth in the auth module; P2.1 shipped
