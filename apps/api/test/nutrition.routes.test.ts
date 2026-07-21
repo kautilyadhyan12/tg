@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { nutritionTargetsResponseSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis, type RedisLike } from "../src/redis.js";
@@ -19,7 +20,7 @@ const jpeg=(()=>{const bytes=Buffer.alloc(1200,1);bytes[0]=0xff;bytes[1]=0xd8;by
 d("nutrition + body routes (real Postgres, fake providers)",()=>{
   const sql=postgres(url??"",{prepare:false,max:5});const redis=createMemoryRedis();const vision=fakeVision();let app:App|undefined;let cookieA="",cookieB="",userA="";
   const api=():App=>{if(app===undefined)throw new Error("beforeAll did not run");return app;};
-  const inject=(method:"GET"|"POST"|"PATCH"|"DELETE",path:string,access:string,body?:unknown)=>api().inject({method,url:path,cookies:access===""?{}:{accessToken:access},headers:body===undefined?{}:{"content-type":"application/json"},...(body===undefined?{}:{payload:JSON.stringify(body)})});
+  const inject=(method:"GET"|"POST"|"PUT"|"PATCH"|"DELETE",path:string,access:string,body?:unknown)=>api().inject({method,url:path,cookies:access===""?{}:{accessToken:access},headers:body===undefined?{}:{"content-type":"application/json"},...(body===undefined?{}:{payload:JSON.stringify(body)})});
   async function session(email:string){const reg=await inject("POST","/v1/auth/register","",{email,password:PASSWORD,displayName:"P26a Fixture"});if(reg.statusCode!==201)throw new Error(reg.body);const userId=reg.json<{userId:string}>().userId;const login=await inject("POST","/v1/auth/login","",{email,password:PASSWORD});return{userId,access:login.cookies.find((c)=>c.name==="accessToken")?.value??""};}
   beforeAll(async()=>{await sql`DELETE FROM meal_logs WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM body_measurements WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM user_dishware WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM api_cost_events WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM users WHERE email LIKE 'p26a-%@example.com'`;app=await buildApp(loadConfig(env),{redis,nutrition:{visionProvider:vision,foodSearchProvider:noExternal}});const a=await session("p26a-alice@example.com");userA=a.userId;cookieA=a.access;cookieB=(await session("p26a-bob@example.com")).access;},60_000);
   afterAll(async()=>{if(app!==undefined)await app.close();await sql.end({timeout:5});});
@@ -430,5 +431,44 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       expect(dal?.gramsPoint).toBe(Math.round(200*0.5*1.0)); // 100 g
       expect(dal?.portionSource).toBe("user_dishware");
     }finally{await a.close();}
+  },30_000);
+
+  // Nutrition targets (this card): the nutrition.py Mifflin-St Jeor port,
+  // computed from the user's OWN stored profile. Kd ruled no fabricated
+  // defaults — an incomplete profile yields NO targets plus an honest list of
+  // what is missing, so the page can ask for it instead of inventing 2000.
+  it("serves targets from the stored profile, withholds them when inputs are missing, and never crosses users",async()=>{
+    const t=await session("p26a-targets@example.com");
+    expect((await inject("GET","/v1/nutrition/targets","")).statusCode).toBe(401);
+
+    // A brand-new user has no fitness-profile row and no weight: all five missing.
+    const empty=await inject("GET","/v1/nutrition/targets",t.access);
+    expect(empty.statusCode,empty.body).toBe(200);
+    expect(empty.json()).toEqual({targets:null,missing:["age","gender","heightCm","weightKg","exerciseFrequency"]});
+
+    // Fill the profile but NOT the weight — weight lives on users.weight_kg,
+    // a different table, so this pins that the read spans both.
+    expect((await inject("PUT","/v1/users/me/fitness-profile",t.access,{age:30,gender:"female",heightCm:165,exerciseFrequency:4,fitnessGoals:["weight_loss"],onboardingCompleted:true})).statusCode).toBe(200);
+    expect((await inject("GET","/v1/nutrition/targets",t.access)).json()).toEqual({targets:null,missing:["weightKg"]});
+
+    // Complete: the SAME golden the unit test hand-computes, now end-to-end
+    // through real storage (a contract mismatch would show here, not there).
+    expect((await inject("PATCH","/v1/users/me",t.access,{weightKg:60})).statusCode).toBe(200);
+    const done=await inject("GET","/v1/nutrition/targets",t.access);
+    expect(done.json()).toEqual({targets:{bmr:1320,tdee:2046,kcal:1646,proteinG:120,carbsG:189,fatG:46},missing:[]});
+
+    // R7.2 (T3 finding): both arms are parsed through the SHARED contract, so
+    // the route's shape and the client's types cannot drift apart silently.
+    // .strict() means an extra key here would fail, not be quietly carried.
+    expect(nutritionTargetsResponseSchema.safeParse(done.json()).success).toBe(true);
+    expect(nutritionTargetsResponseSchema.safeParse(empty.json()).success).toBe(true);
+
+    // Tenancy: this route takes no id, so the proof is that a second user with
+    // a different profile gets THEIR numbers and neither leaks into the other.
+    const u=await session("p26a-targets2@example.com");
+    expect((await inject("PUT","/v1/users/me/fitness-profile",u.access,{age:25,gender:"male",heightCm:180,exerciseFrequency:6,fitnessGoals:["muscle_gain"],onboardingCompleted:true})).statusCode).toBe(200);
+    expect((await inject("PATCH","/v1/users/me",u.access,{weightKg:75})).statusCode).toBe(200);
+    expect((await inject("GET","/v1/nutrition/targets",u.access)).json<{targets:{kcal:number}}>().targets.kcal).toBe(3327);
+    expect((await inject("GET","/v1/nutrition/targets",t.access)).json<{targets:{kcal:number}}>().targets.kcal).toBe(1646);
   },30_000);
 });

@@ -31,6 +31,41 @@ export async function getUserSyncContext(
   return await repo.getSyncContext(sql, userId);
 }
 
+/** The stored answers the nutrition targets calculator reads (Mifflin-St Jeor,
+ *  nutrition.py:98). Structurally the calculator's `TargetInputs`, but declared
+ *  here so the users module never imports a nutrition type.
+ *
+ *  Same sql-only shape as getUserSyncContext above, and for the same reason:
+ *  getProfile/getFitnessProfile take UsersDeps (redis + emailSender + log),
+ *  which NutritionDeps cannot supply. Two PK lookups rather than a join —
+ *  reusing the tested repo reads keeps the DB access in repo.ts (R4.6) and
+ *  costs one extra indexed lookup on a once-per-page-load endpoint. */
+export interface UserTargetContext {
+  age: number | null;
+  gender: string | null;
+  heightCm: number | null;
+  weightKg: number | null;
+  exerciseFrequency: number | null;
+  fitnessGoals: string[];
+}
+
+export async function getUserTargetContext(sql: Sql, userId: string): Promise<UserTargetContext> {
+  const [sync, fitness] = await Promise.all([
+    repo.getSyncContext(sql, userId),
+    repo.getFitnessProfile(sql, userId),
+  ]);
+  // No profile row = the user has not onboarded; every field reads as missing
+  // rather than defaulting (the whole point of the honest-empty-state ruling).
+  return {
+    age: fitness?.age ?? null,
+    gender: fitness?.gender ?? null,
+    heightCm: fitness?.heightCm ?? null,
+    weightKg: sync.weightKg,
+    exerciseFrequency: fitness?.exerciseFrequency ?? null,
+    fitnessGoals: fitness?.fitnessGoals ?? [],
+  };
+}
+
 /** Typed failure for the central error mapper (R8.1); message client-safe. */
 export class UsersError extends Error {
   readonly statusCode: number;

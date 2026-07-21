@@ -174,6 +174,15 @@ export function registerNutritionRoutes(
     },
   );
 
+  /** Daily calorie + macro targets, computed server-side from the user's own
+   *  stored profile (R3.1). No input to parse — the identity is the request's
+   *  own session, so there is no id to tamper with. Responds
+   *  { targets: null, missing: [...] } when the profile is incomplete: the
+   *  server never fabricates a target (Kd ruling, this card). */
+  app.get("/v1/nutrition/targets", { preHandler: [app.authenticate] }, async (req, reply) => {
+    return reply.send(await service.getTargets(nutritionDeps, authedUserId(req)));
+  });
+
   app.get("/v1/nutrition/foods", { preHandler: [app.authenticate] }, async (req, reply) => {
     const q = parse(foodSearchQuerySchema, req.query, req, reply);
     if (q === null) return;
