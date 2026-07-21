@@ -1,6 +1,54 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: Nutrition targets — API half + WEB half 🔴  [DONE 2026-07-21]
+  API (branch nutrition-targets-api → PR #42 merged to master): GET
+  /v1/nutrition/targets ports backend-ml's Mifflin-St Jeor calculator
+  (nutrition.py:98-179) VERBATIM — every constant carries its source line.
+  Reads user_fitness_profiles + users.weight_kg via a new sql-only
+  getUserTargetContext (getProfile takes UsersDeps, which NutritionDeps cannot
+  supply). NO migration. Kd rulings: NO fabricated defaults — an incomplete
+  profile returns {targets:null, missing[]} instead of the salvage's
+  70kg/170cm/25y/male guesses; all five inputs required, goals may be empty.
+  The salvage's opposite goal precedence (kcal tests weight_loss first, protein
+  tests muscle_gain first) is ported as-is and pinned. api 293/293 on Neon.
+  SIX rounds of fresh-chat T3 — the endpoint was correct from round 2; rounds
+  3-6 found one unreachable type hole and a string of citation defects in my
+  own records. Recurring lesson, now in DECISIONS: each guard was verified
+  against the mutation the PREVIOUS round named, leaving the next-nearest open
+  ("mutate the class, not the case"), and a CORRECTION is a new claim that
+  inherits V1 in full (one comment was wrong twice in opposite directions).
+  WEB (web-repoint, commit aa362ce): MacroRings + "Remaining today" repointed;
+  nutritionApi.js is now 100% new-API (getTargets was its last mlApi call).
+  The || 2000/150/250/65 defaults DELETED — supersession marked on BOTH
+  branches. Re-verifying the approved plan caught a flash-the-honest-prompt
+  defect before any code: the left column's spinner is owned by the MEALS
+  fetch, and || 2000 had made the not-yet-loaded state look correct — a
+  fabricated default hiding a loading bug from its own author. T3: 6 findings,
+  all fixed; the serious one was `targets == null` (loose) collapsing three
+  states into two, so a FAILED request told a complete-profile user to fix a
+  profile that was never broken — `== null` ported from the API half, where it
+  is right, into the one place the two values differ. web 105/106 (1 = known
+  syncClient env quirk); lint 7 = baseline parity. SMOKE PASSED twice.
+  SMOKE METHOD (both learned the hard way, recorded): a fresh account cannot
+  show the empty state (onboarding is mandatory and collects all five) — clear
+  a field in Settings; and killing the API cannot show the failure state
+  (/v1/auth/me fails first and signs you out) — block only the targets URL.
+NEXT CARDS: ⏰ Groq COACH_MODEL migration (HARD DATE before 2026-08-16 —
+  llama-3.1-8b-instant is decommissioned and the coach goes DARK; flip the
+  default + re-quote the model-specific price constants per Part 0 rule 4) ·
+  DPDP Day-14 delete/export worker (HARD GATE for cutover, doc-promoted;
+  needs BullMQ) · avatar storage incl. the unmet R3.9 upload security ·
+  workout history calendar repoint · limitedToDays in the Progress UI ·
+  onboarding wizard's native unit dropdowns → the shared Select ·
+  real-phone mobile-web camera smoke · T3 residuals (bySubstring cross-word
+  matching; item-removal telemetry; API request-level canonical dedupe).
+  STILL ON THE OLD BACKEND (owed, each its own cutover line): exerciseApi,
+  gamificationApi, progressApi(predictions), recommendationApi, runningApi,
+  workoutApi, Settings' avatar.
+```
+
+```
 TASK: Card ⑦ — Settings profile forms → new API 🟡  [DONE 2026-07-20]
   WEB (web-repoint): Settings' two profile forms + reset-onboarding repointed
   off backend-ml. Load = GET /v1/users/me + /fitness-profile (flat-merged);

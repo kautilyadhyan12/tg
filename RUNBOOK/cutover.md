@@ -100,7 +100,7 @@ the operational wrapper around it.
             Card 4 wired it; the API side is its own small card and MUST land
             before real traffic. Client change is one header line
             (apps/web/src/api/coachApi.js notes where).
-      - [ ] **Nutrition targets/remaining** (MacroRings + "Remaining today",
+      - [x] **Nutrition targets/remaining** (MacroRings + "Remaining today",
             web Card 5a, D2 Kd-ruled 2026-07-16) — the new API has no targets
             surface (v1 §6.1's nutrition module is photo pipeline + lookup
             only); the page keeps reading the OLD backend's Mifflin-St Jeor
@@ -128,6 +128,15 @@ the operational wrapper around it.
             Card-5b approval is now superseded (see the ⚠ marker in
             DECISIONS.md). A browser SMOKE is owed with it — the API card
             shipped no reachable UI and correctly claimed none.
+            **WEB HALF DONE 2026-07-21** (commit aa362ce): all four points
+            landed. `nutritionApi.js` is now 100% new-API — `getTargets` was
+            its last old-backend call and the mlApi import is gone. An
+            incomplete profile names the missing fields; a FAILED request says
+            "couldn't load" instead (a fresh-chat T3 caught the two being
+            conflated by a loose `== null`). Fresh-chat T3: 6 findings, all
+            fixed. SMOKE PASSED twice — success arms, then the failure path
+            confirmed in-browser with the targets request blocked.
+            **THIS LINE IS NOW CLOSED.**
       - [x] **Dishware IN-FLOW UI + portion API** (Part 2B §3.2 rung 1;
             Kd re-ruled at the 5b smoke: dishware must live inside the
             add-food and photo flows, driving the server's portion math).
