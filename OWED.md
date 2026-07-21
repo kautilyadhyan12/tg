@@ -146,9 +146,21 @@ then; none may be hidden or reduced to close the gap.
       which is a new message. What is actually needed: a real **"Try again"**
       control on the failed reply that resends with the SAME key. Kd ruled
       2026-07-21 to build it properly rather than ship the ineffective
-      one-liner. Web-only, on this branch, after the API half merges. Owed with
-      it: a browser SMOKE — send, fail, Try again → ONE conversation, ONE
-      question spent.
+      one-liner. Web-only, on this branch, after the API half merges.
+      **FOLD IN — same catch block, found by the API card's round-2 review:**
+      `Coach.jsx` maps EVERY 429 to the quota copy ("You've used all your coach
+      questions… or upgrade for more"), but the API now also returns a 429 with
+      `error: 'rate_limited'` for the 10-per-minute burst cap. So a free user
+      with four questions left who sends fast is told to UPGRADE — wrong, and
+      reachable from the shipped screen today, before the Try-again control
+      exists. Branch on `err.response?.data?.error === 'rate_limited'` and say
+      "you're sending messages too quickly" instead. No API change.
+      **SMOKE owed with this card (it is the API half's owed smoke too, per
+      CLAUDE.md Part I §2 — that card ships three new client-visible responses
+      but none of them is reachable from the browser until this one lands):**
+      send → fail → Try again → ONE conversation, ONE question spent; the same
+      key with a different message → the honest mismatch message, never the
+      first answer; 11 rapid sends → "too quickly", NOT the upgrade copy.
 - [ ] 🟡 **Empty conversation left behind by a failed coach message.**
       PRE-EXISTING, found 2026-07-21 while verifying the card above, not
       introduced by it. `repo.createThread` commits on its own BEFORE the
