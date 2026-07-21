@@ -46,14 +46,22 @@ export const ACTIVITY_BY_FREQUENCY: Readonly<Record<number, number>> = {
   7: 1.9,
 };
 
-/** The salvage's `.get(frequency, 1.55)` fallback (:143). The WRITE path bounds
- *  frequency to 1-7 in Zod (users.ts:141) — but there is deliberately no DB
- *  CHECK on `exercise_frequency` (migration 0006 declares a bare integer; the
- *  table's only CHECKs are gender/fitness_level/preferred_workout_time), and
- *  P2.7-migrated rows never pass through Zod at all. So this fallback IS
- *  reachable, and it keeps an out-of-range integer degrading to the ported
- *  default instead of NaN (I6). (T3 finding: an earlier comment here claimed a
- *  DB CHECK that does not exist.) */
+/** The salvage's `.get(frequency, 1.55)` fallback (:143). Kept because R5.4
+ *  requires porting it verbatim — NOT because a live bypass exists.
+ *
+ *  Accurately: Zod is currently the SOLE writer of `exercise_frequency`
+ *  (upsertFitnessProfile ← the PUT's `.min(1).max(7).nullable()`,
+ *  users.ts:141), so the fallback is defensive only. There is no DB CHECK
+ *  behind it (migration 0006 declares a bare integer; the table's only CHECKs
+ *  are gender/fitness_level/preferred_workout_time), so it earns its keep the
+ *  day a second writer appears — degrading an out-of-range integer to the
+ *  ported default instead of NaN (I6).
+ *
+ *  This comment has now been WRONG TWICE in opposite directions: it first
+ *  claimed a DB CHECK that does not exist (T3 round 3), and the correction
+ *  then claimed P2.7-migrated rows bypass Zod — also false, the migrator never
+ *  writes this table at all (INVENTORY.md:45 drops the onboarding fields;
+ *  collections/users.ts:80 inserts only `users` columns). T3 round 6. */
 const DEFAULT_ACTIVITY = 1.55;
 
 /** Kd ruling (this card): all five move the number materially — frequency
@@ -123,6 +131,11 @@ export function missingTargetInputs(input: TargetInputs): MissingTargetInput[] {
         : never
       : never;
   };
+  // NB the `satisfies` closes the TYPE-level shapes; a projection that
+  // launders an absent value (`input.x ?? "default"` written into this
+  // literal) would still satisfy it. That shape is closed by TESTS — the
+  // literal-five assertion and the all-five-null case — not by the compiler.
+  //
   // `== null`, not `=== null` (T3 round 5): `null extends string | null |
   // undefined` is TRUE, so the mapped type above admits an OPTIONAL field —
   // and `undefined === null` is false, so an absent value would never be
