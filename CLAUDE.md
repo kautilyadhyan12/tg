@@ -33,6 +33,21 @@ backend has" for gamification/predictions surfaces whose deferral was already
 Kd-ruled and sequenced in DECISIONS 2026-07-11 and CLAUDE.md P4.x — the
 recommendation was framed as removal instead of citing the existing rulings.)
 
+**EVERY DEFERRAL GETS A LINE IN `OWED.md`, IN THE SAME COMMIT THAT DEFERS IT.**
+`OWED.md` at the repo root is the single list of everything outstanding —
+blocking and non-blocking, code and rulings. DECISIONS.md is a DIARY (what was
+decided, why, in order) and cannot answer "what is still to do"; cutover.md
+tracks only P2.8 blockers. A deferral written into DECISIONS prose alone is how
+work gets silently lost — proven on 2026-07-21, when an audit found TWO items
+owed and tracked nowhere: Google login (a user-facing feature switched off
+since 2026-07-15, which the no-removal rule above exists to prevent) and
+timezone capture (every user bucketed as UTC since 2026-07-11, so streaks roll
+over at the wrong hour for everyone outside London). Items leave OWED.md only by
+being DONE (ticked, dated, commit named) or by an explicit Kd ruling that they
+will never be built (struck, ruling cited).
+(Operator-added 2026-07-21 after Kd asked that nothing be "left to do later and
+forgotten about silently".)
+
 **GROUNDING BEFORE EVERY DECISION AND EVERY RECOMMENDATION — NO EXCEPTIONS.
 Before proposing, recommending, planning, or deciding ANYTHING, the chat MUST
 have read, IN THIS SESSION: (1) the spec §§ the task touches, (2) this file's

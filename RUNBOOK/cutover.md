@@ -14,6 +14,13 @@ the operational wrapper around it.
 > The full procedure below is the general/data-carrying form (used for the
 > verified dev cutover and kept for reference).
 
+> **The full outstanding list lives in `OWED.md` at the repo root.** This file
+> tracks only what BLOCKS the cutover; OWED.md tracks EVERYTHING, including the
+> items that do not block it and therefore had no home before 2026-07-21 (an
+> audit that day found two owed and tracked nowhere — Google login and timezone
+> capture). Any card that defers something adds its line to OWED.md in the same
+> commit; a deferral recorded in DECISIONS prose alone is how work gets lost.
+
 ## Prerequisites (all must be true before starting)
 
 - [x] **argon2id rehash-on-login** shipped (DECISIONS 2026-07-11, owed before
