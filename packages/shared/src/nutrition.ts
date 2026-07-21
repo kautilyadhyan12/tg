@@ -139,3 +139,31 @@ export type PatchBodyMeasurement = z.infer<typeof patchBodyMeasurementSchema>;
 
 export const nutritionListQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(20), cursor: z.string().optional() }).strict();
 export const foodSearchQuerySchema = z.object({ q: z.string().trim().min(1).max(100), limit: z.coerce.number().int().min(1).max(50).default(10) }).strict();
+
+// ── Daily calorie + macro targets (the nutrition.py Mifflin-St Jeor port) ────
+// `targets` is null EXACTLY when `missing` is non-empty: the server refuses to
+// invent a number from defaults (Kd ruling; the Card-7 F2 precedent), so the
+// client renders an honest "add your details" prompt naming what is missing
+// rather than a generic goal indistinguishable from a real one.
+export const missingTargetInputSchema = z.enum(["age", "gender", "heightCm", "weightKg", "exerciseFrequency"]);
+export const nutritionTargetsSchema = z.object({
+  bmr: z.number().int(),
+  tdee: z.number().int(),
+  kcal: z.number().int(),
+  proteinG: z.number().int(),
+  carbsG: z.number().int(),
+  fatG: z.number().int(),
+}).strict();
+// The EXACTLY is enforced, not merely asserted (T3 round 2): both impossible
+// states — targets with an unmet input, and no targets with nothing missing —
+// were accepted by the bare shape. The second is the dangerous one: a client
+// would render an "add your details" prompt naming no details.
+export const nutritionTargetsResponseSchema = z.object({
+  targets: nutritionTargetsSchema.nullable(),
+  missing: z.array(missingTargetInputSchema),
+}).strict().refine((r) => (r.targets === null) === (r.missing.length > 0), {
+  message: "targets must be null exactly when missing is non-empty",
+});
+export type MissingTargetInput = z.infer<typeof missingTargetInputSchema>;
+export type NutritionTargets = z.infer<typeof nutritionTargetsSchema>;
+export type NutritionTargetsResponse = z.infer<typeof nutritionTargetsResponseSchema>;
