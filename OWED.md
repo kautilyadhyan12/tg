@@ -211,20 +211,41 @@ then; none may be hidden or reduced to close the gap.
       (DECISIONS 2026-07-21.)
 
 ### Legal / operational gates
-- [ ] 🔴🟡 **DPDP Day-14 hard-delete + JSON-export worker.** §5.2 ANONYMIZES the
-      users row rather than deleting it, so NO FK cascade collects user-owned
-      PII; §5.2's explicit Day-14 DELETE list is the only mechanism and the
-      worker does not exist. Needs BullMQ (**not installed** — verified) and a
-      worker mode. Must cover BOTH §5.2 lists (hard DELETE and JSON export) and
-      MUST include `user_fitness_profiles`, which holds `medical_conditions`
-      (health data). **Promoted to next-priority on 2026-07-16 as the explicit
-      PRICE of merging the onboarding-storage card**, and has since been
-      deferred past seven cards — record that honestly rather than let it drift.
-      Exposure is theoretical only while the DB is empty; it becomes real with
-      the first registration.
-      **Build note (T3 assessment, 2026-07-21):** carry the retention window as
-      ONE named constant, and make the export a table list rather than a bespoke
-      format — see the open scope question below.
+- [x] 🔴 **DPDP Day-14 HARD-DELETE worker — DONE 2026-07-22** (branch
+      `dpdp-day14-purge`; T3 pending at the time of writing, code complete and
+      api 324/324 on Neon). §5.2 ANONYMIZES the users row rather than deleting
+      it, so NO FK cascade collects user-owned PII; §5.2's explicit Day-14
+      DELETE list is the only mechanism, and it now exists as
+      `apps/api/src/modules/privacy`. 17 tables end empty per purged user — 15
+      deleted directly, `meal_log_corrections` and `coach_messages` collected by
+      CASCADE from their parents (they carry NO `user_id`, which the approved
+      plan had assumed they did — caught by verification before any code).
+      `user_fitness_profiles` IS included, so the condition on which
+      onboarding-storage was merged (2026-07-16) is discharged for this half.
+      Runs on BullMQ (**now installed**, 5.80.10) from a new `worker`
+      entrypoint per v1 §6, plus `tools/dpdp-purge.ts` which is **dry by
+      default** and needs `--apply` to destroy anything.
+      **The build note is honoured and was bigger than it looked:** the
+      retention window is ONE constant (`apps/api/src/retention.ts`), and there
+      turned out to be FOUR hard-coded 14s, not one — two of them the
+      user-facing strings on `DELETE /v1/users/me`. Had only the code read the
+      constant, widening to GDPR's 30 would have left the API telling users
+      "you have 14 days" while purging at 30.
+- [ ] 🔴 **DPDP JSON-export worker — the OTHER half of §5.2, still owed and
+      still blocks P2.8.** Split from the delete half by Kd ruling 2026-07-22
+      because NONE of its infrastructure exists — command-verified: no R2/S3
+      client in any `package.json`, no bucket or signing keys among
+      `config.ts`'s 17 env vars, no zip library, and no Part 4 table to track an
+      export job. It therefore needs new credentials plus ≥2 new dependencies,
+      which would have blown the 🔴 one-thing-per-chat ceiling and delayed the
+      legally load-bearing half. §5.2 wants "a JSON zip of every user-owned
+      table above + profile, delivered via signed URL, 7-day expiry".
+      **A DEVIATION PROPOSAL is on file for that card:** serve it as an
+      authenticated `GET /v1/users/me/export` returning JSON directly — no zip,
+      no R2, no signed URL — which satisfies §5.2's "both flows exist at launch"
+      with zero new infrastructure and keeps the export a table LIST, so adding
+      signed-URL delivery later changes delivery only, never content. Kd rules
+      on that at the card.
 - [ ] 🔴 **Drain offline sync queues before cutover.** Per-user localStorage
       buckets are keyed `user_<id>_*`; pre-cutover that id is the old Mongo
       ObjectId, after it the new UUID, so unflushed workouts orphan. Non-issue
