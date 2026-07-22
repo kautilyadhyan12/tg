@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   Send, Plus, Trash2, MessageSquare,
   Sparkles, Loader2, User as UserIcon,
@@ -71,7 +72,13 @@ function MessageBubble({ message, isStreaming }) {
           <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
         ) : (
           <div className="text-sm leading-relaxed coach-markdown">
-            <ReactMarkdown>{message.content || ' '}</ReactMarkdown>
+            {/* remark-gfm renders GitHub-flavoured markdown — TABLES above all.
+                Added 2026-07-22 after the coach-model smoke: gpt-oss-20b answers
+                macro questions with tables, and plain react-markdown has no
+                table support, so every cell and divider collapsed into one
+                run-on paragraph of "|" and "---". Also gives us strikethrough
+                and auto-links. */}
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content || ' '}</ReactMarkdown>
             {isStreaming && (
               <span className="inline-block w-2 h-4 ml-0.5 align-middle"
                     style={{ background: '#FF8A1F', animation: 'blink 1s infinite' }} />
@@ -654,6 +661,37 @@ export default function Coach() {
           border: none;
           padding: 0;
           color: rgba(255,255,255,0.85);
+        }
+        /* TABLES (2026-07-22, coach-model smoke). gpt-oss-20b answers macro
+           questions with tables; without these they render unstyled and a wide
+           one would blow out the chat bubble on a phone. The wrapper scrolls
+           SIDEWAYS rather than letting the page scroll horizontally. */
+        .coach-markdown table {
+          /* display:block makes the table its OWN scroll container, so a wide
+             table scrolls sideways inside the bubble instead of widening the
+             page. Done in CSS rather than a JSX wrapper: no extra component,
+             nothing to keep in sync. */
+          display: block;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          border-collapse: collapse;
+          margin: 0.6em 0;
+          font-size: 0.92em;
+        }
+        .coach-markdown th, .coach-markdown td {
+          border: 1px solid rgba(255,255,255,0.10);
+          padding: 0.4em 0.65em;
+          text-align: left;
+          vertical-align: top;
+          white-space: nowrap;
+        }
+        .coach-markdown th {
+          background: rgba(255,138,31,0.12);
+          color: #FFB347;
+          font-weight: 600;
+        }
+        .coach-markdown tbody tr:nth-child(even) td {
+          background: rgba(255,255,255,0.025);
         }
       `}</style>
     </div>
