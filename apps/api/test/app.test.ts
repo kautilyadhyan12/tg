@@ -60,6 +60,22 @@ describe("api skeleton", () => {
     }
   });
 
+  it("CORS: Idempotent-Replay is EXPOSED, or browser JS cannot read it", async () => {
+    // Same structural blind spot as the Card 4 preflight bug, one layer along:
+    // @fastify/cors emits Access-Control-Expose-Headers ONLY when
+    // exposedHeaders is set (index.js:232-237) and the default is null, so the
+    // coach replay marker would be sent by the server and be invisible to the
+    // client. A route test asserting res.headers["idempotent-replay"] passes
+    // either way, because inject() bypasses CORS entirely — this assertion is
+    // the only kind that can see it.
+    const res = await app.inject({
+      method: "GET",
+      url: "/health",
+      headers: { origin: WEB_ORIGIN },
+    });
+    expect(res.headers["access-control-expose-headers"]).toContain("Idempotent-Replay");
+  });
+
   it("CORS: foreign origin gets no allow-origin", async () => {
     const res = await app.inject({
       method: "OPTIONS",
