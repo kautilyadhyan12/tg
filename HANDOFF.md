@@ -1,6 +1,64 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: Coach "Try again" control — the client half 🟡  [DONE 2026-07-22]
+  WEB (web-repoint, commits a62586b + 304a089 + ee28e2a): the CLIENT half of the
+  coach retry protection whose API half merged as PR #43. Coach.jsx cleared the
+  message box on send and never restored it, with NO retry affordance — so a
+  failed question could only be RETYPED, which the server correctly reads as a
+  brand-new one (second thread, second question spent), and a key minted inside
+  sendMessage would have differed every attempt and deduped nothing. Now the key
+  is minted ONCE PER COMPOSED MESSAGE and stored with it, so "Try again" resends
+  an IDENTICAL body (message AND threadId, captured at compose time) under the
+  SAME key — which is what the server's whole-body fingerprint recognises. Input
+  is deliberately NOT restored: the button is the retry path.
+  FOLD-IN DELIVERED: every 429 used to map to the quota copy, so a free user with
+  four questions left who typed fast was told to UPGRADE. The catch now branches
+  on the error NAME via pure exported coachErrorInfo — the two 429s and the two
+  409s mean opposite things. quota_exceeded / not_found / validation_error offer
+  NO button (a retry cannot help); the two key-errors retry with a FRESH key.
+  DELIBERATE EXCEPTION, verified: an UNRECOGNISED 429 falls back to "too
+  quickly" — @fastify/rate-limit throws an untyped error so the global limiter's
+  429 arrives as {error:"request_error"}; it must never produce the upgrade copy.
+  T3 (FRESH CHAT, Kd): 1 BLOCKING + 4 more. V1 — the button was addressed PER
+  MESSAGE while the send writes to the TAIL, so a stale button resent the right
+  key into the WRONG bubble and overwrote a newer reply. Closed at BOTH layers
+  (offers withdrawn on compose; button cannot render off-tail) and
+  MUTATION-VERIFIED. V2 stale OWED/cutover lines ticked. V3 the sequencer is now
+  exported + tested like the mapper. V4/V5 recorded, not fixed.
+  web 147/148 (the 1 = the known syncClient env quirk) from a 130/131 baseline;
+  build ✓; lint 1 on Coach.jsx = exact baseline. LIVE-DRIVEN first: replay
+  returned a byte-identical body with idempotent-replay: true, same-key/different
+  message → 400 mismatch, ONE thread after three requests. CORS preflight
+  re-checked before any code (a custom header forces one; refusal would kill the
+  coach in-browser — the Card-4 class).
+  SMOKE PASSED (Kd, all three steps). Kd smoke ask folded in: the answer bubble
+  was too narrow (column capped at 768px, bubble 75% of it = ~576px) so tables
+  were chopped — column now 1024px and ANSWER bubbles 92% (questions stay 75%),
+  ~942px of table width; the table's own scroll is KEPT by Kd's framing.
+  RECORDS: PR #43 and the Groq PR #44 lines were both still open (neither file
+  is editable from a master-bound card — OWED.md is not on master at all); both
+  ticked, and the GROQ_API_KEY ROTATION that card was expected to carry but did
+  NOT perform now has its OWN open line rather than sitting inside a ticked one.
+  cutover.md's limitedToDays checkbox was likewise stale; ticked.
+  NB the card brief's T3 command (`git diff origin/master -- apps/web`) is WRONG
+  on this branch — 4,537 insertions across 36 files, every previous card. Use
+  `git diff HEAD -- apps/web` (this card: 3 files).
+NEXT CARDS: 🔴 DPDP Day-14 hard-delete + JSON-export worker (THE recommendation —
+  promoted 2026-07-16 as the explicit PRICE of merging onboarding-storage and
+  deferred past 8 cards since; needs BullMQ, NOT installed, so R1.4 approval
+  first; carry the retention window as ONE named constant and make the export a
+  table LIST, so Kd's open privacy-scope question does not box it in) ·
+  🔴 Google login (off since 2026-07-15) · 🔴 avatar storage (incl. the unmet
+  R3.9 upload security) · 🔴 XP/badges/leaderboard/predictions/exercise-library
+  (each needs an API surface first) · 🔴 workout history calendar (BLOCKED —
+  read its OWED entry, the new API holds only a SUBSET of workouts) ·
+  🟡 timezone TRAVEL rule · 🟡 real-phone camera smoke · 🟡 ROTATE GROQ_API_KEY
+  (Kd's own action) · ⚪❓ raw <br> in coach answers renders as text — needs a Kd
+  ruling (rehype-raw = new dep + letting model HTML into the DOM).
+```
+
+```
 TASK: Nutrition targets — API half + WEB half 🔴  [DONE 2026-07-21]
   API (branch nutrition-targets-api → PR #42 merged to master): GET
   /v1/nutrition/targets ports backend-ml's Mifflin-St Jeor calculator
