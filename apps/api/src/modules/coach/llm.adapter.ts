@@ -36,7 +36,15 @@ export class ProviderError extends Error {
 
 // coach.py:96-97 — the ported per-call budget (v1 §6.1 "per-call token budget").
 export const COACH_TEMPERATURE = 0.7;
-export const COACH_MAX_TOKENS = 800;
+// Raised 800→1200 during the 2026-07-22 coach-model migration (Kd-ruled): the
+// ported 800 rarely bit llama-3.1-8b-instant (~500 output tokens/answer), but
+// gpt-oss-20b is markedly more verbose (tables, worked examples) and hit 800 on
+// every substantive question, TRUNCATING answers mid-sentence — proven by a
+// live drive against the new model. Deliberately folded into the migration card
+// because the swap is what made the cap bite (not a drive-by, R1.1). Cost impact
+// is ~$0.0001/question at the re-quoted output price — negligible; the quality
+// regression is the real cost. DECISIONS 2026-07-22.
+export const COACH_MAX_TOKENS = 1200;
 
 // OpenAI-compatible response, only the fields we consume (R2.3).
 const completionSchema = z.object({
@@ -120,7 +128,11 @@ export function createGroqProvider(
   );
 }
 
-/** OpenRouter serves the same Llama family under its own model id. */
+/** OpenRouter fallback: meta-llama/llama-3.1-8b-instruct — a DIFFERENT model
+ *  family from the gpt-oss-20b primary since the 2026-07-22 Groq swap (it used
+ *  to be the same Llama family). Priced at the primary's constants — a
+ *  conservative approximation until a real OpenRouter price line is added
+ *  (DECISIONS 2026-07-12; the fallback is rare). */
 export function createOpenRouterProvider(
   apiKey: string,
   fetchImpl: typeof fetch = fetch,

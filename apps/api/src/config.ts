@@ -27,7 +27,13 @@ const envSchema = z.object({
   // OPENROUTER_API_KEY unset = fallback simply not attempted.
   GROQ_API_KEY: z.string().min(1).optional(),
   OPENROUTER_API_KEY: z.string().min(1).optional(),
-  COACH_MODEL: z.string().min(1).default("llama-3.1-8b-instant"), // salvage default (GAP-2)
+  // Coach-model migration 2026-07-22 (supersedes the P2.5b GAP-2 salvage
+  // default): Groq deprecated llama-3.1-8b-instant and DECOMMISSIONS it
+  // 2026-08-16 — after that date requests to it are not served and the coach
+  // goes dark. openai/gpt-oss-20b is Groq's own recommended replacement (per
+  // the deprecation email + console.groq.com supported-models page, the exact
+  // id verified 2026-07-22). Overridable via COACH_MODEL.
+  COACH_MODEL: z.string().min(1).default("openai/gpt-oss-20b"),
   // Vision-swap card 2026-07-16 (supersedes the P2.6a Scout default): Groq
   // decommissions Scout 2026-07-17; qwen3.6-27b is the only vision-capable
   // replacement (console.groq.com/docs/vision, checked 2026-07-16).

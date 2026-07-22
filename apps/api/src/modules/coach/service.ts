@@ -17,11 +17,21 @@ import * as repo from "./repo.js";
 import { formatContext, retrieve } from "./retrieve.js";
 import type { CoachChatResponse, CoachThreadDetail, CoachThreadPage, CoachThreadListQuery } from "./schemas.js";
 
-// DECISIONS 2026-07-12 (GAP-5): Groq llama-3.1-8b-instant public list price,
-// integer micro-USD per 1M tokens (groq.com/pricing, 2026-07). Fallback
-// calls are priced at the same constants until an OpenRouter line is added.
-export const PRICE_MICRO_PER_1M_IN = 50_000; // $0.05 / 1M input tokens
-export const PRICE_MICRO_PER_1M_OUT = 80_000; // $0.08 / 1M output tokens
+// Coach-model migration 2026-07-22: re-quoted for openai/gpt-oss-20b (the
+// Aug-16 llama-3.1-8b-instant decommission replacement). Groq public list
+// price, integer micro-USD per 1M tokens (groq.com/pricing, verified
+// 2026-07-22): $0.075/1M input, $0.30/1M output → ×1e6 = the constants below.
+// Part 0 rule 4: quoted from the source, NEVER carried over — these SUPERSEDE
+// the P2.5b GAP-5 llama constants (50_000 / 80_000). Groq also lists a
+// discounted $0.0375/1M CACHED-input rate; we deliberately price every real
+// call at the full input rate — the ledger must never under-count (R6.1), and
+// our own 24h answer cache already skips the provider on a hit. The OpenRouter
+// FALLBACK is still priced at these constants (DECISIONS 2026-07-12): it now
+// serves a different model at a different price, so the fallback ledger row is
+// an approximation — accepted until a real OpenRouter price line is added
+// (fallback is rare; a conservative-enough estimate beats a missing one).
+export const PRICE_MICRO_PER_1M_IN = 75_000; // $0.075 / 1M input tokens
+export const PRICE_MICRO_PER_1M_OUT = 300_000; // $0.30 / 1M output tokens
 
 export function costMicro(tokensIn: number, tokensOut: number): bigint {
   // Pure BigInt — no float ever touches money (R6.1; T3 P2.5b). Round-half-up

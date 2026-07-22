@@ -13,7 +13,7 @@ import { buildSystemPrompt, buildUserMessage, PROMPT_VERSION } from "../src/modu
 
 const okBody = {
   choices: [{ message: { content: "Bend your knees." } }],
-  model: "llama-3.1-8b-instant",
+  model: "openai/gpt-oss-20b",
   usage: { prompt_tokens: 100, completion_tokens: 200 },
 };
 
@@ -28,11 +28,11 @@ const MESSAGES = [{ role: "user" as const, content: "q" }];
 
 describe("LLM adapter (R2.12: provider responses are external input)", () => {
   it("parses a valid completion with usage", async () => {
-    const p = createGroqProvider("k", "llama-3.1-8b-instant", fetchStub(200, okBody)); // gitleaks:allow
+    const p = createGroqProvider("k", "openai/gpt-oss-20b", fetchStub(200, okBody)); // gitleaks:allow
     const r = await p.chat(MESSAGES);
     expect(r).toEqual({
       content: "Bend your knees.",
-      model: "llama-3.1-8b-instant",
+      model: "openai/gpt-oss-20b",
       provider: "groq",
       tokensIn: 100,
       tokensOut: 200,
@@ -76,7 +76,8 @@ describe("cost math (DECISIONS GAP-5 price constants)", () => {
     expect(costMicro(1_000_000, 1_000_000)).toBe(
       BigInt(PRICE_MICRO_PER_1M_IN + PRICE_MICRO_PER_1M_OUT),
     );
-    expect(costMicro(100, 200)).toBe(21n); // (100·50000 + 200·80000)/1e6 = 21
+    // gpt-oss-20b (2026-07-22): (100·75000 + 200·300000 + 500000)/1e6 = 68
+    expect(costMicro(100, 200)).toBe(68n);
     expect(costMicro(0, 0)).toBe(0n);
   });
 });
