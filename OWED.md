@@ -211,9 +211,18 @@ then; none may be hidden or reduced to close the gap.
       (DECISIONS 2026-07-21.)
 
 ### Legal / operational gates
-- [x] 🔴 **DPDP Day-14 HARD-DELETE worker — DONE 2026-07-22** (branch
-      `dpdp-day14-purge`; T3 pending at the time of writing, code complete and
-      api 324/324 on Neon). §5.2 ANONYMIZES the users row rather than deleting
+- [ ] 🔴 **DPDP Day-14 HARD-DELETE — CODE COMPLETE 2026-07-22, BUT NOT YET
+      RUNNING ANYWHERE, so it is NOT done** (branch `dpdp-day14-purge`).
+      This line was first written ticked; its T3 (finding D1) proved that
+      wrong and it is UNTICKED. A correct sweep that is scheduled nowhere
+      deletes nothing, and "a deleted user's data actually goes" is the whole
+      obligation. Command-verified 2026-07-22: **no Dockerfile exists in the
+      repo**, `docker-compose.yml` defines only mongo/redis/mongo-express (no
+      api, no worker), `ci.yml` has no deploy job, and nothing in RUNBOOK says
+      where `pnpm worker` runs. **What closes it:** the deploy path runs the
+      worker (or a cron runs `tools/dpdp-purge.ts --apply`), and the entry
+      names where. The code below is real, T3'd and proven — the deployment
+      is what is missing. §5.2 ANONYMIZES the users row rather than deleting
       it, so NO FK cascade collects user-owned PII; §5.2's explicit Day-14
       DELETE list is the only mechanism, and it now exists as
       `apps/api/src/modules/privacy`. 17 tables end empty per purged user — 15
@@ -231,6 +240,18 @@ then; none may be hidden or reduced to close the gap.
       user-facing strings on `DELETE /v1/users/me`. Had only the code read the
       constant, widening to GDPR's 30 would have left the API telling users
       "you have 14 days" while purging at 30.
+- [ ] 🔴 **CI runs none of the database tests — including the purge suite.**
+      Found by the DPDP T3 (finding D2) and MEASURED both ways: the gate job
+      runs `pnpm test` with NO `DATABASE_URL`, giving **151 passed / 173
+      skipped**, while the same suite with a `DATABASE_URL` gives **324
+      passed**. The Neon-branch job only runs `drizzle-kit migrate`. So every
+      DB-gated suite this project has built — auth, workouts, nutrition,
+      coach, the Mongo migration, and now the Day-14 purge — is green on merge
+      without ever executing. **Pre-existing infrastructure, not broken by any
+      one card**, but the purge is what makes it serious: the only code in the
+      repo that irreversibly destroys user data has zero enforced coverage.
+      Fix is to give the test job a Neon branch (the migrations job already
+      creates one, so the mechanism exists). Its own card — R1.1.
 - [ ] 🔴 **DPDP JSON-export worker — the OTHER half of §5.2, still owed and
       still blocks P2.8.** Split from the delete half by Kd ruling 2026-07-22
       because NONE of its infrastructure exists — command-verified: no R2/S3
