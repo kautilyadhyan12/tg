@@ -12,6 +12,13 @@ import { createFakeEmbedder } from "../src/modules/coach/embedder.js";
 import { ingestKnowledgeBase } from "../src/modules/coach/ingest.js";
 import { ProviderError, type ChatMessage, type ChatProvider } from "../src/modules/coach/llm.adapter.js";
 import { withFallback } from "../src/modules/coach/llm.adapter.js";
+// Imported, never re-typed: a hard-coded 11 would stay green against a changed
+// constant, i.e. the test would pin the old number and not the behaviour (T3 R9).
+import {
+  COACH_CAP_MAX,
+  COACH_CAP_WINDOW_S,
+  coachIdempotencyKeys,
+} from "../src/modules/coach/idempotency.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -361,5 +368,578 @@ d("coach chat + threads (real Postgres, fake provider)", () => {
       (await inject({ method: "POST", url: "/v1/coach/chat", body: { message: "hi", evil: 1 }, access: cookieA }))
         .statusCode,
     ).toBe(400);
+  });
+
+  // ── retry protection: Idempotency-Key + short-window cap ───────────────────
+  // The owed follow-up from DECISIONS 2026-07-12 (P2.5b T3 minor) and Kd's
+  // D1(b) ruling 2026-07-16. Three harms, each pinned below: a retry must not
+  // (1) open a SECOND thread, (2) burn a SECOND quota slot, (3) duplicate the
+  // messages. Placement is the card: the guard runs after validateChatBody and
+  // BEFORE requireQuota, which increments the counter itself (quotas/service.ts).
+
+  /** The auth limiter allows 20 register+login attempts per HOUR per IP
+   *  (DECISIONS 2026-07-11 GAP-4), and every inject() shares 127.0.0.1 — so a
+   *  block that mints a fixture user per test trips a PRODUCTION control, not
+   *  a bug. Each fixture therefore registers from its own address, exactly as
+   *  nine real users would; the limiter is left fully armed (its own proof
+   *  lives in the auth suite) rather than cleared out of the way. */
+  let fixtureIp = 0;
+  const freshSession = async (email: string): Promise<{ userId: string; access: string }> => {
+    fixtureIp += 1;
+    const remoteAddress = `10.42.0.${String(fixtureIp)}`;
+    const json = { "content-type": "application/json" };
+    const reg = await api().inject({
+      method: "POST",
+      url: "/v1/auth/register",
+      remoteAddress,
+      headers: json,
+      payload: JSON.stringify({ email, password: PASSWORD, displayName: "P25b Fixture" }),
+    });
+    if (reg.statusCode !== 201) throw new Error(`register failed: ${reg.body}`);
+    const { userId } = reg.json<{ userId: string }>();
+    const login = await api().inject({
+      method: "POST",
+      url: "/v1/auth/login",
+      remoteAddress,
+      headers: json,
+      payload: JSON.stringify({ email, password: PASSWORD }),
+    });
+    const access = login.cookies.find((c) => c.name === "accessToken")?.value ?? "";
+    if (access === "") throw new Error(`login failed: ${login.body}`);
+    return { userId, access };
+  };
+
+  /** Direct inject so the shared `inject`/`chat` helpers stay untouched (R1.1). */
+  const chatK = (message: string, access: string, key?: string, threadId?: string) =>
+    api().inject({
+      method: "POST",
+      url: "/v1/coach/chat",
+      headers: {
+        "content-type": "application/json",
+        ...(key === undefined ? {} : { "idempotency-key": key }),
+      },
+      cookies: { accessToken: access },
+      payload: JSON.stringify(threadId === undefined ? { message } : { message, threadId }),
+    });
+
+  const threadCount = async (userId: string): Promise<number> => {
+    const [row] = await sql<{ n: string }[]>`
+      SELECT count(*) AS n FROM coach_threads WHERE user_id = ${userId}`;
+    return Number(row?.n ?? "0");
+  };
+  const messageCount = async (userId: string): Promise<number> => {
+    const [row] = await sql<{ n: string }[]>`
+      SELECT count(*) AS n FROM coach_messages cm
+      JOIN coach_threads t ON t.id = cm.thread_id WHERE t.user_id = ${userId}`;
+    return Number(row?.n ?? "0");
+  };
+
+  it("REPLAY: the same key returns the first answer, and spends NO quota slot, NO second thread, NO duplicate messages, NO provider call", { timeout: 90_000 }, async () => {
+    const u = await freshSession("p25b-idem-replay@example.com");
+    const key = "replay-key-0001";
+    const callsBefore = provider.calls.length;
+
+    const first = await chatK("how should I warm up before squatting", u.access, key);
+    expect(first.statusCode).toBe(200);
+    const firstBody = first.json<{ threadId: string; reply: string; cached: boolean }>();
+    expect(provider.calls.length).toBe(callsBefore + 1);
+
+    // Two replays: byte-identical body, flagged as a replay, provider untouched.
+    for (let i = 0; i < 2; i++) {
+      const again = await chatK("how should I warm up before squatting", u.access, key);
+      expect(again.statusCode).toBe(200);
+      expect(again.json<{ threadId: string; reply: string; cached: boolean }>()).toEqual(firstBody);
+      expect(again.headers["idempotent-replay"]).toBe("true");
+      expect(provider.calls.length).toBe(callsBefore + 1); // harm 3: no second call
+    }
+    expect(await threadCount(u.userId)).toBe(1); // harm 1: no second thread
+    expect(await messageCount(u.userId)).toBe(2); // harm 3: one user + one assistant
+
+    // harm 2 — the house proof (mirrors "a 400 does NOT consume a quota slot"):
+    // if the replays had metered, fewer than four slots would remain.
+    for (let i = 2; i <= 5; i++) {
+      expect((await chatK(`replay distinct question ${String(i)}`, u.access)).statusCode).toBe(200);
+    }
+    const sixth = await chatK("replay distinct question 6", u.access);
+    expect(sixth.statusCode).toBe(429);
+    expect(sixth.json<{ error: string }>().error).toBe("quota_exceeded");
+  });
+
+  it("a DIFFERENT key is a genuinely new request", { timeout: 60_000 }, async () => {
+    const u = await freshSession("p25b-idem-distinct@example.com");
+    const callsBefore = provider.calls.length;
+    const a = await chatK("is a leg day every week enough", u.access, "distinct-key-a");
+    const b = await chatK("what about deload weeks in a program", u.access, "distinct-key-b");
+    expect(a.statusCode).toBe(200);
+    expect(b.statusCode).toBe(200);
+    expect(b.headers["idempotent-replay"]).toBeUndefined();
+    expect(provider.calls.length).toBe(callsBefore + 2);
+    expect(await threadCount(u.userId)).toBe(2);
+  });
+
+  it("NO header → behaviour is exactly as before (today's client must not break)", { timeout: 60_000 }, async () => {
+    const u = await freshSession("p25b-idem-nokey@example.com");
+    const first = await chatK("should I stretch after a workout", u.access);
+    const second = await chatK("should I stretch after a workout", u.access);
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(first.headers["idempotent-replay"]).toBeUndefined();
+    expect(second.headers["idempotent-replay"]).toBeUndefined();
+    expect(await threadCount(u.userId)).toBe(2); // unchanged: two sends, two threads
+  });
+
+  it("CROSS-USER (R3.2): B replaying A's key gets NOTHING of A's", { timeout: 60_000 }, async () => {
+    const a = await freshSession("p25b-idem-tenant-a@example.com");
+    const b = await freshSession("p25b-idem-tenant-b@example.com");
+    const shared = "a-key-both-users-send";
+
+    const aRes = await chatK("A's own private question about knees", a.access, shared);
+    expect(aRes.statusCode).toBe(200);
+    const aBody = aRes.json<{ threadId: string; reply: string }>();
+
+    const bRes = await chatK("B's own private question about shoulders", b.access, shared);
+    expect(bRes.statusCode).toBe(200);
+    const bBody = bRes.json<{ threadId: string; reply: string }>();
+    expect(bRes.headers["idempotent-replay"]).toBeUndefined(); // not treated as a replay
+    expect(bBody.threadId).not.toBe(aBody.threadId);
+    expect(await threadCount(a.userId)).toBe(1);
+    expect(await threadCount(b.userId)).toBe(1);
+    // B's thread must contain B's question, never A's.
+    const [row] = await sql<{ content: string }[]>`
+      SELECT cm.content FROM coach_messages cm
+      JOIN coach_threads t ON t.id = cm.thread_id
+      WHERE t.user_id = ${b.userId} AND cm.role = 'user'`;
+    expect(row?.content).toBe("B's own private question about shoulders");
+  });
+
+  it("a malformed or oversized key is rejected loudly and costs nothing", { timeout: 60_000 }, async () => {
+    const u = await freshSession("p25b-idem-badkey@example.com");
+    for (const bad of ["", "x".repeat(201)]) {
+      const res = await chatK("a perfectly fine question", u.access, bad);
+      expect(res.statusCode).toBe(400);
+      expect(res.json<{ error: string }>().error).toBe("invalid_idempotency_key");
+    }
+    expect(await threadCount(u.userId)).toBe(0); // nothing was opened
+    // …and none of the five monthly slots was metered by those 400s.
+    for (let i = 1; i <= 5; i++) {
+      expect((await chatK(`badkey distinct question ${String(i)}`, u.access)).statusCode).toBe(200);
+    }
+    expect((await chatK("badkey distinct question 6", u.access)).statusCode).toBe(429);
+  });
+
+  it("CONCURRENT duplicates: whichever way the race lands, ONE thread, ONE exchange, ONE provider call", { timeout: 60_000 }, async () => {
+    const u = await freshSession("p25b-idem-concurrent@example.com");
+    const callsBefore = provider.calls.length;
+    const key = "concurrent-key-0001";
+    const msg = "can I train the same muscle two days in a row";
+    const [r1, r2] = await Promise.all([chatK(msg, u.access, key), chatK(msg, u.access, key)]);
+
+    // The loser is EITHER turned away as in-flight OR fast enough to be served
+    // the stored reply — asserting only one of those would be flaky, so the
+    // invariants below are what the guard actually promises.
+    const codes = [r1.statusCode, r2.statusCode].sort((x, y) => x - y);
+    expect(codes[0]).toBe(200);
+    expect([200, 409]).toContain(codes[1]);
+    if (codes[1] === 409) {
+      const conflict = [r1, r2].find((r) => r.statusCode === 409);
+      expect(conflict?.json<{ error: string }>().error).toBe("request_in_flight");
+    }
+    expect(provider.calls.length).toBe(callsBefore + 1);
+    expect(await threadCount(u.userId)).toBe(1);
+    expect(await messageCount(u.userId)).toBe(2);
+  });
+
+  it("a FAILED attempt does not strand the key, and the retry REUSES the conversation it opened", { timeout: 60_000 }, async () => {
+    // The design correction this card turns on: releasing the key on failure
+    // would let the retry open a SECOND thread — the exact harm the card
+    // exists to close, since the thread is created (service.ts) BEFORE the
+    // provider is called and is committed on its own.
+    const u = await freshSession("p25b-idem-recover@example.com");
+    let calls = 0;
+    const flaky: ChatProvider = {
+      chat: () => {
+        calls += 1;
+        return calls === 1
+          ? Promise.reject(new ProviderError("groq: HTTP 503", true))
+          : Promise.resolve({
+              content: "recovered answer",
+              model: "llama-3.1-8b-instant",
+              provider: "groq" as const,
+              tokensIn: 10,
+              tokensOut: 20,
+            });
+      },
+    };
+    const app2 = await buildApp(loadConfig(baseEnv), {
+      redis: createMemoryRedis(), // one redis shared by both attempts below
+      coach: { chatProvider: withFallback(flaky, null), embedder },
+    });
+    try {
+      const send = (key: string) =>
+        app2.inject({
+          method: "POST",
+          url: "/v1/coach/chat",
+          headers: { "content-type": "application/json", "idempotency-key": key },
+          cookies: { accessToken: u.access },
+          payload: JSON.stringify({ message: "why do my knees ache after squats" }),
+        });
+      const failed = await send("recover-key-0001");
+      expect(failed.statusCode).toBe(503);
+      expect(await threadCount(u.userId)).toBe(1); // the orphan the retry must reuse
+
+      const retry = await send("recover-key-0001");
+      expect(retry.statusCode).toBe(200); // not stranded on 409
+      expect(retry.json<{ reply: string }>().reply).toBe("recovered answer");
+      expect(await threadCount(u.userId)).toBe(1); // harm 1: still ONE thread
+      expect(await messageCount(u.userId)).toBe(2);
+    } finally {
+      await app2.close();
+    }
+  });
+
+  it("Redis down → dedupe is skipped but the question still goes through (fail-open, coach doctrine)", { timeout: 60_000 }, async () => {
+    const u = await freshSession("p25b-idem-redisdown@example.com");
+    const dead = createMemoryRedis();
+    dead.down = true;
+    const app4 = await buildApp(loadConfig(baseEnv), {
+      redis: dead,
+      coach: { chatProvider: provider, embedder },
+    });
+    try {
+      const send = () =>
+        app4.inject({
+          method: "POST",
+          url: "/v1/coach/chat",
+          headers: { "content-type": "application/json", "idempotency-key": "redis-down-key" },
+          cookies: { accessToken: u.access },
+          payload: JSON.stringify({ message: "a question asked while redis is down" }),
+        });
+      expect((await send()).statusCode).toBe(200);
+      expect((await send()).statusCode).toBe(200); // no dedupe possible, never a 500
+    } finally {
+      await app4.close();
+    }
+  });
+
+  it("short-window cap: the 11th message in a window is refused as too fast, and the window then RESETS", { timeout: 90_000 }, async () => {
+    // Driven on an INJECTED clock (createMemoryRedis already takes one), not
+    // wall time: 11 round trips to real Postgres inside a real 60 s window is a
+    // race the suite would eventually lose, and it would lose it as
+    // "quota_exceeded on the 11th" — a failure that looks like a code fault
+    // and is not one. Frozen time also lets the reset be asserted rather than
+    // waited for. (T3 R9.)
+    const u = await freshSession("p25b-idem-cap@example.com");
+    let clockMs = Date.now();
+    const capRedis = createMemoryRedis(() => clockMs);
+    const app5 = await buildApp(loadConfig(baseEnv), {
+      redis: capRedis,
+      coach: { chatProvider: provider, embedder },
+    });
+    try {
+      const send = (message: string) =>
+        app5.inject({
+          method: "POST",
+          url: "/v1/coach/chat",
+          headers: { "content-type": "application/json" },
+          cookies: { accessToken: u.access },
+          payload: JSON.stringify({ message }),
+        });
+      // The free plan's 5 monthly questions answer; everything up to the cap
+      // then reports the QUOTA (the cap lets them through, so the user hears
+      // the true reason); the request AFTER the cap trips the cap itself.
+      for (let i = 1; i <= 5; i++) {
+        expect((await send(`cap distinct question ${String(i)}`)).statusCode).toBe(200);
+      }
+      for (let i = 6; i <= COACH_CAP_MAX; i++) {
+        const res = await send(`cap distinct question ${String(i)}`);
+        expect(res.statusCode).toBe(429);
+        expect(res.json<{ error: string }>().error).toBe("quota_exceeded");
+      }
+      const overCap = await send(`cap distinct question ${String(COACH_CAP_MAX + 1)}`);
+      expect(overCap.statusCode).toBe(429);
+      expect(overCap.json<{ error: string }>().error).toBe("rate_limited");
+
+      // One window later the burst allowance is gone and the honest reason
+      // returns — asserted, not waited for, because the clock is ours.
+      clockMs += COACH_CAP_WINDOW_S * 1000 + 1000;
+      const afterWindow = await send("cap distinct question after the window");
+      expect(afterWindow.statusCode).toBe(429);
+      expect(afterWindow.json<{ error: string }>().error).toBe("quota_exceeded");
+    } finally {
+      await app5.close();
+    }
+  });
+
+  it("the SAME key with a DIFFERENT message is rejected loudly, never answered from the first", { timeout: 60_000 }, async () => {
+    // T3 R3.5: the record was keyed on user+key only, so a client reusing one
+    // key for another question was silently handed the FIRST question's answer.
+    // The workouts sync path already rejects this class by name; same contract.
+    const u = await freshSession("p25b-idem-mismatch@example.com");
+    const key = "one-key-two-questions";
+    const first = await chatK("how many rest days should I take", u.access, key);
+    expect(first.statusCode).toBe(200);
+    const firstReply = first.json<{ reply: string }>().reply;
+
+    const reused = await chatK("a completely different question about grip", u.access, key);
+    expect(reused.statusCode).toBe(400);
+    expect(reused.json<{ error: string }>().error).toBe("idempotency_key_mismatch");
+    expect(reused.body).not.toContain(firstReply); // never the wrong answer
+
+    // The original key still replays its OWN message correctly.
+    const honest = await chatK("how many rest days should I take", u.access, key);
+    expect(honest.statusCode).toBe(200);
+    expect(honest.headers["idempotent-replay"]).toBe("true");
+  });
+
+  it("the key/message binding holds on the FAILURE path too, not just after a success", { timeout: 60_000 }, async () => {
+    // T3 round 3 F1, and the third instance of this card's recurring fault:
+    // round 2 bound the message to the stored ANSWER but not to the remembered
+    // THREAD, so one key used for two questions was rejected loudly after a
+    // success and accepted SILENTLY after a failure — question 2's exchange
+    // landing in the thread titled with question 1. Two paths honour the key;
+    // the guarantee has to hold on both or it holds on neither.
+    const u = await freshSession("p25b-idem-failbind@example.com");
+    let calls = 0;
+    const flaky: ChatProvider = {
+      chat: () => {
+        calls += 1;
+        return calls === 1
+          ? Promise.reject(new ProviderError("groq: HTTP 503", true))
+          : Promise.resolve({
+              content: "second question answered",
+              model: "llama-3.1-8b-instant",
+              provider: "groq" as const,
+              tokensIn: 10,
+              tokensOut: 20,
+            });
+      },
+    };
+    const app7 = await buildApp(loadConfig(baseEnv), {
+      redis: createMemoryRedis(),
+      coach: { chatProvider: withFallback(flaky, null), embedder },
+    });
+    try {
+      const send = (message: string) =>
+        app7.inject({
+          method: "POST",
+          url: "/v1/coach/chat",
+          headers: { "content-type": "application/json", "idempotency-key": "one-key-two-questions-fail" },
+          cookies: { accessToken: u.access },
+          payload: JSON.stringify({ message }),
+        });
+
+      // Attempt 1 fails, leaving a thread titled with question ONE.
+      expect((await send("MESSAGE ONE about squats")).statusCode).toBe(503);
+      const [thread] = await sql<{ title: string }[]>`
+        SELECT title FROM coach_threads WHERE user_id = ${u.userId}`;
+      expect(thread?.title).toBe("MESSAGE ONE about squats");
+
+      // Same key, DIFFERENT question: must be refused, NOT folded into that
+      // thread. (Before the fix this returned 200 and appended here.)
+      const different = await send("MESSAGE TWO about deadlifts");
+      expect(different.statusCode).toBe(400);
+      expect(different.json<{ error: string }>().error).toBe("idempotency_key_mismatch");
+      expect(await messageCount(u.userId)).toBe(0); // nothing written anywhere
+      expect(await threadCount(u.userId)).toBe(1); // and no second thread
+
+      // The ORIGINAL question still resumes its own thread and succeeds.
+      const retry = await send("MESSAGE ONE about squats");
+      expect(retry.statusCode).toBe(200);
+      expect(await threadCount(u.userId)).toBe(1);
+      const [still] = await sql<{ title: string }[]>`
+        SELECT title FROM coach_threads WHERE user_id = ${u.userId}`;
+      expect(still?.title).toBe("MESSAGE ONE about squats");
+    } finally {
+      await app7.close();
+    }
+  });
+
+  it("the SAME text in a DIFFERENT thread is a DIFFERENT request — not a replay", { timeout: 60_000 }, async () => {
+    // T3 round 4 F1, the fourth instance of this card's recurring fault. The
+    // fingerprint covered the MESSAGE only, so a key reused with the same text
+    // in another thread replayed the first thread's answer: 200,
+    // Idempotent-Replay: true, and the client's write into the second thread
+    // silently never happened. "ok thanks" / "why?" / "more" is exactly the
+    // repeated short text a chat UI produces across threads.
+    const u = await freshSession("p25b-idem-threadbind@example.com");
+    const t1 = await chatK("start of thread one", u.access);
+    const t2 = await chatK("start of thread two", u.access);
+    const threadOne = t1.json<{ threadId: string }>().threadId;
+    const threadTwo = t2.json<{ threadId: string }>().threadId;
+    expect(threadOne).not.toBe(threadTwo);
+
+    const key = "same-text-two-threads";
+    const first = await chatK("ok thanks", u.access, key, threadOne);
+    expect(first.statusCode).toBe(200);
+    expect(first.json<{ threadId: string }>().threadId).toBe(threadOne);
+
+    // Same key, same text, DIFFERENT thread: a different request. Must be
+    // refused — never answered from thread one, and never silently dropped.
+    const second = await chatK("ok thanks", u.access, key, threadTwo);
+    expect(second.statusCode).toBe(400);
+    expect(second.json<{ error: string }>().error).toBe("idempotency_key_mismatch");
+    expect(second.headers["idempotent-replay"]).toBeUndefined();
+
+    // Thread two must be untouched by the refused request…
+    const [two] = await sql<{ n: string }[]>`
+      SELECT count(*) AS n FROM coach_messages WHERE thread_id = ${threadTwo}`;
+    expect(Number(two?.n)).toBe(2); // its own opening exchange only
+    // …and the original request still replays correctly under its own key.
+    const replay = await chatK("ok thanks", u.access, key, threadOne);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.headers["idempotent-replay"]).toBe("true");
+    expect(replay.json<{ threadId: string }>().threadId).toBe(threadOne);
+  });
+
+  it("an unrecoverable stored reply says so — it does NOT claim a send is in flight", { timeout: 60_000 }, async () => {
+    // T3 round 3 F4: the old message was "That message is already being sent",
+    // asserted one line after the record had been DELETED, so nothing was in
+    // flight. An error must not describe a situation that is not happening.
+    const u = await freshSession("p25b-idem-unreadable@example.com");
+    const corruptRedis = createMemoryRedis();
+    const app8 = await buildApp(loadConfig(baseEnv), {
+      redis: corruptRedis,
+      coach: { chatProvider: provider, embedder },
+    });
+    try {
+      const send = () =>
+        app8.inject({
+          method: "POST",
+          url: "/v1/coach/chat",
+          headers: { "content-type": "application/json", "idempotency-key": "unreadable-record-key" },
+          cookies: { accessToken: u.access },
+          payload: JSON.stringify({ message: "a question whose stored reply goes bad" }),
+        });
+      expect((await send()).statusCode).toBe(200);
+
+      // Corrupt the stored reply the way a format change or a truncated write
+      // would (this also covers a legacy PRE-ENVELOPE record). The key comes
+      // from the module's own builder, never a copy of the recipe.
+      const { recordKey } = coachIdempotencyKeys(u.userId, "unreadable-record-key");
+      expect(await corruptRedis.get(recordKey)).not.toBeNull(); // it really is the right key
+      await corruptRedis.setex(recordKey, 600, "{not valid json");
+
+      const refused = await send();
+      expect(refused.statusCode).toBe(409);
+      expect(refused.json<{ error: string }>().error).toBe("retry_not_replayable");
+      expect(refused.json<{ message: string }>().message).not.toContain("already being sent");
+
+      // …and the bad record was dropped, so the very next attempt re-runs.
+      expect((await send()).statusCode).toBe(200);
+    } finally {
+      await app8.close();
+    }
+  });
+
+  it("a DUPLICATED header dedupes stably — Node JOINS the values, it does not array them", { timeout: 60_000 }, async () => {
+    // The joined-header behaviour was asserted in a code comment and tested
+    // nowhere (T3 R9.2). Writing the test also CORRECTED the review's premise:
+    // it asked for an array-value case too, but a duplicate header never
+    // becomes an array — `idempotency-key` is not special-cased by Node, and
+    // light-my-request joins an explicit array the same way (probed: an
+    // injected ["a","b"] arrives as the string "a,b"). So the array arm is
+    // type narrowing, not a reachable path, and is documented as such instead
+    // of being "tested" against a case that cannot occur.
+    const u = await freshSession("p25b-idem-dupheader@example.com");
+    const joined = "dup-key-a, dup-key-a"; // what two identical headers become
+    const first = await chatK("does the joined header dedupe", u.access, joined);
+    expect(first.statusCode).toBe(200);
+    const again = await chatK("does the joined header dedupe", u.access, joined);
+    expect(again.statusCode).toBe(200);
+    expect(again.headers["idempotent-replay"]).toBe("true");
+    expect(await threadCount(u.userId)).toBe(1);
+
+    // An explicitly array-valued header takes the SAME joined path: one
+    // ordinary key, honoured, never a 500 or an odd stringification.
+    const arrayHeader = await api().inject({
+      method: "POST",
+      url: "/v1/coach/chat",
+      headers: { "content-type": "application/json", "idempotency-key": ["arr-a", "arr-b"] },
+      cookies: { accessToken: u.access },
+      payload: JSON.stringify({ message: "an array-valued key" }),
+    });
+    expect(arrayHeader.statusCode).toBe(200);
+  });
+
+  it("a quota 429 RELEASES the key: the retry hears the real reason, never 'already being sent'", { timeout: 90_000 }, async () => {
+    // The onSend hook exists for exactly this path and nothing pinned it (T3
+    // R9.2). requireQuota rejects from a preHandler, so the handler never runs;
+    // if the claim were not released there, a user who is simply out of
+    // questions would be told their message is in flight for the next 120 s —
+    // the wrong reason, on the one screen where the right reason matters.
+    const u = await freshSession("p25b-idem-quota-release@example.com");
+    for (let i = 1; i <= 5; i++) {
+      expect((await chatK(`release distinct question ${String(i)}`, u.access)).statusCode).toBe(200);
+    }
+    const key = "quota-release-key";
+    const first = await chatK("one question too many", u.access, key);
+    expect(first.statusCode).toBe(429);
+    expect(first.json<{ error: string }>().error).toBe("quota_exceeded");
+
+    const retry = await chatK("one question too many", u.access, key);
+    expect(retry.statusCode).toBe(429);
+    expect(retry.json<{ error: string }>().error).toBe("quota_exceeded"); // NOT request_in_flight
+  });
+
+  it("if the user DELETES the thread a failed attempt opened, the retry starts a fresh one instead of 404ing", { timeout: 60_000 }, async () => {
+    // T3 R9.2, the worst finding: the remembered thread id was cleared only on
+    // success, and repo.deleteThread is a hard DELETE — so tidying away the
+    // empty conversation a failure left behind made every retry under that key
+    // inject a dead id and 404 for the full replay window, on a request that
+    // never mentioned a thread. The "Try again" control this card is built for
+    // resends the SAME key, so that is precisely the path that dead-ended.
+    const u = await freshSession("p25b-idem-deleted-thread@example.com");
+    let calls = 0;
+    const flaky: ChatProvider = {
+      chat: () => {
+        calls += 1;
+        return calls === 1
+          ? Promise.reject(new ProviderError("groq: HTTP 503", true))
+          : Promise.resolve({
+              content: "answer after the tidy-up",
+              model: "llama-3.1-8b-instant",
+              provider: "groq" as const,
+              tokensIn: 10,
+              tokensOut: 20,
+            });
+      },
+    };
+    const sharedRedis = createMemoryRedis();
+    const app6 = await buildApp(loadConfig(baseEnv), {
+      redis: sharedRedis,
+      coach: { chatProvider: withFallback(flaky, null), embedder },
+    });
+    try {
+      const send = () =>
+        app6.inject({
+          method: "POST",
+          url: "/v1/coach/chat",
+          headers: { "content-type": "application/json", "idempotency-key": "deleted-thread-key" },
+          cookies: { accessToken: u.access },
+          payload: JSON.stringify({ message: "a question whose first attempt fails" }),
+        });
+
+      expect((await send()).statusCode).toBe(503);
+      const [orphan] = await sql<{ id: string }[]>`
+        SELECT id FROM coach_threads WHERE user_id = ${u.userId}`;
+      expect(orphan?.id).toBeDefined();
+
+      // The user tidies away the empty conversation.
+      const del = await app6.inject({
+        method: "DELETE",
+        url: `/v1/coach/threads/${orphan?.id ?? ""}`,
+        cookies: { accessToken: u.access },
+      });
+      expect(del.statusCode).toBe(200);
+      expect(await threadCount(u.userId)).toBe(0);
+
+      // Try again: must answer in a NEW thread, not 404 on the deleted one.
+      const retry = await send();
+      expect(retry.statusCode).toBe(200);
+      expect(retry.json<{ reply: string }>().reply).toBe("answer after the tidy-up");
+      expect(await threadCount(u.userId)).toBe(1);
+    } finally {
+      await app6.close();
+    }
   });
 });

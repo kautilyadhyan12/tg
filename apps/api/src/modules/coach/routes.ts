@@ -1,6 +1,8 @@
-// P2.5b — coach routes (thin, R7.1). THE first metered endpoint: R3.3 order
-// on /chat is authn → entitlement+quota (requireQuota reads the resolver) →
-// parse → handler. Thread reads are self-keyed (R3.2); foreign ids → 404.
+// P2.5b — coach routes (thin, R7.1). THE first metered endpoint. The /chat
+// chain is authn → validate → idempotency → burst cap → quota → handler; the
+// two retry guards precede the meter deliberately (a DEVIATION from R3.3's
+// written order, recorded in DECISIONS 2026-07-21 and explained at the route
+// itself). Thread reads are self-keyed (R3.2); foreign ids → 404.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
@@ -11,6 +13,7 @@ import type { Embedder } from "./embedder.js";
 import type { ChatProvider } from "./llm.adapter.js";
 import { createGroqProvider, createOpenRouterProvider } from "./llm.adapter.js";
 import { createMiniLmEmbedder } from "./embedder.adapter.js";
+import { coachIdempotency, coachIdempotencyOnSend, coachRateCap } from "./idempotency.js";
 import { coachChatRequestSchema, coachThreadListQuerySchema } from "./schemas.js";
 import type { CoachChatRequest } from "./schemas.js";
 import * as service from "./service.js";
@@ -80,6 +83,7 @@ export function registerCoachRoutes(
     log: app.log,
   };
   app.decorateRequest("coachChatInput", undefined);
+  app.decorateRequest("coachIdem", undefined);
 
   // Validate the body BEFORE metering (finding 1): a 400 here stops the chain
   // and never reaches requireQuota.
@@ -91,18 +95,36 @@ export function registerCoachRoutes(
 
   app.post(
     "/v1/coach/chat",
-    // R3.3: authn → validate → quota (coach = fail-open; limits from entitlements).
+    // R3.3 order WITH ONE DELIBERATE INVERSION (recorded in DECISIONS
+    // 2026-07-21): R3.3 writes "… → entitlement → quota → rate limit", but the
+    // cap is placed BEFORE requireQuota here. requireQuota INCREMENTS the
+    // counter itself, so a request refused by the cap would otherwise still
+    // spend one of a free user's five monthly questions — the rule's own intent
+    // (never charge for work not done) is better served by the inversion. Same
+    // reason the idempotency guard precedes it: a served replay must reach no
+    // meter at all.
     {
       preHandler: [
         app.authenticate,
         validateChatBody,
+        coachIdempotency({ redis: deps.redis }),
+        coachRateCap({ redis: deps.redis }),
         requireQuota("coach", { sql: deps.sql, redis: deps.redis }),
       ],
+      onSend: coachIdempotencyOnSend({ redis: deps.redis }),
     },
     async (req, reply) => {
       const input = req.coachChatInput;
       if (input === undefined) throw new Error("validateChatBody preHandler did not run");
-      const result = await service.chat(coachDeps, authedUserId(req), input);
+      const result = await service.chat(coachDeps, authedUserId(req), input, {
+        // Reported the moment the thread row commits — which is BEFORE the
+        // provider call, so a failure leaves it behind. Recording it here is
+        // what lets the retry continue in that same conversation.
+        onThreadOpened: (threadId) => {
+          if (req.coachIdem !== undefined) req.coachIdem.openedThreadId = threadId;
+        },
+        resumeThreadId: req.coachIdem?.resumeThreadId ?? undefined,
+      });
       return reply.status(200).send(result);
     },
   );
