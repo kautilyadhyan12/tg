@@ -176,9 +176,15 @@ then; none may be hidden or reduced to close the gap.
       client half "one header line"; that was wrong and was corrected on
       2026-07-21.) The FOLD-IN was that every 429 mapped to the quota copy, so a
       free user with four questions left who sent quickly was told to UPGRADE.
-      **SMOKE — owed with this card and NOT yet run** (it is also the API half's
-      owed smoke, per CLAUDE.md Part I §2, since none of its three new
-      client-visible responses was reachable from a browser until this landed).
+      **SMOKE — PASSED (Kd, 2026-07-22), all three steps**, which also closes
+      the API half's owed smoke (per CLAUDE.md Part I §2 none of its three new
+      client-visible responses was browser-reachable until this landed):
+      (1) request blocked in devtools → error with a **Try again** button →
+      unblocked → click → real answer, ONE conversation in the sidebar;
+      (2) the T3 V1 case — fail one message, then send a different one that
+      succeeds → the stale button is gone and the newer answer is NOT
+      overwritten; (3) ~11 rapid sends → the burst-cap message says "sending
+      too quickly", not the upgrade copy.
 - [ ] 🟡 **Empty conversation left behind by a failed coach message.**
       PRE-EXISTING, found 2026-07-21 while verifying the card above, not
       introduced by it. `repo.createThread` commits on its own BEFORE the
