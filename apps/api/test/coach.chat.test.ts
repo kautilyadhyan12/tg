@@ -44,7 +44,7 @@ function fakeProvider(): ChatProvider & { calls: ChatMessage[][] } {
       calls.push(messages);
       return Promise.resolve({
         content: `answer #${String(calls.length)}`,
-        model: "llama-3.1-8b-instant",
+        model: "openai/gpt-oss-20b",
         provider: "groq" as const,
         tokensIn: 100,
         tokensOut: 200,
@@ -150,17 +150,19 @@ d("coach chat + threads (real Postgres, fake provider)", () => {
     >`SELECT role, model, tokens_in, tokens_out, cost_micro FROM coach_messages
       WHERE thread_id = ${body.threadId} ORDER BY created_at ASC`;
     expect(msgs.map((m) => m.role)).toEqual(["user", "assistant"]);
-    expect(msgs[1]?.model).toBe("llama-3.1-8b-instant#p2"); // prompt versioning
+    expect(msgs[1]?.model).toBe("openai/gpt-oss-20b#p2"); // prompt versioning
     expect(msgs[1]?.tokens_in).toBe(100);
     expect(msgs[1]?.tokens_out).toBe(200);
-    expect(msgs[1]?.cost_micro).toBe("21"); // (100·50000+200·80000)/1e6
+    // gpt-oss-20b prices (2026-07-22): (100·75000+200·300000+500000)/1e6 = 68
+    // (67.5 rounded half-up).
+    expect(msgs[1]?.cost_micro).toBe("68");
 
     const events = await sql<{ provider: string; units: string; cost_micro: string; gym_id: string | null }[]>`
       SELECT provider, units, cost_micro, gym_id FROM api_cost_events WHERE user_id = ${userA}`;
     expect(events.length).toBe(1);
     expect(events[0]?.provider).toBe("groq");
     expect(Number(events[0]?.units)).toBe(300);
-    expect(events[0]?.cost_micro).toBe("21");
+    expect(events[0]?.cost_micro).toBe("68"); // same gpt-oss-20b price as above
     expect(events[0]?.gym_id).toBeNull(); // direct consumer (§3.10)
 
     // The provider saw: system prompt first, RAG context in the user turn.
@@ -194,7 +196,7 @@ d("coach chat + threads (real Postgres, fake provider)", () => {
     const [cachedMsg] = await sql<{ model: string | null }[]>`
       SELECT model FROM coach_messages WHERE thread_id = ${body.threadId}
       AND role = 'assistant' ORDER BY created_at DESC LIMIT 1`;
-    expect(cachedMsg?.model).toBe("cached:llama-3.1-8b-instant");
+    expect(cachedMsg?.model).toBe("cached:openai/gpt-oss-20b");
   });
 
   it("quota: free coach = 5/month → the 6th question 429s with resetsAt (first REAL requireQuota wiring)", { timeout: 60_000 }, async () => {
@@ -563,7 +565,7 @@ d("coach chat + threads (real Postgres, fake provider)", () => {
           ? Promise.reject(new ProviderError("groq: HTTP 503", true))
           : Promise.resolve({
               content: "recovered answer",
-              model: "llama-3.1-8b-instant",
+              model: "openai/gpt-oss-20b",
               provider: "groq" as const,
               tokensIn: 10,
               tokensOut: 20,
@@ -707,7 +709,7 @@ d("coach chat + threads (real Postgres, fake provider)", () => {
           ? Promise.reject(new ProviderError("groq: HTTP 503", true))
           : Promise.resolve({
               content: "second question answered",
-              model: "llama-3.1-8b-instant",
+              model: "openai/gpt-oss-20b",
               provider: "groq" as const,
               tokensIn: 10,
               tokensOut: 20,
@@ -897,7 +899,7 @@ d("coach chat + threads (real Postgres, fake provider)", () => {
           ? Promise.reject(new ProviderError("groq: HTTP 503", true))
           : Promise.resolve({
               content: "answer after the tidy-up",
-              model: "llama-3.1-8b-instant",
+              model: "openai/gpt-oss-20b",
               provider: "groq" as const,
               tokensIn: 10,
               tokensOut: 20,
