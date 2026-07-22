@@ -294,6 +294,18 @@ then; none may be hidden or reduced to close the gap.
       Also recorded: descriptive names whose head noun we stock but the
       substring pass misses still drop honestly ("Margherita Pizza", plurals
       like "Plate of Rotis") — same product call.
+- [ ] ⚪❓ **Raw HTML in coach answers renders as visible text — needs a Kd
+      ruling, not a drive-by.** Seen in the 2026-07-22 smoke: the model emitted
+      `<br>` inside a markdown table cell and it displayed literally
+      ("→ 90-120 g `<br>` Carbs:"). `react-markdown` ignores raw HTML BY DESIGN
+      and prints it as text; rendering it needs the `rehype-raw` plugin — a NEW
+      DEPENDENCY (R1.4) **and** a decision to let model-authored HTML into the
+      DOM, which is a security-shaped choice (rehype-raw does not sanitise on
+      its own). The honest alternatives are (a) add rehype-raw + a sanitiser,
+      (b) strip/convert a small set of known tags client-side, or (c) nudge the
+      system prompt away from HTML (relies on the model obeying, the same
+      weakness Kd rejected when choosing remark-gfm over prompt instructions).
+      Cosmetic today and harms no data. (2026-07-22.)
 - [ ] ⚪ **An over-long coach message is hard to recover.** The composer sets no
       `maxLength`, but the contract caps a message at 2000 chars
       (`COACH_MAX_MESSAGE_CHARS`, packages/shared/src/coach.ts), so a longer one

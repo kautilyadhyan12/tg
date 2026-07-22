@@ -52,6 +52,14 @@ function MessageBubble({ message, isStreaming, isTail, onRetry }) {
   // anywhere the reply would not land, whatever future code does to the list.
   const retry = isTail ? message.retry : undefined;
 
+  // The ANSWER bubble is wider than the question bubble. A question is a line or
+  // two, but an answer from gpt-oss-20b is routinely a markdown TABLE, and at
+  // the old shared 75% those tables were clipped and had to be scrolled
+  // sideways to read them (Kd, at the smoke). Wide tables still scroll inside
+  // the bubble when they genuinely need to — this stops the common case needing
+  // it, rather than removing the scroll.
+  const bubbleWidth = isUser ? 'max-w-[75%] order-1' : 'max-w-[92%]';
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -72,7 +80,7 @@ function MessageBubble({ message, isStreaming, isTail, onRetry }) {
       )}
 
       <div
-        className={`max-w-[75%] rounded-2xl px-4 py-3 ${isUser ? 'order-1' : ''}`}
+        className={`${bubbleWidth} rounded-2xl px-4 py-3`}
         style={{
           background: isUser
             ? 'linear-gradient(135deg, #FF8A1F, #FFB347)'
@@ -549,7 +557,7 @@ export default function Coach() {
           className="flex-1 overflow-y-auto px-6 py-6 no-scrollbar"
         >
           {messages.length === 0 ? (
-            <div className="max-w-3xl mx-auto pt-12">
+            <div className="max-w-5xl mx-auto pt-12">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -602,7 +610,7 @@ export default function Coach() {
               </div>
             </div>
           ) : (
-            <div className="max-w-3xl mx-auto space-y-5">
+            <div className="max-w-5xl mx-auto space-y-5">
               {messages.map((msg, i) => (
                 <MessageBubble
                   key={i}
@@ -626,7 +634,7 @@ export default function Coach() {
         >
           <form
             onSubmit={handleSubmit}
-            className="max-w-3xl mx-auto flex items-end gap-3"
+            className="max-w-5xl mx-auto flex items-end gap-3"
           >
             <div className="flex-1 relative">
               <textarea
