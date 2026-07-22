@@ -5,10 +5,16 @@ import remarkGfm from 'remark-gfm';
 import {
   Send, Plus, Trash2, MessageSquare,
   Sparkles, Loader2, User as UserIcon,
-  PanelLeft, X,
+  PanelLeft, X, RotateCcw,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { coachService } from '../api/coachApi';
+import {
+  coachService,
+  coachErrorInfo,
+  newIdempotencyKey,
+  replaceTailAssistant,
+  appendOutgoing,
+} from '../api/coachApi';
 import { useAuth } from '../context/AuthContext';
 
 // ── Suggested prompts shown when chat is empty ────────────────────────────────
@@ -36,8 +42,15 @@ const SUGGESTED_PROMPTS = [
 ];
 
 // ── Single message bubble ─────────────────────────────────────────────────────
-function MessageBubble({ message, isStreaming }) {
+function MessageBubble({ message, isStreaming, isTail, onRetry }) {
   const isUser = message.role === 'user';
+  // Present ONLY when retrying can honestly help (coachErrorInfo decides —
+  // e.g. a spent quota offers none, because a retry cannot give it back) AND
+  // this bubble is the one a send would write to. The `isTail` half is the
+  // second layer of the T3 V1 fix: appendOutgoing already withdraws stale
+  // offers, and this makes the button structurally incapable of appearing
+  // anywhere the reply would not land, whatever future code does to the list.
+  const retry = isTail ? message.retry : undefined;
 
   return (
     <motion.div
@@ -82,6 +95,28 @@ function MessageBubble({ message, isStreaming }) {
             {isStreaming && (
               <span className="inline-block w-2 h-4 ml-0.5 align-middle"
                     style={{ background: '#FF8A1F', animation: 'blink 1s infinite' }} />
+            )}
+            {/* Resends the SAME question under the SAME Idempotency-Key, so the
+                server recognises the repeat instead of opening a second
+                conversation and spending a second question. Retyping — the only
+                route back before this existed — is a brand-new message. */}
+            {retry !== undefined && (
+              <button
+                type="button"
+                onClick={() => onRetry?.(retry)}
+                disabled={isStreaming}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold"
+                style={{
+                  background: 'rgba(255,138,31,0.12)',
+                  border:     '1px solid rgba(255,138,31,0.35)',
+                  color:      '#FFB347',
+                  cursor:     isStreaming ? 'not-allowed' : 'pointer',
+                  opacity:    isStreaming ? 0.5 : 1,
+                }}
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Try again
+              </button>
             )}
           </div>
         )}
@@ -179,52 +214,80 @@ export default function Coach() {
   };
 
   // ── Send message (non-streaming — DECISIONS 2026-07-11 P2.5 GAP-3) ─────────
+  //
+  // ONE delivery path, shared by a first send and by "Try again", because the
+  // retry must reproduce the request EXACTLY: the server fingerprints the whole
+  // validated body (message + threadId) against the Idempotency-Key, so any
+  // difference is correctly a 400 mismatch rather than a recognised repeat.
+  // `threadId` is therefore whatever was captured when the message was COMPOSED
+  // — never re-read from `activeId` at click time.
+  const performSend = async ({ text, key, threadId }) => {
+    setStreaming(true);
+    // Back to the typing indicator: on a retry this clears the failure copy and
+    // its button, so the failed bubble cannot be clicked twice.
+    setMessages((prev) => replaceTailAssistant(prev, { role: 'assistant', content: '' }));
+
+    try {
+      // New /v1 API (Card 4): one complete response — {threadId, reply, cached}.
+      // A recognised repeat returns the FIRST attempt's answer (and an
+      // Idempotent-Replay header) — same shape, so nothing here changes.
+      const res = await coachService.sendMessage(text, threadId, key);
+      const { threadId: answeredThreadId, reply } = res.data;
+      if (!activeId) setActiveId(answeredThreadId); // server minted or resumed one
+
+      setMessages((prev) => replaceTailAssistant(prev, { role: 'assistant', content: reply }));
+    } catch (err) {
+      // message only — the axios error carries the request config, i.e. the
+      // user's own question (R3.10; the Card-6 console-leak precedent).
+      console.error('Coach chat error:', err?.message);
+
+      // Branch on the error NAME, never the status: two different 429s mean
+      // opposite things and two different 409s give opposite advice.
+      const { content, retry } = coachErrorInfo(err);
+      setMessages((prev) => replaceTailAssistant(prev, {
+        role: 'assistant',
+        content,
+        // Absent when retrying cannot help — no button rather than a false offer.
+        ...(retry === null ? {} : {
+          retry: {
+            text,
+            threadId,
+            // 'fresh-key' ONLY for a key error, where the server holds no answer
+            // bound to this body and the same key would 400 forever.
+            key: retry === 'fresh-key' ? newIdempotencyKey() : key,
+          },
+        }),
+      }));
+    } finally {
+      setStreaming(false);
+      loadConversations();
+    }
+  };
+
   const sendMessage = async (messageText) => {
     const text = (messageText || input).trim();
     if (!text || streaming) return;
 
     setInput('');
-    setStreaming(true);
+    // The key is minted HERE — once per composed message — and then travels with
+    // that message. Minting it inside the request would produce a different key
+    // on every attempt, which dedupes nothing while looking correct.
+    const key = newIdempotencyKey();
 
-    // Add user message
-    const userMsg = { role: 'user', content: text };
-    setMessages((prev) => [...prev, userMsg]);
+    // User message + the empty assistant placeholder the typing indicator uses —
+    // and appendOutgoing withdraws any earlier retry offer, because a send
+    // writes to the TAIL and only the tail may be retryable (T3 V1).
+    setMessages((prev) => appendOutgoing(prev, text));
 
-    // Empty assistant placeholder: MessageBubble renders it as the typing
-    // indicator (isStreaming) until the complete reply arrives.
-    setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
+    await performSend({ text, key, threadId: activeId });
+  };
 
-    try {
-      // New /v1 API (Card 4): one complete response — {threadId, reply, cached}.
-      const res = await coachService.sendMessage(text, activeId);
-      const { threadId, reply } = res.data;
-      if (!activeId) setActiveId(threadId); // server minted a new thread
-
-      setMessages((prev) => {
-        const updated = [...prev];
-        if (updated.length > 0 && updated[updated.length - 1].role === 'assistant') {
-          updated[updated.length - 1] = { role: 'assistant', content: reply };
-        }
-        return updated;
-      });
-    } catch (err) {
-      console.error('Coach chat error:', err);
-      // The new API meters coach questions (v1 §9.3): a 429 is the plan quota,
-      // not a fault — say so instead of a fake "error".
-      const content = err.response?.status === 429
-        ? 'You’ve used all your coach questions for this period. Your quota resets soon — or upgrade for more.'
-        : 'Sorry, I ran into an error. Please try again.';
-      setMessages((prev) => {
-        const updated = [...prev];
-        if (updated.length > 0 && updated[updated.length - 1].role === 'assistant') {
-          updated[updated.length - 1] = { role: 'assistant', content };
-        }
-        return updated;
-      });
-    } finally {
-      setStreaming(false);
-      loadConversations();
-    }
+  // The retry payload is the one captured at compose time — same text, same
+  // thread, same key. The input box is deliberately NOT restored: this button is
+  // the retry path, and retyping would be a new question to the server.
+  const handleRetry = async (retry) => {
+    if (streaming || !retry) return;
+    await performSend(retry);
   };
 
   const handleSubmit = (e) => {
@@ -545,6 +608,8 @@ export default function Coach() {
                   key={i}
                   message={msg}
                   isStreaming={streaming && i === messages.length - 1 && msg.role === 'assistant'}
+                  isTail={i === messages.length - 1}
+                  onRetry={handleRetry}
                 />
               ))}
             </div>

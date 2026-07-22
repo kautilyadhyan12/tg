@@ -81,14 +81,15 @@ the operational wrapper around it.
       - [ ] Workout history calendar (WorkoutCalendar → workoutApi.getHistory)
             — /v1/workouts EXISTS; the client repoint is owed to a web card
             (found out-of-scope during Card 3, R1.1).
-      - [ ] **Groq model migration (HARD DATE: before 2026-08-16)** — Groq is
-            decommissioning `llama-3.1-8b-instant` (our COACH_MODEL default,
-            config.ts:30) on 2026-08-16; after that the coach goes dark. Own
-            small API card: flip the default (Groq recommends GPT OSS 20B),
-            re-quote the model-specific price constants (service.ts:23-24)
-            from groq.com/pricing per Part 0 rule 4, sanity-check answers.
-            This is date-gated, not launch-gated — do it even if cutover
-            slips. (DECISIONS 2026-07-16.)
+      - [x] **Groq model migration** — **DONE 2026-07-22, PR #44** (merge
+            `ad3b1ee`), ahead of the 2026-08-16 decommission of
+            `llama-3.1-8b-instant`. COACH_MODEL now defaults to
+            `openai/gpt-oss-20b`, the price constants are re-quoted from
+            groq.com/pricing (75_000/300_000 micro-USD per 1M), and
+            COACH_MAX_TOKENS was raised 800→1200 by Kd ruling because the
+            new model truncated mid-sentence. Fresh-chat T3 + live drive.
+            NB the GROQ_API_KEY rotation this card was expected to carry did
+            NOT happen — it has its own line in OWED.md.
       - [x] **Vision model migration** — **DONE** (during web Card 5a,
             DECISIONS 2026-07-16; checkbox was STALE, corrected 2026-07-19
             after verifying the CODE, not the doc). Groq decommissioned
@@ -99,20 +100,23 @@ the operational wrapper around it.
             groq.com/pricing 2026-07-16 — nutrition/service.ts:23-24), so the
             "cost rows priced at the old constants" interim note here no
             longer applied. Live-verified through the real adapter.
-      - [ ] Coach chat retry protection (DECISIONS 2026-07-12 P2.5b T3 minor;
-            Kd D1(b) 2026-07-16) — /v1/coach/chat accepts a client-generated
-            Idempotency-Key + gets a short-window per-route cap. Without it a
-            client retry double-charges quota, re-calls Groq, and duplicates
-            messages. The ruling ties this to "when the client is wired" —
-            Card 4 wired it; the API side is its own small card and MUST land
-            before real traffic. **API half BUILT on branch
-            `coach-idempotency`, not yet merged.** The client half is NOT the
-            "one header line" this checkbox used to claim (corrected
-            2026-07-21): Coach.jsx clears the box on send and offers no retry
-            affordance, so a key minted per send would differ on every attempt
-            and dedupe nothing — it needs a real "Try again" control that
-            resends the SAME key. Do not price this gate item as a one-liner.
-            Full scope + the two related items in OWED.md.
+      - [x] **Coach chat retry protection — BOTH halves DONE.** API half
+            merged 2026-07-22 as **PR #43** (`facc804`, five fresh-chat T3
+            rounds): /v1/coach/chat takes an optional Idempotency-Key and a
+            10-per-minute per-user cap, both placed BEFORE `requireQuota`.
+            WEB half done 2026-07-22 on this branch: the "Try again" control
+            resends an identical body under the SAME key (minted once per
+            composed message), and the catch now branches on the error NAME,
+            so the burst cap no longer tells a user with questions left to
+            upgrade. It was never the "one header line" this checkbox once
+            claimed (corrected 2026-07-21). Its T3's blocking finding — a
+            stale button resending into the wrong bubble — is fixed at two
+            layers and unit-pinned. **SMOKE still owed** (it is also the API
+            half's owed smoke: none of its three new client-visible responses
+            was browser-reachable until this landed).
+            The two items it does NOT close are in OWED.md: the empty thread a
+            never-retried failure leaves behind, and the Kd ruling owed on a
+            quota slot spent when the provider never answers.
       - [x] **Nutrition targets/remaining** (MacroRings + "Remaining today",
             web Card 5a, D2 Kd-ruled 2026-07-16) — the new API has no targets
             surface (v1 §6.1's nutrition module is photo pipeline + lookup
@@ -200,11 +204,13 @@ the operational wrapper around it.
             address (a phone resolves `localhost` to itself; CORS is
             exact-origin + credentials). Also settles the recorded
             `capture`-vs-photo-library trade-off (options A/B/C in DECISIONS).
-      - [ ] `limitedToDays` surfaced in the Progress UI (T3 Card 3) — every
-            /v1/progress read returns the plan-clamp field (progress.ts:18-21,
-            the P2.4 history gate) and the page ignores it, so a free-plan
-            user sees "Last year" over 30-day data. Must render an honest
-            clamp notice before cutover ships plan-gated UI to real users.
+      - [x] `limitedToDays` surfaced in the Progress UI (T3 Card 3) — **DONE
+            2026-07-21**; this checkbox was stale. The page now shows a clamp
+            notice and corrects the caption to the window actually shown, and
+            the clamp is compared against the REQUESTED window (the server
+            reports it unconditionally, so a naive check warned about a limit
+            that was not limiting). Fresh-chat T3 + SMOKE passed. Full entry
+            in OWED.md and DECISIONS.
       - [x] **Settings profile forms → new API** — DONE 2026-07-20 (Card 7,
             DECISIONS). Both profile forms + reset-onboarding now run on
             PATCH /v1/users/me + PUT /v1/users/me/fitness-profile via a

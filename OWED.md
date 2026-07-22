@@ -27,16 +27,28 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
 
 ## ⏰ Deadline-driven — do these on the clock, not on the queue
 
-- [ ] ⏰🔴 **Groq COACH_MODEL migration — HARD DATE before 2026-08-16.**
-      `llama-3.1-8b-instant` (config.ts:30) is decommissioned that day; after it
-      the AI coach returns nothing and goes dark. Flip the default (Groq
-      recommends GPT OSS 20B) AND re-quote the model-specific price constants
-      (coach/service.ts:23-24) from groq.com/pricing per Part 0 rule 4 — they
-      are model-specific and must never be carried over by assumption. Verify
-      answer quality against the 5 KB guides. Date-gated, NOT launch-gated: do
-      it even if cutover slips. (DECISIONS 2026-07-16; cutover.md.)
-      Note: the old GROQ_API_KEY reuse was Kd-approved with rotation deferred —
-      this card is the natural moment for the new key (DECISIONS 2026-07-16).
+- [x] ⏰🔴 **Groq COACH_MODEL migration — DONE 2026-07-22, merged as PR #44**
+      (merge `ad3b1ee`), ahead of the 2026-08-16 decommission of
+      `llama-3.1-8b-instant`. Default flipped to `openai/gpt-oss-20b` and the
+      model-specific price constants re-quoted from groq.com/pricing per Part 0
+      rule 4 ($0.075/1M in, $0.30/1M out → 75_000/300_000 micro-USD); the
+      discounted cached-input rate is deliberately unused (never under-count).
+      `COACH_MAX_TOKENS` 800→1200 folded in by Kd ruling — the more verbose
+      model truncated mid-sentence at the old cap. Fresh-chat T3, live-driven
+      against real Groq. A follow-up web commit (`ca4b2cc`) added `remark-gfm`
+      because the new model answers with markdown TABLES, which react-markdown
+      alone rendered as pipe soup. **The key rotation it was expected to carry
+      did NOT happen — its own line below.**
+
+- [ ] 🟡 **Rotate GROQ_API_KEY.** The old key was reused for local dev with
+      rotation explicitly DEFERRED, not waived — Kd's reasoning was that the zip
+      carrying the old `.env` went only to Claude sessions, and he stated "I will
+      rotate it later" (DECISIONS 2026-07-16). The Groq model-migration card was
+      named as the natural moment (new key + new model in one visit to the Groq
+      console); that card shipped on 2026-07-22 WITHOUT rotating, so the item
+      would have vanished with its ticked line. Given its own line here on
+      2026-07-22 rather than being lost. The P0 rule treats every secret in the
+      old repo's `.env` as burned, so this is a real deferral, not hygiene.
 
 ## 🔴 Blocks the cutover — the old backend cannot be switched off until these exist
 
@@ -125,42 +137,48 @@ then; none may be hidden or reduced to close the gap.
       extension), a size cap, R2 storage under SERVER-generated keys, and
       signed-URL/CDN delivery. Do NOT inherit the current shape at cutover.
       (DECISIONS 2026-07-20, Card 7.)
-- [ ] 🔴 **Coach chat retry protection — API half BUILT, in review.**
+- [x] 🔴 **Coach chat retry protection — API half DONE, merged 2026-07-22 as
+      PR #43** (merge commit `facc804`; five fresh-chat T3 rounds).
       `/v1/coach/chat` had no per-route rate limit and accepted no
       Idempotency-Key, so a client retry opened a second thread, spent a second
       quota slot, and duplicated the messages. The API half now takes an
       optional `Idempotency-Key` and carries a 10-message/minute per-user cap,
-      both placed BEFORE `requireQuota` (which increments the counter itself) —
-      branch `coach-idempotency`, NOT yet merged. Tick this line with the PR
-      number when it lands. (DECISIONS 2026-07-12 P2.5b T3; Kd D1(b)
+      both placed BEFORE `requireQuota` (which increments the counter itself).
+      (DECISIONS 2026-07-12 P2.5b T3; Kd D1(b)
       2026-07-16; design + Kd-approved numbers, DECISIONS 2026-07-21 on that
-      branch.) **The three lines below are what it does NOT close.**
-- [ ] 🔴 **Coach "Try again" control — the client half, and it is NOT one line.**
-      **This line previously said "Client change is one header line
-      (coachApi.js notes where)". That was WRONG and is corrected here**
-      (verified 2026-07-21; `coachApi.js`'s own header comment carried the same
-      wrong note and is corrected too). `Coach.jsx` clears the message box on
-      send and never restores it on failure, and there is NO retry affordance
-      anywhere — so a key minted inside `sendMessage` would differ on every
-      attempt and dedupe nothing, and the user's only route back is retyping,
-      which is a new message. What is actually needed: a real **"Try again"**
-      control on the failed reply that resends with the SAME key. Kd ruled
-      2026-07-21 to build it properly rather than ship the ineffective
-      one-liner. Web-only, on this branch, after the API half merges.
-      **FOLD IN — same catch block, found by the API card's round-2 review:**
-      `Coach.jsx` maps EVERY 429 to the quota copy ("You've used all your coach
-      questions… or upgrade for more"), but the API now also returns a 429 with
-      `error: 'rate_limited'` for the 10-per-minute burst cap. So a free user
-      with four questions left who sends fast is told to UPGRADE — wrong, and
-      reachable from the shipped screen today, before the Try-again control
-      exists. Branch on `err.response?.data?.error === 'rate_limited'` and say
-      "you're sending messages too quickly" instead. No API change.
-      **SMOKE owed with this card (it is the API half's owed smoke too, per
-      CLAUDE.md Part I §2 — that card ships three new client-visible responses
-      but none of them is reachable from the browser until this one lands):**
-      send → fail → Try again → ONE conversation, ONE question spent; the same
-      key with a different message → the honest mismatch message, never the
-      first answer; 11 rapid sends → "too quickly", NOT the upgrade copy.
+      branch.) **The two open lines below are what it does NOT close.**
+- [x] 🔴 **Coach "Try again" control — the client half — DONE 2026-07-22.**
+      Built as described below: the key is minted ONCE per composed message and
+      stored with it, so "Try again" resends an IDENTICAL body under the SAME
+      key; the input box is deliberately not restored (the button is the retry
+      path). The 429 fold-in below is delivered too — the catch now branches on
+      `err.response?.data?.error`, so the burst cap says "you're sending
+      messages too quickly" and only a real `quota_exceeded` mentions upgrading.
+      An unrecognised 429 also falls back to the "too quickly" copy: the global
+      @fastify/rate-limit throws an untyped error, so its 429 reaches the client
+      as `{error:"request_error"}` (verified) and must never produce the upgrade
+      copy. `quota_exceeded`, `not_found` and `validation_error` offer NO retry
+      button (it could not help); the two key-errors retry with a FRESH key
+      (the same one would 400 for the full window). Fresh-chat T3: its BLOCKING
+      finding was that the button was addressed per-message while the send
+      writes to the TAIL, so a stale button resent the right key into the wrong
+      bubble and overwrote a newer reply — closed at BOTH layers (offers
+      withdrawn on compose; the button cannot render off-tail) and pinned by
+      unit tests. Live-driven before handover: replay returned a byte-identical
+      body with `idempotent-replay: true`, a same-key/different-message request
+      returned 400 `idempotency_key_mismatch`, and one thread existed after
+      three requests.
+      **What was owed, kept for the record:** `Coach.jsx` cleared the message
+      box on send and never restored it, and there was NO retry affordance — so
+      a key minted inside `sendMessage` would have differed on every attempt and
+      deduped nothing, and the user's only route back was retyping, which the
+      server sees as a new message. (An earlier version of this line called the
+      client half "one header line"; that was wrong and was corrected on
+      2026-07-21.) The FOLD-IN was that every 429 mapped to the quota copy, so a
+      free user with four questions left who sent quickly was told to UPGRADE.
+      **SMOKE — owed with this card and NOT yet run** (it is also the API half's
+      owed smoke, per CLAUDE.md Part I §2, since none of its three new
+      client-visible responses was reachable from a browser until this landed).
 - [ ] 🟡 **Empty conversation left behind by a failed coach message.**
       PRE-EXISTING, found 2026-07-21 while verifying the card above, not
       introduced by it. `repo.createThread` commits on its own BEFORE the
@@ -276,6 +294,16 @@ then; none may be hidden or reduced to close the gap.
       Also recorded: descriptive names whose head noun we stock but the
       substring pass misses still drop honestly ("Margherita Pizza", plurals
       like "Plate of Rotis") — same product call.
+- [ ] ⚪ **An over-long coach message is hard to recover.** The composer sets no
+      `maxLength`, but the contract caps a message at 2000 chars
+      (`COACH_MAX_MESSAGE_CHARS`, packages/shared/src/coach.ts), so a longer one
+      is rejected with `validation_error` AFTER the box has been cleared — and
+      that error correctly offers no "Try again" (resending the same too-long
+      text fails identically), so the only route back is selecting the text out
+      of the user bubble. The copy hedges ("may be too long"), asserting nothing
+      false. Pre-existing; surfaced by the Try-again card's T3 (V5) and reported
+      rather than fixed (R1.1) since it needs a client-side length affordance,
+      not a change to the error mapping. (2026-07-22.)
 - [ ] ⚪ **Coach streaming.** Non-streaming was chosen for v1 (exact token/cost
       accounting + exact-match cacheability, nothing consumed the endpoint until
       P2.8). A streaming card can follow post-cutover.
