@@ -98,6 +98,12 @@ export async function buildApp(
     // PATCH, DPDP account DELETE, measurements CRUD). Found by the Card 4
     // browser smoke; inject() tests bypass CORS so no route test saw it.
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
+    // Response headers browser JS may READ. @fastify/cors emits
+    // Access-Control-Expose-Headers only when this is set (index.js:232-237),
+    // and the default is null — so without this line a custom header is sent
+    // by the server and silently invisible to the client, exactly the shape of
+    // the Card 4 preflight bug (inject() tests cannot see either).
+    exposedHeaders: ["Idempotent-Replay"],
   });
   await app.register(rateLimit, {
     global: true,

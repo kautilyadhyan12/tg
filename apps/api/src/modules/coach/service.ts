@@ -85,10 +85,25 @@ const cacheKey = (model: string, question: string, profileFp: string): string =>
 
 const cachedAnswerSchema = z.object({ content: z.string().min(1) });
 
+export interface ChatHooks {
+  /** Fired the instant a NEW thread row commits — which happens before the
+   *  provider is called, so a later failure leaves that thread behind, empty.
+   *  The retry guard (idempotency.ts) records it so a resend under the same
+   *  Idempotency-Key continues in that thread instead of opening another. */
+  onThreadOpened?: (threadId: string) => void;
+  /** A thread a previous FAILED attempt under the same Idempotency-Key opened.
+   *  BEST-EFFORT by design: resumed if it still exists, otherwise a fresh
+   *  thread is opened. Unlike `input.threadId` — which is the client asserting
+   *  a thread and must 404 when wrong — this one merely remembers, and the user
+   *  may legitimately have deleted it in the meantime. */
+  resumeThreadId?: string | undefined;
+}
+
 export async function chat(
   deps: CoachDeps,
   userId: string,
   input: { message: string; threadId?: string | undefined },
+  hooks: ChatHooks = {},
 ): Promise<CoachChatResponse> {
   if (deps.provider === null) {
     throw new CoachError(503, "coach_unavailable", "The coach is not available right now.");
@@ -101,7 +116,19 @@ export async function chat(
     if (thread === null) throw new CoachError(404, "not_found", "thread not found");
     threadId = thread.id;
   } else {
-    threadId = await repo.createThread(deps.sql, userId, input.message.slice(0, THREAD_TITLE_CHARS));
+    // Resume the thread a failed attempt under this key opened — but only if
+    // it is still there. getThread is userId-scoped (R3.2), so a remembered id
+    // can never resolve to anyone else's thread.
+    const resumed =
+      hooks.resumeThreadId === undefined
+        ? null
+        : await repo.getThread(deps.sql, userId, hooks.resumeThreadId);
+    if (resumed !== null) {
+      threadId = resumed.id;
+    } else {
+      threadId = await repo.createThread(deps.sql, userId, input.message.slice(0, THREAD_TITLE_CHARS));
+      hooks.onThreadOpened?.(threadId);
+    }
   }
 
   // Profile drives the prompt AND the cache key (finding 2) — load it first.
