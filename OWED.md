@@ -240,7 +240,7 @@ then; none may be hidden or reduced to close the gap.
       user-facing strings on `DELETE /v1/users/me`. Had only the code read the
       constant, widening to GDPR's 30 would have left the API telling users
       "you have 14 days" while purging at 30.
-- [ ] 🔴 **CI runs none of the database tests — including the purge suite.**
+- [x] 🔴 **CI runs none of the database tests — including the purge suite.**
       Found by the DPDP T3 (finding D2) and MEASURED both ways: the gate job
       runs `pnpm test` with NO `DATABASE_URL`, giving **151 passed / 173
       skipped**, while the same suite with a `DATABASE_URL` gives **324
@@ -252,6 +252,29 @@ then; none may be hidden or reduced to close the gap.
       repo that irreversibly destroys user data has zero enforced coverage.
       Fix is to give the test job a Neon branch (the migrations job already
       creates one, so the mechanism exists). Its own card — R1.1.
+      **DONE 2026-07-23 — PR #47, branch `ci-db-tests`.** The proposed fix
+      ("give the test job a Neon branch") was TRIED (commit 34aa7c0) and MEASURED
+      too slow: every test PASSED but the full suite took ~38 min against remote
+      Neon from a GH runner (uniform latency, not a hang), overrunning a 30-min
+      cap. Kd ruled to SPLIT instead: `migrations` keeps proving DDL on a real
+      Neon branch; a NEW `db-tests` job runs migrate + seed + `pnpm --filter api
+      test` against a pgvector/pgvector:pg16 SERVICE CONTAINER on the runner
+      (~2 min, no paid Neon compute per PR, DB clean by construction). PROVE both
+      ways: `api tests on local Postgres` green 341/341, 0 skipped; a
+      deliberately-broken purge assertion turned that check RED while the DB-free
+      gate stayed green, then reverted. See DECISIONS 2026-07-23 "CI runs the
+      database-backed api suites".
+- [ ] ⚪ **Assert the DB suites POSITIVELY executed (count floor / fail-if-skipped).**
+      T3 defense-in-depth on the CI db-tests card (2026-07-23). No silent-skip
+      path exists TODAY — `DATABASE_URL` is one job-level value shared by
+      migrate/seed/test, and a bad URL fails `drizzle-kit migrate` loudly before
+      the test step, so a green-with-0-DB-tests run is unreachable. But nothing
+      POSITIVELY asserts a non-zero executed count, so a future refactor that
+      split the env or changed the `skipIf` var could skip the suites while
+      migrate/seed still pass → false green. Add a guard that fails the db-tests
+      job if skipped>0 / passed<floor (a verified vitest-JSON read, not a brittle
+      grep). NOT built with the card: an unverified CI guard risks a false-red,
+      worse than the low residual. R1.1 — its own small card.
 - [ ] 🟡 **The DPDP purge's single-marker guarantee rests on ONE call site.**
       Raised by the round-5 T3 (2026-07-23) as latent, not a live bug —
       recorded so it is not lost. `lockDueUserForPurge` was widened from
