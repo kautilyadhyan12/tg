@@ -61,9 +61,23 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Migrations AND the database-backed api suites, on one throwaway Neon branch.
+  # The `gate` job above runs `pnpm test` with NO DATABASE_URL, so every
+  # describe.skipIf(DATABASE_URL) suite SKIPS there — measured 2026-07-23:
+  # 153 passed / 188 skipped, with 16 of apps/api's 36 test files never running,
+  # including the whole Day-14 purge suite (the only code in the repo that
+  # irreversibly destroys user data). This job already creates and destroys a
+  # branch, so running the suite here costs zero extra Neon branches.
+  # Only apps/api needs a database (verified: DATABASE_URL appears nowhere in
+  # packages/ or apps/web), which is why this filters to `api` rather than
+  # re-running the workspace.
   migrations:
-    name: drizzle migrations on Neon branch
+    name: drizzle migrations + api tests on Neon branch
     runs-on: ubuntu-latest
+    # Bounds a hung suite against remote Neon; the branch is only reclaimed by
+    # the delete step below, so an unbounded job is an unbounded live branch.
+    # 30 is a judgment call, not a spec number (~7x the local full-suite run).
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -92,13 +106,31 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      # Split into distinctly-named steps so a red says WHICH part broke:
+      # install / migrate / seed / test are four different failures.
+      - name: install dependencies
+        if: steps.has-migrations.outputs.present == 'true'
+        run: pnpm install --frozen-lockfile
       - name: apply migrations
         if: steps.has-migrations.outputs.present == 'true'
         env:
           DATABASE_URL: ${{ steps.neon-branch.outputs.db_url }}
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm --filter api migrate
+        run: pnpm --filter api migrate
+      # NOT optional: privacy.purge.test.ts states it "requires migrations
+      # 0001-0007 applied and seed.ts run (exercises + achievements are FK
+      # targets)". Idempotent (drizzle onConflict upserts; the definition
+      # bundle is sha256-compared before insert), so re-seeding a branch
+      # cloned from primary is a no-op.
+      - name: seed reference data
+        if: steps.has-migrations.outputs.present == 'true'
+        env:
+          DATABASE_URL: ${{ steps.neon-branch.outputs.db_url }}
+        run: pnpm --filter api seed
+      - name: api test suite (Neon branch)
+        if: steps.has-migrations.outputs.present == 'true'
+        env:
+          DATABASE_URL: ${{ steps.neon-branch.outputs.db_url }}
+        run: pnpm --filter api test
       - name: delete Neon branch
         if: always() && steps.has-migrations.outputs.present == 'true'
         uses: neondatabase/delete-branch-action@v3

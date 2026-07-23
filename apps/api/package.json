@@ -12,6 +12,7 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
+    "seed": "tsx src/db/seed.ts",
     "coach:ingest": "tsx src/modules/coach/ingest.ts"
   },
   "devDependencies": {
