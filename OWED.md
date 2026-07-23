@@ -271,8 +271,23 @@ then; none may be hidden or reduced to close the gap.
       legitimate re-deletion case the `at >= deleted_at` bound exists to allow
       (a user deletes, restores, and deletes again). Pairs naturally with the
       CI line above, since neither is enforced on merge today.
-- [ ] 🔴 **DPDP JSON-export worker — the OTHER half of §5.2, still owed and
-      still blocks P2.8.** Split from the delete half by Kd ruling 2026-07-22
+- [x] 🔴 **DPDP JSON export — DONE 2026-07-23, merged as PR #46** (merge
+      `5c76d6c`). `GET /v1/users/me/export` returns the user's data as JSON:
+      17 tables + profile, DERIVED from the Day-14 delete list so the two §5.2
+      rights cannot drift apart. Kd-ruled DEVIATION on delivery only — §5.2
+      describes a zip behind a signed URL; none of that infrastructure exists
+      and v1 §18 itself says "data-export endpoint", so the content is
+      identical and adding signed-URL delivery later changes only how it is
+      sent. Three fresh-chat T3 rounds (10+6+4). Notable: the rate limit
+      shipped with an IP dimension that refused a second gym member's FIRST
+      export (and cited a precedent saying the opposite); internal columns
+      rode along on SELECT * (our per-request AI cost on every coach message,
+      and the anti-cheat flags the spec calls silent); and an untyped lookup
+      let a typo ship them, found three times one level down each round —
+      now guarded against the real drizzle schema by a test needing NO
+      database, so CI actually runs it. **STILL OPEN, its own line below:**
+      whether `gym_members` and `leaderboard_snapshots` belong in the export.
+      ~~the OTHER half of §5.2, still owed and still blocks P2.8~~ Split from the delete half by Kd ruling 2026-07-22
       because NONE of its infrastructure exists — command-verified: no R2/S3
       client in any `package.json`, no bucket or signing keys among
       `config.ts`'s 17 env vars, no zip library, and no Part 4 table to track an
