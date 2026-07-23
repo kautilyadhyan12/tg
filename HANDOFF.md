@@ -1746,3 +1746,38 @@ THEN: 🔴 deploy the worker (closes the DPDP gate; needs a Dockerfile +
   scope; refresh_tokens keeps ip+user_agent for a purged person; password_hash
   on the tombstone) · 🟡 ROTATE GROQ_API_KEY (Kd's own action, deferred 5×).
 ```
+
+```
+TASK: CI runs the database-backed api suites  [DONE 2026-07-23, PR #47, branch ci-db-tests]
+  THE GAP (measured): `gate` runs `pnpm test` with NO DATABASE_URL → 153 passed
+  / 188 SKIPPED, 16 of 36 files never run, incl. all 17 purge + 8/10 export
+  tests. The only irreversible-delete code had zero enforced coverage on merge.
+  FIX = SPLIT the CI database work into two jobs:
+  - `migrations` (Neon): create branch → migrate → delete(if:always). Proves DDL
+    on a real primary-cloned branch (R9.4 cloned-staging half; DECISIONS
+    2026-07-16). No seed, no tests, no timeout — fast again.
+  - `db-tests` (NEW): migrate → seed → `pnpm --filter api test` against a
+    pgvector/pgvector:pg16 SERVICE CONTAINER on the runner.
+  WHY NOT tests-on-Neon (the first cut, commit 34aa7c0): PROVE measured it GREEN
+  but ~38 min (uniform Neon latency from a GH runner, NOT a hang) — overran a
+  30-min cap. Kd ruled (AskUserQuestion): move tests to local PG. ~2 min on CI,
+  46 s local; no paid Neon compute per PR; test DB clean-by-construction, which
+  also CLOSES the kickoff's "CI branch clones dev data" flakiness question.
+  FILES: .github/workflows/ci.yml + apps/api/package.json (`seed` script). No
+  source, no migration, no dependency (the pgvector image is a CI SERVICE, not a
+  package dep).
+  PROVE: (a) `api tests on local Postgres` GREEN 341/341, 0 skipped. (b) flipped
+  a purge assertion (0→999) → that check RED (ONLY it; `gate` stayed green — the
+  gap shown live), reverted by --force-with-lease (break commit 131417f NOT in
+  merged history). Fresh-chat T3: no blocking defect ("the change is sound").
+  RECORDS: DECISIONS.md entry (this branch → master) + this block. web-repoint
+  OWED: ticked "CI runs none of the database tests" DONE + added a residual line
+  — assert the DB suites POSITIVELY executed (count floor / fail-if-skipped),
+  defense-in-depth vs a future skipIf/env refactor. NO silent-skip path exists
+  TODAY (shared job-level DATABASE_URL + the migrate/seed canary fail loudly on
+  a bad URL before tests run).
+  required-checks have no teeth on merge here — DECISIONS 2026-07-06: GitHub Free,
+  green-before-merge is procedural. Not this card's to fix.
+NEXT (unchanged): 🔴 deploy the worker (closes the DPDP gate) · 🔴 web-repoint
+  owed endpoints · ❓ Kd privacy-scope rulings · 🟡 ROTATE GROQ_API_KEY.
+```
