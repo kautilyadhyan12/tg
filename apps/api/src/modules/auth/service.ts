@@ -10,6 +10,7 @@ import { hash as argon2Hash, hashSync as argon2HashSync, verify as argon2Verify 
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
 import type { AppConfig } from "../../config.js";
+import { DPDP_RETENTION_MS } from "../../retention.js";
 import type { EmailSender } from "./email.js";
 import * as repo from "./repo.js";
 import type { HashAlgo } from "./repo.js";
@@ -342,8 +343,10 @@ export async function changePassword(
 // Cross-module calls go through these — never through this module's repo or
 // tables. one_time_tokens / refresh_tokens stay auth-owned.
 
-/** Part 4 §5.2: the undo window is 14 days — the token lives exactly that long. */
-const RESTORE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+/** Part 4 §5.2: the token lives exactly as long as the undo window, so it is
+ *  read from src/retention.ts rather than restated here — see that file for
+ *  why the number has exactly one home. */
+const RESTORE_TTL_MS = DPDP_RETENTION_MS;
 
 export async function isUserEmailVerified(sql: Sql, userId: string): Promise<boolean> {
   return await repo.isEmailVerified(sql, userId);
