@@ -252,6 +252,25 @@ then; none may be hidden or reduced to close the gap.
       repo that irreversibly destroys user data has zero enforced coverage.
       Fix is to give the test job a Neon branch (the migrations job already
       creates one, so the mechanism exists). Its own card — R1.1.
+- [ ] 🟡 **The DPDP purge's single-marker guarantee rests on ONE call site.**
+      Raised by the round-5 T3 (2026-07-23) as latent, not a live bug —
+      recorded so it is not lost. `lockDueUserForPurge` was widened from
+      `TransactionSql` to `SqlOrTx` purely so the concurrency test could drive
+      it on two explicitly-ordered reserved connections. That removed the
+      COMPILE-TIME guard: a pooled `Sql` now satisfies the parameter, and on a
+      pooled handle `FOR UPDATE` autocommits and drops the row lock instantly —
+      silently reverting to the double-marker race this card fixed across four
+      rounds. There is no DB backstop either: `audit_log` has only
+      `(gym_id, at)` btree + a BRIN on `at`, **no unique index on
+      `(action, target_id)`**, so a duplicate marker raises no 23505. Verified
+      today: the sole production caller (`purgeUser` → `deps.sql.begin`) does
+      pass a real transaction, so nothing is broken now. Two real closures,
+      either of which ends the reliance: (a) revert the signature to
+      `TransactionSql` and rework the test, or (b) add a partial unique index —
+      **but NOT a naive one on `(action, target_id)`**, which would break the
+      legitimate re-deletion case the `at >= deleted_at` bound exists to allow
+      (a user deletes, restores, and deletes again). Pairs naturally with the
+      CI line above, since neither is enforced on merge today.
 - [ ] 🔴 **DPDP JSON-export worker — the OTHER half of §5.2, still owed and
       still blocks P2.8.** Split from the delete half by Kd ruling 2026-07-22
       because NONE of its infrastructure exists — command-verified: no R2/S3
