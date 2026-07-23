@@ -10,6 +10,7 @@ import { hash as argon2Hash, hashSync as argon2HashSync, verify as argon2Verify 
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
 import type { AppConfig } from "../../config.js";
+import { DPDP_RETENTION_MS } from "../../retention.js";
 import type { EmailSender } from "./email.js";
 import * as repo from "./repo.js";
 import type { HashAlgo } from "./repo.js";
@@ -205,6 +206,74 @@ export async function login(
   return { user: await toAuthUser(deps.sql, user), tokens: await issueSession(deps, user.id, meta) };
 }
 
+// ── Google sign-in (google-login card; v1 §6.1) ─────────────────────────────
+
+/** A live account that can't accept a Google sign-in (soft-deleted, etc.).
+ *  Never distinguishes why (R3.7 spirit) — the route redirects generically. */
+const googleUnavailable = () =>
+  new AuthError(403, "google_unavailable", "This account is not available for Google sign-in");
+
+/** Ported fallback (passport.js:55): Google display name, else "New User".
+ *  display_name is NOT NULL (identity.ts:25). Bounded defensively. */
+function oauthDisplayName(name: string | null): string {
+  const trimmed = (name ?? "").trim();
+  return trimmed.length > 0 ? trimmed.slice(0, 100) : "New User";
+}
+
+/** Record email-verified once for an OAuth account (idempotent — skips if a
+ *  verify_email marker already exists), using the derivation isEmailVerified()
+ *  already reads (DECISIONS: no verified column). */
+async function ensureOAuthEmailVerified(deps: AuthDeps, userId: string): Promise<void> {
+  if (await repo.isEmailVerified(deps.sql, userId)) return;
+  await repo.recordVerifiedOAuthEmail(deps.sql, userId, sha256Hex(mintOpaqueToken()));
+}
+
+/** Google sign-in: log in the linked identity, else link Google to an existing
+ *  same-email account (password untouched — passport.js:41-43), else create an
+ *  OAuth-only user. Returns a session exactly like password login. */
+export async function googleSignIn(
+  deps: AuthDeps,
+  identity: { subject: string; email: string; name: string | null },
+  meta: RequestMeta,
+): Promise<{ user: AuthUser; tokens: SessionTokens }> {
+  // 1. Known Google identity → straight login.
+  const linkedUserId = await repo.findUserIdByAuthIdentity(deps.sql, "google", identity.subject);
+  if (linkedUserId !== null) {
+    const user = await repo.findUserById(deps.sql, linkedUserId);
+    if (user === null || user.status !== "active") throw googleUnavailable();
+    return { user: await toAuthUser(deps.sql, user), tokens: await issueSession(deps, user.id, meta) };
+  }
+
+  // 2. Existing account with this email → link Google to it (never downgrade
+  //    or touch the password), then log in.
+  const byEmail = await repo.findUserByEmail(deps.sql, identity.email);
+  if (byEmail !== null) {
+    if (byEmail.status !== "active") throw googleUnavailable();
+    await repo.linkAuthIdentity(deps.sql, { userId: byEmail.id, provider: "google", subject: identity.subject });
+    await ensureOAuthEmailVerified(deps, byEmail.id);
+    return { user: await toAuthUser(deps.sql, byEmail), tokens: await issueSession(deps, byEmail.id, meta) };
+  }
+
+  // 3. Brand-new OAuth-only user from the Google profile.
+  const newUserId = await repo.createOAuthUser(deps.sql, {
+    email: identity.email,
+    displayName: oauthDisplayName(identity.name),
+  });
+  if (newUserId === null) {
+    // Lost a concurrent create race on the email → re-resolve and link.
+    const raced = await repo.findUserByEmail(deps.sql, identity.email);
+    if (raced === null || raced.status !== "active") throw googleUnavailable();
+    await repo.linkAuthIdentity(deps.sql, { userId: raced.id, provider: "google", subject: identity.subject });
+    await ensureOAuthEmailVerified(deps, raced.id);
+    return { user: await toAuthUser(deps.sql, raced), tokens: await issueSession(deps, raced.id, meta) };
+  }
+  await repo.linkAuthIdentity(deps.sql, { userId: newUserId, provider: "google", subject: identity.subject });
+  await ensureOAuthEmailVerified(deps, newUserId);
+  const created = await repo.findUserById(deps.sql, newUserId);
+  if (created === null) throw new Error("created Google user could not be re-read");
+  return { user: await toAuthUser(deps.sql, created), tokens: await issueSession(deps, newUserId, meta) };
+}
+
 // ── refresh (rotation + reuse detection) ────────────────────────────────────
 
 export async function refresh(
@@ -342,8 +411,10 @@ export async function changePassword(
 // Cross-module calls go through these — never through this module's repo or
 // tables. one_time_tokens / refresh_tokens stay auth-owned.
 
-/** Part 4 §5.2: the undo window is 14 days — the token lives exactly that long. */
-const RESTORE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+/** Part 4 §5.2: the token lives exactly as long as the undo window, so it is
+ *  read from src/retention.ts rather than restated here — see that file for
+ *  why the number has exactly one home. */
+const RESTORE_TTL_MS = DPDP_RETENTION_MS;
 
 export async function isUserEmailVerified(sql: Sql, userId: string): Promise<boolean> {
   return await repo.isEmailVerified(sql, userId);

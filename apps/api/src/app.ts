@@ -13,10 +13,12 @@ import type { EmailSender } from "./modules/auth/email.js";
 import { registerAuthenticate } from "./modules/auth/plugin.js";
 import { AuthError } from "./modules/auth/service.js";
 import { registerAuthRoutes } from "./modules/auth/routes.js";
+import { createGoogleVerifier, type GoogleVerifier } from "./modules/auth/google.js";
 import { registerWorkoutRoutes } from "./modules/workouts/routes.js";
 import type { UsersEmailSender } from "./modules/users/email.js";
 import { UsersError } from "./modules/users/service.js";
 import { registerUserRoutes } from "./modules/users/routes.js";
+import { registerPrivacyRoutes } from "./modules/privacy/routes.js";
 import { registerExerciseRoutes } from "./modules/exercises/routes.js";
 import { registerGamificationRoutes } from "./modules/gamification/routes.js";
 import { registerCoachRoutes, type CoachRouteOverrides } from "./modules/coach/routes.js";
@@ -28,6 +30,7 @@ import { registerNutritionRoutes, type NutritionRouteOverrides } from "./modules
 import { NutritionError } from "./modules/nutrition/service.js";
 import { registerGeoRoutes, type GeoRouteOverrides } from "./modules/geo/routes.js";
 import { GeoError } from "./modules/geo/errors.js";
+import { ExportError } from "./modules/privacy/export.js";
 
 /** Test-only seams (GAP-5 DECISIONS 2026-07-11): production callers pass
  *  nothing; tests inject a capturing EmailSender to reach raw one-time tokens
@@ -45,6 +48,9 @@ export interface BuildAppOverrides {
   /** P2.6b: tests inject a fake ORS route provider (and the reserved-for-P5
    *  geocode resolver) — no test calls the real OpenRouteService. */
   geo?: GeoRouteOverrides;
+  /** google-login: tests inject a fake GoogleVerifier to drive the OAuth flow
+   *  without calling Google; unset in prod builds the real one from config. */
+  googleVerifier?: GoogleVerifier;
 }
 
 declare module "fastify" {
@@ -136,6 +142,7 @@ export async function buildApp(
       err instanceof CoachError ||
       err instanceof NutritionError ||
       err instanceof GeoError ||
+      err instanceof ExportError ||
       (typeof err.code === "string" && err.code.startsWith("FST_"));
     if (clientSafe) {
       if (status >= 500) {
@@ -194,6 +201,7 @@ export async function buildApp(
     sql,
     config,
     redis,
+    googleVerifier: overrides.googleVerifier ?? createGoogleVerifier(config),
     ...(overrides.emailSender !== undefined ? { emailSender: overrides.emailSender } : {}),
   });
   registerWorkoutRoutes(app, { sql, redis });
@@ -202,6 +210,9 @@ export async function buildApp(
     redis,
     ...(overrides.usersEmailSender !== undefined ? { emailSender: overrides.usersEmailSender } : {}),
   });
+  // Part 4 §5.2's export right. Serves /v1/users/me/export but lives in the
+  // privacy module, next to the Day-14 delete list it must stay in step with.
+  registerPrivacyRoutes(app, { sql, redis });
   registerExerciseRoutes(app, { sql });
   registerGamificationRoutes(app, { sql });
   registerCoachRoutes(app, { sql, redis, config }, overrides.coach ?? {});

@@ -639,6 +639,132 @@ NEXT: Card ② users/profile (repoint userApi/profile reads+writes to /v1/users/
   normalizeUser shim). Then ③–⑦, then P2.8 cutover per RUNBOOK/cutover.md.
 OPEN SPEC GAPS: none. v1 §13 doesn't itemize the repoint; §6.1/§18 fix the auth
   model and the card ordering is an implementation choice (Kd-ruled auth-first).
+```
+
+```
+TASK: google-login — Google OAuth on the new API 🔴  [API HALF, T3 R1 DONE, RE-REVIEW OWED]
+      branch google-login (off master). Restores the switched-off Google sign-in
+      buttons — a 🔴 cutover blocker on web-repoint:OWED.md. v1 §6.1 lists Google
+      OAuth; P2.1 shipped email/password only. API-only + additive → merges to
+      master normally; the WEB repoint (buttons + rewrite GoogleAuthSuccess.jsx)
+      is a SEPARATE follow-up card on web-repoint.
+SHIPPED (10 files): NEW modules/auth/google.ts (GoogleVerifier interface + real
+  google-auth-library impl + createGoogleVerifier(config)→null-when-unconfigured)
+  · routes.ts (+GET /v1/auth/google redirect w/ CSRF state cookie; +GET
+  /v1/auth/google/callback → verify state, exchange, googleSignIn, set the SAME
+  httpOnly cookies as password login, redirect to WEB_ORIGIN/auth/google/success
+  — NOTHING in the URL) · service.ts (+googleSignIn: 3-way upsert login/link/
+  create) · repo.ts (+findUserIdByAuthIdentity, createOAuthUser [NULL password],
+  linkAuthIdentity [ON CONFLICT DO NOTHING], recordVerifiedOAuthEmail) ·
+  tokens.ts (+OAUTH_STATE_COOKIE) · config.ts (+3 OPTIONAL Google vars) · app.ts
+  (wire verifier + BuildAppOverrides.googleVerifier test seam) · package.json
+  (+google-auth-library ^9.15.1) · NEW test/auth.google.test.ts (7 tests).
+  NO MIGRATION — auth_identities has existed since 0001_init.
+KEY DECISIONS (all in DECISIONS.md 2026-07-24): the old #token=fragment +
+  localStorage flow is DELIBERATELY NOT ported (R3.7/R3.10 — cookies only) ·
+  Google users marked email-verified via a CONSUMED verify_email token (the
+  existing derivation; NO new column, R0.2) · same-email account → link, password
+  untouched (passport.js:41-43) · soft-deleted account refused (active-only, like
+  login) · state cookie sameSite 'lax' (top-level callback nav) · Google unset =
+  clean disabled (GROQ precedent). NEW DEP google-auth-library ^9.15.1 approved
+  (R1.4; weekly-downloads sanity check still owed at merge).
+PROVE (real Neon, ep-wispy-rain): typecheck (shared+api) clean · eslint (8 touched
+  files) clean · red-flag greps clean · auth.google 7/7 · auth.routes+unit 37/37
+  (no regression). Full api suite NOT run locally (Neon ~38min); CI db-tests job
+  (local PG container) runs it on the PR.
+SMOKE: OWED, cannot run yet — needs BOTH (a) real Google OAuth credentials Kd
+  creates in the Google Cloud console, and (b) the web buttons repointed off the
+  old backend (localhost:3001) to /v1/auth/google. Stated per Part I §2, not
+  skipped. The routes ARE browser-reachable, but no browser path reaches them
+  until the web card + credentials land.
+T3 ROUND 1 (fresh chat) — 2 blocking + 2 low, ALL FIXED (DECISIONS 2026-07-24):
+  A secret-in-logs (gaxios err.config carries client_secret) → log errorSummary()
+  only · B email_verified===false let an ABSENT claim through (account-takeover
+  into a password account via same-email linking) → !==true, mutation-verified ·
+  C id_token now Zod-parsed (identityFromClaims) · D per-IP googleLimit added.
+  NEW file test/auth.google.unit.test.ts (8 DB-free tests: the B strictness + A
+  log-safety, run in CI's gate job). PROVE post-fix: typecheck+lint clean,
+  unit 8/8, auth.google 8/8 on Neon. CLASS NOTE owed: pino redact-path hardening
+  for err.config across coach/nutrition/geo/auth is its own repo-wide card.
+OPEN: (1) RE-REVIEW the round-1 fixes in the SAME fresh T3 chat (diff refreshed:
+  t3-google-login.diff). (2) After merge, the OWED.md tick for
+  "Google login" API-half lands as a SEPARATE web-repoint commit (OWED.md does
+  not exist on master — branch-topology ruling 2026-07-21). (3) web-repoint card:
+  buttons → new API, rewrite GoogleAuthSuccess.jsx to use cookies + adoptSession
+  (never setUser raw — the shared-browser hazard Card 2 closed), delete the
+  localStorage/#token path.
+NEXT CARDS (unchanged from the Day-14 block): 🔴 avatar storage (incl R3.9) ·
+  🔴 XP/badges/leaderboard/predictions/exercise-library (some need Kd rulings:
+  XP-storage column, leaderboard P4-before-P2.8 sequencing) · 🔴 workout history
+  calendar (BLOCKED, read its OWED entry) · deploy infra + DPDP worker (Day-14
+  gate) · 🟡 timezone TRAVEL rule · 🟡 ROTATE GROQ_API_KEY (Kd action).
+```
+
+TASK: DPDP Day-14 hard-delete worker 🔴  [CODE DONE, T3 OWED]  branch dpdp-day14-purge
+  The blocking P2.8 legal gate, half of it. Part 4 §5.2 ANONYMIZES the users row
+  instead of deleting it, so NO FK cascade collects user-owned PII — §5.2's
+  explicit Day-14 DELETE list is the only mechanism and it did not exist.
+  Now: modules/privacy (tables.ts = the compliance artifact, repo.ts = 15
+  literal DELETEs, purge.ts = the job), a BullMQ worker.ts entrypoint (v1 §6
+  "two modes, same image"), and tools/dpdp-purge.ts which is DRY BY DEFAULT.
+  17 tables end empty per user: 15 deleted directly, meal_log_corrections and
+  coach_messages collected by CASCADE (they carry NO user_id — the approved
+  plan's uniform "WHERE user_id" loop was WRONG and verification caught it
+  before any code). user_fitness_profiles IS included, discharging the
+  condition onboarding-storage was merged on (DECISIONS 2026-07-16).
+  RETENTION IS ONE CONSTANT (src/retention.ts) per the privacy-scope build
+  note — and the plan UNDERCOUNTED: there were FOUR hard-coded 14s, not one,
+  two of them USER-FACING COPY. Had only the code read the constant, widening
+  to GDPR's 30 would leave the API saying "you have 14 days" while purging at
+  30. All four now derive from it; no existing test asserted any (grepped).
+  THE BUG THIS CARD CAUGHT IN ITSELF, and it was SILENT: the leaderboard scrub
+  used JSON.stringify(x)::jsonb. postgres-js sends that as a TEXT param, so
+  the cast makes a jsonb STRING SCALAR, and `array @> string` is FALSE with no
+  error — the UPDATE matched nothing, committed happily, and a purged user's
+  name would have stayed on every leaderboard forever. sql.json() fixes it.
+  Found only because the test asserts the scrubbed VALUE, and only after a 5s
+  default timeout (the one test I forgot to give 60s) stopped masking it as a
+  network flake. A timeout is not a result.
+  MARKER = an audit_log 'user.purged' row (Kd ruling): no migration, and it
+  makes the purge narratable (Part 8). NOT EXISTS bounded by at >= deleted_at
+  because audit_log has no index on action/target_id. PROVEN ON REAL DATA:
+  dev holds 9 due accounts, 8 marked, dry run scanned exactly the 1 unmarked.
+  NEW DEP bullmq@5.80.10 (7,384,354 wk downloads, verified from npm — my plan
+  said "~2M" from memory, wrong by 3.7x). worker.ts imports ioredis DIRECTLY,
+  a declared exception: createIoRedis sets maxRetriesPerRequest:1 and BullMQ
+  requires null. The job body is a plain function, so all 10 tests run against
+  real Postgres with no queue/Redis/worker involved.
+  api 324/324 on Neon (314 baseline + 10); typecheck + lint + red-flag greps
+  clean. Tests were RED first, three times, each for a different real reason.
+  ⚠ RUNNING THE SUITE PURGES DUE ACCOUNTS IN THE TARGET DB — the sweep is
+  global by design. The first green run purged 8 pre-existing soft-deleted
+  example.com fixtures on dev. Warned loudly in the test header.
+  NO SMOKE — no browser-reachable surface (a scheduled job, no route); the two
+  DELETE /v1/users/me strings interpolate the same 14 they hard-coded. Stated
+  per Part I §2 rather than skipped.
+  OPEN: T3 in a FRESH chat (diff: t3-dpdp-day14.diff), then the OWED.md line
+  must land as a SEPARATE web-repoint commit — OWED.md does not exist on
+  master (the 2026-07-21 branch-topology ruling, commit c488dda precedent).
+  SPEC GAPs for Kd: (1) 8 user_id-bearing tables §5.2 does not name
+  (one_time_tokens, refresh_tokens, gym_members, gym_staff, api_cost_events,
+  usage_daily, trace_samples, gyms.owner_user_id) — implemented §5.2 verbatim,
+  NOT widened (R0.2); (2) the tombstone is silent on password_hash/hash_algo,
+  timezone, legacy_mongo_id — cleared only the three §5.2 names.
+  DEVIATION (R7.1): one privacy repo issues cross-module deletes so the §5.2
+  list stays reviewable in one place. Declared; Kd may veto.
+NEXT CARDS: 🔴 DPDP JSON EXPORT — the other half of §5.2 and STILL BLOCKS P2.8.
+  Split by Kd ruling because NONE of its infra exists (no R2/S3 client, no
+  bucket env vars, no zip lib, no export-job table — all command-verified). A
+  DEVIATION PROPOSAL is on file for it: serve GET /v1/users/me/export as plain
+  JSON, no zip/R2/signed URL, which meets §5.2's "both flows exist at launch"
+  with zero new infrastructure and keeps the export a table LIST · 🔴 Google
+  login · 🔴 avatar storage (incl. unmet R3.9) · 🔴 XP/badges/leaderboard/
+  predictions/exercise-library · 🔴 workout history calendar (BLOCKED, read its
+  OWED entry) · 🟡 timezone TRAVEL rule · 🟡 real-phone camera smoke ·
+  🟡 ROTATE GROQ_API_KEY (Kd's own action).
+```
+
+```
 TASK: onboarding-storage — fitness-profile storage on the new API 🔴 (schema+migration)
       [branch onboarding-storage off master@1857be7 → PR #30. T3 DONE (fresh
        chat, Part I §7c): no blocking violations; 1 advisory FIXED (PUT {} test
@@ -2220,4 +2346,137 @@ DECISIONS:
   - apps/api src/index.ts throws NotImplementedError (R1.3) until P0.4.
 OPEN SPEC GAPS: none.
 NEXT TASK: P0.2 — CI pipeline (typecheck · lint · test · gitleaks · Drizzle migrations on a Neon branch).
+```
+
+```
+TASK: DPDP Day-14 hard-delete worker 🔴  [CODE COMPLETE 2026-07-23; the CUTOVER GATE STAYS OPEN]
+  API (branch dpdp-day14-purge off origin/master): Part 4 §5.2's Day-14 hard
+  delete. §5.2 ANONYMIZES the users row rather than deleting it, so NO FK
+  cascade collects user-owned PII — the enumerated DELETE list is the only
+  mechanism, and it now exists as apps/api/src/modules/privacy/.
+  18 PII tables end empty per purged user: 15 direct DELETEs + 3 collected by
+  CASCADE (meal_log_corrections, coach_messages, workout_sets). Tombstone per
+  §5.2 (email NULL, 'Deleted user', weight NULL, row KEPT). Leaderboard
+  display_name scrubbed element-wise. user_fitness_profiles IS included, so
+  the condition onboarding-storage was merged on (DECISIONS 2026-07-16) is
+  discharged for the delete half. Runs on BullMQ (NEW DEP, Kd-approved,
+  5.80.10) from a new `worker` entrypoint (v1 §6), plus tools/dpdp-purge.ts
+  which is DRY BY DEFAULT (--apply to destroy). Retention is ONE constant
+  (src/retention.ts) that also drives the undo window, the restore-token TTL
+  and the user-facing copy — there were FOUR hard-coded 14s, two of them the
+  strings users read, so widening to GDPR's 30 would have had the API lying.
+  NO migration. api 331/331 on Neon; typecheck/lint/greps clean.
+  FIVE fresh-chat T3 rounds, 9+9+9+4+0 findings. The card's whole lesson is
+  one fault repeating: FOUR times a fix closed the case it was shown and left
+  the class open, and my "mutation-verified" claim for the round-3 concurrency
+  fix was hollow because the test was SEQUENTIAL. What finally worked:
+  reproduce the bug yourself first, make the question DECIDABLE rather than a
+  heuristic, and mutation-test for the RIGHT reason. Round 5 clean: an
+  independent reviewer re-probed the race (B-first, N=5 production path,
+  restore-vs-lock) and the mutation, and reported the records match the code
+  for the first time.
+  BIGGEST CATCHES: a cross-tenant DELETE (my own "defence in depth" destroyed
+  an ACTIVE user's workout_sets via a denormalised user_id — probed);
+  a double-marker race that survived two "fixes" (READ COMMITTED evaluates a
+  correlated NOT EXISTS folded into the FOR UPDATE statement against the
+  PRE-LOCK snapshot — it must be TWO statements); and three text heuristics
+  for "did a name survive?" that were each defeated by the next shape, now
+  replaced by a structural conformance gate.
+  ⚠ THE GATE IS STILL OPEN AND MUST NOT BE TICKED: the sweep is SCHEDULED
+  NOWHERE. No Dockerfile exists, docker-compose.yml has no api/worker service,
+  ci.yml has no deploy job. Code that runs nowhere deletes nothing.
+  ⚠ CI ENFORCES NONE OF IT: `pnpm test` runs with no DATABASE_URL, so all 17
+  purge tests skip on merge. Its own OWED line.
+NEXT CARDS: 🔴 DPDP JSON-EXPORT (the other §5.2 half; needs R2+zip or the
+  recorded no-infra DEVIATION: GET /v1/users/me/export returning JSON) ·
+  🔴 deploy the worker (Dockerfile + compose service) — what closes the gate ·
+  🔴 CI must run the DB suites (a Neon branch for the test job) ·
+  ❓ Kd rulings owed: privacy-law scope (GDPR/CCPA timers), SPEC GAP 1 (the
+  user-bearing tables §5.2 does not name — refresh_tokens keeps ip+user_agent
+  for a purged person), SPEC GAP 2 (password_hash on the tombstone) ·
+  🔴 Google login · 🔴 avatar storage · 🟡 ROTATE GROQ_API_KEY.
+```
+
+```
+TASK: DPDP data export 🔴  [DONE 2026-07-23, merged PR #46 (5c76d6c)]
+  API, branch dpdp-export off master. GET /v1/users/me/export returns the
+  user's data as JSON: 17 tables + profile, DERIVED from the Day-14 delete
+  list (EXPORTED_TABLES = PII_TABLES − EXPORT_EXCLUDED_TABLES) so §5.2's two
+  rights cannot drift apart; a DB-FREE test fails if a table lands on neither.
+  Kd-ruled DEVIATION on delivery ONLY: §5.2 says "JSON zip via signed URL,
+  7-day expiry" and this returns JSON from an authed endpoint, because that
+  infra does not exist (no R2 client, no bucket keys, no zip lib) and v1 §18
+  itself says "data-export endpoint". Content identical either way.
+  Kd rulings: push_tokens EXCLUDED (device credentials, spoofing vector),
+  auth_identities INCLUDED, users columns ENUMERATED not SELECT * (fail-closed
+  — a new column is missed, never leaked), rate limit 3/hour PER USER.
+  api 341/341 on Neon. No migration, no new dependency.
+  THREE fresh-chat T3 rounds (10 + 6 + 4 findings). The lesson, and it is the
+  same one three times: I fixed the artifact that was NAMED and left the
+  identical weakness one level down — reader map key → strip map key → strip
+  map VALUES. Each time tsc was silent and the CI-visible suite was green.
+  BIGGEST CATCHES: the rate limit shipped with an IP dimension that refused a
+  second gym member's FIRST export (Jorhat gyms = shared connections, P6) and
+  cited a precedent that says the opposite in as many words — inverted, not
+  quoted (V2); SELECT * shipped our per-request AI cost on every coach message
+  and the anti-cheat flags v1 §14.1 calls SILENT; and my own tests were blind
+  TWICE (the rate-limit test used a different IP per request by design; the
+  credentials test could not see internal columns until I mutation-tested it).
+  What finally worked: break the fix on purpose and watch the test go red.
+  OPEN, recorded not ruled: whether gym_members + leaderboard_snapshots belong
+  in the export (same gap as the delete side — rule them TOGETHER so the two
+  rights stay symmetrical); the strip is COLUMN-level and cannot see inside
+  jsonb (matters when P4.y lands); workout_sets exports its denormalised
+  user_id; users.deleted_at omitted with no stated reason.
+NEXT CARD (Kd-picked): CI must run the DB test suites. MEASURED 2026-07-23:
+  `pnpm test` with no DATABASE_URL = 153 passed / 188 SKIPPED, and 16 of 36
+  test FILES never run — including every Day-14 purge and export test. The
+  mechanism already exists: ci.yml's `migrations` job creates a Neon branch,
+  applies migrations, deletes it. It just never runs a test. Approved shape:
+  extend THAT job (zero extra Neon branches) with seed + `pnpm --filter api
+  test`; keep `gate`'s DB-free `pnpm test` for fast feedback. Only apps/api
+  needs a DB (verified). No seed npm script exists — call
+  `tsx src/db/seed.ts`. NB CI branches FROM primary with init_source:
+  parent-data, so it clones DEV DATA — a real flakiness vector, and the open
+  question is whether to start the CI branch EMPTY instead.
+THEN: 🔴 deploy the worker (closes the DPDP gate; needs a Dockerfile +
+  compose service — NONE exist, and it is ~₹400-1,200/mo, so it is a Kd money
+  call) · 🔴 web-repoint owed endpoints · ❓ Kd rulings owed (privacy-law
+  scope; refresh_tokens keeps ip+user_agent for a purged person; password_hash
+  on the tombstone) · 🟡 ROTATE GROQ_API_KEY (Kd's own action, deferred 5×).
+```
+
+```
+TASK: CI runs the database-backed api suites  [DONE 2026-07-23, PR #47, branch ci-db-tests]
+  THE GAP (measured): `gate` runs `pnpm test` with NO DATABASE_URL → 153 passed
+  / 188 SKIPPED, 16 of 36 files never run, incl. all 17 purge + 8/10 export
+  tests. The only irreversible-delete code had zero enforced coverage on merge.
+  FIX = SPLIT the CI database work into two jobs:
+  - `migrations` (Neon): create branch → migrate → delete(if:always). Proves DDL
+    on a real primary-cloned branch (R9.4 cloned-staging half; DECISIONS
+    2026-07-16). No seed, no tests, no timeout — fast again.
+  - `db-tests` (NEW): migrate → seed → `pnpm --filter api test` against a
+    pgvector/pgvector:pg16 SERVICE CONTAINER on the runner.
+  WHY NOT tests-on-Neon (the first cut, commit 34aa7c0): PROVE measured it GREEN
+  but ~38 min (uniform Neon latency from a GH runner, NOT a hang) — overran a
+  30-min cap. Kd ruled (AskUserQuestion): move tests to local PG. ~2 min on CI,
+  46 s local; no paid Neon compute per PR; test DB clean-by-construction, which
+  also CLOSES the kickoff's "CI branch clones dev data" flakiness question.
+  FILES: .github/workflows/ci.yml + apps/api/package.json (`seed` script). No
+  source, no migration, no dependency (the pgvector image is a CI SERVICE, not a
+  package dep).
+  PROVE: (a) `api tests on local Postgres` GREEN 341/341, 0 skipped. (b) flipped
+  a purge assertion (0→999) → that check RED (ONLY it; `gate` stayed green — the
+  gap shown live), reverted by --force-with-lease (break commit 131417f NOT in
+  merged history). Fresh-chat T3: no blocking defect ("the change is sound").
+  RECORDS: DECISIONS.md entry (this branch → master) + this block. web-repoint
+  OWED: ticked "CI runs none of the database tests" DONE + added a residual line
+  — assert the DB suites POSITIVELY executed (count floor / fail-if-skipped),
+  defense-in-depth vs a future skipIf/env refactor. NO silent-skip path exists
+  TODAY (shared job-level DATABASE_URL + the migrate/seed canary fail loudly on
+  a bad URL before tests run).
+  required-checks have no teeth on merge here — DECISIONS 2026-07-06: GitHub Free,
+  green-before-merge is procedural. Not this card's to fix.
+NEXT (unchanged): 🔴 deploy the worker (closes the DPDP gate) · 🔴 web-repoint
+  owed endpoints · ❓ Kd privacy-scope rulings · 🟡 ROTATE GROQ_API_KEY.
 ```

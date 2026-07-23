@@ -1,0 +1,25 @@
+// Part 4 §5.2's account-deletion window, in ONE place.
+//
+// §5.2 defines a single number: the soft-delete window between Day 0 (the
+// user asks to be deleted) and the hard cascade. FOUR things state or enforce
+// it, and before this file existed all four hard-coded 14 independently:
+//   · the DB undo window            (modules/users/repo.ts, restoreUser)
+//   · the restore-token TTL          (modules/auth/service.ts, issueRestoreToken)
+//   · the two user-facing strings    (modules/users/routes.ts, DELETE /v1/users/me)
+//   · the Day-14 purge sweep         (modules/privacy)
+//
+// They all derive from here now, because the number is LIKELY TO CHANGE and
+// the failure mode is nasty. Kd's open privacy-scope question (DECISIONS
+// 2026-07-21) may widen the product beyond India's DPDP: GDPR's "without
+// undue delay" is conventionally ≤30 days, CCPA's is 45. The recorded
+// engineering assessment is that building this worker now boxes nothing in
+// PROVIDED the window is one named constant — this file is that promise kept.
+//
+// Why the COPY derives from it too: if only the code read the constant, the
+// day the window moves to 30 the API would still tell the user "you have 14
+// days to undo" while purging at 30. The app would be lying about its own
+// deletion behaviour, produced by the very change meant to keep it lawful.
+export const DPDP_RETENTION_DAYS = 14;
+
+/** The same window in milliseconds, for the one-time-token TTL. */
+export const DPDP_RETENTION_MS = DPDP_RETENTION_DAYS * 24 * 60 * 60 * 1000;

@@ -6,6 +6,7 @@
 // service goes through auth's service interface (R7.1).
 // Every query is keyed by the owning userId (R3.2).
 import type { Sql, TransactionSql } from "postgres";
+import { DPDP_RETENTION_DAYS } from "../../retention.js";
 import type { UpdateProfileRequest } from "./schemas.js";
 
 /** Reads that run both standalone and inside a tx. postgres.js's Sql and
@@ -284,16 +285,20 @@ export async function softDeleteUser(sql: Sql, userId: string): Promise<DeletedU
   });
 }
 
-/** Undo inside the 14-day window (Part 4 §5.2): only a soft-deleted row whose
- *  deleted_at is younger than 14 days flips back. The window is enforced HERE
- *  as well as by the token TTL — belt and braces. Gym memberships closed at
- *  Day 0 deliberately STAY closed (rejoin by code) — auto-reopen could exceed
- *  seat caps (DECISIONS 2026-07-11, T3 finding 4; revisit at P3.10). */
+/** Undo inside the §5.2 window (Part 4 §5.2): only a soft-deleted row whose
+ *  deleted_at is younger than the retention window flips back. The window is
+ *  enforced HERE as well as by the token TTL — belt and braces. Gym
+ *  memberships closed at Day 0 deliberately STAY closed (rejoin by code) —
+ *  auto-reopen could exceed seat caps (DECISIONS 2026-07-11, T3 finding 4;
+ *  revisit at P3.10).
+ *  The window comes from src/retention.ts so the undo window, the restore
+ *  token's TTL, the user-facing copy and the Day-14 purge can never disagree
+ *  — an interval literal cannot be parameterised, hence the multiplication. */
 export async function restoreUser(sql: Sql, userId: string): Promise<boolean> {
   const rows = await sql<{ id: string }[]>`
     UPDATE users SET status = 'active', deleted_at = NULL
     WHERE id = ${userId} AND status = 'deleted'
-      AND deleted_at > now() - interval '14 days'
+      AND deleted_at > now() - (${DPDP_RETENTION_DAYS} * interval '1 day')
     RETURNING id`;
   return rows.length > 0;
 }
