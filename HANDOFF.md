@@ -1,6 +1,64 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: google-login — Google OAuth on the new API 🔴  [API HALF, T3 R1 DONE, RE-REVIEW OWED]
+      branch google-login (off master). Restores the switched-off Google sign-in
+      buttons — a 🔴 cutover blocker on web-repoint:OWED.md. v1 §6.1 lists Google
+      OAuth; P2.1 shipped email/password only. API-only + additive → merges to
+      master normally; the WEB repoint (buttons + rewrite GoogleAuthSuccess.jsx)
+      is a SEPARATE follow-up card on web-repoint.
+SHIPPED (10 files): NEW modules/auth/google.ts (GoogleVerifier interface + real
+  google-auth-library impl + createGoogleVerifier(config)→null-when-unconfigured)
+  · routes.ts (+GET /v1/auth/google redirect w/ CSRF state cookie; +GET
+  /v1/auth/google/callback → verify state, exchange, googleSignIn, set the SAME
+  httpOnly cookies as password login, redirect to WEB_ORIGIN/auth/google/success
+  — NOTHING in the URL) · service.ts (+googleSignIn: 3-way upsert login/link/
+  create) · repo.ts (+findUserIdByAuthIdentity, createOAuthUser [NULL password],
+  linkAuthIdentity [ON CONFLICT DO NOTHING], recordVerifiedOAuthEmail) ·
+  tokens.ts (+OAUTH_STATE_COOKIE) · config.ts (+3 OPTIONAL Google vars) · app.ts
+  (wire verifier + BuildAppOverrides.googleVerifier test seam) · package.json
+  (+google-auth-library ^9.15.1) · NEW test/auth.google.test.ts (7 tests).
+  NO MIGRATION — auth_identities has existed since 0001_init.
+KEY DECISIONS (all in DECISIONS.md 2026-07-24): the old #token=fragment +
+  localStorage flow is DELIBERATELY NOT ported (R3.7/R3.10 — cookies only) ·
+  Google users marked email-verified via a CONSUMED verify_email token (the
+  existing derivation; NO new column, R0.2) · same-email account → link, password
+  untouched (passport.js:41-43) · soft-deleted account refused (active-only, like
+  login) · state cookie sameSite 'lax' (top-level callback nav) · Google unset =
+  clean disabled (GROQ precedent). NEW DEP google-auth-library ^9.15.1 approved
+  (R1.4; weekly-downloads sanity check still owed at merge).
+PROVE (real Neon, ep-wispy-rain): typecheck (shared+api) clean · eslint (8 touched
+  files) clean · red-flag greps clean · auth.google 7/7 · auth.routes+unit 37/37
+  (no regression). Full api suite NOT run locally (Neon ~38min); CI db-tests job
+  (local PG container) runs it on the PR.
+SMOKE: OWED, cannot run yet — needs BOTH (a) real Google OAuth credentials Kd
+  creates in the Google Cloud console, and (b) the web buttons repointed off the
+  old backend (localhost:3001) to /v1/auth/google. Stated per Part I §2, not
+  skipped. The routes ARE browser-reachable, but no browser path reaches them
+  until the web card + credentials land.
+T3 ROUND 1 (fresh chat) — 2 blocking + 2 low, ALL FIXED (DECISIONS 2026-07-24):
+  A secret-in-logs (gaxios err.config carries client_secret) → log errorSummary()
+  only · B email_verified===false let an ABSENT claim through (account-takeover
+  into a password account via same-email linking) → !==true, mutation-verified ·
+  C id_token now Zod-parsed (identityFromClaims) · D per-IP googleLimit added.
+  NEW file test/auth.google.unit.test.ts (8 DB-free tests: the B strictness + A
+  log-safety, run in CI's gate job). PROVE post-fix: typecheck+lint clean,
+  unit 8/8, auth.google 8/8 on Neon. CLASS NOTE owed: pino redact-path hardening
+  for err.config across coach/nutrition/geo/auth is its own repo-wide card.
+OPEN: (1) RE-REVIEW the round-1 fixes in the SAME fresh T3 chat (diff refreshed:
+  t3-google-login.diff). (2) After merge, the OWED.md tick for
+  "Google login" API-half lands as a SEPARATE web-repoint commit (OWED.md does
+  not exist on master — branch-topology ruling 2026-07-21). (3) web-repoint card:
+  buttons → new API, rewrite GoogleAuthSuccess.jsx to use cookies + adoptSession
+  (never setUser raw — the shared-browser hazard Card 2 closed), delete the
+  localStorage/#token path.
+NEXT CARDS (unchanged from the Day-14 block): 🔴 avatar storage (incl R3.9) ·
+  🔴 XP/badges/leaderboard/predictions/exercise-library (some need Kd rulings:
+  XP-storage column, leaderboard P4-before-P2.8 sequencing) · 🔴 workout history
+  calendar (BLOCKED, read its OWED entry) · deploy infra + DPDP worker (Day-14
+  gate) · 🟡 timezone TRAVEL rule · 🟡 ROTATE GROQ_API_KEY (Kd action).
+```
+
 TASK: DPDP Day-14 hard-delete worker 🔴  [CODE DONE, T3 OWED]  branch dpdp-day14-purge
   The blocking P2.8 legal gate, half of it. Part 4 §5.2 ANONYMIZES the users row
   instead of deleting it, so NO FK cascade collects user-owned PII — §5.2's
