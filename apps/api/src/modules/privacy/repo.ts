@@ -1,7 +1,9 @@
 // Part 4 §5.2 Day-14 hard delete — the only file in the repo that
 // irreversibly destroys user data. Every statement is literal SQL naming its
 // table, never a built identifier: a table name cannot be parameterised, and
-// this repo has no dynamic-identifier precedent anywhere (grep, 2026-07-22).
+// this repo has no dynamic-identifier precedent in `src` (T3 F9: the claim
+// used to say "anywhere", which the Day-14 round-1 review had already narrowed
+// to src — two TEST files use sql(t) over a frozen const array).
 // The lists in tables.ts are the reviewable claim; these are the statements
 // that honour it, and the purge test asserts every listed table ends empty,
 // so the two cannot drift apart silently.

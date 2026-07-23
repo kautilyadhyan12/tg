@@ -23,7 +23,8 @@
 // These lists DO NOT generate SQL. modules/privacy/repo.ts issues literal
 // DELETE statements, because a table name is an identifier and cannot be
 // parameterised, and because this repo has no dynamic-identifier precedent
-// anywhere (verified by grep, 2026-07-22). Drift between these lists and
+// in `src` (T3 F9 — the sentence said "anywhere" and was false: two TEST
+// files use sql(t) over a frozen const array). Drift between these lists and
 // those statements is caught by the test that asserts EVERY table below
 // holds zero rows for a purged user — a forgotten DELETE fails there
 // regardless of how the statements are written.
@@ -88,6 +89,62 @@ export const CASCADE_COLLECTED_TABLES = [
  *  half is covered on the day it is added rather than the day someone
  *  remembers the test exists. */
 export const PII_TABLES = [...DIRECT_DELETE_TABLES, ...CASCADE_COLLECTED_TABLES] as const;
+
+// ── §5.2's OTHER list: the export ───────────────────────────────────────────
+// "Export (the other DPDP right): a worker builds a JSON zip of every
+//  user-owned table above + profile" — "above" being the DELETE list, so the
+// two lists are deliberately the same set minus a stated exclusion. Keeping
+// them in ONE file is the point: a reviewer can hold them side by side, and
+// the export test FAILS if a table appears on neither, so adding a table
+// forces a decision about both rights rather than only the one you were
+// thinking about.
+
+/** On the delete list but deliberately NOT exported, each with its reason.
+ *  Kd-ruled 2026-07-23. */
+export const EXPORT_EXCLUDED_TABLES = {
+  // Device push credentials, not user content. A downloadable file containing
+  // live push tokens is a spoofing vector, and they are already deleted at
+  // Day 0 (users/repo.ts softDeleteUser), so a live user's export would be
+  // handing out current device tokens for no user benefit. §5.2's wording
+  // ("every user-owned table above") does cover them, which is exactly why
+  // this exclusion is written down rather than silently applied.
+  push_tokens: "device push credentials — exporting them is a spoofing vector, not user content",
+} as const;
+
+/** Tables whose rows go into the user's export = the delete list minus the
+ *  stated exclusions. Derived, never hand-listed, so it cannot drift from the
+ *  delete side. */
+export type ExportedTable = Exclude<PiiTable, keyof typeof EXPORT_EXCLUDED_TABLES>;
+
+export const EXPORTED_TABLES = PII_TABLES.filter(
+  // Object.hasOwn, not `in` (T3 round 2, F5): `in` walks Object.prototype,
+  // so a table named `toString` would test as excluded and vanish from the
+  // export. Unreachable today; the round-1 claim that F10 was "closed for
+  // free" was true of EXPORT_READERS only, not of this test.
+  (t): t is ExportedTable => !Object.hasOwn(EXPORT_EXCLUDED_TABLES, t),
+);
+
+// EXPORT_READERS is keyed by ExportedTable, NOT by `string` (T3 F3). With a
+// string key the compiler cannot see a missing reader, so adding a table to
+// the delete list — which by construction adds it to the export list — threw
+// a plain Error at request time: a 500 on the DPDP export for EVERY user, the
+// right dark app-wide, caught only by a test that CI does not run (D2).
+// Typing the key moves that failure to `tsc`, which CI does run. It also
+// closes the prototype hole in the old lookup (a table named `toString`
+// resolved to Object.prototype's member instead of undefined).
+
+// NOT EXPORTED because §5.2's list does not name them — RECORDED, NOT RULED
+// (R0.2). These hold user-linked rows and are on neither §5.2 list:
+//   gym_members · gym_staff · leaderboard_snapshots · api_cost_events ·
+//   usage_daily · trace_samples · refresh_tokens · one_time_tokens
+// Two are genuinely the user's own content and a reasonable person would
+// expect them in an export — `gym_members` (their membership history) and
+// `leaderboard_snapshots` (their name, rank and score). The rest are
+// credentials (refresh_tokens, one_time_tokens — must never be exported) or
+// operational/metering rows. This is the SAME gap already open on the delete
+// side (see SPEC GAP 1 above); both are owed one Kd ruling, and ruling them
+// TOGETHER is what keeps deletion and export symmetrical — which is the
+// property that makes either list auditable at all.
 
 export type PiiTable = (typeof PII_TABLES)[number];
 

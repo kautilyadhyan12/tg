@@ -14,3 +14,4 @@ export * from "./entitlements.js";
 export * from "./coach.js";
 export * from "./nutrition.js";
 export * from "./geo.js";
+export * from "./privacy.js";
