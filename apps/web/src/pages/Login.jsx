@@ -1,20 +1,34 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useTransition } from '../context/TransitionContext';
 import { Eye, EyeOff, Dumbbell, ArrowRight, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// Google OAuth is deferred: the new API has no /v1/auth/google yet (v1 §6.1
-// lists it, but P2.1 shipped email/password only). Re-enabled by its own
-// web-repoint card; this flag keeps the button in place meanwhile.
-const GOOGLE_LOGIN_ENABLED = false;
+// Google OAuth on the NEW API (v1 §6.1). A full-page navigation to
+// /v1/auth/google — it redirects to Google, and the callback sets the same
+// httpOnly cookies as password login (no token in the URL, none in JS).
+const GOOGLE_LOGIN_URL = `${import.meta.env.VITE_API_URL}/v1/auth/google`;
+// The callback sends failures back to /login?error=… — surfaced below.
+const GOOGLE_ERROR_MESSAGES = {
+  google_failed: 'Google sign-in failed. Please try again.',
+  google_not_configured: 'Google sign-in is currently unavailable.',
+};
 
 export default function Login() {
   const { login }  = useAuth();
   const navigate   = useNavigate();
   const { triggerTransition } = useTransition();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Surface a Google sign-in error passed back by the OAuth callback, once.
+  useEffect(() => {
+    const error = searchParams.get('error');
+    if (!error) return;
+    toast.error(GOOGLE_ERROR_MESSAGES[error] ?? 'Sign-in failed. Please try again.');
+    setSearchParams({}, { replace: true }); // clear so a refresh won't re-toast
+  }, [searchParams, setSearchParams]);
 
   const [form,    setForm]    = useState({ email: '', password: '' });
   const [show,    setShow]    = useState(false);
@@ -195,8 +209,6 @@ export default function Login() {
             </motion.button>
           </form>
 
-          {GOOGLE_LOGIN_ENABLED && (
-            <>
           {/* Or divider */}
           <div className="flex items-center gap-3 my-5">
             <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
@@ -212,7 +224,7 @@ export default function Login() {
             whileHover={{ scale: 1.01 }}
             whileTap={{   scale: 0.99 }}
             onClick={() => {
-              window.location.href = 'http://localhost:3001/api/auth/google';
+              window.location.href = GOOGLE_LOGIN_URL;
             }}
             className="w-full py-3.5 rounded-2xl font-semibold text-sm
                        flex items-center justify-center gap-2.5
@@ -232,8 +244,6 @@ export default function Login() {
             </svg>
             Continue with Google
           </motion.button>
-            </>
-          )}
 
           {/* Divider */}
           <div className="flex items-center gap-3 my-6">

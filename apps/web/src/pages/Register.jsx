@@ -6,10 +6,10 @@ import { useTransition } from '../context/TransitionContext';
 import { Eye, EyeOff, Dumbbell, ArrowRight, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// Google OAuth is deferred: the new API has no /v1/auth/google yet (v1 §6.1
-// lists it, but P2.1 shipped email/password only). Re-enabled by its own
-// web-repoint card; this flag keeps the button in place meanwhile.
-const GOOGLE_LOGIN_ENABLED = false;
+// Google OAuth on the NEW API (v1 §6.1). Full-page navigation to
+// /v1/auth/google; the callback sets httpOnly cookies (no token in JS). Sign-up
+// and sign-in share the endpoint — the callback creates the account if new.
+const GOOGLE_LOGIN_URL = `${import.meta.env.VITE_API_URL}/v1/auth/google`;
 
 const PERKS = [
   'Real-time AI form correction',
@@ -350,8 +350,6 @@ export default function Register() {
             </motion.button>
           </form>
 
-          {GOOGLE_LOGIN_ENABLED && (
-            <>
           {/* Or divider */}
           <div className="flex items-center gap-3 my-5">
             <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
@@ -367,7 +365,7 @@ export default function Register() {
             whileHover={{ scale: 1.01 }}
             whileTap={{   scale: 0.99 }}
             onClick={() => {
-              window.location.href = 'http://localhost:3001/api/auth/google';
+              window.location.href = GOOGLE_LOGIN_URL;
             }}
             className="w-full py-3.5 rounded-2xl font-semibold text-sm
                        flex items-center justify-center gap-2.5
@@ -387,8 +385,6 @@ export default function Register() {
             </svg>
             Continue with Google
           </motion.button>
-            </>
-          )}
 
           {/* Divider */}
           <div className="flex items-center gap-3 my-6">

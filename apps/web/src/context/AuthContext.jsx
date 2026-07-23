@@ -168,7 +168,9 @@ export function AuthProvider({ children }) {
 
   const value = {
     user,
-    setUser,
+    // setUser is deliberately NOT exported: a raw setUser bypasses adoptSession
+    // (the shared-browser queue hazard Card 2 closed). Change the user only via
+    // login / updateUser, which route through adoptSession. (web-repoint Google half.)
     loading,
     login,
     logout,

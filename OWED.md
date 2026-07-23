@@ -115,20 +115,28 @@ then; none may be hidden or reduced to close the gap.
       preserve when the calendar eventually moves. Any real XP display is
       gated on the XP-storage card above (P2.3 GAP-1), not on this.
       (Found 2026-07-21 while planning the calendar card.)
-- [ ] 🔴 **Google login** (`GOOGLE_LOGIN_ENABLED=false`, Login.jsx/Register.jsx).
-      **THE AUDIT MISS — owed since 2026-07-15 and tracked NOWHERE until now.**
-      v1 §6.1:438 lists Google OAuth in the auth module; P2.1 shipped
-      email/password only and there is no `/v1/auth/google` route, so the
-      buttons are HIDDEN and the `/auth/google/success` route was removed.
-      A user-facing feature is currently switched off — exactly what the
-      no-removal rule forbids leaving untracked.
-      Scope must include: `pages/GoogleAuthSuccess.jsx` is ORPHANED dead code
-      still calling `localStorage.setItem('accessToken')` and the now-wrong
-      `/auth/me` — rewrite or delete it; and it calls `setUser` RAW, bypassing
-      `adoptSession`, which would key the user to 'guest' and re-open the
-      shared-browser queue hazard Card 2 closed. Route session adoption through
-      `adoptSession` or stop exporting `setUser`. (DECISIONS 2026-07-15 Cards
-      1–2.)
+- [ ] 🔴 **Google login — BOTH CODE HALVES DONE, CLOSES ON SMOKE.** Not ticked:
+      the web-half T3 (2026-07-24) ruled the tick premature — a user-facing
+      feature is not closed until it works end-to-end, and its smoke cannot run
+      yet (DPDP Day-14 un-tick precedent: code that can't run isn't done).
+      API half merged to master 2026-07-24 (PR #48): `GET /v1/auth/google` +
+      `/callback` set httpOnly-cookie sessions (no token in URL/localStorage),
+      3-way upsert, email-verified via consumed token, CSRF state, per-IP limit;
+      fresh-chat T3 (2 blocking + 2 low, all fixed + mutation-verified). Web half
+      done on `web-repoint` (this branch): Login/Register buttons un-gated and
+      pointing at `${VITE_API_URL}/v1/auth/google`; `/auth/google/success` route
+      restored (bare route); Login toasts the callback's `?error=`;
+      `GoogleAuthSuccess.jsx` REWRITTEN — the `#token`/localStorage/raw-`setUser`
+      flow is GONE, it reads the cookie session AuthProvider restored (getMe →
+      adoptSession) and routes via the pure `googleSuccessRoute` (unit-tested);
+      `setUser` no longer exported from AuthContext.
+      **CLOSES WHEN:** (1) master merged into `web-repoint` so the endpoint the
+      buttons target exists ON THIS BRANCH (web-repoint trails master by 11 — the
+      API is real, just not integrated here yet; without the merge the buttons
+      404 in local dev/smoke), AND (2) Kd creates the Google OAuth credentials +
+      sets the API's `WEB_ORIGIN` to the web origin, AND (3) the browser
+      click-through passes. (v1 §6.1:438; DECISIONS 2026-07-15 Cards 1–2,
+      2026-07-24 google-login.)
 - [ ] 🔴 **Avatar / profile-picture storage.** No `profilePicture` field exists
       in the shared schema or the users DDL (command-verified), so this is the
       one Settings surface still on legacy mlApi. **Scope MUST include the R3.9

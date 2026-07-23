@@ -1,6 +1,60 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: web-repoint (Google login half) 🟡  [CODE DONE, T3 OWED]  branch web-repoint
+  The web side of the google-login API card (merged master PR #48). Wires the
+  buttons to the new endpoints so Google sign-in works end-to-end. Ticks the 🔴
+  OWED "Google login" line.
+SHIPPED (6 files + 1 test): Login.jsx / Register.jsx — removed the
+  GOOGLE_LOGIN_ENABLED=false gate (buttons restored) + the stale deferral
+  comment; buttons now navigate to `${VITE_API_URL}/v1/auth/google` (was
+  hard-coded localhost:3001). Login.jsx also reads the callback's `?error=`
+  (google_failed / google_not_configured) via useSearchParams and toasts once
+  (clears the param so a refresh won't re-toast). GoogleAuthSuccess.jsx —
+  REWRITTEN: deleted the `#token` fragment / localStorage / raw-setUser flow
+  (R3.7/R3.10). AuthProvider's mount effect (getMe → adoptSession) already
+  restores the cookie session on the full-page redirect, so the page only reads
+  useAuth() and routes by onboardingCompleted (mirrors Login.jsx:33-36); no
+  session → /login?error=google_failed. AuthContext.jsx — setUser NO LONGER
+  EXPORTED (nothing else used it raw; grep-verified), permanently closing the
+  Card-2 shared-browser hazard the OWED line named. App.jsx — /auth/google/
+  success route restored as a BARE route (not PublicRoute, so it controls its
+  own onboarding-vs-dashboard routing). NEW src/pages/googleAuth.test.js —
+  source assertions (web has no jsdom; coachApi.test.js precedent).
+DECISIONS: no new spec judgment — all determined by existing rulings (Cards 1-2
+  adoptSession; the google-login API decisions on master). OWED.md ticked.
+PROVE: googleAuth.test.js 4/4; full web suite = 151 passed / 1 failed, the 1
+  being the PRE-EXISTING syncClient.test.js `window is not defined` (no jsdom) —
+  PROVEN pre-existing by stashing this card and re-running on the clean branch
+  (identical failure). eslint on the 5 touched files: my files CLEAN; the only
+  errors are pre-existing react-refresh warnings on AuthContext's other named
+  exports (lines I didn't touch; web is out of the lint gate per 2026-07-08).
+SMOKE: OWED — cannot run without (a) real Google OAuth credentials (Kd creates
+  in the Google Cloud console) and (b) the running API carrying the Google
+  routes. web-repoint is 11 commits behind master (no Google API here) → before
+  smoke, MERGE master into web-repoint (also brings the API) or run the API from
+  a master checkout, and set the API's WEB_ORIGIN to the web dev origin so the
+  callback redirect lands on the web app.
+T3 ROUND 1 (fresh chat) — security pass CLEAN; no R0–R11 violations. Actioned:
+  · Behavioral test added — routing extracted to a pure `googleSuccessRoute`
+    (googleSuccessRoute.js), 5 unit tests covering every branch; MUTATION-VERIFIED
+    (swapping the onboarding branch turns 3 red). Replaces the weak routing
+    source-grep the reviewer flagged. Suite now 8/8.
+  · OWED.md UN-TICKED — the reviewer ruled the DONE tick premature (a feature
+    isn't closed until smoke); reframed to "both code halves done, CLOSES on
+    smoke" (DPDP Day-14 un-tick precedent).
+  · Reviewer's BLOCKER ("endpoint doesn't exist") was a BRANCH-LOCAL grep: the
+    endpoint EXISTS on master (routes.ts:259/267, google.ts, PR #48) — web-repoint
+    just trails master by 11. Corrected with evidence; the real residual is
+    integration + smoke, already flagged.
+  · Reviewer note (out of scope, R1.1): Settings.jsx still raw-fetches the OLD
+    backend for the DPDP account-delete path — owed its own OWED line/card.
+OPEN: (1) RECOMMENDED NEXT: merge master → web-repoint so the endpoint exists on
+  this branch (resolves the on-branch gap + unblocks smoke; 11 commits, expect
+  HANDOFF/DECISIONS/OWED conflicts). (2) re-review the round-1 fixes if desired.
+  (3) commit + PR into web-repoint (this branch's own history; NOT master).
+```
+
 TASK: Coach "Try again" control — the client half 🟡  [DONE 2026-07-22]
   WEB (web-repoint, commits a62586b + 304a089 + ee28e2a): the CLIENT half of the
   coach retry protection whose API half merged as PR #43. Coach.jsx cleared the

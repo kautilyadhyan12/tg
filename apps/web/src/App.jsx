@@ -10,6 +10,7 @@ import AppLayout from './components/common/AppLayout';
 // Pages
 import Login           from './pages/Login';
 import Register        from './pages/Register';
+import GoogleAuthSuccess from './pages/GoogleAuthSuccess';
 import ForgotPassword  from './pages/ForgotPassword';
 import Onboarding      from './pages/Onboarding';
 import Dashboard       from './pages/Dashboard';
@@ -57,8 +58,10 @@ export default function App() {
             <Route path="/forgot-password" element={
               <PublicRoute><ForgotPassword /></PublicRoute>
             } />
-            {/* Google OAuth (/auth/google/success) deferred to its own web-repoint
-                card — the new API has no /v1/auth/google yet (v1 §6.1). */}
+            {/* Google OAuth landing. Bare route (NOT PublicRoute): the callback
+                set the session cookies, so this page reads the restored session
+                and routes to onboarding/dashboard itself (web-repoint Google half). */}
+            <Route path="/auth/google/success" element={<GoogleAuthSuccess />} />
 
             {/* ── Onboarding ────────────────────────────────────────────── */}
             <Route path="/onboarding" element={
