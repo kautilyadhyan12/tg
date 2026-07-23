@@ -1,0 +1,161 @@
+// apps/api's SECOND entrypoint — v1 §6: "One Docker image runs in two modes:
+// `api` (HTTP) and `worker` (queues) — same code, different entrypoint."
+// This file is the scheduler shell and holds NO business logic: the work it
+// runs lives in modules/privacy/purge.ts as a plain function, which is why
+// the purge suite tests it against real Postgres with no queue involved.
+//
+// Queue name is `rollups` because Part 4 §5.1 puts the retention jobs there
+// ("jobs live in the BullMQ `rollups` queue; each is idempotent"), and Part 8's
+// alert catalog watches BullMQ queue age with `ops worker restart`.
+//
+// DELIBERATE EXCEPTION TO THE REDIS SEAM, declared rather than slipped in:
+// src/redis.ts says "Modules depend on RedisLike, never on ioredis directly",
+// and this file imports ioredis directly. Two reasons it cannot use the seam.
+// (1) `createIoRedis` sets `maxRetriesPerRequest: 1` and
+// `enableOfflineQueue: false`; BullMQ REQUIRES `maxRetriesPerRequest: null`
+// because its blocking commands must retry indefinitely. (2) A blocking
+// worker monopolises its connection, so sharing one with app commands would
+// stall them. This is an ENTRYPOINT (same tier as index.ts), not a module,
+// so the rule's subject does not cover it.
+import * as Sentry from "@sentry/node";
+import { Queue, Worker } from "bullmq";
+import { Redis } from "ioredis";
+import pino from "pino";
+import postgres from "postgres";
+import { loadConfig } from "./config.js";
+import { purgeDueUsers } from "./modules/privacy/purge.js";
+
+const config = loadConfig(process.env);
+const log = pino({ level: config.LOG_LEVEL });
+
+// T3 round 2 (R8.1): Sentry.init lives in app.ts, which this entrypoint never
+// builds — so nothing from the worker reached alerting at all. Combined with
+// the throw-on-shortfall in the job handler below, a nightly purge that failed
+// for every user (or withheld every marker for schema drift) now reaches the
+// failed set AND Sentry. Same options as app.ts, including sendDefaultPii:
+// false (a purge logs user ids; none of it should leave). [round-4 V4: this
+// comment said "the errored-purge ack above" — the handler is BELOW, and it
+// throws, not acks; corrected.]
+if (config.SENTRY_DSN !== undefined) {
+  Sentry.init({ dsn: config.SENTRY_DSN, environment: config.NODE_ENV, sendDefaultPii: false });
+}
+
+// Config only *requires* REDIS_URL in production; a worker cannot run without
+// one in any environment, so it fails fast here rather than half-starting.
+const redisUrl = config.REDIS_URL;
+if (redisUrl === undefined) {
+  log.fatal({ event: "worker.no_redis" }, "REDIS_URL is required to run the worker");
+  process.exit(1);
+}
+
+export const ROLLUPS_QUEUE = "rollups";
+export const DPDP_PURGE_JOB = "dpdp.purge";
+
+const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
+const sql = postgres(config.DATABASE_URL, { prepare: false, max: 2 });
+
+const queue = new Queue(ROLLUPS_QUEUE, { connection });
+
+// Daily at 03:00 UTC. A deterministic jobId collapses duplicate enqueues
+// (Part IV #3) so a redeploy cannot stack schedules. The window is measured
+// in days, so the hour is operational (off-peak), not a correctness choice —
+// and unlike streaks this needs no org-local day maths (trap #8).
+// A Redis hiccup at boot must be the deliberate exit(1) below, not an
+// unhandled rejection off a top-level await (T3 round 3 minor).
+try {
+  await queue.upsertJobScheduler(
+    DPDP_PURGE_JOB,
+    { pattern: "0 3 * * *" },
+    {
+      name: DPDP_PURGE_JOB,
+      opts: {
+        // R3.5: the handler is idempotent (an already-purged user is not
+        // re-selected), so a retry is free.
+        attempts: 3,
+        backoff: { type: "exponential", delay: 60_000 },
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 200 }, // the dead-letter tail (R8.3)
+      },
+    },
+  );
+} catch (err) {
+  log.fatal({ err }, "failed to register the purge schedule");
+  process.exit(1);
+}
+
+const worker = new Worker(
+  ROLLUPS_QUEUE,
+  async (job) => {
+    // T3 F1 (R8.3): returning here would mark an unknown job COMPLETED.
+    // Part 4 §5.1 puts every retention sweep on this same queue and BullMQ
+    // workers compete for it, so the day the refresh_tokens/webhook_events
+    // sweeps land, this process would eat and silently ack them. Throwing
+    // puts it on the failed set instead, where the DLQ tail and the
+    // `worker.on("failed")` handler can see it — silent job death is
+    // exactly what R8.3 forbids.
+    if (job.name !== DPDP_PURGE_JOB) {
+      throw new Error(`unknown job on ${ROLLUPS_QUEUE}: ${job.name}`);
+    }
+    // R8.3: every background job logs start/finish/duration.
+    const startedAt = Date.now();
+    log.info({ event: "job.started", jobId: job.id, job: job.name }, "job started");
+    const result = await purgeDueUsers({ sql, log });
+    log.info(
+      { ...result, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
+      "job finished",
+    );
+    // R8.3: a run that did not fully succeed must NOT be acked COMPLETED —
+    // it has to reach the failed set, the DLQ tail, the `failed` handler and
+    // Sentry. Two ways it can fall short, and BOTH must throw (T3 round 3, F4
+    // added the second — round 2 covered only per-user errors):
+    //   errors               — a user's transaction threw
+    //   schemaDriftSnapshots — a leaderboard snapshot the scrub cannot certify,
+    //                          so this run withheld every marker (fail-closed)
+    // tools/dpdp-purge.ts exits non-zero on the identical condition; the two
+    // entrypoints must not disagree about what a failure is.
+    if (result.errors > 0 || result.schemaDriftSnapshots > 0) {
+      throw new Error(
+        `purge not fully certified: ${String(result.errors)} failed, ` +
+          `${String(result.schemaDriftSnapshots)} uncertifiable snapshot(s)`,
+      );
+    }
+  },
+  { connection },
+);
+
+// R8.3: silent job death is forbidden — a failure that exhausts its attempts
+// stays on the failed set (the DLQ tail above) and says so here.
+worker.on("failed", (job, err) => {
+  Sentry.captureException(err, { tags: { job: job?.name ?? "unknown", queue: ROLLUPS_QUEUE } });
+  log.error(
+    {
+      attemptsMade: job?.attemptsMade,
+      errName: err.name,
+      errMessage: err.message,
+      event: "job.failed",
+      job: job?.name,
+      jobId: job?.id,
+    },
+    "job failed",
+  );
+});
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.on(signal, () => {
+    log.info({ signal }, "worker shutting down");
+    void (async () => {
+      // close() waits for the in-flight job, so a purge transaction is never
+      // torn down mid-cascade.
+      await worker.close();
+      await queue.close();
+      await connection.quit();
+      await sql.end();
+      // T3 round 3 minor: an exception captured moments before SIGTERM would
+      // be dropped without a flush. Bounded so shutdown cannot hang on it.
+      await Sentry.close(2000);
+      process.exit(0);
+    })();
+  });
+}
+
+log.info({ event: "worker.started", queue: ROLLUPS_QUEUE }, "worker started");

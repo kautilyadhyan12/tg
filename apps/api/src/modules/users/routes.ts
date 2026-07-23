@@ -9,6 +9,7 @@ import type { Sql } from "postgres";
 import type { z } from "zod";
 import { createDualRateLimit } from "../auth/rateLimit.js";
 import type { RedisLike } from "../../redis.js";
+import { DPDP_RETENTION_DAYS } from "../../retention.js";
 import { createLogOnlyUsersEmailSender, type UsersEmailSender } from "./email.js";
 import {
   putFitnessProfileRequestSchema,
@@ -80,10 +81,13 @@ export function registerUserRoutes(
     const { emailSent } = await service.deleteAccount(usersDeps, authedUserId(req));
     // T3 2026-07-11 finding 6: don't promise an email that wasn't sent
     // (OAuth-only accounts have no address; sender may also have failed).
+    // The number is interpolated from src/retention.ts, never restated: if
+    // the window ever widens (Kd's open privacy-scope ruling), copy that
+    // still said "14 days" would be the API lying about its own behaviour.
     return reply.status(200).send({
       message: emailSent
-        ? "Account scheduled for deletion. You have 14 days to undo via the link we emailed you."
-        : "Account scheduled for deletion. It will be permanently removed after 14 days.",
+        ? `Account scheduled for deletion. You have ${String(DPDP_RETENTION_DAYS)} days to undo via the link we emailed you.`
+        : `Account scheduled for deletion. It will be permanently removed after ${String(DPDP_RETENTION_DAYS)} days.`,
     });
   });
 
