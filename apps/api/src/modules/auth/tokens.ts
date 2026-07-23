@@ -15,6 +15,9 @@ const accessClaimsSchema = z.object({ sub: z.string().uuid(), typ: z.literal("ac
 // Cookie names live here so plugin.ts and routes.ts can't drift (T3 2026-07-11).
 export const ACCESS_COOKIE = "accessToken";
 export const REFRESH_COOKIE = "refreshToken";
+// google-login: short-lived anti-CSRF `state` for the OAuth round-trip. Never a
+// session credential — set on the redirect, matched-and-cleared on the callback.
+export const OAUTH_STATE_COOKIE = "g_oauth_state";
 
 export class InvalidAccessTokenError extends Error {
   constructor(message: string) {

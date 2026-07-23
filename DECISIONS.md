@@ -640,3 +640,93 @@ The reviewer probed Neon rather than reasoning, and its headline finding is the 
 - (PROVE, both halves) (a) CI `api tests on local Postgres` GREEN, **341 passed / 0 skipped, ~2 min** (local rehearsal on the same container: 36 files / 341 passed, 46 s). (b) MUTATION on CI: flipped one purge assertion (streaks after purge `0→999`), pushed → `api tests on local Postgres` went RED (ONLY that check; the DB-free `gate` stayed green — the exact gap this card closes, shown live), then reverted via `--force-with-lease` → back to green. The deliberate-break commit (131417f) is NOT in the merged history.
 - (SMOKE — none owed) No web-reachable surface (a workflow file); PROVE(b) is its equivalent (Part I §2).
 - (T3 — fresh chat, per DECISIONS 2026-07-11 "required for EVERY task") No blocking violation; verdict "the change is sound." Findings were this records entry (R11.3), the executed-count residual (OWED, above), and the required-checks point (existing 2026-07-06 ruling). All addressed. **READY TO MERGE** (V7): CI green, no blocking finding.
+
+## google-login — Google OAuth on the new API (2026-07-24; API half, branch google-login)
+
+Restores the switched-off Google sign-in buttons (OWED `web-repoint` 🔴, cutover
+blocker) by building the missing `/v1/auth/google` endpoints on the new API.
+v1 §6.1 lists Google OAuth in the auth module; P2.1 shipped email/password only.
+API-half only + additive → merges to master normally; the web repoint (buttons +
+rewriting `GoogleAuthSuccess.jsx`) is a separate follow-up on `web-repoint`.
+
+- 2026-07-24 · v1 §6.1 · **NEW DEP `google-auth-library` ^9.15.1** (Google's own
+  OAuth2 client; needed to exchange the code + verify the id_token signature).
+  R1.4 approval; the SDK types never leave `modules/auth/google.ts` (R7.1). The
+  old `passport`/`passport-google-oauth20` is Express-bound and NOT ported.
+  (Weekly-download / maintenance sanity check to be pasted at PROVE.)
+- 2026-07-24 · R3.7/R3.10 (SECURITY — the old flow is deliberately NOT ported) ·
+  The salvage callback (googleAuth.routes.js:45) returned the JWT in a URL
+  fragment (`#token=`) and the web stored it in `localStorage`
+  (GoogleAuthSuccess.jsx:31). Both are BANNED on the new API (tokens only in
+  httpOnly cookies, DECISIONS 2026-07-11; never in URLs, R3.10 note). The new
+  callback calls the same `setSessionCookies` as password login and redirects to
+  `${WEB_ORIGIN}/auth/google/success` with NOTHING in the URL.
+- 2026-07-24 · v1 §6.1 (SPEC GAP — email-verified for Google users; Kd-approved) ·
+  users has no verified column; emailVerified is DERIVED from a consumed
+  verify_email one-time token (DECISIONS 2026-07-11). Google already verifies the
+  email (old `isEmailVerified: true`, passport.js:47,60). Faithful port WITHOUT a
+  new column (R0.2): on Google create/link, `recordVerifiedOAuthEmail` inserts a
+  CONSUMED verify_email token (random marker hash, never emailed) so
+  `isEmailVerified()` derives true. Idempotent — skipped if already verified.
+- 2026-07-24 · v1 §6.1 / passport.js:41-43 (account linking; Kd-approved) ·
+  3-way upsert: known (provider,subject) → login; else same-email account → LINK
+  Google to it and NEVER touch the password (ported "do NOT downgrade a local
+  account"); else create an OAuth-only user (password_hash/hash_algo NULL —
+  identity.ts allows it). Link is `ON CONFLICT (provider,subject) DO NOTHING`
+  (idempotent replay). A soft-deleted (`status != 'active'`) account is refused
+  a Google sign-in (google_unavailable), matching login's active-only rule.
+- 2026-07-24 · Part IV #6 (state cookie sameSite) · The anti-CSRF `state` cookie
+  is sameSite 'lax' (NOT the session cookies' 'none'): the Google→callback hop is
+  a top-level GET to our own API origin, where 'lax' IS sent and is the safer
+  default for a CSRF nonce. Short-lived (600 s), httpOnly, secure in prod, path
+  /v1/auth; cleared on the callback regardless of outcome.
+- 2026-07-24 · config (ported `googleConfigured` guard, passport.js:8-12) ·
+  GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_CALLBACK_URL are ALL optional;
+  any unset → `createGoogleVerifier` returns null → both routes redirect
+  `?error=google_not_configured` and the rest of auth runs (GROQ_API_KEY
+  precedent). Kd creates the real credentials in the Google Cloud console at the
+  smoke step; tests inject a fake `GoogleVerifier` via buildApp overrides (the
+  emailSender seam) and never call Google. No migration — `auth_identities` has
+  existed since 0001_init.
+
+## google-login — T3 round 1 (2026-07-24; fresh chat) — 2 blocking + 2 low, all resolved
+- (A, R3.10/R3.6 — BLOCKING, secret-in-logs) The callback catch logged the whole
+  `err`. The REAL GoogleVerifier.exchange throws a google-auth-library/gaxios
+  error whose `.config` carries the token-endpoint request — client_secret + the
+  auth code — and pino's redact paths (app.ts) cover only req headers/set-cookie,
+  NOT `err.config`. FIX: log `errorSummary(err)` (the message only, "invalid_grant"
+  etc.), never the object. `errorSummary` is a pure exported helper, unit-tested
+  (a gaxios-shaped error with a secret in `.config` → summary is the message and
+  contains neither the secret nor the code). CLASS NOTE (recorded, NOT fixed here
+  per R1.1): other modules (coach/nutrition/geo, and auth service.ts:169) also log
+  `{ err }` of external-call errors; a pino redact-path hardening for
+  `err.config`/`err.response`/`err.request` is owed as its own repo-wide card.
+- (B, R3.1/R3.7 — BLOCKING, account-takeover surface) `payload.email_verified ===
+  false` threw only on explicit false; an ABSENT claim passed and the email was
+  treated as verified — and that fact auto-links a Google login into an existing
+  password account (service.ts step 2). FIX: `email_verified !== true` throws.
+  MUTATION-VERIFIED: reverting to `=== false` turns the DB-free "email_verified
+  ABSENT → throws" test RED for the right reason, restored to green by the fix.
+- (C, R2.3 — folded into B's fix) The id_token payload was read with ad-hoc
+  guards. Now parsed through `googleIdTokenClaimsSchema` (Zod) in the new
+  `identityFromClaims(raw: unknown)` — the R2.3 boundary for the claim VALUES
+  (the signature is still verified by verifyIdToken). An undefined payload fails
+  the parse and throws (replaces the old explicit null-check). Exported + unit-
+  tested (6 cases) since the SDK path can't be driven in-process.
+- (D, R3.7 — low, closed not deferred) The two OAuth GETs carried only the global
+  300/min floor while every other auth route has a strict per-route limit, and the
+  callback drives an external token exchange + a user INSERT. Added a dedicated
+  IP-only `googleLimit` (20/hr, the auth number; no email in the request) on both
+  routes. DB-suite test: 21st callback from one IP → 429.
+- (security pass — the reviewer confirmed) state/CSRF sound (crypto-strong nonce,
+  httpOnly lax cookie, single-use, double-submit); password-untouched guarantee
+  verified (step 2 only INSERTs auth_identities); verified-marker mechanically
+  correct; link/create-race idempotent; cookie flags correct; SQL clean; no open
+  redirect (targets are fixed WEB_ORIGIN / provider authUrl); SDK confined to
+  google.ts. Behavioral note (intended, not a bug): a soft-deleted account whose
+  email matches a Google identity is locked out of Google sign-in (active-only +
+  email UNIQUE) — recorded so Kd knows it's a dead-end by design.
+- (PROVE, post-fix) typecheck + lint (4 changed files) clean; auth.google.unit
+  8/8 (DB-free, runs in CI's gate job); auth.google 8/8 on real Neon (incl. the
+  rate-limit test); finding B mutation-verified red→green. **READY TO MERGE** (V7)
+  once Kd re-reviews — every T3 finding resolved.

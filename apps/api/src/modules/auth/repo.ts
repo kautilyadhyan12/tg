@@ -105,6 +105,67 @@ export async function setPasswordHash(
     WHERE id = ${userId}`;
 }
 
+// ── OAuth identities (auth_identities; identity.ts §3.1 "Google today") ──────
+
+/** The user linked to this provider identity, or null. */
+export async function findUserIdByAuthIdentity(
+  sql: Sql,
+  provider: string,
+  subject: string,
+): Promise<string | null> {
+  const rows = await sql<{ user_id: string }[]>`
+    SELECT user_id FROM auth_identities
+    WHERE provider = ${provider} AND subject = ${subject}`;
+  return rows[0]?.user_id ?? null;
+}
+
+/** Create an OAuth-only user: password_hash / hash_algo stay NULL (identity.ts:
+ *  both nullable, "OAuth-only accounts"). null = email already taken (23505),
+ *  so the service re-resolves and links instead. */
+export async function createOAuthUser(
+  sql: Sql,
+  input: { email: string; displayName: string },
+): Promise<string | null> {
+  try {
+    const rows = await sql<{ id: string }[]>`
+      INSERT INTO users (email, display_name)
+      VALUES (${input.email}, ${input.displayName})
+      RETURNING id`;
+    return rows[0]?.id ?? null;
+  } catch (err) {
+    if (isUniqueViolation(err)) return null;
+    throw err;
+  }
+}
+
+/** Idempotent link (ON CONFLICT on auth_identities_provider_subject_uq): a
+ *  replayed callback is a no-op, never a 23505. */
+export async function linkAuthIdentity(
+  sql: Sql,
+  input: { userId: string; provider: string; subject: string },
+): Promise<void> {
+  await sql`
+    INSERT INTO auth_identities (user_id, provider, subject)
+    VALUES (${input.userId}, ${input.provider}, ${input.subject})
+    ON CONFLICT (provider, subject) DO NOTHING`;
+}
+
+/** Marks an OAuth account's email verified by writing a CONSUMED verify_email
+ *  token — the exact shape isEmailVerified() derives from (DECISIONS
+ *  2026-07-11: users has NO verified column). Google asserts the email, so this
+ *  is the faithful port of the old `isEmailVerified: true` (passport.js:47,60)
+ *  WITHOUT inventing a schema field (R0.2). token_hash is a random marker,
+ *  never emailed and never consumable. */
+export async function recordVerifiedOAuthEmail(
+  sql: Sql,
+  userId: string,
+  markerHash: string,
+): Promise<void> {
+  await sql`
+    INSERT INTO one_time_tokens (user_id, purpose, token_hash, expires_at, used_at)
+    VALUES (${userId}, 'verify_email', ${markerHash}, now(), now())`;
+}
+
 // ── refresh tokens (rotation + reuse detection, v1 §6.1 / Part 4 §3.1) ──────
 
 export async function insertRefreshToken(

@@ -42,6 +42,14 @@ const envSchema = z.object({
   // 503s cleanly (fail-closed, GROQ_API_KEY precedent); the browse/read side
   // (saved_routes, runs) works without it.
   ORS_API_KEY: z.string().min(1).optional(),
+  // google-login card: v1 §6.1's Google OAuth. All three unset = Google
+  // sign-in cleanly disabled (the routes redirect with ?error=google_not_
+  // configured), the rest of auth runs — porting the old `googleConfigured`
+  // guard (passport.js:8-12), same pattern as GROQ_API_KEY. CALLBACK_URL must
+  // exactly match the redirect URI registered in the Google Cloud console.
+  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+  GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+  GOOGLE_CALLBACK_URL: z.string().url().optional(),
 });
 
 export type AppConfig = Readonly<z.infer<typeof envSchema>>;
