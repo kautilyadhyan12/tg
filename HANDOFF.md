@@ -1697,3 +1697,52 @@ NEXT CARDS: 🔴 DPDP JSON-EXPORT (the other §5.2 half; needs R2+zip or the
   for a purged person), SPEC GAP 2 (password_hash on the tombstone) ·
   🔴 Google login · 🔴 avatar storage · 🟡 ROTATE GROQ_API_KEY.
 ```
+
+```
+TASK: DPDP data export 🔴  [DONE 2026-07-23, merged PR #46 (5c76d6c)]
+  API, branch dpdp-export off master. GET /v1/users/me/export returns the
+  user's data as JSON: 17 tables + profile, DERIVED from the Day-14 delete
+  list (EXPORTED_TABLES = PII_TABLES − EXPORT_EXCLUDED_TABLES) so §5.2's two
+  rights cannot drift apart; a DB-FREE test fails if a table lands on neither.
+  Kd-ruled DEVIATION on delivery ONLY: §5.2 says "JSON zip via signed URL,
+  7-day expiry" and this returns JSON from an authed endpoint, because that
+  infra does not exist (no R2 client, no bucket keys, no zip lib) and v1 §18
+  itself says "data-export endpoint". Content identical either way.
+  Kd rulings: push_tokens EXCLUDED (device credentials, spoofing vector),
+  auth_identities INCLUDED, users columns ENUMERATED not SELECT * (fail-closed
+  — a new column is missed, never leaked), rate limit 3/hour PER USER.
+  api 341/341 on Neon. No migration, no new dependency.
+  THREE fresh-chat T3 rounds (10 + 6 + 4 findings). The lesson, and it is the
+  same one three times: I fixed the artifact that was NAMED and left the
+  identical weakness one level down — reader map key → strip map key → strip
+  map VALUES. Each time tsc was silent and the CI-visible suite was green.
+  BIGGEST CATCHES: the rate limit shipped with an IP dimension that refused a
+  second gym member's FIRST export (Jorhat gyms = shared connections, P6) and
+  cited a precedent that says the opposite in as many words — inverted, not
+  quoted (V2); SELECT * shipped our per-request AI cost on every coach message
+  and the anti-cheat flags v1 §14.1 calls SILENT; and my own tests were blind
+  TWICE (the rate-limit test used a different IP per request by design; the
+  credentials test could not see internal columns until I mutation-tested it).
+  What finally worked: break the fix on purpose and watch the test go red.
+  OPEN, recorded not ruled: whether gym_members + leaderboard_snapshots belong
+  in the export (same gap as the delete side — rule them TOGETHER so the two
+  rights stay symmetrical); the strip is COLUMN-level and cannot see inside
+  jsonb (matters when P4.y lands); workout_sets exports its denormalised
+  user_id; users.deleted_at omitted with no stated reason.
+NEXT CARD (Kd-picked): CI must run the DB test suites. MEASURED 2026-07-23:
+  `pnpm test` with no DATABASE_URL = 153 passed / 188 SKIPPED, and 16 of 36
+  test FILES never run — including every Day-14 purge and export test. The
+  mechanism already exists: ci.yml's `migrations` job creates a Neon branch,
+  applies migrations, deletes it. It just never runs a test. Approved shape:
+  extend THAT job (zero extra Neon branches) with seed + `pnpm --filter api
+  test`; keep `gate`'s DB-free `pnpm test` for fast feedback. Only apps/api
+  needs a DB (verified). No seed npm script exists — call
+  `tsx src/db/seed.ts`. NB CI branches FROM primary with init_source:
+  parent-data, so it clones DEV DATA — a real flakiness vector, and the open
+  question is whether to start the CI branch EMPTY instead.
+THEN: 🔴 deploy the worker (closes the DPDP gate; needs a Dockerfile +
+  compose service — NONE exist, and it is ~₹400-1,200/mo, so it is a Kd money
+  call) · 🔴 web-repoint owed endpoints · ❓ Kd rulings owed (privacy-law
+  scope; refresh_tokens keeps ip+user_agent for a purged person; password_hash
+  on the tombstone) · 🟡 ROTATE GROQ_API_KEY (Kd's own action, deferred 5×).
+```
