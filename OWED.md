@@ -258,6 +258,18 @@ then; none may be hidden or reduced to close the gap.
       user-facing strings on `DELETE /v1/users/me`. Had only the code read the
       constant, widening to GDPR's 30 would have left the API telling users
       "you have 14 days" while purging at 30.
+      **PARTIAL PROGRESS 2026-07-24 (deploy-infra card) — STILL UNTICKED, and
+      deliberately so.** Three of the four command-verified absences above are
+      now closed: `infra/Dockerfile` exists (one image, two modes, v1 §6),
+      `infra/docker-compose.yml` defines a `worker` service running
+      `src/worker.ts`, and `infra/README.md` NAMES where the purge runs — the
+      worker service on the Hetzner VPS, `dpdp.purge` on the `rollups` queue at
+      03:00 UTC. What remains is the part that actually deletes data: **no host
+      is provisioned and nothing is running**, and `ci.yml` still has no deploy
+      job. An image proven on a laptop is not a scheduled sweep. This line ticks
+      when the compose runs on a real host — the same standard that unticked it
+      after T3 finding D1, applied to the card that built the image rather than
+      relaxed for it.
 - [x] 🔴 **CI runs none of the database tests — including the purge suite.**
       Found by the DPDP T3 (finding D2) and MEASURED both ways: the gate job
       runs `pnpm test` with NO `DATABASE_URL`, giving **151 passed / 173
@@ -348,8 +360,30 @@ then; none may be hidden or reduced to close the gap.
       on greenfield prod (empty DB) — matters only for a data-carrying cutover.
       (DECISIONS 2026-07-15.)
 - [ ] 🔴 New API deployed and healthy (`/health`), `data_backend` flag seeded.
+      The IMAGE and compose now exist (`infra/`, 2026-07-24) and are proven on a
+      local Docker stack; no host is provisioned, so nothing is deployed and this
+      stays open. Provisioning starts the ~₹700–1,200/mo spend Kd already accepted
+      at the P0.4b ruling (DECISIONS 2026-07-07) — it is a decision to execute,
+      not a decision still to make.
 - [ ] 🔴 Secrets in the deploy platform (escrow doc, Part 8 §1) — never in repo.
+      `infra/README.md` lists the four hard-required variables (`DATABASE_URL`,
+      `WEB_ORIGIN`, `JWT_SECRET`, plus `REDIS_URL` in production) and the file
+      they belong in on the host (`infra/api.env`, gitignored + dockerignored).
+      The escrow doc itself is still owed, as are the two rotations above.
 - [ ] 🔴 Backup/restore drill actually performed and logged (Part 8).
+- [ ] ⚪ **CI does not build or push the API image, and nothing auto-deploys.**
+      Deferred by the 2026-07-24 deploy-infra card rather than half-built: v1 §19's
+      pipeline ends "build images → migrate → deploy staging → manual promote",
+      but there is no registry and no host to push to yet, so a build-and-push job
+      would be ceremony that proves nothing. Its own card once a host exists.
+- [ ] ⚪ **The image runs TypeScript through `tsx` rather than a compiled `dist/`.**
+      Kd-approved at the deploy-infra plan gate as option A. No package the image
+      needs has a build script (`apps/api`, `@app/shared` and `@app/engine` all
+      run from source; only `apps/web` has one, `vite build`), so compiling means
+      adding build scripts to three packages and repointing their `main`/`exports`
+      — which changes module resolution for typecheck and test everywhere, past
+      the Part I §7b one-thing-per-chat ceiling. Cost today: a boot-time transpile
+      and a larger image. Worth revisiting if boot time or image size ever bites.
 
 ## 🟡 Needed before real users, not before cutover
 
