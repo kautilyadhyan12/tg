@@ -1,0 +1,91 @@
+# DEV topology, v1 §19: "dev (docker-compose: pg+redis local)". This is the
+# environment that PROVES the image before a rupee is spent on a VPS — the whole
+# stack (api + worker + postgres + redis) runs on the laptop.
+#
+# Usage:  docker compose -f infra/docker-compose.dev.yml up --build
+# Then, from a HOST checkout (drizzle-kit is a devDependency and is deliberately
+# absent from the --prod image — see the Dockerfile and README):
+#   DATABASE_URL=postgres://aihg:aihg@localhost:5433/aihg \
+#     corepack pnpm --filter api exec drizzle-kit migrate
+#   DATABASE_URL=... corepack pnpm --filter api exec tsx src/db/seed.ts
+
+name: aihg-dev
+
+x-api-image: &api-image
+  image: aihg-api:local
+  build:
+    context: ..
+    dockerfile: infra/Dockerfile
+  restart: unless-stopped
+  init: true
+  environment: &api-env
+    NODE_ENV: development
+    LOG_LEVEL: info
+    # Service names, not localhost — inside the compose network the containers
+    # reach each other on the standard ports regardless of the host mappings
+    # below.
+    DATABASE_URL: postgres://aihg:aihg@postgres:5432/aihg
+    REDIS_URL: redis://redis:6379
+    # Vite's default dev origin. CORS is exact-origin with credentials, so this
+    # must match the browser's address EXACTLY or every cookie request fails
+    # (Part IV #6 — the Card-4 lesson). Smoking from a phone on the LAN? Set
+    # this to the laptop's LAN address, not localhost.
+    WEB_ORIGIN: http://localhost:5173
+    # DEV-ONLY PLACEHOLDER, not a secret and never used anywhere real. config.ts
+    # requires 32+ chars so HS256 is not brute-forceable. Production secrets live
+    # in infra/api.env on the host and never enter the repo or the image (R3.6).
+    JWT_SECRET: dev-only-placeholder-not-a-real-secret-000
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_started
+
+services:
+  # pgvector/pgvector:pg16 — NOT plain postgres. Migration 0001 needs the `vector`
+  # extension (Part 4 §3.7's pinned vector(384)) plus contrib citext and pgcrypto,
+  # all present in this image. It is the same image ci.yml's db-tests job runs.
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aihg
+      POSTGRES_PASSWORD: aihg
+      POSTGRES_DB: aihg
+    ports:
+      # 5433 on the host, so a Postgres already installed locally on 5432 is
+      # untouched.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aihg -d aihg"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      # 6380 on the host: the repo-root docker-compose.yml (the LEGACY mongo
+      # stack, still serving the old backend until P2.8) already binds 6379, and
+      # both must be able to run at once during the cutover.
+      - "6380:6379"
+    volumes:
+      - redisdata:/data
+
+  api:
+    <<: *api-image
+    ports:
+      - "3000:3000"
+
+  worker:
+    <<: *api-image
+    command: ["node", "--import", "tsx", "src/worker.ts"]
+    healthcheck:
+      disable: true
+
+volumes:
+  pgdata:
+  redisdata:
