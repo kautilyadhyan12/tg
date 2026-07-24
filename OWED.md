@@ -68,6 +68,14 @@ then; none may be hidden or reduced to close the gap.
       does not exist anywhere in Part 4 — inventing a column would violate R0.2,
       so the badges.py XP/level curve stays unported until a ruled migration
       card. (DECISIONS 2026-07-11 P2.3 GAP-1.)
+      **RULED 2026-07-24 (Kd): KEEP the feature — add XP storage.** XP/levels is
+      a live feature on the old backend and the no-removal rule keeps it; the
+      GAP-1 deferral is now discharged by an explicit ruling to build its home.
+      Next: a 🔴 migration card adds XP storage (column or small table, SQL
+      reviewed by Kd — the onboarding-storage / user_fitness_profiles precedent
+      for Kd-authorised schema beyond the spec) and ports the badges.py
+      XP/level curve verbatim (R5.4). THEN the web XP display repoints.
+      Dropping it was never on the table — no-removal.
 - [ ] 🔴 **Badge catalog + challenges screens.** "Tables now, screens later"
       carve; needs catalog/challenges read endpoints. Challenges also need a
       scheduler for weekly rotation. (DECISIONS 2026-07-11 P2.3.)
@@ -78,6 +86,18 @@ then; none may be hidden or reduced to close the gap.
       Kd must either land a minimal read early or explicitly accept a dark
       window. DECIDE AT THIS LINE — do not silently flip it.
       (DECISIONS 2026-07-16, Card 3.)
+      **RULED 2026-07-24 (Kd): the feature STAYS and is built PROPERLY in P4;
+      accept a temporary "coming soon" state at the cutover moment** (the
+      framework's sanctioned dark-window option — NOT a removal; the leaderboard
+      screen stays working on the old backend until cutover, and shows a
+      "coming soon" placeholder only if P4 has not yet landed when the old
+      backend is switched off). Rationale: at launch the DB is empty
+      (DECISIONS 2026-07-13), so a global board has no entries to show, and it
+      needs the full verified-entries-only anti-cheat (v1 §14) that is real P4
+      work — a rushed empty board before cutover buys nothing. No feature is
+      deleted or reduced; this only sequences WHEN its new-backend home is
+      built. Revisit if Kd later wants it visible at cutover → then a minimal
+      read lands early instead.
 - [ ] 🔴 **Predictions** (PredictionsSection) — the 2B §5 card (P2.3 carve).
 - [ ] 🔴 **Exercise library content**: display names, instructions, media/GIFs,
       server-side search. The Part 4 §3.4 catalog is data-only
