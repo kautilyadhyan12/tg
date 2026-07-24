@@ -1,0 +1,42 @@
+# TLS terminator in front of the API (v1 §19: "Docker Compose: caddy (TLS) + api
+# + worker"). Caddy obtains and renews a certificate automatically.
+#
+# THIS PROXY IS PART OF THE AUTH CONTRACT, not just plumbing. DECISIONS
+# 2026-07-11 (P2.1 GAP-2) fixed production cookies at sameSite='none' +
+# secure=true, because the web is on Vercel and the API is on Hetzner — a
+# cross-site pair where lax/strict are silently dropped on XHR. TWO DISTINCT
+# reasons this proxy is load-bearing (an earlier version of this comment
+# conflated them — T3 note, 2026-07-24):
+#   (1) COOKIE STORAGE. The API always emits the cookie with the `Secure`
+#       attribute in production (auth/routes.ts: `secure: prod`, a NODE_ENV
+#       boolean — NOT gated on the request protocol). A browser only STORES a
+#       Secure cookie delivered over HTTPS, so Caddy must actually terminate TLS
+#       or the Set-Cookie is silently dropped by the browser. This is about
+#       Caddy doing TLS at all, not about any header.
+#   (2) request.protocol CORRECTNESS. `trustProxy: true` (app.ts:76) makes
+#       Fastify read the X-Forwarded-Proto Caddy sets, so request.protocol/host
+#       report https and the real domain. That governs absolute-URL building
+#       (e.g. the Google OAuth callback), NOT whether the Secure cookie is
+#       emitted. Strip that header and redirects/callbacks break, logins do not.
+# Both are why TLS lives here and the header is forwarded (Part IV #6).
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	# reverse_proxy sets X-Forwarded-For / -Proto / -Host by default.
+	reverse_proxy api:3000 {
+		health_uri /health
+		health_interval 30s
+	}
+
+	log {
+		# Request logs carry no bodies; R3.10 keeps tokens, cookies and payloads
+		# out of logs on the application side and this must not reintroduce them.
+		output stdout
+		format json
+	}
+}

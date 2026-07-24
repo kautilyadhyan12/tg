@@ -1,0 +1,76 @@
+# PRODUCTION topology, v1 §19 verbatim: "1× Hetzner VPS (CX32-class), Docker
+# Compose: caddy (TLS) + api + worker".
+#
+# THERE IS NO postgres OR redis SERVICE HERE, AND THAT IS THE SPEC, NOT AN
+# OMISSION: v1 §19 puts Postgres on Neon (managed, PITR, branching) and Redis on
+# Upstash (pay-per-request). Both arrive as URLs in api.env. The local pg+redis
+# pair lives in docker-compose.dev.yml, which is §19's separate "dev
+# (docker-compose: pg+redis local)" environment.
+#
+# Usage:  docker compose -f infra/docker-compose.yml up -d
+# Secrets: create infra/api.env on the HOST first (gitignored — see README).
+
+name: aihg
+
+x-api-image: &api-image
+  image: ${API_IMAGE:-aihg-api:local}
+  build:
+    context: ..
+    dockerfile: infra/Dockerfile
+  env_file:
+    - ./api.env
+  environment:
+    NODE_ENV: production
+  restart: unless-stopped
+  # init: true gives PID 1 a real init that forwards signals, so a redeploy
+  # delivers SIGTERM to the process that handles it. worker.ts closes the queue
+  # on SIGTERM and waits for the in-flight job, so a DPDP purge transaction is
+  # never torn down mid-cascade.
+  init: true
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in the shell or infra/.env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in the shell or infra/.env}
+    depends_on:
+      api:
+        condition: service_healthy
+
+  api:
+    <<: *api-image
+    # No host port: the API is reachable only through Caddy, so TLS and the
+    # X-Forwarded-Proto the secure-cookie contract depends on cannot be bypassed.
+    expose:
+      - "3000"
+
+  # THE SAME IMAGE, THE OTHER MODE (v1 §6). This service is what makes the DPDP
+  # Day-14 sweep exist operationally: worker.ts registers the `dpdp.purge`
+  # scheduler on the BullMQ `rollups` queue at 0 3 * * * (03:00 UTC). Until this
+  # ran somewhere, the purge code was correct and deleted nothing — see
+  # RUNBOOK/cutover.md's DPDP prerequisite.
+  #
+  # A deterministic jobId collapses duplicate enqueues (Part IV #3), so a
+  # redeploy cannot stack schedules. Do NOT scale this service above 1 without
+  # reading the single-marker concurrency note in OWED.md: the guarantee that one
+  # purge writes one audit marker currently rests on a single call site.
+  worker:
+    <<: *api-image
+    command: ["node", "--import", "tsx", "src/worker.ts"]
+    # The worker serves no HTTP, so the image's /health HEALTHCHECK cannot apply.
+    healthcheck:
+      disable: true
+
+volumes:
+  caddy-data:
+  caddy-config:

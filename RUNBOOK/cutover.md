@@ -33,6 +33,15 @@ the operational wrapper around it.
       worker (or a cron must run `tools/dpdp-purge.ts --apply`), and this entry
       must name where. Until then the code below is real and proven, and the
       obligation is not discharged.
+      **2026-07-24 — the image now exists; the box STAYS OPEN.** The deploy-infra
+      card added `infra/Dockerfile` (one image, two modes), an
+      `infra/docker-compose.yml` `worker` service running `src/worker.ts`, and
+      `infra/README.md`, which names where the purge runs: the worker service on
+      the Hetzner VPS, `dpdp.purge` on the `rollups` queue at 03:00 UTC. So "an
+      image that does not exist yet" above is now stale — but the gate is about
+      RUNNING, not about YAML. No host is provisioned, nothing is scheduled, and
+      `ci.yml` still has no deploy job. Ticks when the compose runs on a real
+      host. Full entry in OWED.md.
       §5.2 tombstones the `users` row rather than
       deleting it, so NO FK cascade collects user-owned PII; §5.2's explicit
       Day-14 DELETE list is the only mechanism, and it now exists:
@@ -74,8 +83,16 @@ the operational wrapper around it.
       must move to the new API and its endpoints must exist for each feature.
 - [ ] New API deployed and healthy (`/health` green); `data_backend` feature
       flag present (seeded, `seed.ts`).
+      The image and compose exist as of 2026-07-24 (`infra/`) and are proven on a
+      local Docker stack; no host is provisioned, so nothing is deployed. The
+      ~₹700–1,200/mo VPS spend was already accepted by Kd at the P0.4b ruling
+      (DECISIONS 2026-07-07) — provisioning is execution, not a new decision.
 - [ ] Secrets in the deploy platform (escrow: `DATABASE_URL`, `MONGO_URI`,
       `JWT_SECRET`, …) — never in the repo.
+      `infra/README.md` names the four hard-required variables and the host file
+      they live in (`infra/api.env`, gitignored + dockerignored). The escrow doc
+      and the two outstanding rotations (`GROQ_API_KEY`, `GOOGLE_CLIENT_SECRET`)
+      are still owed — see OWED.md.
 - [ ] Backup/restore drill for the target Postgres performed (Part 8).
 
 ## Procedure (target downtime < 30 min, Part 4 §7)
