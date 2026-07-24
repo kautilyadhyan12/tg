@@ -115,10 +115,13 @@ then; none may be hidden or reduced to close the gap.
       preserve when the calendar eventually moves. Any real XP display is
       gated on the XP-storage card above (P2.3 GAP-1), not on this.
       (Found 2026-07-21 while planning the calendar card.)
-- [ ] 🔴 **Google login — BOTH CODE HALVES DONE, CLOSES ON SMOKE.** Not ticked:
-      the web-half T3 (2026-07-24) ruled the tick premature — a user-facing
-      feature is not closed until it works end-to-end, and its smoke cannot run
-      yet (DPDP Day-14 un-tick precedent: code that can't run isn't done).
+- [x] 🔴 **Google login — DONE, SMOKE PASSED (Kd, 2026-07-24).** End-to-end
+      browser click-through on the local stack succeeded: `/login` → "Continue
+      with Google" → Google account chooser → callback → logged in. All three
+      closing conditions met (master merged into `web-repoint` @ 57526aa; Google
+      OAuth credentials created + redirect URI `http://localhost:3000/v1/auth/
+      google/callback`; smoke passed). The un-tick (web-half T3, 2026-07-24) held
+      exactly until the feature actually worked — the DPDP Day-14 precedent.
       API half merged to master 2026-07-24 (PR #48): `GET /v1/auth/google` +
       `/callback` set httpOnly-cookie sessions (no token in URL/localStorage),
       3-way upsert, email-verified via consumed token, CSRF state, per-IP limit;
