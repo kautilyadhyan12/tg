@@ -49,6 +49,13 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       would have vanished with its ticked line. Given its own line here on
       2026-07-22 rather than being lost. The P0 rule treats every secret in the
       old repo's `.env` as burned, so this is a real deferral, not hygiene.
+- [ ] 🟡 **Rotate the GOOGLE_CLIENT_SECRET.** The secret created for the
+      google-login local smoke (2026-07-24) was pasted into a Claude chat to wire
+      `apps/api/.env`, so treat it as exposed (same class as GROQ above). Fine for
+      local dev; before any real deployment, regenerate it in the Google Cloud
+      console (Clients → "AI Home Gym Local" → + Add secret), put the new value in
+      the deploy platform's secrets, and delete the old. The client ID is public
+      by design; only the secret needs rotating.
 
 ## 🔴 Blocks the cutover — the old backend cannot be switched off until these exist
 

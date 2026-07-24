@@ -76,21 +76,16 @@ the operational wrapper around it.
       migrations. Pre-existing repo infrastructure, but this card is what
       makes it load-bearing: the only code that irreversibly destroys user
       data has zero enforced coverage on merge. Its own OWED line.
-- [ ] **DPDP JSON-export worker — STILL OWED, and it still blocks P2.8**
-      (Part 4 §5.2's other half: "a worker builds a JSON zip of every
-      user-owned table above + profile, delivered via signed URL, 7-day
-      expiry"). Split from the delete half by Kd ruling 2026-07-22 because
-      NONE of its infrastructure exists — verified: no R2/S3 client in any
-      package.json, no bucket/signing env vars in config.ts, no zip library,
-      and no Part 4 table to track an export job. It therefore needs new
-      credentials and ≥2 new dependencies, which would have blown the 🔴
-      one-thing-per-chat ceiling and delayed the legally load-bearing half.
-      A DEVIATION PROPOSAL is on file for that card: deliver the export as an
-      authenticated `GET /v1/users/me/export` returning JSON directly — no
-      zip, no R2, no signed URL — which satisfies §5.2's "both flows exist at
-      launch" with zero new infrastructure and keeps the export a table LIST,
-      so swapping in signed-URL delivery later changes delivery only, never
-      content. Kd rules on that at the card, not here.
+- [x] **DPDP JSON-export — DONE, merged as PR #46 (2026-07-23).** The DEVIATION
+      below was ACCEPTED and shipped: `GET /v1/users/me/export` returns the
+      user's data as JSON directly (17 tables + profile, DERIVED from the Day-14
+      delete list so the two §5.2 rights can't drift), no zip/R2/signed URL — which
+      satisfies §5.2's "both flows exist at launch" with zero new infrastructure;
+      swapping in signed-URL delivery later changes delivery only, never content.
+      Three fresh-chat T3 rounds. (This line said "STILL OWED" through the
+      2026-07-24 master→web-repoint merge — stale, corrected here.)
+      Original context: split from the delete half by Kd ruling 2026-07-22
+      because none of the zip/R2/signing infrastructure existed.
 - [ ] **Web app repointed to the new API.** Today `apps/web` is split:
       `syncClient.js` → `VITE_API_URL` (new), but `authApi/coachApi/mlApi/
       nutritionApi` still → `VITE_AUTH_API_URL` / `VITE_ML_API_URL` (old). All
