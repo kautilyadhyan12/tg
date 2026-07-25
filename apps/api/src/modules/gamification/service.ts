@@ -56,15 +56,17 @@ export async function onWorkoutSynced(
  *  user_xp row exists yet (T3 F1: a SELECT … FOR UPDATE would lock nothing there
  *  and let two first-syncs lose an update). Since the total is a pure function
  *  of committed rows, serialized recompute is exactly correct. */
-export async function recomputeXp(
-  deps: GamificationDeps,
-  userId: string,
-  tz: string,
-): Promise<number> {
+async function recomputeXp(deps: GamificationDeps, userId: string, tz: string): Promise<number> {
+  // NOT exported (T3 F5): both callers are in this file, and an external caller
+  // could not know the ordering rule that XP must be recomputed AFTER awards.
+  // safeTimeZone is re-applied here rather than trusted from the caller —
+  // getActivityDays' contract requires a validated zone, and the guard is
+  // idempotent, so being self-contained costs nothing.
+  const zone = safeTimeZone(tz);
   return await deps.sql.begin(async (tx) => {
     await repo.lockXpForUser(tx, userId); // serialize concurrent recompute (T3 F1)
     const counts = await repo.getXpAccrualCounts(tx, userId);
-    const days = await repo.getActivityDays(tx, userId, tz);
+    const days = await repo.getActivityDays(tx, userId, zone);
     const earned = await repo.listEarned(tx, userId);
     const total = computeTotalXp({
       workoutCount: counts.workoutCount,

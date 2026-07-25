@@ -363,11 +363,29 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     expect(b.streak.lastActivityDate).toBe(dayOf(daysAgoIso(1)));
     // Cross-user isolation: B's XP is B's own (3 workouts + 2 continuations +
     // 2 bronze badges = 150 + 60 + 20 + 100 = 330 → level 2), never A's 400.
-    // The manual streak override above does NOT recompute XP (a direct SQL
-    // write, not a sync), proving /me reads the STORED value rather than
-    // recomputing on read.
     expect(b.xp.total).toBe(330);
     expect(b.xp.level).toBe(2);
+  });
+
+  it("GET /me READS stored XP — it does not recompute on read", { timeout: 30_000 }, async () => {
+    // T3 F1: round 1 claimed the streaks override above proved this. It did
+    // NOT — recomputeXp never reads `streaks` (it derives from workouts +
+    // activity days + user_achievements), so a recompute-on-read would have
+    // returned 330 just the same. The assertion could not fail for the reason
+    // it named. This one CAN: poison the stored value with a number no
+    // recompute could ever produce; a recompute-on-read clobbers it back to 330.
+    await sql`UPDATE user_xp SET total_xp = 999 WHERE user_id = ${userB}`;
+    const me = await inject({ method: "GET", url: "/v1/gamification/me", access: cookieB });
+    expect(me.statusCode).toBe(200);
+    const body = me.json<{ xp: { total: number; level: number } }>();
+    expect(body.xp.total).toBe(999); // stored value served verbatim
+    expect(body.xp.level).toBe(4); // …and the level is DERIVED from it (999 ≥ 722)
+    // The stored row is untouched by the read (no write-on-read).
+    const [row] = await sql<{ total_xp: number }[]>`
+      SELECT total_xp FROM user_xp WHERE user_id = ${userB}`;
+    expect(row?.total_xp).toBe(999);
+    // Restore so later assertions/reruns see the real recomputed value.
+    await sql`UPDATE user_xp SET total_xp = 330 WHERE user_id = ${userB}`;
   });
 
   it("XP recompute serializes concurrent syncs even before the user_xp row exists (T3 F1)", { timeout: 30_000 }, async () => {
@@ -379,29 +397,49 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     // id, not by a row. MUTATION CHECK: emptying lockXpForUser makes B acquire
     // immediately, so the `toBe(false)` below fails.
     const uid = crypto.randomUUID();
-    const cA = await sql.reserve();
-    const cB = await sql.reserve();
+    let releaseA = (): void => {};
+    const aHolds = new Promise<void>((r) => (releaseA = r));
+    let aLocked = (): void => {};
+    const aReady = new Promise<void>((r) => (aLocked = r));
+
+    // A opens a REAL transaction (repo.lockXpForUser only accepts one — T3 F2)
+    // and holds the lock until we let go.
+    const aP = sql.begin(async (tx) => {
+      await lockXpForUser(tx, uid);
+      aLocked();
+      await aHolds;
+    });
+    await aReady;
+
+    // B must get PAST `begin` and be blocked ON THE LOCK ITSELF. Round 1 timed a
+    // window that also contained B's `begin` round-trip, so the "not acquired"
+    // assertion could pass merely because B had not yet REACHED the lock — a
+    // vacuous pass proving nothing (T3 F3). And that is not theoretical: this
+    // test FAILED on the first run of the fix because opening B's second Neon
+    // connection (TLS handshake) took longer than 400 ms. So B now SIGNALS from
+    // inside its transaction and we wait for that signal — no duration is
+    // assumed for the setup, and the sleep below measures only BLOCKAGE.
+    let bEntered = (): void => {};
+    const bInTx = new Promise<void>((r) => (bEntered = r));
+    let bAcquired = false;
+    const bP = sql.begin(async (tx) => {
+      bEntered(); // inside the tx: `begin` has already round-tripped
+      await lockXpForUser(tx, uid); // BLOCKS until A commits
+      bAcquired = true;
+    });
+
     try {
-      await cA`begin`;
-      await lockXpForUser(cA, uid); // A holds the advisory lock
-
-      let bAcquired = false;
-      const bP = (async () => {
-        await cB`begin`;
-        await lockXpForUser(cB, uid); // BLOCKS until A commits
-        bAcquired = true;
-      })();
-
+      await bInTx; // deterministic: B is genuinely inside its transaction
       await new Promise((r) => setTimeout(r, 400));
-      expect(bAcquired).toBe(false); // serialized: B is waiting on A's lock
+      expect(bAcquired).toBe(false); // …and genuinely blocked on A's lock
 
-      await cA`commit`; // release the advisory lock
+      releaseA(); // A commits, releasing the advisory lock
+      await aP;
       await bP;
       expect(bAcquired).toBe(true); // B proceeds only after A committed
-      await cB`commit`;
     } finally {
-      cA.release();
-      cB.release();
+      releaseA(); // never strand A's transaction if an assertion throws
+      await Promise.allSettled([aP, bP]); // and never leak an unhandled rejection
     }
   });
 

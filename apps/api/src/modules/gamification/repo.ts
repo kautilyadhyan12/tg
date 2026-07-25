@@ -85,13 +85,15 @@ export async function awardAchievements(sql: Sql, userId: string, codes: string[
  *  value is not read here: recompute derives it in full from committed rows, so
  *  the lock only has to make the read-then-upsert atomic against another sync.
  *
- *  Typed SqlOrTx ONLY so the reserved-connection concurrency test can drive
- *  this exact function. The lock is TRANSACTION-scoped, so on a POOLED handle it
- *  would be taken and released in one implicit statement and serialize NOTHING
- *  (the DPDP round-5 footgun, DECISIONS 2026-07-23). The sole production caller
- *  runs it inside `sql.begin` (service.recomputeXp) — verified. */
-export async function lockXpForUser(sql: SqlOrTx, userId: string): Promise<void> {
-  await sql`SELECT pg_advisory_xact_lock(hashtext(${`xp:${userId}`}))`;
+ *  Typed TransactionSql, NOT SqlOrTx (T3 F2). The lock is TRANSACTION-scoped:
+ *  on a POOLED handle it would be taken and released inside one implicit
+ *  transaction and serialize NOTHING. Round 1 of this card widened the type so
+ *  a reserved-connection test could drive it and left a COMMENT in place of the
+ *  guard — which is precisely the trade the DPDP round-5 review flagged as a
+ *  silent footgun (DECISIONS 2026-07-23). The type makes the misuse
+ *  unrepresentable instead; the test drives two real `sql.begin` transactions. */
+export async function lockXpForUser(tx: TransactionSql, userId: string): Promise<void> {
+  await tx`SELECT pg_advisory_xact_lock(hashtext(${`xp:${userId}`}))`;
 }
 
 export async function upsertXp(tx: TransactionSql, userId: string, totalXp: number): Promise<void> {
