@@ -42,6 +42,10 @@ export const DIRECT_DELETE_TABLES = [
   "workouts", // §5.2 "workouts(+sets CASCADE)" — sets go by cascade, see below
   "user_achievements",
   "streaks",
+  "user_xp", // Kd-authorised XP store (DECISIONS 2026-07-24). Game state like
+  // its siblings streaks/user_achievements above — deleted on purge, exported
+  // by derivation. Not in §5.2's prose (the table postdates the spec), the
+  // same footing as user_fitness_profiles below.
   "challenge_participants",
   "auth_identities",
   "user_fitness_profiles", // NOT in §5.2's prose — added by Kd ruling, below

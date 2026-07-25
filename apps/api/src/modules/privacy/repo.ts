@@ -96,6 +96,7 @@ export async function deleteUserOwnedRows(tx: TransactionSql, userId: string): P
   await tx`DELETE FROM workouts WHERE user_id = ${userId}`;
   await tx`DELETE FROM user_achievements WHERE user_id = ${userId}`;
   await tx`DELETE FROM streaks WHERE user_id = ${userId}`;
+  await tx`DELETE FROM user_xp WHERE user_id = ${userId}`; // Kd-authorised XP store (DECISIONS 2026-07-24)
   await tx`DELETE FROM challenge_participants WHERE user_id = ${userId}`;
   await tx`DELETE FROM auth_identities WHERE user_id = ${userId}`;
   // push_tokens is inside §5.2's own Day-0 sentence ("push tokens deleted"),

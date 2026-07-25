@@ -156,6 +156,7 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     await sql`INSERT INTO run_schedules (user_id, rule) VALUES (${userId}, ${sql.json({})})`;
     await sql`INSERT INTO user_achievements (user_id, code) VALUES (${userId}, 'first_workout')`;
     await sql`INSERT INTO streaks (user_id, current, longest) VALUES (${userId}, 3, 5)`;
+    await sql`INSERT INTO user_xp (user_id, total_xp) VALUES (${userId}, 123)`;
     await sql`INSERT INTO challenge_participants (challenge_id, user_id)
               VALUES (${challengeId}, ${userId})`;
     // Day 0 deletes push tokens; this row stands in for one that outlived it

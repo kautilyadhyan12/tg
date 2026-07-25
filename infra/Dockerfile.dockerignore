@@ -1,0 +1,52 @@
+# BuildKit reads `<dockerfile-path>.dockerignore` in preference to the context
+# root's .dockerignore. It lives here rather than at the repo root so this deploy
+# card adds no file that could affect any other build.
+#
+# The build context is the REPO ROOT (the pnpm workspace needs the lockfile and
+# every workspace manifest), so everything the API image does not need is excluded
+# explicitly.
+
+# Host node_modules are win32-native (@node-rs/argon2-win32-x64-msvc, onnxruntime,
+# sharp). Copying them in would shadow the linux install and break at runtime.
+**/node_modules
+**/.turbo
+**/dist
+
+.git
+.github
+.gitignore
+.gitleaksignore
+
+# SECRETS NEVER ENTER THE IMAGE (R3.6). Both the root and apps/api .env files are
+# gitignored and must stay out of the build context too; compose supplies env at
+# RUN time, never at build time.
+**/.env
+**/.env.*
+infra/api.env
+
+# The previous-version stack (CLAUDE.md migration stance: salvage source, still
+# serving the old backend until P2.8) — not part of the new API image.
+backend-auth
+backend-ml
+ml-training
+
+# apps/web deploys to Vercel (v1 §19), not into this image. Its package.json IS
+# still copied by the Dockerfile: --frozen-lockfile compares the lockfile against
+# every workspace manifest, so omitting it would read as lockfile drift.
+apps/web/src
+apps/web/public
+apps/web/index.html
+apps/web/vite.config.js
+
+# Tests and one-off tools. Verified nothing under any src/ imports either, and
+# packages/engine/test alone is 4.4 MB of golden trace fixtures (its src is 153 KB).
+**/test
+apps/api/tools
+
+# Root-level prose only — deliberately NOT a blanket `*.md`, which would have
+# stripped apps/api/src/modules/coach/knowledge/*.md, the five knowledge guides
+# the coach KB is ingested from (P2.5a).
+/*.md
+docs
+RUNBOOK
+*.diff

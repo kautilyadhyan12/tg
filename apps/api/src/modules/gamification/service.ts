@@ -4,7 +4,8 @@
 // upsert (R3.5).
 import type { Sql } from "postgres";
 import * as repo from "./repo.js";
-import { earnedCodes } from "./badges.js";
+import { badgeXpForCodes, earnedCodes } from "./badges.js";
+import { computeTotalXp, countStreakContinuationDays, xpProgress } from "./xp.js";
 import { dayInTz, reconcile, replayActivityDays, safeTimeZone, type StreakState } from "./streak.js";
 import type { GamificationMe } from "@app/shared";
 
@@ -44,7 +45,39 @@ export async function onWorkoutSynced(
   const stats = await repo.getStats(deps.sql, userId, tz);
   const codes = earnedCodes({ ...stats, current_streak: state.current });
   await repo.awardAchievements(deps.sql, userId, codes);
+  await recomputeXp(deps, userId, tz); // AFTER awards — badge XP is part of the total
   return state;
+}
+
+/** Recompute lifetime XP from committed history and upsert it (idempotent,
+ *  retry-safe — never an $inc; see xp.ts). Runs AFTER awardAchievements
+ *  because badge XP is part of the total. An advisory lock (lockXpForUser)
+ *  serializes concurrent syncs for the user — INCLUDING the first sync, when no
+ *  user_xp row exists yet (T3 F1: a SELECT … FOR UPDATE would lock nothing there
+ *  and let two first-syncs lose an update). Since the total is a pure function
+ *  of committed rows, serialized recompute is exactly correct. */
+async function recomputeXp(deps: GamificationDeps, userId: string, tz: string): Promise<number> {
+  // NOT exported (T3 F5): both callers are in this file, and an external caller
+  // could not know the ordering rule that XP must be recomputed AFTER awards.
+  // safeTimeZone is re-applied here rather than trusted from the caller —
+  // getActivityDays' contract requires a validated zone, and the guard is
+  // idempotent, so being self-contained costs nothing.
+  const zone = safeTimeZone(tz);
+  return await deps.sql.begin(async (tx) => {
+    await repo.lockXpForUser(tx, userId); // serialize concurrent recompute (T3 F1)
+    const counts = await repo.getXpAccrualCounts(tx, userId);
+    const days = await repo.getActivityDays(tx, userId, zone);
+    const earned = await repo.listEarned(tx, userId);
+    const total = computeTotalXp({
+      workoutCount: counts.workoutCount,
+      perfectFormWorkouts: counts.perfectFormWorkouts,
+      excellentFormWorkouts: counts.excellentFormWorkouts,
+      streakContinuationDays: countStreakContinuationDays(days),
+      badgeXp: badgeXpForCodes(earned.map((e) => e.code)),
+    });
+    await repo.upsertXp(tx, userId, total);
+    return total;
+  });
 }
 
 /** P2.6a meal hook: meal stats now come from meal_logs (origin is a real
@@ -54,10 +87,14 @@ export async function onMealLogged(
   userId: string,
   timezone: string | null,
 ): Promise<void> {
-  const stats = await repo.getStats(deps.sql, userId, safeTimeZone(timezone));
+  const tz = safeTimeZone(timezone);
+  const stats = await repo.getStats(deps.sql, userId, tz);
   const streak = await reconciledStreak(deps, userId, timezone);
   const codes = earnedCodes({ ...stats, current_streak: streak.current });
   await repo.awardAchievements(deps.sql, userId, codes);
+  // A meal can earn a badge (first_meal, macro_master, photo_meal), whose tier
+  // XP is part of the total — recompute so XP stays consistent with awards.
+  await recomputeXp(deps, userId, tz);
 }
 
 /** Read-side lazy reconciliation (DECISIONS GAP-5): freezes owed for missed
@@ -91,12 +128,23 @@ export async function getMe(
 ): Promise<GamificationMe> {
   const streak = await reconciledStreak(deps, userId, timezone);
   const earned = await repo.listEarned(deps.sql, userId);
+  // XP is a plain read: it is recomputed + stored at every workout sync / meal
+  // log, so the stored value is already current here (no write-on-read).
+  const p = xpProgress(await repo.getXp(deps.sql, userId));
   return {
     streak: {
       current: streak.current,
       longest: streak.longest,
       lastActivityDate: streak.lastActivityDate,
       freezesAvailable: streak.freezesAvailable,
+    },
+    xp: {
+      total: p.xp,
+      level: p.level,
+      xpInLevel: p.xpInLevel,
+      xpForNext: p.xpForNext,
+      progressPct: p.progressPct,
+      nextLevelAt: p.nextLevelAt,
     },
     achievements: earned.map((e) => ({ code: e.code, earnedAt: e.earnedAt.toISOString() })),
   };
