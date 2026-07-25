@@ -95,8 +95,14 @@ the operational wrapper around it.
       does not exist; per the NO-REMOVAL rule (CLAUDE.md MIGRATION STANCE),
       P2.8 is blocked until every line has a new-API surface and its consumer
       is repointed:**
-      - [ ] XP/levels display (GamificationStrip, Achievements) — XP storage
-            deferred by DECISIONS 2026-07-11 P2.3 GAP-1; needs its ruled card.
+      - [ ] XP/levels display (GamificationStrip, Achievements) — **the API half
+            is DONE: merged to master 2026-07-26 as PR #50 (`47cc001`)**, which
+            discharges the DECISIONS 2026-07-11 P2.3 GAP-1 deferral (migration
+            `0008_user_xp`, the verbatim badges.py curve, `xp` block on
+            `/v1/gamification/me`, on both DPDP lists). Still owed HERE: the WEB
+            display repoint + its browser smoke. NB `web-repoint` must merge
+            master before that card, or the endpoint answers with no `xp` block.
+            Full detail on the OWED.md line.
       - [ ] Badge catalog + challenges screens — "tables now, screens later"
             (DECISIONS 2026-07-11 P2.3 carve); needs catalog/challenges reads.
       - [ ] Leaderboard (GamificationStrip, Achievements) — P4.x card

@@ -1,6 +1,19 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+POINTER (2026-07-26) — the most recent card is NOT on this branch.
+  XP / levels storage (🔴, API half) shipped on a branch off master and MERGED
+  as PR #50 (`47cc001`). Its full HANDOFF block and DECISIONS entry live on
+  MASTER, because that is where the card landed; this branch carries only the
+  OWED.md line for the WEB half that is still owed.
+  If you are picking up the WEB XP display: read `OWED.md`'s "XP / levels
+  display" line first — it names the camelCase trap, the "totals deliberately
+  diverge" rule, and the fact that THIS BRANCH DOES NOT YET CARRY THE ENDPOINT
+  (merge master in first, or /v1/gamification/me answers with no `xp` block).
+  The block below is the previous web-repoint card, not the latest work.
+```
+
+```
 TASK: web-repoint (Google login half) 🟡  [CODE DONE, T3 OWED]  branch web-repoint
   The web side of the google-login API card (merged master PR #48). Wires the
   buttons to the new endpoints so Google sign-in works end-to-end. Ticks the 🔴
