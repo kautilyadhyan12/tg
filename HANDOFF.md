@@ -1,6 +1,67 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: XP / levels storage + badges.py curve port 🔴  [DONE — MERGED PR #50 (47cc001)]
+      branch t3-user-xp (off master, now deleted locally). API half only.
+      Implements the Kd ruling of 2026-07-24 ("XP/LEVELS — KEEP, add storage"),
+      discharging the P2.3 GAP-1 deferral. Part 7 is SILENT on user XP, so
+      badges.py is the source and this is Kd-authorised schema beyond the spec
+      (the user_fitness_profiles precedent).
+SHIPPED (17 files): migration `0008_user_xp` — 1:1 `user_xp(user_id PK,
+  total_xp, timestamps)`, SQL reviewed by Kd; `level` DERIVED on read, never
+  stored. NEW `modules/gamification/xp.ts` — badges.py port, VERBATIM: TIER_XP
+  (:11-16), XP_REWARDS (:202-211), xp_for_level (:215-227), level_for_xp incl.
+  the 200 cap (:230-237), xp_progress (:240-253). `badges.ts` regains each
+  badge's `tier` + `badgeXpForCodes`. `service.recomputeXp` (module-private)
+  runs AFTER awardAchievements in BOTH sync hooks; `getMe` READS stored XP.
+  `@app/shared` gamificationMeSchema gains an `xp` block (camelCase).
+  `privacy/tables.ts` + an explicit DELETE + an EXPORT_READERS entry.
+DECISIONS (full entry in DECISIONS.md, this branch):
+  · D1 DEVIATION — accrual is a RECOMPUTE from full history, never the old
+    backend's live `$inc`: the sync hook runs on every retry, so `$inc` would
+    double-count. Constants verbatim; ACCRUAL deliberately differs.
+  · D2 a 1:1 table (mirrors `streaks`), not a `users` column.
+  · D3 badge XP = Σ TIER_XP over earned codes (tier ported into the seed).
+  · D4 meal/coach/photo/challenge XP constants ported but UNWIRED — grep proves
+    the old backend never awarded them (R0.2: not a new feature here).
+  · D5 streak_day = adjacent one-day-apart pairs over DISTINCT activity days.
+  · GOVERNING RULE (read xp.ts before "fixing" any number): EVERY recomputed
+    input to EVERY component diverges from the old backend — day bucketing,
+    activity-vs-sync time, retroactive backfill, the server-derived form score,
+    and all four badge-stat inputs. Constants verbatim, TOTALS deliberately not.
+    This replaced a counted list that was wrong at 1, 3 and 4 axes in
+    successive rounds; a list was the wrong shape because it is itself a claim.
+PROVE: api 366/366 on Neon; typecheck + lint clean. THREE behavioural
+  guarantees each mutation-verified red→green: the advisory-lock BODY, its
+  CALL SITE (probed via pg_blocking_pids, not a stopwatch), and that `/me`
+  reads stored XP rather than recomputing.
+T3: FIVE fresh-chat rounds, 25 findings, all resolved. The CODE was stable
+  after round 1's lock fix — every later finding was about evidence, scoping or
+  the record (a guarantee no test carried; a type widened for a test; a test
+  that could pass vacuously; a false test premise; an incomplete enumeration
+  ×3; a mis-scoped threat model ×2). Rounds 3-5 each found a defect created by
+  the previous round's fix; round 5's two halves shipped in ONE commit.
+SMOKE: NONE, correctly — no browser-reachable surface until the web display.
+OPEN / NEXT:
+  1. WEB XP display (GamificationStrip, Achievements) — on `web-repoint`, see
+     that branch's OWED.md line. MERGE MASTER IN FIRST or /v1/gamification/me
+     answers with no `xp` block. TRAP: API is camelCase (`xpInLevel`), the
+     components read `user.progress.xp_in_level` — a straight swap yields
+     `undefined`, which renders as a plausible blank, not an error. Browser
+     smoke owed with it.
+  2. SECURITY, inherited by the leaderboard / Form Score™ cards (on OWED):
+     XP is safe ONLY while it grants nothing. Primary vector is fabricated
+     workout VOLUME (50 + up to 50 per forged sync; `avgFormScore` is
+     client-sent per set and merely averaged; POST /v1/workouts/sync has NO
+     per-route rate limit). Backdated `startedAt` (unclamped) is second.
+  3. REPORTED not fixed (R1.1): `getStreakForUpdate` has the same first-insert
+     gap this card fixed for XP (FOR UPDATE locks nothing when no row exists)
+     and an overstated comment. Pre-existing; its own small card.
+SPEC GAPs: none opened. Part 7's silence on XP is the pre-existing one, and
+  Kd's 2026-07-24 ruling is what authorises the storage.
+```
+
+```
 TASK: google-login — Google OAuth on the new API 🔴  [API HALF, T3 R1 DONE, RE-REVIEW OWED]
       branch google-login (off master). Restores the switched-off Google sign-in
       buttons — a 🔴 cutover blocker on web-repoint:OWED.md. v1 §6.1 lists Google
