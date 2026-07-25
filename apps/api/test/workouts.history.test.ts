@@ -493,18 +493,38 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     // try opens HERE (T3 round 4 #5): everything that can throw while the lock
     // is held must be inside it, or a throw strands the holder's transaction on
     // the shared pool and leaks syncP's rejection.
+    // Declared OUTSIDE the try so `finally` can DRAIN it (T3 round 5 #4):
+    // round 4 narrowed the drain to [holderP], so a throw at the assertions
+    // below returned the test with the sync's INSERT still in flight on the
+    // shared pool, landing during the next test and teardown. A parked catch
+    // silences the warning; it does not stop the write.
+    let syncP: Promise<Awaited<ReturnType<typeof sync>>> | undefined;
     try {
       expect(holderPid).toBeGreaterThan(0);
 
       let syncDone = false;
-      const syncP = sync(crypto.randomUUID(), daysAgoIso(0), [squatSet(1)], cookieB).then((r) => {
-        syncDone = true;
-        return r;
-      });
+      // BOTH branches flip the flag (T3 round 5 #1). Round 4 flipped it only on
+      // fulfilment, so a REJECTING sync left it false: the poll burned its full
+      // 20 s, the `await syncP` that would surface the real error was never
+      // reached, and the test reported "expected 0 to be greater than 0" —
+      // blaming a deleted call site for a failed request, which is precisely
+      // the report #2 was written to eliminate. Worse, round 4's own parked
+      // catch (#5) removed the unhandled-rejection warning that had been the
+      // last surviving trace of it: two fixes in one commit, the second
+      // disarming the first. Re-throwing here keeps `await syncP` authoritative.
+      syncP = sync(crypto.randomUUID(), daysAgoIso(0), [squatSet(1)], cookieB).then(
+        (r) => {
+          syncDone = true;
+          return r;
+        },
+        (e: unknown) => {
+          syncDone = true;
+          throw e;
+        },
+      );
       // Park a no-op handler so a rejection can never surface as an UNHANDLED
-      // one if an assertion below throws first; the awaits still see the real
-      // outcome. (syncP is scoped inside the try per #5, so `finally` cannot
-      // reach it — this is what replaces that reach.)
+      // one if an assertion below throws first. This marks the promise handled
+      // WITHOUT swallowing it — `await syncP` still rethrows the real error.
       syncP.catch(() => undefined);
       // Read the flag through a typed accessor: TS narrows a `let x = false`
       // to the literal `false` because the only mutation is inside a callback
@@ -539,10 +559,12 @@ d("workouts history + progress + gamification (real Postgres)", () => {
       await holderP;
       const res = await syncP;
       expect(res.statusCode).toBe(201); // and completes normally once released
-      await Promise.allSettled([syncP]);
     } finally {
       releaseHolder();
-      await Promise.allSettled([holderP]);
+      // Drain BOTH (round 5 #4): the sync's INSERT must not still be in flight
+      // when this test returns. The dead `allSettled([syncP])` that used to sit
+      // after the await above is gone — it settled an already-awaited promise.
+      await Promise.allSettled([holderP, syncP ?? Promise.resolve()]);
     }
   });
 

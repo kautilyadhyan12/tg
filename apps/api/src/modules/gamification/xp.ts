@@ -13,12 +13,21 @@
 //
 // DO NOT re-add the sentence that used to sit here ("recomputing with the same
 // constants yields the same total for any real history"). It was FALSE, no test
-// carried it, and it was deleted at T3 round 3. The CONSTANTS are verbatim; the
-// TOTALS deliberately diverge from the old backend on FOUR axes, all recorded
-// in DECISIONS under the D5 addendum. Axes 1-3 are STREAK XP; axis 4 is the
-// FORM bonus and diverges independently — round 3 enumerated only the streak
-// ones and still called the list complete, which is the same "the enumeration
-// is the claim" defect the list itself documents:
+// carried it, and it was deleted at T3 round 3.
+//
+// THE GOVERNING RULE (stated as a rule, NOT a list — T3 round 5):
+//   The CONSTANTS are verbatim. The TOTALS are not, and cannot be:
+//   *** EVERY RECOMPUTED INPUT TO EVERY COMPONENT DIVERGES from the old
+//   backend's version of that input, because this system derives from
+//   committed rows what the old one took on the client's word or measured at
+//   sync time. ***
+// A COUNTED LIST WAS THE WRONG SHAPE and is the reason this took five rounds:
+// round 2 named one axis and claimed equivalence for the rest; round 3 named
+// three and called it complete; round 4 named four and called THAT complete;
+// round 5 found badge inputs, whose deltas are up to 30x larger than round 4's.
+// Each round's enumeration was itself an unevidenced claim — the exact defect
+// the entry documents. The instances below are ILLUSTRATIVE, NOT EXHAUSTIVE;
+// if you find another, it confirms the rule rather than contradicting it.
 //   1. DAY BUCKETING — old: `datetime.utcnow().date()` (workouts.py:234);
 //      new: the user's own timezone (Part IV #8 forbids day math anywhere else).
 //   2. ACTIVITY TIME vs SYNC TIME — the old backend compared the SYNC INSTANT
@@ -40,8 +49,22 @@
 //      the old float comparison gave +20. Deriving it server-side is REQUIRED
 //      (R3.1 — the client must not hand us the number that grants the bonus),
 //      so this divergence is the rule working, not a port error.
-// All four are consequences of recompute-from-history (and server-derived
-// inputs) being the correct model, not defects — but they are DIVERGENCES, and
+//   5. BADGE INPUTS — the LARGEST class, and the one four rounds missed even
+//      though both premises were already on the page (D3 records badge XP as a
+//      component; axis 4 records that a re-derived input diverges). `badgeXp`
+//      is the fourth summand of computeTotalXp, and EVERY stat feeding the
+//      evaluator is recomputed differently from gamification.py's
+//      compute_user_stats: `total_kcal` (old: estimate_session_calories over
+//      active/rest seconds; new: Σ per-set MET kcal_point) gates calorie_1k
+//      (50) and calorie_10k (400); `morning/night_workouts` (old: completed_at
+//      hour in UTC; new: started_at in the USER'S tz) gate early_bird and
+//      night_owl (150 each); `avg_form_last5` (different selection AND
+//      averaging) gates form_master (400); `families_tried` (old: 11
+//      categories; new: 12 families — the GAP-4 re-key) gates variety_all
+//      (400). ONE badge flipping moves the total by 50-1000, i.e. up to ~30x
+//      axis 4's delta.
+// All of these are consequences of recompute-from-history and server-derived
+// inputs being the correct model, not defects — but they are DIVERGENCES, and
 // calling them equivalence is how a wrong premise gets reused later as fact.
 import { dayDiff } from "./streak.js";
 
