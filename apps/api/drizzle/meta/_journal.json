@@ -50,6 +50,13 @@
       "when": 1784264288142,
       "tag": "0007_meal_logs_meal_type",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784891635843,
+      "tag": "0008_user_xp",
+      "breakpoints": true
     }
   ]
 }

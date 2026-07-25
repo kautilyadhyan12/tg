@@ -100,6 +100,9 @@ export const EXPORT_READERS: Record<ExportedTable, (sql: Sql, userId: string) =>
 
   streaks: (sql, u) => sql<Row[]>`SELECT * FROM streaks WHERE user_id = ${u}`,
 
+  // The user's own lifetime XP — their own game score, SELECT * like streaks.
+  user_xp: (sql, u) => sql<Row[]>`SELECT * FROM user_xp WHERE user_id = ${u}`,
+
   challenge_participants: (sql, u) =>
     sql<Row[]>`SELECT * FROM challenge_participants WHERE user_id = ${u} ORDER BY challenge_id`,
 

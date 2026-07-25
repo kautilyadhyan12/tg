@@ -21,6 +21,7 @@ import {
   INTERNAL_COLUMNS_EVERYWHERE,
 } from "../src/modules/privacy/export.js";
 import {
+  DIRECT_DELETE_TABLES,
   EXPORT_EXCLUDED_TABLES,
   EXPORTED_TABLES,
   PII_TABLES,
@@ -54,20 +55,13 @@ d("DPDP data export (real Postgres)", () => {
       await sql`DELETE FROM workouts WHERE user_id = ANY(${madeUsers})`;
       await sql`DELETE FROM meal_logs WHERE user_id = ANY(${madeUsers})`;
       await sql`DELETE FROM coach_threads WHERE user_id = ANY(${madeUsers})`;
-      for (const t of [
-        "user_dishware",
-        "runs",
-        "saved_routes",
-        "run_schedules",
-        "body_measurements",
-        "workout_templates",
-        "user_achievements",
-        "streaks",
-        "challenge_participants",
-        "auth_identities",
-        "user_fitness_profiles",
-        "push_tokens",
-      ]) {
+      // Drive the REAL list, never a copy of it (T3 F4). The literal that used
+      // to sit here silently missed `user_xp` when that table was added, and
+      // only the FK cascade from the `users` delete below covered it — i.e. it
+      // worked by accident. This is the exact drift DIRECT_DELETE_TABLES exists
+      // to kill, and privacy.purge.test.ts already loops it. Re-deleting the
+      // four handled above is a harmless no-op.
+      for (const t of DIRECT_DELETE_TABLES) {
         await sql`DELETE FROM ${sql(t)} WHERE user_id = ANY(${madeUsers})`;
       }
       await sql`DELETE FROM users WHERE id = ANY(${madeUsers})`;
@@ -134,6 +128,7 @@ d("DPDP data export (real Postgres)", () => {
     await sql`INSERT INTO run_schedules (user_id, rule) VALUES (${userId}, ${sql.json({})})`;
     await sql`INSERT INTO user_achievements (user_id, code) VALUES (${userId}, 'first_workout')`;
     await sql`INSERT INTO streaks (user_id, current, longest) VALUES (${userId}, 3, 5)`;
+    await sql`INSERT INTO user_xp (user_id, total_xp) VALUES (${userId}, 456)`;
     await sql`INSERT INTO challenge_participants (challenge_id, user_id)
               VALUES (${challengeId}, ${userId})`;
     await sql`INSERT INTO push_tokens (user_id, token, platform)
