@@ -29,6 +29,22 @@ export const streaks = pgTable("streaks", {
   createdAt: createdAt(),
 });
 
+// Kd-authorised XP storage (beyond-spec; DECISIONS 2026-07-24 "XP/levels KEEP,
+// add storage"). 1:1 with users, mirrors `streaks`: total_xp is RECOMPUTED from
+// full history and upserted at every sync (idempotent, retry-safe — never an
+// $inc, which the old backend used and which double-counts on a retried sync).
+// `level` is a pure function of total_xp and is DERIVED on read, never stored.
+// On DPDP purge/export it is covered by adding "user_xp" to privacy/tables.ts
+// (the sibling `streaks`/`user_achievements` precedent).
+export const userXp = pgTable("user_xp", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  totalXp: integer("total_xp").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: createdAt(),
+});
+
 export const achievements = pgTable("achievements", {
   // seeded from badges.py port
   code: text("code").primaryKey(),

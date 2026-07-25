@@ -7,6 +7,7 @@ import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
+import { lockXpForUser } from "../src/modules/gamification/repo.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -164,6 +165,10 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     const n = await sql<{ code: string }[]>`
       SELECT code FROM user_achievements WHERE user_id = ${userA} AND code = 'first_workout'`;
     expect(n.length).toBe(1);
+    // XP is RECOMPUTED, not $inc'd, so the retry leaves it unchanged — a naive
+    // increment would read 240. 50 base + 20 excellent-form + 50 bronze badge.
+    const [x] = await sql<{ total_xp: number }[]>`SELECT total_xp FROM user_xp WHERE user_id = ${userA}`;
+    expect(x?.total_xp).toBe(120);
   });
 
   it("real weight changes the kcal number (2B §2.3's accuracy lever)", { timeout: 30_000 }, async () => {
@@ -316,11 +321,29 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     expect(me.statusCode).toBe(200);
     const body = me.json<{
       streak: { current: number; longest: number; freezesAvailable: number };
+      xp: {
+        total: number;
+        level: number;
+        xpInLevel: number;
+        xpForNext: number;
+        progressPct: number;
+        nextLevelAt: number;
+      };
       achievements: { code: string }[];
     }>();
     expect(body.streak.current).toBe(3);
     const codes = body.achievements.map((a) => a.code);
     expect(codes).toEqual(expect.arrayContaining(["first_workout", "streak_3"]));
+    // 4 workouts (all excellent form) + 2 streak-continuation days + 2 bronze
+    // badges = 200 + 80 + 20 + 100 = 400 → level 3 (base 348, next 722).
+    expect(body.xp).toEqual({
+      total: 400,
+      level: 3,
+      xpInLevel: 52,
+      xpForNext: 374,
+      progressPct: 13.9,
+      nextLevelAt: 722,
+    });
 
     // E2E of the lazy sweep: user B is handed a streak with a missed day and
     // one banked freeze — reading /me must spend it and keep the streak.
@@ -331,10 +354,55 @@ d("workouts history + progress + gamification (real Postgres)", () => {
       ON CONFLICT (user_id) DO UPDATE SET current = 5, longest = 5,
         last_activity_date = ${missedFrom}, freezes_available = 1`;
     const bMe = await inject({ method: "GET", url: "/v1/gamification/me", access: cookieB });
-    const b = bMe.json<{ streak: { current: number; freezesAvailable: number; lastActivityDate: string } }>();
+    const b = bMe.json<{
+      streak: { current: number; freezesAvailable: number; lastActivityDate: string };
+      xp: { total: number; level: number };
+    }>();
     expect(b.streak.current).toBe(5);
     expect(b.streak.freezesAvailable).toBe(0);
     expect(b.streak.lastActivityDate).toBe(dayOf(daysAgoIso(1)));
+    // Cross-user isolation: B's XP is B's own (3 workouts + 2 continuations +
+    // 2 bronze badges = 150 + 60 + 20 + 100 = 330 → level 2), never A's 400.
+    // The manual streak override above does NOT recompute XP (a direct SQL
+    // write, not a sync), proving /me reads the STORED value rather than
+    // recomputing on read.
+    expect(b.xp.total).toBe(330);
+    expect(b.xp.level).toBe(2);
+  });
+
+  it("XP recompute serializes concurrent syncs even before the user_xp row exists (T3 F1)", { timeout: 30_000 }, async () => {
+    // The first-ever-sync case: no user_xp row yet, so a `SELECT … FOR UPDATE`
+    // would lock NOTHING and let two syncs race to a lost update. The advisory
+    // lock serializes regardless — proven by driving the REAL lockXpForUser on
+    // two LIVE transactions (the DPDP concurrency-test precedent, not a
+    // sequential stand-in). A random id needs no row: the lock is keyed by user
+    // id, not by a row. MUTATION CHECK: emptying lockXpForUser makes B acquire
+    // immediately, so the `toBe(false)` below fails.
+    const uid = crypto.randomUUID();
+    const cA = await sql.reserve();
+    const cB = await sql.reserve();
+    try {
+      await cA`begin`;
+      await lockXpForUser(cA, uid); // A holds the advisory lock
+
+      let bAcquired = false;
+      const bP = (async () => {
+        await cB`begin`;
+        await lockXpForUser(cB, uid); // BLOCKS until A commits
+        bAcquired = true;
+      })();
+
+      await new Promise((r) => setTimeout(r, 400));
+      expect(bAcquired).toBe(false); // serialized: B is waiting on A's lock
+
+      await cA`commit`; // release the advisory lock
+      await bP;
+      expect(bAcquired).toBe(true); // B proceeds only after A committed
+      await cB`commit`;
+    } finally {
+      cA.release();
+      cB.release();
+    }
   });
 
   it("history/progress/gamification all 401 without a cookie", { timeout: 30_000 }, async () => {

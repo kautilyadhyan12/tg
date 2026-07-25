@@ -12,7 +12,14 @@ import {
   safeTimeZone,
   type StreakState,
 } from "../src/modules/gamification/streak.js";
-import { earnedCodes, evaluate } from "../src/modules/gamification/badges.js";
+import { badgeXpForCodes, earnedCodes, evaluate } from "../src/modules/gamification/badges.js";
+import {
+  computeTotalXp,
+  countStreakContinuationDays,
+  levelForXp,
+  xpForLevel,
+  xpProgress,
+} from "../src/modules/gamification/xp.js";
 import { DEFAULT_WEIGHT_KG, kcalPointForSets } from "../src/modules/workouts/calories.js";
 
 const state = (s: Partial<StreakState>): StreakState => ({ ...EMPTY_STREAK, ...s });
@@ -173,5 +180,88 @@ describe("kcal formula (2B §2.2: MET × weight × active hours)", () => {
     expect(kcalPointForSets(sets, null)).toBe(6 * DEFAULT_WEIGHT_KG);
     expect(kcalPointForSets(sets, 0)).toBe(6 * DEFAULT_WEIGHT_KG);
     expect(kcalPointForSets(sets, 100)).toBe(600);
+  });
+});
+
+describe("XP curve + accrual (badges.py port; DECISIONS 2026-07-24)", () => {
+  it("xpForLevel matches badges.py:215-227 (int(100*(l-1)^1.8))", () => {
+    expect(xpForLevel(1)).toBe(0);
+    expect(xpForLevel(2)).toBe(100); //  1^1.8 = 1
+    expect(xpForLevel(3)).toBe(348); //  2^1.8 = 3.4822
+    expect(xpForLevel(4)).toBe(722); //  3^1.8 = 7.2247
+  });
+
+  it("levelForXp steps at each threshold and caps the loop at 200 (badges.py:230-237)", () => {
+    expect(levelForXp(0)).toBe(1);
+    expect(levelForXp(99)).toBe(1);
+    expect(levelForXp(100)).toBe(2);
+    expect(levelForXp(347)).toBe(2);
+    expect(levelForXp(348)).toBe(3);
+    expect(levelForXp(721)).toBe(3);
+    expect(levelForXp(722)).toBe(4);
+    // The ported `if level > 200: break` bounds the loop — a huge total can
+    // never spin it away or exceed the cap.
+    expect(levelForXp(1e15)).toBe(201);
+  });
+
+  it("xpProgress reports level, in-level XP and pct (badges.py:240-253)", () => {
+    expect(xpProgress(0)).toEqual({
+      level: 1,
+      xp: 0,
+      xpInLevel: 0,
+      xpForNext: 100,
+      progressPct: 0,
+      nextLevelAt: 100,
+    });
+    // 400 XP → level 3 (base 348, next 722): 52 into a 374 span = 13.9%.
+    expect(xpProgress(400)).toEqual({
+      level: 3,
+      xp: 400,
+      xpInLevel: 52,
+      xpForNext: 374,
+      progressPct: 13.9,
+      nextLevelAt: 722,
+    });
+  });
+
+  it("computeTotalXp sums the ported components (workouts.py:216-300)", () => {
+    // 4 workouts, all excellent form, 2 streak-continuation days, 2 bronze badges
+    expect(
+      computeTotalXp({
+        workoutCount: 4,
+        perfectFormWorkouts: 0,
+        excellentFormWorkouts: 4,
+        streakContinuationDays: 2,
+        badgeXp: 100,
+      }),
+    ).toBe(400); // 200 + 0 + 80 + 20 + 100
+    // one perfect-form workout, no streak, no badges: 50 base + 50 perfect
+    expect(
+      computeTotalXp({
+        workoutCount: 1,
+        perfectFormWorkouts: 1,
+        excellentFormWorkouts: 0,
+        streakContinuationDays: 0,
+        badgeXp: 0,
+      }),
+    ).toBe(100);
+  });
+
+  it("countStreakContinuationDays counts consecutive-calendar-day pairs only (D5)", () => {
+    expect(countStreakContinuationDays(["2026-07-10", "2026-07-11", "2026-07-12"])).toBe(2);
+    expect(countStreakContinuationDays(["2026-07-10", "2026-07-12"])).toBe(0); // 1-day gap = reset
+    // input order must not matter (getActivityDays is sorted, but pin it)
+    expect(countStreakContinuationDays(["2026-07-12", "2026-07-10", "2026-07-11"])).toBe(2);
+    expect(countStreakContinuationDays([])).toBe(0);
+    expect(countStreakContinuationDays(["2026-07-10"])).toBe(0);
+  });
+
+  it("badgeXpForCodes sums by tier (badges.py:11-16); unknown code = 0", () => {
+    expect(badgeXpForCodes(["first_workout"])).toBe(50); // bronze
+    expect(badgeXpForCodes(["first_workout", "streak_3"])).toBe(100); // bronze + bronze
+    expect(badgeXpForCodes(["fifty_workouts"])).toBe(400); // gold
+    expect(badgeXpForCodes(["hundred_workouts"])).toBe(1000); // platinum
+    expect(badgeXpForCodes(["not_a_badge"])).toBe(0);
+    expect(badgeXpForCodes([])).toBe(0);
   });
 });

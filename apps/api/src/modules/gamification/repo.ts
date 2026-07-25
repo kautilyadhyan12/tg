@@ -6,6 +6,12 @@ import type { Sql, TransactionSql } from "postgres";
 import type { StreakState } from "./streak.js";
 import { EMPTY_STREAK } from "./streak.js";
 
+// A pooled handle OR a transaction context — safe for plain reads. The FOR
+// UPDATE lock below is typed TransactionSql (NOT this), because on a pooled
+// handle FOR UPDATE autocommits and releases the lock immediately (the DPDP
+// round-5 lesson, DECISIONS 2026-07-23).
+type SqlOrTx = Sql | TransactionSql;
+
 interface StreakDbRow {
   current: number;
   longest: number;
@@ -54,7 +60,7 @@ export interface EarnedRow {
   earnedAt: Date;
 }
 
-export async function listEarned(sql: Sql, userId: string): Promise<EarnedRow[]> {
+export async function listEarned(sql: SqlOrTx, userId: string): Promise<EarnedRow[]> {
   const rows = await sql<{ code: string; earned_at: Date }[]>`
     SELECT code, earned_at FROM user_achievements
     WHERE user_id = ${userId} ORDER BY earned_at ASC, code ASC`;
@@ -70,6 +76,56 @@ export async function awardAchievements(sql: Sql, userId: string, codes: string[
       VALUES (${userId}, ${code})
       ON CONFLICT (user_id, code) DO NOTHING`;
   }
+}
+
+/** Serialize XP recompute for ONE user across concurrent syncs, via an advisory
+ *  TRANSACTION lock. It serializes whether or not the user_xp row exists yet —
+ *  unlike `SELECT … FOR UPDATE`, which locks NOTHING on a first-ever sync (no
+ *  row to lock) and let two first-syncs race to a lost update (T3 F1). The XP
+ *  value is not read here: recompute derives it in full from committed rows, so
+ *  the lock only has to make the read-then-upsert atomic against another sync.
+ *
+ *  Typed SqlOrTx ONLY so the reserved-connection concurrency test can drive
+ *  this exact function. The lock is TRANSACTION-scoped, so on a POOLED handle it
+ *  would be taken and released in one implicit statement and serialize NOTHING
+ *  (the DPDP round-5 footgun, DECISIONS 2026-07-23). The sole production caller
+ *  runs it inside `sql.begin` (service.recomputeXp) — verified. */
+export async function lockXpForUser(sql: SqlOrTx, userId: string): Promise<void> {
+  await sql`SELECT pg_advisory_xact_lock(hashtext(${`xp:${userId}`}))`;
+}
+
+export async function upsertXp(tx: TransactionSql, userId: string, totalXp: number): Promise<void> {
+  await tx`
+    INSERT INTO user_xp (user_id, total_xp, updated_at)
+    VALUES (${userId}, ${totalXp}, now())
+    ON CONFLICT (user_id) DO UPDATE SET total_xp = EXCLUDED.total_xp, updated_at = now()`;
+}
+
+/** Read total_xp (no lock) for the /me read; 0 when the user has never synced. */
+export async function getXp(sql: SqlOrTx, userId: string): Promise<number> {
+  const rows = await sql<{ total_xp: number }[]>`
+    SELECT total_xp FROM user_xp WHERE user_id = ${userId}`;
+  return rows[0]?.total_xp ?? 0;
+}
+
+/** Workout-side XP accrual counts (base + form bonuses), badges.py-faithful:
+ *  avg_form_score >= 100 → perfect (+50), 80..99 → excellent (+20), mutually
+ *  exclusive (workouts.py:222-225). A NULL score counts toward the base but
+ *  earns no bonus (matches the old form_accuracy default of 0). */
+export async function getXpAccrualCounts(
+  sql: SqlOrTx,
+  userId: string,
+): Promise<{ workoutCount: number; perfectFormWorkouts: number; excellentFormWorkouts: number }> {
+  const [r] = await sql<{ workout_count: string; perfect: string; excellent: string }[]>`
+    SELECT count(*) AS workout_count,
+           count(*) FILTER (WHERE avg_form_score >= 100) AS perfect,
+           count(*) FILTER (WHERE avg_form_score >= 80 AND avg_form_score < 100) AS excellent
+    FROM workouts WHERE user_id = ${userId}`;
+  return {
+    workoutCount: Number(r?.workout_count ?? 0),
+    perfectFormWorkouts: Number(r?.perfect ?? 0),
+    excellentFormWorkouts: Number(r?.excellent ?? 0),
+  };
 }
 
 /** Distinct qualifying-activity days ('YYYY-MM-DD', user TZ) — the §3.5

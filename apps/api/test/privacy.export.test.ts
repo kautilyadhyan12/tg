@@ -134,6 +134,7 @@ d("DPDP data export (real Postgres)", () => {
     await sql`INSERT INTO run_schedules (user_id, rule) VALUES (${userId}, ${sql.json({})})`;
     await sql`INSERT INTO user_achievements (user_id, code) VALUES (${userId}, 'first_workout')`;
     await sql`INSERT INTO streaks (user_id, current, longest) VALUES (${userId}, 3, 5)`;
+    await sql`INSERT INTO user_xp (user_id, total_xp) VALUES (${userId}, 456)`;
     await sql`INSERT INTO challenge_participants (challenge_id, user_id)
               VALUES (${challengeId}, ${userId})`;
     await sql`INSERT INTO push_tokens (user_id, token, platform)
