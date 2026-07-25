@@ -76,17 +76,29 @@ then; none may be hidden or reduced to close the gap.
       for Kd-authorised schema beyond the spec) and ports the badges.py
       XP/level curve verbatim (R5.4). THEN the web XP display repoints.
       Dropping it was never on the table — no-removal.
-      **API HALF BUILT 2026-07-25 on branch `t3-user-xp` (commit 82524fe),
-      PENDING MERGE — this line stays OPEN until the web half ships.**
+      **API HALF ✅ MERGED TO MASTER 2026-07-26 as PR #50 (merge `47cc001`) —
+      this line stays OPEN because its actual subject, the web display, is
+      still on the old backend.**
       Migration `0008_user_xp` (1:1 `user_xp`, SQL reviewed by Kd) + the
       verbatim badges.py curve/constants in `gamification/xp.ts`; XP is
       RECOMPUTED from full history at every sync (never `$inc` — a retried sync
       would double-count), and `user_xp` is on BOTH DPDP lists (delete +
       export). `/v1/gamification/me` now returns an `xp` block
       `{total, level, xpInLevel, xpForNext, progressPct, nextLevelAt}`.
-      T3 (fresh chat) found ONE low finding — the first-sync lock did not
-      serialize before the row existed — fixed with `pg_advisory_xact_lock`,
-      pinned by a two-live-transaction test, mutation-verified. api 364/364.
+      NB **`web-repoint` does not carry it yet** — merge master into this branch
+      before starting the web half, or `/v1/gamification/me` will answer without
+      the `xp` block (the Google-login card's exact situation).
+      T3 ran FIVE fresh-chat rounds (25 findings, all resolved). The code has
+      been stable since round 1's lock fix; rounds 2-5 were about evidence and
+      records. Three behavioural guarantees each carry a mutation-verified test:
+      the advisory-lock body, its CALL SITE (probed via `pg_blocking_pids`), and
+      that `/me` reads stored XP rather than recomputing. api 366/366 on Neon.
+      **READ BEFORE TOUCHING XP NUMBERS:** `xp.ts` carries a governing rule —
+      *every recomputed input to every component diverges from the old backend*
+      (day bucketing, activity-vs-sync time, retroactive backfill, the
+      server-derived form score, and all four badge-stat inputs). The constants
+      are verbatim; the TOTALS deliberately are not. Do not "fix" a difference
+      against the old app without reading it.
       **STILL OWED (the web half, this line's actual subject):** repoint
       GamificationStrip + Achievements off `gamificationApi`'s old-backend
       `getOverview` onto the new `xp` block. TRAP, same class as the
@@ -126,6 +138,19 @@ then; none may be hidden or reduced to close the gap.
       deleted or reduced; this only sequences WHEN its new-backend home is
       built. Revisit if Kd later wants it visible at cutover → then a minimal
       read lands early instead.
+      **INHERITED THREAT MODEL — read before ranking anyone by XP** (from the
+      XP card's round-5 review, full text in master's DECISIONS): XP is safe
+      today ONLY because it grants nothing. Every one of its four components is
+      client-determined. PRIMARY vector: fabricated workout VOLUME — each
+      accepted sync of a fresh client-generated `workoutId` mints 50 (base) +
+      up to 50 (perfect-form bonus, since `avgFormScore` is client-sent per set
+      and the server merely averages it), and **`POST /v1/workouts/sync` has NO
+      per-route rate limit** (verified: `app.authenticate` is its only
+      preHandler). SECOND: backdated `startedAt` (no past/future clamp) mints
+      +10 per fabricated distinct day. The moment a leaderboard ranks on XP,
+      both become value-granting inputs — a per-route limit plus v1 §14.1
+      plausibility checks (P4.y) are the home for closing them, and v1 §14's
+      "verified entries only" for global boards is the other half.
 - [ ] 🔴 **Predictions** (PredictionsSection) — the 2B §5 card (P2.3 carve).
 - [ ] 🔴 **Exercise library content**: display names, instructions, media/GIFs,
       server-side search. The Part 4 §3.4 catalog is data-only
