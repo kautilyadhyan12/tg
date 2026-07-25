@@ -465,55 +465,84 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     // test covers the wiring: hold the lock for a REAL user, then drive a real
     // POST /v1/workouts/sync for that user and require it to BLOCK.
     //
-    // The proof signal is pg_locks, NOT a stopwatch — these syncs take seconds,
-    // so "it hadn't finished after N ms" would be the F3 vacuous pass again. A
-    // WAITER on an advisory lock can only exist if the sync path asked for one.
-    // Counting ungranted advisory locks is sufficient because this is the only
-    // advisory lock in the codebase (grep: repo.ts is the sole caller), so no
-    // other suite can contribute one.
+    // The proof signal is the LOCK GRAPH, NOT a stopwatch — these syncs take
+    // seconds, so "it hadn't finished after N ms" would be the F3 vacuous pass
+    // again. And it is scoped to THIS holder's backend pid, because "the only
+    // advisory lock in the codebase" does NOT mean "the only contender" (T3
+    // round 4): workouts.sync.test.ts fires three concurrent POSTs of one
+    // workout for one user, whose duplicate path still runs the hook, and
+    // vitest runs suites on up to 4 threads against ONE database — so a plain
+    // `pg_locks … NOT granted` count is satisfiable by a foreign suite.
+    // `pg_blocking_pids` asks the only question that cannot be answered by
+    // anyone else's contention: is a backend blocked BY US?
     let releaseHolder = (): void => {};
     const holderHolds = new Promise<void>((r) => (releaseHolder = r));
     let holderLocked = (): void => {};
     const holderReady = new Promise<void>((r) => (holderLocked = r));
+    let holderPid = 0;
 
     const holderP = sql.begin(async (tx) => {
+      const [me] = await tx<{ pid: number }[]>`SELECT pg_backend_pid()::int AS pid`;
+      holderPid = me?.pid ?? 0;
       await lockXpForUser(tx, userB); // a REAL user, the one the sync will use
       holderLocked();
       await holderHolds;
     });
     await Promise.race([holderReady, holderP]);
 
-    let syncDone = false;
-    const syncP = sync(crypto.randomUUID(), daysAgoIso(0), [squatSet(1)], cookieB).then((r) => {
-      syncDone = true;
-      return r;
-    });
-
-    const waitingOnAdvisory = async (): Promise<number> => {
-      const [row] = await sql<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM pg_locks WHERE locktype = 'advisory' AND NOT granted`;
-      return row?.n ?? 0;
-    };
-
+    // try opens HERE (T3 round 4 #5): everything that can throw while the lock
+    // is held must be inside it, or a throw strands the holder's transaction on
+    // the shared pool and leaks syncP's rejection.
     try {
-      // Poll until the sync is DEMONSTRABLY blocked on the advisory lock. If the
-      // call site is ever removed, no waiter appears, this loop exhausts and the
-      // expect below fails — which is exactly the mutation this test exists for.
+      expect(holderPid).toBeGreaterThan(0);
+
+      let syncDone = false;
+      const syncP = sync(crypto.randomUUID(), daysAgoIso(0), [squatSet(1)], cookieB).then((r) => {
+        syncDone = true;
+        return r;
+      });
+      // Park a no-op handler so a rejection can never surface as an UNHANDLED
+      // one if an assertion below throws first; the awaits still see the real
+      // outcome. (syncP is scoped inside the try per #5, so `finally` cannot
+      // reach it — this is what replaces that reach.)
+      syncP.catch(() => undefined);
+      // Read the flag through a typed accessor: TS narrows a `let x = false`
+      // to the literal `false` because the only mutation is inside a callback
+      // it cannot see run, which makes every `!syncDone` below an
+      // "always truthy" lint error. A `boolean`-returning function is the
+      // honest fix (no `as` cast, which R2.2 bans here).
+      const isSyncDone = (): boolean => syncDone;
+
+      const blockedByHolder = async (): Promise<number> => {
+        const [row] = await sql<{ n: number }[]>`
+          SELECT count(*)::int AS n FROM pg_stat_activity
+          WHERE wait_event_type = 'Lock' AND wait_event = 'advisory'
+            AND ${holderPid} = ANY(pg_blocking_pids(pid))`;
+        return row?.n ?? 0;
+      };
+
+      // Poll until the sync is DEMONSTRABLY blocked BY US. If the call site is
+      // removed, no such waiter appears and the assertion below fails — the
+      // mutation this test exists for. Bail out the moment the sync finishes,
+      // so a failed REQUEST is reported as itself rather than as a missing
+      // waiter 20 s later (round 4 #2 — F3's own shape, reintroduced).
       let waiters = 0;
-      for (let i = 0; i < 100 && waiters === 0; i++) {
-        waiters = await waitingOnAdvisory();
-        if (waiters === 0) await new Promise((r) => setTimeout(r, 200));
+      for (let i = 0; i < 100 && waiters === 0 && !isSyncDone(); i++) {
+        waiters = await blockedByHolder();
+        if (waiters === 0 && !isSyncDone()) await new Promise((r) => setTimeout(r, 200));
       }
-      expect(waiters).toBeGreaterThan(0); // the sync path asked for the lock…
-      expect(syncDone).toBe(false); // …and is parked on it
+      if (isSyncDone()) expect((await syncP).statusCode).toBe(201); // surfaces the real cause
+      expect(waiters).toBeGreaterThan(0); // the sync path asked for OUR lock…
+      expect(isSyncDone()).toBe(false); // …and is parked on it
 
       releaseHolder();
       await holderP;
       const res = await syncP;
       expect(res.statusCode).toBe(201); // and completes normally once released
+      await Promise.allSettled([syncP]);
     } finally {
       releaseHolder();
-      await Promise.allSettled([holderP, syncP]);
+      await Promise.allSettled([holderP]);
     }
   });
 

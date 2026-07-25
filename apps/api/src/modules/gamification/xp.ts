@@ -14,8 +14,11 @@
 // DO NOT re-add the sentence that used to sit here ("recomputing with the same
 // constants yields the same total for any real history"). It was FALSE, no test
 // carried it, and it was deleted at T3 round 3. The CONSTANTS are verbatim; the
-// TOTALS deliberately diverge from the old backend on three axes, all recorded
-// in DECISIONS under the D5 addendum:
+// TOTALS deliberately diverge from the old backend on FOUR axes, all recorded
+// in DECISIONS under the D5 addendum. Axes 1-3 are STREAK XP; axis 4 is the
+// FORM bonus and diverges independently — round 3 enumerated only the streak
+// ones and still called the list complete, which is the same "the enumeration
+// is the claim" defect the list itself documents:
 //   1. DAY BUCKETING — old: `datetime.utcnow().date()` (workouts.py:234);
 //      new: the user's own timezone (Part IV #8 forbids day math anywhere else).
 //   2. ACTIVITY TIME vs SYNC TIME — the old backend compared the SYNC INSTANT
@@ -28,9 +31,18 @@
 //      previous sync). That is not a corner case, it is the DESIGNED path: the
 //      same retroactive-restore semantics already ruled for streaks
 //      (Part 7 §3.5; DECISIONS 2026-07-11 P2.3 T3 finding 1).
-// All three are consequences of recompute-from-history being the correct model,
-// not defects — but they are DIVERGENCES, and calling them equivalence is how a
-// wrong premise gets reused later as fact.
+//   4. FORM INPUT — old: `form_accuracy`, a CLIENT-SENT workout-level float
+//      (workouts.py:36, default 0) tested `>=100` / `>=80` (:222-225). New:
+//      `avg_form_score`, SERVER-DERIVED as `Math.round(mean of per-set scores)`
+//      (workouts/repo.ts) and tested at the same thresholds. Two live
+//      consequences: sets [100,100,79] average 93 → +20 where a client-reported
+//      100 gave +50; and sets [100,99] average 99.5 → rounds to 100 → +50 where
+//      the old float comparison gave +20. Deriving it server-side is REQUIRED
+//      (R3.1 — the client must not hand us the number that grants the bonus),
+//      so this divergence is the rule working, not a port error.
+// All four are consequences of recompute-from-history (and server-derived
+// inputs) being the correct model, not defects — but they are DIVERGENCES, and
+// calling them equivalence is how a wrong premise gets reused later as fact.
 import { dayDiff } from "./streak.js";
 
 /** badges.py:202-211. Only workout / form / streak / badge XP is ever actually
