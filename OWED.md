@@ -76,6 +76,34 @@ then; none may be hidden or reduced to close the gap.
       for Kd-authorised schema beyond the spec) and ports the badges.py
       XP/level curve verbatim (R5.4). THEN the web XP display repoints.
       Dropping it was never on the table — no-removal.
+      **API HALF BUILT 2026-07-25 on branch `t3-user-xp` (commit 82524fe),
+      PENDING MERGE — this line stays OPEN until the web half ships.**
+      Migration `0008_user_xp` (1:1 `user_xp`, SQL reviewed by Kd) + the
+      verbatim badges.py curve/constants in `gamification/xp.ts`; XP is
+      RECOMPUTED from full history at every sync (never `$inc` — a retried sync
+      would double-count), and `user_xp` is on BOTH DPDP lists (delete +
+      export). `/v1/gamification/me` now returns an `xp` block
+      `{total, level, xpInLevel, xpForNext, progressPct, nextLevelAt}`.
+      T3 (fresh chat) found ONE low finding — the first-sync lock did not
+      serialize before the row existed — fixed with `pg_advisory_xact_lock`,
+      pinned by a two-live-transaction test, mutation-verified. api 364/364.
+      **STILL OWED (the web half, this line's actual subject):** repoint
+      GamificationStrip + Achievements off `gamificationApi`'s old-backend
+      `getOverview` onto the new `xp` block. TRAP, same class as the
+      nutrition-targets card: the API speaks camelCase (`xpInLevel`) while the
+      components read the old shape (`user.progress.xp_in_level`,
+      `user.xp`, `user.level`) — a straight swap yields `undefined`, which
+      renders as a plausible-looking blank rather than an error. The browser
+      SMOKE is owed WITH that card (the API half ships no reachable UI and
+      correctly claims none).
+      SCOPE BOUNDARY (verified by grep, so the web card does not over-reach):
+      those two screens ALSO render `badge.xp_reward` (Achievements.jsx) and
+      leaderboard `entry.xp`/`entry.level` — those belong to the **badge
+      catalog** and **leaderboard** lines below, NOT to this one. The per-badge
+      tier XP those need IS already ported (`ACHIEVEMENTS[].tier` +
+      `badgeXpForCodes`, in `gamification/badges.ts`), but it is not yet served
+      by any endpoint and is NOT stored on the `achievements` table — the badge
+      catalog card decides whether it needs a column.
 - [ ] 🔴 **Badge catalog + challenges screens.** "Tables now, screens later"
       carve; needs catalog/challenges read endpoints. Challenges also need a
       scheduler for weekly rotation. (DECISIONS 2026-07-11 P2.3.)
