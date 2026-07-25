@@ -7,10 +7,30 @@
 // live `$inc` (workouts.py:216-300). This is a deliberate DEVIATION, recorded
 // in DECISIONS: the sync hook runs on every retry (DECISIONS 2026-07-11 P2.3
 // T3 finding 2), and an `$inc` would double-count XP on a retried sync — the
-// exact hazard the streak recompute already exists to avoid. Recomputing with
-// the same constants yields the same total for any real history, and it is
-// idempotent by construction. Production starts empty, so there is no legacy
-// `$inc` total to reconcile against.
+// exact hazard the streak recompute already exists to avoid. It is idempotent
+// by construction. Production starts empty, so there is no legacy `$inc` total
+// to reconcile against.
+//
+// DO NOT re-add the sentence that used to sit here ("recomputing with the same
+// constants yields the same total for any real history"). It was FALSE, no test
+// carried it, and it was deleted at T3 round 3. The CONSTANTS are verbatim; the
+// TOTALS deliberately diverge from the old backend on three axes, all recorded
+// in DECISIONS under the D5 addendum:
+//   1. DAY BUCKETING — old: `datetime.utcnow().date()` (workouts.py:234);
+//      new: the user's own timezone (Part IV #8 forbids day math anywhere else).
+//   2. ACTIVITY TIME vs SYNC TIME — the old backend compared the SYNC INSTANT
+//      against `lastWorkoutDate`, itself written as `datetime.utcnow()` at
+//      :262, so its streak XP tracked WHEN A SYNC ARRIVED. This recompute
+//      buckets each workout's own `started_at`. A Monday workout synced on
+//      Wednesday therefore scores differently under each.
+//   3. RETROACTIVE BACKFILL — a late offline sync that fills a day gap creates
+//      +10s the old `$inc` could never award (it only ever compared against the
+//      previous sync). That is not a corner case, it is the DESIGNED path: the
+//      same retroactive-restore semantics already ruled for streaks
+//      (Part 7 §3.5; DECISIONS 2026-07-11 P2.3 T3 finding 1).
+// All three are consequences of recompute-from-history being the correct model,
+// not defects — but they are DIVERGENCES, and calling them equivalence is how a
+// wrong premise gets reused later as fact.
 import { dayDiff } from "./streak.js";
 
 /** badges.py:202-211. Only workout / form / streak / badge XP is ever actually

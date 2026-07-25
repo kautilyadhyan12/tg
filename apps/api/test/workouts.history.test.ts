@@ -374,18 +374,27 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     // returned 330 just the same. The assertion could not fail for the reason
     // it named. This one CAN: poison the stored value with a number no
     // recompute could ever produce; a recompute-on-read clobbers it back to 330.
-    await sql`UPDATE user_xp SET total_xp = 999 WHERE user_id = ${userB}`;
-    const me = await inject({ method: "GET", url: "/v1/gamification/me", access: cookieB });
-    expect(me.statusCode).toBe(200);
-    const body = me.json<{ xp: { total: number; level: number } }>();
-    expect(body.xp.total).toBe(999); // stored value served verbatim
-    expect(body.xp.level).toBe(4); // …and the level is DERIVED from it (999 ≥ 722)
-    // The stored row is untouched by the read (no write-on-read).
-    const [row] = await sql<{ total_xp: number }[]>`
+    // Capture the real value rather than hard-coding the restore (T3 round 3):
+    // writing back a literal 330 would duplicate a number the system DERIVES —
+    // the same copy-of-a-derived-value shape as the F4 cleanup list.
+    const [before] = await sql<{ total_xp: number }[]>`
       SELECT total_xp FROM user_xp WHERE user_id = ${userB}`;
-    expect(row?.total_xp).toBe(999);
-    // Restore so later assertions/reruns see the real recomputed value.
-    await sql`UPDATE user_xp SET total_xp = 330 WHERE user_id = ${userB}`;
+    const stored = before?.total_xp ?? 0;
+    try {
+      await sql`UPDATE user_xp SET total_xp = 999 WHERE user_id = ${userB}`;
+      const me = await inject({ method: "GET", url: "/v1/gamification/me", access: cookieB });
+      expect(me.statusCode).toBe(200);
+      const body = me.json<{ xp: { total: number; level: number } }>();
+      expect(body.xp.total).toBe(999); // stored value served verbatim
+      expect(body.xp.level).toBe(4); // …and the level is DERIVED from it (999 ≥ 722)
+      // The stored row is untouched by the read (no write-on-read).
+      const [row] = await sql<{ total_xp: number }[]>`
+        SELECT total_xp FROM user_xp WHERE user_id = ${userB}`;
+      expect(row?.total_xp).toBe(999);
+    } finally {
+      // Restore in a finally so a failed assertion cannot strand the poison.
+      await sql`UPDATE user_xp SET total_xp = ${stored} WHERE user_id = ${userB}`;
+    }
   });
 
   it("XP recompute serializes concurrent syncs even before the user_xp row exists (T3 F1)", { timeout: 30_000 }, async () => {
@@ -409,7 +418,12 @@ d("workouts history + progress + gamification (real Postgres)", () => {
       aLocked();
       await aHolds;
     });
-    await aReady;
+    // Race, not a bare await (T3 round 3): if A's transaction REJECTS (pool
+    // starvation, connection error) aLocked never fires, so a bare `await
+    // aReady` would hang past the `try` — never reaching the finally, leaving
+    // aP's rejection unhandled, and reporting a 30 s timeout instead of the
+    // real cause. This surfaces A's error as the failure.
+    await Promise.race([aReady, aP]);
 
     // B must get PAST `begin` and be blocked ON THE LOCK ITSELF. Round 1 timed a
     // window that also contained B's `begin` round-trip, so the "not acquired"
@@ -440,6 +454,66 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     } finally {
       releaseA(); // never strand A's transaction if an assertion throws
       await Promise.allSettled([aP, bP]); // and never leak an unhandled rejection
+    }
+  });
+
+  it("the SYNC PATH actually takes that lock — the call site, not just the primitive", { timeout: 60_000 }, async () => {
+    // T3 round 3: the test above drives lockXpForUser DIRECTLY on a synthetic
+    // id, so deleting the call in service.recomputeXp left the whole suite
+    // green — a serial recompute is bit-identical with or without a lock. The
+    // type only stops the wrong ARGUMENT; it cannot see a DELETED CALL. This
+    // test covers the wiring: hold the lock for a REAL user, then drive a real
+    // POST /v1/workouts/sync for that user and require it to BLOCK.
+    //
+    // The proof signal is pg_locks, NOT a stopwatch — these syncs take seconds,
+    // so "it hadn't finished after N ms" would be the F3 vacuous pass again. A
+    // WAITER on an advisory lock can only exist if the sync path asked for one.
+    // Counting ungranted advisory locks is sufficient because this is the only
+    // advisory lock in the codebase (grep: repo.ts is the sole caller), so no
+    // other suite can contribute one.
+    let releaseHolder = (): void => {};
+    const holderHolds = new Promise<void>((r) => (releaseHolder = r));
+    let holderLocked = (): void => {};
+    const holderReady = new Promise<void>((r) => (holderLocked = r));
+
+    const holderP = sql.begin(async (tx) => {
+      await lockXpForUser(tx, userB); // a REAL user, the one the sync will use
+      holderLocked();
+      await holderHolds;
+    });
+    await Promise.race([holderReady, holderP]);
+
+    let syncDone = false;
+    const syncP = sync(crypto.randomUUID(), daysAgoIso(0), [squatSet(1)], cookieB).then((r) => {
+      syncDone = true;
+      return r;
+    });
+
+    const waitingOnAdvisory = async (): Promise<number> => {
+      const [row] = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM pg_locks WHERE locktype = 'advisory' AND NOT granted`;
+      return row?.n ?? 0;
+    };
+
+    try {
+      // Poll until the sync is DEMONSTRABLY blocked on the advisory lock. If the
+      // call site is ever removed, no waiter appears, this loop exhausts and the
+      // expect below fails — which is exactly the mutation this test exists for.
+      let waiters = 0;
+      for (let i = 0; i < 100 && waiters === 0; i++) {
+        waiters = await waitingOnAdvisory();
+        if (waiters === 0) await new Promise((r) => setTimeout(r, 200));
+      }
+      expect(waiters).toBeGreaterThan(0); // the sync path asked for the lock…
+      expect(syncDone).toBe(false); // …and is parked on it
+
+      releaseHolder();
+      await holderP;
+      const res = await syncP;
+      expect(res.statusCode).toBe(201); // and completes normally once released
+    } finally {
+      releaseHolder();
+      await Promise.allSettled([holderP, syncP]);
     }
   });
 
