@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Trophy, Target, Crown, ChevronRight, Sparkles } from 'lucide-react';
 import {
-  UNKNOWN, formatLevel, formatXpProgress, formatXpTotal, gamificationService,
-  xpBarWidth,
+  UNKNOWN, badgesKnown, challengesKnown, formatLevel, formatXpProgress,
+  formatXpTotal, gamificationService, oldPayloadState, xpBarWidth,
 } from '../../api/gamificationApi';
 import { useXp } from '../../hooks/useXp';
 
@@ -85,13 +85,23 @@ export default function GamificationStrip() {
   // `null` = unknown; nothing here invents a number (see readXpView).
   const { xp } = useXp();
 
+  // ROUND 3 F8: `Promise.all` coupled two independent old-backend features, so
+  // ONE rejection nulled BOTH payloads. DECISIONS 2026-07-24 rules the
+  // leaderboard goes dark until P4 — with `all`, that planned dark window would
+  // have blanked the badge catalog and challenges too: a no-removal problem
+  // arriving on a schedule. Settled independently now, and logged message-only
+  // (R3.10) rather than handing the whole axios error to console.error.
   useEffect(() => {
-    Promise.all([
+    Promise.allSettled([
       gamificationService.getOverview(),
       gamificationService.getLeaderboard(5),
     ])
-      .then(([overview, lb]) => { setData(overview.data); setLeaderboard(lb.data); })
-      .catch(console.error)
+      .then(([overview, lb]) => {
+        if (overview.status === 'fulfilled') setData(overview.value.data);
+        else console.error('gamification overview failed:', overview.reason?.message);
+        if (lb.status === 'fulfilled') setLeaderboard(lb.value.data);
+        else console.error('leaderboard failed:', lb.reason?.message);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -114,10 +124,15 @@ export default function GamificationStrip() {
   // user count, "(0/—)" and "0 of — badges" claimed zero earned badges, and
   // "Complete workouts to earn your first badge" told a user with badges that
   // they had none. All were unreachable before this card and are the PERMANENT
-  // state on this branch. `oldReady` is the honest distinction: when the old
-  // payload is absent nothing about badges or challenges is KNOWN, so those
-  // cards say so instead of saying zero.
-  const oldReady     = Boolean(data);
+  // state on this branch.
+  //
+  // ROUND 3 F2/F5: `oldReady = Boolean(data)` was wrong twice over. It treated
+  // "still in flight" as "failed", so a healthy load asserted "unavailable";
+  // and it asserted the ENVELOPE arrived rather than the FIELD inside it, so a
+  // 200 with `{}` still printed "(0/—)" and "earn your first badge". Three
+  // states, and per-card knowledge — both pure and unit-tested.
+  const oldState     = oldPayloadState({ data, loading });
+  const oldFailed    = oldState === 'failed';
   const badges       = data?.badges;
   const challenges   = data?.challenges;
   const earnedBadges = badges?.all?.filter((b) => b.earned) ?? [];
@@ -160,17 +175,19 @@ export default function GamificationStrip() {
             </button>
           </div>
           <div className="flex flex-col gap-2 flex-1">
-            {oldReady ? (
-              (challenges?.active ?? []).slice(0, 3).map((c) => (
+            {challengesKnown(data) ? (
+              challenges.active.slice(0, 3).map((c) => (
                 <ChallengeRow key={c.id} challenge={c} />
               ))
-            ) : (
+            ) : oldFailed ? (
               // An empty list would read as "no challenges this week", which is
-              // a claim we cannot make when the payload never arrived (round 2 ①).
+              // a claim we cannot make when the payload never arrived (round 2 ①)
+              // — and only sayable once the read has FAILED, not while it is
+              // still in flight (round 3 F2).
               <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
                 Challenges are unavailable right now
               </p>
-            )}
+            ) : null}
           </div>
         </div>
       </HeroCard>
@@ -237,7 +254,7 @@ export default function GamificationStrip() {
                 Latest Badges
               </h3>
               <span className="text-2xs" style={{ color: 'rgba(255,255,255,0.75)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
-                ({oldReady ? earnedBadges.length : UNKNOWN}/{badges?.total_count ?? UNKNOWN})
+                ({badgesKnown(data) ? earnedBadges.length : UNKNOWN}/{Number.isFinite(badges?.total_count) ? badges.total_count : UNKNOWN})
               </span>
             </div>
             <button
@@ -284,9 +301,11 @@ export default function GamificationStrip() {
                 <Sparkles className="w-6 h-6" style={{ color: 'rgba(255,138,31,0.5)' }} />
                 <p className="text-xs text-center"
                    style={{ color: 'rgba(255,255,255,0.65)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
-                  {oldReady
+                  {badgesKnown(data)
                     ? <>Complete workouts to<br />earn your first badge</>
-                    : <>Badges are<br />unavailable right now</>}
+                    : oldFailed
+                      ? <>Badges are<br />unavailable right now</>
+                      : null}
                 </p>
               </div>
             )}

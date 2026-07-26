@@ -52,6 +52,37 @@ export function readXpView(data) {
   return Number.isFinite(parsed.data.progressPct) ? parsed.data : null;
 }
 
+/** The OLD payload's three states, as a pure function — round 3's Done-gate
+ *  recommendation, and the fix for its F2.
+ *
+ *  Both components used `!xp` as a stand-in for "the old read is finished",
+ *  which it is not: with `if (loading && !xp)` the state "new API answered, old
+ *  read still IN FLIGHT" rendered "Failed to load achievements" and "Badges are
+ *  unavailable right now" — a failure CLAIM during a healthy load. That is
+ *  verbatim the defect round 1 ④ deleted from the XP wording, re-created for the
+ *  old payload by round 2's own fix. And because `mlApi` sets no timeout, an old
+ *  backend that accepts the connection and never answers made that false claim
+ *  PERMANENT — the same hang round 2 ② was written about, inverted.
+ *
+ *  Three states, never two. Pure and unit-tested, so the four combinations are
+ *  covered without a DOM (vitest runs `environment: "node"`; the jsdom project
+ *  is still owed). */
+export function oldPayloadState({ data, loading }) {
+  if (data) return 'ready';
+  return loading ? 'loading' : 'failed';
+}
+
+/** Per-CARD readiness — round 3 F5. `Boolean(data)` asserts the ENVELOPE
+ *  arrived, not that the field inside it did, so a 200 with `{}` (the shape this
+ *  file's own test adapter returns) still produced "(0/—)", "0 of — badges" and
+ *  "Badges (0)". Array-shape is the honest question: can we enumerate them? */
+export function badgesKnown(data) {
+  return Array.isArray(data?.badges?.all);
+}
+export function challengesKnown(data) {
+  return Array.isArray(data?.challenges?.active);
+}
+
 /** Render helpers — the ONLY way a component may turn `xp` into anything.
  *
  *  They exist because round 1's mutation proved the guard was at the READER

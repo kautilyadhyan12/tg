@@ -5,7 +5,8 @@ import { useTransition } from '../context/TransitionContext';
 import { workoutService } from '../api/workoutApi';
 import { recommendationService } from '../api/recommendationApi';
 import {
-  formatLevel, formatNextLevel, formatXpFraction, formatXpTotal, xpBarWidth,
+  UNKNOWN, formatLevel, formatNextLevel, formatXpFraction, formatXpTotal,
+  xpBarWidth,
 } from '../api/gamificationApi';
 import { useXp } from '../hooks/useXp';
 import GamificationStrip from '../components/dashboard/GamificationStrip';
@@ -252,6 +253,12 @@ export default function Dashboard() {
       .catch(console.error);
   }, []);
 
+  // `stats` is null when the old read fails, which on this branch is permanent
+  // (mlApi's Bearer comes from localStorage, which Card 1 no longer writes).
+  // Without this the `|| 0` fallbacks fabricate — the review of 888e750 put it
+  // exactly right: no source knows those zeros, and a real "Level 2" sitting
+  // beside them lends them credibility.
+  const statsKnown = Boolean(stats?.stats);
   const s        = stats?.stats || {};
   const activity = stats?.activity || {};
   const recent   = stats?.recent_workouts || [];
@@ -339,9 +346,9 @@ export default function Dashboard() {
 
         {/* ── Stats grid ────────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard icon={Dumbbell} label="Total Workouts" value={s.total_workouts || 0} sub="all time" color="#FF8A1F" delay={0.15} bgImage="/images/dashboard/totalworkout.png" />
-          <StatCard icon={Clock} label="Hours Trained" value={Math.round((s.total_minutes || 0) / 60 * 10) / 10} suffix="h" sub={`${s.total_minutes || 0} minutes`} color="#60a5fa" delay={0.2} bgImage="/images/dashboard/hourstrained.png" />
-          <StatCard icon={Flame} label="Calories Burned" value={s.total_calories || 0} sub="kcal total" color="#f97316" delay={0.25} bgImage="/images/dashboard/caloriesburned.png" />
+          <StatCard icon={Dumbbell} label="Total Workouts" value={statsKnown ? (s.total_workouts ?? 0) : UNKNOWN} sub="all time" color="#FF8A1F" delay={0.15} bgImage="/images/dashboard/totalworkout.png" />
+          <StatCard icon={Clock} label="Hours Trained" value={statsKnown ? Math.round((s.total_minutes ?? 0) / 60 * 10) / 10 : UNKNOWN} suffix="h" sub={statsKnown ? `${s.total_minutes ?? 0} minutes` : undefined} color="#60a5fa" delay={0.2} bgImage="/images/dashboard/hourstrained.png" />
+          <StatCard icon={Flame} label="Calories Burned" value={statsKnown ? (s.total_calories ?? 0) : UNKNOWN} sub="kcal total" color="#f97316" delay={0.25} bgImage="/images/dashboard/caloriesburned.png" />
           <StatCard icon={Trophy} label="Current Level" value={`Level ${formatLevel(xp)}`} sub={`${formatXpTotal(xp)} XP earned`} color="#FFD66B" delay={0.3} bgImage="/images/dashboard/currentlevel.png" />
         </div>
 
@@ -358,8 +365,8 @@ export default function Dashboard() {
               </div>
               <div className="mt-4 grid grid-cols-3 gap-3" style={{ maxWidth: '65%' }}>
                 {[
-                  { label: 'This week', value: `${s.weekly_workouts || 0}`, sub: 'workouts' },
-                  { label: 'Streak',    value: `${s.streak || 0}`,          sub: 'days' },
+                  { label: 'This week', value: statsKnown ? `${s.weekly_workouts ?? 0}` : UNKNOWN, sub: 'workouts' },
+                  { label: 'Streak',    value: statsKnown ? `${s.streak ?? 0}` : UNKNOWN,          sub: 'days' },
                   { label: 'Level',     value: formatLevel(xp),             sub: 'current' },
                 ].map(({ label, value, sub }) => (
                   <div key={label} className="text-center">
@@ -380,7 +387,7 @@ export default function Dashboard() {
               <div style={{ maxWidth: '70%' }}>
                 <WeekStrip activity={activity} />
                 <p className="text-xs mt-4 text-center" style={{ color: 'rgba(255,255,255,0.50)' }}>
-                  {s.weekly_workouts || 0} of 7 days active
+                  {statsKnown ? `${s.weekly_workouts ?? 0} of 7 days active` : 'Weekly activity unavailable'}
                 </p>
               </div>
             </BgCard>

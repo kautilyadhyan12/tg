@@ -5,8 +5,9 @@ import {
   Medal, Loader2, ChevronRight,
 } from 'lucide-react';
 import {
-  UNKNOWN, formatLevel, formatNextLevel, formatXpFraction, formatXpTotal,
-  gamificationService, xpBarWidth,
+  UNKNOWN, badgesKnown, challengesKnown, formatLevel, formatNextLevel,
+  formatXpFraction, formatXpTotal, gamificationService, oldPayloadState,
+  xpBarWidth,
 } from '../api/gamificationApi';
 import { useAuth } from '../context/AuthContext';
 import { useXp } from '../hooks/useXp';
@@ -258,7 +259,7 @@ function LeaderboardRow({ entry, index }) {
       <div className="text-right">
         <p className="text-sm font-bold tabular-nums"
            style={{ color: '#FF8A1F' }}>
-          {entry.xp.toLocaleString()}
+          {Number.isFinite(entry.xp) ? entry.xp.toLocaleString() : UNKNOWN}
         </p>
         <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.40)' }}>
           XP
@@ -280,15 +281,16 @@ export default function Achievements() {
   const { xp } = useXp();
 
   useEffect(() => {
-    Promise.all([
+    Promise.allSettled([
       gamificationService.getOverview(),
       gamificationService.getLeaderboard(20),
     ])
       .then(([overviewRes, lbRes]) => {
-        setData(overviewRes.data);
-        setLeaderboard(lbRes.data);
+        if (overviewRes.status === 'fulfilled') setData(overviewRes.value.data);
+        else console.error('gamification overview failed:', overviewRes.reason?.message);
+        if (lbRes.status === 'fulfilled') setLeaderboard(lbRes.value.data);
+        else console.error('leaderboard failed:', lbRes.reason?.message);
       })
-      .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
@@ -320,7 +322,8 @@ export default function Achievements() {
   // `challenges.active.map` below was left unguarded while its own sibling was
   // chained, and a render throw blanks the page (no ErrorBoundary in apps/web),
   // which would take the XP header with it.
-  const oldReady     = Boolean(data);
+  const oldState     = oldPayloadState({ data, loading });
+  const oldFailed    = oldState === 'failed';
   const badges       = data?.badges;
   const challenges   = data?.challenges;
   const earnedBadges = badges?.all?.filter((b) => b.earned) ?? [];
@@ -397,7 +400,7 @@ export default function Achievements() {
               </h1>
               <p className="text-xs" style={{ color: 'rgba(255,255,255,0.50)' }}>
                 {formatXpTotal(xp)} total XP
-                {' · '}{oldReady ? earnedBadges.length : UNKNOWN} of {badges?.total_count ?? UNKNOWN} badges
+                {' · '}{badgesKnown(data) ? earnedBadges.length : UNKNOWN} of {Number.isFinite(badges?.total_count) ? badges.total_count : UNKNOWN} badges
               </p>
             </div>
             <div className="text-right">
@@ -438,7 +441,7 @@ export default function Achievements() {
         {/* The old-backend failure notice lives HERE, not in an early return —
             badges, challenges and the leaderboard come from that payload, the
             XP header above does not. (T3 finding ①.) */}
-        {!data && (
+        {oldFailed && (
           <div className="card-glass">
             <p className="text-white">Failed to load achievements</p>
             <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.50)' }}>
@@ -451,8 +454,8 @@ export default function Achievements() {
         {data && (
         <div className="flex gap-2">
           {[
-            { id: 'badges',      label: 'Badges',       icon: Medal,  count: earnedBadges.length },
-            { id: 'challenges',  label: 'Challenges',   icon: Target, count: challenges?.active?.length ?? 0 },
+            { id: 'badges',      label: 'Badges',       icon: Medal,  count: badgesKnown(data) ? earnedBadges.length : null },
+            { id: 'challenges',  label: 'Challenges',   icon: Target, count: challengesKnown(data) ? challenges.active.length : null },
             { id: 'leaderboard', label: 'Leaderboard',  icon: Crown,  count: null },
           ].map((t) => {
             const Icon = t.icon;
@@ -566,12 +569,12 @@ export default function Achievements() {
                 </div>
                 <p className="text-2xs"
                    style={{ color: 'rgba(255,255,255,0.30)' }}>
-                  {leaderboard.total_users} athletes
+                  {Number.isFinite(leaderboard.total_users) ? leaderboard.total_users : UNKNOWN} athletes
                 </p>
               </div>
 
               <div className="space-y-1">
-                {leaderboard.leaderboard.map((entry, i) => (
+                {(leaderboard.leaderboard ?? []).map((entry, i) => (
                   <LeaderboardRow key={entry.user_id} entry={entry} index={i} />
                 ))}
               </div>
@@ -583,7 +586,7 @@ export default function Achievements() {
                      style={{ color: 'rgba(255,255,255,0.50)' }}>
                     You're ranked <strong style={{ color: '#FF8A1F' }}>
                       #{leaderboard.current_user_rank}
-                    </strong> of {leaderboard.total_users}
+                    </strong> of {Number.isFinite(leaderboard.total_users) ? leaderboard.total_users : UNKNOWN}
                   </p>
                 </div>
               )}

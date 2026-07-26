@@ -74,7 +74,19 @@ Each needs an API surface built BEFORE its screen can be repointed. Per the
 no-removal rule these UIs stay untouched and working on the old backend until
 then; none may be hidden or reduced to close the gap.
 
-- [x] 🔴 **XP / levels display — DONE 2026-07-26. Commits `7750478` (build) +
+- [ ] 🔴 **XP / levels display — UNTICKED 2026-07-26 by T3 round 3.** It was
+      ticked on the round-2 smoke; round 3 then found three behaviour defects
+      that a click-through cannot see, so the tick was premature and comes off
+      (the google-login / DPDP precedent). Re-ticks when round 3's fixes have
+      their own smoke AND a round 4 comes back clean. Round 3's findings:
+      an unguarded `leaderboard.leaderboard.map` — the twin of the read round 2
+      claimed to have fixed — which blanks the whole page including the XP
+      header on a partial 200; "Failed to load achievements" asserted while the
+      old read was still IN FLIGHT (a failure claim during a healthy load, and
+      permanent against a hanging backend, since mlApi sets no timeout); and
+      `oldReady = Boolean(data)` testing the envelope rather than the field, so
+      a 200 with `{}` still printed "(0/—)" and "earn your first badge".
+      Commits `7750478` (build) +
       `f918cc4` (T3 round 2). RE-SMOKE PASSED (Kd) on the round-2 bytes: the
       strip read "330 XP · Level 2" / "230/248 to Lv 3" with the old backend
       OFF, the counters read "(—/—)" and "of —" rather than zeros, Achievements
@@ -235,14 +247,24 @@ then; none may be hidden or reduced to close the gap.
       Also fix while here: `workoutApi.js` declares **`getHistory` TWICE** in
       one object literal (lines 5 and 9) — the second silently wins, so the
       `(limit)` variant is dead code and a footgun.
-- [x] 🔴 **DONE 2026-07-26 — Dashboard XP repointed, SMOKE OWED.** Kd chose
+- [ ] 🔴 **UNTICKED 2026-07-26 by its own T3.** The card repointed XP but left
+      the page's OTHER six figures fabricating (`s.total_workouts || 0` and
+      friends), and `stats` is null whenever the old read fails — so a real
+      "Level 2" sat beside three fabricated zeros and lent them credibility,
+      while the strip below it correctly showed "—/—". Fixed at round 3 with
+      `statsKnown`; re-ticks on a fresh smoke. The DECISIONS entry calling that
+      mix "honest" was false and is struck there.
+      Kd chose
       option (a) on 2026-07-26 (ship the XP card, then this immediately) and
       confirmed the defect from his own re-smoke screenshot: the same page read
       "Level 1 / 0 XP earned" in a stat card and "0/100 XP → Level 2" in the
       Experience Points panel while the strip below it read "330 XP · Level 2".
       All four Dashboard sites now read the new API through the same `useXp()`
       hook and the shared formatters: the stat card's level + total, the XPBar,
-      and the small "Level" figure. **The `xp % 100` maths is DELETED** — it
+      and the small "Level" figure. **The `xp % 100` maths is deleted FROM THIS
+      PAGE** — the original wording said "DELETED" full stop, which its own T3
+      showed was false of the app: `PostWorkout.jsx` still carries it, and has
+      its own line below — it
       assumed every level costs 100 XP, but the curve is
       `floor(100*(level-1)^1.8)` (badges.py:215-227), so it was wrong for every
       user above level 2; the server's own `xpInLevel`/`xpForNext` are rendered
@@ -309,17 +331,34 @@ then; none may be hidden or reduced to close the gap.
       card (P4.x), which is where `entry.*` gets its new-API home. Until then,
       "header level vs. my own leaderboard row may disagree" is an EXPECTED
       smoke observation, not a bug to chase.
-- [ ] 🟡 **`.catch(console.error)` on axios errors prints the old backend's
-      Bearer token to the browser console.** Pre-existing, R3.10, in files the
-      XP card edited but out of its scope to fix — recorded because that card
-      applied the message-only rule to its own new log line and left the same
-      class two lines away (its T3 made the point). `GamificationStrip.jsx` and
-      `Achievements.jsx` both `.catch(console.error)` the whole axios error
-      object, whose `config.headers.Authorization` carries whatever `mlApi.js`
-      attached. Harmless while that value is the string "Bearer null" on this
-      branch, real the moment any client attaches a live one. The fix is the
-      `err?.message` form used in `useXp.js`; it belongs to a small sweep of
-      every `catch(console.error)` on an axios call, not to one card.
+- [ ] 🟡 **`.catch(console.error)` on axios errors logs the whole error object,
+      including any Authorization header.** Pre-existing, R3.10. **CORRECTED
+      2026-07-26 twice over by the T3s.** (a) The original line said the leaked
+      value is the string "Bearer null" — FALSE: `mlApi.js` sets the header only
+      `if (token)`, so on this branch NO Authorization header is attached at all.
+      The item is real but LESS urgent than recorded, not more; it becomes real
+      the day any client attaches a live token. (b) The line named only
+      `GamificationStrip.jsx` and `Achievements.jsx` while its own criterion was
+      "files the XP card edited" — `Dashboard.jsx` qualified too and was missing.
+      Round 3 has since converted the two gamification call sites to the
+      `err?.message` form as part of the `allSettled` change, so what remains is
+      the wider sweep: every other `catch(console.error)` on an axios call in
+      `apps/web`, `Dashboard.jsx` included.
+- [ ] 🔴 **`PostWorkout.jsx` has the same 100-XP-per-level bug the Dashboard
+      card deleted — and it is shown after EVERY workout.** Found by the T3 on
+      888e750 (its F4) and given this line because the MIGRATION STANCE requires
+      the deferral to be recorded in the deferring commit; grep confirmed
+      "PostWorkout" appeared in neither OWED.md nor DECISIONS.md before now.
+      `const xpProgress = summary.current_xp % 100` then
+      `{xpProgress}/100 XP → Level {summary.current_level + 1}` — the identical
+      assumption, on a live route (App.jsx). The real curve is
+      `floor(100*(level-1)^1.8)`, so it is wrong for every user above level 2.
+      OUT of the Dashboard card's scope because it reads a different payload
+      (`summary.*` from the workout-complete response, not `/v1/gamification/me`),
+      so it needs its own repoint rather than a formatter swap. **OWED.md said
+      "The `xp % 100` maths is DELETED" — true of the Dashboard, false of the
+      app**, which is the "fix the class, not the case" failure this project
+      keeps recording; that wording is corrected on the Dashboard line above.
 - [ ] 🟡 **The sidebar level is STALE until a full page reload.** Raised by the
       XP card's T3 round 2 (2026-07-26), which correctly demolished the reason
       the code gave for its own design. `useXp` reads once with `[]` deps and
