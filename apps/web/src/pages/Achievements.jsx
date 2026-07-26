@@ -5,12 +5,11 @@ import {
   Medal, Loader2, ChevronRight,
 } from 'lucide-react';
 import {
-  UNKNOWN, badgesKnown, challengesKnown, formatCount, formatFraction,
-  formatLevel, formatNextLevel, formatXpFraction, formatXpTotal,
-  gamificationService, oldPayloadState, orUnknown, progressWidth,
-  readLeaderboardView, readOverviewView, xpBarWidth,
+  earnedBadgeCount, formatCount, formatFraction, formatLevel, formatNextLevel,
+  formatXpFraction, formatXpTotal, gamificationService, listState,
+  oldPayloadState, orUnknown, progressWidth, readLeaderboardView,
+  readOverviewView, xpBarWidth,
 } from '../api/gamificationApi';
-import { useAuth } from '../context/AuthContext';
 import { useXp } from '../hooks/useXp';
 
 // ── Tier color config ─────────────────────────────────────────────────────────
@@ -33,9 +32,22 @@ const CATEGORY_LABELS = {
   engagement:  'Engagement',
 };
 
+/** Bucket for a badge whose category is unknown or is a key this map does not
+ *  carry — see round 5 F7. Kept out of CATEGORY_LABELS so the eight real
+ *  sections keep their order and this one always renders last. */
+const OTHER_CATEGORY = 'other';
+const OTHER_LABEL    = 'Other';
+
 // ── Single badge card ─────────────────────────────────────────────────────────
+/** ROUND 5 F2: `badge.earned` is now true / false / NULL, and null must render
+ *  as neither. The locked treatment — a padlock, grayscale, 45% opacity — is a
+ *  CLAIM that the user has not earned it; showing that for an unknown is the
+ *  same fabrication as printing a zero. Unknown keeps the icon, drops the
+ *  padlock, and sits at an intermediate opacity that asserts nothing. */
 function BadgeCard({ badge, index }) {
-  const tier = TIER_CONFIG[badge.tier] || TIER_CONFIG.bronze;
+  const tier    = TIER_CONFIG[badge.tier] || TIER_CONFIG.bronze;
+  const earned  = badge.earned === true;
+  const unknown = badge.earned === null;
 
   return (
     <motion.div
@@ -45,14 +57,14 @@ function BadgeCard({ badge, index }) {
       whileHover={{ y: -2 }}
       className="relative rounded-2xl p-4 text-center transition-all"
       style={{
-        background: badge.earned
+        background: earned
           ? tier.bg
           : 'rgba(255,255,255,0.02)',
-        border: badge.earned
+        border: earned
           ? `1px solid ${tier.ring}`
-          : '1px solid rgba(255,255,255,0.04)',
-        opacity:    badge.earned ? 1 : 0.45,
-        boxShadow:  badge.earned ? tier.glow : 'none',
+          : unknown ? '1px dashed rgba(255,255,255,0.14)' : '1px solid rgba(255,255,255,0.04)',
+        opacity:    earned ? 1 : unknown ? 0.7 : 0.45,
+        boxShadow:  earned ? tier.glow : 'none',
       }}
     >
       {/* Icon */}
@@ -60,13 +72,14 @@ function BadgeCard({ badge, index }) {
         className="w-14 h-14 mx-auto rounded-2xl flex items-center justify-center
                    text-3xl mb-2"
         style={{
-          background: badge.earned
+          background: earned
             ? `${tier.color}15`
             : 'rgba(255,255,255,0.03)',
-          filter: badge.earned ? 'none' : 'grayscale(80%)',
+          filter: earned || unknown ? 'none' : 'grayscale(80%)',
         }}
+        title={unknown ? 'Earned state unavailable' : undefined}
       >
-        {badge.earned ? badge.icon : <Lock className="w-6 h-6"
+        {earned || unknown ? orUnknown(badge.icon) : <Lock className="w-6 h-6"
           style={{ color: 'rgba(255,255,255,0.30)' }} />}
       </div>
 
@@ -75,8 +88,8 @@ function BadgeCard({ badge, index }) {
         className="inline-block text-2xs font-semibold uppercase tracking-wider
                    px-2 py-0.5 rounded-full mb-2"
         style={{
-          background: badge.earned ? `${tier.color}20` : 'rgba(255,255,255,0.04)',
-          color:      badge.earned ? tier.color : 'rgba(255,255,255,0.35)',
+          background: earned ? `${tier.color}20` : 'rgba(255,255,255,0.04)',
+          color:      earned ? tier.color : 'rgba(255,255,255,0.35)',
         }}
       >
         {badge.tier}
@@ -96,9 +109,9 @@ function BadgeCard({ badge, index }) {
       {/* XP reward */}
       <div className="mt-2 flex items-center justify-center gap-1">
         <Zap className="w-3 h-3"
-             style={{ color: badge.earned ? tier.color : 'rgba(255,255,255,0.30)' }} />
+             style={{ color: earned ? tier.color : 'rgba(255,255,255,0.30)' }} />
         <span className="text-2xs font-semibold tabular-nums"
-              style={{ color: badge.earned ? tier.color : 'rgba(255,255,255,0.30)' }}>
+              style={{ color: earned ? tier.color : 'rgba(255,255,255,0.30)' }}>
           +{orUnknown(badge.xpReward)} XP
         </span>
       </div>
@@ -233,10 +246,14 @@ function LeaderboardRow({ entry, index }) {
         className="w-9 h-9 rounded-full flex items-center justify-center
                    text-sm font-bold flex-shrink-0"
         style={{
-          background: entry.is_current_user
+          // ROUND 5 F4: these two read the RAW payload field on an object the
+          // reader produces as `isCurrentUser`, so they were always undefined
+          // and the current-user avatar highlight was dead. The three sites
+          // around them were already correct, which is why it looked fine.
+          background: entry.isCurrentUser
             ? 'linear-gradient(135deg, #FF8A1F, #FFB347)'
             : 'rgba(255,255,255,0.06)',
-          color: entry.is_current_user ? '#fff' : 'rgba(255,255,255,0.65)',
+          color: entry.isCurrentUser ? '#fff' : 'rgba(255,255,255,0.65)',
         }}
       >
         {entry.name === null ? '?' : entry.name[0].toUpperCase()}
@@ -263,7 +280,7 @@ function LeaderboardRow({ entry, index }) {
       <div className="text-right">
         <p className="text-sm font-bold tabular-nums"
            style={{ color: '#FF8A1F' }}>
-          {Number.isFinite(entry.xp) ? entry.xp.toLocaleString() : UNKNOWN}
+          {formatCount(entry.xp)}
         </p>
         <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.40)' }}>
           XP
@@ -275,7 +292,9 @@ function LeaderboardRow({ entry, index }) {
 
 // ── Main Achievements page ────────────────────────────────────────────────────
 export default function Achievements() {
-  const { user } = useAuth();
+  // ROUND 5 F4: `useAuth()`'s `user` was dead once the raw `entry.is_current_user`
+  // reads were corrected to the reader's `isCurrentUser`; it was one of the
+  // three baseline lint errors. Removed with the fix that made it dead.
   const [data,         setData]         = useState(null);
   const [leaderboard,  setLeaderboard]  = useState(null);
   const [loading,      setLoading]      = useState(true);
@@ -352,15 +371,27 @@ export default function Achievements() {
   const overview     = readOverviewView(data);
   const board        = readLeaderboardView(leaderboard);
   const challenges   = overview.challenges.active;
-  const earnedBadges = (overview.badges.all ?? []).filter((b) => b.earned);
+  const earnedCount  = earnedBadgeCount(overview.badges.all);
 
-  // Group badges by category. An element with no usable category is kept out of
-  // the grouping rather than filed under "undefined".
+  // ROUND 5 F1: each list gets its OWN three-state, because branching on
+  // `oldFailed` — the ENVELOPE's state — left "envelope 200'd, list unusable"
+  // in neither arm, so three tabs said "Loading…" permanently after both reads
+  // had settled, with no failure notice either.
+  const badgesState     = listState(oldState, earnedCount !== null);
+  const challengesState = listState(oldState, challenges !== null);
+  const boardState      = listState(lbState,  board.entries !== null);
+
+  // Group badges by category. ROUND 5 F7: a badge whose category is null — or
+  // is a key CATEGORY_LABELS does not carry — was dropped from the grid while
+  // still being COUNTED in the header, so "1 of 40 badges" could sit above an
+  // empty tab. Latent today (the backend emits exactly the eight known keys)
+  // but the count and the grid must not disagree, so unlisted categories fall
+  // into an "Other" group instead of vanishing.
   const badgesByCategory = {};
   (overview.badges.all ?? []).forEach((b) => {
-    if (b.category === null) return;
-    if (!badgesByCategory[b.category]) badgesByCategory[b.category] = [];
-    badgesByCategory[b.category].push(b);
+    const key = b.category !== null && b.category in CATEGORY_LABELS ? b.category : OTHER_CATEGORY;
+    if (!badgesByCategory[key]) badgesByCategory[key] = [];
+    badgesByCategory[key].push(b);
   });
 
   return (
@@ -428,7 +459,7 @@ export default function Achievements() {
               </h1>
               <p className="text-xs" style={{ color: 'rgba(255,255,255,0.50)' }}>
                 {formatXpTotal(xp)} total XP
-                {' · '}{badgesKnown(data) ? earnedBadges.length : UNKNOWN} of {orUnknown(overview.badges.totalCount)} badges
+                {' · '}{orUnknown(earnedCount)} of {orUnknown(overview.badges.totalCount)} badges
               </p>
             </div>
             <div className="text-right">
@@ -489,8 +520,8 @@ export default function Achievements() {
             about. A count of `null` renders no count, never a fabricated 0. */}
         <div className="flex gap-2">
           {[
-            { id: 'badges',      label: 'Badges',       icon: Medal,  count: badgesKnown(data) ? earnedBadges.length : null },
-            { id: 'challenges',  label: 'Challenges',   icon: Target, count: challengesKnown(data) ? challenges.length : null },
+            { id: 'badges',      label: 'Badges',       icon: Medal,  count: earnedCount },
+            { id: 'challenges',  label: 'Challenges',   icon: Target, count: challengesState === 'ready' ? challenges.length : null },
             { id: 'leaderboard', label: 'Leaderboard',  icon: Crown,  count: null },
           ].map((t) => {
             const Icon = t.icon;
@@ -538,14 +569,25 @@ export default function Achievements() {
               exit={{    opacity: 0 }}
               className="space-y-6"
             >
-              {!badgesKnown(data) && (
+              {badgesState !== 'ready' && (
                 <div className="card-glass">
                   <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                    {oldFailed ? 'Badges are unavailable right now.' : 'Loading badges…'}
+                    {badgesState === 'failed' ? 'Badges are unavailable right now.' : 'Loading badges…'}
                   </p>
                 </div>
               )}
-              {Object.keys(CATEGORY_LABELS).map((cat) => {
+              {/* ROUND 5 F7: a known-but-empty catalog rendered NOTHING — the
+                  notice above is suppressed once the list is usable, and every
+                  category maps to null. GamificationStrip has this empty state;
+                  this tab did not. */}
+              {badgesState === 'ready' && overview.badges.all.length === 0 && (
+                <div className="card-glass">
+                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                    No badges in the catalog yet.
+                  </p>
+                </div>
+              )}
+              {[...Object.keys(CATEGORY_LABELS), OTHER_CATEGORY].map((cat) => {
                 const catBadges = badgesByCategory[cat] || [];
                 if (catBadges.length === 0) return null;
 
@@ -553,7 +595,7 @@ export default function Achievements() {
                   <div key={cat}>
                     <h2 className="text-sm font-bold uppercase tracking-wider mb-3"
                         style={{ color: 'rgba(255,138,31,0.70)' }}>
-                      {CATEGORY_LABELS[cat]}
+                      {CATEGORY_LABELS[cat] ?? OTHER_LABEL}
                     </h2>
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                       {catBadges.map((b, i) => (
@@ -588,10 +630,10 @@ export default function Achievements() {
                 </p>
               </div>
 
-              {!challengesKnown(data) && (
+              {challengesState !== 'ready' && (
                 <div className="card-glass">
                   <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                    {oldFailed ? 'Challenges are unavailable right now.' : 'Loading challenges…'}
+                    {challengesState === 'failed' ? 'Challenges are unavailable right now.' : 'Loading challenges…'}
                   </p>
                 </div>
               )}
@@ -628,9 +670,9 @@ export default function Achievements() {
                 </p>
               </div>
 
-              {board.entries === null ? (
+              {boardState !== 'ready' ? (
                 <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                  {lbState === 'failed'
+                  {boardState === 'failed'
                     ? 'The leaderboard is unavailable right now.'
                     : 'Loading the leaderboard…'}
                 </p>

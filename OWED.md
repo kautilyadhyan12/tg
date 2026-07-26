@@ -75,7 +75,31 @@ no-removal rule these UIs stay untouched and working on the old backend until
 then; none may be hidden or reduced to close the gap.
 
 - [ ] 🔴 **XP / levels display — UNTICKED 2026-07-26 by T3 round 3, STILL OFF
-      after round 4.** It was ticked on the round-2 smoke; round 3 then found
+      after rounds 4 AND 5.**
+      **ROUND 5 (2026-07-26, fresh chat): 8 more findings, 3 blocking, all
+      fixed.** The pattern held a fifth time — round 4's own F4 fix created
+      round 5's F1, and round 4's new readers created F2 and F3.
+      F1: the per-tab captions branched on the ENVELOPE's state, so "200 with no
+      list" matched neither arm and three tabs said "Loading…" forever after
+      both reads had settled. F2: the new readers defaulted every BOOLEAN to
+      `false` (only the 15 numeric/string fields were nulled), so a catalog with
+      no `earned` field printed "0 of 40 badges" and "earn your first badge" —
+      the round-2 fabrication restored through a default instead of an envelope
+      gate. F3: `recent_workouts` was the one list left unparsed, so three
+      Dashboard sites rendered "0 min · 0 kcal · 0% form" with the unknown
+      accuracy painted RED. Plus a dead current-user highlight (F4), a badges
+      tab that rendered nothing when the catalog was empty (F7), a caption and
+      its dots gated on different fields (F8), a false consumer count in
+      `useXp`'s comment (F6), and two `.catch(console.error)` leaking the axios
+      config in Dashboard (R3.10).
+      **F5 is the one to remember: round 4's 132-line "class fix" shipped with
+      NO tests on the class** — every render fixture used empty lists, so
+      `readBadge`/`readChallenge` never produced output any test looked at,
+      which is exactly why F2 and F3 survived a round. Now 19 unit tests over
+      all ten readers/formatters + 6 render tests that render a real badge,
+      challenge and recent workout. The render tests also caught TWO more
+      page-blanking ReferenceErrors in the round-4/5 edits themselves.
+      It was ticked on the round-2 smoke; round 3 then found
       three behaviour defects that a click-through cannot see, so the tick was
       premature and comes off (the google-login / DPDP precedent). Re-ticks when
       the fixes have their own smoke AND a round comes back clean.

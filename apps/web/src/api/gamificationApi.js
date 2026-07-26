@@ -83,6 +83,24 @@ export function challengesKnown(data) {
   return Array.isArray(data?.challenges?.active);
 }
 
+/** The state of ONE list, given the envelope's state and whether that list came
+ *  out usable. Three values, never two.
+ *
+ *  ROUND 5 F1: round 4 replaced the `{data && …}` wrappers with per-tab
+ *  `oldFailed ? 'unavailable' : 'Loading…'` branches — but `oldFailed` is the
+ *  ENVELOPE's state, while the tab's real question is whether ITS list is
+ *  usable. So "envelope 200'd, list absent" matched neither arm and three tabs
+ *  claimed "Loading…" permanently, after both promises had settled and with no
+ *  failure notice either. That is round 4 F7's state-collapse (`!xp` cannot tell
+ *  loading from failed) re-created in three new sites by round 4's own F4 fix —
+ *  the fifth consecutive round in which a fix opened the next finding.
+ *
+ *  The rule matches useXp: a 200 whose block is unusable is a FAILED read. */
+export function listState(envelopeState, known) {
+  if (known) return 'ready';
+  return envelopeState === 'loading' ? 'loading' : 'failed';
+}
+
 /** Render helpers — the ONLY way a component may turn `xp` into anything.
  *
  *  They exist because round 1's mutation proved the guard was at the READER
@@ -166,6 +184,14 @@ export function xpBarWidth(xp) {
 const finite = (v) => (Number.isFinite(v) ? v : null);
 const text   = (v) => (typeof v === 'string' && v.trim() !== '' ? v : null);
 const list   = (v) => (Array.isArray(v) ? v : null);
+/** ROUND 5 F2: the first version of these readers wrote `x === true`, so fifteen
+ *  numeric/string fields became null when unknown while the three BOOLEANS
+ *  became `false` — a definite claim, not an absence. `earned: false` then fed
+ *  the earned-badge count, and a catalog with no `earned` field rendered
+ *  "0 of 40 badges" and "Complete workouts to earn your first badge" to a user
+ *  who has badges: verbatim the round-2 ① fabrication, restored through a
+ *  default instead of an envelope gate. A missing boolean is UNKNOWN. */
+const bool   = (v) => (typeof v === 'boolean' ? v : null);
 
 /** The value, or the em dash when unknown. Keeps NUMBERS numeric, so callers
  *  that animate or suffix them still can — the reason this is not formatCount. */
@@ -197,7 +223,7 @@ export function readChallenge(c) {
     target:      finite(c?.target),
     progress:    finite(c?.progress),
     xpReward:    finite(c?.xp_reward),
-    completed:   c?.completed === true,
+    completed:   bool(c?.completed),
   };
 }
 
@@ -210,8 +236,17 @@ export function readBadge(b) {
     category:    text(b?.category),
     description: text(b?.description),
     xpReward:    finite(b?.xp_reward),
-    earned:      b?.earned === true,
+    earned:      bool(b?.earned),
   };
+}
+
+/** How many badges are earned, or NULL when that cannot be answered — either
+ *  the list is absent, or an element's `earned` is unknown. Round 5 F2: a count
+ *  derived from a defaulted boolean is a fabrication with extra steps. */
+export function earnedBadgeCount(all) {
+  if (all === null) return null;
+  if (all.some((b) => b.earned === null)) return null;
+  return all.filter((b) => b.earned === true).length;
 }
 
 export function readLeaderboardEntry(e) {
@@ -222,7 +257,23 @@ export function readLeaderboardEntry(e) {
     badgeCount:    finite(e?.badge_count),
     xp:            finite(e?.xp),
     streak:        finite(e?.streak),
-    isCurrentUser: e?.is_current_user === true,
+    isCurrentUser: bool(e?.is_current_user),
+  };
+}
+
+/** ROUND 5 F3: `recent_workouts` was the ONE list `readStatsView` passed through
+ *  unparsed while badges/challenges/entries all got an element reader, and three
+ *  Dashboard sites then fabricated with `|| 0` — "0 min · 0 kcal · 0% form", with
+ *  an unknown accuracy painted RED by the <60 branch. Reachable on real data:
+ *  the old backend returns serialized Mongo documents with no shape contract. */
+export function readRecentWorkout(w) {
+  return {
+    id:              text(w?.id),
+    completedAt:     text(w?.completed_at),
+    exerciseName:    text(w?.exercise_name),
+    durationMinutes: finite(w?.duration_minutes),
+    caloriesBurned:  finite(w?.calories_burned),
+    formAccuracy:    finite(w?.form_accuracy),
   };
 }
 
@@ -259,6 +310,7 @@ export function readLeaderboardView(data) {
 export function readStatsView(data) {
   const s = data?.stats;
   const a = data?.activity;
+  const recent = list(data?.recent_workouts);
   return {
     totalWorkouts:  finite(s?.total_workouts),
     totalMinutes:   finite(s?.total_minutes),
@@ -269,7 +321,7 @@ export function readStatsView(data) {
     // strip render seven inactive dots — a visual "you trained on none of these
     // days" — beside a caption that correctly read "unavailable".
     activity: a && typeof a === 'object' && !Array.isArray(a) ? a : null,
-    recent:   list(data?.recent_workouts),
+    recent:   recent === null ? null : recent.map(readRecentWorkout),
   };
 }
 

@@ -183,6 +183,48 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     expect(text).not.toMatch(/\d[\d,]*\s*XP/);
   });
 
+  it('a recent workout with only an id and a date fabricates nothing — round 5 F3', async () => {
+    // `recent_workouts` was the one list readStatsView passed through unparsed,
+    // and three sites then rendered `|| 0`: "0 min · 0 kcal · 0% form", with the
+    // unknown accuracy painted RED by the <60 branch.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    workoutService.getStats.mockResolvedValue({
+      data: {
+        stats: { total_workouts: 3 },
+        recent_workouts: [{ id: 'w1', completed_at: '2026-07-25T10:00:00Z' }],
+      },
+    });
+
+    const { container } = renderPage(<Dashboard />);
+    await waitFor(() => expect(screen.getByText('Workout Session')).toBeTruthy());
+
+    const text = container.textContent;
+    expect(text).not.toMatch(/0 min/);
+    expect(text).not.toMatch(/0 kcal/);
+    expect(text).not.toMatch(/0% form/);
+    expect(text).toMatch(/— min/);
+    expect(text).toMatch(/— kcal/);
+    expect(text).toMatch(/—% form/);
+  });
+
+  it('the week caption and the dots agree — round 5 F8', async () => {
+    // weeklyWorkouts known + activity unknown used to print "3 of 7 days
+    // active" beside seven dashed UNKNOWN dots.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    workoutService.getStats.mockResolvedValue({
+      data: { stats: { weekly_workouts: 3 } },   // no `activity`
+    });
+
+    const { container } = renderPage(<Dashboard />);
+    await waitFor(() => expect(screen.getByText('Weekly activity unavailable')).toBeTruthy());
+    expect(screen.queryByText('3 of 7 days active')).toBeNull();
+    expect(container.querySelectorAll('[title="Activity unavailable"]').length).toBe(7);
+  });
+
   it('the week strip claims nothing when activity is unknown — round 4 F3', async () => {
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     gamificationService.getOverview.mockImplementation(DEAD);
@@ -332,6 +374,106 @@ describe('Achievements — the three payloads are independent — round 4 F4', (
     await waitFor(() => expect(screen.getByText(/Level 3/)).toBeTruthy());
     expect(screen.getByText(/578/)).toBeTruthy();
     expect(screen.queryByText(/Level 1\b/)).toBeNull();
+  });
+
+  // ── ROUND 5 ────────────────────────────────────────────────────────────────
+  // These enter states the round-4 fixtures never did: every list fixture was
+  // `all: []` / `active: []`, so BadgeCard and ChallengeCard never rendered and
+  // F2's boolean default survived a whole round.
+  it('envelope 200s with no lists: tabs say unavailable, never "Loading" forever — F1', async () => {
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockResolvedValue({ data: {} });
+    gamificationService.getLeaderboard.mockResolvedValue({ data: {} });
+
+    renderPage(<Achievements />);
+    await waitFor(() => expect(screen.getByText(/Level 3/)).toBeTruthy());
+
+    // Both promises have SETTLED. Branching on the envelope put this case in
+    // neither arm, so all three tabs claimed "Loading…" permanently.
+    await waitFor(() =>
+      expect(screen.getByText('Badges are unavailable right now.')).toBeTruthy());
+    expect(screen.queryByText('Loading badges…')).toBeNull();
+
+    fireEvent.click(screen.getByText('Challenges'));
+    await waitFor(() =>
+      expect(screen.getByText('Challenges are unavailable right now.')).toBeTruthy());
+    expect(screen.queryByText('Loading challenges…')).toBeNull();
+
+    fireEvent.click(screen.getByText('Leaderboard'));
+    await waitFor(() =>
+      expect(screen.getByText('The leaderboard is unavailable right now.')).toBeTruthy());
+    expect(screen.queryByText('Loading the leaderboard…')).toBeNull();
+  });
+
+  it('a catalog with no `earned` field claims no count — F2', async () => {
+    // `earned: b?.earned === true` turned unknown into "not earned", which fed
+    // the count: "0 of 40 badges", "Badges (0)", and "earn your first badge"
+    // shown to a user who has badges.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockResolvedValue({
+      data: {
+        badges: {
+          all: [
+            { id: 'b1', name: 'First Rep', tier: 'bronze', category: 'milestones', xp_reward: 10 },
+            { id: 'b2', name: 'Week One', tier: 'silver', category: 'streaks', xp_reward: 25 },
+          ],
+          total_count: 40,
+        },
+        challenges: { active: [] },
+      },
+    });
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+
+    renderPage(<Achievements />);
+    await waitFor(() => expect(screen.getByText('First Rep')).toBeTruthy());
+
+    expect(screen.queryByText(/0 of 40 badges/)).toBeNull();
+    expect(screen.getByText(new RegExp(`— of 40 badges`))).toBeTruthy();
+    // And the padlock must not appear: "locked" is a claim about an unknown.
+    expect(screen.getAllByTitle('Earned state unavailable')).toHaveLength(2);
+  });
+
+  it('a fully-specified catalog still counts and renders normally', async () => {
+    // The control for the test above — an honest unknown must not cost us the
+    // ability to show a real count.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockResolvedValue({
+      data: {
+        badges: {
+          all: [
+            { id: 'b1', name: 'First Rep', tier: 'bronze', category: 'milestones', xp_reward: 10, earned: true },
+            { id: 'b2', name: 'Week One', tier: 'silver', category: 'streaks', xp_reward: 25, earned: false },
+          ],
+          total_count: 40,
+        },
+        challenges: { active: [] },
+      },
+    });
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+
+    renderPage(<Achievements />);
+    await waitFor(() => expect(screen.getByText('First Rep')).toBeTruthy());
+    expect(screen.getByText(/1 of 40 badges/)).toBeTruthy();
+    expect(screen.queryByTitle('Earned state unavailable')).toBeNull();
+  });
+
+  it('a partial challenge renders dashes, not "undefined / undefined"', async () => {
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockResolvedValue({
+      data: {
+        badges: { all: [], total_count: 40 },
+        challenges: { active: [{ id: 'c1', name: 'Mystery Challenge' }] },
+      },
+    });
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+
+    renderPage(<Achievements />);
+    await waitFor(() => expect(screen.getByText('Challenges')).toBeTruthy());
+    fireEvent.click(screen.getByText('Challenges'));
+
+    await waitFor(() => expect(screen.getByText('Mystery Challenge')).toBeTruthy());
+    expect(screen.queryByText(/undefined/)).toBeNull();
+    expect(screen.getByText(`${'—'} / ${'—'}`)).toBeTruthy();
   });
 
   it('old backend HANGS: no permanent "Failed to load" claim — round 3 F2', async () => {

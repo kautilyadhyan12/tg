@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Trophy, Target, Crown, ChevronRight, Sparkles } from 'lucide-react';
 import {
-  UNKNOWN, badgesKnown, challengesKnown, formatFraction, formatLevel,
-  formatXpProgress, formatXpTotal, gamificationService, oldPayloadState,
-  orUnknown, progressWidth, readLeaderboardView, readOverviewView, xpBarWidth,
+  challengesKnown, earnedBadgeCount, formatFraction, formatLevel, formatXpProgress,
+  formatXpTotal, gamificationService, listState, oldPayloadState, orUnknown,
+  progressWidth, readLeaderboardView, readOverviewView, xpBarWidth,
 } from '../../api/gamificationApi';
 import { useXp } from '../../hooks/useXp';
 
@@ -109,8 +109,10 @@ export default function GamificationStrip() {
       .finally(() => setLoading(false));
   }, []);
 
-  const oldState  = oldPayloadState({ data, loading });
-  const oldFailed = oldState === 'failed';
+  // Round 5 F1: `oldFailed` is gone — every render below asks its own list's
+  // state via listState(), never the envelope's, which is what put three
+  // captions in a permanent "Loading…".
+  const oldState = oldPayloadState({ data, loading });
 
   // T3 finding ①: this used to be `if (loading || !data) return null`, which
   // gated the NEW-API XP block behind the OLD backend's payload — so the state
@@ -152,8 +154,15 @@ export default function GamificationStrip() {
   // and `challenge.progress` were still bare here when round 4 ran.
   const overview     = readOverviewView(data);
   const board        = readLeaderboardView(leaderboard);
-  const earnedBadges = (overview.badges.all ?? []).filter((b) => b.earned);
-  const recentBadges = earnedBadges.slice(-3).reverse();
+  // ROUND 5 F2: `earned` may now be null (unknown), so the COUNT is null unless
+  // every element answers. A count derived from a defaulted boolean is a
+  // fabrication with extra steps — it printed "0 of 40 badges" and "earn your
+  // first badge" to a user who has badges.
+  const earnedCount  = earnedBadgeCount(overview.badges.all);
+  const earnedBadges = (overview.badges.all ?? []).filter((b) => b.earned === true);
+  const recentBadges = earnedCount === null ? [] : earnedBadges.slice(-3).reverse();
+  const badgesState     = listState(oldState, earnedCount !== null);
+  const challengesState = listState(oldState, challengesKnown(data));
 
   // Round 2 ③: `leaderboard.leaderboard` was an unguarded read while its
   // sibling was optional-chained, and a render throw blanks the page (no
@@ -189,11 +198,11 @@ export default function GamificationStrip() {
             </button>
           </div>
           <div className="flex flex-col gap-2 flex-1">
-            {challengesKnown(data) ? (
+            {challengesState === 'ready' ? (
               overview.challenges.active.slice(0, 3).map((c, i) => (
                 <ChallengeRow key={c.id ?? i} challenge={c} />
               ))
-            ) : oldFailed ? (
+            ) : challengesState === 'failed' ? (
               // An empty list would read as "no challenges this week", which is
               // a claim we cannot make when the payload never arrived (round 2 ①)
               // — and only sayable once the read has FAILED, not while it is
@@ -268,7 +277,7 @@ export default function GamificationStrip() {
                 Latest Badges
               </h3>
               <span className="text-2xs" style={{ color: 'rgba(255,255,255,0.75)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
-                ({badgesKnown(data) ? earnedBadges.length : UNKNOWN}/{orUnknown(overview.badges.totalCount)})
+                ({orUnknown(earnedCount)}/{orUnknown(overview.badges.totalCount)})
               </span>
             </div>
             <button
@@ -315,9 +324,12 @@ export default function GamificationStrip() {
                 <Sparkles className="w-6 h-6" style={{ color: 'rgba(255,138,31,0.5)' }} />
                 <p className="text-xs text-center"
                    style={{ color: 'rgba(255,255,255,0.65)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
-                  {badgesKnown(data)
+                  {/* "earn your first badge" is a CLAIM about the user's
+                      catalog, sayable only when the count is genuinely 0 —
+                      round 5 F2 restored it via `earned: false` defaults. */}
+                  {badgesState === 'ready'
                     ? <>Complete workouts to<br />earn your first badge</>
-                    : oldFailed
+                    : badgesState === 'failed'
                       ? <>Badges are<br />unavailable right now</>
                       : null}
                 </p>

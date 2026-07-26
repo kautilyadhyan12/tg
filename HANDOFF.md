@@ -1,6 +1,61 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: WEB XP display + Dashboard XP — T3 ROUND 5  [FIXED, SMOKE + ROUND 6 OWED]
+      branch web-repoint. 8 findings, 3 BLOCKING, all fixed. FIFTH consecutive
+      round to find the previous round's fix opened the next defect.
+WHAT ROUND 4 BROKE, THAT ROUND 5 FOUND:
+  F1 (blocking) — round 4's F4 fix branched the per-tab captions on `oldFailed`,
+    the ENVELOPE's state. "200 with no list" matched neither arm, so THREE tabs
+    said "Loading…" permanently after both promises settled, no failure notice.
+    That is round 4's OWN F7 state-collapse, re-created in three new sites.
+    Fixed with `listState(envelopeState, known)` — pure, unit-tested, per list.
+  F2 (blocking) — round 4's new readers nulled the 15 numeric/string fields and
+    DEFAULTED the 3 booleans to false. `earned:false` fed the count, so a
+    catalog with no `earned` field printed "0 of 40 badges" + "earn your first
+    badge" — the round-2 fabrication, back via a default. `bool()` now nulls;
+    `earnedBadgeCount` returns null if ANY element is unknown; a padlock is a
+    claim, so unknown badges render as neither earned nor locked.
+  F3 (blocking) — `recent_workouts` was the ONE list round 4 left unparsed, so
+    three Dashboard sites rendered "0 min · 0 kcal · 0% form", with the unknown
+    accuracy painted RED by the <60 branch. `readRecentWorkout` added.
+  F4 dead current-user highlight (raw `entry.is_current_user` on a reader view;
+    fixing it killed the last `useAuth()` use, removing a baseline lint error).
+  F6 `useXp`'s comment claimed 3 consumers / 2 requests — it is 4 consumers and
+    /dashboard fires THREE concurrent GETs. F7 empty-catalog tab rendered
+    nothing + uncategorised badges counted-but-invisible ("Other" bucket now).
+    F8 week caption and dots gated on different fields.
+  SECURITY (R3.10) two `.catch(console.error)` in Dashboard handed the whole
+    axios error (with `.config.headers` Bearer) to the console.
+F5 — THE ONE TO REMEMBER: round 4's 132-line "class fix" shipped with NO tests
+  on the class. Every render fixture used `all: []` / `active: []`, so
+  readBadge/readChallenge never produced output any test read — which is
+  precisely why F2 and F3 lived a whole round. A class fix with no tests on the
+  class is a claim, not a fix. Now 19 unit tests (all ten readers/formatters)
+  + 6 render tests using non-empty fixtures.
+THE RENDER TESTS SAVED IT TWICE MORE: two page-blanking ReferenceErrors in MY
+  OWN edits — a surviving `badges` (r4) and a surviving `UNKNOWN` (r5), each of
+  which blanks the page (no ErrorBoundary). Three saves in two rounds.
+PROVE: web 215 passed / 1 failed (216), the 1 being the pre-existing syncClient
+  `window` quirk. Scoped lint 2 errors (Zap, ChevronRight) — DOWN from the
+  3-error baseline, because F4's fix removed the dead `user`. Build green.
+PROCESS FAILURE #2 (see DECISIONS): bulk-editing a source file with
+  `(Get-Content -Raw) -replace … | Set-Content` CORRUPTED its encoding —
+  UTF-8 read as CP1252, every separator mojibake, BOM prepended. The BUILD
+  STILL PASSED (mojibake in comments is valid JS); caught by inspecting bytes.
+  Repaired and verified. RULE: never edit source with a PowerShell round-trip.
+OPEN / NEXT:
+  1. **T3 ROUND 6** — five rounds, five times the fix opened the next thing.
+  2. **RE-SMOKE**, scope grew again: + a 200 whose badge catalog has no
+     `earned` field, + a recent-workouts entry missing its metrics (on top of
+     round 4's hung-backend, `{"stats":{}}`, and leaderboard-fails states).
+  3. Both OWED ticks STAY OFF until 1 and 2 are done.
+  4. Then: PostWorkout.jsx 100-XP bug (OWED, live route) · rotate the Neon
+     password (OWED) · shut down the dev servers + restore Docker.
+SPEC GAPs: none.
+```
+
+```
 TASK: WEB XP display + Dashboard XP — T3 ROUND 4  [FIXED, SMOKE + ROUND 5 OWED]
       branch web-repoint. 8 findings, all real, all fixed. FOURTH consecutive
       round to find the previous round's fix had opened something new.

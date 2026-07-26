@@ -14,8 +14,11 @@ import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
 import mlApi from './mlApi';
 import {
-  UNKNOWN, badgesKnown, challengesKnown, formatLevel, formatXpProgress,
-  formatXpTotal, gamificationService, oldPayloadState, readXpView,
+  UNKNOWN, badgesKnown, challengesKnown, earnedBadgeCount, formatCount,
+  formatFraction, formatLevel, formatXpProgress, formatXpTotal,
+  gamificationService, listState, oldPayloadState, orUnknown, progressWidth,
+  readBadge, readChallenge, readLeaderboardEntry, readLeaderboardView,
+  readOverviewView, readRecentWorkout, readStatsView, readXpView,
 } from './gamificationApi';
 
 function recordRequests(api) {
@@ -151,6 +154,188 @@ describe('render formatters — the render-site half of the fabrication guard', 
   });
 });
 
+
+// ── The old-payload readers ─────────────────────────────────────────────────
+// ROUND 5 F5: these 132 lines shipped in round 4 as "the class fix" with NO
+// direct coverage — the only mentions of them anywhere in the suite were a
+// regex string in a source guard and a comment in the render file. That is why
+// round 5's F2 and F3 survived a round: the render fixtures all used
+// `all: []` / `active: []`, so `readBadge` and `readChallenge` never once
+// produced output that a test looked at. A class fix with no tests on the class
+// is a claim, not a fix.
+describe('old-payload readers: every field is a usable value or NULL', () => {
+  it('readChallenge maps names and nulls the rest', () => {
+    expect(readChallenge({
+      id: 'c1', name: 'Run 5k', icon: '🏃', difficulty: 'easy',
+      description: 'go', current: 2, target: 5, progress: 40,
+      xp_reward: 50, completed: false,
+    })).toEqual({
+      id: 'c1', name: 'Run 5k', icon: '🏃', difficulty: 'easy',
+      description: 'go', current: 2, target: 5, progress: 40,
+      xpReward: 50, completed: false,
+    });
+    // Everything unknown — and `completed` is NULL, not false (F2).
+    expect(readChallenge({})).toEqual({
+      id: null, name: null, icon: null, difficulty: null, description: null,
+      current: null, target: null, progress: null, xpReward: null, completed: null,
+    });
+    expect(readChallenge(null).current).toBeNull();
+    expect(readChallenge(undefined).completed).toBeNull();
+  });
+
+  it('readBadge nulls a missing `earned` rather than defaulting it to false', () => {
+    // THE ROUND 5 F2 REGRESSION. `earned: b?.earned === true` turned "unknown"
+    // into "not earned", which fed the count and printed "0 of 40 badges" and
+    // "earn your first badge" to a user who has badges — verbatim the round-2
+    // fabrication the round-4 commit message claimed was deleted.
+    expect(readBadge({ id: 'b', tier: 'gold' }).earned).toBeNull();
+    expect(readBadge({ earned: false }).earned).toBe(false);
+    expect(readBadge({ earned: true }).earned).toBe(true);
+    // Truthy non-booleans are NOT a yes.
+    expect(readBadge({ earned: 'yes' }).earned).toBeNull();
+    expect(readBadge({ earned: 1 }).earned).toBeNull();
+    expect(readBadge({ xp_reward: 0 }).xpReward).toBe(0);   // a real zero survives
+    expect(readBadge({ xp_reward: '25' }).xpReward).toBeNull();
+    expect(readBadge({ name: '   ' }).name).toBeNull();     // whitespace is not a name
+  });
+
+  it('earnedBadgeCount refuses to count what it cannot answer', () => {
+    expect(earnedBadgeCount(null)).toBeNull();
+    expect(earnedBadgeCount([])).toBe(0);
+    expect(earnedBadgeCount([{ earned: true }, { earned: false }])).toBe(1);
+    // ONE unknown element makes the whole count unknown — the alternative is a
+    // number that silently under-reports.
+    expect(earnedBadgeCount([{ earned: true }, { earned: null }])).toBeNull();
+  });
+
+  it('readLeaderboardEntry maps snake_case and nulls the rest', () => {
+    const e = readLeaderboardEntry({
+      rank: 2, name: 'Kd', level: 3, badge_count: 9, xp: 578,
+      streak: 4, is_current_user: true,
+    });
+    expect(e).toEqual({
+      rank: 2, name: 'Kd', level: 3, badgeCount: 9, xp: 578,
+      streak: 4, isCurrentUser: true,
+    });
+    const bare = readLeaderboardEntry({ name: 'Partial' });
+    expect(bare.rank).toBeNull();
+    expect(bare.level).toBeNull();
+    expect(bare.badgeCount).toBeNull();
+    expect(bare.isCurrentUser).toBeNull();   // F2: not `false`
+  });
+
+  it('readRecentWorkout parses the list round 4 left unparsed (F3)', () => {
+    expect(readRecentWorkout({ id: 'w1', completed_at: '2026-07-25T10:00:00Z' })).toEqual({
+      id: 'w1', completedAt: '2026-07-25T10:00:00Z', exerciseName: null,
+      durationMinutes: null, caloriesBurned: null, formAccuracy: null,
+    });
+    expect(readRecentWorkout({ form_accuracy: 0 }).formAccuracy).toBe(0);
+    expect(readRecentWorkout({ duration_minutes: NaN }).durationMinutes).toBeNull();
+  });
+
+  it('readOverviewView nulls a list it cannot enumerate', () => {
+    const v = readOverviewView({
+      badges: { all: [{ id: 'b', earned: true }], total_count: 40 },
+      challenges: { active: [{ id: 'c' }] },
+    });
+    expect(v.badges.all).toHaveLength(1);
+    expect(v.badges.all[0].earned).toBe(true);
+    expect(v.badges.totalCount).toBe(40);
+    expect(v.challenges.active[0].id).toBe('c');
+
+    const empty = readOverviewView({});
+    expect(empty.badges.all).toBeNull();
+    expect(empty.badges.totalCount).toBeNull();
+    expect(empty.challenges.active).toBeNull();
+    expect(readOverviewView(null).badges.all).toBeNull();
+    // A non-array is not an enumerable list.
+    expect(readOverviewView({ badges: { all: {} } }).badges.all).toBeNull();
+  });
+
+  it('readLeaderboardView nulls entries and totals independently', () => {
+    const v = readLeaderboardView({
+      leaderboard: [{ rank: 1, name: 'A' }], total_users: 7, current_user_rank: 3,
+    });
+    expect(v.entries).toHaveLength(1);
+    expect(v.totalUsers).toBe(7);
+    expect(v.currentUserRank).toBe(3);
+
+    const empty = readLeaderboardView({});
+    expect(empty.entries).toBeNull();
+    expect(empty.totalUsers).toBeNull();
+    expect(empty.currentUserRank).toBeNull();
+    expect(readLeaderboardView(null).entries).toBeNull();
+  });
+
+  it('readStatsView is per-field, so a partial 200 fabricates nothing', () => {
+    // The exact payload round 4 F2 was about: envelope present, fields absent.
+    const partial = readStatsView({ stats: {} });
+    expect(partial.totalWorkouts).toBeNull();
+    expect(partial.totalMinutes).toBeNull();
+    expect(partial.totalCalories).toBeNull();
+    expect(partial.weeklyWorkouts).toBeNull();
+    expect(partial.streak).toBeNull();
+    expect(partial.activity).toBeNull();
+    expect(partial.recent).toBeNull();
+
+    const some = readStatsView({
+      stats: { total_workouts: 12, streak: 0 },
+      activity: { '2026-07-25': true },
+      recent_workouts: [{ id: 'w', calories_burned: 300 }],
+    });
+    expect(some.totalWorkouts).toBe(12);
+    expect(some.streak).toBe(0);            // a real zero is not an unknown
+    expect(some.totalMinutes).toBeNull();
+    expect(some.activity).toEqual({ '2026-07-25': true });
+    expect(some.recent[0].caloriesBurned).toBe(300);
+    expect(some.recent[0].durationMinutes).toBeNull();
+    // An array is not an activity map.
+    expect(readStatsView({ activity: [] }).activity).toBeNull();
+  });
+});
+
+describe('listState — three states per LIST, not per envelope (round 5 F1)', () => {
+  it('a usable list is ready whatever the envelope did', () => {
+    expect(listState('ready', true)).toBe('ready');
+    expect(listState('failed', true)).toBe('ready');
+  });
+  it('THE F1 DEFECT: envelope ready + list unusable is FAILED, never loading', () => {
+    // Branching on the envelope left this combination in neither arm, so three
+    // tabs said "Loading…" permanently after both promises had settled.
+    expect(listState('ready', false)).toBe('failed');
+    expect(listState('failed', false)).toBe('failed');
+  });
+  it('only a genuinely in-flight envelope reads as loading', () => {
+    expect(listState('loading', false)).toBe('loading');
+  });
+});
+
+describe('unknown-safe formatters', () => {
+  it('orUnknown keeps numbers numeric so callers can animate them', () => {
+    expect(orUnknown(0)).toBe(0);
+    expect(orUnknown(12)).toBe(12);
+    expect(orUnknown(null)).toBe(UNKNOWN);
+    expect(orUnknown(undefined)).toBe(UNKNOWN);
+  });
+  it('formatCount renders a real zero but never invents one', () => {
+    expect(formatCount(0)).toBe('0');
+    expect(formatCount(1234)).toBe((1234).toLocaleString());
+    expect(formatCount(null)).toBe(UNKNOWN);
+    expect(formatCount(undefined)).toBe(UNKNOWN);
+  });
+  it('formatFraction dashes either side independently', () => {
+    expect(formatFraction(2, 5)).toBe('2 / 5');
+    expect(formatFraction(null, 5)).toBe(`${UNKNOWN} / 5`);
+    expect(formatFraction(2, null)).toBe(`2 / ${UNKNOWN}`);
+  });
+  it('progressWidth clamps, and unknown is an EMPTY track not a full one', () => {
+    expect(progressWidth(40)).toBe('40%');
+    expect(progressWidth(-10)).toBe('0%');
+    expect(progressWidth(9999)).toBe('100%');
+    expect(progressWidth(null)).toBe('0%');
+    expect(progressWidth(undefined)).toBe('0%');
+  });
+});
 
 // ── Source guards ───────────────────────────────────────────────────────────
 // Precedent: nutritionApi.test.js's usage guard (DECISIONS 2026-07-19).
@@ -355,18 +540,32 @@ describe('the old-payload cards claim nothing they do not know', () => {
   // name the SITES instead.
   it('GamificationStrip gates each count and empty state on per-card knowledge', () => {
     const { src } = codeAt('../components/dashboard/GamificationStrip.jsx');
-    expect(src).toMatch(/badgesKnown\(data\)\s*\?\s*earnedBadges\.length/);
-    expect(src).toMatch(/challengesKnown\(data\)\s*\?/);
+    // ROUND 5 F2: the count comes from `earnedBadgeCount`, which returns null
+    // when any element's `earned` is unknown — `earnedBadges.length` counted a
+    // defaulted `false` as "not earned" and printed a confident zero.
+    expect(src).toMatch(/earnedBadgeCount\s*\(/);
+    expect(src).toMatch(/orUnknown\(earnedCount\)/);
+    expect(src).not.toMatch(/\{\s*earnedBadges\.length\s*\}/);
+    // ROUND 5 F1: per-LIST state, not the envelope's.
+    expect(src).toMatch(/badgesState\s*=\s*listState\(/);
+    expect(src).toMatch(/challengesState\s*=\s*listState\(/);
     expect(src).not.toMatch(/total_users\s*(\|\||\?\?)\s*\d/);
     expect(src).not.toMatch(/total_count\s*(\|\||\?\?)\s*\d/);
   });
 
   it('Achievements gates its header count and BOTH tab counts', () => {
     const { src } = codeAt('../pages/Achievements.jsx');
-    expect(src).toMatch(/badgesKnown\(data\)\s*\?\s*earnedBadges\.length\s*:\s*UNKNOWN/);
-    expect(src).toMatch(/challengesKnown\(data\)/);
+    expect(src).toMatch(/orUnknown\(earnedCount\)/);
+    // ROUND 5 F1: three lists, three states, each derived per list.
+    expect(src).toMatch(/badgesState\s*=\s*listState\(/);
+    expect(src).toMatch(/challengesState\s*=\s*listState\(/);
+    expect(src).toMatch(/boardState\s*=\s*listState\(/);
+    // A caption may not branch on the ENVELOPE's failure — that is the F1 hole.
+    expect(src).not.toMatch(/oldFailed\s*\?\s*'(Badges|Challenges)/);
     // Round 3 F5: the tab counts were `{data &&}`-only and `?? 0`.
     expect(src).not.toMatch(/active\?\.length\s*\?\?\s*0/);
+    // Round 5 F4: no raw snake_case read on a reader-produced view.
+    expect(src).not.toMatch(/entry\.is_current_user/);
   });
 
   it('Dashboard reads its own old-stats payload through the reader', () => {

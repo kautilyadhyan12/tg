@@ -5,8 +5,8 @@ import { useTransition } from '../context/TransitionContext';
 import { workoutService } from '../api/workoutApi';
 import { recommendationService } from '../api/recommendationApi';
 import {
-  formatCount, formatLevel, formatNextLevel, formatXpFraction, formatXpTotal,
-  orUnknown, readStatsView, xpBarWidth,
+  UNKNOWN, formatCount, formatLevel, formatNextLevel, formatXpFraction,
+  formatXpTotal, orUnknown, readStatsView, xpBarWidth,
 } from '../api/gamificationApi';
 import { useXp } from '../hooks/useXp';
 import GamificationStrip from '../components/dashboard/GamificationStrip';
@@ -262,13 +262,20 @@ export default function Dashboard() {
   const [recommendations, setRecommendations] = useState([]);
 
   useEffect(() => {
+    // ROUND 5 security pass (R3.10): these two were `.catch(console.error)`,
+    // which hands the WHOLE axios error to the console — and its `.config
+    // .headers` carries the `Authorization: Bearer <token>` that mlApi's request
+    // interceptor sets. GamificationStrip and Achievements fixed exactly this
+    // and cite R3.10; these two were left behind in the same commit. That it is
+    // harmless today only because Card 1 stopped writing localStorage is a
+    // mitigation, not a fix.
     workoutService.getStats()
       .then((res) => setStatsRaw(res.data))
-      .catch(console.error)
+      .catch((err) => console.error('stats read failed:', err?.message))
       .finally(() => setLoading(false));
     recommendationService.getRecommendations(6)
       .then((res) => setRecommendations(res.data.recommendations || []))
-      .catch(console.error);
+      .catch((err) => console.error('recommendations read failed:', err?.message));
   }, []);
 
   // The old read fails on this branch permanently (mlApi's Bearer comes from
@@ -415,8 +422,14 @@ export default function Dashboard() {
               </div>
               <div style={{ maxWidth: '70%' }}>
                 <WeekStrip activity={stats.activity} />
+                {/* ROUND 5 F8: the caption was gated on `weeklyWorkouts` and the
+                    dots on `activity` — two different fields, so one could say
+                    "3 of 7 days active" beside seven dashed UNKNOWN dots, or
+                    "unavailable" beside real flames. Round 4 F3's "two standards
+                    eight inches apart", unfixed in the other direction. The
+                    caption now speaks only when BOTH are known. */}
                 <p className="text-xs mt-4 text-center" style={{ color: 'rgba(255,255,255,0.50)' }}>
-                  {stats.weeklyWorkouts === null
+                  {stats.weeklyWorkouts === null || stats.activity === null
                     ? 'Weekly activity unavailable'
                     : `${stats.weeklyWorkouts} of 7 days active`}
                 </p>
@@ -573,15 +586,20 @@ export default function Dashboard() {
                       </button>
                     </div>
                     {recent.slice(0, 6).map((w, i) => {
-                      const date = w.completed_at
-                        ? new Date(w.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                        : 'Unknown';
+                      const date = w.completedAt
+                        ? new Date(w.completedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                        : UNKNOWN;
+                      // ROUND 5 F3: `w.form_accuracy || 0` fell through to the
+                      // <60 branch, so an UNKNOWN accuracy was painted RED —
+                      // a bad-form claim about a workout we know nothing about.
+                      // Unknown is neutral grey and reads "—".
                       const formColor =
-                        w.form_accuracy >= 80 ? '#4ade80' :
-                        w.form_accuracy >= 60 ? '#FFB347' : '#f87171';
+                        w.formAccuracy === null ? 'rgba(255,255,255,0.40)' :
+                        w.formAccuracy >= 80 ? '#4ade80' :
+                        w.formAccuracy >= 60 ? '#FFB347' : '#f87171';
                       return (
                         <motion.div
-                          key={w.id || i}
+                          key={w.id ?? i}
                           initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.08 * i }}
                           className="flex items-center gap-3 py-2.5 rounded-xl px-3 mb-2"
@@ -596,15 +614,15 @@ export default function Dashboard() {
                               Workout Session
                             </p>
                             <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.70)', ...TS }}>
-                              {date} · {w.duration_minutes || 0} min
+                              {date} · {formatCount(w.durationMinutes)} min
                             </p>
                           </div>
                           <div className="text-right flex-shrink-0">
                             <p className="text-xs font-semibold" style={{ color: '#FF8A1F', ...TS }}>
-                              {w.calories_burned || 0} kcal
+                              {formatCount(w.caloriesBurned)} kcal
                             </p>
                             <p className="text-2xs" style={{ color: formColor, ...TS }}>
-                              {w.form_accuracy || 0}% form
+                              {formatCount(w.formAccuracy)}% form
                             </p>
                           </div>
                         </motion.div>
