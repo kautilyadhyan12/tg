@@ -74,7 +74,19 @@ Each needs an API surface built BEFORE its screen can be repointed. Per the
 no-removal rule these UIs stay untouched and working on the old backend until
 then; none may be hidden or reduced to close the gap.
 
-- [ ] 🔴 **XP / levels display** (GamificationStrip, Achievements). XP storage
+- [x] 🔴 **XP / levels display — DONE 2026-07-26. Commits `7750478` (build) +
+      `f918cc4` (T3 round 2). RE-SMOKE PASSED (Kd) on the round-2 bytes: the
+      strip read "330 XP · Level 2" / "230/248 to Lv 3" with the old backend
+      OFF, the counters read "(—/—)" and "of —" rather than zeros, Achievements
+      read "Level 2 / 330 total XP · — of — badges", and the sidebar read
+      "Level 2 / L2".** Two fresh-chat T3 rounds (6 + 8 findings, all resolved);
+      round 2's own headline was that round 1's fix had re-created this card's
+      defect elsewhere, which is why the re-smoke was required rather than
+      assumed. A third round was offered and not run — if one is ever run and
+      finds something blocking, this tick comes off (the google-login / DPDP
+      precedent). The Dashboard XP surfaces are a SEPARATE line below, Kd-ruled
+      out of this card on 2026-07-26 and confirmed wrong by the same smoke.
+      (GamificationStrip, Achievements). XP storage
       does not exist anywhere in Part 4 — inventing a column would violate R0.2,
       so the badges.py XP/level curve stays unported until a ruled migration
       card. (DECISIONS 2026-07-11 P2.3 GAP-1.)
