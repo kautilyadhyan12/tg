@@ -74,11 +74,35 @@ Each needs an API surface built BEFORE its screen can be repointed. Per the
 no-removal rule these UIs stay untouched and working on the old backend until
 then; none may be hidden or reduced to close the gap.
 
-- [ ] 🔴 **XP / levels display — UNTICKED 2026-07-26 by T3 round 3.** It was
-      ticked on the round-2 smoke; round 3 then found three behaviour defects
-      that a click-through cannot see, so the tick was premature and comes off
-      (the google-login / DPDP precedent). Re-ticks when round 3's fixes have
-      their own smoke AND a round 4 comes back clean. Round 3's findings:
+- [ ] 🔴 **XP / levels display — UNTICKED 2026-07-26 by T3 round 3, STILL OFF
+      after round 4.** It was ticked on the round-2 smoke; round 3 then found
+      three behaviour defects that a click-through cannot see, so the tick was
+      premature and comes off (the google-login / DPDP precedent). Re-ticks when
+      the fixes have their own smoke AND a round comes back clean.
+      **ROUND 4 (2026-07-26, fresh chat): 8 findings, all real, all fixed — the
+      fourth consecutive round to find that the previous round's fix opened
+      something new.** Headline: the source guard was defeated FOUR more ways
+      (ten total across four rounds), including a destructure that FIELD_READ
+      structurally cannot see, and a contradiction appended to FIELD_READ that
+      disarmed the whole scan silently because it had no positive control.
+      **Kd approved two new dev deps (jsdom + @testing-library/react) on
+      2026-07-26 and the protection of record is now RENDER tests**
+      (`apps/web/src/pages/xpDisplay.render.test.jsx`, 13 tests): the regex
+      battery cannot win because source text has unbounded spellings for the
+      same rendered output. All four of the reviewer's paste-in mutations were
+      re-run against the fix and each goes RED — verified, not asserted. Round
+      4's other findings: `statsKnown` was `Boolean(data)` under a new name so a
+      `{stats:{}}` 200 still printed six zeros (F2); the week strip rendered
+      seven inactive dots — seven claims — beside a caption reading
+      "unavailable" (F3); `allSettled` decoupled the FETCH but every render was
+      still gated on the overview payload, so a healthy leaderboard was thrown
+      away and disclaimed (F4); seven element-level fields were still read bare
+      (F5); the old payloads never crossed a parser at all, which is the CLASS
+      behind rounds 2-4 and is now fixed with `readOverviewView` /
+      `readLeaderboardView` / `readStatsView` (F6); `useXp` exposed one state
+      where three exist, so a hung old backend + failed XP read hid the surface
+      forever (F7); and three claims in the guard's own header were false (F8).
+      Round 3's findings:
       an unguarded `leaderboard.leaderboard.map` — the twin of the read round 2
       claimed to have fixed — which blanks the whole page including the XP
       header on a partial 200; "Failed to load achievements" asserted while the
@@ -247,13 +271,25 @@ then; none may be hidden or reduced to close the gap.
       Also fix while here: `workoutApi.js` declares **`getHistory` TWICE** in
       one object literal (lines 5 and 9) — the second silently wins, so the
       `(limit)` variant is dead code and a footgun.
-- [ ] 🔴 **UNTICKED 2026-07-26 by its own T3.** The card repointed XP but left
-      the page's OTHER six figures fabricating (`s.total_workouts || 0` and
-      friends), and `stats` is null whenever the old read fails — so a real
-      "Level 2" sat beside three fabricated zeros and lent them credibility,
-      while the strip below it correctly showed "—/—". Fixed at round 3 with
-      `statsKnown`; re-ticks on a fresh smoke. The DECISIONS entry calling that
-      mix "honest" was false and is struck there.
+- [ ] 🔴 **UNTICKED 2026-07-26 by its own T3, STILL OFF after round 4.** The
+      card repointed XP but left the page's OTHER six figures fabricating
+      (`s.total_workouts || 0` and friends), and `stats` is null whenever the old
+      read fails — so a real "Level 2" sat beside three fabricated zeros and lent
+      them credibility, while the strip below it correctly showed "—/—".
+      Round 3 "fixed" this with `statsKnown`; **round 4 F2 found that fix was the
+      SAME DEFECT under a new name** — `Boolean(stats?.stats)` asserted the
+      envelope, then six sites read fields off it with `?? 0`, so a 200 carrying
+      `{stats:{}}` (or any subset missing `total_minutes`) still printed
+      "0 workouts / 0h / 0 kcal" as fact. That is verbatim the shape round 3 had
+      just deleted from two OTHER files and shipped here in the same commit. The
+      guard could not catch it because it banned `|| 0` and PERMITTED `?? 0`,
+      which is the spelling the code was actually written in.
+      Round 4 also found the week strip claiming seven untrained days it knew
+      nothing about (F3), beside its own correct "unavailable" caption.
+      Now fixed per-field through `readStatsView`, with the envelope gate gone
+      entirely and render tests covering `{stats:{}}`, a partial 200, and the
+      unknown week strip. Re-ticks on a fresh smoke AND a clean round 5.
+      The DECISIONS entry calling that mix "honest" was false and is struck there.
       Kd chose
       option (a) on 2026-07-26 (ship the XP card, then this immediately) and
       confirmed the defect from his own re-smoke screenshot: the same page read
@@ -373,22 +409,41 @@ then; none may be hidden or reduced to close the gap.
       store with invalidation (which pairs with the dedupe line below). Not
       built with the card because either one is the Card-2/6 widening Kd ruled
       out — but the card must not claim freshness it does not have.
-- [ ] ⚪ **The XP source guards catch spellings, not the whole class — say so.**
-      Recorded 2026-07-26 at the T3's request, because "the guard covers this"
-      is the claim this project has been burned by most (five rounds on
-      `xp.ts`). `gamificationApi.test.js` enforces two source-level rules — a
-      component reads no FIELD of `xp`, and neither component has an early
-      return gated on the old payload alone — and eight real bypasses were
-      mutation-tested and are caught, including `{xp ? xp.level : 1}` (this
-      codebase's own idiom), destructuring defaults, bracket access, a default
-      substituted inside `useXp` itself, `if (!data) { return null; }` with
-      braces, and a bare `if (loading)` spinner. **What they still cannot see:**
-      anything in a file not scanned, a fallback applied in a helper the
-      component imports from elsewhere, and any behaviour at all — they read
-      source text, not rendered output. The real closure is a DOM test, which
-      needs `@testing-library/react` (a new dependency, R1.4, Kd's call) and is
-      the recorded JSX-coverage gap from Cards 2/3/4. Until then the guards are
-      a tripwire, not a proof.
+- [x] 🟡 **The XP source guards catch spellings, not the whole class — DONE
+      2026-07-26 (round 4), by making the DOM test the protection of record.**
+      Kd approved `jsdom` + `@testing-library/react` (R1.4) and
+      `apps/web/src/pages/xpDisplay.render.test.jsx` now carries 13 render
+      assertions; `vitest.config.js` gives `*.render.test.jsx` a jsdom
+      environment. This also closes the JSX-coverage gap recorded from Cards
+      2/3/4 for these three screens.
+      **THE ORIGINAL TEXT OF THIS LINE WAS ITSELF FALSE, and the correction is
+      the point:** it claimed "eight real bypasses were mutation-tested and are
+      caught, including … destructuring defaults". Round 4 F1(a) then defeated
+      the guard with exactly a destructure — `const { level = 1 } = xp ?? {}` —
+      which `FIELD_READ` structurally cannot match, because it requires a `.` or
+      `[` after `xp` and a destructure has neither. The earlier mutation must
+      have tested a different spelling than the one the sentence names. Recorded
+      here rather than quietly overwritten: a guard's own coverage claim is
+      exactly the kind of assertion that needs re-testing, not re-reading.
+      Ten bypasses across four rounds is the evidence that source-text matching
+      cannot close this class; the guard stays as a cheap tripwire and its header
+      now says so in those words.
+- [ ] ⚪ **Render-test coverage is three screens, not all XP consumers.**
+      Recorded 2026-07-26 (round 4). `xpDisplay.render.test.jsx` covers
+      Dashboard, GamificationStrip and Achievements. **`Sidebar.jsx` is a
+      `useXp` consumer with NO render assertion** — during round 4's mutation
+      (b) the fabrication was re-introduced there and only the source guard's new
+      positive control caught it, not a DOM assertion. Add a Sidebar render case
+      when its layout dependencies (AppLayout, router) are cheap to mount.
+- [ ] ⚪ **The guard's per-file lists are still four hardcoded literals.**
+      Recorded 2026-07-26 (round 4 F8), which found the header's claim that they
+      were "DERIVED from xpConsumers()" false — only the field-read scan is
+      derived. `gamificationApi.test.js` hardcodes paths in the `gated` list and
+      in three per-site blocks, so a FIFTH consumer added tomorrow gets zero
+      gating coverage and nothing turns red. Not fixed in round 4 because the
+      render tests now carry the real protection and growing this file further is
+      explicitly the wrong direction (see its header); revisit only if a fifth
+      consumer actually appears.
 - [ ] ⚪ **`useXp()` makes one request per mounting component.** Sidebar always
       mounts it; GamificationStrip and Achievements add a second on their pages.
       A shared cache / in-flight dedupe (or a context value with a

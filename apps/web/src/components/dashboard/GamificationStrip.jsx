@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Trophy, Target, Crown, ChevronRight, Sparkles } from 'lucide-react';
 import {
-  UNKNOWN, badgesKnown, challengesKnown, formatLevel, formatXpProgress,
-  formatXpTotal, gamificationService, oldPayloadState, xpBarWidth,
+  UNKNOWN, badgesKnown, challengesKnown, formatFraction, formatLevel,
+  formatXpProgress, formatXpTotal, gamificationService, oldPayloadState,
+  orUnknown, progressWidth, readLeaderboardView, readOverviewView, xpBarWidth,
 } from '../../api/gamificationApi';
 import { useXp } from '../../hooks/useXp';
 
@@ -38,6 +39,9 @@ function HeroCard({ bgImage, children, className = '', style = {}, onClick }) {
 }
 
 // ── Challenge row — transparent so background shows through ──────────────────
+/** `challenge` is a readChallenge() view: every field is a usable value or NULL.
+ *  Round 4 F5 — `current`/`target`/`progress` were read bare here, so a partial
+ *  element rendered "undefined/undefined" and `width: "undefined%"`. */
 function ChallengeRow({ challenge }) {
   const diffColor =
     challenge.difficulty === 'easy'   ? '#4ade80' :
@@ -52,16 +56,16 @@ function ChallengeRow({ challenge }) {
       <div className="flex items-center gap-2 mb-1.5">
         <span className="text-base flex-shrink-0">{challenge.icon}</span>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-white truncate">{challenge.name}</p>
+          <p className="text-xs font-semibold text-white truncate">{orUnknown(challenge.name)}</p>
           <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.70)' }}>
-            {challenge.current}/{challenge.target}
+            {formatFraction(challenge.current, challenge.target)}
             {challenge.completed && <span className="ml-1 text-green-400">✓</span>}
           </p>
         </div>
       </div>
       <div className="h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.15)' }}>
         <motion.div
-          initial={{ width: 0 }} animate={{ width: `${challenge.progress}%` }}
+          initial={{ width: 0 }} animate={{ width: progressWidth(challenge.progress) }}
           transition={{ duration: 1, ease: 'easeOut' }}
           className="h-full rounded-full"
           style={{
@@ -83,7 +87,7 @@ export default function GamificationStrip() {
   const [loading,     setLoading]     = useState(true);
   // XP is on the NEW API, fetched separately from the two old-backend reads.
   // `null` = unknown; nothing here invents a number (see readXpView).
-  const { xp } = useXp();
+  const { xp, status: xpStatus } = useXp();
 
   // ROUND 3 F8: `Promise.all` coupled two independent old-backend features, so
   // ONE rejection nulled BOTH payloads. DECISIONS 2026-07-24 rules the
@@ -105,14 +109,23 @@ export default function GamificationStrip() {
       .finally(() => setLoading(false));
   }, []);
 
+  const oldState  = oldPayloadState({ data, loading });
+  const oldFailed = oldState === 'failed';
+
   // T3 finding ①: this used to be `if (loading || !data) return null`, which
   // gated the NEW-API XP block behind the OLD backend's payload — so the state
   // that is PERMANENT on this branch (old backend Bearer-null-broken, new API
   // fine) rendered no XP at all, while a comment two lines up claimed the two
   // sources were independent. A separate fetch is not independence if the
-  // render is still gated. The strip now hides only while the old read is
-  // genuinely in flight AND we have no XP either — i.e. nothing to show yet.
-  if (loading && !xp) return null;
+  // render is still gated.
+  //
+  // ROUND 4 F7: the replacement `loading && !xp` was still two states pretending
+  // to be three. `!xp` is true for BOTH "XP still loading" and "XP failed", so
+  // with the old backend accepting the connection and never answering (mlApi
+  // sets no timeout) and the XP read failing, this returned null FOREVER — no
+  // dash, no notice, nothing. Both reads now report their own state and the
+  // strip hides only while BOTH are genuinely still in flight.
+  if (oldState === 'loading' && xpStatus === 'loading') return null;
 
   // `data.user` (the OLD backend's XP block) is deliberately no longer read —
   // XP comes from the new API via useXp. The rest of this payload still feeds
@@ -130,23 +143,24 @@ export default function GamificationStrip() {
   // "still in flight" as "failed", so a healthy load asserted "unavailable";
   // and it asserted the ENVELOPE arrived rather than the FIELD inside it, so a
   // 200 with `{}` still printed "(0/—)" and "earn your first badge". Three
-  // states, and per-card knowledge — both pure and unit-tested.
-  const oldState     = oldPayloadState({ data, loading });
-  const oldFailed    = oldState === 'failed';
-  const badges       = data?.badges;
-  const challenges   = data?.challenges;
-  const earnedBadges = badges?.all?.filter((b) => b.earned) ?? [];
+  // states, and per-card knowledge — both pure and unit-tested. (oldState and
+  // oldFailed are computed above, because the early return needs them.)
+  //
+  // ROUND 4 F5/F6: both payloads now cross a READER, so every field below is a
+  // usable value or null. Previously only the reads someone had thought of were
+  // guarded, and each round found the ones they had not — `challenge.current`
+  // and `challenge.progress` were still bare here when round 4 ran.
+  const overview     = readOverviewView(data);
+  const board        = readLeaderboardView(leaderboard);
+  const earnedBadges = (overview.badges.all ?? []).filter((b) => b.earned);
   const recentBadges = earnedBadges.slice(-3).reverse();
 
   // Round 2 ③: `leaderboard.leaderboard` was an unguarded read while its
   // sibling was optional-chained, and a render throw blanks the page (no
   // ErrorBoundary exists in apps/web) — which would take the XP header down
   // too, re-creating ① by a third route.
-  let userRank = null;
-  if (leaderboard) {
-    const me = leaderboard.leaderboard?.find((e) => e.is_current_user);
-    userRank  = me ? me.rank : leaderboard.current_user_rank;
-  }
+  const me       = board.entries?.find((e) => e.isCurrentUser) ?? null;
+  const userRank = me ? me.rank : board.currentUserRank;
 
   return (
     <motion.div
@@ -176,8 +190,8 @@ export default function GamificationStrip() {
           </div>
           <div className="flex flex-col gap-2 flex-1">
             {challengesKnown(data) ? (
-              challenges.active.slice(0, 3).map((c) => (
-                <ChallengeRow key={c.id} challenge={c} />
+              overview.challenges.active.slice(0, 3).map((c, i) => (
+                <ChallengeRow key={c.id ?? i} challenge={c} />
               ))
             ) : oldFailed ? (
               // An empty list would read as "no challenges this week", which is
@@ -209,10 +223,10 @@ export default function GamificationStrip() {
             <div className="flex items-end gap-2 mb-2">
               <p className="text-5xl font-bold tracking-tighter tabular-nums"
                  style={{ color: '#FFD66B', textShadow: '0 0 20px rgba(255,214,107,0.5)' }}>
-                {userRank || '—'}
+                {orUnknown(userRank)}
               </p>
               <p className="text-sm pb-2" style={{ color: 'rgba(255,255,255,0.85)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
-                of {Number.isFinite(leaderboard?.total_users) ? leaderboard.total_users : UNKNOWN}
+                of {orUnknown(board.totalUsers)}
               </p>
             </div>
             <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.90)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
@@ -254,7 +268,7 @@ export default function GamificationStrip() {
                 Latest Badges
               </h3>
               <span className="text-2xs" style={{ color: 'rgba(255,255,255,0.75)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
-                ({badgesKnown(data) ? earnedBadges.length : UNKNOWN}/{Number.isFinite(badges?.total_count) ? badges.total_count : UNKNOWN})
+                ({badgesKnown(data) ? earnedBadges.length : UNKNOWN}/{orUnknown(overview.badges.totalCount)})
               </span>
             </div>
             <button
@@ -275,7 +289,7 @@ export default function GamificationStrip() {
                   b.tier === 'silver'   ? '#c0c0c0' : '#cd7f32';
                 return (
                   <motion.div
-                    key={b.id}
+                    key={b.id ?? i}
                     initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.1 * i }}
                     className="flex items-center gap-3 rounded-xl px-3 py-2.5"
@@ -288,10 +302,10 @@ export default function GamificationStrip() {
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-bold text-white truncate"
                          style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
-                        {b.name}
+                        {orUnknown(b.name)}
                       </p>
                       <p className="text-2xs uppercase tracking-wider font-semibold"
-                         style={{ color: tierColor }}>{b.tier}</p>
+                         style={{ color: tierColor }}>{orUnknown(b.tier)}</p>
                     </div>
                   </motion.div>
                 );

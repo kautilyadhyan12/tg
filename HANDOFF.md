@@ -1,6 +1,67 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: WEB XP display + Dashboard XP — T3 ROUND 4  [FIXED, SMOKE + ROUND 5 OWED]
+      branch web-repoint. 8 findings, all real, all fixed. FOURTH consecutive
+      round to find the previous round's fix had opened something new.
+THE HEADLINE — the source guard is RETIRED as the protection of record.
+  It was defeated 4 more ways (10 total across 4 rounds): a DESTRUCTURE
+  (`const { level = 1 } = xp ?? {}`) that FIELD_READ structurally cannot see;
+  a contradiction appended to FIELD_READ that disarmed the whole scan silently
+  because it had no positive control; `if (oldFailed) return null`, a name
+  invented after the six-name early-return list was written; and the
+  strip-eating attack with the poison moved BELOW the last helper call.
+  KD APPROVED jsdom + @testing-library/react (R1.4, 2026-07-26, option A).
+  NEW: `src/pages/xpDisplay.render.test.jsx` (13 render tests) + vitest.config
+  gives `*.render.test.jsx` a jsdom env. The guard STAYS as a tripwire; its
+  header now says in those words that it is not proof, plus a standing
+  instruction: do not grow it for a new bypass — add a render assertion.
+SHIPPED (8 files): gamificationApi.js (+readOverviewView/readLeaderboardView/
+  readStatsView/readChallenge/readBadge/readLeaderboardEntry + orUnknown/
+  formatCount/formatFraction/progressWidth) · useXp.js (returns `status`) ·
+  Dashboard.jsx · Achievements.jsx · GamificationStrip.jsx ·
+  gamificationApi.test.js (positive+negative controls, `??` spelling, false
+  claims deleted) · NEW xpDisplay.render.test.jsx · vitest.config.js.
+FINDINGS: F2 `statsKnown` was `Boolean(data)` renamed — a `{stats:{}}` 200 still
+  printed six zeros, the SAME shape round 3 deleted in two files and shipped in
+  a third. F3 week strip claimed 7 untrained days beside its own "unavailable"
+  caption. F4 allSettled decoupled the FETCH, not the RENDER — a healthy
+  leaderboard was thrown away and disclaimed; the P4 dark window gave a blank
+  tab. F5 seven element-level fields still bare. F6 THE CLASS: the old payloads
+  never crossed a parser — now they do. F7 useXp had 1 state where 3 exist, so
+  a hung old backend + failed XP read hid the surface forever. F8 three false
+  claims in the guard header (+ one on OWED) deleted.
+MUTATION PROOF (the reviewer's own bar — all four go RED):
+  (a) destructure → render assertion caught it; SOURCE GUARD STILL PASSED 24/24,
+      which is the whole argument. (b) disarmed FIELD_READ → new positive
+  control. (c) `if (oldFailed) return null` → render assertion. (d) strip-eating
+  → caught, but at first only INCIDENTALLY (it broke up text other assertions
+  matched on), so a whole-document sweep was added; it now fails on the
+  fabrication itself. Restores from `cp` backups, NEVER `git checkout --`.
+THE NEW TESTS EARNED THEIR KEEP IMMEDIATELY: they caught `ReferenceError:
+  badges is not defined` at Achievements.jsx:431 in MY OWN fix — a leftover
+  reference that blanks the whole page (no ErrorBoundary in apps/web). The
+  source guard could not have seen it.
+PROVE: web 194 passed / 1 failed (195) — the 1 is the pre-existing syncClient
+  `window` quirk, unchanged. +15 tests. Scoped lint 3 errors = exact baseline
+  parity, each VERIFIED still present at merge-base 1164a86, not assumed.
+  `vite build` GREEN — this also closes the gap the previous block flagged
+  ("Build: NOT re-captured after the T3 fixes").
+OPEN / NEXT:
+  1. **T3 ROUND 5** — round 4's fixes are new, unreviewed code, and four rounds
+     running have each found the previous round's fix opened something.
+  2. **RE-SMOKE**, scope GREW again: needs the old backend UP AND HANGING (not
+     off), a 200 with body `{"stats":{}}`, and the leaderboard-fails-while-
+     overview-succeeds state. Both OWED ticks stay OFF until 1 and 2 are done.
+  3. OWED lines added: Sidebar has no render coverage; the guard's four
+     hardcoded path lists remain literals. One ticked: the source-guard/DOM-test
+     line is DONE.
+  4. Then: PostWorkout.jsx 100-XP bug (OWED, live route) · rotate the Neon
+     password (OWED).
+SPEC GAPs: none.
+```
+
+```
 TASK: WEB XP display repoint 🟡  [CODE + T3 ROUND 1 DONE, SMOKE OWED]
       branch web-repoint (master merged in first at 1164a86, which is what put
       the `xp` block on this branch). Discharges the WEB half of OWED's "XP /

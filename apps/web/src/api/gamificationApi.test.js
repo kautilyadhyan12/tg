@@ -166,18 +166,32 @@ describe('render formatters — the render-site half of the fabrication guard', 
 // 2's own new `oldReady` variable became a fresh way to re-gate XP behind the
 // old payload, invisible to a regex that only knew the spelling `data`.
 //
-// What is different now:
-//   · the field-read scan runs over EVERY .js/.jsx under src (0 hits today), so
-//     a prop-receiving or newly-extracted component cannot escape;
-//   · the per-file list is DERIVED from xpConsumers(), not a second literal —
-//     round 3 proved that two lists means editing the wrong one silences it;
-//   · every negative block carries a POSITIVE anchor, which is this card's own
-//     0x08 lesson: negative assertions alone cannot tell "nothing to catch"
-//     from "cannot catch anything";
-//   · the strip is asserted not to have eaten the file.
-// These are still source text, not behaviour. BEHAVIOUR is covered by the pure
-// helper tests at the end (oldPayloadState / badgesKnown / challengesKnown),
-// because vitest runs environment:"node" and the jsdom project is still owed.
+// ROUND 4 THEN DEFEATED ROUND 3's REPLACEMENT FOUR MORE WAYS — ten in total:
+// a DESTRUCTURE (`const { level = 1 } = xp ?? {}`) has neither `.` nor `[` so
+// FIELD_READ cannot see it; FIELD_READ had no positive control, so appending a
+// contradiction to it disarmed the whole scan silently; the early-return regex
+// listed six variable names and required a `!`, which `if (oldFailed) return`
+// satisfies neither of; and the strip-eating attack still worked with the poison
+// moved BELOW the last helper call, where the positive anchor cannot fire.
+//
+// WHAT THIS SECTION IS AND IS NOT, stated plainly because three previous
+// versions of this comment claimed protection they did not deliver (round 4 F8
+// found three false claims here, all now deleted):
+//   · IT IS a cheap early-warning net for re-introductions at the SPELLING
+//     level. That is genuinely useful and it stays.
+//   · IT IS NOT the protection of record, and it cannot be. Source text has
+//     unbounded spellings for the same rendered output, so any regex battery can
+//     only enumerate the attacks someone already thought of — which is exactly
+//     what ten bypasses across four rounds demonstrate empirically.
+//   · THE PROTECTION OF RECORD is `src/pages/xpDisplay.render.test.jsx`, which
+//     renders the components in jsdom and asserts on the DOM. Every one of the
+//     ten bypasses fails there, because it does not matter how a fabrication was
+//     spelled — only that a number nobody knows reached the screen.
+// Do not grow this section in response to a new bypass. Add a render assertion.
+//
+// Claims made below are limited to what is mechanically true: FIELD_READ now
+// carries a positive AND a negative control (so a disarmed regex fails loudly),
+// and every negative block has at least one positive assertion beside it.
 
 // `src/`, NOT `apps/web/`. The first cut used '../..', which walked the whole
 // package and scanned `dist/` build output (date-fns.js, lib-<hash>.js) and
@@ -245,6 +259,25 @@ describe('no file under src reads a FIELD of xp — only gamificationApi.js may'
     expect(scanned.length).toBeGreaterThan(20);
   });
 
+  // ROUND 4 F1(b): FIELD_READ's only assertion was `expect(offenders).toEqual([])`,
+  // which a DEAD regex satisfies just as well as a clean codebase. Appending a
+  // contradiction to the pattern and re-introducing `Level {xp.level || 1}` in
+  // Sidebar.jsx passed 24/24. HELPER_CALL was positively exercised by every
+  // consumer; this one never was. A control on both sides now, so the scan
+  // cannot be silently disarmed — the standing 0x08 lesson, third occurrence.
+  it('FIELD_READ actually matches a field read (positive control)', () => {
+    expect(FIELD_READ.test('xp.level')).toBe(true);
+    expect(FIELD_READ.test('xp?.level')).toBe(true);
+    expect(FIELD_READ.test('xp["level"]')).toBe(true);
+    expect(FIELD_READ.test('{xp ? xp.level : 1}')).toBe(true);
+  });
+
+  it('FIELD_READ does not match innocent text (negative control)', () => {
+    expect(FIELD_READ.test('const { xp } = useXp();')).toBe(false);
+    expect(FIELD_READ.test('formatLevel(xp)')).toBe(false);
+    expect(FIELD_READ.test('xpBarWidth(xp)')).toBe(false);
+  });
+
   it('every scanned file is field-read clean', () => {
     // The RAW check applies only to NON-consumers. A consumer legitimately
     // DISCUSSES these fields in prose — GamificationStrip's comment explains
@@ -296,16 +329,23 @@ describe('XP renders independently of the old-backend payload', () => {
     '../pages/Achievements.jsx',
   ];
 
-  it.each(gated)('%s has no early return gated on the old payload', (rel) => {
+  it.each(gated)('%s hides only while EVERY read is still in flight', (rel) => {
     const { src } = codeAt(rel);
-    // Round 3 F7: the DERIVED names count too, not just `data`.
+    // Round 3 F7: the DERIVED names count too, not just `data`. Round 4 F1(c)
+    // then showed this list can never be complete — `if (oldFailed) return null`
+    // uses a name invented after the list was written, and passes. The render
+    // tests are what actually close that; this stays as an early warning.
     expect(src).not.toMatch(
       /if\s*\(\s*!\s*\(?\s*(data|oldReady|oldState|statsKnown|badgesKnown|challengesKnown)\b[\s\S]{0,40}?\)\s*\{?\s*return/,
     );
     // A bare `if (loading)` gate is the round-2 ② hole: `loading` is the OLD
-    // read's, so it must always be paired with `!xp`.
+    // read's. And `loading && !xp` — round 1's replacement — is the round-4 F7
+    // hole, because `!xp` cannot tell "XP loading" from "XP failed", so a
+    // hanging old backend plus a failed XP read hid the surface forever.
     expect(src).not.toMatch(/if\s*\(\s*loading\s*\)/);
-    expect(src).toMatch(/loading\s*&&\s*!\s*xp/);
+    expect(src).not.toMatch(/loading\s*&&\s*!\s*xp\b/);
+    // POSITIVE anchor: the gate must consult the XP read's OWN state.
+    expect(src).toMatch(/xpStatus\s*===\s*'loading'/);
   });
 });
 
@@ -329,12 +369,19 @@ describe('the old-payload cards claim nothing they do not know', () => {
     expect(src).not.toMatch(/active\?\.length\s*\?\?\s*0/);
   });
 
-  it('Dashboard gates its own old-stats figures (review of 888e750, F1)', () => {
+  it('Dashboard reads its own old-stats payload through the reader', () => {
     const { src } = codeAt('../pages/Dashboard.jsx');
+    // POSITIVE anchor.
+    expect(src).toMatch(/readStatsView\s*\(/);
     // stats null => s = {} => every `|| 0` fired, so a real Level sat beside
-    // fabricated zeros and lent them credibility.
-    expect(src).toMatch(/statsKnown/);
-    expect(src).not.toMatch(/s\.(total_workouts|total_minutes|total_calories|weekly_workouts|streak)\s*\|\|\s*0/);
+    // fabricated zeros and lent them credibility (review of 888e750, F1).
+    //
+    // ROUND 4 F2: the previous version of this line banned `|| 0` and PERMITTED
+    // `?? 0` — which is the spelling the code had actually been written in, so
+    // the assertion was green against the live defect. Both operators now.
+    expect(src).not.toMatch(
+      /\b(total_workouts|total_minutes|total_calories|weekly_workouts|streak)\s*(\|\||\?\?)\s*0/,
+    );
   });
 });
 
@@ -352,9 +399,16 @@ describe('the old payload is read with every nested field guarded', () => {
     // per-site assertions above require. Banning the spelling instead would
     // forbid the correct code, which is how a guard starts pushing people toward
     // worse shapes to keep it quiet.
+    // ROUND 4 F8: this block was three `not.toMatch` and nothing else, so on an
+    // eaten or emptied file it passed vacuously — the exact failure mode the
+    // section header claimed had been closed everywhere. Positive anchor first.
+    expect(src).toMatch(/read(Overview|Leaderboard)View\s*\(/);
     expect(src).not.toMatch(/\bleaderboard\.leaderboard\s*\./);
     expect(src).not.toMatch(/\{\s*leaderboard\.total_users\s*\}/);
     expect(src).not.toMatch(/\{\s*entry\.xp\.toLocaleString/);
+    // Round 4 F5: the ELEMENT-level siblings round 3 left bare beside `entry.xp`.
+    expect(src).not.toMatch(/\{\s*entry\.(rank|level|badge_count)\s*\}/);
+    expect(src).not.toMatch(/\bchallenge\.(current|target|progress)\s*\}/);
   });
 });
 

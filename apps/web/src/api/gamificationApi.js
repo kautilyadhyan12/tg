@@ -141,6 +141,138 @@ export function xpBarWidth(xp) {
   return `${Math.min(100, Math.max(0, v))}%`;
 }
 
+// ── Old-backend payload readers (round 4 F6) ─────────────────────────────────
+//
+// THE CLASS FIX, and the reason this section exists rather than a seventh round
+// of per-read guards. Rounds 1-4 each closed the reads they could see and each
+// missed one: round 2 ③ chained `challenges.active` and left `leaderboard.
+// leaderboard`; round 3 F1 fixed that twin and left `leaderboard.leaderboard.
+// map`, two bare `total_users` and `entry.xp`; round 4 F5 then found seven more
+// at ELEMENT level (`entry.rank`, `challenge.current`, `badge.xp_reward`, …).
+// Four rounds, same shape, because `getOverview`/`getLeaderboard`/`getStats`
+// responses are EXTERNAL INPUT (R2.3) rendered raw — the only payload that ever
+// crossed a parser was the new API's, through readXpView.
+//
+// So these do for the three old payloads what readXpView does for the new one:
+// every field arrives as a usable value or as NULL, and null is rendered as the
+// em dash by orUnknown/formatCount. A render site added tomorrow fabricates only
+// by deliberately writing `?? 0` — not by forgetting a guard, which is how all
+// four rounds' worth got in.
+//
+// Deliberately NOT Zod: these three shapes are the OLD backend's, they die at
+// P2.8 (RUNBOOK/cutover.md), and a shared contract for a payload we are deleting
+// would outlive its subject. `xpViewSchema` stays the shared contract because
+// the NEW API's shape is permanent.
+const finite = (v) => (Number.isFinite(v) ? v : null);
+const text   = (v) => (typeof v === 'string' && v.trim() !== '' ? v : null);
+const list   = (v) => (Array.isArray(v) ? v : null);
+
+/** The value, or the em dash when unknown. Keeps NUMBERS numeric, so callers
+ *  that animate or suffix them still can — the reason this is not formatCount. */
+export function orUnknown(v) {
+  return v === null || v === undefined ? UNKNOWN : v;
+}
+/** Unknown-safe count for string contexts (`{formatCount(x)} of 7`). */
+export function formatCount(v) {
+  return v === null || v === undefined ? UNKNOWN : v.toLocaleString();
+}
+/** "3 / 5", with either side unknown. */
+export function formatFraction(a, b) {
+  return `${orUnknown(a)} / ${orUnknown(b)}`;
+}
+/** A CSS width from a percentage that may be unknown or out of range. Unknown
+ *  is an EMPTY track, never a full one — same rule as xpBarWidth. */
+export function progressWidth(v) {
+  return v === null || v === undefined ? '0%' : `${Math.min(100, Math.max(0, v))}%`;
+}
+
+export function readChallenge(c) {
+  return {
+    id:          text(c?.id),
+    name:        text(c?.name),
+    icon:        text(c?.icon),
+    difficulty:  text(c?.difficulty),
+    description: text(c?.description),
+    current:     finite(c?.current),
+    target:      finite(c?.target),
+    progress:    finite(c?.progress),
+    xpReward:    finite(c?.xp_reward),
+    completed:   c?.completed === true,
+  };
+}
+
+export function readBadge(b) {
+  return {
+    id:          text(b?.id),
+    name:        text(b?.name),
+    icon:        text(b?.icon),
+    tier:        text(b?.tier),
+    category:    text(b?.category),
+    description: text(b?.description),
+    xpReward:    finite(b?.xp_reward),
+    earned:      b?.earned === true,
+  };
+}
+
+export function readLeaderboardEntry(e) {
+  return {
+    rank:          finite(e?.rank),
+    name:          text(e?.name),
+    level:         finite(e?.level),
+    badgeCount:    finite(e?.badge_count),
+    xp:            finite(e?.xp),
+    streak:        finite(e?.streak),
+    isCurrentUser: e?.is_current_user === true,
+  };
+}
+
+/** `{badges:{all,total_count}, challenges:{active}}` — lists are NULL when the
+ *  payload cannot be enumerated, which is what badgesKnown/challengesKnown ask. */
+export function readOverviewView(data) {
+  const all    = list(data?.badges?.all);
+  const active = list(data?.challenges?.active);
+  return {
+    badges: {
+      all:        all === null ? null : all.map(readBadge),
+      totalCount: finite(data?.badges?.total_count),
+    },
+    challenges: {
+      active: active === null ? null : active.map(readChallenge),
+    },
+  };
+}
+
+export function readLeaderboardView(data) {
+  const entries = list(data?.leaderboard);
+  return {
+    entries:         entries === null ? null : entries.map(readLeaderboardEntry),
+    totalUsers:      finite(data?.total_users),
+    currentUserRank: finite(data?.current_user_rank),
+  };
+}
+
+/** `workoutService.getStats()` — the Dashboard's own payload, and the one round
+ *  4 F2 caught still fabricating: `Boolean(stats?.stats)` asserted the ENVELOPE
+ *  and six sites then read fields off it with `?? 0`, so a 200 carrying
+ *  `{stats:{}}` printed "0 workouts / 0h / 0 kcal" as fact. Per-field now, so
+ *  there is nothing left for an envelope gate to get wrong. */
+export function readStatsView(data) {
+  const s = data?.stats;
+  const a = data?.activity;
+  return {
+    totalWorkouts:  finite(s?.total_workouts),
+    totalMinutes:   finite(s?.total_minutes),
+    totalCalories:  finite(s?.total_calories),
+    weeklyWorkouts: finite(s?.weekly_workouts),
+    streak:         finite(s?.streak),
+    // A plain object keyed by date, or NULL. Round 4 F3: `|| {}` let the week
+    // strip render seven inactive dots — a visual "you trained on none of these
+    // days" — beside a caption that correctly read "unavailable".
+    activity: a && typeof a === 'object' && !Array.isArray(a) ? a : null,
+    recent:   list(data?.recent_workouts),
+  };
+}
+
 export const gamificationService = {
   /** {streak, xp, achievements} — @app/shared gamificationMeSchema. */
   getMe: () => authApi.get('/v1/gamification/me'),

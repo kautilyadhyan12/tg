@@ -5,8 +5,8 @@ import { useTransition } from '../context/TransitionContext';
 import { workoutService } from '../api/workoutApi';
 import { recommendationService } from '../api/recommendationApi';
 import {
-  UNKNOWN, formatLevel, formatNextLevel, formatXpFraction, formatXpTotal,
-  xpBarWidth,
+  formatCount, formatLevel, formatNextLevel, formatXpFraction, formatXpTotal,
+  orUnknown, readStatsView, xpBarWidth,
 } from '../api/gamificationApi';
 import { useXp } from '../hooks/useXp';
 import GamificationStrip from '../components/dashboard/GamificationStrip';
@@ -41,10 +41,24 @@ function AnimatedNumber({ value, duration = 1500, suffix = '' }) {
 }
 
 // ── Week calendar strip ───────────────────────────────────────────────────────
-function WeekStrip({ activity = {} }) {
+/** `activity` is a date-keyed object, or NULL when we do not know.
+ *
+ *  ROUND 4 F3: this used to default to `{}`, so an unknown week rendered all
+ *  seven dots in their NOT-TRAINED state — a visual "you trained on none of
+ *  these days", which is seven claims — directly beside a caption that correctly
+ *  read "Weekly activity unavailable". Two standards eight inches apart, and the
+ *  same fabrication class the two XP cards exist to delete: GamificationStrip
+ *  already applies the honest rule to its own empty list ("an empty list would
+ *  read as 'no challenges this week', which is a claim we cannot make").
+ *
+ *  Unknown now has its OWN look — dashed outline, no fill, no flame — so the
+ *  strip asserts nothing about any day. It is deliberately not an empty box or a
+ *  hidden component: the days of the week are knowable and the shape stays. */
+function WeekStrip({ activity }) {
   const days   = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const today  = new Date();
   const dayIdx = (today.getDay() + 6) % 7;
+  const known  = activity !== null && activity !== undefined;
 
   return (
     <div className="flex gap-2">
@@ -53,7 +67,7 @@ function WeekStrip({ activity = {} }) {
         date.setDate(today.getDate() - dayIdx + i);
         const dateStr = date.toISOString().split('T')[0];
         const isToday = i === dayIdx;
-        const isDone  = !!activity[dateStr];
+        const isDone  = known && !!activity[dateStr];
         const isPast  = i < dayIdx;
 
         return (
@@ -63,17 +77,21 @@ function WeekStrip({ activity = {} }) {
               {day}
             </span>
             <div className="w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300"
+                 title={known ? undefined : 'Activity unavailable'}
                  style={{
-                   background: isDone ? 'linear-gradient(135deg, #FF8A1F, #FFB347)'
+                   background: !known ? 'transparent'
+                     : isDone ? 'linear-gradient(135deg, #FF8A1F, #FFB347)'
                      : isToday ? 'rgba(255,138,31,0.25)' : 'rgba(255,255,255,0.08)',
-                   border: isToday && !isDone ? '1px solid rgba(255,138,31,0.6)' : '1px solid transparent',
+                   border: !known ? '1px dashed rgba(255,255,255,0.20)'
+                     : isToday && !isDone ? '1px solid rgba(255,138,31,0.6)' : '1px solid transparent',
                    boxShadow: isDone ? '0 0 12px rgba(255,138,31,0.4)' : 'none',
                  }}>
               {isDone ? (
                 <Flame className="w-3.5 h-3.5 text-white" />
               ) : (
                 <span className="text-xs font-bold" style={{
-                  color: isToday ? '#FF8A1F' : isPast ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.4)',
+                  color: !known ? 'rgba(255,255,255,0.22)'
+                    : isToday ? '#FF8A1F' : isPast ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.4)',
                 }}>
                   {date.getDate()}
                 </span>
@@ -239,13 +257,13 @@ export default function Dashboard() {
   const quote    = getQuote();
   const greeting = getGreeting();
 
-  const [stats,           setStats]           = useState(null);
+  const [statsRaw,        setStatsRaw]        = useState(null);
   const [loading,         setLoading]         = useState(true);
   const [recommendations, setRecommendations] = useState([]);
 
   useEffect(() => {
     workoutService.getStats()
-      .then((res) => setStats(res.data))
+      .then((res) => setStatsRaw(res.data))
       .catch(console.error)
       .finally(() => setLoading(false));
     recommendationService.getRecommendations(6)
@@ -253,15 +271,26 @@ export default function Dashboard() {
       .catch(console.error);
   }, []);
 
-  // `stats` is null when the old read fails, which on this branch is permanent
-  // (mlApi's Bearer comes from localStorage, which Card 1 no longer writes).
-  // Without this the `|| 0` fallbacks fabricate — the review of 888e750 put it
-  // exactly right: no source knows those zeros, and a real "Level 2" sitting
-  // beside them lends them credibility.
-  const statsKnown = Boolean(stats?.stats);
-  const s        = stats?.stats || {};
-  const activity = stats?.activity || {};
-  const recent   = stats?.recent_workouts || [];
+  // The old read fails on this branch permanently (mlApi's Bearer comes from
+  // localStorage, which Card 1 no longer writes), so EVERY figure below is
+  // unknown in the state Kd actually sees.
+  //
+  // ROUND 4 F2: the previous fix was `statsKnown = Boolean(stats?.stats)` —
+  // which asserted the ENVELOPE arrived, then six sites read fields off it with
+  // `?? 0`. A 200 carrying `{stats:{}}`, or any subset with `total_minutes`
+  // missing, printed "0 workouts / 0h / 0 kcal" as fact. That is verbatim the
+  // shape round 3 had just deleted from GamificationStrip and Achievements
+  // (Boolean(data) → badgesKnown/challengesKnown) and shipped here in the SAME
+  // commit. The code carried its own admission: if those fields could never be
+  // missing, the `?? 0` operators would be dead.
+  //
+  // Per-field now, via the same reader treatment the new API's payload gets —
+  // so there is no envelope gate left to be wrong, and `?? 0` appears nowhere.
+  const stats  = readStatsView(statsRaw);
+  const recent = stats.recent ?? [];
+  const hours  = stats.totalMinutes === null
+    ? null
+    : Math.round((stats.totalMinutes / 60) * 10) / 10;
 
   return (
     <div className="min-h-screen p-6 relative" style={{ background: '#0A0908' }}>
@@ -286,11 +315,11 @@ export default function Dashboard() {
             <h1 className="text-4xl font-bold tracking-tighter" style={{ color: 'rgba(255,255,255,0.95)' }}>
               {user?.displayName?.split(' ')[0] || 'Athlete'}
             </h1>
-            {s.streak > 0 && (
+            {stats.streak !== null && stats.streak > 0 && (
               <div className="flex items-center gap-1.5 mt-2">
                 <Flame className="w-4 h-4" style={{ color: '#FF8A1F' }} />
                 <span className="text-sm font-semibold" style={{ color: '#FF8A1F' }}>
-                  {s.streak} day streak
+                  {stats.streak} day streak
                 </span>
                 <span className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>— keep it going!</span>
               </div>
@@ -346,9 +375,9 @@ export default function Dashboard() {
 
         {/* ── Stats grid ────────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard icon={Dumbbell} label="Total Workouts" value={statsKnown ? (s.total_workouts ?? 0) : UNKNOWN} sub="all time" color="#FF8A1F" delay={0.15} bgImage="/images/dashboard/totalworkout.png" />
-          <StatCard icon={Clock} label="Hours Trained" value={statsKnown ? Math.round((s.total_minutes ?? 0) / 60 * 10) / 10 : UNKNOWN} suffix="h" sub={statsKnown ? `${s.total_minutes ?? 0} minutes` : undefined} color="#60a5fa" delay={0.2} bgImage="/images/dashboard/hourstrained.png" />
-          <StatCard icon={Flame} label="Calories Burned" value={statsKnown ? (s.total_calories ?? 0) : UNKNOWN} sub="kcal total" color="#f97316" delay={0.25} bgImage="/images/dashboard/caloriesburned.png" />
+          <StatCard icon={Dumbbell} label="Total Workouts" value={orUnknown(stats.totalWorkouts)} sub="all time" color="#FF8A1F" delay={0.15} bgImage="/images/dashboard/totalworkout.png" />
+          <StatCard icon={Clock} label="Hours Trained" value={orUnknown(hours)} suffix="h" sub={stats.totalMinutes === null ? undefined : `${stats.totalMinutes} minutes`} color="#60a5fa" delay={0.2} bgImage="/images/dashboard/hourstrained.png" />
+          <StatCard icon={Flame} label="Calories Burned" value={orUnknown(stats.totalCalories)} sub="kcal total" color="#f97316" delay={0.25} bgImage="/images/dashboard/caloriesburned.png" />
           <StatCard icon={Trophy} label="Current Level" value={`Level ${formatLevel(xp)}`} sub={`${formatXpTotal(xp)} XP earned`} color="#FFD66B" delay={0.3} bgImage="/images/dashboard/currentlevel.png" />
         </div>
 
@@ -365,9 +394,9 @@ export default function Dashboard() {
               </div>
               <div className="mt-4 grid grid-cols-3 gap-3" style={{ maxWidth: '65%' }}>
                 {[
-                  { label: 'This week', value: statsKnown ? `${s.weekly_workouts ?? 0}` : UNKNOWN, sub: 'workouts' },
-                  { label: 'Streak',    value: statsKnown ? `${s.streak ?? 0}` : UNKNOWN,          sub: 'days' },
-                  { label: 'Level',     value: formatLevel(xp),             sub: 'current' },
+                  { label: 'This week', value: formatCount(stats.weeklyWorkouts), sub: 'workouts' },
+                  { label: 'Streak',    value: formatCount(stats.streak),         sub: 'days' },
+                  { label: 'Level',     value: formatLevel(xp),                   sub: 'current' },
                 ].map(({ label, value, sub }) => (
                   <div key={label} className="text-center">
                     <p className="text-xl font-bold tracking-tighter tabular-nums" style={{ color: '#FF8A1F' }}>{value}</p>
@@ -385,9 +414,11 @@ export default function Dashboard() {
                 <h3 className="text-sm font-semibold text-white">This Week</h3>
               </div>
               <div style={{ maxWidth: '70%' }}>
-                <WeekStrip activity={activity} />
+                <WeekStrip activity={stats.activity} />
                 <p className="text-xs mt-4 text-center" style={{ color: 'rgba(255,255,255,0.50)' }}>
-                  {statsKnown ? `${s.weekly_workouts ?? 0} of 7 days active` : 'Weekly activity unavailable'}
+                  {stats.weeklyWorkouts === null
+                    ? 'Weekly activity unavailable'
+                    : `${stats.weeklyWorkouts} of 7 days active`}
                 </p>
               </div>
             </BgCard>

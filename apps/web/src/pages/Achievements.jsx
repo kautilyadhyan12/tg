@@ -5,9 +5,10 @@ import {
   Medal, Loader2, ChevronRight,
 } from 'lucide-react';
 import {
-  UNKNOWN, badgesKnown, challengesKnown, formatLevel, formatNextLevel,
-  formatXpFraction, formatXpTotal, gamificationService, oldPayloadState,
-  xpBarWidth,
+  UNKNOWN, badgesKnown, challengesKnown, formatCount, formatFraction,
+  formatLevel, formatNextLevel, formatXpFraction, formatXpTotal,
+  gamificationService, oldPayloadState, orUnknown, progressWidth,
+  readLeaderboardView, readOverviewView, xpBarWidth,
 } from '../api/gamificationApi';
 import { useAuth } from '../context/AuthContext';
 import { useXp } from '../hooks/useXp';
@@ -98,7 +99,7 @@ function BadgeCard({ badge, index }) {
              style={{ color: badge.earned ? tier.color : 'rgba(255,255,255,0.30)' }} />
         <span className="text-2xs font-semibold tabular-nums"
               style={{ color: badge.earned ? tier.color : 'rgba(255,255,255,0.30)' }}>
-          +{badge.xp_reward} XP
+          +{orUnknown(badge.xpReward)} XP
         </span>
       </div>
     </motion.div>
@@ -134,7 +135,7 @@ function ChallengeCard({ challenge, index }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <p className="text-sm font-bold text-white">{challenge.name}</p>
+            <p className="text-sm font-bold text-white">{orUnknown(challenge.name)}</p>
             <span
               className="text-2xs font-semibold uppercase tracking-wider
                          px-1.5 py-0.5 rounded-full"
@@ -154,7 +155,7 @@ function ChallengeCard({ challenge, index }) {
           <Zap className="w-3 h-3" style={{ color: '#FF8A1F' }} />
           <span className="text-xs font-bold tabular-nums"
                 style={{ color: '#FF8A1F' }}>
-            +{challenge.xp_reward}
+            +{orUnknown(challenge.xpReward)}
           </span>
         </div>
       </div>
@@ -162,9 +163,9 @@ function ChallengeCard({ challenge, index }) {
       {/* Progress */}
       <div className="flex justify-between text-2xs mb-1.5"
            style={{ color: 'rgba(255,255,255,0.50)' }}>
-        <span>{challenge.current} / {challenge.target}</span>
+        <span>{formatFraction(challenge.current, challenge.target)}</span>
         <span style={{ color: challenge.completed ? '#4ade80' : 'rgba(255,255,255,0.50)' }}>
-          {challenge.completed ? '✓ Complete' : `${challenge.progress}%`}
+          {challenge.completed ? '✓ Complete' : `${orUnknown(challenge.progress)}%`}
         </span>
       </div>
       <div
@@ -173,7 +174,7 @@ function ChallengeCard({ challenge, index }) {
       >
         <motion.div
           initial={{ width: 0 }}
-          animate={{ width: `${challenge.progress}%` }}
+          animate={{ width: progressWidth(challenge.progress) }}
           transition={{ duration: 1, ease: 'easeOut' }}
           className="h-full rounded-full"
           style={{
@@ -188,8 +189,11 @@ function ChallengeCard({ challenge, index }) {
 }
 
 // ── Leaderboard row ───────────────────────────────────────────────────────────
+/** `entry` is a readLeaderboardEntry() view — every field usable or NULL.
+ *  Round 4 F5: `rank`, `name`, `level` and `badge_count` were read bare, so an
+ *  entry missing them rendered "Lv undefined · undefined badges". */
 function LeaderboardRow({ entry, index }) {
-  const isPodium = entry.rank <= 3;
+  const isPodium = entry.rank !== null && entry.rank <= 3;
   const podiumColors = {
     1: '#FFD66B',
     2: '#c0c0c0',
@@ -203,10 +207,10 @@ function LeaderboardRow({ entry, index }) {
       transition={{ delay: 0.04 * index }}
       className="flex items-center gap-3 py-3 px-3 rounded-xl transition-all"
       style={{
-        background: entry.is_current_user
+        background: entry.isCurrentUser
           ? 'rgba(255,138,31,0.08)'
           : 'transparent',
-        border: entry.is_current_user
+        border: entry.isCurrentUser
           ? '1px solid rgba(255,138,31,0.20)'
           : '1px solid transparent',
       }}
@@ -219,7 +223,7 @@ function LeaderboardRow({ entry, index }) {
         ) : (
           <span className="text-sm font-bold tabular-nums"
                 style={{ color: 'rgba(255,255,255,0.40)' }}>
-            {entry.rank}
+            {orUnknown(entry.rank)}
           </span>
         )}
       </div>
@@ -235,14 +239,14 @@ function LeaderboardRow({ entry, index }) {
           color: entry.is_current_user ? '#fff' : 'rgba(255,255,255,0.65)',
         }}
       >
-        {entry.name?.[0]?.toUpperCase() || '?'}
+        {entry.name === null ? '?' : entry.name[0].toUpperCase()}
       </div>
 
       {/* Name + level */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-white truncate">
-          {entry.name}
-          {entry.is_current_user && (
+          {orUnknown(entry.name)}
+          {entry.isCurrentUser && (
             <span className="ml-2 text-2xs font-medium"
                   style={{ color: '#FF8A1F' }}>
               You
@@ -250,8 +254,8 @@ function LeaderboardRow({ entry, index }) {
           )}
         </p>
         <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.40)' }}>
-          Lv {entry.level} · {entry.badge_count} badge{entry.badge_count !== 1 ? 's' : ''}
-          {entry.streak > 0 && ` · ${entry.streak}d streak`}
+          Lv {orUnknown(entry.level)} · {orUnknown(entry.badgeCount)} badge{entry.badgeCount === 1 ? '' : 's'}
+          {entry.streak !== null && entry.streak > 0 && ` · ${entry.streak}d streak`}
         </p>
       </div>
 
@@ -278,7 +282,7 @@ export default function Achievements() {
   const [tab,          setTab]          = useState('badges');
   // XP on the NEW API, fetched independently of the old-backend reads below
   // (badges/challenges/leaderboard). `null` = unknown, never a fabricated 0.
-  const { xp } = useXp();
+  const { xp, status: xpStatus } = useXp();
 
   useEffect(() => {
     Promise.allSettled([
@@ -294,12 +298,32 @@ export default function Achievements() {
       .finally(() => setLoading(false));
   }, []);
 
+  // ROUND 3/4 F4: `Promise.allSettled` decoupled the FETCHES but every render
+  // below was still gated on `data` — the OVERVIEW payload — leaderboard tab
+  // included. Two live consequences: an overview failure threw away a
+  // leaderboard that had arrived and was sitting in state, while the notice
+  // asserted it was "unavailable"; and the P4 dark window (DECISIONS
+  // 2026-07-24, i.e. the SCHEDULED state) gave a clickable tab rendering a blank
+  // region with no explanation. "A separate fetch is not independence if the
+  // render is still gated" — written for this file's sibling, true here too.
+  //
+  // Each payload now reports its own state through the same tested pure
+  // function. Both settle together today (one allSettled), so `loading` is
+  // shared — but the STATES are per-payload, which is what the renders need.
+  const oldState  = oldPayloadState({ data, loading });
+  const oldFailed = oldState === 'failed';
+  const lbState   = oldPayloadState({ data: leaderboard, loading });
+
   // ROUND 2 ②: this was `if (loading)`, driven ENTIRELY by the old backend's
   // Promise.all — so finding ① was only half closed. `mlApi` sets no timeout,
   // so an old backend that accepts the connection and never answers held this
-  // spinner forever and the new-API header never rendered. Same two-arm form
-  // the strip already uses: spin only while there is genuinely nothing to show.
-  if (loading && !xp) {
+  // spinner forever and the new-API header never rendered.
+  //
+  // ROUND 4 F7: `loading && !xp` was still two states pretending to be three —
+  // `!xp` is true both while XP is in flight AND when it has failed, so a hung
+  // old backend plus a failed XP read spun forever. Spin only while EVERY read
+  // is genuinely still in flight, i.e. there is nothing yet to show or say.
+  if (oldState === 'loading' && lbState === 'loading' && xpStatus === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center"
            style={{ background: '#0A0908' }}>
@@ -322,15 +346,19 @@ export default function Achievements() {
   // `challenges.active.map` below was left unguarded while its own sibling was
   // chained, and a render throw blanks the page (no ErrorBoundary in apps/web),
   // which would take the XP header with it.
-  const oldState     = oldPayloadState({ data, loading });
-  const oldFailed    = oldState === 'failed';
-  const badges       = data?.badges;
-  const challenges   = data?.challenges;
-  const earnedBadges = badges?.all?.filter((b) => b.earned) ?? [];
+  // ROUND 4 F5/F6: both payloads cross a READER, so every field below — down to
+  // each element's `rank`, `current`, `xp_reward` — is a usable value or null.
+  // Round 3 guarded `entry.xp` and left its four siblings in the same component.
+  const overview     = readOverviewView(data);
+  const board        = readLeaderboardView(leaderboard);
+  const challenges   = overview.challenges.active;
+  const earnedBadges = (overview.badges.all ?? []).filter((b) => b.earned);
 
-  // Group badges by category
+  // Group badges by category. An element with no usable category is kept out of
+  // the grouping rather than filed under "undefined".
   const badgesByCategory = {};
-  (badges?.all ?? []).forEach((b) => {
+  (overview.badges.all ?? []).forEach((b) => {
+    if (b.category === null) return;
     if (!badgesByCategory[b.category]) badgesByCategory[b.category] = [];
     badgesByCategory[b.category].push(b);
   });
@@ -400,7 +428,7 @@ export default function Achievements() {
               </h1>
               <p className="text-xs" style={{ color: 'rgba(255,255,255,0.50)' }}>
                 {formatXpTotal(xp)} total XP
-                {' · '}{badgesKnown(data) ? earnedBadges.length : UNKNOWN} of {Number.isFinite(badges?.total_count) ? badges.total_count : UNKNOWN} badges
+                {' · '}{badgesKnown(data) ? earnedBadges.length : UNKNOWN} of {orUnknown(overview.badges.totalCount)} badges
               </p>
             </div>
             <div className="text-right">
@@ -441,21 +469,28 @@ export default function Achievements() {
         {/* The old-backend failure notice lives HERE, not in an early return —
             badges, challenges and the leaderboard come from that payload, the
             XP header above does not. (T3 finding ①.) */}
+        {/* ROUND 4 F4: this claimed the leaderboard was unavailable whenever the
+            OVERVIEW failed — including when the leaderboard had arrived and was
+            sitting in state. It now names only what actually failed. */}
         {oldFailed && (
           <div className="card-glass">
             <p className="text-white">Failed to load achievements</p>
             <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.50)' }}>
-              Badges, challenges and the leaderboard are unavailable right now.
+              {lbState === 'failed'
+                ? 'Badges, challenges and the leaderboard are unavailable right now.'
+                : 'Badges and challenges are unavailable right now.'}
             </p>
           </div>
         )}
 
         {/* ── Tabs ──────────────────────────────────────────────────────────── */}
-        {data && (
+        {/* Not gated on `data`: the leaderboard is a SEPARATE payload, and
+            hiding its tab because the overview failed is the coupling F4 is
+            about. A count of `null` renders no count, never a fabricated 0. */}
         <div className="flex gap-2">
           {[
             { id: 'badges',      label: 'Badges',       icon: Medal,  count: badgesKnown(data) ? earnedBadges.length : null },
-            { id: 'challenges',  label: 'Challenges',   icon: Target, count: challengesKnown(data) ? challenges.active.length : null },
+            { id: 'challenges',  label: 'Challenges',   icon: Target, count: challengesKnown(data) ? challenges.length : null },
             { id: 'leaderboard', label: 'Leaderboard',  icon: Crown,  count: null },
           ].map((t) => {
             const Icon = t.icon;
@@ -488,10 +523,11 @@ export default function Achievements() {
             );
           })}
         </div>
-        )}
 
         {/* ── Tab content ───────────────────────────────────────────────────── */}
-        {data && (
+        {/* Also no `data` gate — see the tabs above. Each tab answers for its
+            own payload, so the leaderboard survives an overview failure and
+            vice versa. */}
         <AnimatePresence mode="wait">
           {/* ── BADGES TAB ──────────────────────────────────────────────────── */}
           {tab === 'badges' && (
@@ -502,6 +538,13 @@ export default function Achievements() {
               exit={{    opacity: 0 }}
               className="space-y-6"
             >
+              {!badgesKnown(data) && (
+                <div className="card-glass">
+                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                    {oldFailed ? 'Badges are unavailable right now.' : 'Loading badges…'}
+                  </p>
+                </div>
+              )}
               {Object.keys(CATEGORY_LABELS).map((cat) => {
                 const catBadges = badgesByCategory[cat] || [];
                 if (catBadges.length === 0) return null;
@@ -514,7 +557,7 @@ export default function Achievements() {
                     </h2>
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                       {catBadges.map((b, i) => (
-                        <BadgeCard key={b.id} badge={b} index={i} />
+                        <BadgeCard key={b.id ?? i} badge={b} index={i} />
                       ))}
                     </div>
                   </div>
@@ -545,14 +588,26 @@ export default function Achievements() {
                 </p>
               </div>
 
-              {(challenges?.active ?? []).map((c, i) => (
-                <ChallengeCard key={c.id} challenge={c} index={i} />
+              {!challengesKnown(data) && (
+                <div className="card-glass">
+                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                    {oldFailed ? 'Challenges are unavailable right now.' : 'Loading challenges…'}
+                  </p>
+                </div>
+              )}
+              {(challenges ?? []).map((c, i) => (
+                <ChallengeCard key={c.id ?? i} challenge={c} index={i} />
               ))}
             </motion.div>
           )}
 
           {/* ── LEADERBOARD TAB ─────────────────────────────────────────────── */}
-          {tab === 'leaderboard' && leaderboard && (
+          {/* ROUND 4 F4: this was `tab === 'leaderboard' && leaderboard &&`
+              INSIDE a `{data && …}` wrapper, so the DECISIONS 2026-07-24 P4 dark
+              window — a scheduled, expected state — produced a clickable tab
+              that rendered absolutely nothing. It now says which of the three
+              states it is in. */}
+          {tab === 'leaderboard' && (
             <motion.div
               key="leaderboard"
               initial={{ opacity: 0 }}
@@ -569,31 +624,38 @@ export default function Achievements() {
                 </div>
                 <p className="text-2xs"
                    style={{ color: 'rgba(255,255,255,0.30)' }}>
-                  {Number.isFinite(leaderboard.total_users) ? leaderboard.total_users : UNKNOWN} athletes
+                  {formatCount(board.totalUsers)} athletes
                 </p>
               </div>
 
-              <div className="space-y-1">
-                {(leaderboard.leaderboard ?? []).map((entry, i) => (
-                  <LeaderboardRow key={entry.user_id} entry={entry} index={i} />
-                ))}
-              </div>
+              {board.entries === null ? (
+                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                  {lbState === 'failed'
+                    ? 'The leaderboard is unavailable right now.'
+                    : 'Loading the leaderboard…'}
+                </p>
+              ) : (
+                <div className="space-y-1">
+                  {board.entries.map((entry, i) => (
+                    <LeaderboardRow key={entry.name ?? i} entry={entry} index={i} />
+                  ))}
+                </div>
+              )}
 
-              {leaderboard.current_user_rank && (
+              {board.currentUserRank !== null && (
                 <div className="mt-4 pt-4 border-t"
                      style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
                   <p className="text-xs text-center"
                      style={{ color: 'rgba(255,255,255,0.50)' }}>
                     You're ranked <strong style={{ color: '#FF8A1F' }}>
-                      #{leaderboard.current_user_rank}
-                    </strong> of {Number.isFinite(leaderboard.total_users) ? leaderboard.total_users : UNKNOWN}
+                      #{board.currentUserRank}
+                    </strong> of {formatCount(board.totalUsers)}
                   </p>
                 </div>
               )}
             </motion.div>
           )}
         </AnimatePresence>
-        )}
       </div>
     </div>
     </div>

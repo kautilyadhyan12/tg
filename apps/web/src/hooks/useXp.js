@@ -22,34 +22,52 @@ import { gamificationService, readXpView } from '../api/gamificationApi';
  *  request-dedupe is on OWED.md rather than built here, because an unproven
  *  cache is worse than a cheap authenticated GET.
  *
- *  NO `loading` IS RETURNED, and that is the fix for T3 finding ④ rather than
- *  an oversight. The first version returned one that every consumer ignored, so
- *  an in-flight request rendered the same "XP unavailable" text as a failed one
- *  — a failure CLAIM during a healthy load, flashing on every visit. The
- *  formatters now render both states as a neutral em dash, which is honest for
- *  both ("we are not showing you a number") and asserts nothing false. With the
- *  wording neutral there is nothing left for a loading flag to change, and
- *  returning an unconsumed one is the dead surface R1 warns about.
+ *  `status` IS RETURNED, and the history matters because it has been wrong in
+ *  both directions. The FIRST version returned a `loading` flag every consumer
+ *  ignored, so an in-flight request rendered the same "XP unavailable" text as a
+ *  failed one — a failure CLAIM during a healthy load (T3 ④). Round 1 removed
+ *  the flag and neutralised the wording, which fixed that. But round 4 F7 caught
+ *  what removing it cost: `{xp}` alone collapses THREE states into two, exactly
+ *  the defect round 3 F2 had just fixed on the OLD payload via oldPayloadState.
+ *  Both consumers then wrote `loading && !xp`, where `loading` is the OLD read's
+ *  — so with the old backend accepting the connection and never answering (mlApi
+ *  sets no timeout — verified, nutritionApi is the only client in src/api that
+ *  sets one) and the XP read failing, Achievements spun forever and the strip
+ *  returned null forever: no dash, no notice, no header.
+ *
+ *  Three states, never two — the same shape as oldPayloadState, for the same
+ *  reason. The em-dash rendering stays: 'loading' and 'failed' both show a dash,
+ *  because both mean "we are not showing you a number". `status` exists so a
+ *  caller can tell whether anything is still COMING, which is a different
+ *  question from what to print, and is the one the spinner gates need.
  *
  *  A failed request is logged, never swallowed silently, and never surfaced as
- *  an error state: the callers have no error affordance and "unknown" is the
- *  honest rendering either way. */
+ *  a user-facing error: the callers have no error affordance and "unknown" is
+ *  the honest rendering either way. */
 export function useXp() {
-  const [xp, setXp] = useState(null);
+  const [xp, setXp]         = useState(null);
+  const [status, setStatus] = useState('loading');
 
   useEffect(() => {
     let cancelled = false;
     gamificationService
       .getMe()
       .then((res) => {
-        if (!cancelled) setXp(readXpView(res.data));
+        if (cancelled) return;
+        // A 200 whose `xp` block is missing or malformed is a FAILED read, not a
+        // ready one — readXpView returning null means we have no number, and
+        // saying "ready" about it would re-create the ④ claim in reverse.
+        const view = readXpView(res.data);
+        setXp(view);
+        setStatus(view === null ? 'failed' : 'ready');
       })
       .catch((err) => {
         // Message only — the error object carries the request config (R3.10).
         console.error('xp read failed:', err?.message);
+        if (!cancelled) setStatus('failed');
       });
     return () => { cancelled = true; };
   }, []);
 
-  return { xp };
+  return { xp, status };
 }
