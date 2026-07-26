@@ -118,7 +118,8 @@ then; none may be hidden or reduced to close the gap.
       renders as a plausible-looking blank rather than an error. The browser
       SMOKE is owed WITH that card (the API half ships no reachable UI and
       correctly claims none).
-      **WEB HALF DONE 2026-07-26 — SMOKE PASSED (Kd), all three surfaces.**
+      **WEB HALF BUILT + SMOKE PASSED (Kd) 2026-07-26 — commit `7750478` on
+      `web-repoint`. Box stays UNTICKED pending the T3 round below.**
       Sidebar + GamificationStrip ("Your Rank" only) + Achievements (header
       only) now read the new `xp` block via a `useXp()` hook on the Card-1
       cookie client; `readXpView` returns NULL rather than a default so no
