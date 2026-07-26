@@ -4,8 +4,11 @@ import {
   Trophy, Lock, Target, Zap, Flame, Crown,
   Medal, Loader2, ChevronRight,
 } from 'lucide-react';
-import { gamificationService } from '../api/gamificationApi';
+import {
+  UNKNOWN, formatLevel, formatXpTotal, gamificationService,
+} from '../api/gamificationApi';
 import { useAuth } from '../context/AuthContext';
+import { useXp } from '../hooks/useXp';
 
 // ── Tier color config ─────────────────────────────────────────────────────────
 const TIER_CONFIG = {
@@ -271,6 +274,9 @@ export default function Achievements() {
   const [leaderboard,  setLeaderboard]  = useState(null);
   const [loading,      setLoading]      = useState(true);
   const [tab,          setTab]          = useState('badges');
+  // XP on the NEW API, fetched independently of the old-backend reads below
+  // (badges/challenges/leaderboard). `null` = unknown, never a fabricated 0.
+  const { xp } = useXp();
 
   useEffect(() => {
     Promise.all([
@@ -295,20 +301,22 @@ export default function Achievements() {
     );
   }
 
-  if (!data) {
-    return (
-      <div className="min-h-screen p-6" style={{ background: '#0A0908' }}>
-        <p className="text-white">Failed to load achievements</p>
-      </div>
-    );
-  }
-
-  const { user: userData, badges, challenges } = data;
-  const earnedBadges = badges.all.filter((b) => b.earned);
+  // T3 finding ①: this used to be an early `return <Failed to load…>` that
+  // took the XP HEADER down with it — the header reads the NEW API, which is
+  // fine precisely when the old backend is not. The failure notice is now
+  // rendered in place of the TABS below, so the header survives it.
+  //
+  // `data.user` (the OLD backend's XP block) is deliberately no longer read —
+  // XP comes from the new API via useXp. The rest of this payload still feeds
+  // the badge-catalog, challenges and leaderboard tabs, each its own OWED card,
+  // and is optional-chained so a failed old read cannot blank XP.
+  const badges       = data?.badges;
+  const challenges   = data?.challenges;
+  const earnedBadges = badges?.all?.filter((b) => b.earned) ?? [];
 
   // Group badges by category
   const badgesByCategory = {};
-  badges.all.forEach((b) => {
+  (badges?.all ?? []).forEach((b) => {
     if (!badgesByCategory[b.category]) badgesByCategory[b.category] = [];
     badgesByCategory[b.category].push(b);
   });
@@ -374,24 +382,27 @@ export default function Achievements() {
                 Achievements
               </p>
               <h1 className="text-2xl font-bold tracking-tight text-white">
-                Level {userData.level}
+                Level {formatLevel(xp)}
               </h1>
               <p className="text-xs" style={{ color: 'rgba(255,255,255,0.50)' }}>
-                {userData.xp.toLocaleString()} total XP · {earnedBadges.length} of {badges.total_count} badges
+                {formatXpTotal(xp)} total XP
+                {' · '}{earnedBadges.length} of {badges?.total_count ?? '—'} badges
               </p>
             </div>
             <div className="text-right">
               <p className="text-3xl font-bold tracking-tighter tabular-nums"
                  style={{ color: '#FF8A1F' }}>
-                {userData.progress.xp_in_level}
+                {xp ? xp.xpInLevel : UNKNOWN}
                 <span className="text-base font-medium"
                       style={{ color: 'rgba(255,255,255,0.40)' }}>
-                  /{userData.progress.xp_for_next}
+                  /{xp ? xp.xpForNext : UNKNOWN}
                 </span>
               </p>
+              {/* `level + 1` is the LABEL for the next level, not arithmetic on
+                  XP — every XP quantity here is server-computed. */}
               <p className="text-2xs"
                  style={{ color: 'rgba(255,255,255,0.40)' }}>
-                XP to Lv {userData.level + 1}
+                XP to Lv {xp ? xp.level + 1 : UNKNOWN}
               </p>
             </div>
           </div>
@@ -401,9 +412,12 @@ export default function Achievements() {
             className="h-3 rounded-full overflow-hidden"
             style={{ background: 'rgba(255,255,255,0.04)' }}
           >
+            {/* Unknown XP leaves the TRACK in place and the fill at zero — the
+                bar is never removed, and the "—/—" above it is what says the
+                number is unknown rather than zero. */}
             <motion.div
               initial={{ width: 0 }}
-              animate={{ width: `${userData.progress.progress_pct}%` }}
+              animate={{ width: xp ? `${xp.progressPct}%` : '0%' }}
               transition={{ duration: 1.2, ease: 'easeOut' }}
               className="h-full rounded-full"
               style={{
@@ -414,11 +428,24 @@ export default function Achievements() {
           </div>
         </motion.div>
 
+        {/* The old-backend failure notice lives HERE, not in an early return —
+            badges, challenges and the leaderboard come from that payload, the
+            XP header above does not. (T3 finding ①.) */}
+        {!data && (
+          <div className="card-glass">
+            <p className="text-white">Failed to load achievements</p>
+            <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.50)' }}>
+              Badges, challenges and the leaderboard are unavailable right now.
+            </p>
+          </div>
+        )}
+
         {/* ── Tabs ──────────────────────────────────────────────────────────── */}
+        {data && (
         <div className="flex gap-2">
           {[
             { id: 'badges',      label: 'Badges',       icon: Medal,  count: earnedBadges.length },
-            { id: 'challenges',  label: 'Challenges',   icon: Target, count: challenges.active.length },
+            { id: 'challenges',  label: 'Challenges',   icon: Target, count: challenges?.active?.length ?? 0 },
             { id: 'leaderboard', label: 'Leaderboard',  icon: Crown,  count: null },
           ].map((t) => {
             const Icon = t.icon;
@@ -451,8 +478,10 @@ export default function Achievements() {
             );
           })}
         </div>
+        )}
 
         {/* ── Tab content ───────────────────────────────────────────────────── */}
+        {data && (
         <AnimatePresence mode="wait">
           {/* ── BADGES TAB ──────────────────────────────────────────────────── */}
           {tab === 'badges' && (
@@ -554,6 +583,7 @@ export default function Achievements() {
             </motion.div>
           )}
         </AnimatePresence>
+        )}
       </div>
     </div>
     </div>

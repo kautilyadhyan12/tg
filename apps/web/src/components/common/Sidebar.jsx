@@ -1,6 +1,8 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTransition } from '../../context/TransitionContext';
+import { useXp } from '../../hooks/useXp';
+import { formatLevel } from '../../api/gamificationApi';
 import {
   LayoutDashboard, Dumbbell, Activity, Brain,
   Apple, Trophy, Settings, LogOut, Zap, Play,
@@ -24,6 +26,10 @@ export default function Sidebar({ collapsed = false, setCollapsed = () => {} }) 
   const { user, logout } = useAuth();
   const navigate          = useNavigate();
   const { triggerTransition } = useTransition();
+  // Level comes from GET /v1/gamification/me, NOT from the auth user — that
+  // shape has no `level` field, so the previous `user?.level || 1` rendered a
+  // fabricated "Level 1" for everyone. `null` = unknown and shows an em dash.
+  const { xp } = useXp();
 
   const handleLogout = async () => {
     triggerTransition(async () => {
@@ -155,7 +161,7 @@ export default function Sidebar({ collapsed = false, setCollapsed = () => {} }) 
               <div className="flex items-center gap-1 mt-0.5">
                 <Flame className="w-2.5 h-2.5" style={{ color: '#FF8A1F' }} />
                 <span className="text-2xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                  Level {user?.level || 1}
+                  Level {formatLevel(xp)}
                 </span>
               </div>
             </div>
@@ -166,7 +172,7 @@ export default function Sidebar({ collapsed = false, setCollapsed = () => {} }) 
                 color:      '#FFB347',
               }}
             >
-              L{user?.level || 1}
+              L{formatLevel(xp)}
             </div>
           </div>
         </div>

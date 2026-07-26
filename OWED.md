@@ -49,6 +49,16 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       would have vanished with its ticked line. Given its own line here on
       2026-07-22 rather than being lost. The P0 rule treats every secret in the
       old repo's `.env` as burned, so this is a real deferral, not hygiene.
+- [ ] 🟡 **Rotate the Neon database password (`DATABASE_URL`).** Exposed
+      2026-07-26: a `grep` for the connection string during the XP-card smoke
+      setup matched a neighbouring comment line, and the mangled value — password
+      included — was printed into a Claude chat transcript in an error message.
+      Same class as the two rotations above, and treated the same way rather than
+      waved off because it was accidental. This one is heavier than a provider
+      key: it is direct read/write access to the dev database. Rotate in the Neon
+      console (Roles → reset password), update `apps/api/.env` and the
+      `infra/api.env` on any host, and re-run the migrations check. The dev
+      branch holds only test fixtures, which is why this is 🟡 and not 🔴.
 - [ ] 🟡 **Rotate the GOOGLE_CLIENT_SECRET.** The secret created for the
       google-login local smoke (2026-07-24) was pasted into a Claude chat to wire
       `apps/api/.env`, so treat it as exposed (same class as GROQ above). Fine for
@@ -85,9 +95,9 @@ then; none may be hidden or reduced to close the gap.
       would double-count), and `user_xp` is on BOTH DPDP lists (delete +
       export). `/v1/gamification/me` now returns an `xp` block
       `{total, level, xpInLevel, xpForNext, progressPct, nextLevelAt}`.
-      NB **`web-repoint` does not carry it yet** — merge master into this branch
-      before starting the web half, or `/v1/gamification/me` will answer without
-      the `xp` block (the Google-login card's exact situation).
+      ~~NB **`web-repoint` does not carry it yet**~~ — DONE: master merged into
+      this branch at `1164a86` (2026-07-26), which is what put the `xp` block
+      here before the web half was built.
       T3 ran FIVE fresh-chat rounds (25 findings, all resolved). The code has
       been stable since round 1's lock fix; rounds 2-5 were about evidence and
       records. Three behavioural guarantees each carry a mutation-verified test:
@@ -108,6 +118,30 @@ then; none may be hidden or reduced to close the gap.
       renders as a plausible-looking blank rather than an error. The browser
       SMOKE is owed WITH that card (the API half ships no reachable UI and
       correctly claims none).
+      **WEB HALF DONE 2026-07-26 — SMOKE PASSED (Kd), all three surfaces.**
+      Sidebar + GamificationStrip ("Your Rank" only) + Achievements (header
+      only) now read the new `xp` block via a `useXp()` hook on the Card-1
+      cookie client; `readXpView` returns NULL rather than a default so no
+      fabricated number can reach the UI, mutation-verified. Kd's SCOPE RULING
+      (2026-07-26) put **Sidebar IN** — its `user?.level || 1` read a field the
+      auth user shape does not have, so it rendered "Level 1" for everyone —
+      and **Dashboard OUT** (different old endpoint; its own line below).
+      SMOKE evidence, on a seeded account at total_xp 330 → Level 2 (a value
+      chosen BECAUSE a fresh account is genuinely Level 1, which is what the old
+      bug faked and so could not discriminate): sidebar read "Level 2 / L2";
+      "Your Rank" read "330 XP · Level 2" with "230/248 to Lv 3"; the
+      Achievements header read "Level 2 / 330 total XP" with "Failed to load
+      achievements" BELOW it. The last two both prove the T3 ① fix — they
+      rendered with the old backend switched off, which the first cut of this
+      card could not have done. `/v1/gamification/me` matched all three.
+      **STILL OWED: a second T3 round.** Round 1 found two blocking defects and
+      both fixes are new, independently-unreviewed code — which on this project
+      is exactly where the next defect has been every time. If round 2 finds a
+      blocking defect this tick comes off (the google-login / DPDP precedent).
+      NB the SMOKE also exposed a Docker trap worth knowing: `aihg-dev-api-1`
+      publishes port 3000 and points at its OWN Postgres, so with that container
+      up the browser talks to a different database than a locally-run api and a
+      login can fail for no code reason at all.
       SCOPE BOUNDARY (verified by grep, so the web card does not over-reach):
       those two screens ALSO render `badge.xp_reward` (Achievements.jsx) and
       leaderboard `entry.xp`/`entry.level` — those belong to the **badge
@@ -182,6 +216,69 @@ then; none may be hidden or reduced to close the gap.
       Also fix while here: `workoutApi.js` declares **`getHistory` TWICE** in
       one object literal (lines 5 and 9) — the second silently wins, so the
       `(limit)` variant is dead code and a footgun.
+- [ ] 🔴 **Dashboard's XP surfaces still fabricate — XPBar + "Current Level"
+      StatCard.** Kd-ruled OUT of the 2026-07-26 XP-display card and given this
+      line in the same commit, per the deferral rule. `Dashboard.jsx` renders
+      `s.xp || 0` / `s.level || 1` (StatCard, XPBar, and a "Level" stat row) off
+      `workoutService.getStats()` — a **different** old endpoint from the two
+      the XP card repointed, so folding it in would have meant a second repoint
+      in one card. Per the no-removal rule it STAYS working on the old backend,
+      untouched, until its card. Two things that card must not inherit:
+      (a) the `|| 0` / `|| 1` fallbacks are the fabrication class the XP card
+      exists to remove — Dashboard shows a real-looking "Level 1" and "0 XP" for
+      everyone whose stats read fails; (b) `XPBar` renders
+      `{progress}/100 XP → Level {level + 1}`, i.e. a **hardcoded 100-XP
+      level**, but the real curve is not linear (L2=100, L3=348, L4=722 —
+      `xp_for_level`, badges.py:215-227). Render the API's precomputed
+      `xpInLevel`/`xpForNext`/`progressPct` via the existing `useXp()` hook;
+      never client-side XP math. Unblocked today — the endpoint exists.
+- [ ] 🟡 **`/dashboard` and `/achievements` redirect to `/login` when the OLD ML
+      API is RUNNING and rejecting.** Found by the XP card's T3 (2026-07-26)
+      while it was busy getting the same question wrong in the other direction.
+      `mlApi` sources a Bearer from `localStorage.accessToken`, which Card 1 no
+      longer writes, so every old-backend read 401s and `mlApi.js`'s response
+      interceptor navigates to `/login` before the page paints. The planned
+      Card-1 interim (DECISIONS 2026-07-15: "the planned multi-card
+      consequence"), closing when `workoutApi` / `recommendationApi` /
+      `gamificationApi.getOverview` get their own repoint cards (③/⑦).
+      **THE NUANCE THAT MATTERS FOR EVERY SMOKE FROM NOW ON, and that the XP
+      card originally got wrong:** this only happens when the old API is UP and
+      answering 401. When it is simply NOT RUNNING — the ordinary local-dev
+      state — the axios error carries no `response`, `error.response?.status`
+      is undefined, no redirect fires, and the page renders its own failure
+      state. So "old backend down" is MORE smokeable than "old backend up", and
+      a card that assumes unreachability without checking which case it is in
+      will under-claim what it can prove.
+- [ ] 🟡 **Achievements can now show two contradictory XP totals for the same
+      user.** Raised by the XP card's T3 (2026-07-26); correct under no-removal,
+      but it was not recorded and it is visible. The page HEADER now reads the
+      new API (`xp.level` / `xp.total`) while the leaderboard tab's rows —
+      including the current user's own highlighted row — still read the OLD
+      backend's `entry.level` / `entry.xp`. Before this card both came from one
+      payload and agreed by construction; they are now two stores whose totals
+      accrued independently (the new one recomputes from history and diverges
+      by design — see `xp.ts`'s governing rule). Closes with the leaderboard
+      card (P4.x), which is where `entry.*` gets its new-API home. Until then,
+      "header level vs. my own leaderboard row may disagree" is an EXPECTED
+      smoke observation, not a bug to chase.
+- [ ] 🟡 **`.catch(console.error)` on axios errors prints the old backend's
+      Bearer token to the browser console.** Pre-existing, R3.10, in files the
+      XP card edited but out of its scope to fix — recorded because that card
+      applied the message-only rule to its own new log line and left the same
+      class two lines away (its T3 made the point). `GamificationStrip.jsx` and
+      `Achievements.jsx` both `.catch(console.error)` the whole axios error
+      object, whose `config.headers.Authorization` carries whatever `mlApi.js`
+      attached. Harmless while that value is the string "Bearer null" on this
+      branch, real the moment any client attaches a live one. The fix is the
+      `err?.message` form used in `useXp.js`; it belongs to a small sweep of
+      every `catch(console.error)` on an axios call, not to one card.
+- [ ] ⚪ **`useXp()` makes one request per mounting component.** Sidebar always
+      mounts it; GamificationStrip and Achievements add a second on their pages.
+      A shared cache / in-flight dedupe (or a context value with a
+      post-sync refresh) is the eventual home — deliberately NOT built with the
+      XP card, because an unproven cache is worse than a cheap authenticated
+      GET, and a value read once at session adoption goes stale on every
+      workout sync. (2026-07-26.)
 - [ ] ⚪ **XP display in the workout calendar — CURRENTLY DEAD, do not "restore"
       it.** WorkoutCalendar renders XP behind `session.xp_earned > 0`, but the
       old backend NEVER WRITES `xp_earned` onto a workout: the completion

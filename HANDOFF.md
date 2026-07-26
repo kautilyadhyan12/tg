@@ -1,6 +1,56 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: WEB XP display repoint 🟡  [CODE + T3 ROUND 1 DONE, SMOKE OWED]
+      branch web-repoint (master merged in first at 1164a86, which is what put
+      the `xp` block on this branch). Discharges the WEB half of OWED's "XP /
+      levels display" 🔴 line; the API half was PR #50.
+SHIPPED (7 files): gamificationApi.js (+getMe on authApi; +readXpView via the
+  SHARED xpViewSchema; +formatLevel/formatXpTotal/formatXpProgress) · NEW
+  hooks/useXp.js · NEW gamificationApi.test.js (17 tests) · Sidebar.jsx (the
+  live `user?.level || 1` fabrication, gone) · GamificationStrip.jsx ("Your
+  Rank" only) · Achievements.jsx (header only) · OWED.md (+4 lines).
+KD SCOPE RULING (2026-07-26): Sidebar IN (already broken, not merely unnamed);
+  Dashboard OUT (rides workoutService.getStats — a second repoint) with its own
+  OWED line naming its `s.xp || 0` / `s.level || 1` and its hardcoded-100 XPBar.
+DECISIONS: full entry appended this branch ("Web XP display repoint").
+T3 ROUND 1 (fresh chat): 6 findings, all real, all fixed.
+  ① BLOCKING — XP was rendered INSIDE the old payload's early returns, so the
+    state that is permanent on this branch showed no XP, while the comment
+    claimed the sources were independent. A separate fetch is not independence
+    if the render is gated. Hoisted in both components.
+  ② BLOCKING — the fabrication guard sat at the READER; the original bug lived
+    at a RENDER SITE (proven: reverting all three call sites left the suite
+    green). Closed at both layers — tested formatters + a comment-stripped
+    source guard. Both mutation-verified red→green.
+  ③ readXpView hand-rolled the six-field list → now the shared xpViewSchema
+    (R7.2), plus one finite check because progressPct is a bare z.number().
+  ④ `loading` was returned and ignored → "XP unavailable" flashed during a
+    healthy load. Wording is neutral now and the flag is gone.
+  ⑤ nextLevelAt required-but-unrendered → resolved by ③ (the contract decides).
+  ⑥ Achievements can now show two contradictory XP totals (new-API header vs
+    old-backend leaderboard row) → OWED + an expected smoke observation.
+PROVE: web 172 passed / 1 failed (173). The 1 is the recorded pre-existing
+  syncClient VITE_API_URL/`window` quirk — PROVEN pre-existing by stashing and
+  re-running at HEAD, not assumed. Lint 3 errors = exact baseline parity
+  (Zap, ChevronRight, `user`), measured the same way; zero introduced.
+  Build: green before the T3 fixes; NOT re-captured after them — run it.
+SMOKE: OWED, and its scope GREW at the T3. The card first claimed the two
+  screens were unreachable; that holds only when the old ML API is UP and
+  401ing. With it simply NOT RUNNING there is no `response`, so no redirect,
+  and — with ① fixed — both screens render their XP. All three surfaces are
+  smokeable today.
+OPEN / NEXT:
+  1. Kd's SMOKE (steps in the chat), then tick OWED's XP line.
+  2. T3 round 2 on the fix commit — ① and ② were both found in round 1 and
+     both fixes are new code that has not been independently reviewed.
+  3. Four OWED lines added: Dashboard XP · the redirect-vs-not-running nuance
+     · the two contradictory totals · `.catch(console.error)` leaking the old
+     Bearer to the console (R3.10, pre-existing, its own sweep).
+SPEC GAPs: none.
+```
+
+```
 POINTER (2026-07-26, REWRITTEN at the master merge that made its first version
   false — "when an action makes a record obsolete, updating the record IS part
   of the action", DECISIONS coach R2 F2.)

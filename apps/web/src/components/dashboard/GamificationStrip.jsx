@@ -2,7 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Trophy, Target, Crown, ChevronRight, Sparkles } from 'lucide-react';
-import { gamificationService } from '../../api/gamificationApi';
+import {
+  formatLevel, formatXpProgress, formatXpTotal, gamificationService,
+} from '../../api/gamificationApi';
+import { useXp } from '../../hooks/useXp';
 
 // ── HeroCard ──────────────────────────────────────────────────────────────────
 function HeroCard({ bgImage, children, className = '', style = {}, onClick }) {
@@ -77,6 +80,9 @@ export default function GamificationStrip() {
   const [data,        setData]        = useState(null);
   const [leaderboard, setLeaderboard] = useState(null);
   const [loading,     setLoading]     = useState(true);
+  // XP is on the NEW API, fetched separately from the two old-backend reads.
+  // `null` = unknown; nothing here invents a number (see readXpView).
+  const { xp } = useXp();
 
   useEffect(() => {
     Promise.all([
@@ -88,10 +94,23 @@ export default function GamificationStrip() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading || !data) return null;
+  // T3 finding ①: this used to be `if (loading || !data) return null`, which
+  // gated the NEW-API XP block behind the OLD backend's payload — so the state
+  // that is PERMANENT on this branch (old backend Bearer-null-broken, new API
+  // fine) rendered no XP at all, while a comment two lines up claimed the two
+  // sources were independent. A separate fetch is not independence if the
+  // render is still gated. The strip now hides only while the old read is
+  // genuinely in flight AND we have no XP either — i.e. nothing to show yet.
+  if (loading && !xp) return null;
 
-  const { user, badges, challenges } = data;
-  const earnedBadges = badges.all.filter((b) => b.earned);
+  // `data.user` (the OLD backend's XP block) is deliberately no longer read —
+  // XP comes from the new API via useXp. The rest of this payload still feeds
+  // the challenges + badge-catalog cards, which are their own OWED cards, and
+  // is now optional-chained throughout so a missing/failed old read degrades
+  // those two cards to their existing empty states instead of blanking XP.
+  const badges       = data?.badges;
+  const challenges   = data?.challenges;
+  const earnedBadges = badges?.all?.filter((b) => b.earned) ?? [];
   const recentBadges = earnedBadges.slice(-3).reverse();
 
   let userRank = null;
@@ -127,7 +146,7 @@ export default function GamificationStrip() {
             </button>
           </div>
           <div className="flex flex-col gap-2 flex-1">
-            {challenges.active.slice(0, 3).map((c) => (
+            {(challenges?.active ?? []).slice(0, 3).map((c) => (
               <ChallengeRow key={c.id} challenge={c} />
             ))}
           </div>
@@ -158,23 +177,28 @@ export default function GamificationStrip() {
               </p>
             </div>
             <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.90)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
-              <span className="font-bold text-white">{user.xp.toLocaleString()} XP</span>
-              {' · '}Level {user.level}
+              <span className="font-bold text-white">{formatXpTotal(xp)} XP</span>
+              {' · '}Level {formatLevel(xp)}
             </p>
           </div>
           <div>
+            {/* Unknown XP leaves the TRACK in place and the fill at zero — the
+                bar is never removed; the "—/—" caption is what says unknown. */}
             <div className="h-2 rounded-full overflow-hidden mb-1.5"
                  style={{ background: 'rgba(255,255,255,0.15)' }}>
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: `${user.progress.progress_pct}%` }}
+                animate={{ width: xp ? `${xp.progressPct}%` : '0%' }}
                 transition={{ duration: 1.2, ease: 'easeOut' }}
                 className="h-full rounded-full"
                 style={{ background: 'linear-gradient(90deg, #FF8A1F, #FFB347)' }}
               />
             </div>
+            {/* `level + 1` is the LABEL for the next level, not arithmetic on
+                XP — every XP quantity here is server-computed. (xp.nextLevelAt
+                is a cumulative-XP threshold, not a level number: xp.ts:142.) */}
             <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.70)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
-              {user.progress.xp_in_level}/{user.progress.xp_for_next} to Lv {user.level + 1}
+              {formatXpProgress(xp)}
             </p>
           </div>
         </div>
@@ -191,7 +215,7 @@ export default function GamificationStrip() {
                 Latest Badges
               </h3>
               <span className="text-2xs" style={{ color: 'rgba(255,255,255,0.75)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
-                ({earnedBadges.length}/{badges.total_count})
+                ({earnedBadges.length}/{badges?.total_count ?? '—'})
               </span>
             </div>
             <button
