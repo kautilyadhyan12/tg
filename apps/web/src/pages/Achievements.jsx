@@ -5,7 +5,8 @@ import {
   Medal, Loader2, ChevronRight,
 } from 'lucide-react';
 import {
-  UNKNOWN, formatLevel, formatXpTotal, gamificationService,
+  UNKNOWN, formatLevel, formatNextLevel, formatXpFraction, formatXpTotal,
+  gamificationService, xpBarWidth,
 } from '../api/gamificationApi';
 import { useAuth } from '../context/AuthContext';
 import { useXp } from '../hooks/useXp';
@@ -291,7 +292,12 @@ export default function Achievements() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) {
+  // ROUND 2 ②: this was `if (loading)`, driven ENTIRELY by the old backend's
+  // Promise.all — so finding ① was only half closed. `mlApi` sets no timeout,
+  // so an old backend that accepts the connection and never answers held this
+  // spinner forever and the new-API header never rendered. Same two-arm form
+  // the strip already uses: spin only while there is genuinely nothing to show.
+  if (loading && !xp) {
     return (
       <div className="min-h-screen flex items-center justify-center"
            style={{ background: '#0A0908' }}>
@@ -309,7 +315,12 @@ export default function Achievements() {
   // `data.user` (the OLD backend's XP block) is deliberately no longer read —
   // XP comes from the new API via useXp. The rest of this payload still feeds
   // the badge-catalog, challenges and leaderboard tabs, each its own OWED card,
-  // and is optional-chained so a failed old read cannot blank XP.
+  // and is optional-chained AT EVERY READ so a failed or partial old read
+  // cannot blank XP. Round 2 ③ caught that this claim was previously false —
+  // `challenges.active.map` below was left unguarded while its own sibling was
+  // chained, and a render throw blanks the page (no ErrorBoundary in apps/web),
+  // which would take the XP header with it.
+  const oldReady     = Boolean(data);
   const badges       = data?.badges;
   const challenges   = data?.challenges;
   const earnedBadges = badges?.all?.filter((b) => b.earned) ?? [];
@@ -386,23 +397,19 @@ export default function Achievements() {
               </h1>
               <p className="text-xs" style={{ color: 'rgba(255,255,255,0.50)' }}>
                 {formatXpTotal(xp)} total XP
-                {' · '}{earnedBadges.length} of {badges?.total_count ?? '—'} badges
+                {' · '}{oldReady ? earnedBadges.length : UNKNOWN} of {badges?.total_count ?? UNKNOWN} badges
               </p>
             </div>
             <div className="text-right">
               <p className="text-3xl font-bold tracking-tighter tabular-nums"
                  style={{ color: '#FF8A1F' }}>
-                {xp ? xp.xpInLevel : UNKNOWN}
-                <span className="text-base font-medium"
-                      style={{ color: 'rgba(255,255,255,0.40)' }}>
-                  /{xp ? xp.xpForNext : UNKNOWN}
-                </span>
+                {formatXpFraction(xp)}
               </p>
               {/* `level + 1` is the LABEL for the next level, not arithmetic on
                   XP — every XP quantity here is server-computed. */}
               <p className="text-2xs"
                  style={{ color: 'rgba(255,255,255,0.40)' }}>
-                XP to Lv {xp ? xp.level + 1 : UNKNOWN}
+                XP to Lv {formatNextLevel(xp)}
               </p>
             </div>
           </div>
@@ -417,7 +424,7 @@ export default function Achievements() {
                 number is unknown rather than zero. */}
             <motion.div
               initial={{ width: 0 }}
-              animate={{ width: xp ? `${xp.progressPct}%` : '0%' }}
+              animate={{ width: xpBarWidth(xp) }}
               transition={{ duration: 1.2, ease: 'easeOut' }}
               className="h-full rounded-full"
               style={{
@@ -535,7 +542,7 @@ export default function Achievements() {
                 </p>
               </div>
 
-              {challenges.active.map((c, i) => (
+              {(challenges?.active ?? []).map((c, i) => (
                 <ChallengeCard key={c.id} challenge={c} index={i} />
               ))}
             </motion.div>

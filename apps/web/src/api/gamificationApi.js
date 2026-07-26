@@ -52,26 +52,62 @@ export function readXpView(data) {
   return Number.isFinite(parsed.data.progressPct) ? parsed.data : null;
 }
 
-/** Render helpers — the ONLY way a component turns `xp` into text.
+/** Render helpers — the ONLY way a component may turn `xp` into anything.
  *
- *  They exist because the T3 mutation proved the gap: reverting the three call
- *  sites to `xp?.level || 1` left the whole suite green, since the guard was
- *  tested at the READER and the original bug lived at a RENDER SITE. Routing
- *  every site through one tested function closes the class rather than the
- *  case. Unknown renders as an em dash — never a zero, never a Level 1. */
+ *  They exist because round 1's mutation proved the guard was at the READER
+ *  while the original bug lived at a RENDER SITE. Round 2 then proved the first
+ *  version of that fix was still bypassable nine ways (`{xp ? xp.level : 1}` —
+ *  this codebase's own idiom — among them), because components were still
+ *  allowed to touch `xp`'s FIELDS. So the rule is now stricter and mechanically
+ *  checkable: **a component never reads a field of `xp`.** It passes the whole
+ *  object to a helper here, or tests it for truthiness to choose a layout. The
+ *  test guard enforces exactly that, which is why a bar width and a next-level
+ *  label are helpers too rather than one-line expressions at the call site.
+ *
+ *  Every helper is FIELD-SAFE, not object-truthy (round 2 ⑧): `formatXpTotal({})`
+ *  used to throw on `.toLocaleString()` and `formatLevel({})` rendered the
+ *  string "undefined". Only `readXpView` output should ever reach them, but
+ *  nothing enforces that, and a throw inside render blanks the whole page —
+ *  there is no ErrorBoundary anywhere in apps/web (grep-verified).
+ *
+ *  Unknown renders as an em dash — never a zero, never a Level 1. */
 export const UNKNOWN = '—';
+
+const num = (xp, field) => (Number.isFinite(xp?.[field]) ? xp[field] : null);
+
 export function formatLevel(xp) {
-  return xp ? String(xp.level) : UNKNOWN;
+  const v = num(xp, 'level');
+  return v === null ? UNKNOWN : String(v);
 }
 export function formatXpTotal(xp) {
-  return xp ? xp.total.toLocaleString() : UNKNOWN;
+  const v = num(xp, 'total');
+  return v === null ? UNKNOWN : v.toLocaleString();
 }
-/** "52/374 to Lv 4" — `level + 1` is the next level's LABEL, not arithmetic on
- *  XP (every XP quantity is server-computed; xp.ts:131-143). */
+/** The next level's LABEL. `level + 1` is a label, not arithmetic on XP — every
+ *  XP quantity is server-computed (xp.ts:131-143). */
+export function formatNextLevel(xp) {
+  const v = num(xp, 'level');
+  return v === null ? UNKNOWN : String(v + 1);
+}
+/** "230/248" */
+export function formatXpFraction(xp) {
+  const a = num(xp, 'xpInLevel');
+  const b = num(xp, 'xpForNext');
+  return a === null || b === null ? `${UNKNOWN}/${UNKNOWN}` : `${a}/${b}`;
+}
+/** "230/248 to Lv 3" */
 export function formatXpProgress(xp) {
-  return xp
-    ? `${xp.xpInLevel}/${xp.xpForNext} to Lv ${xp.level + 1}`
-    : `${UNKNOWN}/${UNKNOWN} to Lv ${UNKNOWN}`;
+  return `${formatXpFraction(xp)} to Lv ${formatNextLevel(xp)}`;
+}
+/** A CSS width for the level bar, CLAMPED to [0,100] (round 2 ⑥).
+ *  `progressPct` is the one field the shared schema leaves unbounded — it is a
+ *  bare `z.number()`, so -50 and 9999 parse — and every other bar in this app
+ *  clamps (MacroRings, PredictionsSection, ActiveRun). Unknown is 0% with the
+ *  numbers beside it reading "—/—", which is what says unknown; a bar cannot. */
+export function xpBarWidth(xp) {
+  const v = num(xp, 'progressPct');
+  if (v === null) return '0%';
+  return `${Math.min(100, Math.max(0, v))}%`;
 }
 
 export const gamificationService = {

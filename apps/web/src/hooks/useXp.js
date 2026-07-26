@@ -3,14 +3,24 @@ import { gamificationService, readXpView } from '../api/gamificationApi';
 
 /** The current user's XP/level block from GET /v1/gamification/me, or NULL.
  *
- *  Deliberately its OWN request rather than a value on AuthContext. XP changes
- *  on every workout sync, so a value read once at session adoption goes stale
- *  and would need a refresh mechanism — genuinely the Card-2/6 widening Kd
- *  ruled out of this card (2026-07-26). Three components mount this today
- *  (Sidebar always; GamificationStrip and Achievements on their pages), so a
- *  page load makes at most two requests; request-dedupe is on OWED.md rather
- *  than built here, because an unproven cache is worse than a cheap
- *  authenticated GET.
+ *  Deliberately its OWN request rather than a value on AuthContext — but NOT
+ *  for the reason first written here. That comment said an AuthContext value
+ *  "read once at session adoption goes stale on every sync", implying this hook
+ *  does better. **It does not, and round 2 was right to call it:** the effect
+ *  has `[]` deps and `Sidebar` mounts in `AppLayout` and never unmounts across
+ *  navigation, so the sidebar level is equally stale after a sync until a full
+ *  reload. The two options differ only in WHEN the single read happens.
+ *
+ *  The honest reason to keep it here: it is CONTAINED. AuthContext is shared by
+ *  every screen and its session-adoption sequence is load-bearing (flush timing,
+ *  the onboarding gate), so adding a read there is Card-2/6 work Kd ruled out of
+ *  this card. The staleness is real either way and is recorded on OWED.md as
+ *  its own line rather than papered over here.
+ *
+ *  Three components mount this today (Sidebar always; GamificationStrip and
+ *  Achievements on their pages), so a page load makes at most two requests;
+ *  request-dedupe is on OWED.md rather than built here, because an unproven
+ *  cache is worse than a cheap authenticated GET.
  *
  *  NO `loading` IS RETURNED, and that is the fix for T3 finding ④ rather than
  *  an oversight. The first version returned one that every consumer ignored, so

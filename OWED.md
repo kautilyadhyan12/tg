@@ -135,10 +135,16 @@ then; none may be hidden or reduced to close the gap.
       achievements" BELOW it. The last two both prove the T3 ① fix — they
       rendered with the old backend switched off, which the first cut of this
       card could not have done. `/v1/gamification/me` matched all three.
-      **STILL OWED: a second T3 round.** Round 1 found two blocking defects and
-      both fixes are new, independently-unreviewed code — which on this project
-      is exactly where the next defect has been every time. If round 2 finds a
-      blocking defect this tick comes off (the google-login / DPDP precedent).
+      **T3 ROUND 2 DONE — 8 findings, all fixed, and it proved the round-1 fix
+      had created a NEW instance of this card's own defect** (hoisting XP out of
+      the old payload made the badge/challenge counters render "of 0" and "0 of
+      — badges" on a failed read, asserting zeros where nothing is known — the
+      state Kd's smoke ran in, and which I wrongly reported as correct). Also:
+      the Achievements spinner still gated the header on the old backend; two
+      unguarded payload reads could blank the page; and BOTH source guards were
+      bypassable nine ways until redesigned as a positive rule. **RE-SMOKE OWED
+      on these bytes** — the previous pass does not carry over, because what the
+      two screens display with the old backend off has changed ("—", not "0").
       NB the SMOKE also exposed a Docker trap worth knowing: `aihg-dev-api-1`
       publishes port 3000 and points at its OWN Postgres, so with that container
       up the browser talks to a different database than a locally-run api and a
@@ -273,6 +279,36 @@ then; none may be hidden or reduced to close the gap.
       branch, real the moment any client attaches a live one. The fix is the
       `err?.message` form used in `useXp.js`; it belongs to a small sweep of
       every `catch(console.error)` on an axios call, not to one card.
+- [ ] 🟡 **The sidebar level is STALE until a full page reload.** Raised by the
+      XP card's T3 round 2 (2026-07-26), which correctly demolished the reason
+      the code gave for its own design. `useXp` reads once with `[]` deps and
+      `Sidebar` mounts in `AppLayout` and never unmounts across navigation, so
+      after a workout sync the sidebar keeps showing the pre-sync level until
+      the user reloads. The comment had claimed the hook AVOIDED the staleness
+      that an AuthContext value would have; it does not — the two differ only in
+      WHEN the single read happens, and the honest reason to prefer the hook is
+      that it is contained, not that it is fresher. Kd's smoke did not catch it
+      because step 6 said "complete a workout, then reload", and the reload is
+      exactly what hides it. Real fixes: refetch on the sync event, or a shared
+      store with invalidation (which pairs with the dedupe line below). Not
+      built with the card because either one is the Card-2/6 widening Kd ruled
+      out — but the card must not claim freshness it does not have.
+- [ ] ⚪ **The XP source guards catch spellings, not the whole class — say so.**
+      Recorded 2026-07-26 at the T3's request, because "the guard covers this"
+      is the claim this project has been burned by most (five rounds on
+      `xp.ts`). `gamificationApi.test.js` enforces two source-level rules — a
+      component reads no FIELD of `xp`, and neither component has an early
+      return gated on the old payload alone — and eight real bypasses were
+      mutation-tested and are caught, including `{xp ? xp.level : 1}` (this
+      codebase's own idiom), destructuring defaults, bracket access, a default
+      substituted inside `useXp` itself, `if (!data) { return null; }` with
+      braces, and a bare `if (loading)` spinner. **What they still cannot see:**
+      anything in a file not scanned, a fallback applied in a helper the
+      component imports from elsewhere, and any behaviour at all — they read
+      source text, not rendered output. The real closure is a DOM test, which
+      needs `@testing-library/react` (a new dependency, R1.4, Kd's call) and is
+      the recorded JSX-coverage gap from Cards 2/3/4. Until then the guards are
+      a tripwire, not a proof.
 - [ ] ⚪ **`useXp()` makes one request per mounting component.** Sidebar always
       mounts it; GamificationStrip and Achievements add a second on their pages.
       A shared cache / in-flight dedupe (or a context value with a

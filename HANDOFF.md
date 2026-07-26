@@ -40,13 +40,46 @@ SMOKE: OWED, and its scope GREW at the T3. The card first claimed the two
   401ing. With it simply NOT RUNNING there is no `response`, so no redirect,
   and — with ① fixed — both screens render their XP. All three surfaces are
   smokeable today.
+T3 ROUND 2 (fresh chat): 8 findings, all real, all fixed. Headline: round 1's
+  fix for ① created a NEW instance of the defect this card exists to delete.
+  ① BLOCKING — hoisting XP out of the old payload made the badge/challenge
+    cards render for the first time on a failed read, and they FABRICATED
+    ("of 0", "(0/—)", "0 of — badges", "earn your first badge"). Kd's smoke
+    ran in exactly that state and I reported it as correct. Now one
+    `oldReady` gate: absent payload reads "—" and says "unavailable".
+  ② BLOCKING — Achievements still had `if (loading) return <spinner>` above
+    the header, and `loading` is the OLD read's. No timeout on mlApi, so a
+    hung old backend hid the header forever. Two-arm form now.
+  ③ `challenges.active.map` and `leaderboard.leaderboard.find` unguarded
+    while the comment claimed "optional-chained throughout"; no ErrorBoundary
+    exists, so a partial payload blanks the page — ① by a third route.
+  ④⑤ BOTH source guards were sieves — 9 of 11 bypasses passed, incl.
+    `{xp ? xp.level : 1}`. Redesigned as a POSITIVE rule (a component may
+    read no FIELD of xp) with the scanned set derived from hook importers, so
+    the Dashboard card is covered on the day it is written. 8 bypasses
+    mutation-verified caught.
+  ⑥ bar widths now clamped (progressPct is unbounded in the schema).
+  ⑦ the hook's justification was false — it is no fresher than AuthContext;
+    the sidebar is stale until reload. Own OWED line; comment corrected.
+  ⑧ formatters were object-truthy, so formatXpTotal({}) threw. Field-safe now.
+  A DEFECT I INTRODUCED AND NEARLY SHIPPED: generating the guard via a Python
+  heredoc wrote literal 0x08 bytes where `\b` was meant, so several regexes
+  could never match and the negative assertions were passing VACUOUSLY. Only
+  the one POSITIVE assertion failed loudly. Lesson recorded in DECISIONS.
+PROVE (post-round-2): web 176 passed / 1 failed (177), same pre-existing
+  syncClient quirk; lint 3 = baseline parity. Both independently reproduced
+  by the reviewer.
 OPEN / NEXT:
-  1. Kd's SMOKE (steps in the chat), then tick OWED's XP line.
-  2. T3 round 2 on the fix commit — ① and ② were both found in round 1 and
-     both fixes are new code that has not been independently reviewed.
-  3. Four OWED lines added: Dashboard XP · the redirect-vs-not-running nuance
-     · the two contradictory totals · `.catch(console.error)` leaking the old
-     Bearer to the console (R3.10, pre-existing, its own sweep).
+  1. **RE-SMOKE required** — ①②③ changed what Kd already looked at. Dashboard
+     and Achievements with the old backend OFF must read "—", not "0", and the
+     Challenges tab needs clicking on a partial payload.
+  2. T3 round 3 — round 2's fixes are again new, unreviewed code, and rounds
+     1 and 2 each found the previous round's fix had opened something.
+  3. Then the Dashboard XP card (Kd chose option (a), 2026-07-26).
+  4. OWED lines now added by this card: Dashboard XP · the
+     redirect-vs-not-running nuance · the two contradictory totals ·
+     `.catch(console.error)` leaking the old Bearer · sidebar staleness ·
+     the guards catch spellings not the class · useXp request dedupe.
 SPEC GAPs: none.
 ```
 

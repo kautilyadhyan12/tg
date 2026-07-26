@@ -8,7 +8,8 @@
 //   · readXpView returns NULL for anything it cannot trust, and never a
 //     zero-filled object — the `|| 2000` / `|| 1` fabrication class.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
 import mlApi from './mlApi';
@@ -151,53 +152,109 @@ describe('render formatters — the render-site half of the fabrication guard', 
 });
 
 // Usage guard (the nutritionApi.test.js precedent, DECISIONS 2026-07-19).
-// Formatters make the CORRECT path tested and single; they do not stop a future
-// edit from writing `xp?.level || 1` straight into a component — which is the
-// exact line this card was opened to delete, so "less likely" is not closed.
-// This scans the three repointed render sites for the fabrication pattern. It
-// needs no DOM and no new dependency, so CI runs it.
-const RENDER_SITES = [
-  '../components/common/Sidebar.jsx',
-  '../components/dashboard/GamificationStrip.jsx',
-  '../pages/Achievements.jsx',
-];
+//
+// ROUND 2 ④/⑤ MEASURED THE FIRST VERSION AND IT WAS A SIEVE: 9 of 11 realistic
+// re-introductions passed it, including `{xp ? xp.level : 1}` — this codebase's
+// own idiom — plus `const lvl = xp?.level`, destructuring defaults, bracket
+// access, and a default substituted inside useXp.js, which defeated BOTH layers.
+// A blacklist of spellings can only ever catch the spelling it was written
+// against, which is the "fix the class, not the case" failure this project has
+// recorded five rounds running on xp.ts.
+//
+// So the rule is now POSITIVE and much narrower: **a component may not read a
+// FIELD of `xp` at all.** It passes the whole object to a helper in
+// gamificationApi.js, or truth-tests it to pick a layout. Every bypass above
+// requires reading a field, so all of them now fail. useXp.js is scanned too,
+// since substituting a default there defeats everything downstream — and the
+// list is DERIVED from the files that import the hook, so the next card's
+// Dashboard site is covered on the day it is written rather than being outside
+// the guard by construction (④'s last point).
+const HOOK_CONSUMERS_DIR = '../..';
+
+/** Every file that consumes useXp, found rather than hardcoded. */
+function xpConsumers() {
+  const root = fileURLToPath(new URL(HOOK_CONSUMERS_DIR, import.meta.url));
+  const out = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, e.name);
+      if (e.isDirectory()) { walk(full); continue; }
+      if (!/\.jsx?$/.test(e.name)) continue;
+      const src = readFileSync(full, 'utf8');
+      if (/from\s+['"][^'"]*hooks\/useXp['"]/.test(src)) out.push(full);
+    }
+  };
+  walk(root);
+  return out;
+}
 
 /** Source with comments removed. The first cut of this guard flagged its own
- *  explanatory comment in Sidebar.jsx ("the previous `user?.level || 1` …") —
+ *  explanatory comment in Sidebar.jsx ("the previous `user?.level || 1` ...") —
  *  the trap nutritionApi.test.js already names: "prose is not a dependency".
  *  A comment must be free to describe the bug that was fixed. */
+function stripComments(src) {
+  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
 function code(rel) {
-  return readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  return stripComments(readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8'));
 }
 
 describe('render sites never fabricate an XP value', () => {
-  it.each(RENDER_SITES)('%s applies no numeric fallback to an xp read', (rel) => {
+  it('finds every useXp consumer by import, not by a hardcoded list', () => {
+    const found = xpConsumers().map((f) => basename(f)).sort();
+    // Fails loudly if a site is renamed/moved (④'s ENOENT note) or if a NEW
+    // consumer appears without this guard being considered.
+    expect(found).toEqual(['Achievements.jsx', 'GamificationStrip.jsx', 'Sidebar.jsx']);
+  });
+
+  it.each([
+    '../components/common/Sidebar.jsx',
+    '../components/dashboard/GamificationStrip.jsx',
+    '../pages/Achievements.jsx',
+  ])('%s reads no FIELD of xp — only helpers may', (rel) => {
     const src = code(rel);
-    // `xp.level || 1`, `xp?.total ?? 0`, `xp.xpForNext || 100`, …
-    expect(src).not.toMatch(/\bxp\s*\??\.\s*\w+\s*(\|\||\?\?)\s*-?\d/);
-    // …and the old shape is gone for good: `user.level`, `user.xp`,
-    // `userData.progress.xp_in_level` were the pre-card reads.
+    // `xp.level`, `xp?.total`, `xp["level"]`, and any fallback built on them.
+    // Lookbehind excludes `entry.xp` — the OLD leaderboard row's own XP, a
+    // different value that stays on the old backend under no-removal. Without
+    // it this guard false-positives on Achievements.jsx and would push someone
+    // toward "fixing" a surface another card owns.
+    expect(src).not.toMatch(/(?<![.\w$])xp\s*\??\s*(\.\s*\w+|\[)/);
+    // Destructuring a field out of the hook's return is the same read.
+    expect(src).not.toMatch(/\{[^}]*\b(level|total|xpInLevel|xpForNext|progressPct|nextLevelAt)\b[^}]*\}\s*=\s*(useXp|xp)\b/);
+    // The pre-card shape stays gone.
     expect(src).not.toMatch(/\buser(Data)?\s*\??\.\s*(xp|level)\b/);
     expect(src).not.toMatch(/xp_in_level|xp_for_next|progress_pct/);
   });
 
-  it('every render site imports the formatters rather than reaching into xp', () => {
-    for (const rel of RENDER_SITES) {
-      expect(code(rel), rel).toMatch(/from\s+['"][^'"]*gamificationApi['"]/);
-    }
+  it('useXp.js substitutes no default for a missing block', () => {
+    const src = code('../hooks/useXp.js');
+    // `xp ?? { level: 1 }` / `|| {}` inside the hook defeats every downstream
+    // guard at once, so it is checked at the source too (④).
+    expect(src).not.toMatch(/(\?\?|\|\|)\s*\{/);
+    expect(src).toMatch(/readXpView\s*\(/);
   });
 });
 
-// T3 finding ①: the XP block must not be gated behind the OLD backend's
-// payload. A separate fetch is not independence if the render is still inside
-// `if (!data) return …` — and that state is PERMANENT on this branch, not an
-// edge case. Both assertions are decidable source facts, so they need no DOM.
+// ROUND 1 ① / ROUND 2 ②: the XP block must not be gated behind the OLD
+// backend's payload. Round 2 measured the first version of THIS guard too:
+// `if (!data) { return null; }` (braces), `if (!(data))`, returning a spinner
+// instead of null, and gating the JSX subtree all passed it — and the
+// Achievements assertion compared two string indices, so it could not see the
+// `if (loading) return <spinner>` that was sitting above the header in the
+// shipped code. Both are now checked by SHAPE rather than by one spelling.
 describe('XP renders independently of the old-backend payload', () => {
-  it('GamificationStrip does not gate its early return on the old payload', () => {
-    const src = code('../components/dashboard/GamificationStrip.jsx');
-    expect(src).not.toMatch(/if\s*\([^)]*\bdata\b[^)]*\)\s*return\s+null/);
+  it.each([
+    '../components/dashboard/GamificationStrip.jsx',
+    '../pages/Achievements.jsx',
+  ])('%s has no early return gated on the old payload alone', (rel) => {
+    const src = code(rel);
+    // Any `if (!data …) return …` in any bracing/spelling.
+    expect(src).not.toMatch(/if\s*\(\s*!\s*\(?\s*data\b[\s\S]{0,40}?\)\s*\{?\s*return/);
+    // A bare `if (loading)` gate is the round-2 ② hole: `loading` belongs to the
+    // OLD read, so it must always be paired with `!xp`.
+    expect(src).not.toMatch(/if\s*\(\s*loading\s*\)/);
+    // And the pairing must actually be present where a loading gate exists.
+    if (/\bloading\b/.test(src)) expect(src).toMatch(/loading\s*&&\s*!\s*xp/);
   });
 
   it('Achievements renders the XP header BEFORE the old-payload failure notice', () => {
@@ -206,7 +263,24 @@ describe('XP renders independently of the old-backend payload', () => {
     const notice = src.indexOf('Failed to load achievements');
     expect(header, 'XP header render site not found').toBeGreaterThan(-1);
     expect(notice, 'failure notice not found').toBeGreaterThan(-1);
-    // If the notice comes first it is an early return that takes XP down too.
     expect(header).toBeLessThan(notice);
+  });
+});
+
+// ROUND 2 ①: hoisting XP out of the old payload made the OTHER cards render on
+// a failed old read for the first time, and they fabricated — "of 0", "(0/-)",
+// "0 of - badges", "Complete workouts to earn your first badge". Unreachable
+// before this card; the PERMANENT state on this branch.
+describe('the old-payload cards claim nothing when the payload is absent', () => {
+  it.each([
+    '../components/dashboard/GamificationStrip.jsx',
+    '../pages/Achievements.jsx',
+  ])('%s applies no numeric fallback to an old-payload count', (rel) => {
+    const src = code(rel);
+    expect(src).not.toMatch(/total_users\s*(\|\||\?\?)\s*\d/);
+    expect(src).not.toMatch(/total_count\s*(\|\||\?\?)\s*\d/);
+    // A raw `earnedBadges.length` printed with no oldReady gate would claim
+    // zero earned badges when nothing is known.
+    expect(src).toMatch(/\boldReady\b/);
   });
 });

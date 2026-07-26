@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Trophy, Target, Crown, ChevronRight, Sparkles } from 'lucide-react';
 import {
-  formatLevel, formatXpProgress, formatXpTotal, gamificationService,
+  UNKNOWN, formatLevel, formatXpProgress, formatXpTotal, gamificationService,
+  xpBarWidth,
 } from '../../api/gamificationApi';
 import { useXp } from '../../hooks/useXp';
 
@@ -105,17 +106,30 @@ export default function GamificationStrip() {
 
   // `data.user` (the OLD backend's XP block) is deliberately no longer read —
   // XP comes from the new API via useXp. The rest of this payload still feeds
-  // the challenges + badge-catalog cards, which are their own OWED cards, and
-  // is now optional-chained throughout so a missing/failed old read degrades
-  // those two cards to their existing empty states instead of blanking XP.
+  // the challenges + badge-catalog cards, which are their own OWED cards.
+  //
+  // ROUND 2 ①: hoisting XP out of the old payload's early return made these two
+  // cards render on a FAILED old read for the first time — and they fabricated,
+  // which is the very thing this card exists to delete. "of 0" claimed a zero
+  // user count, "(0/—)" and "0 of — badges" claimed zero earned badges, and
+  // "Complete workouts to earn your first badge" told a user with badges that
+  // they had none. All were unreachable before this card and are the PERMANENT
+  // state on this branch. `oldReady` is the honest distinction: when the old
+  // payload is absent nothing about badges or challenges is KNOWN, so those
+  // cards say so instead of saying zero.
+  const oldReady     = Boolean(data);
   const badges       = data?.badges;
   const challenges   = data?.challenges;
   const earnedBadges = badges?.all?.filter((b) => b.earned) ?? [];
   const recentBadges = earnedBadges.slice(-3).reverse();
 
+  // Round 2 ③: `leaderboard.leaderboard` was an unguarded read while its
+  // sibling was optional-chained, and a render throw blanks the page (no
+  // ErrorBoundary exists in apps/web) — which would take the XP header down
+  // too, re-creating ① by a third route.
   let userRank = null;
   if (leaderboard) {
-    const me = leaderboard.leaderboard.find((e) => e.is_current_user);
+    const me = leaderboard.leaderboard?.find((e) => e.is_current_user);
     userRank  = me ? me.rank : leaderboard.current_user_rank;
   }
 
@@ -146,9 +160,17 @@ export default function GamificationStrip() {
             </button>
           </div>
           <div className="flex flex-col gap-2 flex-1">
-            {(challenges?.active ?? []).slice(0, 3).map((c) => (
-              <ChallengeRow key={c.id} challenge={c} />
-            ))}
+            {oldReady ? (
+              (challenges?.active ?? []).slice(0, 3).map((c) => (
+                <ChallengeRow key={c.id} challenge={c} />
+              ))
+            ) : (
+              // An empty list would read as "no challenges this week", which is
+              // a claim we cannot make when the payload never arrived (round 2 ①).
+              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+                Challenges are unavailable right now
+              </p>
+            )}
           </div>
         </div>
       </HeroCard>
@@ -173,7 +195,7 @@ export default function GamificationStrip() {
                 {userRank || '—'}
               </p>
               <p className="text-sm pb-2" style={{ color: 'rgba(255,255,255,0.85)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
-                of {leaderboard?.total_users || 0}
+                of {Number.isFinite(leaderboard?.total_users) ? leaderboard.total_users : UNKNOWN}
               </p>
             </div>
             <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.90)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
@@ -188,7 +210,7 @@ export default function GamificationStrip() {
                  style={{ background: 'rgba(255,255,255,0.15)' }}>
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: xp ? `${xp.progressPct}%` : '0%' }}
+                animate={{ width: xpBarWidth(xp) }}
                 transition={{ duration: 1.2, ease: 'easeOut' }}
                 className="h-full rounded-full"
                 style={{ background: 'linear-gradient(90deg, #FF8A1F, #FFB347)' }}
@@ -215,7 +237,7 @@ export default function GamificationStrip() {
                 Latest Badges
               </h3>
               <span className="text-2xs" style={{ color: 'rgba(255,255,255,0.75)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
-                ({earnedBadges.length}/{badges?.total_count ?? '—'})
+                ({oldReady ? earnedBadges.length : UNKNOWN}/{badges?.total_count ?? UNKNOWN})
               </span>
             </div>
             <button
@@ -262,7 +284,9 @@ export default function GamificationStrip() {
                 <Sparkles className="w-6 h-6" style={{ color: 'rgba(255,138,31,0.5)' }} />
                 <p className="text-xs text-center"
                    style={{ color: 'rgba(255,255,255,0.65)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
-                  Complete workouts to<br />earn your first badge
+                  {oldReady
+                    ? <>Complete workouts to<br />earn your first badge</>
+                    : <>Badges are<br />unavailable right now</>}
                 </p>
               </div>
             )}
