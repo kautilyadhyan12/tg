@@ -235,9 +235,31 @@ then; none may be hidden or reduced to close the gap.
       Also fix while here: `workoutApi.js` declares **`getHistory` TWICE** in
       one object literal (lines 5 and 9) — the second silently wins, so the
       `(limit)` variant is dead code and a footgun.
-- [ ] 🔴 **Dashboard's XP surfaces still fabricate — XPBar + "Current Level"
-      StatCard.** Kd-ruled OUT of the 2026-07-26 XP-display card and given this
-      line in the same commit, per the deferral rule. `Dashboard.jsx` renders
+- [x] 🔴 **DONE 2026-07-26 — Dashboard XP repointed, SMOKE OWED.** Kd chose
+      option (a) on 2026-07-26 (ship the XP card, then this immediately) and
+      confirmed the defect from his own re-smoke screenshot: the same page read
+      "Level 1 / 0 XP earned" in a stat card and "0/100 XP → Level 2" in the
+      Experience Points panel while the strip below it read "330 XP · Level 2".
+      All four Dashboard sites now read the new API through the same `useXp()`
+      hook and the shared formatters: the stat card's level + total, the XPBar,
+      and the small "Level" figure. **The `xp % 100` maths is DELETED** — it
+      assumed every level costs 100 XP, but the curve is
+      `floor(100*(level-1)^1.8)` (badges.py:215-227), so it was wrong for every
+      user above level 2; the server's own `xpInLevel`/`xpForNext` are rendered
+      instead. No fabricated defaults remain (`s.xp || 0`, `s.level || 1`, and
+      XPBar's `xp = 0, level = 1` parameter defaults are all gone).
+      The XP-guard's consumer list is DERIVED from the hook's importers, so it
+      FAILED on this card until Dashboard was added — the guard working as
+      designed rather than needing a human to remember. Both regressions
+      mutation-verified caught: reinstating `xp?.level || 1`, and reinstating
+      `xp.total % 100`. web 177 passed / 1 failed (178, the pre-existing
+      syncClient quirk); lint clean on both touched files; `vite build` green.
+      **Owed with it:** Kd's Dashboard smoke, and a T3 — no independent review
+      has seen this card at all.
+      ORIGINAL ENTRY, kept because it is the evidence the deferral was recorded
+      rather than remembered: "Dashboard's XP surfaces still fabricate — XPBar +
+      Current Level StatCard." Kd-ruled OUT of the 2026-07-26 XP-display card and
+      given this line in the same commit, per the deferral rule. `Dashboard.jsx` renders
       `s.xp || 0` / `s.level || 1` (StatCard, XPBar, and a "Level" stat row) off
       `workoutService.getStats()` — a **different** old endpoint from the two
       the XP card repointed, so folding it in would have meant a second repoint

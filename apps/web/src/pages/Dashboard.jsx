@@ -4,6 +4,10 @@ import { useAuth } from '../context/AuthContext';
 import { useTransition } from '../context/TransitionContext';
 import { workoutService } from '../api/workoutApi';
 import { recommendationService } from '../api/recommendationApi';
+import {
+  formatLevel, formatNextLevel, formatXpFraction, formatXpTotal, xpBarWidth,
+} from '../api/gamificationApi';
+import { useXp } from '../hooks/useXp';
 import GamificationStrip from '../components/dashboard/GamificationStrip';
 import { motion } from 'framer-motion';
 import {
@@ -82,17 +86,27 @@ function WeekStrip({ activity = {} }) {
 }
 
 // ── XP bar ────────────────────────────────────────────────────────────────────
-function XPBar({ xp = 0, level = 1 }) {
-  const progress = xp % 100;
+/** Takes the WHOLE xp block from useXp (or null), never loose numbers.
+ *
+ *  It used to take `xp`/`level` as numbers defaulting to 0/1 and compute
+ *  `xp % 100` — i.e. it assumed every level costs exactly 100 XP. The real
+ *  curve is `floor(100 * (level-1)^1.8)` (badges.py:215-227), so levels cost
+ *  100, 248, 374, … and that bar was wrong for every user above level 2. The
+ *  server already sends the position within the level, so nothing here
+ *  computes anything: no `% 100`, no defaults, no XP arithmetic (R3.1 / the
+ *  Kd ruling of 2026-07-26). Unknown renders as a dash, not a Level 1. */
+function XPBar({ xp }) {
   return (
     <div>
       <div className="flex justify-between items-center mb-2">
         <div className="flex items-center gap-1.5">
           <Zap className="w-3.5 h-3.5" style={{ color: '#FF8A1F' }} />
-          <span className="text-xs font-medium" style={{ color: '#FF8A1F' }}>Level {level}</span>
+          <span className="text-xs font-medium" style={{ color: '#FF8A1F' }}>
+            Level {formatLevel(xp)}
+          </span>
         </div>
         <span className="text-2xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
-          {progress}/100 XP → Level {level + 1}
+          {formatXpFraction(xp)} XP → Level {formatNextLevel(xp)}
         </span>
       </div>
       <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.1)' }}>
@@ -100,7 +114,7 @@ function XPBar({ xp = 0, level = 1 }) {
           className="h-full rounded-full"
           style={{ background: 'linear-gradient(90deg, #FF8A1F, #FFB347)' }}
           initial={{ width: 0 }}
-          animate={{ width: `${progress}%` }}
+          animate={{ width: xpBarWidth(xp) }}
           transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1], delay: 0.5 }}
         />
       </div>
@@ -215,6 +229,10 @@ const TS = { textShadow: '0 1px 6px rgba(0,0,0,0.9)' };
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const { user } = useAuth();
+  // XP/level come from the NEW API (GET /v1/gamification/me), not from
+  // workoutService.getStats — that old-backend payload's `xp`/`level` are the
+  // ones that rendered a fabricated "Level 1 / 0 XP earned" for everyone here.
+  const { xp } = useXp();
   const navigate = useNavigate();
   const { triggerTransition } = useTransition();
   const quote    = getQuote();
@@ -324,7 +342,7 @@ export default function Dashboard() {
           <StatCard icon={Dumbbell} label="Total Workouts" value={s.total_workouts || 0} sub="all time" color="#FF8A1F" delay={0.15} bgImage="/images/dashboard/totalworkout.png" />
           <StatCard icon={Clock} label="Hours Trained" value={Math.round((s.total_minutes || 0) / 60 * 10) / 10} suffix="h" sub={`${s.total_minutes || 0} minutes`} color="#60a5fa" delay={0.2} bgImage="/images/dashboard/hourstrained.png" />
           <StatCard icon={Flame} label="Calories Burned" value={s.total_calories || 0} sub="kcal total" color="#f97316" delay={0.25} bgImage="/images/dashboard/caloriesburned.png" />
-          <StatCard icon={Trophy} label="Current Level" value={`Level ${s.level || 1}`} sub={`${s.xp || 0} XP earned`} color="#FFD66B" delay={0.3} bgImage="/images/dashboard/currentlevel.png" />
+          <StatCard icon={Trophy} label="Current Level" value={`Level ${formatLevel(xp)}`} sub={`${formatXpTotal(xp)} XP earned`} color="#FFD66B" delay={0.3} bgImage="/images/dashboard/currentlevel.png" />
         </div>
 
         {/* ── XP + Week strip ───────────────────────────────────────────────── */}
@@ -336,13 +354,13 @@ export default function Dashboard() {
                 <h3 className="text-sm font-semibold text-white">Experience Points</h3>
               </div>
               <div style={{ maxWidth: '65%' }}>
-                <XPBar xp={s.xp || 0} level={s.level || 1} />
+                <XPBar xp={xp} />
               </div>
               <div className="mt-4 grid grid-cols-3 gap-3" style={{ maxWidth: '65%' }}>
                 {[
                   { label: 'This week', value: `${s.weekly_workouts || 0}`, sub: 'workouts' },
                   { label: 'Streak',    value: `${s.streak || 0}`,          sub: 'days' },
-                  { label: 'Level',     value: `${s.level || 1}`,           sub: 'current' },
+                  { label: 'Level',     value: formatLevel(xp),             sub: 'current' },
                 ].map(({ label, value, sub }) => (
                   <div key={label} className="text-center">
                     <p className="text-xl font-bold tracking-tighter tabular-nums" style={{ color: '#FF8A1F' }}>{value}</p>

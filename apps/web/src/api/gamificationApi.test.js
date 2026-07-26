@@ -204,13 +204,16 @@ describe('render sites never fabricate an XP value', () => {
     const found = xpConsumers().map((f) => basename(f)).sort();
     // Fails loudly if a site is renamed/moved (④'s ENOENT note) or if a NEW
     // consumer appears without this guard being considered.
-    expect(found).toEqual(['Achievements.jsx', 'GamificationStrip.jsx', 'Sidebar.jsx']);
+    expect(found).toEqual([
+      'Achievements.jsx', 'Dashboard.jsx', 'GamificationStrip.jsx', 'Sidebar.jsx',
+    ]);
   });
 
   it.each([
     '../components/common/Sidebar.jsx',
     '../components/dashboard/GamificationStrip.jsx',
     '../pages/Achievements.jsx',
+    '../pages/Dashboard.jsx',
   ])('%s reads no FIELD of xp — only helpers may', (rel) => {
     const src = code(rel);
     // `xp.level`, `xp?.total`, `xp["level"]`, and any fallback built on them.
