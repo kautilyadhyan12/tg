@@ -254,8 +254,15 @@ then; none may be hidden or reduced to close the gap.
       mutation-verified caught: reinstating `xp?.level || 1`, and reinstating
       `xp.total % 100`. web 177 passed / 1 failed (178, the pre-existing
       syncClient quirk); lint clean on both touched files; `vite build` green.
-      **Owed with it:** Kd's Dashboard smoke, and a T3 — no independent review
-      has seen this card at all.
+      **SMOKE PASSED (Kd, 2026-07-26):** the stat card read "Level 2 / 330 XP
+      earned", the Experience Points panel read "Level 2 / 230/248 XP → Level 3"
+      with the bar nearly full, and all three XP surfaces on the page agreed
+      with the sidebar and with `/v1/gamification/me`. The contradiction that
+      the XP card's own smoke exposed — a real level beside a fabricated one on
+      one page — is closed.
+      **Still owed with it:** a T3 — no independent review has seen this card,
+      and on the XP card each of two rounds found the previous round's fix had
+      opened something new.
       ORIGINAL ENTRY, kept because it is the evidence the deferral was recorded
       rather than remembered: "Dashboard's XP surfaces still fabricate — XPBar +
       Current Level StatCard." Kd-ruled OUT of the 2026-07-26 XP-display card and
