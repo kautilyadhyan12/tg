@@ -6,7 +6,7 @@ import { workoutService } from '../api/workoutApi';
 import { recommendationService } from '../api/recommendationApi';
 import {
   UNKNOWN, formatCount, formatLevel, formatNextLevel, formatXpFraction,
-  formatXpTotal, orUnknown, readStatsView, xpBarWidth,
+  formatXpTotal, orUnknown, readRecommendations, readStatsView, xpBarWidth,
 } from '../api/gamificationApi';
 import { useXp } from '../hooks/useXp';
 import GamificationStrip from '../components/dashboard/GamificationStrip';
@@ -259,7 +259,10 @@ export default function Dashboard() {
 
   const [statsRaw,        setStatsRaw]        = useState(null);
   const [loading,         setLoading]         = useState(true);
-  const [recommendations, setRecommendations] = useState([]);
+  // NULL = not known yet / read failed; [] = genuinely none. Round 6 F9 is the
+  // same distinction for `recent`: `?? []` collapsed three states into two, so
+  // a failed read looked exactly like a brand-new account with no workouts.
+  const [recommendations, setRecommendations] = useState(null);
 
   useEffect(() => {
     // ROUND 5 security pass (R3.10): these two were `.catch(console.error)`,
@@ -273,8 +276,13 @@ export default function Dashboard() {
       .then((res) => setStatsRaw(res.data))
       .catch((err) => console.error('stats read failed:', err?.message))
       .finally(() => setLoading(false));
+    // ROUND 6 F2: this was `res.data.recommendations || []`, which accepts ANY
+    // type — a string, an object — and `.slice(0,6).map(...)` below then threw,
+    // blanking the ENTIRE Dashboard including the XP header. With no
+    // ErrorBoundary in apps/web that is T3 finding ① by a fourth route, and the
+    // file's own comments cite that hazard three times while leaving this live.
     recommendationService.getRecommendations(6)
-      .then((res) => setRecommendations(res.data.recommendations || []))
+      .then((res) => setRecommendations(readRecommendations(res.data)))
       .catch((err) => console.error('recommendations read failed:', err?.message));
   }, []);
 
@@ -294,7 +302,12 @@ export default function Dashboard() {
   // Per-field now, via the same reader treatment the new API's payload gets —
   // so there is no envelope gate left to be wrong, and `?? 0` appears nowhere.
   const stats  = readStatsView(statsRaw);
-  const recent = stats.recent ?? [];
+  // ROUND 6 F9: `stats.recent ?? []` then `.length > 0` made a FAILED read
+  // indistinguishable from a genuine zero-workout account — the card simply
+  // vanished. Three states, like everywhere else on this page.
+  const recent      = stats.recent;
+  const recentState = recent === null ? (loading ? 'loading' : 'failed') : 'ready';
+  const recsState   = recommendations === null ? (loading ? 'loading' : 'failed') : 'ready';
   const hours  = stats.totalMinutes === null
     ? null
     : Math.round((stats.totalMinutes / 60) * 10) / 10;
@@ -481,10 +494,29 @@ export default function Dashboard() {
         <GamificationStrip />
 
         {/* ── Recommended For You + Recent Workouts ─────────────────────────── */}
-        {(recommendations.length > 0 || recent.length > 0) && (
+        {(recsState !== 'ready' || recommendations.length > 0
+          || recentState !== 'ready' || recent.length > 0) && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
 
-            {recommendations.length > 0 && (
+            {recsState !== 'ready' ? (
+              <div className="card-glass">
+                <h3 className="text-sm font-semibold text-white mb-1">Recommended For You</h3>
+                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                  {recsState === 'failed'
+                    ? 'Recommendations are unavailable right now.'
+                    : 'Loading recommendations…'}
+                </p>
+              </div>
+            ) : recommendations.length === 0 ? (
+              <div className="card-glass">
+                <h3 className="text-sm font-semibold text-white mb-1">Recommended For You</h3>
+                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                  No recommendations right now.
+                </p>
+              </div>
+            ) : null}
+
+            {recsState === 'ready' && recommendations.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5, duration: 0.5 }}
@@ -515,12 +547,21 @@ export default function Dashboard() {
                       </button>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
+                      {/* ROUND 6 F3: six bare reads lived here. The difficulty
+                          ternary's final `else` painted an UNKNOWN difficulty
+                          red-and-"advanced" — verbatim round 5 F3's own defect,
+                          one list along — and `{ex.calories_per_min}` rendered
+                          " kcal/min", a unit with no number. Unknown difficulty
+                          is now neutral grey and every field goes through the
+                          reader + orUnknown. */}
                       {recommendations.slice(0, 6).map((ex, i) => (
                         <motion.button
-                          key={ex.id}
+                          key={ex.id ?? i}
                           initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.05 * i }}
-                          onClick={() => triggerTransition(() => navigate('/exercises?exercise=' + ex.id))}
+                          onClick={ex.id === null
+                            ? undefined
+                            : () => triggerTransition(() => navigate('/exercises?exercise=' + ex.id))}
                           className="text-left rounded-2xl p-3 transition-all"
                           style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.12)' }}
                         >
@@ -530,26 +571,28 @@ export default function Dashboard() {
                               style={{
                                 background: ex.difficulty === 'beginner' ? 'rgba(34,197,94,0.25)'
                                   : ex.difficulty === 'intermediate' ? 'rgba(255,138,31,0.25)'
+                                  : ex.difficulty === null ? 'rgba(255,255,255,0.06)'
                                   : 'rgba(239,68,68,0.25)',
                                 color: ex.difficulty === 'beginner' ? '#4ade80'
                                   : ex.difficulty === 'intermediate' ? '#FF8A1F'
+                                  : ex.difficulty === null ? 'rgba(255,255,255,0.45)'
                                   : '#f87171',
                               }}
                             >
-                              {ex.difficulty}
+                              {orUnknown(ex.difficulty)}
                             </span>
-                            {ex.ai_supported && <Sparkles className="w-3 h-3" style={{ color: '#FF8A1F' }} />}
+                            {ex.aiSupported === true && <Sparkles className="w-3 h-3" style={{ color: '#FF8A1F' }} />}
                           </div>
                           <p className="text-xs font-semibold text-white leading-snug mb-1" style={TS}>
-                            {ex.name}
+                            {orUnknown(ex.name)}
                           </p>
                           <p className="text-2xs truncate" style={{ color: 'rgba(255,255,255,0.70)', ...TS }}>
-                            {ex.primary_category}
+                            {orUnknown(ex.primaryCategory)}
                           </p>
                           <div className="flex items-center gap-1 mt-2">
                             <Flame className="w-3 h-3" style={{ color: '#FF8A1F' }} />
                             <span className="text-2xs font-medium" style={{ color: 'rgba(255,138,31,0.95)', ...TS }}>
-                              {ex.calories_per_min} kcal/min
+                              {formatCount(ex.caloriesPerMin)} kcal/min
                             </span>
                           </div>
                         </motion.button>
@@ -560,7 +603,25 @@ export default function Dashboard() {
               </motion.div>
             )}
 
-            {recent.length > 0 && (
+            {recentState !== 'ready' ? (
+              <div className="card-glass">
+                <h3 className="text-sm font-semibold text-white mb-1">Recent Workouts</h3>
+                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                  {recentState === 'failed'
+                    ? 'Recent workouts are unavailable right now.'
+                    : 'Loading recent workouts…'}
+                </p>
+              </div>
+            ) : recent.length === 0 ? (
+              <div className="card-glass">
+                <h3 className="text-sm font-semibold text-white mb-1">Recent Workouts</h3>
+                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                  No workouts logged yet.
+                </p>
+              </div>
+            ) : null}
+
+            {recentState === 'ready' && recent.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.55, duration: 0.5 }}
@@ -586,8 +647,13 @@ export default function Dashboard() {
                       </button>
                     </div>
                     {recent.slice(0, 6).map((w, i) => {
-                      const date = w.completedAt
-                        ? new Date(w.completedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                      // ROUND 6 F7: `text()` validates non-empty-string, never
+                      // PARSEABILITY, so `completed_at: 'not-a-date'` printed
+                      // the literal "Invalid Date" beside siblings correctly
+                      // reading "—". A date that will not parse is unknown.
+                      const parsed = w.completedAt === null ? null : new Date(w.completedAt);
+                      const date = parsed !== null && !Number.isNaN(parsed.getTime())
+                        ? parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
                         : UNKNOWN;
                       // ROUND 5 F3: `w.form_accuracy || 0` fell through to the
                       // <60 branch, so an UNKNOWN accuracy was painted RED —

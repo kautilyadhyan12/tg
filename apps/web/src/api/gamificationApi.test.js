@@ -14,11 +14,12 @@ import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
 import mlApi from './mlApi';
 import {
-  UNKNOWN, badgesKnown, challengesKnown, earnedBadgeCount, formatCount,
-  formatFraction, formatLevel, formatXpProgress, formatXpTotal,
-  gamificationService, listState, oldPayloadState, orUnknown, progressWidth,
-  readBadge, readChallenge, readLeaderboardEntry, readLeaderboardView,
-  readOverviewView, readRecentWorkout, readStatsView, readXpView,
+  UNKNOWN, earnedBadgeCount, formatCount, formatFraction, formatLevel,
+  formatXpProgress, formatXpTotal, gamificationService, listState,
+  oldPayloadState, orUnknown, progressWidth, readBadge, readChallenge,
+  readLeaderboardEntry, readLeaderboardView, readOverviewView,
+  readRecentWorkout, readRecommendation, readRecommendations, readStatsView,
+  readXpView,
 } from './gamificationApi';
 
 function recordRequests(api) {
@@ -231,6 +232,32 @@ describe('old-payload readers: every field is a usable value or NULL', () => {
     });
     expect(readRecentWorkout({ form_accuracy: 0 }).formAccuracy).toBe(0);
     expect(readRecentWorkout({ duration_minutes: NaN }).durationMinutes).toBeNull();
+  });
+
+  it('readRecommendation nulls every field it cannot trust — round 6 F3', () => {
+    expect(readRecommendation({
+      id: 'r1', name: 'Squat', difficulty: 'beginner',
+      primary_category: 'legs', calories_per_min: 8, ai_supported: true,
+    })).toEqual({
+      id: 'r1', name: 'Squat', difficulty: 'beginner',
+      primaryCategory: 'legs', caloriesPerMin: 8, aiSupported: true,
+    });
+    const bare = readRecommendation({ id: 'r1', name: 'Mystery Move' });
+    expect(bare.difficulty).toBeNull();       // must NOT fall into "advanced"
+    expect(bare.caloriesPerMin).toBeNull();   // must NOT render " kcal/min"
+    expect(bare.aiSupported).toBeNull();      // F2's boolean rule
+    expect(readRecommendation(null).id).toBeNull();
+  });
+
+  it('readRecommendations refuses a non-array — round 6 F2', () => {
+    // `res.data.recommendations || []` accepted a STRING, which reached
+    // `.slice(0,6).map()` and threw, blanking the whole Dashboard.
+    expect(readRecommendations({ recommendations: 'oops' })).toBeNull();
+    expect(readRecommendations({ recommendations: { 0: 'x' } })).toBeNull();
+    expect(readRecommendations({})).toBeNull();
+    expect(readRecommendations(null)).toBeNull();
+    expect(readRecommendations({ recommendations: [] })).toEqual([]);
+    expect(readRecommendations({ recommendations: [{ id: 'r' }] })).toHaveLength(1);
   });
 
   it('readOverviewView nulls a list it cannot enumerate', () => {
@@ -593,11 +620,19 @@ describe('the old payload is read with every nested field guarded', () => {
   ])('%s never dereferences a nested old-payload field bare', (rel) => {
     const { src } = codeAt(rel);
     // Only the reads with NO guard of their own. `challenges.active.slice` and
-    // `badges.all.filter` are deliberately NOT banned — they now sit inside a
-    // `challengesKnown(data) ? …` / `badgesKnown(data) ? …` ternary, which the
-    // per-site assertions above require. Banning the spelling instead would
-    // forbid the correct code, which is how a guard starts pushing people toward
-    // worse shapes to keep it quiet.
+    // `badges.all.filter` are deliberately NOT banned — they sit behind a
+    // `listState(...)` gate or a `?? []`, and the per-site assertions above
+    // require the gate. Banning the spelling instead would forbid the correct
+    // code, which is how a guard starts pushing people toward worse shapes to
+    // keep it quiet.
+    //
+    // ROUND 6 F10: the previous wording said these sit inside a
+    // `badgesKnown(data) ? …` ternary "which the per-site assertions above
+    // require". Both halves were false — no component calls `badgesKnown`, and
+    // the per-site assertions require `listState(`. Round 5's refactor made the
+    // sentence stale and nothing caught it, which is the fourth false claim
+    // this section has carried. Corrected rather than deleted, so the pattern
+    // stays visible: a comment describing code is a claim, and it rots.
     // ROUND 4 F8: this block was three `not.toMatch` and nothing else, so on an
     // eaten or emptied file it passed vacuously — the exact failure mode the
     // section header claimed had been closed everywhere. Positive anchor first.
@@ -621,16 +656,9 @@ describe('old-payload state is a pure function, so all four states are testable'
     expect(oldPayloadState({ data: null, loading: false })).toBe('failed');
   });
 
-  it('per-card knowledge asks whether the list can be enumerated', () => {
-    expect(badgesKnown({ badges: { all: [] } })).toBe(true);
-    expect(challengesKnown({ challenges: { active: [] } })).toBe(true);
-    // Round 3 F5: a 200 with `{}` — the shape this file's own adapter returns.
-    expect(badgesKnown({})).toBe(false);
-    expect(challengesKnown({})).toBe(false);
-    expect(badgesKnown({ badges: {} })).toBe(false);
-    expect(challengesKnown({ challenges: {} })).toBe(false);
-    expect(badgesKnown(null)).toBe(false);
-    expect(challengesKnown(null)).toBe(false);
-    expect(badgesKnown({ badges: { all: 'nope' } })).toBe(false);
-  });
+  // ROUND 6 F10: the five `badgesKnown`/`challengesKnown` assertions that stood
+  // here are deleted with the functions. Round 5's listState refactor left them
+  // testing a path no component takes — coverage on dead code, which reads as
+  // protection and is not. The same question is asked directly of the reader's
+  // output above (`readOverviewView nulls a list it cannot enumerate`).
 });

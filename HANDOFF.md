@@ -1,6 +1,57 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: WEB XP display + Dashboard XP — T3 ROUND 6  [FIXED, SMOKE + ROUND 7 OWED]
+      branch web-repoint. 12 findings, 3 BLOCKING, all fixed. SIXTH consecutive
+      round to find the previous round's fix opened the next defect.
+THE HEADLINE — F1 is this card's defect INVERTED. Round 5's F2 fix made
+  earnedBadgeCount return null when any badge's `earned` is unknown; the list's
+  STATE then borrowed that test (`listState(oldState, earnedCount !== null)`),
+  so a catalog that ARRIVED and was RENDERED got "Badges are unavailable right
+  now." printed directly above two visible badge cards. Not a fabricated
+  number — a false denial of content the user can see. Same rule, opposite
+  sign, same gate. Round 5's own F2 render test sat in that exact state and
+  asserted nothing about the notice, so it shipped green.
+  FIX: ask the list's own question — `overview.badges.all !== null`.
+F2/F3 (blocking) — `recommendations` was a SECOND unparsed list in Dashboard.
+  Round 5's claim that `recent_workouts` was "the ONE list left unparsed" was
+  FALSE, and both were in the same file, fixed in the same commit. A non-array
+  value reached `.slice().map()` → threw → blanked the ENTIRE Dashboard, XP
+  header included (no ErrorBoundary). Six bare reads; the difficulty ternary's
+  `else` painted an unknown difficulty red-and-"advanced" — verbatim round 5
+  F3's own defect, one list along. Now readRecommendation/readRecommendations.
+ALSO: F4 strip's loading arms rendered nothing forever · F5 TIER_CONFIG
+  fallback fabricated a bronze ring/glow · F6 three more heading-then-nothing
+  empty states · F7 literal "Invalid Date" · F8 nullable booleans read as
+  definite-false · F9 failed recent-workouts read looked like a zero-workout
+  account · F10 fourth false claim in the guard + badgesKnown/challengesKnown
+  DELETED (dead surface carrying 5 assertions) · F11 two assertions vacuous by
+  construction (`/undefined/` cannot fail for a bare JSX child — React renders
+  undefined as nothing; the real pre-fix output was "Lv  ·  badges") · F12
+  earnedBadgeCount(undefined) threw.
+CLEARED BY THE REVIEWER, do not re-litigate: useXp's consumer count is correct
+  this round (4 importers, 3 concurrent GETs on /dashboard, independently
+  verified) · the 2 lint errors are genuinely pre-existing on master · the
+  whole-document sweep would PASS in the states it is missing from, so its
+  absence is a missing tripwire, not a live fabrication.
+PROVE: web 219 passed / 1 failed (220), the 1 being the pre-existing syncClient
+  `window` quirk. Scoped lint 2 (Zap, ChevronRight) = current baseline. Build
+  green. +4 tests, including two unit tests for the new recommendation readers
+  — added rather than dropping an unused import, which is round 5's own F5
+  lesson applied to my own work in the same session.
+OPEN / NEXT:
+  1. **T3 ROUND 7** — six rounds, six times the fix opened the next thing.
+  2. **RE-SMOKE**, scope grew again: + a badge catalog with no `earned` field
+     (F1 shows in ONE click), + a non-array `recommendations`, + a ready-but-
+     empty challenges list. On top of rounds 4/5's hung-backend, `{"stats":{}}`,
+     leaderboard-fails, and missing-workout-metrics states.
+  3. Both OWED ticks STAY OFF until 1 and 2 are done.
+  4. Then: PostWorkout.jsx 100-XP bug (OWED, live route) · rotate the Neon
+     password (OWED) · shut down the dev servers + restore Docker.
+SPEC GAPs: none.
+```
+
+```
 TASK: WEB XP display + Dashboard XP — T3 ROUND 5  [FIXED, SMOKE + ROUND 6 OWED]
       branch web-repoint. 8 findings, 3 BLOCKING, all fixed. FIFTH consecutive
       round to find the previous round's fix opened the next defect.

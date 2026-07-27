@@ -278,6 +278,46 @@ describe('GamificationStrip — XP renders when the old backend does not', () =>
     expect(screen.queryByText(/Level 1\b/)).toBeNull();
   });
 
+  it('a non-array recommendations field does not blank the page — round 6 F2', async () => {
+    // `res.data.recommendations || []` accepted ANY type, and `.slice().map()`
+    // then threw. With no ErrorBoundary in apps/web the entire Dashboard went
+    // blank — XP header included, i.e. T3 finding ① by a fourth route.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    workoutService.getStats.mockImplementation(DEAD);
+    recommendationService.getRecommendations.mockResolvedValue({
+      data: { recommendations: 'oops' },
+    });
+
+    const { container } = renderPage(<Dashboard />);
+    await waitFor(() => expect(screen.getAllByText(/Level 3/).length).toBeGreaterThan(0));
+    expect(container.textContent.length).toBeGreaterThan(0);
+    expect(screen.getByText('Recommendations are unavailable right now.')).toBeTruthy();
+  });
+
+  it('a partial recommendation is neutral, not "advanced" — round 6 F3', async () => {
+    // The difficulty ternary's final `else` painted an UNKNOWN difficulty red
+    // and labelled it advanced; `{ex.calories_per_min}` rendered " kcal/min".
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    workoutService.getStats.mockImplementation(DEAD);
+    recommendationService.getRecommendations.mockResolvedValue({
+      data: { recommendations: [{ id: 'r1', name: 'Mystery Move' }] },
+    });
+
+    const { container } = renderPage(<Dashboard />);
+    await waitFor(() => expect(screen.getByText('Mystery Move')).toBeTruthy());
+
+    expect(container.textContent).not.toMatch(/advanced/i);
+    expect(container.textContent).toMatch(/— kcal\/min/);
+    // The difficulty pill reads as unknown rather than as a real level.
+    const pill = screen.getAllByText('—').find((el) => el.className.includes('rounded-full'));
+    expect(pill).toBeTruthy();
+    expect(pill.style.color).not.toContain('248');   // not the red branch
+  });
+
   it('a leaderboard 200 missing its list does not blank the page', async () => {
     // Round 3 F1 / round 2 ③: an unguarded nested read throws in render, and
     // there is no ErrorBoundary in apps/web, so the whole page — XP included —
@@ -358,7 +398,12 @@ describe('Achievements — the three payloads are independent — round 4 F4', (
     fireEvent.click(screen.getByText('Leaderboard'));
 
     await waitFor(() => expect(screen.getByText('Partial')).toBeTruthy());
-    expect(screen.queryByText(/undefined/)).toBeNull();
+    // ROUND 6 F11: this used to assert `queryByText(/undefined/)` is null,
+    // which CANNOT FAIL for a bare `{expr}` — React renders undefined as
+    // nothing, so the pre-fix output was "Lv  ·  badges", never
+    // "Lv undefined". The assertion was vacuous by construction for exactly
+    // the class it claimed to guard. Assert the DASHES that must be there.
+    expect(screen.getByText(/Lv — · — badges/)).toBeTruthy();
     expect(screen.queryByText(/Lv 0\b/)).toBeNull();
   });
 
@@ -403,6 +448,31 @@ describe('Achievements — the three payloads are independent — round 4 F4', (
     await waitFor(() =>
       expect(screen.getByText('The leaderboard is unavailable right now.')).toBeTruthy());
     expect(screen.queryByText('Loading the leaderboard…')).toBeNull();
+  });
+
+  it('a catalog that ARRIVED is never called unavailable — round 6 F1', async () => {
+    // listState(oldState, earnedCount !== null) used the COUNT's knowability as
+    // the LIST's, so a catalog that arrived and is on screen was classified as
+    // a failed read: "Badges are unavailable right now." printed directly above
+    // two rendered badge cards. Round 5's F2 fixture entered this exact state
+    // and asserted nothing about the notice, so it shipped green.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockResolvedValue({
+      data: {
+        badges: {
+          all: [{ id: 'b1', name: 'First Rep', tier: 'bronze', category: 'milestones', xp_reward: 10 }],
+          total_count: 40,
+        },
+        challenges: { active: [] },
+      },
+    });
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+
+    renderPage(<Achievements />);
+    await waitFor(() => expect(screen.getByText('First Rep')).toBeTruthy());
+    // The badge is VISIBLE, so the page may not say the badges are missing.
+    expect(screen.queryByText('Badges are unavailable right now.')).toBeNull();
+    expect(screen.queryByText('Loading badges…')).toBeNull();
   });
 
   it('a catalog with no `earned` field claims no count — F2', async () => {
@@ -472,8 +542,10 @@ describe('Achievements — the three payloads are independent — round 4 F4', (
     fireEvent.click(screen.getByText('Challenges'));
 
     await waitFor(() => expect(screen.getByText('Mystery Challenge')).toBeTruthy());
-    expect(screen.queryByText(/undefined/)).toBeNull();
+    // See the F11 note above: `/undefined/` cannot fail here. The dash is the
+    // assertion that can.
     expect(screen.getByText(`${'—'} / ${'—'}`)).toBeTruthy();
+    expect(screen.getByText('—%')).toBeTruthy();
   });
 
   it('old backend HANGS: no permanent "Failed to load" claim — round 3 F2', async () => {

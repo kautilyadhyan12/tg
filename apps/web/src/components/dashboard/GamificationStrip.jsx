@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Trophy, Target, Crown, ChevronRight, Sparkles } from 'lucide-react';
 import {
-  challengesKnown, earnedBadgeCount, formatFraction, formatLevel, formatXpProgress,
+  earnedBadgeCount, formatFraction, formatLevel, formatXpProgress,
   formatXpTotal, gamificationService, listState, oldPayloadState, orUnknown,
   progressWidth, readLeaderboardView, readOverviewView, xpBarWidth,
 } from '../../api/gamificationApi';
@@ -51,7 +51,7 @@ function ChallengeRow({ challenge }) {
     <div className="rounded-xl p-2.5" style={{
       background: 'rgba(0,0,0,0.20)',
       border:     '1px solid rgba(255,255,255,0.12)',
-      opacity:    challenge.completed ? 0.80 : 1,
+      opacity:    challenge.completed === true ? 0.80 : 1,
     }}>
       <div className="flex items-center gap-2 mb-1.5">
         <span className="text-base flex-shrink-0">{challenge.icon}</span>
@@ -59,7 +59,7 @@ function ChallengeRow({ challenge }) {
           <p className="text-xs font-semibold text-white truncate">{orUnknown(challenge.name)}</p>
           <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.70)' }}>
             {formatFraction(challenge.current, challenge.target)}
-            {challenge.completed && <span className="ml-1 text-green-400">✓</span>}
+            {challenge.completed === true && <span className="ml-1 text-green-400">✓</span>}
           </p>
         </div>
       </div>
@@ -69,7 +69,7 @@ function ChallengeRow({ challenge }) {
           transition={{ duration: 1, ease: 'easeOut' }}
           className="h-full rounded-full"
           style={{
-            background: challenge.completed
+            background: challenge.completed === true
               ? '#4ade80'
               : `linear-gradient(90deg, ${diffColor}, ${diffColor}bb)`,
           }}
@@ -160,9 +160,16 @@ export default function GamificationStrip() {
   // first badge" to a user who has badges.
   const earnedCount  = earnedBadgeCount(overview.badges.all);
   const earnedBadges = (overview.badges.all ?? []).filter((b) => b.earned === true);
+  // ROUND 6 F1: `recentBadges` is empty when the COUNT is unknown — showing a
+  // "latest earned" list we cannot verify would itself be a claim. But the
+  // STATE below must not borrow that test: `listState(oldState, earnedCount
+  // !== null)` classified a catalog that had arrived and was on screen as a
+  // FAILED read, printing "Badges are unavailable right now" beside a rendered
+  // "(—/40)". The list's state is whether the LIST arrived; the count is a
+  // separate question with a separate answer.
   const recentBadges = earnedCount === null ? [] : earnedBadges.slice(-3).reverse();
-  const badgesState     = listState(oldState, earnedCount !== null);
-  const challengesState = listState(oldState, challengesKnown(data));
+  const badgesState     = listState(oldState, overview.badges.all !== null);
+  const challengesState = listState(oldState, overview.challenges.active !== null);
 
   // Round 2 ③: `leaderboard.leaderboard` was an unguarded read while its
   // sibling was optional-chained, and a render throw blanks the page (no
@@ -198,11 +205,24 @@ export default function GamificationStrip() {
             </button>
           </div>
           <div className="flex flex-col gap-2 flex-1">
-            {challengesState === 'ready' ? (
+            {challengesState === 'ready' && overview.challenges.active.length > 0 ? (
               overview.challenges.active.slice(0, 3).map((c, i) => (
                 <ChallengeRow key={c.id ?? i} challenge={c} />
               ))
-            ) : challengesState === 'failed' ? (
+            ) : challengesState === 'ready' ? (
+              // ROUND 6 F6: a ready-but-empty list rendered an empty card body.
+              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+                No challenges this week
+              </p>
+            ) : challengesState === 'loading' ? (
+              // ROUND 6 F4: the loading arm rendered NOTHING, forever — mlApi
+              // sets no timeout, so a hung backend leaves this permanent. The
+              // sibling Achievements tab says "Loading challenges…" in the
+              // identical state: two standards, eight inches apart, again.
+              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+                Loading challenges…
+              </p>
+            ) : (
               // An empty list would read as "no challenges this week", which is
               // a claim we cannot make when the payload never arrived (round 2 ①)
               // — and only sayable once the read has FAILED, not while it is
@@ -210,7 +230,7 @@ export default function GamificationStrip() {
               <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
                 Challenges are unavailable right now
               </p>
-            ) : null}
+            )}
           </div>
         </div>
       </HeroCard>
@@ -326,12 +346,18 @@ export default function GamificationStrip() {
                    style={{ color: 'rgba(255,255,255,0.65)', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
                   {/* "earn your first badge" is a CLAIM about the user's
                       catalog, sayable only when the count is genuinely 0 —
-                      round 5 F2 restored it via `earned: false` defaults. */}
-                  {badgesState === 'ready'
-                    ? <>Complete workouts to<br />earn your first badge</>
+                      round 5 F2 restored it via `earned: false` defaults, and
+                      round 6 F1 showed the STATE must not borrow the count's
+                      test. Ready-with-unknown-count says neither.
+                      ROUND 6 F4: the loading arm was `null`, so a hung backend
+                      left this card body permanently empty. */}
+                  {badgesState === 'loading'
+                    ? <>Loading badges…</>
                     : badgesState === 'failed'
                       ? <>Badges are<br />unavailable right now</>
-                      : null}
+                      : earnedCount === 0
+                        ? <>Complete workouts to<br />earn your first badge</>
+                        : <>No badges to show</>}
                 </p>
               </div>
             )}

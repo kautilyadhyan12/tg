@@ -75,7 +75,27 @@ no-removal rule these UIs stay untouched and working on the old backend until
 then; none may be hidden or reduced to close the gap.
 
 - [ ] 🔴 **XP / levels display — UNTICKED 2026-07-26 by T3 round 3, STILL OFF
-      after rounds 4 AND 5.**
+      after rounds 4, 5 AND 6.**
+      **ROUND 6 (2026-07-27, fresh chat): 12 findings, 3 blocking, all fixed.**
+      Sixth consecutive round in which the previous round's fix opened the next
+      one. F1 is the headline and it is the INVERSE of this card's defect:
+      round 5's F2 fix made the earned-count null whenever any badge's `earned`
+      is unknown, and the list's STATE borrowed that test — so a catalog that
+      arrived and was rendered on screen got "Badges are unavailable right now."
+      printed directly above two visible badge cards. Not a fabricated number;
+      a false denial of content the user can see. Same rule, opposite sign.
+      F2/F3: `recommendations` was a SECOND unparsed list in Dashboard — round
+      5's claim that `recent_workouts` was "the ONE" was false. A non-array
+      value reached `.slice().map()` and blanked the entire page (no
+      ErrorBoundary), and six bare reads painted an unknown difficulty red and
+      "advanced". Also fixed: blank loading arms in the strip (F4), a fabricated
+      bronze tier ring (F5), three more empty-list states (F6), a literal
+      "Invalid Date" (F7), nullable booleans read as definite-false (F8), a
+      failed recent-workouts read looking like a zero-workout account (F9), a
+      fourth false claim in the guard (F10), two assertions that could not fail
+      for the class they named (F11), and a throw on `earnedBadgeCount(undefined)`
+      (F12). `badgesKnown`/`challengesKnown` DELETED — dead surface that still
+      carried five assertions, which reads as protection and is not.
       **ROUND 5 (2026-07-26, fresh chat): 8 more findings, 3 blocking, all
       fixed.** The pattern held a fifth time — round 4's own F4 fix created
       round 5's F1, and round 4's new readers created F2 and F3.

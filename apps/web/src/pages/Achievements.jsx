@@ -38,6 +38,15 @@ const CATEGORY_LABELS = {
 const OTHER_CATEGORY = 'other';
 const OTHER_LABEL    = 'Other';
 
+/** Round 6 F5: the treatment for a badge whose tier we do not know. Grey, no
+ *  ring colour, no glow — it must not read as any real tier. */
+const NEUTRAL_TIER = {
+  color: 'rgba(255,255,255,0.45)',
+  bg:    'rgba(10,9,8,0.75)',
+  ring:  'rgba(255,255,255,0.18)',
+  glow:  'none',
+};
+
 // ── Single badge card ─────────────────────────────────────────────────────────
 /** ROUND 5 F2: `badge.earned` is now true / false / NULL, and null must render
  *  as neither. The locked treatment — a padlock, grayscale, 45% opacity — is a
@@ -45,9 +54,14 @@ const OTHER_LABEL    = 'Other';
  *  same fabrication as printing a zero. Unknown keeps the icon, drops the
  *  padlock, and sits at an intermediate opacity that asserts nothing. */
 function BadgeCard({ badge, index }) {
-  const tier    = TIER_CONFIG[badge.tier] || TIER_CONFIG.bronze;
-  const earned  = badge.earned === true;
-  const unknown = badge.earned === null;
+  // ROUND 6 F5: `TIER_CONFIG[badge.tier] || TIER_CONFIG.bronze` FABRICATED a
+  // tier — a badge with no tier got a full bronze ring and bronze glow beside
+  // an empty tier pill. Round 5's own standard ("a padlock is a claim") applies
+  // identically to a bronze ring. Unknown tier gets a neutral treatment.
+  const tierKnown = badge.tier !== null && badge.tier in TIER_CONFIG;
+  const tier      = tierKnown ? TIER_CONFIG[badge.tier] : NEUTRAL_TIER;
+  const earned    = badge.earned === true;
+  const unknown   = badge.earned === null;
 
   return (
     <motion.div
@@ -92,7 +106,7 @@ function BadgeCard({ badge, index }) {
           color:      earned ? tier.color : 'rgba(255,255,255,0.35)',
         }}
       >
-        {badge.tier}
+        {orUnknown(badge.tier)}
       </span>
 
       {/* Name */}
@@ -133,7 +147,7 @@ function ChallengeCard({ challenge, index }) {
       transition={{ delay: 0.05 * index }}
       className="card-glass"
       style={{
-        opacity: challenge.completed ? 0.7 : 1,
+        opacity: challenge.completed === true ? 0.7 : 1,
       }}
     >
       <div className="flex items-start gap-3 mb-3">
@@ -177,8 +191,12 @@ function ChallengeCard({ challenge, index }) {
       <div className="flex justify-between text-2xs mb-1.5"
            style={{ color: 'rgba(255,255,255,0.50)' }}>
         <span>{formatFraction(challenge.current, challenge.target)}</span>
-        <span style={{ color: challenge.completed ? '#4ade80' : 'rgba(255,255,255,0.50)' }}>
-          {challenge.completed ? '✓ Complete' : `${orUnknown(challenge.progress)}%`}
+        {/* ROUND 6 F8: `completed === null` is unknown, not "not complete". The
+            percentage beside it is TRUE either way, so this stays a percentage
+            rather than a dash — but it must not imply a verified incomplete. */}
+        <span style={{ color: challenge.completed === true ? '#4ade80' : 'rgba(255,255,255,0.50)' }}
+              title={challenge.completed === null ? 'Completion state unavailable' : undefined}>
+          {challenge.completed === true ? '✓ Complete' : `${orUnknown(challenge.progress)}%`}
         </span>
       </div>
       <div
@@ -191,7 +209,7 @@ function ChallengeCard({ challenge, index }) {
           transition={{ duration: 1, ease: 'easeOut' }}
           className="h-full rounded-full"
           style={{
-            background: challenge.completed
+            background: challenge.completed === true
               ? 'linear-gradient(90deg, #4ade80, #22c55e)'
               : `linear-gradient(90deg, ${diffColor}, ${diffColor}cc)`,
           }}
@@ -204,7 +222,10 @@ function ChallengeCard({ challenge, index }) {
 // ── Leaderboard row ───────────────────────────────────────────────────────────
 /** `entry` is a readLeaderboardEntry() view — every field usable or NULL.
  *  Round 4 F5: `rank`, `name`, `level` and `badge_count` were read bare, so an
- *  entry missing them rendered "Lv undefined · undefined badges". */
+ *  entry missing them rendered "Lv  ·  badges" — an empty gap, NOT the literal
+ *  "undefined" this comment claimed for two rounds. React renders undefined as
+ *  nothing from a JSX child; only a template literal produces "undefined".
+ *  Round 6 F11 corrected the claim and the vacuous assertion built on it. */
 function LeaderboardRow({ entry, index }) {
   const isPodium = entry.rank !== null && entry.rank <= 3;
   const podiumColors = {
@@ -377,7 +398,15 @@ export default function Achievements() {
   // `oldFailed` — the ENVELOPE's state — left "envelope 200'd, list unusable"
   // in neither arm, so three tabs said "Loading…" permanently after both reads
   // had settled, with no failure notice either.
-  const badgesState     = listState(oldState, earnedCount !== null);
+  // ROUND 6 F1: this read `earnedCount !== null`, i.e. it used the COUNT's
+  // knowability as the LIST's. Round 5's own F2 fix made earnedBadgeCount
+  // return null whenever any element's `earned` is unknown — so a catalog that
+  // arrived, is enumerable, and is rendered on screen was classified as a
+  // FAILED read, and "Badges are unavailable right now." printed directly above
+  // two visible badge cards. That is the inverse of this card's defect: not a
+  // number nobody knows, but a denial of content the user can see. The list's
+  // state is whether the LIST arrived; the count is a separate question.
+  const badgesState     = listState(oldState, overview.badges.all !== null);
   const challengesState = listState(oldState, challenges !== null);
   const boardState      = listState(lbState,  board.entries !== null);
 
@@ -637,6 +666,16 @@ export default function Achievements() {
                   </p>
                 </div>
               )}
+              {/* ROUND 6 F6: round 5 added an empty-list notice for badges and
+                  left challenges and the leaderboard — plus the strip's
+                  challenges card — with a heading followed by nothing. */}
+              {challengesState === 'ready' && challenges.length === 0 && (
+                <div className="card-glass">
+                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                    No challenges this week.
+                  </p>
+                </div>
+              )}
               {(challenges ?? []).map((c, i) => (
                 <ChallengeCard key={c.id ?? i} challenge={c} index={i} />
               ))}
@@ -675,6 +714,10 @@ export default function Achievements() {
                   {boardState === 'failed'
                     ? 'The leaderboard is unavailable right now.'
                     : 'Loading the leaderboard…'}
+                </p>
+              ) : board.entries.length === 0 ? (
+                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                  No one on the leaderboard yet.
                 </p>
               ) : (
                 <div className="space-y-1">

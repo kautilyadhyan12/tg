@@ -76,12 +76,12 @@ export function oldPayloadState({ data, loading }) {
  *  arrived, not that the field inside it did, so a 200 with `{}` (the shape this
  *  file's own test adapter returns) still produced "(0/—)", "0 of — badges" and
  *  "Badges (0)". Array-shape is the honest question: can we enumerate them? */
-export function badgesKnown(data) {
-  return Array.isArray(data?.badges?.all);
-}
-export function challengesKnown(data) {
-  return Array.isArray(data?.challenges?.active);
-}
+// ROUND 6 F10: `badgesKnown` and `challengesKnown` are GONE. Round 5's
+// listState refactor made every call site read `overview.badges.all !== null`
+// instead, leaving two exported functions that nothing called and five
+// assertions testing them — dead surface with test coverage, which reads as
+// protection and is not (R1.3). The question they asked ("can this list be
+// enumerated?") is now asked directly of the reader's output.
 
 /** The state of ONE list, given the envelope's state and whether that list came
  *  out usable. Three values, never two.
@@ -244,7 +244,8 @@ export function readBadge(b) {
  *  the list is absent, or an element's `earned` is unknown. Round 5 F2: a count
  *  derived from a defaulted boolean is a fabrication with extra steps. */
 export function earnedBadgeCount(all) {
-  if (all === null) return null;
+  // Round 6 F12: `all === null` let `undefined` through to `.some` and threw.
+  if (!Array.isArray(all)) return null;
   if (all.some((b) => b.earned === null)) return null;
   return all.filter((b) => b.earned === true).length;
 }
@@ -266,6 +267,31 @@ export function readLeaderboardEntry(e) {
  *  Dashboard sites then fabricated with `|| 0` — "0 min · 0 kcal · 0% form", with
  *  an unknown accuracy painted RED by the <60 branch. Reachable on real data:
  *  the old backend returns serialized Mongo documents with no shape contract. */
+/** ROUND 6 F2/F3: `recommendationService.getRecommendations()` was the SECOND
+ *  unparsed list in Dashboard — round 5's claim that `recent_workouts` was "the
+ *  ONE list left unparsed" was false, and both were fixed in the same commit.
+ *  Six bare reads rendered from it, including a `difficulty` ternary whose
+ *  final `else` painted an UNKNOWN difficulty red-and-"advanced" — verbatim
+ *  round 5 F3's own defect, one list along. Worse, the list itself was only
+ *  `|| []`-guarded, so a non-array `recommendations` field reached `.slice()`
+ *  and threw, blanking the entire Dashboard (no ErrorBoundary in apps/web). */
+export function readRecommendation(r) {
+  return {
+    id:              text(r?.id),
+    name:            text(r?.name),
+    difficulty:      text(r?.difficulty),
+    primaryCategory: text(r?.primary_category),
+    caloriesPerMin:  finite(r?.calories_per_min),
+    aiSupported:     bool(r?.ai_supported),
+  };
+}
+
+/** The recommendations LIST, or null when it is absent or not a list. */
+export function readRecommendations(data) {
+  const l = list(data?.recommendations);
+  return l === null ? null : l.map(readRecommendation);
+}
+
 export function readRecentWorkout(w) {
   return {
     id:              text(w?.id),
