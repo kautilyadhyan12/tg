@@ -1,6 +1,65 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: SESSION CLOSE 2026-07-27 — read this FIRST, it supersedes the round-7
+      block below on smoke status. Branch web-repoint, HEAD 0404087.
+
+DONE THIS SESSION
+  · T3 rounds 4, 5, 6, 7 — 36 findings, 12 of them blocking, all fixed and
+    committed (1dd31cb, 59b1a1b, 85bbc6f, 9644fa5). Details in each round's
+    block below and in DECISIONS.
+  · The regex source-guard was RETIRED as the protection of record; jsdom +
+    @testing-library/react are now dev deps (Kd approved, R1.4) and
+    `apps/web/src/pages/xpDisplay.render.test.jsx` carries the real protection.
+    web 223 passed / 1 failed (224) — the 1 is the pre-existing syncClient
+    `window` quirk. Scoped lint 2 (Zap, ChevronRight) = baseline. Build green.
+  · **Neon DATABASE_URL rotated and VERIFIED** (0404087). OWED line ticked.
+    Kd reset it in the console and pasted the new value straight into
+    apps/api/.env in the editor — NOT through chat, which is how the old one
+    burned. Verified by query: neondb_owner / neondb / 46 public tables.
+
+THE SMOKE IS STILL OWED, AND THE FIRST ATTEMPT WAS INVALID — READ THIS
+  A mock old-backend now exists at `apps/web/tools/mock-ml-backend.mjs`. It
+  serves the nine response states the T3 rounds care about, switchable by
+  visiting http://localhost:8000/__state/<name> in a browser tab. It exists
+  because the states that hid rounds 4-7's defects (200-with-empty-body, a
+  catalog with no `earned` field, a hanging connection, a non-array
+  `recommendations`) CANNOT be produced by "the old server is off" — which is
+  the only state any previous smoke could reach. That is why those defects
+  survived human click-throughs.
+  **Kd ran the nine steps on 2026-07-27 and the run does not count.** The mock's
+  first version replied `Access-Control-Allow-Origin: *`, and a browser refuses
+  a wildcard on a credentialed request (`mlApi` sets `withCredentials: true`,
+  mlApi.js:5). Chrome blocked every call, so the app said "unavailable" in all
+  nine states including `healthy`. ONLY Test 1 (old backend genuinely
+  unreachable → dashes + a real Level 2) is a valid result. The CORS bug is
+  fixed and verified by curl; the whole run needs repeating.
+  LESSON, and it is the session's own lesson turned on its author: the rig was
+  handed over without being tested end-to-end. Run the `healthy` state FIRST as
+  a control — if real numbers do not appear, the rig is lying, not the app.
+
+STATE OF THE MACHINE AT SESSION END (all three may need restarting)
+  · new API   :3000  — cd apps/api; node --import tsx --env-file=.env src/index.ts
+  · web       :5173  — cd apps/web; corepack pnpm exec vite
+  · mock old  :8000  — node apps/web/tools/mock-ml-backend.mjs
+  · Docker: aihg-dev-postgres/redis/worker + aihg-mongo/-express were UP.
+  NOTE: do not pipe these into Select-Object — a closing pipe kills the process
+  (happened twice this session).
+
+OPEN, IN KD'S PREFERRED ORDER
+  1. **PostWorkout.jsx 100-XP bug** — the ONLY item on this list that is live
+     for real users; it renders after every workout and is wrong for everyone
+     above level 2. OWED has the line. Kd approved doing this next.
+  2. Re-run the smoke with the fixed rig (steps are reconstructable from the
+     nine state names; `healthy` first as the control).
+  3. T3 round 8 — seven rounds, seven times the previous fix opened the next
+     defect. `t3-xp-web-r8.diff` is written at the repo root, and the round-8
+     prompt is in this session's transcript.
+  4. Shut the three servers down / restore Docker if not already done.
+SPEC GAPs: none.
+```
+
+```
 TASK: WEB XP display + Dashboard XP — T3 ROUND 7  [FIXED, SMOKE + ROUND 8 OWED]
       branch web-repoint. 8 findings, 3 BLOCKING, all fixed. SEVENTH consecutive
       round to find the previous round's fix opened the next defect. 61 findings
