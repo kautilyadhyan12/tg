@@ -6,7 +6,8 @@ import { workoutService } from '../api/workoutApi';
 import { recommendationService } from '../api/recommendationApi';
 import {
   UNKNOWN, formatCount, formatLevel, formatNextLevel, formatXpFraction,
-  formatXpTotal, orUnknown, readRecommendations, readStatsView, xpBarWidth,
+  formatXpTotal, difficultyColor, oldPayloadState, orUnknown, readRecommendations,
+  readStatsView, xpBarWidth,
 } from '../api/gamificationApi';
 import { useXp } from '../hooks/useXp';
 import GamificationStrip from '../components/dashboard/GamificationStrip';
@@ -263,6 +264,17 @@ export default function Dashboard() {
   // same distinction for `recent`: `?? []` collapsed three states into two, so
   // a failed read looked exactly like a brand-new account with no workouts.
   const [recommendations, setRecommendations] = useState(null);
+  // ROUND 7 F1: recommendations needs its OWN settled flag. Round 6 derived
+  // `recsState` from `loading`, which only the getStats chain sets — so the
+  // recommendations read had no way to move its own state. Both failure modes
+  // this card exists to delete reproduced at once: stats settling first while
+  // recommendations were still in flight printed "unavailable" (a false denial
+  // during a healthy load, the defect oldPayloadState was written to remove),
+  // and a hanging stats read with failed recommendations printed "Loading…"
+  // forever (round 5 F1, the defect listState was written to remove). A state
+  // must never borrow another read's knowability — that is round 6 F1's rule,
+  // and this is the seventh consecutive round where the previous fix opened it.
+  const [recsLoading, setRecsLoading] = useState(true);
 
   useEffect(() => {
     // ROUND 5 security pass (R3.10): these two were `.catch(console.error)`,
@@ -283,7 +295,8 @@ export default function Dashboard() {
     // file's own comments cite that hazard three times while leaving this live.
     recommendationService.getRecommendations(6)
       .then((res) => setRecommendations(readRecommendations(res.data)))
-      .catch((err) => console.error('recommendations read failed:', err?.message));
+      .catch((err) => console.error('recommendations read failed:', err?.message))
+      .finally(() => setRecsLoading(false));
   }, []);
 
   // The old read fails on this branch permanently (mlApi's Bearer comes from
@@ -305,9 +318,12 @@ export default function Dashboard() {
   // ROUND 6 F9: `stats.recent ?? []` then `.length > 0` made a FAILED read
   // indistinguishable from a genuine zero-workout account — the card simply
   // vanished. Three states, like everywhere else on this page.
+  // Each read answers with its OWN settled flag (round 7 F1). `oldPayloadState`
+  // is the tested function for exactly this shape, so both go through it rather
+  // than repeating the ternary and getting one of them wrong again.
   const recent      = stats.recent;
-  const recentState = recent === null ? (loading ? 'loading' : 'failed') : 'ready';
-  const recsState   = recommendations === null ? (loading ? 'loading' : 'failed') : 'ready';
+  const recentState = oldPayloadState({ data: recent,          loading });
+  const recsState   = oldPayloadState({ data: recommendations, loading: recsLoading });
   const hours  = stats.totalMinutes === null
     ? null
     : Math.round((stats.totalMinutes / 60) * 10) / 10;
@@ -494,8 +510,11 @@ export default function Dashboard() {
         <GamificationStrip />
 
         {/* ── Recommended For You + Recent Workouts ─────────────────────────── */}
-        {(recsState !== 'ready' || recommendations.length > 0
-          || recentState !== 'ready' || recent.length > 0) && (
+        {/* ROUND 7 F8: this was gated so that BOTH lists being ready-and-empty
+            hid the whole section — suppressing "No workouts logged yet.", which
+            is knowable and true. The section is unconditional now; each half
+            always says what it knows. */}
+        {(
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
 
             {recsState !== 'ready' ? (
@@ -549,19 +568,27 @@ export default function Dashboard() {
                     <div className="grid grid-cols-2 gap-3">
                       {/* ROUND 6 F3: six bare reads lived here. The difficulty
                           ternary's final `else` painted an UNKNOWN difficulty
-                          red-and-"advanced" — verbatim round 5 F3's own defect,
-                          one list along — and `{ex.calories_per_min}` rendered
-                          " kcal/min", a unit with no number. Unknown difficulty
-                          is now neutral grey and every field goes through the
+                          the hard RED — the pill itself was EMPTY, since a bare
+                          `{ex.difficulty}` renders as nothing (round 7 F3
+                          corrected the earlier "red-and-advanced" wording, which
+                          was never renderable) — and `{ex.calories_per_min}`
+                          rendered " kcal/min", a unit with no number. Unknown
+                          difficulty is neutral grey via the shared
+                          `difficultyColor`, and every field goes through the
                           reader + orUnknown. */}
                       {recommendations.slice(0, 6).map((ex, i) => (
                         <motion.button
                           key={ex.id ?? i}
                           initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.05 * i }}
+                          // Round 7, security pass: `'…?exercise=' + ex.id` put
+                          // an unencoded external string into a query — an id
+                          // containing & or # silently corrupts the URL. No
+                          // injection sink (client-side route), but free to fix.
                           onClick={ex.id === null
                             ? undefined
-                            : () => triggerTransition(() => navigate('/exercises?exercise=' + ex.id))}
+                            : () => triggerTransition(() =>
+                                navigate('/exercises?exercise=' + encodeURIComponent(ex.id)))}
                           className="text-left rounded-2xl p-3 transition-all"
                           style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.12)' }}
                         >
@@ -573,10 +600,10 @@ export default function Dashboard() {
                                   : ex.difficulty === 'intermediate' ? 'rgba(255,138,31,0.25)'
                                   : ex.difficulty === null ? 'rgba(255,255,255,0.06)'
                                   : 'rgba(239,68,68,0.25)',
-                                color: ex.difficulty === 'beginner' ? '#4ade80'
-                                  : ex.difficulty === 'intermediate' ? '#FF8A1F'
-                                  : ex.difficulty === null ? 'rgba(255,255,255,0.45)'
-                                  : '#f87171',
+                                // Round 7 F2: the foreground goes through the
+                                // shared helper so all three difficulty sites
+                                // agree on what unknown looks like.
+                                color: difficultyColor(ex.difficulty),
                               }}
                             >
                               {orUnknown(ex.difficulty)}

@@ -1,6 +1,61 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: WEB XP display + Dashboard XP — T3 ROUND 7  [FIXED, SMOKE + ROUND 8 OWED]
+      branch web-repoint. 8 findings, 3 BLOCKING, all fixed. SEVENTH consecutive
+      round to find the previous round's fix opened the next defect. 61 findings
+      total across seven rounds.
+F1 (blocking) — ONE omission, BOTH failure modes. `recsState` derived from
+  `loading`, which only the getStats chain sets; the recommendations request had
+  .then/.catch and NO settled flag, so that read could never move its own state.
+  Stats settling first + recs in flight → "Recommendations are unavailable right
+  now." (false denial during a healthy load — what oldPayloadState exists to
+  delete). Stats hanging + recs failed → "Loading recommendations…" forever
+  (round 5 F1 — what listState exists to delete). Round 6's OWN F1 rule (never
+  borrow another read's knowability), broken by round 6's own three-state work.
+  FIX: a dedicated `recsLoading`, and both derivations now go through the tested
+  `oldPayloadState`. MUTATION-VERIFIED: reverting turns both new tests red.
+F2 (blocking) — round 6's difficulty "class fix" covered ONE SITE OF THREE. The
+  same hard-red `else` was live in ChallengeCard and ChallengeRow, plus a bare
+  `{challenge.difficulty}` pill. This is the standing memory note — fix the
+  CLASS, not the case — failed in the very round that named the class. One
+  exported `difficultyColor()` now, both vocabularies, neutral for null.
+F3 (blocking) — ROUND 6's F11 RULING VIOLATED BY THE F11 COMMIT. A
+  `not.toMatch(/advanced/i)` assertion that CANNOT FAIL: the pre-fix pill was a
+  bare `{ex.difficulty}`, React renders undefined as nothing, and "advanced"
+  appears nowhere in Dashboard.jsx. The defect was RED AND UNLABELLED. The false
+  premise propagated into 2 source comments + DECISIONS + OWED + the commit
+  message; all corrected per V2/V4, not just the assertion.
+ALSO: F4 stale comment naming the functions F10 deleted, 230 lines away · F5
+  seven bare nullable fields render BLANK where siblings print "—" · F6 the
+  record said "every read is === true now" — six bare isCurrentUser reads said
+  otherwise (benign render, real record defect) · F7 earnedBadgeCount([null])
+  threw — F12 guarded the argument, not the element · F8 the section vanished
+  when both lists were ready-and-empty · encodeURIComponent on a route query.
+CLEARED BY THE REVIEWER, do not re-litigate: R2.3's boundary is otherwise
+  intact — every network-fed useState crosses a reader, enumerated exhaustively,
+  NO fourth unparsed list · R3.10 clean at all five log sites · round 6 added no
+  new unguarded read or throw path · badgesKnown/challengesKnown deletion lost
+  no live coverage · NEUTRAL_TIER is visually distinct from bronze · the
+  listState matrix is correct at all five call sites.
+PROVE: web 223 passed / 1 failed (224), the 1 being the pre-existing syncClient
+  `window` quirk. Scoped lint 2 (Zap, ChevronRight) = baseline. Build green.
+  +4 tests; the two F1 render tests mutation-verified red, restored from a `cp`
+  backup (never `git checkout --`, per this card's own recorded incident).
+OPEN / NEXT:
+  1. **T3 ROUND 8** — seven rounds, seven times the fix opened the next thing.
+  2. **RE-SMOKE**, scope grew again: + a slow/hanging recommendations endpoint
+     beside a fast-FAILING stats endpoint (F1), + a challenge with no
+     difficulty (F2). On top of rounds 4-6's hung-backend, `{"stats":{}}`,
+     leaderboard-fails, missing-workout-metrics, no-`earned`-field, non-array
+     recommendations, and ready-but-empty states.
+  3. Both OWED ticks STAY OFF until 1 and 2 are done.
+  4. Then: PostWorkout.jsx 100-XP bug (OWED, live route) · rotate the Neon
+     password (OWED) · shut down the dev servers + restore Docker.
+SPEC GAPs: none.
+```
+
+```
 TASK: WEB XP display + Dashboard XP — T3 ROUND 6  [FIXED, SMOKE + ROUND 7 OWED]
       branch web-repoint. 12 findings, 3 BLOCKING, all fixed. SIXTH consecutive
       round to find the previous round's fix opened the next defect.

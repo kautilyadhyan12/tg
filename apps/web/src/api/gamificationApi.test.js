@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
 import mlApi from './mlApi';
 import {
-  UNKNOWN, earnedBadgeCount, formatCount, formatFraction, formatLevel,
+  UNKNOWN, difficultyColor, earnedBadgeCount, formatCount, formatFraction, formatLevel,
   formatXpProgress, formatXpTotal, gamificationService, listState,
   oldPayloadState, orUnknown, progressWidth, readBadge, readChallenge,
   readLeaderboardEntry, readLeaderboardView, readOverviewView,
@@ -207,6 +207,26 @@ describe('old-payload readers: every field is a usable value or NULL', () => {
     // ONE unknown element makes the whole count unknown — the alternative is a
     // number that silently under-reports.
     expect(earnedBadgeCount([{ earned: true }, { earned: null }])).toBeNull();
+    // Round 6 F12 guarded the ARGUMENT; round 7 F7 found the ELEMENT still
+    // unguarded, so `[null]` threw one layer in — same shape, same surface.
+    expect(earnedBadgeCount(undefined)).toBeNull();
+    expect(earnedBadgeCount([null])).toBeNull();
+    expect(earnedBadgeCount([undefined, { earned: true }])).toBeNull();
+  });
+
+  it('difficultyColor never paints an unknown as the hard branch — round 7 F2', () => {
+    // Three components each carried their own ternary whose final `else` was
+    // the hard/advanced RED, so an unknown difficulty rendered as a definite
+    // hard one. Round 6 F3 fixed one of the three and called it a class fix.
+    expect(difficultyColor('easy')).toBe('#4ade80');
+    expect(difficultyColor('beginner')).toBe('#4ade80');
+    expect(difficultyColor('medium')).toBe('#FF8A1F');
+    expect(difficultyColor('intermediate')).toBe('#FF8A1F');
+    expect(difficultyColor('hard')).toBe('#f87171');
+    expect(difficultyColor('advanced')).toBe('#f87171');
+    // THE ONES THAT MATTER: unknown is neutral, never red.
+    expect(difficultyColor(null)).toBe('rgba(255,255,255,0.45)');
+    expect(difficultyColor(undefined)).toBe('rgba(255,255,255,0.45)');
   });
 
   it('readLeaderboardEntry maps snake_case and nulls the rest', () => {
@@ -243,7 +263,7 @@ describe('old-payload readers: every field is a usable value or NULL', () => {
       primaryCategory: 'legs', caloriesPerMin: 8, aiSupported: true,
     });
     const bare = readRecommendation({ id: 'r1', name: 'Mystery Move' });
-    expect(bare.difficulty).toBeNull();       // must NOT fall into "advanced"
+    expect(bare.difficulty).toBeNull();       // must NOT fall into the red branch
     expect(bare.caloriesPerMin).toBeNull();   // must NOT render " kcal/min"
     expect(bare.aiSupported).toBeNull();      // F2's boolean rule
     expect(readRecommendation(null).id).toBeNull();

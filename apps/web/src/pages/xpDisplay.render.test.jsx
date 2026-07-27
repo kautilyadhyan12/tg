@@ -310,12 +310,58 @@ describe('GamificationStrip — XP renders when the old backend does not', () =>
     const { container } = renderPage(<Dashboard />);
     await waitFor(() => expect(screen.getByText('Mystery Move')).toBeTruthy());
 
-    expect(container.textContent).not.toMatch(/advanced/i);
+    // ROUND 7 F3: an `expect(textContent).not.toMatch(/advanced/i)` stood here
+    // and COULD NOT FAIL — the pre-fix pill was a bare `{ex.difficulty}`, which
+    // React renders as nothing when undefined, and the literal "advanced"
+    // appears nowhere in Dashboard.jsx. The defect was RED AND UNLABELLED, not
+    // "advanced". That is round 6 F11's own ruling, violated one screen away in
+    // the very commit that issued it — and the false premise then propagated
+    // into two source comments, DECISIONS, OWED and the commit message. The
+    // colour assertion below is the one that actually caught the live defect
+    // when mutation-tested; it is now the only one here.
     expect(container.textContent).toMatch(/— kcal\/min/);
-    // The difficulty pill reads as unknown rather than as a real level.
     const pill = screen.getAllByText('—').find((el) => el.className.includes('rounded-full'));
     expect(pill).toBeTruthy();
-    expect(pill.style.color).not.toContain('248');   // not the red branch
+    expect(pill.style.color).not.toContain('248');   // not the red/hard branch
+    expect(pill.style.color).toContain('255, 255, 255');   // the neutral one
+  });
+
+  it('recommendations IN FLIGHT are never called unavailable — round 7 F1', async () => {
+    // `recsState` derived from `loading`, which only the getStats chain sets —
+    // so the recommendations read could never move its own state. Stats
+    // settling first while recommendations were still in flight printed
+    // "Recommendations are unavailable right now.", a false denial during a
+    // perfectly healthy load. Round 6 F1's rule, violated by round 6's own
+    // three-state work: a state must never borrow another read's knowability.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    workoutService.getStats.mockResolvedValue({ data: { stats: { total_workouts: 3 } } });
+    recommendationService.getRecommendations.mockImplementation(HANGS);
+
+    renderPage(<Dashboard />);
+    await waitFor(() => expect(screen.getByText('Recommended For You')).toBeTruthy());
+
+    expect(screen.queryByText('Recommendations are unavailable right now.')).toBeNull();
+    expect(screen.getByText('Loading recommendations…')).toBeTruthy();
+  });
+
+  it('a FAILED recommendations read never says Loading forever — round 7 F1', async () => {
+    // The mirror image: stats hanging (mlApi sets no timeout, so permanent)
+    // with recommendations already failed printed "Loading recommendations…"
+    // for ever — round 5 F1's defect, which listState exists to delete.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    workoutService.getStats.mockImplementation(HANGS);
+    recommendationService.getRecommendations.mockImplementation(DEAD);
+
+    renderPage(<Dashboard />);
+    await waitFor(() =>
+      expect(screen.getByText('Recommendations are unavailable right now.')).toBeTruthy());
+    expect(screen.queryByText('Loading recommendations…')).toBeNull();
+    // And the stats half, genuinely still in flight, must NOT claim failure.
+    expect(screen.queryByText('Recent workouts are unavailable right now.')).toBeNull();
   });
 
   it('a leaderboard 200 missing its list does not blank the page', async () => {
@@ -546,6 +592,31 @@ describe('Achievements — the three payloads are independent — round 4 F4', (
     // assertion that can.
     expect(screen.getByText(`${'—'} / ${'—'}`)).toBeTruthy();
     expect(screen.getByText('—%')).toBeTruthy();
+  });
+
+  it('a challenge with no difficulty is not painted hard-red — round 7 F2', async () => {
+    // Round 6 F3 fixed this ternary in Dashboard and left the identical one
+    // live in ChallengeCard and ChallengeRow, so "fixed as a class" was true of
+    // one site in three.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockResolvedValue({
+      data: {
+        badges: { all: [], total_count: 40 },
+        challenges: { active: [{ id: 'c1', name: 'Mystery Challenge', current: 1, target: 3, progress: 33 }] },
+      },
+    });
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+
+    renderPage(<Achievements />);
+    await waitFor(() => expect(screen.getByText('Challenges')).toBeTruthy());
+    fireEvent.click(screen.getByText('Challenges'));
+    await waitFor(() => expect(screen.getByText('Mystery Challenge')).toBeTruthy());
+
+    // The difficulty pill must read "—" in neutral grey, not a hard-red blank.
+    const pill = screen.getAllByText('—').find((el) => el.className.includes('rounded-full'));
+    expect(pill).toBeTruthy();
+    expect(pill.style.color).toContain('255, 255, 255');
+    expect(pill.style.color).not.toContain('248');
   });
 
   it('old backend HANGS: no permanent "Failed to load" claim — round 3 F2', async () => {

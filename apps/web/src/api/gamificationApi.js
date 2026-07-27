@@ -212,6 +212,27 @@ export function progressWidth(v) {
   return v === null || v === undefined ? '0%' : `${Math.min(100, Math.max(0, v))}%`;
 }
 
+/** The accent colour for a difficulty, with UNKNOWN as neutral grey.
+ *
+ *  ROUND 7 F2: three components each carried their own ternary whose final
+ *  `else` was the hard/advanced RED, so an unknown difficulty was painted as a
+ *  definite hard one. Round 6 F3 fixed one of the three and the DECISIONS entry
+ *  called it "fixed as a class" — it was not. One function now, so the next
+ *  edit cannot fix a third of it. `easy`/`beginner` and `medium`/`intermediate`
+ *  are the challenge and recommendation vocabularies respectively; both are
+ *  matched here rather than in the call sites. */
+export function difficultyColor(difficulty) {
+  switch (difficulty) {
+    case 'easy':
+    case 'beginner':     return '#4ade80';
+    case 'medium':
+    case 'intermediate': return '#FF8A1F';
+    case null:
+    case undefined:      return 'rgba(255,255,255,0.45)';
+    default:             return '#f87171';
+  }
+}
+
 export function readChallenge(c) {
   return {
     id:          text(c?.id),
@@ -245,8 +266,10 @@ export function readBadge(b) {
  *  derived from a defaulted boolean is a fabrication with extra steps. */
 export function earnedBadgeCount(all) {
   // Round 6 F12: `all === null` let `undefined` through to `.some` and threw.
+  // Round 7 F7: the ELEMENT was still unguarded, so `[null]` threw one layer
+  // in — the same shape, on the same exported surface, in the fix for it.
   if (!Array.isArray(all)) return null;
-  if (all.some((b) => b.earned === null)) return null;
+  if (all.some((b) => b?.earned !== true && b?.earned !== false)) return null;
   return all.filter((b) => b.earned === true).length;
 }
 
@@ -271,7 +294,7 @@ export function readLeaderboardEntry(e) {
  *  unparsed list in Dashboard — round 5's claim that `recent_workouts` was "the
  *  ONE list left unparsed" was false, and both were fixed in the same commit.
  *  Six bare reads rendered from it, including a `difficulty` ternary whose
- *  final `else` painted an UNKNOWN difficulty red-and-"advanced" — verbatim
+ *  final `else` painted an UNKNOWN difficulty the hard/advanced RED — verbatim
  *  round 5 F3's own defect, one list along. Worse, the list itself was only
  *  `|| []`-guarded, so a non-array `recommendations` field reached `.slice()`
  *  and threw, blanking the entire Dashboard (no ErrorBoundary in apps/web). */
@@ -303,8 +326,11 @@ export function readRecentWorkout(w) {
   };
 }
 
-/** `{badges:{all,total_count}, challenges:{active}}` — lists are NULL when the
- *  payload cannot be enumerated, which is what badgesKnown/challengesKnown ask. */
+/** `{badges:{all,total_count}, challenges:{active}}` — a list is NULL when the
+ *  payload cannot be enumerated, which is the question `listState` asks of it.
+ *  (Round 7 F4: this sentence named badgesKnown/challengesKnown in the present
+ *  tense, 230 lines below the block deleting them — inside the very commit
+ *  whose F10 was about a comment describing code that no longer exists.) */
 export function readOverviewView(data) {
   const all    = list(data?.badges?.all);
   const active = list(data?.challenges?.active);

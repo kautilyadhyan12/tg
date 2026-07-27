@@ -75,7 +75,26 @@ no-removal rule these UIs stay untouched and working on the old backend until
 then; none may be hidden or reduced to close the gap.
 
 - [ ] 🔴 **XP / levels display — UNTICKED 2026-07-26 by T3 round 3, STILL OFF
-      after rounds 4, 5 AND 6.**
+      after rounds 4, 5, 6 AND 7.**
+      **ROUND 7 (2026-07-27, fresh chat): 8 findings, 3 blocking, all fixed.**
+      Seventh consecutive round in which the previous round's fix opened the
+      next one. F1: `recsState` derived from the STATS read's loading flag —
+      the recommendations request had no settled flag at all — so BOTH failure
+      modes this card exists to delete fired at once, a false "unavailable"
+      during a healthy load and a permanent "Loading…" against a hung backend.
+      F2: round 6's difficulty "class fix" covered one site of three; the
+      hard-red `else` was still live in ChallengeCard and ChallengeRow. There
+      is one exported `difficultyColor()` now. F3: round 6's F11 ruling
+      (an assertion whose stated failure mode the code cannot produce is
+      vacuous) was violated by the F11 commit itself — a `/advanced/i` check
+      that could never fail, whose false premise then propagated into two
+      source comments, DECISIONS, OWED and the commit message. All corrected.
+      Also: a stale comment naming deleted functions (F4), seven bare nullable
+      fields rendering blank where siblings print "—" (F5), six bare
+      `isCurrentUser` reads the record claimed were fixed (F6),
+      `earnedBadgeCount([null])` throwing one layer inside F12's own fix (F7),
+      a section that vanished when both lists were empty (F8), and an
+      unencoded id in a route query.
       **ROUND 6 (2026-07-27, fresh chat): 12 findings, 3 blocking, all fixed.**
       Sixth consecutive round in which the previous round's fix opened the next
       one. F1 is the headline and it is the INVERSE of this card's defect:

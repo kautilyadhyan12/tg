@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Trophy, Target, Crown, ChevronRight, Sparkles } from 'lucide-react';
 import {
-  earnedBadgeCount, formatFraction, formatLevel, formatXpProgress,
+  difficultyColor, earnedBadgeCount, formatFraction, formatLevel, formatXpProgress,
   formatXpTotal, gamificationService, listState, oldPayloadState, orUnknown,
   progressWidth, readLeaderboardView, readOverviewView, xpBarWidth,
 } from '../../api/gamificationApi';
@@ -43,9 +43,9 @@ function HeroCard({ bgImage, children, className = '', style = {}, onClick }) {
  *  Round 4 F5 — `current`/`target`/`progress` were read bare here, so a partial
  *  element rendered "undefined/undefined" and `width: "undefined%"`. */
 function ChallengeRow({ challenge }) {
-  const diffColor =
-    challenge.difficulty === 'easy'   ? '#4ade80' :
-    challenge.difficulty === 'medium' ? '#FF8A1F' : '#f87171';
+  // ROUND 7 F2: see Achievements.jsx's ChallengeCard — an unknown difficulty
+  // was painted the hard/advanced red here too.
+  const diffColor = difficultyColor(challenge.difficulty);
 
   return (
     <div className="rounded-xl p-2.5" style={{
@@ -54,7 +54,9 @@ function ChallengeRow({ challenge }) {
       opacity:    challenge.completed === true ? 0.80 : 1,
     }}>
       <div className="flex items-center gap-2 mb-1.5">
-        <span className="text-base flex-shrink-0">{challenge.icon}</span>
+        {/* Round 7 F5: bare reads render nothing when null — a blank where the
+            rest of the card prints "—". */}
+        <span className="text-base flex-shrink-0">{orUnknown(challenge.icon)}</span>
         <div className="flex-1 min-w-0">
           <p className="text-xs font-semibold text-white truncate">{orUnknown(challenge.name)}</p>
           <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.70)' }}>
@@ -175,7 +177,7 @@ export default function GamificationStrip() {
   // sibling was optional-chained, and a render throw blanks the page (no
   // ErrorBoundary exists in apps/web) — which would take the XP header down
   // too, re-creating ① by a third route.
-  const me       = board.entries?.find((e) => e.isCurrentUser) ?? null;
+  const me       = board.entries?.find((e) => e.isCurrentUser === true) ?? null;
   const userRank = me ? me.rank : board.currentUserRank;
 
   return (
@@ -327,7 +329,7 @@ export default function GamificationStrip() {
                       border:     `1px solid ${tierColor}40`,
                     }}
                   >
-                    <span className="text-xl flex-shrink-0">{b.icon}</span>
+                    <span className="text-xl flex-shrink-0">{orUnknown(b.icon)}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-bold text-white truncate"
                          style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>

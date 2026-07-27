@@ -5,9 +5,9 @@ import {
   Medal, Loader2, ChevronRight,
 } from 'lucide-react';
 import {
-  earnedBadgeCount, formatCount, formatFraction, formatLevel, formatNextLevel,
-  formatXpFraction, formatXpTotal, gamificationService, listState,
-  oldPayloadState, orUnknown, progressWidth, readLeaderboardView,
+  difficultyColor, earnedBadgeCount, formatCount, formatFraction, formatLevel,
+  formatNextLevel, formatXpFraction, formatXpTotal, gamificationService,
+  listState, oldPayloadState, orUnknown, progressWidth, readLeaderboardView,
   readOverviewView, xpBarWidth,
 } from '../api/gamificationApi';
 import { useXp } from '../hooks/useXp';
@@ -111,13 +111,18 @@ function BadgeCard({ badge, index }) {
 
       {/* Name */}
       <p className="text-sm font-bold text-white leading-tight mb-1">
-        {badge.name}
+        {/* ROUND 7 F5: these were bare reads. Per round 6 F11's own finding a
+            bare `{expr}` renders NOTHING when null, so an unknown name was a
+            blank region while the tier pill and XP reward four inches away in
+            the same card correctly printed "—". Two standards inside one
+            component. Text fields take the dash like every other unknown. */}
+        {orUnknown(badge.name)}
       </p>
 
       {/* Description */}
       <p className="text-2xs leading-relaxed"
          style={{ color: 'rgba(255,255,255,0.45)' }}>
-        {badge.description}
+        {orUnknown(badge.description)}
       </p>
 
       {/* XP reward */}
@@ -135,10 +140,12 @@ function BadgeCard({ badge, index }) {
 
 // ── Challenge card ────────────────────────────────────────────────────────────
 function ChallengeCard({ challenge, index }) {
-  const diffColor =
-    challenge.difficulty === 'easy'   ? '#4ade80' :
-    challenge.difficulty === 'medium' ? '#FF8A1F' :
-    '#f87171';
+  // ROUND 7 F2: the final `else` here painted an UNKNOWN difficulty red — the
+  // hard/advanced colour — which is a claim about data nobody has. Round 6 F3
+  // fixed exactly this ternary in Dashboard and left the two other components
+  // carrying it, so "fixed as a class" was not true of the class. Grey is the
+  // unknown colour, as everywhere else on these screens.
+  const diffColor = difficultyColor(challenge.difficulty);
 
   return (
     <motion.div
@@ -158,7 +165,7 @@ function ChallengeCard({ challenge, index }) {
             border:     `1px solid ${diffColor}30`,
           }}
         >
-          {challenge.icon}
+          {orUnknown(challenge.icon)}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
@@ -171,11 +178,11 @@ function ChallengeCard({ challenge, index }) {
                 color:      diffColor,
               }}
             >
-              {challenge.difficulty}
+              {orUnknown(challenge.difficulty)}
             </span>
           </div>
           <p className="text-xs" style={{ color: 'rgba(255,255,255,0.50)' }}>
-            {challenge.description}
+            {orUnknown(challenge.description)}
           </p>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
@@ -241,10 +248,15 @@ function LeaderboardRow({ entry, index }) {
       transition={{ delay: 0.04 * index }}
       className="flex items-center gap-3 py-3 px-3 rounded-xl transition-all"
       style={{
-        background: entry.isCurrentUser
+        // ROUND 7 F6: `isCurrentUser` is a bool() field — true / false / NULL —
+        // and these five reads were bare, so unknown fell into the not-me
+        // treatment. Benign in render (an absence, not a printed claim), but
+        // round 6's DECISIONS said "every read is === true now", which was
+        // false. Made explicit so the record and the code agree.
+        background: entry.isCurrentUser === true
           ? 'rgba(255,138,31,0.08)'
           : 'transparent',
-        border: entry.isCurrentUser
+        border: entry.isCurrentUser === true
           ? '1px solid rgba(255,138,31,0.20)'
           : '1px solid transparent',
       }}
@@ -271,10 +283,10 @@ function LeaderboardRow({ entry, index }) {
           // reader produces as `isCurrentUser`, so they were always undefined
           // and the current-user avatar highlight was dead. The three sites
           // around them were already correct, which is why it looked fine.
-          background: entry.isCurrentUser
+          background: entry.isCurrentUser === true
             ? 'linear-gradient(135deg, #FF8A1F, #FFB347)'
             : 'rgba(255,255,255,0.06)',
-          color: entry.isCurrentUser ? '#fff' : 'rgba(255,255,255,0.65)',
+          color: entry.isCurrentUser === true ? '#fff' : 'rgba(255,255,255,0.65)',
         }}
       >
         {entry.name === null ? '?' : entry.name[0].toUpperCase()}
@@ -284,7 +296,7 @@ function LeaderboardRow({ entry, index }) {
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-white truncate">
           {orUnknown(entry.name)}
-          {entry.isCurrentUser && (
+          {entry.isCurrentUser === true && (
             <span className="ml-2 text-2xs font-medium"
                   style={{ color: '#FF8A1F' }}>
               You
