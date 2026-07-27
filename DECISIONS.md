@@ -1248,3 +1248,416 @@ issued it (F3); round 6's F10 fix left a stale comment 230 lines away (F4).
 - (PROVE, post-round-7) web **223 passed / 1 failed (224)** â€” the 1 is the pre-existing `syncClient` `window` quirk. Scoped lint **2 errors** (`Zap`, `ChevronRight`), the current baseline. `vite build` green. +4 tests: two render tests for F1's two failure modes (both mutation-verified red against the reverted fix, restored from a `cp` backup), one for F2's unknown difficulty, and unit tests for `difficultyColor` and `earnedBadgeCount([null])`.
 - (BOTH OWED TICKS STAY OFF) Round 7 was not clean. Smoke scope grows again: a slow/hanging recommendations endpoint beside a fast-failing stats endpoint (F1), and a challenge with no difficulty (F2).
 
+
+## 2026-07-27 — PostWorkout XP repoint: the last copy of the 100-XP curve
+
+The item HANDOFF's session-close block ranked first and the only one on that
+list live for real users. Web-only on `web-repoint`: no API change, no
+migration, no new dependency.
+
+- (SCOPE) **SIX** `xp`-derived render sites plus TWO for the delta, one file.
+  (**CORRECTED at T3, F3:** this said "five", which was wrong under its own
+  reading — the same bullet counts the bar. Measured, not recounted from memory:
+  `formatLevel` ×3, `formatXpFraction`, `formatNextLevel`, `xpBarWidth` = 6, and
+  `formatXpEarned` ×2.) `summary.current_xp % 100` and its `{xpProgress}/100 XP`
+  caption are DELETED; level, position-in-level and the bar width now come from
+  `useXp()` (`GET /v1/gamification/me`) through the shared formatters, exactly as
+  `888e750` did for the Dashboard.
+- (LAST COPY — claim narrowed at T3, F4) The original wording here said a grep
+  for `% 100` and `/100 XP` "returns only two Dashboard COMMENTS and the render
+  assertion". That was a RECONSTRUCTION, not a paste — the exact habit the OWED
+  edit in this same commit corrects someone else for. What the greps actually
+  return: `% 100` → 7 hits (2 Dashboard comments, 1 PostWorkout comment, 2 in
+  the render test, 1 in the guard's new comment, and `index.css`'s unrelated
+  `background-size: 200% 100%`); `/100 XP` → 5 hits, NONE of them in Dashboard
+  (1 PostWorkout comment, 4 test lines). The claim that survives, and the only
+  one worth making: **no live code path computes the curve anywhere in
+  `apps/web/src`** — every hit is prose, an assertion banning it, or CSS.
+- (WHY IT WAS WRONG, verified not recalled) `summary.current_xp` is the user's
+  TOTAL XP — the old endpoint returns `user.get("xp", 0)`
+  (backend-ml/app/routers/workouts.py, the block returning `"current_xp"`) — so
+  `% 100` assumed every level costs 100. The real curve is
+  `floor(100*(level-1)^1.8)`: 100, 248, 374. Wrong for every user above level 2,
+  after every workout.
+- (THE SHARE CARD WAS THE HALF THE OWED LINE DID NOT NAME) `ShareCard` rendered
+  `Level {summary.current_level}` into the downloadable PNG. Repointing only the
+  visible card would have left one screen printing two different levels — and
+  the stale one is the one that leaves the building as an image. The two stores
+  diverge BY DESIGN (xp.ts's governing rule), so both surfaces now read the one
+  source. This is the same class as the Achievements header-vs-leaderboard
+  contradiction already on OWED, and it would have been shipped by a fix that
+  read the OWED line without opening the file.
+- (`xp_earned` STAYS, guarded) It is THIS workout's delta and the new API has no
+  per-workout field (`xpViewSchema` carries total/level/xpInLevel/xpForNext/
+  progressPct/nextLevelAt). Keeping it is NO-REMOVAL; guarding it with
+  `formatXpEarned` is R2.3 — an absent field reads "—", never "+0", which would
+  claim the workout earned nothing.
+- (DECLARED BEHAVIOUR CHANGE) The bar's `initial` is now 0. It used to animate
+  from the pre-workout position via `xpProgress - summary.xp_earned`, which
+  cannot survive the repoint: the width is now the new API's `progressPct` while
+  the delta is the OLD store's, so subtracting one from the other is arithmetic
+  across two stores that diverge by design. Reconstructing a true "before" would
+  be client-side XP maths — the thing this card deletes.
+- (**MY OWN ASSERTION COULD NOT FAIL FOR THE DEFECT IT NAMED — caught by
+  mutating, before handover**) The `xp_earned` guard test asserted
+  `not.toMatch(/\+undefined/)` plus a positive "—". Dropping the guard passed it
+  GREEN. Two reasons, both this project's recorded classes: React renders
+  `undefined` as NOTHING, so the real output is a bare "+" and the string
+  "+undefined" never existed (round 6 F11's exact finding); and the positive "—"
+  was satisfied by the SHARE CARD, which still had its guard, so the page's own
+  card was never examined. Rewritten to assert BOTH sites by identity
+  (`getByText('experience points').previousElementSibling.textContent === '—'`),
+  which now fails with `expected '+' to be '—'`. Recorded because the lesson is
+  that mutation-testing is what caught it at authoring time rather than at round
+  4 — the discipline the XP and DPDP cards each had to learn across five rounds.
+- (the guard did its job unprompted, second time) `gamificationApi.test.js`
+  derives its consumer list from the files importing `useXp`, so adding
+  PostWorkout turned it RED before a line of the new render code was reviewed —
+  exactly as it did for Dashboard. List updated, not weakened.
+- (NOT added to the "XP renders independently" gated list, and why) PostWorkout's
+  whole render is gated on `summary`, and that is not the round-2 ② defect: the
+  summary IS this screen's subject, so there is no post-workout page without it.
+  Stated rather than forced, since adding it to that list would have required
+  either a false assertion or a contortion of the page.
+- (SMOKE RIG EXTENDED, in-repo) `apps/web/tools/mock-ml-backend.mjs` now serves
+  `/workouts/:id/summary` — without it the page is unreachable in a browser on
+  this branch in EVERY state (old backend down → its own catch toasts and
+  redirects to /dashboard; old backend up and 401ing → mlApi redirects to
+  /login, OWED). The `partial` state serves a summary with no `xp_earned`. The
+  fixture's `current_level: 7` / `current_xp: 578` are deliberately unlike the
+  new API's level 3, so "Level 7" or "78/100" appearing anywhere on that screen
+  means the repoint has regressed. Driven by curl before handover.
+- (SCOPE HELD, Kd-ruled at the plan gate) The wider defect — the `summary`
+  payload is UNPARSED, so `getFormGrade(undefined)` returns a definite grade
+  **D** / "Keep practicing" for a score we were never sent — is REPORTED, not
+  fixed (R1.1), on its own OWED line with the evidence. Same for the
+  fire-and-forget sync race that can leave this screen one workout stale.
+- (PROVE) web **226 passed / 1 failed (227)** — the 1 is the pre-existing
+  `syncClient` VITE_API_URL env quirk (`window is not defined` in node, CI-green,
+  DECISIONS 2026-07-15) — up from the 223/224 baseline, i.e. +3 tests and
+  nothing else disturbed. `vite build` ✓. Lint on PostWorkout.jsx: **4 errors +
+  1 warning = EXACT baseline parity**, verified by linting `git show
+  HEAD:...PostWorkout.jsx` rather than assumed — same rules (`Math.random`
+  purity ×4 inside the untouched `Confetti`, one `exhaustive-deps`), only the
+  line numbers shifted. Both test files lint clean. Three mutations verified
+  red→green: the `% 100` curve (all three tests red, the DOM showing "78/100
+  XP"), the share card's `current_level` (red, the DOM showing "Level 7" beside
+  the card's own "Level —"), and the dropped `xp_earned` guard. Restores from
+  `cp` backups, never `git checkout --` (this project's recorded process
+  failure).
+- (OWED TICK WITHHELD) The 🔴 line stays unticked until a fresh-chat T3 and Kd's
+  browser smoke both pass. Applying that standard to this card rather than
+  relaxing it is the whole point of the precedent.
+
+## PostWorkout XP repoint — T3 round 1 (2026-07-27; fresh chat) — 7 findings, 2 blocking, ALL fixed
+
+The reviewer mutation-tested the new assertions rather than reading them, and
+found the SECOND vacuous assertion in a card whose own DECISIONS entry had just
+recorded finding the first. Both blocking findings are the same shape and it is
+this project's most-recorded one: **the fix is right, the protection is not.**
+
+- (F1, BLOCKING — R9.5, the predicted second vacuous assertion, in the very
+  assertion written to cover both sites) `not.toMatch(/Level [78]\b/)` CANNOT
+  FIRE at the site this card is about. The row renders as one unbroken run of
+  text — `…Level 3230/374 XP…` — so with `summary.current_level` restored it
+  reads `Level 7230/374`, and there is no word boundary between "7" and "2".
+  The reviewer's mutation m2b (old read back in the row's left span) left test 1
+  **GREEN**; only test 2's `/Level\s*\d/` sweep caught it. It matched for the
+  SHARE CARD only by luck of adjacency — the next character there happens to be
+  an emoji. So the comment beside it, claiming it "also covers the SHARE CARD",
+  was true of the card and false of the row it was written next to. Fixed by
+  dropping `\b`, and re-mutated. **Two vacuous assertions in one card, both
+  found by mutating rather than reading** — the first by me, the second by a
+  reviewer doing what I had told them to do because of the first.
+- (F2, BLOCKING — R9.1/R9.5, the bar had NO protection of record) The OWED line
+  names the bar AND the caption; only the caption was guarded. The reviewer's
+  mutation `animate={{ width: `${summary.current_xp % 100}%` }}` **passed all
+  three new render tests and the source guard.** ⚠ **THE EXPLANATION THAT STOOD
+  HERE IS FALSE AND IS STRUCK — see the round 2 entry below.** It read
+  "framer-motion never runs `animate` under jsdom, so the node is `width: 0px`
+  in every state", presented in bold as "the part worth keeping". It is not:
+  `0px` is the `initial`, and the node settles at the real width after the
+  element's own delay+duration. Struck in place rather than reworded, per T3
+  round 3 F4 — which found this site still uncorrected with its correction 113
+  lines away, and counted the premise in SIX places where round 2's own entry
+  claimed four. HELPER_CALL is
+  satisfied by any single helper call elsewhere in the file, and FIELD_READ only
+  bans fields of `xp`. FIXED with a per-consumer ban on `summary.current_(xp|
+  level)` in the comment-stripped source. This is knowingly a REGEX, against
+  round 4's standing "add a render assertion instead" — because here one cannot
+  exist without mocking framer-motion across the whole file, which is its own
+  card and is now on OWED. The comment says so in those words: a tripwire, not
+  proof.
+- (F6, V2 — a fixture labelled "real" that the server cannot produce) The
+  render file's `XP_LEVEL_3` carried `xpForNext: 248 / progressPct: 92.7 /
+  nextLevelAt: 596` at level 3. **248 is LEVEL 2's span.** Recomputed from
+  `xp.ts` itself: `xpForLevel(3)=348`, `xpForLevel(4)=722`, so a total of 578 at
+  level 3 is 230 in level, span **374**, `round(230/374*100*10)/10 = 61.5`, next
+  at **722**. The two files in this card's own area disagreed about the same
+  curve — `gamificationApi.test.js`'s fixture already had 374/722 right.
+  Pre-existing (the XP card wrote it), corrected here rather than left, because
+  a block labelled "a real /v1/gamification/me xp block" that is impossible is
+  how a later reader learns the wrong curve. My two assertions moved to 230/374.
+- (F3/F4/F5, V1/V2 — three of my own counts were reconstructions) "Five render
+  sites" (it is six, plus two for the delta); the "last copy" grep claim (a
+  paraphrase — actual output now pasted, and the claim narrowed to the one that
+  survives: no live code path); and OWED's "roughly fourteen further bare
+  reads". **Measured for the record, and the reviewer's own number checked
+  rather than laundered: 40 `summary.*` occurrences, minus 3 comment-only and 3
+  `xp_earned` (which IS guarded) = 34 bare reads across NINE distinct fields —
+  the review said eight.** V1 applies to a finding exactly as it applies to a
+  claim.
+- (F7, three-state honesty — a blank page the smoke would have hit) A 200 with
+  no `summary` key sets `summary = undefined` WITHOUT throwing, so the catch
+  never runs: no toast, no redirect, a blank white page. Pre-existing and part
+  of the unparsed-summary gap, but this card's `empty200` branch is what makes
+  it reachable, so it is named in the rig comment and on the OWED line — a white
+  screen in that state is the KNOWN state, not a broken rig. That distinction is
+  the whole lesson of the invalidated smoke run recorded on 2026-07-27.
+- (R3.10, in-scope and declared) The summary fetch's catch logged the WHOLE
+  axios error. `useXp.js` — imported by this same file — logs `err?.message` and
+  cites R3.10 by name, so this was two standards eight inches apart. Fixed to
+  message-only. **The review's own claim about it is corrected here:** it said
+  the leak carries `Authorization: Bearer <token>`; on this branch it does not,
+  because `mlApi` attaches the header only `if (token)` and Card 1 stopped
+  writing `localStorage.accessToken` — which is the SAME overstatement OWED.md
+  already corrected once on 2026-07-26, made again by a fresh reviewer. Real,
+  but less urgent than reported.
+- (Done gate — the reviewer's sharpest non-code point) The smoke steps for this
+  card existed ONLY in the authoring chat, which is precisely the handover shape
+  that produced the invalidated run. They are now in the repo at
+  `RUNBOOK/smoke-postworkout-xp.md`, numbered, with a ✅ per step and the
+  control state first.
+- (out of scope, reported → OWED) `Running.jsx`'s `stats?.running_level ?? 1`
+  is a fabricated level on a live screen — verbatim the `user?.level || 1` class
+  this card deletes, on a different payload. Its own line.
+- (what the reviewer CLEARED, so it is not re-litigated) The declined
+  summary-parse boundary is drawn where the record says: the only field this
+  diff touches is `xp_earned` and it is guarded at both sites. Security pass
+  otherwise clean — no new authn/authz/tenancy/SQL surface, `xp` crosses
+  `readXpView`'s parse, no secrets, no new deps, the rig is localhost-only.
+
+- (SMOKE — PASSED, Kd 2026-07-27, gates "done") Every step ✅ against local
+  api + web + the mock rig: the XP row reads `Level 3` · `332/374 XP` ·
+  `Level 4`; the share card's preview shows the SAME level (the two-levels-on-
+  one-screen defect confirmed absent in a browser); the `partial` state turns
+  the `+70` delta into an em dash rather than `+0` or a bare `+`; and with
+  `/v1/gamification/me` blocked in devtools the level reads `—` and `—/— XP`
+  while the form score, calories and delta survive — i.e. a failed XP read does
+  not blank a page that has no ErrorBoundary.
+- (THE FIXTURE IS WHY THE SMOKE PROVES ANYTHING, recorded because the last two
+  smokes on this project lost time to the instrument) A Level-1 or Level-2
+  account CANNOT demonstrate this fix: level 2 genuinely costs exactly 100 XP,
+  so the correct curve and the deleted `% 100` maths print the same string. The
+  account was therefore built to Level 3 through the real API — register, four
+  consecutive-day workout syncs at perfect form, then the fitness profile so the
+  mandatory onboarding gate (Card 6) does not intercept the tester — landing on
+  total 680, i.e. `332/374` correct versus `80/100` buggy. Two different
+  numbers on screen is the whole point; a fixture where they agree would have
+  passed with the bug live. Also recorded: `POST /v1/workouts/sync` requires the
+  `Idempotency-Key` header to EQUAL the body's `workoutId` (a mismatch 400s with
+  `idempotency_key_mismatch`), which cost a first attempt.
+- (dev-DB residue, stated rather than left to be discovered) The smoke account
+  `smoke-xp@example.com` and its four backdated squat workouts now live in the
+  dev database. Harmless — production launches EMPTY (DECISIONS 2026-07-13) —
+  but it is a fixture a later reader will meet, and the DPDP purge suite's own
+  precedent is that data left outside a test's fixtures must be said out loud.
+- (STATUS) OWED's 🔴 line is TICKED. The basis is recorded on that line: round 1
+  found no behaviour defect in the page — both blocking findings were gaps in
+  the protection around an already-correct fix — and the defect itself is now
+  browser-verified. A round 2 is RECOMMENDED, not blocking: nobody has reviewed
+  round 1's fixes, and two of the three fixes I wrote in this card were
+  themselves defective on first attempt.
+
+## PostWorkout XP repoint — T3 round 2 (2026-07-28; fresh chat) — 8 findings, 3 blocking, ALL fixed
+
+Round 2 probed rather than read, and its headline is the worst kind this
+project records: **round 1's central technical premise was false, and three
+artefacts were built on it.** Second consecutive round to find that the fix was
+right and the protection was not.
+
+- (R2 F1, BLOCKING — R9.5, the THIRD vacuous assertion in this card, and it is
+  round 1's F1 INVERTED) `getAllByText(/Level 3/).length >= 2` is satisfied by
+  the PAGE's own two level sites before the share card is ever reached. Mutation
+  — ShareCard's `formatLevel` → `formatNextLevel`, so the downloadable PNG
+  prints Level 4 while the page prints Level 3 — left the suite GREEN. That is
+  verbatim the defect ShareCard was brought into scope to prevent, and this
+  entry's own words for it ("one screen printing two different levels, and the
+  stale one leaves the building as an image"). The symmetry is the lesson: round
+  1's F1 was a positive "—" satisfied by the CARD so the page went unexamined;
+  this is a positive "Level 3" satisfied by the PAGE so the card went
+  unexamined. Same blind spot, opposite direction, one round apart. FIXED by
+  identity (`getByText('+70 XP').nextElementSibling`), plus an EXACT count so a
+  vanishing site is still caught. Mutation-verified: `expected 'Level 4' to be
+  'Level 3'`.
+- (R2 F2, BLOCKING — V1/V2, **the false premise, and it was mine**) Round 1
+  asserted in **SIX** places (**"FOUR" CORRECTED at round 3 F4 — an uncounted
+  count, inside the entry written to punish uncounted counts; measured by grep:
+  gamificationApi.test.js, xpDisplay.render.test.jsx, OWED.md, DECISIONS.md ×1,
+  HANDOFF.md ×2, of which three were still uncorrected when round 3 ran**) that
+  "framer-motion never runs `animate` under jsdom —
+  the node is `width: 0px` in every state". **Measured on framer-motion 12.42.2:
+  false.** `0px` is the `initial`; after the bar's own `delay: 0.8 + duration:
+  1` it settles at the real width — I probed it directly this session and
+  watched it go `"0px"` → `"61.5%"`. Round 1 read the DOM ~1.8s early, because
+  the existing `waitFor` resolves long before the animation ends, then
+  generalised ONE INSTANT into "every state". That is measuring the case and
+  calling it the class — this project's most-recorded mistake — committed inside
+  the fix written for that same mistake. Three things rested on it, all now
+  undone: round 4's standing "add a render assertion instead" was overridden
+  when it never needed to be; an OWED card to mock framer-motion across 28 tests
+  was raised and is now STRUCK; and the regex substituted for the assertion is
+  bypassable in one line — a destructure (`const { current_xp = 0 } = summary`)
+  puts the deleted curve back in the bar with everything green. FIXED with the
+  DOM assertion that was always available: `expect(…style.width).toBe('61.5%')`.
+  Mutation-verified against the destructure: `expected '78%' to be '61.5%'`.
+- (R2 F2 follow-on, caught while proving the fix) The new assertion first failed
+  as **"Test timed out in 5000ms"** rather than on the width, because `waitFor`
+  was given 6s inside vitest's 5s default test budget. A timeout is not a result
+  — it reads as flaky infrastructure and hides the assertion that did the work
+  (the DPDP card's recorded lesson). The test now carries its own 10s budget, so
+  the mutant fails on the number.
+- (R2 F3, BLOCKING — R9.5) The round-1 regex shipped with NO control, so
+  rewriting it as `/summaryZZZ…/` and restoring `% 100` in the bar left the
+  suite green — while it was, at that moment, the ONLY protection the bar had.
+  Round 4's F1(b) verbatim ("appending a contradiction disarmed the whole scan
+  silently because it had no positive control"), committed ~75 lines below the
+  comment recording it, and it falsified this section's standing claim that a
+  disarmed regex "fails loudly". Positive AND negative controls added;
+  mutation-verified `expected false to be true`.
+- (R2, non-blocking, all fixed) The rig's `path.includes('/summary')` also
+  swallowed `/running/sessions/:id/summary`, answering the running screen with a
+  workout payload — in the one instrument whose header warns that a lying rig
+  gets blamed on the app; now anchored to `/workouts/:id/summary`. · `useXp.js`
+  still said FOUR components mount it; PostWorkout made it five, so round 5 F6's
+  sentence went stale AGAIN for the identical reason, and is now counted from
+  the importers. · The F6 correction cited `gamificationApi.test.js`'s fixture as
+  corroboration; that fixture is ITSELF impossible (`total: 330, level: 3` — 330
+  is level 2, since `xpForLevel(3)` = 348), so two of six fields agreeing was
+  coincidence. Comment corrected; the fixture is on OWED, not fixed here (R1.1,
+  it is the XP card's file). · Duplicated HANDOFF lines merged.
+- (R2 Done gate — the runbook omitted the two things that made the smoke work)
+  It said "use an account at Level 2 or above" without saying how to build one,
+  and sent the tester to the summary route without noting it is
+  `<ProtectedRoute>`-wrapped behind the mandatory onboarding gate, so a fresh
+  account is intercepted first. Both facts lived only in DECISIONS prose — the
+  same shape the file's own header was written about. The account recipe
+  (register → four consecutive-day perfect-form syncs → fitness profile, with
+  the `Idempotency-Key`-equals-`workoutId` trap named) is now IN the runbook,
+  with a check that it reports level 3 before the tester proceeds.
+- (**THE TICK COMES OFF, and the reviewer was right on both counts**) It named
+  no commit while nothing is committed, against OWED's own "tick it, date it,
+  NAME THE COMMIT". And the argument used to justify ticking without a clean
+  round — "round 1 found no behaviour defect, only protection gaps" — is exactly
+  what the re-tick precedent forecloses, since that precedent was written after
+  a round found behaviour defects a click-through could not see. Round 2 then
+  found precisely that: a screen-visible level contradiction passing green.
+- (a scratch file I nearly shipped, recorded because the mechanism is dull and
+  dangerous) The framer-motion probe was written to `apps/web/src/pages/` and
+  "deleted" with a relative `rm -f` run from the WRONG working directory — `-f`
+  suppresses the error, so it reported success and the file survived, joining
+  the suite as an 18th test file. Caught by noticing the file COUNT move, not by
+  any test. Scratch files belong in the scratchpad; a delete that cannot fail is
+  a delete you have not verified.
+- (security pass — clean, second consecutive round) Reviewer re-confirmed: no
+  new authn/authz/tenancy/SQL surface, no new dependency, `xp` reaches both
+  render sites only through `readXpView`'s parse, `formatXpEarned` rejects
+  non-finite input, the R3.10 fix is correct and round 1's narrowing of the
+  Bearer-token claim stands, and the two remaining `console.error(err)` in the
+  file are html2canvas/clipboard errors carrying no request config — so the
+  OWED axios-sweep boundary holds as written.
+- (PROVE, post-round-2) web **228 passed / 1 failed (229)** — the 1 is the
+  pre-existing syncClient env quirk — up from 226/227, i.e. +2 controls and
+  nothing else disturbed. `vite build` ✓. Lint on PostWorkout.jsx = exact
+  baseline parity (4 errors + 1 warning). All three blocking fixes
+  mutation-verified red→green, restores from `cp` backups verified by md5sum.
+
+## PostWorkout XP repoint — T3 round 3 (2026-07-28; fresh chat) — 8 findings, 2 blocking, ALL fixed
+
+Round 3 re-measured round 2's three blocking fixes and confirmed all three hold
+(framer-motion probed at 1841 ms settle; the bar assertion proven not to be
+timing-luck by mutating to a width the sweep PASSES THROUGH; the disarmed-regex
+controls firing on both layers; the anchored rig regex driven with curl). Then
+it found the thing all three rounds have been circling.
+
+- (R3 F1, BLOCKING — V1/V2 + Part I.6 S1, **the worst placement possible**) The
+  falsified framer-motion premise was still stated as FACT in `HANDOFF.md`'s top
+  block — the artefact S1 makes mandatory reading before a new chat may speak —
+  in two places, one of them under the heading **"THE FINDING WORTH CARRYING
+  FORWARD"**, i.e. the exact text the next chat lifts. Every other site had been
+  corrected in place; these two had corrections sitting 74 and 21 lines further
+  down, which is not a correction, it is a contradiction with a gap in it. Both
+  now marked in place. The count in round 2's own entry said the premise was
+  asserted in FOUR places; measured, it is SIX, with three still uncorrected
+  when round 3 ran (R3 F4) — an uncounted count inside the entry written to
+  punish uncounted counts.
+- (R3 F2, BLOCKING — R9.1/R9.5, **a live fabrication class on four screens that
+  passed all 229 tests**) `xpBarWidth` had ZERO assertions. It was not even
+  imported into the test file — it appeared only inside two regex STRINGS. Its
+  own doc claims a [0,100] clamp and "unknown is 0% … a bar cannot say unknown",
+  and nothing tested either. **The sibling `progressWidth` has exactly that
+  test**: two functions with the same contract, one tested, and the tested one
+  is not the one on the congratulations screen. Mutation-verified: returning
+  '100%' for unknown — a full yellow bar beside "—/— XP" on all four render
+  sites — left the suite byte-identical to baseline. The one stated reason not
+  to assert it ("the DOM is unreadable") had already been proven false by round
+  2, so this gap outlived its own excuse.
+- (**THE FIX'S FIRST VERSION WAS TIMING-LUCK, AND MY OWN MUTATION CAUGHT IT**)
+  I first added `await waitFor(() => expect(bar.style.width).toBe('0%'))`. Under
+  the mutation that render assertion **PASSED** — only the unit test failed —
+  because the bar sweeps 0 → 100% and `waitFor` needs ONE matching poll, which
+  the start of the sweep supplies. The unknown case is precisely the one where
+  start and end are the same value, so "it was 0% at some instant" asserts
+  nothing. Replaced by settle-then-assert-once (2.4s > the measured 1.84s
+  window). Both layers now fail on the mutant. The lesson generalises past this
+  card: **`waitFor` is the wrong instrument whenever the value you are asserting
+  is also the value it starts at.**
+- (R3 F6, R9.5 failure quality) The bar assertion read
+  `container.querySelector('.from-yellow-500').style` directly, so a pure
+  restyle (`from-yellow-500` → `from-amber-500`, no XP change) failed after 6.35s
+  with a bare `TypeError: Cannot read properties of null` — an opaque result
+  reading as broken infrastructure, which is round 2's own 5s-budget lesson
+  reintroduced one line under its own comment. Now an `xpBar()` helper asserts
+  the anchor matches EXACTLY ONE node first, so the failure names its cause and
+  the anchor's uniqueness is itself pinned.
+- (R3 F5, V2) "Both sites are now asserted by identity" was false — the page's
+  delta is identity-anchored, the share card's was a text query. The CLAIM is
+  corrected rather than the test contorted, and the reason is recorded: in that
+  fixture the level is KNOWN, so the card's neighbouring line reads "Level 3",
+  which the page renders twice more and cannot anchor. `getByText` throws when
+  absent, so it cannot pass vacuously; it is a scoped text query, now labelled
+  as one.
+- (R3 F3, V1) My OWED line said four of `validXp`'s six fields are unreachable
+  together. No reading yields four: hold `total: 330` and five are wrong; hold
+  the other five and exactly ONE is — the block is `xpProgress(400)` to the
+  digit, so the fix is `total: 400`. Corrected, and the recompute-don't-hand-
+  calculate rule restated, since that is the whole lesson of the fixture this
+  one was cited to corroborate.
+- (R3 F7/F8, runbook) "Two more things" listed three. And the recipe's stated
+  total of 680 is DATE-DEPENDENT: `streak_3` keys on the current streak, which
+  zeroes once the gap from the hardcoded dates exceeds a day, so later runs land
+  on 630 (`282/374`). The gate survives either way — both are level 3 with
+  `xpForNext` 374 — so the runbook now states the range and says explicitly that
+  only the level and the denominator are load-bearing.
+- (security note, pre-existing, TAKEN because the file was already open) The rig
+  reflected the caller's Origin with `credentials: true` AND bound every
+  interface, so `/__state/<name>` — a state-changing GET with no auth — was
+  flippable by any page on the same wifi, and the symptom would have looked like
+  an app bug. Now bound to `127.0.0.1`, with a note for the owed mobile smoke.
+  Re-driven by curl after the change: workout summary answers with and without a
+  query string, the running path still correctly returns `{}`.
+- (what round 3 CLEARED, recorded so round 4 need not re-derive it) The recorded
+  2026-07-27 smoke is NOT invalidated by the rig narrowing — the anchored regex
+  still answers every workout-summary path in healthy/partial/empty200 and only
+  stopped giving a WRONG answer on the running path. And the ordinary production
+  interleaving nobody had entered — XP arriving AFTER the summary, i.e. two
+  different backends — was probed: the page shows `Level —` / `—/— XP` / an
+  empty bar in flight, then settles to Level 3 / 230/374 / 61.5% at ~2761 ms. No
+  defect; the in-flight dash is the ruled behaviour.
+- (PROVE, post-round-3) web **229 passed / 1 failed (230)** — the 1 is the
+  pre-existing syncClient env quirk — up from 228/229, i.e. +1 test and nothing
+  else disturbed. `vite build` ✓. Lint = exact baseline parity (4 errors + 1
+  warning on PostWorkout.jsx, everything else clean). F2 mutation-verified
+  red→green at BOTH layers after the settle-then-assert fix.
+- (STATUS) Round 3 was not clean, so the 🔴 tick stays OFF and nothing is
+  committed. Three rounds, one shape: the fix is right, the protection is not.

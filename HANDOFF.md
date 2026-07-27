@@ -1,6 +1,170 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: PostWorkout XP repoint — the LAST copy of the 100-XP curve
+      [T3 ROUND 1 DONE: 7 findings, 2 blocking, ALL FIXED. SMOKE OWED.]
+      branch web-repoint, based on HEAD 3516331. Web-only: no API change, no
+      migration, no new dependency. NOT COMMITTED — the working tree carries
+      it; commit after the smoke per the loop order.
+
+T3 ROUND 1 (fresh chat, run by Kd) — the reviewer MUTATED rather than read,
+and found the SECOND vacuous assertion in a card that had just recorded
+finding the first. Both blocking findings were "the fix is right, the
+protection is not":
+  · F1 `not.toMatch(/Level [78]\b/)` could not fire at the site this card is
+    about — the row renders as one run of text ("Level 7230/374"), where no
+    word boundary exists between "7" and "2". It matched for the share card
+    only because the next character there is an emoji. Mutation m2b left
+    test 1 GREEN. Fixed by dropping `\b`; now caught by three tests.
+  · F2 THE BAR had no protection at all. ⚠ **THE REASON GIVEN HERE WAS FALSE —
+    see round 2 below; framer-motion DOES land `animate` widths in jsdom, it
+    just settles ~1.8s in.** Left in place with this marker rather than
+    rewritten, because it is the claim round 2 overturned. A `% 100` mutation
+    in the bar passed all three render tests
+    AND the source guard. Now held by a per-consumer ban on
+    `summary.current_(xp|level)`, labelled in the code as a tripwire, not
+    proof. Mocking framer-motion is the real fix and is on OWED.
+  · F6 the render fixture claimed to be "a real xp block" and could not be:
+    xpForNext 248 is LEVEL 2's span. Recomputed from xp.ts — 374 / 61.5 / 722.
+  · F3/F4/F5 three of my own counts were reconstructions, now measured. NB
+    the review's own numbers were checked, not laundered: it said the summary
+    has 8 unparsed fields; it is 9.
+  · F7 a 200 with no `summary` key renders a BLANK page (no toast, no
+    redirect). Pre-existing; named in the rig + on OWED so the smoke reads it
+    as the known state.
+  · Done gate: the smoke steps existed only in a chat — the shape that
+    invalidated the last run. Now at RUNBOOK/smoke-postworkout-xp.md.
+  · R3.10: the summary catch logged the whole axios error; message-only now.
+    The review said it leaks a Bearer token — on this branch it does not
+    (mlApi attaches the header only `if (token)`), the same overstatement
+    OWED corrected once already on 2026-07-26.
+
+WHAT CHANGED (4 files + 3 records)
+  · apps/web/src/pages/PostWorkout.jsx — `summary.current_xp % 100` and its
+    `{xpProgress}/100 XP` caption DELETED. Level, position-in-level and the bar
+    now come from `useXp()` through the shared formatters (the 888e750
+    Dashboard shape). ShareCard moved to the SAME source — it read
+    `summary.current_level`, so the page and the downloadable PNG would
+    otherwise print two different levels. `xp_earned` stays (this workout's
+    delta; the new API has no such field) but is guarded → "—", never "+0".
+  · gamificationApi.test.js — consumer list +PostWorkout.jsx (it went red on
+    its own first, as it did for Dashboard).
+  · xpDisplay.render.test.jsx — +3 render tests, all mutation-verified.
+  · tools/mock-ml-backend.mjs — serves /workouts/:id/summary; `partial` omits
+    xp_earned. Without this the page is unreachable in a browser on this branch
+    in every state. Driven by curl.
+  · OWED.md (quote corrected, tick WITHHELD, +2 lines) · DECISIONS.md · here.
+
+PROVE (post-round-1)
+  web 226 passed / 1 failed (227) — the 1 is the pre-existing syncClient
+  VITE_API_URL env quirk, unchanged; up from 223/224, so +3 and nothing else
+  disturbed. vite build ✓. Lint on PostWorkout.jsx = EXACT baseline parity
+  (4 errors + 1 warning, same rules), verified by linting the committed version
+  rather than assumed; both test files clean. The two mutations that previously
+  slipped through are now caught — m2b by three tests, m5 by the new guard —
+  and every restore was from a `cp` backup verified by md5sum, never
+  `git checkout --`.
+
+THE FINDING WORTH CARRYING FORWARD
+  THREE vacuous assertions in one card: one I found by mutating my own work
+  before handover, one the reviewer found in the assertion I had written to fix
+  the first, and one whole render site (the bar) that no test could see at all.
+  Reading an assertion tells you nothing about whether it can fail.
+  ⚠ **THE "LESSON" THIS BLOCK ORIGINALLY CARRIED WAS FALSE, and it was the
+  worst place in the repo to put a false claim** — S1 makes this block mandatory
+  reading, and it was headed "carry forward", i.e. the exact text the next chat
+  lifts. It said "a render test cannot see a framer-motion `animate` prop under
+  jsdom". IT CAN: `0px` is the `initial` and the node settles at the real width
+  after the element's own delay+duration (round 2 measured it; round 3
+  reproduced it at 1841 ms). Corrected in place per T3 round 3 F1, which found
+  it still standing here after every other site had been fixed.
+  THE REAL LESSON, which survives: an assertion that has not been mutated is not
+  protection, and **a premise measured at one instant is not a premise about
+  every state**. Round 3 then found the same shape again one layer down — a
+  `waitFor` for the unknown bar could pass on a transient frame at the start of
+  the sweep, so it was replaced by a settle-then-assert.
+
+SMOKE — PASSED (Kd, 2026-07-27), every step. OWED's 🔴 line is TICKED.
+  Steps live at RUNBOOK/smoke-postworkout-xp.md (they were chat-only until the
+  T3 caught it — the shape that invalidated the previous run).
+  THE FIXTURE MATTERS: a Level-1/2 account CANNOT prove this fix, because level
+  2 costs exactly 100 XP so the right curve and the deleted maths print the same
+  string. Built to Level 3 through the real API (register → 4 consecutive-day
+  perfect-form syncs → fitness profile so the mandatory onboarding gate does not
+  intercept), giving `332/374` correct vs `80/100` buggy. NB
+  POST /v1/workouts/sync requires Idempotency-Key == body workoutId.
+  Left in the DEV db: smoke-xp@example.com + 4 backdated squat workouts.
+
+T3 ROUND 2 (2026-07-28, fresh chat) — 8 findings, 3 blocking, ALL FIXED.
+  · F1 THE THIRD vacuous assertion, and round 1's F1 inverted: the share-card
+    level was never examined, because `getAllByText(/Level 3/).length >= 2` is
+    satisfied by the PAGE's own two sites. The PNG could print Level 4 beside a
+    page printing Level 3 with everything green. Now asserted by identity.
+  · F2 **ROUND 1's CENTRAL PREMISE WAS FALSE.** "framer-motion never runs
+    `animate` under jsdom" — measured: `0px` is the `initial`, and it settles at
+    the real width after delay+duration. Round 1 read the DOM ~1.8s early and
+    called one instant "every state". The bar is now asserted in the DOM
+    (`style.width === '61.5%'`), which catches a destructure bypass the regex
+    cannot; round 4's "add a render assertion" was never really overridden; and
+    the OWED framer-motion-mock card is STRUCK as raised on a false premise.
+  · F3 the round-1 regex had no positive control, so disarming it was silent —
+    round 4 F1(b) verbatim, ~75 lines under the comment recording it.
+  · Also: the rig swallowed `/running/sessions/:id/summary`; `useXp`'s "FOUR
+    components" went stale again (five now); the F6 correction cited a fixture
+    that is ITSELF impossible (on OWED); the runbook omitted the account recipe
+    and the onboarding gate that intercepts a fresh account.
+  · A scratch probe file survived a relative `rm -f` run from the wrong
+    directory and joined the suite as an 18th test file. Caught by the file
+    COUNT moving, not by a test.
+
+THE OWED TICK IS BACK OFF. It named no commit while nothing is committed, and
+  the "no behaviour defect, only protection gaps" argument is exactly what the
+  re-tick precedent forecloses — round 2 then found a screen-visible defect
+  passing green. Re-ticks on a clean round plus a commit.
+
+PROVE (post-round-2): web 228 passed / 1 failed (229) — the 1 is the syncClient
+  env quirk — up from 226/227. Build ✓. Lint = exact baseline parity. All three
+  blocking fixes mutation-verified red→green.
+
+T3 ROUND 3 (2026-07-28, fresh chat) — 8 findings, 2 blocking, ALL FIXED.
+  Round 3 re-measured round 2's three fixes and all three HOLD (framer-motion
+  settle probed at 1841 ms; the bar assertion proven not to be timing-luck; the
+  regex controls firing; the rig regex curl-driven). Then:
+  · F1 the falsified framer-motion premise was STILL stated as fact in this
+    file's top block — twice, one under "THE FINDING WORTH CARRYING FORWARD",
+    the text a new chat lifts — with its corrections 74 and 21 lines below.
+    Corrected in place. Round 2 said the premise sat in FOUR places; it was SIX.
+  · F2 BLOCKING, and the real one: `xpBarWidth` had ZERO assertions — not even
+    imported into the test file. A mutant returning '100%' for unknown (a full
+    bar beside "—/— XP" on four screens) left all 229 tests green. Its SIBLING
+    `progressWidth` has exactly the missing test.
+  · MY FIRST FIX FOR F2 WAS TIMING-LUCK and my own mutation caught it: a
+    `waitFor(…toBe('0%'))` PASSES under that mutant, because the bar sweeps
+    0 → 100% and waitFor needs one matching poll, which the start supplies.
+    **waitFor is the wrong instrument when the asserted value is also the
+    starting value.** Now settle-then-assert-once.
+  · Also: an opaque TypeError when the Tailwind anchor is renamed (now a helper
+    that asserts cardinality first); "both sites by identity" was false (claim
+    corrected, not the test contorted); my `validXp` miscount (it is ONE field,
+    `total: 400`); the runbook's "two things" listing three and its date-
+    dependent 680 total; and the rig now binds 127.0.0.1 rather than every
+    interface, since `/__state/<name>` is an unauthenticated state-changing GET.
+
+PROVE (post-round-3): web 229 passed / 1 failed (230) — the 1 is the syncClient
+  env quirk — up from 228/229. Build ✓. Lint = exact baseline parity. F2
+  mutation-verified red→green at BOTH layers.
+
+OPEN, IN ORDER
+  1. Round 4 T3 — round 3 was not clean either. THREE rounds, one shape: the fix
+     is right, the protection around it is not. Diff: t3-postworkout-xp.diff.
+  2. COMMIT — nothing is committed; the working tree carries everything.
+  3. Then re-tick OWED's 🔴 line, naming the commit.
+  4. Still open from the previous session: re-run the nine-step XP smoke with
+     the fixed rig, and T3 round 8 on the XP work (`t3-xp-web-r8.diff`).
+SPEC GAPs: none.
+```
+
+```
 TASK: SESSION CLOSE 2026-07-27 — read this FIRST, it supersedes the round-7
       block below on smoke status. Branch web-repoint, HEAD 0404087.
 

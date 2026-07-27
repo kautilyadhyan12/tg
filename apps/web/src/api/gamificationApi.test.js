@@ -16,7 +16,7 @@ import mlApi from './mlApi';
 import {
   UNKNOWN, difficultyColor, earnedBadgeCount, formatCount, formatFraction, formatLevel,
   formatXpProgress, formatXpTotal, gamificationService, listState,
-  oldPayloadState, orUnknown, progressWidth, readBadge, readChallenge,
+  oldPayloadState, orUnknown, progressWidth, readBadge, readChallenge, xpBarWidth,
   readLeaderboardEntry, readLeaderboardView, readOverviewView,
   readRecentWorkout, readRecommendation, readRecommendations, readStatsView,
   readXpView,
@@ -375,6 +375,26 @@ describe('unknown-safe formatters', () => {
     expect(formatFraction(null, 5)).toBe(`${UNKNOWN} / 5`);
     expect(formatFraction(2, null)).toBe(`2 / ${UNKNOWN}`);
   });
+  // T3 round 3, BLOCKING: `xpBarWidth` had ZERO assertions — it was not even
+  // imported here, appearing only inside two regex STRINGS. Its own doc claims
+  // a [0,100] clamp and "unknown is 0% … a bar cannot say unknown", and nothing
+  // tested either: a mutant returning '100%' for unknown — a full yellow bar
+  // beside "—/— XP" on all FOUR of its render sites — left the whole suite
+  // green. The clamp test below was written for the SIBLING function, which is
+  // the tell: two functions with the same contract, one tested, and the tested
+  // one is not the one on the congratulations screen.
+  it('xpBarWidth clamps, and unknown is an EMPTY track not a full one', () => {
+    expect(xpBarWidth({ progressPct: 61.5 })).toBe('61.5%');
+    expect(xpBarWidth({ progressPct: -10 })).toBe('0%');
+    expect(xpBarWidth({ progressPct: 9999 })).toBe('100%');
+    // THE ONE THAT MATTERS: a bar cannot render "unknown", so it renders empty.
+    // A full bar would be a claim of progress nobody knows.
+    expect(xpBarWidth(null)).toBe('0%');
+    expect(xpBarWidth(undefined)).toBe('0%');
+    expect(xpBarWidth({})).toBe('0%');
+    expect(xpBarWidth({ progressPct: 'nope' })).toBe('0%');
+  });
+
   it('progressWidth clamps, and unknown is an EMPTY track not a full one', () => {
     expect(progressWidth(40)).toBe('40%');
     expect(progressWidth(-10)).toBe('0%');
@@ -480,6 +500,7 @@ function codeAt(rel) {
 
 const FIELD_READ = /(?<![.\w$])xp\s*\??\s*(\.\s*\w+|\[)/;
 const HELPER_CALL = /format(Level|XpTotal|XpFraction|NextLevel|XpProgress)\s*\(|xpBarWidth\s*\(/;
+const OLD_XP_PAYLOAD = /summary\s*\??\.\s*current_(xp|level)/;
 
 describe('no file under src reads a FIELD of xp — only gamificationApi.js may', () => {
   // Repo-wide, so a component receiving `xp` as a PROP (XPBar today) or one
@@ -510,6 +531,25 @@ describe('no file under src reads a FIELD of xp — only gamificationApi.js may'
     expect(FIELD_READ.test('xpBarWidth(xp)')).toBe(false);
   });
 
+  // T3 round 2, BLOCKING #3: OLD_XP_PAYLOAD shipped with NO control, so
+  // rewriting it as `/summaryZZZ…/` and putting `% 100` back in the bar left the
+  // suite 71/71 GREEN. That is round 4's F1(b) verbatim — "appending a
+  // contradiction to FIELD_READ disarmed the whole scan silently because it had
+  // no positive control" — committed about seventy lines BELOW the comment that
+  // records it, and it falsified this section's own standing claim that a
+  // disarmed regex "fails loudly". It did not; it failed silently, and at the
+  // time it was the only protection the bar had.
+  it('OLD_XP_PAYLOAD actually matches the old reads (positive control)', () => {
+    expect(OLD_XP_PAYLOAD.test('summary.current_xp % 100')).toBe(true);
+    expect(OLD_XP_PAYLOAD.test('Level {summary.current_level}')).toBe(true);
+    expect(OLD_XP_PAYLOAD.test('summary?.current_xp')).toBe(true);
+  });
+
+  it('OLD_XP_PAYLOAD does not match innocent text (negative control)', () => {
+    expect(OLD_XP_PAYLOAD.test('summary.xp_earned')).toBe(false);
+    expect(OLD_XP_PAYLOAD.test('formatXpFraction(xp)')).toBe(false);
+  });
+
   it('every scanned file is field-read clean', () => {
     // The RAW check applies only to NON-consumers. A consumer legitimately
     // DISCUSSES these fields in prose — GamificationStrip's comment explains
@@ -535,8 +575,13 @@ describe('no file under src reads a FIELD of xp — only gamificationApi.js may'
 
 describe('the useXp consumers render through helpers', () => {
   it('finds every consumer by import, not by a hardcoded list', () => {
+    // PostWorkout.jsx joined on 2026-07-27 (the OWED 🔴 line: the last copy of
+    // the hardcoded-100 curve). As with Dashboard before it, this assertion went
+    // RED before a line of the new render code was reviewed — which is the whole
+    // point of deriving the list from the imports instead of hardcoding it.
     expect(xpConsumers().map((f) => basename(f)).sort()).toEqual([
-      'Achievements.jsx', 'Dashboard.jsx', 'GamificationStrip.jsx', 'Sidebar.jsx',
+      'Achievements.jsx', 'Dashboard.jsx', 'GamificationStrip.jsx',
+      'PostWorkout.jsx', 'Sidebar.jsx',
     ]);
   });
 
@@ -551,6 +596,23 @@ describe('the useXp consumers render through helpers', () => {
       expect(src, basename(abs) + ': no helper call').toMatch(HELPER_CALL);
       expect(src, basename(abs) + ': pre-card shape').not.toMatch(/\buser(Data)?\s*\??\.\s*(xp|level)\b/);
       expect(src, basename(abs) + ': snake_case shape').not.toMatch(/xp_in_level|xp_for_next|progress_pct/);
+      // A cheap tripwire on the OLD XP payload — nothing more, and the history
+      // of this line is why it says so.
+      //
+      // Round 1 added it as THE protection for the XP bar, on the stated premise
+      // that "framer-motion never runs `animate` under jsdom — the node is
+      // width: 0px in every state", so no render assertion was possible.
+      // **THAT PREMISE IS FALSE** (T3 round 2, measured): 0px is the `initial`,
+      // and after the bar's own `delay: 0.8 + duration: 1` it settles at the
+      // real width. Round 1 read the DOM ~1.8s too early and generalised one
+      // instant into "every state" — measuring the case and calling it the
+      // class. The bar is now asserted in the DOM where it always could have
+      // been (xpDisplay.render.test.jsx), so round 4's standing "add a render
+      // assertion instead" is satisfied rather than overridden, and this line is
+      // back to being what the rest of this section is: an early warning at the
+      // SPELLING level, not proof. A destructure defeats it in one line.
+      expect(src, basename(abs) + ': reads the OLD XP payload')
+        .not.toMatch(OLD_XP_PAYLOAD);
     }
   });
 });

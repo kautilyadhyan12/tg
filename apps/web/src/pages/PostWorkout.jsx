@@ -8,8 +8,40 @@ import {
   Apple, Heart, Download, Share2,
 } from 'lucide-react';
 import { workoutService } from '../api/workoutApi';
+import { useXp } from '../hooks/useXp';
+import {
+  UNKNOWN, formatLevel, formatNextLevel, formatXpFraction, xpBarWidth,
+} from '../api/gamificationApi';
 import toast from 'react-hot-toast';
 import html2canvas from 'html2canvas';
+
+// ── XP on this screen ─────────────────────────────────────────────────────────
+// THE LEVEL AND THE POSITION WITHIN IT COME FROM `GET /v1/gamification/me` via
+// useXp — never from the workout summary, and never computed here.
+//
+// What stood here until 2026-07-27 (OWED.md's 🔴 line, raised by the Dashboard
+// card's T3 as its F4): `const xpProgress = summary.current_xp % 100`, rendered
+// as `{xpProgress}/100 XP`. `summary.current_xp` is the user's TOTAL XP — the
+// old endpoint returns `user.get("xp", 0)`, backend-ml/app/routers/workouts.py,
+// in the block returning `"current_xp"` — so that expression assumed every level
+// costs exactly 100. The real curve is `floor(100 * (level-1)^1.8)`
+// (badges.py:215-227, ported verbatim into the API's xp.ts), i.e. levels cost
+// 100, 248, 374 … — so the bar and its "Level N+1" caption were wrong for every
+// user above level 2, on the screen shown after EVERY workout. This was the LAST
+// copy in the app; the Dashboard's identical bug went the same way in 888e750.
+//
+// The server already sends the position within the level, so no XP arithmetic
+// remains on this page (R3.1, and the Kd ruling of 2026-07-26 which names this
+// exact shape as the thing not to copy). Unknown renders as an em dash — never a
+// Level 1, never a 0.
+//
+// `xp_earned` STAYS on the old summary payload: it is THIS workout's delta and
+// the new API has no per-workout field (`xpViewSchema` carries total, level,
+// xpInLevel, xpForNext, progressPct, nextLevelAt — no delta). Keeping it is the
+// NO-REMOVAL rule; guarding it is R2.3 — an absent field must read "—" and not
+// "+0", which would claim the workout earned nothing.
+/** "+50", or the em dash when the old backend sent no usable number. */
+const formatXpEarned = (v) => (Number.isFinite(v) ? `+${v.toLocaleString()}` : UNKNOWN);
 
 // ── Confetti ──────────────────────────────────────────────────────────────────
 function Confetti() {
@@ -61,7 +93,13 @@ function StarRating({ value, onChange }) {
 }
 
 // ── Share Card (the div that gets screenshot'd) ───────────────────────────────
-function ShareCard({ summary, cardRef }) {
+/** Takes the same `xp` block the page's own XP card renders. It used to read
+ *  `summary.current_level`, i.e. the OLD store's level, while the card beside it
+ *  showed the new API's — so one screen printed two different levels, and the
+ *  one that left the building as a downloadable PNG was the stale one. The two
+ *  stores diverge BY DESIGN (the new one recomputes from history — see xp.ts's
+ *  governing rule), which is exactly why both surfaces must read one source. */
+function ShareCard({ summary, xp, cardRef }) {
   const date = new Date().toLocaleDateString('en-IN', {
     day: 'numeric', month: 'short', year: 'numeric',
   });
@@ -155,8 +193,8 @@ function ShareCard({ summary, cardRef }) {
         }}>
           <span style={{ fontSize: 18 }}>⚡</span>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#fbbf24' }}>+{summary.xp_earned} XP</div>
-            <div style={{ fontSize: 11, color: '#6b7280' }}>Level {summary.current_level}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#fbbf24' }}>{formatXpEarned(summary.xp_earned)} XP</div>
+            <div style={{ fontSize: 11, color: '#6b7280' }}>Level {formatLevel(xp)}</div>
           </div>
         </div>
         {summary.current_streak > 0 && (
@@ -225,6 +263,13 @@ export default function PostWorkout() {
   const navigate       = useNavigate();
   const { triggerTransition } = useTransition();
 
+  // The NEW API's XP block. Its own request, independent of the summary read —
+  // but note the page as a whole still cannot render without `summary`, because
+  // the summary IS this screen's subject. That is not the "one source failing
+  // blanks the other" defect the XP card spent rounds deleting; there is simply
+  // no post-workout screen without the workout.
+  const { xp } = useXp();
+
   const [summary,     setSummary]     = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [rating,      setRating]      = useState(0);
@@ -239,7 +284,17 @@ export default function PostWorkout() {
     workoutService.getSummary(sessionId)
       .then((res) => setSummary(res.data.summary))
       .catch((err) => {
-        console.error(err);
+        // Message only (R3.10) — the axios error carries `config`, i.e. the URL,
+        // the request body and any headers. `useXp.js`, imported by this very
+        // file, logs `err?.message` and cites this rule by name, so a full-error
+        // dump here was two standards eight inches apart. NB the T3 that raised
+        // it said the leak includes `Authorization: Bearer <token>`; on THIS
+        // branch it does not — `mlApi` attaches the header only `if (token)` and
+        // Card 1 stopped writing `localStorage.accessToken` — which is the same
+        // overstatement OWED.md already corrected once, on 2026-07-26. Real but
+        // less urgent than reported, and fixed here because it is one line in a
+        // file already open. The wider sweep stays on its own OWED line.
+        console.error('summary load failed:', err?.message);
         toast.error('Failed to load summary');
         navigate('/dashboard');
       })
@@ -349,8 +404,7 @@ export default function PostWorkout() {
 
   if (!summary) return null;
 
-  const formInfo   = getFormGrade(summary.form_accuracy);
-  const xpProgress = summary.current_xp % 100;
+  const formInfo = getFormGrade(summary.form_accuracy);
 
   return (
     <div className="min-h-screen bg-dark-200 pb-12">
@@ -460,7 +514,7 @@ export default function PostWorkout() {
               className="flex justify-center mb-4 overflow-hidden"
             >
               <div style={{ transform: 'scale(0.82)', transformOrigin: 'top center' }}>
-                <ShareCard summary={summary} cardRef={cardRef} />
+                <ShareCard summary={summary} xp={xp} cardRef={cardRef} />
               </div>
             </motion.div>
           )}
@@ -468,7 +522,7 @@ export default function PostWorkout() {
           {/* Hidden full-size card for html2canvas (always mounted, off-screen) */}
           {!showCard && (
             <div style={{ position: 'absolute', left: -9999, top: -9999, pointerEvents: 'none' }}>
-              <ShareCard summary={summary} cardRef={cardRef} />
+              <ShareCard summary={summary} xp={xp} cardRef={cardRef} />
             </div>
           )}
 
@@ -548,24 +602,31 @@ export default function PostWorkout() {
               </div>
               <div>
                 <p className="text-white font-semibold">XP Earned</p>
-                <p className="text-gray-400 text-sm">Level {summary.current_level}</p>
+                <p className="text-gray-400 text-sm">Level {formatLevel(xp)}</p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-yellow-400 font-bold text-2xl">+{summary.xp_earned}</p>
+              <p className="text-yellow-400 font-bold text-2xl">{formatXpEarned(summary.xp_earned)}</p>
               <p className="text-gray-500 text-xs">experience points</p>
             </div>
           </div>
           <div>
             <div className="flex justify-between text-xs text-gray-400 mb-1.5">
-              <span>Level {summary.current_level}</span>
-              <span>{xpProgress}/100 XP</span>
-              <span>Level {summary.current_level + 1}</span>
+              <span>Level {formatLevel(xp)}</span>
+              <span>{formatXpFraction(xp)} XP</span>
+              <span>Level {formatNextLevel(xp)}</span>
             </div>
             <div className="h-2 bg-dark-300 rounded-full overflow-hidden">
+              {/* The bar starts EMPTY. It used to animate from the pre-workout
+                  position via `xpProgress - summary.xp_earned` — which cannot
+                  survive the repoint: the width now comes from the new API's
+                  `progressPct` while the delta is the OLD store's, so
+                  subtracting one from the other is arithmetic across two stores
+                  that diverge by design. Reconstructing a true "before" would be
+                  client-side XP math, which is the thing this card deletes. */}
               <motion.div
-                initial={{ width: `${Math.max(0, xpProgress - summary.xp_earned)}%` }}
-                animate={{ width: `${Math.min(xpProgress, 100)}%` }}
+                initial={{ width: 0 }}
+                animate={{ width: xpBarWidth(xp) }}
                 transition={{ delay: 0.8, duration: 1, ease: 'easeOut' }}
                 className="h-full bg-gradient-to-r from-yellow-500 to-yellow-300 rounded-full"
               />

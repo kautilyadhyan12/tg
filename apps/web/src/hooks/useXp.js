@@ -17,14 +17,16 @@ import { gamificationService, readXpView } from '../api/gamificationApi';
  *  this card. The staleness is real either way and is recorded on OWED.md as
  *  its own line rather than papered over here.
  *
- *  FOUR components mount this: Sidebar (always, via AppLayout), Dashboard,
- *  GamificationStrip and Achievements. `/dashboard` therefore issues THREE
- *  concurrent GET /v1/gamification/me — Sidebar + Dashboard + the strip.
- *  (Round 5 F6 corrected this: it read "three components … at most two
- *  requests", written before `888e750` made Dashboard a consumer and never
- *  updated. Counted from the importers, not from memory — the fifth consecutive
- *  round in which the record overstated. Verified: grep for the import returns
- *  Sidebar.jsx, GamificationStrip.jsx, Achievements.jsx, Dashboard.jsx.)
+ *  FIVE components mount this: Sidebar (always, via AppLayout), Dashboard,
+ *  GamificationStrip, Achievements and PostWorkout. `/dashboard` therefore
+ *  issues THREE concurrent GET /v1/gamification/me — Sidebar + Dashboard + the
+ *  strip — and `/workout/summary/:id` issues two (Sidebar + PostWorkout).
+ *  (Round 5 F6 corrected this once already, from "three components … at most
+ *  two requests", written before `888e750` made Dashboard a consumer and never
+ *  updated. It went stale AGAIN the moment PostWorkout became a consumer on
+ *  2026-07-27, and T3 round 2 caught it — the same sentence, the same way,
+ *  twice. Counted from the importers, never from memory: grep for the import
+ *  returns Sidebar, GamificationStrip, Achievements, Dashboard, PostWorkout.)
  *  Request-dedupe is on OWED.md rather than built here, because an unproven
  *  cache is worse than a cheap authenticated GET — but three concurrent
  *  identical requests on the app's landing screen raises that line's priority.

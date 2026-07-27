@@ -27,7 +27,7 @@
 // spelling level early), but it is no longer the protection of record.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 // Only the NETWORK functions are mocked. readXpView / readStatsView /
 // readOverviewView / orUnknown / formatLevel — every piece of logic that decides
@@ -46,7 +46,14 @@ vi.mock('../api/gamificationApi', async (importOriginal) => {
   };
 });
 vi.mock('../api/workoutApi', () => ({
-  workoutService: { getStats: vi.fn() },
+  workoutService: { getStats: vi.fn(), getSummary: vi.fn() },
+}));
+// PostWorkout imports both at module scope. html2canvas touches canvas APIs
+// jsdom does not implement, and the toast is a side effect, not a claim under
+// test — neither is exercised by any assertion below.
+vi.mock('html2canvas', () => ({ default: vi.fn() }));
+vi.mock('react-hot-toast', () => ({
+  default: { success: vi.fn(), error: vi.fn() },
 }));
 vi.mock('../api/recommendationApi', () => ({
   recommendationService: { getRecommendations: vi.fn() },
@@ -65,14 +72,31 @@ const { recommendationService } = await import('../api/recommendationApi');
 const Dashboard         = (await import('./Dashboard')).default;
 const Achievements      = (await import('./Achievements')).default;
 const GamificationStrip = (await import('../components/dashboard/GamificationStrip')).default;
+const PostWorkout       = (await import('./PostWorkout')).default;
 
 /** A real /v1/gamification/me `xp` block. Level THREE deliberately: "Level 1" is
  *  the fabricated value this whole card exists to delete, so it must never be
  *  the same string as the true one, or a passing test proves nothing. */
+/** CORRECTED 2026-07-27 (PostWorkout T3, F6): this block was labelled "a real
+ *  /v1/gamification/me xp block" and was not one. `xpForNext: 248` is LEVEL 2's
+ *  span; at level 3 the server sends 374, because xpForLevel(3)=348 and
+ *  xpForLevel(4)=722 (xp.ts `xpProgress`, and DECISIONS' own "levels cost 100,
+ *  248, 374"). progressPct and nextLevelAt were wrong with it. Recomputed from
+ *  the real functions for total 578: 578−348 = 230 in level, span 374,
+ *  round(230/374*100*10)/10 = 61.5, next at 722.
+ *
+ *  **THE CORROBORATION THIS COMMENT ORIGINALLY CITED WAS ITSELF WRONG** (T3
+ *  round 2). It said `gamificationApi.test.js`'s fixture "already carried the
+ *  right shape". That fixture is `total: 330, level: 3, xpInLevel: 52` — and
+ *  330 is LEVEL 2 on this curve, since xpForLevel(3) = 348. It is an impossible
+ *  block of exactly the class this correction deletes; two of its six fields
+ *  happening to match is coincidence, not corroboration. Fixing the class
+ *  stopped at the file this card had open. That fixture is NOT corrected here
+ *  (different card's file, R1.1) — it is on OWED. */
 const XP_LEVEL_3 = {
   xp: {
-    level: 3, total: 578, xpInLevel: 230, xpForNext: 248,
-    progressPct: 92.7, nextLevelAt: 596,
+    level: 3, total: 578, xpInLevel: 230, xpForNext: 374,
+    progressPct: 61.5, nextLevelAt: 722,
   },
 };
 
@@ -630,5 +654,220 @@ describe('Achievements — the three payloads are independent — round 4 F4', (
     // asserting failure would be a false claim during a healthy load.
     await waitFor(() => expect(screen.getByText(/Level 3/)).toBeTruthy());
     expect(screen.queryByText('Failed to load achievements')).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+/** The old backend's workout summary. The XP fields are chosen so the OLD math
+ *  and the NEW source DISAGREE — that is the whole design of this fixture.
+ *
+ *  `current_xp: 578` is a TOTAL, so the deleted `summary.current_xp % 100` would
+ *  render "78/100 XP", and `current_level: 7` would render "Level 7" / "Level 8".
+ *  The new API says level 3 at 230/374 (XP_LEVEL_3). If either number were still
+ *  read from this payload the assertions below would see it. A fixture where the
+ *  two agree would pass with the bug live, which is the trap this project has
+ *  recorded repeatedly — most recently at round 7 F3, where an assertion could
+ *  not fail for the defect it named. */
+const SUMMARY = {
+  session_id: 's1',
+  duration_minutes: 35,
+  active_seconds: 900,
+  calories_burned: 280,
+  form_accuracy: 88,
+  exercises_count: 3,
+  completed_at: '2026-07-27T10:00:00Z',
+  personal_records: [],
+  xp_earned: 70,
+  current_level: 7,
+  current_xp: 578,
+  current_streak: 3,
+  meal_suggestions: [],
+  stretches: [],
+  exercises: [],
+};
+
+/** The XP bar, resolved with a LOUD failure when it cannot be found.
+ *
+ *  T3 round 3 F6: reading `container.querySelector('.from-yellow-500').style`
+ *  directly means a pure restyle (`from-yellow-500` → `from-amber-500`, no XP
+ *  change at all) fails after six seconds with a bare
+ *  "TypeError: Cannot read properties of null" — an opaque result that reads as
+ *  broken infrastructure, which is the exact lesson round 2 recorded about the
+ *  5s budget, reintroduced one line below its own comment. Asserting the
+ *  selector's cardinality first turns that into a sentence naming the cause,
+ *  and also pins that the anchor stays unique. */
+function xpBar(container) {
+  const found = container.querySelectorAll('.from-yellow-500');
+  expect(found.length, 'XP bar anchor .from-yellow-500 did not match exactly one node — restyled?').toBe(1);
+  return found[0];
+}
+
+/** PostWorkout reads `:sessionId` with useParams, so it needs a real route —
+ *  without one the id is undefined and the page redirects instead of rendering. */
+const renderPostWorkout = () =>
+  render(
+    <MemoryRouter initialEntries={['/workout/summary/s1']}>
+      <Routes>
+        <Route path="/workout/summary/:sessionId" element={<PostWorkout />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+
+describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
+  // 10s test budget: the bar assertion below waits out framer-motion's own
+  // delay(0.8)+duration(1), and vitest's DEFAULT is 5s — with the default, a
+  // failing bar reports "Test timed out in 5000ms" instead of the actual width
+  // mismatch. A timeout is not a result (the DPDP card's recorded lesson): it
+  // reads as flaky infrastructure and hides the assertion that did the work.
+  it('renders the server curve, never `total % 100`', async () => {
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY } });
+
+    const { container } = renderPostWorkout();
+    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
+
+    const text = container.textContent;
+
+    // THE HEADLINE. The real position within the level, from the server.
+    expect(text).toMatch(/230\/374 XP/);
+    // The deleted maths, in both of its spellings.
+    expect(text).not.toMatch(/\/100 XP/);
+    expect(text).not.toMatch(/78\/100/);
+    // The OLD store's level, which `current_level` would have supplied — at
+    // BOTH sites: the share card is mounted off-screen whenever the preview is
+    // closed (the default), so one screen cannot print two different levels.
+    //
+    // NO `\b` HERE, and that was a real defect (T3 F2 of this card). The row
+    // renders as one run of text — "…Level 3230/374 XP…" — so with the old read
+    // restored it reads "Level 7230/374", where `\b` between "7" and "2" does
+    // not exist and the pattern could not fire. It matched for the share card
+    // only by luck of adjacency (the next character there is an emoji). The
+    // assertion was therefore blind at the very site this card is about, and
+    // the mutation proved it: restoring `summary.current_level` in the row left
+    // this test GREEN. Second vacuous assertion found in this one card.
+    expect(text).not.toMatch(/Level [78]/);
+    expect(text).toMatch(/Level 4/);
+
+    // THE SHARE CARD'S OWN LEVEL, BY IDENTITY (T3 round 2, BLOCKING #1 — the
+    // THIRD vacuous assertion in this card). This was
+    // `getAllByText(/Level 3/).length >= 2`, which the PAGE satisfies on its own
+    // before the card is ever reached: the "XP Earned" subtitle and the row's
+    // left span are already two. Mutating ShareCard's `formatLevel` to
+    // `formatNextLevel` — the PNG printing Level 4 while the page prints Level 3
+    // — left the whole suite GREEN. That is the exact defect ShareCard was
+    // brought into scope to prevent, and it is round 1's F1 INVERTED: there a
+    // positive "—" was satisfied by the card so the page went unexamined; here a
+    // positive "Level 3" was satisfied by the page so the card went unexamined.
+    // Same blind spot, opposite direction, one round apart.
+    const shareLevel = screen.getByText('+70 XP').nextElementSibling;
+    expect(shareLevel.textContent).toBe('Level 3');
+    // The count still earns its place: it catches a level site DISAPPEARING,
+    // which identity checks cannot see. Exact, not a floor.
+    expect(screen.getAllByText(/Level 3/).length).toBe(3);
+
+    // THE BAR (T3 round 2, BLOCKING #2). Round 1 asserted that framer-motion
+    // "never runs `animate` under jsdom — the node is width: 0px in every
+    // state", and built a regex guard on that premise. IT IS FALSE, and the
+    // reviewer measured it: 0px is the `initial`, and after this element's own
+    // `delay: 0.8 + duration: 1` it settles at the real width. Round 1 read the
+    // value ~1.8s early, because the existing waitFor resolves long before the
+    // animation ends — measuring the case and calling it the class, which is
+    // this project's most-recorded mistake, committed in the fix for it.
+    // So round 4's standing "add a render assertion instead" was never actually
+    // overridden, and here it is: the DOM, not the source text.
+    // DERIVED from the fixture, not a copied literal: a hardcoded '61.5%' is a
+    // duplicate of a number the fixture already owns, and this project recorded
+    // that shape as a defect once already (XP round 3 F5 — "duplicating a number
+    // the system DERIVES"). Changing the fixture must move this assertion with
+    // it, or the test starts pinning a value nothing produces.
+    await waitFor(
+      () => expect(xpBar(container).style.width).toBe(`${XP_LEVEL_3.xp.progressPct}%`),
+      { timeout: 6000 },
+    );
+
+    // The delta STAYS — it is this workout's, and the new API has no such field.
+    expect(text).toMatch(/\+70/);
+  }, 10000);
+
+  it('XP read fails: dashes, and the rest of the page survives', async () => {
+    gamificationService.getMe.mockImplementation(DEAD);
+    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY } });
+
+    const { container } = renderPostWorkout();
+    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
+
+    const text = container.textContent;
+
+    // No level is invented — not from `current_level`, not as a Level 1 default.
+    // Whole-document sweep rather than per-element queries: a fabrication
+    // interpolated into a longer string slips past getByText, which is exactly
+    // how round 4's mutation (d) behaved.
+    expect(text).not.toMatch(/Level\s*\d/);
+    expect(text).not.toMatch(/\/100 XP/);
+    expect(text).toMatch(/—\/— XP/);
+
+    // THE BAR IS EMPTY WHEN NOTHING IS KNOWN (T3 round 3, BLOCKING). A bar
+    // cannot render "unknown", so it renders nothing — a filled one beside
+    // "—/— XP" would be a claim of progress nobody knows, on the screen shown
+    // after every workout. This had NO assertion at any layer: `xpBarWidth`
+    // was untested and the only bar assertion covered the known, in-range
+    // case, so a mutant returning '100%' for unknown left all 229 tests green.
+    // A PLAIN `waitFor` IS THE WRONG INSTRUMENT HERE, and I proved it by
+    // mutating: with `xpBarWidth` returning '100%' for unknown, a
+    // `waitFor(() => …toBe('0%'))` PASSED — because the bar sweeps 0 → 100%
+    // and waitFor only needs ONE poll to match, which the start of the sweep
+    // supplies. The unknown case is the one where start and end are the same
+    // value, so "it was 0% at some instant" says nothing. Only the unit test
+    // caught that mutant.
+    //
+    // So: wait out the animation, then assert ONCE. The window is the bar's own
+    // delay(0.8) + duration(1), measured settling at ~1.84s; 2.4s clears it with
+    // margin inside the 10s budget.
+    await new Promise((r) => { setTimeout(r, 2400); });
+    expect(xpBar(container).style.width).toBe('0%');
+
+    // A failed XP read must not blank the page — there is no ErrorBoundary
+    // anywhere in apps/web, and this screen's subject is the workout, not the
+    // level. The summary's own figures are untouched by the XP failure.
+    expect(text).toMatch(/88%/);
+    expect(text).toMatch(/280 kcal/);
+    expect(text).toMatch(/\+70/);
+  }, 10000);   // waits out the animation window, same reason as the test above
+
+  it('a summary with no xp_earned reads "—", never "+0"', async () => {
+    // R2.3 on the one summary field this card touches. `+0` would claim the
+    // workout earned nothing, which is a different statement from "we were not
+    // told" — the standing rule, applied to the delta.
+    const { xp_earned, ...noXpEarned } = SUMMARY;   // eslint-disable-line no-unused-vars
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    workoutService.getSummary.mockResolvedValue({ data: { summary: noXpEarned } });
+
+    const { container } = renderPostWorkout();
+    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
+
+    // ELEMENT-SCOPED, and the first version of this test was not — which the
+    // mutation run caught before handover. Dropping the guard renders
+    // `+{summary.xp_earned}` with an undefined value, and REACT RENDERS
+    // undefined AS NOTHING: the output is a bare "+", never "+undefined", so
+    // `not.toMatch(/\+undefined/)` could not fail for the defect it named. The
+    // positive `—` assertion was worse: it was satisfied by the SHARE CARD,
+    // which still had its guard, so the page's own card was never examined.
+    // That is round 6 F11 / round 7 F3's class exactly, committed here and
+    // caught only by mutating. Both sites are now asserted by identity.
+    const pageValue = screen.getByText('experience points').previousElementSibling;
+    expect(pageValue.textContent).toBe('—');          // not "+", not "+0"
+    // The SHARE CARD's tile. T3 round 3 F5 was right that the comment here
+    // claimed "both sites are asserted by identity" while this one is a TEXT
+    // query — so the CLAIM is corrected rather than the test contorted, because
+    // the test is sound and an identity anchor here is not: in this fixture the
+    // level is KNOWN (only the delta is unknown), so the card's neighbouring
+    // line reads "Level 3", which the page renders twice more and cannot anchor.
+    // `getByText` THROWS when absent, so this cannot pass vacuously, and
+    // "— XP" with the suffix is a string only the card produces — the page's own
+    // delta renders as a bare "—". A scoped text query, honestly labelled.
+    expect(screen.getByText('— XP').textContent).toBe('— XP');
+
+    // The level is still known — one unknown field must not blank the others.
+    expect(container.textContent).toMatch(/230\/374 XP/);
   });
 });

@@ -453,20 +453,148 @@ then; none may be hidden or reduced to close the gap.
       the wider sweep: every other `catch(console.error)` on an axios call in
       `apps/web`, `Dashboard.jsx` included.
 - [ ] 🔴 **`PostWorkout.jsx` has the same 100-XP-per-level bug the Dashboard
-      card deleted — and it is shown after EVERY workout.** Found by the T3 on
+      card deleted — and it is shown after EVERY workout.**
+      **TICK TAKEN BACK OFF 2026-07-28 by T3 round 2 — it was premature and the
+      reviewer was right on both counts.** (a) Protocol: the tick named no
+      commit, and nothing is committed — OWED's own rule is "tick it, date it,
+      NAME THE COMMIT". (b) Substance: the argument used to justify ticking
+      without a clean round — "round 1 found no behaviour defect, only gaps in
+      the protection" — is the exact argument the re-tick precedent was written
+      to foreclose, and round 2 then found a SCREEN-VISIBLE defect passing
+      green: the share card could print a different level from the page beside
+      it, and every test stayed green. Re-ticks on a clean round plus a commit.
+      Found by the T3 on
       888e750 (its F4) and given this line because the MIGRATION STANCE requires
       the deferral to be recorded in the deferring commit; grep confirmed
       "PostWorkout" appeared in neither OWED.md nor DECISIONS.md before now.
-      `const xpProgress = summary.current_xp % 100` then
-      `{xpProgress}/100 XP → Level {summary.current_level + 1}` — the identical
-      assumption, on a live route (App.jsx). The real curve is
-      `floor(100*(level-1)^1.8)`, so it is wrong for every user above level 2.
+      `const xpProgress = summary.current_xp % 100`, rendered by a three-span
+      row as `Level {summary.current_level}` · `{xpProgress}/100 XP` ·
+      `Level {summary.current_level + 1}` — the identical assumption, on a live
+      route (App.jsx). The real curve is `floor(100*(level-1)^1.8)`, so it is
+      wrong for every user above level 2.
+      **QUOTE CORRECTED 2026-07-27:** this line used to render the second half
+      as `{xpProgress}/100 XP → Level {summary.current_level + 1}`, which is the
+      DASHBOARD's wording — PostWorkout has no arrow and splits the caption
+      across three spans. Small, but it is a paraphrase of a file the writer had
+      not opened, which is exactly what CITATION DISCIPLINE (DECISIONS
+      2026-07-20) exists to stop: quote the text, do not reconstruct it.
       OUT of the Dashboard card's scope because it reads a different payload
       (`summary.*` from the workout-complete response, not `/v1/gamification/me`),
       so it needs its own repoint rather than a formatter swap. **OWED.md said
       "The `xp % 100` maths is DELETED" — true of the Dashboard, false of the
       app**, which is the "fix the class, not the case" failure this project
       keeps recording; that wording is corrected on the Dashboard line above.
+      **STATUS 2026-07-28: the user-facing bug IS fixed and browser-verified**
+      (smoke passed on a Level-3 account, where the right answer `332/374 XP`
+      and the deleted maths `80/100 XP` are visibly different) — but the line
+      stays open until a clean round and a commit. Two T3 rounds have now found
+      the same shape: the fix is right, the protection around it is not. Three
+      vacuous assertions across the two rounds, each satisfied by a DIFFERENT
+      site than the one it named. What landed: the page takes the level and the
+      position within it from `useXp()` through the shared formatters exactly as
+      the Dashboard does, `xpProgress` is deleted, and no XP arithmetic remains
+      on the page. The SHARE CARD moved to the same source in the same commit —
+      it read `summary.current_level`, so the page and the downloadable PNG
+      would otherwise have printed two different levels. Web-only: no API
+      change, no migration, no new dependency.
+
+- [ ] 🟡 **The post-workout XP can be one workout stale — on the one screen that
+      exists to be about that workout.** Raised by the PostWorkout repoint
+      (2026-07-27); recorded rather than fixed, because closing it is sync-card
+      work and this card was scoped to the curve. `ActiveWorkout.jsx` calls
+      `queueWorkoutSync(...)` FIRE-AND-FORGET and navigates to the summary route
+      about two seconds later, while the new API recomputes XP server-side at
+      `POST /v1/workouts/sync`. So `useXp()` here can read a total that does not
+      yet include the workout just finished — and offline it certainly does,
+      since the queue flushes later BY DESIGN (R10.3). Nothing is fabricated:
+      every number shown is a real server value, and the `+N XP` delta beside it
+      is the old store's own figure. But the screen can truthfully report a
+      level that looks like the workout did not count, which is a poor thing for
+      a congratulations page to do. Real fixes are a refetch on the
+      sync-settled event, or a shared XP store with invalidation — the SAME
+      mechanism the `useXp` staleness line needs, so they should be built
+      together rather than twice.
+
+- [ ] 🟡 **`PostWorkout.jsx`'s `summary` payload is UNPARSED — the class rounds
+      4-7 closed for the other three old-backend payloads.** Reported not fixed
+      by the PostWorkout XP repoint (2026-07-27) under R1.1, and Kd ruled
+      "record as OWED, fix XP only" at that card's plan gate: the named task was
+      the XP curve, and adding a fourth reader would have doubled a card on the
+      page carrying the app's last live XP defect. CONCRETE, not theoretical —
+      `getFormGrade(summary.form_accuracy)` has no unknown arm, so an absent
+      score falls through every threshold to the final `return`: grade **D**,
+      "Keep practicing", in red, with the bar animating to `undefined%`. That is
+      a definite bad-form verdict on a workout whose form we were never told,
+      i.e. verbatim round 5 F3's defect ("an unknown accuracy painted RED by the
+      <60 branch") one page along. **A SECOND CONCRETE CASE, found by the T3:**
+      a 200 with no `summary` key sets `summary = undefined` WITHOUT throwing,
+      so the catch never runs and the page renders BLANK — no toast, no
+      redirect, no text. The smoke rig's `empty200` state serves exactly that,
+      and its comment says so, meaning a white screen there is the known state
+      rather than a broken rig.
+      **COUNT CORRECTED 2026-07-27 (T3 F5) — the line said "roughly fourteen",
+      which was a guess.** Measured: 40 `summary.*` occurrences, minus 3
+      comment-only and 3 `xp_earned` (which IS guarded), = **34 bare reads
+      across NINE distinct fields** — `active_seconds` (8), `form_accuracy` (6),
+      `duration_minutes` (6), `personal_records` (4), `current_streak` (4),
+      `exercises_count` (2), `calories_burned` (2), `stretches` (1),
+      `meal_suggestions` (1). (The review that raised this said eight fields; it
+      is nine. A finding is a claim and inherits V1 too.) The fix is the
+      established shape — a `readSummaryView` alongside `readStatsView` — and
+      its natural home is the `workoutApi` repoint card, since that is the
+      client this payload arrives on.
+
+- [x] ~~🟡 **The XP bar's width has no protection a render test can give it —
+      framer-motion is invisible to jsdom.**~~ **STRUCK 2026-07-28: THE PREMISE
+      WAS FALSE, and this card should never have existed.** Raised by the
+      PostWorkout T3 round 1 on the claim that `animate` "never executes under
+      jsdom — the node reads `width: 0px` in every state". Round 2 MEASURED it
+      on framer-motion 12.42.2: `0px` is the `initial`, and after the element's
+      own `delay: 0.8 + duration: 1` the node settles at the real width. Round 1
+      read the DOM about 1.8s too early — the existing `waitFor` resolves long
+      before the animation ends — and generalised one instant into "every
+      state". Measuring the case and calling it the class, in the fix written
+      for exactly that mistake.
+      **Consequences, all now undone:** the bar is asserted in the DOM where it
+      always could have been (`expect(…style.width).toBe('61.5%')`, which
+      catches the destructure bypass the regex cannot see); round 4's standing
+      "add a render assertion instead" was never actually overridden; and no
+      framer-motion mock is needed, so the 28 tests in that file stay untouched.
+      Kept struck rather than deleted, per the rule that items leave this file
+      by being done or by a ruling — and because "a card raised on a premise
+      nobody measured" is the failure worth being able to find again.
+
+- [ ] 🟡 **`gamificationApi.test.js`'s `validXp` fixture is impossible.**
+      Found by T3 round 2 while checking a claim in the PostWorkout card — the
+      corrected render fixture's comment cited this one as corroboration, and it
+      does not corroborate. It reads `total: 330, level: 3, xpInLevel: 52`, but
+      330 is LEVEL 2 on this curve (`xpForLevel(3)` = 348).
+      **COUNT CORRECTED 2026-07-28 (T3 round 3 F3) — this line said "four of its
+      six fields are unreachable together", and no reading of the block yields
+      four.** Measured against `xp.ts`'s own `xpProgress`: hold `total: 330` and
+      FIVE are wrong (the truth for 330 is level 2 / 230 / 248 / 92.7 / 348);
+      hold the other five and exactly ONE is — `{level:3, xpInLevel:52,
+      xpForNext:374, progressPct:13.9, nextLevelAt:722}` is `xpProgress(400)` to
+      the digit. **So the fix is one character class: `total: 400`.** The same
+      sentence also named `nextLevelAt` 348 and then left it out of its own
+      tally. Recompute from `xpProgress`, never by hand — which is the whole
+      lesson of the fixture this one was cited to corroborate.
+      Same class as the render fixture corrected on 2026-07-27, one file along,
+      and the tests using it are passthrough/shape tests that would pass with any
+      six numbers, which is why nothing caught it. NOT fixed by the PostWorkout
+      card (R1.1 — it is the XP card's file and its assertions would need
+      re-checking against real values).
+
+- [ ] 🟡 **`Running.jsx` fabricates a level: `stats?.running_level ?? 1`.**
+      Found by the PostWorkout T3 (2026-07-27) while checking whether the
+      100-XP class was really closed. It is verbatim the `user?.level || 1`
+      class deleted from the Sidebar and the `s.level || 1` class deleted from
+      the Dashboard — a confident "Level 1" for a user whose level nobody knows
+      — on a live screen, differing only in which payload it reads (running has
+      its OWN progression, `running.py`'s `running_xp`, which is a separate
+      system from `user_xp` and was explicitly out of that card's scope,
+      DECISIONS 2026-07-25 D4). Not fixed here (R1.1: different payload,
+      different card). Closes with the running/geo repoint.
 - [ ] 🟡 **The sidebar level is STALE until a full page reload.** Raised by the
       XP card's T3 round 2 (2026-07-26), which correctly demolished the reason
       the code gave for its own design. `useXp` reads once with `[]` deps and
