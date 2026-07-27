@@ -49,16 +49,25 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
       would have vanished with its ticked line. Given its own line here on
       2026-07-22 rather than being lost. The P0 rule treats every secret in the
       old repo's `.env` as burned, so this is a real deferral, not hygiene.
-- [ ] 🟡 **Rotate the Neon database password (`DATABASE_URL`).** Exposed
+- [x] 🟡 **Rotate the Neon database password (`DATABASE_URL`) — DONE
+      2026-07-27 (Kd rotated in the Neon console; verified by query).** Exposed
       2026-07-26: a `grep` for the connection string during the XP-card smoke
       setup matched a neighbouring comment line, and the mangled value — password
       included — was printed into a Claude chat transcript in an error message.
       Same class as the two rotations above, and treated the same way rather than
       waved off because it was accidental. This one is heavier than a provider
-      key: it is direct read/write access to the dev database. Rotate in the Neon
-      console (Roles → reset password), update `apps/api/.env` and the
-      `infra/api.env` on any host, and re-run the migrations check. The dev
-      branch holds only test fixtures, which is why this is 🟡 and not 🔴.
+      key: it is direct read/write access to the dev database.
+      **HOW IT WAS DONE:** Neon console → Roles → `neondb_owner` → Reset
+      password. Kd pasted the new value straight into `apps/api/.env` line 5 in
+      the editor — deliberately NOT through the chat, since a chat transcript is
+      exactly how the old one burned. Verified by connecting with the new URL and
+      running `select current_user, current_database()` plus a table count:
+      `neondb_owner` / `neondb` / 46 public tables. The API was restarted and
+      re-listens on :3000. Grep confirmed `apps/api/.env` was the ONLY file
+      holding the real secret — `.github/workflows/ci.yml` takes its URL from the
+      `neon-branch` step output, and `infra/docker-compose.dev.yml` carries local
+      container credentials (`aihg`/`postgres`), neither of which is this one.
+      The dev branch holds only test fixtures, which is why this was 🟡 not 🔴.
 - [ ] 🟡 **Rotate the GOOGLE_CLIENT_SECRET.** The secret created for the
       google-login local smoke (2026-07-24) was pasted into a Claude chat to wire
       `apps/api/.env`, so treat it as exposed (same class as GROQ above). Fine for
