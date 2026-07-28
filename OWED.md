@@ -85,6 +85,16 @@ then; none may be hidden or reduced to close the gap.
 
 - [ ] 🔴 **XP / levels display — UNTICKED 2026-07-26 by T3 round 3, STILL OFF
       after rounds 4, 5, 6 AND 7.**
+      **SMOKE HALF DISCHARGED 2026-07-28: the re-smoke PASSED, all 11 steps**
+      (Kd, steps at `RUNBOOK/smoke-xp-dashboard.md`, result recorded there). It
+      replaces the 2026-07-27 attempt voided by the rig's CORS wildcard. Level 3
+      / `332/374` / `680 XP` held on all five XP surfaces in all ten rig states,
+      including `dead` and `hang`; no fabricated zero and no false "unavailable"
+      over visible content anywhere. **THE TICK STAYS OFF: this line needs the
+      smoke AND T3 round 8, and round 8 has not run** (`t3-xp-web-r8.diff`
+      regenerated 2026-07-28 — the previous copy was cut one minute after round
+      7's commit and two commits had landed on 4 of its 12 files since; prompt
+      ready at `t3-xp-web-r8-PROMPT.md`).
       **ROUND 7 (2026-07-27, fresh chat): 8 findings, 3 blocking, all fixed.**
       Seventh consecutive round in which the previous round's fix opened the
       next one. F1: `recsState` derived from the STATS read's loading flag —
@@ -343,7 +353,15 @@ then; none may be hidden or reduced to close the gap.
       Also fix while here: `workoutApi.js` declares **`getHistory` TWICE** in
       one object literal (lines 5 and 9) — the second silently wins, so the
       `(limit)` variant is dead code and a footgun.
-- [ ] 🔴 **UNTICKED 2026-07-26 by its own T3, STILL OFF after round 4.** The
+- [ ] 🔴 **UNTICKED 2026-07-26 by its own T3, STILL OFF after round 4.**
+      **SMOKE HALF DISCHARGED 2026-07-28 — the re-smoke PASSED, all 11 steps**
+      (`RUNBOOK/smoke-xp-dashboard.md`). Step 6 is this line's own defect and it
+      is CLOSED at the browser: in the `statsEmpty` state — a 200 carrying
+      `{"stats":{}}`, the exact payload round 4 F2 was about — the three stat
+      cards read `—`, not "0 workouts / 0h / 0 kcal". Step 17 (`emptyLists`)
+      confirms the opposite sign still works: a zero the server actually sent
+      still renders as `0`. **THE TICK STAYS OFF pending T3 round 8.** The
+      original entry follows. The
       card repointed XP but left the page's OTHER six figures fabricating
       (`s.total_workouts || 0` and friends), and `stats` is null whenever the old
       read fails — so a real "Level 2" sat beside three fabricated zeros and lent

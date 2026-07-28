@@ -181,9 +181,20 @@ and **Burpee** (red/advanced).
 
 ## The nine failure states
 
-For each: open `http://localhost:8000/__state/<name>` in the rig tab, then
-**reload** `/dashboard` (and `/achievements` where named). Report pass/fail per
-step.
+**SWITCH STATES FROM A TERMINAL, NOT A BROWSER TAB:**
+
+```bash
+curl -s http://127.0.0.1:8000/__state/<name>
+```
+
+Then **reload** `/dashboard` (and `/achievements` where named). Report pass/fail
+per step.
+
+**⚠ RUN `hang` LAST — step 10 is deliberately out of order.** It saturates the
+browser's connection pool and cannot be escaped from inside the browser; the
+full explanation is in that step. Do steps 9, 11–17 first, then 10, then stop.
+(Found on 2026-07-28 during the run this file was written for: the tester was
+trapped mid-smoke and the rig had to be killed from outside.)
 
 **In every single one of these, before anything else, check the XP invariant:**
 
@@ -208,9 +219,29 @@ leaderboard are unavailable right now.`
 
 ---
 
-**10. `hang`** — the rig accepts the connection and never answers. `mlApi` sets
-no timeout, so these reads never settle. *(Rounds 4 F7 and 7 F1 — the state that
-produced a permanent lie.)*
+**10. `hang` — RUN THIS ONE LAST.** The rig accepts the connection and never
+answers. `mlApi` sets no timeout, so these reads never settle. *(Rounds 4 F7 and
+7 F1 — the state that produced a permanent lie.)*
+
+> **⚠ THIS STATE IS A ONE-WAY DOOR IN A BROWSER, AND IT TRAPPED THE 2026-07-28
+> RUN.** Loading `/dashboard` in `hang` leaves ~6 requests open that the rig will
+> never answer — and **6 is Chrome's per-host connection limit**. The pool is
+> then fully saturated with dead sockets, so *every* later request to
+> `localhost:8000` waits forever, **including `/__state/<name>`**. The tester
+> pasted the next state's URL and watched it spin; it was never going to load.
+> Measured at the time: `netstat` showed exactly 6 ESTABLISHED Chrome→:8000
+> connections and zero capacity left.
+>
+> **The escape is from OUTSIDE the browser** — kill and restart the rig:
+> ```bash
+> netstat -ano | grep ":8000.*LISTENING"     # get the PID
+> taskkill //PID <pid> //F
+> node apps/web/tools/mock-ml-backend.mjs
+> ```
+> Switching state with `curl` alone is NOT proven sufficient: the browser's dead
+> sockets outlive the state change. Restart the rig.
+>
+> Hence: run this state LAST, and end the smoke here.
 
 ✅ The XP surfaces render **immediately and fully** — they are on the other
 server. `/achievements`'s header shows `Level 3`, it does not spin.
@@ -317,3 +348,34 @@ skip.
 
 If the run is clean, the two OWED lines (86 and 346) may be ticked **only
 together with a clean T3 round 8** — both gates, not either.
+
+---
+
+## RUN RESULT — 2026-07-28 (Kd) — ALL 11 STEPS PASSED
+
+Every state behaved as specified. Level 3 / `332/374` / `680 XP` held on all
+five XP surfaces in all ten rig states, including `dead` and `hang`. No
+fabricated zero appeared in any state, and no false "unavailable" appeared over
+visible content.
+
+The fixture was `smoke-xpdash-1785229803361@example.com`, built by the recipe
+above; `/v1/gamification/me` returned `level 3`, `total 680`, `xpInLevel 332`,
+`xpForNext 374`, `progressPct 88.8` before the run started, so the expected
+values were measured, not assumed.
+
+**Three honest deviations from this file as written, none of which affect the
+result:**
+
+1. **States were switched by `curl` from a terminal, by the assistant, not by
+   the tester in a browser tab.** The file has been corrected to prescribe this;
+   it is now the documented method.
+2. **`hang` was run 4th, not last** — this file's own ordering advice did not
+   exist yet. It trapped the run exactly as now described in step 10, and the
+   rig had to be killed and restarted. Steps 1–4 were already complete and
+   unaffected; the run continued from step 5 after the restart.
+3. **Docker was not running** and was not needed: `DATABASE_URL` points at Neon,
+   and `apps/api/.env` declares no `REDIS_URL`. The previous session's note that
+   the Docker containers must be up is not true for this smoke.
+
+**This closes the SMOKE half only.** The OWED ticks still wait on T3 round 8
+(`t3-xp-web-r8.diff`, prompt at `t3-xp-web-r8-PROMPT.md`).

@@ -1751,3 +1751,56 @@ gate). Its own recommendation: fix the nine, add one OWED line, tick.
   what took four rounds was the protection around it, and the through-line is
   one sentence: **every blocking finding came from a claim someone had not
   measured — mine most of all.**
+
+## 2026-07-28 — XP display re-smoke: PASSED (11/11), and the rig trapped the run
+
+- (The smoke half of OWED.md:86 and OWED.md:346 is DISCHARGED; the ticks stay
+  OFF, because both lines need the smoke AND a clean T3 round 8, and round 8 has
+  not run.) All 11 steps passed. Level 3 / `332/374` / `680 XP` held on all five
+  XP surfaces across all ten rig states. The `statsEmpty` step is round 4 F2's
+  exact payload (`{"stats":{}}`) and the three stat cards read `—`, not
+  "0 workouts / 0h / 0 kcal": the defect is closed at the browser, not just in
+  the unit suite. `emptyLists` confirms the fix did not overshoot — a zero the
+  server actually SENT still renders as `0`. Expected values were read off
+  `/v1/gamification/me` before the run (level 3, total 680, xpInLevel 332,
+  xpForNext 374, progressPct 88.8), so they were measured, not assumed.
+
+- (THE FINDING, and it is about the INSTRUMENT rather than the app) **The `hang`
+  state is a one-way door in a browser.** Loading `/dashboard` under it leaves
+  ~6 requests open that the rig never answers, and 6 is Chrome's per-host
+  connection limit — so the pool saturates with dead sockets and every later
+  request to `localhost:8000` waits forever, INCLUDING `/__state/<name>`. Kd
+  pasted the next state's URL mid-run and watched it spin; it was never going to
+  load. Measured at the time rather than reasoned about: `netstat` showed exactly
+  6 ESTABLISHED Chrome→:8000 connections and no capacity left. The escape is from
+  outside the browser — kill and restart the rig. `RUNBOOK/smoke-xp-dashboard.md`
+  now switches states by curl from a terminal, runs `hang` LAST, and carries the
+  explanation in the step itself.
+  **This is the THIRD time this rig has trapped or falsified a run** — the CORS
+  wildcard that voided 2026-07-27, the `/running/…/summary` over-match found by
+  round 2, and now this. The standing lesson stays what its own header says: the
+  rig is a lying instrument until each state has been driven end-to-end, and the
+  `healthy` control exists because of it. What is new is that a state can break
+  the smoke's CONTROL SURFACE and not just its readings.
+
+- (V1, and it cuts against a record this repo carries) **Docker was not running
+  and was not needed.** The 2026-07-27 session-close block lists
+  `aihg-dev-postgres/redis/worker` among the machine state, which reads as a
+  prerequisite. `DATABASE_URL` points at Neon and `apps/api/.env` declares no
+  `REDIS_URL` — checked by listing the env KEYS and the DB host only, never the
+  connection string, since printing that value into a transcript is exactly how
+  the last password burned (OWED, Neon rotation 2026-07-27).
+
+- (Process, recorded because it nearly wasted a review) `t3-xp-web-r8.diff` was
+  STALE: cut 07-27 14:14, one minute after round 7's commit `9644fa5`, with
+  `c681b23` and `7f9f4cb` since touching 4 of its 12 files. Regenerated as
+  `1164a86..HEAD` restricted to the card's own ten files — 10 files / 2825
+  insertions. Kd rejected `master..HEAD` (54 files / 12229 insertions, the whole
+  branch including the closed PostWorkout card), citing this repo's own recorded
+  instance of that mistake. A diff's SCOPE is part of the review's correctness,
+  not a convenience.
+
+- (Correction, mine) A count of "14 unticked 🔴 items" in OWED was wrong; it is
+  13. The regex `'^- \[ \] .*🔴'` matched line 1099, an ❓ item whose body reads
+  "see the 🔴 leaderboard line above" — a mention, not a marker. Caught by Kd.
+  V1 says a number comes from a command; it does not say the command is right.

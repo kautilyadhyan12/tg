@@ -1,6 +1,75 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: XP display / Dashboard XP — THE RE-SMOKE. [PASSED, all 11 steps, 2026-07-28.
+      OWED ticks still OFF: round 8 has not run.]
+      Branch web-repoint, HEAD fb4a65d + this commit. No app code changed this
+      session — the only source edit is the rig-trap fix in the runbook.
+
+WHAT WAS DONE
+  · `t3-xp-web-r8.diff` REGENERATED. The copy at the repo root was cut 07-27
+    14:14, one minute after round 7's commit 9644fa5, and c681b23 + 7f9f4cb have
+    since touched 4 of its 12 files (gamificationApi.js, gamificationApi.test.js,
+    useXp.js, xpDisplay.render.test.jsx). Round 8 would have audited code that no
+    longer exists. Scoped `1164a86..HEAD -- <the card's 10 files>`: 10 files,
+    2825 insertions. NOT `master..HEAD`, which is 54 files / 12229 insertions —
+    the whole branch including the PostWorkout card. DECISIONS already records
+    that mistake once ("would have buried this card's 358 lines").
+  · `RUNBOOK/smoke-xp-dashboard.md` WRITTEN, then corrected by its own run.
+  · `t3-xp-web-r8-PROMPT.md` written, ready to paste.
+  · SMOKE RUN: all 11 steps PASSED. Result block is in the runbook.
+
+THE SMOKE'S ONE STRUCTURAL FINDING, and it is about the INSTRUMENT
+  **`hang` is a one-way door in a browser.** Loading /dashboard in that state
+  leaves ~6 requests open that the rig never answers — and 6 is Chrome's
+  per-host connection limit. The pool saturates with dead sockets, so every
+  later request to localhost:8000 waits forever INCLUDING `/__state/<name>`.
+  Kd pasted the next state's URL and watched it spin; it was never going to
+  load. Measured at the time: netstat showed exactly 6 ESTABLISHED Chrome→:8000
+  connections, zero capacity left. Escape is from OUTSIDE the browser — kill and
+  restart the rig. The runbook now runs `hang` LAST, switches states by curl
+  from a terminal, and carries the whole explanation in step 10.
+  This is the third time this rig has trapped a run (CORS wildcard 07-27, the
+  `/running/.../summary` over-match, now this). **The rig is a lying instrument
+  by default and every new state must be driven end-to-end before a human uses
+  it.**
+
+WHAT THE SMOKE PROVED
+  Level 3 / 332/374 / 680 XP held on all FIVE XP surfaces (Sidebar ×2, Dashboard
+  stat card, Experience Points panel, Your Rank card, Achievements header) in ALL
+  TEN rig states. The card's own defect is closed at the browser: `statsEmpty`
+  (a 200 carrying `{"stats":{}}`, round 4 F2's exact payload) shows `—`, not
+  "0 workouts / 0h / 0 kcal"; and `emptyLists` still shows a real `0`, so the fix
+  did not overshoot into calling a sent zero unknown.
+
+THREE DEVIATIONS, RECORDED BECAUSE THEY ARE NOT WHAT THE FILE SAID
+  1. States switched by curl by the assistant, not by Kd in a browser tab. Now
+     the documented method.
+  2. `hang` ran 4th, not last — the ordering advice did not exist yet. Steps 1-4
+     were complete and unaffected; the run resumed at step 5 after a rig restart.
+  3. **Docker was NOT running and was NOT needed.** DATABASE_URL is Neon and
+     apps/api/.env declares no REDIS_URL. The previous session-close block says
+     the Docker containers must be up; that is not true for this smoke.
+
+STATE OF THE MACHINE (all three still running as of handover)
+  · new API   :3000  — cd apps/api; node --import tsx --env-file=.env src/index.ts
+  · web       :5173  — cd apps/web; corepack pnpm exec vite
+  · mock old  :8000  — node apps/web/tools/mock-ml-backend.mjs   (state = healthy)
+  NB the API took >30s to bind on first boot and printed nothing until it did;
+  a second attempt failed with EADDRINUSE, which is how we learned the first
+  had succeeded. Don't conclude it is dead from silence — curl /health.
+
+NEXT, and it is the ONLY thing between this card and its two ticks:
+  **T3 ROUND 8.** Fresh chat, NOT a subagent. Diff: `t3-xp-web-r8.diff`
+  (regenerated). Prompt: `t3-xp-web-r8-PROMPT.md`, ready to paste, names
+  PostWorkout.jsx as out of scope and the 359 never-reviewed lines that arrived
+  after round 7's diff was cut. Seven rounds have run; in every one, the previous
+  round's fix opened the next finding. Assume the eighth does too.
+LEFT IN THE DEV DB: smoke-xpdash-1785229803361@example.com + 4 backdated squats.
+SPEC GAPs: none.
+```
+
+```
 TASK: PostWorkout XP repoint — the LAST copy of the 100-XP curve
       [DONE. 4 T3 ROUNDS (7+8+8+9 findings, 7 blocking, all fixed). SMOKE
       PASSED. COMMITTED c681b23 + the round-4 fixes. OWED 🔴 TICKED.]
