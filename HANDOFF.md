@@ -5,8 +5,12 @@ TASK: PostWorkout XP repoint — the LAST copy of the 100-XP curve
       [DONE. 4 T3 ROUNDS (7+8+8+9 findings, 7 blocking, all fixed). SMOKE
       PASSED. COMMITTED c681b23 + the round-4 fixes. OWED 🔴 TICKED.]
       branch web-repoint, based on HEAD 3516331. Web-only: no API change, no
-      migration, no new dependency. NOT COMMITTED — the working tree carries
-      it; commit after the smoke per the loop order.
+      migration, no new dependency. COMMITTED: c681b23 (the fix) + 7f9f4cb
+      (round-4 fixes + the tick). Working tree clean.
+      (⚠ This sentence read "NOT COMMITTED — commit after the smoke" until
+      2026-07-28. The header above it was corrected and this clause was not —
+      round 4 F1's exact finding, one paragraph down, in the block round 4 F1
+      was about. Fixed rather than left as a third instance.)
 
 T3 ROUND 1 (fresh chat, run by Kd) — the reviewer MUTATED rather than read,
 and found the SECOND vacuous assertion in a card that had just recorded
@@ -166,13 +170,45 @@ PROVE (post-round-3): web 229 passed / 1 failed (230) — the 1 is the syncClien
   env quirk — up from 228/229. Build ✓. Lint = exact baseline parity. F2
   mutation-verified red→green at BOTH layers.
 
-OPEN, IN ORDER
-  1. Round 4 T3 — round 3 was not clean either. THREE rounds, one shape: the fix
-     is right, the protection around it is not. Diff: t3-postworkout-xp.diff.
-  2. COMMIT — nothing is committed; the working tree carries everything.
-  3. Then re-tick OWED's 🔴 line, naming the commit.
-  4. Still open from the previous session: re-run the nine-step XP smoke with
-     the fixed rig, and T3 round 8 on the XP work (`t3-xp-web-r8.diff`).
+THIS CARD IS FINISHED. Nothing about PostWorkout is outstanding.
+
+NEXT, and it is the top of the queue — the XP DISPLAY / DASHBOARD XP card from
+the previous session (OWED.md:86 and OWED.md:346, both 🔴 and both UNTICKED
+after SEVEN T3 rounds). Its code is committed and its findings are all fixed;
+what it still owes is exactly two things:
+  1. **THE RE-SMOKE.** It is blocked on nothing — the rig it needs is now in the
+     repo and WORKING (this session extended it with the workout-summary route,
+     anchored its path matching, bound it to loopback and drove every state with
+     curl). The scope has grown across rounds 4-7 and the state names to walk
+     are the rig's own: `healthy` FIRST as the control, then `dead`, `hang`,
+     `empty200`, `statsEmpty`, `noEarned`, `partial`, `badRecs`, `lbOnly`,
+     `emptyLists`. Read `apps/web/tools/mock-ml-backend.mjs`'s header — each
+     state names the round whose defect it reproduces.
+     ⚠ The 2026-07-27 attempt at this run was INVALIDATED (CORS wildcard, fixed
+     since). Run `healthy` first: if real numbers do not appear, the rig is
+     lying, not the app.
+     ⚠ Write the steps INTO the repo before running them, as
+     `RUNBOOK/smoke-postworkout-xp.md` now does — chat-only steps are what
+     invalidated the last run, and a T3 raised it again on 2026-07-27.
+  2. **T3 round 8** on that card (`t3-xp-web-r8.diff` at the repo root).
+Both ticks come off until those are done; the lines say so themselves.
+
+WORTH KNOWING BEFORE STARTING (learned the hard way this session)
+  · A Level-1 or Level-2 account cannot demonstrate an XP curve bug — level 2
+    costs exactly 100 XP, so right and wrong print the same string. The account
+    recipe is in RUNBOOK/smoke-postworkout-xp.md and takes about a minute.
+  · `POST /v1/workouts/sync` requires `Idempotency-Key` to EQUAL the body's
+    `workoutId`.
+  · Mutation-test every new assertion before claiming it protects anything.
+    Four rounds on the last card produced 7 blocking findings and ZERO
+    user-visible defects — every one was an assertion that could not fail, or a
+    claim nobody measured.
+  · `waitFor` is the wrong instrument when the value you assert is also the
+    value the animation starts at.
+  · Restore mutations from `cp` backups, never `git checkout --`.
+
+LEFT IN THE DEV DB: `smoke-xp@example.com` + 4 backdated squat workouts
+  (harmless — production starts empty).
 SPEC GAPs: none.
 ```
 
