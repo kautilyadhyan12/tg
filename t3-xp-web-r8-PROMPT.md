@@ -1,10 +1,15 @@
 # T3 ROUND 8 — web XP display + Dashboard XP card
 
-Paste everything below the line into a **FRESH chat** (not a subagent — a
-subagent review is not a T3), and attach:
-- `CLAUDE.md`
-- `t3-xp-web-r8.diff`
-- `docs/spec/07-part7-retention.md` (§2 Form Score / gamification surfaces)
+Paste everything below the line into a **FRESH Claude Code chat in this repo**
+(not a subagent — a subagent review is not a T3).
+
+**Nothing needs attaching.** Claude Code loads `CLAUDE.md` automatically and can
+read every other file from disk; the prompt names the paths. The upload list this
+file used to carry was inherited from the claude.ai workflow in CLAUDE.md Part I
+§3, which was written for chats that cannot see the repo. In Claude Code, an
+upload is a stale COPY of a file the reviewer can read live — which is the exact
+failure this round exists to avoid, since the diff it reviews had already gone
+stale once.
 
 ---
 
@@ -13,6 +18,13 @@ R0–R11. Output only: (1) violations as rule# · file:line · one-line fix; (2)
 security pass — authn/authz/tenancy, input parsing, idempotency, secrets/log
 leaks, SQL safety; (3) anything that would fail the phase's Done gate. No praise,
 no restating the diff.
+
+READ FROM DISK — nothing is attached and nothing needs to be:
+  · the diff under review: `t3-xp-web-r8.diff` at the repo root
+  · the spec: `docs/spec/07-part7-retention.md` (§2 Form Score / gamification)
+  · `CLAUDE.md` is already loaded for you
+Read the CURRENT files too, not only the diff — every file it touches is on disk
+and the live copy is the one that ships.
 
 ## What this diff is
 
