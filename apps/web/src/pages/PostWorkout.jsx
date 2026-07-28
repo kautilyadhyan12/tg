@@ -10,7 +10,7 @@ import {
 import { workoutService } from '../api/workoutApi';
 import { useXp } from '../hooks/useXp';
 import {
-  UNKNOWN, formatLevel, formatNextLevel, formatXpFraction, xpBarWidth,
+  formatLevel, formatNextLevel, formatXpEarned, formatXpFraction, xpBarWidth,
 } from '../api/gamificationApi';
 import toast from 'react-hot-toast';
 import html2canvas from 'html2canvas';
@@ -35,13 +35,19 @@ import html2canvas from 'html2canvas';
 // exact shape as the thing not to copy). Unknown renders as an em dash — never a
 // Level 1, never a 0.
 //
-// `xp_earned` STAYS on the old summary payload: it is THIS workout's delta and
-// the new API has no per-workout field (`xpViewSchema` carries total, level,
-// xpInLevel, xpForNext, progressPct, nextLevelAt — no delta). Keeping it is the
-// NO-REMOVAL rule; guarding it is R2.3 — an absent field must read "—" and not
-// "+0", which would claim the workout earned nothing.
-/** "+50", or the em dash when the old backend sent no usable number. */
-const formatXpEarned = (v) => (Number.isFinite(v) ? `+${v.toLocaleString()}` : UNKNOWN);
+// `xp_earned` STAYS on the old summary payload, because the new API has no
+// per-workout field at all (`xpViewSchema` carries total, level, xpInLevel,
+// xpForNext, progressPct, nextLevelAt — no delta). Keeping it is the NO-REMOVAL
+// rule; guarding it is R2.3 — an absent field must read "—" and not "+0", which
+// would claim the workout earned nothing.
+//
+// IT IS NOT "THIS WORKOUT'S DELTA", and this comment used to say it was (T3
+// round 4 F5, verified against the file it cites): the summary endpoint
+// RE-DERIVES the figure as base + form bonus only, while the amount actually
+// awarded at completion also included streak_day and badge XP. So it
+// understates the real award whenever a streak continued or a badge landed.
+// Pre-existing and out of this card's scope — but the comment must not assert
+// what the source contradicts.
 
 // ── Confetti ──────────────────────────────────────────────────────────────────
 function Confetti() {

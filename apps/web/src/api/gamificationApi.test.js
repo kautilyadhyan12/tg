@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
 import mlApi from './mlApi';
 import {
-  UNKNOWN, difficultyColor, earnedBadgeCount, formatCount, formatFraction, formatLevel,
+  UNKNOWN, difficultyColor, earnedBadgeCount, formatCount, formatFraction, formatLevel, formatXpEarned,
   formatXpProgress, formatXpTotal, gamificationService, listState,
   oldPayloadState, orUnknown, progressWidth, readBadge, readChallenge, xpBarWidth,
   readLeaderboardEntry, readLeaderboardView, readOverviewView,
@@ -393,6 +393,22 @@ describe('unknown-safe formatters', () => {
     expect(xpBarWidth(undefined)).toBe('0%');
     expect(xpBarWidth({})).toBe('0%');
     expect(xpBarWidth({ progressPct: 'nope' })).toBe('0%');
+  });
+
+  // T3 round 4 F9: this lived in PostWorkout.jsx, so it was the one old-payload
+  // formatter this block could not reach — `+0`, negative and non-finite were
+  // unasserted, covered only incidentally by one render test's absent-field case.
+  it('formatXpEarned: a real delta gets a plus, anything unusable gets a dash', () => {
+    expect(formatXpEarned(70)).toBe('+70');
+    expect(formatXpEarned(1500)).toBe(`+${(1500).toLocaleString()}`);
+    // 0 IS a real number the server can send: "+0" is then a fact, not a
+    // fabrication. Unknown is what must never render as zero.
+    expect(formatXpEarned(0)).toBe('+0');
+    expect(formatXpEarned(undefined)).toBe(UNKNOWN);
+    expect(formatXpEarned(null)).toBe(UNKNOWN);
+    expect(formatXpEarned('70')).toBe(UNKNOWN);
+    expect(formatXpEarned(NaN)).toBe(UNKNOWN);
+    expect(formatXpEarned(Infinity)).toBe(UNKNOWN);
   });
 
   it('progressWidth clamps, and unknown is an EMPTY track not a full one', () => {

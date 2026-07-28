@@ -1551,7 +1551,9 @@ right and the protection was not.
   round — "round 1 found no behaviour defect, only protection gaps" — is exactly
   what the re-tick precedent forecloses, since that precedent was written after
   a round found behaviour defects a click-through could not see. Round 2 then
-  found precisely that: a screen-visible level contradiction passing green.
+  found precisely that: a vacuous assertion over a screen-visible level
+  contradiction — the mutant visible, the shipped code never wrong (narrowed at
+  round 4 F4).
 - (a scratch file I nearly shipped, recorded because the mechanism is dull and
   dangerous) The framer-motion probe was written to `apps/web/src/pages/` and
   "deleted" with a relative `rm -f` run from the WRONG working directory — `-f`
@@ -1661,3 +1663,91 @@ it found the thing all three rounds have been circling.
   red→green at BOTH layers after the settle-then-assert fix.
 - (STATUS) Round 3 was not clean, so the 🔴 tick stays OFF and nothing is
   committed. Three rounds, one shape: the fix is right, the protection is not.
+
+## PostWorkout XP repoint — T3 round 4 (2026-07-28; fresh chat) — 9 findings, ZERO blocking — CARD CLOSED
+
+The first round on this card to find no user-visible defect and say so plainly.
+It re-measured all four of round 3's fixes and all four held (the `xpBar()`
+cardinality assertion fails loudly on a restyle; the 61.5% waitFor is not
+timing-luck — a 0→100% sweep delivers no poll stringifying to exactly '61.5%';
+the 2400ms settle catches the mutant; the ShareCard identity assertion holds;
+the source guard survives the comment-stripper; `xpBarWidth`'s coverage reaches
+the class, since null/undefined/{}/'nope' all land on the one `Number.isFinite`
+gate). Its own recommendation: fix the nine, add one OWED line, tick.
+
+- (THE STOPPING RULE, Kd-set before the round and applied by it) A finding
+  blocks the 🔴 tick only if it is a defect a user could see on screen;
+  everything else is fixed in the same commit but does not hold the line. It
+  exists because three rounds and 23 findings had produced SEVEN blocking items
+  and NOT ONE user-visible defect — the page has been correct since round 1 —
+  while the previous card on this project ran to seven rounds with the findings
+  shrinking each time. Round 4 tagged every finding and cleared the tick.
+- (R4 F1/F2, V1 + Part I.6 S1) `HANDOFF.md`'s top block still said "OWED's 🔴
+  line is TICKED" (false for three rounds, correction 33 lines below), still
+  said "NOT COMMITTED", and still carried a round-1 header after four rounds.
+  **This is round 3 F1's own shape, in the same file, shipped by the commit that
+  fixed round 3 F1.** Corrected in place.
+- (R4 F3, V2) The last TWO surviving statements of the falsified framer-motion
+  premise — both consequence clauses ("mocking framer-motion is the real fix and
+  is on OWED"), one of them three lines under the ⚠ marker round 3 added to that
+  very paragraph. The count is now: round 2 said four, round 3 said six, round 4
+  measured EIGHT by counting consequence clauses and not just premise
+  statements. The lesson is the counting rule, not the number: **a correction
+  aimed at a sentence leaves the clauses that depend on it standing.**
+- (R4 F4, V2 — an overstatement of MINE that the record carried three times)
+  `OWED.md`, `DECISIONS.md` and `HANDOFF.md` all said round 2 "found a
+  SCREEN-VISIBLE defect passing green". It did not: ShareCard already read
+  `formatLevel(xp)` before round 1, so both sites read one source and the screen
+  never contradicted itself. Round 2 found a VACUOUS ASSERTION over a
+  screen-visible defect CLASS — the mutant would have been visible, the shipped
+  code never was. c681b23 therefore shipped two records that contradict each
+  other, and the accurate one was the COMMIT MESSAGE ("no round found a defect a
+  user could see"). Corrected at all three sites; the re-tick precedent survives
+  intact.
+- (R4 F5, R0.2/V2 — verified against the source rather than taken) `xp_earned`
+  was described as "THIS workout's delta". The summary endpoint RE-DERIVES it as
+  base + form bonus only (workouts.py), while the amount actually awarded at
+  completion also included `streak_day` and badge XP — so it UNDERSTATES the
+  real award whenever a streak continued or a badge landed. Confirmed by reading
+  both blocks. Pre-existing, kept under NO-REMOVAL, comment corrected.
+- (R4 F6 → the OWED line, and it is the one gate-shaped finding) The bar's
+  `initial` went from `max(0, xpProgress − xp_earned)` to `0`, so the gain no
+  longer animates. Declared in DECISIONS with sound reasoning, but CLAUDE.md
+  requires an OWED LINE for a UI reduction forced by a missing backend surface,
+  and the commit that added three missed this one. Not blocking — what was lost
+  is the animation, not a number, and the number it swept from was computed on
+  the broken curve. Line added.
+- (R4 F7, V1) The 2400ms settle comment justified itself with "measured settling
+  at ~1.84s" — which is the KNOWN-value test's number. Round 4 measured this
+  path reaching '0%' in ~110ms, because a value that never changes has no
+  animation to wait out. The instrument is still right in both directions; the
+  REASON was quoted from the wrong measurement. Restated.
+- (R4 F8 — **the reviewer's proposed fix was wrong and was NOT taken**) It
+  correctly found that `listen(8000, '127.0.0.1')` serves IPv4 loopback only, so
+  a client resolving `localhost` to `::1` sees the rig as down — with the
+  "everything unavailable" signature that invalidated a previous smoke. Its fix,
+  `listen(8000, '::')`, is **the IPv6 WILDCARD, not loopback**: on a dual-stack
+  host it accepts every interface and would re-open the LAN exposure round 3
+  closed. Kept on 127.0.0.1, with the reasoning in the file and a fallback line
+  in the runbook's control step. Recorded because a finding is a claim (V1) and
+  this one's remedy would have undone a security fix.
+- (R4 F9, R9.1) `formatXpEarned` was the fourth old-payload formatter but lived
+  in the page, so this file's formatter tests could not reach it — `+0`,
+  negative and non-finite were unasserted. MOVED beside its siblings in
+  `gamificationApi.js` (the `syncTimezone` → `userApi.js` precedent) with eight
+  assertions, including that `+0` is a FACT when the server sends 0 and only
+  UNKNOWN may never render as zero.
+- (R4 security, taken) The runbook committed a working login for an account that
+  lives in the shared dev database — a disposable fixture, not a production
+  secret, but a live credential in git three commits after a Neon rotation for
+  that same class. The recipe now GENERATES the password and prints it.
+- (PROVE, post-round-4) web **230 passed / 1 failed (231)** — the 1 is the
+  pre-existing syncClient env quirk — up from 229/230. `vite build` ✓. Lint =
+  exact baseline parity (4 errors + 1 warning, all in PostWorkout's untouched
+  `Confetti`). 
+- (**CARD CLOSED.** OWED's 🔴 line is TICKED, naming `c681b23` + this commit.)
+  Four rounds, 32 findings, 7 blocking, zero user-visible defects in the shipped
+  page at any point. The bug itself was fixed and browser-verified on day one;
+  what took four rounds was the protection around it, and the through-line is
+  one sentence: **every blocking finding came from a claim someone had not
+  measured — mine most of all.**

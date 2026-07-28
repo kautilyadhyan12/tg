@@ -44,7 +44,13 @@ load-bearing; do not treat the total as a fixed expectation.
 
 ```bash
 J=/tmp/smoke-cookies.txt; rm -f $J
-EMAIL="smoke-xp@example.com"; PASS="SmokeTest2026!"
+# The password is GENERATED, not committed (T3 round 4 security note): the first
+# version of this file put a working login for a shared-dev-database account
+# into git, three commits after a Neon password was rotated for that same class.
+# It is a disposable fixture, not a production secret — but it does not belong
+# in history. Copy the line it prints; you need it at step 5.
+EMAIL="smoke-xp@example.com"; PASS="Smoke-$(node -e 'console.log(crypto.randomUUID().slice(0,12))')!"
+echo "SMOKE LOGIN -> $EMAIL / $PASS"
 curl -s -c $J -X POST http://localhost:3000/v1/auth/register -H "Content-Type: application/json" \
   -d "{\"email\":\"$EMAIL\",\"password\":\"$PASS\",\"displayName\":\"Smoke XP\"}"
 curl -s -c $J -X POST http://localhost:3000/v1/auth/login -H "Content-Type: application/json" \
@@ -103,6 +109,11 @@ node apps/web/tools/mock-ml-backend.mjs
 `http://localhost:8000/__state/healthy`.
 ✅ It prints `{"state":"healthy"}`.
 
+**If that page will not load,** try `http://127.0.0.1:8000/__state/healthy`. The
+rig binds IPv4 loopback only (deliberately — see the comment in the file), and a
+browser that resolves `localhost` to the IPv6 `::1` will report it as down. That
+looks identical to the app being broken, which is why it is named here.
+
 If any later step shows "unavailable" everywhere, the rig is lying, not the app
 — check CORS before filing anything (the recorded lesson from the invalidated
 run).
@@ -112,7 +123,7 @@ run).
 ## The steps
 
 **5.** Log in at `http://localhost:5173` as `smoke-xp@example.com` /
-`SmokeTest2026!` — the Level-3 account from the recipe at the top. Any other
+the password the recipe printed — the Level-3 account from the top. Any other
 account either cannot show the difference (Level 1–2) or is intercepted by the
 onboarding gate. Then go straight to:
 

@@ -2,7 +2,8 @@
 
 ```
 TASK: PostWorkout XP repoint — the LAST copy of the 100-XP curve
-      [T3 ROUND 1 DONE: 7 findings, 2 blocking, ALL FIXED. SMOKE OWED.]
+      [DONE. 4 T3 ROUNDS (7+8+8+9 findings, 7 blocking, all fixed). SMOKE
+      PASSED. COMMITTED c681b23 + the round-4 fixes. OWED 🔴 TICKED.]
       branch web-repoint, based on HEAD 3516331. Web-only: no API change, no
       migration, no new dependency. NOT COMMITTED — the working tree carries
       it; commit after the smoke per the loop order.
@@ -23,7 +24,10 @@ protection is not":
     in the bar passed all three render tests
     AND the source guard. Now held by a per-consumer ban on
     `summary.current_(xp|level)`, labelled in the code as a tripwire, not
-    proof. Mocking framer-motion is the real fix and is on OWED.
+    proof. ⚠ STRUCK (round 4 F3): "mocking framer-motion is the real fix and is
+    on OWED" is dead twice over — a render assertion DOES exist, and that OWED
+    card is struck. It was one of the last two surviving statements of the
+    falsified premise.
   · F6 the render fixture claimed to be "a real xp block" and could not be:
     xpForNext 248 is LEVEL 2's span. Recomputed from xp.ts — 374 / 61.5 / 722.
   · F3/F4/F5 three of my own counts were reconstructions, now measured. NB
@@ -84,7 +88,11 @@ THE FINDING WORTH CARRYING FORWARD
   `waitFor` for the unknown bar could pass on a transient frame at the start of
   the sweep, so it was replaced by a settle-then-assert.
 
-SMOKE — PASSED (Kd, 2026-07-27), every step. OWED's 🔴 line is TICKED.
+SMOKE — PASSED (Kd, 2026-07-27), every step. ⚠ "OWED's 🔴 line is TICKED" was
+  FALSE when written and stayed false for three rounds, with its correction 33
+  lines below — round 3 F1's own shape, in the file round 3 F1 was about,
+  committed by the commit that fixed it (round 4 F1). The line IS ticked now,
+  naming c681b23 + the round-4 fix commit.
   Steps live at RUNBOOK/smoke-postworkout-xp.md (they were chat-only until the
   T3 caught it — the shape that invalidated the previous run).
   THE FIXTURE MATTERS: a Level-1/2 account CANNOT prove this fix, because level
@@ -117,10 +125,14 @@ T3 ROUND 2 (2026-07-28, fresh chat) — 8 findings, 3 blocking, ALL FIXED.
     directory and joined the suite as an 18th test file. Caught by the file
     COUNT moving, not by a test.
 
-THE OWED TICK IS BACK OFF. It named no commit while nothing is committed, and
-  the "no behaviour defect, only protection gaps" argument is exactly what the
-  re-tick precedent forecloses — round 2 then found a screen-visible defect
-  passing green. Re-ticks on a clean round plus a commit.
+THE OWED TICK WENT BACK OFF AT ROUND 2, and is back ON after round 4. It had
+  named no commit while nothing was committed, and the "no behaviour defect,
+  only protection gaps" argument is what the re-tick precedent forecloses.
+  ⚠ CORRECTED (round 4 F4): this said round 2 "found a screen-visible defect
+  passing green". It did not — ShareCard already read `formatLevel(xp)` before
+  round 1; round 2 found a VACUOUS ASSERTION over a screen-visible defect
+  CLASS, i.e. the mutant would have been visible, the shipped code never was.
+  The precedent survives the correction intact.
 
 PROVE (post-round-2): web 228 passed / 1 failed (229) — the 1 is the syncClient
   env quirk — up from 226/227. Build ✓. Lint = exact baseline parity. All three

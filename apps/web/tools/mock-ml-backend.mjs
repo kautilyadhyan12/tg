@@ -237,4 +237,15 @@ createServer((req, res) => {
 // an app bug. Nothing here is secret; the risk is a LYING INSTRUMENT, which is
 // this file's own stated hazard. NB if a future card needs the rig reachable
 // from a PHONE (the owed mobile smoke), change this line deliberately.
+//
+// IPv4 LOOPBACK ONLY, and that is a deliberate keep. T3 round 4 (F8) correctly
+// observed that a client which resolves `localhost` to `::1` sees the rig as
+// down — and the symptom, "everything unavailable", is the exact signature of
+// the CORS bug that invalidated a previous smoke run. **Its proposed fix,
+// `listen(8000, '::')`, is WRONG and was not taken: `::` is the IPv6 WILDCARD,
+// not loopback — on a dual-stack host it accepts every interface and would
+// re-open the LAN exposure the previous round closed.** The safe options are
+// `::1` (which breaks IPv4 clients instead) or two servers, neither worth it
+// for a fixture rig. Kept on 127.0.0.1; the runbook's control step tells the
+// tester what to try if the browser cannot reach it.
 }).listen(8000, '127.0.0.1', () => console.log('[mock-ml] listening on 127.0.0.1:8000, state =', state));

@@ -452,17 +452,23 @@ then; none may be hidden or reduced to close the gap.
       `err?.message` form as part of the `allSettled` change, so what remains is
       the wider sweep: every other `catch(console.error)` on an axios call in
       `apps/web`, `Dashboard.jsx` included.
-- [ ] 🔴 **`PostWorkout.jsx` has the same 100-XP-per-level bug the Dashboard
-      card deleted — and it is shown after EVERY workout.**
-      **TICK TAKEN BACK OFF 2026-07-28 by T3 round 2 — it was premature and the
-      reviewer was right on both counts.** (a) Protocol: the tick named no
-      commit, and nothing is committed — OWED's own rule is "tick it, date it,
-      NAME THE COMMIT". (b) Substance: the argument used to justify ticking
-      without a clean round — "round 1 found no behaviour defect, only gaps in
-      the protection" — is the exact argument the re-tick precedent was written
-      to foreclose, and round 2 then found a SCREEN-VISIBLE defect passing
-      green: the share card could print a different level from the page beside
-      it, and every test stayed green. Re-ticks on a clean round plus a commit.
+- [x] 🔴 **`PostWorkout.jsx` has the same 100-XP-per-level bug the Dashboard
+      card deleted — and it is shown after EVERY workout. DONE 2026-07-28,
+      commits `c681b23` + the round-4 fixes.** Smoke passed 2026-07-27 on a
+      Level-3 account; FOUR T3 rounds (7+8+8+9 findings, 7 blocking, all fixed),
+      round 4 clean of user-visible defects and recommending the tick.
+      **THE TICK'S HISTORY, kept because it is the point:** it went on early
+      after round 1, and round 2 took it off — correctly, on two counts. (a) It
+      named no commit while nothing was committed, against OWED's own "tick it,
+      date it, NAME THE COMMIT". (b) The argument for ticking without a clean
+      round — "round 1 found no behaviour defect, only gaps in the protection" —
+      is what the re-tick precedent forecloses. It goes back on now under a
+      stopping rule Kd set explicitly: a finding blocks the tick only if it is a
+      defect a user could see. Round 4 found none, said so, and recommended
+      this. (Round 2's finding was a VACUOUS ASSERTION over a screen-visible
+      defect class — corrected at round 4 F4, which verified ShareCard already
+      read `formatLevel(xp)` before round 1: the mutant would have been visible,
+      the shipped code never was.)
       Found by the T3 on
       888e750 (its F4) and given this line because the MIGRATION STANCE requires
       the deferral to be recorded in the deferring commit; grep confirmed
@@ -497,6 +503,20 @@ then; none may be hidden or reduced to close the gap.
       it read `summary.current_level`, so the page and the downloadable PNG
       would otherwise have printed two different levels. Web-only: no API
       change, no migration, no new dependency.
+
+- [ ] 🟡 **The post-workout XP bar no longer animates from where you were to
+      where you are.** Raised by T3 round 4 (F6) as a deferral-rule gap: the
+      PostWorkout repoint changed the bar's `initial` from
+      `max(0, xpProgress − xp_earned)` to `0`, so it now fills from empty rather
+      than sweeping the gain. The reasoning was sound and declared in DECISIONS
+      — the old "before" was computed on the broken `% 100` curve, and
+      reconstructing it today means arithmetic across two stores that diverge by
+      design — but CLAUDE.md's rule is that a UI reduction forced by a missing
+      backend surface gets an OWED LINE, and that commit added three and missed
+      this one. What the user lost is the ANIMATION, not a number (the number it
+      used to sweep from was wrong), which is why round 4 did not call it
+      blocking. Closes when the new API carries a per-workout delta: the bar can
+      then start at `progressPct − thatDelta` honestly, from one store.
 
 - [ ] 🟡 **The post-workout XP can be one workout stale — on the one screen that
       exists to be about that workout.** Raised by the PostWorkout repoint

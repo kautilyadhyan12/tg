@@ -820,9 +820,14 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     // value, so "it was 0% at some instant" says nothing. Only the unit test
     // caught that mutant.
     //
-    // So: wait out the animation, then assert ONCE. The window is the bar's own
-    // delay(0.8) + duration(1), measured settling at ~1.84s; 2.4s clears it with
-    // margin inside the 10s budget.
+    // So: wait, then assert ONCE. The wait is sized for THE MUTANT's sweep, not
+    // for this path — corrected at T3 round 4 F7, which measured the honest
+    // case reaching '0%' in ~110ms, because a value that never changes has no
+    // animation to wait out. The 1.84s figure belongs to the KNOWN-value test.
+    // What 2.4s buys is that a mutant sweeping 0 → 100% has finished before the
+    // assertion runs, so it cannot be caught mid-sweep at a coincidental value.
+    // It cannot pass early for a new reason either: an animation that never
+    // runs leaves `width: 0px`, which fails `toBe('0%')`.
     await new Promise((r) => { setTimeout(r, 2400); });
     expect(xpBar(container).style.width).toBe('0%');
 

@@ -212,6 +212,26 @@ export function progressWidth(v) {
   return v === null || v === undefined ? '0%' : `${Math.min(100, Math.max(0, v))}%`;
 }
 
+/** "+50" for a workout's XP delta, or the em dash when the old backend sent no
+ *  usable number — never "+0", which would claim the workout earned nothing.
+ *
+ *  Lives HERE, beside its siblings, rather than in PostWorkout.jsx where it was
+ *  written (T3 round 4 F9): as a page-local it was the fourth old-payload
+ *  formatter and the only one this file's formatter tests could not reach, so
+ *  its `+0`, negative and non-finite behaviour was unasserted. Same move, same
+ *  reason, as `syncTimezone` → userApi.js (DECISIONS 2026-07-21).
+ *
+ *  WHAT THE NUMBER ACTUALLY IS, stated because the caller's comment used to
+ *  overstate it (round 4 F5): `GET /workouts/:id/summary` RE-DERIVES this as
+ *  base + form bonus only (backend-ml workouts.py), while the amount the old
+ *  backend actually awarded at completion also included streak_day and badge
+ *  XP. So it understates the real award for any workout that continued a streak
+ *  or earned a badge. Pre-existing, kept under NO-REMOVAL, and not something
+ *  this formatter can fix — but do not describe it as "the delta". */
+export function formatXpEarned(v) {
+  return Number.isFinite(v) ? `+${v.toLocaleString()}` : UNKNOWN;
+}
+
 /** The accent colour for a difficulty, with UNKNOWN as neutral grey.
  *
  *  ROUND 7 F2: three components each carried their own ternary whose final
