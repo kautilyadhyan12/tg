@@ -1,6 +1,57 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: XP display / Dashboard XP — T3 ROUND 8 RECEIVED AND RECORDED. The card
+      FAILED it: 6 blocking findings, 15 of 31 mutants survived.
+      [NO CODE FIXED THIS SESSION. Records only. The fix is Round A, below.]
+      Branch web-repoint. Working tree: records + the findings file, committed.
+
+WHAT THIS SESSION DID
+  · Regenerated `t3-xp-web-r8.diff` (it was stale — cut one minute after round
+    7's commit, with 4 of its 12 files changed since).
+  · Wrote RUNBOOK/smoke-xp-dashboard.md; RAN the re-smoke with Kd: 11/11 PASSED.
+  · Received T3 round 8, VERIFIED all six findings against the current files
+    before planning anything, and recorded them verbatim at
+    `t3-xp-web-r8-FINDINGS.md`.
+  · OWED, DECISIONS and this file updated. Ticks REMAIN OFF.
+
+READ THIS BEFORE FIXING ANYTHING
+  **The smoke passing and the T3 failing are not in tension.** The smoke reaches
+  the ten states the mock rig can produce; F4 needs a badge whose `category` is
+  a prototype name, which the rig never sends, and F1/F2/F6 are properties of the
+  TEST SUITE and not of the running app. Do not let "but the smoke passed" soften
+  any of these.
+
+  **F1 is the card's own defect, alive.** `Level {(xp ?? { level: 1 }).level}` in
+  Sidebar survives BOTH protections: the source guard's FIELD_READ demands a `.`
+  or `[` after `xp`, and Sidebar is mounted by NO render test — the one consumer
+  where the original `user?.level || 1` bug lived is the one with zero DOM
+  coverage. The guard's comment claiming "all ten bypasses fail there" is FALSE
+  and must be corrected in the same commit that fixes it (it is the fifth false
+  claim that section has carried).
+
+THE FIX IS SPLIT — Kd ruling 2026-07-28
+  · **ROUND A (next): F3, F4, F5 — the LIVE defects.** Failing test first, R9.5.
+    F4 blanks the whole Achievements page via a prototype-chain `in` lookup on
+    external input. F3 claims "Weekly activity unavailable" during an in-flight
+    read, permanently against a hung backend. F5 paints an unknown badge tier
+    BRONZE in GamificationStrip while Achievements renders it neutral.
+  · **ROUND B (after A): F1, F2, F6 — the PROTECTION.** Sidebar + Achievements
+    render coverage, the FIELD_READ bypass, and the three `>= 3` dash floors that
+    let four numeric fabrications through. Mutation-test EVERY new assertion
+    before it counts — rounds 6 F11 and 7 F3 are both about assertions that
+    could not fail.
+  · Four non-blocking findings are on OWED with lines, not in A or B.
+
+STATE OF THE MACHINE (still running at handover; kill if not wanted)
+  · new API :3000 · web :5173 · mock old :8000 (state = healthy)
+  Docker is NOT running and is NOT needed — DATABASE_URL is Neon, no REDIS_URL.
+  The API prints nothing for >30s on first boot; curl /health, don't assume dead.
+SMOKE FIXTURE: smoke-xpdash-1785229803361@example.com (Level 3 / 332/374 / 680).
+SPEC GAPs: none.
+```
+
+```
 TASK: XP display / Dashboard XP — THE RE-SMOKE. [PASSED, all 11 steps, 2026-07-28.
       OWED ticks still OFF: round 8 has not run.]
       Branch web-repoint, HEAD fb4a65d + this commit. No app code changed this

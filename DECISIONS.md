@@ -1804,3 +1804,68 @@ gate). Its own recommendation: fix the nine, add one OWED line, tick.
   13. The regex `'^- \[ \] .*🔴'` matched line 1099, an ❓ item whose body reads
   "see the 🔴 leaderboard line above" — a mention, not a marker. Caught by Kd.
   V1 says a number comes from a command; it does not say the command is right.
+
+## 2026-07-28 — T3 round 8: the card FAILED it. 6 blocking, 15/31 mutants alive
+
+- (The eighth consecutive round in which the previous round's fix opened the next
+  finding. The pattern has now not broken once.) Findings verbatim at
+  `t3-xp-web-r8-FINDINGS.md` — recorded as the reviewer wrote them, because a
+  paraphrase of a finding is hearsay (V4) and this card has already lost rounds
+  to claims nobody re-measured. **All six were independently re-verified against
+  the current files by the receiving chat BEFORE any plan was written**, per the
+  standing instruction not to take another agent's results at face value: the
+  `FIELD_READ` regex was read and shown not to match `xp ??`; the render test's
+  four `describe` blocks were listed (no Sidebar); every `getMe.` line in the
+  Achievements block was confirmed to use `XP_LEVEL_3`; the `in CATEGORY_LABELS`
+  lookup and `{}` initialiser were read at `Achievements.jsx:431-435`; the bronze
+  `else` was read at `GamificationStrip.jsx:317-320`; the three floors were read
+  at the render test's `:144/:161/:182`. No overstatement was found. The review
+  is accepted in full.
+
+- (THE FINDING THAT MATTERS MOST, because it is this card's own defect) **F1: the
+  bug the card was opened to delete is reintroducible with all 75 tests green.**
+  `Level {(xp ?? { level: 1 }).level}` in `Sidebar.jsx` survives both protections
+  — the source guard because `FIELD_READ` demands a `.` or `[` after `xp`, and
+  the render suite because **Sidebar is mounted by no test at all.** The one
+  consumer where the original `user?.level || 1` lived is the one with zero DOM
+  coverage. Round 7 shipped a guard whose comment claims "all ten bypasses fail
+  there … it does not care how a fabrication was spelled"; two of the ten pass.
+  **That claim is struck here and must be corrected at `gamificationApi.test.js`
+  :454-457 and at DECISIONS 2026-07-26 (line 1173) when Round B lands.** It is
+  the fifth false claim that guard section has carried, and it is precisely the
+  claim the section was rewritten to stop making.
+
+- (F4, and it is the one a user hits) An unguarded `in` against a literal `{}`
+  is a prototype-chain read: a badge `category` of `toString` makes
+  `badgesByCategory[key]` resolve to `Object.prototype.toString`, which is
+  truthy, so the array is never created and `.push` is called on a function. The
+  whole Achievements page renders blank — XP header included — because there is
+  no ErrorBoundary in `apps/web`. `category` is `text(b?.category)`: any non-empty
+  string from the old backend, i.e. external input used as an object key (R2.3).
+  Structurally identical to round 6 F2, one layer in.
+
+- (Why the smoke passed anyway, stated so the two records do not look like they
+  contradict each other) The 2026-07-28 browser smoke passed 11/11 and **could
+  not have caught F4**: the mock rig never sends a prototype-name category, and
+  no amount of clicking produces one. Nor could it catch F1/F2/F6, which are
+  properties of the TEST SUITE, not of the running app. A passing smoke and a
+  failing T3 are not in tension — they reach different things, which is why the
+  card needs both gates.
+
+- (Kd ruling, 2026-07-28) The fixes are SPLIT across two chats rather than done
+  in one: **Round A** = F3, F4, F5, the live defects, failing test first per
+  R9.5; **Round B** = F1, F2, F6, the protection layer, every new assertion
+  mutation-tested before it counts. Reason: six blocking findings in one sitting
+  is past the ~300-400-line staleness threshold in Part I §1, and the two halves
+  need different methods — Round A fixes shipping behaviour, Round B fixes
+  instruments that have now been wrong five times.
+
+- (Deferred with lines, per the deferral rule) Round 8's four non-blocking
+  findings are on OWED rather than in Round A/B: the leaderboard name-as-key
+  collision (`readLeaderboardEntry` discards `user_id`), the podium colour for a
+  zero/negative rank, the CTA hidden forever by a hung `getStats`, plus the
+  long-mislabelled local `syncClient` failure (cause finally identified:
+  `apps/web/.env` sets `VITE_API_URL`, falsifying the test's premise locally) and
+  the fact that **`apps/web` is excluded from the lint gate** — root lint is
+  `turbo run lint --filter=!web` — so every web card's "lint clean" DoD tick has
+  been true by exclusion rather than by fact.

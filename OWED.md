@@ -91,10 +91,35 @@ then; none may be hidden or reduced to close the gap.
       / `332/374` / `680 XP` held on all five XP surfaces in all ten rig states,
       including `dead` and `hang`; no fabricated zero and no false "unavailable"
       over visible content anywhere. **THE TICK STAYS OFF: this line needs the
-      smoke AND T3 round 8, and round 8 has not run** (`t3-xp-web-r8.diff`
-      regenerated 2026-07-28 — the previous copy was cut one minute after round
-      7's commit and two commits had landed on 4 of its 12 files since; prompt
-      ready at `t3-xp-web-r8-PROMPT.md`).
+      smoke AND T3 round 8.**
+      **ROUND 8 HAS NOW RUN (2026-07-28) AND THE CARD FAILED IT: 6 BLOCKING
+      FINDINGS, 15 of 31 MUTANTS SURVIVED.** Findings verbatim at
+      `t3-xp-web-r8-FINDINGS.md`; all six independently re-verified against the
+      current files before any fix was planned. The eighth consecutive round in
+      which the previous round's fix opened the next finding.
+      THREE ARE LIVE DEFECTS: F4 an unguarded `in` lookup on external input
+      blanks the WHOLE Achievements page (a badge category of `toString` →
+      `.push` on `Object.prototype.toString`); F3 the week strip claims
+      "Weekly activity unavailable" during an in-flight read, permanently when
+      the old backend hangs; F5 an unknown badge tier is painted BRONZE in
+      GamificationStrip while Achievements renders it neutral — round 6 F5 fixed
+      at one of two sites, the eighth instance of the one-of-N shape.
+      THREE ARE THE PROTECTION: F1 `Sidebar` — the component the ORIGINAL bug
+      lived in — is mounted by no render test at all, and the source guard's
+      `FIELD_READ` misses `xp ?? { level: 1 }`, so the card's own defect is
+      reintroducible with all 75 tests green; F2 no Achievements test ever runs
+      with the XP read failing; F6 four numeric fabrications (`?? 0` at Total
+      Workouts, Calories, This-week, Your Rank) survive because
+      `getAllByText('—').length >= 3` is a floor with two dashes of slack.
+      **Also falsified: the claim in `gamificationApi.test.js:454-457` and
+      DECISIONS (2026-07-26) that "all ten bypasses fail there".** Two of them
+      pass. Fifth false claim carried by that guard section.
+      FIX ORDER, Kd-approved 2026-07-28: **Round A** = the live defects
+      (F3, F4, F5), failing test first per R9.5; **Round B** = the protection
+      layer (F1, F2, F6), every new assertion mutation-tested before it counts.
+      The smoke does NOT need re-running for Round A/B unless a fix changes
+      user-visible behaviour beyond the defect — and note the smoke could not
+      have caught F4: the rig never sends a prototype-name category.
       **ROUND 7 (2026-07-27, fresh chat): 8 findings, 3 blocking, all fixed.**
       Seventh consecutive round in which the previous round's fix opened the
       next one. F1: `recsState` derived from the STATS read's loading flag —
@@ -1013,6 +1038,44 @@ then; none may be hidden or reduced to close the gap.
       (DECISIONS 2026-07-19.)
 
 ## ⚪ Improvements and residuals
+
+- [ ] 🟡 **T3 round 8's four non-blocking findings (2026-07-28).** Given lines
+      here in the same commit that deferred them, per the deferral rule — they
+      were reported by a review that named them explicitly, which is exactly how
+      items get lost when only prose records them. Full text at
+      `t3-xp-web-r8-FINDINGS.md` §(3).
+      1. `Achievements.jsx:737` `key={entry.name ?? i}` — `readLeaderboardEntry`
+         DISCARDS the payload's `user_id` (which the file's own fixture carries
+         at line 411), forcing name-as-key. Two athletes with the same display
+         name collide and React reuses the wrong row. Fix is to keep `user_id`
+         in the reader and key on it; the reason it is not in Round A/B is that
+         it changes a reader's shape, which is its own small card.
+      2. `Achievements.jsx:268` `podiumColors[entry.rank]` — `rank` is
+         `finite()`, so 0 or a negative passes `isPodium` and yields a Crown
+         with `color: undefined`. Cosmetic.
+      3. `Dashboard.jsx:733` `{!loading && (CTA)}` — the STATIC "Ready to
+         start?" call-to-action borrows the stats read's knowability, so a hung
+         `getStats` hides it forever. Round 7 F8's shape, one site over. Note
+         this is the same three-states-never-two family as F3 and is worth
+         folding into whichever round touches `Dashboard.jsx` last.
+- [ ] 🟡 **`apps/web/src/sync/syncClient.test.js` fails locally, passes in CI.**
+      `ReferenceError: window is not defined`. Cause VERIFIED by T3 round 8:
+      `apps/web/.env` sets `VITE_API_URL`, vitest loads it, so the test's premise
+      ("in this node test env `VITE_API_URL` is unset") is false on a dev machine
+      with a populated `.env`. Not a product defect — but it makes EVERY local
+      PROVE run report "1 failed", which is how a real regression gets waved
+      through as "that's just the known one". It has been described as "the
+      pre-existing syncClient env quirk" in five handoff blocks without anyone
+      naming the cause until now.
+- [ ] 🟡 **`apps/web` is excluded from the lint gate and the DoD box says
+      "lint clean" anyway.** Root lint is `turbo run lint --filter=!web`, and
+      `pnpm --filter web lint` fails with 67 errors package-wide. So every web
+      card has ticked "lint clean" truthfully-by-exclusion while the package it
+      changed was never linted. Found by T3 round 8, which also confirmed the 2
+      errors in this card's own files (`Sidebar.jsx:8` unused `Zap`,
+      `Achievements.jsx:5` unused `ChevronRight`) are pre-existing on master and
+      correctly untouched per R1.1. Either lint web and fix the 67, or change the
+      DoD wording so the box stops asserting something nobody checked.
 
 - [ ] ⚪ **Onboarding wizard's native unit dropdowns → the shared `Select`.** A
       native `<select>` popup is OS-drawn and its hovered row uses the system
