@@ -86,3 +86,15 @@ corepack pnpm --filter web exec vite build
 Baseline before you start: **75 passed** across those two files. The separate
 `syncClient.test.js` failure is a known local env quirk with its own OWED line —
 it is not yours and must not be "fixed" here.
+
+## Push when the round is done
+
+After Kd has approved and the work is committed, **ask him to confirm, then
+`git push` the branch**. `web-repoint` tracks `origin/web-repoint`; this is a
+BACKUP to its own remote branch and merges nothing into `master`. The commits
+accumulate on a laptop otherwise — they were 31 deep on 2026-07-28.
+
+**Do not offer to merge.** CLAUDE.md Part I.5 V7: merge only after a chat writes
+"READY TO MERGE", which it may do only when CI is green AND every T3 finding is
+resolved and pushed. Round B is still outstanding after this one, so no chat can
+honestly say it yet.
