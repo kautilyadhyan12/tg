@@ -73,6 +73,7 @@ const Dashboard         = (await import('./Dashboard')).default;
 const Achievements      = (await import('./Achievements')).default;
 const GamificationStrip = (await import('../components/dashboard/GamificationStrip')).default;
 const PostWorkout       = (await import('./PostWorkout')).default;
+const Sidebar           = (await import('../components/common/Sidebar')).default;
 
 /** A real /v1/gamification/me `xp` block. Level THREE deliberately: "Level 1" is
  *  the fabricated value this whole card exists to delete, so it must never be
@@ -107,6 +108,29 @@ const HANGS = () => new Promise(() => {});
 
 const renderPage = (ui) => render(<MemoryRouter>{ui}</MemoryRouter>);
 
+/** ROUND 8 F6 — the instruments the dash FLOORS are replaced by.
+ *
+ *  `getAllByText('—').length >= 3` is a floor with slack: five sites render the
+ *  dash in the old-backend-dead fixture, so any TWO of them could start printing
+ *  a fabricated number and the count still passed. The reviewer proved it by
+ *  reintroducing `?? 0` at four render sites — Total Workouts, Calories Burned,
+ *  This week and Your Rank — with all 75 tests green. MUT-21 is round 4 F2
+ *  verbatim ("0 workouts / 0h / 0 kcal printed as fact"), i.e. the exact defect
+ *  this card exists to delete, alive again and invisible.
+ *
+ *  A count cannot say WHICH site went numeric. These name the site.
+ *
+ *  `getByText` THROWS when its anchor is absent or ambiguous, so neither helper
+ *  can pass vacuously: deleting a stat card fails the test that reads it, which
+ *  is the "a vanishing site is still caught" half of the DECISIONS 2026-07-28
+ *  ruling on floors (identity + an exact count, at PostWorkout's share card). */
+/** Dashboard's LOCAL StatCard renders value → label → sub as siblings, so the
+ *  label is the anchor and the value is the node before it. */
+const statValue = (label) => screen.getByText(label).previousElementSibling.textContent;
+/** The three tiles in the Experience Points card render only value → sub: their
+ *  `label` is the React key and never reaches the DOM, so the SUB is the anchor. */
+const tileValue = (sub) => screen.getByText(sub).previousElementSibling.textContent;
+
 beforeEach(() => {
   vi.clearAllMocks();
   recommendationService.getRecommendations.mockImplementation(DEAD);
@@ -118,6 +142,58 @@ afterEach(() => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+/** ROUND 8 F1 — the consumer where the ORIGINAL bug lived, mounted by no test.
+ *
+ *  `user?.level || 1` in Sidebar rendered a fabricated "Level 1" for every user
+ *  on this branch; deleting it is why this card exists. It then survived every
+ *  protection the card built, for two independent reasons, and each was a claim
+ *  the repo made and did not hold:
+ *
+ *    · the source guard's FIELD_READ requires a `.` or `[` after `xp`, and
+ *      `(xp ?? { level: 1 }).level` has neither — documented bypass #6;
+ *    · this file imported Dashboard, Achievements, GamificationStrip and
+ *      PostWorkout. NOT Sidebar. The one component the card was opened for had
+ *      zero DOM coverage, so MUT-28 reintroduced the fabrication with all 75
+ *      tests green.
+ *
+ *  Sidebar needs no new fixture: useAuth, useTransition and the router are
+ *  already mocked or provided at the top of this file, and useXp is the REAL
+ *  hook reading the mocked gamificationService. */
+describe('Sidebar — where the original bug lived — round 8 F1', () => {
+  it('XP read fails: no level is invented in the shell', async () => {
+    gamificationService.getMe.mockImplementation(DEAD);
+
+    const { container } = renderPage(<Sidebar />);
+
+    // Waiting on the dash rather than on a static node also lets the failed
+    // read settle before the sweep runs.
+    await waitFor(() => expect(screen.getByText('Level —')).toBeTruthy());
+
+    // WHOLE-DOCUMENT, and BOTH spellings. The user card prints the level twice
+    // — "Level {…}" in the flame row and a compact "L{…}" badge beside it — so
+    // asserting one of them leaves the other free to fabricate.
+    const text = container.textContent;
+    expect(text).not.toMatch(/Level\s*\d/);
+    expect(text).not.toMatch(/\bL\d/);
+  });
+
+  it('XP ready: the sidebar prints the TRUE level, at both sites', async () => {
+    // THE POSITIVE CONTROL. Without it, a Sidebar that renders no level at all
+    // — or whose user card was deleted outright — satisfies the test above
+    // completely, and the protection becomes an assertion that cannot fail.
+    // That is rounds 6 F11 and 7 F3's defect class, and Round A's F5 needed
+    // exactly this control for the same reason (DECISIONS 2026-07-29).
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+
+    renderPage(<Sidebar />);
+
+    await waitFor(() => expect(screen.getByText('Level 3')).toBeTruthy());
+    expect(screen.getByText('L3')).toBeTruthy();
+    expect(screen.queryByText(/Level 1\b/)).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 describe('Dashboard — a real level never sits beside fabricated figures', () => {
   it('old backend DEAD, XP ready: shows the true level and dashes for the rest', async () => {
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
@@ -125,7 +201,7 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     gamificationService.getLeaderboard.mockImplementation(DEAD);
     workoutService.getStats.mockImplementation(DEAD);
 
-    renderPage(<Dashboard />);
+    const { container } = renderPage(<Dashboard />);
 
     // The true level, from the new API.
     await waitFor(() => expect(screen.getAllByText(/Level 3/).length).toBeGreaterThan(0));
@@ -140,8 +216,19 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     expect(screen.queryByText('0 minutes')).toBeNull();
     expect(screen.queryByText(/0 of 7 days active/)).toBeNull();
     expect(screen.getByText('Weekly activity unavailable')).toBeTruthy();
-    // Dashes are present where the numbers would be.
-    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3);
+
+    // ROUND 8 F6: every dash site named, not counted. See statValue/tileValue.
+    expect(statValue('Total Workouts')).toBe('—');
+    expect(statValue('Hours Trained')).toBe('—');
+    expect(statValue('Calories Burned')).toBe('—');
+    expect(tileValue('workouts')).toBe('—');
+    expect(tileValue('days')).toBe('—');
+
+    // …and a whole-document sweep, because identity assertions can only cover
+    // the sites someone thought of. With the old backend dead NO old-backend
+    // figure is knowable, so a bare zero anywhere on this page is a
+    // fabrication — including at a site added tomorrow.
+    expect(container.textContent).not.toMatch(/\b0\b/);
   });
 
   it('a 200 carrying {stats:{}} still shows dashes — round 4 F2', async () => {
@@ -152,13 +239,21 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     gamificationService.getLeaderboard.mockImplementation(DEAD);
     workoutService.getStats.mockResolvedValue({ data: { stats: {} } });
 
-    renderPage(<Dashboard />);
+    const { container } = renderPage(<Dashboard />);
 
     await waitFor(() => expect(screen.getAllByText(/Level 3/).length).toBeGreaterThan(0));
     expect(screen.queryByText('0 minutes')).toBeNull();
     expect(screen.queryByText(/0 of 7 days active/)).toBeNull();
     expect(screen.getByText('Weekly activity unavailable')).toBeTruthy();
-    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3);
+
+    // ROUND 8 F6, and this fixture is where it bites hardest: the ENVELOPE
+    // arrived, so a `?? 0` on any absent field reads as a real server zero.
+    expect(statValue('Total Workouts')).toBe('—');
+    expect(statValue('Hours Trained')).toBe('—');
+    expect(statValue('Calories Burned')).toBe('—');
+    expect(tileValue('workouts')).toBe('—');
+    expect(tileValue('days')).toBe('—');
+    expect(container.textContent).not.toMatch(/\b0\b/);
   });
 
   it('a PARTIAL 200 fabricates nothing for the missing fields', async () => {
@@ -179,7 +274,19 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     // The two ABSENT fields must NOT have become zeros.
     expect(screen.queryByText('0 minutes')).toBeNull();
     expect(screen.queryByText('kcal total')).toBeTruthy();
-    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2);
+
+    // ROUND 8 F6, by identity. NO whole-document zero sweep in THIS test: the
+    // known `total_workouts: 12` is a number, so StatCard animates it from 0
+    // and a bare "0" is a legitimate frame of that sweep, not a fabrication.
+    // The absent fields are strings ('—') and never animate.
+    expect(statValue('Hours Trained')).toBe('—');
+    expect(statValue('Calories Burned')).toBe('—');
+    expect(tileValue('days')).toBe('—');
+    // THE CONTROL, and it is the one that stops "everything is a dash" from
+    // passing: a field the server DID send still renders its real value. The
+    // tiles render {value} directly, so unlike StatCard there is no animation
+    // to race here.
+    expect(tileValue('workouts')).toBe('2');
   });
 
   it('XP read fails too: no level is invented anywhere', async () => {
@@ -317,6 +424,12 @@ describe('GamificationStrip — XP renders when the old backend does not', () =>
     expect(screen.queryByText('of 0')).toBeNull();
     expect(screen.queryByText(/\(0\//)).toBeNull();
     expect(screen.getByText(/Challenges are unavailable/)).toBeTruthy();
+
+    // ROUND 8 F6 / MUT-20: `orUnknown(userRank)` reverted to `?? 0` printed a
+    // rank of "0" — an athlete's position, fabricated — and every test stayed
+    // green. The `of 0` assertion above reads the TOTAL, a different node; the
+    // rank is the <p> immediately before it and had nothing on it at all.
+    expect(screen.getByText('of —').previousElementSibling.textContent).toBe('—');
   });
 
   it('old backend HANGS and XP fails: the strip does not vanish forever — F7', async () => {
@@ -552,6 +665,36 @@ describe('Achievements — the three payloads are independent — round 4 F4', (
     await waitFor(() => expect(screen.getByText(/Level 3/)).toBeTruthy());
     expect(screen.getByText(/578/)).toBeTruthy();
     expect(screen.queryByText(/Level 1\b/)).toBeNull();
+  });
+
+  it('the XP read fails TOO: the header invents nothing — round 8 F2', async () => {
+    // Every other test in this block resolves getMe with XP_LEVEL_3 — 13 of 13,
+    // counted, not recalled — so formatLevel, formatXpTotal, formatXpFraction,
+    // formatNextLevel and xpBarWidth were only ever exercised ON THIS PAGE with
+    // a KNOWN block. Dashboard, GamificationStrip and PostWorkout each have an
+    // XP-fails fixture; Achievements had none, and MUT-34 — the same
+    // destructure that defeats FIELD_READ — rendered "Level 1" in this header
+    // with all 75 tests green. The test above is its control: same page, same
+    // failed old backend, XP known.
+    gamificationService.getMe.mockImplementation(DEAD);
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+
+    const { container } = renderPage(<Achievements />);
+    await waitFor(() =>
+      expect(screen.getByText('Failed to load achievements')).toBeTruthy());
+
+    // WHOLE-DOCUMENT, matching the Dashboard's XP-fails test: a fabrication
+    // interpolated into a longer string slips past every per-element query,
+    // which is exactly how round 4's strip-eating mutation behaved.
+    const text = container.textContent;
+    expect(text).not.toMatch(/Level\s*\d/);
+    expect(text).not.toMatch(/\d[\d,]*\s*XP/);
+
+    // The positive half: the header still RENDERS, as dashes. Without these a
+    // header deleted outright would satisfy both sweeps above.
+    expect(text).toMatch(/—\/—/);
+    expect(text).toMatch(/XP to Lv —/);
   });
 
   // ── ROUND 5 ────────────────────────────────────────────────────────────────

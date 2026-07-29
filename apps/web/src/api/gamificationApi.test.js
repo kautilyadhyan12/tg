@@ -513,9 +513,27 @@ describe('unknown-safe formatters', () => {
 //     only enumerate the attacks someone already thought of — which is exactly
 //     what ten bypasses across four rounds demonstrate empirically.
 //   · THE PROTECTION OF RECORD is `src/pages/xpDisplay.render.test.jsx`, which
-//     renders the components in jsdom and asserts on the DOM. Every one of the
-//     ten bypasses fails there, because it does not matter how a fabrication was
-//     spelled — only that a number nobody knows reached the screen.
+//     renders the components in jsdom and asserts on the DOM: it does not matter
+//     how a fabrication was spelled, only that a number nobody knows reached the
+//     screen.
+//
+// **THE SENTENCE THAT STOOD HERE — "every one of the ten bypasses fails there"
+// — WAS FALSE AND IS STRUCK (round 8 F1).** Two of the ten passed it, both
+// bypass #6, the destructure: MUT-28 reintroduced `Level {(xp ?? { level: 1
+// }).level}` in Sidebar.jsx and MUT-34 did the same in the Achievements header,
+// and both left all 75 tests GREEN. The render suite could not see either,
+// because it imported four components and Sidebar was not one of them, and
+// because all 13 Achievements tests resolved getMe with a KNOWN block. A DOM
+// assertion only covers what someone remembered to mount.
+//
+// WHAT IS TRUE AS MEASURED, and nothing beyond it — this is the FIFTH false
+// claim this section has carried, and the claim it keeps failing to make
+// honestly is precisely this one:
+//   · those two re-introductions are now caught. Round B mounted Sidebar with
+//     the XP read dead and gave Achievements its own XP-fails fixture, then
+//     re-ran both mutations: RED (Round B B1 and B3, 2026-07-29).
+//   · the other eight bypasses were verified caught in round 4 and have NOT
+//     been re-measured since. That is a round-4 measurement, not a current one.
 // Do not grow this section in response to a new bypass. Add a render assertion.
 //
 // Claims made below are limited to what is mechanically true: FIELD_READ now

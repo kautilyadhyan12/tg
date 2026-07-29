@@ -111,8 +111,10 @@ then; none may be hidden or reduced to close the gap.
       with the XP read failing; F6 four numeric fabrications (`?? 0` at Total
       Workouts, Calories, This-week, Your Rank) survive because
       `getAllByText('—').length >= 3` is a floor with two dashes of slack.
-      **Also falsified: the claim in `gamificationApi.test.js:454-457` and
-      DECISIONS (2026-07-26) that "all ten bypasses fail there".** Two of them
+      **Also falsified: the claim in `gamificationApi.test.js` (the guard
+      section's header — round 8 cited it as :454-457, which Round A's edits had
+      already shifted to :515-518; corrected here per V4) and DECISIONS
+      (2026-07-26, line 1173) that "all ten bypasses fail there".** Two of them
       pass. Fifth false claim carried by that guard section.
       FIX ORDER, Kd-approved 2026-07-28: **Round A** = the live defects
       (F3, F4, F5), failing test first per R9.5; **Round B** = the protection
@@ -137,7 +139,32 @@ then; none may be hidden or reduced to close the gap.
       Lint parity checked rather than "lint clean" ticked: the six touched files
       produce 1 error at HEAD and the same 1 error after (pre-existing
       `ChevronRight`), package-wide 67 both times.
-      **THE TICK STAYS OFF: Round B (F1, F2, F6) has not run.**
+      **ROUND B IS DONE (2026-07-29). F1, F2 and F6 are FIXED, and NO component
+      file changed — all three were defects of the TEST layer, so Round B alters
+      no shipping behaviour and owes no re-smoke.** F1: `Sidebar` is mounted by
+      two new tests (XP dead → no level at either of its two sites; XP ready →
+      the TRUE level at both, the positive control without which an empty
+      sidebar would pass). F2: one Achievements test with `getMe` DEAD, the
+      whole-document sweep matching the Dashboard's. F6: the three
+      `getAllByText('—').length >= 3` floors at :144/:161/:182 are REPLACED by
+      per-site identity assertions (`statValue`/`tileValue`, which throw when
+      their anchor is absent or ambiguous so they cannot pass vacuously) plus a
+      whole-document `\b0\b` sweep on the dead fixtures; `Your Rank` got its own
+      identity assertion in GamificationStrip, since the pre-existing `of 0`
+      check reads the TOTAL and never touched the rank.
+      **9 mutations, 9 RED — every new assertion mutation-tested before it was
+      claimed to protect anything**, restored from `cp` backups. B1/B3 are
+      MUT-28/MUT-34 verbatim (the destructure that defeats `FIELD_READ`);
+      B5/B6/B7/B8 are MUT-21/24/26/20, the four numeric fabrications, of which
+      MUT-21 is round 4 F2 verbatim; B2 and B9 are the vanishing-site controls.
+      Suite 84/84 (81 + 3). `vite build` green. Lint parity: the two touched
+      files produce 0 problems, package-wide 67 errors — the same 67 Round A
+      measured and round 8's reviewer counted independently.
+      The two false "all ten bypasses" claims are CORRECTED IN THE SAME COMMIT,
+      in the guard header and at DECISIONS line 1173, and neither is replaced by
+      a new sweeping claim: what is written is what was measured (Kd chose this
+      over re-running all ten to earn the strong sentence back).
+      **THE TICK STAYS OFF: T3 round 9 has not run on Rounds A+B.**
       **ROUND 7 (2026-07-27, fresh chat): 8 findings, 3 blocking, all fixed.**
       Seventh consecutive round in which the previous round's fix opened the
       next one. F1: `recsState` derived from the STATS read's loading flag —
@@ -330,6 +357,23 @@ then; none may be hidden or reduced to close the gap.
       `badgeXpForCodes`, in `gamification/badges.ts`), but it is not yet served
       by any endpoint and is NOT stored on the `achievements` table — the badge
       catalog card decides whether it needs a column.
+- [ ] 🔴 **Round 8 F6's other EIGHT surviving mutants — NOT addressed by Round B,
+      NOT re-measured.** F6's table listed twelve; Round B's prescription
+      ("per-site identity assertions plus a whole-document numeric sweep on the
+      DEAD fixture") covers the four NUMERIC render-site fabrications only —
+      MUT-20/21/24/26, all four now mutation-verified caught. The other eight
+      stand exactly as the reviewer measured them on 2026-07-28 and have NOT been
+      re-run since, so this line records a round-8 measurement and not a current
+      one: MUT-3, 4, 15, 16, 17 (`orUnknown(...)` → bare read at badge
+      name/icon/xpReward and `ex.primaryCategory` — round 7 F5's own fix, which
+      shipped with no test at any layer), MUT-29 (`entry.isCurrentUser === true`
+      → truthy, round 7 F6's fix), MUT-2 (the recommendation pill's BACKGROUND —
+      round 7 F2's own site, asserted on colour but not background), and MUT-10
+      (`useXp` reporting a malformed 200 as ready). Recorded rather than folded
+      in because Kd approved a plan naming exactly nine mutations (R1.1/S4) —
+      and recorded AT ALL because "fix the class, not the case" plus an untracked
+      known gap is the precise combination this card has lost rounds to. Close it
+      in whichever round next touches these assertions.
 - [ ] 🔴 **Badge catalog + challenges screens.** "Tables now, screens later"
       carve; needs catalog/challenges read endpoints. Challenges also need a
       scheduler for weekly rotation. (DECISIONS 2026-07-11 P2.3.)

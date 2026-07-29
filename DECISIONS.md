@@ -1170,7 +1170,7 @@ The fourth consecutive round in which the PREVIOUS round's fix opened something
 new. Round 3's `statsKnown`, its successor to `oldReady`, and its rebuilt guard
 each became a round-4 finding.
 
-- (**THE RULING THAT MATTERS â€” the regex guard is retired as the protection of record**) Four rounds hardened a battery of source-text regexes; it was defeated TEN times, four of them in round 4: a DESTRUCTURE (`const { level = 1 } = xp ?? {}`) that `FIELD_READ` structurally cannot match because it requires `.` or `[` after `xp`; a contradiction appended to `FIELD_READ` that disarmed the entire scan silently, because the pattern had a negative assertion only and no positive control (the 0x08 lesson, third occurrence); `if (oldFailed) return null`, a variable name invented after the early-return regex's six-name list was written; and the strip-eating attack with the poison moved BELOW the last helper call, where the positive anchor cannot fire. The conclusion is not that the regexes were badly written. Source text has unbounded spellings for the same rendered output, so any such battery can only enumerate attacks someone already thought of. **Kd approved `jsdom` + `@testing-library/react` as dev dependencies (R1.4, 2026-07-26, option A of three offered).** `apps/web/src/pages/xpDisplay.render.test.jsx` renders the components and asserts on the DOM; all ten bypasses fail there because it does not care how a fabrication was spelled, only that a number nobody knows reached the screen. The source guard STAYS as a cheap tripwire and its header now says, in those words, that it is not proof. Standing instruction added to that file: do not grow it in response to a new bypass â€” add a render assertion.
+- (**THE RULING THAT MATTERS â€” the regex guard is retired as the protection of record**) Four rounds hardened a battery of source-text regexes; it was defeated TEN times, four of them in round 4: a DESTRUCTURE (`const { level = 1 } = xp ?? {}`) that `FIELD_READ` structurally cannot match because it requires `.` or `[` after `xp`; a contradiction appended to `FIELD_READ` that disarmed the entire scan silently, because the pattern had a negative assertion only and no positive control (the 0x08 lesson, third occurrence); `if (oldFailed) return null`, a variable name invented after the early-return regex's six-name list was written; and the strip-eating attack with the poison moved BELOW the last helper call, where the positive anchor cannot fire. The conclusion is not that the regexes were badly written. Source text has unbounded spellings for the same rendered output, so any such battery can only enumerate attacks someone already thought of. **Kd approved `jsdom` + `@testing-library/react` as dev dependencies (R1.4, 2026-07-26, option A of three offered).** `apps/web/src/pages/xpDisplay.render.test.jsx` renders the components and asserts on the DOM. **THE CLAUSE THAT FOLLOWED HERE — "all ten bypasses fail there because it does not care how a fabrication was spelled" — WAS FALSE AND IS STRUCK (round 8 F1, corrected by Round B on 2026-07-29).** Two of the ten passed it, both bypass #6, the destructure: MUT-28 in `Sidebar.jsx` and MUT-34 in the Achievements header each reintroduced `Level {(xp ?? { level: 1 }).level}` with all 75 tests GREEN. A DOM assertion covers only what someone remembered to MOUNT, and this suite imported four components with Sidebar — the one where the original `user?.level || 1` lived — not among them, while all 13 Achievements tests resolved `getMe` with a known block. Both are now caught, mutation-verified (Round B B1/B3); the other eight remain a ROUND 4 measurement that has not been re-run. The source guard STAYS as a cheap tripwire and its header now says, in those words, that it is not proof. Standing instruction added to that file: do not grow it in response to a new bypass â€” add a render assertion.
 - (F2, BLOCKING â€” the fabrication class, live on the Dashboard in the commit that claimed to delete it) `statsKnown = Boolean(stats?.stats)` asserted the ENVELOPE, then six sites read fields off it with `?? 0`. A 200 carrying `{stats:{}}`, or any subset missing `total_minutes`, printed "0 workouts / 0h / 0 kcal / 0 minutes" as fact. This is verbatim the shape round 3 had just deleted from GamificationStrip and Achievements (`Boolean(data)` to `badgesKnown`/`challengesKnown`) and shipped here in the SAME commit. The code carried its own admission: if those fields could never be missing, the `?? 0` operators would be dead. The guard could not catch it because it banned `|| 0` and PERMITTED `?? 0` â€” the spelling the code was actually written in.
 - (F3, BLOCKING) The week strip's `activity = stats?.activity || {}` default rendered seven dots in their NOT-TRAINED state â€” a visual "you trained on none of these days", i.e. seven claims â€” directly beside a caption that correctly read "Weekly activity unavailable". GamificationStrip applies the honest rule to its own empty list eight inches away ("an empty list would read as 'no challenges this week', which is a claim we cannot make"). Unknown now has its own look: dashed outline, no fill, no flame.
 - (F4) `allSettled` decoupled the FETCH but every render in Achievements was still gated on `data`, the OVERVIEW payload â€” leaderboard tab included. Two live consequences: an overview failure threw away a leaderboard sitting in state while the notice asserted it was "unavailable" (a false failure claim, third shape), and the DECISIONS 2026-07-24 P4 dark window â€” a SCHEDULED state â€” produced a clickable tab rendering nothing at all. Per-payload state now; the notice names only what actually failed.
@@ -1946,3 +1946,108 @@ gate). Its own recommendation: fix the nine, add one OWED line, tick.
   user-visible behaviour BEYOND the defect. F3 adds "Loading this week…" and a
   loading tooltip, which IS the defect's fix, so no re-run. Stated here so the
   absence is a cited decision and not an omission.
+
+## 2026-07-29 — T3 round 8 ROUND B: the PROTECTION layer (F1, F2, F6)
+
+- (Scope, and the thing that makes this round different from the seven before
+  it) **No component file changed.** F1, F2 and F6 are all defects of the TEST
+  layer — a component nobody mounted, a page never rendered in its unknown
+  state, and three assertions with slack in them — so Round B alters no shipping
+  behaviour, owes no re-smoke, and its `vite build` is a formality rather than
+  evidence. Every previous round on this card changed source; stating this
+  plainly is what stops a future reader assuming a behaviour change went
+  unsmoked.
+
+- (F1, and it is the card's own defect) `Sidebar.jsx` — where `user?.level || 1`
+  lived, the fabricated "Level 1" this card was opened to delete — was mounted by
+  NO test in `xpDisplay.render.test.jsx`, which imported four components and not
+  that one. The source guard could not cover the gap either: `FIELD_READ` is
+  `/(?<![.\w$])xp\s*\??\s*(\.\s*\w+|\[)/`, which needs a `.` or `[` after `xp`,
+  and `(xp ?? { level: 1 }).level` offers neither — the `.level` there follows a
+  PAREN. Two protections, one blind spot, and MUT-28 walked through both with 75
+  tests green. Sidebar now has two tests, and the level is asserted at BOTH its
+  sites: the flame row's `Level {…}` and the compact `L{…}` badge beside it, so
+  fixing one and leaving the other is not available.
+
+- (THE POSITIVE CONTROL, because "no level is printed" is trivially satisfied by
+  printing nothing) The second Sidebar test asserts the TRUE level renders when
+  XP is known. Without it, deleting the user card outright passes the first test
+  completely — rounds 6 F11 and 7 F3's class, and Round A needed the identical
+  control for F5. Mutation B2 (the level site stops printing a level) turns BOTH
+  Sidebar tests red, which is the proof that neither is vacuous.
+
+- (F2) All 13 Achievements tests resolved `getMe` with `XP_LEVEL_3` — counted,
+  not recalled; the kickoff said 12. Dashboard, GamificationStrip and PostWorkout
+  each had an XP-fails fixture and Achievements had none, so `formatLevel` /
+  `formatXpTotal` / `formatXpFraction` / `formatNextLevel` / `xpBarWidth` were
+  never exercised on that page with an unknown block. One test with `getMe` DEAD
+  now sweeps the whole document, and the pre-existing XP-known test one line
+  above it is its control.
+
+- (F6 — **the floors, and why a count was always the wrong instrument**)
+  `expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3)` stood at
+  three sites. FIVE sites render the dash in the dead fixture — Total Workouts,
+  Hours Trained, Calories Burned, This week, Streak (measured, not assumed) — so
+  the floor carried two dashes of slack and any two sites could start printing a
+  fabricated number underneath it. The reviewer proved it with four `?? 0`
+  re-introductions, all green; MUT-21 is round 4 F2 verbatim ("0 workouts / 0h /
+  0 kcal printed as fact"), the exact defect this card exists to delete, alive
+  again and invisible. **A count cannot say WHICH site went numeric.** Replaced
+  by per-site identity assertions plus a whole-document `\b0\b` sweep on the dead
+  fixtures. `Your Rank` is fixed in the same breath: the existing `of 0` check
+  reads the TOTAL, a different node, and the rank had nothing on it at all.
+  This is the same remedy DECISIONS 2026-07-28 recorded for PostWorkout's
+  `getAllByText(/Level 3/).length >= 2` — identity, because a positive count is
+  satisfied by whatever else happens to be on the page.
+
+- (An instrument choice worth recording, since it is what makes the new
+  assertions non-vacuous by construction) `statValue`/`tileValue` are built on
+  `getByText`, which THROWS when its anchor is absent OR ambiguous. So a deleted
+  stat card fails the test that reads it — that is the "an exact count still
+  catches a vanishing site" half of the floors ruling, obtained from the anchor
+  itself rather than from a second brittle number. Mutation B9 deletes the
+  Calories Burned card entirely and turns three tests red, which is the proof.
+
+- (THE MEASUREMENT) **9 mutations, 9 RED**, each applied to a `cp` backup and
+  restored from it, never `git checkout --` (round 3's recorded process
+  failure). B1/B3 are MUT-28/MUT-34 verbatim; B5/B6/B7/B8 are MUT-21/24/26/20;
+  B2/B9 are the vanishing-site controls; B4 is a numeric fabrication at the XP
+  fraction, and it was caught TWICE — by the new Achievements test and by the
+  source guard's `FIELD_READ`, which does see `xp?.xpInLevel`. The mutation
+  harness writes UTF-8 explicitly at both ends and refuses to run when its anchor
+  does not appear exactly once, because round 5 recorded a PowerShell text
+  round-trip corrupting a source file by reading UTF-8 as CP1252.
+
+- (**THE CORRECTION, and it is the fifth this guard section has needed**) The
+  claim "all ten bypasses fail there" is struck in BOTH places it stood — the
+  guard header in `gamificationApi.test.js` and this file at line 1173 — and
+  **not replaced by a new sweeping claim.** What is written now is what was
+  measured: the two that round 8 caught passing are now caught, mutation-verified
+  today; the other eight are a ROUND 4 measurement that has not been re-run. Kd
+  was offered the alternative — re-run all ten and earn the strong sentence back
+  — and chose the measured wording. Recorded because the temptation to restore a
+  tidy sentence is exactly how that comment became wrong five times.
+
+- (Round 8 cited `gamificationApi.test.js:454-457` for the false claim; those
+  lines are `xpBarWidth` assertions now.) Round A's edits had already shifted the
+  guard header to :515-518. The finding's SUBSTANCE was exact and its line
+  number was stale — V4 in the ordinary direction, and the OWED line is corrected
+  to describe the section rather than a line number that moves under it.
+
+- (Deferred WITH a line, per the deferral rule) F6's table listed twelve
+  surviving mutants and Round B's prescription covers the four numeric ones. The
+  other eight — MUT-3/4/15/16/17 (round 7 F5's fix, uncovered), MUT-29 (round 7
+  F6's), MUT-2 (round 7 F2's background) and MUT-10 (`useXp`) — were NOT
+  addressed and NOT re-measured, and they now have their own 🔴 OWED line rather
+  than living in this prose. Not folded in because Kd approved a plan naming
+  exactly nine mutations (S4/R1.1); recorded loudly because an untracked known
+  gap plus "fix the class, not the case" is this card's recurring shape.
+
+- (PROVE, post-Round-B) **84/84 green** (81 + 3 new tests). `vite build` ✓ in
+  40.27s. Lint measured as PARITY rather than ticked, since `apps/web` is
+  excluded from the root gate: the two touched files produce **0 problems**, and
+  package-wide **67 errors / 9 warnings** — the same 67 Round A measured before
+  and after, and the same 67 round 8's reviewer counted independently.
+
+- (THE TICK STAYS OFF) Rounds A and B have not been reviewed. T3 round 9 runs on
+  the two commits together.

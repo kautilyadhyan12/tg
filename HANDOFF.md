@@ -1,6 +1,63 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: XP display / Dashboard XP — T3 ROUND 8, ROUND B. F1, F2, F6 FIXED.
+      Branch web-repoint. 2 test files + OWED/DECISIONS/HANDOFF.
+      NO COMPONENT FILE CHANGED — all three were TEST-layer defects.
+      Suite 84/84 green (81 + 3 new). OWED tick STILL OFF.
+
+WHAT THIS SESSION DID
+  · F1 — Sidebar is MOUNTED now. It was in no render test at all, and the
+    source guard's FIELD_READ needs a `.` or `[` after `xp`, which
+    `(xp ?? { level: 1 }).level` does not have (the `.level` follows a paren).
+    Two protections, one blind spot. Asserted at BOTH its level sites:
+    `Level {…}` in the flame row and the `L{…}` badge beside it.
+  · F2 — one Achievements test with getMe DEAD. All 13 of its tests used
+    XP_LEVEL_3 (counted; the kickoff said 12), so that page's formatters had
+    never once run on an unknown block.
+  · F6 — the three `getAllByText('—').length >= 3` floors are GONE. Five sites
+    render the dash in the dead fixture, so the floor had two dashes of slack.
+    Replaced with per-site identity (`statValue`/`tileValue`) + a whole-document
+    `\b0\b` sweep. `Your Rank` got its own assertion — the old `of 0` check
+    reads the TOTAL, not the rank.
+  · 9 mutations, 9 RED. Restored from `cp` backups, never `git checkout --`.
+  · Both "all ten bypasses fail there" claims CORRECTED, in the same commit.
+
+READ THIS BEFORE ROUND 9 / ANY FURTHER WORK
+  **The corrected claim was NOT replaced with a new strong one.** The guard
+  header and DECISIONS:1173 now say only what was measured: the two bypasses
+  round 8 caught passing are caught (B1/B3, today); the other eight are a
+  ROUND 4 measurement not re-run since. Kd was offered the alternative — re-run
+  all ten — and chose the measured wording. Do not "tidy" it back.
+
+  **Round 8 F6's other EIGHT mutants have their own 🔴 OWED line.** F6's table
+  listed twelve; the prescription covered the four numeric ones. MUT-3/4/15/16/
+  17/29/2/10 were NOT addressed and NOT re-measured. That line is the record —
+  do not treat F6 as fully closed.
+
+  **`getByText` is doing load-bearing work.** It throws when its anchor is
+  absent or ambiguous, which is why the new identity assertions cannot pass
+  vacuously and why B9 (deleting a whole stat card) turns three tests red. Do
+  not "simplify" statValue/tileValue into querySelector lookups.
+
+  **Do NOT add a test for `Object.create(null)` in Achievements** — Round A's
+  one surviving mutant, inert while `Object.hasOwn` stands (DECISIONS
+  2026-07-29). Adding one is the vacuous assertion this round is about.
+
+NEXT: T3 ROUND 9, fresh chat, on Rounds A + B together (7b91c68 + this commit).
+  Both OWED 🔴 ticks stay OFF until it is clean.
+
+VERIFY: corepack pnpm --filter web exec vitest run src/api/gamificationApi.test.js src/pages/xpDisplay.render.test.jsx
+        corepack pnpm --filter web exec vite build
+LINT: parity, not clean — apps/web is excluded from the root gate. Touched
+      files 0 problems; package-wide 67 errors (same as Round A and as round
+      8's reviewer measured).
+NOTE: syncClient.test.js still fails locally (apps/web/.env sets VITE_API_URL).
+      Known, on OWED, NOT ours — not in the two files above.
+SPEC GAPs: none.
+```
+
+```
 TASK: XP display / Dashboard XP — T3 ROUND 8, ROUND A. F3, F4, F5 FIXED.
       Branch web-repoint. 6 source/test files + OWED/DECISIONS/HANDOFF.
       Suite 81/81 green (75 pre-existing + 6 new). OWED tick STILL OFF.
