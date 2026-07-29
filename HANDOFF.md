@@ -1,6 +1,61 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: XP display / Dashboard XP — T3 ROUND 10 FIXES. 4 findings, ALL FIXED.
+      Branch web-repoint. 4 files + OWED/DECISIONS/HANDOFF.
+      Suite 90/90 green (87 + 3). OWED ticks STILL OFF.
+
+WHAT THIS SESSION DID
+  · F1 (VISIBLE) — the week caption counted SESSIONS (`weekly_workouts`, since
+    Monday) and was labelled "days active", above dots drawn from `activity`
+    (keyed by DAY, over a ROLLING seven days). TWO mismatches, verified at
+    backend-ml/app/routers/workouts.py:72-74 and :86-89 — the review named one.
+    "5 of 7 days active" over 3 flames; "10 of 7 days active" past 7 sessions.
+    New `weekDates()` in gamificationApi.js; the caption and WeekStrip both use
+    it, so a count and a picture of one week cannot be two answers.
+  · F2 — round 9 asserted PRESENCE on six neutral style slots and NEUTRALITY on
+    two. A neutral slot set to bronze is still valid CSS, so 4 mutants lived.
+  · F3 — the completeness loop listed 5 of 7 fields AND only ever ran over the
+    NEUTRAL tier. Extending it (the prescribed fix) still left the four KNOWN
+    tiers unchecked: deleting `tint` from bronze survived at 89/89. Second test
+    added for the known half + both difficulty vocabularies.
+  · F4 — the recommendation pill's BACKGROUND knew one vocabulary while its
+    label knew two, so difficulty 'easy' was a green label on a red pill.
+  · 13 mutations, 12 RED. Round 9's re-run as regression: all still RED.
+
+READ THIS BEFORE ROUND 11
+  **The one GREEN mutant is declared and is NOT a gap to close.** M3 (WeekStrip's
+  date +24h) is a DATE-DEPENDENT equivalent: `weekDates(t)` subtracts t's own
+  Monday offset, so t and t+1d are identical except across a Sunday boundary —
+  on a Sunday it IS caught. Do not add an assertion for it. The decoupling it
+  probes (caption and dots on different windows) IS caught: M13 is RED.
+
+  **The caption's zero is now a FACT, not a fabrication.** `activity` arrived and
+  empty ⇒ "0 of 7 days active" is true. Unknown lives only in the
+  "Weekly activity unavailable" arm. Two old tests pinned the old source and
+  went red on the fix — that is the R9.5 evidence, not an accident.
+
+  **Round 8 F6's other EIGHT mutants are STILL open** (own 🔴 OWED line):
+  MUT-3/4/15/16/17/29/2/10. Not addressed by Round B, round 9 or round 10.
+
+  **Do NOT re-report:** Object.create(null); A1 (equivalent, round 9 verified);
+  the apps/web lint exclusion; syncClient.test.js.
+
+NEXT: T3 ROUND 11, fresh chat, on this commit. Round 10's own verdict was that
+  round 11 "should be able to close this, and I would hold it to that".
+
+VERIFY: corepack pnpm --filter web exec vitest run src/api/gamificationApi.test.js src/pages/xpDisplay.render.test.jsx
+        corepack pnpm --filter web exec vite build
+LINT: parity. Six touched files = 1 error (ChevronRight, pre-existing);
+      package-wide 67 errors / 9 warnings.
+MUTATION HARNESS RULE (round 9's failure, now enforced in code): re-snapshot
+      UNCONDITIONALLY at the start of every run, or delete the snapshot between
+      runs. Two harnesses with overlapping file sets is how three source files
+      got silently reverted mid-run.
+SPEC GAPs: none.
+```
+
+```
 TASK: XP display / Dashboard XP — T3 ROUND 9 FIXES. 4 findings, ALL FIXED.
       Branch web-repoint. 6 files + OWED/DECISIONS/HANDOFF.
       Suite 87/87 green (84 + 3). OWED ticks STILL OFF.

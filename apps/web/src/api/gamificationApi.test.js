@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
 import mlApi from './mlApi';
 import {
-  UNKNOWN, difficultyColor, earnedBadgeCount, formatCount, formatFraction, formatLevel, formatXpEarned,
+  UNKNOWN, difficultyColor, difficultyStyle, earnedBadgeCount, formatCount, formatFraction, formatLevel, formatXpEarned,
   formatXpProgress, formatXpTotal, gamificationService, listState,
   oldPayloadState, orUnknown, progressWidth, readBadge, readChallenge, tierStyle, xpBarWidth,
   readLeaderboardEntry, readLeaderboardView, readOverviewView,
@@ -283,9 +283,35 @@ describe('old-payload readers: every field is a usable value or NULL', () => {
       expect(s.color).toBe('rgba(255,255,255,0.45)');
       // The defect was UNDEFINED styles, not a wrong colour — asserting the
       // colour alone would have missed it. Every field must be a real string.
-      for (const field of ['color', 'bg', 'ring', 'glow', 'edge']) {
+      for (const field of ['color', 'bg', 'ring', 'glow', 'edge', 'tint', 'pill']) {
         expect(typeof s[field]).toBe('string');
         expect(s[field].length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('every style-table entry is COMPLETE — round 10 F3, the known half', () => {
+    // The prototype-name loop above covers the NEUTRAL tier only. Round 10 F3
+    // found it listing 5 of the 7 fields; extending it still left the four
+    // KNOWN tiers unchecked, and a known tier missing a field is round 8 F4's
+    // own defect — the known-tier path with styles reading `undefined`.
+    // Measured: deleting `tint` from bronze survived at 89/89, so this is a
+    // real gap in round 10's own fix and not a hypothetical.
+    for (const tier of ['bronze', 'silver', 'gold', 'platinum']) {
+      const s = tierStyle(tier);
+      for (const f of ['color', 'bg', 'ring', 'glow', 'edge', 'tint', 'pill']) {
+        expect(typeof s[f], `${tier}.${f}`).toBe('string');
+        expect(s[f].length, `${tier}.${f}`).toBeGreaterThan(0);
+      }
+    }
+    // The difficulty table round 9 added has the same shape and the same risk —
+    // both vocabularies, both ends, so a partially-filled entry cannot ship.
+    for (const d of ['easy', 'beginner', 'medium', 'intermediate', 'hard',
+                     'advanced', 'nonsense', null, undefined]) {
+      const s = difficultyStyle(d);
+      for (const f of ['color', 'tint', 'edge', 'bar', 'barSoft']) {
+        expect(typeof s[f], `${String(d)}.${f}`).toBe('string');
+        expect(s[f].length, `${String(d)}.${f}`).toBeGreaterThan(0);
       }
     }
   });

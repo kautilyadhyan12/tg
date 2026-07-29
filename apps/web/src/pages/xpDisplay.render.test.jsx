@@ -276,10 +276,14 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
 
     renderPage(<Dashboard />);
 
-    // The KNOWN field renders its caption. (The stat number itself is not
-    // asserted here: StatCard animates it from 0 via requestAnimationFrame, so
-    // its intermediate value is a timing artefact, not a claim.)
-    await waitFor(() => expect(screen.getByText('2 of 7 days active')).toBeTruthy());
+    // ROUND 10 F1: this used to wait on "2 of 7 days active" — the
+    // `weekly_workouts: 2` SESSION count. The caption is derived from
+    // `activity` now, which here is an empty (but arrived) map, so the honest
+    // answer is 0 days. The session count keeps its own tile below.
+    // (The stat number itself is not asserted here: StatCard animates it from 0
+    // via requestAnimationFrame, so its intermediate value is a timing
+    // artefact, not a claim.)
+    await waitFor(() => expect(screen.getByText('0 of 7 days active')).toBeTruthy());
     // The two ABSENT fields must NOT have become zeros.
     expect(screen.queryByText('0 minutes')).toBeNull();
     expect(screen.queryByText('kcal total')).toBeTruthy();
@@ -389,11 +393,70 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     // The week ARRIVED, so nothing may claim it did not.
     expect(screen.queryByText('Weekly activity unavailable')).toBeNull();
     expect(container.querySelectorAll('[title="Activity unavailable"]').length).toBe(0);
-    // …and the count's own unknown is a dash, not a suppressed caption and not
-    // a zero. `formatCount` is what makes both true from one read.
-    expect(screen.getByText('— of 7 days active')).toBeTruthy();
+    // ROUND 10 F1 changed what "the count" means here. The caption no longer
+    // reads `weekly_workouts` at all, so an `activity` that ARRIVED and is empty
+    // is a GENUINE zero — a fact the server sent, not a fabrication. Unknown
+    // now has exactly one home, the arm above ("Weekly activity unavailable"),
+    // which is the honest place for it once the number is derived from the very
+    // map the dots are drawn from.
+    expect(screen.getByText('0 of 7 days active')).toBeTruthy();
     expect(screen.queryByText(/\bnull of 7\b/)).toBeNull();
-    expect(screen.queryByText('0 of 7 days active')).toBeNull();
+    expect(screen.queryByText(/undefined of 7/)).toBeNull();
+  });
+
+  it('the caption counts the SAME days the dots light — round 10 F1', async () => {
+    // `weekly_workouts` is a count of SESSIONS since Monday
+    // (backend-ml/app/routers/workouts.py:72-74); `activity` is keyed by DAY
+    // over a ROLLING seven days (:86-89) — two different measurements over two
+    // different windows. The caption printed the first while the dots drew the
+    // second, so two sessions on one day read "5 of 7 days active" over three
+    // flames, and past seven sessions "10 of 7 days active", which cannot be
+    // true. The tile eight inches to the left labels that same field
+    // "workouts", which is what it actually is.
+    //
+    // The fixture's dates are computed HERE and not imported from `weekDates`,
+    // so a wrong helper cannot make this test agree with itself.
+    const t = new Date();
+    const monIdx = (t.getDay() + 6) % 7;
+    const dayKey = (offset) => {
+      const d = new Date(t);
+      d.setDate(t.getDate() - monIdx + offset);
+      return d.toISOString().split('T')[0];
+    };
+
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    workoutService.getStats.mockResolvedValue({
+      data: {
+        stats: { weekly_workouts: 5 },                        // FIVE sessions…
+        activity: { [dayKey(0)]: true, [dayKey(2)]: true },   // …on TWO days
+      },
+    });
+
+    renderPage(<Dashboard />);
+    await waitFor(() => expect(screen.getByText(/of 7 days active/)).toBeTruthy());
+
+    // THE INVARIANT, and it is source-independent: whatever the caption says,
+    // it must equal what the strip actually DREW.
+    const strip = screen.getByText('Mon').closest('.flex.gap-2');
+    const litDots = [...strip.querySelectorAll('div')]
+      .filter((d) => d.style.background.includes('linear-gradient(135deg')).length;
+    expect(litDots).toBe(2);
+    expect(screen.getByText(`${litDots} of 7 days active`)).toBeTruthy();
+
+    // The session count must not be the caption's number…
+    expect(screen.queryByText('5 of 7 days active')).toBeNull();
+    // …and an arithmetic impossibility must never be printable. ELEMENT-SCOPED,
+    // not a document sweep — the strip's last day number runs straight into the
+    // caption ("…Sun2" + "2 of 7 days active" reads as "22 of 7"), so a
+    // whole-document regex here fails on adjacency rather than on the defect.
+    // That is round 8 F2's own trap ("Level 7230/374"), hit while writing the
+    // assertion for a finding about two numbers disagreeing.
+    expect(screen.getByText(/of 7 days active/).textContent)
+      .not.toMatch(/([89]|[1-9]\d+) of 7 days active/);
+    // The tile KEEPS the session count — its own label already says "workouts".
+    expect(tileValue('workouts')).toBe('5');
   });
 
   it('the week strip claims nothing when activity is unknown — round 4 F3', async () => {
@@ -532,6 +595,31 @@ describe('GamificationStrip — XP renders when the old backend does not', () =>
     expect(pill).toBeTruthy();
     expect(pill.style.color).not.toContain('248');   // not the red/hard branch
     expect(pill.style.color).toContain('255, 255, 255');   // the neutral one
+  });
+
+  it("a recommendation's pill agrees with itself on difficulty — round 10 F4", async () => {
+    // `difficultyStyle` matches BOTH vocabularies (easy/beginner,
+    // medium/intermediate); the pill's BACKGROUND ternary knew only
+    // beginner/intermediate/null and fell through to the hard RED for anything
+    // else. So `difficulty: 'easy'` rendered a GREEN label on a RED pill —
+    // measured by round 10: bg rgba(239,68,68,0.25), color rgb(74,222,128).
+    // Round 7 F2 routed the FOREGROUND through the shared helper and left the
+    // background hand-rolled: one element, two vocabularies.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    workoutService.getStats.mockImplementation(DEAD);
+    recommendationService.getRecommendations.mockResolvedValue({
+      data: { recommendations: [{ id: 'r1', name: 'Easy Move', difficulty: 'easy' }] },
+    });
+
+    renderPage(<Dashboard />);
+    const label = await screen.findByText('easy');
+
+    // Both fields, one resolver: a pill may not disagree with its own label.
+    expect(label.style.color).toContain('74, 222, 128');
+    expect(label.style.background).toContain('74, 222, 128');
+    expect(label.style.background).not.toContain('239, 68, 68');
   });
 
   it('recommendations IN FLIGHT are never called unavailable — round 7 F1', async () => {
@@ -958,11 +1046,18 @@ describe('Achievements — the three payloads are independent — round 4 F4', (
     // about and which I wrote here on the first pass.
     const card = screen.getByText('Unknown Diff').closest('.card-glass');
     const iconTile = card.querySelector('.rounded-xl');
+    // ROUND 10 F2: presence is not enough. `not.toBe('')` passes just as well
+    // for a DEFINITE known colour, so a neutral slot set to hard-red or bronze
+    // survived at 87/87 — round 8 F5's rule ("the text says unknown, the colour
+    // makes a definite claim") unguarded in the fix for its own hazard.
     expect(iconTile.style.background).not.toBe('');
+    expect(iconTile.style.background).toContain('255, 255, 255');
     expect(iconTile.style.border).not.toBe('');
+    expect(iconTile.style.border).toContain('255, 255, 255');
 
     const pill = screen.getAllByText('—').find((el) => el.className.includes('rounded-full'));
     expect(pill.style.background).not.toBe('');
+    expect(pill.style.background).toContain('255, 255, 255');
   });
 
   it('the STRIP paints an unknown difficulty too — round 9 F1, second component', async () => {
@@ -1072,9 +1167,12 @@ describe('Achievements — the three payloads are independent — round 4 F4', (
       // a value that is `rgba(...)` in exactly this state, so both backgrounds
       // were dropped entirely. Cosmetic rather than a false claim, but it is the
       // same defect and it is asserted here so the class stays closed.
+      // ROUND 10 F2, the tier half: neutrality, not just presence.
       expect(pill.style.background).not.toBe('');
+      expect(pill.style.background).toContain('255, 255, 255');
       const iconTile = card.querySelector('.rounded-2xl');
       expect(iconTile.style.background).not.toBe('');
+      expect(iconTile.style.background).toContain('255, 255, 255');
     }
   });
 

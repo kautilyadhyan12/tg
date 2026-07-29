@@ -6,7 +6,7 @@ import { workoutService } from '../api/workoutApi';
 import { recommendationService } from '../api/recommendationApi';
 import {
   UNKNOWN, formatCount, formatLevel, formatNextLevel, formatXpFraction,
-  formatXpTotal, difficultyColor, oldPayloadState, orUnknown, readRecommendations,
+  formatXpTotal, difficultyStyle, weekDates, oldPayloadState, orUnknown, readRecommendations,
   readStatsView, xpBarWidth,
 } from '../api/gamificationApi';
 import { useXp } from '../hooks/useXp';
@@ -70,13 +70,16 @@ function WeekStrip({ activity, state }) {
   const known  = state === 'ready';
   const title  = known ? undefined
     : state === 'loading' ? 'Loading activity…' : 'Activity unavailable';
+  // ROUND 10 F1: the dates come from `weekDates` so the caption above cannot
+  // count a different set of days than the dots draw. The caption used to read
+  // `weekly_workouts` — a count of SESSIONS over a different window — which is
+  // how "5 of 7 days active" ended up over three flames.
+  const dates  = weekDates(today);
 
   return (
     <div className="flex gap-2">
       {days.map((day, i) => {
-        const date    = new Date(today);
-        date.setDate(today.getDate() - dayIdx + i);
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = dates[i];
         const isToday = i === dayIdx;
         // `?.` because knowability now comes from the STATE: a caller passing
         // 'ready' with no payload must degrade, not throw — a throw in render
@@ -107,7 +110,7 @@ function WeekStrip({ activity, state }) {
                   color: !known ? 'rgba(255,255,255,0.22)'
                     : isToday ? '#FF8A1F' : isPast ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.4)',
                 }}>
-                  {date.getDate()}
+                  {Number(dateStr.slice(-2))}
                 </span>
               )}
             </div>
@@ -496,7 +499,7 @@ export default function Dashboard() {
                     ? 'Loading this week…'
                     : weekState !== 'ready'
                       ? 'Weekly activity unavailable'
-                      : `${formatCount(stats.weeklyWorkouts)} of 7 days active`}
+                      : `${weekDates().filter((d) => stats.activity?.[d]).length} of 7 days active`}
                 </p>
               </div>
             </BgCard>
@@ -632,14 +635,16 @@ export default function Dashboard() {
                             <span
                               className="text-2xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full"
                               style={{
-                                background: ex.difficulty === 'beginner' ? 'rgba(34,197,94,0.25)'
-                                  : ex.difficulty === 'intermediate' ? 'rgba(255,138,31,0.25)'
-                                  : ex.difficulty === null ? 'rgba(255,255,255,0.06)'
-                                  : 'rgba(239,68,68,0.25)',
-                                // Round 7 F2: the foreground goes through the
-                                // shared helper so all three difficulty sites
-                                // agree on what unknown looks like.
-                                color: difficultyColor(ex.difficulty),
+                                // ROUND 10 F4: this ternary knew only
+                                // beginner/intermediate/null while the shared
+                                // helper matches BOTH vocabularies, so
+                                // difficulty 'easy' rendered a green label on a
+                                // RED pill — measured. Round 7 F2 routed the
+                                // foreground through the helper and left the
+                                // background hand-rolled: one element, two
+                                // vocabularies. Both fields, one resolver now.
+                                background: difficultyStyle(ex.difficulty).tint,
+                                color:      difficultyStyle(ex.difficulty).color,
                               }}
                             >
                               {orUnknown(ex.difficulty)}

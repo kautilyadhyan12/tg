@@ -183,7 +183,25 @@ then; none may be hidden or reduced to close the gap.
       Also corrected: this card's round-9 prompt claimed "touched files 0
       problems", which was Round B's two test files, not the combined six-file
       diff — that is 1 pre-existing `ChevronRight` error, as Round A recorded.
-      **THE TICK STAYS OFF: nobody has reviewed round 9's fixes. Round 10.**
+      **ROUND 10 HAS RUN (2026-07-29): 4 findings, 1 VISIBLE, ALL FIXED.**
+      F1 (VISIBLE): the week caption printed `weekly_workouts` — a count of
+      SESSIONS since Monday — labelled "days active", above a strip whose flames
+      come from `activity`, keyed by DAY over a ROLLING seven days. Two
+      mismatches, not one (verified at `backend-ml/app/routers/workouts.py`
+      :72-74 and :86-89). Measured: "5 of 7 days active" over three flames, and
+      "10 of 7 days active" — a sentence that cannot be true. Round 9 F4 fixed
+      the readiness axis of round 5 F8 and left the counting axis. Caption and
+      dots now derive from ONE `weekDates()`. F2/F3/F4 (NOT-VISIBLE): neutral
+      style slots asserted for presence but not neutrality (4 mutants survived);
+      the completeness loop listing 5 of 7 fields **and** covering only the
+      NEUTRAL tier, so the four known tiers had no check at all (found while
+      fixing, not by the review); and the recommendation pill's background
+      knowing one vocabulary while its label knew two.
+      **13 mutations, 12 RED, 1 GREEN** — the green one declared: a
+      date-dependent equivalent (a 24h shift changes nothing except across a
+      Sunday). Round 9's protections re-run as regression: all still RED.
+      Suite 90/90.
+      **THE TICK STAYS OFF: nobody has reviewed round 10's fixes. Round 11.**
       **ROUND 7 (2026-07-27, fresh chat): 8 findings, 3 blocking, all fixed.**
       Seventh consecutive round in which the previous round's fix opened the
       next one. F1: `recsState` derived from the STATS read's loading flag —

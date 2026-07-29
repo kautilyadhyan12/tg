@@ -2052,6 +2052,84 @@ gate). Its own recommendation: fix the nine, add one OWED line, tick.
 - (THE TICK STAYS OFF) Rounds A and B have not been reviewed. T3 round 9 runs on
   the two commits together.
 
+## 2026-07-29 — T3 round 10: 4 findings, 1 VISIBLE, ALL FIXED
+
+- (**F1, VISIBLE — two numbers describing the same week, from different fields
+  over different windows**) The caption printed `weekly_workouts` labelled "days
+  active"; the dots drew `activity`. Verified at the source, and it is worse than
+  the finding said — there are TWO mismatches, not one:
+  `weekly` is `{"$count": "count"}` over SESSIONS since `week_start`
+  (`backend-ml/app/routers/workouts.py:72-74`), while `activity` is keyed by DAY
+  over `seven_days_ago` (:86-89) — a rolling window, not Monday-to-Sunday. So two
+  sessions in one day read "5 of 7 days active" over three flames, and past seven
+  sessions "10 of 7 days active", which cannot be true. The screen convicted
+  itself: the tile eight inches left labels that same field "workouts".
+  Round 9 F4 fixed the READINESS axis of round 5 F8's invariant and left the
+  COUNTING axis. Fixed by deriving the caption from the SAME map the dots use,
+  over the same seven days, through a new `weekDates()` that WeekStrip also
+  calls — one implementation, so a count and a picture of one week cannot be two
+  answers.
+
+- (A consequence worth stating, because it changes what an old test meant) The
+  caption no longer reads a nullable count, so `formatCount` left that site and
+  an `activity` that ARRIVED and is empty now reads "0 of 7 days active" — a
+  genuine zero the server sent, not a fabrication. Unknown has exactly one home
+  now, the "Weekly activity unavailable" arm. Two existing tests pinned the old
+  source and went RED on the fix before the new one was written, which is the
+  R9.5 evidence for this finding.
+
+- (F2, NOT-VISIBLE) Round 9 added six neutral style slots and asserted PRESENCE
+  (`not.toBe('')`) on all six but NEUTRALITY on only two. A neutral slot set to
+  hard-red or bronze is still valid CSS, so four such mutants survived at 87/87 —
+  round 8 F5's rule ("the text says unknown, the colour makes a definite claim")
+  unguarded in the fix for round 8 F5's own hazard. `.toContain('255, 255, 255')`
+  now sits beside each presence check.
+
+- (**F3, NOT-VISIBLE, and the fix found a second hole the finding did not
+  name**) The "every field must be a real string" loop listed 5 of the 7 tier
+  fields. Extending it to 7 was the prescribed fix — but that loop only ever runs
+  over the NEUTRAL tier (its inputs are prototype names), so the four KNOWN tiers
+  had no completeness check at all. Measured: deleting `tint` from bronze
+  survived at 89/89 even after the prescribed fix. A known tier missing a field
+  is round 8 F4's own defect — the known-tier path with styles reading
+  `undefined`. A second test now walks all four known tiers × 7 fields and both
+  difficulty vocabularies × 5 fields.
+
+- (F4, NOT-VISIBLE) `difficultyStyle` matches both vocabularies; the
+  recommendation pill's BACKGROUND ternary knew only `beginner`/`intermediate`/
+  `null` and fell through to the hard RED for everything else, so
+  `difficulty: 'easy'` rendered a green label on a red pill. Round 7 F2 routed
+  the FOREGROUND through the shared helper and left the background hand-rolled —
+  one element, two vocabularies. Both fields take the resolver now.
+
+- (THE MEASUREMENT) **13 mutations, 12 RED, 1 GREEN.** Round 9's protections were
+  re-run as a regression check after the source changes — R1-R7 and R10-R12 all
+  still RED. The GREEN one is **M3** (WeekStrip's date shifted by 24h) and it is
+  a DATE-DEPENDENT EQUIVALENT: `weekDates(t)` subtracts `t`'s own Monday offset,
+  so `t` and `t+1d` yield identical output everywhere except across a Sunday
+  boundary — on a Sunday it IS caught. Stated precisely rather than filed as
+  "equivalent", because the distinction is the difference between a mutant that
+  cannot fail and one that fails on one day in seven. The decoupling defect it
+  was meant to probe — caption and dots counting different windows — is caught:
+  M13 (caption reading next week) is RED.
+
+- (Two defects of MINE, caught in-session and recorded because the record is
+  where this card's lessons live) Removing WeekStrip's `date` variable left a
+  surviving `date.getDate()` reference — a render throw, which blanks the page
+  with no ErrorBoundary; it is rounds 4 and 5's defect exactly, and the render
+  tests named the line immediately. And the F1 test's "impossible sentence" sweep
+  ran over the whole document, where the strip's last day-number abuts the
+  caption ("…Sun2" + "2 of 7" reads as "22 of 7") — round 8 F2's adjacency trap,
+  hit while writing an assertion about two numbers disagreeing. Element-scoped
+  now.
+
+- (PROVE, post-round-10) **90/90 green** (87 + 3). `vite build` ✓. Lint parity:
+  six touched files = **1 error** (`ChevronRight`, pre-existing), package-wide
+  **67 errors / 9 warnings** — unchanged, and independently re-measured by round
+  10's reviewer at the same figures.
+
+- (THE TICKS) Still OFF. Round 11 reviews these fixes.
+
 ## 2026-07-29 — T3 round 9: 4 findings, 2 VISIBLE, ALL FIXED
 
 - (The round worked, and the stopping rule did its job in both directions) Round

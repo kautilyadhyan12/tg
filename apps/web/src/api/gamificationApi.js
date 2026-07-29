@@ -241,6 +241,40 @@ export function formatXpEarned(v) {
  *  edit cannot fix a third of it. `easy`/`beginner` and `medium`/`intermediate`
  *  are the challenge and recommendation vocabularies respectively; both are
  *  matched here rather than in the call sites. */
+/** The seven calendar days the week strip shows, Monday→Sunday, as the
+ *  `YYYY-MM-DD` keys the old backend's `activity` map is keyed by.
+ *
+ *  ROUND 10 F1 — why this exists rather than the caption reading a count field.
+ *  `weekly_workouts` and `activity` are DIFFERENT MEASUREMENTS of different
+ *  things, and the caption printed the first while the dots drew the second:
+ *
+ *    · `weekly` is `{"$count": "count"}` over SESSIONS since `week_start`
+ *      (backend-ml/app/routers/workouts.py:72-74) — two workouts on Monday
+ *      count twice;
+ *    · `activity` is keyed by `completed_at.strftime("%Y-%m-%d")` over
+ *      `seven_days_ago` (workouts.py:86-89) — a DAY appears once, and the
+ *      window is a rolling seven days, not Monday-to-Sunday.
+ *
+ *  So the caption said "5 of 7 days active" over three flames, and past seven
+ *  sessions it said "10 of 7 days active" — a sentence that cannot be true,
+ *  measured by round 10. The screen convicted itself: the tile eight inches
+ *  left labels the SAME field "workouts".
+ *
+ *  Round 9 F4 fixed the READINESS axis of round 5 F8's invariant and left the
+ *  COUNTING axis, which is why the caption now derives its number from the same
+ *  map the dots do, over the same seven days. One source, so they cannot
+ *  disagree — a count and a picture of the same week must not be two answers. */
+export function weekDates(today = new Date()) {
+  const dayIdx = (today.getDay() + 6) % 7;   // Monday = 0
+  const out = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - dayIdx + i);
+    out.push(d.toISOString().split('T')[0]);
+  }
+  return out;
+}
+
 /** ROUND 9 F1 — the `${color}NN` hazard, enumerated properly this time.
  *
  *  Round A found this hazard while fixing round 8 F5, wrote it into DECISIONS as
