@@ -1058,6 +1058,24 @@ then; none may be hidden or reduced to close the gap.
          `getStats` hides it forever. Round 7 F8's shape, one site over. Note
          this is the same three-states-never-two family as F3 and is worth
          folding into whichever round touches `Dashboard.jsx` last.
+- [ ] 🟡 **R3.6's pre-commit gitleaks HAS NEVER EXISTED, and a feature-branch
+      push is scanned by nothing.** CLAUDE.md R3.6 states "Gitleaks runs in CI
+      and pre-commit". Verified 2026-07-28: there is no `.husky`, no
+      `.git/hooks/pre-commit`, and `gitleaks` is not on PATH — so the pre-commit
+      half is a rule the repo asserts and does not implement. The CI half is real
+      but narrower than it reads: `.github/workflows/ci.yml` triggers on
+      `pull_request` and `push: branches: [master]` ONLY, so pushing a feature
+      branch runs NO scan at all. Found while pushing `web-repoint` (31 commits)
+      as a backup — the push went out with a hand-written pattern scan standing in
+      for gitleaks, which is weaker and was stated as such rather than ticked.
+      **This matters here more than in most repos: three secrets have already
+      burned** (Groq key, Neon password, Google client secret — all three above
+      on this list), and two of those reached a chat transcript rather than git,
+      which is the failure mode a pre-commit hook does NOT catch either. Fix is
+      either (a) install gitleaks + a pre-commit hook so the rule becomes true,
+      or (b) amend R3.6 to describe what actually runs. Do NOT leave the sentence
+      standing as-is: a protection everyone believes in and nobody installed is
+      worse than a known gap.
 - [ ] 🟡 **`apps/web/src/sync/syncClient.test.js` fails locally, passes in CI.**
       `ReferenceError: window is not defined`. Cause VERIFIED by T3 round 8:
       `apps/web/.env` sets `VITE_API_URL`, vitest loads it, so the test's premise
