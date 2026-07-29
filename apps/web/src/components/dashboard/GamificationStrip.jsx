@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Trophy, Target, Crown, ChevronRight, Sparkles } from 'lucide-react';
 import {
-  difficultyColor, earnedBadgeCount, formatFraction, formatLevel, formatXpProgress,
+  difficultyStyle, earnedBadgeCount, formatFraction, formatLevel, formatXpProgress,
   formatXpTotal, gamificationService, listState, oldPayloadState, orUnknown,
   progressWidth, readLeaderboardView, readOverviewView, tierStyle, xpBarWidth,
 } from '../../api/gamificationApi';
@@ -45,7 +45,7 @@ function HeroCard({ bgImage, children, className = '', style = {}, onClick }) {
 function ChallengeRow({ challenge }) {
   // ROUND 7 F2: see Achievements.jsx's ChallengeCard — an unknown difficulty
   // was painted the hard/advanced red here too.
-  const diffColor = difficultyColor(challenge.difficulty);
+  const diff      = difficultyStyle(challenge.difficulty);
 
   return (
     <div className="rounded-xl p-2.5" style={{
@@ -73,7 +73,7 @@ function ChallengeRow({ challenge }) {
           style={{
             background: challenge.completed === true
               ? '#4ade80'
-              : `linear-gradient(90deg, ${diffColor}, ${diffColor}bb)`,
+              : diff.barSoft,
           }}
         />
       </div>

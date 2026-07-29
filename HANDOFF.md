@@ -1,6 +1,60 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: XP display / Dashboard XP — T3 ROUND 9 FIXES. 4 findings, ALL FIXED.
+      Branch web-repoint. 6 files + OWED/DECISIONS/HANDOFF.
+      Suite 87/87 green (84 + 3). OWED ticks STILL OFF.
+
+WHAT THIS SESSION DID
+  · F1 (VISIBLE) — Round A's own `${color}NN` hazard, applied to 1 of 8 sites.
+    The other 7 dropped their colour entirely when the value is the neutral
+    rgba: a progress bar with NO FILL beside "2 / 5" and "40%", on two
+    components. `difficultyStyle()` now sits beside `tierStyle()` with
+    tint/edge/bar/barSoft fields; known values byte-identical; NO call site
+    concatenates any more (grep-verified zero).
+  · F4 (VISIBLE, pre-existing) — round 5 F8's other direction. Caption needed
+    state AND a known count; dots need only the state. So `activity` with no
+    `weekly_workouts` lit 7 definite dots (4 flames) under "Weekly activity
+    unavailable". Caption answers the STRIP's question now, via formatCount.
+  · F2 (NOT-VISIBLE) — Round B's tile helper covered 2 tiles of 3. The LEVEL
+    tile was unasserted, and `xp ? formatLevel(xp) : '1'` beat FIELD_READ,
+    HELPER_CALL and the render suite at once.
+  · F3 (NOT-VISIBLE) — one of Round B's four new assertions COULD NOT FAIL:
+    the regex wants digits next to "XP", Achievements spells it "N total XP".
+    Replaced by identity on the whole line.
+  · 12 new mutations, 12 RED (incl. a positive control). Round B's 9 re-run,
+    all still RED, identical counts.
+
+READ THIS BEFORE ROUND 10
+  **A mutation harness must re-snapshot at the start of every run, or be
+  deleted between runs.** Two harnesses were live this session with overlapping
+  file sets; the older one held snapshots from BEFORE round 9's fixes, so its
+  `restore` silently reverted three source files mid-run. The tell was the
+  failure COUNTS climbing run over run, not any error. Third process failure of
+  this family (rounds 3 and 5 were `git checkout --` and a PowerShell
+  round-trip); first with a stale snapshot as the cause. Round 9's own 12
+  mutations were unaffected — own snapshot, correct tree.
+
+  **Round 8 F6's other EIGHT mutants are STILL open** (own 🔴 OWED line):
+  MUT-3/4/15/16/17/29/2/10. Round 9 did not re-measure them either.
+
+  **Do NOT add a test for `Object.create(null)`** (Round A's declared survivor)
+  and do not re-report A1, which round 9 verified is an equivalent mutant:
+  `weekState === 'ready'` and `activity !== null` cannot diverge.
+
+NEXT: T3 ROUND 10, fresh chat, on this commit. Both 🔴 ticks stay OFF until it
+  is clean. Round 9's verdict was "worth one more round; not worth a tenth" —
+  that was about round 9 itself, so round 10 is the one that should close this.
+
+VERIFY: corepack pnpm --filter web exec vitest run src/api/gamificationApi.test.js src/pages/xpDisplay.render.test.jsx
+        corepack pnpm --filter web exec vite build
+LINT: parity, not clean. SIX touched files = 1 error (ChevronRight,
+      pre-existing, R1.1); package-wide 67 errors / 9 warnings, unchanged.
+      (Round B's "0 problems" was true of its TWO test files only.)
+SPEC GAPs: none.
+```
+
+```
 TASK: XP display / Dashboard XP — T3 ROUND 8, ROUND B. F1, F2, F6 FIXED.
       Branch web-repoint. 2 test files + OWED/DECISIONS/HANDOFF.
       NO COMPONENT FILE CHANGED — all three were TEST-layer defects.

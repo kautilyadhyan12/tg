@@ -2052,6 +2052,99 @@ gate). Its own recommendation: fix the nine, add one OWED line, tick.
 - (THE TICK STAYS OFF) Rounds A and B have not been reviewed. T3 round 9 runs on
   the two commits together.
 
+## 2026-07-29 — T3 round 9: 4 findings, 2 VISIBLE, ALL FIXED
+
+- (The round worked, and the stopping rule did its job in both directions) Round
+  9 ran in a fresh chat on Rounds A+B together, made 33 mutations plus 6 render
+  probes, and tagged every finding VISIBLE / NOT-VISIBLE as the rule required.
+  Two were VISIBLE and held the ticks; two were NOT-VISIBLE and were fixed in
+  the same commit without holding anything. **All four were independently
+  re-verified against the current files before this plan was written** — the
+  seven concatenation sites by grep, the unasserted `tileValue('current')` by
+  grep, the `total XP` spelling by reading `Achievements.jsx:512`, and the
+  caption/dots asymmetry by reading both guards.
+
+- (**F1, VISIBLE — the ninth instance of the one-of-N shape, and the first
+  produced by the round whose entire finding WAS that shape**) Round A found the
+  `${color}NN` hazard mid-fix, wrote it into DECISIONS as a trap, invented the
+  `edge` field for it — **and applied it to one of eight sites.** Seven more
+  concatenated an alpha suffix onto a colour that is `rgba(255,255,255,0.45)`
+  when unknown, which is a valid 8-digit hex for a known value and INVALID CSS
+  for the neutral one, so the declaration was dropped entirely. Measured in
+  jsdom: `linear-gradient(90deg, rgb(74,222,128), rgba(74,222,128,0.8))` for a
+  known difficulty versus EMPTY for an unknown one — a progress bar with no fill
+  beside a card printing "2 / 5" and "40%", on two components. Round A's
+  enumeration asked whether each site RESOLVES the colour correctly; it never
+  asked whether the site CONCATENATES onto the resolved value. Fixed as data:
+  `difficultyStyle()` joins `tierStyle()` with `tint`/`edge`/`bar`/`barSoft`
+  fields, known values byte-identical to what the concatenations produced, and
+  **no call site appends anything any more** (grep-verified: zero remaining).
+
+- (F2, NOT-VISIBLE — **Round B's own helper covered two tiles of three**) The
+  Experience Points card has three tiles; Round B asserted `workouts` and
+  `days` and never `current`, the LEVEL tile — an XP site, on the page this card
+  is about. `value: xp ? formatLevel(xp) : '1'` then beat all three protections
+  at once: `FIELD_READ` sees no field read, `HELPER_CALL` is satisfied because
+  `formatLevel` is still called on the known branch, and no render assertion
+  read that tile. Round 8 F1's shape exactly, one component over, in the file
+  Round B was rewriting. Asserted in both directions now (`'—'` unknown, `'3'`
+  known).
+
+- (F3, NOT-VISIBLE — **an assertion I wrote in Round B could not fail, in the
+  commit whose record cites that rule twice**) `not.toMatch(/\d[\d,]*\s*XP/)`
+  was copied from the Dashboard's XP-fails test, where the markup is
+  `{formatXpFraction(xp)} XP` — digits ADJACENT to "XP". Achievements spells it
+  `{formatXpTotal(xp)} total XP`, so a digit can never sit next to "XP" there,
+  and with all three reads dead no badge card renders either. The regex had no
+  reachable producer. Round 9 proved it: a fabricated `0 total XP` AND a
+  plausible `578 total XP` both left the suite green, while the same fabrication
+  where adjacency holds turned it red — the regex was alive, it just could not
+  reach the site it was placed for. Replaced by identity on the whole line
+  (`'— total XP · — of — badges'`), which also covers the two badge counts.
+
+- (F4, VISIBLE, pre-existing — round 5 F8's OTHER direction, which its own text
+  named and its test never entered) The caption required
+  `weekState === 'ready' && weeklyWorkouts !== null`; the dots require the state
+  alone. A payload carrying `activity` but no `weekly_workouts` therefore lit
+  seven DEFINITE dots — measured: 4 flames, 0 unavailable tooltips — under a
+  caption reading "Weekly activity unavailable". The dots were right and the
+  caption was wrong. The caption now answers the STRIP's question and the
+  count's own unknown is a dash, via `formatCount` rather than a `!== null`
+  guard that can be dropped with nothing noticing (mutation R9 pins exactly
+  that: without it the page renders the literal "null of 7 days active").
+
+- (THE MEASUREMENT) **12 new mutations, 12 RED**, including a POSITIVE CONTROL
+  (R7: a known difficulty resolving neutral) which is caught by two tests — the
+  new bar assertion and round 7 F2's pre-existing unit test. Round B's nine were
+  re-run afterwards and are all still RED with identical failure counts, so the
+  new assertions cost none of the old protection. Baseline 87/87.
+
+- (**A PROCESS FAILURE OF MINE, recorded because it is the third of its family
+  and the first with a NEW cause**) Two mutation harnesses were live in one
+  session with overlapping file sets. The Round B harness still held snapshots
+  taken BEFORE round 9's fixes, and its `restore` therefore reverted
+  `Achievements.jsx`, `Dashboard.jsx` and `GamificationStrip.jsx` to their
+  pre-fix state mid-run — silently, since restoring is supposed to be the safe
+  operation. The contaminated results were visible only because the failure
+  COUNTS climbed run over run; the tell was in the data, not in an error.
+  Recovered from the round 9 harness's own snapshot and re-run clean. Rounds 3
+  and 5 recorded `git checkout --` and a PowerShell round-trip; this one is
+  **a STALE snapshot, and the rule that follows is: a mutation harness must
+  re-snapshot at the start of every run, or be deleted between runs.** The 12
+  round 9 mutations were unaffected (own snapshot, taken from the correct tree);
+  only the Round B re-check was, and it was redone.
+
+- (PROVE, post-round-9) **87/87 green** (84 + 3 new tests). `vite build` ✓.
+  Lint parity: the six touched files produce **1 error** — `ChevronRight`,
+  pre-existing and untouched per R1.1, the same 1 Round A measured — and
+  package-wide **67 errors / 9 warnings**, unchanged and matching both Round A
+  and round 9's own independent count. (Round 9 was right that the round-9
+  PROMPT's "touched files 0 problems" was wrong for the combined six-file diff:
+  that figure was Round B's two test files. Corrected here.)
+
+- (THE TICKS) Still OFF. Round 9's two VISIBLE findings are fixed but nobody has
+  reviewed the fixes. Round 10 decides.
+
 ## 2026-07-29 — THE STOPPING RULE, set for T3 round 9 BEFORE it runs (Kd ruling)
 
 - (The ruling) **From round 9 on, a finding blocks the XP display / Dashboard XP

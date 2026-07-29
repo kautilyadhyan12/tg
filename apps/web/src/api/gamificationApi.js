@@ -241,16 +241,66 @@ export function formatXpEarned(v) {
  *  edit cannot fix a third of it. `easy`/`beginner` and `medium`/`intermediate`
  *  are the challenge and recommendation vocabularies respectively; both are
  *  matched here rather than in the call sites. */
-export function difficultyColor(difficulty) {
+/** ROUND 9 F1 — the `${color}NN` hazard, enumerated properly this time.
+ *
+ *  Round A found this hazard while fixing round 8 F5, wrote it into DECISIONS as
+ *  a trap, invented `edge` for it — and applied it to ONE of eight sites. Round 9
+ *  measured the other seven: appending a 2-digit alpha to a colour is a valid
+ *  8-digit hex for a KNOWN difficulty/tier and INVALID CSS for the neutral
+ *  `rgba(...)`, so every one of them silently loses its colour in exactly the
+ *  unknown state the neutral value exists for. Measured in jsdom, same challenge,
+ *  known vs unknown: `linear-gradient(90deg, rgb(74,222,128), rgba(74,222,128,0.8))`
+ *  vs `<empty>` — a progress bar with no fill beside a card printing "2 / 5" and
+ *  "40%". Round A's own enumeration missed them because it asked whether each
+ *  site RESOLVES the colour correctly and never whether it CONCATENATES onto the
+ *  resolved value.
+ *
+ *  So the tints are fields, like `edge`, and no call site appends anything. The
+ *  known values are byte-identical to what the concatenations produced — that is
+ *  the point of a table of literals rather than computed alpha. */
+const DIFFICULTY_STYLES = {
+  easy: {
+    color: '#4ade80', tint: '#4ade8015', edge: '#4ade8030',
+    bar:     'linear-gradient(90deg, #4ade80, #4ade80cc)',
+    barSoft: 'linear-gradient(90deg, #4ade80, #4ade80bb)',
+  },
+  medium: {
+    color: '#FF8A1F', tint: '#FF8A1F15', edge: '#FF8A1F30',
+    bar:     'linear-gradient(90deg, #FF8A1F, #FF8A1Fcc)',
+    barSoft: 'linear-gradient(90deg, #FF8A1F, #FF8A1Fbb)',
+  },
+  hard: {
+    color: '#f87171', tint: '#f8717115', edge: '#f8717130',
+    bar:     'linear-gradient(90deg, #f87171, #f87171cc)',
+    barSoft: 'linear-gradient(90deg, #f87171, #f87171bb)',
+  },
+};
+/** Unknown: a real gradient rather than an empty string, so the bar still has a
+ *  visible track treatment. It must never read as one of the three known
+ *  difficulties — that is round 8 F5's rule ("the text says unknown, the colour
+ *  makes a definite claim"), which is why this is grey and not a faded green. */
+const NEUTRAL_DIFFICULTY = {
+  color: 'rgba(255,255,255,0.45)',
+  tint:  'rgba(255,255,255,0.08)',
+  edge:  'rgba(255,255,255,0.18)',
+  bar:     'linear-gradient(90deg, rgba(255,255,255,0.45), rgba(255,255,255,0.30))',
+  barSoft: 'linear-gradient(90deg, rgba(255,255,255,0.45), rgba(255,255,255,0.28))',
+};
+
+export function difficultyStyle(difficulty) {
   switch (difficulty) {
     case 'easy':
-    case 'beginner':     return '#4ade80';
+    case 'beginner':     return DIFFICULTY_STYLES.easy;
     case 'medium':
-    case 'intermediate': return '#FF8A1F';
+    case 'intermediate': return DIFFICULTY_STYLES.medium;
     case null:
-    case undefined:      return 'rgba(255,255,255,0.45)';
-    default:             return '#f87171';
+    case undefined:      return NEUTRAL_DIFFICULTY;
+    default:             return DIFFICULTY_STYLES.hard;
   }
+}
+
+export function difficultyColor(difficulty) {
+  return difficultyStyle(difficulty).color;
 }
 
 /** The visual treatment for a badge TIER, with UNKNOWN as neutral grey.
@@ -277,18 +327,24 @@ export function difficultyColor(difficulty) {
  *  spelled it. That concatenation is a valid 8-digit hex for a tier colour and
  *  INVALID CSS for the neutral `rgba(...)`, so the border would have vanished in
  *  exactly the unknown state this fix exists for. */
+/** ROUND 9 F1, same fix as `difficultyStyle` above: `tint` (the icon tile) and
+ *  `pill` (the tier pill) were `${tier.color}15` and `${tier.color}20` at
+ *  BadgeCard, i.e. two more of the eight concatenation sites Round A did not
+ *  enumerate. Known values byte-identical; unknown gets valid rgba. */
 const NEUTRAL_TIER = {
   color: 'rgba(255,255,255,0.45)',
   bg:    'rgba(10,9,8,0.75)',
   ring:  'rgba(255,255,255,0.18)',
   glow:  'none',
   edge:  'rgba(255,255,255,0.18)',
+  tint:  'rgba(255,255,255,0.08)',
+  pill:  'rgba(255,255,255,0.12)',
 };
 const TIER_STYLES = {
-  bronze:   { color: '#cd7f32', bg: 'rgba(10,9,8,0.75)', ring: '#cd7f32', glow: '0 0 16px rgba(205,127,50,0.50), 0 0 40px rgba(205,127,50,0.20)', edge: '#cd7f3240' },
-  silver:   { color: '#c0c0c0', bg: 'rgba(10,9,8,0.75)', ring: '#c0c0c0', glow: '0 0 16px rgba(192,192,192,0.50), 0 0 40px rgba(192,192,192,0.20)', edge: '#c0c0c040' },
-  gold:     { color: '#FFD66B', bg: 'rgba(10,9,8,0.75)', ring: '#FFD66B', glow: '0 0 16px rgba(255,214,107,0.60), 0 0 40px rgba(255,214,107,0.25)', edge: '#FFD66B40' },
-  platinum: { color: '#a78bfa', bg: 'rgba(10,9,8,0.75)', ring: '#a78bfa', glow: '0 0 16px rgba(167,139,250,0.60), 0 0 40px rgba(167,139,250,0.25)', edge: '#a78bfa40' },
+  bronze:   { color: '#cd7f32', bg: 'rgba(10,9,8,0.75)', ring: '#cd7f32', glow: '0 0 16px rgba(205,127,50,0.50), 0 0 40px rgba(205,127,50,0.20)', edge: '#cd7f3240', tint: '#cd7f3215', pill: '#cd7f3220' },
+  silver:   { color: '#c0c0c0', bg: 'rgba(10,9,8,0.75)', ring: '#c0c0c0', glow: '0 0 16px rgba(192,192,192,0.50), 0 0 40px rgba(192,192,192,0.20)', edge: '#c0c0c040', tint: '#c0c0c015', pill: '#c0c0c020' },
+  gold:     { color: '#FFD66B', bg: 'rgba(10,9,8,0.75)', ring: '#FFD66B', glow: '0 0 16px rgba(255,214,107,0.60), 0 0 40px rgba(255,214,107,0.25)', edge: '#FFD66B40', tint: '#FFD66B15', pill: '#FFD66B20' },
+  platinum: { color: '#a78bfa', bg: 'rgba(10,9,8,0.75)', ring: '#a78bfa', glow: '0 0 16px rgba(167,139,250,0.60), 0 0 40px rgba(167,139,250,0.25)', edge: '#a78bfa40', tint: '#a78bfa15', pill: '#a78bfa20' },
 };
 export function tierStyle(tier) {
   return typeof tier === 'string' && Object.hasOwn(TIER_STYLES, tier)

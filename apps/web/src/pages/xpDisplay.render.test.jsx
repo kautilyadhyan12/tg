@@ -223,6 +223,15 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     expect(statValue('Calories Burned')).toBe('—');
     expect(tileValue('workouts')).toBe('—');
     expect(tileValue('days')).toBe('—');
+    // ROUND 9 F2 — the tile Round B missed. There are THREE tiles and its two
+    // assertions covered two of them, so `Level` — an XP site, on the page this
+    // card is about — was named by nothing. `value: xp ? formatLevel(xp) : '1'`
+    // then beat all three protections at once: FIELD_READ sees no field read,
+    // HELPER_CALL is satisfied because formatLevel is still called on the known
+    // branch, and no render assertion read the tile. Round 8 F1's shape exactly,
+    // one component over, in the file Round B was rewriting. Here XP is READY,
+    // so this is the positive control; the unknown case is asserted below.
+    expect(tileValue('current')).toBe('3');
 
     // …and a whole-document sweep, because identity assertions can only cover
     // the sites someone thought of. With the old backend dead NO old-backend
@@ -312,6 +321,9 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     const text = container.textContent;
     expect(text).not.toMatch(/Level\s*\d/);
     expect(text).not.toMatch(/\d[\d,]*\s*XP/);
+    // ROUND 9 F2, the unknown half: the Level tile must dash like its two
+    // siblings. `xp ? formatLevel(xp) : '1'` renders "1" here and was green.
+    expect(tileValue('current')).toBe('—');
   });
 
   it('a recent workout with only an id and a date fabricates nothing — round 5 F3', async () => {
@@ -354,6 +366,34 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     await waitFor(() => expect(screen.getByText('Weekly activity unavailable')).toBeTruthy());
     expect(screen.queryByText('3 of 7 days active')).toBeNull();
     expect(container.querySelectorAll('[title="Activity unavailable"]').length).toBe(7);
+  });
+
+  it('activity known but the COUNT unknown: the caption denies nothing — round 9 F4', async () => {
+    // The other direction of round 5 F8, which that round's text named and its
+    // test never entered. The caption required `weekState === 'ready' && count
+    // !== null`; the dots require the state alone. So a payload with `activity`
+    // and no `weekly_workouts` lit seven DEFINITE dots — a flame on a day the
+    // user really trained — under "Weekly activity unavailable". Measured by the
+    // round 9 reviewer: 4 flames, 0 unavailable tooltips, caption claiming a
+    // failed read. The dots were right and the caption was wrong.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    workoutService.getStats.mockResolvedValue({
+      data: { stats: { total_workouts: 3 }, activity: {} },   // no weekly_workouts
+    });
+
+    const { container } = renderPage(<Dashboard />);
+    await waitFor(() => expect(screen.getAllByText(/Level 3/).length).toBeGreaterThan(0));
+
+    // The week ARRIVED, so nothing may claim it did not.
+    expect(screen.queryByText('Weekly activity unavailable')).toBeNull();
+    expect(container.querySelectorAll('[title="Activity unavailable"]').length).toBe(0);
+    // …and the count's own unknown is a dash, not a suppressed caption and not
+    // a zero. `formatCount` is what makes both true from one read.
+    expect(screen.getByText('— of 7 days active')).toBeTruthy();
+    expect(screen.queryByText(/\bnull of 7\b/)).toBeNull();
+    expect(screen.queryByText('0 of 7 days active')).toBeNull();
   });
 
   it('the week strip claims nothing when activity is unknown — round 4 F3', async () => {
@@ -689,10 +729,28 @@ describe('Achievements — the three payloads are independent — round 4 F4', (
     // which is exactly how round 4's strip-eating mutation behaved.
     const text = container.textContent;
     expect(text).not.toMatch(/Level\s*\d/);
-    expect(text).not.toMatch(/\d[\d,]*\s*XP/);
+
+    // ROUND 9 F3 — **THE ASSERTION THAT STOOD HERE COULD NOT FAIL, and it was
+    // mine.** It was `not.toMatch(/\d[\d,]*\s*XP/)`, copied from the Dashboard's
+    // XP-fails test where the markup is `{formatXpFraction(xp)} XP` — digits
+    // ADJACENT to "XP". This page spells it `{formatXpTotal(xp)} total XP`
+    // (Achievements.jsx:512), so a digit can never sit next to "XP" at that
+    // site, and with all three reads dead no badge card renders either — the
+    // page's only other producer of an adjacent form. The regex had no
+    // reachable producer here. Round 9 proved it: a fabricated `0 total XP`
+    // AND a plausible `578 total XP` both left the suite green, while the same
+    // fabrication where adjacency does hold turned it red. That is round 6
+    // F11's ruling — an assertion whose stated failure mode the code cannot
+    // produce is vacuous — violated in the commit whose record cites it twice.
+    //
+    // Identity instead, the instrument this card already chose for the floors.
+    // The whole line is asserted, so the badge counts beside the total are
+    // covered by the same read.
+    const xpLine = screen.getByText(/total XP/).textContent.replace(/\s+/g, ' ').trim();
+    expect(xpLine).toBe('— total XP · — of — badges');
 
     // The positive half: the header still RENDERS, as dashes. Without these a
-    // header deleted outright would satisfy both sweeps above.
+    // header deleted outright would satisfy the sweep above.
     expect(text).toMatch(/—\/—/);
     expect(text).toMatch(/XP to Lv —/);
   });
@@ -849,6 +907,88 @@ describe('Achievements — the three payloads are independent — round 4 F4', (
     expect(pill.style.color).not.toContain('248');
   });
 
+  it('an unknown difficulty still PAINTS its progress bar — round 9 F1', async () => {
+    // THE CONCATENATION HAZARD, at the site where it is visible rather than
+    // merely cosmetic. `linear-gradient(90deg, ${diffColor}, ${diffColor}cc)`
+    // is a valid 8-digit hex for a known difficulty and INVALID CSS for the
+    // neutral `rgba(255,255,255,0.45)`, so the whole declaration was dropped and
+    // the bar rendered with NO FILL — beside a card printing "2 / 5" and "40%".
+    // Round A found this hazard, wrote it into DECISIONS as a trap, invented
+    // `edge` for it, and applied it to one of eight sites; this is the seven.
+    //
+    // Both challenges render in ONE fixture so the control is structural: if a
+    // resolver ever returned neutral for everything, the known bar would stop
+    // being green and this test fails on that line — the mistake Round A's F5
+    // positive control was written to prevent.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockResolvedValue({
+      data: {
+        badges: { all: [], total_count: 40 },
+        challenges: { active: [
+          { id: 'c1', name: 'Known Diff',   difficulty: 'easy', current: 2, target: 5, progress: 40 },
+          { id: 'c2', name: 'Unknown Diff',                     current: 2, target: 5, progress: 40 },
+        ] },
+      },
+    });
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+
+    renderPage(<Achievements />);
+    await waitFor(() => expect(screen.getByText('Challenges')).toBeTruthy());
+    fireEvent.click(screen.getByText('Challenges'));
+    await waitFor(() => expect(screen.getByText('Unknown Diff')).toBeTruthy());
+
+    const barOf = (name) =>
+      screen.getByText(name).closest('.card-glass').querySelector('.h-full.rounded-full');
+
+    // THE HEADLINE: the unknown bar has a fill at all. An empty string here is
+    // the defect — a bar that reads as "no progress" about a number the same
+    // card prints two inches away.
+    const unknownBar = barOf('Unknown Diff').style.background;
+    expect(unknownBar).not.toBe('');
+    expect(unknownBar).toContain('255, 255, 255');   // neutral…
+    expect(unknownBar).not.toContain('74, 222, 128'); // …never the easy green
+
+    // THE CONTROL: a known difficulty is unchanged and still green.
+    const knownBar = barOf('Known Diff').style.background;
+    expect(knownBar).toContain('74, 222, 128');
+
+    // The icon tile and the difficulty pill carried the same hazard. Asserted
+    // DIRECTLY, not through a loop with an `if` in it: `if (x) expect(x).not
+    // .toBe('')` cannot fail, which is the defect class this whole round is
+    // about and which I wrote here on the first pass.
+    const card = screen.getByText('Unknown Diff').closest('.card-glass');
+    const iconTile = card.querySelector('.rounded-xl');
+    expect(iconTile.style.background).not.toBe('');
+    expect(iconTile.style.border).not.toBe('');
+
+    const pill = screen.getAllByText('—').find((el) => el.className.includes('rounded-full'));
+    expect(pill.style.background).not.toBe('');
+  });
+
+  it('the STRIP paints an unknown difficulty too — round 9 F1, second component', async () => {
+    // `${diffColor}bb` in ChallengeRow is the eighth site and the second one a
+    // user can see. Asserted in its own component because "fixed at one of N
+    // sites" is this card's most-repeated failure — round 8 F5 was that shape,
+    // and round 9 F1 is that shape applied to round 8 F5's own fix.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockResolvedValue({
+      data: {
+        badges: { all: [], total_count: 40 },
+        challenges: { active: [
+          { id: 'c1', name: 'Strip Unknown', current: 2, target: 5, progress: 40 },
+        ] },
+      },
+    });
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+
+    renderPage(<GamificationStrip />);
+    const name = await screen.findByText('Strip Unknown');
+
+    const bar = name.closest('.rounded-xl').querySelector('.h-full.rounded-full');
+    expect(bar.style.background).not.toBe('');
+    expect(bar.style.background).toContain('255, 255, 255');
+  });
+
   it('a badge category of `toString` does not blank the page — round 8 F4', async () => {
     // `b.category in CATEGORY_LABELS` walks the PROTOTYPE CHAIN, so `toString`
     // answered "known"; `badgesByCategory['toString']` then resolved to the
@@ -926,6 +1066,15 @@ describe('Achievements — the three payloads are independent — round 4 F4', (
       const pill = card.querySelector('.rounded-full');
       expect(pill.style.color).toContain('255, 255, 255');
       expect(pill.style.color).not.toContain('205, 127, 50');
+
+      // ROUND 9 F1, the BadgeCard half: the icon tile was `${tier.color}15` and
+      // this pill's background `${tier.color}20` — two more concatenations onto
+      // a value that is `rgba(...)` in exactly this state, so both backgrounds
+      // were dropped entirely. Cosmetic rather than a false claim, but it is the
+      // same defect and it is asserted here so the class stays closed.
+      expect(pill.style.background).not.toBe('');
+      const iconTile = card.querySelector('.rounded-2xl');
+      expect(iconTile.style.background).not.toBe('');
     }
   });
 

@@ -479,11 +479,24 @@ export default function Dashboard() {
                     ROUND 8 F3 adds the third state the dots now carry: an
                     in-flight read is a LOAD, not a failure. */}
                 <p className="text-xs mt-4 text-center" style={{ color: 'rgba(255,255,255,0.50)' }}>
+                  {/* ROUND 9 F4 — the OTHER direction of round 5 F8, which that
+                      round's own text named ("or 'unavailable' beside real
+                      flames") and its test never covered. The caption required
+                      BOTH the strip's state and a known count; the dots require
+                      only the state. So a payload carrying `activity` but no
+                      `weekly_workouts` lit seven definite dots — a flame on a
+                      day the user really trained — under a caption reading
+                      "Weekly activity unavailable". Measured: 4 flames, 0
+                      unavailable tooltips, caption claiming failure.
+                      The caption now answers the STRIP's question, and the
+                      count's own unknown is the dash — which is also why this
+                      goes through `formatCount` rather than a `!== null` guard
+                      that can be dropped without any test noticing. */}
                   {weekState === 'loading'
                     ? 'Loading this week…'
-                    : weekState === 'ready' && stats.weeklyWorkouts !== null
-                      ? `${stats.weeklyWorkouts} of 7 days active`
-                      : 'Weekly activity unavailable'}
+                    : weekState !== 'ready'
+                      ? 'Weekly activity unavailable'
+                      : `${formatCount(stats.weeklyWorkouts)} of 7 days active`}
                 </p>
               </div>
             </BgCard>

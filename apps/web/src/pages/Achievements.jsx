@@ -5,7 +5,7 @@ import {
   Medal, Loader2, ChevronRight,
 } from 'lucide-react';
 import {
-  difficultyColor, earnedBadgeCount, formatCount, formatFraction, formatLevel,
+  difficultyStyle, earnedBadgeCount, formatCount, formatFraction, formatLevel,
   formatNextLevel, formatXpFraction, formatXpTotal, gamificationService,
   listState, oldPayloadState, orUnknown, progressWidth, readLeaderboardView,
   readOverviewView, tierStyle, xpBarWidth,
@@ -82,7 +82,7 @@ function BadgeCard({ badge, index }) {
                    text-3xl mb-2"
         style={{
           background: earned
-            ? `${tier.color}15`
+            ? tier.tint
             : 'rgba(255,255,255,0.03)',
           filter: earned || unknown ? 'none' : 'grayscale(80%)',
         }}
@@ -97,7 +97,7 @@ function BadgeCard({ badge, index }) {
         className="inline-block text-2xs font-semibold uppercase tracking-wider
                    px-2 py-0.5 rounded-full mb-2"
         style={{
-          background: earned ? `${tier.color}20` : 'rgba(255,255,255,0.04)',
+          background: earned ? tier.pill : 'rgba(255,255,255,0.04)',
           color:      earned ? tier.color : 'rgba(255,255,255,0.35)',
         }}
       >
@@ -140,7 +140,7 @@ function ChallengeCard({ challenge, index }) {
   // fixed exactly this ternary in Dashboard and left the two other components
   // carrying it, so "fixed as a class" was not true of the class. Grey is the
   // unknown colour, as everywhere else on these screens.
-  const diffColor = difficultyColor(challenge.difficulty);
+  const diff      = difficultyStyle(challenge.difficulty);
 
   return (
     <motion.div
@@ -156,8 +156,8 @@ function ChallengeCard({ challenge, index }) {
         <div
           className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
           style={{
-            background: `${diffColor}15`,
-            border:     `1px solid ${diffColor}30`,
+            background: diff.tint,
+            border:     `1px solid ${diff.edge}`,
           }}
         >
           {orUnknown(challenge.icon)}
@@ -169,8 +169,8 @@ function ChallengeCard({ challenge, index }) {
               className="text-2xs font-semibold uppercase tracking-wider
                          px-1.5 py-0.5 rounded-full"
               style={{
-                background: `${diffColor}15`,
-                color:      diffColor,
+                background: diff.tint,
+                color:      diff.color,
               }}
             >
               {orUnknown(challenge.difficulty)}
@@ -213,7 +213,7 @@ function ChallengeCard({ challenge, index }) {
           style={{
             background: challenge.completed === true
               ? 'linear-gradient(90deg, #4ade80, #22c55e)'
-              : `linear-gradient(90deg, ${diffColor}, ${diffColor}cc)`,
+              : diff.bar,
           }}
         />
       </div>

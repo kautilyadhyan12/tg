@@ -164,7 +164,26 @@ then; none may be hidden or reduced to close the gap.
       in the guard header and at DECISIONS line 1173, and neither is replaced by
       a new sweeping claim: what is written is what was measured (Kd chose this
       over re-running all ten to earn the strong sentence back).
-      **THE TICK STAYS OFF: T3 round 9 has not run on Rounds A+B.**
+      **ROUND 9 HAS RUN (2026-07-29) ON ROUNDS A+B: 4 findings, 2 VISIBLE, ALL
+      FIXED.** The stopping rule worked in both directions — two findings held
+      the ticks, two were fixed without holding anything. F1 (VISIBLE): Round A's
+      own `${color}NN` hazard was applied to ONE of EIGHT sites, so seven more
+      dropped their colour entirely in the unknown state — measured, a progress
+      bar with no fill beside a card printing "2 / 5" and "40%", on two
+      components. `difficultyStyle()` now joins `tierStyle()` and no call site
+      concatenates (grep: zero remain). F4 (VISIBLE, pre-existing): round 5 F8's
+      other direction — seven definite dots, 4 flames, under "Weekly activity
+      unavailable". F2/F3 (NOT-VISIBLE) are both **Round B's own work**: its tile
+      helper covered two tiles of three, leaving the LEVEL tile unasserted and a
+      fabricated Level 1 green past all three protections; and one of its four
+      new Achievements assertions could not fail, because the regex was copied
+      from a site where digits sit next to "XP" to one spelled "N total XP".
+      **12 new mutations, 12 RED**, including a positive control; Round B's nine
+      re-run and all still RED with identical counts. Suite 87/87.
+      Also corrected: this card's round-9 prompt claimed "touched files 0
+      problems", which was Round B's two test files, not the combined six-file
+      diff — that is 1 pre-existing `ChevronRight` error, as Round A recorded.
+      **THE TICK STAYS OFF: nobody has reviewed round 9's fixes. Round 10.**
       **ROUND 7 (2026-07-27, fresh chat): 8 findings, 3 blocking, all fixed.**
       Seventh consecutive round in which the previous round's fix opened the
       next one. F1: `recsState` derived from the STATS read's loading flag —
