@@ -1076,6 +1076,35 @@ then; none may be hidden or reduced to close the gap.
          `getStats` hides it forever. Round 7 F8's shape, one site over. Note
          this is the same three-states-never-two family as F3 and is worth
          folding into whichever round touches `Dashboard.jsx` last.
+         **RAISED at Round A's plan gate (2026-07-29) as a labelled
+         RECOMMENDATION, since Round A WAS the last round touching that file —
+         Round B touches only `Sidebar.jsx` and the two test files. Kd approved
+         the plan as written, so it was not folded in and there is now no
+         scheduled round that will pass this file.** It needs a card of its own.
+- [ ] 🟡 **`Running.jsx:97-100` carries BOTH of Round A's defect classes, in a
+      SAFETY signal.** Found 2026-07-29 while enumerating F5's class across the
+      XP card's ten files; outside those files, so reported under R1.1 and
+      deferred rather than fixed — and given a line here so it is not lost the
+      way Google login and timezone capture were.
+      Verified by reading the file this session:
+      1. `colors[weather.risk] || '#FFD66B'` — `#FFD66B` is the **low**-risk
+         colour, so an unrecognised risk is painted as a definite LOW risk.
+         That is round 8 F5's fabrication (unknown rendered as a definite
+         value), except the claim here understates a weather hazard to a runner
+         rather than mis-colouring a badge. Line 96 already special-cases
+         `risk === 'unknown'` and `'none'`, so the backend HAS a declared
+         unknown — the gap is every other unrecognised string.
+      2. It is also round 8 F4's shape: an object indexed by external text with
+         no own-property guard, so `risk: 'toString'` resolves to
+         `Object.prototype.toString` — truthy, so the `||` fallback never fires
+         and the colour is invalid. Not a crash here (unlike Achievements),
+         because nothing is called on the result.
+      **`apps/web/src/api/runningApi.js` declares ZERO readers** (grep-verified,
+      `^export function read` → 0) and never mentions `weather` or `risk`, so
+      this payload reaches the render completely unparsed — the same
+      external-input-rendered-raw condition that produced rounds 1-7's entire
+      finding sequence on the XP card. The running feature has not had that
+      pass yet.
 - [ ] 🟡 **R3.6's pre-commit gitleaks HAS NEVER EXISTED, and a feature-branch
       push is scanned by nothing.** CLAUDE.md R3.6 states "Gitleaks runs in CI
       and pre-commit". Verified 2026-07-28: there is no `.husky`, no
