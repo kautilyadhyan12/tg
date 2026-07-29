@@ -8,17 +8,17 @@ import {
   difficultyColor, earnedBadgeCount, formatCount, formatFraction, formatLevel,
   formatNextLevel, formatXpFraction, formatXpTotal, gamificationService,
   listState, oldPayloadState, orUnknown, progressWidth, readLeaderboardView,
-  readOverviewView, xpBarWidth,
+  readOverviewView, tierStyle, xpBarWidth,
 } from '../api/gamificationApi';
 import { useXp } from '../hooks/useXp';
 
-// ── Tier color config ─────────────────────────────────────────────────────────
-const TIER_CONFIG = {
-  bronze:   { color: '#cd7f32', bg: 'rgba(10,9,8,0.75)', ring: '#cd7f32', glow: '0 0 16px rgba(205,127,50,0.50), 0 0 40px rgba(205,127,50,0.20)' },
-  silver:   { color: '#c0c0c0', bg: 'rgba(10,9,8,0.75)', ring: '#c0c0c0', glow: '0 0 16px rgba(192,192,192,0.50), 0 0 40px rgba(192,192,192,0.20)' },
-  gold:     { color: '#FFD66B', bg: 'rgba(10,9,8,0.75)', ring: '#FFD66B', glow: '0 0 16px rgba(255,214,107,0.60), 0 0 40px rgba(255,214,107,0.25)' },
-  platinum: { color: '#a78bfa', bg: 'rgba(10,9,8,0.75)', ring: '#a78bfa', glow: '0 0 16px rgba(167,139,250,0.60), 0 0 40px rgba(167,139,250,0.25)' },
-};
+// ── Tier colour config ────────────────────────────────────────────────────────
+// ROUND 8 F5: `TIER_CONFIG` and `NEUTRAL_TIER` lived HERE, and GamificationStrip
+// carried its own 4-arm ternary whose final `else` was bronze — so round 6 F5's
+// fix covered one of the two components and the same badge rendered neutral on
+// this page and DEFINITELY BRONZE on the dashboard. Both now read `tierStyle`
+// from gamificationApi.js, beside `difficultyColor`, which round 7 F2 moved
+// there for exactly this reason. The values are unchanged, byte for byte.
 
 // ── Category labels ───────────────────────────────────────────────────────────
 const CATEGORY_LABELS = {
@@ -38,15 +38,6 @@ const CATEGORY_LABELS = {
 const OTHER_CATEGORY = 'other';
 const OTHER_LABEL    = 'Other';
 
-/** Round 6 F5: the treatment for a badge whose tier we do not know. Grey, no
- *  ring colour, no glow — it must not read as any real tier. */
-const NEUTRAL_TIER = {
-  color: 'rgba(255,255,255,0.45)',
-  bg:    'rgba(10,9,8,0.75)',
-  ring:  'rgba(255,255,255,0.18)',
-  glow:  'none',
-};
-
 // ── Single badge card ─────────────────────────────────────────────────────────
 /** ROUND 5 F2: `badge.earned` is now true / false / NULL, and null must render
  *  as neither. The locked treatment — a padlock, grayscale, 45% opacity — is a
@@ -58,8 +49,12 @@ function BadgeCard({ badge, index }) {
   // tier — a badge with no tier got a full bronze ring and bronze glow beside
   // an empty tier pill. Round 5's own standard ("a padlock is a claim") applies
   // identically to a bronze ring. Unknown tier gets a neutral treatment.
-  const tierKnown = badge.tier !== null && badge.tier in TIER_CONFIG;
-  const tier      = tierKnown ? TIER_CONFIG[badge.tier] : NEUTRAL_TIER;
+  // ROUND 8 F4: the replacement was `badge.tier in TIER_CONFIG`, and `in` walks
+  // the PROTOTYPE CHAIN — a tier of `toString` answered "known", so the style
+  // resolved to Object.prototype.toString and every field read off that function
+  // was `undefined`: the known-tier path with no styling at all. `tierStyle`
+  // does an own-property lookup, and it is shared with GamificationStrip (F5).
+  const tier      = tierStyle(badge.tier);
   const earned    = badge.earned === true;
   const unknown   = badge.earned === null;
 
@@ -428,9 +423,24 @@ export default function Achievements() {
   // empty tab. Latent today (the backend emits exactly the eight known keys)
   // but the count and the grid must not disagree, so unlisted categories fall
   // into an "Other" group instead of vanishing.
-  const badgesByCategory = {};
+  // ROUND 8 F4, and it is the one a user hits: `b.category in CATEGORY_LABELS`
+  // walked the PROTOTYPE CHAIN, so a category of `toString` / `constructor` /
+  // `valueOf` / `__proto__` / `hasOwnProperty` answered "known" — and
+  // `badgesByCategory['toString']` then resolved to the INHERITED
+  // Object.prototype.toString, which is truthy, so the array was never created
+  // and `.push` ran on a function. TypeError inside render, and with no
+  // ErrorBoundary anywhere in apps/web the ENTIRE page went blank, XP header
+  // included. `category` is `text(b?.category)`: any non-empty string the old
+  // backend sends, i.e. external input used as an object key (R2.3).
+  // `Object.hasOwn` is what fixes it. `Object.create(null)` is belt-and-braces:
+  // it has no behavioural effect while the hasOwn check stands (the key is then
+  // always an own CATEGORY_LABELS key or 'other'), and it is stated as such
+  // rather than credited to a test — no assertion can distinguish it.
+  const badgesByCategory = Object.create(null);
   (overview.badges.all ?? []).forEach((b) => {
-    const key = b.category !== null && b.category in CATEGORY_LABELS ? b.category : OTHER_CATEGORY;
+    const key = b.category !== null && Object.hasOwn(CATEGORY_LABELS, b.category)
+      ? b.category
+      : OTHER_CATEGORY;
     if (!badgesByCategory[key]) badgesByCategory[key] = [];
     badgesByCategory[key].push(b);
   });

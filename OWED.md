@@ -120,6 +120,24 @@ then; none may be hidden or reduced to close the gap.
       The smoke does NOT need re-running for Round A/B unless a fix changes
       user-visible behaviour beyond the defect — and note the smoke could not
       have caught F4: the rig never sends a prototype-name category.
+      **ROUND A IS DONE (2026-07-29). F3, F4 and F5 are FIXED.** Each began as a
+      failing test written and shown RED before any source was touched (R9.5 —
+      the gate round 7 failed): 6 new tests, and the F4 red run reproduced the
+      reviewer's Probe C exactly (`TypeError: badgesByCategory[key].push is not
+      a function`, `<body><div /></body>`). Suite 81/81 green. **11 mutations
+      were run against the new assertions: 10 RED, 1 GREEN** — and the green one
+      was declared green in the PLAN before it ran. It is `Object.create(null)`
+      at `Achievements.jsx`, which is behaviourally inert once the
+      `Object.hasOwn` check stands, so no assertion can distinguish it; that is
+      written in the source comment instead of being credited to a test (rounds
+      6 F11 / 7 F3's lesson). F5 was fixed as a CLASS: every site in the card's
+      ten files resolving a colour from a nullable field was enumerated, the two
+      defective ones fixed, the six already-correct ones re-read and left, and
+      the one excluded (`podiumColors[entry.rank]`) is the OWED line below.
+      Lint parity checked rather than "lint clean" ticked: the six touched files
+      produce 1 error at HEAD and the same 1 error after (pre-existing
+      `ChevronRight`), package-wide 67 both times.
+      **THE TICK STAYS OFF: Round B (F1, F2, F6) has not run.**
       **ROUND 7 (2026-07-27, fresh chat): 8 findings, 3 blocking, all fixed.**
       Seventh consecutive round in which the previous round's fix opened the
       next one. F1: `recsState` derived from the STATS read's loading flag —

@@ -268,6 +268,37 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
       expect(dot.style.border).toContain('dashed');
     }
   });
+
+  it('activity IN FLIGHT is never called unavailable — round 8 F3', async () => {
+    // WeekStrip and its caption branched on `stats.activity === null` ALONE, so
+    // loading and failed were one answer. mlApi sets no timeout, so against a
+    // hung old backend the page claimed a failed read PERMANENTLY — a caption
+    // plus seven "Activity unavailable" tooltips during a perfectly healthy
+    // in-flight request. `oldPayloadState` is the tested function for exactly
+    // this shape and round 7 applied it to recentState and recsState on this
+    // page while leaving the third read on two states.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    workoutService.getStats.mockImplementation(HANGS);
+
+    const { container } = renderPage(<Dashboard />);
+    await waitFor(() => expect(screen.getAllByText(/Level 3/).length).toBeGreaterThan(0));
+
+    // The caption speaks of a load in progress, never of a failure.
+    expect(screen.getByText('Loading this week…')).toBeTruthy();
+    expect(screen.queryByText('Weekly activity unavailable')).toBeNull();
+
+    // …and so do all seven dots. A loading caption over seven "unavailable"
+    // tooltips is round 5 F8's two-standards-eight-inches-apart defect again,
+    // which is why the dots take the STATE and not a second null test.
+    expect(container.querySelectorAll('[title="Loading activity…"]').length).toBe(7);
+    expect(container.querySelectorAll('[title="Activity unavailable"]').length).toBe(0);
+
+    // The sibling pane, reading the SAME hung request, already got this right —
+    // the two must not disagree about one request.
+    expect(screen.getByText('Loading recent workouts…')).toBeTruthy();
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -386,6 +417,38 @@ describe('GamificationStrip — XP renders when the old backend does not', () =>
     expect(screen.queryByText('Loading recommendations…')).toBeNull();
     // And the stats half, genuinely still in flight, must NOT claim failure.
     expect(screen.queryByText('Recent workouts are unavailable right now.')).toBeNull();
+  });
+
+  it('an unknown badge tier is neutral in Latest Badges, never bronze — round 8 F5', async () => {
+    // The tier ternary's final `else` was '#cd7f32', so a badge with NO tier
+    // got a bronze pill and a bronze card edge while the pill printed "—".
+    // Probe D of round 8 measured the same badge in both components: bronze
+    // here, neutral in Achievements — one badge, two answers.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockResolvedValue({
+      data: {
+        // `earned` is present on every element, so earnedBadgeCount answers and
+        // recentBadges is non-empty (round 6 F1's rule).
+        badges: { all: [{ id: 'b1', name: 'Mystery Badge', earned: true }], total_count: 40 },
+        challenges: { active: [] },
+      },
+    });
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+
+    renderPage(<GamificationStrip />);
+    const name = await screen.findByText('Mystery Badge');
+
+    // The tier pill is the <p> immediately after the name <p> in the same card.
+    const pill = name.nextElementSibling;
+    expect(pill.textContent).toBe('—');
+    expect(pill.style.color).toContain('255, 255, 255');       // neutral grey
+    expect(pill.style.color).not.toContain('205, 127, 50');    // NOT bronze
+
+    // The card edge is the second half of the same claim — a bronze border
+    // around a dash says "bronze" just as loudly as the text colour does.
+    const card = name.closest('.rounded-xl');
+    expect(card.style.border).toContain('rgba(255, 255, 255');
+    expect(card.style.border).not.toContain('205, 127, 50');
   });
 
   it('a leaderboard 200 missing its list does not blank the page', async () => {
@@ -641,6 +704,86 @@ describe('Achievements — the three payloads are independent — round 4 F4', (
     expect(pill).toBeTruthy();
     expect(pill.style.color).toContain('255, 255, 255');
     expect(pill.style.color).not.toContain('248');
+  });
+
+  it('a badge category of `toString` does not blank the page — round 8 F4', async () => {
+    // `b.category in CATEGORY_LABELS` walks the PROTOTYPE CHAIN, so `toString`
+    // answered "known"; `badgesByCategory['toString']` then resolved to the
+    // inherited Object.prototype.toString, which is TRUTHY, so the array was
+    // never created and `.push` ran on a function. The whole page went blank —
+    // XP header included — because there is no ErrorBoundary in apps/web.
+    // `category` is text(b?.category): any non-empty string from the old
+    // backend, i.e. external input used as an object key (R2.3). Structurally
+    // round 6 F2 (non-array → .slice() → blank page), one layer in.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockResolvedValue({
+      data: {
+        badges: {
+          all: [
+            { id: 'b1', name: 'First Rep',   tier: 'bronze', category: 'milestones', xp_reward: 10, earned: true  },
+            { id: 'b2', name: 'Proto Badge', tier: 'gold',   category: 'toString',   xp_reward: 20, earned: true  },
+            { id: 'b3', name: 'Chain Badge', tier: 'silver', category: '__proto__',  xp_reward: 30, earned: false },
+          ],
+          total_count: 40,
+        },
+        challenges: { active: [] },
+      },
+    });
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+
+    const { container } = renderPage(<Achievements />);
+    await waitFor(() => expect(screen.getByText('First Rep')).toBeTruthy());
+
+    // The page is not blank, and the XP header — the thing this card exists to
+    // render — is still on it.
+    expect(container.textContent.length).toBeGreaterThan(0);
+    expect(screen.getByText(/Level 3/)).toBeTruthy();
+
+    // Round 5 F7's rule: an unlisted category falls into "Other". It must not
+    // vanish from a grid whose header still counts it — the count and the grid
+    // may not disagree.
+    expect(screen.getByText('Proto Badge')).toBeTruthy();
+    expect(screen.getByText('Chain Badge')).toBeTruthy();
+    expect(screen.getByText('Other')).toBeTruthy();
+    expect(screen.getByText(/2 of 40 badges/)).toBeTruthy();
+  });
+
+  it('an unknown badge tier is neutral here too — round 8 F5 / F4', async () => {
+    // The other half of Probe D, so the two components cannot drift apart
+    // again. It also covers `badge.tier in TIER_CONFIG`, which answered "known"
+    // for `toString` and then read every style off a FUNCTION: undefined ring,
+    // undefined glow, undefined colour — the known-tier path with no styling.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockResolvedValue({
+      data: {
+        badges: {
+          all: [
+            { id: 'b1', name: 'No Tier',    category: 'streaks', earned: true },
+            { id: 'b2', name: 'Proto Tier', category: 'streaks', tier: 'toString', earned: true },
+          ],
+          total_count: 40,
+        },
+        challenges: { active: [] },
+      },
+    });
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+
+    renderPage(<Achievements />);
+    await waitFor(() => expect(screen.getByText('No Tier')).toBeTruthy());
+
+    for (const badgeName of ['No Tier', 'Proto Tier']) {
+      const card = screen.getByText(badgeName).closest('.rounded-2xl');
+      // An earned badge with a KNOWN tier gets that tier's ring and glow. An
+      // unknown one must get neither — a bronze ring is a claim, exactly as
+      // round 5 ruled a padlock is.
+      expect(card.style.boxShadow).toBe('none');
+      expect(card.style.border).toContain('rgba(255, 255, 255');
+      expect(card.style.border).not.toContain('205, 127, 50');
+
+      const pill = card.querySelector('.rounded-full');
+      expect(pill.style.color).toContain('255, 255, 255');
+      expect(pill.style.color).not.toContain('205, 127, 50');
+    }
   });
 
   it('old backend HANGS: no permanent "Failed to load" claim — round 3 F2', async () => {

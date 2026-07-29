@@ -54,12 +54,22 @@ function AnimatedNumber({ value, duration = 1500, suffix = '' }) {
  *
  *  Unknown now has its OWN look — dashed outline, no fill, no flame — so the
  *  strip asserts nothing about any day. It is deliberately not an empty box or a
- *  hidden component: the days of the week are knowable and the shape stays. */
-function WeekStrip({ activity }) {
+ *  hidden component: the days of the week are knowable and the shape stays.
+ *
+ *  ROUND 8 F3: `known` was `activity !== null`, which collapsed LOADING and
+ *  FAILED into one answer, so seven "Activity unavailable" tooltips appeared
+ *  during a perfectly healthy in-flight read — permanently, because mlApi sets
+ *  no timeout. Same defect as round 3 F2 and round 7 F1, at the one site on this
+ *  page `oldPayloadState` had not been applied to. The strip takes the STATE
+ *  now, not a second null test of its own: a caption and a tooltip disagreeing
+ *  about one request is round 5 F8's two-standards defect. */
+function WeekStrip({ activity, state }) {
   const days   = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const today  = new Date();
   const dayIdx = (today.getDay() + 6) % 7;
-  const known  = activity !== null && activity !== undefined;
+  const known  = state === 'ready';
+  const title  = known ? undefined
+    : state === 'loading' ? 'Loading activity…' : 'Activity unavailable';
 
   return (
     <div className="flex gap-2">
@@ -68,7 +78,10 @@ function WeekStrip({ activity }) {
         date.setDate(today.getDate() - dayIdx + i);
         const dateStr = date.toISOString().split('T')[0];
         const isToday = i === dayIdx;
-        const isDone  = known && !!activity[dateStr];
+        // `?.` because knowability now comes from the STATE: a caller passing
+        // 'ready' with no payload must degrade, not throw — a throw in render
+        // blanks the page (no ErrorBoundary in apps/web).
+        const isDone  = known && !!activity?.[dateStr];
         const isPast  = i < dayIdx;
 
         return (
@@ -78,7 +91,7 @@ function WeekStrip({ activity }) {
               {day}
             </span>
             <div className="w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300"
-                 title={known ? undefined : 'Activity unavailable'}
+                 title={title}
                  style={{
                    background: !known ? 'transparent'
                      : isDone ? 'linear-gradient(135deg, #FF8A1F, #FFB347)'
@@ -324,6 +337,12 @@ export default function Dashboard() {
   const recent      = stats.recent;
   const recentState = oldPayloadState({ data: recent,          loading });
   const recsState   = oldPayloadState({ data: recommendations, loading: recsLoading });
+  // ROUND 8 F3: the week strip was the THIRD read on this page and the only one
+  // still on two states — round 7 applied oldPayloadState to the two above and
+  // left this. Against a hung old backend it claimed "Weekly activity
+  // unavailable" forever, eight inches from a pane correctly reading "Loading
+  // recent workouts…" about the very same request.
+  const weekState   = oldPayloadState({ data: stats.activity,  loading });
   const hours  = stats.totalMinutes === null
     ? null
     : Math.round((stats.totalMinutes / 60) * 10) / 10;
@@ -450,17 +469,21 @@ export default function Dashboard() {
                 <h3 className="text-sm font-semibold text-white">This Week</h3>
               </div>
               <div style={{ maxWidth: '70%' }}>
-                <WeekStrip activity={stats.activity} />
+                <WeekStrip activity={stats.activity} state={weekState} />
                 {/* ROUND 5 F8: the caption was gated on `weeklyWorkouts` and the
                     dots on `activity` — two different fields, so one could say
                     "3 of 7 days active" beside seven dashed UNKNOWN dots, or
                     "unavailable" beside real flames. Round 4 F3's "two standards
                     eight inches apart", unfixed in the other direction. The
-                    caption now speaks only when BOTH are known. */}
+                    caption speaks only when BOTH are known — unchanged here.
+                    ROUND 8 F3 adds the third state the dots now carry: an
+                    in-flight read is a LOAD, not a failure. */}
                 <p className="text-xs mt-4 text-center" style={{ color: 'rgba(255,255,255,0.50)' }}>
-                  {stats.weeklyWorkouts === null || stats.activity === null
-                    ? 'Weekly activity unavailable'
-                    : `${stats.weeklyWorkouts} of 7 days active`}
+                  {weekState === 'loading'
+                    ? 'Loading this week…'
+                    : weekState === 'ready' && stats.weeklyWorkouts !== null
+                      ? `${stats.weeklyWorkouts} of 7 days active`
+                      : 'Weekly activity unavailable'}
                 </p>
               </div>
             </BgCard>

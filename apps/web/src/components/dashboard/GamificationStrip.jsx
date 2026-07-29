@@ -5,7 +5,7 @@ import { Trophy, Target, Crown, ChevronRight, Sparkles } from 'lucide-react';
 import {
   difficultyColor, earnedBadgeCount, formatFraction, formatLevel, formatXpProgress,
   formatXpTotal, gamificationService, listState, oldPayloadState, orUnknown,
-  progressWidth, readLeaderboardView, readOverviewView, xpBarWidth,
+  progressWidth, readLeaderboardView, readOverviewView, tierStyle, xpBarWidth,
 } from '../../api/gamificationApi';
 import { useXp } from '../../hooks/useXp';
 
@@ -314,10 +314,14 @@ export default function GamificationStrip() {
           <div className="flex-1 flex flex-col gap-2">
             {recentBadges.length > 0 ? (
               recentBadges.map((b, i) => {
-                const tierColor =
-                  b.tier === 'platinum' ? '#a78bfa' :
-                  b.tier === 'gold'     ? '#FFD66B' :
-                  b.tier === 'silver'   ? '#c0c0c0' : '#cd7f32';
+                // ROUND 8 F5: this ternary's final `else` was '#cd7f32', so an
+                // UNKNOWN tier was painted a definite bronze — pill text "—",
+                // pill colour and card edge bronze. Round 6 F5 deleted the same
+                // fabrication from Achievements' BadgeCard and left this one
+                // live: the eighth "fixed at one of N sites" on this card. The
+                // treatment is `tierStyle` now, shared with that component, so
+                // one badge cannot render two answers on two screens again.
+                const tier = tierStyle(b.tier);
                 return (
                   <motion.div
                     key={b.id ?? i}
@@ -326,7 +330,12 @@ export default function GamificationStrip() {
                     className="flex items-center gap-3 rounded-xl px-3 py-2.5"
                     style={{
                       background: 'rgba(0,0,0,0.20)',
-                      border:     `1px solid ${tierColor}40`,
+                      // `edge` rather than `${tier.color}40`: that spelling is a
+                      // valid 8-digit hex for a tier and INVALID CSS for the
+                      // neutral rgba(), so the border would disappear in exactly
+                      // the unknown state — the naive fix failing only where it
+                      // matters.
+                      border:     `1px solid ${tier.edge}`,
                     }}
                   >
                     <span className="text-xl flex-shrink-0">{orUnknown(b.icon)}</span>
@@ -336,7 +345,7 @@ export default function GamificationStrip() {
                         {orUnknown(b.name)}
                       </p>
                       <p className="text-2xs uppercase tracking-wider font-semibold"
-                         style={{ color: tierColor }}>{orUnknown(b.tier)}</p>
+                         style={{ color: tier.color }}>{orUnknown(b.tier)}</p>
                     </div>
                   </motion.div>
                 );

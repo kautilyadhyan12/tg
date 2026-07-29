@@ -1869,3 +1869,80 @@ gate). Its own recommendation: fix the nine, add one OWED line, tick.
   the fact that **`apps/web` is excluded from the lint gate** — root lint is
   `turbo run lint --filter=!web` — so every web card's "lint clean" DoD tick has
   been true by exclusion rather than by fact.
+
+## 2026-07-29 — T3 round 8 ROUND A: the three LIVE defects fixed (F3, F4, F5)
+
+- (Scope, and it was Kd's ruling not this chat's judgment) Round A fixed F3, F4
+  and F5 only. F1/F2/F6 are Round B in a separate chat, and round 8's four
+  non-blocking findings stayed on OWED. The `{!loading && CTA}` item was RAISED
+  as a labelled RECOMMENDATION at the plan gate — its own OWED text invites
+  folding it into "whichever round touches Dashboard.jsx last", which is this
+  one — and Kd approved the plan as written, so it was NOT folded in and stays
+  on the list. Recorded because the next round touching that file is nobody.
+
+- (R9.5, THE gate this card failed in round 7, and the reason Round A exists as
+  its own chat) **Every fix started as a failing test, written and shown RED
+  before any source file was touched.** Six new tests, all six red first:
+  2 in `gamificationApi.test.js` (the tier resolver) and 4 in
+  `xpDisplay.render.test.jsx`. The F4 red run reproduced the reviewer's Probe C
+  verbatim — `TypeError: badgesByCategory[key].push is not a function` at
+  `Achievements.jsx:435`, with the rendered body `<body><div /></body>`. The
+  blank page is real and is now a test, not a claim. Final: 81/81 green
+  (75 pre-existing + 6).
+
+- (THE MEASUREMENT, because the last four rounds produced 7 blocking findings
+  and zero user-visible defects — every one an assertion that could not fail)
+  **11 mutations, each applied to a `cp` backup of the tree and restored from
+  that backup, never `git checkout --`. 10 RED, 1 GREEN.** The three F3
+  mutations (revert the caption, revert the strip's knowability, swap the
+  loading string for the failed string) each turned the F3 test red on its own.
+  F5 got five, including a POSITIVE CONTROL that breaks a KNOWN tier — without
+  it, a resolver returning neutral for everything would have satisfied every
+  "unknown is neutral" assertion and silently deleted the feature.
+
+- (The GREEN one, stated plainly because a survived mutant that gets explained
+  away afterwards is how this card lost four rounds) `Object.create(null)` at
+  `Achievements.jsx` survives its mutation and always will: once the
+  `Object.hasOwn` check stands, the key is always an own `CATEGORY_LABELS` key
+  or `'other'`, so removing the null prototype changes NOTHING observable. **It
+  was declared green in the PLAN, before the mutation ran**, and the source
+  comment says so rather than a test being credited with protecting it. The
+  reverse mutation — hasOwn removed, `Object.create(null)` kept — IS caught: the
+  crash becomes a silent drop of the badge from the grid while the header still
+  counts it, which is round 5 F7's defect.
+
+- (F5 as a CLASS, since the kickoff called it the eighth "fixed at one of N
+  sites" and rounds 6 F3 and 7 F2 are both that mistake recorded) Every site in
+  the card's ten files that resolves a colour from a NULLABLE field was
+  enumerated by grep before the fix: two defective (GamificationStrip's tier
+  ternary, Achievements' `in TIER_CONFIG`), six already correct and re-read line
+  by line (`completed === true`, `isCurrentUser === true`, the two
+  `difficultyColor` sites, the difficulty BACKGROUND ternary's explicit null
+  arm, `formAccuracy === null`), and one excluded WITH its citation —
+  `podiumColors[entry.rank]`, which is round 8 non-blocking #2 and has an OWED
+  line. The resolver lives in `gamificationApi.js` beside `difficultyColor`, so
+  a future edit cannot fix half of it.
+
+- (A trap the naive fix walks into, worth recording because "export a colour
+  resolver" was the reviewer's own prescription) GamificationStrip's card border
+  was `` `1px solid ${tierColor}40` ``. A resolver returning a colour STRING
+  makes that `rgba(255,255,255,0.45)40` for the unknown case — **invalid CSS, so
+  the border vanishes in exactly the state the fix is for.** `tierStyle`
+  therefore returns an `edge` field carrying the 25%-alpha variant per tier,
+  byte-identical to today's output for the four known tiers. Mutation F5-e
+  (border back to the concatenation) is RED, so this is asserted and not just
+  described.
+
+- (V1 / the lint gate, since `apps/web` is excluded from root lint and OWED
+  records that every web card's "lint clean" tick has been true by exclusion)
+  Lint was measured as PARITY, not as zero: the six touched files produce
+  **1 error at HEAD and the same 1 error after** (`ChevronRight`, pre-existing,
+  untouched per R1.1), package-wide **67 errors both times** — which also
+  matches the count round 8's reviewer measured independently. `vite build`
+  green.
+
+- (Not re-smoked, per an existing ruling rather than this chat's preference)
+  OWED's Round A/B line says the smoke re-runs only if a fix changes
+  user-visible behaviour BEYOND the defect. F3 adds "Loading this week…" and a
+  loading tooltip, which IS the defect's fix, so no re-run. Stated here so the
+  absence is a cited decision and not an omission.

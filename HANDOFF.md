@@ -1,6 +1,58 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: XP display / Dashboard XP — T3 ROUND 8, ROUND A. F3, F4, F5 FIXED.
+      Branch web-repoint. 6 source/test files + OWED/DECISIONS/HANDOFF.
+      Suite 81/81 green (75 pre-existing + 6 new). OWED tick STILL OFF.
+
+WHAT THIS SESSION DID
+  · Wrote 6 tests FIRST and showed all 6 RED before touching any source (R9.5 —
+    the gate round 7 failed). The F4 red run reproduced the reviewer's Probe C
+    exactly: `TypeError: badgesByCategory[key].push is not a function` with the
+    body rendering `<div />`. The blank page was real.
+  · F4 — `Object.hasOwn(CATEGORY_LABELS, b.category)` + `Object.create(null)` in
+    Achievements; the same prototype hazard at the tier lookup died with F5.
+  · F3 — `weekState = oldPayloadState({data: stats.activity, loading})`; the
+    strip takes the STATE, so caption and all seven tooltips answer together.
+  · F5 — `tierStyle()` exported from gamificationApi.js beside difficultyColor;
+    Achievements' local TIER_CONFIG/NEUTRAL_TIER deleted; BOTH sites call it.
+  · 11 mutations: 10 RED, 1 GREEN (declared green in the plan BEFORE it ran).
+  · Lint measured as PARITY (1 error at HEAD, same 1 after; 67 package-wide
+    both times) because apps/web is excluded from the root lint gate.
+
+READ THIS BEFORE ROUND B
+  **The one surviving mutant is not a gap to close.** `Object.create(null)` in
+  Achievements is behaviourally inert while the `Object.hasOwn` check stands —
+  no assertion can distinguish it, and the source comment says so. Do NOT add a
+  test for it in Round B; adding one would be the vacuous assertion rounds 6 F11
+  and 7 F3 are about. The reverse (hasOwn removed, null prototype kept) IS
+  caught.
+
+  **F5's enumeration is recorded in DECISIONS 2026-07-29** — every
+  colour-from-a-nullable-field site in the card's ten files, with the two fixed,
+  the six already correct, and the one excluded by an OWED citation. Round B
+  does not need to redo it.
+
+  **A trap for anyone touching the tier colours:** `${tierStyle(t).color}40` is
+  invalid CSS for the neutral rgba value, so the border silently disappears in
+  exactly the unknown state. Use the `edge` field. Mutation F5-e pins it.
+
+NEXT: ROUND B — F1, F2, F6 (the PROTECTION layer), fresh chat.
+  F1 Sidebar is mounted by NO render test and FIELD_READ misses `xp ??`; the
+  "all ten bypasses fail there" claim at gamificationApi.test.js:454-457 and in
+  DECISIONS 2026-07-26 (line 1173) must be CORRECTED in that same commit.
+  F2 no Achievements test runs with getMe DEAD. F6 the three `>= 3` dash floors
+  at the render test's :144/:161/:182 let four numeric fabrications through.
+  Mutation-test every new assertion before it counts.
+
+VERIFY: corepack pnpm --filter web exec vitest run src/api/gamificationApi.test.js src/pages/xpDisplay.render.test.jsx
+        corepack pnpm --filter web exec vite build
+NOTE: syncClient.test.js still fails locally (apps/web/.env sets VITE_API_URL).
+      Known, on OWED, NOT ours — it is not in the two files above.
+SPEC GAPs: none.
+```
+
+```
 TASK: XP display / Dashboard XP — T3 ROUND 8 RECEIVED AND RECORDED. The card
       FAILED it: 6 blocking findings, 15 of 31 mutants survived.
       [NO CODE FIXED THIS SESSION. Records only. The fix is Round A, below.]

@@ -16,7 +16,7 @@ import mlApi from './mlApi';
 import {
   UNKNOWN, difficultyColor, earnedBadgeCount, formatCount, formatFraction, formatLevel, formatXpEarned,
   formatXpProgress, formatXpTotal, gamificationService, listState,
-  oldPayloadState, orUnknown, progressWidth, readBadge, readChallenge, xpBarWidth,
+  oldPayloadState, orUnknown, progressWidth, readBadge, readChallenge, tierStyle, xpBarWidth,
   readLeaderboardEntry, readLeaderboardView, readOverviewView,
   readRecentWorkout, readRecommendation, readRecommendations, readStatsView,
   readXpView,
@@ -227,6 +227,67 @@ describe('old-payload readers: every field is a usable value or NULL', () => {
     // THE ONES THAT MATTER: unknown is neutral, never red.
     expect(difficultyColor(null)).toBe('rgba(255,255,255,0.45)');
     expect(difficultyColor(undefined)).toBe('rgba(255,255,255,0.45)');
+  });
+
+  it('tierStyle never paints an unknown tier as bronze — round 8 F5', () => {
+    // GamificationStrip's "Latest Badges" ternary ended `: '#cd7f32'`, so a
+    // badge whose tier we do NOT know got a definite bronze pill and a bronze
+    // card border while the pill's own text read "—": the words said unknown
+    // and the colour made a claim. Achievements had already fixed this in its
+    // own component (round 6 F5, NEUTRAL_TIER) and the treatment was never
+    // shared — the EIGHTH instance of the one-of-N shape on this card, after
+    // round 7 F2's difficulty ternary (one of three) and round 6 F3 before it.
+    // The resolver lives here, beside difficultyColor, for the same reason: a
+    // later edit cannot fix half of a function.
+    expect(tierStyle('bronze').color).toBe('#cd7f32');
+    expect(tierStyle('silver').color).toBe('#c0c0c0');
+    expect(tierStyle('gold').color).toBe('#FFD66B');
+    expect(tierStyle('platinum').color).toBe('#a78bfa');
+    // The four known tiers must stay DISTINGUISHABLE. A resolver returning one
+    // colour for all of them would satisfy every "unknown is neutral" assertion
+    // below and quietly delete the feature.
+    const known = ['bronze', 'silver', 'gold', 'platinum'].map((t) => tierStyle(t).color);
+    expect(new Set(known).size).toBe(4);
+
+    // THE ONES THAT MATTER: unknown is neutral, never a real tier. `''` and
+    // `'BRONZE'` are here because readBadge's text() passes any non-empty
+    // string through unchanged — it does not lowercase or spell-check.
+    for (const unknown of [null, undefined, 'mythic', 'BRONZE']) {
+      expect(tierStyle(unknown).color).toBe('rgba(255,255,255,0.45)');
+      expect(tierStyle(unknown).glow).toBe('none');
+      expect(tierStyle(unknown).ring).toBe('rgba(255,255,255,0.18)');
+    }
+
+    // `edge` is the 25%-alpha BORDER variant, and it is a field rather than a
+    // `${color}40` concatenation at the call site for one reason: `#cd7f32` +
+    // `40` is a valid 8-digit hex, but `rgba(255,255,255,0.45)` + `40` is
+    // invalid CSS — the border would silently VANISH for exactly the unknown
+    // case this fix exists for. The naive spelling fails only in the state
+    // nobody looks at.
+    expect(tierStyle('bronze').edge).toBe('#cd7f3240');
+    expect(tierStyle('gold').edge).toBe('#FFD66B40');
+    expect(tierStyle(null).edge).not.toMatch(/40$/);
+    expect(tierStyle(null).edge).toMatch(/^rgba\(/);
+  });
+
+  it('tierStyle answers own properties only — round 8 F4, second site', () => {
+    // `badge.tier in TIER_CONFIG` walked the PROTOTYPE CHAIN, so a tier of
+    // `toString` answered "known" and `TIER_CONFIG[badge.tier]` then resolved
+    // to Object.prototype.toString — a FUNCTION. Every style read off it was
+    // `undefined`, so the badge took the known-tier path with no styling at
+    // all. `tier` is text(b?.tier): any non-empty string the old backend cares
+    // to send, i.e. external input used as an object key (R2.3).
+    for (const key of ['toString', 'constructor', 'valueOf', '__proto__',
+                       'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable']) {
+      const s = tierStyle(key);
+      expect(s.color).toBe('rgba(255,255,255,0.45)');
+      // The defect was UNDEFINED styles, not a wrong colour — asserting the
+      // colour alone would have missed it. Every field must be a real string.
+      for (const field of ['color', 'bg', 'ring', 'glow', 'edge']) {
+        expect(typeof s[field]).toBe('string');
+        expect(s[field].length).toBeGreaterThan(0);
+      }
+    }
   });
 
   it('readLeaderboardEntry maps snake_case and nulls the rest', () => {

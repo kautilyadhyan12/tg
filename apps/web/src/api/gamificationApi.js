@@ -253,6 +253,49 @@ export function difficultyColor(difficulty) {
   }
 }
 
+/** The visual treatment for a badge TIER, with UNKNOWN as neutral grey.
+ *
+ *  ROUND 8 F5 — the EIGHTH instance of the one-of-N shape on this card. Round 6
+ *  F5 deleted `TIER_CONFIG[badge.tier] || TIER_CONFIG.bronze` from Achievements'
+ *  BadgeCard and left GamificationStrip's own ternary, whose final `else` was
+ *  that same bronze. One badge therefore rendered NEUTRAL on one screen and
+ *  DEFINITELY BRONZE on the other, with the pill's text reading "—" in both: the
+ *  words said unknown and the colour made a claim. Same remedy as
+ *  `difficultyColor` above — one function, so the next edit cannot fix half of
+ *  it.
+ *
+ *  ROUND 8 F4, second site: the lookup is `Object.hasOwn`, NEVER `in`.
+ *  `badge.tier in TIER_CONFIG` walks the prototype chain, so a tier of
+ *  `toString` answered "known" and the style resolved to
+ *  `Object.prototype.toString` — a function, so every style field read off it
+ *  was `undefined` and the badge took the known-tier path with no styling at
+ *  all. `tier` is `text(b?.tier)`: any non-empty string the old backend sends,
+ *  i.e. external input used as an object key (R2.3).
+ *
+ *  `edge` is the 25%-alpha BORDER variant, and it is a field rather than a
+ *  `${color}40` concatenation at the call site — which is how GamificationStrip
+ *  spelled it. That concatenation is a valid 8-digit hex for a tier colour and
+ *  INVALID CSS for the neutral `rgba(...)`, so the border would have vanished in
+ *  exactly the unknown state this fix exists for. */
+const NEUTRAL_TIER = {
+  color: 'rgba(255,255,255,0.45)',
+  bg:    'rgba(10,9,8,0.75)',
+  ring:  'rgba(255,255,255,0.18)',
+  glow:  'none',
+  edge:  'rgba(255,255,255,0.18)',
+};
+const TIER_STYLES = {
+  bronze:   { color: '#cd7f32', bg: 'rgba(10,9,8,0.75)', ring: '#cd7f32', glow: '0 0 16px rgba(205,127,50,0.50), 0 0 40px rgba(205,127,50,0.20)', edge: '#cd7f3240' },
+  silver:   { color: '#c0c0c0', bg: 'rgba(10,9,8,0.75)', ring: '#c0c0c0', glow: '0 0 16px rgba(192,192,192,0.50), 0 0 40px rgba(192,192,192,0.20)', edge: '#c0c0c040' },
+  gold:     { color: '#FFD66B', bg: 'rgba(10,9,8,0.75)', ring: '#FFD66B', glow: '0 0 16px rgba(255,214,107,0.60), 0 0 40px rgba(255,214,107,0.25)', edge: '#FFD66B40' },
+  platinum: { color: '#a78bfa', bg: 'rgba(10,9,8,0.75)', ring: '#a78bfa', glow: '0 0 16px rgba(167,139,250,0.60), 0 0 40px rgba(167,139,250,0.25)', edge: '#a78bfa40' },
+};
+export function tierStyle(tier) {
+  return typeof tier === 'string' && Object.hasOwn(TIER_STYLES, tier)
+    ? TIER_STYLES[tier]
+    : NEUTRAL_TIER;
+}
+
 export function readChallenge(c) {
   return {
     id:          text(c?.id),
