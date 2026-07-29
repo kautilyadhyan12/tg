@@ -1,0 +1,791 @@
+diff --git a/apps/web/src/api/gamificationApi.js b/apps/web/src/api/gamificationApi.js
+index 84800e6..7a62a21 100644
+--- a/apps/web/src/api/gamificationApi.js
++++ b/apps/web/src/api/gamificationApi.js
+@@ -253,6 +253,49 @@ export function difficultyColor(difficulty) {
+   }
+ }
+ 
++/** The visual treatment for a badge TIER, with UNKNOWN as neutral grey.
++ *
++ *  ROUND 8 F5 — the EIGHTH instance of the one-of-N shape on this card. Round 6
++ *  F5 deleted `TIER_CONFIG[badge.tier] || TIER_CONFIG.bronze` from Achievements'
++ *  BadgeCard and left GamificationStrip's own ternary, whose final `else` was
++ *  that same bronze. One badge therefore rendered NEUTRAL on one screen and
++ *  DEFINITELY BRONZE on the other, with the pill's text reading "—" in both: the
++ *  words said unknown and the colour made a claim. Same remedy as
++ *  `difficultyColor` above — one function, so the next edit cannot fix half of
++ *  it.
++ *
++ *  ROUND 8 F4, second site: the lookup is `Object.hasOwn`, NEVER `in`.
++ *  `badge.tier in TIER_CONFIG` walks the prototype chain, so a tier of
++ *  `toString` answered "known" and the style resolved to
++ *  `Object.prototype.toString` — a function, so every style field read off it
++ *  was `undefined` and the badge took the known-tier path with no styling at
++ *  all. `tier` is `text(b?.tier)`: any non-empty string the old backend sends,
++ *  i.e. external input used as an object key (R2.3).
++ *
++ *  `edge` is the 25%-alpha BORDER variant, and it is a field rather than a
++ *  `${color}40` concatenation at the call site — which is how GamificationStrip
++ *  spelled it. That concatenation is a valid 8-digit hex for a tier colour and
++ *  INVALID CSS for the neutral `rgba(...)`, so the border would have vanished in
++ *  exactly the unknown state this fix exists for. */
++const NEUTRAL_TIER = {
++  color: 'rgba(255,255,255,0.45)',
++  bg:    'rgba(10,9,8,0.75)',
++  ring:  'rgba(255,255,255,0.18)',
++  glow:  'none',
++  edge:  'rgba(255,255,255,0.18)',
++};
++const TIER_STYLES = {
++  bronze:   { color: '#cd7f32', bg: 'rgba(10,9,8,0.75)', ring: '#cd7f32', glow: '0 0 16px rgba(205,127,50,0.50), 0 0 40px rgba(205,127,50,0.20)', edge: '#cd7f3240' },
++  silver:   { color: '#c0c0c0', bg: 'rgba(10,9,8,0.75)', ring: '#c0c0c0', glow: '0 0 16px rgba(192,192,192,0.50), 0 0 40px rgba(192,192,192,0.20)', edge: '#c0c0c040' },
++  gold:     { color: '#FFD66B', bg: 'rgba(10,9,8,0.75)', ring: '#FFD66B', glow: '0 0 16px rgba(255,214,107,0.60), 0 0 40px rgba(255,214,107,0.25)', edge: '#FFD66B40' },
++  platinum: { color: '#a78bfa', bg: 'rgba(10,9,8,0.75)', ring: '#a78bfa', glow: '0 0 16px rgba(167,139,250,0.60), 0 0 40px rgba(167,139,250,0.25)', edge: '#a78bfa40' },
++};
++export function tierStyle(tier) {
++  return typeof tier === 'string' && Object.hasOwn(TIER_STYLES, tier)
++    ? TIER_STYLES[tier]
++    : NEUTRAL_TIER;
++}
++
+ export function readChallenge(c) {
+   return {
+     id:          text(c?.id),
+diff --git a/apps/web/src/api/gamificationApi.test.js b/apps/web/src/api/gamificationApi.test.js
+index 90599e9..aee8977 100644
+--- a/apps/web/src/api/gamificationApi.test.js
++++ b/apps/web/src/api/gamificationApi.test.js
+@@ -16,7 +16,7 @@ import mlApi from './mlApi';
+ import {
+   UNKNOWN, difficultyColor, earnedBadgeCount, formatCount, formatFraction, formatLevel, formatXpEarned,
+   formatXpProgress, formatXpTotal, gamificationService, listState,
+-  oldPayloadState, orUnknown, progressWidth, readBadge, readChallenge, xpBarWidth,
++  oldPayloadState, orUnknown, progressWidth, readBadge, readChallenge, tierStyle, xpBarWidth,
+   readLeaderboardEntry, readLeaderboardView, readOverviewView,
+   readRecentWorkout, readRecommendation, readRecommendations, readStatsView,
+   readXpView,
+@@ -229,6 +229,67 @@ describe('old-payload readers: every field is a usable value or NULL', () => {
+     expect(difficultyColor(undefined)).toBe('rgba(255,255,255,0.45)');
+   });
+ 
++  it('tierStyle never paints an unknown tier as bronze — round 8 F5', () => {
++    // GamificationStrip's "Latest Badges" ternary ended `: '#cd7f32'`, so a
++    // badge whose tier we do NOT know got a definite bronze pill and a bronze
++    // card border while the pill's own text read "—": the words said unknown
++    // and the colour made a claim. Achievements had already fixed this in its
++    // own component (round 6 F5, NEUTRAL_TIER) and the treatment was never
++    // shared — the EIGHTH instance of the one-of-N shape on this card, after
++    // round 7 F2's difficulty ternary (one of three) and round 6 F3 before it.
++    // The resolver lives here, beside difficultyColor, for the same reason: a
++    // later edit cannot fix half of a function.
++    expect(tierStyle('bronze').color).toBe('#cd7f32');
++    expect(tierStyle('silver').color).toBe('#c0c0c0');
++    expect(tierStyle('gold').color).toBe('#FFD66B');
++    expect(tierStyle('platinum').color).toBe('#a78bfa');
++    // The four known tiers must stay DISTINGUISHABLE. A resolver returning one
++    // colour for all of them would satisfy every "unknown is neutral" assertion
++    // below and quietly delete the feature.
++    const known = ['bronze', 'silver', 'gold', 'platinum'].map((t) => tierStyle(t).color);
++    expect(new Set(known).size).toBe(4);
++
++    // THE ONES THAT MATTER: unknown is neutral, never a real tier. `''` and
++    // `'BRONZE'` are here because readBadge's text() passes any non-empty
++    // string through unchanged — it does not lowercase or spell-check.
++    for (const unknown of [null, undefined, 'mythic', 'BRONZE']) {
++      expect(tierStyle(unknown).color).toBe('rgba(255,255,255,0.45)');
++      expect(tierStyle(unknown).glow).toBe('none');
++      expect(tierStyle(unknown).ring).toBe('rgba(255,255,255,0.18)');
++    }
++
++    // `edge` is the 25%-alpha BORDER variant, and it is a field rather than a
++    // `${color}40` concatenation at the call site for one reason: `#cd7f32` +
++    // `40` is a valid 8-digit hex, but `rgba(255,255,255,0.45)` + `40` is
++    // invalid CSS — the border would silently VANISH for exactly the unknown
++    // case this fix exists for. The naive spelling fails only in the state
++    // nobody looks at.
++    expect(tierStyle('bronze').edge).toBe('#cd7f3240');
++    expect(tierStyle('gold').edge).toBe('#FFD66B40');
++    expect(tierStyle(null).edge).not.toMatch(/40$/);
++    expect(tierStyle(null).edge).toMatch(/^rgba\(/);
++  });
++
++  it('tierStyle answers own properties only — round 8 F4, second site', () => {
++    // `badge.tier in TIER_CONFIG` walked the PROTOTYPE CHAIN, so a tier of
++    // `toString` answered "known" and `TIER_CONFIG[badge.tier]` then resolved
++    // to Object.prototype.toString — a FUNCTION. Every style read off it was
++    // `undefined`, so the badge took the known-tier path with no styling at
++    // all. `tier` is text(b?.tier): any non-empty string the old backend cares
++    // to send, i.e. external input used as an object key (R2.3).
++    for (const key of ['toString', 'constructor', 'valueOf', '__proto__',
++                       'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable']) {
++      const s = tierStyle(key);
++      expect(s.color).toBe('rgba(255,255,255,0.45)');
++      // The defect was UNDEFINED styles, not a wrong colour — asserting the
++      // colour alone would have missed it. Every field must be a real string.
++      for (const field of ['color', 'bg', 'ring', 'glow', 'edge']) {
++        expect(typeof s[field]).toBe('string');
++        expect(s[field].length).toBeGreaterThan(0);
++      }
++    }
++  });
++
+   it('readLeaderboardEntry maps snake_case and nulls the rest', () => {
+     const e = readLeaderboardEntry({
+       rank: 2, name: 'Kd', level: 3, badge_count: 9, xp: 578,
+@@ -452,9 +513,27 @@ describe('unknown-safe formatters', () => {
+ //     only enumerate the attacks someone already thought of — which is exactly
+ //     what ten bypasses across four rounds demonstrate empirically.
+ //   · THE PROTECTION OF RECORD is `src/pages/xpDisplay.render.test.jsx`, which
+-//     renders the components in jsdom and asserts on the DOM. Every one of the
+-//     ten bypasses fails there, because it does not matter how a fabrication was
+-//     spelled — only that a number nobody knows reached the screen.
++//     renders the components in jsdom and asserts on the DOM: it does not matter
++//     how a fabrication was spelled, only that a number nobody knows reached the
++//     screen.
++//
++// **THE SENTENCE THAT STOOD HERE — "every one of the ten bypasses fails there"
++// — WAS FALSE AND IS STRUCK (round 8 F1).** Two of the ten passed it, both
++// bypass #6, the destructure: MUT-28 reintroduced `Level {(xp ?? { level: 1
++// }).level}` in Sidebar.jsx and MUT-34 did the same in the Achievements header,
++// and both left all 75 tests GREEN. The render suite could not see either,
++// because it imported four components and Sidebar was not one of them, and
++// because all 13 Achievements tests resolved getMe with a KNOWN block. A DOM
++// assertion only covers what someone remembered to mount.
++//
++// WHAT IS TRUE AS MEASURED, and nothing beyond it — this is the FIFTH false
++// claim this section has carried, and the claim it keeps failing to make
++// honestly is precisely this one:
++//   · those two re-introductions are now caught. Round B mounted Sidebar with
++//     the XP read dead and gave Achievements its own XP-fails fixture, then
++//     re-ran both mutations: RED (Round B B1 and B3, 2026-07-29).
++//   · the other eight bypasses were verified caught in round 4 and have NOT
++//     been re-measured since. That is a round-4 measurement, not a current one.
+ // Do not grow this section in response to a new bypass. Add a render assertion.
+ //
+ // Claims made below are limited to what is mechanically true: FIELD_READ now
+diff --git a/apps/web/src/components/dashboard/GamificationStrip.jsx b/apps/web/src/components/dashboard/GamificationStrip.jsx
+index 7b32515..257b17b 100644
+--- a/apps/web/src/components/dashboard/GamificationStrip.jsx
++++ b/apps/web/src/components/dashboard/GamificationStrip.jsx
+@@ -5,7 +5,7 @@ import { Trophy, Target, Crown, ChevronRight, Sparkles } from 'lucide-react';
+ import {
+   difficultyColor, earnedBadgeCount, formatFraction, formatLevel, formatXpProgress,
+   formatXpTotal, gamificationService, listState, oldPayloadState, orUnknown,
+-  progressWidth, readLeaderboardView, readOverviewView, xpBarWidth,
++  progressWidth, readLeaderboardView, readOverviewView, tierStyle, xpBarWidth,
+ } from '../../api/gamificationApi';
+ import { useXp } from '../../hooks/useXp';
+ 
+@@ -314,10 +314,14 @@ export default function GamificationStrip() {
+           <div className="flex-1 flex flex-col gap-2">
+             {recentBadges.length > 0 ? (
+               recentBadges.map((b, i) => {
+-                const tierColor =
+-                  b.tier === 'platinum' ? '#a78bfa' :
+-                  b.tier === 'gold'     ? '#FFD66B' :
+-                  b.tier === 'silver'   ? '#c0c0c0' : '#cd7f32';
++                // ROUND 8 F5: this ternary's final `else` was '#cd7f32', so an
++                // UNKNOWN tier was painted a definite bronze — pill text "—",
++                // pill colour and card edge bronze. Round 6 F5 deleted the same
++                // fabrication from Achievements' BadgeCard and left this one
++                // live: the eighth "fixed at one of N sites" on this card. The
++                // treatment is `tierStyle` now, shared with that component, so
++                // one badge cannot render two answers on two screens again.
++                const tier = tierStyle(b.tier);
+                 return (
+                   <motion.div
+                     key={b.id ?? i}
+@@ -326,7 +330,12 @@ export default function GamificationStrip() {
+                     className="flex items-center gap-3 rounded-xl px-3 py-2.5"
+                     style={{
+                       background: 'rgba(0,0,0,0.20)',
+-                      border:     `1px solid ${tierColor}40`,
++                      // `edge` rather than `${tier.color}40`: that spelling is a
++                      // valid 8-digit hex for a tier and INVALID CSS for the
++                      // neutral rgba(), so the border would disappear in exactly
++                      // the unknown state — the naive fix failing only where it
++                      // matters.
++                      border:     `1px solid ${tier.edge}`,
+                     }}
+                   >
+                     <span className="text-xl flex-shrink-0">{orUnknown(b.icon)}</span>
+@@ -336,7 +345,7 @@ export default function GamificationStrip() {
+                         {orUnknown(b.name)}
+                       </p>
+                       <p className="text-2xs uppercase tracking-wider font-semibold"
+-                         style={{ color: tierColor }}>{orUnknown(b.tier)}</p>
++                         style={{ color: tier.color }}>{orUnknown(b.tier)}</p>
+                     </div>
+                   </motion.div>
+                 );
+diff --git a/apps/web/src/pages/Achievements.jsx b/apps/web/src/pages/Achievements.jsx
+index 4a8c146..e0d7523 100644
+--- a/apps/web/src/pages/Achievements.jsx
++++ b/apps/web/src/pages/Achievements.jsx
+@@ -8,17 +8,17 @@ import {
+   difficultyColor, earnedBadgeCount, formatCount, formatFraction, formatLevel,
+   formatNextLevel, formatXpFraction, formatXpTotal, gamificationService,
+   listState, oldPayloadState, orUnknown, progressWidth, readLeaderboardView,
+-  readOverviewView, xpBarWidth,
++  readOverviewView, tierStyle, xpBarWidth,
+ } from '../api/gamificationApi';
+ import { useXp } from '../hooks/useXp';
+ 
+-// ── Tier color config ─────────────────────────────────────────────────────────
+-const TIER_CONFIG = {
+-  bronze:   { color: '#cd7f32', bg: 'rgba(10,9,8,0.75)', ring: '#cd7f32', glow: '0 0 16px rgba(205,127,50,0.50), 0 0 40px rgba(205,127,50,0.20)' },
+-  silver:   { color: '#c0c0c0', bg: 'rgba(10,9,8,0.75)', ring: '#c0c0c0', glow: '0 0 16px rgba(192,192,192,0.50), 0 0 40px rgba(192,192,192,0.20)' },
+-  gold:     { color: '#FFD66B', bg: 'rgba(10,9,8,0.75)', ring: '#FFD66B', glow: '0 0 16px rgba(255,214,107,0.60), 0 0 40px rgba(255,214,107,0.25)' },
+-  platinum: { color: '#a78bfa', bg: 'rgba(10,9,8,0.75)', ring: '#a78bfa', glow: '0 0 16px rgba(167,139,250,0.60), 0 0 40px rgba(167,139,250,0.25)' },
+-};
++// ── Tier colour config ────────────────────────────────────────────────────────
++// ROUND 8 F5: `TIER_CONFIG` and `NEUTRAL_TIER` lived HERE, and GamificationStrip
++// carried its own 4-arm ternary whose final `else` was bronze — so round 6 F5's
++// fix covered one of the two components and the same badge rendered neutral on
++// this page and DEFINITELY BRONZE on the dashboard. Both now read `tierStyle`
++// from gamificationApi.js, beside `difficultyColor`, which round 7 F2 moved
++// there for exactly this reason. The values are unchanged, byte for byte.
+ 
+ // ── Category labels ───────────────────────────────────────────────────────────
+ const CATEGORY_LABELS = {
+@@ -38,15 +38,6 @@ const CATEGORY_LABELS = {
+ const OTHER_CATEGORY = 'other';
+ const OTHER_LABEL    = 'Other';
+ 
+-/** Round 6 F5: the treatment for a badge whose tier we do not know. Grey, no
+- *  ring colour, no glow — it must not read as any real tier. */
+-const NEUTRAL_TIER = {
+-  color: 'rgba(255,255,255,0.45)',
+-  bg:    'rgba(10,9,8,0.75)',
+-  ring:  'rgba(255,255,255,0.18)',
+-  glow:  'none',
+-};
+-
+ // ── Single badge card ─────────────────────────────────────────────────────────
+ /** ROUND 5 F2: `badge.earned` is now true / false / NULL, and null must render
+  *  as neither. The locked treatment — a padlock, grayscale, 45% opacity — is a
+@@ -58,8 +49,12 @@ function BadgeCard({ badge, index }) {
+   // tier — a badge with no tier got a full bronze ring and bronze glow beside
+   // an empty tier pill. Round 5's own standard ("a padlock is a claim") applies
+   // identically to a bronze ring. Unknown tier gets a neutral treatment.
+-  const tierKnown = badge.tier !== null && badge.tier in TIER_CONFIG;
+-  const tier      = tierKnown ? TIER_CONFIG[badge.tier] : NEUTRAL_TIER;
++  // ROUND 8 F4: the replacement was `badge.tier in TIER_CONFIG`, and `in` walks
++  // the PROTOTYPE CHAIN — a tier of `toString` answered "known", so the style
++  // resolved to Object.prototype.toString and every field read off that function
++  // was `undefined`: the known-tier path with no styling at all. `tierStyle`
++  // does an own-property lookup, and it is shared with GamificationStrip (F5).
++  const tier      = tierStyle(badge.tier);
+   const earned    = badge.earned === true;
+   const unknown   = badge.earned === null;
+ 
+@@ -428,9 +423,24 @@ export default function Achievements() {
+   // empty tab. Latent today (the backend emits exactly the eight known keys)
+   // but the count and the grid must not disagree, so unlisted categories fall
+   // into an "Other" group instead of vanishing.
+-  const badgesByCategory = {};
++  // ROUND 8 F4, and it is the one a user hits: `b.category in CATEGORY_LABELS`
++  // walked the PROTOTYPE CHAIN, so a category of `toString` / `constructor` /
++  // `valueOf` / `__proto__` / `hasOwnProperty` answered "known" — and
++  // `badgesByCategory['toString']` then resolved to the INHERITED
++  // Object.prototype.toString, which is truthy, so the array was never created
++  // and `.push` ran on a function. TypeError inside render, and with no
++  // ErrorBoundary anywhere in apps/web the ENTIRE page went blank, XP header
++  // included. `category` is `text(b?.category)`: any non-empty string the old
++  // backend sends, i.e. external input used as an object key (R2.3).
++  // `Object.hasOwn` is what fixes it. `Object.create(null)` is belt-and-braces:
++  // it has no behavioural effect while the hasOwn check stands (the key is then
++  // always an own CATEGORY_LABELS key or 'other'), and it is stated as such
++  // rather than credited to a test — no assertion can distinguish it.
++  const badgesByCategory = Object.create(null);
+   (overview.badges.all ?? []).forEach((b) => {
+-    const key = b.category !== null && b.category in CATEGORY_LABELS ? b.category : OTHER_CATEGORY;
++    const key = b.category !== null && Object.hasOwn(CATEGORY_LABELS, b.category)
++      ? b.category
++      : OTHER_CATEGORY;
+     if (!badgesByCategory[key]) badgesByCategory[key] = [];
+     badgesByCategory[key].push(b);
+   });
+diff --git a/apps/web/src/pages/Dashboard.jsx b/apps/web/src/pages/Dashboard.jsx
+index 397bbb1..c41e143 100644
+--- a/apps/web/src/pages/Dashboard.jsx
++++ b/apps/web/src/pages/Dashboard.jsx
+@@ -54,12 +54,22 @@ function AnimatedNumber({ value, duration = 1500, suffix = '' }) {
+  *
+  *  Unknown now has its OWN look — dashed outline, no fill, no flame — so the
+  *  strip asserts nothing about any day. It is deliberately not an empty box or a
+- *  hidden component: the days of the week are knowable and the shape stays. */
+-function WeekStrip({ activity }) {
++ *  hidden component: the days of the week are knowable and the shape stays.
++ *
++ *  ROUND 8 F3: `known` was `activity !== null`, which collapsed LOADING and
++ *  FAILED into one answer, so seven "Activity unavailable" tooltips appeared
++ *  during a perfectly healthy in-flight read — permanently, because mlApi sets
++ *  no timeout. Same defect as round 3 F2 and round 7 F1, at the one site on this
++ *  page `oldPayloadState` had not been applied to. The strip takes the STATE
++ *  now, not a second null test of its own: a caption and a tooltip disagreeing
++ *  about one request is round 5 F8's two-standards defect. */
++function WeekStrip({ activity, state }) {
+   const days   = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+   const today  = new Date();
+   const dayIdx = (today.getDay() + 6) % 7;
+-  const known  = activity !== null && activity !== undefined;
++  const known  = state === 'ready';
++  const title  = known ? undefined
++    : state === 'loading' ? 'Loading activity…' : 'Activity unavailable';
+ 
+   return (
+     <div className="flex gap-2">
+@@ -68,7 +78,10 @@ function WeekStrip({ activity }) {
+         date.setDate(today.getDate() - dayIdx + i);
+         const dateStr = date.toISOString().split('T')[0];
+         const isToday = i === dayIdx;
+-        const isDone  = known && !!activity[dateStr];
++        // `?.` because knowability now comes from the STATE: a caller passing
++        // 'ready' with no payload must degrade, not throw — a throw in render
++        // blanks the page (no ErrorBoundary in apps/web).
++        const isDone  = known && !!activity?.[dateStr];
+         const isPast  = i < dayIdx;
+ 
+         return (
+@@ -78,7 +91,7 @@ function WeekStrip({ activity }) {
+               {day}
+             </span>
+             <div className="w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300"
+-                 title={known ? undefined : 'Activity unavailable'}
++                 title={title}
+                  style={{
+                    background: !known ? 'transparent'
+                      : isDone ? 'linear-gradient(135deg, #FF8A1F, #FFB347)'
+@@ -324,6 +337,12 @@ export default function Dashboard() {
+   const recent      = stats.recent;
+   const recentState = oldPayloadState({ data: recent,          loading });
+   const recsState   = oldPayloadState({ data: recommendations, loading: recsLoading });
++  // ROUND 8 F3: the week strip was the THIRD read on this page and the only one
++  // still on two states — round 7 applied oldPayloadState to the two above and
++  // left this. Against a hung old backend it claimed "Weekly activity
++  // unavailable" forever, eight inches from a pane correctly reading "Loading
++  // recent workouts…" about the very same request.
++  const weekState   = oldPayloadState({ data: stats.activity,  loading });
+   const hours  = stats.totalMinutes === null
+     ? null
+     : Math.round((stats.totalMinutes / 60) * 10) / 10;
+@@ -450,17 +469,21 @@ export default function Dashboard() {
+                 <h3 className="text-sm font-semibold text-white">This Week</h3>
+               </div>
+               <div style={{ maxWidth: '70%' }}>
+-                <WeekStrip activity={stats.activity} />
++                <WeekStrip activity={stats.activity} state={weekState} />
+                 {/* ROUND 5 F8: the caption was gated on `weeklyWorkouts` and the
+                     dots on `activity` — two different fields, so one could say
+                     "3 of 7 days active" beside seven dashed UNKNOWN dots, or
+                     "unavailable" beside real flames. Round 4 F3's "two standards
+                     eight inches apart", unfixed in the other direction. The
+-                    caption now speaks only when BOTH are known. */}
++                    caption speaks only when BOTH are known — unchanged here.
++                    ROUND 8 F3 adds the third state the dots now carry: an
++                    in-flight read is a LOAD, not a failure. */}
+                 <p className="text-xs mt-4 text-center" style={{ color: 'rgba(255,255,255,0.50)' }}>
+-                  {stats.weeklyWorkouts === null || stats.activity === null
+-                    ? 'Weekly activity unavailable'
+-                    : `${stats.weeklyWorkouts} of 7 days active`}
++                  {weekState === 'loading'
++                    ? 'Loading this week…'
++                    : weekState === 'ready' && stats.weeklyWorkouts !== null
++                      ? `${stats.weeklyWorkouts} of 7 days active`
++                      : 'Weekly activity unavailable'}
+                 </p>
+               </div>
+             </BgCard>
+diff --git a/apps/web/src/pages/xpDisplay.render.test.jsx b/apps/web/src/pages/xpDisplay.render.test.jsx
+index 6c0e97b..ad0aaf3 100644
+--- a/apps/web/src/pages/xpDisplay.render.test.jsx
++++ b/apps/web/src/pages/xpDisplay.render.test.jsx
+@@ -73,6 +73,7 @@ const Dashboard         = (await import('./Dashboard')).default;
+ const Achievements      = (await import('./Achievements')).default;
+ const GamificationStrip = (await import('../components/dashboard/GamificationStrip')).default;
+ const PostWorkout       = (await import('./PostWorkout')).default;
++const Sidebar           = (await import('../components/common/Sidebar')).default;
+ 
+ /** A real /v1/gamification/me `xp` block. Level THREE deliberately: "Level 1" is
+  *  the fabricated value this whole card exists to delete, so it must never be
+@@ -107,6 +108,29 @@ const HANGS = () => new Promise(() => {});
+ 
+ const renderPage = (ui) => render(<MemoryRouter>{ui}</MemoryRouter>);
+ 
++/** ROUND 8 F6 — the instruments the dash FLOORS are replaced by.
++ *
++ *  `getAllByText('—').length >= 3` is a floor with slack: five sites render the
++ *  dash in the old-backend-dead fixture, so any TWO of them could start printing
++ *  a fabricated number and the count still passed. The reviewer proved it by
++ *  reintroducing `?? 0` at four render sites — Total Workouts, Calories Burned,
++ *  This week and Your Rank — with all 75 tests green. MUT-21 is round 4 F2
++ *  verbatim ("0 workouts / 0h / 0 kcal printed as fact"), i.e. the exact defect
++ *  this card exists to delete, alive again and invisible.
++ *
++ *  A count cannot say WHICH site went numeric. These name the site.
++ *
++ *  `getByText` THROWS when its anchor is absent or ambiguous, so neither helper
++ *  can pass vacuously: deleting a stat card fails the test that reads it, which
++ *  is the "a vanishing site is still caught" half of the DECISIONS 2026-07-28
++ *  ruling on floors (identity + an exact count, at PostWorkout's share card). */
++/** Dashboard's LOCAL StatCard renders value → label → sub as siblings, so the
++ *  label is the anchor and the value is the node before it. */
++const statValue = (label) => screen.getByText(label).previousElementSibling.textContent;
++/** The three tiles in the Experience Points card render only value → sub: their
++ *  `label` is the React key and never reaches the DOM, so the SUB is the anchor. */
++const tileValue = (sub) => screen.getByText(sub).previousElementSibling.textContent;
++
+ beforeEach(() => {
+   vi.clearAllMocks();
+   recommendationService.getRecommendations.mockImplementation(DEAD);
+@@ -117,6 +141,58 @@ afterEach(() => {
+   vi.restoreAllMocks();
+ });
+ 
++// ─────────────────────────────────────────────────────────────────────────────
++/** ROUND 8 F1 — the consumer where the ORIGINAL bug lived, mounted by no test.
++ *
++ *  `user?.level || 1` in Sidebar rendered a fabricated "Level 1" for every user
++ *  on this branch; deleting it is why this card exists. It then survived every
++ *  protection the card built, for two independent reasons, and each was a claim
++ *  the repo made and did not hold:
++ *
++ *    · the source guard's FIELD_READ requires a `.` or `[` after `xp`, and
++ *      `(xp ?? { level: 1 }).level` has neither — documented bypass #6;
++ *    · this file imported Dashboard, Achievements, GamificationStrip and
++ *      PostWorkout. NOT Sidebar. The one component the card was opened for had
++ *      zero DOM coverage, so MUT-28 reintroduced the fabrication with all 75
++ *      tests green.
++ *
++ *  Sidebar needs no new fixture: useAuth, useTransition and the router are
++ *  already mocked or provided at the top of this file, and useXp is the REAL
++ *  hook reading the mocked gamificationService. */
++describe('Sidebar — where the original bug lived — round 8 F1', () => {
++  it('XP read fails: no level is invented in the shell', async () => {
++    gamificationService.getMe.mockImplementation(DEAD);
++
++    const { container } = renderPage(<Sidebar />);
++
++    // Waiting on the dash rather than on a static node also lets the failed
++    // read settle before the sweep runs.
++    await waitFor(() => expect(screen.getByText('Level —')).toBeTruthy());
++
++    // WHOLE-DOCUMENT, and BOTH spellings. The user card prints the level twice
++    // — "Level {…}" in the flame row and a compact "L{…}" badge beside it — so
++    // asserting one of them leaves the other free to fabricate.
++    const text = container.textContent;
++    expect(text).not.toMatch(/Level\s*\d/);
++    expect(text).not.toMatch(/\bL\d/);
++  });
++
++  it('XP ready: the sidebar prints the TRUE level, at both sites', async () => {
++    // THE POSITIVE CONTROL. Without it, a Sidebar that renders no level at all
++    // — or whose user card was deleted outright — satisfies the test above
++    // completely, and the protection becomes an assertion that cannot fail.
++    // That is rounds 6 F11 and 7 F3's defect class, and Round A's F5 needed
++    // exactly this control for the same reason (DECISIONS 2026-07-29).
++    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
++
++    renderPage(<Sidebar />);
++
++    await waitFor(() => expect(screen.getByText('Level 3')).toBeTruthy());
++    expect(screen.getByText('L3')).toBeTruthy();
++    expect(screen.queryByText(/Level 1\b/)).toBeNull();
++  });
++});
++
+ // ─────────────────────────────────────────────────────────────────────────────
+ describe('Dashboard — a real level never sits beside fabricated figures', () => {
+   it('old backend DEAD, XP ready: shows the true level and dashes for the rest', async () => {
+@@ -125,7 +201,7 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
+     gamificationService.getLeaderboard.mockImplementation(DEAD);
+     workoutService.getStats.mockImplementation(DEAD);
+ 
+-    renderPage(<Dashboard />);
++    const { container } = renderPage(<Dashboard />);
+ 
+     // The true level, from the new API.
+     await waitFor(() => expect(screen.getAllByText(/Level 3/).length).toBeGreaterThan(0));
+@@ -140,8 +216,19 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
+     expect(screen.queryByText('0 minutes')).toBeNull();
+     expect(screen.queryByText(/0 of 7 days active/)).toBeNull();
+     expect(screen.getByText('Weekly activity unavailable')).toBeTruthy();
+-    // Dashes are present where the numbers would be.
+-    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3);
++
++    // ROUND 8 F6: every dash site named, not counted. See statValue/tileValue.
++    expect(statValue('Total Workouts')).toBe('—');
++    expect(statValue('Hours Trained')).toBe('—');
++    expect(statValue('Calories Burned')).toBe('—');
++    expect(tileValue('workouts')).toBe('—');
++    expect(tileValue('days')).toBe('—');
++
++    // …and a whole-document sweep, because identity assertions can only cover
++    // the sites someone thought of. With the old backend dead NO old-backend
++    // figure is knowable, so a bare zero anywhere on this page is a
++    // fabrication — including at a site added tomorrow.
++    expect(container.textContent).not.toMatch(/\b0\b/);
+   });
+ 
+   it('a 200 carrying {stats:{}} still shows dashes — round 4 F2', async () => {
+@@ -152,13 +239,21 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
+     gamificationService.getLeaderboard.mockImplementation(DEAD);
+     workoutService.getStats.mockResolvedValue({ data: { stats: {} } });
+ 
+-    renderPage(<Dashboard />);
++    const { container } = renderPage(<Dashboard />);
+ 
+     await waitFor(() => expect(screen.getAllByText(/Level 3/).length).toBeGreaterThan(0));
+     expect(screen.queryByText('0 minutes')).toBeNull();
+     expect(screen.queryByText(/0 of 7 days active/)).toBeNull();
+     expect(screen.getByText('Weekly activity unavailable')).toBeTruthy();
+-    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3);
++
++    // ROUND 8 F6, and this fixture is where it bites hardest: the ENVELOPE
++    // arrived, so a `?? 0` on any absent field reads as a real server zero.
++    expect(statValue('Total Workouts')).toBe('—');
++    expect(statValue('Hours Trained')).toBe('—');
++    expect(statValue('Calories Burned')).toBe('—');
++    expect(tileValue('workouts')).toBe('—');
++    expect(tileValue('days')).toBe('—');
++    expect(container.textContent).not.toMatch(/\b0\b/);
+   });
+ 
+   it('a PARTIAL 200 fabricates nothing for the missing fields', async () => {
+@@ -179,7 +274,19 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
+     // The two ABSENT fields must NOT have become zeros.
+     expect(screen.queryByText('0 minutes')).toBeNull();
+     expect(screen.queryByText('kcal total')).toBeTruthy();
+-    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2);
++
++    // ROUND 8 F6, by identity. NO whole-document zero sweep in THIS test: the
++    // known `total_workouts: 12` is a number, so StatCard animates it from 0
++    // and a bare "0" is a legitimate frame of that sweep, not a fabrication.
++    // The absent fields are strings ('—') and never animate.
++    expect(statValue('Hours Trained')).toBe('—');
++    expect(statValue('Calories Burned')).toBe('—');
++    expect(tileValue('days')).toBe('—');
++    // THE CONTROL, and it is the one that stops "everything is a dash" from
++    // passing: a field the server DID send still renders its real value. The
++    // tiles render {value} directly, so unlike StatCard there is no animation
++    // to race here.
++    expect(tileValue('workouts')).toBe('2');
+   });
+ 
+   it('XP read fails too: no level is invented anywhere', async () => {
+@@ -268,6 +375,37 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
+       expect(dot.style.border).toContain('dashed');
+     }
+   });
++
++  it('activity IN FLIGHT is never called unavailable — round 8 F3', async () => {
++    // WeekStrip and its caption branched on `stats.activity === null` ALONE, so
++    // loading and failed were one answer. mlApi sets no timeout, so against a
++    // hung old backend the page claimed a failed read PERMANENTLY — a caption
++    // plus seven "Activity unavailable" tooltips during a perfectly healthy
++    // in-flight request. `oldPayloadState` is the tested function for exactly
++    // this shape and round 7 applied it to recentState and recsState on this
++    // page while leaving the third read on two states.
++    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
++    gamificationService.getOverview.mockImplementation(DEAD);
++    gamificationService.getLeaderboard.mockImplementation(DEAD);
++    workoutService.getStats.mockImplementation(HANGS);
++
++    const { container } = renderPage(<Dashboard />);
++    await waitFor(() => expect(screen.getAllByText(/Level 3/).length).toBeGreaterThan(0));
++
++    // The caption speaks of a load in progress, never of a failure.
++    expect(screen.getByText('Loading this week…')).toBeTruthy();
++    expect(screen.queryByText('Weekly activity unavailable')).toBeNull();
++
++    // …and so do all seven dots. A loading caption over seven "unavailable"
++    // tooltips is round 5 F8's two-standards-eight-inches-apart defect again,
++    // which is why the dots take the STATE and not a second null test.
++    expect(container.querySelectorAll('[title="Loading activity…"]').length).toBe(7);
++    expect(container.querySelectorAll('[title="Activity unavailable"]').length).toBe(0);
++
++    // The sibling pane, reading the SAME hung request, already got this right —
++    // the two must not disagree about one request.
++    expect(screen.getByText('Loading recent workouts…')).toBeTruthy();
++  });
+ });
+ 
+ // ─────────────────────────────────────────────────────────────────────────────
+@@ -286,6 +424,12 @@ describe('GamificationStrip — XP renders when the old backend does not', () =>
+     expect(screen.queryByText('of 0')).toBeNull();
+     expect(screen.queryByText(/\(0\//)).toBeNull();
+     expect(screen.getByText(/Challenges are unavailable/)).toBeTruthy();
++
++    // ROUND 8 F6 / MUT-20: `orUnknown(userRank)` reverted to `?? 0` printed a
++    // rank of "0" — an athlete's position, fabricated — and every test stayed
++    // green. The `of 0` assertion above reads the TOTAL, a different node; the
++    // rank is the <p> immediately before it and had nothing on it at all.
++    expect(screen.getByText('of —').previousElementSibling.textContent).toBe('—');
+   });
+ 
+   it('old backend HANGS and XP fails: the strip does not vanish forever — F7', async () => {
+@@ -388,6 +532,38 @@ describe('GamificationStrip — XP renders when the old backend does not', () =>
+     expect(screen.queryByText('Recent workouts are unavailable right now.')).toBeNull();
+   });
+ 
++  it('an unknown badge tier is neutral in Latest Badges, never bronze — round 8 F5', async () => {
++    // The tier ternary's final `else` was '#cd7f32', so a badge with NO tier
++    // got a bronze pill and a bronze card edge while the pill printed "—".
++    // Probe D of round 8 measured the same badge in both components: bronze
++    // here, neutral in Achievements — one badge, two answers.
++    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
++    gamificationService.getOverview.mockResolvedValue({
++      data: {
++        // `earned` is present on every element, so earnedBadgeCount answers and
++        // recentBadges is non-empty (round 6 F1's rule).
++        badges: { all: [{ id: 'b1', name: 'Mystery Badge', earned: true }], total_count: 40 },
++        challenges: { active: [] },
++      },
++    });
++    gamificationService.getLeaderboard.mockImplementation(DEAD);
++
++    renderPage(<GamificationStrip />);
++    const name = await screen.findByText('Mystery Badge');
++
++    // The tier pill is the <p> immediately after the name <p> in the same card.
++    const pill = name.nextElementSibling;
++    expect(pill.textContent).toBe('—');
++    expect(pill.style.color).toContain('255, 255, 255');       // neutral grey
++    expect(pill.style.color).not.toContain('205, 127, 50');    // NOT bronze
++
++    // The card edge is the second half of the same claim — a bronze border
++    // around a dash says "bronze" just as loudly as the text colour does.
++    const card = name.closest('.rounded-xl');
++    expect(card.style.border).toContain('rgba(255, 255, 255');
++    expect(card.style.border).not.toContain('205, 127, 50');
++  });
++
+   it('a leaderboard 200 missing its list does not blank the page', async () => {
+     // Round 3 F1 / round 2 ③: an unguarded nested read throws in render, and
+     // there is no ErrorBoundary in apps/web, so the whole page — XP included —
+@@ -491,6 +667,36 @@ describe('Achievements — the three payloads are independent — round 4 F4', (
+     expect(screen.queryByText(/Level 1\b/)).toBeNull();
+   });
+ 
++  it('the XP read fails TOO: the header invents nothing — round 8 F2', async () => {
++    // Every other test in this block resolves getMe with XP_LEVEL_3 — 13 of 13,
++    // counted, not recalled — so formatLevel, formatXpTotal, formatXpFraction,
++    // formatNextLevel and xpBarWidth were only ever exercised ON THIS PAGE with
++    // a KNOWN block. Dashboard, GamificationStrip and PostWorkout each have an
++    // XP-fails fixture; Achievements had none, and MUT-34 — the same
++    // destructure that defeats FIELD_READ — rendered "Level 1" in this header
++    // with all 75 tests green. The test above is its control: same page, same
++    // failed old backend, XP known.
++    gamificationService.getMe.mockImplementation(DEAD);
++    gamificationService.getOverview.mockImplementation(DEAD);
++    gamificationService.getLeaderboard.mockImplementation(DEAD);
++
++    const { container } = renderPage(<Achievements />);
++    await waitFor(() =>
++      expect(screen.getByText('Failed to load achievements')).toBeTruthy());
++
++    // WHOLE-DOCUMENT, matching the Dashboard's XP-fails test: a fabrication
++    // interpolated into a longer string slips past every per-element query,
++    // which is exactly how round 4's strip-eating mutation behaved.
++    const text = container.textContent;
++    expect(text).not.toMatch(/Level\s*\d/);
++    expect(text).not.toMatch(/\d[\d,]*\s*XP/);
++
++    // The positive half: the header still RENDERS, as dashes. Without these a
++    // header deleted outright would satisfy both sweeps above.
++    expect(text).toMatch(/—\/—/);
++    expect(text).toMatch(/XP to Lv —/);
++  });
++
+   // ── ROUND 5 ────────────────────────────────────────────────────────────────
+   // These enter states the round-4 fixtures never did: every list fixture was
+   // `all: []` / `active: []`, so BadgeCard and ChallengeCard never rendered and
+@@ -643,6 +849,86 @@ describe('Achievements — the three payloads are independent — round 4 F4', (
+     expect(pill.style.color).not.toContain('248');
+   });
+ 
++  it('a badge category of `toString` does not blank the page — round 8 F4', async () => {
++    // `b.category in CATEGORY_LABELS` walks the PROTOTYPE CHAIN, so `toString`
++    // answered "known"; `badgesByCategory['toString']` then resolved to the
++    // inherited Object.prototype.toString, which is TRUTHY, so the array was
++    // never created and `.push` ran on a function. The whole page went blank —
++    // XP header included — because there is no ErrorBoundary in apps/web.
++    // `category` is text(b?.category): any non-empty string from the old
++    // backend, i.e. external input used as an object key (R2.3). Structurally
++    // round 6 F2 (non-array → .slice() → blank page), one layer in.
++    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
++    gamificationService.getOverview.mockResolvedValue({
++      data: {
++        badges: {
++          all: [
++            { id: 'b1', name: 'First Rep',   tier: 'bronze', category: 'milestones', xp_reward: 10, earned: true  },
++            { id: 'b2', name: 'Proto Badge', tier: 'gold',   category: 'toString',   xp_reward: 20, earned: true  },
++            { id: 'b3', name: 'Chain Badge', tier: 'silver', category: '__proto__',  xp_reward: 30, earned: false },
++          ],
++          total_count: 40,
++        },
++        challenges: { active: [] },
++      },
++    });
++    gamificationService.getLeaderboard.mockImplementation(DEAD);
++
++    const { container } = renderPage(<Achievements />);
++    await waitFor(() => expect(screen.getByText('First Rep')).toBeTruthy());
++
++    // The page is not blank, and the XP header — the thing this card exists to
++    // render — is still on it.
++    expect(container.textContent.length).toBeGreaterThan(0);
++    expect(screen.getByText(/Level 3/)).toBeTruthy();
++
++    // Round 5 F7's rule: an unlisted category falls into "Other". It must not
++    // vanish from a grid whose header still counts it — the count and the grid
++    // may not disagree.
++    expect(screen.getByText('Proto Badge')).toBeTruthy();
++    expect(screen.getByText('Chain Badge')).toBeTruthy();
++    expect(screen.getByText('Other')).toBeTruthy();
++    expect(screen.getByText(/2 of 40 badges/)).toBeTruthy();
++  });
++
++  it('an unknown badge tier is neutral here too — round 8 F5 / F4', async () => {
++    // The other half of Probe D, so the two components cannot drift apart
++    // again. It also covers `badge.tier in TIER_CONFIG`, which answered "known"
++    // for `toString` and then read every style off a FUNCTION: undefined ring,
++    // undefined glow, undefined colour — the known-tier path with no styling.
++    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
++    gamificationService.getOverview.mockResolvedValue({
++      data: {
++        badges: {
++          all: [
++            { id: 'b1', name: 'No Tier',    category: 'streaks', earned: true },
++            { id: 'b2', name: 'Proto Tier', category: 'streaks', tier: 'toString', earned: true },
++          ],
++          total_count: 40,
++        },
++        challenges: { active: [] },
++      },
++    });
++    gamificationService.getLeaderboard.mockImplementation(DEAD);
++
++    renderPage(<Achievements />);
++    await waitFor(() => expect(screen.getByText('No Tier')).toBeTruthy());
++
++    for (const badgeName of ['No Tier', 'Proto Tier']) {
++      const card = screen.getByText(badgeName).closest('.rounded-2xl');
++      // An earned badge with a KNOWN tier gets that tier's ring and glow. An
++      // unknown one must get neither — a bronze ring is a claim, exactly as
++      // round 5 ruled a padlock is.
++      expect(card.style.boxShadow).toBe('none');
++      expect(card.style.border).toContain('rgba(255, 255, 255');
++      expect(card.style.border).not.toContain('205, 127, 50');
++
++      const pill = card.querySelector('.rounded-full');
++      expect(pill.style.color).toContain('255, 255, 255');
++      expect(pill.style.color).not.toContain('205, 127, 50');
++    }
++  });
++
+   it('old backend HANGS: no permanent "Failed to load" claim — round 3 F2', async () => {
+     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+     gamificationService.getOverview.mockImplementation(HANGS);

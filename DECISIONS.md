@@ -2051,3 +2051,36 @@ gate). Its own recommendation: fix the nine, add one OWED line, tick.
 
 - (THE TICK STAYS OFF) Rounds A and B have not been reviewed. T3 round 9 runs on
   the two commits together.
+
+## 2026-07-29 — THE STOPPING RULE, set for T3 round 9 BEFORE it runs (Kd ruling)
+
+- (The ruling) **From round 9 on, a finding blocks the XP display / Dashboard XP
+  🔴 OWED ticks only if it is a defect a user could see on screen. Everything
+  else is fixed in the same commit but does not hold the line.** Round 9's
+  reviewer must tag every finding VISIBLE or NOT-VISIBLE and justify a VISIBLE
+  tag by naming the state a user reaches it in and what they would see.
+
+- (Why, and it is a measurement rather than fatigue) This is the rule Kd set
+  before the PostWorkout card's round 4, which closed that card after four
+  rounds and 32 findings (DECISIONS 2026-07-28, "THE STOPPING RULE"). It is
+  invoked here because the two halves of round 8's remedy fall on opposite sides
+  of it: **Round A's three findings were user-visible** — a blank Achievements
+  page via a prototype-chain key, a false "Weekly activity unavailable" during a
+  healthy in-flight read, a bronze ring on an unknown badge — **and Round B's
+  three were not.** F1, F2 and F6 were defects of the TEST layer; nothing on
+  screen was ever wrong, and Round B changed no component file at all. What is
+  left in this area is claim-and-assertion work, and a review can always find
+  more of that.
+
+- (Set BEFORE the round, deliberately, and this is the part that makes it a rule
+  rather than an excuse) A stopping rule invented after seeing the findings is a
+  rationalisation of them. This one is recorded here and written into
+  `t3-xp-web-r9-PROMPT.md` before round 9 has run, so it binds whatever comes
+  back. It does NOT reduce the review's scope or evidence bar: every finding is
+  still reported at full severity and still fixed.
+
+- (What it does not do) It does not close the card. It does not touch the eight
+  unaddressed round-8 F6 mutants, which keep their own 🔴 OWED line and are a
+  separate deferral. And it does not apply to any OTHER card — the PostWorkout
+  precedent and this one are both per-card rulings made on measured evidence
+  about that card, never a general licence to stop reviewing.
