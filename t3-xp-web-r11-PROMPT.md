@@ -23,6 +23,29 @@ else is reported at full severity and fixed, but holds nothing.
 Round 10's verdict was that **round 11 "should be able to close this, and I
 would hold it to that."** If nothing VISIBLE survives, say so plainly.
 
+## THE CAP — Kd ruling, 2026-07-29, set BEFORE this round runs
+
+**Round 11 is the LAST review round on this card. There is no round 12.**
+
+- Nothing VISIBLE survives → **the card closes, both 🔴 ticks go ON.**
+- Something VISIBLE survives → **it is fixed, and the card closes anyway** on
+  that fix. It does not buy another review round.
+- Everything NOT-VISIBLE you find → reported at full severity, fixed if cheap,
+  and otherwise written to `OWED.md` with a line. It blocks nothing.
+
+Why, stated so this reads as a decision and not as fatigue: the visible-defect
+count has gone **3 → 2 → 1** across rounds 8, 9 and 10, and the last two rounds
+spent as much effort on test quality as on shipped behaviour. Eleven rounds on
+one card is itself the finding — the card bundled nine screens' worth of
+behaviour into one piece of work, and the remaining risk no longer justifies the
+cost of another cycle. The strict standard this card enforces ("never render a
+number nobody knows") has been met on screen since round 8.
+
+**This does not soften round 11.** Review at full depth, measure everything, and
+report every finding you have. The cap governs what happens AFTER your verdict,
+not how hard you look. Do not moderate a finding because of it, and do not
+recommend a round 12 — recommend OWED lines instead.
+
 ## Audit against
 
 CLAUDE.md Part II R0–R11 and the spec §§ the card touches. Output only:

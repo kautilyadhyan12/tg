@@ -2052,6 +2052,42 @@ gate). Its own recommendation: fix the nine, add one OWED line, tick.
 - (THE TICK STAYS OFF) Rounds A and B have not been reviewed. T3 round 9 runs on
   the two commits together.
 
+## 2026-07-29 — THE CAP: round 11 is the LAST round on this card (Kd ruling)
+
+- (The ruling, set BEFORE round 11 runs, same as the stopping rule it extends)
+  **Round 11 is the final review round on the XP display / Dashboard XP card.
+  There is no round 12.** Nothing VISIBLE survives ⇒ the card closes and both 🔴
+  ticks go ON. Something VISIBLE survives ⇒ it is fixed and the card closes ON
+  THAT FIX; it does not buy another cycle. Everything NOT-VISIBLE is reported at
+  full severity, fixed if cheap, and otherwise takes an `OWED.md` line — it
+  blocks nothing.
+
+- (Why, and it is a measurement rather than fatigue) The count of findings a user
+  could actually SEE has gone **3 → 2 → 1** across rounds 8, 9 and 10. The two
+  most recent rounds spent as much effort on test quality as on shipped
+  behaviour, and four of the last eight findings were assertions that could not
+  fail rather than defects in the app. The strict standard this card exists to
+  enforce — never render a number nobody knows — has held on screen since round
+  8. Continuing to pay a full review cycle for a shrinking, non-visible remainder
+  is a worse trade than shipping.
+
+- (**The finding the round count IS**) Eleven rounds on one card is not a sign
+  the reviews are wrong; it is a sign the CARD was wrong. It bundled nine
+  screens' worth of behaviour — Sidebar, Dashboard, GamificationStrip,
+  Achievements, PostWorkout and their four payloads — into one unit of work,
+  which is exactly what Part I §1 ("one task card, one chat", stop at ~300-400
+  changed lines) exists to prevent. Recorded as a lesson for the cards still
+  queued: a repoint that touches more than one screen's payload is more than one
+  card. This is the second time the record has had to say the scope was the
+  problem (the first was `master..HEAD` diff scope, 2026-07-28).
+
+- (What the cap does NOT do) It does not soften round 11's depth, evidence bar,
+  or severity tagging — the prompt says so in those words, and tells the reviewer
+  to recommend OWED lines rather than a round 12. It does not close round 8 F6's
+  eight deferred mutants, which keep their own 🔴 line. And it applies to THIS
+  card only: like the PostWorkout stopping rule it extends, it is a per-card
+  ruling made on measured evidence about that card, never a general licence.
+
 ## 2026-07-29 — T3 round 10: 4 findings, 1 VISIBLE, ALL FIXED
 
 - (**F1, VISIBLE — two numbers describing the same week, from different fields
