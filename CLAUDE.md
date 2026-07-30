@@ -51,8 +51,10 @@ forgotten about silently".)
 **GROUNDING BEFORE EVERY DECISION AND EVERY RECOMMENDATION — NO EXCEPTIONS.
 Before proposing, recommending, planning, or deciding ANYTHING, the chat MUST
 have read, IN THIS SESSION: (1) the spec §§ the task touches, (2) this file's
-rules for the domain, (3) the ENTIRE DECISIONS.md — every ruling, because any
-one of them may already answer the question, (4) HANDOFF.md's top block, and
+rules for the domain, (3) **the ENTIRE `DECISIONS-INDEX.md`, plus every
+DECISIONS.md entry it points to that the task touches, plus that index's §1
+(standing rules) and §2 (open questions) in the DECISIONS.md original — always,
+whatever the task** (amended 2026-07-30; see below), (4) HANDOFF.md's top block, and
 (5) RUNBOOK/cutover.md's prerequisites when the work affects the migration.
 Reading the spec but skipping DECISIONS.md is NOT grounded — DECISIONS.md IS
 the operator's case law and it OVERRIDES a chat's fresh judgment every time.
@@ -63,6 +65,28 @@ session, the only permitted output is reading it — not an opinion.**
 (Operator-added 2026-07-16 after the same incident: the chat had read the spec
 and verified endpoints but had NOT re-read DECISIONS.md's P2.3 entries, and so
 re-litigated four questions Kd had already ruled on 2026-07-11.)
+
+**AMENDMENT 2026-07-30 — why (3) now reads "the index" and not "the entire
+file".** "Read the ENTIRE DECISIONS.md" was correct when it was written and
+became impossible: the file reached 2,396 lines / ~135k tokens, so a chat that
+obeyed it literally would spend half its working memory before doing any work,
+and would then start losing the early part of its own session. On 2026-07-30 a
+fresh chat hit this on its FIRST message and could not propose a next task at
+all. **The rule's PURPOSE is unchanged and is not weakened: no chat may
+recommend, plan or decide anything while ignorant of an existing ruling.** What
+changes is the instrument. `DECISIONS-INDEX.md` is read IN FULL — it is one line
+per ruling, so nothing is hidden from the chat, only deferred — and it names
+which entries bind which work. §1 (standing rules) and §2 (open questions) are
+read in the DECISIONS.md ORIGINAL every session regardless of task, because
+those are the entries that can answer a question the chat did not know it was
+asking. **The index is a pointer, never a citation**: quote DECISIONS.md by line
+(V2), and if index and original ever disagree, the ORIGINAL wins and the index is
+the thing to fix. Every commit adding a `##` heading to DECISIONS.md adds its
+index line in the SAME commit — the deferral rule's discipline, applied to the
+record itself. This is the second time a DECISIONS.md read-path has been split
+for exactly this reason: `OWED.md` exists because the file could not answer "what
+is still to do?", and this exists because it can no longer answer "what has
+already been decided?".
 
 
 # AI Home Gym — Implementation Playbook for Opus 4.8
