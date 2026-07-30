@@ -729,9 +729,15 @@ then; none may be hidden or reduced to close the gap.
 
 - [ ] 🟡 **`PostWorkout.jsx`'s `summary` payload is UNPARSED — the class rounds
       4-7 closed for the other three old-backend payloads.**
-      **BUILT 2026-07-30 — TICK WITHHELD pending Kd's browser SMOKE and a
-      fresh-chat T3**, which is the standard the previous PostWorkout card applied
-      to itself (DECISIONS :1348) rather than one relaxed for this card.
+      **BUILT 2026-07-30 — TICK WITHHELD pending a fresh-chat T3.**
+      **SMOKE HALF DISCHARGED 2026-07-30: PASSED (Kd), on commit `fb1956c`**,
+      reported as a blanket pass rather than step-by-step and recorded that way
+      (result at `RUNBOOK/smoke-postworkout-summary.md`). The `healthy` CONTROL was
+      part of the run, which is the step that matters most — it is the only one
+      that can catch the fix dashing out numbers the backend really sent.
+      The remaining gate is a fresh-chat T3, which is the standard the previous
+      PostWorkout card applied to itself (DECISIONS :1348) rather than one relaxed
+      for this card.
       What landed: `readSummaryView` + `formGrade` + the time/percent formatters in
       `gamificationApi.js`, beside `readStatsView` — which parses a
       `workoutService` payload too, so the location is precedent and not a new

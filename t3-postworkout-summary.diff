@@ -1,0 +1,1469 @@
+commit fb1956cbc7ce7186cc4d0a979a57856b9cb174b6
+Author: dhyan878 <dhyan78909@gmail.com>
+Date:   Thu Jul 30 16:41:57 2026 +0530
+
+    PostWorkout summary payload gets a reader (OWED.md:730)
+    
+    The old backend's workout-complete payload reached the render completely unparsed - 34 bare reads across nine fields - while the other three old payloads on these screens each got a reader across T3 rounds 4-7. Kd deferred it at the PostWorkout XP card's plan gate ("record as OWED, fix XP only"); this discharges that line.
+    
+    Every defect was reproduced by a test written and shown RED before any source change (R9.5): an absent form score fell through every threshold to grade D / "Keep practicing" / red, a bad-form verdict on a workout nobody scored; formatTime(undefined) printed "NaNh NaNm" on the page AND in the PNG; calories printed "undefined kcal"; exercises_count rendered as nothing; a list arriving as a bare string passed length>0 then threw at .map, blanking the whole page (no ErrorBoundary in apps/web); and a 200 with no summary key stored undefined without throwing, so the catch never ran and the page rendered a blank white screen.
+    
+    readSummaryView + formGrade live in gamificationApi.js beside readStatsView, which parses a workoutService payload too, so the location is precedent not a new pattern. ONE grade ladder now serves the page and the share card; ShareCard's twin is deleted, so the PNG can no longer print "undefined% (D)".
+    
+    Kd's rulings at the gate: "Not scored" copy; the empty-200 case takes the page's existing toast+redirect; the zero-active-seconds fix folded in (0 is falsy, so a workout with no active movement silently showed the total-duration figure); the page/PNG calories rounding difference is report-only with its own OWED line.
+    
+    A REGRESSION THIS COMMIT SHIPPED, fixed and recorded because the pattern matters more than the bug: xp_earned survived the snake->camel rename at ONE of two sites, so the page's XP card read a dash for every workout while the PNG read +70 - and all 7 render tests stayed GREEN, because the whole-document sweep is satisfied by the SHARE CARD. Round 1 F1 verbatim, in the card that quotes round 1 F1. Found by grep, not by the tests. The missing per-site identity assertion now exists and its mutation is RED.
+    
+    PROVE: web 269 passed / 1 failed (270), the 1 being the known syncClient env quirk. +21 tests. 13 mutations, 13 RED, md5-guarded, sources restored byte-identical. vite build green. Lint parity measured at HEAD and after: 5 problems both times, all pre-existing. Package-wide 67/9 unchanged.
+    
+    OWED TICK WITHHELD pending Kd's browser smoke AND a fresh-chat T3. Smoke steps at RUNBOOK/smoke-postworkout-summary.md, healthy CONTROL first. Also folded in from earlier this session: the DECISIONS-INDEX ruling recorded in DECISIONS.md where it belongs, and an OWED line for cutover.md being stale.
+    
+    Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+diff --git a/DECISIONS-INDEX.md b/DECISIONS-INDEX.md
+index f5e91ec..59bd169 100644
+--- a/DECISIONS-INDEX.md
++++ b/DECISIONS-INDEX.md
+@@ -49,6 +49,12 @@ mid-file: re-derive them with
+   last review round; no round 12. Includes the recorded lesson that **eleven
+   rounds was a fault of the CARD's scope, not the code** — a repoint touching
+   more than one screen's payload is more than one card.
++- **:2398** — 2026-07-30 — **this file's READ PATH is split** and this index is
++  the instrument: grounding = this index IN FULL + §1/§2 read in the DECISIONS.md
++  ORIGINAL + the entries the task touches (CLAUDE.md:51-89). Coverage
++  command-verified the same day: 97 headings, 72 cited by exact line, 25 inside
++  declared ranges, **none unmapped**. The index is a POINTER — cite DECISIONS.md,
++  never this file.
+ 
+ Standing rules that live in CLAUDE.md, not here — the no-removal rule, the
+ deferral rule (every deferral gets an OWED.md line in the same commit), the
+@@ -95,6 +101,11 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
+   same-shaped defect; enumerate every path carrying a guarantee.**
+ - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
+ - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
++- **:2444** — 2026-07-30 — PostWorkout's summary payload gets a reader
++  (`readSummaryView`, `formGrade`). Kd's rulings in it: "Not scored" copy, the
++  empty-200 toast+redirect, the zero-active-seconds fold-in, calories rounding
++  report-only. **Standing lesson: a whole-document sweep is satisfied by the SHARE
++  CARD** — a rename regression stayed green through 7 render tests because of it.
+ 
+ ## 5 · DPDP / privacy
+ 
+diff --git a/DECISIONS.md b/DECISIONS.md
+index 8f61696..66200e8 100644
+--- a/DECISIONS.md
++++ b/DECISIONS.md
+@@ -2394,3 +2394,140 @@ gate). Its own recommendation: fix the nine, add one OWED line, tick.
+   separate deferral. And it does not apply to any OTHER card — the PostWorkout
+   precedent and this one are both per-card rulings made on measured evidence
+   about that card, never a general licence to stop reviewing.
++
++## 2026-07-30 — this file's READ PATH split into an index (recorded after the fact)
++
++- (THE RULING, Kd 2026-07-30) CLAUDE.md's GROUNDING rule no longer requires
++  reading the ENTIRE DECISIONS.md. It now requires `DECISIONS-INDEX.md` IN FULL,
++  plus this file's §1 (standing rules) and §2 (open questions) entries read in the
++  ORIGINAL every session whatever the task, plus the full original entries the
++  task touches. Amended at CLAUDE.md:51-89; the index shipped in the same commit,
++  `dd07856`.
++- (WHY — measured, not asserted) The rule was right when it was written and became
++  impossible to obey. This file is 2,396 lines and the Read tool refuses it
++  outright: "File content (125146 tokens) exceeds maximum allowed tokens (25000)".
++  A chat that obeyed it literally would spend roughly half its working context
++  before doing any work, and would then start losing the early part of its own
++  session — so the rule as written produced either a paralysed chat or a false
++  claim of grounding. About 1,150 lines, 48% of the file, are ONE card's eleven
++  review rounds, closed the same morning.
++- (THE TRIGGER) A fresh chat hit this on its FIRST message on 2026-07-30: asked
++  "what next", it could not name a card without being grounded and could not
++  ground without spending the context, so it stopped and put the choice to Kd
++  rather than claim a grounding it had not done.
++- (WHAT IS NOT WEAKENED) The rule's PURPOSE is untouched — no chat may recommend,
++  plan or decide anything while ignorant of an existing ruling. The index is one
++  line per ruling, so nothing is hidden from a chat, only deferred. **It is a
++  pointer, never a citation:** quote this file by line (V2), and if the two ever
++  disagree the ORIGINAL wins and the index is the thing to fix.
++- (THE PRECEDENT) This is the SECOND time this file's read path has been split for
++  the same reason. `OWED.md` exists because it could not answer "what is still to
++  do?"; the index exists because it can no longer answer "what has already been
++  decided?".
++- (COVERAGE — command-verified 2026-07-30, twice, because the first run's `comm`
++  warned "input is not in sorted order" and its counts could not be trusted) 97
++  `##` headings in this file; the index cites 72 by EXACT line and the remaining
++  25 all fall inside ranges it declares (:493-:538, :640-:730, :774-:866,
++  :868-:916, :1043-:1105, :1252-:1753). Uncovered: NONE. The index cites 82
++  distinct line anchors in total — the other ten point at bullets inside entries
++  rather than at headings, which is why "82 headings" would be the wrong number
++  and was corrected before it reached this file.
++- (RECORDED LATE, and that is the finding worth keeping) `dd07856` changed only
++  CLAUDE.md and the new index. It wrote NO entry here, though amending a standing
++  rule is the largest kind of judgment call the DoD's "DECISIONS.md updated (if
++  judgment call)" box exists for — so for a few hours the reasoning for a rule
++  binding every future session lived only in a commit message, which is not the
++  case-law record. Caught by the next chat's verification pass (S5: inherited work
++  is unverified work) and closed by this entry, with its index line added in the
++  SAME commit per the index's own maintenance rule.
++
++## 2026-07-30 — PostWorkout's summary payload gets a reader (OWED.md:730)
++
++Web-only on `web-repoint`: no API change, no migration, no new dependency, no new
++route. Discharges the OWED line Kd created at the PostWorkout XP card's own plan
++gate ("record as OWED, fix XP only", the entry at :1330).
++
++- (SCOPE — ONE screen, ONE payload, deliberately) THE CAP's recorded lesson
++  (:2158) is that eleven rounds on the XP card was a fault of the CARD: it bundled
++  nine screens' payloads into one unit of work. This card is scoped to
++  `GET /workouts/:id/summary` and the one screen that reads it.
++- (THE COUNT, re-derived rather than inherited) OWED:730 claimed 34 bare reads
++  across nine fields. Measured this session: 40 `summary.*` occurrences, minus 3
++  comment-only (`current_xp` ×2, `current_level` ×1) and 3 already-guarded
++  (`xp_earned`) = 34 across 9 fields. The OWED line was accurate.
++- (WHERE THE READER LIVES, and why not `workoutApi.js`) In `gamificationApi.js`
++  beside `readStatsView` — whose own JSDoc says it parses `workoutService.getStats()`,
++  i.e. a `workoutService` payload's reader ALREADY lives in that file. The
++  `text/finite/list/bool` primitives are module-private there, so the alternative
++  meant exporting them or writing a second set. OWED:730 named this location.
++- (WHAT WAS RENDERING) Predicted by reading the file, then PROVEN by tests written
++  red first (R9.5): `getFormGrade(undefined)` fell through every threshold to the
++  final return — grade **D**, "Keep practicing", in RED, on a workout nobody
++  scored (round 5 F3's defect, one page along); `formatTime(undefined)` reached
++  `${Math.floor(NaN)}h ${NaN}m` = **"NaNh NaNm"** on the page AND in the PNG;
++  calories printed **"undefined kcal"** on the page and **"NaN kcal"** in the
++  card; `exercises_count` rendered as NOTHING, a blank tile; and a list arriving
++  as a bare string passed `?.length > 0` and then threw at `.map`, **blanking the
++  whole page** (no ErrorBoundary anywhere in apps/web — round 6 F2's class, three
++  sites along).
++- (THE BLANK WHITE PAGE) A 200 with no `summary` key had
++  `setSummary(res.data.summary)` store `undefined` WITHOUT throwing, so the catch
++  never ran: no toast, no redirect, no text. `readSummaryView` returns NULL for
++  that payload and the page throws into its EXISTING failure path, rather than
++  growing a second one worded differently for the same event. Kd chose this over
++  an on-page failure state (2026-07-30) because it is the smallest change and the
++  file already handles a failed read exactly that way.
++- (ONE GRADE LADDER) `ShareCard` carried a SECOND ladder (`getGrade`) with the same
++  missing arm, so the PNG printed "undefined% (D)". One exported `formGrade` now
++  serves both; the card keeps its own fixed tile colour, so no colour is
++  concatenated (round 9 F1's other half). The fixed class of "one of N sites" is
++  what this project has recorded four times.
++- (COPY, Kd chose 2026-07-30) An unknown score reads grade `—` with the caption
++  **"Not scored"** in grey.
++- (DECLARED BEHAVIOUR CHANGE, Kd ruled 2026-07-30 to fold it in) The old check was
++  `summary.active_seconds ? … : …`, and 0 is FALSY — so a workout with zero active
++  seconds silently displayed the TOTAL-duration figure under a label promising
++  active time. Now `active !== null`, and a real 0 reads `0s`. Inside an expression
++  this card already rewrote; unit-tested both ways.
++- (PRESERVED ON PURPOSE) The page says "35 min" where the card says "35m" in the
++  minutes fallback. Pre-existing; changing either would be an unrequested display
++  change to a REAL value. What the two now share is the seconds path and the
++  unknown rule — the parts that could disagree dishonestly. Asserted as an
++  equality, not as two literals.
++- (**A REGRESSION THIS COMMIT SHIPPED AND THE TESTS LET THROUGH**) `xp_earned`
++  survived the snake→camel rename at ONE of its two sites, so the page's XP card
++  read `—` for every workout while the PNG read `+70` — and all 7 render tests
++  stayed GREEN. Both reasons are this project's own recorded classes: test 1's
++  `/\+70/` is a whole-document sweep the SHARE CARD satisfies (round 1 F1
++  verbatim — a positive assertion satisfied by the card while the page went
++  unexamined), and test 3's `—` was satisfied by a site now reading undefined for
++  every workout, i.e. passing for the wrong reason. **Found by grep, not by the
++  tests.** Fixed, and the missing identity assertion added; mutation M10 restores
++  the regression and is RED, so the gap is closed rather than just the instance.
++- (PROVE) web **269 passed / 1 failed (270)** — the 1 is the known `syncClient`
++  VITE_API_URL env quirk (its own OWED line, CI-green). +21 tests (4 render, 17
++  unit), counted from the diff. `vite build` ✓.
++  **13 mutations, 13 RED, zero survivors** — including M10 above and M12, a
++  control proving the positive-control test can fail. The harness re-snapshots
++  unconditionally and md5-guards every sed, because a sed that fails to match
++  leaves the source pristine and would be recorded as a surviving mutant; md5s
++  confirmed byte-identical restoration afterwards.
++  Lint PARITY measured both ways rather than ticked: the two source files at HEAD
++  produce 5 problems (4 errors, 1 warning) and the five touched files produce the
++  same 5 after — all of them in `Confetti`'s untouched `Math.random` and the
++  pre-existing `exhaustive-deps` warning. Package-wide 67 errors / 9 warnings, the
++  same figure rounds A/B/9/10/11 each measured.
++- (SMOKE RIG EXTENDED) New `unscored` state in `apps/web/tools/mock-ml-backend.mjs`
++  serving metrics-absent + string-shaped lists, falling through to `healthy` for
++  every other endpoint so anything wrong on that screen belongs to this payload.
++  Steps at `RUNBOOK/smoke-postworkout-summary.md`, with the `healthy` control
++  FIRST — a fix that dashed out real numbers is the one outcome this card must not
++  have, and only a control can catch it.
++- (OWED TICK WITHHELD) The line stays open until Kd's browser smoke AND a
++  fresh-chat T3 both pass — the standard the previous PostWorkout card applied to
++  itself (:1348), not relaxed for this one.
++- (REPORTED, NOT FIXED — R1.1, both given OWED lines in this commit) The page
++  prints calories unrounded while the card rounds them, so one workout can read
++  280.4 and 280; Kd chose "report only" on 2026-07-30. And an EMPTY meal/stretch
++  list still renders a heading with nothing under it — a truthful empty section,
++  but poor, and adding copy is a product decision rather than a defect fix.
+diff --git a/HANDOFF.md b/HANDOFF.md
+index 81456eb..63333f9 100644
+--- a/HANDOFF.md
++++ b/HANDOFF.md
+@@ -1,5 +1,63 @@
+ # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
+ 
++```
++TASK: PostWorkout's summary payload gets a reader (OWED.md:730). Branch
++      web-repoint. 5 files + RUNBOOK smoke doc + DECISIONS/INDEX/OWED/HANDOFF.
++      web 269/270 (the 1 = the known syncClient env quirk). +21 tests.
++      OWED TICK WITHHELD: needs Kd's smoke AND a fresh-chat T3.
++
++WHAT THIS SESSION DID
++  · `readSummaryView` + `formGrade` + workoutTimeLabel/Short + totalTimeLabel +
++    formatPercent + readPersonalRecord/readMealSuggestion, all in
++    gamificationApi.js beside readStatsView (which parses a workoutService
++    payload too — the location is precedent, not a new pattern).
++  · Fixed, each proven by a test written RED first: an absent form score printing
++    grade D / "Keep practicing" / red; "NaNh NaNm" for the time on page AND PNG;
++    "undefined kcal"; a blank Exercises tile; a string-shaped list reaching .map
++    and blanking the whole page; and a 200 with no `summary` rendering a blank
++    white screen with no toast.
++  · ONE grade ladder now serves the page and the share card. ShareCard's twin
++    (`getGrade`) is deleted.
++  · Kd's rulings at the gate: "Not scored" copy · empty-200 = the page's existing
++    toast+redirect · fold in the zero-active-seconds fix · calories rounding is
++    report-only.
++  · 13 mutations, 13 RED. New `unscored` rig state + RUNBOOK/smoke-postworkout-
++    summary.md, with the `healthy` CONTROL as step 1.
++
++READ THIS IF YOU TOUCH THIS AREA AGAIN
++  **A whole-document sweep is satisfied by the SHARE CARD.** This commit shipped a
++  real regression and 7 render tests stayed green: `xp_earned` survived the
++  snake→camel rename at one of two sites, the page's XP card read "—" for every
++  workout, and test 1's `/\+70/` matched the PNG's copy instead. Round 1 F1
++  verbatim, in the card that quotes round 1 F1. Found by GREP, not by the tests.
++  Anything that renders at two surfaces needs an identity assertion at BOTH.
++
++  **The control is not optional.** Step 1 of the smoke is `healthy`, because the
++  one outcome this card must not have is dashing out numbers the backend really
++  sent, and no amount of unknown-state testing can see that.
++
++  **The md5 guard in the mutation harness earns its place.** A sed that fails to
++  match leaves the source pristine, the tests pass, and the run would record a
++  surviving mutant that never existed.
++
++STILL OPEN (all have OWED lines — nothing left in prose):
++  · 🟡 this card's own line, until the smoke and the T3
++  · ⚪ calories rounded in the PNG but not on the page
++  · ⚪ an empty meal/stretch list renders a heading over blank space
++  · 🟡 RUNBOOK/cutover.md is stale (added earlier this session)
++
++NEXT: Kd runs RUNBOOK/smoke-postworkout-summary.md, then a fresh-chat T3 on the
++  commit. Do NOT tick the OWED line before both.
++
++VERIFY: corepack pnpm --filter web exec vitest run
++        corepack pnpm --filter web exec vite build
++LINT: parity, measured both ways — the two source files at HEAD produce 5
++      problems (4 errors, 1 warning), the five touched files produce the same 5
++      after; all in Confetti's untouched Math.random + the pre-existing
++      exhaustive-deps warning. Package-wide 67 errors / 9 warnings.
++SPEC GAPs: none.
++```
++
+ ```
+ TASK: XP display / Dashboard XP — T3 ROUND 11 FIXES. **CARD CLOSED.**
+       Branch web-repoint. 4 files + OWED/DECISIONS/HANDOFF.
+diff --git a/OWED.md b/OWED.md
+index 886d007..4a31fd2 100644
+--- a/OWED.md
++++ b/OWED.md
+@@ -728,7 +728,29 @@ then; none may be hidden or reduced to close the gap.
+       together rather than twice.
+ 
+ - [ ] 🟡 **`PostWorkout.jsx`'s `summary` payload is UNPARSED — the class rounds
+-      4-7 closed for the other three old-backend payloads.** Reported not fixed
++      4-7 closed for the other three old-backend payloads.**
++      **BUILT 2026-07-30 — TICK WITHHELD pending Kd's browser SMOKE and a
++      fresh-chat T3**, which is the standard the previous PostWorkout card applied
++      to itself (DECISIONS :1348) rather than one relaxed for this card.
++      What landed: `readSummaryView` + `formGrade` + the time/percent formatters in
++      `gamificationApi.js`, beside `readStatsView` — which parses a
++      `workoutService` payload too, so the location is precedent and not a new
++      pattern. All 34 bare reads across 9 fields go through it; ONE grade ladder
++      serves the page AND the share card, so the PNG can no longer print
++      "undefined% (D)"; a 200 with no `summary` key takes the page's EXISTING
++      toast+redirect instead of rendering a blank white screen; a list arriving as
++      a string can no longer reach `.map` and blank the page. web **269/270** (the
++      1 is the `syncClient` env quirk on its own line below), **+21 tests**,
++      **13 mutations / 13 RED**, lint parity measured at HEAD and after. Smoke
++      steps at `RUNBOOK/smoke-postworkout-summary.md`; new `unscored` rig state.
++      Full entry at DECISIONS :2444.
++      **THE LESSON, recorded because it nearly shipped:** `xp_earned` survived the
++      snake→camel rename at ONE of two sites, so the page's XP card read "—" for
++      every workout while the PNG read "+70" — and all 7 render tests stayed
++      GREEN, because a whole-document `/\+70/` sweep is satisfied by the SHARE
++      CARD (round 1 F1 verbatim). Found by grep, not by the tests. The missing
++      identity assertion now exists and its mutation is RED.
++      ORIGINAL ENTRY FOLLOWS. Reported not fixed
+       by the PostWorkout XP repoint (2026-07-27) under R1.1, and Kd ruled
+       "record as OWED, fix XP only" at that card's plan gate: the named task was
+       the XP curve, and adding a fourth reader would have doubled a card on the
+@@ -1272,6 +1294,39 @@ then; none may be hidden or reduced to close the gap.
+       `Achievements.jsx:5` unused `ChevronRight`) are pre-existing on master and
+       correctly untouched per R1.1. Either lint web and fix the 67, or change the
+       DoD wording so the box stops asserting something nobody checked.
++- [ ] ⚪ **PostWorkout prints calories unrounded while its share card rounds
++      them.** One workout can read `280.4 kcal` on screen and `280 kcal` in the
++      downloadable PNG — two surfaces, one number. Pre-existing (the page never
++      rounded, the card always did); found while writing the summary reader
++      2026-07-30 and Kd chose **report only** at that card's gate, since rounding
++      the page would be an unrequested display change to a real value. Both sites
++      ARE now honest about an ABSENT value ("— kcal"). Close it by picking one
++      rounding rule for both, in whichever card next touches that screen's copy.
++- [ ] ⚪ **An EMPTY meal-suggestion or stretch list renders a heading with nothing
++      under it.** Pre-existing, and distinct from the defect the summary reader
++      closed: a list that ARRIVED empty is a truthful "none", so it is not a
++      fabrication — but "Post-Workout Nutrition" over blank space reads as broken.
++      The UNKNOWN case now says "unavailable right now" (2026-07-30); the empty
++      case was left alone because writing empty-state copy is a product decision,
++      not a defect fix. Same family as round 6 F6 / round 7 F8's empty-list states
++      on the other three payloads.
++- [ ] 🟡 **`RUNBOOK/cutover.md` is STALE — its checkboxes must not be quoted as
++      fact.** Flagged by `DECISIONS-INDEX.md` when it was written (2026-07-30) and
++      command-verified the same day: `cutover.md:107` still reads
++      `- [ ] XP/levels display (GamificationStrip, Achievements)` although that
++      card CLOSED on 2026-07-30 and both 🔴 lines for it above are ticked. The file
++      states no verification date; the newest past date anywhere in it is
++      2026-07-26 (`cutover.md:108`, the XP API-half merge — `2026-08-16` also
++      appears but is the future Groq decommission deadline). So it predates THREE
++      card closures, and `grep -ci postworkout` over it returns **0** although that
++      card closed 2026-07-28.
++      It matters because CLAUDE.md's grounding rule sends every
++      migration-affecting card to cutover.md's prerequisites, and the P2.8 gate is
++      "every owed endpoint exists" — a checklist that under-reports what is DONE
++      reads as work still outstanding, and one that over-reported would be worse.
++      Given a line here rather than fixed in passing because re-verifying the whole
++      file against OWED.md is its own pass, not a one-checkbox edit. Closes by
++      re-verifying every box against OWED.md and re-dating the file.
+ 
+ - [ ] ⚪ **Onboarding wizard's native unit dropdowns → the shared `Select`.** A
+       native `<select>` popup is OS-drawn and its hovered row uses the system
+diff --git a/RUNBOOK/smoke-postworkout-summary.md b/RUNBOOK/smoke-postworkout-summary.md
+new file mode 100644
+index 0000000..7fb02c0
+--- /dev/null
++++ b/RUNBOOK/smoke-postworkout-summary.md
+@@ -0,0 +1,135 @@
++# SMOKE — PostWorkout's summary payload gets a reader
++
++Card: the unparsed-summary gap, `OWED.md:730`, branch `web-repoint`.
++Gates "done" per CLAUDE.md Part I §2. Run every step; report pass/fail per step.
++
++**What this card changed, in one sentence.** When the old backend leaves a number
++out of the workout summary, the page now prints `—` instead of inventing one. The
++headline case: an absent form score used to fall through every grading threshold
++and print **grade D, "Keep practicing", in red** — a bad-form verdict on a workout
++nobody scored.
++
++**Nothing changes when the backend sends real numbers.** Step 1 is the control
++that proves that, and it runs FIRST. If step 1 shows dashes, stop — the fix is
++wrong, not the rig.
++
++---
++
++## Setup — three servers
++
++Three terminals, from the repo root:
++
++```
++node apps/web/tools/mock-ml-backend.mjs
++```
++```
++cd apps/api && node --import tsx --env-file=.env src/index.ts
++```
++```
++cd apps/web && corepack pnpm exec vite
++```
++
++The rig is the OLD backend on `:8000`, the api is the NEW one on `:3000`, web is
++on `:5173`. Log in as usual, then open:
++
++**`http://localhost:5173/workout/summary/smoke-1`**
++
++The rig answers that summary id in every state, so you do NOT need to complete a
++real workout to run this.
++
++Switch rig state by opening `http://localhost:8000/__state/<name>` in another tab,
++then RELOAD the summary page. Read the current state at `http://localhost:8000/__state`.
++
++**Open devtools BEFORE you act** — a panel opened afterwards says "Currently
++recording…" and has captured nothing (the timezone card's recorded lesson).
++
++---
++
++## THE CONTROL — run this first
++
++### 1. State `healthy` — every real number renders
++Open `__state/healthy`, reload the summary page.
++
++✅ **Workout Time** reads `15m 0s`, with `35 min total` underneath
++✅ **Calories** reads `280 kcal` · **Exercises** reads `3` · **Avg Form** reads `88%`
++✅ The **Form Score** card reads grade **A** with the caption **Great**, in green,
++   and its bar is about 88% full
++✅ **Personal Records** lists `Best form accuracy!`
++✅ **Post-Workout Nutrition** lists `Paneer bhurji + rice`
++✅ Expand **Cool Down Stretches** → two stretches listed
++✅ No `—` anywhere among those figures
++
++**If any of the above shows a dash, STOP and report it.** That is the fix
++over-reaching, and it is the one outcome this card must not have.
++
++---
++
++## THE DEFECT — the state the card exists for
++
++### 2. State `unscored` — the metrics are absent
++Open `__state/unscored`, reload.
++
++✅ **Avg Form** reads `—`, not `undefined%`
++✅ The **Form Score** card reads grade `—` with the caption **Not scored**, in
++   grey — **NOT** `D` / "Keep practicing" / red
++✅ The Form Score bar is **empty**, and the row beneath it reads `0%` `—` `100%`
++✅ **Workout Time** reads `—`, not `NaNh NaNm`
++✅ **Calories** reads `— kcal`, not `undefined kcal`
++✅ **Exercises** reads `—`, and the tile is not blank
++✅ The page still renders fully — hero, cards, buttons. **Not a white screen.**
++✅ **Post-Workout Nutrition** reads "Suggestions unavailable right now."
++✅ Expand **Cool Down Stretches** → "Stretches unavailable right now."
++✅ There is no **Personal Records** section (the list could not be read, so
++   nothing is claimed about records)
++✅ Search the page for the words `undefined` and `NaN` — neither appears
++✅ **XP Earned** still reads `+70`, and the level line still reads a real
++   `Level N` with a real `X/Y XP` — those come from the NEW api and are
++   unaffected by rig state
++
++### 3. State `unscored` — the share card, i.e. the copy that leaves as a file
++Still in `unscored`. Click **Preview card**.
++
++✅ The preview's four tiles read `—`, `— kcal`, `—`, `—` — the Form-score tile
++   shows `—`, **not** `undefined% (D)`
++✅ The `⚡ +70 XP` tile and its `Level N` line are unchanged
++
++### 4. State `unscored` — the downloaded PNG
++Click **Download PNG**, then open the file.
++
++✅ The image shows the same dashes as the preview. A real number here that the
++   page does not show would be the exact defect this card's predecessor found —
++   two surfaces printing two different answers, with the stale one leaving the
++   building.
++
++### 5. State `empty200` — the blank white page is gone
++Open `__state/empty200`, reload.
++
++✅ A red toast reads **"Failed to load summary"** and you land on `/dashboard`
++✅ You do **not** sit on a blank white page with no message
++
++Before this card, this state rendered nothing at all — no toast, no redirect, no
++text — and the rig's own comment documented that white screen as expected.
++
++---
++
++## REGRESSION CHECKS
++
++### 6. State `partial` — the previous card's fix still holds
++Open `__state/partial`, reload. This summary has real metrics but no `xp_earned`.
++
++✅ **XP Earned** reads `—`, not `+0` and not a blank
++✅ The share-card tile reads `— XP`
++✅ Every OTHER figure reads its real value (`88%`, `280 kcal`, grade `A`, `Great`)
++
++### 7. Back to `healthy` — nothing was dashed out permanently
++Open `__state/healthy`, reload.
++
++✅ Step 1's list holds again, exactly
++
++---
++
++## Reporting
++
++Per step: pass, or what you actually saw. A failure here is fixed with a failing
++test first (R9.5) before any source change — that is how every defect in this
++card was fixed, including one regression the tests initially let through.
+diff --git a/apps/web/src/api/gamificationApi.js b/apps/web/src/api/gamificationApi.js
+index 7ce3bd2..243faa0 100644
+--- a/apps/web/src/api/gamificationApi.js
++++ b/apps/web/src/api/gamificationApi.js
+@@ -212,6 +212,13 @@ export function progressWidth(v) {
+   return v === null || v === undefined ? '0%' : `${Math.min(100, Math.max(0, v))}%`;
+ }
+ 
++/** "88%", or the em dash when unknown. NOT `${orUnknown(v)}%`, which renders the
++ *  nonsense "—%" — the suffix belongs inside the unknown decision, not outside
++ *  it. */
++export function formatPercent(v) {
++  return Number.isFinite(v) ? `${v}%` : UNKNOWN;
++}
++
+ /** "+50" for a workout's XP delta, or the em dash when the old backend sent no
+  *  usable number — never "+0", which would claim the workout earned nothing.
+  *
+@@ -558,6 +565,138 @@ export function readStatsView(data) {
+   };
+ }
+ 
++// ── PostWorkout's summary payload (OWED.md:730) ───────────────────────────────
++// `GET /workouts/:id/summary`, the old backend's workout-complete response. It
++// reached the render COMPLETELY unparsed until 2026-07-30 — 34 bare reads across
++// nine fields — while the other three old payloads on these screens each got a
++// reader across rounds 4-7. Deferred by Kd's ruling at the PostWorkout XP card's
++// plan gate ("record as OWED, fix XP only", DECISIONS :1330); this is that line
++// being discharged. Lives HERE and not in `workoutApi.js` for the reason
++// `readStatsView`'s own JSDoc gives: that reader ALSO parses a `workoutService`
++// payload, and the text/finite/list primitives above are module-private.
++
++/** The five grade arms plus the one the page did not have.
++ *
++ *  THE DEFECT THIS DELETES: the page's local `getFormGrade` had no unknown arm,
++ *  so an absent `form_accuracy` fell through every threshold to the final return
++ *  — grade **D**, "Keep practicing", in RED. A definite bad-form verdict on a
++ *  workout nobody scored, shown after every workout. Verbatim round 5 F3's
++ *  defect ("an unknown accuracy painted RED by the <60 branch") one page along.
++ *
++ *  ONE ladder, deliberately: `ShareCard` carried a SECOND copy (`getGrade`) with
++ *  the same missing arm, so the downloadable PNG printed "undefined% (D)". Two
++ *  sites, one class — the one-of-N shape this project has recorded four times,
++ *  most recently at round 9 F1. The card keeps its own fixed tile colour, so no
++ *  `${color}NN` concatenation is introduced (round 9 F1's other half). */
++export function formGrade(score) {
++  if (!Number.isFinite(score)) {
++    return { grade: UNKNOWN, label: 'Not scored', color: 'text-gray-400' };
++  }
++  if (score >= 90) return { grade: 'A+', color: 'text-green-400',  label: 'Excellent' };
++  if (score >= 80) return { grade: 'A',  color: 'text-green-400',  label: 'Great' };
++  if (score >= 70) return { grade: 'B',  color: 'text-yellow-400', label: 'Good' };
++  if (score >= 60) return { grade: 'C',  color: 'text-orange-400', label: 'Needs work' };
++  return                  { grade: 'D',  color: 'text-red-400',    label: 'Keep practicing' };
++}
++
++/** Seconds as a compact duration. Shared by the page and the share card, which
++ *  spelled it identically in two places. */
++function secondsLabel(totalSeconds) {
++  const h = Math.floor(totalSeconds / 3600);
++  const m = Math.floor((totalSeconds % 3600) / 60);
++  const s = Math.round(totalSeconds % 60);
++  if (h > 0)    return `${h}h ${m}m`;
++  if (m === 0)  return `${s}s`;
++  return `${m}m ${s}s`;
++}
++
++/** Active time when we have it, total time when we do not, the em dash when
++ *  NEITHER is known — which is where `formatTime(undefined)` used to reach
++ *  `${Math.floor(NaN)}h ${NaN}m` and print **"NaNh NaNm"**, on the page and in
++ *  the PNG.
++ *
++ *  `active !== null`, NOT `active ? …`, and that is a fix folded in by Kd's
++ *  ruling of 2026-07-30: a genuine ZERO is falsy, so a workout with 0 active
++ *  seconds silently displayed the total-duration figure under a label promising
++ *  active time. Declared in DECISIONS rather than slipped in.
++ *
++ *  The two spellings of the MINUTES fallback are pre-existing and deliberately
++ *  preserved — the page says "35 min", the card says "35m". Changing either would
++ *  be an unrequested display change to a real value; what they now share is the
++ *  seconds path and the unknown rule, which is what could disagree dishonestly. */
++function workoutTime(active, minutes, minutesLabel) {
++  if (active !== null)  return secondsLabel(active);
++  if (minutes !== null) return minutesLabel(minutes);
++  return UNKNOWN;
++}
++export function workoutTimeLabel(active, minutes) {
++  return workoutTime(active, minutes, (m) => (m < 1 ? '< 1 min' : m < 60 ? `${m} min` : `${Math.floor(m / 60)}h ${m % 60}m`));
++}
++export function workoutTimeLabelShort(active, minutes) {
++  return workoutTime(active, minutes, (m) => (m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`));
++}
++/** The page's "N min total" sub-line, or NULL when there is no total to name —
++ *  never the string "undefined total". */
++export function totalTimeLabel(minutes) {
++  return minutes === null ? null : `${workoutTimeLabel(null, minutes)} total`;
++}
++
++/** One personal record as its display string, or NULL when the entry carries
++ *  nothing usable. The old backend sends either a bare string or
++ *  `{icon, value, label}` — the render already branched on `typeof`, which is the
++ *  evidence both shapes are real. A partly-known object still renders what it
++ *  has; `value` accepts a number OR a string because the payload has no contract
++ *  saying which. */
++export function readPersonalRecord(pr) {
++  if (typeof pr === 'string') return text(pr);
++  const icon  = text(pr?.icon);
++  const value = finite(pr?.value) ?? text(pr?.value);
++  const label = text(pr?.label);
++  if (icon === null && value === null && label === null) return null;
++  return `${icon === null ? '' : `${icon} `}${orUnknown(value)} — ${orUnknown(label)}`;
++}
++
++export function readMealSuggestion(m) {
++  return { meal: text(m?.meal), timing: text(m?.timing) };
++}
++
++/** `res.data` of `GET /workouts/:id/summary` → a view, or NULL when there is no
++ *  summary object in it at all.
++ *
++ *  NULL is the signal that fixes the blank white page: a 200 carrying `{}` had
++ *  `setSummary(res.data.summary)` store `undefined` WITHOUT throwing, so the
++ *  catch never ran — no toast, no redirect, no text. The rig documents that state
++ *  (tools/mock-ml-backend.mjs:118). Per-field below, so there is nothing for an
++ *  envelope gate to get wrong — round 4 F2's lesson, where `Boolean(stats?.stats)`
++ *  asserted the envelope and six sites then read fields off it with `?? 0`.
++ *
++ *  Only the NINE fields the page renders. `session_id`, `completed_at` and
++ *  `exercises` are deliberately absent: dead surface reads as protection and is
++ *  not (round 6, where deleting two unused flags also deleted five assertions). */
++export function readSummaryView(data) {
++  const s = data?.summary;
++  if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
++  const records = list(s.personal_records);
++  const meals   = list(s.meal_suggestions);
++  const stretch = list(s.stretches);
++  return {
++    activeSeconds:   finite(s.active_seconds),
++    durationMinutes: finite(s.duration_minutes),
++    caloriesBurned:  finite(s.calories_burned),
++    formAccuracy:    finite(s.form_accuracy),
++    exercisesCount:  finite(s.exercises_count),
++    currentStreak:   finite(s.current_streak),
++    xpEarned:        finite(s.xp_earned),
++    // A non-array with a positive `length` — a bare string — used to reach
++    // `.map` and throw, blanking the WHOLE page: `personal_records?.length > 0`
++    // is true for a non-empty string and there is no ErrorBoundary anywhere in
++    // apps/web. Round 6 F2's class, three sites along.
++    personalRecords: records === null ? null : records.map(readPersonalRecord),
++    mealSuggestions: meals   === null ? null : meals.map(readMealSuggestion),
++    stretches:       stretch === null ? null : stretch.map((v) => text(v)),
++  };
++}
++
+ export const gamificationService = {
+   /** {streak, xp, achievements} — @app/shared gamificationMeSchema. */
+   getMe: () => authApi.get('/v1/gamification/me'),
+diff --git a/apps/web/src/api/gamificationApi.test.js b/apps/web/src/api/gamificationApi.test.js
+index 2a3d745..691217d 100644
+--- a/apps/web/src/api/gamificationApi.test.js
++++ b/apps/web/src/api/gamificationApi.test.js
+@@ -14,7 +14,9 @@ import { fileURLToPath } from 'node:url';
+ import authApi from './authApi';
+ import mlApi from './mlApi';
+ import {
+-  UNKNOWN, difficultyColor, difficultyStyle, earnedBadgeCount, weekDates, formatCount, formatFraction, formatLevel, formatXpEarned,
++  UNKNOWN, difficultyColor, difficultyStyle, earnedBadgeCount, weekDates, formatCount, formatFraction, formatLevel, formatPercent, formatXpEarned,
++  formGrade, readMealSuggestion, readPersonalRecord, readSummaryView,
++  totalTimeLabel, workoutTimeLabel, workoutTimeLabelShort,
+   formatXpProgress, formatXpTotal, gamificationService, listState,
+   oldPayloadState, orUnknown, progressWidth, readBadge, readChallenge, tierStyle, xpBarWidth,
+   readLeaderboardEntry, readLeaderboardView, readOverviewView,
+@@ -937,3 +939,202 @@ describe('old-payload state is a pure function, so all four states are testable'
+   // protection and is not. The same question is asked directly of the reader's
+   // output above (`readOverviewView nulls a list it cannot enumerate`).
+ });
++
++// ── PostWorkout's summary payload (OWED.md:730) ────────────────────────────────
++// The reader and formatters replacing 34 bare reads across nine fields. The render
++// tests in xpDisplay.render.test.jsx are the protection of record for what reaches
++// the SCREEN (round 4 F1's ruling); these pin the logic that decides whether a
++// value is knowable at all, which is the part a render test cannot enumerate.
++describe('formGrade — five known arms and the one the page did not have', () => {
++  it('grades a real score exactly as the deleted page-local did', () => {
++    expect(formGrade(90)).toEqual({ grade: 'A+', color: 'text-green-400',  label: 'Excellent' });
++    expect(formGrade(88)).toEqual({ grade: 'A',  color: 'text-green-400',  label: 'Great' });
++    expect(formGrade(70)).toEqual({ grade: 'B',  color: 'text-yellow-400', label: 'Good' });
++    expect(formGrade(60)).toEqual({ grade: 'C',  color: 'text-orange-400', label: 'Needs work' });
++    expect(formGrade(59)).toEqual({ grade: 'D',  color: 'text-red-400',    label: 'Keep practicing' });
++    // Every arm is a `>=`, so an off-by-one here silently re-grades every workout.
++    expect(formGrade(89).grade).toBe('A');
++    expect(formGrade(79).grade).toBe('B');
++    expect(formGrade(69).grade).toBe('C');
++    expect(formGrade(0).grade).toBe('D');       // a real zero IS a D, not unknown
++  });
++
++  it('an unknown score is NOT a D', () => {
++    // THE DEFECT. Every value here fell through to the final return before this
++    // function existed — grade D, "Keep practicing", in RED, on a workout nobody
++    // scored. `undefined >= 60` is false and so is every other comparison, which
++    // is why an unguarded ladder structurally cannot say "we were not told".
++    for (const v of [null, undefined, NaN, Infinity, -Infinity, '88', {}]) {
++      expect(formGrade(v)).toEqual({ grade: UNKNOWN, label: 'Not scored', color: 'text-gray-400' });
++    }
++  });
++});
++
++describe('workout time — the "NaNh NaNm" case, and a real zero', () => {
++  it('prefers active seconds, falls back to total minutes', () => {
++    expect(workoutTimeLabel(900, 35)).toBe('15m 0s');
++    expect(workoutTimeLabel(29, 1)).toBe('29s');
++    expect(workoutTimeLabel(3700, 62)).toBe('1h 1m');
++    expect(workoutTimeLabel(null, 35)).toBe('35 min');
++    expect(workoutTimeLabel(null, 0)).toBe('< 1 min');
++    expect(workoutTimeLabel(null, 95)).toBe('1h 35m');
++  });
++
++  it('neither known reads the dash, never "NaNh NaNm"', () => {
++    // What `formatTime(undefined)` produced: both `< 1` and `< 60` are false for
++    // undefined, so it reached `${Math.floor(NaN)}h ${NaN}m` — on the page AND in
++    // the downloadable PNG.
++    expect(workoutTimeLabel(null, null)).toBe(UNKNOWN);
++    expect(workoutTimeLabelShort(null, null)).toBe(UNKNOWN);
++  });
++
++  it('ZERO active seconds shows as 0s, not as the total duration', () => {
++    // The fold-in Kd ruled on 2026-07-30. The old check was `active ? … : …` and
++    // 0 is falsy, so a workout with no active movement silently displayed the
++    // TOTAL figure under a label promising active time.
++    expect(workoutTimeLabel(0, 35)).toBe('0s');
++    expect(workoutTimeLabelShort(0, 35)).toBe('0s');
++  });
++
++  it('page and card share the seconds path and differ only on minutes', () => {
++    // The minutes spellings are pre-existing and deliberately preserved: changing
++    // either would be an unrequested display change to a real value. What they
++    // MUST agree on is the seconds path and the unknown rule.
++    expect(workoutTimeLabelShort(900, 35)).toBe(workoutTimeLabel(900, 35));
++    expect(workoutTimeLabelShort(null, 35)).toBe('35m');
++    expect(workoutTimeLabel(null, 35)).toBe('35 min');
++  });
++
++  it('the "total" sub-line is NULL rather than "undefined total"', () => {
++    expect(totalTimeLabel(35)).toBe('35 min total');
++    expect(totalTimeLabel(null)).toBe(null);
++  });
++});
++
++describe('formatPercent — the suffix lives inside the unknown decision', () => {
++  it('renders a real percentage, and a BARE dash when unknown', () => {
++    expect(formatPercent(88)).toBe('88%');
++    expect(formatPercent(0)).toBe('0%');            // a real zero is a real zero
++    // Not "—%", which is what `${orUnknown(v)}%` at the call site would produce.
++    for (const v of [null, undefined, NaN, Infinity, '88']) {
++      expect(formatPercent(v)).toBe(UNKNOWN);
++    }
++  });
++});
++
++describe('readPersonalRecord — both shapes the old backend sends', () => {
++  it('passes a usable string through and nulls an unusable one', () => {
++    expect(readPersonalRecord('Best form accuracy!')).toBe('Best form accuracy!');
++    expect(readPersonalRecord('')).toBe(null);
++    expect(readPersonalRecord('   ')).toBe(null);
++  });
++
++  it('composes the object shape, and renders what it has when partly known', () => {
++    expect(readPersonalRecord({ icon: '🔥', value: 12, label: 'reps' })).toBe('🔥 12 — reps');
++    expect(readPersonalRecord({ value: '12kg', label: 'lift' })).toBe('12kg — lift');
++    expect(readPersonalRecord({ icon: '🔥', label: 'reps' })).toBe(`🔥 ${UNKNOWN} — reps`);
++    expect(readPersonalRecord({ icon: '🔥', value: 12 })).toBe(`🔥 12 — ${UNKNOWN}`);
++  });
++
++  it('nulls an entry carrying nothing usable', () => {
++    for (const v of [null, undefined, {}, 42, { icon: '' }]) {
++      expect(readPersonalRecord(v)).toBe(null);
++    }
++  });
++});
++
++describe('readSummaryView — NULL is the signal that fixes the blank page', () => {
++  const full = {
++    summary: {
++      active_seconds: 900, duration_minutes: 35, calories_burned: 280,
++      form_accuracy: 88, exercises_count: 3, current_streak: 3, xp_earned: 70,
++      personal_records: ['Best form accuracy!'],
++      meal_suggestions: [{ meal: 'Paneer bhurji', timing: 'within 45 min' }],
++      stretches: ['Hamstring stretch'],
++    },
++  };
++
++  it('returns null when there is no summary OBJECT at all', () => {
++    // The empty-200 case. `{}` is a 200 the old backend really sends, and
++    // `setSummary(res.data.summary)` stored undefined from it WITHOUT throwing, so
++    // the page's catch never ran and it rendered a blank white screen.
++    for (const v of [{}, null, undefined, { summary: null }, { summary: 'x' }, { summary: [] }]) {
++      expect(readSummaryView(v)).toBe(null);
++    }
++  });
++
++  it('reads every rendered field, and nothing that is not rendered', () => {
++    // `toEqual` on the WHOLE object is what keeps dead surface out: adding
++    // session_id / completed_at / exercises here would fail it. Round 6's lesson —
++    // unused surface reads as protection and is not.
++    expect(readSummaryView(full)).toEqual({
++      activeSeconds: 900, durationMinutes: 35, caloriesBurned: 280,
++      formAccuracy: 88, exercisesCount: 3, currentStreak: 3, xpEarned: 70,
++      personalRecords: ['Best form accuracy!'],
++      mealSuggestions: [{ meal: 'Paneer bhurji', timing: 'within 45 min' }],
++      stretches: ['Hamstring stretch'],
++    });
++  });
++
++  it('nulls each field independently — no envelope gate to get wrong', () => {
++    // Round 4 F2: `Boolean(stats?.stats)` asserted the ENVELOPE and six sites then
++    // read fields off it with `?? 0`, so a 200 carrying `{stats:{}}` printed
++    // "0 workouts / 0h / 0 kcal" as fact. Per-field means that cannot recur here.
++    expect(readSummaryView({ summary: {} })).toEqual({
++      activeSeconds: null, durationMinutes: null, caloriesBurned: null,
++      formAccuracy: null, exercisesCount: null, currentStreak: null, xpEarned: null,
++      personalRecords: null, mealSuggestions: null, stretches: null,
++    });
++    const v = readSummaryView({ summary: { form_accuracy: 88, calories_burned: 'lots' } });
++    expect(v.formAccuracy).toBe(88);
++    expect(v.caloriesBurned).toBe(null);            // a string is not a number
++  });
++
++  it('nulls a list that is not a list, instead of letting it reach .map', () => {
++    // Round 6 F2's class, three sites along. A non-empty STRING passes
++    // `?.length > 0`, then `.map is not a function` throws during render and
++    // blanks the whole page — there is no ErrorBoundary anywhere in apps/web.
++    const v = readSummaryView({
++      summary: {
++        personal_records: 'Best form accuracy!',
++        meal_suggestions: 'Paneer bhurji',
++        stretches: 'Hamstring stretch',
++      },
++    });
++    expect(v.personalRecords).toBe(null);
++    expect(v.mealSuggestions).toBe(null);
++    expect(v.stretches).toBe(null);
++    // An EMPTY list is a truthful "none" and stays a list — the round 6 F1
++    // inverse, where a real empty result got denied as "unavailable".
++    const e = readSummaryView({ summary: { personal_records: [], stretches: [] } });
++    expect(e.personalRecords).toEqual([]);
++    expect(e.stretches).toEqual([]);
++  });
++
++  it('guards the ELEMENTS of every list, not just the list', () => {
++    // Round 7 F7: `earnedBadgeCount([null])` threw one layer inside the fix for
++    // the list-level version of the same bug. Same shape, checked here first.
++    const v = readSummaryView({
++      summary: {
++        personal_records: [null, 42, {}],
++        meal_suggestions: [null, { meal: 'Dal' }],
++        stretches: [null, 7, 'Quad stretch'],
++      },
++    });
++    expect(v.personalRecords).toEqual([null, null, null]);
++    expect(v.mealSuggestions).toEqual([
++      { meal: null, timing: null },
++      { meal: 'Dal', timing: null },
++    ]);
++    expect(v.stretches).toEqual([null, null, 'Quad stretch']);
++  });
++});
++
++describe('readMealSuggestion', () => {
++  it('reads both fields or nulls them', () => {
++    expect(readMealSuggestion({ meal: 'Dal', timing: 'now' })).toEqual({ meal: 'Dal', timing: 'now' });
++    expect(readMealSuggestion({ meal: 'Dal' })).toEqual({ meal: 'Dal', timing: null });
++    expect(readMealSuggestion(null)).toEqual({ meal: null, timing: null });
++    expect(readMealSuggestion({ meal: 42 })).toEqual({ meal: null, timing: null });
++  });
++});
+diff --git a/apps/web/src/pages/PostWorkout.jsx b/apps/web/src/pages/PostWorkout.jsx
+index 2ae811c..1023a65 100644
+--- a/apps/web/src/pages/PostWorkout.jsx
++++ b/apps/web/src/pages/PostWorkout.jsx
+@@ -10,7 +10,9 @@ import {
+ import { workoutService } from '../api/workoutApi';
+ import { useXp } from '../hooks/useXp';
+ import {
+-  formatLevel, formatNextLevel, formatXpEarned, formatXpFraction, xpBarWidth,
++  UNKNOWN, formGrade, formatLevel, formatNextLevel, formatPercent, formatXpEarned,
++  formatXpFraction, orUnknown, progressWidth, readSummaryView, totalTimeLabel,
++  workoutTimeLabel, workoutTimeLabelShort, xpBarWidth,
+ } from '../api/gamificationApi';
+ import toast from 'react-hot-toast';
+ import html2canvas from 'html2canvas';
+@@ -110,13 +112,10 @@ function ShareCard({ summary, xp, cardRef }) {
+     day: 'numeric', month: 'short', year: 'numeric',
+   });
+ 
+-  const getGrade = (score) => {
+-    if (score >= 90) return 'A+';
+-    if (score >= 80) return 'A';
+-    if (score >= 70) return 'B';
+-    if (score >= 60) return 'C';
+-    return 'D';
+-  };
++  // `getGrade` stood here — a SECOND grade ladder with the same missing unknown
++  // arm as the page's, so an unscored workout printed "undefined% (D)" into the
++  // downloadable PNG. One exported `formGrade` now serves both surfaces; the
++  // card keeps its own fixed tile colour, so no colour is concatenated here.
+ 
+   return (
+     <div
+@@ -168,10 +167,10 @@ function ShareCard({ summary, xp, cardRef }) {
+       {/* Stats grid */}
+       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+         {[
+-          { label: 'Workout Time', value: summary.active_seconds ? (summary.active_seconds < 60 ? `${summary.active_seconds}s` : `${Math.floor(summary.active_seconds / 60)}m ${Math.round(summary.active_seconds % 60)}s`) : (summary.duration_minutes < 60 ? `${summary.duration_minutes}m` : `${Math.floor(summary.duration_minutes/60)}h ${summary.duration_minutes%60}m`), icon: '⏱️', color: '#60a5fa' },
+-          { label: 'Calories',   value: `${Math.round(summary.calories_burned)} kcal`, icon: '🔥', color: '#fb923c' },
+-          { label: 'Exercises',  value: `${summary.exercises_count}`,                  icon: '💪', color: '#a78bfa' },
+-          { label: 'Form score', value: `${summary.form_accuracy}% (${getGrade(summary.form_accuracy)})`, icon: '🎯', color: '#34d399' },
++          { label: 'Workout Time', value: workoutTimeLabelShort(summary.activeSeconds, summary.durationMinutes), icon: '⏱️', color: '#60a5fa' },
++          { label: 'Calories',   value: `${summary.caloriesBurned === null ? UNKNOWN : Math.round(summary.caloriesBurned)} kcal`, icon: '🔥', color: '#fb923c' },
++          { label: 'Exercises',  value: `${orUnknown(summary.exercisesCount)}`,         icon: '💪', color: '#a78bfa' },
++          { label: 'Form score', value: summary.formAccuracy === null ? UNKNOWN : `${summary.formAccuracy}% (${formGrade(summary.formAccuracy).grade})`, icon: '🎯', color: '#34d399' },
+         ].map(({ label, value, icon, color }) => (
+           <div key={label} style={{
+             background: 'rgba(255,255,255,0.04)',
+@@ -199,11 +198,11 @@ function ShareCard({ summary, xp, cardRef }) {
+         }}>
+           <span style={{ fontSize: 18 }}>⚡</span>
+           <div>
+-            <div style={{ fontSize: 16, fontWeight: 700, color: '#fbbf24' }}>{formatXpEarned(summary.xp_earned)} XP</div>
++            <div style={{ fontSize: 16, fontWeight: 700, color: '#fbbf24' }}>{formatXpEarned(summary.xpEarned)} XP</div>
+             <div style={{ fontSize: 11, color: '#6b7280' }}>Level {formatLevel(xp)}</div>
+           </div>
+         </div>
+-        {summary.current_streak > 0 && (
++        {summary.currentStreak !== null && summary.currentStreak > 0 && (
+           <div style={{
+             flex: 1,
+             background: 'rgba(249,115,22,0.08)',
+@@ -213,7 +212,7 @@ function ShareCard({ summary, xp, cardRef }) {
+           }}>
+             <span style={{ fontSize: 18 }}>🔥</span>
+             <div>
+-              <div style={{ fontSize: 16, fontWeight: 700, color: '#fb923c' }}>{summary.current_streak} days</div>
++              <div style={{ fontSize: 16, fontWeight: 700, color: '#fb923c' }}>{summary.currentStreak} days</div>
+               <div style={{ fontSize: 11, color: '#6b7280' }}>Streak</div>
+             </div>
+           </div>
+@@ -221,7 +220,7 @@ function ShareCard({ summary, xp, cardRef }) {
+       </div>
+ 
+       {/* PRs if any */}
+-      {summary.personal_records?.length > 0 && (
++      {summary.personalRecords !== null && summary.personalRecords.length > 0 && (
+         <div style={{
+           background: 'rgba(234,179,8,0.06)',
+           borderRadius: 12, padding: '10px 14px',
+@@ -231,14 +230,11 @@ function ShareCard({ summary, xp, cardRef }) {
+           <div style={{ fontSize: 11, color: '#facc15', fontWeight: 600, marginBottom: 6, letterSpacing: '0.08em' }}>
+             🏆 PERSONAL RECORDS
+           </div>
+-          {summary.personal_records.slice(0, 3).map((pr, i) => {
+-            const label = typeof pr === 'string' ? pr : `${pr.icon} ${pr.value} — ${pr.label}`;
+-            return (
+-              <div key={i} style={{ fontSize: 12, color: '#fde68a', marginBottom: 2 }}>
+-                {label}
+-              </div>
+-            );
+-          })}
++          {summary.personalRecords.slice(0, 3).map((pr, i) => (
++            <div key={i} style={{ fontSize: 12, color: '#fde68a', marginBottom: 2 }}>
++              {orUnknown(pr)}
++            </div>
++          ))}
+         </div>
+       )}
+ 
+@@ -288,7 +284,20 @@ export default function PostWorkout() {
+   useEffect(() => {
+     if (!sessionId) { navigate('/dashboard'); return; }
+     workoutService.getSummary(sessionId)
+-      .then((res) => setSummary(res.data.summary))
++      .then((res) => {
++        const view = readSummaryView(res.data);
++        // A 200 carrying no `summary` OBJECT is a failed read, not a page. What
++        // stood here — `setSummary(res.data.summary)` — stored `undefined`
++        // without throwing, so this promise resolved, the catch never ran, and
++        // `if (!summary) return null` rendered a BLANK WHITE PAGE: no toast, no
++        // redirect, no text. The smoke rig's `empty200` state serves exactly that
++        // and its own comment says a white screen there is the known state
++        // (tools/mock-ml-backend.mjs:118). Throwing routes it into the failure
++        // path this page ALREADY has, rather than growing a second one worded
++        // differently for the same event.
++        if (view === null) throw new Error('summary missing from response');
++        setSummary(view);
++      })
+       .catch((err) => {
+         // Message only (R3.10) — the axios error carries `config`, i.e. the URL,
+         // the request body and any headers. `useXp.js`, imported by this very
+@@ -307,32 +316,15 @@ export default function PostWorkout() {
+       .finally(() => setLoading(false));
+   }, [sessionId]);
+ 
+-  const formatTime = (mins) => {
+-    if (mins < 1)  return '< 1 min';
+-    if (mins < 60) return `${mins} min`;
+-    return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+-  };
+-
+-  // Format an exact number of SECONDS as a compact duration. Used for the
+-  // active-workout-time headline so a 29s or 1m37s span shows precisely
+-  // rather than being rounded to whole minutes.
+-  const formatSeconds = (totalSeconds) => {
+-    if (totalSeconds == null) return '—';
+-    const h = Math.floor(totalSeconds / 3600);
+-    const m = Math.floor((totalSeconds % 3600) / 60);
+-    const s = Math.round(totalSeconds % 60);
+-    if (h > 0) return `${h}h ${m}m`;
+-    if (m === 0) return `${s}s`;
+-    return `${m}m ${s}s`;
+-  };
+-
+-  const getFormGrade = (score) => {
+-    if (score >= 90) return { grade: 'A+', color: 'text-green-400',  label: 'Excellent' };
+-    if (score >= 80) return { grade: 'A',  color: 'text-green-400',  label: 'Great' };
+-    if (score >= 70) return { grade: 'B',  color: 'text-yellow-400', label: 'Good' };
+-    if (score >= 60) return { grade: 'C',  color: 'text-orange-400', label: 'Needs work' };
+-    return               { grade: 'D',  color: 'text-red-400',    label: 'Keep practicing' };
+-  };
++  // `formatTime`, `formatSeconds` and `getFormGrade` used to live here. They are
++  // now `workoutTimeLabel` / `workoutTimeLabelShort` / `totalTimeLabel` /
++  // `formGrade` in gamificationApi.js — the same move, for the same reason, as
++  // `formatXpEarned` (T3 round 4 F9) and `syncTimezone` → userApi.js (DECISIONS
++  // 2026-07-21): as page-locals they were the formatters this package's tests
++  // could not reach, so their unknown-input behaviour went unasserted — and
++  // `getFormGrade` having NO unknown arm is precisely the defect this card fixes.
++  // `getFormGrade` also had a TWIN inside ShareCard (`getGrade`), which is why
++  // one ladder now serves both surfaces.
+ 
+   const handleExport = async () => {
+     if (!cardRef.current) return;
+@@ -410,7 +402,7 @@ export default function PostWorkout() {
+ 
+   if (!summary) return null;
+ 
+-  const formInfo = getFormGrade(summary.form_accuracy);
++  const formInfo = formGrade(summary.formAccuracy);
+ 
+   return (
+     <div className="min-h-screen bg-dark-200 pb-12">
+@@ -444,7 +436,11 @@ export default function PostWorkout() {
+           >
+             Amazing effort 💪 Keep the streak going!
+           </motion.p>
+-          {summary.current_streak > 0 && (
++          {/* `!== null` first, deliberately: an unknown streak is not a streak of
++              zero. The gate's OUTCOME is unchanged (undefined > 0 was already
++              false), but it now says which question it is asking, so a later edit
++              cannot read the absence as a definite "no streak". */}
++          {summary.currentStreak !== null && summary.currentStreak > 0 && (
+             <motion.div
+               initial={{ scale: 0 }}
+               animate={{ scale: 1 }}
+@@ -454,7 +450,7 @@ export default function PostWorkout() {
+             >
+               <Flame className="w-4 h-4 text-orange-400" />
+               <span className="text-orange-300 font-semibold text-sm">
+-                {summary.current_streak} day streak!
++                {summary.currentStreak} day streak!
+               </span>
+             </motion.div>
+           )}
+@@ -471,10 +467,10 @@ export default function PostWorkout() {
+           className="grid grid-cols-2 gap-4"
+         >
+           {[
+-            { icon: Clock,    label: 'Workout Time',  value: summary.active_seconds ? formatSeconds(summary.active_seconds) : formatTime(summary.duration_minutes), color: 'text-blue-400',     bg: 'bg-blue-500/10', sublabel: summary.active_seconds ? `${formatTime(summary.duration_minutes)} total` : null, sublabelTip: 'Time you were actually moving through reps. The smaller "total" figure is the whole time on the workout screen, including standing between reps and camera setup.' },
+-            { icon: Flame,    label: 'Calories',  value: `${summary.calories_burned} kcal`,    color: 'text-orange-400',   bg: 'bg-orange-500/10', sublabel: 'Estimate', sublabelTip: 'Calculated from your body weight and active movement time using standard MET values — not measured by a heart-rate sensor, so treat it as a planning estimate rather than an exact figure.' },
+-            { icon: Dumbbell, label: 'Exercises', value: summary.exercises_count,               color: 'text-primary-400',  bg: 'bg-primary-500/10' },
+-            { icon: Target,   label: 'Avg Form',  value: `${summary.form_accuracy}%`,           color: formInfo.color,      bg: 'bg-white/5' },
++            { icon: Clock,    label: 'Workout Time',  value: workoutTimeLabel(summary.activeSeconds, summary.durationMinutes), color: 'text-blue-400',     bg: 'bg-blue-500/10', sublabel: summary.activeSeconds !== null ? totalTimeLabel(summary.durationMinutes) : null, sublabelTip: 'Time you were actually moving through reps. The smaller "total" figure is the whole time on the workout screen, including standing between reps and camera setup.' },
++            { icon: Flame,    label: 'Calories',  value: `${orUnknown(summary.caloriesBurned)} kcal`, color: 'text-orange-400',   bg: 'bg-orange-500/10', sublabel: 'Estimate', sublabelTip: 'Calculated from your body weight and active movement time using standard MET values — not measured by a heart-rate sensor, so treat it as a planning estimate rather than an exact figure.' },
++            { icon: Dumbbell, label: 'Exercises', value: orUnknown(summary.exercisesCount),      color: 'text-primary-400',  bg: 'bg-primary-500/10' },
++            { icon: Target,   label: 'Avg Form',  value: formatPercent(summary.formAccuracy),    color: formInfo.color,      bg: 'bg-white/5' },
+           ].map(({ icon: Icon, label, value, color, bg, sublabel, sublabelTip }) => (
+             <div key={label} className="card text-center">
+               <div className={`w-12 h-12 ${bg} rounded-xl
+@@ -577,9 +573,14 @@ export default function PostWorkout() {
+             </div>
+           </div>
+           <div className="mt-4 h-3 bg-dark-300 rounded-full overflow-hidden">
++            {/* `progressWidth` rather than a template: an unknown score leaves the
++                track EMPTY (a filled bar beside a "—" grade would be a claim
++                about form quality nobody measured), and it clamps 0-100, so an
++                out-of-range score can no longer overflow the track either. What
++                stood here rendered `width: "undefined%"`. */}
+             <motion.div
+               initial={{ width: 0 }}
+-              animate={{ width: `${summary.form_accuracy}%` }}
++              animate={{ width: progressWidth(summary.formAccuracy) }}
+               transition={{ delay: 0.6, duration: 1, ease: 'easeOut' }}
+               className="h-full rounded-full bg-gradient-to-r
+                          from-primary-600 to-primary-400"
+@@ -587,7 +588,7 @@ export default function PostWorkout() {
+           </div>
+           <div className="flex justify-between text-xs text-gray-500 mt-1">
+             <span>0%</span>
+-            <span className="text-white font-medium">{summary.form_accuracy}%</span>
++            <span className="text-white font-medium">{formatPercent(summary.formAccuracy)}</span>
+             <span>100%</span>
+           </div>
+         </motion.div>
+@@ -612,7 +613,7 @@ export default function PostWorkout() {
+               </div>
+             </div>
+             <div className="text-right">
+-              <p className="text-yellow-400 font-bold text-2xl">{formatXpEarned(summary.xp_earned)}</p>
++              <p className="text-yellow-400 font-bold text-2xl">{formatXpEarned(summary.xpEarned)}</p>
+               <p className="text-gray-500 text-xs">experience points</p>
+             </div>
+           </div>
+@@ -641,7 +642,7 @@ export default function PostWorkout() {
+         </motion.div>
+ 
+         {/* ── Personal records ────────────────────────────────────────────── */}
+-        {summary.personal_records?.length > 0 && (
++        {summary.personalRecords !== null && summary.personalRecords.length > 0 && (
+           <motion.div
+             initial={{ y: 20, opacity: 0 }}
+             animate={{ y: 0, opacity: 1 }}
+@@ -653,14 +654,11 @@ export default function PostWorkout() {
+               <h3 className="text-white font-semibold">Personal Records</h3>
+             </div>
+             <div className="space-y-2">
+-              {summary.personal_records.map((record, i) => {
+-                const text = typeof record === 'string' ? record : `${record.icon} ${record.value} — ${record.label}`;
+-                return (
+-                  <div key={i} className="flex items-center gap-2 text-yellow-300 text-sm">
+-                    <span>🏆</span>{text}
+-                  </div>
+-                );
+-              })}
++              {summary.personalRecords.map((record, i) => (
++                <div key={i} className="flex items-center gap-2 text-yellow-300 text-sm">
++                  <span>🏆</span>{orUnknown(record)}
++                </div>
++              ))}
+             </div>
+           </motion.div>
+         )}
+@@ -694,11 +692,16 @@ export default function PostWorkout() {
+             <h3 className="text-white font-semibold">Post-Workout Nutrition</h3>
+           </div>
+           <div className="space-y-3">
+-            {summary.meal_suggestions?.map((meal, i) => (
++            {/* NULL is unknown, and it says so. `?.map` on a non-array threw and
++                blanked the whole page; an EMPTY array is a truthful "none" and
++                keeps its existing silent section (pre-existing, reported). */}
++            {summary.mealSuggestions === null ? (
++              <p className="text-gray-500 text-sm">Suggestions unavailable right now.</p>
++            ) : summary.mealSuggestions.map((meal, i) => (
+               <div key={i} className="flex items-start justify-between p-3 bg-dark-200 rounded-xl">
+                 <div>
+-                  <p className="text-white text-sm font-medium">{meal.meal}</p>
+-                  <p className="text-gray-500 text-xs mt-0.5">{meal.timing}</p>
++                  <p className="text-white text-sm font-medium">{orUnknown(meal.meal)}</p>
++                  <p className="text-gray-500 text-xs mt-0.5">{orUnknown(meal.timing)}</p>
+                 </div>
+                 <span className="text-green-400 text-xs bg-green-500/10
+                                  px-2 py-1 rounded-full flex-shrink-0 ml-3">✓</span>
+@@ -729,13 +732,15 @@ export default function PostWorkout() {
+           </button>
+           {showStretch && (
+             <div className="mt-4 space-y-2">
+-              {summary.stretches?.map((stretch, i) => (
++              {summary.stretches === null ? (
++                <p className="text-gray-500 text-sm">Stretches unavailable right now.</p>
++              ) : summary.stretches.map((stretch, i) => (
+                 <div key={i} className="flex items-center gap-3 p-3 bg-dark-200 rounded-xl">
+                   <div className="w-6 h-6 bg-red-500/20 rounded-full
+                                   flex items-center justify-center flex-shrink-0">
+                     <span className="text-red-300 text-xs font-bold">{i + 1}</span>
+                   </div>
+-                  <p className="text-gray-300 text-sm">{stretch}</p>
++                  <p className="text-gray-300 text-sm">{orUnknown(stretch)}</p>
+                 </div>
+               ))}
+             </div>
+diff --git a/apps/web/src/pages/xpDisplay.render.test.jsx b/apps/web/src/pages/xpDisplay.render.test.jsx
+index b4675fe..908544b 100644
+--- a/apps/web/src/pages/xpDisplay.render.test.jsx
++++ b/apps/web/src/pages/xpDisplay.render.test.jsx
+@@ -68,6 +68,11 @@ vi.mock('../context/TransitionContext', () => ({
+ const { gamificationService } = await import('../api/gamificationApi');
+ const { workoutService }      = await import('../api/workoutApi');
+ const { recommendationService } = await import('../api/recommendationApi');
++// The toast is normally a side effect and not a claim under test (see the mock
++// above) — but for the empty-200 case it IS the claim: the page's only honest
++// response to "the summary did not arrive" is to say so, and today it says
++// nothing at all. So this one assertion needs the mock's call log.
++const toast = (await import('react-hot-toast')).default;
+ 
+ const Dashboard         = (await import('./Dashboard')).default;
+ const Achievements      = (await import('./Achievements')).default;
+@@ -1248,6 +1253,45 @@ const SUMMARY = {
+   exercises: [],
+ };
+ 
++/** The same workout with every METRIC absent — the state OWED.md:730 is about.
++ *
++ *  Not a hypothetical shape: the old backend's `/workouts/:id/summary` returns
++ *  serialized Mongo documents with no shape contract (the same reasoning
++ *  readStatsView's own JSDoc gives for `recent_workouts`), and this page ships
++ *  NINE fields read bare. What it renders today, before the fix:
++ *    · form_accuracy → `getFormGrade(undefined)` falls through every threshold
++ *      to the final return: grade **D**, "Keep practicing", in RED. A definite
++ *      bad-form verdict on a workout nobody scored — round 5 F3's defect
++ *      ("an unknown accuracy painted RED by the <60 branch") one page along.
++ *    · active_seconds + duration_minutes → formatTime(undefined) reaches
++ *      `${Math.floor(NaN)}h ${NaN}m` = **"NaNh NaNm"**, on the page AND in the
++ *      downloadable PNG.
++ *    · calories_burned → **"undefined kcal"** on the page, **"NaN kcal"** in the
++ *      card (the page does not round, the card does — its own OWED line).
++ *    · exercises_count → React renders undefined as NOTHING, so the page tile
++ *      goes BLANK while the card prints "undefined".
++ *  `xp_earned` is deliberately KEPT here: it is already guarded, and a fixture
++ *  that dropped it too would let a test pass on the wrong dash. */
++const SUMMARY_UNSCORED = (({
++  // eslint-disable-next-line no-unused-vars
++  form_accuracy, calories_burned, exercises_count, active_seconds, duration_minutes,
++  ...rest
++}) => rest)(SUMMARY);
++
++/** Every LIST arriving as a bare string instead of an array. Round 6 F2's class
++ *  exactly, three sites along: `personal_records?.length > 0` is TRUE for a
++ *  non-empty string, and `.map` on a string is not a function — so the whole
++ *  page throws and blanks, and there is no ErrorBoundary anywhere in apps/web.
++ *  A string is the shape to test rather than `{}`: the render already handles a
++ *  string ELEMENT (`typeof record === 'string'`), which is evidence the backend
++ *  does send strings here, and `{}` has no `length` so it merely hides. */
++const SUMMARY_BAD_LISTS = {
++  ...SUMMARY,
++  personal_records: 'Best form accuracy!',
++  meal_suggestions: 'Paneer bhurji + rice',
++  stretches:        'Hamstring stretch, 30s each side',
++};
++
+ /** The XP bar, resolved with a LOUD failure when it cannot be found.
+  *
+  *  T3 round 3 F6: reading `container.querySelector('.from-yellow-500').style`
+@@ -1275,6 +1319,37 @@ const renderPostWorkout = () =>
+     </MemoryRouter>,
+   );
+ 
++/** The FORM bar, not the XP bar. `.from-primary-600` is a distinct Tailwind token
++ *  from the XP card's `.from-primary-600/20` background, so it matches one node —
++ *  and the length assertion PINS that, because a restyle making it ambiguous
++ *  would otherwise leave this silently asserting the wrong element. Same shape
++ *  and same reason as `xpBar` above. */
++function formBar(container) {
++  const found = container.querySelectorAll('.from-primary-600');
++  expect(found.length, 'form bar anchor .from-primary-600 did not match exactly one node — restyled?').toBe(1);
++  return found[0];
++}
++
++/** Every stat tile carrying `label`, as its VALUE text.
++ *
++ *  It returns BOTH surfaces on purpose: the page's tile and the share card's tile
++ *  use the same labels, so a test can assert they agree. That is this card's own
++ *  recorded lesson (DECISIONS :1282) — repointing only the visible card left one
++ *  screen printing two different levels, and the stale one was the copy that
++ *  leaves the building as a PNG.
++ *
++ *  The page renders label→value as <p> siblings; the card renders
++ *  icon→value→label as <div>s, so the value sits on opposite sides. Keyed on
++ *  tagName rather than DOM order, because order is an accident of layout and a
++ *  reordered section would silently start reading the wrong node.
++ *
++ *  `getAllByText` THROWS when nothing matches, so this cannot pass vacuously: a
++ *  tile that disappears fails the test that reads it, which is the "a vanishing
++ *  site is still caught" half of the DECISIONS 2026-07-28 ruling on floors. */
++const tileValues = (label) => screen.getAllByText(label).map((n) => (
++  n.tagName === 'P' ? n.nextElementSibling.textContent : n.previousElementSibling.textContent
++));
++
+ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
+   // 10s test budget: the bar assertion below waits out framer-motion's own
+   // delay(0.8)+duration(1), and vitest's DEFAULT is 5s — with the default, a
+@@ -1437,4 +1512,138 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
+     // The level is still known — one unknown field must not blank the others.
+     expect(container.textContent).toMatch(/230\/374 XP/);
+   });
++
++  // ── The unparsed-summary gap (OWED.md:730) ─────────────────────────────────
++  // Deferred by Kd's ruling at this card's own plan gate ("record as OWED, fix XP
++  // only", DECISIONS :1330) because the named task was the XP curve and a fourth
++  // payload reader would have doubled a card on the page carrying the app's last
++  // live XP defect. These four tests are that OWED line being discharged.
++
++  it('an unscored workout reads "—" everywhere, never grade D', async () => {
++    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
++    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY_UNSCORED } });
++
++    const { container } = renderPostWorkout();
++    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
++
++    const text = container.textContent;
++
++    // THE HEADLINE. By identity at the one site that renders them — a
++    // whole-document /Keep practicing/ sweep would ALSO pass if the Form Score
++    // card vanished entirely, and a test that passes when its subject is gone is
++    // the vacuous-assertion class this card recorded four times.
++    const label = screen.getByText('Form Score').nextElementSibling;
++    const grade = screen.getByText('Form Score').parentElement.nextElementSibling;
++    expect(label.textContent).toBe('Not scored');
++    expect(grade.textContent).toBe('—');
++    // …and the sweep as well, which catches the verdict reappearing anywhere else.
++    expect(text).not.toMatch(/Keep practicing/);
++
++    // No fabrication reached the DOM in ANY spelling. These are what catch a site
++    // the assertions below do not name one by one.
++    expect(text).not.toMatch(/undefined/);
++    expect(text).not.toMatch(/NaN/);
++
++    // Both surfaces, by identity. The page and the PNG cannot disagree.
++    expect(tileValues('Workout Time')).toEqual(['—', '—']);
++    expect(tileValues('Calories')).toEqual(['— kcal', '— kcal']);
++    expect(tileValues('Exercises')).toEqual(['—', '—']);
++    expect(tileValues('Avg Form')).toEqual(['—']);
++    expect(tileValues('Form score')).toEqual(['—']);
++
++    // The bar cannot render "unknown", so it renders NOTHING: a filled bar beside
++    // a "—" grade is a claim about form quality nobody measured. Instrument
++    // copied deliberately from the XP bar's unknown case above, for the reason
++    // recorded there — `waitFor` needs only ONE poll to match, and the start of
++    // any sweep supplies 0%, so a mutant that sweeps 0 → 100% passes it. Wait out
++    // the sweep, then assert once.
++    await new Promise((r) => { setTimeout(r, 2400); });
++    expect(formBar(container).style.width).toBe('0%');
++
++    // The XP block is a SEPARATE read and is healthy — one unknown payload must
++    // not blank a knowable one (round 4 F4's defect).
++    expect(text).toMatch(/230\/374 XP/);
++  }, 10000);
++
++  it('a 200 with no `summary` key says so, instead of a blank white page', async () => {
++    // PRE-EXISTING, and documented inside the smoke rig itself
++    // (tools/mock-ml-backend.mjs:118): `setSummary(res.data.summary)` stores
++    // undefined WITHOUT throwing, so the catch never runs — no toast, no
++    // redirect, no text. The rig's `empty200` state serves exactly this and its
++    // comment says a white screen there is the KNOWN state rather than a broken
++    // rig. An absent summary is a failed read by any honest reading, so it takes
++    // the page's EXISTING failure path rather than growing a second, differently
++    // worded one.
++    //
++    // The clear is load-bearing: three tests above can call toast.error, and
++    // without it this assertion would pass on one of THEIR calls while the
++    // empty-200 path stayed silent. That is precisely how a vacuous assertion
++    // gets written.
++    toast.error.mockClear();
++    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
++    workoutService.getSummary.mockResolvedValue({ data: {} });
++
++    renderPostWorkout();
++
++    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to load summary'));
++  });
++
++  it('lists arriving as strings do not blank the page', async () => {
++    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
++    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY_BAD_LISTS } });
++
++    const { container } = renderPostWorkout();
++    // Today `personal_records.map` and `meal_suggestions.map` are called on
++    // STRINGS and throw during render, so this line is the whole assertion: it
++    // fails on a blank document, which is exactly what the user gets.
++    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
++
++    expect(container.textContent).toMatch(/88%/);          // real metrics survive
++    expect(container.textContent).not.toMatch(/undefined/);
++
++    // `stretches` is behind the expander, so its throw needs the click — a mount
++    // assertion alone would leave that third site uncovered.
++    fireEvent.click(screen.getByText('Cool Down Stretches'));
++    expect(screen.getByText('Workout Complete!')).toBeTruthy();
++  });
++
++  it('a fully-scored workout still renders every real number (positive control)', async () => {
++    // Without this, every assertion above could be satisfied by rendering a dash
++    // unconditionally. Round 9 F2's lesson: a tile helper that covered two of
++    // three sites let a fabricated Level 1 through all three protections.
++    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
++    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY } });
++
++    const { container } = renderPostWorkout();
++    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
++
++    expect(tileValues('Workout Time')).toEqual(['15m 0s', '15m 0s']);
++    expect(tileValues('Calories')).toEqual(['280 kcal', '280 kcal']);
++    expect(tileValues('Exercises')).toEqual(['3', '3']);
++    expect(tileValues('Avg Form')).toEqual(['88%']);
++    expect(tileValues('Form score')).toEqual(['88% (A)']);
++
++    const label = screen.getByText('Form Score').nextElementSibling;
++    const grade = screen.getByText('Form Score').parentElement.nextElementSibling;
++    expect(label.textContent).toBe('Great');     // 88 → the >= 80 arm, not >= 90
++    expect(grade.textContent).toBe('A');
++
++    // THE PAGE'S OWN DELTA, BY IDENTITY — and this assertion exists because its
++    // absence let a real regression through in this very commit. `xp_earned`
++    // survived the snake→camel rename at ONE of its two sites, so the page card
++    // read "—" for every workout while the PNG read "+70", and the whole suite
++    // stayed green: test 1's `/\+70/` is a whole-document sweep the SHARE CARD
++    // satisfies, and test 3's "—" is satisfied by a site that now reads undefined
++    // for every workout, passing for the wrong reason. That is round 1 F1's
++    // finding verbatim (a positive assertion satisfied by the card while the page
++    // went unexamined) and round 7 F3's rule (an assertion whose stated failure
++    // mode the code cannot produce is vacuous). It was found by grep, not by the
++    // tests — which is the argument for this line.
++    expect(screen.getByText('experience points').previousElementSibling.textContent).toBe('+70');
++
++    await waitFor(
++      () => expect(formBar(container).style.width).toBe(`${SUMMARY.form_accuracy}%`),
++      { timeout: 6000 },
++    );
++  }, 10000);
+ });
+diff --git a/apps/web/tools/mock-ml-backend.mjs b/apps/web/tools/mock-ml-backend.mjs
+index 0480289..8f6ad4a 100644
+--- a/apps/web/tools/mock-ml-backend.mjs
++++ b/apps/web/tools/mock-ml-backend.mjs
+@@ -34,6 +34,13 @@ const STATES = [
+   'partial',     // elements missing metrics/difficulty — rounds 5 F3, 6 F7, 7 F2;
+                  //   also a workout summary with no `xp_earned` (PostWorkout)
+   'badRecs',     // recommendations is a STRING, not a list — round 6 F2
++  'unscored',    // workout summary with the METRICS absent and every list a
++                 //   STRING — the state OWED.md:730 was about. Before the
++                 //   2026-07-30 reader this printed grade D / "Keep practicing"
++                 //   in red for a workout nobody scored, "NaNh NaNm" for the
++                 //   time, "undefined kcal", and the string-shaped lists blanked
++                 //   the whole page at `.map`. Everything else 200s, so this
++                 //   state isolates the summary payload.
+   'lbOnly',      // overview fails, leaderboard 200s — round 4 F4
+   'emptyLists',  // everything 200s with empty lists — round 6 F6
+   'healthy',     // full, well-formed payloads — THE CONTROL. Run it first.
+@@ -102,6 +109,25 @@ const SUMMARY_FULL = {
+  *  first version of this card's own test). */
+ const SUMMARY_NO_XP_EARNED = (({ xp_earned, ...rest }) => rest)(SUMMARY_FULL);
+ 
++/** The `unscored` state's payload: every METRIC absent, and every LIST arriving
++ *  as a bare string instead of an array. Both halves of OWED.md:730 in one state,
++ *  because both are properties of this one payload and a smoke that had to switch
++ *  states between them would be two click-throughs for one card.
++ *
++ *  A string rather than `{}` for the lists on purpose: `personal_records?.length
++ *  > 0` is TRUE for a non-empty string and then `.map` is not a function, which
++ *  is what actually blanked the page. `{}` has no `length`, so it merely hid the
++ *  section and would make this state look milder than the real defect. */
++const SUMMARY_UNSCORED = {
++  session_id:       'smoke-1',
++  completed_at:     new Date().toISOString(),
++  xp_earned:        70,
++  current_streak:   3,
++  personal_records: 'Best form accuracy!',
++  meal_suggestions: 'Paneer bhurji + rice',
++  stretches:        'Hamstring stretch, 30s each side',
++};
++
+ function payloadFor(path) {
+   // The summary gets its own branch BEFORE the per-state switch, because every
+   // 200-serving state needs an answer here: PostWorkout's own catch toasts and
+@@ -124,6 +150,7 @@ function payloadFor(path) {
+     // KNOWN state, not a broken rig. Every other state renders the page.
+     if (state === 'empty200') return {};
+     if (state === 'partial')  return { summary: SUMMARY_NO_XP_EARNED };
++    if (state === 'unscored') return { summary: SUMMARY_UNSCORED };
+     return { summary: SUMMARY_FULL };
+   }
+ 
+@@ -173,6 +200,11 @@ function payloadFor(path) {
+       if (path.includes('/recommendations')) return { recommendations: [] };
+       if (path.includes('/workouts/stats')) return { stats: { total_workouts: 0, total_minutes: 0, total_calories: 0, weekly_workouts: 0, streak: 0 }, activity: {}, recent_workouts: [] };
+       return {};
++    // `unscored` differs from `healthy` ONLY in the workout summary, which is
++    // branched on above — so it falls through to healthy's payloads here on
++    // purpose. That isolation is the point: anything wrong on the PostWorkout
++    // screen in this state belongs to the summary payload and nothing else.
++    case 'unscored':
+     case 'healthy':
+       if (path.includes('/gamification/overview')) return { badges: { all: BADGES_FULL, total_count: 40 }, challenges: { active: CHALLENGES_FULL } };
+       if (path.includes('/gamification/leaderboard')) return LEADERBOARD_FULL;

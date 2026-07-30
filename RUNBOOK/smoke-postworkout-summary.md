@@ -3,6 +3,19 @@
 Card: the unparsed-summary gap, `OWED.md:730`, branch `web-repoint`.
 Gates "done" per CLAUDE.md Part I §2. Run every step; report pass/fail per step.
 
+## RESULT — PASSED (Kd, 2026-07-30), on commit `fb1956c`
+
+Reported as a **blanket pass**, not step by step, and recorded that way rather
+than written up as eleven individual ticks — a record must not claim more
+resolution than the report it came from. The control (step 1) was included in the
+run, which is the step that matters most: it is the only one that can catch the
+fix dashing out numbers the backend really sent.
+
+This discharges the SMOKE half of the card's gate. **The OWED tick stays OFF
+until a fresh-chat T3 also passes** — the standard the previous PostWorkout card
+held itself to (DECISIONS :1348), and the google-login / DPDP precedent for a
+tick that went on too early.
+
 **What this card changed, in one sentence.** When the old backend leaves a number
 out of the workout summary, the page now prints `—` instead of inventing one. The
 headline case: an absent form score used to fall through every grading threshold

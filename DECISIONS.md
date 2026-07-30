@@ -2531,3 +2531,14 @@ gate ("record as OWED, fix XP only", the entry at :1330).
   280.4 and 280; Kd chose "report only" on 2026-07-30. And an EMPTY meal/stretch
   list still renders a heading with nothing under it — a truthful empty section,
   but poor, and adding copy is a product decision rather than a defect fix.
+
+- (SMOKE — PASSED, Kd 2026-07-30, on commit `fb1956c`) Gates the card per Part I
+  §2. Reported as a BLANKET pass rather than step by step, and recorded that way
+  rather than written up as individual ticks: a record must not claim more
+  resolution than the report it came from, which is this project's most-repeated
+  correction. The `healthy` CONTROL was part of the run — the step that matters
+  most here, because dashing out numbers the backend really SENT is the one
+  outcome this card must not have, and no unknown-state step can see it. Result
+  recorded at `RUNBOOK/smoke-postworkout-summary.md`. **The OWED tick stays OFF
+  until a fresh-chat T3 also passes** (the :1348 standard, and the google-login /
+  DPDP precedent for a tick that went on early).
