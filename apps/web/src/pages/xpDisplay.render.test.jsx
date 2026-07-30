@@ -68,6 +68,11 @@ vi.mock('../context/TransitionContext', () => ({
 const { gamificationService } = await import('../api/gamificationApi');
 const { workoutService }      = await import('../api/workoutApi');
 const { recommendationService } = await import('../api/recommendationApi');
+// The toast is normally a side effect and not a claim under test (see the mock
+// above) — but for the empty-200 case it IS the claim: the page's only honest
+// response to "the summary did not arrive" is to say so, and today it says
+// nothing at all. So this one assertion needs the mock's call log.
+const toast = (await import('react-hot-toast')).default;
 
 const Dashboard         = (await import('./Dashboard')).default;
 const Achievements      = (await import('./Achievements')).default;
@@ -1248,6 +1253,45 @@ const SUMMARY = {
   exercises: [],
 };
 
+/** The same workout with every METRIC absent — the state OWED.md:730 is about.
+ *
+ *  Not a hypothetical shape: the old backend's `/workouts/:id/summary` returns
+ *  serialized Mongo documents with no shape contract (the same reasoning
+ *  readStatsView's own JSDoc gives for `recent_workouts`), and this page ships
+ *  NINE fields read bare. What it renders today, before the fix:
+ *    · form_accuracy → `getFormGrade(undefined)` falls through every threshold
+ *      to the final return: grade **D**, "Keep practicing", in RED. A definite
+ *      bad-form verdict on a workout nobody scored — round 5 F3's defect
+ *      ("an unknown accuracy painted RED by the <60 branch") one page along.
+ *    · active_seconds + duration_minutes → formatTime(undefined) reaches
+ *      `${Math.floor(NaN)}h ${NaN}m` = **"NaNh NaNm"**, on the page AND in the
+ *      downloadable PNG.
+ *    · calories_burned → **"undefined kcal"** on the page, **"NaN kcal"** in the
+ *      card (the page does not round, the card does — its own OWED line).
+ *    · exercises_count → React renders undefined as NOTHING, so the page tile
+ *      goes BLANK while the card prints "undefined".
+ *  `xp_earned` is deliberately KEPT here: it is already guarded, and a fixture
+ *  that dropped it too would let a test pass on the wrong dash. */
+const SUMMARY_UNSCORED = (({
+  // eslint-disable-next-line no-unused-vars
+  form_accuracy, calories_burned, exercises_count, active_seconds, duration_minutes,
+  ...rest
+}) => rest)(SUMMARY);
+
+/** Every LIST arriving as a bare string instead of an array. Round 6 F2's class
+ *  exactly, three sites along: `personal_records?.length > 0` is TRUE for a
+ *  non-empty string, and `.map` on a string is not a function — so the whole
+ *  page throws and blanks, and there is no ErrorBoundary anywhere in apps/web.
+ *  A string is the shape to test rather than `{}`: the render already handles a
+ *  string ELEMENT (`typeof record === 'string'`), which is evidence the backend
+ *  does send strings here, and `{}` has no `length` so it merely hides. */
+const SUMMARY_BAD_LISTS = {
+  ...SUMMARY,
+  personal_records: 'Best form accuracy!',
+  meal_suggestions: 'Paneer bhurji + rice',
+  stretches:        'Hamstring stretch, 30s each side',
+};
+
 /** The XP bar, resolved with a LOUD failure when it cannot be found.
  *
  *  T3 round 3 F6: reading `container.querySelector('.from-yellow-500').style`
@@ -1274,6 +1318,37 @@ const renderPostWorkout = () =>
       </Routes>
     </MemoryRouter>,
   );
+
+/** The FORM bar, not the XP bar. `.from-primary-600` is a distinct Tailwind token
+ *  from the XP card's `.from-primary-600/20` background, so it matches one node —
+ *  and the length assertion PINS that, because a restyle making it ambiguous
+ *  would otherwise leave this silently asserting the wrong element. Same shape
+ *  and same reason as `xpBar` above. */
+function formBar(container) {
+  const found = container.querySelectorAll('.from-primary-600');
+  expect(found.length, 'form bar anchor .from-primary-600 did not match exactly one node — restyled?').toBe(1);
+  return found[0];
+}
+
+/** Every stat tile carrying `label`, as its VALUE text.
+ *
+ *  It returns BOTH surfaces on purpose: the page's tile and the share card's tile
+ *  use the same labels, so a test can assert they agree. That is this card's own
+ *  recorded lesson (DECISIONS :1282) — repointing only the visible card left one
+ *  screen printing two different levels, and the stale one was the copy that
+ *  leaves the building as a PNG.
+ *
+ *  The page renders label→value as <p> siblings; the card renders
+ *  icon→value→label as <div>s, so the value sits on opposite sides. Keyed on
+ *  tagName rather than DOM order, because order is an accident of layout and a
+ *  reordered section would silently start reading the wrong node.
+ *
+ *  `getAllByText` THROWS when nothing matches, so this cannot pass vacuously: a
+ *  tile that disappears fails the test that reads it, which is the "a vanishing
+ *  site is still caught" half of the DECISIONS 2026-07-28 ruling on floors. */
+const tileValues = (label) => screen.getAllByText(label).map((n) => (
+  n.tagName === 'P' ? n.nextElementSibling.textContent : n.previousElementSibling.textContent
+));
 
 describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
   // 10s test budget: the bar assertion below waits out framer-motion's own
@@ -1437,4 +1512,138 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     // The level is still known — one unknown field must not blank the others.
     expect(container.textContent).toMatch(/230\/374 XP/);
   });
+
+  // ── The unparsed-summary gap (OWED.md:730) ─────────────────────────────────
+  // Deferred by Kd's ruling at this card's own plan gate ("record as OWED, fix XP
+  // only", DECISIONS :1330) because the named task was the XP curve and a fourth
+  // payload reader would have doubled a card on the page carrying the app's last
+  // live XP defect. These four tests are that OWED line being discharged.
+
+  it('an unscored workout reads "—" everywhere, never grade D', async () => {
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY_UNSCORED } });
+
+    const { container } = renderPostWorkout();
+    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
+
+    const text = container.textContent;
+
+    // THE HEADLINE. By identity at the one site that renders them — a
+    // whole-document /Keep practicing/ sweep would ALSO pass if the Form Score
+    // card vanished entirely, and a test that passes when its subject is gone is
+    // the vacuous-assertion class this card recorded four times.
+    const label = screen.getByText('Form Score').nextElementSibling;
+    const grade = screen.getByText('Form Score').parentElement.nextElementSibling;
+    expect(label.textContent).toBe('Not scored');
+    expect(grade.textContent).toBe('—');
+    // …and the sweep as well, which catches the verdict reappearing anywhere else.
+    expect(text).not.toMatch(/Keep practicing/);
+
+    // No fabrication reached the DOM in ANY spelling. These are what catch a site
+    // the assertions below do not name one by one.
+    expect(text).not.toMatch(/undefined/);
+    expect(text).not.toMatch(/NaN/);
+
+    // Both surfaces, by identity. The page and the PNG cannot disagree.
+    expect(tileValues('Workout Time')).toEqual(['—', '—']);
+    expect(tileValues('Calories')).toEqual(['— kcal', '— kcal']);
+    expect(tileValues('Exercises')).toEqual(['—', '—']);
+    expect(tileValues('Avg Form')).toEqual(['—']);
+    expect(tileValues('Form score')).toEqual(['—']);
+
+    // The bar cannot render "unknown", so it renders NOTHING: a filled bar beside
+    // a "—" grade is a claim about form quality nobody measured. Instrument
+    // copied deliberately from the XP bar's unknown case above, for the reason
+    // recorded there — `waitFor` needs only ONE poll to match, and the start of
+    // any sweep supplies 0%, so a mutant that sweeps 0 → 100% passes it. Wait out
+    // the sweep, then assert once.
+    await new Promise((r) => { setTimeout(r, 2400); });
+    expect(formBar(container).style.width).toBe('0%');
+
+    // The XP block is a SEPARATE read and is healthy — one unknown payload must
+    // not blank a knowable one (round 4 F4's defect).
+    expect(text).toMatch(/230\/374 XP/);
+  }, 10000);
+
+  it('a 200 with no `summary` key says so, instead of a blank white page', async () => {
+    // PRE-EXISTING, and documented inside the smoke rig itself
+    // (tools/mock-ml-backend.mjs:118): `setSummary(res.data.summary)` stores
+    // undefined WITHOUT throwing, so the catch never runs — no toast, no
+    // redirect, no text. The rig's `empty200` state serves exactly this and its
+    // comment says a white screen there is the KNOWN state rather than a broken
+    // rig. An absent summary is a failed read by any honest reading, so it takes
+    // the page's EXISTING failure path rather than growing a second, differently
+    // worded one.
+    //
+    // The clear is load-bearing: three tests above can call toast.error, and
+    // without it this assertion would pass on one of THEIR calls while the
+    // empty-200 path stayed silent. That is precisely how a vacuous assertion
+    // gets written.
+    toast.error.mockClear();
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    workoutService.getSummary.mockResolvedValue({ data: {} });
+
+    renderPostWorkout();
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to load summary'));
+  });
+
+  it('lists arriving as strings do not blank the page', async () => {
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY_BAD_LISTS } });
+
+    const { container } = renderPostWorkout();
+    // Today `personal_records.map` and `meal_suggestions.map` are called on
+    // STRINGS and throw during render, so this line is the whole assertion: it
+    // fails on a blank document, which is exactly what the user gets.
+    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
+
+    expect(container.textContent).toMatch(/88%/);          // real metrics survive
+    expect(container.textContent).not.toMatch(/undefined/);
+
+    // `stretches` is behind the expander, so its throw needs the click — a mount
+    // assertion alone would leave that third site uncovered.
+    fireEvent.click(screen.getByText('Cool Down Stretches'));
+    expect(screen.getByText('Workout Complete!')).toBeTruthy();
+  });
+
+  it('a fully-scored workout still renders every real number (positive control)', async () => {
+    // Without this, every assertion above could be satisfied by rendering a dash
+    // unconditionally. Round 9 F2's lesson: a tile helper that covered two of
+    // three sites let a fabricated Level 1 through all three protections.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY } });
+
+    const { container } = renderPostWorkout();
+    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
+
+    expect(tileValues('Workout Time')).toEqual(['15m 0s', '15m 0s']);
+    expect(tileValues('Calories')).toEqual(['280 kcal', '280 kcal']);
+    expect(tileValues('Exercises')).toEqual(['3', '3']);
+    expect(tileValues('Avg Form')).toEqual(['88%']);
+    expect(tileValues('Form score')).toEqual(['88% (A)']);
+
+    const label = screen.getByText('Form Score').nextElementSibling;
+    const grade = screen.getByText('Form Score').parentElement.nextElementSibling;
+    expect(label.textContent).toBe('Great');     // 88 → the >= 80 arm, not >= 90
+    expect(grade.textContent).toBe('A');
+
+    // THE PAGE'S OWN DELTA, BY IDENTITY — and this assertion exists because its
+    // absence let a real regression through in this very commit. `xp_earned`
+    // survived the snake→camel rename at ONE of its two sites, so the page card
+    // read "—" for every workout while the PNG read "+70", and the whole suite
+    // stayed green: test 1's `/\+70/` is a whole-document sweep the SHARE CARD
+    // satisfies, and test 3's "—" is satisfied by a site that now reads undefined
+    // for every workout, passing for the wrong reason. That is round 1 F1's
+    // finding verbatim (a positive assertion satisfied by the card while the page
+    // went unexamined) and round 7 F3's rule (an assertion whose stated failure
+    // mode the code cannot produce is vacuous). It was found by grep, not by the
+    // tests — which is the argument for this line.
+    expect(screen.getByText('experience points').previousElementSibling.textContent).toBe('+70');
+
+    await waitFor(
+      () => expect(formBar(container).style.width).toBe(`${SUMMARY.form_accuracy}%`),
+      { timeout: 6000 },
+    );
+  }, 10000);
 });

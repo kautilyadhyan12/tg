@@ -10,7 +10,9 @@ import {
 import { workoutService } from '../api/workoutApi';
 import { useXp } from '../hooks/useXp';
 import {
-  formatLevel, formatNextLevel, formatXpEarned, formatXpFraction, xpBarWidth,
+  UNKNOWN, formGrade, formatLevel, formatNextLevel, formatPercent, formatXpEarned,
+  formatXpFraction, orUnknown, progressWidth, readSummaryView, totalTimeLabel,
+  workoutTimeLabel, workoutTimeLabelShort, xpBarWidth,
 } from '../api/gamificationApi';
 import toast from 'react-hot-toast';
 import html2canvas from 'html2canvas';
@@ -110,13 +112,10 @@ function ShareCard({ summary, xp, cardRef }) {
     day: 'numeric', month: 'short', year: 'numeric',
   });
 
-  const getGrade = (score) => {
-    if (score >= 90) return 'A+';
-    if (score >= 80) return 'A';
-    if (score >= 70) return 'B';
-    if (score >= 60) return 'C';
-    return 'D';
-  };
+  // `getGrade` stood here — a SECOND grade ladder with the same missing unknown
+  // arm as the page's, so an unscored workout printed "undefined% (D)" into the
+  // downloadable PNG. One exported `formGrade` now serves both surfaces; the
+  // card keeps its own fixed tile colour, so no colour is concatenated here.
 
   return (
     <div
@@ -168,10 +167,10 @@ function ShareCard({ summary, xp, cardRef }) {
       {/* Stats grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
         {[
-          { label: 'Workout Time', value: summary.active_seconds ? (summary.active_seconds < 60 ? `${summary.active_seconds}s` : `${Math.floor(summary.active_seconds / 60)}m ${Math.round(summary.active_seconds % 60)}s`) : (summary.duration_minutes < 60 ? `${summary.duration_minutes}m` : `${Math.floor(summary.duration_minutes/60)}h ${summary.duration_minutes%60}m`), icon: '⏱️', color: '#60a5fa' },
-          { label: 'Calories',   value: `${Math.round(summary.calories_burned)} kcal`, icon: '🔥', color: '#fb923c' },
-          { label: 'Exercises',  value: `${summary.exercises_count}`,                  icon: '💪', color: '#a78bfa' },
-          { label: 'Form score', value: `${summary.form_accuracy}% (${getGrade(summary.form_accuracy)})`, icon: '🎯', color: '#34d399' },
+          { label: 'Workout Time', value: workoutTimeLabelShort(summary.activeSeconds, summary.durationMinutes), icon: '⏱️', color: '#60a5fa' },
+          { label: 'Calories',   value: `${summary.caloriesBurned === null ? UNKNOWN : Math.round(summary.caloriesBurned)} kcal`, icon: '🔥', color: '#fb923c' },
+          { label: 'Exercises',  value: `${orUnknown(summary.exercisesCount)}`,         icon: '💪', color: '#a78bfa' },
+          { label: 'Form score', value: summary.formAccuracy === null ? UNKNOWN : `${summary.formAccuracy}% (${formGrade(summary.formAccuracy).grade})`, icon: '🎯', color: '#34d399' },
         ].map(({ label, value, icon, color }) => (
           <div key={label} style={{
             background: 'rgba(255,255,255,0.04)',
@@ -199,11 +198,11 @@ function ShareCard({ summary, xp, cardRef }) {
         }}>
           <span style={{ fontSize: 18 }}>⚡</span>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#fbbf24' }}>{formatXpEarned(summary.xp_earned)} XP</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#fbbf24' }}>{formatXpEarned(summary.xpEarned)} XP</div>
             <div style={{ fontSize: 11, color: '#6b7280' }}>Level {formatLevel(xp)}</div>
           </div>
         </div>
-        {summary.current_streak > 0 && (
+        {summary.currentStreak !== null && summary.currentStreak > 0 && (
           <div style={{
             flex: 1,
             background: 'rgba(249,115,22,0.08)',
@@ -213,7 +212,7 @@ function ShareCard({ summary, xp, cardRef }) {
           }}>
             <span style={{ fontSize: 18 }}>🔥</span>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#fb923c' }}>{summary.current_streak} days</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#fb923c' }}>{summary.currentStreak} days</div>
               <div style={{ fontSize: 11, color: '#6b7280' }}>Streak</div>
             </div>
           </div>
@@ -221,7 +220,7 @@ function ShareCard({ summary, xp, cardRef }) {
       </div>
 
       {/* PRs if any */}
-      {summary.personal_records?.length > 0 && (
+      {summary.personalRecords !== null && summary.personalRecords.length > 0 && (
         <div style={{
           background: 'rgba(234,179,8,0.06)',
           borderRadius: 12, padding: '10px 14px',
@@ -231,14 +230,11 @@ function ShareCard({ summary, xp, cardRef }) {
           <div style={{ fontSize: 11, color: '#facc15', fontWeight: 600, marginBottom: 6, letterSpacing: '0.08em' }}>
             🏆 PERSONAL RECORDS
           </div>
-          {summary.personal_records.slice(0, 3).map((pr, i) => {
-            const label = typeof pr === 'string' ? pr : `${pr.icon} ${pr.value} — ${pr.label}`;
-            return (
-              <div key={i} style={{ fontSize: 12, color: '#fde68a', marginBottom: 2 }}>
-                {label}
-              </div>
-            );
-          })}
+          {summary.personalRecords.slice(0, 3).map((pr, i) => (
+            <div key={i} style={{ fontSize: 12, color: '#fde68a', marginBottom: 2 }}>
+              {orUnknown(pr)}
+            </div>
+          ))}
         </div>
       )}
 
@@ -288,7 +284,20 @@ export default function PostWorkout() {
   useEffect(() => {
     if (!sessionId) { navigate('/dashboard'); return; }
     workoutService.getSummary(sessionId)
-      .then((res) => setSummary(res.data.summary))
+      .then((res) => {
+        const view = readSummaryView(res.data);
+        // A 200 carrying no `summary` OBJECT is a failed read, not a page. What
+        // stood here — `setSummary(res.data.summary)` — stored `undefined`
+        // without throwing, so this promise resolved, the catch never ran, and
+        // `if (!summary) return null` rendered a BLANK WHITE PAGE: no toast, no
+        // redirect, no text. The smoke rig's `empty200` state serves exactly that
+        // and its own comment says a white screen there is the known state
+        // (tools/mock-ml-backend.mjs:118). Throwing routes it into the failure
+        // path this page ALREADY has, rather than growing a second one worded
+        // differently for the same event.
+        if (view === null) throw new Error('summary missing from response');
+        setSummary(view);
+      })
       .catch((err) => {
         // Message only (R3.10) — the axios error carries `config`, i.e. the URL,
         // the request body and any headers. `useXp.js`, imported by this very
@@ -307,32 +316,15 @@ export default function PostWorkout() {
       .finally(() => setLoading(false));
   }, [sessionId]);
 
-  const formatTime = (mins) => {
-    if (mins < 1)  return '< 1 min';
-    if (mins < 60) return `${mins} min`;
-    return `${Math.floor(mins / 60)}h ${mins % 60}m`;
-  };
-
-  // Format an exact number of SECONDS as a compact duration. Used for the
-  // active-workout-time headline so a 29s or 1m37s span shows precisely
-  // rather than being rounded to whole minutes.
-  const formatSeconds = (totalSeconds) => {
-    if (totalSeconds == null) return '—';
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const s = Math.round(totalSeconds % 60);
-    if (h > 0) return `${h}h ${m}m`;
-    if (m === 0) return `${s}s`;
-    return `${m}m ${s}s`;
-  };
-
-  const getFormGrade = (score) => {
-    if (score >= 90) return { grade: 'A+', color: 'text-green-400',  label: 'Excellent' };
-    if (score >= 80) return { grade: 'A',  color: 'text-green-400',  label: 'Great' };
-    if (score >= 70) return { grade: 'B',  color: 'text-yellow-400', label: 'Good' };
-    if (score >= 60) return { grade: 'C',  color: 'text-orange-400', label: 'Needs work' };
-    return               { grade: 'D',  color: 'text-red-400',    label: 'Keep practicing' };
-  };
+  // `formatTime`, `formatSeconds` and `getFormGrade` used to live here. They are
+  // now `workoutTimeLabel` / `workoutTimeLabelShort` / `totalTimeLabel` /
+  // `formGrade` in gamificationApi.js — the same move, for the same reason, as
+  // `formatXpEarned` (T3 round 4 F9) and `syncTimezone` → userApi.js (DECISIONS
+  // 2026-07-21): as page-locals they were the formatters this package's tests
+  // could not reach, so their unknown-input behaviour went unasserted — and
+  // `getFormGrade` having NO unknown arm is precisely the defect this card fixes.
+  // `getFormGrade` also had a TWIN inside ShareCard (`getGrade`), which is why
+  // one ladder now serves both surfaces.
 
   const handleExport = async () => {
     if (!cardRef.current) return;
@@ -410,7 +402,7 @@ export default function PostWorkout() {
 
   if (!summary) return null;
 
-  const formInfo = getFormGrade(summary.form_accuracy);
+  const formInfo = formGrade(summary.formAccuracy);
 
   return (
     <div className="min-h-screen bg-dark-200 pb-12">
@@ -444,7 +436,11 @@ export default function PostWorkout() {
           >
             Amazing effort 💪 Keep the streak going!
           </motion.p>
-          {summary.current_streak > 0 && (
+          {/* `!== null` first, deliberately: an unknown streak is not a streak of
+              zero. The gate's OUTCOME is unchanged (undefined > 0 was already
+              false), but it now says which question it is asking, so a later edit
+              cannot read the absence as a definite "no streak". */}
+          {summary.currentStreak !== null && summary.currentStreak > 0 && (
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
@@ -454,7 +450,7 @@ export default function PostWorkout() {
             >
               <Flame className="w-4 h-4 text-orange-400" />
               <span className="text-orange-300 font-semibold text-sm">
-                {summary.current_streak} day streak!
+                {summary.currentStreak} day streak!
               </span>
             </motion.div>
           )}
@@ -471,10 +467,10 @@ export default function PostWorkout() {
           className="grid grid-cols-2 gap-4"
         >
           {[
-            { icon: Clock,    label: 'Workout Time',  value: summary.active_seconds ? formatSeconds(summary.active_seconds) : formatTime(summary.duration_minutes), color: 'text-blue-400',     bg: 'bg-blue-500/10', sublabel: summary.active_seconds ? `${formatTime(summary.duration_minutes)} total` : null, sublabelTip: 'Time you were actually moving through reps. The smaller "total" figure is the whole time on the workout screen, including standing between reps and camera setup.' },
-            { icon: Flame,    label: 'Calories',  value: `${summary.calories_burned} kcal`,    color: 'text-orange-400',   bg: 'bg-orange-500/10', sublabel: 'Estimate', sublabelTip: 'Calculated from your body weight and active movement time using standard MET values — not measured by a heart-rate sensor, so treat it as a planning estimate rather than an exact figure.' },
-            { icon: Dumbbell, label: 'Exercises', value: summary.exercises_count,               color: 'text-primary-400',  bg: 'bg-primary-500/10' },
-            { icon: Target,   label: 'Avg Form',  value: `${summary.form_accuracy}%`,           color: formInfo.color,      bg: 'bg-white/5' },
+            { icon: Clock,    label: 'Workout Time',  value: workoutTimeLabel(summary.activeSeconds, summary.durationMinutes), color: 'text-blue-400',     bg: 'bg-blue-500/10', sublabel: summary.activeSeconds !== null ? totalTimeLabel(summary.durationMinutes) : null, sublabelTip: 'Time you were actually moving through reps. The smaller "total" figure is the whole time on the workout screen, including standing between reps and camera setup.' },
+            { icon: Flame,    label: 'Calories',  value: `${orUnknown(summary.caloriesBurned)} kcal`, color: 'text-orange-400',   bg: 'bg-orange-500/10', sublabel: 'Estimate', sublabelTip: 'Calculated from your body weight and active movement time using standard MET values — not measured by a heart-rate sensor, so treat it as a planning estimate rather than an exact figure.' },
+            { icon: Dumbbell, label: 'Exercises', value: orUnknown(summary.exercisesCount),      color: 'text-primary-400',  bg: 'bg-primary-500/10' },
+            { icon: Target,   label: 'Avg Form',  value: formatPercent(summary.formAccuracy),    color: formInfo.color,      bg: 'bg-white/5' },
           ].map(({ icon: Icon, label, value, color, bg, sublabel, sublabelTip }) => (
             <div key={label} className="card text-center">
               <div className={`w-12 h-12 ${bg} rounded-xl
@@ -577,9 +573,14 @@ export default function PostWorkout() {
             </div>
           </div>
           <div className="mt-4 h-3 bg-dark-300 rounded-full overflow-hidden">
+            {/* `progressWidth` rather than a template: an unknown score leaves the
+                track EMPTY (a filled bar beside a "—" grade would be a claim
+                about form quality nobody measured), and it clamps 0-100, so an
+                out-of-range score can no longer overflow the track either. What
+                stood here rendered `width: "undefined%"`. */}
             <motion.div
               initial={{ width: 0 }}
-              animate={{ width: `${summary.form_accuracy}%` }}
+              animate={{ width: progressWidth(summary.formAccuracy) }}
               transition={{ delay: 0.6, duration: 1, ease: 'easeOut' }}
               className="h-full rounded-full bg-gradient-to-r
                          from-primary-600 to-primary-400"
@@ -587,7 +588,7 @@ export default function PostWorkout() {
           </div>
           <div className="flex justify-between text-xs text-gray-500 mt-1">
             <span>0%</span>
-            <span className="text-white font-medium">{summary.form_accuracy}%</span>
+            <span className="text-white font-medium">{formatPercent(summary.formAccuracy)}</span>
             <span>100%</span>
           </div>
         </motion.div>
@@ -612,7 +613,7 @@ export default function PostWorkout() {
               </div>
             </div>
             <div className="text-right">
-              <p className="text-yellow-400 font-bold text-2xl">{formatXpEarned(summary.xp_earned)}</p>
+              <p className="text-yellow-400 font-bold text-2xl">{formatXpEarned(summary.xpEarned)}</p>
               <p className="text-gray-500 text-xs">experience points</p>
             </div>
           </div>
@@ -641,7 +642,7 @@ export default function PostWorkout() {
         </motion.div>
 
         {/* ── Personal records ────────────────────────────────────────────── */}
-        {summary.personal_records?.length > 0 && (
+        {summary.personalRecords !== null && summary.personalRecords.length > 0 && (
           <motion.div
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -653,14 +654,11 @@ export default function PostWorkout() {
               <h3 className="text-white font-semibold">Personal Records</h3>
             </div>
             <div className="space-y-2">
-              {summary.personal_records.map((record, i) => {
-                const text = typeof record === 'string' ? record : `${record.icon} ${record.value} — ${record.label}`;
-                return (
-                  <div key={i} className="flex items-center gap-2 text-yellow-300 text-sm">
-                    <span>🏆</span>{text}
-                  </div>
-                );
-              })}
+              {summary.personalRecords.map((record, i) => (
+                <div key={i} className="flex items-center gap-2 text-yellow-300 text-sm">
+                  <span>🏆</span>{orUnknown(record)}
+                </div>
+              ))}
             </div>
           </motion.div>
         )}
@@ -694,11 +692,16 @@ export default function PostWorkout() {
             <h3 className="text-white font-semibold">Post-Workout Nutrition</h3>
           </div>
           <div className="space-y-3">
-            {summary.meal_suggestions?.map((meal, i) => (
+            {/* NULL is unknown, and it says so. `?.map` on a non-array threw and
+                blanked the whole page; an EMPTY array is a truthful "none" and
+                keeps its existing silent section (pre-existing, reported). */}
+            {summary.mealSuggestions === null ? (
+              <p className="text-gray-500 text-sm">Suggestions unavailable right now.</p>
+            ) : summary.mealSuggestions.map((meal, i) => (
               <div key={i} className="flex items-start justify-between p-3 bg-dark-200 rounded-xl">
                 <div>
-                  <p className="text-white text-sm font-medium">{meal.meal}</p>
-                  <p className="text-gray-500 text-xs mt-0.5">{meal.timing}</p>
+                  <p className="text-white text-sm font-medium">{orUnknown(meal.meal)}</p>
+                  <p className="text-gray-500 text-xs mt-0.5">{orUnknown(meal.timing)}</p>
                 </div>
                 <span className="text-green-400 text-xs bg-green-500/10
                                  px-2 py-1 rounded-full flex-shrink-0 ml-3">✓</span>
@@ -729,13 +732,15 @@ export default function PostWorkout() {
           </button>
           {showStretch && (
             <div className="mt-4 space-y-2">
-              {summary.stretches?.map((stretch, i) => (
+              {summary.stretches === null ? (
+                <p className="text-gray-500 text-sm">Stretches unavailable right now.</p>
+              ) : summary.stretches.map((stretch, i) => (
                 <div key={i} className="flex items-center gap-3 p-3 bg-dark-200 rounded-xl">
                   <div className="w-6 h-6 bg-red-500/20 rounded-full
                                   flex items-center justify-center flex-shrink-0">
                     <span className="text-red-300 text-xs font-bold">{i + 1}</span>
                   </div>
-                  <p className="text-gray-300 text-sm">{stretch}</p>
+                  <p className="text-gray-300 text-sm">{orUnknown(stretch)}</p>
                 </div>
               ))}
             </div>

@@ -212,6 +212,13 @@ export function progressWidth(v) {
   return v === null || v === undefined ? '0%' : `${Math.min(100, Math.max(0, v))}%`;
 }
 
+/** "88%", or the em dash when unknown. NOT `${orUnknown(v)}%`, which renders the
+ *  nonsense "—%" — the suffix belongs inside the unknown decision, not outside
+ *  it. */
+export function formatPercent(v) {
+  return Number.isFinite(v) ? `${v}%` : UNKNOWN;
+}
+
 /** "+50" for a workout's XP delta, or the em dash when the old backend sent no
  *  usable number — never "+0", which would claim the workout earned nothing.
  *
@@ -555,6 +562,138 @@ export function readStatsView(data) {
     // days" — beside a caption that correctly read "unavailable".
     activity: a && typeof a === 'object' && !Array.isArray(a) ? a : null,
     recent:   recent === null ? null : recent.map(readRecentWorkout),
+  };
+}
+
+// ── PostWorkout's summary payload (OWED.md:730) ───────────────────────────────
+// `GET /workouts/:id/summary`, the old backend's workout-complete response. It
+// reached the render COMPLETELY unparsed until 2026-07-30 — 34 bare reads across
+// nine fields — while the other three old payloads on these screens each got a
+// reader across rounds 4-7. Deferred by Kd's ruling at the PostWorkout XP card's
+// plan gate ("record as OWED, fix XP only", DECISIONS :1330); this is that line
+// being discharged. Lives HERE and not in `workoutApi.js` for the reason
+// `readStatsView`'s own JSDoc gives: that reader ALSO parses a `workoutService`
+// payload, and the text/finite/list primitives above are module-private.
+
+/** The five grade arms plus the one the page did not have.
+ *
+ *  THE DEFECT THIS DELETES: the page's local `getFormGrade` had no unknown arm,
+ *  so an absent `form_accuracy` fell through every threshold to the final return
+ *  — grade **D**, "Keep practicing", in RED. A definite bad-form verdict on a
+ *  workout nobody scored, shown after every workout. Verbatim round 5 F3's
+ *  defect ("an unknown accuracy painted RED by the <60 branch") one page along.
+ *
+ *  ONE ladder, deliberately: `ShareCard` carried a SECOND copy (`getGrade`) with
+ *  the same missing arm, so the downloadable PNG printed "undefined% (D)". Two
+ *  sites, one class — the one-of-N shape this project has recorded four times,
+ *  most recently at round 9 F1. The card keeps its own fixed tile colour, so no
+ *  `${color}NN` concatenation is introduced (round 9 F1's other half). */
+export function formGrade(score) {
+  if (!Number.isFinite(score)) {
+    return { grade: UNKNOWN, label: 'Not scored', color: 'text-gray-400' };
+  }
+  if (score >= 90) return { grade: 'A+', color: 'text-green-400',  label: 'Excellent' };
+  if (score >= 80) return { grade: 'A',  color: 'text-green-400',  label: 'Great' };
+  if (score >= 70) return { grade: 'B',  color: 'text-yellow-400', label: 'Good' };
+  if (score >= 60) return { grade: 'C',  color: 'text-orange-400', label: 'Needs work' };
+  return                  { grade: 'D',  color: 'text-red-400',    label: 'Keep practicing' };
+}
+
+/** Seconds as a compact duration. Shared by the page and the share card, which
+ *  spelled it identically in two places. */
+function secondsLabel(totalSeconds) {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = Math.round(totalSeconds % 60);
+  if (h > 0)    return `${h}h ${m}m`;
+  if (m === 0)  return `${s}s`;
+  return `${m}m ${s}s`;
+}
+
+/** Active time when we have it, total time when we do not, the em dash when
+ *  NEITHER is known — which is where `formatTime(undefined)` used to reach
+ *  `${Math.floor(NaN)}h ${NaN}m` and print **"NaNh NaNm"**, on the page and in
+ *  the PNG.
+ *
+ *  `active !== null`, NOT `active ? …`, and that is a fix folded in by Kd's
+ *  ruling of 2026-07-30: a genuine ZERO is falsy, so a workout with 0 active
+ *  seconds silently displayed the total-duration figure under a label promising
+ *  active time. Declared in DECISIONS rather than slipped in.
+ *
+ *  The two spellings of the MINUTES fallback are pre-existing and deliberately
+ *  preserved — the page says "35 min", the card says "35m". Changing either would
+ *  be an unrequested display change to a real value; what they now share is the
+ *  seconds path and the unknown rule, which is what could disagree dishonestly. */
+function workoutTime(active, minutes, minutesLabel) {
+  if (active !== null)  return secondsLabel(active);
+  if (minutes !== null) return minutesLabel(minutes);
+  return UNKNOWN;
+}
+export function workoutTimeLabel(active, minutes) {
+  return workoutTime(active, minutes, (m) => (m < 1 ? '< 1 min' : m < 60 ? `${m} min` : `${Math.floor(m / 60)}h ${m % 60}m`));
+}
+export function workoutTimeLabelShort(active, minutes) {
+  return workoutTime(active, minutes, (m) => (m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`));
+}
+/** The page's "N min total" sub-line, or NULL when there is no total to name —
+ *  never the string "undefined total". */
+export function totalTimeLabel(minutes) {
+  return minutes === null ? null : `${workoutTimeLabel(null, minutes)} total`;
+}
+
+/** One personal record as its display string, or NULL when the entry carries
+ *  nothing usable. The old backend sends either a bare string or
+ *  `{icon, value, label}` — the render already branched on `typeof`, which is the
+ *  evidence both shapes are real. A partly-known object still renders what it
+ *  has; `value` accepts a number OR a string because the payload has no contract
+ *  saying which. */
+export function readPersonalRecord(pr) {
+  if (typeof pr === 'string') return text(pr);
+  const icon  = text(pr?.icon);
+  const value = finite(pr?.value) ?? text(pr?.value);
+  const label = text(pr?.label);
+  if (icon === null && value === null && label === null) return null;
+  return `${icon === null ? '' : `${icon} `}${orUnknown(value)} — ${orUnknown(label)}`;
+}
+
+export function readMealSuggestion(m) {
+  return { meal: text(m?.meal), timing: text(m?.timing) };
+}
+
+/** `res.data` of `GET /workouts/:id/summary` → a view, or NULL when there is no
+ *  summary object in it at all.
+ *
+ *  NULL is the signal that fixes the blank white page: a 200 carrying `{}` had
+ *  `setSummary(res.data.summary)` store `undefined` WITHOUT throwing, so the
+ *  catch never ran — no toast, no redirect, no text. The rig documents that state
+ *  (tools/mock-ml-backend.mjs:118). Per-field below, so there is nothing for an
+ *  envelope gate to get wrong — round 4 F2's lesson, where `Boolean(stats?.stats)`
+ *  asserted the envelope and six sites then read fields off it with `?? 0`.
+ *
+ *  Only the NINE fields the page renders. `session_id`, `completed_at` and
+ *  `exercises` are deliberately absent: dead surface reads as protection and is
+ *  not (round 6, where deleting two unused flags also deleted five assertions). */
+export function readSummaryView(data) {
+  const s = data?.summary;
+  if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
+  const records = list(s.personal_records);
+  const meals   = list(s.meal_suggestions);
+  const stretch = list(s.stretches);
+  return {
+    activeSeconds:   finite(s.active_seconds),
+    durationMinutes: finite(s.duration_minutes),
+    caloriesBurned:  finite(s.calories_burned),
+    formAccuracy:    finite(s.form_accuracy),
+    exercisesCount:  finite(s.exercises_count),
+    currentStreak:   finite(s.current_streak),
+    xpEarned:        finite(s.xp_earned),
+    // A non-array with a positive `length` — a bare string — used to reach
+    // `.map` and throw, blanking the WHOLE page: `personal_records?.length > 0`
+    // is true for a non-empty string and there is no ErrorBoundary anywhere in
+    // apps/web. Round 6 F2's class, three sites along.
+    personalRecords: records === null ? null : records.map(readPersonalRecord),
+    mealSuggestions: meals   === null ? null : meals.map(readMealSuggestion),
+    stretches:       stretch === null ? null : stretch.map((v) => text(v)),
   };
 }
 

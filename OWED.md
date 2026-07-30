@@ -728,7 +728,29 @@ then; none may be hidden or reduced to close the gap.
       together rather than twice.
 
 - [ ] 🟡 **`PostWorkout.jsx`'s `summary` payload is UNPARSED — the class rounds
-      4-7 closed for the other three old-backend payloads.** Reported not fixed
+      4-7 closed for the other three old-backend payloads.**
+      **BUILT 2026-07-30 — TICK WITHHELD pending Kd's browser SMOKE and a
+      fresh-chat T3**, which is the standard the previous PostWorkout card applied
+      to itself (DECISIONS :1348) rather than one relaxed for this card.
+      What landed: `readSummaryView` + `formGrade` + the time/percent formatters in
+      `gamificationApi.js`, beside `readStatsView` — which parses a
+      `workoutService` payload too, so the location is precedent and not a new
+      pattern. All 34 bare reads across 9 fields go through it; ONE grade ladder
+      serves the page AND the share card, so the PNG can no longer print
+      "undefined% (D)"; a 200 with no `summary` key takes the page's EXISTING
+      toast+redirect instead of rendering a blank white screen; a list arriving as
+      a string can no longer reach `.map` and blank the page. web **269/270** (the
+      1 is the `syncClient` env quirk on its own line below), **+21 tests**,
+      **13 mutations / 13 RED**, lint parity measured at HEAD and after. Smoke
+      steps at `RUNBOOK/smoke-postworkout-summary.md`; new `unscored` rig state.
+      Full entry at DECISIONS :2444.
+      **THE LESSON, recorded because it nearly shipped:** `xp_earned` survived the
+      snake→camel rename at ONE of two sites, so the page's XP card read "—" for
+      every workout while the PNG read "+70" — and all 7 render tests stayed
+      GREEN, because a whole-document `/\+70/` sweep is satisfied by the SHARE
+      CARD (round 1 F1 verbatim). Found by grep, not by the tests. The missing
+      identity assertion now exists and its mutation is RED.
+      ORIGINAL ENTRY FOLLOWS. Reported not fixed
       by the PostWorkout XP repoint (2026-07-27) under R1.1, and Kd ruled
       "record as OWED, fix XP only" at that card's plan gate: the named task was
       the XP curve, and adding a fourth reader would have doubled a card on the
@@ -1272,6 +1294,39 @@ then; none may be hidden or reduced to close the gap.
       `Achievements.jsx:5` unused `ChevronRight`) are pre-existing on master and
       correctly untouched per R1.1. Either lint web and fix the 67, or change the
       DoD wording so the box stops asserting something nobody checked.
+- [ ] ⚪ **PostWorkout prints calories unrounded while its share card rounds
+      them.** One workout can read `280.4 kcal` on screen and `280 kcal` in the
+      downloadable PNG — two surfaces, one number. Pre-existing (the page never
+      rounded, the card always did); found while writing the summary reader
+      2026-07-30 and Kd chose **report only** at that card's gate, since rounding
+      the page would be an unrequested display change to a real value. Both sites
+      ARE now honest about an ABSENT value ("— kcal"). Close it by picking one
+      rounding rule for both, in whichever card next touches that screen's copy.
+- [ ] ⚪ **An EMPTY meal-suggestion or stretch list renders a heading with nothing
+      under it.** Pre-existing, and distinct from the defect the summary reader
+      closed: a list that ARRIVED empty is a truthful "none", so it is not a
+      fabrication — but "Post-Workout Nutrition" over blank space reads as broken.
+      The UNKNOWN case now says "unavailable right now" (2026-07-30); the empty
+      case was left alone because writing empty-state copy is a product decision,
+      not a defect fix. Same family as round 6 F6 / round 7 F8's empty-list states
+      on the other three payloads.
+- [ ] 🟡 **`RUNBOOK/cutover.md` is STALE — its checkboxes must not be quoted as
+      fact.** Flagged by `DECISIONS-INDEX.md` when it was written (2026-07-30) and
+      command-verified the same day: `cutover.md:107` still reads
+      `- [ ] XP/levels display (GamificationStrip, Achievements)` although that
+      card CLOSED on 2026-07-30 and both 🔴 lines for it above are ticked. The file
+      states no verification date; the newest past date anywhere in it is
+      2026-07-26 (`cutover.md:108`, the XP API-half merge — `2026-08-16` also
+      appears but is the future Groq decommission deadline). So it predates THREE
+      card closures, and `grep -ci postworkout` over it returns **0** although that
+      card closed 2026-07-28.
+      It matters because CLAUDE.md's grounding rule sends every
+      migration-affecting card to cutover.md's prerequisites, and the P2.8 gate is
+      "every owed endpoint exists" — a checklist that under-reports what is DONE
+      reads as work still outstanding, and one that over-reported would be worse.
+      Given a line here rather than fixed in passing because re-verifying the whole
+      file against OWED.md is its own pass, not a one-checkbox edit. Closes by
+      re-verifying every box against OWED.md and re-dating the file.
 
 - [ ] ⚪ **Onboarding wizard's native unit dropdowns → the shared `Select`.** A
       native `<select>` popup is OS-drawn and its hovered row uses the system

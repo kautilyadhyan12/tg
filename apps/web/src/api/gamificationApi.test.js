@@ -14,7 +14,9 @@ import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
 import mlApi from './mlApi';
 import {
-  UNKNOWN, difficultyColor, difficultyStyle, earnedBadgeCount, weekDates, formatCount, formatFraction, formatLevel, formatXpEarned,
+  UNKNOWN, difficultyColor, difficultyStyle, earnedBadgeCount, weekDates, formatCount, formatFraction, formatLevel, formatPercent, formatXpEarned,
+  formGrade, readMealSuggestion, readPersonalRecord, readSummaryView,
+  totalTimeLabel, workoutTimeLabel, workoutTimeLabelShort,
   formatXpProgress, formatXpTotal, gamificationService, listState,
   oldPayloadState, orUnknown, progressWidth, readBadge, readChallenge, tierStyle, xpBarWidth,
   readLeaderboardEntry, readLeaderboardView, readOverviewView,
@@ -936,4 +938,203 @@ describe('old-payload state is a pure function, so all four states are testable'
   // testing a path no component takes — coverage on dead code, which reads as
   // protection and is not. The same question is asked directly of the reader's
   // output above (`readOverviewView nulls a list it cannot enumerate`).
+});
+
+// ── PostWorkout's summary payload (OWED.md:730) ────────────────────────────────
+// The reader and formatters replacing 34 bare reads across nine fields. The render
+// tests in xpDisplay.render.test.jsx are the protection of record for what reaches
+// the SCREEN (round 4 F1's ruling); these pin the logic that decides whether a
+// value is knowable at all, which is the part a render test cannot enumerate.
+describe('formGrade — five known arms and the one the page did not have', () => {
+  it('grades a real score exactly as the deleted page-local did', () => {
+    expect(formGrade(90)).toEqual({ grade: 'A+', color: 'text-green-400',  label: 'Excellent' });
+    expect(formGrade(88)).toEqual({ grade: 'A',  color: 'text-green-400',  label: 'Great' });
+    expect(formGrade(70)).toEqual({ grade: 'B',  color: 'text-yellow-400', label: 'Good' });
+    expect(formGrade(60)).toEqual({ grade: 'C',  color: 'text-orange-400', label: 'Needs work' });
+    expect(formGrade(59)).toEqual({ grade: 'D',  color: 'text-red-400',    label: 'Keep practicing' });
+    // Every arm is a `>=`, so an off-by-one here silently re-grades every workout.
+    expect(formGrade(89).grade).toBe('A');
+    expect(formGrade(79).grade).toBe('B');
+    expect(formGrade(69).grade).toBe('C');
+    expect(formGrade(0).grade).toBe('D');       // a real zero IS a D, not unknown
+  });
+
+  it('an unknown score is NOT a D', () => {
+    // THE DEFECT. Every value here fell through to the final return before this
+    // function existed — grade D, "Keep practicing", in RED, on a workout nobody
+    // scored. `undefined >= 60` is false and so is every other comparison, which
+    // is why an unguarded ladder structurally cannot say "we were not told".
+    for (const v of [null, undefined, NaN, Infinity, -Infinity, '88', {}]) {
+      expect(formGrade(v)).toEqual({ grade: UNKNOWN, label: 'Not scored', color: 'text-gray-400' });
+    }
+  });
+});
+
+describe('workout time — the "NaNh NaNm" case, and a real zero', () => {
+  it('prefers active seconds, falls back to total minutes', () => {
+    expect(workoutTimeLabel(900, 35)).toBe('15m 0s');
+    expect(workoutTimeLabel(29, 1)).toBe('29s');
+    expect(workoutTimeLabel(3700, 62)).toBe('1h 1m');
+    expect(workoutTimeLabel(null, 35)).toBe('35 min');
+    expect(workoutTimeLabel(null, 0)).toBe('< 1 min');
+    expect(workoutTimeLabel(null, 95)).toBe('1h 35m');
+  });
+
+  it('neither known reads the dash, never "NaNh NaNm"', () => {
+    // What `formatTime(undefined)` produced: both `< 1` and `< 60` are false for
+    // undefined, so it reached `${Math.floor(NaN)}h ${NaN}m` — on the page AND in
+    // the downloadable PNG.
+    expect(workoutTimeLabel(null, null)).toBe(UNKNOWN);
+    expect(workoutTimeLabelShort(null, null)).toBe(UNKNOWN);
+  });
+
+  it('ZERO active seconds shows as 0s, not as the total duration', () => {
+    // The fold-in Kd ruled on 2026-07-30. The old check was `active ? … : …` and
+    // 0 is falsy, so a workout with no active movement silently displayed the
+    // TOTAL figure under a label promising active time.
+    expect(workoutTimeLabel(0, 35)).toBe('0s');
+    expect(workoutTimeLabelShort(0, 35)).toBe('0s');
+  });
+
+  it('page and card share the seconds path and differ only on minutes', () => {
+    // The minutes spellings are pre-existing and deliberately preserved: changing
+    // either would be an unrequested display change to a real value. What they
+    // MUST agree on is the seconds path and the unknown rule.
+    expect(workoutTimeLabelShort(900, 35)).toBe(workoutTimeLabel(900, 35));
+    expect(workoutTimeLabelShort(null, 35)).toBe('35m');
+    expect(workoutTimeLabel(null, 35)).toBe('35 min');
+  });
+
+  it('the "total" sub-line is NULL rather than "undefined total"', () => {
+    expect(totalTimeLabel(35)).toBe('35 min total');
+    expect(totalTimeLabel(null)).toBe(null);
+  });
+});
+
+describe('formatPercent — the suffix lives inside the unknown decision', () => {
+  it('renders a real percentage, and a BARE dash when unknown', () => {
+    expect(formatPercent(88)).toBe('88%');
+    expect(formatPercent(0)).toBe('0%');            // a real zero is a real zero
+    // Not "—%", which is what `${orUnknown(v)}%` at the call site would produce.
+    for (const v of [null, undefined, NaN, Infinity, '88']) {
+      expect(formatPercent(v)).toBe(UNKNOWN);
+    }
+  });
+});
+
+describe('readPersonalRecord — both shapes the old backend sends', () => {
+  it('passes a usable string through and nulls an unusable one', () => {
+    expect(readPersonalRecord('Best form accuracy!')).toBe('Best form accuracy!');
+    expect(readPersonalRecord('')).toBe(null);
+    expect(readPersonalRecord('   ')).toBe(null);
+  });
+
+  it('composes the object shape, and renders what it has when partly known', () => {
+    expect(readPersonalRecord({ icon: '🔥', value: 12, label: 'reps' })).toBe('🔥 12 — reps');
+    expect(readPersonalRecord({ value: '12kg', label: 'lift' })).toBe('12kg — lift');
+    expect(readPersonalRecord({ icon: '🔥', label: 'reps' })).toBe(`🔥 ${UNKNOWN} — reps`);
+    expect(readPersonalRecord({ icon: '🔥', value: 12 })).toBe(`🔥 12 — ${UNKNOWN}`);
+  });
+
+  it('nulls an entry carrying nothing usable', () => {
+    for (const v of [null, undefined, {}, 42, { icon: '' }]) {
+      expect(readPersonalRecord(v)).toBe(null);
+    }
+  });
+});
+
+describe('readSummaryView — NULL is the signal that fixes the blank page', () => {
+  const full = {
+    summary: {
+      active_seconds: 900, duration_minutes: 35, calories_burned: 280,
+      form_accuracy: 88, exercises_count: 3, current_streak: 3, xp_earned: 70,
+      personal_records: ['Best form accuracy!'],
+      meal_suggestions: [{ meal: 'Paneer bhurji', timing: 'within 45 min' }],
+      stretches: ['Hamstring stretch'],
+    },
+  };
+
+  it('returns null when there is no summary OBJECT at all', () => {
+    // The empty-200 case. `{}` is a 200 the old backend really sends, and
+    // `setSummary(res.data.summary)` stored undefined from it WITHOUT throwing, so
+    // the page's catch never ran and it rendered a blank white screen.
+    for (const v of [{}, null, undefined, { summary: null }, { summary: 'x' }, { summary: [] }]) {
+      expect(readSummaryView(v)).toBe(null);
+    }
+  });
+
+  it('reads every rendered field, and nothing that is not rendered', () => {
+    // `toEqual` on the WHOLE object is what keeps dead surface out: adding
+    // session_id / completed_at / exercises here would fail it. Round 6's lesson —
+    // unused surface reads as protection and is not.
+    expect(readSummaryView(full)).toEqual({
+      activeSeconds: 900, durationMinutes: 35, caloriesBurned: 280,
+      formAccuracy: 88, exercisesCount: 3, currentStreak: 3, xpEarned: 70,
+      personalRecords: ['Best form accuracy!'],
+      mealSuggestions: [{ meal: 'Paneer bhurji', timing: 'within 45 min' }],
+      stretches: ['Hamstring stretch'],
+    });
+  });
+
+  it('nulls each field independently — no envelope gate to get wrong', () => {
+    // Round 4 F2: `Boolean(stats?.stats)` asserted the ENVELOPE and six sites then
+    // read fields off it with `?? 0`, so a 200 carrying `{stats:{}}` printed
+    // "0 workouts / 0h / 0 kcal" as fact. Per-field means that cannot recur here.
+    expect(readSummaryView({ summary: {} })).toEqual({
+      activeSeconds: null, durationMinutes: null, caloriesBurned: null,
+      formAccuracy: null, exercisesCount: null, currentStreak: null, xpEarned: null,
+      personalRecords: null, mealSuggestions: null, stretches: null,
+    });
+    const v = readSummaryView({ summary: { form_accuracy: 88, calories_burned: 'lots' } });
+    expect(v.formAccuracy).toBe(88);
+    expect(v.caloriesBurned).toBe(null);            // a string is not a number
+  });
+
+  it('nulls a list that is not a list, instead of letting it reach .map', () => {
+    // Round 6 F2's class, three sites along. A non-empty STRING passes
+    // `?.length > 0`, then `.map is not a function` throws during render and
+    // blanks the whole page — there is no ErrorBoundary anywhere in apps/web.
+    const v = readSummaryView({
+      summary: {
+        personal_records: 'Best form accuracy!',
+        meal_suggestions: 'Paneer bhurji',
+        stretches: 'Hamstring stretch',
+      },
+    });
+    expect(v.personalRecords).toBe(null);
+    expect(v.mealSuggestions).toBe(null);
+    expect(v.stretches).toBe(null);
+    // An EMPTY list is a truthful "none" and stays a list — the round 6 F1
+    // inverse, where a real empty result got denied as "unavailable".
+    const e = readSummaryView({ summary: { personal_records: [], stretches: [] } });
+    expect(e.personalRecords).toEqual([]);
+    expect(e.stretches).toEqual([]);
+  });
+
+  it('guards the ELEMENTS of every list, not just the list', () => {
+    // Round 7 F7: `earnedBadgeCount([null])` threw one layer inside the fix for
+    // the list-level version of the same bug. Same shape, checked here first.
+    const v = readSummaryView({
+      summary: {
+        personal_records: [null, 42, {}],
+        meal_suggestions: [null, { meal: 'Dal' }],
+        stretches: [null, 7, 'Quad stretch'],
+      },
+    });
+    expect(v.personalRecords).toEqual([null, null, null]);
+    expect(v.mealSuggestions).toEqual([
+      { meal: null, timing: null },
+      { meal: 'Dal', timing: null },
+    ]);
+    expect(v.stretches).toEqual([null, null, 'Quad stretch']);
+  });
+});
+
+describe('readMealSuggestion', () => {
+  it('reads both fields or nulls them', () => {
+    expect(readMealSuggestion({ meal: 'Dal', timing: 'now' })).toEqual({ meal: 'Dal', timing: 'now' });
+    expect(readMealSuggestion({ meal: 'Dal' })).toEqual({ meal: 'Dal', timing: null });
+    expect(readMealSuggestion(null)).toEqual({ meal: null, timing: null });
+    expect(readMealSuggestion({ meal: 42 })).toEqual({ meal: null, timing: null });
+  });
 });

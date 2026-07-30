@@ -34,6 +34,13 @@ const STATES = [
   'partial',     // elements missing metrics/difficulty — rounds 5 F3, 6 F7, 7 F2;
                  //   also a workout summary with no `xp_earned` (PostWorkout)
   'badRecs',     // recommendations is a STRING, not a list — round 6 F2
+  'unscored',    // workout summary with the METRICS absent and every list a
+                 //   STRING — the state OWED.md:730 was about. Before the
+                 //   2026-07-30 reader this printed grade D / "Keep practicing"
+                 //   in red for a workout nobody scored, "NaNh NaNm" for the
+                 //   time, "undefined kcal", and the string-shaped lists blanked
+                 //   the whole page at `.map`. Everything else 200s, so this
+                 //   state isolates the summary payload.
   'lbOnly',      // overview fails, leaderboard 200s — round 4 F4
   'emptyLists',  // everything 200s with empty lists — round 6 F6
   'healthy',     // full, well-formed payloads — THE CONTROL. Run it first.
@@ -102,6 +109,25 @@ const SUMMARY_FULL = {
  *  first version of this card's own test). */
 const SUMMARY_NO_XP_EARNED = (({ xp_earned, ...rest }) => rest)(SUMMARY_FULL);
 
+/** The `unscored` state's payload: every METRIC absent, and every LIST arriving
+ *  as a bare string instead of an array. Both halves of OWED.md:730 in one state,
+ *  because both are properties of this one payload and a smoke that had to switch
+ *  states between them would be two click-throughs for one card.
+ *
+ *  A string rather than `{}` for the lists on purpose: `personal_records?.length
+ *  > 0` is TRUE for a non-empty string and then `.map` is not a function, which
+ *  is what actually blanked the page. `{}` has no `length`, so it merely hid the
+ *  section and would make this state look milder than the real defect. */
+const SUMMARY_UNSCORED = {
+  session_id:       'smoke-1',
+  completed_at:     new Date().toISOString(),
+  xp_earned:        70,
+  current_streak:   3,
+  personal_records: 'Best form accuracy!',
+  meal_suggestions: 'Paneer bhurji + rice',
+  stretches:        'Hamstring stretch, 30s each side',
+};
+
 function payloadFor(path) {
   // The summary gets its own branch BEFORE the per-state switch, because every
   // 200-serving state needs an answer here: PostWorkout's own catch toasts and
@@ -124,6 +150,7 @@ function payloadFor(path) {
     // KNOWN state, not a broken rig. Every other state renders the page.
     if (state === 'empty200') return {};
     if (state === 'partial')  return { summary: SUMMARY_NO_XP_EARNED };
+    if (state === 'unscored') return { summary: SUMMARY_UNSCORED };
     return { summary: SUMMARY_FULL };
   }
 
@@ -173,6 +200,11 @@ function payloadFor(path) {
       if (path.includes('/recommendations')) return { recommendations: [] };
       if (path.includes('/workouts/stats')) return { stats: { total_workouts: 0, total_minutes: 0, total_calories: 0, weekly_workouts: 0, streak: 0 }, activity: {}, recent_workouts: [] };
       return {};
+    // `unscored` differs from `healthy` ONLY in the workout summary, which is
+    // branched on above — so it falls through to healthy's payloads here on
+    // purpose. That isolation is the point: anything wrong on the PostWorkout
+    // screen in this state belongs to the summary payload and nothing else.
+    case 'unscored':
     case 'healthy':
       if (path.includes('/gamification/overview')) return { badges: { all: BADGES_FULL, total_count: 40 }, challenges: { active: CHALLENGES_FULL } };
       if (path.includes('/gamification/leaderboard')) return LEADERBOARD_FULL;

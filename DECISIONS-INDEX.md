@@ -49,6 +49,12 @@ mid-file: re-derive them with
   last review round; no round 12. Includes the recorded lesson that **eleven
   rounds was a fault of the CARD's scope, not the code** — a repoint touching
   more than one screen's payload is more than one card.
+- **:2398** — 2026-07-30 — **this file's READ PATH is split** and this index is
+  the instrument: grounding = this index IN FULL + §1/§2 read in the DECISIONS.md
+  ORIGINAL + the entries the task touches (CLAUDE.md:51-89). Coverage
+  command-verified the same day: 97 headings, 72 cited by exact line, 25 inside
+  declared ranges, **none unmapped**. The index is a POINTER — cite DECISIONS.md,
+  never this file.
 
 Standing rules that live in CLAUDE.md, not here — the no-removal rule, the
 deferral rule (every deferral gets an OWED.md line in the same commit), the
@@ -95,6 +101,11 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:2444** — 2026-07-30 — PostWorkout's summary payload gets a reader
+  (`readSummaryView`, `formGrade`). Kd's rulings in it: "Not scored" copy, the
+  empty-200 toast+redirect, the zero-active-seconds fold-in, calories rounding
+  report-only. **Standing lesson: a whole-document sweep is satisfied by the SHARE
+  CARD** — a rename regression stayed green through 7 render tests because of it.
 
 ## 5 · DPDP / privacy
 

@@ -2394,3 +2394,140 @@ gate). Its own recommendation: fix the nine, add one OWED line, tick.
   separate deferral. And it does not apply to any OTHER card — the PostWorkout
   precedent and this one are both per-card rulings made on measured evidence
   about that card, never a general licence to stop reviewing.
+
+## 2026-07-30 — this file's READ PATH split into an index (recorded after the fact)
+
+- (THE RULING, Kd 2026-07-30) CLAUDE.md's GROUNDING rule no longer requires
+  reading the ENTIRE DECISIONS.md. It now requires `DECISIONS-INDEX.md` IN FULL,
+  plus this file's §1 (standing rules) and §2 (open questions) entries read in the
+  ORIGINAL every session whatever the task, plus the full original entries the
+  task touches. Amended at CLAUDE.md:51-89; the index shipped in the same commit,
+  `dd07856`.
+- (WHY — measured, not asserted) The rule was right when it was written and became
+  impossible to obey. This file is 2,396 lines and the Read tool refuses it
+  outright: "File content (125146 tokens) exceeds maximum allowed tokens (25000)".
+  A chat that obeyed it literally would spend roughly half its working context
+  before doing any work, and would then start losing the early part of its own
+  session — so the rule as written produced either a paralysed chat or a false
+  claim of grounding. About 1,150 lines, 48% of the file, are ONE card's eleven
+  review rounds, closed the same morning.
+- (THE TRIGGER) A fresh chat hit this on its FIRST message on 2026-07-30: asked
+  "what next", it could not name a card without being grounded and could not
+  ground without spending the context, so it stopped and put the choice to Kd
+  rather than claim a grounding it had not done.
+- (WHAT IS NOT WEAKENED) The rule's PURPOSE is untouched — no chat may recommend,
+  plan or decide anything while ignorant of an existing ruling. The index is one
+  line per ruling, so nothing is hidden from a chat, only deferred. **It is a
+  pointer, never a citation:** quote this file by line (V2), and if the two ever
+  disagree the ORIGINAL wins and the index is the thing to fix.
+- (THE PRECEDENT) This is the SECOND time this file's read path has been split for
+  the same reason. `OWED.md` exists because it could not answer "what is still to
+  do?"; the index exists because it can no longer answer "what has already been
+  decided?".
+- (COVERAGE — command-verified 2026-07-30, twice, because the first run's `comm`
+  warned "input is not in sorted order" and its counts could not be trusted) 97
+  `##` headings in this file; the index cites 72 by EXACT line and the remaining
+  25 all fall inside ranges it declares (:493-:538, :640-:730, :774-:866,
+  :868-:916, :1043-:1105, :1252-:1753). Uncovered: NONE. The index cites 82
+  distinct line anchors in total — the other ten point at bullets inside entries
+  rather than at headings, which is why "82 headings" would be the wrong number
+  and was corrected before it reached this file.
+- (RECORDED LATE, and that is the finding worth keeping) `dd07856` changed only
+  CLAUDE.md and the new index. It wrote NO entry here, though amending a standing
+  rule is the largest kind of judgment call the DoD's "DECISIONS.md updated (if
+  judgment call)" box exists for — so for a few hours the reasoning for a rule
+  binding every future session lived only in a commit message, which is not the
+  case-law record. Caught by the next chat's verification pass (S5: inherited work
+  is unverified work) and closed by this entry, with its index line added in the
+  SAME commit per the index's own maintenance rule.
+
+## 2026-07-30 — PostWorkout's summary payload gets a reader (OWED.md:730)
+
+Web-only on `web-repoint`: no API change, no migration, no new dependency, no new
+route. Discharges the OWED line Kd created at the PostWorkout XP card's own plan
+gate ("record as OWED, fix XP only", the entry at :1330).
+
+- (SCOPE — ONE screen, ONE payload, deliberately) THE CAP's recorded lesson
+  (:2158) is that eleven rounds on the XP card was a fault of the CARD: it bundled
+  nine screens' payloads into one unit of work. This card is scoped to
+  `GET /workouts/:id/summary` and the one screen that reads it.
+- (THE COUNT, re-derived rather than inherited) OWED:730 claimed 34 bare reads
+  across nine fields. Measured this session: 40 `summary.*` occurrences, minus 3
+  comment-only (`current_xp` ×2, `current_level` ×1) and 3 already-guarded
+  (`xp_earned`) = 34 across 9 fields. The OWED line was accurate.
+- (WHERE THE READER LIVES, and why not `workoutApi.js`) In `gamificationApi.js`
+  beside `readStatsView` — whose own JSDoc says it parses `workoutService.getStats()`,
+  i.e. a `workoutService` payload's reader ALREADY lives in that file. The
+  `text/finite/list/bool` primitives are module-private there, so the alternative
+  meant exporting them or writing a second set. OWED:730 named this location.
+- (WHAT WAS RENDERING) Predicted by reading the file, then PROVEN by tests written
+  red first (R9.5): `getFormGrade(undefined)` fell through every threshold to the
+  final return — grade **D**, "Keep practicing", in RED, on a workout nobody
+  scored (round 5 F3's defect, one page along); `formatTime(undefined)` reached
+  `${Math.floor(NaN)}h ${NaN}m` = **"NaNh NaNm"** on the page AND in the PNG;
+  calories printed **"undefined kcal"** on the page and **"NaN kcal"** in the
+  card; `exercises_count` rendered as NOTHING, a blank tile; and a list arriving
+  as a bare string passed `?.length > 0` and then threw at `.map`, **blanking the
+  whole page** (no ErrorBoundary anywhere in apps/web — round 6 F2's class, three
+  sites along).
+- (THE BLANK WHITE PAGE) A 200 with no `summary` key had
+  `setSummary(res.data.summary)` store `undefined` WITHOUT throwing, so the catch
+  never ran: no toast, no redirect, no text. `readSummaryView` returns NULL for
+  that payload and the page throws into its EXISTING failure path, rather than
+  growing a second one worded differently for the same event. Kd chose this over
+  an on-page failure state (2026-07-30) because it is the smallest change and the
+  file already handles a failed read exactly that way.
+- (ONE GRADE LADDER) `ShareCard` carried a SECOND ladder (`getGrade`) with the same
+  missing arm, so the PNG printed "undefined% (D)". One exported `formGrade` now
+  serves both; the card keeps its own fixed tile colour, so no colour is
+  concatenated (round 9 F1's other half). The fixed class of "one of N sites" is
+  what this project has recorded four times.
+- (COPY, Kd chose 2026-07-30) An unknown score reads grade `—` with the caption
+  **"Not scored"** in grey.
+- (DECLARED BEHAVIOUR CHANGE, Kd ruled 2026-07-30 to fold it in) The old check was
+  `summary.active_seconds ? … : …`, and 0 is FALSY — so a workout with zero active
+  seconds silently displayed the TOTAL-duration figure under a label promising
+  active time. Now `active !== null`, and a real 0 reads `0s`. Inside an expression
+  this card already rewrote; unit-tested both ways.
+- (PRESERVED ON PURPOSE) The page says "35 min" where the card says "35m" in the
+  minutes fallback. Pre-existing; changing either would be an unrequested display
+  change to a REAL value. What the two now share is the seconds path and the
+  unknown rule — the parts that could disagree dishonestly. Asserted as an
+  equality, not as two literals.
+- (**A REGRESSION THIS COMMIT SHIPPED AND THE TESTS LET THROUGH**) `xp_earned`
+  survived the snake→camel rename at ONE of its two sites, so the page's XP card
+  read `—` for every workout while the PNG read `+70` — and all 7 render tests
+  stayed GREEN. Both reasons are this project's own recorded classes: test 1's
+  `/\+70/` is a whole-document sweep the SHARE CARD satisfies (round 1 F1
+  verbatim — a positive assertion satisfied by the card while the page went
+  unexamined), and test 3's `—` was satisfied by a site now reading undefined for
+  every workout, i.e. passing for the wrong reason. **Found by grep, not by the
+  tests.** Fixed, and the missing identity assertion added; mutation M10 restores
+  the regression and is RED, so the gap is closed rather than just the instance.
+- (PROVE) web **269 passed / 1 failed (270)** — the 1 is the known `syncClient`
+  VITE_API_URL env quirk (its own OWED line, CI-green). +21 tests (4 render, 17
+  unit), counted from the diff. `vite build` ✓.
+  **13 mutations, 13 RED, zero survivors** — including M10 above and M12, a
+  control proving the positive-control test can fail. The harness re-snapshots
+  unconditionally and md5-guards every sed, because a sed that fails to match
+  leaves the source pristine and would be recorded as a surviving mutant; md5s
+  confirmed byte-identical restoration afterwards.
+  Lint PARITY measured both ways rather than ticked: the two source files at HEAD
+  produce 5 problems (4 errors, 1 warning) and the five touched files produce the
+  same 5 after — all of them in `Confetti`'s untouched `Math.random` and the
+  pre-existing `exhaustive-deps` warning. Package-wide 67 errors / 9 warnings, the
+  same figure rounds A/B/9/10/11 each measured.
+- (SMOKE RIG EXTENDED) New `unscored` state in `apps/web/tools/mock-ml-backend.mjs`
+  serving metrics-absent + string-shaped lists, falling through to `healthy` for
+  every other endpoint so anything wrong on that screen belongs to this payload.
+  Steps at `RUNBOOK/smoke-postworkout-summary.md`, with the `healthy` control
+  FIRST — a fix that dashed out real numbers is the one outcome this card must not
+  have, and only a control can catch it.
+- (OWED TICK WITHHELD) The line stays open until Kd's browser smoke AND a
+  fresh-chat T3 both pass — the standard the previous PostWorkout card applied to
+  itself (:1348), not relaxed for this one.
+- (REPORTED, NOT FIXED — R1.1, both given OWED lines in this commit) The page
+  prints calories unrounded while the card rounds them, so one workout can read
+  280.4 and 280; Kd chose "report only" on 2026-07-30. And an EMPTY meal/stretch
+  list still renders a heading with nothing under it — a truthful empty section,
+  but poor, and adding copy is a product decision rather than a defect fix.

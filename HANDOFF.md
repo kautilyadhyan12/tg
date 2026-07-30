@@ -1,6 +1,64 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: PostWorkout's summary payload gets a reader (OWED.md:730). Branch
+      web-repoint. 5 files + RUNBOOK smoke doc + DECISIONS/INDEX/OWED/HANDOFF.
+      web 269/270 (the 1 = the known syncClient env quirk). +21 tests.
+      OWED TICK WITHHELD: needs Kd's smoke AND a fresh-chat T3.
+
+WHAT THIS SESSION DID
+  · `readSummaryView` + `formGrade` + workoutTimeLabel/Short + totalTimeLabel +
+    formatPercent + readPersonalRecord/readMealSuggestion, all in
+    gamificationApi.js beside readStatsView (which parses a workoutService
+    payload too — the location is precedent, not a new pattern).
+  · Fixed, each proven by a test written RED first: an absent form score printing
+    grade D / "Keep practicing" / red; "NaNh NaNm" for the time on page AND PNG;
+    "undefined kcal"; a blank Exercises tile; a string-shaped list reaching .map
+    and blanking the whole page; and a 200 with no `summary` rendering a blank
+    white screen with no toast.
+  · ONE grade ladder now serves the page and the share card. ShareCard's twin
+    (`getGrade`) is deleted.
+  · Kd's rulings at the gate: "Not scored" copy · empty-200 = the page's existing
+    toast+redirect · fold in the zero-active-seconds fix · calories rounding is
+    report-only.
+  · 13 mutations, 13 RED. New `unscored` rig state + RUNBOOK/smoke-postworkout-
+    summary.md, with the `healthy` CONTROL as step 1.
+
+READ THIS IF YOU TOUCH THIS AREA AGAIN
+  **A whole-document sweep is satisfied by the SHARE CARD.** This commit shipped a
+  real regression and 7 render tests stayed green: `xp_earned` survived the
+  snake→camel rename at one of two sites, the page's XP card read "—" for every
+  workout, and test 1's `/\+70/` matched the PNG's copy instead. Round 1 F1
+  verbatim, in the card that quotes round 1 F1. Found by GREP, not by the tests.
+  Anything that renders at two surfaces needs an identity assertion at BOTH.
+
+  **The control is not optional.** Step 1 of the smoke is `healthy`, because the
+  one outcome this card must not have is dashing out numbers the backend really
+  sent, and no amount of unknown-state testing can see that.
+
+  **The md5 guard in the mutation harness earns its place.** A sed that fails to
+  match leaves the source pristine, the tests pass, and the run would record a
+  surviving mutant that never existed.
+
+STILL OPEN (all have OWED lines — nothing left in prose):
+  · 🟡 this card's own line, until the smoke and the T3
+  · ⚪ calories rounded in the PNG but not on the page
+  · ⚪ an empty meal/stretch list renders a heading over blank space
+  · 🟡 RUNBOOK/cutover.md is stale (added earlier this session)
+
+NEXT: Kd runs RUNBOOK/smoke-postworkout-summary.md, then a fresh-chat T3 on the
+  commit. Do NOT tick the OWED line before both.
+
+VERIFY: corepack pnpm --filter web exec vitest run
+        corepack pnpm --filter web exec vite build
+LINT: parity, measured both ways — the two source files at HEAD produce 5
+      problems (4 errors, 1 warning), the five touched files produce the same 5
+      after; all in Confetti's untouched Math.random + the pre-existing
+      exhaustive-deps warning. Package-wide 67 errors / 9 warnings.
+SPEC GAPs: none.
+```
+
+```
 TASK: XP display / Dashboard XP — T3 ROUND 11 FIXES. **CARD CLOSED.**
       Branch web-repoint. 4 files + OWED/DECISIONS/HANDOFF.
       Suite 93/93 green (90 + 3). BOTH 🔴 OWED TICKS ARE NOW ON.
