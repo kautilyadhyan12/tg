@@ -83,8 +83,14 @@ Each needs an API surface built BEFORE its screen can be repointed. Per the
 no-removal rule these UIs stay untouched and working on the old backend until
 then; none may be hidden or reduced to close the gap.
 
-- [ ] 🔴 **XP / levels display — UNTICKED 2026-07-26 by T3 round 3, STILL OFF
-      after rounds 4, 5, 6 AND 7.**
+- [x] 🔴 **XP / levels display — DONE 2026-07-30.** Closed by T3 round 11
+      under THE CAP (DECISIONS 2026-07-29): round 11 returned ONE visible
+      finding, it was fixed, and the card closes on that fix. Eleven review
+      rounds; commits `7b91c68` (Round A) · `0869f01` (Round B) · `df0ea05`
+      (round 9) · `690cdfb` (round 10) · this one (round 11). Smoke passed
+      11/11 on 2026-07-28 and no fix since has changed user-visible
+      behaviour beyond a defect. Was: UNTICKED 2026-07-26 by round 3, still
+      off after rounds 4, 5, 6 AND 7.
       **SMOKE HALF DISCHARGED 2026-07-28: the re-smoke PASSED, all 11 steps**
       (Kd, steps at `RUNBOOK/smoke-xp-dashboard.md`, result recorded there). It
       replaces the 2026-07-27 attempt voided by the rig's CORS wildcard. Level 3
@@ -201,7 +207,49 @@ then; none may be hidden or reduced to close the gap.
       date-dependent equivalent (a 24h shift changes nothing except across a
       Sunday). Round 9's protections re-run as regression: all still RED.
       Suite 90/90.
-      **THE TICK STAYS OFF: nobody has reviewed round 10's fixes. Round 11.**
+      **ROUND 11 HAS RUN (2026-07-30): 6 findings, 1 VISIBLE, ALL FIXED — AND
+      THE CARD CLOSES ON IT, per THE CAP.** F1 (VISIBLE) was a REGRESSION ROUND
+      10 INTRODUCED: `weekDates` does local calendar arithmetic and serialises
+      in UTC, and round 10 routed the printed day number through the UTC string,
+      so in IST between 00:00 and 05:29 every day number was one behind and the
+      orange "today" cell showed yesterday — measured, 26 27 28 29 30 31 1
+      against a calendar reading 27 28 29 30 31 1 2. In DST zones the same
+      mixing duplicated a key in the spring-forward week and skipped one in the
+      fall-back week. Fixed by returning `{ key, day }`: the key stays UTC
+      because the backend buckets UTC, the day is local because that is what the
+      user's calendar says. F2/F5/F6 fixed too (two assertions that could not
+      fail — one dominated, one whose producer the round 10 fix had made
+      structurally bounded; an orphaned JSDoc; two `new Date()` calls where one
+      was claimed). **10 mutations, 9 RED**; the survivor is declared (P9: the
+      strip reading its own instant can only diverge across UTC midnight).
+      A gap the mutations found in round 11's OWN fixture is closed in the same
+      commit: every activity key sat inside the displayed week, so "count this
+      week" and "count every key" were the same number and the caption could
+      abandon the Mon-Sun window unnoticed.
+- [ ] 🔴 **Week strip date axis — render-side coverage.** Round 11 F3 measured
+      TEN surviving mutants on this axis and round 11's fix closed the helper
+      half with pinned-clock, pinned-TZ unit tests (`weekDates` now has three).
+      What is still UNCOVERED is the RENDER side: no assertion in
+      `xpDisplay.render.test.jsx` reads a day NUMBER, a label↔date relationship,
+      or which seven days the strip covers, so "labels rotated", "Monday
+      permanently highlighted" and "dates reversed" are caught only at the unit
+      layer. Needs `vi.setSystemTime` plus a pinned TZ in the render file, which
+      is why it is a line rather than a same-commit fix: fake timers interact
+      with framer-motion's animation waits, and this card has twice recorded
+      that a timing instrument chosen carelessly produces a vacuous assertion.
+- [ ] 🟡 **`xpDisplay.render.test.jsx`'s week fixture re-implements
+      `weekDates`.** Round 11 F4: the fixture computes its own keys with the
+      same algorithm, `toISOString` included, so a helper wrong in the SAME way
+      is invisible to it — which is exactly how round 10's UTC/local mixing
+      survived there. The overclaiming comment ("a wrong helper cannot make this
+      test agree with itself") is CORRECTED in place; the structural fix is to
+      derive the fixture from a pinned clock and literal dates.
+- [ ] 🟡 **`ExerciseLibrary.jsx:63` — `DIFF_COLORS[exercise.difficulty] ||
+      DIFF_COLORS.beginner`.** Raised by round 11 under R1.1 as out of scope: a
+      FOURTH site of the one-of-N shape round 7 F2 declared fixed as a class, on
+      a screen this card does not own — an unknown difficulty painted as a
+      definite `beginner`. Belongs to whichever card repoints the exercise
+      library.
       **ROUND 7 (2026-07-27, fresh chat): 8 findings, 3 blocking, all fixed.**
       Seventh consecutive round in which the previous round's fix opened the
       next one. F1: `recsState` derived from the STATS read's loading flag —
@@ -477,14 +525,16 @@ then; none may be hidden or reduced to close the gap.
       Also fix while here: `workoutApi.js` declares **`getHistory` TWICE** in
       one object literal (lines 5 and 9) — the second silently wins, so the
       `(limit)` variant is dead code and a footgun.
-- [ ] 🔴 **UNTICKED 2026-07-26 by its own T3, STILL OFF after round 4.**
+- [x] 🔴 **Dashboard XP — DONE 2026-07-30**, ticked with the XP display line above under THE CAP after T3 round 11. (Was: UNTICKED 2026-07-26 by its own T3, STILL OFF after round 4.)
       **SMOKE HALF DISCHARGED 2026-07-28 — the re-smoke PASSED, all 11 steps**
       (`RUNBOOK/smoke-xp-dashboard.md`). Step 6 is this line's own defect and it
       is CLOSED at the browser: in the `statsEmpty` state — a 200 carrying
       `{"stats":{}}`, the exact payload round 4 F2 was about — the three stat
       cards read `—`, not "0 workouts / 0h / 0 kcal". Step 17 (`emptyLists`)
       confirms the opposite sign still works: a zero the server actually sent
-      still renders as `0`. **THE TICK STAYS OFF pending T3 round 8.** The
+      still renders as `0`. **DONE 2026-07-30 — ticked with the XP display line
+      above, under THE CAP after T3 round 11.** (Was: tick stays off
+      pending T3 round 8; rounds 8, 9, 10 and 11 all ran.) The
       original entry follows. The
       card repointed XP but left the page's OTHER six figures fabricating
       (`s.total_workouts || 0` and friends), and `stats` is null whenever the old

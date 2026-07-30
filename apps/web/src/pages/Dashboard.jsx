@@ -63,23 +63,25 @@ function AnimatedNumber({ value, duration = 1500, suffix = '' }) {
  *  page `oldPayloadState` had not been applied to. The strip takes the STATE
  *  now, not a second null test of its own: a caption and a tooltip disagreeing
  *  about one request is round 5 F8's two-standards defect. */
-function WeekStrip({ activity, state }) {
+function WeekStrip({ activity, state, dates, todayIdx }) {
   const days   = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const today  = new Date();
-  const dayIdx = (today.getDay() + 6) % 7;
   const known  = state === 'ready';
   const title  = known ? undefined
     : state === 'loading' ? 'Loading activity…' : 'Activity unavailable';
-  // ROUND 10 F1: the dates come from `weekDates` so the caption above cannot
+  // ROUND 10 F1: the week comes from `weekDates` so the caption above cannot
   // count a different set of days than the dots draw. The caption used to read
   // `weekly_workouts` — a count of SESSIONS over a different window — which is
   // how "5 of 7 days active" ended up over three flames.
-  const dates  = weekDates(today);
+  // ROUND 11 F6: and it is now computed ONCE by the parent and passed in. This
+  // component and the caption each called `weekDates()` with their own
+  // `new Date()`, so "one source" was true of the function and not of the
+  // INSTANT — the same class the round 10 fix closed, left half-open.
+  const dayIdx = todayIdx;
 
   return (
     <div className="flex gap-2">
       {days.map((day, i) => {
-        const dateStr = dates[i];
+        const { key: dateStr, day: dayNum } = dates[i];
         const isToday = i === dayIdx;
         // `?.` because knowability now comes from the STATE: a caller passing
         // 'ready' with no payload must degrade, not throw — a throw in render
@@ -110,7 +112,7 @@ function WeekStrip({ activity, state }) {
                   color: !known ? 'rgba(255,255,255,0.22)'
                     : isToday ? '#FF8A1F' : isPast ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.4)',
                 }}>
-                  {Number(dateStr.slice(-2))}
+                  {dayNum}
                 </span>
               )}
             </div>
@@ -346,6 +348,10 @@ export default function Dashboard() {
   // unavailable" forever, eight inches from a pane correctly reading "Loading
   // recent workouts…" about the very same request.
   const weekState   = oldPayloadState({ data: stats.activity,  loading });
+  // ROUND 11 F6: ONE instant, read once, shared by the strip and its caption.
+  const now         = new Date();
+  const week        = weekDates(now);
+  const todayIdx    = (now.getDay() + 6) % 7;
   const hours  = stats.totalMinutes === null
     ? null
     : Math.round((stats.totalMinutes / 60) * 10) / 10;
@@ -472,7 +478,7 @@ export default function Dashboard() {
                 <h3 className="text-sm font-semibold text-white">This Week</h3>
               </div>
               <div style={{ maxWidth: '70%' }}>
-                <WeekStrip activity={stats.activity} state={weekState} />
+                <WeekStrip activity={stats.activity} state={weekState} dates={week} todayIdx={todayIdx} />
                 {/* ROUND 5 F8: the caption was gated on `weeklyWorkouts` and the
                     dots on `activity` — two different fields, so one could say
                     "3 of 7 days active" beside seven dashed UNKNOWN dots, or
@@ -499,7 +505,7 @@ export default function Dashboard() {
                     ? 'Loading this week…'
                     : weekState !== 'ready'
                       ? 'Weekly activity unavailable'
-                      : `${weekDates().filter((d) => stats.activity?.[d]).length} of 7 days active`}
+                      : `${week.filter((d) => stats.activity?.[d.key]).length} of 7 days active`}
                 </p>
               </div>
             </BgCard>

@@ -414,8 +414,17 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     // true. The tile eight inches to the left labels that same field
     // "workouts", which is what it actually is.
     //
-    // The fixture's dates are computed HERE and not imported from `weekDates`,
-    // so a wrong helper cannot make this test agree with itself.
+    // ROUND 11 F4 — THE COMMENT THAT STOOD HERE OVERCLAIMED AND IS CORRECTED.
+    // It said the fixture "cannot make this test agree with itself" because the
+    // dates are computed here rather than imported. That is only true of a
+    // DIFFERENTLY wrong helper: this fixture re-implements `weekDates`'s
+    // algorithm, `toISOString` included, so a helper wrong in the SAME way is
+    // invisible to it. Round 11 proved it — the UTC/local mixing survived here
+    // and was caught only by the unit tests in `gamificationApi.test.js`, which
+    // pin both the clock and the timezone. What this fixture buys is a check
+    // that the caption and the dots agree; what it does NOT buy is a check that
+    // either is right. Deriving it from a pinned clock and literal dates is on
+    // OWED.
     const t = new Date();
     const monIdx = (t.getDay() + 6) % 7;
     const dayKey = (offset) => {
@@ -423,19 +432,40 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
       d.setDate(t.getDate() - monIdx + offset);
       return d.toISOString().split('T')[0];
     };
+    // ROUND 11: a day OUTSIDE the displayed week. Without it, "count the days in
+    // this week" and "count every key in the payload" return the same number
+    // for this fixture, so the caption could abandon the Mon-Sun window and
+    // nothing would notice — measured, that mutant survived at 93/93. It is
+    // round 10 F1's own defect (the caption counting a different set of days
+    // than the dots draw) and the fixture, not the assertion, was the hole.
+    const lastWeek = (() => {
+      const d = new Date(t);
+      d.setDate(t.getDate() - monIdx - 3);
+      return d.toISOString().split('T')[0];
+    })();
 
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     gamificationService.getOverview.mockImplementation(DEAD);
     gamificationService.getLeaderboard.mockImplementation(DEAD);
     workoutService.getStats.mockResolvedValue({
       data: {
-        stats: { weekly_workouts: 5 },                        // FIVE sessions…
-        activity: { [dayKey(0)]: true, [dayKey(2)]: true },   // …on TWO days
+        stats: { weekly_workouts: 5 },              // FIVE sessions…
+        activity: {
+          [dayKey(0)]: true, [dayKey(2)]: true,     // …on TWO days this week…
+          [lastWeek]: true,                         // …plus one OUTSIDE the window
+        },
       },
     });
 
     renderPage(<Dashboard />);
     await waitFor(() => expect(screen.getByText(/of 7 days active/)).toBeTruthy());
+
+    // The SESSION count must never be the caption's number. ROUND 11 F2: this
+    // now runs BEFORE the identity assertions below, because `getByText(
+    // `${litDots} of 7 days active`)` THROWS on any other value and therefore
+    // dominated it — a check that cannot fail because a stricter one fails
+    // first is still a check that cannot fail.
+    expect(screen.queryByText('5 of 7 days active')).toBeNull();
 
     // THE INVARIANT, and it is source-independent: whatever the caption says,
     // it must equal what the strip actually DREW.
@@ -445,16 +475,15 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     expect(litDots).toBe(2);
     expect(screen.getByText(`${litDots} of 7 days active`)).toBeTruthy();
 
-    // The session count must not be the caption's number…
-    expect(screen.queryByText('5 of 7 days active')).toBeNull();
-    // …and an arithmetic impossibility must never be printable. ELEMENT-SCOPED,
-    // not a document sweep — the strip's last day number runs straight into the
-    // caption ("…Sun2" + "2 of 7 days active" reads as "22 of 7"), so a
-    // whole-document regex here fails on adjacency rather than on the defect.
-    // That is round 8 F2's own trap ("Level 7230/374"), hit while writing the
-    // assertion for a finding about two numbers disagreeing.
-    expect(screen.getByText(/of 7 days active/).textContent)
-      .not.toMatch(/([89]|[1-9]\d+) of 7 days active/);
+    // ROUND 11 F2: an "impossible sentence" regex (`/([89]|[1-9]\d+) of 7/`)
+    // stood here and is DELETED rather than kept as reassurance. Two reasons,
+    // and the second is the interesting one: it was dominated by the identity
+    // assertion above, AND its producer is now bounded — the caption counts
+    // `week.filter(...)` over a SEVEN-element array, so a value above 7 is not
+    // reachable by any mutation of the caption. The round 10 fix made the
+    // impossibility structural, which retires the assertion written for it.
+    // Keeping it would be decoration, which is what rounds 6 F11, 7 F3, 9 F3
+    // and this one are all about.
     // The tile KEEPS the session count — its own label already says "workouts".
     expect(tileValue('workouts')).toBe('5');
   });

@@ -232,15 +232,6 @@ export function formatXpEarned(v) {
   return Number.isFinite(v) ? `+${v.toLocaleString()}` : UNKNOWN;
 }
 
-/** The accent colour for a difficulty, with UNKNOWN as neutral grey.
- *
- *  ROUND 7 F2: three components each carried their own ternary whose final
- *  `else` was the hard/advanced RED, so an unknown difficulty was painted as a
- *  definite hard one. Round 6 F3 fixed one of the three and the DECISIONS entry
- *  called it "fixed as a class" — it was not. One function now, so the next
- *  edit cannot fix a third of it. `easy`/`beginner` and `medium`/`intermediate`
- *  are the challenge and recommendation vocabularies respectively; both are
- *  matched here rather than in the call sites. */
 /** The seven calendar days the week strip shows, Monday→Sunday, as the
  *  `YYYY-MM-DD` keys the old backend's `activity` map is keyed by.
  *
@@ -264,16 +255,53 @@ export function formatXpEarned(v) {
  *  COUNTING axis, which is why the caption now derives its number from the same
  *  map the dots do, over the same seven days. One source, so they cannot
  *  disagree — a count and a picture of the same week must not be two answers. */
+/** ROUND 11 F1 — why this returns a PAIR and not a string.
+ *
+ *  The arithmetic above is LOCAL (`getDay`/`getDate`/`setDate`); `toISOString`
+ *  is UTC. Round 10 shipped the day NUMBER off the UTC string, replacing a local
+ *  number that was always right with one that is wrong wherever local and UTC
+ *  straddle midnight. Measured at 02:00 IST on Wed 29 Jul: the strip printed
+ *  26 27 28 29 30 31 1 against a calendar reading 27 28 29 30 31 1 2, with the
+ *  orange "today" cell showing yesterday — for five and a half hours of every
+ *  day, in this app's home market. In UTC the two agree, which is why 90 tests
+ *  never saw it.
+ *
+ *  So the two consumers get the two different things they actually need:
+ *    · `key` stays UTC, because the old backend buckets by UTC
+ *      (`datetime.utcnow()` at backend-ml/app/routers/workouts.py:55, the
+ *      `strftime` at :89). A local key would stop matching the payload.
+ *    · `day` is the LOCAL calendar day, because that is what the user's own
+ *      calendar says and it is the only number the cell can honestly print.
+ *
+ *  The residual — a 01:00 IST workout landing on the previous UTC day, so a
+ *  flame can sit under the wrong cell — is REAL and is the existing OWED
+ *  timezone-capture item (users have been bucketed as UTC since 2026-07-11).
+ *  It is not this card's to fix and is not silently closed by this comment. */
 export function weekDates(today = new Date()) {
   const dayIdx = (today.getDay() + 6) % 7;   // Monday = 0
   const out = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() - dayIdx + i);
-    out.push(d.toISOString().split('T')[0]);
+    out.push({ key: d.toISOString().split('T')[0], day: d.getDate() });
   }
   return out;
 }
+
+/** The accent colour for a difficulty, with UNKNOWN as neutral grey.
+ *
+ *  ROUND 7 F2: three components each carried their own ternary whose final
+ *  `else` was the hard/advanced RED, so an unknown difficulty was painted as a
+ *  definite hard one. Round 6 F3 fixed one of the three and the DECISIONS entry
+ *  called it "fixed as a class" — it was not. One function now, so the next
+ *  edit cannot fix a third of it. `easy`/`beginner` and `medium`/`intermediate`
+ *  are the challenge and recommendation vocabularies respectively; both are
+ *  matched here rather than in the call sites. *
+ *  ROUND 11 F5: this block spent one commit orphaned above `weekDates`, because
+ *  the new helper's own JSDoc was inserted between it and the function it
+ *  describes. The rationale for this card's most-repeated rule was filed under
+ *  a date utility. Reattached — a doc comment that drifts off its subject is
+ *  the round 6 F10 / round 7 F4 shape, and this file has now hosted it twice. */
 
 /** ROUND 9 F1 — the `${color}NN` hazard, enumerated properly this time.
  *

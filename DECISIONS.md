@@ -2052,6 +2052,109 @@ gate). Its own recommendation: fix the nine, add one OWED line, tick.
 - (THE TICK STAYS OFF) Rounds A and B have not been reviewed. T3 round 9 runs on
   the two commits together.
 
+## 2026-07-30 — T3 round 11: 6 findings, 1 VISIBLE, ALL FIXED — **CARD CLOSED**
+
+- (**F1, VISIBLE, and it was a REGRESSION ROUND 10 INTRODUCED** — the one honest
+  way to say it) `weekDates` does its calendar arithmetic in LOCAL time
+  (`getDay`/`getDate`/`setDate`) and serialises in UTC (`toISOString`). Round 10
+  changed the printed day number from `date.getDate()` — local, and always right
+  — to `Number(dateStr.slice(-2))`, which is the UTC string. Re-measured in this
+  session before anything was touched:
+
+  ```
+  TZ=Asia/Kolkata, 02:00 IST Wed 29 Jul
+    OLD prints  27 28 29 30 31  1  2   <- matches the user's calendar
+    NEW prints  26 27 28 29 30 31  1   <- one behind, "today" cell shows yesterday
+  TZ=UTC, same instant
+    OLD prints  27 28 29 30 31  1  2
+    NEW prints  27 28 29 30 31  1  2   <- identical, which is WHY 90 tests passed
+  ```
+
+  Reachable for 5.5 hours of every day in this app's home market, and in DST
+  zones the same mixing duplicates a key in the spring-forward week (one workout,
+  two flames, counted twice) and skips a day in the fall-back week. Round 10's
+  invariant held throughout — the caption and the dots agreed, and were both
+  wrong, because they read the same broken array. **Agreement is not
+  correctness**, and that is the lesson this finding adds to the eight
+  "two standards" findings before it.
+
+- (The fix, and why it is a PAIR) `weekDates` returns `{ key, day }`: the key
+  stays UTC because the old backend buckets by UTC (`datetime.utcnow()` at
+  `workouts.py:55`, the `strftime` at :89) and a local key would stop matching
+  the payload; `day` is the local calendar day, because that is the only number
+  a cell can honestly print. The residual — a 01:00 IST workout landing on the
+  previous UTC day, so a flame can sit under the wrong cell — is REAL, is the
+  existing OWED timezone-capture item (every user bucketed as UTC since
+  2026-07-11), and is named in the source comment rather than quietly closed by
+  it.
+
+- (R9.5, and the instrument mattered more than usual) Three unit tests written
+  and shown RED first, each pinning BOTH the clock and the timezone. Each carries
+  a **positive control that the TZ switch took effect** (`expect(instant.getDate())
+  .toBe(29)`) — without it, a runtime that ignored the switch would make local
+  equal UTC and every assertion would pass vacuously, which is precisely how the
+  defect survived 90 tests. `globalThis.process` rather than `process`, because
+  this package lints as a browser env; a suppression comment would have been the
+  lazier answer and R2.2 exists to prevent it.
+
+- (F2 — two assertions that could not fail, in round 10's flagship test) One was
+  DOMINATED: `getByText(\`${litDots} of 7 days active\`)` throws on any other
+  value, so a later `queryByText('5 of 7 …')).toBeNull()` could never be the
+  thing that failed. It now runs BEFORE the identity check, where it is
+  reachable. The other — the `/([89]|[1-9]\d+) of 7/` "impossible sentence"
+  regex — is **deleted**, and the reason is worth keeping: its producer is now
+  bounded (`week.filter(...)` over a seven-element array), so the round 10 fix
+  made the impossibility STRUCTURAL and retired the assertion written for it. A
+  check kept as reassurance after its defect became unreachable is decoration.
+
+- (F5) The round 7 F2 doc block — "one function, so the next edit cannot fix a
+  third of it" — spent one commit orphaned above `weekDates`, because the new
+  helper's JSDoc was inserted between it and the function it describes. The
+  rationale for this card's most-repeated rule was filed under a date utility.
+  Reattached. Round 6 F10 / round 7 F4's shape, hosted by this file twice now.
+
+- (F6) `WeekStrip` and the caption each called `weekDates()` with their own
+  `new Date()`, so round 10's "one source, so they cannot disagree" was true of
+  the FUNCTION and not of the INSTANT. The parent now reads the clock once and
+  passes the week down. Not reachable in practice (it needs a render straddling
+  UTC midnight) but it is the same class the round 10 fix closed, left half-open.
+
+- (THE MEASUREMENT, and one of the survivors was a gap in MY OWN fixture)
+  **10 mutations, 9 RED.** P8 — the caption counting every `activity` key rather
+  than this week's — SURVIVED at 93/93, because every key in the round 10 F1
+  fixture sat inside the displayed week, so "count this week" and "count
+  everything" returned the same number. That is round 10 F1's own defect,
+  unprotected by the test written for it, and the FIXTURE was the hole rather
+  than the assertion. A day outside the window was added and P8 is now RED.
+  The remaining survivor, **P9** (the strip reading its own instant again), is
+  declared: it can only diverge across UTC midnight, so there is nothing an
+  assertion could see, and chasing it would produce exactly the vacuous
+  assertion this card has recorded four times.
+
+- (F4, corrected rather than rebuilt) The round 10 F1 fixture's comment claimed
+  that computing its dates locally meant "a wrong helper cannot make this test
+  agree with itself". False, and round 11 proved it: the fixture re-implements
+  `weekDates`'s algorithm including `toISOString`, so a helper wrong in the SAME
+  way is invisible to it — the UTC/local mixing survived there and was caught
+  only by the new unit tests. The comment now says what the fixture actually
+  buys (caption-vs-dots agreement) and what it does not (that either is right).
+  The structural fix — a pinned clock and literal dates — is an OWED line.
+
+- (PROVE, post-round-11) **93/93 green** (90 + 3). `vite build` ✓. Lint: the four
+  touched files **0 problems**, package-wide **67 errors / 9 warnings** —
+  parity, and it took a correction to get there: the first cut added 5
+  `no-undef` errors on bare `process`, caught by measuring rather than by
+  assuming, since "lint parity" has been a claimed tick on this card before.
+
+- (**THE CARD IS CLOSED.** Both 🔴 OWED lines TICKED, naming `7b91c68`,
+  `0869f01`, `df0ea05`, `690cdfb` and this commit.) Eleven review rounds. The
+  visible-defect count ran 3 → 2 → 1 → 1, and the last one was introduced by the
+  round before it, which is the clearest possible argument for the cap: each
+  additional cycle was itself generating the defect the next cycle found. Three
+  deferrals leave with lines rather than in prose — the render-side date axis,
+  the fixture's re-implementation, and `ExerciseLibrary.jsx:63` as a fourth
+  one-of-N site on a screen this card does not own.
+
 ## 2026-07-29 — THE CAP: round 11 is the LAST round on this card (Kd ruling)
 
 - (The ruling, set BEFORE round 11 runs, same as the stopping rule it extends)

@@ -1,6 +1,72 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: XP display / Dashboard XP — T3 ROUND 11 FIXES. **CARD CLOSED.**
+      Branch web-repoint. 4 files + OWED/DECISIONS/HANDOFF.
+      Suite 93/93 green (90 + 3). BOTH 🔴 OWED TICKS ARE NOW ON.
+
+WHAT THIS SESSION DID
+  · F1 (VISIBLE) — and it was a REGRESSION ROUND 10 INTRODUCED. `weekDates`
+    does LOCAL calendar arithmetic and serialises in UTC; round 10 routed the
+    PRINTED day number through the UTC string. Re-measured before touching
+    anything: at 02:00 IST on Wed 29 Jul the strip printed 26 27 28 29 30 31 1
+    against a calendar reading 27 28 29 30 31 1 2, with the orange "today" cell
+    showing yesterday — 5.5 hours of every day in the home market. In UTC the
+    two agree, which is exactly why 90 tests passed. Fixed: weekDates returns
+    { key, day } — key stays UTC (the backend buckets UTC), day is local.
+  · F2 — two assertions that could not fail: one dominated by a stricter check
+    that throws first, one whose producer the round 10 fix had made bounded.
+    Reordered and deleted respectively.
+  · F5 — the round 7 F2 doc block was orphaned above weekDates. Reattached.
+  · F6 — WeekStrip and the caption each called new Date(). The parent reads the
+    clock ONCE now and passes the week down.
+  · 10 mutations, 9 RED.
+
+READ THIS IF YOU TOUCH THIS AREA AGAIN
+  **Agreement is not correctness.** Round 10's invariant (caption == dots) held
+  the whole time F1 was live: both read the same broken array, so they agreed
+  and were both wrong. An invariant between two consumers of one source says
+  nothing about whether the source is right.
+
+  **The date-axis tests MUST pin the timezone AND carry a positive control that
+  the pin took effect.** `globalThis.process.env.TZ` is set per test with
+  `expect(instant.getDate()).toBe(29)` beside it. Without that control a runtime
+  ignoring the switch makes local == UTC and every assertion passes vacuously —
+  the exact mechanism by which F1 survived 90 tests. Use `globalThis.process`,
+  not `process`: this package lints as a browser env (5 no-undef errors
+  otherwise, measured).
+
+  **P9 is a DECLARED survivor, not a gap.** The strip reading its own instant
+  can only diverge from the parent's across UTC midnight, so no assertion can
+  see it. Do not add one.
+
+  **The round 10 F1 render fixture re-implements weekDates** (own OWED line).
+  Its comment used to claim independence; that claim is corrected. It proves the
+  caption and dots agree — NOT that either is right. The unit tests are what
+  prove correctness.
+
+STILL OPEN (all have OWED lines — nothing left in prose):
+  · 🔴 week strip date axis, RENDER side: no assertion reads a day number, a
+    label↔date relationship, or which seven days are covered. Needs
+    vi.setSystemTime + a pinned TZ in the render file; fake timers interact with
+    framer-motion's waits, which is why it is a line and not a same-commit fix.
+  · 🔴 round 8 F6's other EIGHT mutants (MUT-3/4/15/16/17/29/2/10) — never
+    addressed by Round B or rounds 9, 10, 11.
+  · 🟡 the render fixture's re-implementation of weekDates.
+  · 🟡 ExerciseLibrary.jsx:63 — a FOURTH one-of-N site, different card.
+
+NEXT: this card is DONE — no round 12 (THE CAP, DECISIONS 2026-07-29). Pick up
+  the next repoint card. **Scope it to ONE screen's payload**: eleven rounds on
+  this one is recorded in DECISIONS as a finding about the CARD, not the code —
+  it bundled nine screens into one unit of work, which Part I §1 exists to stop.
+
+VERIFY: corepack pnpm --filter web exec vitest run src/api/gamificationApi.test.js src/pages/xpDisplay.render.test.jsx
+        corepack pnpm --filter web exec vite build
+LINT: parity. Four touched files 0 problems; package-wide 67 errors / 9 warnings.
+SPEC GAPs: none.
+```
+
+```
 TASK: XP display / Dashboard XP — T3 ROUND 10 FIXES. 4 findings, ALL FIXED.
       Branch web-repoint. 4 files + OWED/DECISIONS/HANDOFF.
       Suite 90/90 green (87 + 3). OWED ticks STILL OFF.

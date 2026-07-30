@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
 import mlApi from './mlApi';
 import {
-  UNKNOWN, difficultyColor, difficultyStyle, earnedBadgeCount, formatCount, formatFraction, formatLevel, formatXpEarned,
+  UNKNOWN, difficultyColor, difficultyStyle, earnedBadgeCount, weekDates, formatCount, formatFraction, formatLevel, formatXpEarned,
   formatXpProgress, formatXpTotal, gamificationService, listState,
   oldPayloadState, orUnknown, progressWidth, readBadge, readChallenge, tierStyle, xpBarWidth,
   readLeaderboardEntry, readLeaderboardView, readOverviewView,
@@ -314,6 +314,78 @@ describe('old-payload readers: every field is a usable value or NULL', () => {
         expect(s[f].length, `${String(d)}.${f}`).toBeGreaterThan(0);
       }
     }
+  });
+
+  // ── ROUND 11 F1: the week strip's date axis ───────────────────────────────
+  // It had ZERO coverage — round 11 measured TEN surviving mutants, including
+  // "every cell prints 2026" and, worst, the CORRECT fix itself: the suite could
+  // not tell the defective helper from the fixed one.
+  //
+  // The defect: `weekDates` does its calendar arithmetic in LOCAL time
+  // (getDay/getDate/setDate) and serialises in UTC (toISOString). Round 10 then
+  // routed the PRINTED day number through that UTC string, replacing a local
+  // number that was always right with one that is wrong wherever local and UTC
+  // straddle midnight — for IST that is 00:00–05:29, five and a half hours of
+  // every day, in this app's home market.
+  describe('weekDates — the printed day is LOCAL, the lookup key is UTC', () => {
+    const ORIGINAL_TZ = globalThis.process.env.TZ;
+    afterEach(() => { globalThis.process.env.TZ = ORIGINAL_TZ; });
+
+    it('prints the local calendar day, not the UTC one — round 11 F1', () => {
+      globalThis.process.env.TZ = 'Asia/Kolkata';
+      // 20:30Z on Tue 28 Jul is 02:00 IST on WEDNESDAY 29 Jul.
+      const instant = new Date('2026-07-28T20:30:00Z');
+
+      // POSITIVE CONTROL, and it is load-bearing: if this runtime ignored the
+      // TZ switch, local would equal UTC and every assertion below would pass
+      // vacuously — which is exactly how the defect survived 90 tests.
+      expect(instant.getDate(), 'TZ switch did not take effect').toBe(29);
+
+      const w = weekDates(instant);
+      // What the user's calendar says that week is.
+      expect(w.map((d) => d.day)).toEqual([27, 28, 29, 30, 31, 1, 2]);
+
+      // The KEY stays UTC, because the old backend buckets by UTC
+      // (`datetime.utcnow()` / `strftime` in workouts.py). That a 01:00 IST
+      // workout lands on the previous UTC day is the EXISTING owed
+      // timezone-capture item, not this card's to fix — but the key must not
+      // quietly become local either, or the lookup stops matching the payload.
+      expect(w[0].key).toBe('2026-07-26');
+      expect(w.map((d) => d.key)).toEqual([
+        '2026-07-26', '2026-07-27', '2026-07-28',
+        '2026-07-29', '2026-07-30', '2026-07-31', '2026-08-01',
+      ]);
+    });
+
+    it('key and day agree when local time IS UTC — the control', () => {
+      globalThis.process.env.TZ = 'UTC';
+      const instant = new Date('2026-07-29T12:00:00Z');
+      expect(instant.getDate(), 'TZ switch did not take effect').toBe(29);
+
+      const w = weekDates(instant);
+      expect(w.map((d) => d.day)).toEqual([27, 28, 29, 30, 31, 1, 2]);
+      // Same seven days by both measures — so the test above is measuring the
+      // TZ mixing and not some unrelated arithmetic error.
+      expect(w.map((d) => Number(d.key.slice(-2)))).toEqual(w.map((d) => d.day));
+    });
+
+    it('is seven consecutive days starting MONDAY, across a month end', () => {
+      // Closes the cheap half of round 11 F3: "week starts Sunday", "dates
+      // reversed", "every cell prints 1" and "slice(0,4) prints the year" are
+      // all mutations no assertion could see before this.
+      globalThis.process.env.TZ = 'Asia/Kolkata';
+      const w = weekDates(new Date('2026-07-30T06:00:00Z'));   // Thu 30 Jul IST
+      expect(w).toHaveLength(7);
+      expect(w.map((d) => d.day)).toEqual([27, 28, 29, 30, 31, 1, 2]);
+      // Monday first: the key's own weekday, read back in UTC.
+      expect(new Date(`${w[0].key}T00:00:00Z`).getUTCDay()).toBe(1);
+      // Strictly consecutive, one day apart, no duplicate and no gap.
+      for (let i = 1; i < 7; i++) {
+        const prev = new Date(`${w[i - 1].key}T00:00:00Z`).getTime();
+        const cur  = new Date(`${w[i].key}T00:00:00Z`).getTime();
+        expect(cur - prev, `gap between ${w[i - 1].key} and ${w[i].key}`).toBe(86400000);
+      }
+    });
   });
 
   it('readLeaderboardEntry maps snake_case and nulls the rest', () => {
