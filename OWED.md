@@ -729,15 +729,43 @@ then; none may be hidden or reduced to close the gap.
 
 - [ ] 🟡 **`PostWorkout.jsx`'s `summary` payload is UNPARSED — the class rounds
       4-7 closed for the other three old-backend payloads.**
-      **BUILT 2026-07-30 — TICK WITHHELD pending a fresh-chat T3.**
+      **BUILT 2026-07-30. SMOKE PASSED. T3 ROUND 1 RUN: 6 findings, ZERO
+      VISIBLE, ALL FIXED. TICK AWAITING KD'S CALL — see the two options at the
+      end of this entry.**
+      **T3 round 1 (2026-07-30, fresh chat; full entry DECISIONS :2546).** Every
+      finding was a MUTANT a user could have seen, over shipped code that is
+      correct; none was deferred, so none created an OWED line. F1: the
+      anti-fabrication sweep checked `undefined`/`NaN` — what the PRE-fix code
+      produced — but not `null`, the one spelling the NEW code can produce.
+      **F2 is the one to remember: `current_streak` rendered at both surfaces and
+      was asserted at neither — the same rename regression this card already
+      recorded, ONE FIELD OVER, in the same commit.** F3: all four list-element
+      render bodies were unreachable from every fixture. F4: the empty-200 test
+      proved the toast and not the redirect. F5: "13 mutations, 13 RED" was
+      unreproducible from the repo — the harness now lives at
+      `apps/web/tools/mutate-postworkout-summary.sh` and exits non-zero if a
+      mutant survives. F6: a helper's doc claimed protection it could not give.
+      Now **18 mutations, 18 RED**, five of which were GREEN before this round.
+      web 270/271. **No component file changed, so no re-smoke is owed** (the
+      Round B precedent, DECISIONS :1950).
       **SMOKE HALF DISCHARGED 2026-07-30: PASSED (Kd), on commit `fb1956c`**,
       reported as a blanket pass rather than step-by-step and recorded that way
       (result at `RUNBOOK/smoke-postworkout-summary.md`). The `healthy` CONTROL was
       part of the run, which is the step that matters most — it is the only one
       that can catch the fix dashing out numbers the backend really sent.
-      The remaining gate is a fresh-chat T3, which is the standard the previous
-      PostWorkout card applied to itself (DECISIONS :1348) rather than one relaxed
-      for this card.
+      **THE TICK IS KD'S CALL, and the honest case against ticking now is
+      recorded first.** This card's own predecessor writes, on the line above:
+      "the argument for ticking without a clean round — *round 1 found no
+      behaviour defect, only gaps in the protection* — is what the re-tick
+      precedent forecloses." That describes this situation exactly. Against that:
+      all six findings are FIXED rather than deferred, the fixes are entirely
+      test-layer plus one new tool file, and five mutants that were green are now
+      red. Kd chooses: **(a)** a T3 round 2 on the fix commit, then tick if clean;
+      or **(b)** an explicit per-card stopping ruling that a round with zero
+      VISIBLE findings closes this card, ticking now. Do NOT tick without one of
+      those two — and note a chat may not choose (b) for itself: extending the
+      per-card stopping rule (DECISIONS :2365) is Kd's, and a chat already
+      overstepped it once on this card, recorded at DECISIONS :2546.
       What landed: `readSummaryView` + `formGrade` + the time/percent formatters in
       `gamificationApi.js`, beside `readStatsView` — which parses a
       `workoutService` payload too, so the location is precedent and not a new

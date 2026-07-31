@@ -1,6 +1,53 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: PostWorkout summary reader — T3 ROUND 1 FIXES. 6 findings, ZERO VISIBLE,
+      ALL FIXED. Branch web-repoint. 1 test file + 1 new harness + records.
+      web 270/271. 18 mutations, 18 RED. TICK STILL OFF — Kd's call, two
+      options written at the OWED line.
+
+WHAT THIS SESSION DID
+  · F1 — the sweep checked `undefined`/`NaN`, the spellings the PRE-fix code
+    produced, and not `null`, the one the NEW code produces (`${null}` → "null%").
+    Confirmed by re-mutation before fixing.
+  · F2 — `current_streak` renders at BOTH surfaces, asserted at NEITHER. Renaming
+    it left 44/44 green while the pill and the tile both vanished. **This is the
+    xp_earned regression from the same commit, one field over.**
+  · F3 — all four list-element render bodies were unreachable (every fixture had
+    [] or a string the reader nulls). New SUMMARY_LISTS fixture, both PR shapes.
+  · F4 — the empty-200 test proved the toast, not the redirect.
+  · F5 — "13 mutations, 13 RED" was unreproducible from the repo. The harness is
+    now committed and runnable.
+  · F6 — a helper's doc claimed a protection it cannot give; claim narrowed.
+
+READ THIS IF YOU TOUCH THIS AREA AGAIN
+  **Fixing the instance is not fixing the class, and this card proves it twice.**
+  The xp_earned rename regression was found by grep and fixed with an identity
+  assertion — and `current_streak`, four sites away in the same file and the same
+  commit, was left exactly as exposed. When a rename breaks one field, enumerate
+  EVERY field that rename touched, at every surface.
+
+  **A sweep is not an assertion.** `not.toMatch(/undefined/)` says a string is
+  absent from the document; it never says a particular site rendered honestly, and
+  it silently misses whatever spelling the new code produces.
+
+  **The harness is at apps/web/tools/mutate-postworkout-summary.sh.** Run it before
+  claiming any assertion protects anything. It exits non-zero if a mutant survives
+  OR if a sed fails to apply — the second guard exists because an unmatched sed
+  leaves the source pristine and reads as a surviving mutant that never existed.
+
+NEXT: Kd rules on the tick — (a) a T3 round 2 on the fix commit, or (b) an
+  explicit per-card stopping ruling. A chat may NOT choose (b) for itself; one
+  already overstepped that on this card (DECISIONS :2546, the process slip).
+
+VERIFY: corepack pnpm --filter web exec vitest run
+        bash apps/web/tools/mutate-postworkout-summary.sh
+LINT: xpDisplay.render.test.jsx clean. No component file changed this round, so
+      no re-smoke is owed (the Round B precedent, DECISIONS :1950).
+SPEC GAPs: none.
+```
+
+```
 TASK: PostWorkout's summary payload gets a reader (OWED.md:730). Branch
       web-repoint. 5 files + RUNBOOK smoke doc + DECISIONS/INDEX/OWED/HANDOFF.
       web 269/270 (the 1 = the known syncClient env quirk). +21 tests.

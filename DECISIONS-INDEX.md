@@ -101,6 +101,12 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:2546** — 2026-07-30 — PostWorkout summary reader, **T3 round 1**: 6 findings,
+  ZERO visible, all FIXED (none deferred). Its F5 put the mutation harness in the
+  repo at `apps/web/tools/mutate-postworkout-summary.sh` — a claim of "13 mutations,
+  13 RED" was unreproducible without it. **Standing lesson: F2 was the same rename
+  regression as F1's, one field over, in the same commit** — fixing the instance is
+  not fixing the class.
 - **:2444** — 2026-07-30 — PostWorkout's summary payload gets a reader
   (`readSummaryView`, `formGrade`). Kd's rulings in it: "Not scored" copy, the
   empty-200 toast+redirect, the zero-active-seconds fold-in, calories rounding

@@ -1292,6 +1292,21 @@ const SUMMARY_BAD_LISTS = {
   stretches:        'Hamstring stretch, 30s each side',
 };
 
+/** T3 F3: every other fixture carries EMPTY lists (SUMMARY, and SUMMARY_UNSCORED
+ *  inherits them) or strings the reader nulls, so none of the four `.map` bodies
+ *  ever executed — and those are the sites this card rewrote most heavily, having
+ *  deleted an inline `typeof pr === 'string'` branch at two of them. The reviewer
+ *  proved the gap by replacing all four bodies with a ReferenceError: 44/44 still
+ *  GREEN. The `{icon,value,label}` record shape was covered by neither the render
+ *  tests NOR the smoke rig, whose `healthy` personal_records is a bare string
+ *  (mock-ml-backend.mjs) — so BOTH shapes are here on purpose. */
+const SUMMARY_LISTS = {
+  ...SUMMARY,
+  personal_records: ['Best form accuracy!', { icon: '🔥', value: 12, label: 'reps' }],
+  meal_suggestions: [{ meal: 'Paneer bhurji + rice', timing: 'within 45 min' }],
+  stretches:        ['Hamstring stretch, 30s each side'],
+};
+
 /** The XP bar, resolved with a LOUD failure when it cannot be found.
  *
  *  T3 round 3 F6: reading `container.querySelector('.from-yellow-500').style`
@@ -1309,12 +1324,19 @@ function xpBar(container) {
 }
 
 /** PostWorkout reads `:sessionId` with useParams, so it needs a real route —
- *  without one the id is undefined and the page redirects instead of rendering. */
+ *  without one the id is undefined and the page redirects instead of rendering.
+ *
+ *  T3 F4: `/dashboard` is a real route here now. Without it the empty-200 test
+ *  could assert only that the TOAST fired, so deleting `navigate('/dashboard')`
+ *  from the catch left the suite green — a toast floating over the blank page the
+ *  test is named after. The suite's own stderr printed `No routes matched
+ *  location "/dashboard"`, which is incidental output and not protection. */
 const renderPostWorkout = () =>
   render(
     <MemoryRouter initialEntries={['/workout/summary/s1']}>
       <Routes>
         <Route path="/workout/summary/:sessionId" element={<PostWorkout />} />
+        <Route path="/dashboard" element={<div>DASHBOARD REACHED</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -1337,6 +1359,14 @@ function formBar(container) {
  *  recorded lesson (DECISIONS :1282) — repointing only the visible card left one
  *  screen printing two different levels, and the stale one was the copy that
  *  leaves the building as a PNG.
+ *
+ *  **WHAT IT DOES NOT PROTECT** (T3 F6, corrected rather than overclaimed): for
+ *  Calories the two surfaces have a KNOWN disagreement — the page prints the value
+ *  unrounded and the card rounds it (its own OWED line; Kd ruled report-only) —
+ *  and this helper cannot fail on it, because every fixture's value is the integer
+ *  280. So "assert they agree" is true of the UNKNOWN state and of any fixture
+ *  with a fractional value, and is vacuous for Calories as currently fixtured. The
+ *  claim is narrowed here rather than the rounding changed.
  *
  *  The page renders label→value as <p> siblings; the card renders
  *  icon→value→label as <div>s, so the value sits on opposite sides. Keyed on
@@ -1541,8 +1571,21 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
 
     // No fabrication reached the DOM in ANY spelling. These are what catch a site
     // the assertions below do not name one by one.
+    //
+    // T3 F1: `/null/` was MISSING and it is the one spelling THIS card's code can
+    // actually produce — the reader's unknown value is `null`, and `${null}`
+    // stringifies to "null", so a raw template at any site prints "null%". The
+    // reviewer proved it at the form-bar caption, which had no assertion of its
+    // own: mutating it left 44/44 green while the page printed "null%" under the
+    // bar. The old spellings stay because `undefined`/`NaN` are what the PRE-fix
+    // code produced and a regression past the reader could reintroduce either.
     expect(text).not.toMatch(/undefined/);
     expect(text).not.toMatch(/NaN/);
+    expect(text).not.toMatch(/null/);
+
+    // …and the caption itself by identity, because a sweep only says the string is
+    // absent from the whole document, never that THIS site rendered honestly.
+    expect(screen.getByText('0%').nextElementSibling.textContent).toBe('—');
 
     // Both surfaces, by identity. The page and the PNG cannot disagree.
     expect(tileValues('Workout Time')).toEqual(['—', '—']);
@@ -1586,6 +1629,38 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     renderPostWorkout();
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to load summary'));
+    // T3 F4: the REDIRECT is half the claim and was unasserted, so deleting
+    // `navigate('/dashboard')` from the catch left this green — a toast floating
+    // over the blank page this test is named after.
+    await waitFor(() => expect(screen.getByText('DASHBOARD REACHED')).toBeTruthy());
+  });
+
+  it('renders the LIST bodies — both record shapes, a meal, a stretch', async () => {
+    // T3 F3. Every other fixture leaves these four `.map` bodies unexecuted, and
+    // they are the sites this card rewrote most heavily.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY_LISTS } });
+
+    const { container } = renderPostWorkout();
+    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
+
+    // The STRING shape and the {icon,value,label} shape, both composed by
+    // readPersonalRecord. Each appears twice — the page's list and the share
+    // card's top-three — so the count is asserted exactly, which catches either
+    // surface dropping the section.
+    expect(screen.getAllByText('Best form accuracy!').length).toBe(2);
+    expect(screen.getAllByText('🔥 12 — reps').length).toBe(2);
+
+    // The meal object's two fields, by identity: the timing is the node after the
+    // name, so a reader that dropped `timing` cannot hide behind the name.
+    const mealName = screen.getByText('Paneer bhurji + rice');
+    expect(mealName.nextElementSibling.textContent).toBe('within 45 min');
+    expect(container.textContent).not.toMatch(/Suggestions unavailable/);
+
+    // The stretch body is behind the expander.
+    fireEvent.click(screen.getByText('Cool Down Stretches'));
+    expect(screen.getByText('Hamstring stretch, 30s each side')).toBeTruthy();
+    expect(container.textContent).not.toMatch(/Stretches unavailable/);
   });
 
   it('lists arriving as strings do not blank the page', async () => {
@@ -1640,6 +1715,17 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     // mode the code cannot produce is vacuous). It was found by grep, not by the
     // tests — which is the argument for this line.
     expect(screen.getByText('experience points').previousElementSibling.textContent).toBe('+70');
+
+    // THE STREAK, at BOTH surfaces — T3 F2, and it is the xp_earned regression
+    // one field over: renaming `currentStreak` back to `current_streak` at all
+    // four sites left 44/44 GREEN while the page's pill and the card's tile both
+    // silently VANISHED. A field that renders at two surfaces and is asserted at
+    // neither is exactly what this card already learned once.
+    expect(screen.getByText(/day streak!/).textContent).toBe('3 day streak!');
+    expect(screen.getByText('Streak').previousElementSibling.textContent).toBe('3 days');
+
+    // The form-bar caption by identity in the KNOWN state too (T3 F1's site).
+    expect(screen.getByText('0%').nextElementSibling.textContent).toBe('88%');
 
     await waitFor(
       () => expect(formBar(container).style.width).toBe(`${SUMMARY.form_accuracy}%`),

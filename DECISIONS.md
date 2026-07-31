@@ -2542,3 +2542,71 @@ gate ("record as OWED, fix XP only", the entry at :1330).
   recorded at `RUNBOOK/smoke-postworkout-summary.md`. **The OWED tick stays OFF
   until a fresh-chat T3 also passes** (the :1348 standard, and the google-login /
   DPDP precedent for a tick that went on early).
+
+## PostWorkout summary reader — T3 round 1 (2026-07-30; fresh chat) — 6 findings, ZERO visible, ALL fixed
+
+- (THE RESULT) Six findings, every one tagged NOT-VISIBLE by the reviewer and
+  independently confirmed as such: each is a MUTANT a user could have seen, over
+  shipped code that is correct. The reviewer's own summary — "no finding is
+  VISIBLE" — and its verified-claims list (all 34 snake_case reads gone; one
+  `formGrade` ladder serving both surfaces; 4/4 `.map` sites gated; PROVE
+  reproduces exactly at 269/270) stand. **All six are FIXED rather than deferred**,
+  so no OWED line was created for any of them.
+- (F1, R9.5 — CONFIRMED BY RE-MUTATION BEFORE FIXING) The anti-fabrication sweep
+  checked `/undefined/` and `/NaN/` — the spellings the PRE-fix code produced —
+  and NOT `/null/`, which is the one spelling THIS card's code can produce, since
+  the reader's unknown value is `null` and `${null}` stringifies to "null". Proven
+  at the form-bar caption, a third form-accuracy site with no assertion of its
+  own: mutating it left 44/44 green while the unscored page printed "null%" under
+  the bar. Sweep added at both unknown-state tests, and the caption anchored by
+  identity in the known AND unknown states.
+- (F2, R9.1 — CONFIRMED BY RE-MUTATION) `current_streak` renders at BOTH surfaces
+  and was asserted at NEITHER: renaming it back at all four sites left 44/44 green
+  while the page's "🔥 3 day streak!" pill and the card's "3 days / Streak" tile
+  both silently vanished. **This is the xp_earned regression this card already
+  recorded, one field over, in the same commit** — which is the strongest possible
+  argument that "fix the class, not the case" was not satisfied by fixing the
+  instance. Both sites now asserted by identity.
+- (F3, R9.1) All four list-ELEMENT render bodies were unreachable: every fixture
+  carried `[]` or a string the reader nulls, so replacing all four bodies with a
+  ReferenceError left 44/44 green. Those are the sites this card rewrote most
+  heavily, having deleted an inline `typeof pr === 'string'` branch at two of them,
+  and the `{icon,value,label}` record shape was covered by neither the render tests
+  NOR the rig (whose `healthy` personal_records is a bare string). New
+  `SUMMARY_LISTS` fixture carrying BOTH record shapes, a meal object and a stretch,
+  with a test that renders all four bodies.
+- (F4, R9.5) The empty-200 test asserted the TOAST and not the REDIRECT, so
+  deleting `navigate('/dashboard')` left it green — a toast floating over the blank
+  page the test is named after. The redirect did fire; the evidence was the suite's
+  incidental stderr (`No routes matched location "/dashboard"`), which is output,
+  not protection. `/dashboard` is a real route in the harness now and the landing
+  is asserted.
+- (F5, V1 — and it is the finding worth keeping) "13 mutations, 13 RED" was
+  UNREPRODUCIBLE from the repo: `git ls-files | grep -iE 'mutat|mutant'` was empty,
+  the entry described the harness but named no path, and no such file was
+  committed. **This is the previous card's own smoke-steps finding, repeated for
+  the more load-bearing artefact** — a smoke can be re-run from a description, a
+  mutation table cannot. Fixed properly rather than minimally: the harness is now
+  `apps/web/tools/mutate-postworkout-summary.sh`, runnable, self-documenting, and
+  it exits non-zero if any mutant survives or any sed fails to apply.
+- (F6, low) `tileValues`' doc claimed it lets a test assert the two surfaces agree;
+  for Calories it cannot, because the known page/PNG rounding difference is
+  invisible at an integer fixture. The CLAIM is narrowed in place rather than the
+  rounding changed (which Kd ruled report-only) — an assertion's stated protection
+  is itself a claim, and this project has struck several for exactly this.
+- (PROVE, post-fix) web **270 passed / 1 failed (271)** — the 1 is the known
+  syncClient env quirk; +1 test. The harness now runs **18 mutations, 18 RED, zero
+  survivors**: the original 11 render + 2 unit, PLUS five (N1-N5) that were GREEN
+  before this round and are RED after, which is the evidence that F1-F4 are closed
+  rather than described. `xpDisplay.render.test.jsx` lints clean.
+- (**NO COMPONENT FILE CHANGED, so NO RE-SMOKE IS OWED**) The round touched exactly
+  one test file plus the new harness. Nothing a user sees is different from the
+  bytes Kd smoked on `fb1956c` — the Round B precedent (DECISIONS :1950) applied to
+  this card.
+- (PROCESS SLIP, mine, recorded because concealing it would be the worse error) The
+  T3 prompt I wrote instructed the reviewer to apply the stopping rule
+  (DECISIONS :2365) to THIS card. That rule says in its own text that it is
+  per-card and "never a general licence", so extending it was Kd's call and I made
+  it in a prompt. It changed no outcome — all six findings were fixed, so nothing
+  rested on whether a NOT-VISIBLE finding may hold a tick — but the tick decision
+  goes back to Kd rather than being taken on a rule I extended myself.
