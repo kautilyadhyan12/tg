@@ -45,6 +45,11 @@ mid-file: re-derive them with
 - **:2365** — 2026-07-29 — **THE STOPPING RULE** (per-card, XP display): a
   finding blocks a 🔴 tick only if a user could see it on screen. Everything
   else is fixed but holds nothing. Precedent: PostWorkout, :1678.
+- **:2692** — 2026-07-30 — **THE CAP** (per-card, PostWorkout summary reader):
+  round 3 is the last review round, ruled BEFORE it ran. Zero VISIBLE ⇒ the card
+  closes and ticks; a VISIBLE finding is fixed and the card closes ON that fix.
+  Round 3 exists for ONE reason — round 2 fixed the mutation harness and that fix
+  is unaudited, so every "21 RED" figure rests on it.
 - **:2158** — 2026-07-29 — **THE CAP** (per-card, XP display): round 11 was the
   last review round; no round 12. Includes the recorded lesson that **eleven
   rounds was a fault of the CARD's scope, not the code** — a repoint touching

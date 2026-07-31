@@ -782,18 +782,21 @@ then; none may be hidden or reduced to close the gap.
       declined to recommend closure for that reason in its own words: the
       instance-not-class pattern "is now the card's most reliable output, and each
       round has found it in the fix written for the previous one."
-      **Kd chose a round 2 on 2026-07-30 rather than a stopping ruling; it ran and
-      found six more.** So the same choice returns, now with one more round of
-      evidence on each side: **(a)** a T3 round 3 on the round-2 fix commit; or
-      **(b)** an explicit per-card stopping ruling that a round with zero VISIBLE
-      findings closes this card. Do NOT tick without one — and a chat may NOT
-      choose (b) for itself: extending the per-card stopping rule (DECISIONS
-      :2365) is Kd's, and a chat already overstepped exactly that on this card
-      (DECISIONS :2546).
-      Evidence for (b) that rounds 1 and 2 did NOT have: two consecutive rounds
-      with zero VISIBLE findings, no component file changed in either, and the
-      protection now has a green baseline — so the "21 RED" figure means what it
-      says, which round 2's F3 proved was not true before.
+      **RESOLVED 2026-07-30 — THE CAP (Kd ruling, DECISIONS :2692), set BEFORE
+      round 3 runs so it binds whatever comes back: ROUND 3 IS THE LAST ROUND.**
+      Nothing VISIBLE ⇒ this line TICKS. Something VISIBLE ⇒ it is fixed and the
+      line ticks on that fix. NOT-VISIBLE findings are fixed if cheap, else take
+      their own lines here, and block nothing.
+      Round 3 exists for ONE named reason rather than as another cycle: **round 2
+      fixed the mutation harness itself and that fix is unaudited**, so every
+      "21 RED" figure this card quotes rests on a baseline gate written by the same
+      chat, in the same session it was told the instrument was untrustworthy.
+      The evidence the cap rests on: rounds 1 and 2 each returned six findings and
+      ZERO VISIBLE ones, from two independent fresh chats; neither changed a
+      component file, so the bytes Kd smoked at `fb1956c` are still the shipping
+      bytes. The card will tick on a passed smoke + three fresh-chat reviews + a
+      baselined harness — not on "nobody found anything": twelve findings were
+      found and all twelve were fixed.
       What landed: `readSummaryView` + `formGrade` + the time/percent formatters in
       `gamificationApi.js`, beside `readStatsView` — which parses a
       `workoutService` payload too, so the location is precedent and not a new

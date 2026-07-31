@@ -2688,3 +2688,47 @@ gate ("record as OWED, fix XP only", the entry at :1330).
   "1m 60s" — verified a faithful port of the deleted `formatSeconds`, so it predates
   this card. And `ShareCard` stamps `new Date()` rather than the workout's
   `completed_at`, so a PNG exported the next day dates the workout wrong.
+
+## 2026-07-30 — THE CAP, PostWorkout summary reader: round 3 is the LAST round (Kd ruling)
+
+- (THE RULING, set BEFORE round 3 runs) **Round 3 is the final review round on the
+  PostWorkout summary-reader card. There is no round 4.** Nothing VISIBLE survives
+  ⇒ the card closes and the 🟡 OWED line ticks. Something VISIBLE survives ⇒ it is
+  fixed and the card closes ON THAT FIX; it does not buy another cycle. Everything
+  NOT-VISIBLE is reported at full severity, fixed if cheap, and otherwise takes an
+  `OWED.md` line — it blocks nothing.
+- (WHY A ROUND 3 AT ALL, rather than closing now — and it is ONE specific gap, not
+  a general preference for more review) **Round 2 fixed the mutation harness
+  itself, and that fix is unaudited.** Before it, the harness could not distinguish
+  "an assertion caught the mutant" from "the tests never ran" (round 2 F3, proven
+  with a broken runner producing a full table of REDs and exit 0). So every
+  "21 mutations, 21 RED" figure this card has quoted now rests on a baseline gate
+  written by the same chat, in the same session it was told the instrument was
+  untrustworthy. The thing certifying the safety net is the one part nobody
+  independently checked. That is worth exactly one more round and not an open
+  cycle.
+- (WHY A CAP, and it is a measurement rather than fatigue) Rounds 1 and 2 each
+  returned SIX findings and **ZERO VISIBLE ones**, twice, from two independent
+  fresh chats. Neither round changed a single component file, so the bytes Kd
+  smoked on `fb1956c` are still the bytes that ship — what a user gets has been
+  verified and has not moved. What the rounds keep finding is protection quality,
+  and a review can always find more of that. Left uncapped this card repeats the XP
+  card, which needed a cap at round ELEVEN; the evidence here is far better at
+  round three.
+- (SET BEFORE THE ROUND, deliberately, and this is what makes it a rule) A stopping
+  rule invented after seeing the findings is a rationalisation of them — the same
+  sentence recorded at :2385 when this instrument was last used. This entry is
+  committed BEFORE round 3's prompt is handed over, so it binds whatever comes
+  back.
+- (WHAT IT DOES NOT DO) It does not soften round 3's depth, evidence bar, or
+  severity tagging — the prompt says so in those words and points the reviewer
+  first at the harness fix and at whether round 2's fixes were CLASS fixes, given
+  that "fixed the instance, left the class" is this card's four-time output. It
+  does not close the OWED lines rounds 1 and 2 created, which keep their own
+  entries. And it applies to THIS card only: like the two per-card rulings before
+  it, it is made on measured evidence about this card and is never a general
+  licence.
+- (THE STANDARD BEING APPLIED, stated so the tick cannot be misread later) The card
+  ticks on: Kd's passed browser smoke, plus three independent fresh-chat reviews,
+  plus a mutation harness with a green baseline — not on "no one found anything".
+  Twelve findings were found and every one was fixed.
