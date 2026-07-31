@@ -2732,3 +2732,92 @@ gate ("record as OWED, fix XP only", the entry at :1330).
   ticks on: Kd's passed browser smoke, plus three independent fresh-chat reviews,
   plus a mutation harness with a green baseline — not on "no one found anything".
   Twelve findings were found and every one was fixed.
+
+## PostWorkout summary reader — T3 round 3 (2026-07-30; fresh chat) — 9 findings, ZERO visible — CARD CLOSED
+
+- (THE OUTCOME, under THE CAP :2692) Nine findings, every one NOT-VISIBLE, every
+  one a mutant or a record over shipped code that is correct and has not moved
+  since Kd's passed smoke. The reviewer re-measured the load-bearing status claim
+  itself — `git diff --name-only fb1956c..HEAD -- apps/web/src` filtered of tests
+  is EMPTY — so the smoke's subject is still the shipping bytes. **The cap's
+  condition is met: the card closes and OWED.md:730 ticks.** Eight findings are
+  fixed here; one (F7) takes an OWED line, as the cap provides for.
+- (F1 — THE FINDING THE ROUND EXISTED FOR, and it is the same defect a THIRD time)
+  Round 2's F3 said the harness could not tell "an assertion caught it" from "the
+  tests never ran". Round 2 fixed the ONE probe it demonstrated. Round 3 proved
+  that was an instance fix: the baseline verified the runner EXITED 0, not that a
+  test RAN. Two measurements — `vitest -t "NoSuchDescribeName"` exits 0 with 47
+  skipped and zero run, so **renaming the describe block turns the whole gate into
+  a no-op that PASSES it**; and breaking the runner AFTER the baseline moved the
+  rubber stamp one call later, over ~27 runs the baseline never revisited. Fixed as
+  a class: every run's output is parsed for a real `Tests N passed` / `Tests N
+  failed`, the baseline runs BEFORE and AFTER, and a mutation that merely crashes
+  the runner is reported `CRASHED - INVALID` rather than counted RED. Verified
+  against BOTH of the reviewer's probes: renamed-describe → exit 1 with zero
+  mutations run; runner-dies-after-baseline → every line reads CRASHED, exit 26.
+- (**AND THEN THE SAME CLASS AGAIN, FOUND BY ME, AFTER THE ROUND** — recorded
+  because hiding it would be the worse error) The first full run under the fixed
+  gate printed `ALL MUTANTS CAUGHT` while its own output contained
+  `cp: cannot create regular file '...PostWorkout.jsx': Permission denied` between
+  M7 and M8 — a transient Windows lock. The restore had FAILED, so M8 ran with
+  M7's mutation still applied: two mutations live at once, and M8's RED may have
+  been M7's. Nothing checked that the copy worked. That is round 3 F9's sentence
+  ("RED is any non-zero exit, never 'the intended assertion fired'") in a third
+  guise. `restore()` now verifies each copy BY CHECKSUM, retries five times, and
+  makes an unrestorable file FATAL — a contaminated run must stop, not finish and
+  be reported. Re-run clean afterwards.
+- (F2) Five list-ELEMENT guards were unprotected: dropping `orUnknown` at each of
+  the five sites renders an EMPTY row rather than a dash, and `SUMMARY_NULL_ELEMENTS`
+  — round 2 F5's own fixture, built for this behaviour — asserted
+  `getAllByText('—').length >= 4` over a fixture producing SIX. A floor with two of
+  slack, which is round 8 F6's shape reintroduced inside the fixture written to
+  catch it. Now `toBe(6)`, plus five mutations (Q1-Q5).
+- (F3) That same fixture inherited `stretches: []`, so the THIRD list's element path
+  was unreached at every layer. Fixture gives it unreadable elements now and the
+  test opens the expander, asserting the count moves 6 → 8.
+- (F4) The restoration check compared to HEAD rather than to the BACKUPS, so on any
+  uncommitted edit — the normal state while a card is being written — it printed
+  "NOT restored" for files that were restored and prescribed `git checkout --`,
+  **which would have destroyed that work**. The only destructive instruction this
+  card ever shipped. Now compares to the backups by checksum; a sentinel file
+  written at start and cleared on clean exit covers the uncatchable-kill case that
+  no end-of-run check can reach.
+- (F5, and the corrections are the point) The `/undefined|NaN|null/` vocabulary had
+  reached five of nine states while the record said "at every state including the
+  control" — and the four it missed included both UNKNOWN-value states, the class
+  the sweep exists for. Now **9 of the 10 tests**; the tenth is the empty-200 case,
+  which redirects and has no rendered page to sweep. **Two false numbers in the
+  record are corrected here, and BOTH the entry's and the reviewer's were wrong:**
+  the entry said "all 30 `summary.*` reads" and the review said 29 with one comment
+  = 28 live. Measured: `grep -c` returns **29 LINES**, `grep -o | wc -l` returns
+  **40 OCCURRENCES**, and **4 lines are prose** (25, 26, 105, 628). Line counts and
+  read counts are different quantities and both records conflated them. A finding
+  is a claim and inherits V1 — including a reviewer's.
+- (F6) Round 2 changed the rig's `healthy` personal_records to two entries and did
+  not update the SMOKE doc, whose CONTROL step — the step this card calls the most
+  important — still expected one row. The "expected, not a defect" note lived only
+  in HANDOFF.md, which nobody running a smoke reads. Fixed in the doc itself, with
+  the rig change stamped into its RESULT block so a passed run is not silently
+  re-dated against a changed instrument.
+- (F8) `N1` renamed all four streak sites with `/g`, so the harness could not
+  distinguish a CLASS fix from a combined one — round 1 F5's finding applied to a
+  mutation. Split into N1a (page pill) / N1b (share-card tile); both RED, so the
+  fix is confirmed a class fix by the repo rather than by a reviewer's private probe.
+- (F9) `M8` was anchored by indentation alone. Re-anchored by its preceding line
+  with a sed address, and the general form — RED meaning any non-zero exit — is
+  closed by the `suite_failed` parse above.
+- (F7 → OWED, as the cap provides) No rig state has `duration_minutes` present with
+  `active_seconds` absent, and none has unreadable list ELEMENTS, so two behaviours
+  round 2 and round 3 wrote fixtures for stay browser-unreachable. Its own line;
+  it only pays off with a re-run smoke, which is Kd's call.
+- (PROVE) web **272 passed / 1 failed (273)** — the 1 is the known syncClient env
+  quirk. Harness: baseline green BEFORE and AFTER, **27 mutations, 27 RED, 0 GREEN,
+  0 INVALID**, no copy failure, sources verified against the backups. Round 3
+  independently reproduced the pre-round figures before writing a word.
+- (SCOPE) One test file, the harness, the rig and the smoke doc. **No component
+  file changed in round 1, 2 or 3** — verified by the reviewer, not just claimed —
+  so nothing a user sees has moved since `fb1956c` and no re-smoke is owed.
+- (WHAT THE TICK RESTS ON) A passed browser smoke, THREE independent fresh-chat
+  reviews, 21 findings across them all fixed or lined, and a mutation harness whose
+  own three false-success modes were each found and closed. Not "nobody found
+  anything".

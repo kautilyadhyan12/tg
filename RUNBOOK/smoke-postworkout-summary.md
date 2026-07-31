@@ -11,10 +11,19 @@ resolution than the report it came from. The control (step 1) was included in th
 run, which is the step that matters most: it is the only one that can catch the
 fix dashing out numbers the backend really sent.
 
-This discharges the SMOKE half of the card's gate. **The OWED tick stays OFF
-until a fresh-chat T3 also passes** — the standard the previous PostWorkout card
-held itself to (DECISIONS :1348), and the google-login / DPDP precedent for a
-tick that went on too early.
+This discharged the SMOKE half of the card's gate; three fresh-chat T3 rounds then
+ran and the card closed under THE CAP (DECISIONS :2692).
+
+**THE RIG HAS CHANGED SINCE THAT PASS, and the steps below are updated to match.**
+T3 round 2 F4 added a SECOND personal-record shape to the `healthy` state
+(`{icon,value,label}`), because until then no rig state could produce it and that
+render path had never been exercised in a browser. So step 1 now expects TWO
+trophy rows where the passing run saw one. **No shipping code changed in any of
+the three rounds** — `git diff --name-only fb1956c..HEAD -- apps/web/src` filtered
+of tests is empty, verified by round 3 — so the pass still stands for the app; only
+this instrument moved. A re-run is optional and would be a check of the rig, not of
+the fix. (Round 3 F6: the note explaining this lived only in HANDOFF.md, which the
+person running a smoke does not read.)
 
 **What this card changed, in one sentence.** When the old backend leaves a number
 out of the workout summary, the page now prints `—` instead of inventing one. The
@@ -67,7 +76,7 @@ Open `__state/healthy`, reload the summary page.
 ✅ **Calories** reads `280 kcal` · **Exercises** reads `3` · **Avg Form** reads `88%`
 ✅ The **Form Score** card reads grade **A** with the caption **Great**, in green,
    and its bar is about 88% full
-✅ **Personal Records** lists `Best form accuracy!`
+✅ **Personal Records** lists TWO rows — `Best form accuracy!` and `🔥 12 — reps`
 ✅ **Post-Workout Nutrition** lists `Paneer bhurji + rice`
 ✅ Expand **Cool Down Stretches** → two stretches listed
 ✅ No `—` anywhere among those figures

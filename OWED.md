@@ -727,11 +727,21 @@ then; none may be hidden or reduced to close the gap.
       mechanism the `useXp` staleness line needs, so they should be built
       together rather than twice.
 
-- [ ] 🟡 **`PostWorkout.jsx`'s `summary` payload is UNPARSED — the class rounds
-      4-7 closed for the other three old-backend payloads.**
-      **BUILT 2026-07-30. SMOKE PASSED. T3 ROUNDS 1 AND 2 RUN: 6 findings each,
-      ZERO VISIBLE in either, ALL FIXED. TICK AWAITING KD'S CALL — see the
-      options at the end of this entry.**
+- [x] 🟡 **`PostWorkout.jsx`'s `summary` payload — DONE 2026-07-30.** Was: UNPARSED,
+      the class rounds 4-7 closed for the other three old-backend payloads.
+      **CLOSED under THE CAP (DECISIONS :2692, ruled BEFORE round 3 ran): round 3
+      returned nine findings and ZERO VISIBLE ones, so the card closes and this
+      box ticks.** Commits `fb1956c` (the card) · `271bbc8` (smoke) · `677ba90`
+      (round 1) · `b2fa37a` (round 2) · `1334236` (the cap) · this one (round 3).
+      **WHAT THE TICK RESTS ON, stated so it cannot be misread later:** Kd's
+      passed browser smoke, THREE independent fresh-chat reviews, 21 findings
+      across them all fixed or given lines, and a mutation harness whose own three
+      false-success modes were each found and closed. **Not "nobody found
+      anything"** — every round found six to nine things, and not one of them was
+      a defect a user could see. No component file changed in ANY of the three
+      rounds (reviewer-verified, not merely claimed), so the bytes Kd smoked are
+      the bytes that ship.
+      **T3 ROUNDS 1, 2 AND 3: 6 + 6 + 9 findings, ZERO VISIBLE in any of them.**
       **T3 round 2 (2026-07-30, fresh chat; full entry DECISIONS :2614).** It
       reproduced both PROVE claims before writing a word and re-verified round 1's
       five claims, then found six more — all mutants over correct code.
@@ -1359,6 +1369,25 @@ then; none may be hidden or reduced to close the gap.
       `Achievements.jsx:5` unused `ChevronRight`) are pre-existing on master and
       correctly untouched per R1.1. Either lint web and fix the 67, or change the
       DoD wording so the box stops asserting something nobody checked.
+- [ ] ⚪ **Two PostWorkout behaviours are render-test-proven but BROWSER-unreachable.**
+      T3 round 3 F7 (2026-07-30). No rig state has `duration_minutes` present with
+      `active_seconds` absent (the minutes-fallback arm, where "NaNh NaNm total"
+      lived), and none has unreadable list ELEMENTS — so two behaviours rounds 2
+      and 3 wrote fixtures for cannot be seen in a browser. Round 2 F4 established
+      that a jsdom-only path should be made rig-reachable and then did it for one
+      of the three paths it created. Fix is a `minutesOnly` and a `badElements`
+      state in `apps/web/tools/mock-ml-backend.mjs` plus smoke steps — deferred
+      because it only pays off with a RE-RUN smoke, which is Kd's call, not a
+      chat's.
+- [ ] ⚪ **The mutation harness is not run by CI, so its table decays.**
+      `apps/web/tools/mutate-postworkout-summary.sh` is a point-in-time
+      measurement: it was green at `HEAD` on 2026-07-30 and nothing re-checks it
+      when the files it mutates change. Raised by T3 round 3 as the general form of
+      its own F1 — the same reasoning that says "prove a test RAN" says "prove the
+      table is still true". Recorded rather than wired into CI, because the sed
+      anchors are literal source strings and a CI job that goes red on an innocent
+      refactor teaches people to ignore it. Its header says so; revisit if a second
+      harness ever appears.
 - [ ] ⚪❓ **Should `readSummaryView` DROP unreadable list elements rather than
       preserve them as null? — needs a Kd ruling.** Raised by T3 round 2 (F5),
       2026-07-30. Today an all-unreadable `personal_records` renders N trophy rows

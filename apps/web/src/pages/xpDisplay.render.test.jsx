@@ -1337,6 +1337,10 @@ const SUMMARY_NULL_ELEMENTS = {
   ...SUMMARY,
   personal_records: [null, {}],
   meal_suggestions: [null],
+  // ROUND 3 F3: this inherited `stretches: []` from SUMMARY, so the THIRD list's
+  // element path was unreached at every layer — the fixture built for unreadable
+  // elements gave them to two of the three lists.
+  stretches: [null, 7],
 };
 
 /** The XP bar, resolved with a LOUD failure when it cannot be found.
@@ -1496,6 +1500,11 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
 
     // The delta STAYS — it is this workout's, and the new API has no such field.
     expect(text).toMatch(/\+70/);
+    // ROUND 3 F5: the one vocabulary, at EVERY state. It reached five of nine
+    // while the record said "every state including the control" — and the four it
+    // missed included both UNKNOWN-value states, which is the class the sweep
+    // exists for.
+    expect(text).not.toMatch(/undefined|NaN|null/);
   }, 10000);
 
   it('XP read fails: dashes, and the rest of the page survives', async () => {
@@ -1546,6 +1555,7 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     expect(text).toMatch(/88%/);
     expect(text).toMatch(/280 kcal/);
     expect(text).toMatch(/\+70/);
+    expect(text).not.toMatch(/undefined|NaN|null/);   // round 3 F5
   }, 10000);   // waits out the animation window, same reason as the test above
 
   it('a summary with no xp_earned reads "—", never "+0"', async () => {
@@ -1583,6 +1593,7 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
 
     // The level is still known — one unknown field must not blank the others.
     expect(container.textContent).toMatch(/230\/374 XP/);
+    expect(container.textContent).not.toMatch(/undefined|NaN|null/);   // round 3 F5
   });
 
   // ── The unparsed-summary gap (OWED.md:730) ─────────────────────────────────
@@ -1710,11 +1721,22 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     const { container } = renderPostWorkout();
     await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
 
-    // Two unreadable records → two dashes on the page, two more on the share card.
-    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(4);
+    // ROUND 3 F2: this was `>= 4` over a fixture that produces SIX — a floor with
+    // two of slack, so no single site's dash could go missing. It is the shape
+    // round 8 F6 deleted from three other tests, reintroduced in the fixture built
+    // to catch it. EXACT now: 2 records × 2 surfaces, plus the meal's name and
+    // timing. Dropping `orUnknown` at any one of the five element sites renders an
+    // EMPTY row rather than a dash, which a floor cannot see and this can.
+    expect(screen.getAllByText('—').length).toBe(6);
     // The point of the test: no invented CONTENT, and no crash.
     expect(container.textContent).not.toMatch(/undefined|NaN|null/);
     expect(screen.getByText('Personal Records')).toBeTruthy();
+
+    // ROUND 3 F3: the third list, behind the expander. Two unreadable stretches
+    // add two more dashes, so the count moves — a test that only counted before
+    // the click could not tell whether these rows rendered at all.
+    fireEvent.click(screen.getByText('Cool Down Stretches'));
+    expect(screen.getAllByText('—').length).toBe(8);
   });
 
   it('renders the LIST bodies — both record shapes, a meal, a stretch', async () => {
@@ -1743,6 +1765,9 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     fireEvent.click(screen.getByText('Cool Down Stretches'));
     expect(screen.getByText('Hamstring stretch, 30s each side')).toBeTruthy();
     expect(container.textContent).not.toMatch(/Stretches unavailable/);
+    // ROUND 3 F5: this is the ONLY state where all four `.map` bodies execute
+    // with content, and it was one of the four missing the sweep.
+    expect(container.textContent).not.toMatch(/undefined|NaN|null/);
   });
 
   it('lists arriving as strings do not blank the page', async () => {

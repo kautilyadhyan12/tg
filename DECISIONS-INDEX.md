@@ -106,6 +106,14 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:2736** — 2026-07-30 — PostWorkout summary reader, **T3 round 3 — CARD
+  CLOSED** under the cap: 9 findings, zero visible. Its F1 caught the round-2
+  harness fix as an INSTANCE fix (a renamed describe block passed the gate); a
+  fourth instance of the same class was then found by me after the round, when a
+  silent `cp` failure left two mutations live at once and the table still said
+  "ALL MUTANTS CAUGHT". **Standing lesson: a harness must verify the thing it
+  asserts at every point — that a test RAN, that the RED was a test failure, and
+  that the restore actually happened.**
 - **:2614** — 2026-07-30 — PostWorkout summary reader, **T3 round 2**: 6 findings,
   ZERO visible, all FIXED. Its F3 is the one to know — the mutation harness had no
   GREEN BASELINE, so "RED" could not distinguish a caught mutant from a suite that

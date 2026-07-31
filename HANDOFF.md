@@ -1,6 +1,61 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: PostWorkout summary reader — T3 ROUND 3 FIXES. **CARD CLOSED, OWED TICKED.**
+      9 findings, ZERO VISIBLE. Branch web-repoint. 1 test file + harness + rig +
+      smoke doc + records. web 272/273. 27 mutations, 27 RED, baseline green
+      before AND after.
+
+WHAT THIS SESSION DID
+  · F1 — round 2's harness baseline was an INSTANCE fix: it proved the runner
+    exited 0, not that a test RAN. `vitest -t "NoSuchDescribeName"` exits 0 with
+    everything skipped, so renaming the describe block turned the gate into a
+    no-op that PASSED it. Now every run's output is parsed for a real
+    `Tests N passed` / `Tests N failed`, baseline runs before AND after, and a
+    crashed runner reports INVALID instead of RED.
+  · THEN THE SAME CLASS AGAIN, found by me after the round: a run printed "ALL
+    MUTANTS CAUGHT" while its output carried `cp: ... Permission denied` between
+    M7 and M8 — the restore had failed, so M8 ran with M7 still applied. Restores
+    are checksum-verified and fatal now.
+  · F2/F3 — five list-element guards unprotected; a `>= 4` floor over a 6-dash
+    fixture; the third list never got unreadable elements.
+  · F4 — the restore check compared to HEAD, so on a dirty tree it prescribed
+    `git checkout --` on files that were fine. The only destructive instruction
+    this card ever shipped.
+  · F5 — the sweep vocabulary was at 5 of 9 states while the record said "every
+    state". Two false NUMBERS corrected, and BOTH the record's and the reviewer's
+    were wrong: grep -c returns 29 LINES, grep -o returns 40 OCCURRENCES, 4 lines
+    are prose. Line counts and read counts are different quantities.
+  · F6 — the smoke doc's control step was stale after round 2 changed the rig.
+  · F8/F9 — a /g mutation could not tell a class fix from a combined one; another
+    was anchored by indentation alone.
+  · F7 → OWED (rig states for two browser-unreachable paths).
+
+READ THIS IF YOU TOUCH THIS AREA AGAIN
+  **A harness must verify the thing it asserts, at every point.** This one claimed
+  success it had not earned THREE times: a dead runner (round 2 F3), a suite that
+  never ran (round 3 F1), and a failed restore leaving two mutations live (found
+  after round 3). Each time the previous fix had closed the demonstrated case and
+  left the class. If you write a checking tool here, ask what it would print if
+  the thing it checks with were broken.
+
+  **"Fixed the instance, left the class" is this card's signature failure** — six
+  instances now, each found in the fix written for the previous one. After any
+  rename or guard change, enumerate EVERY site and mutate each one.
+
+NEXT: pick a new card. Scope it to ONE screen's payload (THE CAP, :2158). The
+  natural candidates on OWED are the badge-catalog/challenges screens, predictions,
+  the exercise-library content, and the running/geo repoint — the last of which has
+  ZERO readers today and fabricates a weather-risk colour on a safety signal.
+
+VERIFY: corepack pnpm --filter web exec vitest run
+        bash apps/web/tools/mutate-postworkout-summary.sh
+LINT: touched files clean. No component file changed in ANY of the three rounds,
+      so no re-smoke is owed.
+SPEC GAPs: none.
+```
+
+```
 TASK: PostWorkout summary reader — T3 ROUND 2 FIXES. 6 findings, ZERO VISIBLE,
       ALL FIXED. Branch web-repoint. 1 test file + harness + rig + records.
       web 272/273. Green baseline + 21 mutations, 21 RED. TICK STILL OFF.
