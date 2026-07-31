@@ -65,6 +65,13 @@ Standing rules that live in CLAUDE.md, not here — the no-removal rule, the
 deferral rule (every deferral gets an OWED.md line in the same commit), the
 grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
+- **:2825** — 2026-07-31 — two false claims about CI and the branch strategy,
+  corrected. **`web-repoint` is a Kd-RULED long-lived branch (:280) that merges at
+  the P2.8 cutover — it is not an oversight, do not propose merging it early.** PR
+  #29 has been open on it since Card 1, so CI has gated every push all along.
+  **Standing lesson: an index entry you skipped is not evidence of absence** — the
+  ruling was at an entry the index named and the chat chose not to open.
+
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 
 - **:78** — Pending SPEC GAPs raised and not yet ruled on. **Read this section

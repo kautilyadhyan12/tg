@@ -2821,3 +2821,44 @@ gate ("record as OWED, fix XP only", the entry at :1330).
   reviews, 21 findings across them all fixed or lined, and a mutation harness whose
   own three false-success modes were each found and closed. Not "nobody found
   anything".
+
+## 2026-07-31 — two false claims about CI and the branch strategy, both mine, both corrected
+
+- (WHAT I ASSERTED, and it was wrong twice) Asked why no merge had happened since
+  2026-07-25, I answered with two claims stated as fact: **(1)** that there was no
+  recorded ruling authorising the long-lived `web-repoint` branch, only "a
+  half-sentence buried inside a note about something else"; and **(2)** that
+  because `ci.yml` triggers on `pull_request` and `push: [master]` only, "none of
+  those 112 commits has ever been through CI … every green figure came from a
+  local run".
+- (WHAT IS ACTUALLY TRUE) **(1)** `DECISIONS.md:280` carries
+  "(BRANCH STRATEGY, Kd-ruled)" under the Card 1 entry of 2026-07-15, with the
+  reasoning: auth is all-or-nothing (cookie vs localStorage), so the repoint cannot
+  be staged client-by-client on a working app, and the branch merges at the P2.8
+  cutover. **(2)** PR #29 has been open on that branch since Card 1; a push to a
+  branch with an open PR fires `pull_request: synchronize`, and `ci.yml` has no
+  draft filter (grep-verified) — so all five jobs have been running on every push
+  all along. The PR reads "All checks have passed — 5 successful checks" on
+  `a9a9d17`, gitleaks included.
+- (HOW BOTH HAPPENED, because the mechanism is the same and it is instructive)
+  For (1) I grepped for phrases I expected the ruling to use — "does not reach
+  master", "until P2.8" — instead of opening the entry the INDEX had already
+  pointed me at (`:278 — Card 1`). The amended grounding rule (CLAUDE.md:51-89)
+  says to read the index in full and then open the entries the task touches; I read
+  the index, decided Card 1 "wasn't my task", and then made a claim about branch
+  strategy — at which point it was exactly my task. **An index entry you skipped is
+  not evidence of absence.**
+  For (2) I read the trigger LIST and reasoned from it, rather than checking what
+  was actually running. The evidence was one click away in the PR the branch
+  already had.
+- (WHAT CAUGHT IT) Neither a test nor a review: Kd asked a direct question about
+  merges and then sent a screenshot of the compare page, which showed PR #29 sitting
+  there. Both claims had already been put to him as fact, and one of them was
+  drafted into a PR description recommending a merge that the branch strategy
+  forbids.
+- (THE PRE-EXISTING LINE THIS ALSO CORRECTS) `OWED.md`'s gitleaks item asserted
+  "pushing a feature branch runs NO scan at all", written 2026-07-28 about the very
+  branch that had an open PR. Narrowed there to the case it is true for — a branch
+  with NO open PR. Same cause: the trigger list read as if it were the whole story.
+- (NOT CHANGED BY ANY OF THIS) The gitleaks pre-commit half of R3.6 still does not
+  exist, and that item stays open on its own terms.

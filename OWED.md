@@ -1339,10 +1339,22 @@ then; none may be hidden or reduced to close the gap.
       `.git/hooks/pre-commit`, and `gitleaks` is not on PATH — so the pre-commit
       half is a rule the repo asserts and does not implement. The CI half is real
       but narrower than it reads: `.github/workflows/ci.yml` triggers on
-      `pull_request` and `push: branches: [master]` ONLY, so pushing a feature
-      branch runs NO scan at all. Found while pushing `web-repoint` (31 commits)
-      as a backup — the push went out with a hand-written pattern scan standing in
-      for gitleaks, which is weaker and was stated as such rather than ticked.
+      `pull_request` and `push: branches: [master]` ONLY. Found while pushing
+      `web-repoint` (31 commits) as a backup — the push went out with a
+      hand-written pattern scan standing in for gitleaks, which is weaker and was
+      stated as such rather than ticked.
+      **CORRECTED 2026-07-31: "so pushing a feature branch runs NO scan at all"
+      was FALSE as written, and the correction narrows this item.** A push to a
+      branch with an OPEN PR fires the `pull_request` event (`synchronize`), and
+      `ci.yml` has no draft filter (grep-verified) — so `web-repoint` has been
+      scanned on every push since PR #29 was opened, and its checks read "All
+      checks have passed — 5 successful checks" on `a9a9d17`, gitleaks included.
+      The claim holds ONLY for a branch with NO open PR. It was written on
+      2026-07-28 about the very branch that did have one. Corrected in the same
+      session a chat repeated the error one level worse — asserting that 112
+      commits "have never been through CI" while an open PR had been gating them
+      the whole time. Both errors share a cause: reading the trigger list and not
+      checking what was actually running.
       **This matters here more than in most repos: three secrets have already
       burned** (Groq key, Neon password, Google client secret — all three above
       on this list), and two of those reached a chat transcript rather than git,
