@@ -44,6 +44,26 @@ run_unit() {
     >"$BK/out.txt" 2>&1
 }
 
+# ── THE GREEN BASELINE (round 2 F3) ───────────────────────────────────────────
+# Without this, "RED" cannot distinguish "an assertion caught the mutant" from
+# "the tests never ran". The reviewer proved it: replacing the vitest invocation
+# with a nonexistent command produced a full table of REDs and
+# "ALL MUTANTS CAUGHT", exit 0. Any breakage of the runner, the workspace or an
+# unrelated import would have turned this whole file into a rubber stamp — and the
+# header two paragraphs up asserts "RED means an assertion caught it", a claim the
+# file could not support. A mutation expected-RED (M12) structurally cannot cover
+# this; only an UNMUTATED pass can.
+echo "=== baseline: the suite must PASS on pristine source ==="
+if run_render && run_unit; then
+  echo "baseline OK - both target suites pass unmutated"
+else
+  echo "BASELINE FAILED - the suites do not pass on pristine source, so every"
+  echo "RED below would be meaningless. Output:"
+  tail -30 "$BK/out.txt"
+  exit 1
+fi
+echo
+
 fails=0
 mutate() {
   name="$1"; file="$2"; expr="$3"; runner="$4"; desc="$5"
@@ -77,6 +97,11 @@ mutate M9 "$B" 's#value: summary.formAccuracy === null ? UNKNOWN#value: summary.
 mutate M10 "$B" 's#{formatXpEarned(summary.xpEarned)}</p>#{formatXpEarned(summary.xp_earned)}</p>#' run_render 'the rename regression the card shipped'
 mutate M12 "$A" 's#return Number.isFinite(v) ? `${v}%` : UNKNOWN;#return UNKNOWN;#' run_render 'formatPercent: always unknown (control)'
 
+echo "=== round 2 F1: the minutes-fallback arm, which no fixture reached ==="
+mutate P1 "$B" 's#totalTimeLabel(summary.durationMinutes)#totalTimeLabel(summary.duration_minutes)#' run_render 'F1: sublabel field renamed -> NaNh NaNm total'
+mutate P2 "$B" 's#sublabel: summary.activeSeconds !== null ? totalTimeLabel(summary.durationMinutes) : null#sublabel: null#' run_render 'F1: the sublabel is deleted entirely'
+mutate P3 "$B" 's#value: workoutTimeLabelShort(summary.activeSeconds, summary.durationMinutes)#value: workoutTimeLabel(summary.activeSeconds, summary.durationMinutes)#' run_render 'F1: card borrows the page minutes spelling'
+
 echo "=== the five the T3 found unprotected (F1-F4) ==="
 mutate N1 "$B" 's#summary\.currentStreak#summary.current_streak#g' run_render 'F2: streak renamed at all four sites'
 mutate N2 "$B" 's#<span className="text-white font-medium">{formatPercent(summary.formAccuracy)}</span>#<span className="text-white font-medium">{`${summary.formAccuracy}%`}</span>#' run_render 'F1: form-bar caption prints null%'
@@ -89,6 +114,13 @@ mutate M11 "$A" 's#if (active !== null)#if (active)#' run_unit 'workout time: tr
 mutate M13 "$A" 's#if (typeof pr === .string.) return text(pr);#if (typeof pr === "string") return pr;#' run_unit 'readPersonalRecord: unguarded string'
 
 echo
+# Round 2 F6: the EXIT trap covers an ordinary abort, but an uncatchable kill
+# leaves two tracked source files mutated with no marker — the false-record family
+# this harness's other two rules were written against. Say so out loud.
+if ! git diff --quiet -- "$A" "$B"; then
+  echo "WARNING: $A / $B are NOT restored - run 'git checkout --' on them."
+  fails=$((fails + 1))
+fi
 if [ "$fails" -eq 0 ]; then
   echo "ALL MUTANTS CAUGHT (every mutation RED, every sed applied)."
 else

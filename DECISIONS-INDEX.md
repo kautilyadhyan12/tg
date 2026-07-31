@@ -101,6 +101,13 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:2614** — 2026-07-30 — PostWorkout summary reader, **T3 round 2**: 6 findings,
+  ZERO visible, all FIXED. Its F3 is the one to know — the mutation harness had no
+  GREEN BASELINE, so "RED" could not distinguish a caught mutant from a suite that
+  never ran (proven: a broken runner produced a full table of REDs and exit 0).
+  **Standing lesson, and the reviewer's own words: "fixed the instance, left the
+  class" is now this card's most reliable output — four instances, each found in
+  the fix written for the previous one.**
 - **:2546** — 2026-07-30 — PostWorkout summary reader, **T3 round 1**: 6 findings,
   ZERO visible, all FIXED (none deferred). Its F5 put the mutation harness in the
   repo at `apps/web/tools/mutate-postworkout-summary.sh` — a claim of "13 mutations,

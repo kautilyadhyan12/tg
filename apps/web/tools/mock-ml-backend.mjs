@@ -94,7 +94,11 @@ const SUMMARY_FULL = {
   form_accuracy:    88,
   exercises_count:  3,
   completed_at:     new Date().toISOString(),
-  personal_records: ['Best form accuracy!'],
+  // BOTH record shapes the old backend sends. The `{icon,value,label}` one was
+  // added 2026-07-30 (T3 round 2 F4): until then no rig state could produce it, so
+  // that render path had never been exercised in a BROWSER at any point in this
+  // card — only in render tests. A smoke delta, not a code one.
+  personal_records: ['Best form accuracy!', { icon: '🔥', value: 12, label: 'reps' }],
   xp_earned:        70,
   current_level:    7,
   current_xp:       578,

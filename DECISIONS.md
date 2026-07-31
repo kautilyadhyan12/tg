@@ -2610,3 +2610,81 @@ gate ("record as OWED, fix XP only", the entry at :1330).
   it in a prompt. It changed no outcome — all six findings were fixed, so nothing
   rested on whether a NOT-VISIBLE finding may hold a tick — but the tick decision
   goes back to Kd rather than being taken on a rule I extended myself.
+
+## PostWorkout summary reader — T3 round 2 (2026-07-30; fresh chat) — 6 findings, ZERO visible, ALL fixed
+
+- (THE RESULT, and it is the same shape as round 1) Six findings, all NOT-VISIBLE,
+  all mutants over correct shipped code, all FIXED rather than deferred. The
+  reviewer reproduced both PROVE claims before writing a word (18/18 RED, 270/271)
+  and independently verified round 1's five claims — including splitting N1 into
+  per-surface renames to check the streak fix was a CLASS fix and not a combined
+  one. It declined to recommend closure, and named why.
+- (**THE PATTERN IS NOW THE CARD'S MOST RELIABLE OUTPUT**, and the reviewer said so
+  in those words) "Fixed the instance, left the class" has now happened FOUR times
+  on this one card: `xp_earned` → `current_streak` → `durationMinutes` → round 1's
+  own `/null/` sweep, which was added at ONE of its two sites. Each was found in
+  the fix written for the previous one. Recorded here as the finding, not as
+  colour: the lesson is that after a rename, the unit of work is EVERY field that
+  rename touched at EVERY surface — enumerated and mutated, not spot-checked.
+- (F1, R9.1/R9.5 — the third instance) `summary.durationMinutes` in the Workout
+  Time SUB-LINE had no assertion that could fail, and the reviewer enumerated all
+  30 `summary.*` reads across both surfaces to find it. Three mutants lived there;
+  the first prints a real fabrication, measured through the module rather than
+  reasoned: `totalTimeLabel(undefined)` → **"NaNh NaNm total"**, in the HEALTHY
+  state, i.e. the literal string this card's own entry names as one of the two
+  defects it exists to delete. ROOT CAUSE, one for all three: **no fixture had
+  `active_seconds` absent with `duration_minutes` present**, so the minutes-fallback
+  arm never executed at either surface and the page/card divergence the card
+  declares "PRESERVED ON PURPOSE" (35 min vs 35m) was interchangeable as far as the
+  render suite could tell. New `SUMMARY_MINUTES_ONLY` fixture asserting
+  `['35 min', '35m']` as two DIFFERENT strings, the sub-line by identity in the
+  control, and the sub-line's ABSENCE in the minutes-only state; all three
+  mutations added to the harness as P1-P3.
+- (F2, R9.5 — the fourth instance, and it is round 1's own fix) The record said
+  "sweep added at both unknown-state tests"; the diff added `/null/` at exactly
+  ONE. The string-lists test still swept `/undefined/` alone and the healthy
+  positive control — the state Kd's smoke leans on hardest — swept nothing at all,
+  which is precisely why F1's mutant was invisible to five tests. One vocabulary
+  now, `/undefined|NaN|null/`, at every state including the control.
+- (F3, V1/R9 — the finding that undermines every number the harness produced) The
+  harness had **no green baseline**, so "RED" could not distinguish "an assertion
+  caught it" from "the tests never ran". The reviewer proved it by replacing the
+  vitest invocation with a nonexistent command: a full table of REDs, "ALL MUTANTS
+  CAUGHT", exit 0. Any breakage of the runner, the workspace or an unrelated import
+  would have turned the file into a rubber stamp — while its own header asserted
+  "RED means an assertion caught it". Fixed: the suite must PASS unmutated before
+  any mutation runs. **Verified by re-running the reviewer's own probe against the
+  fix: exit code 1, and the mutation table is never reached (0 mutation lines
+  printed).** M12 structurally could not have covered this — only an unmutated pass
+  can.
+- (F4, V1/R11.3) A comment cited the rig's `healthy` personal_records as "a bare
+  string"; it is an ARRAY — the bare string belongs to the `unscored` state. The
+  substantive claim (neither the rig nor the tests carried the `{icon,value,label}`
+  shape) is true, the evidence for it was false, and this project has struck
+  comments for exactly that ("a record is a claim", :1950). Corrected in place —
+  **and the consequence the comment obscured is closed rather than just noted**:
+  the rig's `healthy` state now carries BOTH record shapes, so that render path is
+  reachable in a browser for the first time in this card. It is a SMOKE delta, not
+  a code one; nothing shipping changed.
+- (F5, R9.1, low) `readSummaryView` PRESERVES unreadable list elements as null and
+  the length gate then opens the section, so an all-unreadable list renders N
+  trophy rows of "—" — not a fabricated value, but a fabricated COUNT, at both
+  surfaces. Strictly better than the pre-card code, which threw. A render fixture
+  now pins the behaviour; **whether the reader should DROP unreadable elements
+  instead is a Kd call and has its own OWED line** rather than being decided here.
+- (F6, harness hygiene, low) Restoration was an EXIT trap plus per-mutation
+  restore, so an uncatchable kill would leave two tracked source files mutated with
+  no marker — the false-record family the harness's other two rules were written
+  against. It now checks `git diff --quiet` on both files and says so loudly.
+- (PROVE, post-fix) web **272 passed / 1 failed (273)** — the 1 is the known
+  syncClient env quirk; +2 tests. The harness now runs a green baseline plus
+  **21 mutations, 21 RED**, the three new ones (P1-P3) having been GREEN before this
+  round. `xpDisplay.render.test.jsx` and `mock-ml-backend.mjs` lint clean.
+- (SCOPE) One test file, the harness, and the rig. **No component file changed
+  again this round**, so nothing a user sees has moved since the bytes Kd smoked at
+  `fb1956c`, and no re-smoke is owed on that ground.
+- (REPORTED, NOT FIXED — R1.1, both pre-existing, both given OWED lines) `secondsLabel`'s
+  `Math.round(totalSeconds % 60)` carries to 60 on fractional input, printing
+  "1m 60s" — verified a faithful port of the deleted `formatSeconds`, so it predates
+  this card. And `ShareCard` stamps `new Date()` rather than the workout's
+  `completed_at`, so a PNG exported the next day dates the workout wrong.

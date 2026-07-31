@@ -1,6 +1,52 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: PostWorkout summary reader — T3 ROUND 2 FIXES. 6 findings, ZERO VISIBLE,
+      ALL FIXED. Branch web-repoint. 1 test file + harness + rig + records.
+      web 272/273. Green baseline + 21 mutations, 21 RED. TICK STILL OFF.
+
+WHAT THIS SESSION DID
+  · F3 is the important one: the mutation harness had NO GREEN BASELINE, so "RED"
+    could not distinguish "an assertion caught it" from "the tests never ran" —
+    proven with a broken runner that produced a full table of REDs and exit 0.
+    The suite must now pass unmutated first; verified with the reviewer's own
+    probe (exit 1, mutation table never reached).
+  · F1 — the Workout Time SUB-LINE had no assertion that could fail; mutating its
+    field printed "NaNh NaNm total" in the HEALTHY state. Root cause: no fixture
+    had active_seconds absent with duration_minutes present, so the whole
+    minutes-fallback arm never ran at either surface.
+  · F2 — round 1's own /null/ sweep was added at ONE of its two sites.
+  · F4 — a comment's evidence was false (the rig's healthy PRs are an array, not
+    a bare string); corrected, and the rig now carries BOTH record shapes so that
+    path is browser-reachable for the first time.
+  · F5 — unreadable list elements render as N dashes, a fabricated COUNT; fixture
+    added, and drop-vs-preserve is a Kd question on OWED.
+  · F6 — harness restoration was silent on an uncatchable kill.
+
+READ THIS IF YOU TOUCH THIS AREA AGAIN
+  **"Fixed the instance, left the class" is this card's most reliable output —
+  FOUR times now**: xp_earned → current_streak → durationMinutes → the /null/
+  sweep's own second site. Each was found in the fix written for the previous one.
+  After a rename, the unit of work is EVERY field that rename touched at EVERY
+  surface, enumerated and mutated — not spot-checked.
+
+  **A mutation table without a green baseline is a rubber stamp.** This is the
+  general form and it applies to any harness anyone writes here next.
+
+  **The rig's healthy state now has two personal-record shapes.** If a smoke is
+  re-run, one extra trophy row in `healthy` is expected, not a defect.
+
+NEXT: Kd rules — (a) a T3 round 3, or (b) an explicit per-card stopping ruling.
+  A chat may NOT choose (b) for itself (DECISIONS :2546 records that slip).
+
+VERIFY: corepack pnpm --filter web exec vitest run
+        bash apps/web/tools/mutate-postworkout-summary.sh
+LINT: xpDisplay.render.test.jsx + mock-ml-backend.mjs clean. No component file
+      changed in round 1 OR round 2, so no re-smoke is owed on that ground.
+SPEC GAPs: none.
+```
+
+```
 TASK: PostWorkout summary reader — T3 ROUND 1 FIXES. 6 findings, ZERO VISIBLE,
       ALL FIXED. Branch web-repoint. 1 test file + 1 new harness + records.
       web 270/271. 18 mutations, 18 RED. TICK STILL OFF — Kd's call, two

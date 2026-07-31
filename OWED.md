@@ -729,9 +729,30 @@ then; none may be hidden or reduced to close the gap.
 
 - [ ] 🟡 **`PostWorkout.jsx`'s `summary` payload is UNPARSED — the class rounds
       4-7 closed for the other three old-backend payloads.**
-      **BUILT 2026-07-30. SMOKE PASSED. T3 ROUND 1 RUN: 6 findings, ZERO
-      VISIBLE, ALL FIXED. TICK AWAITING KD'S CALL — see the two options at the
-      end of this entry.**
+      **BUILT 2026-07-30. SMOKE PASSED. T3 ROUNDS 1 AND 2 RUN: 6 findings each,
+      ZERO VISIBLE in either, ALL FIXED. TICK AWAITING KD'S CALL — see the
+      options at the end of this entry.**
+      **T3 round 2 (2026-07-30, fresh chat; full entry DECISIONS :2614).** It
+      reproduced both PROVE claims before writing a word and re-verified round 1's
+      five claims, then found six more — all mutants over correct code.
+      **F3 is the one to know: the mutation harness had NO GREEN BASELINE, so
+      "RED" could not distinguish "an assertion caught it" from "the tests never
+      ran"** — proven with a broken runner producing a full table of REDs and exit
+      0. Fixed, and the fix verified with the reviewer's own probe (exit 1, table
+      never reached). F1: the Workout Time SUB-LINE had no failing assertion and
+      printed "NaNh NaNm total" under mutation — root cause, no fixture had
+      `active_seconds` absent with `duration_minutes` present. F2: round 1's own
+      `/null/` sweep was added at ONE of its two sites. F4: a comment's evidence
+      was false, and the rig now carries both record shapes so that path is
+      browser-reachable at last. F6: harness restoration was silent on an
+      uncatchable kill.
+      Now a green baseline plus **21 mutations, 21 RED**. web 272/273.
+      **No component file changed in either round**, so nothing a user sees has
+      moved since the smoked bytes.
+      **THE PATTERN, recorded because it is the card's real finding:** "fixed the
+      instance, left the class" has happened FOUR times here — `xp_earned` →
+      `current_streak` → `durationMinutes` → the sweep's own second site — each
+      found in the fix written for the previous one.
       **T3 round 1 (2026-07-30, fresh chat; full entry DECISIONS :2546).** Every
       finding was a MUTANT a user could have seen, over shipped code that is
       correct; none was deferred, so none created an OWED line. F1: the
@@ -753,19 +774,26 @@ then; none may be hidden or reduced to close the gap.
       (result at `RUNBOOK/smoke-postworkout-summary.md`). The `healthy` CONTROL was
       part of the run, which is the step that matters most — it is the only one
       that can catch the fix dashing out numbers the backend really sent.
-      **THE TICK IS KD'S CALL, and the honest case against ticking now is
-      recorded first.** This card's own predecessor writes, on the line above:
-      "the argument for ticking without a clean round — *round 1 found no
-      behaviour defect, only gaps in the protection* — is what the re-tick
-      precedent forecloses." That describes this situation exactly. Against that:
-      all six findings are FIXED rather than deferred, the fixes are entirely
-      test-layer plus one new tool file, and five mutants that were green are now
-      red. Kd chooses: **(a)** a T3 round 2 on the fix commit, then tick if clean;
-      or **(b)** an explicit per-card stopping ruling that a round with zero
-      VISIBLE findings closes this card, ticking now. Do NOT tick without one of
-      those two — and note a chat may not choose (b) for itself: extending the
-      per-card stopping rule (DECISIONS :2365) is Kd's, and a chat already
-      overstepped it once on this card, recorded at DECISIONS :2546.
+      **THE TICK IS KD'S CALL, and the honest case against ticking is recorded
+      first.** This card's own predecessor writes, on the line above: "the
+      argument for ticking without a clean round — *round 1 found no behaviour
+      defect, only gaps in the protection* — is what the re-tick precedent
+      forecloses." That describes rounds 1 AND 2 exactly, and round 2's reviewer
+      declined to recommend closure for that reason in its own words: the
+      instance-not-class pattern "is now the card's most reliable output, and each
+      round has found it in the fix written for the previous one."
+      **Kd chose a round 2 on 2026-07-30 rather than a stopping ruling; it ran and
+      found six more.** So the same choice returns, now with one more round of
+      evidence on each side: **(a)** a T3 round 3 on the round-2 fix commit; or
+      **(b)** an explicit per-card stopping ruling that a round with zero VISIBLE
+      findings closes this card. Do NOT tick without one — and a chat may NOT
+      choose (b) for itself: extending the per-card stopping rule (DECISIONS
+      :2365) is Kd's, and a chat already overstepped exactly that on this card
+      (DECISIONS :2546).
+      Evidence for (b) that rounds 1 and 2 did NOT have: two consecutive rounds
+      with zero VISIBLE findings, no component file changed in either, and the
+      protection now has a green baseline — so the "21 RED" figure means what it
+      says, which round 2's F3 proved was not true before.
       What landed: `readSummaryView` + `formGrade` + the time/percent formatters in
       `gamificationApi.js`, beside `readStatsView` — which parses a
       `workoutService` payload too, so the location is precedent and not a new
@@ -1328,6 +1356,25 @@ then; none may be hidden or reduced to close the gap.
       `Achievements.jsx:5` unused `ChevronRight`) are pre-existing on master and
       correctly untouched per R1.1. Either lint web and fix the 67, or change the
       DoD wording so the box stops asserting something nobody checked.
+- [ ] ⚪❓ **Should `readSummaryView` DROP unreadable list elements rather than
+      preserve them as null? — needs a Kd ruling.** Raised by T3 round 2 (F5),
+      2026-07-30. Today an all-unreadable `personal_records` renders N trophy rows
+      of "—" at both surfaces: not a fabricated VALUE, but a fabricated COUNT.
+      Preserving is strictly better than the pre-card code (which threw), and
+      dropping would silently remove rows the payload did claim exist — which is
+      why a chat must not choose. A render fixture pins today's behaviour, so
+      whichever way it is ruled the change is one assertion.
+- [ ] ⚪ **`secondsLabel` carries to "1m 60s" on fractional input.**
+      `Math.round(totalSeconds % 60)` rounds 59.6 to 60 instead of carrying into
+      the minute. Found by T3 round 2 and verified a FAITHFUL port of the
+      `formatSeconds` deleted at `dd07856`, so it predates this card (R1.1,
+      reported not fixed). Reachable only if the old backend sends fractional
+      seconds.
+- [ ] ⚪ **`ShareCard` stamps today's date, not the workout's.** It renders
+      `new Date()`, so a PNG exported the day after a workout dates it wrong.
+      Pre-existing; `completed_at` is deliberately outside the reader's nine
+      rendered fields, so closing this adds a field as well as a line. Found by T3
+      round 2 (R1.1, reported not fixed).
 - [ ] ⚪ **PostWorkout prints calories unrounded while its share card rounds
       them.** One workout can read `280.4 kcal` on screen and `280 kcal` in the
       downloadable PNG — two surfaces, one number. Pre-existing (the page never

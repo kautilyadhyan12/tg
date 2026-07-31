@@ -1297,14 +1297,46 @@ const SUMMARY_BAD_LISTS = {
  *  ever executed — and those are the sites this card rewrote most heavily, having
  *  deleted an inline `typeof pr === 'string'` branch at two of them. The reviewer
  *  proved the gap by replacing all four bodies with a ReferenceError: 44/44 still
- *  GREEN. The `{icon,value,label}` record shape was covered by neither the render
- *  tests NOR the smoke rig, whose `healthy` personal_records is a bare string
- *  (mock-ml-backend.mjs) — so BOTH shapes are here on purpose. */
+ *  GREEN.
+ *
+ *  ROUND 2 F4 CORRECTS THE EVIDENCE THIS COMMENT GAVE. It said the rig's `healthy`
+ *  personal_records is "a bare string"; it is `['Best form accuracy!']`, an ARRAY
+ *  (mock-ml-backend.mjs) — the bare string belongs to the `unscored` state. The
+ *  substantive claim survives and is the reason both shapes are here: the
+ *  `{icon,value,label}` shape was carried by neither the render tests nor the rig.
+ *  A record is a claim (:1950), so the false half is struck rather than reworded
+ *  around. */
 const SUMMARY_LISTS = {
   ...SUMMARY,
   personal_records: ['Best form accuracy!', { icon: '🔥', value: 12, label: 'reps' }],
   meal_suggestions: [{ meal: 'Paneer bhurji + rice', timing: 'within 45 min' }],
   stretches:        ['Hamstring stretch, 30s each side'],
+};
+
+/** ROUND 2 F1: NO fixture had `active_seconds` absent with `duration_minutes`
+ *  present, so the MINUTES-FALLBACK arm never executed at either surface — and
+ *  three mutants lived in that hole, one of which prints a real fabrication
+ *  ("NaNh NaNm total", the literal string this card exists to delete, in the
+ *  HEALTHY state). It also meant the page/card divergence the card declares
+ *  "PRESERVED ON PURPOSE" — the page says "35 min", the card says "35m" — was
+ *  interchangeable as far as the render suite could tell, pinned only at the unit
+ *  layer. That is the same gap that let `getFormGrade` be a page-local defect in
+ *  the first place. */
+const SUMMARY_MINUTES_ONLY = (({
+  // eslint-disable-next-line no-unused-vars
+  active_seconds, ...rest
+}) => rest)(SUMMARY);
+
+/** ROUND 2 F5: elements the reader could not read are PRESERVED as null (unit-
+ *  pinned as `[null, null, null]`), and the length gate then opens the section —
+ *  so an all-unreadable list renders N trophy rows of "—". Not a fabricated
+ *  value, but a fabricated COUNT, and no render fixture reached it. Whether the
+ *  reader should DROP unreadable elements instead is a Kd call on OWED; this
+ *  fixture pins what the code does today either way. */
+const SUMMARY_NULL_ELEMENTS = {
+  ...SUMMARY,
+  personal_records: [null, {}],
+  meal_suggestions: [null],
 };
 
 /** The XP bar, resolved with a LOUD failure when it cannot be found.
@@ -1379,6 +1411,16 @@ function formBar(container) {
 const tileValues = (label) => screen.getAllByText(label).map((n) => (
   n.tagName === 'P' ? n.nextElementSibling.textContent : n.previousElementSibling.textContent
 ));
+
+/** The PAGE's tile label node (the share card's is a <div>, the page's a <p>) —
+ *  needed for the sub-line, which only the page has. `getAllByText` throws when
+ *  nothing matches, and the explicit check turns "the page's tile vanished" into a
+ *  named failure rather than a TypeError on undefined. */
+const pageTile = (label) => {
+  const node = screen.getAllByText(label).find((n) => n.tagName === 'P');
+  expect(node, `no PAGE tile labelled "${label}" — did the stats grid change?`).toBeTruthy();
+  return node;
+};
 
 describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
   // 10s test budget: the bar assertion below waits out framer-motion's own
@@ -1635,6 +1677,46 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     await waitFor(() => expect(screen.getByText('DASHBOARD REACHED')).toBeTruthy());
   });
 
+  it('falls back to total minutes, in each surface\'s own spelling', async () => {
+    // ROUND 2 F1. Three mutants lived in this hole, one of them printing the
+    // literal "NaNh NaNm" this card exists to delete.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY_MINUTES_ONLY } });
+
+    const { container } = renderPostWorkout();
+    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
+
+    // The declared, deliberately-preserved divergence: page "35 min", card "35m".
+    // Asserted as two DIFFERENT strings, so swapping either surface's formatter
+    // for the other's now fails — until now they were interchangeable here.
+    expect(tileValues('Workout Time')).toEqual(['35 min', '35m']);
+
+    // With no active time there is no "total" contrast line to draw, so the
+    // sub-line must be ABSENT rather than reading "— total".
+    expect(pageTile('Workout Time').nextElementSibling.nextElementSibling).toBe(null);
+
+    expect(container.textContent).not.toMatch(/undefined|NaN|null/);
+  });
+
+  it('an all-unreadable list renders rows it can label, not a fabricated count', async () => {
+    // ROUND 2 F5. `readSummaryView` PRESERVES unreadable elements as null and the
+    // length gate then opens the section, so N unreadable records render N trophy
+    // rows of "—". Pinned as CURRENT behaviour; whether the reader should drop
+    // them instead is a Kd call recorded on OWED, and this assertion moves with
+    // that ruling if it lands.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY_NULL_ELEMENTS } });
+
+    const { container } = renderPostWorkout();
+    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
+
+    // Two unreadable records → two dashes on the page, two more on the share card.
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(4);
+    // The point of the test: no invented CONTENT, and no crash.
+    expect(container.textContent).not.toMatch(/undefined|NaN|null/);
+    expect(screen.getByText('Personal Records')).toBeTruthy();
+  });
+
   it('renders the LIST bodies — both record shapes, a meal, a stretch', async () => {
     // T3 F3. Every other fixture leaves these four `.map` bodies unexecuted, and
     // they are the sites this card rewrote most heavily.
@@ -1674,7 +1756,10 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
 
     expect(container.textContent).toMatch(/88%/);          // real metrics survive
-    expect(container.textContent).not.toMatch(/undefined/);
+    // ROUND 2 F2: this swept `/undefined/` ALONE while the unscored test swept
+    // three — so round 1's own fix for a missing spelling was applied at ONE of
+    // its two sites, which is the card's most repeated shape. One vocabulary now.
+    expect(container.textContent).not.toMatch(/undefined|NaN|null/);
 
     // `stretches` is behind the expander, so its throw needs the click — a mount
     // assertion alone would leave that third site uncovered.
@@ -1697,6 +1782,17 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     expect(tileValues('Exercises')).toEqual(['3', '3']);
     expect(tileValues('Avg Form')).toEqual(['88%']);
     expect(tileValues('Form score')).toEqual(['88% (A)']);
+
+    // ROUND 2 F1: the SUB-LINE under Workout Time had no assertion at all, so
+    // renaming its field printed "NaNh NaNm total" here — in the healthy state —
+    // with every test green. Read as the node AFTER the value, so it also fails
+    // if the sub-line vanishes.
+    expect(pageTile('Workout Time').nextElementSibling.nextElementSibling.textContent)
+      .toBe('35 min total');
+
+    // ROUND 2 F2: the control swept for no fabrication spelling at ALL, which is
+    // why F1's mutant was invisible to it. This is the state Kd's smoke leans on.
+    expect(container.textContent).not.toMatch(/undefined|NaN|null/);
 
     const label = screen.getByText('Form Score').nextElementSibling;
     const grade = screen.getByText('Form Score').parentElement.nextElementSibling;
