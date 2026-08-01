@@ -1,6 +1,67 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: Kd's deploy-later RULING recorded + the workout calendar repoint BUILT AND
+      PARKED AS BLOCKED. Branch web-repoint carries RECORDS ONLY (7aab8a0); the
+      code is on `workout-calendar-parked` (7eaba8d) and MUST NOT BE MERGED.
+
+READ THIS FIRST IF YOU ARE PICKING THE NEXT CARD
+  **A workout reaches the new API only if it contains squat, jump squat or chair
+  squat.** Chain, all command-verified: sessionController.js:67 (no definition →
+  log-only) · 3 definitions exist of a 58-exercise catalog · syncClient.js:72
+  (all-log-only never synced) · DECISIONS :75 (server enforces sets[] non-empty)
+  · ActiveWorkout.jsx:536 (every workout still writes to the OLD backend).
+  **After cutover, a workout of any other exercise would be saved NOWHERE.**
+  That is now a 🔴 OWED item of its own; it was previously prose inside another
+  line. It blocks the calendar, PostWorkout's summary and the Dashboard's stats
+  alike, and what is owed FIRST is a Kd RULING (R0.2): where does a hand-logged
+  workout live once the old backend is off?
+
+WHAT THIS SESSION DID
+  · Kd ruled: finish the CODE, buy the server later. P2.8 splits into a code half
+    (now) and a deploy half (VPS, secrets, backup drill, DPDP worker running).
+    The DPDP worker must be live before the first real SIGNUP, not just before
+    the first deploy. Standing two-round review cap, set BEFORE each card runs.
+  · Road-mapped the rest of P2.8 by command: 4 web api files still fully on the
+    old backend (running 13 calls, workouts 10, exercises 5, recommendations 1),
+    gamification mixed. Order: free repoints → missing backend homes → deploy.
+  · Built the calendar repoint to PROVE (320/321, +48 tests, 18/18 mutants,
+    build OK), THEN read OWED:503 and parked it.
+
+READ THIS IF YOU TOUCH THIS AREA AGAIN
+  **An index entry you skipped is not evidence of absence** (:2825, incurred
+  again). OWED:503 opens with "BLOCKED — NOT a client repoint. Do not pick this
+  up as a quick win" and lists three blockers; I read the ONE-LINE version in
+  cutover.md and became the THIRD chat to recommend this card as the cheap one.
+  The full entry would have supplied the whole card in advance.
+
+  **A repoint that nothing asserts is a repoint the next edit silently undoes.**
+  Mutation M18 reverted getHistory to the old backend and all 46 tests stayed
+  GREEN — the render suite must mock the api client, so nothing checked WHICH
+  backend was called. Closed with a recordRequests guard in BOTH directions.
+  Any future repoint card needs this guard from the start.
+
+  **A harness must verify the thing it asserts.** This one shipped two of the
+  PostWorkout harness's own recorded bugs before its first run: `git checkout --`
+  restore (cannot restore untracked files; destructive on a dirty tree) and a
+  parser blind to vitest's ANSI, which made the FIRST run report BASELINE
+  INVALID rather than silently grading 18 mutants on an unreadable instrument.
+
+NEXT: Kd rules on the log-only/write-path question (the 🔴 OWED item above). It
+  is the gate for every workout-history surface. The other genuinely-free
+  repoint left is `/v1/exercises` (exerciseApi list read) — smaller, and NOT
+  blocked by this, but check its OWED entry IN FULL first.
+
+VERIFY (on `workout-calendar-parked`, not web-repoint):
+        corepack pnpm --filter web exec vitest run
+        bash apps/web/tools/mutate-workout-calendar.sh
+LINT: 1 error on WorkoutCalendar.jsx (pre-existing set-state-in-effect; the file
+      produced 2 at HEAD, so parity improved). Its own OWED line.
+SMOKE: NOT RUN — smoking a screen that must not ship would waste Kd's time.
+SPEC GAPs: none. The log-only question is a RULING request, not a spec gap.
+```
+
+```
 TASK: PostWorkout summary reader — T3 ROUND 3 FIXES. **CARD CLOSED, OWED TICKED.**
       9 findings, ZERO VISIBLE. Branch web-repoint. 1 test file + harness + rig +
       smoke doc + records. web 272/273. 27 mutations, 27 RED, baseline green
