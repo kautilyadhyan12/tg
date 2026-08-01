@@ -162,7 +162,86 @@ describe("workout sync payload (v1 §5.3)", () => {
     const dup = { ...payload, sets: [validSetSummary, { ...validSetSummary }] };
     expect(workoutSyncPayloadSchema.safeParse(dup).success).toBe(false);
   });
-  it("rejects empty sets (all-log-only workouts are never synced — DECISIONS 2026-07-10)", () => {
+  // R2-F4: the old title said "all-log-only workouts are never synced", citing
+  // DECISIONS 2026-07-10. That bar was REINTERPRETED on 2026-08-01 — log-only
+  // sets are expressible now, so an all-log-only workout satisfies this with
+  // real sets. What it still forbids is a workout with no sets at all. The
+  // source comment was rewritten in the same commit "so the next reader does
+  // not restore the old meaning", while the assertion enforcing it kept that
+  // meaning — the sweep stopped at the file being edited.
+  it("rejects a workout with NO sets at all (DECISIONS 2026-08-01 reinterprets the 07-10 bar)", () => {
     expect(workoutSyncPayloadSchema.safeParse({ ...payload, sets: [] }).success).toBe(false);
+  });
+
+  // R2-F5: `packages/shared` OWNS this union and had zero cases for the
+  // log-only branch — every assertion lived in api suites gated behind
+  // `describe.skipIf(DATABASE_URL)`. Deleting `logOnlySetSummarySchema` left
+  // this package's suite green. These run with no database.
+  describe("the log-only branch (Part 6 §3.6; Kd-ruled 2026-08-01)", () => {
+    const logOnlySet = {
+      exercise: "squat",
+      setIndex: 1,
+      reps: 10,
+      durationMs: 30_000,
+      mode: "log_only",
+      avgFormScore: null,
+      repScores: null,
+      faultCounts: {},
+      tempoMsAvg: null,
+      romStats: null,
+      view: "unknown",
+      holdMs: null,
+      calibration: null,
+      engineVersion: null,
+      definitionVersion: null,
+    };
+    const withLogOnly = (extra: Record<string, unknown> = {}) => ({
+      ...payload,
+      sets: [{ ...logOnlySet, ...extra }],
+    });
+
+    it("accepts a hand-logged set", () => {
+      expect(workoutSyncPayloadSchema.safeParse(withLogOnly()).success).toBe(true);
+    });
+
+    it("rejects repScores [] — the contract says NULL, exactly as the column does", () => {
+      expect(workoutSyncPayloadSchema.safeParse(withLogOnly({ repScores: [] })).success).toBe(false);
+    });
+
+    it("rejects every form claim on a set nothing analysed", () => {
+      for (const claim of [
+        { avgFormScore: 90 },
+        { repScores: [90, 91] },
+        { faultCounts: { shallow_depth: 1 } },
+        { engineVersion: "1.0.0" },
+        { definitionVersion: 1 },
+      ]) {
+        expect(
+          workoutSyncPayloadSchema.safeParse(withLogOnly(claim)).success,
+          `${JSON.stringify(claim)} must not be storable on a log-only set`,
+        ).toBe(false);
+      }
+    });
+
+    it("still requires an ENGINE set to carry its provenance", () => {
+      for (const missing of [{ engineVersion: null }, { definitionVersion: null }]) {
+        const sets = [{ ...validSetSummary, ...missing }];
+        expect(workoutSyncPayloadSchema.safeParse({ ...payload, sets }).success).toBe(false);
+      }
+    });
+
+    it("accepts defsVersion null — a client with no bundle loaded has none to report", () => {
+      expect(
+        workoutSyncPayloadSchema.safeParse({ ...withLogOnly(), defsVersion: null }).success,
+      ).toBe(true);
+    });
+
+    it("rejects an empty engineVersion at BOTH levels (an empty string is not a version)", () => {
+      expect(
+        workoutSyncPayloadSchema.safeParse({ ...payload, engineVersion: "" }).success,
+      ).toBe(false);
+      const sets = [{ ...validSetSummary, engineVersion: "" }];
+      expect(workoutSyncPayloadSchema.safeParse({ ...payload, sets }).success).toBe(false);
+    });
   });
 });

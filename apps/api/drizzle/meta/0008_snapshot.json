@@ -1,5 +1,5 @@
 {
-  "id": "9695e37c-1908-4aa5-b46d-b27fb62f5ffc",
+  "id": "d3515b39-4008-4a52-bf8d-44c580d0c22f",
   "prevId": "6ad32ec7-1810-4746-8fa4-0aa9ca4662e5",
   "version": "7",
   "dialect": "postgresql",
@@ -2106,7 +2106,7 @@
         },
         "workout_sets_engine_provenance_check": {
           "name": "workout_sets_engine_provenance_check",
-          "value": "(\"workout_sets\".\"mode\" IS DISTINCT FROM 'engine' AND \"workout_sets\".\"avg_form_score\" IS NULL AND \"workout_sets\".\"rep_scores\" IS NULL)\n          OR (\"workout_sets\".\"engine_version\" IS NOT NULL AND \"workout_sets\".\"definition_version\" IS NOT NULL)"
+          "value": "(\"workout_sets\".\"mode\" IS DISTINCT FROM 'engine' AND \"workout_sets\".\"avg_form_score\" IS NULL\n           AND \"workout_sets\".\"rep_scores\" IS NULL AND \"workout_sets\".\"fault_counts\" = '{}'::jsonb)\n          OR (\"workout_sets\".\"engine_version\" IS NOT NULL AND \"workout_sets\".\"definition_version\" IS NOT NULL)"
         },
         "workout_sets_log_only_unscored_check": {
           "name": "workout_sets_log_only_unscored_check",

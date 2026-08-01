@@ -3328,3 +3328,95 @@ user can see changes yet — deliberately, so a failure has one possible cause.
 - (WHAT THIS UNBLOCKS) The web write path can now build an all-log-only payload
   without inventing anything: the client knows its own engine build, and reports
   no bundle version. That was F3's blocking condition, and it is discharged.
+
+## log-only sets — T3 round 2 (2026-08-01; fresh chat) — 5 findings, ZERO visible — CARD CLOSED
+
+Round 2 was ruled the last before round 1 ran (the cap, :2866). Zero VISIBLE
+findings, so the card closes. All five were fixed anyway — each was cheap, and
+one of them would have stopped the migrate command.
+
+- (R2-F1, the consequential one, and it is not in the code at all) **Regenerating
+  an ALREADY-APPLIED migration desynchronised the database's own bookkeeping.**
+  Verified by reading both: `drizzle.__drizzle_migrations` id=9 held
+  `created_at=1785556187541` / hash `7ff846b3…` from the first application, while
+  the regenerated `_journal.json` said `when=1785560018511` and the file hashed
+  to `efc595c2…`. `drizzle-orm`'s migrator applies a migration when
+  `lastDbMigration.created_at < migration.folderMillis`, so 0009 would have RE-RUN,
+  hit `ADD CONSTRAINT "workout_sets_mode_check"` → **42710**, and rolled the whole
+  migrate transaction back. Nothing corrupted; it simply refuses to run. CI
+  inherits it too — the migrations job clones primary WITH data (`ci.yml:65`).
+  FIXED by reconciling the row to the current hash and timestamp, then PROVEN by
+  running `drizzle-kit migrate`, which is now a clean no-op.
+  **The general lesson, and it cost two regenerations to learn: an applied
+  migration cannot be regenerated for free.** Either the row is reconciled in the
+  same step, or the change goes in a NEW migration. R4.4's "forward-only" exists
+  for exactly this; the file was only editable at all because it had never left
+  this machine.
+- (R2-F2 — a test that could not fail, again, in the test written to close
+  exactly that) Case 5 (`mode='log_only'` + `avg_form_score`) was rejected by the
+  PROVENANCE constraint, not the log-only one, because such a row also lacks
+  provenance and Postgres reports whichever it checks first. So the three SCORE
+  clauses of `log_only_unscored_check` had no assertion of their own: delete them
+  and the suite stayed green. **Same defect class as F4, inside F4's own fix,
+  which is this project's signature failure.** FIXED in two parts: every
+  unambiguous case now asserts `constraint_name`, and the three score clauses are
+  proven by fetching the DEPLOYED predicate from `pg_get_constraintdef` and
+  evaluating it against candidate rows — the real expression, not a copy that
+  would drift, and no locks. Mutation-checked: removing the `fault_counts` clause
+  from the live constraint turns exactly one line red with its own message.
+  (A first attempt dropped the sibling constraint inside a transaction; DDL there
+  takes a lock and starved the 2-connection pool, timing out unrelated tests.
+  Recorded because it looked like a finding and was bookkeeping.)
+- (R2-F3) **A fault list is score evidence, and the provenance rule ignored it.**
+  Verified: `mode` NULL + `fault_counts {"shallow_depth":3}` + no provenance was
+  ACCEPTED, while the sibling constraint fourteen lines down already said in
+  words that "a log-only set cannot carry faults — nothing analysed it". The
+  comment claimed the rule was "anything carrying score evidence must say which
+  engine produced it"; only two of the three kinds of evidence were listed.
+  Unreachable through the sync route (the Zod union blocks both branches) — but
+  this CHECK exists precisely because Zod is not the only writer: migrate-mongo
+  inserts directly, and P4.y's audit worker will. FIXED in the constraint, which
+  required the third regeneration and therefore the R2-F1 reconciliation again,
+  done in the same step.
+- (R2-F4) The superseded meaning survived in a test TITLE: "rejects empty sets
+  (all-log-only workouts are never synced — DECISIONS 2026-07-10)". :3298
+  reinterpreted that bar and the SOURCE comment was rewritten "so the next reader
+  does not restore the old meaning" — while the assertion enforcing it still
+  carried the old one, citing the superseded line. **The sweep stopped at the file
+  being edited.** Retitled.
+- (R2-F5) **`packages/shared` OWNS the union and had zero tests for it.** Every
+  log-only assertion lived in api suites gated behind
+  `describe.skipIf(DATABASE_URL)`, so deleting `logOnlySetSummarySchema` left
+  `pnpm --filter @app/shared test` green at 19/19. Six cases added there — the
+  branch parses, `repScores: []` is rejected, every form claim is rejected, an
+  engine set still needs provenance, `defsVersion: null` is accepted,
+  `engineVersion: ""` is rejected at BOTH levels. Mutation-checked with the
+  reviewer's own probe: replacing the log-only arm of the union turns two of them
+  red. shared 19 → **25**.
+- (LOWER-VALUE, fixed in passing) The DB test leaked its `users` fixture row when
+  it failed midway, so the NEXT run died on the leftover instead of on the thing
+  under test; it now cleans both fixtures up front.
+- (RECORDED, NOT CHANGED — a deliberate widening) A row with no `mode`, no
+  provenance and no score evidence is now storable where the pre-0009 NOT NULL
+  forbade it. That is the intended "unknown" bucket for pre-0009 and
+  migrate-mongo rows, and it is unreachable through the API (`syncWorkout` always
+  writes a non-null mode). Stated so it is a recorded choice rather than a
+  discovered surprise.
+- (VERDICTS ON ROUND 1, all re-run rather than reasoned about) F1 fixed — 11 row
+  shapes evaluated against the live predicate. F2 fixed. F3 built as Kd ruled,
+  and every remaining required field checked for honesty on an all-log-only
+  workout: nothing is left that a hand-logging client cannot truthfully answer.
+  F4 mostly fixed → completed here. F5 fixed. F6 fixed at both levels.
+- (PROVE) api **374/374** real Postgres · shared **25/25** · typecheck clean ·
+  lint clean on all four touched files · `drizzle-kit migrate` a clean no-op.
+- (THE ONE THING THAT IS NOT GREEN, and it is not a defect) **CI has never seen
+  this card.** `origin/web-repoint` is at `e49d909`; every commit here is local.
+  Under V7 no READY TO MERGE is available until it is pushed and CI passes. The
+  branch does not merge until cutover regardless, so this blocks nothing today —
+  but "green" on this card means "green on Kd's machine", and that distinction is
+  exactly what the branch-strategy correction at :2825 was about.
+- (WEB SUITE, unchanged and not this card's) 272 passed / 1 failed —
+  `syncClient.test.js`, `window is not defined`, which fires only because the
+  local `apps/web/.env` sets `VITE_API_URL`. Green in CI, red locally, its own
+  OWED line. The web write-path card touches that file next; it is fixed there,
+  not here (R1.1).

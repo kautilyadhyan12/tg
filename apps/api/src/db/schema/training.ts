@@ -104,9 +104,18 @@ export const workoutSets = pgTable(
     // the old DDL), migrate-mongo rows ('legacy-py'/0, Part 4 §7), log-only rows
     // (no score evidence), and engine rows with no scored reps (repScores `[]`,
     // which is not NULL, so provenance is still required).
+    // T3 ROUND 2 F3: `fault_counts` was missing from the first arm, so a row
+    // with a FAULT LIST and no provenance was accepted — verified. A stored
+    // fault list is an analyser output with nobody's name on it, and the
+    // sibling constraint below already says so in words ("a log-only set cannot
+    // carry faults — nothing analysed it"). Unreachable through the sync route
+    // (the Zod union blocks it on both branches), but this CHECK exists exactly
+    // because Zod is not the only writer: migrate-mongo inserts directly, and
+    // P4.y's audit worker will.
     check(
       "workout_sets_engine_provenance_check",
-      sql`(${t.mode} IS DISTINCT FROM 'engine' AND ${t.avgFormScore} IS NULL AND ${t.repScores} IS NULL)
+      sql`(${t.mode} IS DISTINCT FROM 'engine' AND ${t.avgFormScore} IS NULL
+           AND ${t.repScores} IS NULL AND ${t.faultCounts} = '{}'::jsonb)
           OR (${t.engineVersion} IS NOT NULL AND ${t.definitionVersion} IS NOT NULL)`,
     ),
     // A log-only set is user-typed: nothing analysed it, so it can carry no form

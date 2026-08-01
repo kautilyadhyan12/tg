@@ -121,6 +121,17 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:3332** — 2026-08-01 — log-only sets, **T3 round 2 — CARD CLOSED** under the
+  cap: 5 findings, ZERO visible, all fixed. **Read R2-F1 before regenerating any
+  applied migration: it desynchronises `drizzle.__drizzle_migrations`, so the
+  next `drizzle-kit migrate` RE-RUNS the migration and dies on 42710 — CI
+  included, since its migrations job clones primary WITH data.** Either
+  reconcile the row in the same step or use a NEW migration. **Standing lesson:
+  R2-F2 found a test that could not fail INSIDE the fix written to close exactly
+  that class** — a log-only row carrying a score is rejected by the PROVENANCE
+  constraint first, so the log-only constraint's three score clauses were
+  unasserted. Fixed by evaluating the DEPLOYED predicate from
+  `pg_get_constraintdef` rather than a copy of it.
 - **:3298** — 2026-08-01 — **F3 RULED (Kd, option A)**: the workout-level
   `engineVersion` means "the engine build the CLIENT was running", not "the
   engine that scored this", and `defsVersion` becomes NULLABLE — matching Part 4

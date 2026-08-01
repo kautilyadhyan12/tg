@@ -184,6 +184,12 @@ d("0001_init on a real database", () => {
   // one of the two enforcements was wrong and the other was missing. These go
   // straight at the table, past every schema.
   it("0009 workout_sets CHECKs bite at the DB, not just at Zod", async () => {
+    // R2 minor: clean BOTH fixtures up front, not only after. A run that dies
+    // mid-test used to leak this user row, and the next run then failed on the
+    // leftover instead of on the thing under test.
+    await sql`DELETE FROM workouts WHERE user_id IN
+      (SELECT id FROM users WHERE display_name = 'log-only-ddl-check')`;
+    await sql`DELETE FROM users WHERE display_name = 'log-only-ddl-check'`;
     const owner = await sql<{ id: string }[]>`
       INSERT INTO users (display_name) VALUES ('log-only-ddl-check') RETURNING id`;
     const userId = owner[0]?.id;
@@ -211,42 +217,117 @@ d("0001_init on a real database", () => {
         reps?: number;
         avgFormScore?: number | null;
         repScores?: number[] | null;
+        faultCounts?: Record<string, number>;
         engineVersion?: string | null;
         definitionVersion?: number | null;
       },
     ) => sql`
       INSERT INTO workout_sets (workout_id, user_id, exercise_id, started_at,
                                 set_index, mode, reps, duration_ms,
-                                avg_form_score, rep_scores, engine_version,
-                                definition_version)
+                                avg_form_score, rep_scores, fault_counts,
+                                engine_version, definition_version)
       VALUES (${workoutId}, ${userId}, ${exerciseId}, now(), ${setIndex},
               ${c.mode ?? null}, ${c.reps ?? 0}, 1000, ${c.avgFormScore ?? null},
-              ${c.repScores ?? null}::smallint[], ${c.engineVersion ?? null},
+              ${c.repScores ?? null}::smallint[],
+              ${sql.json(c.faultCounts ?? {})}, ${c.engineVersion ?? null},
               ${c.definitionVersion ?? null})`;
 
+    // R2-F2: every case names the constraint it expects. Without that, case 5
+    // below was rejected by the PROVENANCE check, not the log-only one — so the
+    // three score clauses of log_only_unscored_check could be deleted with the
+    // suite still green. A rejection is only evidence for the rule that caused it.
+    const rejects = (p: Promise<unknown>, constraint: string) =>
+      expect(p).rejects.toMatchObject({ code: "23514", constraint_name: constraint });
+
     // mode_check: only the two ruled values exist.
-    await expect(insertSet(1, { mode: "guessed" })).rejects.toMatchObject({ code: "23514" });
+    await rejects(insertSet(1, { mode: "guessed" }), "workout_sets_mode_check");
 
     // engine_provenance_check — F1's exact bypass: a fully SCORED set with NO
     // provenance and NO mode. The first version of this constraint accepted it,
     // because `NULL IS DISTINCT FROM 'engine'` is TRUE.
-    await expect(
+    await rejects(
       insertSet(2, { avgFormScore: 90, repScores: [90, 91] }),
-    ).rejects.toMatchObject({ code: "23514" });
+      "workout_sets_engine_provenance_check",
+    );
     // …and with mode declared, which the first version DID catch.
-    await expect(insertSet(3, { mode: "engine", avgFormScore: 90 })).rejects.toMatchObject({
-      code: "23514",
-    });
+    await rejects(
+      insertSet(3, { mode: "engine", avgFormScore: 90 }),
+      "workout_sets_engine_provenance_check",
+    );
+    // R2-F3: a FAULT LIST is score evidence too, and was NOT covered — a row
+    // with faults and no provenance was accepted until round 2.
+    await rejects(
+      insertSet(9, { faultCounts: { shallow_depth: 3 } }),
+      "workout_sets_engine_provenance_check",
+    );
 
     // log_only_unscored_check — F2's exact bypass: "nothing analysed this, and
     // here is the engine that analysed it". The first version accepted it.
-    await expect(
+    await rejects(
       insertSet(4, { mode: "log_only", engineVersion: "1.0.0", definitionVersion: 1 }),
+      "workout_sets_log_only_unscored_check",
+    );
+
+    // The three SCORE clauses of log_only_unscored_check need the sibling out of
+    // the way to be provable. A log-only row carrying a score ALSO lacks
+    // provenance, so engine_provenance_check rejects it first and Postgres
+    // reports THAT name — which is how round 2 found these three clauses had no
+    // assertion of their own.
+    //
+    // Rather than drop the sibling (DDL inside a transaction takes a lock and
+    // starved the pool), the DEPLOYED predicate is fetched from the catalog and
+    // evaluated on its own against candidate rows. This runs the real
+    // constraint expression — not a copy of it, which would drift — and needs
+    // no locks, no transaction and no writes.
+    const [defRow] = await sql<{ def: string }[]>`
+      SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+      WHERE conrelid = 'workout_sets'::regclass
+        AND conname = 'workout_sets_log_only_unscored_check'`;
+    const predicate = defRow?.def.replace(/^CHECK\s*/i, "");
+    if (predicate === undefined) throw new Error("log_only_unscored_check is not on the table");
+
+    /** Evaluate the deployed predicate against one hypothetical row. */
+    const holds = async (row: {
+      avg_form_score: number | null;
+      rep_scores: number[] | null;
+      fault_counts: Record<string, number>;
+    }): Promise<boolean | null> => {
+      const [r] = await sql<{ ok: boolean | null }[]>`
+        SELECT ${sql.unsafe(predicate)} AS ok
+        FROM (VALUES (
+          'log_only'::text,
+          ${row.avg_form_score}::smallint,
+          ${row.rep_scores}::smallint[],
+          ${sql.json(row.fault_counts)}::jsonb,
+          NULL::text,
+          NULL::int
+        )) AS t(mode, avg_form_score, rep_scores, fault_counts, engine_version,
+                definition_version)`;
+      return r?.ok ?? null;
+    };
+
+    // The honest log-only row satisfies it…
+    expect(await holds({ avg_form_score: null, rep_scores: null, fault_counts: {} })).toBe(true);
+    // …and each score clause on its own makes it FALSE. Delete any one of the
+    // three from the constraint and the matching line here goes red.
+    expect(
+      await holds({ avg_form_score: 80, rep_scores: null, fault_counts: {} }),
+      "avg_form_score clause is not load-bearing",
+    ).toBe(false);
+    expect(
+      await holds({ avg_form_score: null, rep_scores: [80], fault_counts: {} }),
+      "rep_scores clause is not load-bearing",
+    ).toBe(false);
+    expect(
+      await holds({ avg_form_score: null, rep_scores: null, fault_counts: { shallow_depth: 1 } }),
+      "fault_counts clause is not load-bearing",
+    ).toBe(false);
+
+    // A log-only row carrying a score is rejected in the REAL configuration
+    // too — by whichever of the two fires first, which is all that matters here.
+    await expect(
+      insertSet(5, { mode: "log_only", avgFormScore: 80 }),
     ).rejects.toMatchObject({ code: "23514" });
-    // …and the score half, which the first version DID catch.
-    await expect(insertSet(5, { mode: "log_only", avgFormScore: 80 })).rejects.toMatchObject({
-      code: "23514",
-    });
 
     // The legitimate shapes still insert: log-only, engine, the migrate-mongo
     // shape (Part 4 §7: 'legacy-py' / 0), and a pre-0009-style row (mode NULL
