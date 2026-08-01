@@ -97,10 +97,10 @@ export async function syncWorkout(
       // log-only card, and its branch of the union REQUIRES both provenance
       // fields — so 'engine' here is read off the data, not assumed.
       const mode = s.mode ?? "engine";
-      // NULL, not []: an empty array says "we scored zero reps", which is a
-      // measurement. A log-only set was never scored at all, and the migration
-      // 0009 CHECK enforces the distinction in the column itself.
-      const repScores = mode === "log_only" ? null : s.repScores;
+      // T3 round 1 F5: a `mode === "log_only" ? null : s.repScores` translation
+      // used to live here, because the wire demanded `[]` while the column
+      // demands NULL. The contract now says NULL too, so the value passes
+      // straight through and the two ends cannot drift apart.
       await tx`
         INSERT INTO workout_sets (workout_id, user_id, exercise_id, started_at,
                                   set_index, view, mode, reps, hold_ms, duration_ms,
@@ -110,7 +110,7 @@ export async function syncWorkout(
         VALUES (${payload.workoutId}, ${userId}, ${exerciseId},
                 ${payload.startedAt}, ${s.setIndex}, ${s.view}, ${mode}, ${s.reps},
                 ${s.holdMs}, ${s.durationMs}, ${s.avgFormScore},
-                ${repScores}, ${tx.json(asJsonValue(s.faultCounts))}, ${s.tempoMsAvg},
+                ${s.repScores}, ${tx.json(asJsonValue(s.faultCounts))}, ${s.tempoMsAvg},
                 ${s.romStats === null ? null : tx.json(asJsonValue(s.romStats))},
                 ${s.calibration === null ? null : tx.json(asJsonValue(s.calibration))},
                 ${s.engineVersion}, ${s.definitionVersion})

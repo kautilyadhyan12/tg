@@ -100,7 +100,12 @@ export const engineSetSummarySchema = setSummaryBase
     avgFormScore: z.number().int().min(0).max(100).nullable(), // null: no scored reps (e.g. timer tracking)
     repScores: z.array(z.number().int().min(0).max(100)),
     faultCounts: z.record(z.string(), z.number().int().positive()),
-    engineVersion: z.string(),
+    // T3 round 1 F6: this was a bare z.string(), so `engineVersion: ""` was
+    // accepted alongside `avgFormScore: 100` — verified. That hollowed out the
+    // reason absent-`mode` may be read as 'engine' ("its payload already proves
+    // the kind by carrying both provenance fields"): an empty string proves
+    // nothing. NB this makes the field PRESENT, not TRUE — see setModeSchema.
+    engineVersion: z.string().min(1),
     definitionVersion: z.number().int().positive().max(INT4_MAX),
   })
   .strict();
@@ -115,7 +120,12 @@ export const logOnlySetSummarySchema = setSummaryBase
   .extend({
     mode: z.literal("log_only"),
     avgFormScore: z.null(),
-    repScores: z.array(z.never()).max(0),
+    // T3 round 1 F5: this was `z.array(z.never()).max(0)`, so the WIRE demanded
+    // `[]` while the COLUMN demands NULL, and repo.ts translated between them
+    // under a comment calling `[]` a fabrication. The contract now states the
+    // same thing the database does, and the translation is gone: one rule, in
+    // one place, agreed by both ends.
+    repScores: z.null(),
     faultCounts: z.record(z.string(), z.never()).refine((f) => Object.keys(f).length === 0, {
       message: "a log-only set cannot carry faults — nothing analysed it",
     }),
@@ -133,6 +143,16 @@ export type LogOnlySetSummary = z.infer<typeof logOnlySetSummarySchema>;
 
 /** The stored kind of a set. `null` in the DB means UNKNOWN — every row written
  *  before migration 0009 predates the distinction and is not back-claimed as
- *  either. v1 §14's "verified entries only" reads this. */
+ *  either.
+ *
+ *  **`mode = 'engine'` IS A CLIENT CLAIM, NOT A VERIFICATION** (T3 round 1 F6).
+ *  Nothing server-side checks that the named engine version is real, that the
+ *  exercise even HAS a definition, or that the scores came from a run of it —
+ *  the pre-existing threat model at OWED:484-496 (XP is entirely
+ *  client-determined; sync has no per-route rate limit) is unchanged by this
+ *  card. v1 §14's "verified entries only" must NOT read this column as proof;
+ *  it narrows the field, and the P4.y plausibility work is what can make it
+ *  mean more. Recorded here because this card is what makes the column
+ *  queryable, and a queryable column invites exactly that misreading. */
 export const setModeSchema = z.enum(["engine", "log_only"]);
 export type SetMode = z.infer<typeof setModeSchema>;

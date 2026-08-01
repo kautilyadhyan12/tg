@@ -3195,3 +3195,102 @@ user can see changes yet — deliberately, so a failure has one possible cause.
   (:2866, :2912) exist only on `web-repoint`, so a master-based branch would cite
   numbers that do not resolve there. Recorded because a future audit will
   otherwise read this as the pattern being broken by accident.
+
+## log-only sets — T3 round 1 (2026-08-01; fresh chat) — 6 findings, ZERO visible, 5 fixed, 1 to Kd
+
+- (THE HEADLINE, and it is a correction to my own record) **The card's central
+  claim was false in BOTH halves.** DECISIONS :3085 and the commit message for
+  267f443 said the relaxation was "enforced twice" and that "an engine set still
+  MUST carry provenance". Neither held. Both were re-verified against Postgres
+  before a line was changed, and the database answered:
+  `NULL IS DISTINCT FROM 'engine'` → **true**, and
+  `'log_only' IS DISTINCT FROM 'log_only' OR ('1.0.0' IS NOT NULL)` → **true**.
+  Struck, not reworded. This is the project's most-repeated defect — a claim
+  about the artifact outrunning the artifact — and it happened in the card whose
+  whole subject is refusing to state things nobody verified.
+- (F1, the serious one) `workout_sets_engine_provenance_check` read
+  `mode IS DISTINCT FROM 'engine' OR (…)`. `mode` is NULLABLE, so **any row
+  omitting it satisfied the constraint with both provenance columns NULL.**
+  Before 0009 the `NOT NULL` made a provenance-less scored set impossible for
+  every writer; that version made it impossible only for writers that *declare*
+  `mode='engine'` — a REGRESSION dressed as a guard. FIXED by making the rule
+  about the DATA rather than the discriminator: anything carrying score evidence
+  must name the engine that produced it. Verified against every real row shape,
+  by running it: pre-0009 rows, migrate-mongo's `'legacy-py'`/0 (Part 4 §7),
+  log-only rows, and engine rows with no scored reps (`repScores: []` is not
+  NULL, so provenance is still required).
+- (F2) `workout_sets_log_only_unscored_check` constrained score/repScores/faults
+  and NOT the provenance columns, so the DB would have stored
+  `mode='log_only'` beside `engine_version='1.0.0'` — "nothing analysed this,
+  and here is the engine that analysed it". FIXED by adding both to the same
+  constraint.
+- (F4 — and this is WHY F1 and F2 shipped) **The "belt" had no test.** Every
+  rejection in `workouts.sync.test.ts` is Zod's, returning 400 before the DB is
+  reached, so nothing proved the three CHECKs existed, let alone bit. Nine
+  assertions "covering" the constraints could not have failed if the constraints
+  were deleted outright. FIXED with direct `INSERT INTO workout_sets` cases
+  expecting `23514`, in the `db.migration.test.ts` style the repo already had.
+  **The new test was then mutation-checked the only way that means anything: the
+  ORIGINAL broken constraints were restored on the dev database and the test
+  RAN RED** ("promise resolved instead of rejecting"), then the corrected ones
+  went back and it ran green. A test that has never been seen to fail is a
+  claim, not protection — this card had nine of those.
+- (AND THE MUTATION RUN LEFT PROOF BEHIND) Re-adding the corrected constraint
+  then FAILED: `violated by some row`. The row was the fully-scored,
+  provenance-less set the OLD constraint had just accepted during the red run —
+  a shape that was impossible before 0009. Not a false alarm and not a fixture
+  quirk: the bug, having actually happened, blocking its own fix. Debris cleared
+  and the constraint applied.
+- (F5) The wire contract demanded the exact value the code called a fabrication:
+  the log-only branch pinned `repScores` to `[]` (`z.array(z.never()).max(0)`)
+  while the COLUMN requires NULL, with `repo.ts` translating between them under
+  a comment explaining that `[]` claims a scoring pass. FIXED: `repScores:
+  z.null()` on that branch, translation deleted. One rule, one place, both ends
+  agreeing — and the next card no longer has to send a value the contract calls
+  wrong.
+- (F6) `engineVersion: z.string()` accepted `""`. Verified: a set with
+  `engineVersion: ""`, `definitionVersion: 1` and `avgFormScore: 100` was
+  ACCEPTED and stored as `mode='engine'`. That hollows out the stated reason
+  absent-`mode` may be read as engine ("its payload already proves the kind by
+  carrying both provenance fields") — an empty string proves nothing. FIXED with
+  `.min(1)`, **and the larger half recorded rather than coded around:
+  `mode='engine'` is a CLIENT CLAIM, not a verification.** Nothing server-side
+  checks the version is real, that the exercise has a definition, or that the
+  scores came from a run of it. Written into `setModeSchema`'s doc comment so
+  v1 §14's "verified entries only" cannot misread the column this card made
+  queryable. The threat model at OWED:484-496 is unchanged by this card.
+- (F3 — NOT FIXED, it needs Kd's ruling and is recorded as open) An all-log-only
+  workout must still send a workout-level `engineVersion` (required string) and
+  `defsVersion` (required positive int); both are stored and served back by
+  `GET /v1/workouts/:id`. **The card's own all-log-only test hardcodes
+  `"1.0.0"`/1 and asserts nothing about them — the fabrication deleted at set
+  level is performed by the fixture at workout level.** It is invisible today
+  and becomes real the moment the web half lands, because `syncClient.js:40`
+  builds that value as `summaries[0].engineVersion`, which does not exist when
+  there are no summaries. Note Part 4 §3.5:384 declares `bundle_version int`
+  NULLABLE while the payload forbids null. Options put to Kd: (a) make
+  `defsVersion` nullable — matches the spec DDL, shared-schema only, no
+  migration — and record that workout-level `engineVersion` means "the engine
+  build the client was running", which is honest and non-null even when nothing
+  was scored; or (b) a DEVIATION PROPOSAL to make `workouts.engine_version`
+  nullable, which the spec declares NOT NULL, so R0.3 applies. **Own OWED line;
+  the next card cannot be written honestly until it is ruled.**
+- (CLEAN, and round 2 should not redo these — verified by the reviewer and not
+  re-litigated here) Removing `?? []` broke no consumer (the only chain is
+  repo → service → `workoutSetViewSchema`, made nullable in the same commit; no
+  web reader, no DPDP export column). The migration is CORRECT on a non-empty
+  table, not merely lock-costly — every pre-0009 row has `mode` NULL and all
+  three CHECKs evaluate NULL/TRUE for such rows. Journal and snapshot are
+  consistent. migrate-mongo's `'legacy-py'`/0 rows still pass. XP matches the
+  ruling: `FILTER (WHERE avg_form_score >= …)` means a hand-logged workout
+  earns base + streak and neither earns nor DILUTES the form bonus.
+- (MIGRATION REGENERATED, not amended by hand) 0009 was deleted, `training.ts`
+  corrected, and drizzle re-run so the SQL and the meta snapshot cannot drift.
+  It emitted `0008_log_only_sets.sql` a second time even though `0008_user_xp`
+  exists — same collision as the first generation; renamed to 0009 and the
+  journal tag fixed again. Worth knowing about before the next migration.
+- (PROVE) api **374 passed / 374** against real Postgres (+1: the constraint
+  test). shared **19/19**. Typecheck clean; lint clean on all five touched
+  files. The dev database's constraints were reconciled by hand because 0009 had
+  already been applied there — the new `23514` test is what proves the file and
+  the database agree, which is the second job it does.

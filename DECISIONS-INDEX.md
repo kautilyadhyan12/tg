@@ -121,6 +121,17 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:3199** — 2026-08-01 — log-only sets, **T3 round 1**: 6 findings, ZERO
+  visible, 5 fixed, **F3 open for Kd**. **Both halves of :3085's central claim
+  were FALSE** — "enforced twice" and "an engine set still MUST carry
+  provenance" — because `NULL IS DISTINCT FROM 'engine'` is TRUE, so any row
+  omitting `mode` satisfied the guard with no provenance at all. **Standing
+  lesson: the nine assertions "covering" those constraints were all Zod's,
+  returning 400 before the DB was reached — they could not have failed if the
+  constraints were deleted outright.** The replacement was proven by restoring
+  the broken constraints and watching the new test go RED. **F3 (open): an
+  all-log-only workout still has to send a workout-level engine version it does
+  not have; the next card cannot be written honestly until Kd rules.**
 - **:3085** — 2026-08-01 — **hand-logged workouts can reach the new API (API
   half)**. Closes the data-loss hole above: `workout_sets.mode` is filled in as
   `'engine' | 'log_only'` (Part 4 §3.5 declared the column and never its

@@ -1,5 +1,5 @@
 {
-  "id": "89f37076-1f15-446f-aafa-5018d8586dec",
+  "id": "9695e37c-1908-4aa5-b46d-b27fb62f5ffc",
   "prevId": "6ad32ec7-1810-4746-8fa4-0aa9ca4662e5",
   "version": "7",
   "dialect": "postgresql",
@@ -2106,11 +2106,11 @@
         },
         "workout_sets_engine_provenance_check": {
           "name": "workout_sets_engine_provenance_check",
-          "value": "\"workout_sets\".\"mode\" IS DISTINCT FROM 'engine' OR (\"workout_sets\".\"engine_version\" IS NOT NULL AND \"workout_sets\".\"definition_version\" IS NOT NULL)"
+          "value": "(\"workout_sets\".\"mode\" IS DISTINCT FROM 'engine' AND \"workout_sets\".\"avg_form_score\" IS NULL AND \"workout_sets\".\"rep_scores\" IS NULL)\n          OR (\"workout_sets\".\"engine_version\" IS NOT NULL AND \"workout_sets\".\"definition_version\" IS NOT NULL)"
         },
         "workout_sets_log_only_unscored_check": {
           "name": "workout_sets_log_only_unscored_check",
-          "value": "\"workout_sets\".\"mode\" IS DISTINCT FROM 'log_only' OR (\"workout_sets\".\"avg_form_score\" IS NULL AND \"workout_sets\".\"rep_scores\" IS NULL AND \"workout_sets\".\"fault_counts\" = '{}'::jsonb)"
+          "value": "\"workout_sets\".\"mode\" IS DISTINCT FROM 'log_only'\n          OR (\"workout_sets\".\"avg_form_score\" IS NULL AND \"workout_sets\".\"rep_scores\" IS NULL\n              AND \"workout_sets\".\"fault_counts\" = '{}'::jsonb\n              AND \"workout_sets\".\"engine_version\" IS NULL AND \"workout_sets\".\"definition_version\" IS NULL)"
         }
       },
       "isRLSEnabled": false

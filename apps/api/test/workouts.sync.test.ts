@@ -41,7 +41,7 @@ const logSet = (setIndex: number, extra: Record<string, unknown> = {}) => ({
   durationMs: 30000,
   mode: "log_only",
   avgFormScore: null,
-  repScores: [],
+  repScores: null, // T3 F5: the contract says NULL, exactly as the column does
   faultCounts: {},
   tempoMsAvg: null,
   romStats: null,
@@ -306,6 +306,7 @@ d("POST /v1/workouts/sync (real Postgres, real cookie authn)", () => {
     const cases: unknown[] = [
       payload(wid, [logSet(1, { avgFormScore: 95 })]), // a score for a set nothing watched
       payload(wid, [logSet(1, { repScores: [90, 91] })]), // per-rep scores likewise
+      payload(wid, [logSet(1, { repScores: [] })]), // and not even an empty array (F5)
       payload(wid, [logSet(1, { faultCounts: { shallow_depth: 1 } })]), // faults likewise
       payload(wid, [logSet(1, { engineVersion: "1.0.0" })]), // provenance it does not have
       payload(wid, [logSet(1, { definitionVersion: 1 })]),
@@ -325,6 +326,7 @@ d("POST /v1/workouts/sync (real Postgres, real cookie authn)", () => {
       payload(wid, [set(1, { definitionVersion: null })]),
       payload(wid, [set(1, { mode: "engine", engineVersion: null })]),
       payload(wid, [set(1, { mode: "made_up_mode" })]), // only two kinds exist
+      payload(wid, [set(1, { engineVersion: "" })]), // F6: an empty version proves nothing
     ];
     for (const bad of cases) {
       const res = await inject(bad, { "idempotency-key": wid });

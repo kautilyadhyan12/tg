@@ -176,4 +176,103 @@ d("0001_init on a real database", () => {
       WHERE gym_id = ${gymId} AND user_id = ${memberId}`;
     expect(rows[0]?.["n"]).toBe(2);
   });
+
+  // T3 round 1 F4 — the "belt" had no test. Every rejection in
+  // workouts.sync.test.ts is Zod's, returning 400 before the DB is reached, so
+  // nothing proved these three constraints existed, let alone bit. That absence
+  // is precisely why F1 and F2 shipped: the card claimed "enforced twice" while
+  // one of the two enforcements was wrong and the other was missing. These go
+  // straight at the table, past every schema.
+  it("0009 workout_sets CHECKs bite at the DB, not just at Zod", async () => {
+    const owner = await sql<{ id: string }[]>`
+      INSERT INTO users (display_name) VALUES ('log-only-ddl-check') RETURNING id`;
+    const userId = owner[0]?.id;
+    if (userId === undefined) throw new Error("log-only fixture insert failed");
+    const ex = await sql<{ id: string }[]>`SELECT id FROM exercises WHERE slug = 'squat'`;
+    const exerciseId = ex[0]?.id;
+    if (exerciseId === undefined) throw new Error("squat must be seeded for this test");
+
+    const workoutId = "dddddddd-1111-4111-8111-00000000dd01";
+    // Clean BEFORE, not only after: a run that fails mid-test leaves the row
+    // behind and every later run then dies on the PK instead of on the thing
+    // under test — a fixture failure wearing the costume of a real one.
+    await sql`DELETE FROM workouts WHERE id = ${workoutId}`;
+    await sql`
+      INSERT INTO workouts (id, user_id, started_at, platform, engine_version,
+                            sets_count, total_reps, duration_ms)
+      VALUES (${workoutId}, ${userId}, now(), 'web', '1.0.0', 0, 0, 0)`;
+
+    /** One set row. Columns are listed explicitly rather than via the dynamic
+     *  `sql({…})` helper, which cannot type `rep_scores` as smallint[]. */
+    const insertSet = (
+      setIndex: number,
+      c: {
+        mode?: string | null;
+        reps?: number;
+        avgFormScore?: number | null;
+        repScores?: number[] | null;
+        engineVersion?: string | null;
+        definitionVersion?: number | null;
+      },
+    ) => sql`
+      INSERT INTO workout_sets (workout_id, user_id, exercise_id, started_at,
+                                set_index, mode, reps, duration_ms,
+                                avg_form_score, rep_scores, engine_version,
+                                definition_version)
+      VALUES (${workoutId}, ${userId}, ${exerciseId}, now(), ${setIndex},
+              ${c.mode ?? null}, ${c.reps ?? 0}, 1000, ${c.avgFormScore ?? null},
+              ${c.repScores ?? null}::smallint[], ${c.engineVersion ?? null},
+              ${c.definitionVersion ?? null})`;
+
+    // mode_check: only the two ruled values exist.
+    await expect(insertSet(1, { mode: "guessed" })).rejects.toMatchObject({ code: "23514" });
+
+    // engine_provenance_check — F1's exact bypass: a fully SCORED set with NO
+    // provenance and NO mode. The first version of this constraint accepted it,
+    // because `NULL IS DISTINCT FROM 'engine'` is TRUE.
+    await expect(
+      insertSet(2, { avgFormScore: 90, repScores: [90, 91] }),
+    ).rejects.toMatchObject({ code: "23514" });
+    // …and with mode declared, which the first version DID catch.
+    await expect(insertSet(3, { mode: "engine", avgFormScore: 90 })).rejects.toMatchObject({
+      code: "23514",
+    });
+
+    // log_only_unscored_check — F2's exact bypass: "nothing analysed this, and
+    // here is the engine that analysed it". The first version accepted it.
+    await expect(
+      insertSet(4, { mode: "log_only", engineVersion: "1.0.0", definitionVersion: 1 }),
+    ).rejects.toMatchObject({ code: "23514" });
+    // …and the score half, which the first version DID catch.
+    await expect(insertSet(5, { mode: "log_only", avgFormScore: 80 })).rejects.toMatchObject({
+      code: "23514",
+    });
+
+    // The legitimate shapes still insert: log-only, engine, the migrate-mongo
+    // shape (Part 4 §7: 'legacy-py' / 0), and a pre-0009-style row (mode NULL
+    // with provenance present). None may be broken by a constraint added for a
+    // different case.
+    await insertSet(6, { mode: "log_only", reps: 10 });
+    await insertSet(7, {
+      mode: "engine",
+      reps: 5,
+      avgFormScore: 88,
+      repScores: [88],
+      engineVersion: "1.0.0",
+      definitionVersion: 1,
+    });
+    await insertSet(8, {
+      reps: 5,
+      avgFormScore: 70,
+      engineVersion: "legacy-py",
+      definitionVersion: 0,
+    });
+
+    const kept = await sql`
+      SELECT count(*)::int AS n FROM workout_sets WHERE workout_id = ${workoutId}`;
+    expect(kept[0]?.["n"]).toBe(3);
+
+    await sql`DELETE FROM workouts WHERE id = ${workoutId}`;
+    await sql`DELETE FROM users WHERE id = ${userId}`;
+  });
 });

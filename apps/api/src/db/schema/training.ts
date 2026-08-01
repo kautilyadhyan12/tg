@@ -89,21 +89,39 @@ export const workoutSets = pgTable(
     // upserted — ON CONFLICT requires this uniqueness (migration 0002).
     uniqueIndex("workout_sets_workout_set_uq").on(t.workoutId, t.setIndex),
     check("workout_sets_mode_check", sql`${t.mode} IN ('engine','log_only')`),
-    // The nullability above is widened for ONE case only. An 'engine' set still
-    // MUST carry both versions — without this, dropping NOT NULL would silently
-    // let a scored set land with no provenance, which is a bigger hole than the
-    // one being fixed. Rows predating the card (mode IS NULL) are untouched.
+    // T3 ROUND 1 F1 — THE FIRST VERSION OF THIS CONSTRAINT DID NOT HOLD THE LINE
+    // IT WAS WRITTEN FOR. It read `mode IS DISTINCT FROM 'engine' OR (…)`, and
+    // `mode` is nullable: Postgres confirms `NULL IS DISTINCT FROM 'engine'` is
+    // TRUE, so ANY row omitting `mode` satisfied it with both provenance columns
+    // NULL. Before 0009 the NOT NULL made a provenance-less scored set
+    // impossible for every writer; that version made it impossible only for
+    // writers that declare `mode='engine'` — a REGRESSION dressed as a guard,
+    // and the commit claimed the opposite.
+    //
+    // Now the rule is about the DATA, not the discriminator: anything carrying
+    // score evidence must say which engine produced it. Holds for every row
+    // shape that exists or is intended — pre-0009 rows (provenance NOT NULL by
+    // the old DDL), migrate-mongo rows ('legacy-py'/0, Part 4 §7), log-only rows
+    // (no score evidence), and engine rows with no scored reps (repScores `[]`,
+    // which is not NULL, so provenance is still required).
     check(
       "workout_sets_engine_provenance_check",
-      sql`${t.mode} IS DISTINCT FROM 'engine' OR (${t.engineVersion} IS NOT NULL AND ${t.definitionVersion} IS NOT NULL)`,
+      sql`(${t.mode} IS DISTINCT FROM 'engine' AND ${t.avgFormScore} IS NULL AND ${t.repScores} IS NULL)
+          OR (${t.engineVersion} IS NOT NULL AND ${t.definitionVersion} IS NOT NULL)`,
     ),
-    // A log-only set is user-typed: there is no scored rep, so there can be no
-    // form score, no per-rep scores and no faults. Enforced rather than trusted
-    // — the server must not be able to store a form claim about a set nothing
-    // analysed, whatever a client sends.
+    // A log-only set is user-typed: nothing analysed it, so it can carry no form
+    // score, no per-rep scores, no faults — AND no provenance.
+    //
+    // T3 ROUND 1 F2 — the provenance half was MISSING here, so "enforced twice"
+    // was false for it: the DB would have stored `mode='log_only'` alongside
+    // `engine_version='1.0.0'`, i.e. "nothing analysed this, and here is the
+    // engine that analysed it". Verified against Postgres before fixing.
     check(
       "workout_sets_log_only_unscored_check",
-      sql`${t.mode} IS DISTINCT FROM 'log_only' OR (${t.avgFormScore} IS NULL AND ${t.repScores} IS NULL AND ${t.faultCounts} = '{}'::jsonb)`,
+      sql`${t.mode} IS DISTINCT FROM 'log_only'
+          OR (${t.avgFormScore} IS NULL AND ${t.repScores} IS NULL
+              AND ${t.faultCounts} = '{}'::jsonb
+              AND ${t.engineVersion} IS NULL AND ${t.definitionVersion} IS NULL)`,
     ),
     index("workout_sets_workout_idx").on(t.workoutId),
     index("workout_sets_user_started_idx").on(t.userId, t.startedAt.desc()), // exercise-mix, form trend per member

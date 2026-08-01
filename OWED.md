@@ -537,6 +537,23 @@ then; none may be hidden or reduced to close the gap.
       honouring the spec, not a new product call. Migration `0009_log_only_sets`
       (expand-only, SQL reviewed by Kd first) + the `setSummarySchema` union +
       the sync/read paths landed with 9 new real-Postgres tests, api 373/373.
+      **BLOCKING SUB-ITEM, OPEN FOR KD (T3 round 1 F3, DECISIONS :3199):** an
+      all-log-only workout must still send a WORKOUT-level `engineVersion`
+      (required string) and `defsVersion` (required positive int), both stored
+      and served back by `GET /v1/workouts/:id`. The API card's own test hides
+      this by hardcoding `"1.0.0"`/1 — the fabrication deleted at set level,
+      performed at workout level by the fixture. It is invisible today and
+      becomes real the moment the web half lands: `syncClient.js:40` builds that
+      value as `summaries[0].engineVersion`, which does not exist when there are
+      no summaries, so the next card must either invent a number or change this
+      contract. Options: (a) make `defsVersion` nullable — matches Part 4
+      §3.5:384, which declares `bundle_version int` NULLABLE while the payload
+      forbids null; shared-schema only, no migration — and record that
+      workout-level `engineVersion` means "the engine build the client was
+      running", honest and non-null even when nothing was scored; or (b) a
+      DEVIATION PROPOSAL to make `workouts.engine_version` nullable, which the
+      spec declares NOT NULL (R0.3). **The next card cannot be written honestly
+      until this is ruled.**
       **THE WEB HALF IS WHAT REMAINS AND THIS LINE STAYS OPEN FOR IT:**
       `ActiveWorkout.jsx:536` still posts every workout to the legacy backend and
       `syncClient.js:72` still refuses to queue an all-log-only one, so NOTHING
