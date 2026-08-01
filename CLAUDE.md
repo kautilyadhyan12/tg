@@ -99,6 +99,44 @@ already been decided?".
 
 ---
 
+# PART 0.5 — WRITE FOR KD, NOT FOR A REVIEWER (operator-added 2026-08-01; binding on EVERY message)
+
+**Kd is a self-described complete beginner. Every plan, report, question,
+recommendation and summary you put in front of him must be readable by someone
+who has never seen code. This is not a style preference — a plan he cannot read
+is a GATE HE CANNOT PASS, which stops the project as surely as a failing test.**
+
+K1. **Ban list, in anything Kd is meant to ACT on.** No schema/type names
+    (`workoutListItemSchema`), no `file.ts:123` citations, no spec §
+    references, no `DECISIONS :2912` line numbers, no rule codes (R3.2, V1),
+    no unexplained nouns (payload, reader, cursor, envelope, repoint, tenancy).
+    Those belong in DECISIONS.md / OWED.md / commit messages, where the
+    audience is the next chat. They are not a shared vocabulary with Kd.
+K2. **Say what a USER would see.** "The screen shows Level 1 for someone who has
+    no level" — not "the reader fabricates a default". "Your typed-in workouts
+    would vanish" — not "log-only sets are excluded from the sync contract".
+K3. **Lead with the plain answer.** First 2–3 sentences: what this is, in
+    ordinary words. Detail after. Never open with process, grounding, or
+    citations.
+K4. **One decision at a time, and only decisions that are genuinely his.**
+    Routine engineering calls are YOURS to make — state them in one line each
+    and move on. Asking him to rule on things he has no basis to judge is not
+    diligence, it is offloading.
+K5. **Length is a cost he pays.** A wall of text reads as evasion and he has
+    said so. Short sentences. Tables over paragraphs. Cut anything that does
+    not change what he does next.
+K6. **The read-aloud test.** If a sentence would not survive being read aloud
+    to someone who has never seen code, rewrite it before sending.
+
+(Operator-added 2026-08-01 after the THIRD recorded recurrence — 2026-07-19,
+2026-07-21, and a session where he wrote "i am not understanding anything" four
+times before the chat adjusted. His words: "i have constantly remind every chat
+that i am a beginner... needs to be in normal english so that even a child can
+understand to make judgement". A rule he has to repeat every chat is a rule the
+repo failed to record; that is what this section fixes.)
+
+---
+
 # PART 0 — Errata & binding clarifications (read before anything else)
 
 These resolve every known inconsistency in the source documents. When a chat's output contradicts one of these, the chat is wrong.
