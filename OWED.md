@@ -500,7 +500,19 @@ then; none may be hidden or reduced to close the gap.
       (slug/nameKey/family/tier/met/equipment/muscles) and stores none of it.
       Owed to the P4 production line / Part 2 Appendix A localization.
       (DECISIONS 2026-07-16, Card 3.)
-- [ ] 🔴 **THE EXERCISE CATALOG HOLDS 3 ROWS — every other exercise a user can
+- [x] 🔴 **THE EXERCISE CATALOG — DONE 2026-08-01** (DECISIONS :3538, commit on
+      `web-repoint` the same day). 3 → **58** rows, verified against the live DB
+      (`SELECT count(*) FROM exercises` = 58; pose 57 / timer 1). The reviewed
+      table is `CATALOG_58` in `packages/shared/src/exerciseCatalog.ts` — Kd
+      signed it off before any code was written (artifact `docs/catalog-58.md`),
+      and the two SPEC GAPs in it were ruled by Kd (both F11: `brisk_walking`
+      had no family, `arm_circles` had two). The seed imports that one table, so
+      the API and the web cannot drift on what an exercise is called;
+      `slugForLegacyName` is exact-match and returns null rather than guessing.
+      api 381/381 · shared 41/41 · 9 shared mutants + 1 DB mutant, all RED
+      against a verified green baseline. **The write-path line below is
+      unblocked by this.** The original entry follows.
+      **WAS: the exercise catalog holds 3 rows — every other exercise a user can
       pick is UNKNOWN to the new API, and its sets are SILENTLY DISCARDED.**
       Created 2026-08-01 (DECISIONS :3424), found while planning the web write
       path. **It had NO line anywhere in this file** — the gap was visible only
@@ -617,9 +629,13 @@ then; none may be hidden or reduced to close the gap.
       set shape, and the client must stop calling `completeSession`.
       **PLANNED 2026-08-01 AND BLOCKED, BOTH HALVES RULED BY Kd (DECISIONS
       :3424) — do NOT start this card until the CATALOG line above is closed:**
-      1. **BLOCKED ON THE CATALOG.** With 3 catalog rows, sending hand-logged
-         sets would have them discarded and would write 0-rep workouts into
-         history. Catalog first, then this.
+      1. ~~**BLOCKED ON THE CATALOG.**~~ **DISCHARGED 2026-08-01** (DECISIONS
+         :3538): all 58 are seeded, so a hand-logged set of any pickable
+         exercise now resolves to a real row. **This card is READY TO START.**
+         It must resolve the exercise NAME through `slugForLegacyName`
+         (`@app/shared`) — never by lowercasing the name itself, which resolves
+         nothing (the slugs are singular, the names plural), and never by
+         inventing a slug on a null, which the server would discard.
       2. **`completeSession` STAYS — the removal above is DEFERRED, not done,
          and this line is what holds it.** The web card DUAL-WRITES (new API in
          addition to the legacy save), exactly as engine workouts already do.
@@ -1443,6 +1459,19 @@ then; none may be hidden or reduced to close the gap.
 
 ## ⚪ Improvements and residuals
 
+- [ ] ⚪ **`db.migration.test.ts`'s "0009 workout_sets CHECKs bite at the DB" is
+      79 ms inside vitest's default timeout — it will keep flaking.** Recorded
+      2026-08-01 (DECISIONS :3538) by the catalog card, which is NOT its cause:
+      that test never calls the seed and does its own inserts. **Measured, not
+      guessed:** it FAILED one full-suite run ("Test timed out in 5000ms"),
+      PASSED the very next with nothing changed, and passes at
+      `--testTimeout=45000` taking **5079 ms** — 1.6% over the 5000 ms default.
+      It is ~15 sequential round-trips to a Neon branch, so any latency bump
+      tips it. Fix is one argument (the file already uses `120_000` and
+      `30_000` elsewhere), left untouched under R1.1 because it belongs to the
+      log-only card. Whoever next edits that file should give this test its
+      budget — a test that fails on network weather teaches the suite to be
+      ignored.
 - [ ] 🟡 **T3 round 8's four non-blocking findings (2026-07-28).** Given lines
       here in the same commit that deferred them, per the deferral rule — they
       were reported by a review that named them explicitly, which is exactly how

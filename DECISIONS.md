@@ -3534,3 +3534,75 @@ recommendations. Neither is a spec gap; both are sequencing/no-removal rulings.
   → `status 'live'`, tier T3, family F12, MET 2.3** — "the `REMOVED_EXERCISES`
   frontend hack dies with the migration" · **Brisk Walking → `tracking
   'timer'`** — web logs a timed session, excluded from every form-score surface.
+
+## 2026-08-01 — the 58-exercise catalog is SEEDED; hand-logged workouts now have somewhere to live
+
+The card DECISIONS :3424 ruled must come first. Kd reviewed and signed off the
+58-row table before any code was written (P1.8a precedent); the review artifact
+is `docs/catalog-58.md`, and the authoritative copy is `CATALOG_58` in
+`packages/shared/src/exerciseCatalog.ts`.
+
+- **The catalog went 3 → 58 rows.** Verified against the live DB, not inferred:
+  `SELECT count(*) FROM exercises` = **58**, `pose=57 timer=1`, spot values
+  `push_up 8.0 F5 T1` · `mountain_pose 2.3 F12 T3` · `brisk_walking 3.8 F11 T3`
+  · `warrior_ii 3.0 F12 T3`.
+- **One table, two consumers.** The seed imports `CATALOG_58` rather than
+  restating it, and the web will resolve its legacy library names through
+  `slugForLegacyName` on the next card — so the two ends cannot drift on what an
+  exercise is called. `exerciseNameKey` exists so the `exercise.<slug>`
+  convention has exactly one spelling.
+- **Slug rule (not a free choice):** the Part 2 §6 exercise name, lowercased,
+  spaces/hyphens → `_`. It reproduces all **11** slugs
+  `tools/migrate-mongo/exerciseNames.ts` already expects — asserted by a test —
+  so that frozen table needed no edit. Where §6 and the app's label differ, §6
+  wins (R0): `lunge_jump` for "Jump Lunges", `superman` for "Superman Hold",
+  `cobra` for "Cobra Pose". Kd was shown these three explicitly and kept them.
+- **TWO SPEC GAPS, ruled by Kd (both F11):** `brisk_walking` had NO family and
+  the column is NOT NULL — it is the one exercise the camera never watches, so
+  the value is inert filing; `arm_circles` was given TWO ("F11/F8 hybrid",
+  §6:851) and the same sentence's "Mode D cadence" is F11's counting mode.
+- `slugForLegacyName` is EXACT match with no lowercase/trim fallback, and
+  returns null rather than guessing. `exerciseNames.ts:13-16` is the reason:
+  mechanical name rules fail even on the seeded three (singular slugs, plural
+  names). A guessed slug would be discarded server-side and leave a 0-rep
+  workout — the exact failure this card exists to prevent.
+- **Seed insert batched: one statement, not 58 round-trips.** The row-at-a-time
+  loop was right for 3 rows; at 58 it cost ~50 s per seed call against the
+  shared Neon branch. Same conflict target, same idempotency, and the api suite
+  went 327 s → 261 s.
+- (PROVE, all pasted output) api **381/381** real Postgres (374 + 7 new) ·
+  shared **41/41** (25 + 16 new) · web **272/273** — the 1 is the KNOWN local
+  `VITE_API_URL` env quirk recorded at :3332, unchanged by this card and owned
+  by the web write-path card · typecheck clean (api + shared) · lint clean (api
+  + shared).
+- (MUTATION) **9 mutants against the shared assertions, 9 RED**, after the
+  baseline was re-established properly (see the lesson below): dropped row,
+  duplicated slug, MET drift, timer→pose, either Kd ruling reversed, an invalid
+  family, and a lookup that grows a lowercase fallback. One DB-side mutant
+  (slug renamed so it no longer matches its seeded row) → RED on two tests. One
+  mutant's failure was shown at assertion level (`expected '7.0' to be '8.0'`)
+  to prove RED means a failed assertion, not a suite that never ran.
+
+**READ THIS IF YOU WRITE A MUTATION HARNESS HERE — I incurred BOTH of this
+repo's recorded harness failures in one run.**
+  1. **The restore silently failed.** The script `cd`-ed into `apps/api` mid-run,
+     which broke the relative path its `cp` restore used; `cp` errored and the
+     mutation stayed live in the file. Verbatim the ":2736" lesson ("a silent
+     `cp` failure left two mutations live at once"). Restore must be verified by
+     `cmp` from an ABSOLUTE path, every time.
+  2. **A mutation harness that touches a SEED mutates shared state, not just
+     source.** The mutant renamed a slug, the test's `beforeAll` ran the seed,
+     and the renamed slug was INSERTED — the DB went to 59 rows and stayed there
+     after the source was restored. Found by re-counting, cleaned (verified zero
+     `workout_sets` referenced it first), re-proved at 58. A source-only mental
+     model of "mutate → run → restore" is wrong for any DB-backed suite.
+  3. The first baseline line printed EMPTY because the parser was blind to
+     vitest's ANSI — the ":2614" lesson, where a full table of REDs came from a
+     suite that never ran. Re-established ANSI-stripped: **41/41 green**.
+
+- **NOT this card, measured and left alone (R1.1):** `db.migration.test.ts`'s
+  "0009 workout_sets CHECKs bite at the DB" is marginal on this network —
+  measured at **5079 ms against vitest's 5000 ms default**, i.e. 79 ms over. It
+  failed in one full run and passed in the next with nothing changed, and it
+  passes at `--testTimeout=45000`. My code is not in its path (it never calls
+  the seed). Its own OWED line, not a silent flake.

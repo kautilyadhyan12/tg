@@ -121,6 +121,19 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:3538** — 2026-08-01 — **THE 58-EXERCISE CATALOG IS SEEDED** (3 → 58 rows,
+  verified against the live DB). The reviewed table is `CATALOG_58` in
+  `packages/shared/src/exerciseCatalog.ts` (artifact: `docs/catalog-58.md`, Kd
+  signed off before any code). Slug rule = the Part 2 §6 name normalised, which
+  reproduces all 11 slugs the migration's frozen table expects. **Two SPEC GAPS
+  ruled by Kd, both F11** (`brisk_walking` had no family; `arm_circles` had two).
+  `slugForLegacyName` is exact-match and returns null rather than guessing.
+  **Read before writing any mutation harness here: this entry records BOTH
+  recorded harness failures incurred in one run** — a `cd` broke the restore path
+  so a mutant stayed live, and a seed-touching mutant WROTE itself into the
+  shared DB (59 rows, cleaned and re-proved at 58). Also: `db.migration.test.ts`'s
+  0009 test is marginal at 5079 ms vs the 5000 ms default — measured, not this
+  card's, has its own OWED line.
 - **:3501** — 2026-08-01 — **CORRECTION to :3424: its "open ruling" was never
   open.** Part 2 §6:720-733 makes `scripts/seed_exercises.py` the canonical
   58-exercise catalog and Part 4 §3.4:373 rules `arnold_shoulder_press` stays

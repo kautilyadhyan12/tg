@@ -1,10 +1,10 @@
 // Part 4 §8 seeds — plans rows (prices: Part 5 §1 verbatim; entitlements:
 // Part 4 §3.3 canonical shape + v1 §9.1 free/pro values) and feature_flags.
 // Idempotent: upsert on plans.code / feature_flags.key — running twice is a no-op.
-// Exercises / definitions / achievements seeds land with their own tasks
-// (need Part 2 §6 catalog, ported constants, badges.py port).
+// Exercises = the full Part 2 §6 catalog (58) from @app/shared's reviewed
+// table; definitions / achievements seeds land with their own tasks.
 import { desc, eq, inArray } from "drizzle-orm";
-import { exerciseDefinitionSchema } from "@app/shared";
+import { CATALOG_58, exerciseDefinitionSchema, exerciseNameKey } from "@app/shared";
 import squatDef from "@app/engine/definitions/squat.json" with { type: "json" };
 import jumpSquatDef from "@app/engine/definitions/jump_squat.json" with { type: "json" };
 import chairSquatDef from "@app/engine/definitions/chair_squat.json" with { type: "json" };
@@ -191,17 +191,25 @@ const planRows: PlanSeed[] = [
   },
 ];
 
-// P1.10d minimal exercises seed (DECISIONS 2026-07-10): ONLY the three engine
-// exercises the sync path can receive today — the full Part 2 §6 catalog seed
-// stays deferred to its owning task. Values cited: family/tier from Part 2 §6
-// Tier-1 table (all F1, T1); MET from Part 2B Appendix A (Squats 6.0✱,
-// Jump Squats 8.0, Chair Squats 5.0✱ — ✱ = preserved from calories.py).
-// name_key follows the plans convention ("plan.<code>" → "exercise.<slug>").
-const exerciseRows = [
-  { slug: "squat", nameKey: "exercise.squat", family: "F1", tier: "T1", met: "6.0" },
-  { slug: "jump_squat", nameKey: "exercise.jump_squat", family: "F1", tier: "T1", met: "8.0" },
-  { slug: "chair_squat", nameKey: "exercise.chair_squat", family: "F1", tier: "T1", met: "5.0" },
-];
+// The full Part 2 §6 catalog — all 58, from the REVIEWED CONSTANTS TABLE in
+// @app/shared (`exerciseCatalog.ts`; review artifact `docs/catalog-58.md`,
+// signed off by Kd 2026-08-01). This SUPERSEDES the P1.10d minimal 3-row seed,
+// whose own comment deferred the full catalog "to its owning task" — this is
+// that task (DECISIONS :3424: the catalog must exist before hand-logged
+// workouts can be written, because `modules/workouts/repo.ts` discards sets
+// whose slug has no row and keeps the parent workout regardless).
+//
+// The table is imported, never restated: one copy means the API and the web
+// cannot drift on what an exercise is called. `status` is left to the column
+// default 'live' (Part 4 §3.4) — including Mountain Pose, per §3.4:366-369.
+const exerciseRows = CATALOG_58.map((e) => ({
+  slug: e.slug,
+  nameKey: exerciseNameKey(e.slug),
+  family: e.family,
+  tier: e.tier,
+  met: e.met,
+  tracking: e.tracking,
+}));
 
 // Part 4 §8: feature_flags seed — {data_backend, engine_rollout, beta_definitions}.
 const flagRows = [
@@ -250,9 +258,12 @@ async function seedAll(db: SeedDb): Promise<void> {
   for (const flag of flagRows) {
     await db.insert(featureFlags).values(flag).onConflictDoNothing();
   }
-  for (const ex of exerciseRows) {
-    await db.insert(exercises).values(ex).onConflictDoNothing({ target: exercises.slug });
-  }
+  // ONE statement, not 58 round-trips. The row-at-a-time loop was fine for the
+  // 3-row seed it was written for; at 58 it added ~50 s per seed call against
+  // the shared Neon branch, and the DB-gated suites all run against that one
+  // branch (vitest.config.ts) — enough extra load to time out a neighbouring
+  // 5 s test. Same conflict target, same idempotency.
+  await db.insert(exercises).values(exerciseRows).onConflictDoNothing({ target: exercises.slug });
   await seedDefinitions(db);
   // P2.3: achievements catalog (Part 4 §3.8 "seeded from badges.py port").
   // Upsert on code: criteria fixes propagate; earned rows are untouched.
