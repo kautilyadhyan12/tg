@@ -58,6 +58,13 @@ export const workoutSets = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }).notNull(), // copied from parent: partition-ready + BRIN-scannable alone
     setIndex: smallint("set_index").notNull(),
     view: text("view"),
+    // Part 4 §3.5 declares this column and never its vocabulary. Filled in here
+    // for the log-only card (Kd-ruled 2026-08-01): 'engine' = the engine
+    // analysed this set; 'log_only' = the user counted it themselves (Part 6
+    // §3.6's degradation floor, whose own copy promises "your workout still
+    // counts"). NULLABLE, and null means UNKNOWN — every row written before
+    // this migration predates the distinction and must not be back-claimed as
+    // either. v1 §14's "verified entries only" reads this column.
     mode: text("mode"),
     reps: smallint("reps").notNull().default(0),
     holdMs: integer("hold_ms"),
@@ -68,14 +75,36 @@ export const workoutSets = pgTable(
     tempoMsAvg: integer("tempo_ms_avg"),
     romStats: jsonb("rom_stats"),
     calibration: jsonb("calibration"),
-    engineVersion: text("engine_version").notNull(),
-    definitionVersion: integer("definition_version").notNull(),
+    // NULLABLE as of the log-only card: a set the engine never ran on has no
+    // engine version and no definition version. Writing a sentinel (0, 'none')
+    // would put a value that reads real into a column meaning "which engine
+    // scored this" — the fabrication class this project keeps deleting. The
+    // CHECK below is what keeps them mandatory for engine sets.
+    engineVersion: text("engine_version"),
+    definitionVersion: integer("definition_version"),
     createdAt: createdAt(),
   },
   (t) => [
     // Part 4 §3.5 sync contract: sets are "keyed (workout_id, set_index)" and
     // upserted — ON CONFLICT requires this uniqueness (migration 0002).
     uniqueIndex("workout_sets_workout_set_uq").on(t.workoutId, t.setIndex),
+    check("workout_sets_mode_check", sql`${t.mode} IN ('engine','log_only')`),
+    // The nullability above is widened for ONE case only. An 'engine' set still
+    // MUST carry both versions — without this, dropping NOT NULL would silently
+    // let a scored set land with no provenance, which is a bigger hole than the
+    // one being fixed. Rows predating the card (mode IS NULL) are untouched.
+    check(
+      "workout_sets_engine_provenance_check",
+      sql`${t.mode} IS DISTINCT FROM 'engine' OR (${t.engineVersion} IS NOT NULL AND ${t.definitionVersion} IS NOT NULL)`,
+    ),
+    // A log-only set is user-typed: there is no scored rep, so there can be no
+    // form score, no per-rep scores and no faults. Enforced rather than trusted
+    // — the server must not be able to store a form claim about a set nothing
+    // analysed, whatever a client sends.
+    check(
+      "workout_sets_log_only_unscored_check",
+      sql`${t.mode} IS DISTINCT FROM 'log_only' OR (${t.avgFormScore} IS NULL AND ${t.repScores} IS NULL AND ${t.faultCounts} = '{}'::jsonb)`,
+    ),
     index("workout_sets_workout_idx").on(t.workoutId),
     index("workout_sets_user_started_idx").on(t.userId, t.startedAt.desc()), // exercise-mix, form trend per member
     index("workout_sets_exercise_started_idx").on(t.exerciseId, t.startedAt.desc()), // Part 2 §9.4 per-definition telemetry

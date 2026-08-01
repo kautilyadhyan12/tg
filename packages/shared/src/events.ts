@@ -63,22 +63,76 @@ export const INT4_MAX = 2_147_483_647;
 
 // SetSummary — at set end; THE only thing that leaves the device (§2.4,
 // byte-compatible with v1 §5.3; Part 4 §3.5 stores these fields per set).
-export const setSummarySchema = z
-  .object({
-    exercise: z.string(), // exercise slug
-    setIndex: z.number().int().positive().max(SMALLINT_MAX),
-    reps: z.number().int().nonnegative().max(SMALLINT_MAX),
-    durationMs: z.number().int().nonnegative().max(INT4_MAX),
+//
+// TWO KINDS OF SET (log-only card, Kd-ruled 2026-08-01). Part 6 §3.6's
+// degradation ladder ends in "log-only mode: pose unavailable on this device →
+// manual rep counting", and its own user-facing copy promises "your workout
+// still counts". Until now only ENGINE sets could be expressed here, and
+// DECISIONS 2026-07-10 (P1.10c) therefore refused to sync an all-log-only
+// workout — correct while the legacy backend still recorded them, and a
+// data-loss hole the moment that backend is switched off, since only 3 of the
+// 58 catalog exercises have a definition today.
+//
+// The split is a UNION rather than a pile of nullable fields, because the two
+// kinds have genuinely different obligations: an engine set MUST carry its
+// provenance, and a log-only set MUST NOT carry a form claim. A single object
+// with everything optional could express neither rule.
+const setSummaryBase = z.object({
+  exercise: z.string(), // exercise slug
+  setIndex: z.number().int().positive().max(SMALLINT_MAX),
+  reps: z.number().int().nonnegative().max(SMALLINT_MAX),
+  durationMs: z.number().int().nonnegative().max(INT4_MAX),
+  tempoMsAvg: z.number().int().nonnegative().max(INT4_MAX).nullable(),
+  romStats: z.record(z.string(), z.number()).nullable(),
+  view: viewSchema,
+  holdMs: z.number().int().nonnegative().max(INT4_MAX).nullable(), // isometrics: qualifying hold time
+  calibration: z.record(z.string(), z.unknown()).nullable(),
+});
+
+/** A set the engine analysed. `mode` is OPTIONAL here for backward
+ *  compatibility: every client shipped before this card omits it, and its
+ *  payload already proves the kind by carrying both provenance fields — which
+ *  this branch requires. Reading that as 'engine' is reading the data, not
+ *  guessing at it. */
+export const engineSetSummarySchema = setSummaryBase
+  .extend({
+    mode: z.literal("engine").optional(),
     avgFormScore: z.number().int().min(0).max(100).nullable(), // null: no scored reps (e.g. timer tracking)
     repScores: z.array(z.number().int().min(0).max(100)),
     faultCounts: z.record(z.string(), z.number().int().positive()),
-    tempoMsAvg: z.number().int().nonnegative().max(INT4_MAX).nullable(),
-    romStats: z.record(z.string(), z.number()).nullable(),
-    view: viewSchema,
-    holdMs: z.number().int().nonnegative().max(INT4_MAX).nullable(), // isometrics: qualifying hold time
-    calibration: z.record(z.string(), z.unknown()).nullable(),
     engineVersion: z.string(),
     definitionVersion: z.number().int().positive().max(INT4_MAX),
   })
   .strict();
+
+/** A set the user counted themselves. Every scoring field is pinned to its
+ *  EMPTY value rather than left optional: the schema is where "nothing measured
+ *  this" is enforced, so a client cannot smuggle a form score onto a set nothing
+ *  watched. The same three rules are enforced again by a CHECK constraint in
+ *  migration 0009 — belt and braces, because this is the one claim the feature
+ *  must never be able to make. */
+export const logOnlySetSummarySchema = setSummaryBase
+  .extend({
+    mode: z.literal("log_only"),
+    avgFormScore: z.null(),
+    repScores: z.array(z.never()).max(0),
+    faultCounts: z.record(z.string(), z.never()).refine((f) => Object.keys(f).length === 0, {
+      message: "a log-only set cannot carry faults — nothing analysed it",
+    }),
+    // Null, never a sentinel: '0' or 'none' in a column meaning "which engine
+    // scored this" reads like a real answer. There was no engine.
+    engineVersion: z.null(),
+    definitionVersion: z.null(),
+  })
+  .strict();
+
+export const setSummarySchema = z.union([engineSetSummarySchema, logOnlySetSummarySchema]);
 export type SetSummary = z.infer<typeof setSummarySchema>;
+export type EngineSetSummary = z.infer<typeof engineSetSummarySchema>;
+export type LogOnlySetSummary = z.infer<typeof logOnlySetSummarySchema>;
+
+/** The stored kind of a set. `null` in the DB means UNKNOWN — every row written
+ *  before migration 0009 predates the distinction and is not back-claimed as
+ *  either. v1 §14's "verified entries only" reads this. */
+export const setModeSchema = z.enum(["engine", "log_only"]);
+export type SetMode = z.infer<typeof setModeSchema>;

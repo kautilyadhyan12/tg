@@ -4,6 +4,7 @@
 // keyed (workout_id, set_index) — "a retried sync is a no-op by construction;
 // no Idempotency-Key bookkeeping table needed for this path."
 import type { JSONValue, Sql } from "postgres";
+import { type SetMode, setModeSchema } from "@app/shared";
 import type { WorkoutSyncPayload } from "./schemas.js";
 
 /** calibration is z.record(z.unknown()) in the shared contract, so TS can't
@@ -92,16 +93,24 @@ export async function syncWorkout(
     for (const s of known) {
       const exerciseId = exerciseIdBySlug.get(s.exercise)?.id;
       if (exerciseId === undefined) continue; // unreachable: `known` is pre-filtered
+      // A payload that omits `mode` came from a client shipped before the
+      // log-only card, and its branch of the union REQUIRES both provenance
+      // fields — so 'engine' here is read off the data, not assumed.
+      const mode = s.mode ?? "engine";
+      // NULL, not []: an empty array says "we scored zero reps", which is a
+      // measurement. A log-only set was never scored at all, and the migration
+      // 0009 CHECK enforces the distinction in the column itself.
+      const repScores = mode === "log_only" ? null : s.repScores;
       await tx`
         INSERT INTO workout_sets (workout_id, user_id, exercise_id, started_at,
-                                  set_index, view, reps, hold_ms, duration_ms,
+                                  set_index, view, mode, reps, hold_ms, duration_ms,
                                   avg_form_score, rep_scores, fault_counts,
                                   tempo_ms_avg, rom_stats, calibration,
                                   engine_version, definition_version)
         VALUES (${payload.workoutId}, ${userId}, ${exerciseId},
-                ${payload.startedAt}, ${s.setIndex}, ${s.view}, ${s.reps},
+                ${payload.startedAt}, ${s.setIndex}, ${s.view}, ${mode}, ${s.reps},
                 ${s.holdMs}, ${s.durationMs}, ${s.avgFormScore},
-                ${s.repScores}, ${tx.json(asJsonValue(s.faultCounts))}, ${s.tempoMsAvg},
+                ${repScores}, ${tx.json(asJsonValue(s.faultCounts))}, ${s.tempoMsAvg},
                 ${s.romStats === null ? null : tx.json(asJsonValue(s.romStats))},
                 ${s.calibration === null ? null : tx.json(asJsonValue(s.calibration))},
                 ${s.engineVersion}, ${s.definitionVersion})
@@ -196,12 +205,22 @@ export interface SetRow {
   holdMs: number | null;
   durationMs: number;
   avgFormScore: number | null;
-  repScores: number[];
+  repScores: number[] | null;
   faultCounts: unknown;
   tempoMsAvg: number | null;
   romStats: unknown;
-  engineVersion: string;
-  definitionVersion: number;
+  mode: SetMode | null;
+  engineVersion: string | null;
+  definitionVersion: number | null;
+}
+
+/** The stored `mode` text, validated into the union — or null for "unknown".
+ *  A value the CHECK constraint should have made impossible is treated as
+ *  unknown rather than passed through: the read path must not be the place an
+ *  unrecognised kind first reaches a screen. */
+function toSetMode(v: string | null): SetMode | null {
+  const parsed = setModeSchema.safeParse(v);
+  return parsed.success ? parsed.data : null;
 }
 
 /** Detail keyed (id, userId) — a foreign id reads as absent (R3.2). */
@@ -230,11 +249,12 @@ export async function getWorkoutDetail(
       fault_counts: unknown;
       tempo_ms_avg: number | null;
       rom_stats: unknown;
-      engine_version: string;
-      definition_version: number;
+      mode: string | null;
+      engine_version: string | null;
+      definition_version: number | null;
     }[]
   >`
-    SELECT s.set_index, e.slug, s.view, s.reps, s.hold_ms, s.duration_ms,
+    SELECT s.set_index, e.slug, s.view, s.mode, s.reps, s.hold_ms, s.duration_ms,
            s.avg_form_score, s.rep_scores, s.fault_counts, s.tempo_ms_avg,
            s.rom_stats, s.engine_version, s.definition_version
     FROM workout_sets s JOIN exercises e ON e.id = s.exercise_id
@@ -250,10 +270,14 @@ export async function getWorkoutDetail(
       holdMs: s.hold_ms,
       durationMs: s.duration_ms,
       avgFormScore: s.avg_form_score,
-      repScores: s.rep_scores ?? [],
+      // `?? []` WOULD BE A FABRICATION HERE now that null is meaningful: a
+      // log-only set has no rep scores because nothing scored it, and an empty
+      // array claims a scoring pass that found none. Passed through as null.
+      repScores: s.rep_scores,
       faultCounts: s.fault_counts,
       tempoMsAvg: s.tempo_ms_avg,
       romStats: s.rom_stats,
+      mode: toSetMode(s.mode),
       engineVersion: s.engine_version,
       definitionVersion: s.definition_version,
     })),

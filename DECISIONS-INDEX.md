@@ -121,6 +121,17 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:3085** — 2026-08-01 — **hand-logged workouts can reach the new API (API
+  half)**. Closes the data-loss hole above: `workout_sets.mode` is filled in as
+  `'engine' | 'log_only'` (Part 4 §3.5 declared the column and never its
+  vocabulary — a SPEC GAP put to Kd, not invented), provenance columns go NULL
+  rather than to a sentinel, and TWO CHECK constraints keep the relaxation
+  narrow: an engine set still MUST carry provenance, and a log-only set CANNOT
+  carry a form score, per-rep scores or faults. Migration `0009_log_only_sets`,
+  expand-only. Backward compatible — `mode` is optional on the engine branch, so
+  older clients validate unchanged. Kd ruled hand-logged workouts DO earn XP,
+  shown the OWED:484 threat model first. **The web write path is NOT in this
+  card**, so nothing user-visible changed yet.
 - **:2912** — 2026-08-01 — workout history calendar → `/v1/workouts`: **BUILT,
   then PARKED AS BLOCKED** on branch `workout-calendar-parked` (NOT on
   `web-repoint`, which merges wholesale at cutover and would have armed it).

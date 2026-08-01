@@ -1,6 +1,7 @@
 // P2.3 — workout history contracts (v1 §6.1 workouts: "history, PRs";
 // Part 4 §3.5 columns). List = keyset cursor on (started_at, id) DESC.
 import { z } from "zod";
+import { setModeSchema } from "./events.js";
 
 export const workoutListQuerySchema = z
   .object({
@@ -42,12 +43,20 @@ export const workoutSetViewSchema = z.object({
   holdMs: z.number().int().nullable(),
   durationMs: z.number().int(),
   avgFormScore: z.number().int().nullable(),
-  repScores: z.array(z.number().int()),
+  repScores: z.array(z.number().int()).nullable(),
   faultCounts: z.record(z.string(), z.number().int()),
   tempoMsAvg: z.number().int().nullable(),
   romStats: z.record(z.string(), z.number()).nullable(),
-  engineVersion: z.string(),
-  definitionVersion: z.number().int(),
+  /** 'engine' | 'log_only', or NULL for a set stored before migration 0009 —
+   *  unknown, and deliberately not back-claimed as either. A reader must show
+   *  the distinction rather than assume: a log-only set is a number the user
+   *  typed, not a measurement. */
+  mode: setModeSchema.nullable(),
+  // Nullable as of the log-only card: a set the engine never ran on has no
+  // engine version and no definition version. A reader must not print a
+  // placeholder here — there was no engine.
+  engineVersion: z.string().nullable(),
+  definitionVersion: z.number().int().nullable(),
 });
 export type WorkoutSetView = z.infer<typeof workoutSetViewSchema>;
 

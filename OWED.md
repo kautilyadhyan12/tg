@@ -531,6 +531,18 @@ then; none may be hidden or reduced to close the gap.
       **What it unblocks:** the calendar below, PostWorkout's summary, the
       Dashboard's stats — every workout-history surface reads whatever this
       ruling decides.
+      **RULED AND API HALF DONE 2026-08-01 (DECISIONS :3085).** Kd ruled option
+      A: the new API accepts hand-logged workouts. Part 6 §3.6 already promised
+      it in its own user-facing copy ("your workout still counts"), so this was
+      honouring the spec, not a new product call. Migration `0009_log_only_sets`
+      (expand-only, SQL reviewed by Kd first) + the `setSummarySchema` union +
+      the sync/read paths landed with 9 new real-Postgres tests, api 373/373.
+      **THE WEB HALF IS WHAT REMAINS AND THIS LINE STAYS OPEN FOR IT:**
+      `ActiveWorkout.jsx:536` still posts every workout to the legacy backend and
+      `syncClient.js:72` still refuses to queue an all-log-only one, so NOTHING
+      has changed for a user yet and the cutover is still blocked. That is the
+      next card. Also owed with it: `queueWorkoutSync` must build the log-only
+      set shape, and the client must stop calling `completeSession`.
 - [ ] 🔴 **Workout history calendar** (WorkoutCalendar → workoutApi.getHistory).
       **BLOCKED — NOT a client repoint. Do not pick this up as a quick win.**
       **BUILT AND PARKED 2026-08-01 (DECISIONS :2912), still unticked.** A chat

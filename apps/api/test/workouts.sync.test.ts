@@ -32,6 +32,27 @@ const set = (setIndex: number, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
+/** A set the user counted themselves (Part 6 §3.6 log-only mode). Every scoring
+ *  field is at its empty value, because nothing measured this set. */
+const logSet = (setIndex: number, extra: Record<string, unknown> = {}) => ({
+  exercise: "squat",
+  setIndex,
+  reps: 10,
+  durationMs: 30000,
+  mode: "log_only",
+  avgFormScore: null,
+  repScores: [],
+  faultCounts: {},
+  tempoMsAvg: null,
+  romStats: null,
+  view: "unknown",
+  holdMs: null,
+  calibration: null,
+  engineVersion: null,
+  definitionVersion: null,
+  ...extra,
+});
+
 const payload = (workoutId: string, sets: unknown[]) => ({
   workoutId,
   startedAt: "2026-07-10T09:30:00.000Z",
@@ -236,5 +257,145 @@ d("POST /v1/workouts/sync (real Postgres, real cookie authn)", () => {
     expect(w?.["quality_flags"]).toEqual(["unknown_exercise"]);
     const [s] = await sql`SELECT count(*)::int AS n FROM workout_sets WHERE workout_id = ${wid}`;
     expect(s?.["n"]).toBe(1);
+  });
+
+  // ── log-only sets (Kd-ruled 2026-08-01) ────────────────────────────────────
+  // Part 6 §3.6's degradation floor promises "your workout still counts". Only
+  // 3 of the 58 catalog exercises have a definition, so nearly every real set
+  // is user-counted; refusing them meant they lived ONLY on the legacy backend,
+  // and would be lost outright the day it is switched off.
+
+  it("a log-only set is accepted and stored as one, with no invented provenance", { timeout: 30_000 }, async () => {
+    const wid = "aaaaaaaa-1111-4111-8111-000000000008";
+    const res = await post(payload(wid, [logSet(1), logSet(2, { reps: 12 })]));
+    expect(res.statusCode).toBe(201);
+
+    const [w] = await sql`
+      SELECT sets_count, total_reps, avg_form_score, duration_ms FROM workouts WHERE id = ${wid}`;
+    expect(w?.["sets_count"]).toBe(2);
+    expect(w?.["total_reps"]).toBe(22); // the reps COUNT — that is the promise
+    // No set was scored, so the workout has no form score. Not 0 — unknown.
+    expect(w?.["avg_form_score"]).toBeNull();
+
+    const sets = await sql<
+      {
+        mode: string;
+        avg_form_score: number | null;
+        rep_scores: number[] | null;
+        fault_counts: Record<string, number>;
+        engine_version: string | null;
+        definition_version: number | null;
+      }[]
+    >`
+      SELECT mode, avg_form_score, rep_scores, fault_counts, engine_version,
+             definition_version
+      FROM workout_sets WHERE workout_id = ${wid} ORDER BY set_index`;
+    expect(sets.map((s) => s["mode"])).toEqual(["log_only", "log_only"]);
+    for (const s of sets) {
+      expect(s["avg_form_score"]).toBeNull();
+      // NULL, not []: an empty array would claim a scoring pass that found none.
+      expect(s["rep_scores"]).toBeNull();
+      expect(s["fault_counts"]).toEqual({});
+      expect(s["engine_version"]).toBeNull(); // never a '0'/'none' sentinel
+      expect(s["definition_version"]).toBeNull();
+    }
+  });
+
+  it("a log-only set cannot smuggle a form claim — the schema refuses it", { timeout: 30_000 }, async () => {
+    const wid = "aaaaaaaa-1111-4111-8111-000000000009";
+    const cases: unknown[] = [
+      payload(wid, [logSet(1, { avgFormScore: 95 })]), // a score for a set nothing watched
+      payload(wid, [logSet(1, { repScores: [90, 91] })]), // per-rep scores likewise
+      payload(wid, [logSet(1, { faultCounts: { shallow_depth: 1 } })]), // faults likewise
+      payload(wid, [logSet(1, { engineVersion: "1.0.0" })]), // provenance it does not have
+      payload(wid, [logSet(1, { definitionVersion: 1 })]),
+    ];
+    for (const bad of cases) {
+      const res = await inject(bad, { "idempotency-key": wid });
+      expect(res.statusCode).toBe(400);
+    }
+    const rows = await sql`SELECT 1 FROM workouts WHERE id = ${wid}`;
+    expect(rows.length).toBe(0);
+  });
+
+  it("an ENGINE set still MUST carry its provenance — the relaxation is not general", { timeout: 30_000 }, async () => {
+    const wid = "aaaaaaaa-1111-4111-8111-00000000000a";
+    const cases: unknown[] = [
+      payload(wid, [set(1, { engineVersion: null })]),
+      payload(wid, [set(1, { definitionVersion: null })]),
+      payload(wid, [set(1, { mode: "engine", engineVersion: null })]),
+      payload(wid, [set(1, { mode: "made_up_mode" })]), // only two kinds exist
+    ];
+    for (const bad of cases) {
+      const res = await inject(bad, { "idempotency-key": wid });
+      expect(res.statusCode).toBe(400);
+    }
+    const rows = await sql`SELECT 1 FROM workouts WHERE id = ${wid}`;
+    expect(rows.length).toBe(0);
+  });
+
+  it("a payload with NO mode is still accepted and stored as engine (older clients)", { timeout: 30_000 }, async () => {
+    const wid = "aaaaaaaa-1111-4111-8111-00000000000b";
+    // `set()` omits `mode` entirely — the shape every client shipped before this
+    // card sends. It must keep working, and must not be recorded as unknown.
+    const res = await post(payload(wid, [set(1)]));
+    expect(res.statusCode).toBe(201);
+    const [s] = await sql`SELECT mode FROM workout_sets WHERE workout_id = ${wid}`;
+    expect(s?.["mode"]).toBe("engine");
+  });
+
+  it("a MIXED workout keeps each kind honest, and averages only what was scored", { timeout: 30_000 }, async () => {
+    const wid = "aaaaaaaa-1111-4111-8111-00000000000c";
+    const res = await post(payload(wid, [set(1, { avgFormScore: 90 }), logSet(2, { reps: 10 })]));
+    expect(res.statusCode).toBe(201);
+
+    const [w] = await sql`
+      SELECT sets_count, total_reps, avg_form_score FROM workouts WHERE id = ${wid}`;
+    expect(w?.["sets_count"]).toBe(2);
+    expect(w?.["total_reps"]).toBe(15); // 5 scored + 10 typed: both count
+    // 90, NOT round((90+0)/2)=45. The unscored set must not drag the average
+    // down as though it had scored zero.
+    expect(w?.["avg_form_score"]).toBe(90);
+
+    const sets = await sql<{ mode: string }[]>`
+      SELECT mode FROM workout_sets WHERE workout_id = ${wid} ORDER BY set_index`;
+    expect(sets.map((s) => s["mode"])).toEqual(["engine", "log_only"]);
+  });
+
+  it("the detail read tells the two kinds apart", { timeout: 30_000 }, async () => {
+    const wid = "aaaaaaaa-1111-4111-8111-00000000000d";
+    await post(payload(wid, [set(1), logSet(2)]));
+    const res = await api().inject({
+      method: "GET",
+      url: `/v1/workouts/${wid}`,
+      cookies: { accessToken: cookieA },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{
+      sets: { mode: string | null; engineVersion: string | null; repScores: number[] | null }[];
+    }>();
+    expect(body.sets.map((s) => s.mode)).toEqual(["engine", "log_only"]);
+    expect(body.sets[1]?.engineVersion).toBeNull();
+    // Served as null, not [] — a reader must be able to see there was no scoring.
+    expect(body.sets[1]?.repScores).toBeNull();
+  });
+
+  it("cross-tenant denial holds for a log-only workout too", { timeout: 30_000 }, async () => {
+    const wid = "aaaaaaaa-1111-4111-8111-00000000000e";
+    await post(payload(wid, [logSet(1)])); // user A creates it
+    const res = await api().inject({
+      method: "POST",
+      url: "/v1/workouts/sync",
+      headers: { "idempotency-key": wid },
+      cookies: { accessToken: cookieB }, // user B claims the same id
+      payload: payload(wid, [logSet(1, { reps: 99 })]),
+    });
+    expect(res.statusCode).toBe(404);
+    const [w] = await sql`SELECT user_id, total_reps FROM workouts WHERE id = ${wid}`;
+    expect(w?.["user_id"]).toBe(userA); // ownership and data untouched
+    // A's original logSet reps (10), NOT B's attempted 99 — asserted against
+    // both numbers so this cannot pass by coincidence if the fixture changes.
+    expect(w?.["total_reps"]).toBe(10);
+    expect(w?.["total_reps"]).not.toBe(99);
   });
 });

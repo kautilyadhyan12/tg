@@ -3081,3 +3081,117 @@ Web-only: no API change, no migration, no new dependency, no new endpoint.
 - (NOT BROWSER-REACHABLE, stated rather than skipped) A workout with null
   duration/kcal/form (render tests + M1–M3 only) and the 10-page walk cap (needs
   1,000+ workouts on one account; unit test + M10 only).
+
+## 2026-08-01 — hand-logged workouts can reach the new API (API half)
+
+Kd-ruled and approved the same day, migration SQL reviewed before any other code
+(R4.4/T5). API + shared only; the web write path is the NEXT card, so nothing a
+user can see changes yet — deliberately, so a failure has one possible cause.
+
+- (THE HOLE THIS CLOSES, and it is data loss, not polish) A workout reached the
+  new API only if the engine scored at least one set. `sessionController.js:67`
+  drops to log-only when an exercise has no definition; `ls
+  packages/engine/src/definitions/` = **3** against a **58**-exercise catalog
+  (Part 0 rule 1); `syncClient.js:72` never queues an all-log-only workout; and
+  DECISIONS :75 had the server ENFORCE `sets[]` non-empty, so it would have
+  refused one anyway. Meanwhile `ActiveWorkout.jsx:536` still writes every
+  workout to the legacy backend. **So at cutover, a workout of any exercise
+  outside squat / jump squat / chair squat would have been saved NOWHERE.**
+- (THE SPEC ALREADY DECIDED THIS — it is not a new product call) Part 6 §3.6's
+  degradation ladder ends in "**log-only mode**: pose unavailable on this device
+  → manual rep counting UI + honest copy (*'Form checking needs a bit more phone
+  than this one — your workout still counts'*)". The spec promises, in its own
+  user-facing string, that these workouts COUNT. DECISIONS :67 (P1.10c) refusing
+  to sync them was right while the legacy backend recorded them, and becomes a
+  broken promise the moment it is off. This card does not overturn :67 so much as
+  discharge the condition it rested on.
+- (SPEC GAP RESOLVED BY THE RULING — `workout_sets.mode`) Part 4 §3.5:406 declares
+  the column (`set_index smallint NOT NULL, view text, mode text,`) and NOWHERE
+  states its vocabulary; nothing in the repo ever wrote it. Filled in under Kd's
+  ruling as **`'engine' | 'log_only'`**, CHECK-constrained. R0.2 was respected —
+  the values were put to Kd rather than invented, because a CHECK makes them
+  permanent.
+- (NULL IS NOT A SENTINEL, and this is the whole design) A log-only set stores
+  NULL for `engine_version` and `definition_version`. Writing `0` or `'none'`
+  would put a value that READS REAL into a column meaning "which engine scored
+  this". There was no engine. Same reasoning as every honest-unknown decision on
+  the web side; the difference is that here the DB enforces it.
+- (THE RELAXATION IS NARROW, enforced twice) Dropping NOT NULL on two columns
+  would otherwise let an ENGINE set land with no provenance — a bigger hole than
+  the one being closed. `workout_sets_engine_provenance_check` requires both
+  fields whenever `mode = 'engine'`. And `workout_sets_log_only_unscored_check`
+  makes it IMPOSSIBLE to store a form score, per-rep scores or faults on a
+  log-only set, whatever a client sends. Both are enforced a second time in the
+  Zod union, deliberately: this is the one claim the feature must never make.
+- (BACKWARD COMPATIBLE BY CONSTRUCTION) `mode` is OPTIONAL on the engine branch,
+  so every client shipped before this card keeps validating unchanged — its
+  payload already proves the kind by carrying both provenance fields, which that
+  branch requires. Reading absent-mode as `'engine'` is reading the data, not
+  guessing. Test: a payload with no `mode` is accepted and stored as `engine`.
+- (ROWS WRITTEN BEFORE 0009 ARE NOT BACK-CLAIMED) `mode` is nullable and null
+  means UNKNOWN. No backfill: nobody recorded how those sets were produced, and
+  stamping them `'engine'` would be inventing provenance retroactively. The read
+  path carries the null out to the client so a reader can show the difference.
+- (A UNION, NOT A PILE OF NULLABLE FIELDS) `setSummarySchema` is now
+  `engineSetSummarySchema | logOnlySetSummarySchema`. The two kinds have opposite
+  obligations — an engine set MUST carry provenance, a log-only set MUST NOT
+  carry a form claim — and a single object with everything optional could express
+  neither. Field access still works unnarrowed because each branch pins its
+  fields to a type rather than omitting them.
+- (`?? []` REMOVED FROM THE READ PATH — it became a fabrication) `repo.ts` served
+  `s.rep_scores ?? []`. Harmless while the column was effectively always present;
+  now that null is MEANINGFUL, an empty array claims a scoring pass that found
+  no reps, when in fact nothing scored the set. Passed through as null, and
+  `workoutSetViewSchema.repScores` is nullable to match.
+- (AGGREGATES STAY HONEST) A log-only set contributes its reps and duration —
+  that is the promise — but the workout's `avg_form_score` averages only sets
+  that were actually scored. Test: a mixed workout with one 90-scored set and one
+  typed set reads **90**, not `round((90+0)/2) = 45`. An unscored set must not
+  drag an average down as though it had scored zero.
+- (XP — Kd ruled yes, knowingly) A hand-logged workout earns the base workout XP
+  and streak days, and NOT the form bonus (there is no score to earn it with),
+  which falls out of `computeTotalXp` without a special case. Kd was shown the
+  recorded threat model at OWED:484-496 first — XP is already entirely
+  client-determined and `/v1/workouts/sync` has NO per-route rate limit — and
+  ruled to proceed because XP grants nothing today. The fix stays where it was:
+  the P4.y plausibility card and v1 §14's verified-entries-only rule, which is
+  what `mode` now makes queryable.
+- (MIGRATION `0009_log_only_sets`, SQL reviewed by Kd before any other code)
+  Expand-only: two `DROP NOT NULL`, three `ADD CONSTRAINT … CHECK`. No backfill,
+  no rewrite, forward-only. Nothing valid before becomes invalid. **Lock note,
+  stated rather than discovered later:** `ADD CONSTRAINT … CHECK` scans the table
+  to validate, holding ACCESS EXCLUSIVE — free here because prod launches EMPTY
+  (`RUNBOOK/cutover.md:11-15`), but a `NOT VALID` + `VALIDATE` split is the
+  answer if this ever runs against a populated table. **Drizzle emitted the file
+  as `0008_log_only_sets.sql` while `0008_user_xp.sql` already existed** — two
+  files sharing a prefix makes ordering ambiguous, so it was renamed to `0009`
+  and the journal tag corrected in the same edit.
+- (PROVE) api **373 passed / 373** against real Postgres (R9.2 — no SQL mocks),
+  including **9 new** log-only cases: stored-as-log-only with no invented
+  provenance · every smuggled form claim rejected (5 shapes) · an engine set
+  still required to carry provenance (4 shapes) · absent-mode still accepted as
+  engine · a mixed workout averaging only what was scored · the detail read
+  telling the kinds apart · **cross-tenant denial re-proved for a log-only
+  workout** (R9.2's mandatory case). shared **19/19**. web **272/273** (the 1 is
+  the known `syncClient` env quirk, its own OWED line). Typecheck clean; lint
+  clean on all six touched files. One test failed first time and it was MY
+  arithmetic in the fixture, not the code — the log-only fixture uses 10 reps and
+  I asserted 5, copied from the engine fixture. Corrected, and the assertion now
+  pins BOTH the true value and the attacker's value so it cannot pass by
+  coincidence.
+- (NOT IN THIS CARD, on purpose) The web write path. `ActiveWorkout.jsx` still
+  posts every workout to the legacy backend and `syncClient.js` still skips
+  log-only ones, so **no user-visible behaviour changes yet**. Landing the server
+  half alone is the safe order: if the next card misbehaves, the cause is
+  unambiguous. The OWED item stays open with its API half ticked.
+- (BRANCH — this API half lands on `web-repoint`, deviating from the API-half
+  precedent, and the reason is not convenience) Previous API halves (PR #42
+  targets, PR #48 google, PR #50 xp) went to master on their own branches because
+  their web consumers came later and separately. Here the ONLY consumer is the
+  very next card, which is a WEB card and therefore lands on `web-repoint`
+  (:280). Splitting them across branches would put the contract on master and its
+  only caller on a branch that does not merge until cutover, and would fork
+  `DECISIONS.md` line numbering between the two — this session's earlier entries
+  (:2866, :2912) exist only on `web-repoint`, so a master-based branch would cite
+  numbers that do not resolve there. Recorded because a future audit will
+  otherwise read this as the pattern being broken by accident.

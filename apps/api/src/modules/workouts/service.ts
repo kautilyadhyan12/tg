@@ -160,6 +160,10 @@ export async function getWorkout(
       faultCounts: asNumberRecord(s.faultCounts),
       tempoMsAvg: s.tempoMsAvg,
       romStats: s.romStats === null ? null : asNumberRecord(s.romStats),
+      // Carried out to the client so a reader can tell a MEASUREMENT from a
+      // number the user typed. Null = stored before migration 0009, i.e.
+      // unknown — never silently presented as either.
+      mode: s.mode,
       engineVersion: s.engineVersion,
       definitionVersion: s.definitionVersion,
     })),

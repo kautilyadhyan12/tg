@@ -57,6 +57,13 @@
       "when": 1784891635843,
       "tag": "0008_user_xp",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785556187541,
+      "tag": "0009_log_only_sets",
+      "breakpoints": true
     }
   ]
 }
