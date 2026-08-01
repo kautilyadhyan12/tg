@@ -3420,3 +3420,80 @@ one of them would have stopped the migrate command.
   local `apps/web/.env` sets `VITE_API_URL`. Green in CI, red locally, its own
   OWED line. The web write-path card touches that file next; it is fixed there,
   not here (R1.1).
+
+## 2026-08-01 — THE WEB WRITE PATH: Kd ruled BOTH halves — catalog FIRST, the legacy save STAYS
+
+Kd approved the plan of 2026-08-01 (web write path) including both of its
+recommendations. Neither is a spec gap; both are sequencing/no-removal rulings.
+
+- **RULING 1 — the exercise catalog must hold every pickable exercise BEFORE the
+  web write path ships.** The web card is BLOCKED on it and gets its own OWED
+  line (added in this commit). Evidence, all command-verified this session:
+  `exercises` has exactly **3** rows (squat, jump_squat, chair_squat —
+  `db/seed.ts:201-203`) and **`db/seed.ts:254` is the ONLY insert site** in
+  `apps/api` (grep: one hit); the Mongo→PG tool adds none and says so
+  (`tools/migrate-mongo/exerciseNames.ts:4-6` — a slug with no seeded row is
+  SKIPPED). `modules/workouts/repo.ts:58,71` filters unknown slugs out and
+  **still inserts the parent workout**, so an all-unknown payload creates a
+  workout with `sets_count = 0` / `total_reps = 0`. That is a NEW class of wrong
+  row — an empty workout in history — not merely the existing missing data, and
+  it is why shipping the web half first is worse than waiting.
+  `workout_sets.exercise_id` is NOT NULL + FK (`db/schema/training.ts:55-57`), so
+  "store it anyway" would need a migration AND an R0.3 deviation against the
+  Part 4 §3.5 DDL. NOT chosen.
+- **Why the engine path was never bitten by this:** definitions carry the plural
+  legacy name as an alias (`definitions/squat.json:3` → `"squats"`) and the
+  compiled config takes the definition KEY (`definition/compile.ts:89`
+  `exercise: def.key`), so an engine SetSummary always carries the canonical
+  singular slug. A log-only set has no definition and therefore no resolver —
+  the translation must be built, not assumed.
+- **The instrument already exists as precedent, not as a finished table:**
+  `tools/migrate-mongo/exerciseNames.ts` is a REVIEWED CONSTANTS TABLE (P1.8a
+  precedent) mapping legacy display name → catalog slug. It covers the **14**
+  names the legacy workouts reference, NOT the library. Its header states the
+  reason a mechanical rule cannot be used: the seeded slugs are SINGULAR while
+  the legacy names are PLURAL, so lowercase+underscore "would fail to resolve
+  even the seeded three".
+- **OPEN, and the catalog card must put it to Kd (do NOT pick it):** legacy names
+  with NO home in the spec's 58 — `exerciseNames.ts` rows 12–14 (Arnold Shoulder
+  Press, 1-Arm Half-Kneeling Lat Pulldown, 1 Leg Box Squat) are marked "NEVER".
+  A user can hand-log those today, so under the no-removal rule they cannot
+  simply be dropped on the floor. Where their reps live is a RULING, not a
+  design choice.
+
+- **RULING 2 — `ActiveWorkout.jsx:536` (`completeSession`) STAYS for now.** The
+  web card writes to the new API IN ADDITION, exactly as engine workouts already
+  dual-write; removing the legacy save remains owed on the write-path line and
+  is discharged only once the post-workout summary, the Dashboard stats and the
+  calendar have new-API homes. This is the no-removal rule as sequencing:
+  replacement before removal.
+  Evidence: PostWorkout reads the OLD `/workouts/:id/summary`
+  (`PostWorkout.jsx:286` → `readSummaryView`, `gamificationApi.js:676`) whose
+  nine fields (meal suggestions, stretches, personal records, xp_earned,
+  current_streak) have no equivalent on `GET /v1/workouts/:id`;
+  `Dashboard.jsx:305` and `WorkoutCalendar.jsx:182` read the old backend too.
+- **Sharper than the plan first stated, and the reason this ruling matters:** for
+  an UNCOMPLETED session the old endpoint still answers 200 — duration/calories/
+  form default to 0 (`backend-ml/app/routers/workouts.py:643-661`) — and it
+  RECOMPUTES `xp_earned` in the handler from `XP_REWARDS["workout_completed"]`
+  (:591), so the screen would print a plausible **"+50 XP" that was never
+  awarded**. Dropping the save yields a screen that looks true and is false, not
+  one that looks broken.
+
+- **(V1 SELF-AUDIT of the plan that produced these rulings — two claims were
+  wrong and are corrected here rather than left in chat.)**
+  (a) "the library has 58 exercises / the other 55" was **UNVERIFIED**: 58 is the
+  entry count in `scripts/seed_exercises.py` (`grep -c '^        "name":'` = 58)
+  whose own docstring claims "~85", and the live library could NOT be counted —
+  `mongod` refused connection on localhost:27017 this session. The load-bearing
+  fact is "3 recognised vs dozens", which stands; the number does not.
+  (b) the plan's set-boundary list omitted the **"Complete Set" BUTTON**
+  (`ActiveWorkout.jsx:1004`) — a set can end before the rep target is reached.
+  Recording a hand-logged set must hook `handleSetComplete` (:386, the single
+  funnel every path passes through) plus the three sites that bump
+  `engineSetKey` (:426 rest→next set, :483 next exercise, :508 workout end), with
+  the discard at :359-366. Hooking the rep-counter trigger would have lost every
+  early-ended set.
+- **Carried into the web card (recorded at :3332, restated so it is not lost):**
+  the local `syncClient.test.js` "window is not defined" failure is fixed by that
+  card, not by the catalog card (R1.1).

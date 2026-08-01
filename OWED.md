@@ -500,6 +500,45 @@ then; none may be hidden or reduced to close the gap.
       (slug/nameKey/family/tier/met/equipment/muscles) and stores none of it.
       Owed to the P4 production line / Part 2 Appendix A localization.
       (DECISIONS 2026-07-16, Card 3.)
+- [ ] 🔴 **THE EXERCISE CATALOG HOLDS 3 ROWS — every other exercise a user can
+      pick is UNKNOWN to the new API, and its sets are SILENTLY DISCARDED.**
+      Created 2026-08-01 (DECISIONS :3424), found while planning the web write
+      path. **It had NO line anywhere in this file** — the gap was visible only
+      as prose inside the write-path entry below ("nearly every exercise is
+      log-only TODAY"), which is about DEFINITIONS, a different thing: an
+      exercise can be hand-logged without a definition, but it cannot be STORED
+      without a catalog row. Same shape of miss as the write-path line itself.
+      **The chain, command-verified 2026-08-01:**
+      1. `db/seed.ts:201-203` seeds exactly **3** exercises (squat, jump_squat,
+         chair_squat) and `db/seed.ts:254` is the **only** insert site in
+         `apps/api` (grep: one hit). The Mongo→PG tool adds none and says so
+         (`tools/migrate-mongo/exerciseNames.ts:4-6`).
+      2. `modules/workouts/repo.ts:58` filters sets whose slug has no row;
+         `:71` flags the workout `unknown_exercise`; the parent workout is
+         inserted REGARDLESS, so an all-unknown payload lands as a workout with
+         `sets_count = 0`, `total_reps = 0`.
+      3. `db/schema/training.ts:55-57` — `workout_sets.exercise_id` is NOT NULL
+         with an FK, so "store it anyway" needs a migration AND an R0.3
+         deviation against Part 4 §3.5. Kd did NOT choose that.
+      4. There is **no name→slug resolver for a log-only set**. The engine path
+         is unaffected only because definitions carry the plural legacy name as
+         an alias (`definitions/squat.json:3`) and the compiled config takes the
+         definition KEY (`definition/compile.ts:89`).
+      **⇒ Until this line is closed, a hand-logged workout of anything but those
+      three exercises would be ACCEPTED and then emptied — worse than today's
+      missing data, because it writes a 0-rep workout into history.**
+      **THIS BLOCKS THE WEB WRITE PATH BELOW** (Kd's ruling, DECISIONS :3424:
+      catalog first). Scope when it runs: catalog rows for every exercise a user
+      can pick, plus a REVIEWED name→slug table (the P1.8a-precedent instrument
+      already exists in miniature at `tools/migrate-mongo/exerciseNames.ts`,
+      covering **14** legacy names — not the library).
+      **Carries an OPEN RULING the card must put to Kd, not pick:** legacy names
+      with no home in the spec's 58 (`exerciseNames.ts` rows 12–14, marked
+      "NEVER": Arnold Shoulder Press, 1-Arm Half-Kneeling Lat Pulldown, 1 Leg Box
+      Squat). A user can hand-log those today; the no-removal rule says their
+      reps cannot just be dropped.
+      NOT this line: display names, instructions, media/GIFs and server-side
+      search, which are the separate "Exercise library content" line above.
 - [ ] 🔴 **THE WORKOUT WRITE PATH — and the ruling under it: where does a
       HAND-LOGGED workout live after the old backend is off?**
       Created 2026-08-01 (DECISIONS :2912). This was visible only as prose inside
@@ -565,6 +604,28 @@ then; none may be hidden or reduced to close the gap.
       has changed for a user yet and the cutover is still blocked. That is the
       next card. Also owed with it: `queueWorkoutSync` must build the log-only
       set shape, and the client must stop calling `completeSession`.
+      **PLANNED 2026-08-01 AND BLOCKED, BOTH HALVES RULED BY Kd (DECISIONS
+      :3424) — do NOT start this card until the CATALOG line above is closed:**
+      1. **BLOCKED ON THE CATALOG.** With 3 catalog rows, sending hand-logged
+         sets would have them discarded and would write 0-rep workouts into
+         history. Catalog first, then this.
+      2. **`completeSession` STAYS — the removal above is DEFERRED, not done,
+         and this line is what holds it.** The web card DUAL-WRITES (new API in
+         addition to the legacy save), exactly as engine workouts already do.
+         Removal is discharged only when the post-workout summary, the Dashboard
+         stats and the calendar have new-API homes; dropping it today makes the
+         summary screen print duration/calories/form as 0 **and a plausible
+         "+50 XP" that was never awarded** (the old handler recomputes that
+         number: `backend-ml/app/routers/workouts.py:591`) — a screen that looks
+         true and is false. No-removal rule: replacement before removal.
+      3. **When it runs, hook `handleSetComplete` (`ActiveWorkout.jsx:386`) — the
+         single funnel — plus the three `engineSetKey` bump sites (:426, :483,
+         :508) and the discard at :359-366. NOT the rep-counter trigger:** a
+         "Complete Set" BUTTON at :1004 ends a set before the rep target, and
+         hooking the counter would lose every early-ended set.
+      4. Also owed with it (recorded at DECISIONS :3332): the local
+         `syncClient.test.js` "window is not defined" failure is fixed by THIS
+         card, not by the catalog card (R1.1).
 - [ ] 🔴 **Workout history calendar** (WorkoutCalendar → workoutApi.getHistory).
       **BLOCKED — NOT a client repoint. Do not pick this up as a quick win.**
       **BUILT AND PARKED 2026-08-01 (DECISIONS :2912), still unticked.** A chat

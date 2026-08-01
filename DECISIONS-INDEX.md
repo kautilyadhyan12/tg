@@ -121,6 +121,18 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:3424** — 2026-08-01 — **THE WEB WRITE PATH: Kd ruled BOTH halves.** (1) The
+  exercise CATALOG must hold every pickable exercise BEFORE the web write path
+  ships — it has **3** rows, `db/seed.ts:254` is the only insert site, and an
+  all-unknown payload still creates a workout with `sets_count 0`, so shipping
+  the web half first would write EMPTY workouts into history. Its own OWED line
+  was created in the same commit; it had none. (2) `completeSession` **STAYS** —
+  dropping it makes the post-workout screen print a plausible **"+50 XP" that was
+  never awarded** (the old handler recomputes it), i.e. a screen that looks true
+  and is false. **Read before any hand-logged-exercise work: a log-only set has
+  NO name→slug resolver** — the engine path only works because definitions carry
+  the plural legacy name as an alias. Carries a V1 self-audit of its own plan
+  (an unverified "58", and a missed "Complete Set" button).
 - **:3332** — 2026-08-01 — log-only sets, **T3 round 2 — CARD CLOSED** under the
   cap: 5 findings, ZERO visible, all fixed. **Read R2-F1 before regenerating any
   applied migration: it desynchronises `drizzle.__drizzle_migrations`, so the
