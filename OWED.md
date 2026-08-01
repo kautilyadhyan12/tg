@@ -653,6 +653,27 @@ then; none may be hidden or reduced to close the gap.
       4. Also owed with it (recorded at DECISIONS :3332): the local
          `syncClient.test.js` "window is not defined" failure is fixed by THIS
          card, not by the catalog card (R1.1).
+      5. **THE TRAP THAT WOULD RECORD EVERY HAND-LOGGED SET AS 0 REPS.**
+         Command-verified 2026-08-01: the manual rep count lives ONLY in the
+         `setReps` STATE (`ActiveWorkout.jsx:156`) and **nothing mirrors it into
+         a ref** (grep: no `setRepsRef` exists). `handleSetComplete` is a
+         `useCallback` whose deps (`[targetSets, restDuration, exercises,
+         voiceOn]`, :412) rarely change after mount, so it stays pinned to an
+         early render — reading `setReps` inside it yields that render's stale
+         value. This is the SAME hazard the file already documents at :120-129
+         for `elapsedSecs`/`repFormScores`, which is why `elapsedSecsRef` exists.
+         A ref is required, or every hand-logged set syncs 0 reps while the
+         screen shows the right number.
+      6. Per-set DURATION has no source either: the page tracks whole-session
+         elapsed time, movement-gated active seconds and total rest, but nothing
+         per set — and `durationMs` is REQUIRED and non-null on every set in the
+         wire contract. A per-set start timestamp is part of this card (wall
+         clock is fine here — R5.1 binds `packages/engine`, not `apps/web`).
+      7. Decided but not yet built (state it in the card's PLAN so it is
+         reviewable): a set with 0 reps is not sent (nothing happened), and if
+         an exercise name cannot be resolved to a slug the workout is NOT synced
+         at all rather than synced partially — the legacy save still holds it,
+         so nothing is lost while `completeSession` stays.
 - [ ] 🔴 **Workout history calendar** (WorkoutCalendar → workoutApi.getHistory).
       **BLOCKED — NOT a client repoint. Do not pick this up as a quick win.**
       **BUILT AND PARKED 2026-08-01 (DECISIONS :2912), still unticked.** A chat
