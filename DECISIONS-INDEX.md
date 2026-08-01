@@ -121,6 +121,16 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:3501** — 2026-08-01 — **CORRECTION to :3424: its "open ruling" was never
+  open.** Part 2 §6:720-733 makes `scripts/seed_exercises.py` the canonical
+  58-exercise catalog and Part 4 §3.4:373 rules `arnold_shoulder_press` stays
+  unseeded; none of the three unmapped legacy names is IN the library, so no user
+  can hand-log one and nothing is owed. Also re-verifies the count as **58**
+  (visible 56 — `REMOVED_EXERCISES` hides Mountain Pose + Brisk Walking), so
+  :3424's own "UNVERIFIED" self-correction was itself the error. Names the two
+  RULED catalog decisions this work needs (Mountain Pose live/T3/F12/2.3; Brisk
+  Walking `tracking 'timer'`). **Standing lesson: draft a ruling request AFTER
+  the spec read, never before** — the file already carried that lesson.
 - **:3424** — 2026-08-01 — **THE WEB WRITE PATH: Kd ruled BOTH halves.** (1) The
   exercise CATALOG must hold every pickable exercise BEFORE the web write path
   ships — it has **3** rows, `db/seed.ts:254` is the only insert site, and an

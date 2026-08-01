@@ -3497,3 +3497,40 @@ recommendations. Neither is a spec gap; both are sequencing/no-removal rulings.
 - **Carried into the web card (recorded at :3332, restated so it is not lost):**
   the local `syncClient.test.js` "window is not defined" failure is fixed by that
   card, not by the catalog card (R1.1).
+
+## 2026-08-01 — CORRECTION to :3424 — its "OPEN RULING" was never open; the spec had already answered it
+
+- **What :3424 claimed:** that legacy names with no home in the spec's 58
+  (`tools/migrate-mongo/exerciseNames.ts` rows 12–14) are an OPEN RULING the
+  catalog card must put to Kd, "because a user can hand-log those today".
+- **FALSE, and the spec answers it in two places.** Part 2 §6:720-733 declares
+  the canonical catalog IS `scripts/seed_exercises.py`, "which seeds **exactly
+  58 exercises** into Mongo — matching your dashboard count", and states that
+  "`arnold_shoulder_press` has a rep-counter config but is **not** in the 58".
+  Part 4 §3.4:373-374 rules it outright: "`arnold_shoulder_press` stays unseeded
+  — first expansion candidate, one authoring session away."
+  Command-verified this session: `grep -in "arnold\|lat pulldown\|box squat"
+  scripts/seed_exercises.py` → **no match**. None of the three is in the
+  library, so no user can pick or hand-log one. They exist only in historic
+  legacy WORKOUT rows, where the migration already skips + quality-flags them.
+  **Nothing is owed for the write path.** The OWED paragraph is corrected in
+  this commit; this entry stands unrewritten per the append-only rule.
+- **Corrected in the other direction too:** :3424's V1 self-audit marked the
+  library count "58" as UNVERIFIED. It is VERIFIED, and it is 58 — Part 2 §6:721
+  states it as ground truth ("verified, v1.1") and reconciles the competing
+  numbers: the visible library is **56** because the frontend's
+  `REMOVED_EXERCISES` set hides Mountain Pose and Brisk Walking, and the "~85"
+  in the seed script's own docstring is stale. The plan's "3 recognised vs the
+  other 55" was RIGHT; my correction of it was the error.
+- **STANDING LESSON — this file already carried it, and I incurred it anyway.**
+  The log-only HANDOFF block says: "The spec had already decided it… Read the
+  spec § before asking Kd to rule on something it already answers." I wrote an
+  "open ruling" into two records BEFORE reading Part 2 §6, and it was caught
+  only because the grounding rule forces the spec read before PLANNING the next
+  card — i.e. one card later, by luck of sequencing rather than by design.
+  **A ruling request is drafted AFTER the spec read, never before.**
+- **The two catalog decisions this card does need are also RULED, not open**
+  (Part 4 §3.4:366-372, executed in seed per Part 2 Appendix B): **Mountain Pose
+  → `status 'live'`, tier T3, family F12, MET 2.3** — "the `REMOVED_EXERCISES`
+  frontend hack dies with the migration" · **Brisk Walking → `tracking
+  'timer'`** — web logs a timed session, excluded from every form-score surface.

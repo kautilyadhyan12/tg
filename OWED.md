@@ -532,11 +532,22 @@ then; none may be hidden or reduced to close the gap.
       can pick, plus a REVIEWED name→slug table (the P1.8a-precedent instrument
       already exists in miniature at `tools/migrate-mongo/exerciseNames.ts`,
       covering **14** legacy names — not the library).
-      **Carries an OPEN RULING the card must put to Kd, not pick:** legacy names
-      with no home in the spec's 58 (`exerciseNames.ts` rows 12–14, marked
-      "NEVER": Arnold Shoulder Press, 1-Arm Half-Kneeling Lat Pulldown, 1 Leg Box
-      Squat). A user can hand-log those today; the no-removal rule says their
-      reps cannot just be dropped.
+      **CORRECTED 2026-08-01, same day (DECISIONS :3501) — this line first
+      claimed an OPEN RULING here and there is none.** The three unmapped legacy
+      names (`exerciseNames.ts` rows 12–14: Arnold Shoulder Press, 1-Arm
+      Half-Kneeling Lat Pulldown, 1 Leg Box Squat) are **not in the library**
+      (`grep -in "arnold\|lat pulldown\|box squat" scripts/seed_exercises.py` →
+      no match), so no user can pick or hand-log one; they exist only in historic
+      legacy workout rows, which the migration already skips + flags. The spec
+      rules the case directly: Part 4 §3.4:373 — "`arnold_shoulder_press` stays
+      unseeded — first expansion candidate". **Nothing is owed for the write
+      path, and Kd must NOT be asked to rule on it.**
+      **The catalog decisions this card DOES need are likewise already ruled**
+      (Part 4 §3.4:366-372): Mountain Pose → `status 'live'`, T3, F12, MET 2.3
+      (the frontend's `REMOVED_EXERCISES` hack dies with the migration) · Brisk
+      Walking → `tracking 'timer'`, excluded from every form-score surface.
+      Catalog size is **58** (Part 2 §6:721, "verified, v1.1"); the visible
+      library is 56 because of that same frontend hack.
       NOT this line: display names, instructions, media/GIFs and server-side
       search, which are the separate "Exercise library content" line above.
 - [ ] 🔴 **THE WORKOUT WRITE PATH — and the ruling under it: where does a
