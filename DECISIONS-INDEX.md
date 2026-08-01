@@ -121,6 +121,13 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:3298** — 2026-08-01 — **F3 RULED (Kd, option A)**: the workout-level
+  `engineVersion` means "the engine build the CLIENT was running", not "the
+  engine that scored this", and `defsVersion` becomes NULLABLE — matching Part 4
+  §3.5:384, which declares `bundle_version int` with no NOT NULL while the
+  payload had been stricter than the spec. No migration, no deviation. Also
+  `.min(1)` at workout level. **This discharges the last blocker on the web write
+  path**: an all-log-only payload can now be built without inventing anything.
 - **:3199** — 2026-08-01 — log-only sets, **T3 round 1**: 6 findings, ZERO
   visible, 5 fixed, **F3 open for Kd**. **Both halves of :3085's central claim
   were FALSE** — "enforced twice" and "an engine set still MUST carry

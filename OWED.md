@@ -537,7 +537,8 @@ then; none may be hidden or reduced to close the gap.
       honouring the spec, not a new product call. Migration `0009_log_only_sets`
       (expand-only, SQL reviewed by Kd first) + the `setSummarySchema` union +
       the sync/read paths landed with 9 new real-Postgres tests, api 373/373.
-      **BLOCKING SUB-ITEM, OPEN FOR KD (T3 round 1 F3, DECISIONS :3199):** an
+      **[RULED 2026-08-01 — option A, DECISIONS :3298. No longer blocking.]**
+      **WAS: blocking sub-item, open for Kd (T3 round 1 F3, DECISIONS :3199):** an
       all-log-only workout must still send a WORKOUT-level `engineVersion`
       (required string) and `defsVersion` (required positive int), both stored
       and served back by `GET /v1/workouts/:id`. The API card's own test hides
@@ -552,8 +553,12 @@ then; none may be hidden or reduced to close the gap.
       workout-level `engineVersion` means "the engine build the client was
       running", honest and non-null even when nothing was scored; or (b) a
       DEVIATION PROPOSAL to make `workouts.engine_version` nullable, which the
-      spec declares NOT NULL (R0.3). **The next card cannot be written honestly
-      until this is ruled.**
+      spec declares NOT NULL (R0.3).
+      **RESOLVED: Kd chose (a).** `engineVersion` at workout level now means
+      "the engine build the CLIENT was running" — true whether or not anything
+      was scored — and `defsVersion` is nullable, matching the spec DDL. No
+      migration, no deviation. The web card can now build an all-log-only
+      payload without inventing a number.
       **THE WEB HALF IS WHAT REMAINS AND THIS LINE STAYS OPEN FOR IT:**
       `ActiveWorkout.jsx:536` still posts every workout to the legacy backend and
       `syncClient.js:72` still refuses to queue an all-log-only one, so NOTHING

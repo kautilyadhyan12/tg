@@ -3294,3 +3294,37 @@ user can see changes yet — deliberately, so a failure has one possible cause.
   files. The dev database's constraints were reconciled by hand because 0009 had
   already been applied there — the new `23514` test is what proves the file and
   the database agree, which is the second job it does.
+
+## 2026-08-01 — F3 RULED (Kd, option A): the workout-level engine version means the CLIENT's build
+
+- (THE RULING) Kd chose option A. `workoutSyncPayloadSchema.engineVersion` now
+  means **"the engine build the client was running"**, NOT "the engine that
+  scored this workout". The distinction is the entire fix: read the old way, an
+  all-log-only workout had to name an engine that never ran, and the API card's
+  own test papered over it by hardcoding `"1.0.0"` — the fabrication deleted at
+  set level, performed at workout level by the fixture. Read this way the field
+  is a true statement about the CLIENT, knowable whether or not anything was
+  scored, so nothing has to be invented. Per-set provenance is where "what
+  scored this set" lives, and it is nullable there (migration 0009).
+- (`defsVersion` NULLABLE — no migration, no deviation) `Part 4 §3.5:384`
+  declares `bundle_version int` with **no NOT NULL**, quoted from the file this
+  session; the payload schema had been demanding a positive int, i.e. stricter
+  than the spec. A client with no definition bundle loaded — every all-log-only
+  workout — has no bundle version to report, and `1` would be a lie about which
+  bundle produced it. Option (b), making `workouts.engine_version` nullable, was
+  NOT taken: the spec declares that column NOT NULL, so it would have needed a
+  DEVIATION PROPOSAL (R0.3) and a migration, to obtain a weaker guarantee than
+  option A gives for free.
+- (`.min(1)` at workout level too) The same hollow-claim hole F6 closed per set:
+  an empty string is not a version. Rejected, with its own test case.
+- (`sets.min(1)` REINTERPRETED, not weakened) It was the all-log-only bar
+  (DECISIONS 2026-07-10). Log-only sets are expressible now, so an all-log-only
+  workout satisfies it with real sets; what it still forbids is a workout with no
+  sets at all, which remains right — the reps have to come from somewhere.
+  Comment rewritten so the next reader does not restore the old meaning.
+- (PROVE) api **374/374** real Postgres · shared **19/19** · typecheck + lint
+  clean. The all-log-only test now posts `defsVersion: null` and asserts
+  `bundle_version` stores NULL — "unknown", not `1`.
+- (WHAT THIS UNBLOCKS) The web write path can now build an all-log-only payload
+  without inventing anything: the client knows its own engine build, and reports
+  no bundle version. That was F3's blocking condition, and it is discharged.

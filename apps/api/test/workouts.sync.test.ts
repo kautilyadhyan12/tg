@@ -267,8 +267,16 @@ d("POST /v1/workouts/sync (real Postgres, real cookie authn)", () => {
 
   it("a log-only set is accepted and stored as one, with no invented provenance", { timeout: 30_000 }, async () => {
     const wid = "aaaaaaaa-1111-4111-8111-000000000008";
-    const res = await post(payload(wid, [logSet(1), logSet(2, { reps: 12 })]));
+    // defsVersion NULL — T3 F3/option A: a client with no definition bundle
+    // loaded has no bundle version to report, and `1` would be a lie about
+    // which bundle produced this. The workout-level engineVersion stays a real
+    // string because it now means "the build the CLIENT was running".
+    const body = { ...payload(wid, [logSet(1), logSet(2, { reps: 12 })]), defsVersion: null };
+    const res = await inject(body, { "idempotency-key": wid });
     expect(res.statusCode).toBe(201);
+
+    const [bundle] = await sql`SELECT bundle_version FROM workouts WHERE id = ${wid}`;
+    expect(bundle?.["bundle_version"]).toBeNull(); // stored as unknown, not as 1
 
     const [w] = await sql`
       SELECT sets_count, total_reps, avg_form_score, duration_ms FROM workouts WHERE id = ${wid}`;
@@ -327,6 +335,7 @@ d("POST /v1/workouts/sync (real Postgres, real cookie authn)", () => {
       payload(wid, [set(1, { mode: "engine", engineVersion: null })]),
       payload(wid, [set(1, { mode: "made_up_mode" })]), // only two kinds exist
       payload(wid, [set(1, { engineVersion: "" })]), // F6: an empty version proves nothing
+      { ...payload(wid, [set(1)]), engineVersion: "" }, // F3: nor at workout level
     ];
     for (const bad of cases) {
       const res = await inject(bad, { "idempotency-key": wid });
