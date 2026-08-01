@@ -43,6 +43,15 @@ const STATES = [
                  //   state isolates the summary payload.
   'lbOnly',      // overview fails, leaderboard 200s — round 4 F4
   'emptyLists',  // everything 200s with empty lists — round 6 F6
+  'legacyCompleteFails',
+                 // everything 200s EXCEPT the legacy save (PATCH …/complete),
+                 //   which 500s. The write-path card's central claim is that
+                 //   the new sync and the legacy save are independent — neither
+                 //   one's failure drops or duplicates the other — and no state
+                 //   could show it: `dead` and `hang` kill the CREATE too, so a
+                 //   workout could not be started to begin with. Expected here:
+                 //   the workout still syncs to the new API, and the page still
+                 //   navigates. (write-path T3 round 2, F-5)
   'healthy',     // full, well-formed payloads — THE CONTROL. Run it first.
 ];
 let state = 'dead';
@@ -132,7 +141,77 @@ const SUMMARY_UNSCORED = {
   stretches:        'Hamstring stretch, 30s each side',
 };
 
-function payloadFor(path) {
+/** A slice of the old library, named EXACTLY as `scripts/seed_exercises.py`
+ *  names them — the strings the web resolves through the reviewed 58-row
+ *  catalog table. A near-miss here ("Push Ups") would make the app look broken
+ *  when it is the rig that is lying, which is this file's stated hazard.
+ *
+ *  Two of these have an engine definition (Squats, Chair Squats) and three do
+ *  not, so one smoke can cover both paths and a workout that mixes them. */
+const LIBRARY = [
+  { id: 'x1', name: 'Push-ups',      primary_category: 'chest', difficulty: 'beginner',
+    sets_default: 2, reps_default: 3, calories_per_min: 8,  ai_supported: false },
+  { id: 'x2', name: 'Squats',        primary_category: 'legs',  difficulty: 'beginner',
+    sets_default: 2, reps_default: 3, calories_per_min: 8,  ai_supported: true  },
+  { id: 'x3', name: 'Plank',         primary_category: 'core',  difficulty: 'beginner',
+    sets_default: 1, reps_default: 2, calories_per_min: 5,  ai_supported: false },
+  { id: 'x4', name: 'Bicep Curls',   primary_category: 'arms',  difficulty: 'beginner',
+    sets_default: 2, reps_default: 3, calories_per_min: 5,  ai_supported: false },
+  { id: 'x5', name: 'Chair Squats',  primary_category: 'legs',  difficulty: 'beginner',
+    sets_default: 1, reps_default: 3, calories_per_min: 6,  ai_supported: true  },
+];
+
+function payloadFor(path, method = 'GET') {
+  // ── The workout WRITE path (2026-08-02) ────────────────────────────────────
+  // Without these three answers a workout cannot be STARTED on this branch at
+  // all, so the hand-logged write path could not be smoked. The cause is not a
+  // bug in this rig: `mlApi` attaches a bearer token only if localStorage holds
+  // one, and Card 1 moved sessions to httpOnly cookies — so every old-backend
+  // call on `web-repoint` now goes out unauthenticated. The REAL old backend
+  // would reject them for exactly the same reason; this rig is the only way to
+  // exercise a screen that still depends on that backend.
+  // Matched by SUFFIX, like the summary branch below and for the same reason:
+  // the web calls this backend under an `/api` prefix (VITE_ML_API_URL is
+  // `http://localhost:8000/api`), so `path === '/workouts'` matches nothing a
+  // browser ever sends. Caught while writing the smoke steps, before Kd ran it.
+  // The two WRITE branches below do not branch on state THEMSELVES, but they
+  // are NOT state-independent: `dead`, `hang` and `lbOnly` are short-circuited
+  // in the request handler before this function is ever called, so in those
+  // three states the create 500s or never answers. The first version of this
+  // comment claimed independence and was wrong — verified live: POST in `dead`
+  // returns 500, in `hang` it never responds. T3 round 2, F-5.
+  //
+  // `legacyCompleteFails` exists because of that finding: it was impossible to
+  // observe the card's central independence claim — that the new sync and the
+  // legacy save cannot drop each other — since no state could 200 the create
+  // and then fail the completion. Now one can.
+  if (method === 'POST' && /\/workouts$/.test(path)) {
+    // PreWorkout reads `res.data.session.id` and stores it as the session the
+    // legacy save later completes. A missing `session` key throws there and the
+    // user never leaves the checklist screen.
+    return { session: { id: `smoke-${Date.now()}` } };
+  }
+  if (method === 'PATCH' && /\/workouts\/[^/]+\/complete$/.test(path)) {
+    // The legacy save. ActiveWorkout ignores the body and navigates to the
+    // summary; what matters in a smoke is that this 200s, because a failure
+    // here is caught and logged and would look like "nothing happened".
+    return { message: 'workout completed' };
+  }
+  if (/\/exercises\/categories$/.test(path)) return { categories: ['chest', 'legs', 'core', 'arms'] };
+  if (/\/exercises\/muscles$/.test(path))    return { muscles: [] };
+  if (/\/exercises$/.test(path)) {
+    // STATE-AWARE, like the summary branch below. The first cut of this branch
+    // sat above the per-state switch and answered identically in every state,
+    // so `empty200` and `emptyLists` — states whose whole purpose is to show
+    // what the app does with nothing — served a full library. That is the same
+    // class as this file's recorded round-2 finding (the summary branch
+    // swallowing the running screen's payload): a rig that lies gets the app
+    // blamed for it. T3 round 1, F5.
+    if (state === 'empty200') return {};
+    if (state === 'emptyLists') return { exercises: [], total: 0 };
+    return { exercises: LIBRARY, total: LIBRARY.length };
+  }
+
   // The summary gets its own branch BEFORE the per-state switch, because every
   // 200-serving state needs an answer here: PostWorkout's own catch toasts and
   // redirects to /dashboard when this read fails, so a state that 500s it
@@ -260,11 +339,15 @@ createServer((req, res) => {
 
   if (state === 'hang') return;                       // never answers, never closes
   if (state === 'dead') return json(req, res, 500, { error: 'old backend down' });
+  if (state === 'legacyCompleteFails' && req.method === 'PATCH'
+      && /\/workouts\/[^/]+\/complete$/.test(path)) {
+    return json(req, res, 500, { error: 'legacy save failed' });
+  }
   if (state === 'lbOnly') {
     if (path.includes('/gamification/leaderboard')) return json(req, res, 200, LEADERBOARD_FULL);
     return json(req, res, 500, { error: 'overview down' });
   }
-  return json(req, res, 200, payloadFor(path));
+  return json(req, res, 200, payloadFor(path, req.method));
 // Bound to LOOPBACK, not every interface (T3 round 3 security note — reported as
 // pre-existing, taken because this file was already open). `/__state/<name>` is
 // a STATE-CHANGING GET with no auth, and the CORS block above reflects the

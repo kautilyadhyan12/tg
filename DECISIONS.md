@@ -3606,3 +3606,113 @@ repo's recorded harness failures in one run.**
   failed in one full run and passed in the next with nothing changed, and it
   passes at `--testTimeout=45000`. My code is not in its path (it never calls
   the seed). Its own OWED line, not a silent flake.
+
+## 2026-08-02 — THE WEB WRITE PATH: a hand-counted workout now reaches the new API
+
+- (WHAT SHIPPED, and what a user sees) `ActiveWorkout.jsx` records every
+  hand-counted set and `syncClient.js` queues a workout that contains no
+  engine-scored sets at all — the two refusals OWED's write-path entry named.
+  55 of the 58 catalog exercises have no definition, so before this the new API
+  held only workouts made of squat / jump_squat / chair_squat, and after P2.8
+  everything else would have been saved NOWHERE. `completeSession` STAYS (Kd,
+  :3424): every workout is written to BOTH backends, and that deferral now has
+  its OWN OWED line rather than riding inside the ticked one.
+- (THE TRAP THE OWED ENTRY NAMED, AND THE ONE UNDERNEATH IT) The recorded trap
+  was that the manual rep count lives only in React state, which the memoized
+  set-end callback reads as a mount-time snapshot — every hand-logged set would
+  sync as 0 reps. **The fix that "obviously" follows is also wrong**: mirroring
+  the count in a `useEffect` still lags, because `handleManualRep` calls
+  `handleSetComplete()` synchronously in the same tick when the last rep hits
+  the target. That records every completed set ONE REP SHORT — screen says 12,
+  database says 11 — which is strictly worse than the zero, because nothing
+  about it looks wrong. Every write site therefore assigns the ref on the same
+  line as the state setter. **The set ORDINAL had the identical defect and was
+  recorded nowhere**: `engineSetKey` had no ref, so every set would have been
+  filed as set 1 and the contract's duplicate-setIndex check would have parked
+  the whole workout. Fixed as one class, not two cases.
+- (PER-SET DURATION, which had no source) The page timed the session, the
+  movement-gated active seconds and total rest — never one set. A per-set start
+  ref, restarted wherever the rep count resets, because "a new set begins" is
+  one event and splitting it is how set N ends up reporting set N-1. Wall clock
+  is legitimate here: R5.1 binds `packages/engine`, not `apps/web`. Initialised
+  in the mount effect, NOT as `useRef(Date.now())` — that reads a clock during
+  render (lint-rejected, and React may call it twice).
+- (WHERE THE CAPTURE HANGS) `handleSetComplete` is the funnel (both the rep
+  target and the "Complete Set" button land there — hooking the rep counter
+  would lose every early-ended set, OWED item 3), plus the three ordinal-bump
+  sites, idempotent per ordinal so the overlapping paths cannot double-count. It
+  is wrapped so that it CANNOT THROW: the capture sits on the path that starts
+  the rest timer and ends the session, so an exception there would strand the
+  user mid-workout. Collecting data for the new API must never be able to break
+  the workout in front of them; a render test proves it.
+- (WORKOUT-LEVEL VERSIONS) `engineVersion` is now `ENGINE_VERSION` — the build
+  the CLIENT was running (option A, :3298) — not `summaries[0].engineVersion`,
+  which is `undefined` when nothing was scored. `defsVersion` is null unless a
+  set was actually analysed: no bundle was consulted, and `1` would name a
+  bundle that did nothing. Matches Part 4 3.5:384 (`bundle_version int`, no
+  NOT NULL).
+- (THE REFUSALS, both deliberate) A 0-rep set is dropped (nothing happened) and
+  does NOT stop the workout syncing. An exercise whose name has no catalog row
+  refuses the WHOLE workout rather than syncing it partially — the server
+  discards an unknown-slug set while keeping the parent workout, so a partial
+  sync writes a workout with sets missing; refusing leaves the legacy save as
+  one intact record. Reps are checked BEFORE the name so an empty set of an
+  uncatalogued exercise cannot veto a workout the user did do.
+- (SMOKE — PASSED, Kd 2026-08-02, gates "done") Verified in the DATABASE, not
+  just on screen: `push_up` / `log_only` / **reps 3** / duration 19.2 s /
+  `avg_form_score` NULL / `rep_scores` NULL / `bundle_version` NULL /
+  `quality_flags []` — the empty flags being the proof the server RECOGNISED the
+  exercise instead of discarding the set. XP updated at the sync second (the
+  visible half of the card: hand-logged workouts previously left the new API's
+  XP untouched while the post-workout screen claimed "+50 XP").
+- (THE SMOKE WAS NOT RUNNABLE AT ALL, and that is a finding about the branch)
+  On `web-repoint` a workout cannot be STARTED: `PreWorkout` creates the session
+  through `mlApi`, which attaches a bearer token only `if (token)`, and Card 1
+  stopped writing `localStorage.accessToken`. The REAL old backend would reject
+  it identically — this is not a rig defect. `tools/mock-ml-backend.mjs` gained
+  the three answers that make the screen reachable (list exercises, create
+  session, complete session) with names copied VERBATIM from
+  `scripts/seed_exercises.py`, plus a `legacyCompleteFails` state (T3 r2 F-5)
+  because no existing state could 200 the create and fail the completion — so
+  the card's own independence claim ("neither save can drop the other") had no
+  state that could observe it.
+- (TWO T3 ROUNDS, FRESH CHATS, ZERO VISIBLE IN BOTH — card closed under the cap)
+  Round 1: the Skip-Exercise capture had NO test (deleting it left 302 tests
+  green while a part-set vanished); no test ran with the engine active; an
+  unresolved name was recorded twice; the clash-splice left rep scores behind;
+  the rig's new branches shadowed every state. Round 2 audited those fixes and
+  found five more, all NOT-VISIBLE.
+- (**STANDING LESSON — A TEST CAN BE A CLOSED LOOP**, T3 r2 F-2) The test
+  asserting "all 58 exercises resolve" fed `CATALOG_58`'s own names into
+  `slugForLegacyName`, whose lookup map is BUILT FROM `CATALOG_58`. It could not
+  fail for any table content — a list checked against itself — while its comment
+  called it "the card's central premise, asserted rather than believed" and
+  `syncClient.js` cited it as proof. The premise was true (verified separately
+  against `scripts/seed_exercises.py`: 58/58, zero mismatches either way), which
+  is exactly why nobody noticed. It now READS THE REAL LIBRARY FILE; renaming
+  one catalog row makes it fail naming that exercise. **A test whose inputs and
+  its subject share a source proves the source is self-consistent, nothing
+  more.**
+- (**STANDING LESSON — A WRONG COMMENT CAN RE-ARM A FIXED BUG**, T3 r2 F-1) The
+  final capture call carried a comment claiming the Skip-Exercise-on-the-last-
+  exercise route arrived uncaptured. False: both callers capture first, and a
+  mutant deleting that call stays green. The danger is not the redundant call —
+  it is that a reader trusting the comment would conclude the OTHER capture was
+  redundant and delete the load-bearing one, which is the exact regression round
+  1 had just caught. The comment now says which line is load-bearing.
+- (PROVE) web **310/310** (up from a long-standing 272/273 — OWED item 4's
+  `window is not defined` failure is fixed by STUBBING the env instead of
+  reading it; the test asserted a claim about the runner's environment that
+  stopped being true when a URL was put in `apps/web/.env`, so it passed in CI
+  and failed on Kd's machine). Typecheck clean on shared/engine/api. Lint on the
+  8 touched files is an IDENTICAL rule multiset to HEAD. **13 mutants across 2
+  source files, all RED** against a verified green baseline, all targets
+  restored byte-for-byte, post-run baseline re-checked GREEN — harness in the
+  repo at `apps/web/tools/mutate-write-path.mjs` (the PostWorkout precedent:
+  an unreproducible mutation claim is a claim).
+- (OWED, opened by this card) The legacy dual-write removal (lifted out of the
+  ticked entry so it cannot travel inside it) and **F-3: a camera-graded set can
+  still land nowhere** — `analysisAvailable` means "a definition exists", not
+  "the engine filed this set", so when zero frames were fed (camera denied,
+  MediaPipe still loading) neither side files. Harmless before this card; now it
+  can sync a MIXED workout with the squat sets missing.

@@ -121,6 +121,22 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:3610** — 2026-08-02 — **THE WEB WRITE PATH — DONE, card closed under the
+  two-round cap.** A hand-counted workout now reaches the new API; the OWED entry
+  is ticked and the two things it was holding were lifted into their OWN lines
+  (the legacy dual-write removal, and F-3 below). `completeSession` STAYS —
+  both backends are written. Kd's SMOKE passed and was verified IN THE DATABASE.
+  **Read before touching this area: the recorded 0-rep trap has a WORSE variant
+  underneath it** — an effect-mirrored ref lags one tick and records every set
+  ONE REP SHORT, which looks right on screen. **Two standing lessons: a test
+  whose inputs and its subject share a source proves only that the source is
+  self-consistent** (the "all 58" test was a list checked against itself, and was
+  cited as proof in shipped code); **and a wrong comment can re-arm a fixed bug**
+  (a comment named the wrong capture call as load-bearing, inviting deletion of
+  the one round 1 had just protected). **F-3, still open: a camera-graded set can
+  land NOWHERE when zero frames were fed, and this card turns that from "no row"
+  into a MIXED workout synced with sets missing.** 13 mutants / 2 files all RED;
+  harness at `apps/web/tools/mutate-write-path.mjs`.
 - **:3538** — 2026-08-01 — **THE 58-EXERCISE CATALOG IS SEEDED** (3 → 58 rows,
   verified against the live DB). The reviewed table is `CATALOG_58` in
   `packages/shared/src/exerciseCatalog.ts` (artifact: `docs/catalog-58.md`, Kd

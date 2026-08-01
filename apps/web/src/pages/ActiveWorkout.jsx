@@ -15,7 +15,12 @@ import ReferenceAnimation from '../components/workout/ReferenceAnimation';
 import { workoutService } from '../api/workoutApi';
 import { getItem, removeItem } from '../utils/storage';
 import { queueWorkoutSync } from '../sync/syncClient';
-import { accumulateSummary, averageFormScore, createSummaryLog } from './activeWorkoutEngine';
+import {
+  accumulateSummary,
+  averageFormScore,
+  createSummaryLog,
+  recordLogOnlySet,
+} from './activeWorkoutEngine';
 import {
   speakExercise, speakCorrection,
   speakProgress, speakRest, speakSetStart, speakComplete,
@@ -143,6 +148,44 @@ export default function ActiveWorkout() {
   const discardSetKeyRef       = useRef(null);
   const lastRepCountRef        = useRef(0);     // previous engine rep_count → beep once per new rep
 
+  // ── Live copies for the hand-logged write path (2026-08-02) ─────────────────
+  // WHY THESE ARE ASSIGNED DIRECTLY AND NOT MIRRORED IN AN EFFECT. The three
+  // values below are read at SET END, and one of the paths to set end runs in
+  // the SAME TICK as the write that triggers it: handleManualRep does
+  // `setSetReps(n)` and then, if n hit the target, calls handleSetComplete()
+  // immediately — before React has re-rendered, so before any mirroring effect
+  // could run. An effect-mirrored copy would therefore be one rep BEHIND on
+  // every hand-logged set that ends by reaching its target: the screen says 12,
+  // the database says 11. That is worse than the 0-rep failure this ref exists
+  // to prevent, because nothing about it looks wrong.
+  //
+  // So every write site assigns the ref on the same line as the state setter.
+  // The precedent is `currentSetRef.current += 1` in handleRestComplete below;
+  // the trap is the mirroring effects above it, which are correct only because
+  // nothing reads those values synchronously.
+  const setRepsRef             = useRef(0);
+  // The set ORDINAL has the same problem and had no ref at all — handleSetComplete's
+  // deps never include engineSetKey, so reading the state inside it yields an
+  // early render's value and every hand-logged set would be filed under set 1
+  // (a duplicate setIndex, which parks the whole workout at the contract).
+  const engineSetKeyRef        = useRef(1);
+  // Whether the engine is analysing the CURRENT set. When it is, the engine
+  // emits that set's summary itself and the capture below must stay out of the
+  // way — two entries for one ordinal fail the contract's duplicate check.
+  const analysisAvailableRef   = useRef(false);
+  // Per-set start, in wall-clock ms. Nothing on this page measured a single set
+  // before (only whole-session elapsed, movement-gated active seconds, and
+  // total rest), and durationMs is required on every set. Wall clock is fine
+  // here: the no-clock rule binds the engine package, not this app. The FIRST
+  // set's duration includes camera setup, exactly as the session timer already
+  // counts it — one definition of "when the workout started", not two.
+  //
+  // null until the mount effect starts it: `useRef(Date.now())` reads a clock
+  // DURING RENDER, which the lint rules reject as impure and which React may
+  // call more than once. A set that somehow ends before that effect runs is
+  // recorded with a duration of 0 rather than the 56 years since the epoch.
+  const setStartedAtMsRef      = useRef(null);
+
   const currentExercise = exercises[currentIndex];
   // Per-exercise manual override of the rep target, editable mid-workout. Keyed
   // by exercise index so each exercise keeps its own adjusted goal; moving to
@@ -194,8 +237,47 @@ export default function ActiveWorkout() {
   // (rest-complete, next-exercise, manual reset) also resets the rep display
   // explicitly, so no reset-in-effect is needed.
 
+  // An EFFECT is right for this one (unlike the refs above): analysisAvailable
+  // is owned by the hook, not by this page, and it changes when a new set's
+  // session starts — never in the same tick as a set ENDING. The value read at
+  // set end therefore describes the set that just ended, which is what the
+  // capture needs.
+  useEffect(() => { analysisAvailableRef.current = analysisAvailable; }, [analysisAvailable]);
+
+  /** File the set that is ending as a HAND-COUNTED set, if that is what it was.
+   *
+   *  Called at all four points a set can end. Idempotent per ordinal, because
+   *  those points overlap by design — finishing the last set both completes a
+   *  set and ends the workout, and skipping an exercise ends a set without
+   *  going through handleSetComplete at all.
+   *
+   *  NEVER THROWS. Collecting data for the new API must not be able to break
+   *  the workout in front of the user: if anything here fails, the set is not
+   *  recorded, the workout carries on, and the legacy save still happens. */
+  const captureLogOnlySet = useCallback(() => {
+    try {
+      if (analysisAvailableRef.current) return; // the engine files this one itself
+      const name = exercises[currentIndexRef.current]?.name;
+      const startedAtMs = setStartedAtMsRef.current;
+      recordLogOnlySet(setSummariesRef.current, {
+        exerciseName: name,
+        setIndex: engineSetKeyRef.current,
+        reps: setRepsRef.current,
+        durationMs: startedAtMs == null ? 0 : Date.now() - startedAtMs,
+      });
+    } catch (err) {
+      console.error('could not record hand-counted set:', err?.message);
+    }
+  }, [exercises]);
+
+  /** Begin a new set's clock. Paired with every rep-count reset — the two are
+   *  the same event ("a fresh set starts now") and separating them is how the
+   *  duration of set N ends up measuring set N-1. */
+  const startSetClock = () => { setStartedAtMsRef.current = Date.now(); };
+
   useEffect(() => {
     if (!sessionData) { navigate('/workout/builder'); return; }
+    startSetClock(); // the first set's clock starts with the workout
     const preferredCam = sessionData?.cameraDeviceId || null;
     startCamera(preferredCam).then((stream) => {
       if (stream) {
@@ -336,6 +418,7 @@ export default function ActiveWorkout() {
     if (reps > lastRepCountRef.current) {
       lastRepCountRef.current = reps;
       setSetReps(reps);
+      setRepsRef.current = reps;
       playRepBeep();
 
       const remaining = targetReps - reps;
@@ -358,10 +441,16 @@ export default function ActiveWorkout() {
   // dropped so a redone set never double-counts in the workout log.
   const handleManualRepReset = () => {
     setSetReps(0);
+    setRepsRef.current = 0;
     lastRepCountRef.current = 0;
+    // A redone set is a fresh set: its clock restarts, and because the
+    // hand-counted set is only filed at set END, zeroing the count here is the
+    // whole of the discard — there is nothing recorded yet to take back.
+    startSetClock();
     if (analysisAvailable) {
       discardSetKeyRef.current = engineSetKey; // this key's summary (if any) is the discarded set
       setEngineSetKey((k) => k + 1);
+      engineSetKeyRef.current += 1;
     }
   };
 
@@ -370,6 +459,10 @@ export default function ActiveWorkout() {
   const handleManualRep = () => {
     const n = setReps + 1;
     setSetReps(n);
+    // Same line, same tick — handleSetComplete below runs BEFORE any re-render,
+    // and it is what reads this ref. See the ref's declaration for why an
+    // effect here would record every completed set one rep short.
+    setRepsRef.current = n;
     playRepBeep();
     if (n >= targetReps) handleSetComplete();
   };
@@ -387,6 +480,12 @@ export default function ActiveWorkout() {
     setSetCompleteAnim(true);
     setTimeout(() => setSetCompleteAnim(false), 800);
     playSetEndBeep();
+
+    // THE set-end funnel: the rep target being reached AND the "Complete Set"
+    // button both land here, which is why the capture hangs off this rather
+    // than off the rep counter — the button ends a set early, and hooking the
+    // counter would lose every set that did not run to target.
+    captureLogOnlySet();
 
     const duration = restDuration;
     const setNow   = currentSetRef.current;
@@ -424,7 +523,10 @@ export default function ActiveWorkout() {
       currentSetRef.current += 1;
       setCurrentSet((s) => s + 1);
       setEngineSetKey((k) => k + 1);   // fresh engine session for the new set (§3.9)
+      engineSetKeyRef.current += 1;
       setSetReps(0);
+      setRepsRef.current = 0;
+      startSetClock();
       lastRepCountRef.current = 0;
       setPhase('workout');
       if (voiceOn) speakSetStart();
@@ -470,6 +572,13 @@ export default function ActiveWorkout() {
   };
 
   const goToNextExercise = () => {
+    // FIRST, while currentIndexRef still names the exercise being left: this is
+    // reachable from Skip Exercise, which ends a part-finished set WITHOUT going
+    // through handleSetComplete. The engine records a skipped part-set (the
+    // re-key emits its summary), so a hand-counted one must not be the version
+    // that silently vanishes. Idempotent, so the ordinary rest→next path — which
+    // already captured at set end — is unaffected.
+    captureLogOnlySet();
     const idxNow = currentIndexRef.current;
     if (idxNow >= exercises.length - 1) {
       handleWorkoutComplete();
@@ -481,7 +590,10 @@ export default function ActiveWorkout() {
     setCurrentIndex(next);
     setCurrentSet(1);
     setEngineSetKey((k) => k + 1);   // finalize the old exercise's set, start fresh
+    engineSetKeyRef.current += 1;
     setSetReps(0);
+    setRepsRef.current = 0;
+    startSetClock();
     lastRepCountRef.current = 0;
     setPhase('workout');
     if (voiceOn) speakExercise(exercises[next]?.name);
@@ -505,7 +617,23 @@ export default function ActiveWorkout() {
     // cleanup emits its SetSummary via onSetComplete). The short wait lets
     // React commit and run that cleanup before the scores are read below
     // (T3 P1.10b-2a carry-forward: without this the last set is silently lost).
+    // DEFENCE-IN-DEPTH, NOT A LOAD-BEARING CALL — and read this before deleting
+    // either line. Both routes into this function capture first: handleSetComplete
+    // captures at its top, and goToNextExercise (the Skip Exercise route)
+    // captures before it branches here. They are the only two callers, so this
+    // call is always a no-op today; a mutation proves it, staying green when
+    // removed.
+    //
+    // The comment that used to sit here claimed the Skip-Exercise-on-the-final-
+    // exercise route arrived UNcaptured. That was false, and it was dangerous
+    // precisely because it was plausible: a reader tidying up would trust it,
+    // conclude the capture in goToNextExercise was the redundant one, and delete
+    // THAT — which is the load-bearing line, and the exact regression the review
+    // before this one caught. If you are removing a capture call, the one that
+    // matters is in goToNextExercise. T3 round 2, F-1.
+    captureLogOnlySet();
     setEngineSetKey((k) => k + 1);
+    engineSetKeyRef.current += 1;
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     // Read from refs, not state — this function is invoked through
@@ -522,14 +650,22 @@ export default function ActiveWorkout() {
     // all-log-only workouts send 0, exactly as the old screen did.
     const avgForm = averageFormScore(setSummariesRef.current) ?? 0;
 
-    // P1.10c: queue the engine-verified workout for POST /v1/workouts/sync
-    // (offline-safe localStorage queue; flush is fire-and-forget). Independent
-    // of the legacy completeSession below — neither one's failure drops or
-    // duplicates the other. All-log-only workouts are skipped inside.
+    // Queue the workout for POST /v1/workouts/sync (offline-safe localStorage
+    // queue; flush is fire-and-forget). Independent of the legacy
+    // completeSession below — neither one's failure drops or duplicates the
+    // other, and both run for every workout while the old backend is still the
+    // home of the summary screen, the dashboard stats and the calendar.
+    //
+    // Hand-counted sets now travel here too (2026-08-02), which is the whole
+    // point of this write path: 55 of the 58 exercises have no definition, so
+    // before this the new API held only workouts made of squats, jump squats
+    // and chair squats — and after the old backend is switched off, everything
+    // else would have been saved nowhere at all.
     queueWorkoutSync({
       workoutId: syncIdentity.workoutId,
       startedAt: syncIdentity.startedAt,
       summaries: setSummariesRef.current.summaries,
+      unresolved: setSummariesRef.current.unresolved,
     });
 
     try {

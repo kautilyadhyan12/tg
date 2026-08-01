@@ -2,6 +2,7 @@
 // workoutSyncPayloadSchema (v1 §5.3 / Part 2 §2.4 / Part 2 §10 done-gate),
 // Idempotency-Key = workoutId (R10.2), offline→sync round trip.
 import { describe, it, expect, vi } from 'vitest';
+import { ENGINE_VERSION } from '@app/engine';
 import { workoutSyncPayloadSchema } from '@app/shared';
 import {
   buildSyncPayload, postSync, queueWorkoutSync, flushSyncQueue, STATIC_DEFS_BUNDLE_VERSION,
@@ -24,6 +25,27 @@ const summary = (setIndex, extra = {}) => ({
   calibration: null,
   engineVersion: '1.0.0',
   definitionVersion: 1,
+  ...extra,
+});
+
+// A full §2.4 SetSummary for a set the user counted THEMSELVES: every scoring
+// field pinned to its empty value, because nothing watched this set.
+const logOnly = (setIndex, extra = {}) => ({
+  exercise: 'push_up',
+  setIndex,
+  reps: 12,
+  durationMs: 44000,
+  avgFormScore: null,
+  repScores: null,
+  faultCounts: {},
+  tempoMsAvg: null,
+  romStats: null,
+  view: 'unknown',
+  holdMs: null,
+  calibration: null,
+  mode: 'log_only',
+  engineVersion: null,
+  definitionVersion: null,
   ...extra,
 });
 
@@ -70,6 +92,42 @@ describe('buildSyncPayload', () => {
     expect(built.ok).toBe(false);
     expect(built.error).toBeDefined();
   });
+
+  it('builds a valid payload for a workout where NOTHING was scored', () => {
+    // The case that used to be impossible: `summaries[0].engineVersion` on an
+    // empty-of-engine-sets list. This is the whole hand-logged write path.
+    const built = build([logOnly(1), logOnly(2)]);
+    expect(built.ok).toBe(true);
+    const parsed = workoutSyncPayloadSchema.parse(built.payload);
+    expect(parsed).toEqual(built.payload);
+    // The client's own build — a true statement whether or not anything ran.
+    expect(built.payload.engineVersion).toBe(ENGINE_VERSION);
+    // No bundle was consulted, so no bundle version is claimed.
+    expect(built.payload.defsVersion).toBeNull();
+    expect(built.payload.sets.map((s) => s.reps)).toEqual([12, 12]);
+  });
+
+  it('reports the bundle version when at least one set WAS scored', () => {
+    const built = build([summary(1), logOnly(2)]);
+    expect(built.ok).toBe(true);
+    expect(workoutSyncPayloadSchema.parse(built.payload)).toEqual(built.payload);
+    expect(built.payload.defsVersion).toBe(STATIC_DEFS_BUNDLE_VERSION);
+  });
+
+  it('names the CLIENT build, not the version a set happens to carry', () => {
+    // A set claiming some other engine must not rewrite the workout-level
+    // field: it means "the engine build this client was running" (Kd's ruling),
+    // which is knowable from the client alone and from nothing else.
+    const built = build([summary(1, { engineVersion: '0.0.1' })]);
+    expect(built.payload.engineVersion).toBe(ENGINE_VERSION);
+  });
+
+  it('rejects a hand-counted set that smuggles a form score', () => {
+    // The one claim the feature must never make. Enforced by the shared
+    // contract here and by a CHECK constraint at the database.
+    const built = build([logOnly(1, { avgFormScore: 100 })]);
+    expect(built.ok).toBe(false);
+  });
 });
 
 describe('postSync', () => {
@@ -86,17 +144,39 @@ describe('postSync', () => {
 
 describe('flushSyncQueue', () => {
   it('is a no-op (queue untouched, nothing POSTed) when VITE_API_URL is not configured', async () => {
-    // In this node test env VITE_API_URL is unset — exactly the pre-P1.10d
-    // state. Without the guard this call would reach the queue's browser
-    // storage (and, in a browser, POST to the web origin and park on its 404).
-    await expect(flushSyncQueue()).resolves.toBeUndefined();
+    // The env is STUBBED, not assumed. This test asserted a claim about the
+    // runner's environment ("in this node test env VITE_API_URL is unset") that
+    // stopped being true the moment a developer put a URL in apps/web/.env —
+    // and it then failed locally with `window is not defined`, because the
+    // guard never fired and the call reached the queue's browser storage. It
+    // passed in CI and failed on Kd's machine, which is the signature of a test
+    // that reads its environment instead of setting it.
+    vi.stubEnv('VITE_API_URL', '');
+    try {
+      await expect(flushSyncQueue()).resolves.toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 
 describe('queueWorkoutSync', () => {
-  it('skips an all-log-only workout (no engine summaries)', () => {
+  it('refuses a workout with NO sets at all — the reps have to come from somewhere', () => {
     expect(queueWorkoutSync({ workoutId: WORKOUT_ID, startedAt: STARTED_AT, summaries: [] }))
-      .toEqual({ queued: false, reason: 'log-only' });
+      .toEqual({ queued: false, reason: 'no-sets' });
+  });
+
+  it('refuses the WHOLE workout when an exercise has no catalog row', () => {
+    // Partial sync is the worse outcome: the server discards the unknown set
+    // and keeps the parent workout, so history would show fewer sets than were
+    // done. Refusing leaves the legacy save as one intact record.
+    const result = queueWorkoutSync({
+      workoutId: WORKOUT_ID,
+      startedAt: STARTED_AT,
+      summaries: [logOnly(1)],
+      unresolved: ['Arnold Shoulder Press'],
+    });
+    expect(result).toEqual({ queued: false, reason: 'unresolved-exercise' });
   });
 });
 

@@ -10,6 +10,7 @@
 // Idempotency-Key = workoutId (R10.2/R3.5); axios itself never auto-retries.
 
 import axios from 'axios';
+import { ENGINE_VERSION } from '@app/engine';
 import { workoutSyncPayloadSchema } from '@app/shared';
 import { enqueue, flush, park } from './syncQueue';
 
@@ -17,6 +18,14 @@ import { enqueue, flush, park } from './syncQueue';
 // ship as compiled-in package exports until the P2.2 catalog bundle API
 // assigns real bundle_version numbers (Part 4 §3.4).
 export const STATIC_DEFS_BUNDLE_VERSION = 1;
+
+/** True if any set in this workout was actually analysed by the engine.
+ *  `mode` is OPTIONAL on the engine arm of the contract (older clients omit
+ *  it), so the test is "not log_only" rather than "=== 'engine'" — reading it
+ *  the other way would call every pre-log-only-card payload hand-counted. */
+function hasEngineSet(summaries) {
+  return summaries.some((s) => s?.mode !== 'log_only');
+}
 
 const syncApi = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
@@ -29,16 +38,23 @@ const syncApi = axios.create({
  *  through VERBATIM — setIndex is an opaque, NON-contiguous workout ordinal
  *  (manual resets skip numbers) and must never be renumbered. */
 export function buildSyncPayload({ workoutId, startedAt, summaries }) {
+  const engineRan = hasEngineSet(summaries);
   const payload = {
     workoutId,
     startedAt,
     platform: 'web',
-    // Workout-level engineVersion from the first set: versions are homogeneous
-    // within one workout today (a single compiled-in engine; the page cannot
-    // hot-swap it mid-workout). Per-set engineVersion travels in each summary
-    // regardless, so the server loses nothing if that ever changes.
-    engineVersion: summaries[0].engineVersion,
-    defsVersion: STATIC_DEFS_BUNDLE_VERSION,
+    // THE ENGINE BUILD THIS CLIENT WAS RUNNING — not "the engine that scored
+    // this workout" (Kd ruled option A, 2026-08-01). Read the old way this
+    // field was copied off `summaries[0]`, which is undefined for a workout
+    // where nothing was scored: the write path would have had to invent a
+    // version or crash. Read the ruled way it is a true statement about the
+    // app, knowable either way, and per-set provenance is where "what scored
+    // this set" lives — nullable there, precisely so it can say "nothing did".
+    engineVersion: ENGINE_VERSION,
+    // NULL when no set was analysed: no definition bundle was consulted, so
+    // there is no bundle version to report and `1` would name a bundle that
+    // did nothing here. The column has always allowed null (Part 4 §3.5).
+    defsVersion: engineRan ? STATIC_DEFS_BUNDLE_VERSION : null,
     sets: summaries,
     traceSample: null,
   };
@@ -64,12 +80,32 @@ export function flushSyncQueue() {
   return flush((payload) => postSync(payload));
 }
 
-/** Queue one finished workout for sync and kick a flush. A workout with no
- *  engine summaries (all sets log-only, Part 6 §3.6) has nothing
- *  engine-verified to sync and is skipped — the legacy completeSession call
- *  still records it (DECISIONS.md 2026-07-10). */
-export function queueWorkoutSync({ workoutId, startedAt, summaries }) {
-  if (!summaries || summaries.length === 0) return { queued: false, reason: 'log-only' };
+/** Queue one finished workout for sync and kick a flush.
+ *
+ *  HAND-COUNTED WORKOUTS ARE SYNCED (web write path, 2026-08-02). This function
+ *  used to refuse any workout with no engine summaries, which was right while
+ *  log-only sets could not be expressed on the wire at all and the legacy save
+ *  was their only home — and became a data-loss hole the moment that backend is
+ *  switched off, since only 3 of the 58 catalog exercises have a definition.
+ *  Log-only sets are expressible now, so "nothing engine-verified to send" is no
+ *  longer the same statement as "nothing to send".
+ *
+ *  `unresolved` carries display names with no catalog row. The server DISCARDS
+ *  a set whose slug it does not know while still inserting the parent workout —
+ *  so syncing one anyway writes a workout with fewer sets than the user did, or
+ *  none at all. Refusing the whole workout keeps the legacy save as its single
+ *  intact record instead of splitting it across two systems, neither complete.
+ *  It cannot happen today (all 58 library names resolve — asserted in
+ *  activeWorkoutEngine.test.js); it is the guard for the 59th. */
+export function queueWorkoutSync({ workoutId, startedAt, summaries, unresolved = [] }) {
+  if (!summaries || summaries.length === 0) return { queued: false, reason: 'no-sets' };
+  if (unresolved.length > 0) {
+    console.error(
+      'workout NOT synced — exercise missing from the catalog:',
+      unresolved.join(', '),
+    );
+    return { queued: false, reason: 'unresolved-exercise' };
+  }
   const built = buildSyncPayload({ workoutId, startedAt, summaries });
   if (!built.ok) {
     // A payload our own engine produced failing our own contract is a

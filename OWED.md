@@ -562,7 +562,23 @@ then; none may be hidden or reduced to close the gap.
       library is 56 because of that same frontend hack.
       NOT this line: display names, instructions, media/GIFs and server-side
       search, which are the separate "Exercise library content" line above.
-- [ ] 🔴 **THE WORKOUT WRITE PATH — and the ruling under it: where does a
+- [x] 🔴 **THE WORKOUT WRITE PATH — DONE 2026-08-02** (DECISIONS, web-repoint).
+      Both halves shipped: the API half on 2026-08-01, the WEB half now. A
+      hand-counted workout of any of the 58 catalog exercises reaches the new
+      API with its real rep count, its own set ordinals and a per-set duration.
+      **Kd's browser SMOKE PASSED and was verified in the database**, not merely
+      in tests: a 3-rep hand-logged Push-ups set stored as `mode 'log_only'`,
+      duration 19.2 s, `avg_form_score` NULL, `bundle_version` NULL, and
+      `quality_flags []` — i.e. the server recognised the exercise rather than
+      discarding the set. XP updated at the sync second.
+      web 310/310 · 13 mutants across 2 files, all RED against a verified green
+      baseline, all targets restored byte-for-byte · lint identical to HEAD ·
+      TWO fresh-chat T3 rounds (5 findings each, ZERO VISIBLE in both), closed
+      under the two-round cap.
+      **THE TWO THINGS THIS LINE WAS HOLDING NOW HAVE THEIR OWN LINES BELOW** —
+      the legacy dual-write removal, and a hole the web half creates. Neither is
+      allowed to travel inside a ticked entry. The original follows.
+      **WAS: and the ruling under it: where does a
       HAND-LOGGED workout live after the old backend is off?**
       Created 2026-08-01 (DECISIONS :2912). This was visible only as prose inside
       the calendar line below (:514) and had no line of its own; the audit rule
@@ -674,6 +690,46 @@ then; none may be hidden or reduced to close the gap.
          an exercise name cannot be resolved to a slug the workout is NOT synced
          at all rather than synced partially — the legacy save still holds it,
          so nothing is lost while `completeSession` stays.
+- [ ] 🔴 **REMOVE THE LEGACY DUAL-WRITE (`completeSession`) from ActiveWorkout.**
+      Created 2026-08-02, lifted OUT of the write-path entry above as that entry
+      was ticked — it was item 2 there and the entry said in terms "this line is
+      what holds it", so ticking without re-homing it is precisely the silent
+      loss the deferral rule exists to stop.
+      **NOT A CLEANUP. Replacement before removal (Kd's ruling, DECISIONS
+      :3424):** every finished workout is still written to BOTH backends, and
+      the old one is what the post-workout summary, the Dashboard stats and the
+      workout calendar read. Dropping the call today makes the summary screen
+      print duration, calories and form as 0 **and a plausible "+50 XP" that was
+      never awarded** — the old handler recomputes that number
+      (`backend-ml/app/routers/workouts.py:591`). A screen that looks true and
+      is false.
+      **Discharged only when all three of those surfaces have new-API homes.**
+      Two of them already have OWED lines (the calendar below; PostWorkout's
+      summary reader is done but still reads the OLD payload). Until then the
+      dual-write is the correct behaviour, and a chat that proposes deleting it
+      as tidy-up has not read this line.
+- [ ] 🔴 **A camera-graded set can still land NOWHERE — and now it can leave a
+      workout with sets MISSING.** Created 2026-08-02 (write-path T3 round 2,
+      F-3, NOT-VISIBLE, deliberately not fixed inside that card — R1.1).
+      `analysisAvailable` is true whenever a DEFINITION exists
+      (`sessionController.js:59-71`), independent of the camera. But `endSet()`
+      returns null when zero frames were fed (`:123`) — reachable when camera
+      permission is denied (the page carries on; the error is an inline banner,
+      not a block), while MediaPipe is still loading, or when the set ends
+      inside that window. The engine then files nothing, and the web half's
+      capture correctly stands aside because the engine "owns" that set. Neither
+      side files it.
+      **Before the web half this was invisible** — an all-squat workout simply
+      synced nothing and the legacy save held it whole. Now: **squats mixed with
+      any hand-logged exercise sync a workout with the squat sets missing**,
+      which is the partial-workout outcome the unresolved-exercise guard exists
+      to prevent, with no equivalent guard. The zero-frame guard itself is
+      P1.10b's and deliberate (it suppresses phantom StrictMode summaries); what
+      changed is the consequence.
+      Scope when it runs: reconcile at workout end — any ordinal with reps but
+      no summary from either side gets filed — or refuse the sync the way an
+      unresolved exercise does. Both are more than a one-line fix, which is why
+      this is a line and not a patch.
 - [ ] 🔴 **Workout history calendar** (WorkoutCalendar → workoutApi.getHistory).
       **BLOCKED — NOT a client repoint. Do not pick this up as a quick win.**
       **BUILT AND PARKED 2026-08-01 (DECISIONS :2912), still unticked.** A chat

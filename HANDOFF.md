@@ -1,6 +1,67 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE WEB WRITE PATH — **DONE** and CLOSED under the two-round cap
+      (DECISIONS :3610). A hand-counted workout now reaches the new API. Kd's
+      browser SMOKE PASSED and was verified in the DATABASE, not just on screen.
+      The OWED write-path line is TICKED; the two things it was holding now have
+      their own lines.
+
+WHAT LANDED
+  · `ActiveWorkout.jsx` files every hand-counted set; `syncClient.js` queues a
+    workout with no engine-scored sets. Both refusals the OWED entry named are
+    gone. `completeSession` STAYS — both backends are written (Kd, :3424).
+  · The stored row Kd's smoke produced: `push_up` / `log_only` / **reps 3** /
+    19.2 s / avg_form_score NULL / bundle_version NULL / quality_flags **[]**.
+    The empty flags are the proof the server RECOGNISED the exercise rather than
+    discarding the set. XP updated at the sync second.
+  · web **310/310** (was 272/273 — the local `window is not defined` failure is
+    fixed by STUBBING the env instead of reading it). Lint on the 8 touched
+    files: identical rule multiset to HEAD. **13 mutants / 2 files, all RED.**
+
+READ THIS IF YOU TOUCH THIS AREA AGAIN
+  **The recorded 0-rep trap has a worse variant underneath it.** Mirroring the
+  rep count in a `useEffect` still lags one tick — `handleManualRep` calls
+  `handleSetComplete()` synchronously when the last rep hits the target — so
+  every completed set records ONE REP SHORT. Screen says 12, database says 11.
+  Refs are assigned on the SAME LINE as their state setter, at all five sites.
+  The set ORDINAL had the identical defect and was recorded nowhere.
+
+  **A test whose inputs and its subject share a source proves only that the
+  source is self-consistent.** The "all 58 exercises resolve" test fed
+  `CATALOG_58`'s names into a resolver whose map is built from `CATALOG_58` — it
+  could not fail, and shipped code CITED it as proof. It now reads
+  `scripts/seed_exercises.py`. The premise was true, which is why nobody noticed.
+
+  **A wrong comment can re-arm a fixed bug.** A comment claimed the wrong
+  capture call was load-bearing; a reader trusting it would have deleted the one
+  that is — the exact regression T3 round 1 had just caught.
+
+NEXT — pick from OWED, but NOT these two without reading their lines in full:
+  · **The legacy dual-write removal is NOT a cleanup.** Deleting
+    `completeSession` today makes the summary screen print 0s and a plausible
+    "+50 XP" that was never awarded. Replacement before removal.
+  · **F-3 (new, 🔴): a camera-graded set can still land NOWHERE.**
+    `analysisAvailable` means "a definition exists", not "the engine filed this
+    set" — zero frames fed (camera denied, MediaPipe still loading) means
+    neither side files. Harmless before this card; NOW it can sync a mixed
+    workout with the squat sets missing.
+  The workout CALENDAR (branch `workout-calendar-parked`) is unblocked by this
+  card's write path and resumes at its smoke + T3 — read its OWED line first.
+
+VERIFY:
+        cd apps/web && corepack pnpm exec vitest run
+        node apps/web/tools/mutate-write-path.mjs      # 13/13 RED, restores
+SMOKE:  needs three local servers. The old backend CANNOT be used on this
+        branch — `mlApi` attaches a bearer token only `if (token)` and Card 1
+        stopped writing it, so `PreWorkout`'s create-session 401s and a workout
+        cannot be STARTED. Use `node apps/web/tools/mock-ml-backend.mjs`, then
+        `curl localhost:8000/__state/healthy` — **it boots in `dead`**.
+SPEC GAPs: none.
+```
+
+
+```
 TASK: THE 58-EXERCISE CATALOG — **DONE** (a791c53), plus the two rulings that
       produced it (b9a2b0e) and a same-day correction of one of them (6f83f55).
       All 12 previously-local commits are now PUSHED (e49d909..a791c53); CI has
