@@ -1,6 +1,60 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: Hand-logged workouts can reach the new API — **API HALF DONE** (267f443 on
+      web-repoint). Kd-ruled and approved same day; migration SQL reviewed first.
+      NOTHING USER-VISIBLE CHANGED YET — that is the next card.
+
+WHAT LANDED
+  · migration `0009_log_only_sets` — expand-only: 2 × DROP NOT NULL, 3 × ADD
+    CHECK. (Drizzle emitted it as `0008_*` while `0008_user_xp` already existed;
+    renamed to 0009 + journal tag fixed. Watch for this again.)
+  · `workout_sets.mode` = 'engine' | 'log_only'. Part 4 §3.5 declared the column
+    and NEVER its vocabulary — a SPEC GAP put to Kd, not invented.
+  · provenance columns go NULL for a log-only set, never a sentinel.
+  · the relaxation is NARROW, enforced in BOTH the CHECK and the Zod union: an
+    engine set still MUST carry provenance; a log-only set CANNOT carry a form
+    score, per-rep scores or faults, whatever a client sends.
+  · `setSummarySchema` is now a UNION (engine | log_only). `mode` is OPTIONAL on
+    the engine branch, so every pre-existing client validates unchanged.
+  · `?? []` removed from the detail read — it became a fabrication once null was
+    meaningful (an empty array claims a scoring pass that found no reps).
+
+NEXT CARD (the one that actually changes behaviour): the WEB write path.
+  `ActiveWorkout.jsx:536` still posts every workout to the legacy backend, and
+  `syncClient.js:72` still refuses to queue an all-log-only one. Both must move:
+  `queueWorkoutSync` builds the log-only set shape, and `completeSession` goes.
+  Until then the cutover is still blocked and the OWED line stays open.
+
+READ THIS IF YOU TOUCH THIS AREA AGAIN
+  **The spec had already decided it.** Part 6 §3.6's degradation ladder ends in
+  log-only mode with the user-facing copy "your workout still counts". Two chats
+  (me included) treated this as an open product question. Read the spec § before
+  asking Kd to rule on something it already answers.
+
+  **Rows written before 0009 have `mode` NULL = UNKNOWN.** No backfill was done
+  and none should be: nobody recorded how those sets were produced, and stamping
+  them 'engine' would invent provenance retroactively.
+
+  **XP:** a hand-logged workout earns base + streak XP, not the form bonus. Kd
+  ruled this knowingly after seeing OWED:484-496 — XP is already entirely
+  client-determined and sync has NO per-route rate limit. That fix stays with the
+  P4.y plausibility card; `mode` is what makes "verified entries only" queryable.
+
+VERIFY (needs DATABASE_URL — it is in the gitignored apps/api/.env):
+        cd apps/api
+        DATABASE_URL="$(grep -m1 '^DATABASE_URL=' .env | cut -d= -f2-)" \
+          corepack pnpm exec drizzle-kit migrate
+        DATABASE_URL="$(grep -m1 '^DATABASE_URL=' .env | cut -d= -f2-)" \
+          corepack pnpm exec vitest run
+PROVE: api 373/373 (real Postgres, 9 new log-only cases incl. the cross-tenant
+      denial re-proof) · shared 19/19 · web 272/273 (the 1 = known env quirk) ·
+      typecheck + lint clean on all six touched files.
+SMOKE: none owed — no user-visible behaviour changed. The next card owes one.
+SPEC GAPs: `workout_sets.mode` vocabulary — RESOLVED by Kd's ruling, recorded.
+```
+
+```
 TASK: Kd's deploy-later RULING recorded + the workout calendar repoint BUILT AND
       PARKED AS BLOCKED. Branch web-repoint carries RECORDS ONLY (7aab8a0); the
       code is on `workout-calendar-parked` (7eaba8d) and MUST NOT BE MERGED.
