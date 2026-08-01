@@ -1,6 +1,67 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: log-only sets — T3 ROUND 1 FIXES + the F3 RULING. 6 findings, ZERO VISIBLE,
+      all now resolved (63b45e0, c6a3a5d on web-repoint). api 374/374.
+      **ROUND 2 IS THE CAP** — set before round 1 ran. Diff for it:
+      `t3-log-only-sets-r2.diff`.
+
+WHAT THIS SESSION DID
+  · **Both halves of the card's central claim were FALSE**, and the DB said so:
+    `NULL IS DISTINCT FROM 'engine'` → TRUE, so ANY row omitting `mode`
+    satisfied the provenance guard with both provenance columns NULL. Before
+    0009 the NOT NULL made that impossible for EVERY writer; my version made it
+    impossible only for writers that DECLARE `mode='engine'`. A regression
+    dressed as a guard, and the commit message claimed the opposite. The
+    log-only CHECK likewise ignored the provenance columns entirely.
+  · **Why it shipped (F4): the belt had NO test.** All nine "covering"
+    assertions were Zod's, returning 400 before the DB was reached — they would
+    all have passed with the constraints DELETED. Fixed with direct-INSERT
+    `23514` cases, then mutation-checked: broken constraints restored → test
+    RED; correct ones restored → green.
+  · Re-adding the fixed constraint then FAILED on a real row — the fully-scored,
+    provenance-less set the OLD constraint had just accepted during the red run.
+    The bug, having actually happened, blocking its own fix. Best evidence there
+    was; debris cleared.
+  · F5 the wire demanded `[]` for log-only repScores while the column demands
+    NULL, with repo.ts translating under a comment calling `[]` a fabrication.
+    Contract now says NULL; translation gone.
+  · F6 `engineVersion` accepted `""` alongside `avgFormScore: 100`. Now
+    `.min(1)`, and **`mode='engine'` is recorded as a CLIENT CLAIM, not a
+    verification** — nothing checks the version is real or that the exercise even
+    HAS a definition. v1 §14 must not read the column as proof.
+  · F3 RULED by Kd (option A): workout-level `engineVersion` means "the engine
+    build the CLIENT was running", and `defsVersion` is now NULLABLE — matching
+    Part 4 §3.5:384, which declares `bundle_version int` with no NOT NULL while
+    our payload was stricter than the spec. No migration, no deviation.
+
+READ THIS IF YOU TOUCH THIS AREA AGAIN
+  **A test that has never been seen to fail is a claim, not protection.** Nine
+  of them here could not have failed. Before trusting any constraint test, break
+  the constraint and watch it go red.
+
+  **Check what a NULLABLE discriminator does to a CHECK.** `x IS DISTINCT FROM
+  'v'` is TRUE when x is NULL, so a guard written that way is satisfied by every
+  row that simply omits it. Prefer rules about the DATA over rules about the
+  label.
+
+  **`mode='engine'` is a claim.** The OWED:484-496 threat model is unchanged by
+  this card; the column just makes it queryable, which invites misreading.
+
+NEXT: the WEB write path (its own card, fresh chat). `ActiveWorkout.jsx:536`
+  still posts every workout to the OLD backend and `syncClient.js:72` still
+  refuses to queue an all-log-only one. F3's ruling is what unblocks it.
+
+VERIFY (needs DATABASE_URL from the gitignored apps/api/.env):
+        cd apps/api
+        DATABASE_URL="$(grep -m1 '^DATABASE_URL=' .env | cut -d= -f2-)" \
+          corepack pnpm exec vitest run
+PROVE: api 374/374 · shared 19/19 · typecheck + lint clean.
+SMOKE: still none owed — no user-visible behaviour changed.
+SPEC GAPs: none open.
+```
+
+```
 TASK: Hand-logged workouts can reach the new API — **API HALF DONE** (267f443 on
       web-repoint). Kd-ruled and approved same day; migration SQL reviewed first.
       NOTHING USER-VISIBLE CHANGED YET — that is the next card.
