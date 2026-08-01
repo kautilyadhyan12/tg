@@ -2862,3 +2862,222 @@ gate ("record as OWED, fix XP only", the entry at :1330).
   with NO open PR. Same cause: the trigger list read as if it were the whole story.
 - (NOT CHANGED BY ANY OF THIS) The gitleaks pre-commit half of R3.6 still does not
   exist, and that item stays open on its own terms.
+
+## 2026-08-01 — Kd RULING: finish the code first, buy the server later
+
+- (THE RULING, Kd's own words in substance) "I do not want to spend money on a
+  live server now — I want the whole application completed, and when deployment
+  comes I will take a live server." Recorded here because it re-orders the road
+  to P2.8, and an unrecorded deferral is how work gets lost (the 2026-07-21 audit
+  that found Google login and timezone capture tracked nowhere).
+- (WHAT IT CHANGES — P2.8 SPLITS IN TWO, and this is the part a later chat must
+  not misread) The cutover has a CODE half and a DEPLOY half. The code half —
+  every screen off the old backend, verifiable on Kd's laptop against a local
+  api + web — proceeds now. The deploy half (provision the VPS, secrets in the
+  platform, the backup/restore drill, the DPDP Day-14 worker actually RUNNING) is
+  deferred to the deployment moment by this ruling. `RUNBOOK/cutover.md`'s
+  procedure is unchanged; its prerequisites are simply not all reachable yet.
+- (WHAT IT DOES NOT CHANGE) Nothing about the quality bar. Plan-gate → PROVE on
+  real pasted output → fresh-chat T3 → Kd's browser smoke stays intact for every
+  card; Kd asked for "production level" work in the same breath, and explicitly
+  refused a shortcut. The VPS spend accepted at the P0.4b ruling (DECISIONS
+  2026-07-07) is not withdrawn, only postponed.
+- (THE ONE THING THAT MUST NOT BE FORGOTTEN) The DPDP Day-14 hard-delete worker
+  is code-complete and RUNS NOWHERE. Harmless while there are no real users —
+  there is nothing to delete — but it must be live BEFORE the first real signup,
+  not merely before the first deploy. Its OWED line is amended to say so.
+- (SEQUENCING SET WITH THE RULING, after a road-map pass Kd asked for) Measured
+  this session, not recalled: `apps/web` has ELEVEN api files; four still ride the
+  old backend wholesale (`runningApi` 13 calls, `workoutApi` 10, `exerciseApi` 5,
+  `recommendationApi` 1) and `gamificationApi` is mixed (3 old / 1 new). Order
+  agreed: (1) the repoints needing NO backend work, because `/v1/workouts`,
+  `/v1/workouts/:id` and `/v1/exercises` already exist and nothing consumes them;
+  (2) the missing backend homes, largest first — running progression, workout
+  templates + stats, exercise content, badges/challenges, predictions,
+  recommendations, avatar storage; (3) the deploy half, when Kd chooses.
+- (A CORRECTION MADE TO KD IN THE SAME CONVERSATION, recorded because it was
+  mine) I told Kd "the data — DONE, everything was copied to the new database".
+  FALSE as stated. The migration TOOL is built and verified (P2.7a–f); the
+  migration itself runs at P2.8 and has not. And on greenfield prod there is
+  nothing to migrate at all — `RUNBOOK/cutover.md:11-15` says production launches
+  with an EMPTY database and steps 3–5 "collapse to point web at new API +
+  decommission". Corrected to Kd immediately, in the next message.
+- (THE REVIEW CAP, set as a standing default for the cards ahead) Two rounds per
+  card, decided BEFORE the card runs. Not a softening: the XP card needed a cap at
+  ELEVEN rounds and the PostWorkout reader at three, both per-card rulings made
+  once the fact-pattern was already bad (:2158, :2692). Setting it up front is
+  what makes it a rule rather than a rationalisation — :2385's sentence, applied
+  to the schedule instead of to one card.
+
+## 2026-08-01 — workout history calendar: BUILT, then PARKED as blocked
+
+**THE CARD DOES NOT MERGE, AND THE OWED LINE DOES NOT TICK.** Built to PROVE
+(320/321, 18/18 mutants, `vite build` OK), then stopped when grounding that
+should have happened at the plan gate finally happened. Code parked on branch
+`workout-calendar-parked`, deliberately NOT on `web-repoint`: that branch merges
+wholesale at the cutover (:280), so committing a broken repoint there would ARM
+it rather than shelve it. This entry is the record of the block; the build notes
+below are kept because the work is reusable the day it unblocks.
+
+- (**THE GROUNDING FAILURE, mine, and it is the point of this entry**) `OWED.md:503`
+  is this card's own line and its FIRST words are "**BLOCKED — NOT a client
+  repoint. Do not pick this up as a quick win.**", followed by "`/v1/workouts`
+  exists, which is why this was twice (wrongly) recommended as the cheapest card
+  left; existence is not usability." I read the one-line version in
+  `RUNBOOK/cutover.md` and never opened the OWED entry, then recommended the card
+  to Kd on exactly the reasoning that line pre-refutes — the THIRD time. This is
+  the :2825 standing lesson verbatim: **an index entry you skipped is not
+  evidence of absence.** The two blockers I DID hit independently (no exercise
+  names on the list item; no month filter) are that line's items 2 and 3, and the
+  dead `getHistory` duplicate is its "also fix while here" — so the line would
+  have supplied the whole card in advance, including the one blocker I missed.
+- (**THE BLOCKER, re-derived by command rather than taken from the OWED line**,
+  and it is larger than that line says) A workout reaches the new API only if it
+  contains one of THREE exercises:
+  `sessionController.js:67` `if (def == null) return; // no definition yet →
+  log-only`; `ls packages/engine/src/definitions/` = **3** files (squat,
+  jump_squat, chair_squat) against a **58**-exercise catalog (Part 0 rule 1);
+  `syncClient.js:72` skips an all-log-only workout; DECISIONS :75 has the server
+  ENFORCE `sets[]` non-empty, so it would reject one anyway; and
+  `ActiveWorkout.jsx:536` still writes EVERY workout to the OLD backend. So the
+  new API holds not "a subset" but only engine-scored workouts, which today means
+  workouts containing squat / jump squat / chair squat. Repointing the calendar
+  now would BLANK every other day — history showing less training than actually
+  happened, which is the exact class of lie this whole line of work removes. **No
+  test in this card could see it: 46 tests and 18 mutants all run on fixtures
+  shaped like synced workouts.**
+- (**THE UNRECORDED CONSEQUENCE — a cutover blocker nobody had written down**)
+  Follow the same chain past P2.8: the old backend is decommissioned, so
+  `completeSession` dies, and `queueWorkoutSync` still refuses an all-log-only
+  workout. **A workout of any exercise outside the three would then be saved
+  NOWHERE.** Verified absent from OWED (`grep -n "completeSession\|write path"`
+  returns only the calendar line's own prose at :514; `grep -n "log-only"`
+  returns one hit, also inside it). Given its own 🔴 OWED line in this commit.
+- (WHAT IS ACTUALLY OWED FIRST, and it is a Kd ruling, not code) "All-log-only
+  workouts are NOT synced" is Kd-approved (DECISIONS :67, 2026-07-10 P1.10c) and
+  was correct for the SYNC contract — with no SetSummaries there is nothing
+  engine-verified to send. It becomes a different question once the old backend
+  is the only place those workouts live: **where does a hand-logged workout live
+  in the new system?** That ruling gates the workout WRITE path, which gates this
+  calendar, PostWorkout's summary, and the Dashboard's stats. It is the next card,
+  and it is Kd's to rule on (R0.2).
+- (NOT A REASON TO SHRINK ANYTHING) Nothing here proposes hiding or reducing the
+  calendar. It stays exactly as it is on the old backend until its endpoint gap is
+  genuinely closed — the Card-1/2 precedent, and the reason the block was reported
+  rather than worked around.
+
+### Build notes, kept because the work lands unchanged once the blocker lifts
+
+Web-only: no API change, no migration, no new dependency, no new endpoint.
+
+- (SCOPE — ONE screen, and it grew by one payload for a reason that is not
+  discretionary) Planned as `GET /v1/workouts` → `WorkoutCalendar`. Grounding
+  found the OLD `/workouts/history` also projects up to five exercise NAMES per
+  session (`backend-ml/app/routers/workouts.py:388-393`) — a LIVE feature, so the
+  no-removal rule is engaged and dropping the chips was never an option.
+  `workoutListItemSchema` carries no exercise names; `workoutDetailSchema` does,
+  as `sets[].exerciseSlug`. The chips therefore read `GET /v1/workouts/:id`,
+  fetched ONLY when a day's panel opens — the one moment they render — rather
+  than N extra requests per month load. The scope change was reported to Kd when
+  it was found, not absorbed silently.
+- (A DEAD DUPLICATE, deleted) `workoutApi.js` declared `getHistory` TWICE — line
+  5 `(limit) => mlApi.get('/workouts')` and line 9 `(month, year) =>
+  mlApi.get('/workouts/history')`. In an object literal the later key wins, so
+  line 5 was unreachable code no caller could ever have run (grep: `WorkoutCalendar.jsx:182`
+  was the only call site, and it passed month+year). Found by reading the file.
+- (WHAT WAS RENDERING, and it is the one that matters) The old effect was
+  `.catch(console.error)` with `byDate` left at `{}`, so a FAILED read drew a
+  blank grid captioned **"0 active days this month"** — a confident claim about
+  days the user may well have trained, produced by the backend being down. Three
+  states now, never two (OWED:1302's family): loading / failed / ready, the count
+  stated only in `ready`, and a Try-again control on `failed`.
+- (THREE THINGS THE NEW API DOES NOT DO, each answered rather than faked)
+  **Month queries** — `/v1/workouts` is a keyset cursor list with no date filter,
+  so the month is assembled by walking pages until one lands before the month
+  starts. The Card-5d precedent verbatim (DECISIONS 2026-07-19: `listMealsForDay`
+  page-walks, capped, "NO API change, no date filter added"). The 10-page cap is
+  load-bearing: a month drawn from a partial walk looks EMPTY, so `truncated` is
+  returned and the page says so.
+  **The plan read-gate** — a free plan clamps to `limitedToDays`, so an old month
+  honestly returns nothing and a blank grid would read as "you never trained".
+  `monthClamp` surfaces it with the Progress card's own fact and sentence
+  ("Older workouts are still saved" — a READ GATE, never deletion, `seed.ts:44`).
+  It deliberately does NOT name the boundary DATE: the floor is the server's to
+  compute, and a client day-count across DST would be approximate — an
+  approximate date stated precisely is its own small lie.
+  **Day bucketing** — the server used to decide the day; `localDateKey` now does,
+  and ONLY for display grouping in this calendar. It buckets by the viewer's
+  LOCAL day, which is what a calendar means: an 11pm workout in Jorhat belongs to
+  that evening, not to the next UTC day. `iso.split('T')[0]` is the UTC day and is
+  precisely the bug avoided. Streaks and every other boundary stay server-side on
+  `users.timezone` (DECISIONS 2026-07-21; trap #8) — no day maths moved client-side.
+- (DECLARED BEHAVIOUR CHANGE — START time, not finish) The old payload carried
+  `completed_at`; `workoutListItemSchema` carries `startedAt` only. The displayed
+  time therefore moves earlier by the length of the workout. Deriving a finish
+  time from a duration that can ITSELF be unknown would be an invented number, so
+  the label reads **"Started HH:MM"** — unambiguous rather than silently shifted.
+  Flagged to Kd at the plan gate and approved with the plan.
+- (`xp_earned` NOT carried over, and it is not a removal) OWED:963 establishes by
+  command that the old backend never WRITES `xp_earned` onto a workout — the
+  completion handler `$inc`s the user total and returns it in that one response,
+  the session `$set` stores it nowhere, and `/history` projects a field that was
+  never written — so "the block has never rendered for anyone" and "the no-removal
+  rule is therefore NOT engaged". Nothing a user has seen is lost. Per-workout XP
+  has no home in the NEW schema either (`user_xp` is one running total per user,
+  `db/schema/game.ts:39`), so restoring it is a MIGRATION, not a client change. It
+  keeps its own OWED line, amended with that finding.
+- (EXERCISE NAMES ARE SLUGS, interim and recorded) `exerciseLabel` title-cases
+  `barbell_squat` to `Barbell Squat`. That is a LABEL DERIVED FROM THE VALUE, not
+  a name invented for it — the identifier is unchanged, only its punctuation.
+  Real display names and their hi/as translations are the exercise-content card's
+  job; inventing a friendlier name for a slug we do not stock would be the
+  fabrication class this project keeps deleting. New OWED line.
+- (THE READER READS PER FIELD, deliberately, and how drift is caught anyway)
+  `readCalendarSession` does NOT `workoutListItemSchema.safeParse` each row: the
+  shared schema demands `platform`, `setsCount`, `totalReps`, `qualityFlags` and
+  `kcalCalcVersion`, none of which this screen renders, so a strict parse would
+  DROP a row the calendar could draw perfectly because of a field it never shows.
+  Drift is caught instead by a test that feeds a `workoutListItemSchema.parse`d
+  row through the reader and fails if ANY field comes back unknown — a renamed
+  shared field still reds the suite.
+- (UNREADABLE ROWS ARE COUNTED, not dropped) A silently dropped row makes
+  "N active days" a fabricated COUNT — the PostWorkout round-2 F5 finding. The
+  page says "N workouts couldn't be read and are not shown."
+- (PROVE) web **320 passed / 1 failed (321)** — the 1 is the known `syncClient`
+  VITE_API_URL env quirk (its own OWED line, CI-green); the baseline before this
+  card was 272/273, so **+48 tests** (34 unit, 12 render, 2 repoint guards).
+  `vite build` OK (1m 04s).
+  **18 mutations, 18 RED, zero survivors, green baseline before AND after.**
+  Lint measured BOTH ways rather than ticked: the pre-card `WorkoutCalendar.jsx`
+  produces **2 errors** at HEAD (an unused `Dumbbell` import, and
+  `react-hooks/set-state-in-effect`); the five touched files produce **1** — the
+  same pre-existing `set-state-in-effect`, preserved rather than restructured
+  under R1.1. Parity improved; the remaining one is stated, not ticked away.
+- (THE MUTATION HARNESS CAUGHT A REAL HOLE IN MY OWN TESTS — the finding of this
+  card) M18 reverted `getHistory` to `mlApi.get('/workouts')`, i.e. undid the
+  entire repoint, and **all 46 tests stayed GREEN**. Cause: the render suite must
+  mock `../../api/workoutApi`, so the real client never runs, and the unit suite
+  never touched it — between them, nothing asserted WHICH backend was called. A
+  repoint nothing asserts is a repoint the next edit silently undoes. Closed with
+  the `recordRequests` guard from `gamificationApi.test.js`, in BOTH directions:
+  history + detail must ride `authApi` on `/v1`, and `getStats` / `getSummary` /
+  templates must STILL ride `mlApi` (the no-removal guard, the `getPredictions`
+  precedent). 18/18 after.
+- (AND THE HARNESS SHIPPED TWO OF ITS OWN RECORDED BUGS BEFORE IT RAN, both fixed
+  pre-run) It first restored with `git checkout --`, which cannot restore the two
+  NEW untracked files and which prescribes discarding real work on a dirty tree
+  (round-3 F4, the only destructive instruction that card ever shipped); it now
+  snapshots to a temp dir and restores by `cp`, with the cp's exit status AND the
+  resulting md5 both checked, fatally. And its `^\s*Tests` parser could not match
+  vitest's ANSI-wrapped summary line, so the very first run reported BASELINE
+  INVALID — which is the harness working: it refused to grade 18 mutations on an
+  instrument it could not read. Fixed with `NO_COLOR` plus a stripper.
+- (SMOKE + T3 NOT RUN — the card was parked before either) `RUNBOOK/smoke-workout-calendar.md`
+  is written, control step FIRST, and travels with the parked branch. Neither the
+  smoke nor a T3 was run: smoking a screen that must not ship would spend Kd's
+  time on bytes that cannot merge. When the blocker lifts, this card resumes AT
+  the smoke + T3, under the two-round cap set in the ruling above — and its first
+  re-grounding step is to re-read OWED:503 in full, which is what was skipped.
+- (NOT BROWSER-REACHABLE, stated rather than skipped) A workout with null
+  duration/kcal/form (render tests + M1–M3 only) and the 10-page walk cap (needs
+  1,000+ workouts on one account; unit test + M10 only).

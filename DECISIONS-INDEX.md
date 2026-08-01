@@ -65,6 +65,14 @@ Standing rules that live in CLAUDE.md, not here — the no-removal rule, the
 deferral rule (every deferral gets an OWED.md line in the same commit), the
 grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
+- **:2866** — 2026-08-01 — **Kd RULING: finish the CODE first, buy the server
+  later.** P2.8 splits into a CODE half (every screen off the old backend,
+  verifiable locally — proceeds now) and a DEPLOY half (VPS, secrets, backup
+  drill, the DPDP worker actually running — deferred to the deployment moment).
+  Carries the agreed card ORDER for the rest of the repoint, and a **standing
+  two-round review cap set BEFORE each card runs** rather than after a bad
+  fact-pattern. **The DPDP Day-14 worker must be live before the first real
+  SIGNUP, not merely before the first deploy.**
 - **:2825** — 2026-07-31 — two false claims about CI and the branch strategy,
   corrected. **`web-repoint` is a Kd-RULED long-lived branch (:280) that merges at
   the P2.8 cutover — it is not an oversight, do not propose merging it early.** PR
@@ -113,6 +121,23 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:2912** — 2026-08-01 — workout history calendar → `/v1/workouts`: **BUILT,
+  then PARKED AS BLOCKED** on branch `workout-calendar-parked` (NOT on
+  `web-repoint`, which merges wholesale at cutover and would have armed it).
+  **Read this before touching any workout-history surface.** Only 3 engine
+  definitions exist of 58, no definition means log-only, and a log-only workout
+  is never synced — so the new API holds only workouts containing squat / jump
+  squat / chair squat, and after cutover every other workout would be saved
+  NOWHERE. That consequence was untracked and now has its own 🔴 OWED line; the
+  ruling under it ("where does a hand-logged workout live?") gates the calendar,
+  PostWorkout's summary and the Dashboard's stats alike.
+  **Standing lesson 1: an index entry you skipped is not evidence of absence**
+  (:2825, incurred again) — `OWED:503` opens with "BLOCKED — do not pick this up
+  as a quick win" and supplied the entire card in advance; the chat read the
+  one-line cutover.md version instead and became the third to recommend it.
+  **Standing lesson 2: M18 undid the whole repoint and all 46 tests stayed
+  GREEN** — the render suite must mock the api client, so nothing asserted WHICH
+  backend was called. A repoint nothing asserts is one the next edit undoes.
 - **:2736** — 2026-07-30 — PostWorkout summary reader, **T3 round 3 — CARD
   CLOSED** under the cap: 9 findings, zero visible. Its F1 caught the round-2
   harness fix as an INSTANCE fix (a renamed describe block passed the gate); a

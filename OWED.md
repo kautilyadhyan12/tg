@@ -500,8 +500,48 @@ then; none may be hidden or reduced to close the gap.
       (slug/nameKey/family/tier/met/equipment/muscles) and stores none of it.
       Owed to the P4 production line / Part 2 Appendix A localization.
       (DECISIONS 2026-07-16, Card 3.)
+- [ ] 🔴 **THE WORKOUT WRITE PATH — and the ruling under it: where does a
+      HAND-LOGGED workout live after the old backend is off?**
+      Created 2026-08-01 (DECISIONS :2912). This was visible only as prose inside
+      the calendar line below (:514) and had no line of its own; the audit rule
+      exists for exactly this shape of miss.
+      **The chain, every link command-verified this session:**
+      1. `engine/sessionController.js:67` — `if (def == null) return; // no
+         definition yet → log-only`.
+      2. `ls packages/engine/src/definitions/` = **3** (squat, jump_squat,
+         chair_squat) against the **58**-exercise catalog (CLAUDE.md:106). So
+         nearly every exercise is log-only TODAY.
+      3. `sync/syncClient.js:72` — an all-log-only workout is never queued.
+      4. DECISIONS :75 — the server ENFORCES `sets[]` non-empty, so it would
+         reject one even if sent.
+      5. `pages/ActiveWorkout.jsx:536` — every workout is still written to the
+         OLD backend via `completeSession`.
+      **⇒ Today the new API holds only workouts containing one of three
+      exercises. ⇒ After P2.8 switches the old backend off, a workout of any
+      other exercise would be saved NOWHERE AT ALL.** That is data loss on the
+      product's core action, and it blocks the cutover on its own terms.
+      **What is owed FIRST is a Kd RULING, not code.** "All-log-only workouts are
+      NOT synced" is Kd-approved (DECISIONS :67, P1.10c 2026-07-10) and was right
+      for the sync contract — with no SetSummaries there is nothing
+      engine-verified to send. It becomes a different question once the old
+      backend is the only place those workouts live. Options exist (a log-only
+      workout shape the server accepts; a separate manual-log surface; gating on
+      P4 shipping definitions) and each has a different blast radius — R0.2, so
+      none may be picked by a chat.
+      **What it unblocks:** the calendar below, PostWorkout's summary, the
+      Dashboard's stats — every workout-history surface reads whatever this
+      ruling decides.
 - [ ] 🔴 **Workout history calendar** (WorkoutCalendar → workoutApi.getHistory).
       **BLOCKED — NOT a client repoint. Do not pick this up as a quick win.**
+      **BUILT AND PARKED 2026-08-01 (DECISIONS :2912), still unticked.** A chat
+      recommended this card to Kd as the cheapest one left — the THIRD time,
+      on the reasoning the next line pre-refutes — built it to PROVE (320/321,
+      18/18 mutants), and only then read this entry. Code is on branch
+      `workout-calendar-parked`, deliberately NOT on `web-repoint`, which merges
+      wholesale at cutover and would have ARMED the broken repoint. Blockers 2
+      and 3 below were solved in that work (detail endpoint for names; the Card-5d
+      page-walk) and the dead `getHistory` duplicate is fixed there too, so the
+      card resumes at the smoke + T3 once the WRITE-PATH item above is ruled.
       `/v1/workouts` exists, which is why this was twice (wrongly) recommended
       as the cheapest card left; existence is not usability, and three separate
       blockers were found only on the third check (2026-07-21):
@@ -973,6 +1013,18 @@ then; none may be hidden or reduced to close the gap.
       preserve when the calendar eventually moves. Any real XP display is
       gated on the XP-storage card above (P2.3 GAP-1), not on this.
       (Found 2026-07-21 while planning the calendar card.)
+      **AMENDED 2026-08-01 when the calendar actually moved (DECISIONS :2912).**
+      The block is gone from `WorkoutCalendar.jsx` with the old payload, and
+      nothing a user has seen was lost — this line's own finding is why. What
+      this card ADDS to it, command-verified: per-workout XP has no home in the
+      NEW schema either. `grep -rn "xp" apps/api/src/db/schema/workouts.ts`
+      returns nothing, and `user_xp` (db/schema/game.ts:39) stores ONE running
+      total per user with `level` derived on read. So a real per-workout XP
+      display is a MIGRATION plus a sync-time write, not a client change — and
+      it is the SAME gap PostWorkout carries (`PostWorkout.jsx:40`: "`xp_earned`
+      STAYS on the old summary payload, because the new API has no [per-workout
+      XP]"). One backend card would close both surfaces; neither can be closed
+      from the web side.
 - [x] 🔴 **Google login — DONE, SMOKE PASSED (Kd, 2026-07-24).** End-to-end
       browser click-through on the local stack succeeded: `/login` → "Continue
       with Google" → Google account chooser → callback → logged in. All three
@@ -1309,6 +1361,30 @@ then; none may be hidden or reduced to close the gap.
          Round B touches only `Sidebar.jsx` and the two test files. Kd approved
          the plan as written, so it was not folded in and there is now no
          scheduled round that will pass this file.** It needs a card of its own.
+- [ ] 🟡 **Exercise names in the workout calendar are TITLE-CASED SLUGS.**
+      Created 2026-08-01 by the calendar repoint (DECISIONS :2912) in the same
+      commit that deferred it. The old `/workouts/history` projected up to five
+      exercise NAMES per session (`workouts.py:388-393`) — a live feature, so the
+      no-removal rule was engaged and the chips stayed. But the new API carries
+      only `sets[].exerciseSlug` (`workoutDetailSchema`), so `exerciseLabel`
+      renders `barbell_squat` as `Barbell Squat`. That is a label DERIVED from
+      the value, not a name invented for it — the identifier is unchanged, only
+      its punctuation — which is why it shipped rather than a guessed name.
+      **Closes with the exercise-library content card** (already 🔴 above: display
+      names, instructions, media, server-side search), which is the thing that
+      gives a slug a real name and its hi/as translations. Until then the chips
+      read machine-ish, and the smoke doc says so at step 2 rather than letting
+      Kd report it as a defect.
+- [ ] 🟡 **`WorkoutCalendar.jsx` keeps the pre-existing
+      `react-hooks/set-state-in-effect` error.** Measured both ways 2026-08-01,
+      not ticked: the file at HEAD produces **2** eslint errors (an unused
+      `Dumbbell` import + this one); after the repoint it produces **1** — the
+      unused import is gone, and this one was PRESERVED rather than restructured,
+      under R1.1 (it predates the card and fixing it changes the loading
+      semantics the new tests pin). Parity improved, so it blocked nothing; it is
+      listed because "same as baseline" is a claim that decays into "clean" if
+      nobody writes the number down. Whoever next restructures that effect should
+      close it.
 - [ ] 🟡 **`Running.jsx:97-100` carries BOTH of Round A's defect classes, in a
       SAFETY signal.** Found 2026-07-29 while enumerating F5's class across the
       XP card's ten files; outside those files, so reported under R1.1 and
