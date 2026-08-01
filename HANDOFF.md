@@ -1,6 +1,71 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE 58-EXERCISE CATALOG — **DONE** (a791c53), plus the two rulings that
+      produced it (b9a2b0e) and a same-day correction of one of them (6f83f55).
+      All 12 previously-local commits are now PUSHED (e49d909..a791c53); CI has
+      seen this branch for the first time since Card 1's era.
+      **THE WEB WRITE PATH IS NOW UNBLOCKED AND IS THE NEXT CARD.**
+
+WHAT LANDED
+  · exercises 3 → **58** rows, verified against the live DB (count = 58,
+    pose 57 / timer 1), not inferred.
+  · `CATALOG_58` in `packages/shared/src/exerciseCatalog.ts` is THE reviewed
+    table (Kd signed it off BEFORE any code — P1.8a precedent; artifact
+    `docs/catalog-58.md`). The seed imports it; the web resolves legacy library
+    names through `slugForLegacyName` next card. One table, two consumers.
+  · Slug rule = the Part 2 §6 name normalised. It reproduces all 11 slugs
+    `tools/migrate-mongo/exerciseNames.ts` expects (asserted), so that frozen
+    table needed no edit.
+  · TWO SPEC GAPs ruled by Kd, both F11: `brisk_walking` had NO family and the
+    column is NOT NULL; `arm_circles` had TWO ("F11/F8 hybrid").
+  · Seed insert batched: one statement, not 58 round-trips (api 327s → 261s).
+
+READ THIS IF YOU TOUCH THIS AREA AGAIN
+  **`slugForLegacyName` returns NULL rather than guessing, and the caller must
+  respect that.** A fabricated slug is discarded server-side and leaves a 0-rep
+  workout in history — the exact failure the catalog card existed to prevent.
+  Never lowercase the display name instead: the slugs are singular and the
+  names plural, so it resolves nothing (`exerciseNames.ts:13-16`).
+
+  **A mutation harness that touches a SEED mutates the shared DATABASE, not
+  just source.** A renamed-slug mutant was INSERTED by the test's own seed call;
+  the DB sat at 59 rows after the source was restored. Cleaned and re-proved at
+  58. Also: a `cd` mid-script broke the `cp` restore path and left a mutant
+  live — restore must be verified by `cmp` from an ABSOLUTE path. Both are this
+  repo's own recorded harness failures (:2736, :2614), incurred again in one run.
+
+  **The spec answers more than it looks like it does.** I recorded an "OPEN
+  RULING" for Kd about exercises with no catalog home; Part 2 §6:720-733 and
+  Part 4 §3.4:373 had already answered it, and a grep proved none of those names
+  is even in the library. Corrected in 6f83f55. Draft a ruling request AFTER the
+  spec read, never before.
+
+NEXT: the WEB WRITE PATH (its own card, per OWED's entry read IN FULL). Its
+  blocker 1 is discharged; blocker 2 stands — `completeSession` STAYS (Kd ruled;
+  dropping it makes the post-workout screen show 0s AND a "+50 XP" never
+  awarded). Hook `handleSetComplete` (ActiveWorkout.jsx:386) plus the three
+  engineSetKey bump sites (:426, :483, :508) and the discard at :359-366 — NOT
+  the rep counter, because a "Complete Set" button (:1004) ends sets early. That
+  card also owes the `syncClient.test.js` local VITE_API_URL failure.
+
+VERIFY (needs DATABASE_URL from the gitignored apps/api/.env):
+        corepack pnpm --filter @app/shared exec vitest run
+        cd apps/api
+        DATABASE_URL="$(grep -m1 '^DATABASE_URL=' .env | cut -d= -f2-)" \
+          corepack pnpm exec vitest run
+PROVE: api **381/381** real Postgres (374+7) · shared **41/41** (25+16) ·
+      web 272/273 (the 1 = the known local env quirk, :3332, unchanged) ·
+      typecheck + lint clean on api and shared. MUTATION: 9 shared + 1 DB, all
+      RED against a re-established green baseline (41/41), one shown failing at
+      assertion level to prove RED ≠ "suite never ran".
+SMOKE: none owed — nothing user-visible changed. The write-path card owes one.
+SPEC GAPs: two, both RULED by Kd this session (above). None open.
+KNOWN, NOT MINE: `db.migration.test.ts`'s 0009 test needs 5079 ms against a
+      5000 ms default — fails on network weather, has its own OWED line.
+```
+
+```
 TASK: log-only sets — T3 ROUND 1 FIXES + the F3 RULING. 6 findings, ZERO VISIBLE,
       all now resolved (63b45e0, c6a3a5d on web-repoint). api 374/374.
       **ROUND 2 IS THE CAP** — set before round 1 ran. Diff for it:
