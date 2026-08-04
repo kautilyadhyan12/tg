@@ -4430,3 +4430,52 @@ against the files here before any fix was planned.**
   test, never a fact about users, and stating it as if it settled the matter is
   how a real limitation gets filed as a non-event.
 - (**THE CARD CLOSES.** The 🔴 OWED line ticks on this commit.)
+
+## 2026-08-04 — `/v1/workouts` gets a DATE WINDOW (`from`/`to`), the API half of
+## the fix for blank old months
+
+**Kd-directed, in response to his own correction of this chat's "unreachable"
+(:4355). Card 1 of two: the API half. The web half — the calendar asking for one
+month instead of walking backwards — is card 2 and is still owed.**
+
+- (**WHAT WAS BROKEN, and it is a real user, not a hypothetical**) `/v1/workouts`
+  is a keyset cursor list with no date filter, so a client wanting ONE MONTH must
+  page backwards from today until it arrives. The calendar caps that walk at
+  10 × 100 = 1,000 rows. Anyone with 1,000 workouts logged since the month they
+  are browsing gets an EMPTY month — **four sessions a week for five years**. The
+  T3 round-2 fixes made that state stop lying about itself; they did not make the
+  month readable, and this is the fix that does.
+- (**THE SHAPE: a HALF-OPEN window of ABSOLUTE INSTANTS**) `from` inclusive, `to`
+  exclusive, both optional, both `z.string().datetime({ offset: true })`.
+  Half-open so adjacent months TILE — a workout at midnight on the 1st belongs to
+  exactly one of them, which a closed window cannot promise. Instants rather than
+  calendar dates because **a month is local to the VIEWER and the server has no
+  business deciding whose midnight it is**: the caller converts its own month
+  boundaries, so every day boundary stays exactly where it already lives
+  (`users.timezone` server-side for streaks; the viewer's local day for calendar
+  GROUPING only — 2026-07-21, playbook trap #8). No timezone decision is moved.
+- (**THE WINDOW NARROWS, IT NEVER WIDENS**) `since` is `clamp(from, gate.floor)`
+  — the existing Part 4 §0.2 helper, reused rather than re-expressed — so a free
+  user asking for last year still gets the 90-day gate and still gets
+  `limitedToDays` back to explain itself with (P2.4 GAP-4). **A query parameter
+  is not a plan** (R3.1). Proved by test, and proved to BE proved: dropping the
+  clamp turns that test RED.
+- (**AN INVERTED WINDOW IS A 400, not an empty page**) `to <= from` returns zero
+  rows, and zero rows on a history screen is indistinguishable from "you never
+  trained" — the exact confusion this card exists to remove. Compared as
+  INSTANTS, not strings: `offset: true` admits `…T00:00:00+05:30`, which sorts
+  AFTER `…T00:00:00Z` lexically while being five and a half hours earlier.
+- (**NOT A REVERSAL of the Card 5d ruling — it is the upgrade path that ruling
+  named**) DECISIONS 2026-07-19 chose the client page-walk for meals with
+  "option (c) server-side date filter stays the documented upgrade path if
+  history runs deeper". History ran deeper. **The same question is now owed of
+  `listMealsForDay`**, which has the identical cap and the identical failure.
+- (**NO MIGRATION**) `workouts_user_started_idx (user_id, started_at DESC)`
+  already serves the range scan (`0001_init.sql:598`, read this session).
+- (**MEASURED**) api `workouts.history` **19/19** against real Postgres,
+  including four new tests: the half-open boundary with a positive control, the
+  window composed with cursor paging plus the R3.2 cross-tenant denial, the plan
+  gate outranking a wider `from`, and the 400s. Shared **41/41**. The api unit
+  suites 167 passed / 218 DB-skipped, 0 failed. Typecheck and lint clean on both
+  packages. **Both new guarantees were mutation-checked** rather than assumed:
+  deleting the upper bound → 2 failed; dropping the plan clamp → 1 failed.

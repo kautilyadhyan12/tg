@@ -224,6 +224,113 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     expect(asB.json<{ items: unknown[] }>().items.length).toBe(0);
   });
 
+  // ── the date window ────────────────────────────────────────────────────────
+  // Why it exists: without it a client wanting ONE MONTH must page backwards
+  // from today until it arrives, and a capped walk gives up and draws an EMPTY
+  // month — which reads as "you never trained" (the web calendar, 2026-08-04).
+  // Fixtures above are two workouts at day-2 and one each at day-1 and day-0,
+  // all at 12:00 UTC, so every bound below lands cleanly between them.
+  it("GET /v1/workouts?from&to returns exactly the window, half-open", { timeout: 30_000 }, async () => {
+    const dayTwoOnly = await inject({
+      method: "GET",
+      url: `/v1/workouts?limit=100&from=${encodeURIComponent(daysAgoIso(2))}&to=${encodeURIComponent(daysAgoIso(1))}`,
+      access: cookieA,
+    });
+    expect(dayTwoOnly.statusCode).toBe(200);
+    const older = dayTwoOnly.json<{ items: { id: string; startedAt: string }[] }>().items;
+    // `from` INCLUSIVE: both day-2 workouts are in. `to` EXCLUSIVE: the day-1
+    // one is not, even though the bound is its exact instant — that is what
+    // lets adjacent months tile without double-counting a midnight workout.
+    expect(older.length).toBe(2);
+    expect(older.every((i) => dayOf(i.startedAt) === dayOf(daysAgoIso(2)))).toBe(true);
+
+    // THE CONTROL. Without it, a window that returns nothing at all would pass
+    // the assertion above by simply being broken in the other direction.
+    const newer = await inject({
+      method: "GET",
+      url: `/v1/workouts?limit=100&from=${encodeURIComponent(daysAgoIso(1))}`,
+      access: cookieA,
+    });
+    const recent = newer.json<{ items: { id: string }[] }>().items;
+    expect(recent.length).toBe(2);
+    expect(recent.map((i) => i.id).some((id) => older.map((o) => o.id).includes(id))).toBe(false);
+  });
+
+  it("the window composes with cursor paging, and never leaks another user's rows", { timeout: 30_000 }, async () => {
+    const window = `from=${encodeURIComponent(daysAgoIso(2))}&to=${encodeURIComponent(daysAgoIso(1))}`;
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    for (let hop = 0; hop < 5; hop++) {
+      const url: string =
+        cursor === null
+          ? `/v1/workouts?limit=1&${window}`
+          : `/v1/workouts?limit=1&${window}&cursor=${encodeURIComponent(cursor)}`;
+      const page = await inject({ method: "GET", url, access: cookieA });
+      expect(page.statusCode).toBe(200);
+      const body = page.json<{ items: { id: string }[]; nextCursor: string | null }>();
+      seen.push(...body.items.map((i) => i.id));
+      cursor = body.nextCursor;
+      if (cursor === null) break;
+    }
+    expect(seen.length).toBe(2);
+    expect(new Set(seen).size).toBe(2);
+
+    // R3.2: the window is not a way around tenancy.
+    const asB = await inject({
+      method: "GET",
+      url: `/v1/workouts?limit=100&${window}`,
+      access: cookieB,
+    });
+    expect(asB.statusCode).toBe(200);
+    expect(asB.json<{ items: unknown[] }>().items.length).toBe(0);
+  });
+
+  it("a window can NARROW the plan read-gate but never widen it (Part 4 §0.2)", { timeout: 60_000 }, async () => {
+    // A user of its own, so the far-past fixture cannot disturb the streak and
+    // XP assertions the shared fixtures above and below depend on.
+    const c = await session("p23-carol@example.com");
+    const old = crypto.randomUUID();
+    const recent = crypto.randomUUID();
+    expect((await sync(old, daysAgoIso(200), [squatSet(1)], c.access)).statusCode).toBe(201);
+    expect((await sync(recent, daysAgoIso(5), [squatSet(1)], c.access)).statusCode).toBe(201);
+
+    const res = await inject({
+      method: "GET",
+      url: `/v1/workouts?limit=100&from=${encodeURIComponent(daysAgoIso(365))}`,
+      access: c.access,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ items: { id: string }[]; limitedToDays: number | null }>();
+    // Asked for a year; the free plan's 90-day gate still decides. The stored
+    // workout is NOT deleted — it is a read gate — and the response still says
+    // so, which is what lets the screen explain itself instead of drawing a
+    // blank month (P2.4 GAP-4).
+    expect(body.items.map((i) => i.id)).toEqual([recent]);
+    expect(body.limitedToDays).toBe(90);
+  });
+
+  it("an inverted or unparseable window is a 400, never a silently empty page", { timeout: 30_000 }, async () => {
+    const inverted = await inject({
+      method: "GET",
+      url: `/v1/workouts?from=${encodeURIComponent(daysAgoIso(1))}&to=${encodeURIComponent(daysAgoIso(2))}`,
+      access: cookieA,
+    });
+    // Zero rows would be indistinguishable from "you never trained" — the exact
+    // confusion this whole card exists to remove.
+    expect(inverted.statusCode).toBe(400);
+
+    const equal = daysAgoIso(2);
+    const empty = await inject({
+      method: "GET",
+      url: `/v1/workouts?from=${encodeURIComponent(equal)}&to=${encodeURIComponent(equal)}`,
+      access: cookieA,
+    });
+    expect(empty.statusCode).toBe(400);
+
+    expect((await inject({ method: "GET", url: "/v1/workouts?from=last-tuesday", access: cookieA })).statusCode).toBe(400);
+    expect((await inject({ method: "GET", url: "/v1/workouts?from=2026-08-01", access: cookieA })).statusCode).toBe(400);
+  });
+
   it("GET /v1/workouts/:id serves the sets to the owner; 404 for foreign and malformed ids", { timeout: 30_000 }, async () => {
     const id = workoutIds[0];
     if (id === undefined) throw new Error("fixture ordering");

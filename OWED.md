@@ -1852,10 +1852,34 @@ then; none may be hidden or reduced to close the gap.
       precedent it cites (`listMealsForDay`, DECISIONS 2026-07-19) made the same
       trade under the same constraint, so **the same question should be asked of
       that reader when this is built.**
+      **✅ CARD 1 (API) IS DONE 2026-08-04 — DECISIONS :4434.** `/v1/workouts`
+      now takes `from`/`to`: half-open, absolute instants, narrowing only (the
+      Part 4 §0.2 plan gate still out-ranks a wider `from`), inverted window =
+      400. 19/19 against real Postgres, both new guarantees mutation-checked.
+      **THIS LINE STAYS OPEN FOR CARD 2 (WEB):** `fetchMonth` must ASK for the
+      month instead of walking backwards to it. Until it does, nothing a user
+      sees has changed — the endpoint can answer, and the calendar is not yet
+      asking.
       **Not a regression and not this card's defect** — the cap predates it and
       the old backend answered `?month=&year=` server-side, which is exactly the
       surface the repoint lost. Needs its own card (API half, then the client
       simplification); size it against the P2.8 order at DECISIONS :2866.
+- [ ] 🟡 **The MEAL history has the same blank-page defect as the calendar had,
+      from the same cause.** Raised 2026-08-04 while building the workouts date
+      window (DECISIONS :4434), and given a line immediately because the workouts
+      version of this went untracked until a user-visible bug forced it.
+      `listMealsForDay` (`apps/web/src/api/nutritionApi.js`) page-walks
+      `GET /v1/nutrition/meals` backwards from today at 100 rows × 10 pages,
+      because that endpoint has no date filter either. Card 5d chose that
+      deliberately AND named the exit: **"option (c) server-side date filter
+      stays the documented upgrade path if history runs deeper"** (DECISIONS
+      2026-07-19). At ~5 meals a day the cap is about six months — **sooner than
+      the workouts one, not later**, because meals are logged more often than
+      workouts. Past it, an older day shows "couldn't load back this far", which
+      is at least honest, so this is 🟡 rather than 🔴.
+      The fix is the same shape and now has a worked precedent to copy:
+      `from`/`to` on the meals list query, half-open, absolute instants, clamped
+      by the plan gate exactly as the workouts one is.
 - [ ] ⚪ **The timezone-pin guard asserts only that the offset is NOT ZERO, so a
       DST zone would satisfy it.** Raised by the calendar's T3 round 2
       (2026-08-04, DECISIONS :4355) while auditing round 1's own fix, and

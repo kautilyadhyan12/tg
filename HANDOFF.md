@@ -1,6 +1,44 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: `/v1/workouts` DATE WINDOW — **API HALF DONE 2026-08-04** (DECISIONS
+      :4434). Card 2, the WEB half, is NEXT and is what the 🔴 OWED line waits
+      on. **Nothing a user sees has changed yet: the endpoint can answer, the
+      calendar is not yet asking.**
+
+WHY IT EXISTS
+  A client wanting ONE MONTH had to page backwards from today until it arrived,
+  capped at 1,000 rows. Log 1,000 workouts since the month you are browsing —
+  four sessions a week for five years — and the month comes back EMPTY. Kd
+  raised it after this chat called that state "unreachable".
+
+WHAT SHIPPED
+  · `from`/`to` on `workoutListQuerySchema`. HALF-OPEN (`from` inclusive, `to`
+    exclusive) so adjacent months TILE. ABSOLUTE INSTANTS, not calendar dates —
+    a month is local to the VIEWER, so the caller converts its own boundaries
+    and NO timezone decision moves to the server.
+  · It NARROWS only. `since = clamp(from, gate.floor)` reuses the Part 4 §0.2
+    helper, so a query parameter can never out-rank a plan (R3.1).
+  · An inverted window is a 400, not an empty page — zero rows on a history
+    screen reads as "you never trained", which is this card's whole subject.
+  · No migration: `workouts_user_started_idx` already serves the range scan.
+  · api workouts.history 19/19 (real PG), shared 41/41, api units 167/0-fail.
+    Both new guarantees MUTATION-CHECKED: drop the upper bound → 2 RED; drop
+    the plan clamp → 1 RED.
+
+CARD 2 (WEB), THE SHAPE
+  `fetchMonth` asks for `[monthStart, monthEnd)` in ONE request instead of ten;
+  the 10-page cap survives as a safety net for a single month with >1,000
+  workouts, and `truncated` keeps its honest caption. Do NOT delete the
+  truncation state — it becomes near-unreachable, and this card has already
+  been bitten once by treating "should be unreachable" as "cannot happen".
+
+ALSO OWED, RAISED HERE: `listMealsForDay` has the identical cap and the
+identical failure. Card 5d named a server-side date filter as its upgrade path
+"if history runs deeper"; it has.
+```
+
+```
 TASK: WORKOUT CALENDAR — **CARD CLOSED 2026-08-04 under the two-round cap.**
       T3 round 2: 6 findings, 1 user-visible, all fixed. The 🔴 OWED line is
       TICKED. Records: DECISIONS :4355 (round 2), :4267 (round 1), :4239 (smoke

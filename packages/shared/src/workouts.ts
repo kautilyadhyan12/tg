@@ -8,8 +8,43 @@ export const workoutListQuerySchema = z
     limit: z.coerce.number().int().min(1).max(100).default(20),
     /** `<startedAt ISO>|<workout uuid>` from the previous page's nextCursor. */
     cursor: z.string().max(120).optional(),
+    /** HALF-OPEN window on `started_at`: `from` inclusive, `to` exclusive.
+     *
+     *  Added because a cursor list with no date filter forces a client that
+     *  wants ONE MONTH to page backwards from today until it arrives — and a
+     *  capped walk gives up, drawing an EMPTY month for anyone whose history is
+     *  deeper than the cap. That is not hypothetical: 1,000 workouts is four
+     *  sessions a week for five years (Kd, 2026-08-04). The meal reader made
+     *  the same trade under the same constraint and recorded a server-side date
+     *  filter as "the documented upgrade path if history runs deeper"
+     *  (DECISIONS 2026-07-19, Card 5d) — this is that path, taken.
+     *
+     *  ABSOLUTE INSTANTS, not calendar dates, and deliberately so. A calendar
+     *  month is local to the VIEWER; the server has no business deciding whose
+     *  midnight it is here. The caller converts its own local month boundaries
+     *  to instants, which keeps every day boundary exactly where it already
+     *  lives (users.timezone server-side for streaks; the viewer's local day
+     *  for calendar GROUPING only — DECISIONS 2026-07-21, playbook trap #8).
+     *
+     *  These NARROW the window; they never widen it. The Part 4 §0.2 plan
+     *  read-gate still floors the result (service `clamp`), so a free user
+     *  asking for last year gets the same honest empty answer plus
+     *  `limitedToDays` — asking for a range is not a way around the gate. */
+    from: z.string().datetime({ offset: true }).optional(),
+    to: z.string().datetime({ offset: true }).optional(),
   })
-  .strict();
+  .strict()
+  // An inverted window is a caller BUG, and it returns zero rows — which on a
+  // history screen is indistinguishable from "you never trained". This card
+  // exists because that exact confusion reached a user, so it is a 400 rather
+  // than a silently empty page.
+  // Compared as INSTANTS, never as strings: `offset: true` admits
+  // `…T00:00:00+05:30`, which sorts after `…T00:00:00Z` lexically while being
+  // five and a half hours EARLIER.
+  .refine((q) => q.from === undefined || q.to === undefined || Date.parse(q.from) < Date.parse(q.to), {
+    message: "`to` must be later than `from`",
+    path: ["to"],
+  });
 export type WorkoutListQuery = z.infer<typeof workoutListQuerySchema>;
 
 export const workoutListItemSchema = z.object({

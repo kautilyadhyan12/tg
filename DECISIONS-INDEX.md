@@ -121,6 +121,19 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:4434** — 2026-08-04 — **`/v1/workouts` gains a DATE WINDOW (`from`/`to`) —
+  the API half of the blank-old-months fix.** **Read before adding any date
+  filter, and before touching `listMealsForDay`.** Half-open (`from` inclusive,
+  `to` exclusive) so adjacent months TILE, and ABSOLUTE INSTANTS not calendar
+  dates — a month is local to the VIEWER, so the caller converts its own
+  boundaries and no timezone decision moves to the server. The window NARROWS
+  only: `since = clamp(from, gate.floor)` reuses the Part 4 §0.2 helper, so a
+  query parameter can never out-rank a plan (R3.1). An inverted window is a 400,
+  because zero rows on a history screen reads as "you never trained". **Not a
+  reversal of Card 5d — it is the "documented upgrade path if history runs
+  deeper" that ruling named, and the same question is now owed of the meal
+  reader.** No migration; the index already serves it. 19/19 + 41/41, both new
+  guarantees mutation-checked. **The WEB half is card 2 and still owed.**
 - **:4355** — 2026-08-04 — **calendar T3 ROUND 2 (THE CAP) — CARD CLOSED.** 6
   findings, 1 user-visible, all fixed. **Read before writing a render test for a
   screen with more than two states.** F2 (visible): the bold day count was

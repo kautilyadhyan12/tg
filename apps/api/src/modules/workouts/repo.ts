@@ -179,8 +179,13 @@ export async function listWorkouts(
   input: {
     limit: number;
     cursor: { startedAt: Date; id: string } | null;
-    /** Part 4 §0.2 history read-gate floor (P2.4); null = unlimited. */
+    /** Inclusive floor: the LATER of the caller's `from` and the Part 4 §0.2
+     *  plan read-gate (P2.4). Null = unbounded below. */
     since: Date | null;
+    /** Exclusive ceiling from the caller's `to`; null = unbounded above. The
+     *  window is HALF-OPEN so adjacent months tile without overlapping — a
+     *  workout at midnight on the 1st belongs to exactly one of them. */
+    until: Date | null;
   },
 ): Promise<WorkoutRow[]> {
   const rows = await sql<WorkoutDbRow[]>`
@@ -190,6 +195,7 @@ export async function listWorkouts(
     FROM workouts
     WHERE user_id = ${userId}
       AND (${input.since === null} OR started_at >= ${input.since})
+      AND (${input.until === null} OR started_at < ${input.until})
       AND (${input.cursor === null}
            OR (started_at, id) < (${input.cursor?.startedAt ?? null}, ${input.cursor?.id ?? null}))
     ORDER BY started_at DESC, id DESC

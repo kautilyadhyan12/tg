@@ -120,10 +120,14 @@ export async function listWorkouts(
   query: WorkoutListQuery,
 ): Promise<WorkoutPage> {
   const gate = await historyGate(deps, userId);
+  // The requested window NARROWS; the plan floor is the later of the two, so a
+  // `from` older than the gate can never read past it (R3.1 — the server owns
+  // what the plan grants, and a query parameter is not a plan).
   const rows = await repo.listWorkouts(deps.sql, userId, {
     limit: query.limit,
     cursor: parseCursor(query.cursor),
-    since: gate.floor,
+    since: clamp(query.from === undefined ? null : new Date(query.from), gate.floor),
+    until: query.to === undefined ? null : new Date(query.to),
   });
   const hasMore = rows.length > query.limit;
   const items = hasMore ? rows.slice(0, query.limit) : rows;
