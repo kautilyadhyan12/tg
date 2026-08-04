@@ -282,12 +282,19 @@ describe('fetchMonth', () => {
     });
   });
 
-  // ── T3 round 1, F1 (VISIBLE). ────────────────────────────────────────────
-  // The walk starts at TODAY and pages BACKWARDS, so viewing an older month
-  // scans every newer month's rows first — and an unreadable row from any of
-  // them was counted, then printed as a sentence about the month on screen:
-  // "1 workout couldn't be read and is not shown", on a month whose every
-  // workout was read perfectly.
+  // ── The CALENDAR's T3 round 1, F1 (VISIBLE). ─────────────────────────────
+  // Written when the walk started at TODAY and paged BACKWARDS, so viewing an
+  // older month scanned every newer month's rows first — and an unreadable row
+  // from any of them was counted, then printed as a sentence about the month on
+  // screen: "1 workout couldn't be read and is not shown", on a month whose
+  // every workout was read perfectly.
+  //
+  // **THAT WALK IS GONE** (DECISIONS :4622 — the month is asked for, and the
+  // present tense above was left standing by round 1's F1 fix, which corrected
+  // the same claim in `workoutApi.js` and not here: fixed the case, left the
+  // class, found by round 2's F8). The test stays because the GUARD stays: a
+  // server can still answer with the wrong month, and this caption is a claim
+  // to the user rather than a claim about the server.
   //
   // The same blind spot as the durations: every fixture above puts its
   // unreadable rows INSIDE the viewed month, so none could see one leak in
@@ -488,6 +495,38 @@ describe('fetchMonth', () => {
     );
     expect(r.unreadable).toBe(1);
     expect(r.inWindow).toBe(1);         // the July row only
+  });
+
+  it('reaches the volume gate on ten FULL pages of distinct workouts', async () => {
+    // The reader-side positive control for HISTORY_MAX_ROWS. The render suite
+    // has the screen-side one; this proves the number is reachable at all,
+    // which is the half a render timeout cannot distinguish from "never".
+    let served = 0;
+    const r = await fetchMonth(async () => {
+      const p = served;
+      served += 1;
+      return page(
+        Array.from({ length: HISTORY_PAGE_LIMIT }, (_, i) => validItem({ id: `p${p}-i${i}`, startedAt: at(10) })),
+        `c${served}`,
+      );
+    }, july);
+    expect(r.truncated).toBe(true);
+    expect(r.inWindow).toBe(HISTORY_MAX_PAGES * HISTORY_PAGE_LIMIT);
+  });
+
+  it('counts a REPEATED workout ONCE — a stuck cursor is not a thousand workouts', async () => {
+    // T3 round 2, F2. A server whose cursor does not advance returns the same
+    // rows forever. A plain tally made that look like a busy month: 1,000
+    // counted off 100 real workouts, and the screen said so out loud. Distinct
+    // by id, so the count is of WORKOUTS and not of rows handed over.
+    let calls = 0;
+    const r = await fetchMonth(async () => {
+      calls += 1;
+      return page([validItem({ id: 'same', startedAt: at(9) })], 'c1'); // never advances
+    }, july);
+    expect(calls).toBe(HISTORY_MAX_PAGES);
+    expect(r.truncated).toBe(true);
+    expect(r.inWindow).toBe(1);   // one workout, seen ten times
   });
 
   it('DOES count an unreadable row that is dated into this month', async () => {

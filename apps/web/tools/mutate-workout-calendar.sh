@@ -50,12 +50,24 @@
 # TWO RULES, and the first is the existing one from DECISIONS :3819 with its
 # other half now known:
 #   1. Never run this while a browser smoke is in progress — it sabotages the
-#      dev server the operator is testing against.
+#      dev server the operator is testing against. **NOW ENFORCED** below: the
+#      script refuses to start while 5173 or 3000 is listening. It was documented
+#      and unenforced for two days, and T3 round 2 tripped it within an hour of
+#      reading it, with both ports up throughout its run.
 #   2. Never trust ANY test result taken while this may still be running.
-#      Before believing a red, confirm no process survives (`ps -ef | grep
-#      mutate-workout`) and that the sources carry no mutant text. **A test
-#      failure whose shape matches a mutant in this file is a mutant until
-#      proven otherwise.**
+#      **A test failure whose shape matches a mutant in this file is a mutant
+#      until proven otherwise.**
+#
+#      CHECK THE SENTINEL, NOT `ps`. This header used to prescribe
+#      `ps -ef | grep mutate-workout`. **That is a FALSE NEGATIVE on this
+#      machine** — measured by T3 round 2 while a run was demonstrably live:
+#      Git Bash's `ps` lists `/usr/bin/bash` and never the script argument, and
+#      `ps -aW` is no better (only `Get-CimInstance Win32_Process` shows it). So
+#      the diagnostic handed to the next person could not have found the very
+#      thing the incident was about. `$SENTINEL` below is written on start and
+#      trap-removed on exit; it also covers the gap that fooled the original
+#      grep, since it is present THROUGHOUT the run rather than only while a
+#      mutation happens to be applied.
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -71,13 +83,39 @@ SUITES=(src/api/workoutHistory.test.js src/components/progress/workoutCalendar.r
 
 RUN=(corepack pnpm --filter web exec vitest run "${SUITES[@]}" --reporter=basic)
 
+# ── refuse to run alongside a live smoke (:3819 rule 1, now enforced) ─────────
+# The dev servers import these very files. A mutation applied mid-smoke means
+# the operator is judging a screen built from code nobody intends to ship, and
+# they have no way to know. Checked with bash's own /dev/tcp so it needs no tool
+# that may not be installed.
+for port in 5173 3000; do
+  if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
+    exec 3<&- 2>/dev/null
+    echo "FATAL: port $port is LISTENING — a dev server is up."
+    echo "  This script rewrites apps/web sources in place. Running it now would"
+    echo "  serve mutated code to the browser and silently corrupt a smoke test."
+    echo "  Stop the dev servers, or run the smoke first. (:3819 rule 1.)"
+    exit 2
+  fi
+done
+
+# ── the sentinel: the ONE reliable way to ask "is this running?" ──────────────
+SENTINEL="${TMPDIR:-/tmp}/mutate-workout-calendar.RUNNING"
+if [ -e "$SENTINEL" ]; then
+  echo "FATAL: $SENTINEL exists — another run of this script is live (or died"
+  echo "  without cleaning up). Two concurrent runs corrupt each other's"
+  echo "  snapshots. Confirm nothing is running, then delete it."
+  exit 2
+fi
+printf 'pid=%s started=%s\n' "$$" "$(date -Iseconds)" > "$SENTINEL"
+
 # Snapshot to a temp dir, NOT `git checkout --`. Two of these files are new and
 # untracked, so a git restore would silently fail and leave the mutation live;
 # and on a dirty tree `git checkout` prescribes discarding real work (the
 # PostWorkout round-3 F4 finding, the only destructive instruction that card
 # ever shipped).
 SNAP="$(mktemp -d)"
-trap 'rm -rf "$SNAP"' EXIT
+trap 'rm -rf "$SNAP"; rm -f "$SENTINEL"' EXIT
 declare -A ORIG
 for f in "${TARGETS[@]}"; do
   if [ ! -f "$f" ]; then echo "FATAL: missing $f"; exit 2; fi
@@ -130,15 +168,6 @@ restore() {
     fi
   done
 }
-
-echo "── baseline (must be GREEN before anything is mutated) ──"
-BASE="$(run_suites)"
-if [ "$BASE" != "PASS" ]; then
-  echo "BASELINE $BASE — the suites do not pass unmutated. Nothing below would mean anything."
-  exit 1
-fi
-echo "baseline PASS"
-echo ""
 
 # ── the mutations ─────────────────────────────────────────────────────────────
 # Each entry: <label>|<file>|<sed script>. Each restores a defect this card
@@ -224,20 +253,37 @@ MUTATIONS=(
   "M37 the caption blames the months in between again|$VIEW|s#            ? 'This month has more than a thousand workouts, which is more than this view can read, so the days shown may be incomplete.'#            ? 'There are too many workouts between today and this month for this view to read back that far, so the days shown may be incomplete.'#"
   # ── M38-M40: the T3 on d28ace5, F3 — a VOLUME must be counted, not assumed ──
   "M38 a stopped read claims a volume it never counted|$VIEW|s#          {history.inWindow >= HISTORY_MAX_ROWS#          {true#"
-  "M39 another month's rows count toward this month's volume|$READER|s#      if (t < monthStart || t >= monthEnd) continue;#      inWindow += 1;\n      if (t < monthStart || t >= monthEnd) continue;#"
-  "M40 an undatable row counts toward this month's volume|$READER|s#        if (datedIntoThisMonth) inWindow += 1;#        inWindow += 1;#"
+  # M39/M40 RE-ANCHORED by round 2's F2 (the counter became a Set of ids).
+  # INTENT unchanged in both.
+  "M39 another month's rows count toward this month's volume|$READER|s#      if (t < monthStart || t >= monthEnd) continue;#      inWindowIds.add(session.id);\n      if (t < monthStart || t >= monthEnd) continue;#"
+  "M40 an undatable row counts toward this month's volume|$READER|s#        if (datedIntoThisMonth) inWindowIds.add(text(item?.id));#        inWindowIds.add(text(item?.id));#"
+  # ── M41: round 2's F2 — the volume counts WORKOUTS, not rows handed over.
+  # Adding the set's own size makes every add unique, restoring the plain tally
+  # that let a stuck cursor report 1,000 workouts off 100.
+  "M41 a repeated workout counts once per row, not once|$READER|s#      inWindowIds.add(session.id);#      inWindowIds.add(inWindowIds.size);#"
 )
 
-# ── OPTIONAL SUBSET, added 2026-08-04 ─────────────────────────────────────────
-# `MUTATE_ONLY="M30 M31"` runs only those mutants. A full run is 40 × both
-# suites ≈ 1.5 hours, which is a real cost when a fix touched four of them.
+# ── ZERO MUTANTS IS NEVER A PASS ─────────────────────────────────────────────
+# Added 2026-08-05 after this harness printed "ALL MUTANTS CAUGHT", exit 0, on a
+# run in which **NOT ONE MUTANT EXECUTED** — "caught: 0 … of 41", an empty
+# table, in 58 seconds. Cause: the selection loop had been moved ABOVE the
+# `MUTATIONS` array, so it iterated an array that did not exist yet; bash 5
+# expands an unset `${arr[@]}` to nothing WITHOUT tripping `set -u`, so nothing
+# complained. That is the FOURTH time in this project a harness has reported
+# success it did not earn (:2614 F3, :2736 F1, the `cp` failure, and this), and
+# the first where the author of the guard wrote the hole.
 #
-# THE DANGER IS THE REPORT, NOT THE RUN, so the filter is built to make itself
-# impossible to miss: the banner below, `(SUBSET)` on every line of the summary,
-# and — the part that matters — **a filtered run NEVER prints "ALL MUTANTS
-# CAUGHT"**, because that sentence is a claim about all of them. This file's own
-# history is three harnesses that reported success they had not earned; a subset
-# quietly described as a clean sweep would be the fourth.
+# The lesson the other three already taught, applied one level up: **every
+# safeguard here checks that a step HAPPENED, not merely that nothing
+# complained.** A count is a step. Ordering alone is not a guarantee — it is an
+# assumption, and it is exactly what broke.
+if [ "${#MUTATIONS[@]}" -eq 0 ]; then
+  echo "FATAL: the MUTATIONS array is empty at selection time."
+  echo "  This is an ORDERING bug in this script, not a result. Refusing to"
+  echo "  report a pass on a run with nothing in it."
+  exit 2
+fi
+
 SELECTED=()
 for entry in "${MUTATIONS[@]}"; do
   if [ -n "${MUTATE_ONLY:-}" ]; then
@@ -250,6 +296,27 @@ for entry in "${MUTATIONS[@]}"; do
     SELECTED+=("$entry")
   fi
 done
+
+# EVERY REQUESTED LABEL MUST EXIST. Without this, `MUTATE_ONLY="M30 M99 M41"`
+# ran ONE mutant and printed "SELECTED MUTANTS CAUGHT" with exit 0 — a typo
+# silently shrinking the set the operator believes ran, which is this file's own
+# recurring sin (a report claiming more than the run earned). Demonstrated by
+# T3 round 2, F6.
+if [ -n "${MUTATE_ONLY:-}" ]; then
+  UNKNOWN_TOKENS=""
+  for token in $MUTATE_ONLY; do
+    found=""
+    for entry in "${MUTATIONS[@]}"; do
+      [ "${entry%% *}" = "$token" ] && { found=1; break; }
+    done
+    [ -z "$found" ] && UNKNOWN_TOKENS="$UNKNOWN_TOKENS $token"
+  done
+  if [ -n "$UNKNOWN_TOKENS" ]; then
+    echo "FATAL: MUTATE_ONLY names labels that do not exist:$UNKNOWN_TOKENS"
+    echo "  Refusing to run a SMALLER set than you asked for and report it as a pass."
+    exit 2
+  fi
+fi
 
 if [ -n "${MUTATE_ONLY:-}" ]; then
   echo "############################################################"
@@ -265,6 +332,38 @@ if [ -n "${MUTATE_ONLY:-}" ]; then
   fi
 fi
 
+echo "── baseline (must be GREEN before anything is mutated) ──"
+BASE="$(run_suites)"
+if [ "$BASE" != "PASS" ]; then
+  echo "BASELINE $BASE — the suites do not pass unmutated. Nothing below would mean anything."
+  exit 1
+fi
+echo "baseline PASS"
+echo ""
+
+
+# ── OPTIONAL SUBSET, added 2026-08-04 ─────────────────────────────────────────
+# `MUTATE_ONLY="M30 M31"` runs only those mutants.
+#
+# **A FULL RUN IS ROUGHLY 12–25 MINUTES.** Two measurements, both real and
+# reported as a range rather than averaged into a number neither produced:
+# 12m06s for 40 mutants + 2 baselines (T3 round 2, ~17 s each) and 23m25s for
+# 41 + 2 (2026-08-05, ~33 s each). Same machine, different load; the honest
+# reading is "tens of minutes, varies by about 2×".
+#
+# This comment previously said "≈ 1.5 hours". That was **an estimate never
+# measured** — extrapolated from a single COLD vitest run of 147 s, when the
+# runner is warm and much faster in a loop. The invented number was the entire
+# justification for this feature AND was used to talk Kd out of a full run. V1
+# exists for exactly this. The option is still worth keeping — twenty minutes is
+# not free — but it was never paying for ninety.
+#
+# THE DANGER IS THE REPORT, NOT THE RUN, so the filter is built to make itself
+# impossible to miss: the banner below, `(SUBSET)` on every line of the summary,
+# and — the part that matters — **a filtered run NEVER prints "ALL MUTANTS
+# CAUGHT"**, because that sentence is a claim about all of them. This file's own
+# history is three harnesses that reported success they had not earned; a subset
+# quietly described as a clean sweep would be the fourth.
 PASSES=0
 SURVIVORS=0
 INVALIDS=0
@@ -316,6 +415,16 @@ if [ -n "${MUTATE_ONLY:-}" ]; then
   echo "caught: $PASSES   survived: $SURVIVORS   invalid: $INVALIDS   of ${#SELECTED[@]} SELECTED (SUBSET of ${#MUTATIONS[@]})"
 else
   echo "caught: $PASSES   survived: $SURVIVORS   invalid: $INVALIDS   of ${#MUTATIONS[@]}"
+fi
+
+# The counterpart of the empty-MUTATIONS guard above, and the one that would
+# have caught it on its own: a run in which nothing was ATTEMPTED cannot pass,
+# whatever the earlier checks believed.
+RAN=$((PASSES + SURVIVORS + INVALIDS))
+if [ "$RAN" -eq 0 ] || [ "$RAN" -ne "${#SELECTED[@]}" ]; then
+  echo "NOT CLEAN — $RAN mutants actually ran against ${#SELECTED[@]} selected."
+  echo "  A table nobody filled in is not a pass."
+  exit 2
 fi
 if [ "$SURVIVORS" -ne 0 ] || [ "$INVALIDS" -ne 0 ]; then
   echo "NOT CLEAN — a survivor is an assertion that cannot fail; an invalid is a mutation that never ran."

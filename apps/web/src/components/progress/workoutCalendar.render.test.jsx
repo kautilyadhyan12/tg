@@ -377,18 +377,71 @@ describe('a month too big to finish reading — TRUNCATION', () => {
     // The positive control for the test above, and the state the volume
     // sentence was written for: ten full pages, every row inside the window.
     // Without this, "never say the volume" is satisfiable by never saying it.
-    const fullPage = Array.from({ length: 100 }, (_, i) => item({
-      id: `1111111${String(i).padStart(4, '0')}-1111-4111-8111-111111111111`,
-    }));
-    workoutService.getHistory.mockResolvedValue({
-      data: { items: fullPage, nextCursor: 'c1', limitedToDays: null },
+    //
+    // TEN DISTINCT PAGES, and that is the whole correction of T3 round 2's F1.
+    // As first written this used `mockResolvedValue` with a CONSTANT
+    // `nextCursor: 'c1'`, so the walk read the SAME hundred rows ten times: the
+    // count reached 1,000 off 100 workouts and the test passed for a reason its
+    // own name denies. It was the round-1 F2 shape — a check red (or green) for
+    // the wrong cause — one round later, in the test written to close F3.
+    // The page is derived from the CURSOR, not from a call counter, and that is
+    // not fussiness — a counter made this fixture depend on call ORDER, and the
+    // effect runs twice in dev, so two interleaved walks shared it. Deriving
+    // from the cursor makes each walk independent and the ids reproducible.
+    //
+    // ZERO-padded, and that is not fussiness either. Padding with '1' is NOT
+    // injective when the number itself contains 1s: page 10 → `111111`+`10` =
+    // `11111110`, which is exactly what page 0 → `1111111`+`0` produces. With
+    // twenty pages served, pages 0 and 10 collided, distinct ids fell under a
+    // thousand, and the test failed while the reader was computing the right
+    // answer — a fixture that did not do what its own name said, which is the
+    // shape this card has now hit at every level including this one.
+    workoutService.getHistory.mockImplementation(async ({ cursor }) => {
+      const page = cursor === undefined ? 0 : Number(String(cursor).slice(1));
+      return {
+        data: {
+          items: Array.from({ length: 100 }, (_, i) => item({
+            id: `${String(page).padStart(8, '0')}-1111-4111-8111-${String(i).padStart(12, '0')}`,
+          })),
+          nextCursor: `c${page + 1}`,   // ADVANCES — a stuck cursor is F2's bug
+          limitedToDays: null,
+        },
+      };
     });
     render(<WorkoutCalendar />);
 
     expect(
-      await screen.findByText(/this month has more than a thousand workouts/i),
+      // A longer wait than the 1 s default, and NOT a flake workaround: this
+      // fixture really does serve ten pages of a hundred rows and render a
+      // thousand sessions, which is the point of it. Measured at ~1.03 s, i.e.
+      // it failed the default by 30 ms while producing exactly the right answer.
+      await screen.findByText(/this month has more than a thousand workouts/i, undefined, { timeout: 8000 }),
     ).toBeTruthy();
     expect(screen.queryByText(/couldn’t be read all the way through/i)).toBeNull();
+    // The superseded caption is pinned as an absence HERE TOO (round 2, F3).
+    // The pin in the test above cannot see this branch — under M37 that test
+    // renders the vague sentence and passes — so half of ":4622's superseded
+    // clause is pinned as an ABSENCE" was true of one branch only.
+    expect(screen.queryByText(/between today and this month/i)).toBeNull();
+  });
+
+  it('counts a REPEATED workout once, so a stuck cursor cannot invent a volume', async () => {
+    // T3 round 2, F2, measured: a server whose cursor never advances hands back
+    // the same 100 rows ten times. A plain tally reached 1,000 and printed the
+    // confident thousand-workout sentence over a month holding a hundred —
+    // the same threat model the count was invented for, one bug over.
+    const stuckPage = Array.from({ length: 100 }, (_, i) => item({
+      id: `33333333-1111-4111-8111-${String(i).padStart(12, '4')}`,
+    }));
+    workoutService.getHistory.mockResolvedValue({
+      data: { items: stuckPage, nextCursor: 'c1', limitedToDays: null },   // never advances
+    });
+    render(<WorkoutCalendar />);
+
+    expect(
+      await screen.findByText(/this month couldn’t be read all the way through/i),
+    ).toBeTruthy();
+    expect(screen.queryByText(/more than a thousand workouts/i)).toBeNull();
   });
 
   it('never claims a day count for a month it did not finish reading', async () => {

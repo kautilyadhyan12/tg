@@ -1829,7 +1829,7 @@ then; none may be hidden or reduced to close the gap.
          Round B touches only `Sidebar.jsx` and the two test files. Kd approved
          the plan as written, so it was not folded in and there is now no
          scheduled round that will pass this file.** It needs a card of its own.
-- [ ] 🔴 **A long-time user's OLD MONTHS GO BLANK on the calendar, and the page-
+- [x] 🔴 **A long-time user's OLD MONTHS GO BLANK on the calendar, and the page-
       walk is why. `/v1/workouts` needs a date filter.** Raised by Kd on
       2026-08-04, in response to this chat calling the truncated state
       "unreachable" — **which was wrong, and the correction is the point of this
@@ -1856,16 +1856,17 @@ then; none may be hidden or reduced to close the gap.
       now takes `from`/`to`: half-open, absolute instants, narrowing only (the
       Part 4 §0.2 plan gate still out-ranks a wider `from`), inverted window =
       400. 19/19 against real Postgres, both new guarantees mutation-checked.
-      **CARD 2 (WEB): CODE LANDED 2026-08-04 (`d28ace5` + its T3 fixes) —
-      DECISIONS :4622. THE LINE STAYS OPEN UNTIL THE SMOKE AND THE T3 ARE BOTH
-      CLEAN.** It was ticked in `d28ace5`, in the same commit whose own message
-      said "Smoke and T3 unrun" — **struck by that T3's F4, and the precedent it
-      cited is four commits back on this very screen** (:4119, "NOT ticked —
-      smoke and T3 are both unrun"). This file's header rule is that nothing
-      leaves except by being DONE, and CLAUDE.md Part I §2 is explicit that no
-      user-facing card is done without its SMOKE. A tick is the only signal this
-      file carries; spending it early is how the list stops being trustworthy.
-      What has landed: `fetchMonth` now sends the month's own boundaries (local
+      **✅ CARD 2 (WEB) IS DONE 2026-08-05 — DECISIONS :4855. THE LINE IS
+      CLOSED, AND THIS TICK IS THE SECOND ONE.** The first was spent in
+      `d28ace5`, in the same commit whose own message said "Smoke and T3 unrun";
+      **T3 round 1's F4 struck it**, citing :4119 four commits back on this very
+      screen ("NOT ticked — smoke and T3 are both unrun"). It ticks now because
+      the gate is actually met: Kd's browser smoke passed steps A–D (:4829), and
+      BOTH review rounds are done with ZERO user-visible findings across them
+      (:4718, :4855) under the two-round cap. This file's header rule is that
+      nothing leaves except by being DONE; a tick is the only signal it carries,
+      and spending it early is how the list stops being trustworthy.
+      What landed: `fetchMonth` now sends the month's own boundaries (local
       midnight to local midnight, converted client-side so no timezone decision
       moves to the server) and reads back one page instead of walking up to ten
       from today. An older month is readable at any depth of history, and a
@@ -1878,6 +1879,24 @@ then; none may be hidden or reduced to close the gap.
       the old backend answered `?month=&year=` server-side, which is exactly the
       surface the repoint lost. Needs its own card (API half, then the client
       simplification); size it against the P2.8 order at DECISIONS :2866.
+- [ ] ⚪ **A server whose cursor never ADVANCES makes the calendar draw every
+      workout ten times.** Raised by T3 round 2 (2026-08-05, DECISIONS :4718's
+      round-2 entry) while fixing F2, and given its own line because F2 fixed
+      only the half that was this card's: the CAPTION no longer claims a volume
+      it did not see (`inWindow` counts distinct workout ids), but `byDate` still
+      pushes the same session once per row, so a day with one workout renders
+      "×10" and its detail panel lists the same session ten times.
+      **Pre-existing and not this card's defect** — the page-walk has pushed
+      rows without deduplicating since the calendar was built (2026-08-01), and
+      the date window neither caused it nor made it worse. It is ⚪ because it
+      needs a SERVER that accepts `from`/`to` and then returns a non-advancing
+      cursor; against a correct API it cannot happen, and nothing on screen is
+      wrong today.
+      The fix is the same shape as F2's and about three lines: track the placed
+      ids and skip a repeat before pushing into `byDate`. Worth doing with any
+      future work on that reader rather than on its own.
+      **Deliberately NOT folded into the round-2 fixes** (R1.1): the caption was
+      in scope because its claim was this card's own, and the grid was not.
 - [ ] 🟡 **The MEAL history has the same blank-page defect as the calendar had,
       from the same cause.** Raised 2026-08-04 while building the workouts date
       window (DECISIONS :4434), and given a line immediately because the workouts

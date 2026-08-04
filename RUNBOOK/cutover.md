@@ -124,12 +124,20 @@ the operational wrapper around it.
             data-only (nameKey/family/tier/met…); exercise copy/media surface
             is owed (P4 production line / Part 2 Appendix A localization).
       - [x] **Workout history calendar** (WorkoutCalendar → workoutApi.getHistory)
-            — **DONE 2026-08-04.** The month is assembled client-side by a capped
-            page-walk over the keyset list (`/v1/workouts` has no date filter),
-            and the exercise chips come from `/v1/workouts/:id` when a day opens.
-            Kd's browser smoke passed all 8 steps; T3 rounds 1 and 2 both ran and
-            the card closed under its two-round cap (DECISIONS :4355, :4267).
-            Full detail on the OWED.md line.
+            — **DONE 2026-08-04**, and the read path was REPLACED 2026-08-05.
+            **CORRECTED 2026-08-05 (T3 round 2, F8): this entry said the month is
+            assembled by "a capped page-walk over the keyset list (`/v1/workouts`
+            has no date filter)". Both halves are now false** — `/v1/workouts`
+            took a half-open `from`/`to` window on 2026-08-04 (DECISIONS :4434)
+            and the calendar ASKS for the month rather than walking to it
+            (:4622), because the walk drew a long-time user's older months BLANK.
+            This was the third site carrying that sentence in the present tense;
+            round 1's F1 fixed one of them, which is the fix-the-case-not-the-class
+            shape this project keeps recording. The exercise chips still come
+            from `/v1/workouts/:id` when a day opens. Kd's browser smoke passed
+            all 8 original steps plus the date-window addendum's A–D (:4239,
+            :4829); both cards closed under their two-round caps (:4355, :4267,
+            :4718 and round 2). Full detail on the OWED.md line.
       - [x] **Groq model migration** — **DONE 2026-07-22, PR #44** (merge
             `ad3b1ee`), ahead of the 2026-08-16 decommission of
             `llama-3.1-8b-instant`. COACH_MODEL now defaults to

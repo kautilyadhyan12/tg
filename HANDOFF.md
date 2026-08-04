@@ -1,15 +1,13 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
-TASK: DATE WINDOW, **CARD 2 — THE WEB HALF. T3 ROUND 1 DONE: 5 findings, none
-      visible, 4 fixed + 1 recorded. **KD'S BROWSER SMOKE PASSED (steps A–D) on
-      `6bdd4aa`, DECISIONS :4829.** ROUND 2 IS THE CAP AND IS THE LAST THING
-      OWED — the 🔴 line ticks on it and not before.** Records: DECISIONS :4718 (round 1),
-      :4622 (the card), :4434 (the API half), :4483/:4556 (its two T3 rounds).
-      **CORRECTION to this block's first version, which said "the 🔴 OWED line
-      is TICKED": it was, in the same commit whose message said "smoke and T3
-      unrun", and round 1's F4 struck it.** Precedent :4119, four commits back on
-      this same screen.
+TASK: DATE WINDOW, **CARD 2 — THE WEB HALF. CARD CLOSED 2026-08-05 under the
+      two-round cap. The 🔴 OWED line is TICKED, and this is the SECOND tick —
+      the first was premature and was struck by round 1's F4.** Round 1: 5
+      findings, none visible. Round 2 (the cap): 9 findings, none visible. Kd's
+      browser smoke passed steps A–D. Records: DECISIONS :4855 (round 2), :4829
+      (smoke), :4718 (round 1), :4622 (the card), :4434 (the API half),
+      :4483/:4556 (its two T3 rounds).
 
 WHAT CHANGED, in one sentence
   The calendar ASKS the API for the month instead of paging backwards from
@@ -17,7 +15,26 @@ WHAT CHANGED, in one sentence
   history, and a month view costs ONE request rather than up to ten. This is
   the first commit in the pair that a USER can see.
 
-STATE (post-round-1; the pre-T3 figures were web 431/431 and 37 mutants)
+STATE (FINAL, post-round-2 — d28ace5 431/37 → r1 435/37 → r2 **438/41**)
+  · web **438/438**. **41 mutants / 3 files: 41 RED, 0 alive, 0 INVALID**, green
+    baseline both sides, **23m25s — the FULL set, not a subset.** `vite build`
+    green. Lint on the five touched files: 1 error, `WorkoutCalendar.jsx:223`
+    `react-hooks/set-state-in-effect`, pre-existing (its own OWED line).
+    `bash -n` clean on the harness.
+
+READ THIS FIRST IF YOU TOUCH ANY HARNESS IN THIS REPO
+  **It printed "ALL MUTANTS CAUGHT", exit 0, on a run in which NOT ONE MUTANT
+  EXECUTED** — "caught: 0 … of 41", empty table, 58 seconds. A block moved above
+  the `MUTATIONS` array iterated an array that did not exist yet, and **bash 5
+  expands an unset `${arr[@]}` to nothing without tripping `set -u`**. Fourth
+  unearned pass in this project (:2614 F3, :2736 F1, the `cp` failure), first
+  written by the person adding the guards. Fixed with two checks — the array is
+  non-empty at selection time, and **mutants ATTEMPTED must equal mutants
+  SELECTED** — then all three guards were verified by DELIBERATELY BREAKING the
+  script rather than assumed. **Every safeguard must check a step HAPPENED, not
+  that nothing complained; ordering is an assumption, not a guarantee.**
+
+OLDER STATE (round 1, kept for the corrections it carries)
   · web **435/435** (+4: three reader tests for the volume count, one render
     test for the volume caption's positive control). `vite build` green.
     Lint on the five touched files: **1 error, `WorkoutCalendar.jsx:223`
@@ -25,14 +42,24 @@ STATE (post-round-1; the pre-T3 figures were web 431/431 and 37 mutants)
     same line at HEAD before the card began; it has its own OWED line. The line
     moved 222→223 because an import was added, nothing else.
   · **Mutants: a SUBSET of 15 of 40 — 15 RED, 0 alive, 0 INVALID**, green
-    baseline both sides. Ran M30–M40 (this card's) plus M10/M18/M26/M28 (the
-    four whose SUBJECT this round touched: the truncation state, the caption,
-    and the which-backend guard, since `workoutApi.js` was edited). **The other
-    25 are NOT certified by this run** — they cover display helpers and the
-    chips, untouched here, and were 37/37 RED on `d28ace5` hours earlier. The
-    harness now takes `MUTATE_ONLY=` and REFUSES to print "ALL MUTANTS CAUGHT"
-    for a subset; a full run is ~1.5 h, which is why the option exists.
-  · M30–M40 are this card's; M35 was REWRITTEN and M37 re-anchored by round 1.
+    baseline both sides. Ran M30–M40 plus M10/M18/M26/M28.
+    **CORRECTED by round 2, F4 — the sentence that stood here was FALSE.** It
+    said "the other 25 … cover display helpers and the chips, untouched here".
+    **M11 and M24 are anchored INSIDE the six lines round 1 rewrote** (the
+    `datedIntoThisMonth` block), so by round 1's own stated criterion — "the
+    four whose SUBJECT this round touched" — they belonged in the subset and
+    were left out. Round 2 ran ALL 40 and both are RED. **A coverage claim is a
+    claim (V1); "untouched" is checkable and was not checked.**
+    **AND THE NUMBER THAT JUSTIFIED THE SUBSET WAS INVENTED**: "a full run is
+    ~1.5 h" was extrapolated from one COLD vitest run and never measured. Two
+    real measurements now exist and they DISAGREE by about 2×: **12m06s for 40
+    mutants + 2 baselines** (round 2, ~17 s each) and **23m25s for 41 + 2**
+    (my run on the fixed harness, ~33 s each), same machine, different load.
+    Recorded as a RANGE — "tens of minutes" — rather than averaged into a figure
+    neither run produced. The subset option is still worth having; it was never
+    worth the 90 minutes it was sold on.
+  · M30–M41 are this card's; M35 was REWRITTEN and M37 re-anchored by round 1;
+    M39/M40 re-anchored and M41 added by round 2.
 
 READ THIS BEFORE YOU BELIEVE A RED FROM ANY SUITE IN THIS PACKAGE
   **Killing the mutation harness does not necessarily stop it, and a zombie run
@@ -44,8 +71,18 @@ READ THIS BEFORE YOU BELIEVE A RED FROM ANY SUITE IN THIS PACKAGE
   once it finished, the same suites passed three times running. The existing
   rule (:3819, never run it during a smoke) had only ever named the browser.
   Now recorded in the harness header itself: **a test failure whose shape
-  matches a mutant in that file is a mutant until proven otherwise** — check
-  `ps -ef | grep mutate-workout` before diagnosing anything.
+  matches a mutant in that file is a mutant until proven otherwise.**
+  **AND THE DIAGNOSTIC THIS BLOCK ORIGINALLY PRESCRIBED WAS BROKEN** (round 2,
+  F7): `ps -ef | grep mutate-workout` prints NOTHING on Git Bash even while a
+  run is demonstrably live — it lists `/usr/bin/bash` and never the script
+  argument, and `ps -aW` is no better. So the lesson was right and the
+  instrument handed to the next person could not have found the very thing the
+  incident was about. **Use the SENTINEL file** the harness now writes on start
+  and trap-removes on exit; it is present throughout the run, which also covers
+  the mutate→restore gap that made the original grep look clean. The harness
+  additionally now REFUSES to start while 5173 or 3000 is listening, so :3819
+  rule 1 is enforced rather than merely written down — round 2 tripped it within
+  an hour of reading it.
 
 THE ONE TO CARRY OUT OF ROUND 1: A MUTANT RED FOR THE WRONG REASON CERTIFIES
 THE WRONG ASSERTION

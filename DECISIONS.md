@@ -4852,3 +4852,92 @@ it could not support.**
 - (**THE CARD IS STILL NOT DONE.** T3 round 2 is the cap and is unrun. The 🔴
   OWED line stays open until it comes back clean — the F4 lesson from round 1,
   which is what a premature tick cost last time.)
+
+## 2026-08-05 — date-window CARD 2, T3 ROUND 2 (THE CAP) — CARD CLOSED. 9
+## findings, ZERO user-visible, all fixed — and the harness passed a run in
+## which NOTHING RAN
+
+**Round 2 of two, the cap set before round 1 (:2866). Zero visible ⇒ the card
+closes and the 🔴 OWED line ticks (the stopping rule, :2365). The reviewer ran
+all 40 mutants and re-measured round 1's claims; two of the nine findings were
+numbers I had invented, and a tenth defect was mine, found while fixing theirs.**
+
+- (**F2, the only CODE defect, and it is round 1's own fix one bug over**)
+  `inWindow` was a plain tally, so a server whose cursor never ADVANCES — the
+  same "accepts the window, gets it wrong" threat model the field was invented
+  for — returns the same 100 rows ten times and drove the count to 1,000. The
+  screen then printed the confident thousand-workout sentence over a month
+  holding a hundred. **Round 1 fixed the case (foreign rows) and left the class
+  (rows that are not distinct workouts).** Now a Set of ids; the docstring's
+  "can under-state, never over-state" is true again, and was measured false
+  before. Keyed on the RAW id in the unreadable branch, where a missing id
+  collapses every such row onto one entry — the conservative direction, which is
+  the direction this field is deliberately wrong in.
+- (**F1/F3, the tests that did not test what they were named for**) The volume
+  positive control served the SAME hundred rows ten times (a constant
+  `nextCursor`), so it reached 1,000 off 100 workouts — passing for a reason its
+  own name denies, which is round 1's F2 class one round later, inside the test
+  written to close round 1's F3. And the superseded caption's absence pin sat on
+  the test rendering the OTHER branch, so ":4622's clause is pinned as an
+  ABSENCE" was half true and the missing half was the volume branch.
+- (**AND MY REPLACEMENT FOR F1 HAD A SECOND, DIFFERENT BUG — worth more than the
+  finding**) The new fixture built ids with `String(page).padStart(8, '1')`.
+  **Padding with '1' is not injective when the number contains 1s**: page 10 →
+  `111111`+`10` = `11111110`, which is exactly page 0 → `1111111`+`0`. The effect
+  runs twice in dev, twenty pages were served, pages 0 and 10 collided, distinct
+  ids fell under a thousand — and the test failed while the reader computed the
+  right answer. Rewritten to derive the page from the CURSOR (order-independent,
+  so a double-invoked effect cannot perturb it) and zero-padded. **Three times in
+  one day, at three levels — the caption, the mutant, the fixture — the same
+  shape: a claim whose evidence does not support it. A test is a claim, and the
+  FIXTURE is part of the claim.**
+- (**F4/F5, two numbers I asserted and never measured** — V1, and the reason
+  Part I.5 exists) "The other 25 mutants … untouched here" was false: M11 and M24
+  are anchored inside the six lines round 1 rewrote, so by round 1's own stated
+  criterion they belonged in the subset. And **"a full run is ~1.5 h" was
+  extrapolated from a single cold vitest run and never timed** — it was the whole
+  justification for the subset feature AND was used to talk Kd out of a full run,
+  which he then chose on the strength of it. Two real measurements now exist and
+  disagree by ~2× (12m06s for 40+2 in the review; **23m25s for 41+2** here);
+  recorded as a RANGE rather than averaged into a figure neither run produced.
+- (**F6/F7/F9, the harness's promises made real**) `MUTATE_ONLY` accepted labels
+  that match nothing and reported a pass on the smaller set (`"M30 M99 M41"` ran
+  ONE mutant and printed SELECTED MUTANTS CAUGHT) — now FATAL, and moved BEFORE
+  the baseline so a typo costs nothing. The header prescribed
+  `ps -ef | grep mutate-workout` as the zombie check; **measured a FALSE NEGATIVE
+  on Git Bash while a run was demonstrably live**, so the diagnostic could not
+  have found the thing the incident was about — replaced by a sentinel file
+  written on start and trap-removed on exit, which also covers the mutate→restore
+  gap that fooled the original grep. And :3819's "never run this during a smoke",
+  documented and unenforced for two days (the reviewer tripped it within an hour
+  of reading it, with both ports up), is now a refusal to start while 5173 or
+  3000 is listening.
+- (**THE ONE THAT WAS NOT IN THE REVIEW, AND IS THE WORST OF THE DAY**) Moving
+  the selection block above the `MUTATIONS` array made it iterate an array that
+  did not exist yet — bash 5 expands an unset `${arr[@]}` to nothing without
+  tripping `set -u` — and **the harness printed "ALL MUTANTS CAUGHT", exit 0, on
+  a run where NOT ONE MUTANT EXECUTED**: "caught: 0 … of 41", empty table, 58
+  seconds. **That is the FOURTH time in this project a harness has claimed a pass
+  it did not earn** (:2614 F3, :2736 F1, the `cp` failure — and now this), and
+  the first where the hole was written by the author of the guards. Two checks
+  added: the array is verified non-empty at selection time, and **a run in which
+  the number of mutants ATTEMPTED does not equal the number SELECTED cannot
+  pass.** All three guards were then verified by deliberately breaking the script
+  — unknown label, emptied array, real subset — rather than assumed. **The
+  lesson the other three already taught, one level up: every safeguard must check
+  that a step HAPPENED, not that nothing complained. Ordering is an assumption,
+  not a guarantee.**
+- (**REPORTED, NOT FIXED — with a line, per the deferral rule**) Under the same
+  stuck cursor, `byDate` still pushes one session per row, so a day with one
+  workout draws "×10". Pre-existing (the reader has pushed without deduplicating
+  since 2026-08-01), unreachable against a correct API, and NOT this card's —
+  F2 was in scope because the CAPTION's claim was this card's own and the grid's
+  was not (R1.1). New ⚪ OWED line.
+- (**MEASURED**) web **438/438** (+3 on round 1's 435). **41 mutants / 3 files:
+  41 RED, 0 alive, 0 INVALID**, green baseline both sides, **23m25s** — the full
+  set, not a subset, including the rewritten M35, the re-anchored M37/M39/M40 and
+  the new M41. `vite build` green. Lint on the five touched files: 1 error,
+  `WorkoutCalendar.jsx:223` `react-hooks/set-state-in-effect`, pre-existing and
+  its own OWED line. `bash -n` clean on the harness.
+- (**THE CARD CLOSES.** Zero user-visible findings across both rounds; Kd's
+  browser smoke passed (:4829); the 🔴 OWED line ticks on this commit.)

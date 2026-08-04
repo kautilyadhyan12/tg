@@ -121,6 +121,33 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:4855** — 2026-08-05 — **date-window card 2, T3 ROUND 2 (THE CAP) — CARD
+  CLOSED, 🔴 line TICKED.** 9 findings, ZERO user-visible. **Read before writing
+  a test fixture, and before trusting any harness in this repo.**
+  **THE ONE WITH TEETH IS NOT IN THE REVIEW: the harness printed "ALL MUTANTS
+  CAUGHT", exit 0, on a run where NOT ONE MUTANT EXECUTED** — a block moved above
+  the `MUTATIONS` array iterated an array that did not exist yet, and bash 5
+  expands an unset `${arr[@]}` to nothing without tripping `set -u`. Fourth time
+  in this project a harness claimed an unearned pass (:2614 F3, :2736 F1, the
+  `cp` failure), first time written by the author of the guards. Now: the array
+  is checked non-empty, and **a run where mutants ATTEMPTED ≠ SELECTED cannot
+  pass** — every safeguard must check a step HAPPENED, not that nothing
+  complained. **F2, the only code defect, is round 1's fix one bug over**: a
+  stuck cursor made `inWindow` count 1,000 off 100 workouts, so the volume
+  caption lied again — now a Set of ids. **F1/F3: the tests written to close
+  round 1's F3 did not test it** (the volume control served the same 100 rows ten
+  times; the absence pin sat on the wrong branch) — **and the replacement fixture
+  had a SECOND bug: `padStart(8,'1')` is not injective when the number contains
+  1s, so page 10 collided with page 0.** Three levels in one day — caption,
+  mutant, fixture — one shape: **a test is a claim and the FIXTURE is part of the
+  claim.** F4/F5: two numbers asserted and never measured, including the "~1.5 h"
+  that talked Kd out of a full run (real: 12m06s and 23m25s, recorded as a
+  range). F6/F7/F9 made the harness's own promises real — `MUTATE_ONLY` FATALs on
+  unknown labels, a SENTINEL replaces a `ps` grep that was a measured false
+  negative on Git Bash, and :3819's smoke rule is enforced by refusing to start
+  while 5173/3000 listen. 438/438, **41/41 mutants RED**, all guards verified by
+  deliberately breaking them. New ⚪ OWED line: a stuck cursor still draws each
+  workout ten times (pre-existing, out of scope, R1.1).
 - **:4829** — 2026-08-05 — **date-window card 2: browser SMOKE PASSED, steps
   A–D, on the round-1 bytes (`6bdd4aa`).** One request per month view carrying
   `from`/`to`; stepping a month sends the new one; the instants are the viewer's

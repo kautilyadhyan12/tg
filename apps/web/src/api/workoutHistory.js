@@ -237,14 +237,25 @@ export function monthClamp({ month, year }, limitedToDays, now = new Date()) {
  *                  something else and far more reachable: 1,000 workouts
  *                  logged BETWEEN today and the month, which drew the month
  *                  blank. That is the defect this card closed.
- *    inWindow      rows the server returned that PROVABLY belong to this month
- *                  — placed ones, plus unreadable ones whose date is readable
- *                  and inside it. It exists so the caller can tell the two
- *                  truncation causes apart, and it is deliberately CONSERVATIVE
- *                  (a row with no readable date is not counted, because it is
- *                  not known to be in this month). It can therefore under-state
- *                  the volume, never over-state it, and under-stating only
- *                  costs a vaguer sentence.
+ *    inWindow      DISTINCT workouts the server returned that provably belong
+ *                  to this month — placed ones, plus unreadable ones whose date
+ *                  is readable and inside it, each counted once by `id`. It
+ *                  exists so the caller can tell the two truncation causes
+ *                  apart, and it is deliberately CONSERVATIVE (a row with no
+ *                  readable date is not counted, because it is not known to be
+ *                  in this month). It can therefore under-state the volume,
+ *                  never over-state it, and under-stating only costs a vaguer
+ *                  sentence.
+ *
+ *                  DISTINCT is not decoration — T3 round 2, F2 measured the
+ *                  claim above FALSE without it. A server whose cursor does not
+ *                  ADVANCE returns the same 100 rows ten times, which drove a
+ *                  plain counter to 1,000 off 100 workouts and printed the
+ *                  confident thousand-workout sentence over a month that holds
+ *                  a hundred. That is the same threat model this field was
+ *                  invented for — a server that accepts the window and gets it
+ *                  wrong — one bug over, which is this card's recurring shape:
+ *                  the fix for a class, landing on one member of it.
  *
  *                  WHY IT EXISTS — the T3 on d28ace5, F3, measured. `truncated`
  *                  alone does NOT mean "this month has a thousand workouts". A
@@ -277,7 +288,9 @@ export async function fetchMonth(fetchPage, { month, year }) {
   let pages = 0;
   let truncated = false;
   let unreadable = 0;
-  let inWindow = 0;
+  // DISTINCT ids, not a tally — see the `inWindow` note above. A repeated row is
+  // one workout however many times a broken cursor hands it back.
+  const inWindowIds = new Set();
   let limitedToDays = null;
 
   for (;;) {
@@ -332,7 +345,13 @@ export async function fetchMonth(fetchPage, { month, year }) {
         // An undatable row is counted as `unreadable` (we must say it exists)
         // but never as evidence of this month's size — those are two different
         // questions and one of them is answerable.
-        if (datedIntoThisMonth) inWindow += 1;
+        //
+        // Keyed by the RAW id: this row failed `readCalendarSession`, so it may
+        // have no usable id at all, and `text()` returning null collapses every
+        // such row onto one Set entry. That is the conservative direction — it
+        // can only lower the count — and it is the direction this field is
+        // deliberately wrong in.
+        if (datedIntoThisMonth) inWindowIds.add(text(item?.id));
         continue;
       }
       const t = Date.parse(session.startedAt);
@@ -356,7 +375,7 @@ export async function fetchMonth(fetchPage, { month, year }) {
       // round 1 found the guard that used to sit here was UNREACHABLE — and an
       // unreachable guard reads as protection while protecting nothing, the
       // same class as an assertion that cannot fail.
-      inWindow += 1;
+      inWindowIds.add(session.id);
       const key = localDateKey(session.startedAt);
       if (!byDate[key]) byDate[key] = [];
       byDate[key].push(session);
@@ -370,14 +389,15 @@ export async function fetchMonth(fetchPage, { month, year }) {
     byDate[key].sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt));
   }
 
-  return { byDate, limitedToDays, truncated, inWindow, unreadable };
+  return { byDate, limitedToDays, truncated, inWindow: inWindowIds.size, unreadable };
 }
 
-/** The most rows a single month view can read: HISTORY_MAX_PAGES × the page
- *  ceiling. `truncated` with `inWindow` at this number means the month really
- *  does hold more workouts than the view can show; `truncated` with FEWER means
- *  the read stopped short for a reason we cannot name, and the caller must not
- *  claim a volume it did not see. (T3 on d28ace5, F3.) */
+/** The most DISTINCT workouts a single month view can read: HISTORY_MAX_PAGES ×
+ *  the page ceiling. `truncated` with `inWindow` at this number means the month
+ *  really does hold more workouts than the view can show; `truncated` with FEWER
+ *  means the read stopped short for a reason we cannot name, and the caller must
+ *  not claim a volume it did not see. (T3 on d28ace5 F3; "distinct" added by
+ *  round 2's F2, which measured 1,000 counted off 100 real workouts.) */
 export const HISTORY_MAX_ROWS = HISTORY_MAX_PAGES * HISTORY_PAGE_LIMIT;
 
 /** Display helpers. Each renders the em dash for an unknown rather than a
