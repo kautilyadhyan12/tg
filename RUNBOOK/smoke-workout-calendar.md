@@ -290,6 +290,21 @@ about users (Kd's correction, DECISIONS :4355).
 
 ## RESULT — addendum
 
-- Date: **pending**
-- Commit: **pending**
-- Result: **NOT YET RUN**
+- Date: **2026-08-05**
+- Commit: **`6bdd4aa`** (the T3 round-1 fixes, i.e. the current bytes — not the
+  card's first cut, so no step needed re-running on changed code)
+- Result: **PASS — Kd reported "all passed" against steps A–D.**
+
+**What that report resolves, stated rather than inflated** (the :4239
+precedent): steps A–D were numbered with an explicit ✅-expectation and an
+explicit ❌-fail condition each, including step C naming the exact wrong string
+(`2026-08-01T00:00:00.000Z`) that a UTC conversion would produce. The reply was
+a single blanket pass against those four. **I did not independently read the
+`from`/`to` values out of Kd's browser** — the browser is his instrument here,
+and this is a report, not a measurement I took. What IS measured on my side is
+that the same window is asserted by unit and render tests and that deleting it,
+or building it from `Date.UTC`, or dropping it between the screen and the
+client, each turns those tests red (M30/M31/M36).
+
+**Still not discharged by this:** T3 round 2, the cap. The 🔴 OWED line stays
+open until that comes back clean.

@@ -121,6 +121,15 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:4829** — 2026-08-05 — **date-window card 2: browser SMOKE PASSED, steps
+  A–D, on the round-1 bytes (`6bdd4aa`).** One request per month view carrying
+  `from`/`to`; stepping a month sends the new one; the instants are the viewer's
+  midnight (`…T18:30:00.000Z` at +05:30) and not `…T00:00:00.000Z`. **Recorded as
+  a REPORT, not a measurement** — the browser is Kd's instrument and the values
+  were not read out of it by me; the step-C fail condition named the exact wrong
+  string, which is what makes a blanket pass meaningful. Structurally out of
+  reach and said so: the headline fix and both truncation captions. **The 🔴 line
+  still does not tick — round 2 is the cap and is unrun.**
 - **:4718** — 2026-08-04 — **date-window card 2, T3 round 1: 5 findings, none
   visible, 4 fixed + 1 recorded. Read before writing a mutation table, and
   before ticking anything in OWED.md.** **F2 is the one with teeth: a mutant RED

@@ -2,8 +2,9 @@
 
 ```
 TASK: DATE WINDOW, **CARD 2 — THE WEB HALF. T3 ROUND 1 DONE: 5 findings, none
-      visible, 4 fixed + 1 recorded. ROUND 2 IS THE CAP. The 🔴 OWED line is
-      NOT ticked and SMOKE IS STILL UNRUN.** Records: DECISIONS :4718 (round 1),
+      visible, 4 fixed + 1 recorded. **KD'S BROWSER SMOKE PASSED (steps A–D) on
+      `6bdd4aa`, DECISIONS :4829.** ROUND 2 IS THE CAP AND IS THE LAST THING
+      OWED — the 🔴 line ticks on it and not before.** Records: DECISIONS :4718 (round 1),
       :4622 (the card), :4434 (the API half), :4483/:4556 (its two T3 rounds).
       **CORRECTION to this block's first version, which said "the 🔴 OWED line
       is TICKED": it was, in the same commit whose message said "smoke and T3

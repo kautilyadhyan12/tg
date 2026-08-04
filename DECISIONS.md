@@ -4825,3 +4825,30 @@ it could not support.**
   it was re-run properly on a verified-clean tree rather than credited.
 - (**THE CARD IS NOT DONE.** Round 2 is the cap and is unrun; the browser smoke
   addendum is unrun; the 🔴 OWED line stays open until both are clean.)
+
+## 2026-08-05 — date-window card 2: the browser SMOKE PASSED (steps A–D), on
+## the round-1 bytes. The 🔴 line still does not tick — round 2 is unrun
+
+- (**WHAT PASSED**) Kd reported a blanket "all passed" against the four numbered
+  steps of the addendum in `RUNBOOK/smoke-workout-calendar.md`: ONE
+  `/v1/workouts` request per month view carrying `from`/`to`; stepping a month
+  sends the new month; the instants are the viewer's midnight (`…T18:30:00.000Z`
+  the previous day at +05:30) and NOT `…T00:00:00.000Z`; and nothing else on the
+  screen moved. Run on `6bdd4aa` — the round-1 fixes — so nothing was carried
+  over from bytes that later changed (the XP-card precedent, :4239).
+- (**WHAT IT DOES NOT RESOLVE, and this is the honest half**) It is a REPORT,
+  not a measurement I took: the browser is Kd's instrument and I did not read the
+  `from`/`to` values out of it myself. The step-C fail condition was written to
+  name the exact wrong string a UTC conversion produces, which is what makes a
+  blanket pass meaningful rather than polite. What is measured on my side is that
+  the window is asserted by unit AND render tests and that M30/M31/M36 — delete
+  it, build it from `Date.UTC`, drop it between screen and client — each go RED.
+- (**AND WHAT IT STRUCTURALLY CANNOT REACH, named in the doc itself**) The
+  headline fix (an old month filling in) needs 1,000+ workouts logged since that
+  month; both truncation captions need either that volume in ONE month or a
+  server that accepts the window and mis-applies it. Neither is producible on a
+  fixture account, and neither is a gap in this card — "the operator's account
+  cannot reach it" is a fact about a smoke test, never about users (:4355).
+- (**THE CARD IS STILL NOT DONE.** T3 round 2 is the cap and is unrun. The 🔴
+  OWED line stays open until it comes back clean — the F4 lesson from round 1,
+  which is what a premature tick cost last time.)
