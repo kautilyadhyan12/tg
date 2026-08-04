@@ -4508,7 +4508,11 @@ here before it was fixed, and the measurement widened it.**
   because the parser's guarantee was false in both places. (The plain
   `.datetime()` form does NOT share it — measured: zod rejects
   `2026-02-30T00:00:00Z`, which `Date.parse` would roll forward to March 2. zod
-  is the stricter of the two there, so the other five date fields are sound.)
+  is the stricter of the two there, so the other ~~five~~ **SIX** plain-form
+  sites are sound — `geo.ts:55,64`, `nutrition.ts:45,129`, and the two
+  hand-rolled cursor schemas at `geo/routes.ts:66` and
+  `nutrition/routes.ts:75`, named here because a count nothing produced is how
+  V1 is broken quietly. Corrected 2026-08-04, T3 round 2 F5.)
 - (**F2, and why it is NOT fixed separately**) The same input made `clamp`
   return the Invalid Date and discard the plan floor, because `floor > since` is
   a NaN comparison. Never exploitable — `input.since === null` is computed from
@@ -4535,7 +4539,82 @@ here before it was fixed, and the measurement widened it.**
   answers "what does my plan allow", which is what `monthClamp` already treats
   it as.
 - (**MEASURED**) api `workouts.history` **21/21** and `workouts.sync` **16/16**
-  against real Postgres (the sync suite matters here: it proves the tightened
-  `startedAt` still accepts every legitimate payload, including its existing
-  `+05:30` fixture). shared **43/43**. Typecheck and lint clean on both
+  against real Postgres. shared **43/43**. Typecheck and lint clean on both
   packages. **Round 2 is the cap.**
+- (**CORRECTION, T3 round 2 F2 — a claim in the line above, as first written,
+  credited evidence that is not there**) It said the sync suite "proves the
+  tightened `startedAt` still accepts every legitimate payload, including its
+  existing `+05:30` fixture". **`apps/api/test` contains no `+05:30` sync
+  fixture** — `workouts.sync.test.ts:58` sends `2026-07-10T09:30:00.000Z`, and
+  the offset fixture I was thinking of lives in
+  `packages/shared/test/schemas.test.ts`. The suite is green and does prove
+  Z-instants still pass; it proves less than the sentence claimed. **This is
+  the V1 failure in its most persuasive form: not an invented number, but a
+  real green suite credited with the wrong assertion** — and it is the second
+  such correction on this card in two rounds.
+
+## 2026-08-04 — date-window T3 round 2 (THE CAP): 5 findings, none visible,
+## card CLOSED — and three of the five were the RECORD, not the code
+
+**Round 2 of two, the cap. The reviewer verified round 1's three claims by
+re-running them rather than reading them, and all three held: the class fix is
+at both sites, it newly refuses exactly four strings (all unparseable garbage,
+measured across a 27-string battery), and reverting either site turns its own
+test RED — each site independently load-bearing, which round 1 had not shown.**
+
+- (**F1, the only code-adjacent one**) `limitedToDays` is declared TWICE — once
+  in `workouts.ts`, once in `progress.ts` — and round 1's F4 rewording landed on
+  one of them. The stale sentence describes the RESPONSE where the field
+  describes the PLAN, and it is the sentence a future chat reads before
+  "fixing" progress to return null on an unclamped request, which is the exact
+  lie F4 rejected. Reworded, with the ruling cited in the comment so the next
+  edit meets it. **A shared field with two declarations has two comments, and
+  the second one is where the correction gets lost** — the same shape as the
+  duplicate-glyph problems this repo keeps recording.
+- (**F3, a comment corrected in place**) `sync.ts` said the bad value "fails one
+  layer further out" because Postgres receives it as a timestamptz. Measured
+  false: the DRIVER converts it in its own bind step and throws the same
+  `RangeError` client-side, same layer, different call site — Postgres accepts
+  offsets to +15:59 and never sees it. My own round-1 probe had shown this
+  (the error came back with `code: undefined`, i.e. not from PG) and I read past
+  it. **Reasoned rather than measured, in a comment whose whole job is to record
+  what was measured.**
+- (**F4, optional per the reviewer, taken anyway**) The sync half of the class
+  fix was proven at the SCHEMA only. Now asserted at the ROUTE too, beside the
+  existing 400 cases: a `+25:30` `startedAt` answers 400. The schema test proves
+  what the parser does; only this proves what the ENDPOINT does — and the
+  distinction earns its place here, because the old behaviour was a 500, which
+  the client's retry policy classifies as transient and would replay forever.
+  **AND IT PAID FOR ITSELF IMMEDIATELY.** Mutation-checked like everything else
+  here, and the revert answers `expected 500 to be 400` — so **the sync route's
+  500 is now MEASURED end-to-end**, where round 1 could only say "the driver
+  rejects it" and F3 above had to correct even that. The optional test is the
+  one that turned a reasoned claim about that path into an observed one.
+- (**F2 and F5, and they are the ones worth remembering**) Two claims in round
+  1's own record credited evidence that was not where it said. F2: the api sync
+  suite was said to prove the `+05:30` case "including its existing fixture" —
+  there is no such fixture in `apps/api/test`; the offset control is in the
+  SHARED suite. F5: "the other five date fields" — there are six, now named.
+  Both corrected IN PLACE at :4511 and :4544 rather than rewritten. **F2 is V1's
+  most persuasive failure mode: not an invented number but a real, green suite
+  credited with an assertion it does not contain.** A green suite is evidence
+  for what it asserts and nothing else.
+- (**WHAT THE ROUND ALSO ESTABLISHED, unprompted and worth keeping**) The web
+  imports this same schema before queueing a workout
+  (`apps/web/src/sync/syncClient.js:61`), so tightening it had a blast radius
+  round 1 never mentioned. Checked there: the web builds `startedAt` from
+  `new Date().toISOString()`, so it cannot produce a refused value, and a
+  refusal PARKS the workout rather than dropping it. Web 74/74.
+- (**AND A GAIN NAMED THAT NEITHER ROUND CLAIMED**) Before the fix, any
+  logged-in user could produce a 500 on `/v1/workouts` at will with one query
+  string — error-path noise and Sentry pressure on demand. It is a 400 now.
+- (**MEASURED**) api `workouts.sync` **16/16** and `workouts.history` **21/21**
+  against real Postgres; shared **43/43**;
+  (The sync count does not move: F4's assertion joined the existing
+  `validation failure … → 400` case rather than adding a test. I typed 17/17
+  first, from the assumption that a new assertion means a new test, and the
+  suite said 16 — **the third V1 slip on this card in two rounds, caught this
+  time by running the thing before writing the number down.**)
+  typecheck and lint clean on both packages. **THE CARD IS CLOSED** under the
+  cap. The 🔴 OWED line stays open for card 2 (the web half) — nothing a user
+  sees has changed yet, which is what that line says.

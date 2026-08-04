@@ -1,10 +1,22 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
-TASK: `/v1/workouts` DATE WINDOW — **API HALF DONE 2026-08-04** (DECISIONS
-      :4434), **T3 ROUND 1 FIXED** (:4483, round 2 is the cap). Card 2, the WEB
-      half, is NEXT and is what the 🔴 OWED line waits on. **Nothing a user sees
-      has changed yet: the endpoint can answer, the calendar is not yet asking.**
+TASK: `/v1/workouts` DATE WINDOW — **API HALF DONE and CLOSED 2026-08-04**
+      under the two-round cap (DECISIONS :4434 card, :4483 round 1, :4556 round
+      2). Card 2, the WEB half, is NEXT and is what the 🔴 OWED line waits on.
+      **Nothing a user sees has changed yet: the endpoint can answer, the
+      calendar is not yet asking.**
+
+THE ROUND-2 LESSON, and it is about the RECORD rather than the code
+  Three of its five findings were false claims in round 1's own write-up — a
+  green suite credited with an assertion it does not contain (`+05:30` is in the
+  SHARED suite, never in `apps/api/test`), a count of five where there are six,
+  and a 17/17 for a suite that is 16. **A green suite is evidence for what it
+  asserts and nothing else.** Corrected in place, not rewritten.
+  The one with teeth: `limitedToDays` is declared TWICE (`workouts.ts` and
+  `progress.ts`) and round 1's rewording landed on one of them. **A shared field
+  with two declarations has two comments, and the second is where a correction
+  gets lost.**
 
 THE ONE TO CARRY OUT OF THE T3
   `z.string().datetime({ offset: true })` ACCEPTS AN OFFSET `Date` REJECTS —

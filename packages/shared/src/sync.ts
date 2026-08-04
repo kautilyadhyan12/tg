@@ -14,12 +14,15 @@ export const workoutSyncPayloadSchema = z
     // THE CLASS, not just the case (the lesson this repo has recorded four
     // times). The T3 on `b80bd3c` found `datetime({ offset: true })` admitting
     // an offset JS cannot parse; a grep for that option found exactly two sites
-    // and this is the other one. Here the unparseable value is handed to
-    // Postgres as a timestamptz instead of to `new Date`, so it fails one layer
-    // further out — a different 500, the same hole in the same parser. Proven
-    // reachable only as far as "the driver rejects it"; not fixed because a
-    // route was seen to break, fixed because the parser's guarantee was the
-    // thing that was false.
+    // and this is the other one. Here the unparseable value is passed on as a
+    // timestamptz rather than to `new Date` — but it never reaches Postgres:
+    // the DRIVER converts it in its own bind step and throws the same
+    // `RangeError: Invalid time value`, at the same layer as the list path,
+    // from a different call site. (Corrected in place 2026-08-04, T3 round 2
+    // F3 — this comment first said "one layer further out", which was reasoned
+    // rather than measured. Postgres itself accepts offsets to +15:59; the
+    // string never gets that far.) Not fixed because a route was seen to break,
+    // fixed because the parser's guarantee was the thing that was false.
     startedAt: instantSchema,
     platform: z.enum(["web", "android", "ios"]),
     /** THE ENGINE BUILD THE CLIENT WAS RUNNING — not "the engine that scored

@@ -121,6 +121,21 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:4556** — 2026-08-04 — **date-window T3 round 2 (THE CAP) — CARD CLOSED.**
+  5 findings, none visible, **three of them in the RECORD rather than the
+  code.** **Read before writing "the suite proves X" about any green suite.**
+  F2: round 1 credited the api sync suite with a `+05:30` fixture it does not
+  contain (the offset control is in the SHARED suite) — a real, green suite
+  credited with an assertion it does not make, which is V1's most persuasive
+  failure mode; F5 mis-counted the sound plain-`datetime()` sites as five when
+  there are six; and a third slip (17/17 for a suite that is 16) was caught
+  pre-commit by running it. All corrected IN PLACE. F1 is the one with teeth:
+  `limitedToDays` is declared TWICE and round 1's rewording landed on one —
+  **a shared field with two declarations has two comments, and the second is
+  where a correction gets lost.** F3 corrected a comment that reasoned instead
+  of measured. F4 was optional and paid for itself: the route-level assertion,
+  mutation-checked, turns the sync path's 500 from reasoned into MEASURED.
+  Round 1's three claims were re-run by the reviewer and all held.
 - **:4483** — 2026-08-04 — **date-window T3 round 1: 4 findings, none visible,
   all resolved. READ BEFORE USING `z.string().datetime({ offset: true })`
   ANYWHERE.** It accepts a UTC offset with an hour component above 23

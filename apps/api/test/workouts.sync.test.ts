@@ -193,6 +193,15 @@ d("POST /v1/workouts/sync (real Postgres, real cookie authn)", () => {
       payload(wid, [set(1, { reps: 100000 })]), // smallint overflow
       payload(wid, [set(1), set(1)]), // duplicate setIndex would desync aggregates (T3)
       payload(wid, []), // empty engine workout must not be creatable (DECISIONS)
+      // A startedAt that PASSES the date FORMAT check and is not a real
+      // instant: `+25:30` is an offset no clock has. The schema refuses it now
+      // (T3 round 1 on the date window, the class fix) — asserted HERE, at the
+      // route, because the schema test proves what the parser does and this
+      // proves what the ENDPOINT does. Without it the class fix's sync half is
+      // a promise the API layer never makes: the same string used to reach the
+      // driver and answer 500, which the client's retry policy reads as
+      // transient and would replay forever.
+      { ...payload(wid, [set(1)]), startedAt: "2026-07-10T09:30:00+25:30" },
     ];
     for (const bad of cases) {
       const res = await inject(bad, { "idempotency-key": wid });

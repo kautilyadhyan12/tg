@@ -15,9 +15,22 @@ export type ProgressQuery = z.infer<typeof progressQuerySchema>;
  *  →kcal point values (banding per 2B §2.3 is display). consistencyPct =
  *  min(100, round(workouts/days×100)) for bounded periods, 0 for 'all'
  *  (progress.py:63-69 verbatim). */
-/** Part 4 §0.2 read-gate flag (P2.4 GAP-4), on every progress read: non-null
- *  = aggregates cover at most this many days (plan clamp); null = the full
- *  requested window. */
+/** Part 4 §0.2 read-gate flag (P2.4 GAP-4), on every progress read: the PLAN'S
+ *  history limit in days — **whether or not it bound this particular request**
+ *  — and null when the plan is UNLIMITED.
+ *
+ *  Reworded 2026-08-04 alongside its twin in `workouts.ts` (T3 round 2 on the
+ *  date window, F1). The old wording — "aggregates cover at most this many
+ *  days; null = the full requested window" — describes the RESPONSE, and the
+ *  field describes the PLAN. The distinction was harmless while every request
+ *  was unbounded and is not now: a request whose own window is newer than the
+ *  gate is not clamped by anything, and this field still reports the plan's 90.
+ *
+ *  **Do not "fix" that by returning null.** DECISIONS 2026-07-11 (P2.4 GAP-4)
+ *  fixes `null = unlimited`, so null on an unclamped request tells a free user
+ *  their plan has no history limit — the one lie here a reader cannot recover
+ *  from. This comment exists because the reworded twin left this declaration
+ *  behind, and a stale sentence is what invites exactly that edit. */
 const limitedToDays = z.number().int().nullable();
 
 export const progressOverviewSchema = z.object({
