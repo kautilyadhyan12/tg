@@ -27,10 +27,44 @@ const DETECT_INTERVAL_MS = 33;    // ~30fps pose inference
 const PUBLISH_INTERVAL_MS = 33;   // ~30fps overlay publish (one re-render each)
 const FEED_INTERVAL_MS = 67;      // ~15fps engine feed (§2.1 target analysis rate)
 
-export default function usePoseDetection({ exercise, setIndex = 1, enabled, onSetComplete }) {
+/** `analysisEnabled: false` is the user having CHOSEN to count their own reps
+ *  (2026-08-03). It is deliberately stronger than `enabled`, which only pauses
+ *  the feed: no MediaPipe model is downloaded, no engine session is started for
+ *  any set, and `analysisAvailable` stays false — so the page's hand-counting UI
+ *  is the one the user sees, on every exercise, including the three the engine
+ *  could have graded. Part 6 §3.6 described log-only mode as an AUTOMATIC
+ *  degradation on weak devices; a user-chosen one is Kd's ruling of the same
+ *  date, recorded in DECISIONS. */
+export default function usePoseDetection({
+  exercise,
+  setIndex = 1,
+  enabled,
+  onSetComplete,
+  analysisEnabled = true,
+}) {
   const [poseData, setPoseData] = useState(null);
   const [keypointsData, setKeypointsData] = useState(null);
   const [analysisAvailable, setAnalysisAvailable] = useState(false);
+  // "HAS THIS HOOK ANSWERED YET?", which is NOT the same question as
+  // `analysisAvailable`, and conflating them cost the first set of every camera
+  // workout its form score (round 2 F1). `analysisAvailable` is state
+  // initialised to false and only flipped from the per-set effect below, so on
+  // the FIRST render of every camera workout the page is told "nothing is
+  // analysing" — indistinguishable, from the page's side, from "this exercise
+  // has no definition". The page acted on it, marked set 1 as hand-counted, and
+  // never took it back. False here means "not known yet"; false in
+  // `analysisAvailable` means "known, and there is nothing".
+  //
+  // IT HOLDS WHICH EXERCISE THE ANSWER IS ABOUT, not a bare yes/no — round 3 F1.
+  // A boolean answered "has this hook EVER answered", which never goes back to
+  // false, so it protected the mount and nothing else. `analysisAvailable` is
+  // per-exercise state written from the same effect, so on the render where the
+  // exercise CHANGES it still holds the previous exercise's answer: going from
+  // an ungraded exercise to a graded one (press-ups → squats) presented exactly
+  // the round-2 F1 state again — settled, and available still false — and the
+  // page marked the squat set as hand-counted before the engine had spoken.
+  // Single-exercise workouts never hit it, which is every test in the suite.
+  const [settledFor, setSettledFor] = useState(null);
   const [error, setError] = useState(null);
 
   const controllerRef   = useRef(null);
@@ -53,7 +87,12 @@ export default function usePoseDetection({ exercise, setIndex = 1, enabled, onSe
   useEffect(() => { onSetCompleteRef.current = onSetComplete; }, [onSetComplete]);
 
   // ── Initialise MediaPipe on mount (unchanged from the WS version) ───────────
+  // Skipped entirely when the user is counting their own reps: this effect
+  // downloads a pose model from a CDN, and doing that for a workout that will
+  // never look at a camera is both waste and a failure the user cannot act on
+  // (the catch below sets a "Pose detection unavailable" error).
   useEffect(() => {
+    if (!analysisEnabled) return undefined;
     let cancelled = false;
 
     async function initML() {
@@ -123,22 +162,35 @@ export default function usePoseDetection({ exercise, setIndex = 1, enabled, onSe
       }
       mpReadyRef.current = false;
     };
-  }, []); // run once on mount
+  }, [analysisEnabled]); // analysisEnabled is fixed for a workout; effectively mount-only
 
   // ── One engine session PER SET (§3.9) ───────────────────────────────────────
   // Keyed on (exercise, setIndex) — NOT on `enabled`, so pausing does not end the
   // set. On teardown / set change, emit the previous set's SetSummary (§2.4).
+  //
+  // No session is started at all when the user is counting their own reps, so
+  // `analysisAvailable` stays false and endSet() has nothing to emit. That is
+  // the difference between "this exercise has no definition" and "this user
+  // asked to do it themselves": both end up hand-counted, and the page tells
+  // them apart only to word the message honestly.
   useEffect(() => {
+    // No session, and no state written either — `analysisAvailable` is reported
+    // as false by DERIVING it below rather than by setting it here. Writing
+    // state straight from an effect is the thing the hook lint rules ban, and
+    // the derivation is stronger anyway: it cannot be left stale by a path that
+    // forgets to reset it.
+    if (!analysisEnabled) return undefined;
     const controller = controllerRef.current;
     controller.startSet(exercise, setIndex);
     setAnalysisAvailable(controller.analysisAvailable);
+    setSettledFor(exercise);    // the answer exists, and it is about THIS exercise
     setError(null);
     setPoseData(null);
     return () => {
       const summary = controller.endSet();
       if (summary && onSetCompleteRef.current) onSetCompleteRef.current(summary);
     };
-  }, [exercise, setIndex]);
+  }, [exercise, setIndex, analysisEnabled]);
 
   // ── Frame processing loop ───────────────────────────────────────────────────
   const processFrame = useCallback((videoElement) => {
@@ -223,5 +275,20 @@ export default function usePoseDetection({ exercise, setIndex = 1, enabled, onSe
 
   useEffect(() => () => stop(), [stop]);
 
-  return { poseData, keypointsData, analysisAvailable, error, startStreaming, stop };
+  return {
+    poseData,
+    keypointsData,
+    // Hard false whenever analysis is switched off, whatever the last session
+    // left in state. The page reads this to decide whether to offer hand
+    // counting, so a stale true is a screen with no way to record a rep.
+    analysisAvailable: analysisEnabled && analysisAvailable,
+    // Settled IMMEDIATELY when analysis is switched off: that answer came from
+    // the user, not from the engine, so there is nothing to wait for.
+    // Otherwise it is settled only for the exercise the answer was computed for,
+    // so an exercise change reopens the question instead of carrying a stale yes.
+    analysisSettled: !analysisEnabled || settledFor === exercise,
+    error,
+    startStreaming,
+    stop,
+  };
 }

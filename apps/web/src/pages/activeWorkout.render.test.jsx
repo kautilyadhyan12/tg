@@ -24,36 +24,107 @@
 // camera, the pose hook and the old backend are stubbed, because a test cannot
 // hold a webcam.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 const startCamera = vi.fn(async () => null);
-vi.mock('../hooks/useCamera', () => ({
-  default: () => ({
-    videoRef: { current: null },
-    stream: null,
-    error: null,
-    startCamera,
-    stopCamera: vi.fn(),
-  }),
-}));
+let cameraError = null;
+// A SETTER, not just a getter — round 3 F3. `error` was a getter over a plain
+// module `let` with no React state behind it, so a test could choose the value
+// a workout STARTED with and nothing else: changing it mid-set re-rendered
+// nothing, and the one behaviour round 2's F3 fix added to production (an error
+// that CLEARS when the camera recovers) was unreachable from this suite. That
+// is where round 3's F2 hid. `setCameraError` is wired to real state in the mock
+// below and re-renders the page the way the real hook does.
+let setCameraError = (v) => { cameraError = v; };
+vi.mock('../hooks/useCamera', async () => {
+  const { useState, useEffect } = await import('react');
+  const useMockCamera = () => {
+    const [err, setErr] = useState(cameraError);
+    useEffect(() => {
+      setCameraError = (v) => { cameraError = v; setErr(v); };
+      setErr(cameraError);
+      return () => { setCameraError = (v) => { cameraError = v; }; };
+    }, []);
+    return { videoRef: { current: null }, stream: null, error: err, startCamera, stopCamera: vi.fn() };
+  };
+  return { default: useMockCamera };
+});
 
 // analysisAvailable: false is the ordinary case — 55 of the 58 catalog
 // exercises have no definition. It is CONFIGURABLE rather than hardcoded so the
-// engine-active path can be rendered too: with it pinned false, the gate that
-// keeps the hand-counted capture out of the engine's way could be deleted
-// without a single test noticing. T3 round 1, F2.
-let poseState = { poseData: null, analysisAvailable: false };
-vi.mock('../hooks/usePoseDetection', () => ({
-  default: () => ({
-    poseData: poseState.poseData,
-    keypointsData: null,
-    analysisAvailable: poseState.analysisAvailable,
-    error: null,
-    startStreaming: vi.fn(),
-    stop: vi.fn(),
-  }),
-}));
+// engine-active path can be rendered too: with it pinned false, the rule that
+// decides who owns a set could be deleted without a single test noticing.
+// T3 round 1, F2.
+//
+// `emitSummary` reproduces the REAL hook's timing, and that timing is the whole
+// reason `reconcileSets` exists: the engine's summary for a set is emitted from
+// the per-set effect's CLEANUP, which React runs after the render that ended
+// the set — i.e. AFTER the page has already captured the user's own count. A
+// mock that emitted the summary synchronously at set end would make the
+// ordering hazard untestable and every "the engine wins" assertion vacuous.
+//
+// `analysisAvailable` may be a FUNCTION of the exercise slug — round 3 F1. One
+// value for the whole workout meant no test could render a workout where the
+// answer CHANGES between exercises, which is the only place round 3's F1 lived:
+// press-ups (no definition) followed by squats (definition). Every test in the
+// suite used a single exercise, so the whole class was invisible.
+let poseState = { poseData: null, analysisAvailable: false, emitSummary: null };
+let analysisEnabledSeen = null;
+const availableFor = (exercise) =>
+  (typeof poseState.analysisAvailable === 'function'
+    ? poseState.analysisAvailable(exercise)
+    : poseState.analysisAvailable);
+vi.mock('../hooks/usePoseDetection', async () => {
+  const { useEffect, useState } = await import('react');
+  // Named `use…` so the hook rules apply to it — this IS a hook, and an
+  // anonymous arrow assigned to `default` is one ESLint cannot check.
+  const useMockPoseDetection = ({ exercise, setIndex, onSetComplete, analysisEnabled }) => {
+    analysisEnabledSeen = analysisEnabled;
+    useEffect(() => {
+      if (!poseState.emitSummary || analysisEnabled === false) return undefined;
+      return () => { onSetComplete(poseState.emitSummary(setIndex)); };
+      // onSetComplete is intentionally out: the page passes a new callback
+      // identity on some renders, and re-running this effect would emit the
+      // set's summary early — the exact ordering this mock exists to model.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [setIndex, analysisEnabled]);
+    // THE MOUNT TIMING IS PART OF THE CONTRACT, and this mock used to get it
+    // wrong. The real hook holds `analysisAvailable` in state initialised to
+    // FALSE and flips it from the per-set effect — so on the very first render
+    // of every camera workout the page is told "nothing is analysing", and only
+    // learns otherwise one commit later. Returning the settled value
+    // synchronously made that window invisible, and a defect that only exists
+    // inside it (round 2 F1: set 1 of every camera workout filed as the user's
+    // own count, form score discarded) passed both the suite and the mutation
+    // that was written to catch exactly it. A mock standing in for the thing
+    // under test proves the mock — round 1's F4, recurring.
+    // Tracks WHICH EXERCISE the answer is about, exactly as the real hook does,
+    // so an exercise change reopens the question instead of carrying the
+    // previous answer for one render.
+    const [settledFor, setSettledFor] = useState(null);
+    useEffect(() => {
+      if (analysisEnabled === false) return;
+      setSettledFor(exercise);
+    }, [analysisEnabled, exercise, setIndex]);
+    const settled = settledFor === exercise;
+    const available = analysisEnabled === false ? false : availableFor(exercise);
+    return {
+      poseData: poseState.poseData,
+      keypointsData: null,
+      // The user counting their own reps means nothing is analysing, whatever
+      // definitions exist — the real hook starts no session at all.
+      analysisAvailable: settled && available,
+      // False until the hook has actually answered FOR THIS EXERCISE. The page
+      // must not read "not yet known" as "no definition exists".
+      analysisSettled: analysisEnabled === false ? true : settled,
+      error: null,
+      startStreaming: vi.fn(),
+      stop: vi.fn(),
+    };
+  };
+  return { default: useMockPoseDetection };
+});
 
 const completeSession = vi.fn(async () => ({ data: {} }));
 vi.mock('../api/workoutApi', () => ({
@@ -68,9 +139,9 @@ vi.mock('./activeWorkoutEngine', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
-    recordLogOnlySet: (...args) => {
+    recordHandCountedSet: (...args) => {
       if (recordThrows) throw new Error('recording blew up');
-      return actual.recordLogOnlySet(...args);
+      return actual.recordHandCountedSet(...args);
     },
   };
 });
@@ -99,14 +170,33 @@ const exercise = (over = {}) => ({
   ...over,
 });
 
-function startWorkout(exercises) {
-  setItem('active_session', { sessionId: 's1', exercises, name: 'My Workout' });
+function startWorkout(exercises, session = {}) {
+  setItem('active_session', { sessionId: 's1', exercises, name: 'My Workout', ...session });
   return render(
     <MemoryRouter>
       <ActiveWorkout />
     </MemoryRouter>,
   );
 }
+
+/** A §2.4-shaped engine summary for one set ordinal. */
+const engineSummary = (setIndex, over = {}) => ({
+  exercise: 'squat',
+  setIndex,
+  reps: 9,
+  durationMs: 30_000,
+  tempoMsAvg: null,
+  romStats: null,
+  view: 'side',
+  holdMs: null,
+  calibration: null,
+  avgFormScore: 88,
+  repScores: [88],
+  faultCounts: {},
+  engineVersion: '1.0.0',
+  definitionVersion: 1,
+  ...over,
+});
 
 const tapRep = () => fireEvent.click(screen.getByText('+1 Rep'));
 
@@ -120,7 +210,9 @@ beforeEach(() => {
   localStorage.clear();
   vi.clearAllMocks();
   recordThrows = false;
-  poseState = { poseData: null, analysisAvailable: false };
+  cameraError = null;
+  analysisEnabledSeen = null;
+  poseState = { poseData: null, analysisAvailable: false, emitSummary: null };
   // An OFFSET on the real clock, not a frozen one: testing-library's waiting
   // needs time to actually pass, so a fully fake clock would deadlock. Tests
   // that care about durations move `clockOffset` and read what was recorded.
@@ -371,31 +463,518 @@ describe('a hand-counted workout reaches the new API', () => {
     expect(durationMs).toBeLessThan(60_000); // not the abandoned hour
   });
 
-  it('files nothing itself when the engine is analysing the set', async () => {
-    // The engine emits that set's summary on its own teardown. If the page
-    // filed one too, both would claim the same set number, the contract's
-    // duplicate check would reject the payload, and the WHOLE workout would be
-    // parked. Rendered with the engine active — the case the other tests, which
-    // pin it off, cannot reach at all.
+  it('sends ONE entry for a set the engine graded — the engine\'s, not both', async () => {
+    // Two entries claiming one set number fail the contract's duplicate check
+    // and park the WHOLE workout. The page now records the user's count for
+    // every set, so this is the assertion that keeps that from becoming a
+    // double-file: the engine measured this set, so the engine's entry is the
+    // one sent, complete with the form score a hand-counted set can never have.
     poseState = {
       analysisAvailable: true,
       poseData: { rep_count: 2, logOnly: false, corrections: [], form_correct: true },
+      emitSummary: (setIndex) => engineSummary(setIndex),
     };
     startWorkout([exercise({ name: 'Squats', reps: 10 })]);
 
-    // The engine's count reached the display, so it also reached the ref that
-    // the capture reads (same line, by construction). Without this wait the
-    // test would pass vacuously: a 0-rep set is dropped whether the gate exists
-    // or not. `getAllByText` because the rep count and the set number can both
-    // read "2" — the assertion is that a 2 rendered at all.
     await waitFor(() => expect(screen.getAllByText('2').length).toBeGreaterThan(0));
-    expect(screen.queryByText('+1 Rep')).toBeNull(); // no manual button
+    expect(screen.queryByText('+1 Rep')).toBeNull(); // the engine is counting
     fireEvent.click(screen.getByText('Complete Set ✓'));
 
-    await waitFor(() => expect(completeSession).toHaveBeenCalled());
-    // Nothing hand-counted was filed, so with no engine summary either (the
-    // hook is stubbed) there is nothing to send.
-    expect(peekQueue()).toEqual([]);
+    await waitFor(() => expect(queued()).toBeDefined());
+    const { sets } = queued();
+    expect(sets).toHaveLength(1);
+    expect(sets[0].setIndex).toBe(1);
+    expect(sets[0].mode).toBeUndefined();      // an engine set, not log_only
+    expect(sets[0].avgFormScore).toBe(88);
+    expect(sets[0].reps).toBe(9);              // the engine's count, not the display's 2
+  });
+
+  it('A CAMERA THAT NEVER STARTS DOES NOT SWALLOW THE SET', async () => {
+    // THE DEFECT THIS FILE PREVIOUSLY ASSERTED AS CORRECT. The old test here
+    // rendered exactly this state — a definition exists, the engine files
+    // nothing — and asserted the queue stayed EMPTY, describing it as "nothing
+    // to send". That is a set the user performed, on a workout that syncs,
+    // disappearing: history showing less training than actually happened.
+    //
+    // `analysisAvailable` was never a statement about the camera. It goes true
+    // the moment a definition COMPILES. With the camera refused, the engine is
+    // fed zero frames, files nothing, and the page used to stand aside for it.
+    cameraError = 'Permission denied';
+    poseState = {
+      analysisAvailable: true,   // a definition exists for Squats
+      poseData: null,            // ...and not one frame ever reached the engine
+      emitSummary: null,         // so the engine files nothing at all
+    };
+    startWorkout([exercise({ name: 'Squats', reps: 3 })]);
+
+    // The user is not stranded: the button is offered because nothing else is
+    // counting, and it is offered at once — a camera error needs no waiting.
+    await waitFor(() => expect(screen.getByText('+1 Rep')).toBeTruthy());
+    tapRep();
+    tapRep();
+    tapRep();
+
+    await waitFor(() => expect(queued()).toBeDefined());
+    const { sets } = queued();
+    expect(sets).toHaveLength(1);
+    expect(sets[0].reps).toBe(3);
+    expect(sets[0].exercise).toBe('squat');
+    expect(sets[0].mode).toBe('log_only');   // honestly unscored, not graded
+    expect(sets[0].avgFormScore).toBeNull();
+  });
+
+  it('offers hand counting after a camera that reports no error and sends no frames', async () => {
+    // The quieter half of the same failure: permission dialog left sitting
+    // open, MediaPipe still downloading, or a device that claims to exist and
+    // never streams. There is no error to react to — only silence — so the
+    // offer is timed, and until it arrives the user has no way to record a rep.
+    //
+    // Only the POLL timer is faked: this file spies on Date.now for durations,
+    // and a full fake clock would fight that and deadlock testing-library's
+    // waits. The silence itself is expressed by moving `clockOffset`, which is
+    // what the page's gap check actually reads.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval'] });
+    try {
+      poseState = { analysisAvailable: true, poseData: null, emitSummary: null };
+      startWorkout([exercise({ name: 'Squats', reps: 2 })]);
+
+      // Not offered immediately — a slow start must not flash the button.
+      expect(screen.queryByText('+1 Rep')).toBeNull();
+
+      clockOffset = 6000;                                    // six seconds of silence
+      await act(async () => { vi.advanceTimersByTime(1000); });  // one poll tick
+      expect(screen.getByText('+1 Rep')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('THE CAMERA DIES MID-SET: frames stop, no error is raised, hand counting is offered', async () => {
+    // T3 F1, and the reason smoke step 6 could not pass by the route it claimed.
+    // The old guard asked `poseData == null`, which is only ever true BEFORE a
+    // set's first frame: null is written once, at set start, and the engine's
+    // feed never returns null. So once one frame had landed the page could never
+    // see silence again — unplug the webcam mid-set and the last frame just sat
+    // there, no error, no button, no way to record the rest of the set.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval'] });
+    try {
+      poseState = {
+        analysisAvailable: true,
+        poseData: { rep_count: 1, logOnly: false, corrections: [], form_correct: true },
+        emitSummary: null,
+      };
+      startWorkout([exercise({ name: 'Squats', reps: 5 })]);
+
+      // The camera IS counting. No button — this is the positive control, and it
+      // is what stops the fix from simply offering the button to everyone.
+      await waitFor(() => expect(screen.getAllByText('1').length).toBeGreaterThan(0));
+      expect(screen.queryByText('+1 Rep')).toBeNull();
+
+      // The webcam is pulled. `poseData` deliberately keeps its last value —
+      // that is the real behaviour, and the state the old guard was blind to.
+      clockOffset = 6000;
+      await act(async () => { vi.advanceTimersByTime(1000); });
+      expect(screen.getByText('+1 Rep')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('THE FIRST SET of a camera workout keeps its form score (round 2 F1)', async () => {
+    // The window nobody could see. `analysisAvailable` is state initialised to
+    // false and flipped from an effect, so on render 1 of EVERY camera workout
+    // the page is told nothing is analysing. The ownership effect ran in that
+    // render, marked set 1 as the user's, and never cleared it — so rule 1
+    // spliced the engine's summary out and set 1 was filed `log_only` with no
+    // score. Sets 2..N were fine, which is why it read as correct.
+    poseState = {
+      analysisAvailable: true,
+      poseData: { rep_count: 1, logOnly: false, corrections: [], form_correct: true },
+      emitSummary: (setIndex) => engineSummary(setIndex, { reps: 1 }),
+    };
+    startWorkout([exercise({ name: 'Squats', sets: 1, reps: 1 })]);
+
+    await waitFor(() => expect(queued()).toBeDefined(), { timeout: 3000 });
+    const [set] = queued().sets;
+    expect(set.mode).toBeUndefined();          // the ENGINE's entry, not the user's
+    expect(set.avgFormScore).not.toBeNull();
+  });
+
+  it('A GRADED EXERCISE AFTER AN UNGRADED ONE keeps its form score (round 3 F1)', async () => {
+    // Round 2's F1 at a second trigger, and the one every test in this file was
+    // structurally blind to: they all use ONE exercise. `analysisAvailable` is
+    // per-exercise state written from an effect, so on the render where the
+    // exercise CHANGES it still holds the previous exercise's answer. Press-ups
+    // (no definition) → squats (definition): settled was already true, available
+    // was still false, and the squat set was marked hand-counted before the
+    // engine spoke. The screen said "AI form check" and the history disagreed.
+    poseState = {
+      analysisAvailable: (ex) => ex === 'squats',
+      poseData: { rep_count: 1, logOnly: false, corrections: [], form_correct: true },
+      emitSummary: (setIndex) => (setIndex === 2 ? engineSummary(2, { reps: 1 }) : null),
+    };
+    startWorkout([
+      exercise({ name: 'Push-ups', sets: 1, reps: 1 }),
+      exercise({ name: 'Squats', sets: 1, reps: 1 }),
+    ]);
+
+    tapRep();                                    // push-ups: hand-counted, correct
+    await waitFor(() => expect(screen.getByText('Skip Rest →')).toBeTruthy());
+    fireEvent.click(screen.getByText('Skip Rest →'));
+
+    await waitFor(() => expect(queued()).toBeDefined(), { timeout: 3000 });
+    const sets = queued().sets;
+    const squat = sets.find((s) => s.exercise === 'squat');
+    expect(squat).toBeDefined();
+    expect(squat.mode).toBeUndefined();          // the ENGINE's entry
+    expect(squat.avgFormScore).not.toBeNull();
+  });
+
+  it('A CAMERA THAT RECOVERS does not take the set back (round 3 F2)', async () => {
+    // Round 2's F3 fix made a camera error CLEARABLE, and `cameraError` was a
+    // live term in `countItYourself` while ownership was write-once. So on
+    // recovery the rep button vanished mid-set — the camera taking a set back,
+    // which Kd's ruling forbids — and the set was filed as the user's own count
+    // anyway. Mobile browsers mute the track on backgrounding, so this is the
+    // same user action as the hidden-tab case arriving down the other path.
+    poseState = {
+      analysisAvailable: true,
+      poseData: { rep_count: 0, logOnly: false, corrections: [], form_correct: true },
+      emitSummary: () => engineSummary(1, { reps: 9 }),
+    };
+    startWorkout([exercise({ name: 'Squats', sets: 1, reps: 4 })]);
+
+    act(() => setCameraError('Camera stopped sending video'));
+    await waitFor(() => expect(screen.getByText('+1 Rep')).toBeTruthy());
+    tapRep();
+    tapRep();
+
+    // The camera comes back mid-set.
+    act(() => setCameraError(null));
+    expect(screen.getByText('+1 Rep')).toBeTruthy();   // still the user's set
+
+    tapRep();
+    tapRep();                                          // reaches the target
+    await waitFor(() => expect(queued()).toBeDefined(), { timeout: 3000 });
+    const [set] = queued().sets;
+    expect(set.reps).toBe(4);                          // what they tapped
+    expect(set.mode).toBe('log_only');
+  });
+
+  it('a camera that wakes up AHEAD of the user cannot overwrite their count', async () => {
+    // The teeth behind "the camera does not take a set back". The existing
+    // recovery test had the engine returning a count BELOW what the user had
+    // tapped, so the display guard (`reps > lastRepCountRef`) declined it on its
+    // own and the ownership rule was never actually exercised — the mutant that
+    // reinstates the old `manualMode` guard survived. Here the camera comes back
+    // claiming MORE reps than the user counted, which is the only shape that
+    // tells the two rules apart.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval'] });
+    try {
+      poseState = { analysisAvailable: true, poseData: null, emitSummary: null };
+      startWorkout([exercise({ name: 'Squats', sets: 1, reps: 20 })]);
+
+      clockOffset = 6000;
+      await act(async () => { vi.advanceTimersByTime(1000); });
+      tapRep();
+      tapRep();                                       // the user has counted 2
+
+      await act(async () => {
+        poseState.poseData = { rep_count: 9, logOnly: false, corrections: [], form_correct: true };
+        clockOffset = 6100;
+        vi.advanceTimersByTime(1000);
+      });
+
+      fireEvent.click(screen.getByText('Complete Set ✓'));
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // What reaches the wire is the 2 they tapped, not the 9 the camera claimed.
+    await waitFor(() => expect(queued()).toBeDefined(), { timeout: 3000 });
+    const [set] = queued().sets;
+    expect(set.reps).toBe(2);
+    expect(set.mode).toBe('log_only');
+  });
+
+  it('BACKGROUNDING THE TAB does not cost the set its grading (round 4 F1)', async () => {
+    // The third route to the same failure. Mobile browsers MUTE the video track
+    // when the page is backgrounded, and `useCamera` turns a mute into an error —
+    // so glancing at a notification raised a camera error, the sticky stamp made
+    // it permanent, and the set came back hand-counted with its form score
+    // discarded, on a camera that was fine before and after. Round 2's F2 added
+    // the hidden guard to the stall poll for exactly this action; the error path
+    // was written later and skipped it.
+    const hide = (v) => {
+      Object.defineProperty(document, 'hidden', { value: v, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+    try {
+      poseState = {
+        analysisAvailable: true,
+        poseData: { rep_count: 1, logOnly: false, corrections: [], form_correct: true },
+        emitSummary: () => engineSummary(1, { reps: 1 }),
+      };
+      // Target 5, NOT 1. At 1 the engine's own rep completes the set on the
+      // first render and the workout is over before the test does anything —
+      // which is how the first version of this test passed with the fix removed.
+      startWorkout([exercise({ name: 'Squats', sets: 1, reps: 5 })]);
+      await waitFor(() => expect(screen.getAllByText('1').length).toBeGreaterThan(0));
+
+      // Hidden → the track mutes → an error arrives → and it clears on return.
+      await act(async () => { hide(true); setCameraError('Camera stopped sending video'); });
+      await act(async () => { setCameraError(null); hide(false); });
+
+      // End the set by hand so the workout finishes and the payload is written.
+      fireEvent.click(screen.getByText('Complete Set ✓'));
+
+      await waitFor(() => expect(queued()).toBeDefined(), { timeout: 3000 });
+      const [set] = queued().sets;
+      expect(set.mode).toBeUndefined();      // still the ENGINE's set
+      expect(set.avgFormScore).not.toBeNull();
+    } finally {
+      hide(false);
+    }
+  });
+
+  it('a redo AFTER the camera recovers gets grading back (round 4 F2)', async () => {
+    // Round 2's F4 carried a live stall across a redo, justified by "the camera
+    // has not come back just because the set was restarted" — but the condition
+    // never checked whether it HAD. A user who redid a set once the camera was
+    // working again was locked out of grading for the new set too: live preview,
+    // badge still reading "Camera not counting", set filed unscored.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval'] });
+    try {
+      poseState = { analysisAvailable: true, poseData: null, emitSummary: null };
+      startWorkout([exercise({ name: 'Squats', sets: 1, reps: 9 })]);
+
+      clockOffset = 6000;
+      await act(async () => { vi.advanceTimersByTime(1000); });
+      expect(screen.getByText('+1 Rep')).toBeTruthy();      // stalled
+
+      // Frames resume: the camera is demonstrably alive again.
+      await act(async () => {
+        poseState.poseData = { rep_count: 0, logOnly: false, corrections: [], form_correct: true };
+        clockOffset = 6200;
+        vi.advanceTimersByTime(1000);
+      });
+
+      fireEvent.click(screen.getByTitle('Reset reps for this set'));
+      await waitFor(() => expect(screen.queryByText('+1 Rep')).toBeNull());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('A CAMERA THAT IS WORKING is never interrupted by the stall timer', async () => {
+    // The positive control for the gap check, and it earns its keep: two
+    // mutations survived without it — never refreshing the heartbeat (so every
+    // camera set stalls after five seconds) and ignoring the gap entirely (so
+    // the button appears at once). Both would take the camera away from someone
+    // whose camera is fine, which is the failure the whole card is judged on.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval'] });
+    try {
+      poseState = {
+        analysisAvailable: true,
+        poseData: { rep_count: 0, logOnly: false, corrections: [], form_correct: true },
+        emitSummary: null,
+      };
+      startWorkout([exercise({ name: 'Squats', reps: 9 })]);
+
+      // Six seconds pass, but a fresh frame lands every second — a healthy
+      // camera. Total elapsed is well past the threshold; the GAP never is.
+      for (let i = 1; i <= 6; i += 1) {
+        await act(async () => {
+          clockOffset = i * 1000;
+          poseState.poseData = { rep_count: 0, logOnly: false, corrections: [], form_correct: true };
+          vi.advanceTimersByTime(1000);
+        });
+      }
+      expect(screen.queryByText('+1 Rep')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('SWITCHING TABS is not mistaken for a dead camera (round 2 F2)', async () => {
+    // The frame loop stops itself while the page is hidden and the browser
+    // pauses rAF anyway — but the stall poll reads the wall clock, which does
+    // not care. Six seconds in another app therefore looked exactly like an
+    // unplugged webcam, and because the handover is sticky by ruling, the user
+    // came back to a live camera preview, a "Camera not counting" badge that
+    // never cleared, and that set filed with no form score.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval'] });
+    const hide = (v) => {
+      Object.defineProperty(document, 'hidden', { value: v, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+    try {
+      poseState = {
+        analysisAvailable: true,
+        poseData: { rep_count: 0, logOnly: false, corrections: [], form_correct: true },
+        emitSummary: null,
+      };
+      startWorkout([exercise({ name: 'Squats', reps: 9 })]);
+      await waitFor(() => expect(screen.queryByText('+1 Rep')).toBeNull());
+
+      await act(async () => { hide(true); clockOffset = 6000; vi.advanceTimersByTime(6000); });
+      await act(async () => { hide(false); vi.advanceTimersByTime(1000); });
+
+      expect(screen.queryByText('+1 Rep')).toBeNull();
+    } finally {
+      hide(false);
+      vi.useRealTimers();
+    }
+  });
+
+  it('a redo during a stall keeps the rep button (round 2 F4)', async () => {
+    // Re-keying the set cleared `stalledSetKey`, so the user who pressed redo
+    // BECAUSE the camera had stopped counting lost the button for another five
+    // seconds — with the camera still dead. The camera has not recovered just
+    // because the set was restarted.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval'] });
+    try {
+      poseState = { analysisAvailable: true, poseData: null, emitSummary: null };
+      startWorkout([exercise({ name: 'Squats', reps: 9 })]);
+
+      clockOffset = 6000;
+      await act(async () => { vi.advanceTimersByTime(1000); });
+      expect(screen.getByText('+1 Rep')).toBeTruthy();
+
+      fireEvent.click(screen.getByTitle('Reset reps for this set'));
+      expect(screen.getByText('+1 Rep')).toBeTruthy();   // still there, same instant
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a PAUSED workout is not mistaken for a dead camera', async () => {
+    // Frames legitimately stop while paused — the hook stops feeding the engine.
+    // Without the pause guard the wait keeps running, and because the handover is
+    // sticky the button would still be there after resuming: the user pauses to
+    // take a breath and comes back to a screen that has given up on their camera.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval'] });
+    try {
+      poseState = {
+        analysisAvailable: true,
+        poseData: { rep_count: 0, logOnly: false, corrections: [], form_correct: true },
+        emitSummary: null,
+      };
+      startWorkout([exercise({ name: 'Squats', reps: 9 })]);
+
+      fireEvent.click(screen.getByText('Pause'));
+      await act(async () => { clockOffset = 30000; vi.advanceTimersByTime(5000); });
+      fireEvent.click(screen.getByText('Resume'));
+
+      await act(async () => { vi.advanceTimersByTime(1000); });
+      expect(screen.queryByText('+1 Rep')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("THE F2 END TO END: a stalled set the user tapped out reaches the API as THEIR count", async () => {
+    // The whole finding in one path. Camera slow → handover at five seconds →
+    // the user taps 3 → the camera wakes and files a summary for the SAME set →
+    // what reaches the wire must be the 3 they watched, log_only, no form score.
+    // Before the fix this stored the engine's 2 and a grade nobody earned.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval'] });
+    try {
+      poseState = {
+        analysisAvailable: true,
+        poseData: null,
+        emitSummary: () => engineSummary(1, { reps: 2 }),
+      };
+      startWorkout([exercise({ name: 'Squats', reps: 3 })]);
+
+      clockOffset = 6000;
+      await act(async () => { vi.advanceTimersByTime(1000); });
+      tapRep();
+      tapRep();
+      tapRep();                       // hits the target → set ends → workout ends
+    } finally {
+      vi.useRealTimers();
+    }
+
+    await waitFor(() => expect(queued()).toBeDefined(), { timeout: 3000 });
+    const sets = queued().sets;
+    expect(sets).toHaveLength(1);     // never both entries for one ordinal
+    expect(sets[0].reps).toBe(3);
+    expect(sets[0].mode).toBe('log_only');
+    expect(sets[0].avgFormScore).toBeNull();
+  });
+
+  it('a set handed to the user STAYS theirs when the camera comes back mid-set', async () => {
+    // Kd's ruling 2026-08-03: the camera does not take a set back mid-set. Both
+    // halves are asserted — the button must not vanish under the user's thumb,
+    // and the count that reaches the wire must be the one they watched.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval'] });
+    try {
+      poseState = {
+        analysisAvailable: true,
+        poseData: null,
+        // The camera wakes up late and files a summary for the SAME set.
+        emitSummary: () => engineSummary(1),
+      };
+      startWorkout([exercise({ name: 'Squats', reps: 9 })]);
+
+      clockOffset = 6000;
+      await act(async () => { vi.advanceTimersByTime(1000); });
+      fireEvent.click(screen.getByText('+1 Rep'));
+      fireEvent.click(screen.getByText('+1 Rep'));
+
+      // The camera starts delivering again, part-way through the set.
+      await act(async () => {
+        poseState.poseData = { rep_count: 1, logOnly: false, corrections: [], form_correct: true };
+        clockOffset = 6100;
+        vi.advanceTimersByTime(1000);
+      });
+
+      // Still the user's set: the button is still there and their count stands.
+      expect(screen.getByText('+1 Rep')).toBeTruthy();
+      fireEvent.click(screen.getByText('+1 Rep'));
+      expect(screen.getAllByText('3').length).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('mixes a graded set and a hand-counted set in one workout, one entry each', async () => {
+    // The shape that turned F-3 from invisible into damaging: before the write
+    // path, a squat-only workout simply synced nothing and the legacy save held
+    // it whole. Once hand-logged exercises sync, a mixed workout could go up
+    // with the squat sets missing — a real day, quietly short.
+    poseState = {
+      analysisAvailable: true,
+      poseData: { rep_count: 1, logOnly: false, corrections: [], form_correct: true },
+      // The engine grades set 1 and then goes dark — the camera is knocked, the
+      // tab is backgrounded mid-workout. Set 2 is the user's own count.
+      emitSummary: (setIndex) => (setIndex === 1 ? engineSummary(1) : null),
+    };
+    startWorkout([exercise({ name: 'Squats', sets: 2, reps: 1 })]);
+
+    await waitFor(() => expect(screen.getAllByText('1').length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByText('Complete Set ✓'));   // set 1, graded
+
+    await waitFor(() => expect(screen.getByText('Skip Rest →')).toBeTruthy());
+    // The camera is knocked out between sets. `poseData` is NOT reset to null
+    // here any more: nothing in the real system ever puts it back to null
+    // mid-workout, so a test that did was proving reconcileSets under a state
+    // the app cannot produce (T3 F3). The error alone is the producible signal —
+    // and it is producible only since the track-ended listener was added, which
+    // is the other half of the same fix.
+    act(() => setCameraError('Camera disconnected'));
+    fireEvent.click(screen.getByText('Skip Rest →'));
+
+    await waitFor(() => expect(screen.getByText('+1 Rep')).toBeTruthy());
+    tapRep();                            // set 2, counted by hand
+
+    await waitFor(() => expect(queued()).toBeDefined());
+    const { sets } = queued();
+    expect(sets.map((s) => s.setIndex)).toEqual([1, 2]);
+    expect(sets[0].avgFormScore).toBe(88);      // graded
+    expect(sets[1].mode).toBe('log_only');      // hand-counted
+    expect(sets[1].reps).toBe(1);
   });
 
   it('a failure while recording a set cannot break the workout', async () => {
@@ -410,5 +989,61 @@ describe('a hand-counted workout reaches the new API', () => {
 
     await waitFor(() => expect(completeSession).toHaveBeenCalledTimes(1));
     expect(peekQueue()).toEqual([]); // nothing recorded, nothing invented
+  });
+});
+
+// ── The user's CHOICE to count their own reps (Kd ruling, 2026-08-03) ────────
+describe('counting your own reps is a choice, not only a fallback', () => {
+  it('counts by hand on an exercise the engine COULD have graded', async () => {
+    // The point of the ruling. Squats have a definition and the engine would
+    // normally own them; the user said they would rather count. So: no engine
+    // session, the button is there, and the set is filed as honestly unscored.
+    //
+    // The pose stream below is ADVERSARIAL and deliberately so — a live
+    // rep_count of 7 and a summary generator, i.e. an engine behaving as if the
+    // user had never chosen. The page must ignore all of it on its own account
+    // rather than by trusting the hook to have switched itself off. It did not,
+    // when this test was first written: the rep effect read the stream, hit the
+    // target instantly and ended sets the user had not finished.
+    poseState = {
+      analysisAvailable: true,               // a definition exists...
+      poseData: { rep_count: 7, logOnly: false, corrections: [], form_correct: true },
+      emitSummary: (setIndex) => engineSummary(setIndex),  // ...and would file
+    };
+    startWorkout([exercise({ name: 'Squats', reps: 2 })], { mode: 'manual' });
+
+    expect(analysisEnabledSeen).toBe(false); // the engine was never switched on
+    tapRep();
+    tapRep();
+
+    await waitFor(() => expect(queued()).toBeDefined());
+    const { sets } = queued();
+    expect(sets).toHaveLength(1);
+    expect(sets[0].reps).toBe(2);            // the user's 2, not the engine's 7 or 9
+    expect(sets[0].mode).toBe('log_only');
+    expect(sets[0].avgFormScore).toBeNull();
+  });
+
+  it('never asks for the camera when the user said they did not want one', async () => {
+    startWorkout([exercise({ reps: 1 })], { mode: 'manual', cameraDeviceId: 'cam-1' });
+    tapRep();
+    await waitFor(() => expect(completeSession).toHaveBeenCalled());
+    expect(startCamera).not.toHaveBeenCalled();
+  });
+
+  it('still uses the camera when that is what was chosen', async () => {
+    // The negative control. Without it, "never asks for the camera" would pass
+    // just as well if the page had stopped asking altogether.
+    startWorkout([exercise({ name: 'Squats', reps: 1 })], { mode: 'camera' });
+    await waitFor(() => expect(startCamera).toHaveBeenCalled());
+    expect(analysisEnabledSeen).toBe(true);
+  });
+
+  it('treats a session saved before the choice existed as a camera workout', async () => {
+    // Backward compatibility with an `active_session` already in localStorage:
+    // no `mode` key means the camera, which is what every workout did before.
+    startWorkout([exercise({ name: 'Squats', reps: 1 })]);
+    await waitFor(() => expect(startCamera).toHaveBeenCalled());
+    expect(analysisEnabledSeen).toBe(true);
   });
 });

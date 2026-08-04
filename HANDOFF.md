@@ -1,6 +1,229 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: COUNTING YOUR OWN REPS IS A CHOICE — **DONE. SMOKE PASSED 2026-08-04,
+      DB-VERIFIED, COMMITTED.** Steps 1–5 and 7 pass (7 had never run: the
+      ungraded-then-graded score loss did NOT recur — squat scored 77/91 beside
+      hand-tapped push-ups in one workout). Steps 6 and 8 SKIPPED by Kd's
+      RULING (DECISIONS :4081) — the mid-set handover code and all its tests
+      STAY; only the live-browser drill was waived. OWED's two smoke-held
+      lines are ticked. NOTE: a correction to the block below — it said
+      "committed"; the card's 18 files were in fact committed only WITH the
+      smoke records, 2026-08-04.
+
+NEXT
+  1. The workout CALENDAR (branch `workout-calendar-parked`).
+  2. If a camera-death set-loss bug ever surfaces live, its card starts by
+     running smoke 6/8 from `RUNBOOK/smoke-count-it-yourself.md`.
+
+KNOWN FALSE ALARM (do not re-investigate): identical summary-screen numbers
+  (35 min / 280 kcal / 88%, "15m 0s" for a seconds-long workout) are the mock
+  rig's canned SUMMARY_FULL payload — the summary still reads the OLD backend
+  (existing OWED line for its new-API home).
+
+VERIFY:
+        cd apps/web && corepack pnpm exec vitest run     # 360/360
+SPEC GAPs: none.
+```
+
+
+```
+TASK: COUNTING YOUR OWN REPS IS A CHOICE — **FOUR T3 ROUNDS DONE, ELEVEN
+      BLOCKING DEFECTS FIXED. COMMITTED, NOT DONE.** The card ticks only when
+      Kd's smoke passes. **NO ROUND 5** — Kd's call, 2026-08-04, and it is the
+      right one: see below.
+
+STATE
+  · web **360/360**, 21 files. Mutation harness: **54 mutants / 5 files**,
+    0 alive, 0 unapplied, 0 inconclusive, restored byte-for-byte, baseline
+    re-checked GREEN.
+  · Rounds recorded at DECISIONS :3819 (r1 + Kd's ruling), :3917 (r2), :3987
+    (r3), :4023 (r4). Read :4023 before trusting ANY figure in this block.
+  · **The smoke result is VOID and every step is unrun** — the earlier "steps
+    1–5 pass" was measured on code that rounds 2–4 have since changed, and round
+    2's F1 means that run should have failed. Eight steps now; 7 and 8 were added
+    after round 3 and have NEVER executed.
+
+WHY THERE IS NO ROUND 5, AND WHY THAT IS NOT GIVING UP
+  Kd stopped the loop, over the chat's own proposal to rewrite first. The four
+  rounds were not finding four bugs — they kept finding ONE bug wearing new
+  clothes: the backgrounded-camera failure was found and "fixed" in rounds 2, 3
+  AND 4, by three different routes. The chat proposed a state-machine rewrite on
+  the spot; Kd judged that a rewrite at the end of an exhausted card produces
+  rounds five, six and seven, and that the exit is a real smoke run, not more new
+  code. The rewrite is OWED as its own card, on committed and smoke-passed code.
+
+READ THIS IF YOU TOUCH THIS AREA AGAIN
+  **`countItYourself` is an if-ladder and CLAUDE.md R2.4 forbids it.** Four terms
+  ORed together, a sticky key written from two effects, `document.hidden` guards
+  in two places, a redo special case. Every round found a new COMBINATION, not a
+  new mistake. Do not add a fifth term — build the table (its OWED line has the
+  shape).
+
+  **A mutation figure covers the presence of lines, not their conditions.**
+  "50 mutants, 0 alive" was true in three consecutive rounds while blocking
+  defects were live, because no FIXTURE could reach the states they lived in.
+  Three separate fixtures were kinder than production: the pose mock answered
+  synchronously, the camera mock's error could never change mid-set, and every
+  test used one exercise. Each was found only after it had hidden a defect.
+
+  **A command that prints something is not the command that answers the
+  question.** `npx playwright --version` printed 1.62.1 from a global cache; the
+  package is not installed and not a dependency, and the chat had already told Kd
+  the browser run was starting. Same shape as reading an empty DB query moments
+  after a workout — the queue flushes at next app load, and 35 minutes went into
+  a confident, wrong "this is a real bug".
+
+  **Never run the mutation harness while a smoke is in progress**, and never
+  commit while it runs — it rewrites five source files dozens of times under the
+  live dev server.
+
+NEXT
+  1. **Kd runs `RUNBOOK/smoke-count-it-yourself.md`, all 8 steps.** Step 7 (two
+     exercises: press-ups THEN squats) and step 8 (camera cut and restore) are
+     the ones that catch what four rounds of review kept missing.
+  2. Fix ONLY what the smoke fails. Nothing else.
+  3. Then the workout CALENDAR (branch `workout-calendar-parked`).
+
+VERIFY:
+        cd apps/web && corepack pnpm exec vitest run     # 360/360
+        node apps/web/tools/mutate-write-path.mjs        # 54/54 RED, exit 0
+SPEC GAPs: none.
+```
+
+
+```
+TASK: COUNTING YOUR OWN REPS IS A CHOICE — **T3 ROUND 1 FIXED. Round 2 is the
+      cap** (:2866). Smoke steps 1–5 PASSED and are confirmed in the DATABASE.
+      Kd made a RULING mid-round that replaced the fix the chat had proposed
+      (DECISIONS :3819).
+
+WHAT LANDED THIS ROUND
+  · **F1 (🔴): a camera that DIED mid-set never offered hand counting.** The
+    stall test asked `poseData == null` — true ONLY before a set's first frame,
+    since null is written once at set start and `feed()` never returns null. And
+    `useCamera` had no `ended`/`mute` listener, so an unplugged webcam raised no
+    error either. Smoke step 6 was unreachable by the route it described. Now:
+    each frame stamps a heartbeat, a 1 s poll compares the GAP against
+    `ENGINE_STALL_MS`, and the camera's track reports its own death.
+  · **F2 (🔴): the engine could overwrite a hand count with a smaller one, or 0.**
+    `endSet()` returns a summary after ONE fed frame. Camera slow → handover at
+    5 s → user taps 7 → camera wakes and manages 2 → stored as 2, with a form
+    score. **Kd RULED the mode does not flip mid-set, either way**, which closed
+    it more cleanly than the chat's "bigger count wins" (dropped: it makes the
+    stored number depend on arithmetic the user cannot see).
+  · F3–F6 fixed: two tests that fed unproducible states; both pose/camera hooks
+    now have direct tests AND are mutation targets; the harness's "could not
+    tell" verdicts now FAIL instead of passing; a test whose name promised an
+    assertion its body never made now makes it.
+  · F8/F9 reported not fixed (R1.1), with OWED lines.
+  · web **345/345** (was 331). **39 mutants / 5 files, ALL RED**, 0 alive,
+    0 unapplied, 0 inconclusive, restored byte-for-byte, baseline re-checked
+    GREEN.
+
+READ THIS IF YOU TOUCH THIS AREA AGAIN
+  **A DB query taken moments after a workout is NOT a test of whether it saved.**
+  The queue flushes at the next app load. A camera workout took TWELVE MINUTES to
+  appear and landed the instant Kd hard-reloaded — and 35 minutes went into a
+  confident, wrong "this is a real bug" built on three empty queries. Reload
+  first, then query, then conclude.
+
+  **Never run the mutation harness while a smoke is in progress.** It rewrites the
+  workout screen 39 times under the operator's live dev server, and the browser
+  hot-reloads every sabotage. Any workout done in that window tests broken code.
+
+  **The first fix drafted for F2 would have stripped the form score off EVERY
+  camera set.** A hand record's `reps` is WHAT THE SCREEN SHOWED, and in camera
+  mode that is the engine's own count — the manual button continues from the
+  displayed number rather than restarting at 1. So "any hand count wins" or "the
+  bigger count wins" silently reclassifies every graded set as ungraded.
+  Ownership is now STORED (`handOwned`) at the moment the hand-counting UI goes
+  up, never inferred from the reps, and a test pins the ordinary camera set.
+
+  **A test can assert the right thing and still be unable to fail.** The first
+  stale-`analysisAvailable` test rendered straight into `analysisEnabled: false`,
+  where the internal state is already false — so deleting the guard changed
+  nothing and the mutant lived. It renders TRUE first now. The mutation harness
+  is what found it; the assertion looked correct to read.
+
+NEXT
+  1. Fresh-chat T3 **round 2 — THE CAP**. Prompt ready at
+     `t3-count-yourself-PROMPT.md`, diff at `t3-count-yourself-web.diff`.
+  2. Smoke step 6 must be RE-RUN once round 2 closes: its old expectation was
+     unreachable, so its earlier "pass" proved nothing. Steps 1–5 stand.
+  3. Then the workout CALENDAR (branch `workout-calendar-parked`) — read its
+     OWED line first.
+
+VERIFY:
+        cd apps/web && corepack pnpm exec vitest run        # 345/345
+        node apps/web/tools/mutate-write-path.mjs           # 39/39 RED, exit 0
+SPEC GAPs: none.
+```
+
+
+```
+TASK: COUNTING YOUR OWN REPS IS A CHOICE — code complete, **SMOKE NOT RUN**, so
+      the card is NOT done and the OWED line is NOT ticked
+      (DECISIONS :3720; Kd's ruling, same day).
+
+WHAT LANDED
+  · Pre-workout offers "Use the camera" / "I'll count my own reps". Choosing the
+    second starts no camera, downloads no pose model, drops the whole framing
+    checklist, and shows `+1 Rep` on ALL 58 exercises — including the three the
+    engine could grade. The choice rides in `active_session.mode`; absent = camera.
+  · **F-3 is fixed** (its OWED line is code-complete, tick held for the smoke).
+    The page stopped asking `analysisAvailable` at set end and now records the
+    user's count for EVERY set, with `reconcileSets` settling ownership once at
+    workout end: engine summary wins, else the user's count, never both.
+  · web **331/331**. **26 mutants / 3 files, ALL RED**, 0 alive, 0 unapplied.
+    Lint on the six pre-existing files: identical rule multiset to HEAD.
+    `vite build` green; shared/engine/api typecheck clean when run directly.
+
+READ THIS IF YOU TOUCH THIS AREA AGAIN
+  **Who owns a set CANNOT be decided at set end.** The engine's summary is
+  emitted from the pose hook's per-set effect CLEANUP, which React runs after
+  the render that ended the set — strictly after the page's synchronous capture.
+  Any fix shaped like "check whether the engine filed this one, then decide" is
+  asking a question that has no answer yet. That is why the reconcile is a
+  separate step at workout end and not a better guard.
+
+  **The suite asserted the defect as correct.** A test named "files nothing
+  itself when the engine is analysing the set" rendered a definition-exists /
+  engine-filed-nothing state, expected an EMPTY sync queue, and called it
+  "nothing to send". It was a lost set, described as intended behaviour. When a
+  fix has to delete a test, read what the test was actually claiming first.
+
+  **A mutation harness can be disarmed by an editing accident.** A `sed -i`
+  rename flipped `ActiveWorkout.jsx` from CRLF to LF; the harness forced CRLF
+  anchors and NINE mutants silently stopped applying, including every one
+  protecting the recorded 0-rep trap. The table just got shorter. Anchors now
+  match either ending and an unapplied mutant EXITS NON-ZERO.
+
+  **A comment recording WHY an assumption holds is what makes it visible when it
+  stops.** `crypto.randomUUID()` was used bare because getUserMedia guaranteed a
+  secure context — true until a workout could start without a camera.
+
+NEXT
+  1. **Kd runs `RUNBOOK/smoke-count-it-yourself.md`** (6 steps; 5 is the control
+     that the camera path still works, and 3/4/6 check the DATABASE, not the
+     screen). Then a fresh-chat T3 under the standing two-round cap (:2866).
+  2. Then the workout CALENDAR: built and parked on `workout-calendar-parked`,
+     merges into `web-repoint` with **zero conflicts** (verified 2026-08-03 by
+     `git merge-tree`), resumes at its smoke + T3. Read its OWED line first.
+
+VERIFY:
+        cd apps/web && corepack pnpm exec vitest run
+        node apps/web/tools/mutate-write-path.mjs     # 26/26 RED, exit 0
+SMOKE:  needs three local servers; the rig boots in `dead` — open
+        `localhost:8000/__state/healthy` FIRST. Steps 1 and 4 need the webcam
+        DISABLED, step 5 needs it back.
+SPEC GAPs: none. But note this card EXTENDS the spec by Kd's ruling —
+        `06-part6-mobile.md:188` only ever described log-only as automatic
+        weak-device degradation, never as something a user picks.
+```
+
+
+```
 TASK: THE WEB WRITE PATH — **DONE** and CLOSED under the two-round cap
       (DECISIONS :3610). A hand-counted workout now reaches the new API. Kd's
       browser SMOKE PASSED and was verified in the DATABASE, not just on screen.

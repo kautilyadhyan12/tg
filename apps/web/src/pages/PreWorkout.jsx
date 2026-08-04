@@ -4,7 +4,7 @@ import { useTransition } from '../context/TransitionContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Camera, Smartphone, CheckCircle, AlertCircle,
-  RefreshCw, Play, ArrowLeft, Sun,
+  RefreshCw, Play, ArrowLeft, Sun, Hand,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useCamera from '../hooks/useCamera';
@@ -27,11 +27,28 @@ const TIPS = [
   { emoji: '🧹', text: 'Clear space behind you'          },
 ];
 
+// How the reps get counted. Chosen here, fixed for the whole workout, and read
+// back by ActiveWorkout out of `active_session`.
+//
+//   'camera' — the on-device engine grades the exercises it has definitions for.
+//   'manual' — the user counts their own reps, on every exercise. No camera is
+//              requested, no pose model is downloaded, nothing is graded.
+//
+// Kd's ruling, 2026-08-03: hand counting is a CHOICE the user always has, not
+// only a fallback for weak phones (which is all Part 6 §3.6 described). The
+// concrete thing it fixes: this screen used to refuse to start ANY workout —
+// including press-ups, which never touch the camera — until a live camera feed
+// arrived, because "Camera is working" ticks itself and cannot be ticked by
+// hand. No camera meant no workout at all.
+const MODE_CAMERA = 'camera';
+const MODE_MANUAL = 'manual';
+
 export default function PreWorkout() {
   const navigate    = useNavigate();
   const { triggerTransition } = useTransition();
   const builderData = getItem('workout_builder', []);
 
+  const [mode,        setMode]        = useState(MODE_CAMERA);
   const [selectedCam, setSelectedCam] = useState(null);
   const [checklist,   setChecklist]   = useState({
     camera: false, lighting: false, distance: false, fullbody: false,
@@ -75,8 +92,34 @@ export default function PreWorkout() {
   const toggleCheck = (key) =>
     setChecklist((p) => ({ ...p, [key]: !p[key] }));
 
-  const allChecked = Object.values(checklist).every(Boolean);
-  const doneCount  = Object.values(checklist).filter(Boolean).length;
+  const manualMode = mode === MODE_MANUAL;
+
+  /** Switching mode also switches the camera off or back on. Leaving a live
+   *  stream running behind a "no camera" choice would be the screen saying one
+   *  thing while the machine does another — and on a laptop the recording light
+   *  stays on, which is how a user learns not to trust the choice. */
+  const handleModeChange = (next) => {
+    if (next === mode) return;
+    setMode(next);
+    if (next === MODE_MANUAL) {
+      stopCamera();
+      setChecklist((p) => ({ ...p, camera: false }));
+      return;
+    }
+    if (selectedCam) {
+      startCamera(selectedCam).then((stream) => {
+        if (stream) setChecklist((p) => ({ ...p, camera: true }));
+      });
+    }
+  };
+
+  // The checklist is entirely about camera framing — lighting, distance, full
+  // body in shot. None of it means anything when nothing is watching, so in
+  // manual mode there is no gate at all rather than a gate of ticks the user
+  // would be lying about.
+  const checkValues = manualMode ? [] : Object.values(checklist);
+  const allChecked  = checkValues.every(Boolean);
+  const doneCount   = checkValues.filter(Boolean).length;
 
   const handleStart = async () => {
     if (!allChecked) {
@@ -93,7 +136,8 @@ export default function PreWorkout() {
         sessionId:      res.data.session.id,
         exercises:      builderData,
         name:           'My Workout',
-        cameraDeviceId: selectedCam,
+        mode,
+        cameraDeviceId: manualMode ? null : selectedCam,
       });
       stopCamera();
       triggerTransition(() => navigate('/workout/active'));
@@ -137,36 +181,101 @@ export default function PreWorkout() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest"
                style={{ color: '#FF8A1F' }}>
-              Camera Setup
+              {manualMode ? 'Workout Setup' : 'Camera Setup'}
             </p>
             <h1 className="text-xl font-bold tracking-tight"
                 style={{ color: 'rgba(255,255,255,0.95)' }}>
               Set up before you train
             </h1>
           </div>
-          <div className="ml-auto flex items-center gap-2">
-            <span className="text-sm font-bold tabular-nums"
-                  style={{ color: '#FF8A1F' }}>
-              {doneCount}/4
-            </span>
-            <div
-              className="w-24 h-1.5 rounded-full overflow-hidden"
-              style={{ background: 'rgba(255,255,255,0.08)' }}
-            >
-              <motion.div
-                animate={{ width: `${(doneCount / 4) * 100}%` }}
-                transition={{ duration: 0.4 }}
-                className="h-full rounded-full"
-                style={{ background: 'linear-gradient(90deg, #FF8A1F, #FFB347)' }}
-              />
+          {!manualMode && (
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-sm font-bold tabular-nums"
+                    style={{ color: '#FF8A1F' }}>
+                {doneCount}/4
+              </span>
+              <div
+                className="w-24 h-1.5 rounded-full overflow-hidden"
+                style={{ background: 'rgba(255,255,255,0.08)' }}
+              >
+                <motion.div
+                  animate={{ width: `${(doneCount / 4) * 100}%` }}
+                  transition={{ duration: 0.4 }}
+                  className="h-full rounded-full"
+                  style={{ background: 'linear-gradient(90deg, #FF8A1F, #FFB347)' }}
+                />
+              </div>
             </div>
+          )}
+        </div>
+
+        {/* How reps get counted — the choice, before anything else on the page */}
+        <div className="px-6 pt-5">
+          <p className="text-xs font-semibold uppercase tracking-wider mb-2"
+             style={{ color: 'rgba(255,255,255,0.30)' }}>
+            How do you want to count your reps?
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {[
+              {
+                key:   MODE_CAMERA,
+                icon:  Camera,
+                title: 'Use the camera',
+                desc:  'Checks your form and counts for you',
+              },
+              {
+                key:   MODE_MANUAL,
+                icon:  Hand,
+                title: "I'll count my own reps",
+                desc:  'No camera. Tap a button for each rep',
+              },
+            ].map(({ key, icon: Icon, title, desc }) => {
+              const active = mode === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => handleModeChange(key)}
+                  className="flex items-center gap-3 p-4 rounded-2xl
+                             transition-all duration-200 text-left"
+                  style={{
+                    background: active ? 'rgba(255,138,31,0.08)' : 'rgba(255,255,255,0.03)',
+                    border:     active ? '1px solid rgba(255,138,31,0.30)' : '1px solid rgba(255,255,255,0.06)',
+                  }}
+                >
+                  <div
+                    className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{
+                      background: active ? 'rgba(255,138,31,0.18)' : 'rgba(255,255,255,0.05)',
+                      border:     active ? '1px solid rgba(255,138,31,0.30)' : '1px solid rgba(255,255,255,0.08)',
+                    }}
+                  >
+                    <Icon className="w-4 h-4"
+                          style={{ color: active ? '#FF8A1F' : 'rgba(255,255,255,0.30)' }} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold"
+                       style={{ color: active ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.60)' }}>
+                      {title}
+                    </p>
+                    <p className="text-2xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      {desc}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
+        <div
+          className={`flex-1 grid grid-cols-1 gap-6 p-6 ${manualMode ? 'max-w-2xl' : 'lg:grid-cols-2'}`}
+        >
 
-          {/* Left: Camera */}
+          {/* Left: Camera — nothing to set up when nothing is watching */}
+          {!manualMode && (
           <div className="space-y-4">
             <div
               className="relative overflow-hidden rounded-3xl"
@@ -325,11 +434,40 @@ export default function PreWorkout() {
               </div>
             </div>
           </div>
+          )}
 
           {/* Right: Checklist */}
           <div className="flex flex-col gap-4">
 
+            {manualMode && (
+              <div
+                className="rounded-2xl p-4"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255,138,31,0.06) 0%, rgba(255,138,31,0.02) 100%)',
+                  border:     '1px solid rgba(255,138,31,0.12)',
+                }}
+              >
+                <div className="flex items-start gap-3">
+                  <Hand className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#FF8A1F' }} />
+                  <div>
+                    <p className="text-sm font-semibold mb-1"
+                       style={{ color: 'rgba(255,255,255,0.90)' }}>
+                      You&apos;re counting your own reps
+                    </p>
+                    <p className="text-xs leading-relaxed"
+                       style={{ color: 'rgba(255,255,255,0.45)' }}>
+                      No camera is used, so there is nothing to set up. Tap the
+                      <span className="font-semibold"> +1 Rep </span>
+                      button once for each rep. Your sets are saved the same way —
+                      you just won&apos;t get a form score.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* DroidCam tip */}
+            {!manualMode && (
             <div
               className="rounded-2xl p-4"
               style={{
@@ -353,8 +491,10 @@ export default function PreWorkout() {
                 </div>
               </div>
             </div>
+            )}
 
             {/* Checklist items */}
+            {!manualMode && (
             <div
               className="rounded-2xl p-4 flex-1"
               style={{
@@ -428,6 +568,7 @@ export default function PreWorkout() {
                 })}
               </div>
             </div>
+            )}
 
             {/* Start button */}
             <motion.button
@@ -458,6 +599,12 @@ export default function PreWorkout() {
                 </>
               )}
             </motion.button>
+
+            {manualMode && (
+              <p className="text-2xs text-center" style={{ color: 'rgba(255,255,255,0.30)' }}>
+                Changed your mind? Pick &ldquo;Use the camera&rdquo; above.
+              </p>
+            )}
           </div>
         </div>
       </div>

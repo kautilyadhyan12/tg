@@ -708,8 +708,32 @@ then; none may be hidden or reduced to close the gap.
       summary reader is done but still reads the OLD payload). Until then the
       dual-write is the correct behaviour, and a chat that proposes deleting it
       as tidy-up has not read this line.
-- [ ] 🔴 **A camera-graded set can still land NOWHERE — and now it can leave a
-      workout with sets MISSING.** Created 2026-08-02 (write-path T3 round 2,
+- [x] 🔴 **A camera-graded set can still land NOWHERE — and now it can leave a
+      workout with sets MISSING.** **CODE COMPLETE 2026-08-03 (DECISIONS :3720);
+      TICKED 2026-08-04 on the smoke**: step 4 passed and is DB-verified
+      (camera refused on squats → hand-counted → `squat`/`log_only`/reps 3,
+      `exercise_id` resolved; runbook table). Step 6, this line's other route,
+      was **SKIPPED BY KD'S RULING** (DECISIONS :4081); the reconcile code it
+      would have exercised stays covered by the unit suite + mutation harness.
+      Original text below. Fixed as part of Kd's ruling that
+      hand counting is a user CHOICE: the page no longer decides who files a set
+      by asking whether a definition exists — it records the user's count for
+      every set and settles ownership once at workout end, when the engine's
+      answer actually exists. **The proposed fix in this entry could not have
+      worked**: it assumed hand-counted reps were available to fall back on, and
+      on a camera-graded exercise the `+1 Rep` button was not rendered at all,
+      so the count was always 0. **This entry's own suite asserted the defect as
+      correct** — a test called "files nothing itself when the engine is
+      analysing the set" expected an empty queue and described it as "nothing to
+      send"; it is replaced by four that assert the opposite.
+      **The mutant that reinstated the old gate (M8) was RETIRED in T3 round 3 —
+      it could not be made to bite.** Corrected here rather than left standing:
+      at capture time the engine has not filed yet, so a "has the engine filed
+      this?" guard never fires, and an `analysisAvailable` guard reads the first
+      render's value through a pinned callback. That impossibility IS this
+      card's central design claim. The behaviour is covered instead by M4, M7
+      (both capture call sites) and M47 (the recording itself, 12 tests red).
+      Created 2026-08-02 (write-path T3 round 2,
       F-3, NOT-VISIBLE, deliberately not fixed inside that card — R1.1).
       `analysisAvailable` is true whenever a DEFINITION exists
       (`sessionController.js:59-71`), independent of the camera. But `endSet()`
@@ -730,6 +754,158 @@ then; none may be hidden or reduced to close the gap.
       no summary from either side gets filed — or refuse the sync the way an
       unresolved exercise does. Both are more than a one-line fix, which is why
       this is a line and not a patch.
+- [x] 🔴 **RE-RUN SMOKE STEPS 5 AND 6 — DISCHARGED 2026-08-04.** Step 5
+      re-ran on the final code and met this line's exact closure condition: a
+      TWO-set camera squat workout, BOTH sets `mode` `engine`, real scores
+      83/83 (started 03:55 UTC 08-04; table in the runbook). Step 6 was
+      **SKIPPED BY KD'S RULING** (DECISIONS :4081) — not run, not owed; the
+      handover code and its unit/mutation coverage stay. Original text below.
+      Reopened 2026-08-03 by T3 round 2. Step 5 (the camera control) DID pass and
+      is recorded below, but **it passed on ROUND 1 CODE**, and round 2's F1
+      showed that code filed the FIRST set of every camera workout as the user's
+      own count with the form score discarded. Re-run against the current code it
+      would have failed. **A passed control cannot be carried across a change to
+      the thing it controls.** Step 6 (camera dies mid-set) is owed for the
+      separate reason that its round-1 expectation was unreachable, so its
+      "pass" proved nothing either.
+      **To close:** one camera-on squat workout of TWO OR MORE sets — set 1 is
+      the whole point — then the step-3 query showing BOTH sets `mode` `engine`
+      with real `avg_form_score`. Then step 6.
+- [x] 🔴 **The camera control step (smoke 5) — passed 2026-08-03 on ROUND 1
+      code; see the reopened line above, which supersedes this for the tick.**
+      Two real camera workouts stored the same day:
+      `squat`/`engine`/3 reps/`avg_form_score` 100/`view` `side` (started
+      07:45:37) and `squat`/`engine`/3 reps/score 67 (started 07:58:05). The
+      camera path grades and stores exactly as before this card.
+      **KEPT UNSTRUCK BECAUSE THE ROUTE TO IT IS THE LESSON.** For 35 minutes
+      this looked like a card-breaking regression, and the chat said so. Three
+      queries (07:19, 07:47, 07:50 UTC) found no engine row, and the chat used
+      that absence to conclude, in order: that steps 5–6 wrote nothing; that the
+      workout was NOT sitting in the browser queue ("ruled out"); and finally,
+      after tracing `buildLogOnlySet` dropping 0-rep sets into `queueWorkoutSync`
+      returning `no-sets` SILENTLY, that a camera workout measuring nothing
+      vanishes without trace — "a real bug, and it's mine".
+      **Every one of those was wrong, and the mechanism is worth knowing.** The
+      07:45 workout was queued correctly and simply had not flushed: it reached
+      the DB at 07:57:21, TWELVE MINUTES after it started, the instant Kd
+      hard-reloaded and `AuthContext` kicked the app-load flush. That is the
+      documented, accepted behaviour (DECISIONS 2026-07-15 — "a liveness delay,
+      never data loss"), and it means **a DB query moments after a workout is not
+      a valid test of whether it was saved.** The runbook told the reader to
+      trust the DB over the screen and never said the DB can lag the screen by
+      minutes; that is a real gap in the runbook, now fixed there.
+      Two further self-inflicted confounds, both avoidable: the chat ran the
+      mutation harness — which rewrites `ActiveWorkout.jsx` 26 times, live, under
+      Kd's running dev server — WHILE Kd was mid-smoke, so an unknown part of his
+      session exercised deliberately sabotaged code; and it read `no-sets`, a
+      real silent path, as the explanation for an absence that had a duller
+      cause. **Do not run the mutation harness while a smoke is in progress.**
+      Smoke 6 (camera dies mid-set) remains screen-only — see its own line.
+- ~~🟡 **Switching between the camera and hand counting MID-WORKOUT, by
+      choice.**~~ **STRUCK 2026-08-03 — Kd RULED IT WILL NOT BE BUILT**, in
+      response to the T3 F2 finding: "if some chooses by hand then they can not
+      change to camera in the middle of exercise same for the other part." The
+      choice is made before the workout and is fixed for its length, both ways.
+      **This is a design rule now, not an absent feature**, and the code enforces
+      it in two places: `engineStalled` is sticky for the set it fired on, and
+      `reconcileSets` rule 1 gives a hand-owned set to the user even when the
+      engine also filed one. The ruling is what CLOSED F2 — the alternative on
+      the table was comparing rep counts, which is a worse rule for the same
+      reason it was tempting: it makes the stored number depend on arithmetic the
+      user cannot see.
+      **NOT struck, and deliberately: the AUTOMATIC handover when the camera
+      DIES.** That is not a switch the user chooses, it is the only alternative
+      to a set they cannot finish, and removing it would restore the exact defect
+      this card exists to kill. Camera → hand on failure: yes. Hand → camera
+      ever: no.
+- [ ] 🟡 **The LOCAL pose model is broken — every camera workout silently
+      downloads it from a CDN instead.** Found 2026-08-03 in Kd's smoke console,
+      NOT caused by this card and not fixed by it (R1.1 — reported, not touched).
+      MediaPipe fails to open the bundled model with `Unable to open zip
+      archive` (`MediaPipeTasksStatus=104`), retries GPU→CPU, fails both, logs
+      `local model unavailable, trying remote CDN`, and only then succeeds:
+      "MediaPipe ready" arrives ~1.4 s later than it should. Consequences:
+      camera workouts need INTERNET even though the whole engine was built to
+      run offline (Part 2 I1 / the P1.10 Done gate's "full workout with the API
+      server off"), and the first-set delay is exactly what the untested
+      5-second stall threshold trades against (its own line above). Likely a
+      corrupt or LFS-pointer model file in the web assets rather than a code
+      fault — check the file's real size first.
+- [ ] 🟡 **Replace the "who is counting this set?" if-ladder with one explicit
+      state machine.** Raised 2026-08-04 after FOUR T3 rounds found ELEVEN
+      blocking defects, and the same one kept returning in a new disguise: the
+      hidden-tab/backgrounded-camera failure was found and "fixed" in rounds 2,
+      3 AND 4, by three different routes (the stall poll, the mute latch, the
+      error stamp). Each fix guarded one path; the next round found the next.
+      **The cause is the shape of the code, and CLAUDE.md R2.4 already forbids
+      it**: `countItYourself` is a four-term boolean OR, fed by a sticky key
+      written from two separate effects, with `document.hidden` guards in two
+      places and a special case for redo — the "ad-hoc if-ladder" the rule names.
+      Nobody can enumerate its states, which is why every round found a new
+      combination rather than a new mistake.
+      **Shape of the replacement:** one pure reducer over three states —
+      `deciding` (the hook has not answered for this exercise) · `camera` · `you`
+      — with an explicit transition table: the hook answers → camera or you; a
+      camera failure or stall → you, locked for the set; hidden/paused/resting →
+      NO transition; a new set → deciding. Then a table test walks every row, and
+      a new situation must be ADDED as a row or the test fails.
+      **DELIBERATELY NOT DONE INSIDE THIS CARD (Kd, 2026-08-04).** The chat
+      proposed doing it immediately; Kd's judgement was that a rewrite at the end
+      of an exhausted four-round card is how you get rounds five, six and seven,
+      and that the exit is his smoke run, not more new code. Correct call —
+      recorded here so the idea is not lost, to be taken as its own small card in
+      a fresh chat, on committed and smoke-passed code.
+- [ ] 🟡 **`captureHandCountedSet` silently ignores render state — any future
+      guard added inside it will not work.** Found 2026-08-03 by T3 round 2's
+      mutation run, indirectly. It is a `useCallback` pinned to `[exercises]`, so
+      anything it reads that is not a ref comes from the FIRST render of the
+      workout. Today it reads only refs, deliberately and correctly. The hazard
+      is the next edit: a reviewer or a chat adding an ordinary-looking condition
+      like `if (analysisAvailable) return;` gets a guard that never fires — on
+      every camera workout that value is `false` at first render, because the
+      pose hook answers one commit later. **This was not theoretical: mutant M8
+      injected exactly that guard and went ALIVE for precisely this reason.**
+      Re-anchoring it onto a ref read did not help either — the second form asked
+      "has the engine filed this ordinal?", which at capture time is always no —
+      so M8 was RETIRED in round 3, with its reasoning kept where it stood in
+      `mutate-write-path.mjs`. Nothing is broken now;
+      what is owed is making it hard to get wrong — either widen the deps, or
+      pass the values the function needs as arguments from its call sites.
+- [ ] 🟡 **The Coach's message id still assumes a secure context — the assumption
+      THIS card deleted.** T3 F8, 2026-08-03. Reported not fixed (R1.1): not this
+      card's file. `coachApi.js` calls `crypto.randomUUID()` bare, under a comment
+      justifying it as "the same requirement the sync path already relies on,
+      ActiveWorkout.jsx". The sync path stopped relying on it the moment a workout
+      could start without ever asking for a camera — `newWorkoutId` now falls back
+      to `getRandomValues`. So on a plain-http origin (a phone opening the dev
+      server by LAN address) sending a coach message throws where a workout now
+      survives. The comment is the dangerous part: it cites a guarantee that no
+      longer exists, so a reader checking it would conclude the call is safe.
+      Fix is the same three-line fallback, or lift `newWorkoutId` into a shared
+      helper both call.
+- [ ] 🟡 **The camera is switched on before the user can say they don't want it.**
+      T3 F9, 2026-08-03. Reported not fixed (R1.1): pre-existing mount behaviour,
+      not something this card introduced. `PreWorkout` calls `getAvailableCameras()`
+      on mount, which calls `getUserMedia` unconditionally, then starts the camera.
+      So a user who always counts their own reps still gets a permission prompt and
+      a lit recording light on every visit, and the new copy that says no camera is
+      used is only true AFTER they have already been asked. The device list needs
+      permission to carry labels, which is why it was written this way — but the
+      list is only needed once the camera path is actually chosen.
+- [ ] ⚪ **The rep-counting choice is not remembered between workouts.** Created
+      2026-08-03. Every workout starts on "Use the camera" and a user who always
+      counts by hand re-picks every time. Deliberately out of scope: per-user
+      preference storage on this branch is `packages/shared` + the profile API,
+      not a localStorage flag, and that is a card not a line of code.
+- [ ] ⚪ **The 5-second camera-stall threshold has never been watched by a
+      human.** Created 2026-08-03. `ENGINE_STALL_MS` in `ActiveWorkout.jsx` is
+      how long a camera-graded set may produce no analysed frame before the
+      screen offers hand counting. **It is not a spec value — there is none**
+      (Part 0 rule 4 applies to spec numbers; this is a UI patience threshold).
+      Chosen so a slow MediaPipe start does not flash the button and a dead
+      camera does not cost a whole set. Never measured on a real slow phone,
+      where model load is exactly the case it is trading against — the mobile
+      camera smoke below is where it would be observed.
 - [ ] 🔴 **Workout history calendar** (WorkoutCalendar → workoutApi.getHistory).
       **BLOCKED — NOT a client repoint. Do not pick this up as a quick win.**
       **BUILT AND PARKED 2026-08-01 (DECISIONS :2912), still unticked.** A chat

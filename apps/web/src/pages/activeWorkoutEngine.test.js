@@ -1,12 +1,14 @@
 import { readFileSync } from "node:fs";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { CATALOG_58, setSummarySchema, slugForLegacyName } from "@app/shared";
 import {
   accumulateSummary,
   averageFormScore,
   buildLogOnlySet,
   createSummaryLog,
-  recordLogOnlySet,
+  newWorkoutId,
+  reconcileSets,
+  recordHandCountedSet,
 } from "./activeWorkoutEngine.js";
 
 const summary = (over = {}) => ({
@@ -78,8 +80,8 @@ describe("averageFormScore", () => {
 
   it("stays null for a workout of hand-counted sets — reps are not a score", () => {
     const log = createSummaryLog();
-    recordLogOnlySet(log, handLogged());
-    expect(log.summaries).toHaveLength(1);
+    recordHandCountedSet(log, handLogged());
+    expect(reconcileSets(log).summaries).toHaveLength(1);
     expect(averageFormScore(log)).toBeNull();
   });
 });
@@ -198,53 +200,209 @@ describe("buildLogOnlySet", () => {
   });
 });
 
-describe("recordLogOnlySet", () => {
-  it("files the set on the log", () => {
+describe("recordHandCountedSet", () => {
+  it("stores the set without deciding whether it reaches the wire", () => {
     const log = createSummaryLog();
-    expect(recordLogOnlySet(log, handLogged()).kind).toBe("set");
-    expect(log.summaries.map((s) => s.setIndex)).toEqual([1]);
+    expect(recordHandCountedSet(log, handLogged()).kind).toBe("recorded");
+    expect(log.handCounted.map((r) => r.setIndex)).toEqual([1]);
+    expect(log.summaries).toEqual([]); // `summaries` is the ENGINE's list only
   });
 
   it("is idempotent per set ordinal — the four set-end paths overlap by design", () => {
     const log = createSummaryLog();
-    recordLogOnlySet(log, handLogged({ reps: 12 }));
-    const second = recordLogOnlySet(log, handLogged({ reps: 99 }));
+    recordHandCountedSet(log, handLogged({ reps: 12 }));
+    const second = recordHandCountedSet(log, handLogged({ reps: 99 }));
     expect(second.kind).toBe("duplicate");
-    expect(log.summaries).toHaveLength(1);
-    expect(log.summaries[0].reps).toBe(12);
+    expect(log.handCounted).toHaveLength(1);
+    expect(log.handCounted[0].reps).toBe(12);
   });
 
-  it("records an unresolved name so the caller can refuse the whole workout", () => {
+  it("guards duplicates for an UNRESOLVABLE exercise too", () => {
+    // The old guard read `summaries`, which an unresolved set never reached, so
+    // the overlapping set-end paths recorded the name once each and the refusal
+    // read "Arnold Shoulder Press, Arnold Shoulder Press" (T3 round 1, F3).
+    // Now the guard reads the list it writes to, so no record can evade it.
     const log = createSummaryLog();
-    recordLogOnlySet(log, handLogged({ exerciseName: "1 Leg Box Squat" }));
-    expect(log.summaries).toEqual([]);
-    expect(log.unresolved).toEqual(["1 Leg Box Squat"]);
+    recordHandCountedSet(log, handLogged({ exerciseName: "Arnold Shoulder Press" }));
+    recordHandCountedSet(log, handLogged({ exerciseName: "Arnold Shoulder Press" }));
+    expect(log.handCounted).toHaveLength(1);
+    expect(reconcileSets(log).unresolved).toEqual(["Arnold Shoulder Press"]);
+  });
+});
+
+describe("reconcileSets — who owns each set", () => {
+  it("sends the hand-counted set when the engine filed nothing for it", () => {
+    // THE F-3 REGRESSION, at the unit level. A definition existing is not the
+    // engine having filed anything: fed zero frames it files nothing, and the
+    // set used to be dropped by both sides.
+    const log = createSummaryLog();
+    recordHandCountedSet(log, handLogged({ setIndex: 1, reps: 5 }));
+    const { summaries, unresolved } = reconcileSets(log);
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0].reps).toBe(5);
+    expect(summaries[0].mode).toBe("log_only");
+    expect(unresolved).toEqual([]);
   });
 
-  it("records an unresolved name ONCE even when the set is captured twice", () => {
-    // The duplicate guard reads `summaries`, which an unresolved set never
-    // reaches — so the overlapping set-end paths recorded the name once each
-    // and the console line repeated it. T3 round 1, F3.
+  it("the ENGINE wins a set both sides hold — never two entries for one ordinal", () => {
+    // Two entries under one setIndex fail the contract's duplicate check and
+    // park the whole workout. The engine's entry carries real measurement.
     const log = createSummaryLog();
-    recordLogOnlySet(log, handLogged({ exerciseName: "Arnold Shoulder Press" }));
-    recordLogOnlySet(log, handLogged({ exerciseName: "Arnold Shoulder Press" }));
-    expect(log.unresolved).toEqual(["Arnold Shoulder Press"]);
+    recordHandCountedSet(log, handLogged({ setIndex: 3, reps: 12 }));
+    accumulateSummary(log, summary({ setIndex: 3, reps: 7 }));
+    const { summaries } = reconcileSets(log);
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0].reps).toBe(7);
+  });
+
+  it("THE USER'S OWN COUNT WINS a set they were counting, even though the engine filed one", () => {
+    // T3 F2. The engine used to win a shared ordinal unconditionally, and
+    // `endSet()` returns a summary after ONE fed frame — reps possibly 0. So:
+    // the camera is slow, the stall hands over at 5 s, the user taps 7, the
+    // camera wakes and manages 2, and the set was stored as 2. The screen said
+    // 7. This card created the path by recording the user's count on every set.
+    const log = createSummaryLog();
+    recordHandCountedSet(log, handLogged({ setIndex: 1, reps: 7, handOwned: true }));
+    accumulateSummary(log, summary({ setIndex: 1, reps: 2, repScores: [88, 91] }));
+    const { summaries } = reconcileSets(log);
+    expect(summaries).toHaveLength(1);          // never two entries for one ordinal
+    expect(summaries[0].reps).toBe(7);
+    // Stored honestly: a set the camera stopped watching part-way cannot claim a
+    // form score for reps nobody graded.
+    expect(summaries[0].mode).toBe("log_only");
+    expect(summaries[0].avgFormScore).toBeNull();
+    expect(summaries[0].repScores).toBeNull();
+  });
+
+  it("an ORDINARY camera set keeps the engine's summary and its form score", () => {
+    // The trap the `handOwned` flag exists to avoid, asserted directly. `reps`
+    // on a hand record is WHAT THE SCREEN SHOWED, and in camera mode that is the
+    // engine's own count — the page keeps one displayed number. So a reconcile
+    // rule shaped like "any hand record wins" or "the bigger count wins" would
+    // silently rewrite every graded set in the workout as log_only and throw its
+    // form score away. handOwned is false here precisely because the user was
+    // never counting, even though the record's reps are non-zero.
+    const log = createSummaryLog();
+    recordHandCountedSet(log, handLogged({ setIndex: 1, reps: 5, handOwned: false }));
+    accumulateSummary(log, summary({ setIndex: 1, reps: 5, repScores: [90, 80] }));
+    const { summaries } = reconcileSets(log);
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0].mode).toBeUndefined();  // the engine's own summary, untouched
+    expect(summaries[0].repScores).toEqual([90, 80]);
+  });
+
+  it("DROPS the rep scores of a set it takes off the engine (round 4 F3)", () => {
+    // The form average is computed from `repScores`, which is filled when a
+    // summary is ACCUMULATED. Rule 1 removes that summary from the payload but
+    // used to leave its grades in the list — so a set stored `log_only` with a
+    // NULL score still contributed its scores to the workout average, and the
+    // summary screen, dashboard and calendar showed a form score for a workout
+    // the new API holds as entirely ungraded. `accumulateSummary` already
+    // rebuilds this list when IT displaces an entry, for the same reason.
+    const log = createSummaryLog();
+    accumulateSummary(log, summary({ setIndex: 1, reps: 2, repScores: [90, 86] }));
+    expect(log.repScores).toEqual([90, 86]);          // accumulated, as before
+
+    recordHandCountedSet(log, handLogged({ setIndex: 1, reps: 7, handOwned: true }));
+    const { summaries, repScores } = reconcileSets(log);
+
+    expect(summaries[0].mode).toBe("log_only");
+    expect(repScores).toEqual([]);                     // nothing graded survives
+    expect(averageFormScore({ repScores })).toBeNull();
+  });
+
+  it("KEEPS the rep scores of sets the engine still owns", () => {
+    // The positive control: emptying the list unconditionally would be just as
+    // wrong, and would silently strip the score off every ordinary workout.
+    const log = createSummaryLog();
+    accumulateSummary(log, summary({ setIndex: 1, reps: 2, repScores: [90, 80] }));
+    accumulateSummary(log, summary({ setIndex: 2, reps: 2, repScores: [70, 60] }));
+    recordHandCountedSet(log, handLogged({ setIndex: 2, reps: 5, handOwned: true }));
+
+    const { repScores } = reconcileSets(log);
+    expect(repScores).toEqual([90, 80]);               // set 1 keeps its grades
+    expect(averageFormScore({ repScores })).toBe(85);
+  });
+
+  it("mixes both sources in one workout, in set order", () => {
+    const log = createSummaryLog();
+    accumulateSummary(log, summary({ setIndex: 2, reps: 7 }));
+    recordHandCountedSet(log, handLogged({ setIndex: 1, reps: 12 }));
+    recordHandCountedSet(log, handLogged({ setIndex: 3, reps: 9 }));
+    const { summaries } = reconcileSets(log);
+    expect(summaries.map((s) => s.setIndex)).toEqual([1, 2, 3]);
+    expect(summaries.map((s) => s.reps)).toEqual([12, 7, 9]);
+  });
+
+  it("names the unresolvable exercise so the caller can refuse the workout", () => {
+    const log = createSummaryLog();
+    recordHandCountedSet(log, handLogged({ exerciseName: "1 Leg Box Squat" }));
+    const { summaries, unresolved } = reconcileSets(log);
+    expect(summaries).toEqual([]);
+    expect(unresolved).toEqual(["1 Leg Box Squat"]);
+  });
+
+  it("does NOT block the sync over an unresolvable set the engine already filed", () => {
+    // The hand-counted record for a graded set is discarded before its name is
+    // ever resolved. Reaching a refusal on a set that is not being sent would
+    // park a workout for an exercise it does not contain.
+    const log = createSummaryLog();
+    recordHandCountedSet(log, handLogged({ setIndex: 1, exerciseName: "1 Leg Box Squat" }));
+    accumulateSummary(log, summary({ setIndex: 1, reps: 7 }));
+    const { summaries, unresolved } = reconcileSets(log);
+    expect(unresolved).toEqual([]);
+    expect(summaries).toHaveLength(1);
   });
 
   it("an empty set leaves the workout syncable — it is not a failure", () => {
     const log = createSummaryLog();
-    recordLogOnlySet(log, handLogged({ reps: 0 }));
-    expect(log.summaries).toEqual([]);
-    expect(log.unresolved).toEqual([]);
+    recordHandCountedSet(log, handLogged({ reps: 0 }));
+    const { summaries, unresolved } = reconcileSets(log);
+    expect(summaries).toEqual([]);
+    expect(unresolved).toEqual([]);
   });
 
-  it("an engine summary WINS a set ordinal a hand-counted set already holds", () => {
-    // Two entries under one setIndex fail the contract's duplicate check and
-    // park the whole workout. The engine's entry carries real measurement.
+  it("does not mutate the log it reads", () => {
+    // The page calls this at workout end, but nothing stops it being called
+    // twice; a reconcile that appended to `summaries` would double every
+    // hand-counted set on the second call.
     const log = createSummaryLog();
-    recordLogOnlySet(log, handLogged({ setIndex: 3 }));
-    accumulateSummary(log, summary({ setIndex: 3, reps: 7 }));
+    accumulateSummary(log, summary({ setIndex: 1 }));
+    recordHandCountedSet(log, handLogged({ setIndex: 2 }));
+    const first = reconcileSets(log);
+    const second = reconcileSets(log);
+    expect(first.summaries).toEqual(second.summaries);
     expect(log.summaries).toHaveLength(1);
-    expect(log.summaries[0].reps).toBe(7);
+  });
+});
+
+describe("newWorkoutId", () => {
+  it("is a v4 UUID", () => {
+    expect(newWorkoutId()).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+  });
+
+  it("works where randomUUID does not — a plain-http origin has no secure context", () => {
+    // The reason this function exists. A hand-counted workout never calls
+    // getUserMedia, so the secure context the old bare `crypto.randomUUID()`
+    // relied on is no longer guaranteed, and starting one would throw on
+    // render. getRandomValues is not secure-context restricted.
+    const real = globalThis.crypto;
+    try {
+      // stubGlobal, not assignment: `crypto` is a getter-only property here, so
+      // a plain assignment throws and the test would be measuring that instead.
+      vi.stubGlobal("crypto", { getRandomValues: (a) => real.getRandomValues(a) });
+      expect(globalThis.crypto.randomUUID).toBeUndefined(); // the stub really took
+      expect(newWorkoutId()).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("gives a different id each time — it is the sync idempotency key", () => {
+    expect(newWorkoutId()).not.toBe(newWorkoutId());
   });
 });

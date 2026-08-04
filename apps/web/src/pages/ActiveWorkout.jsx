@@ -19,7 +19,9 @@ import {
   accumulateSummary,
   averageFormScore,
   createSummaryLog,
-  recordLogOnlySet,
+  newWorkoutId,
+  reconcileSets,
+  recordHandCountedSet,
 } from './activeWorkoutEngine';
 import {
   speakExercise, speakCorrection,
@@ -80,6 +82,17 @@ function playSetEndBeep() {
   setTimeout(() => playBeep(660, 0.12, 0.3), 150);
 }
 
+// How long a camera-graded set may produce NO analysed frame before the screen
+// offers hand counting instead. Not a spec figure — there is none; this is a UI
+// patience threshold, chosen so a slow MediaPipe start does not flash the
+// button, and a camera that will never deliver does not cost a whole set.
+const ENGINE_STALL_MS = 5000;
+
+// How often that gap is checked. Sets the worst-case overshoot: a stall is
+// noticed somewhere between ENGINE_STALL_MS and ENGINE_STALL_MS + this. One
+// second keeps the timer cheap while staying well inside "about five seconds".
+const STALL_POLL_MS = 1000;
+
 export default function ActiveWorkout() {
   const navigate = useNavigate();
   // Read ONCE via lazy initializer. This component re-renders ~30x/second
@@ -89,12 +102,23 @@ export default function ActiveWorkout() {
   // P1.10c sync identity, fixed once per workout: the client-generated
   // workoutId IS the idempotency key (v1 §5.3 / Part 4 §3.5), so it must
   // survive re-renders; startedAt is the wall-clock workout start.
-  // crypto.randomUUID needs a secure context — always true on any reachable
-  // workout path, because getUserMedia (the camera) has the same requirement.
+  //
+  // This used to call crypto.randomUUID() bare, under a comment reasoning that
+  // a secure context was guaranteed because getUserMedia had already run. That
+  // stopped being true on 2026-08-03: a hand-counted workout never asks for a
+  // camera, so on a plain-http origin randomUUID is undefined and starting one
+  // would throw on render. `newWorkoutId` keeps the same id, minus that
+  // assumption.
   const [syncIdentity] = useState(() => ({
-    workoutId: crypto.randomUUID(),
+    workoutId: newWorkoutId(),
     startedAt: new Date().toISOString(),
   }));
+
+  // How this workout counts reps, chosen on the pre-workout screen and fixed
+  // for its whole length. Absent (an `active_session` written before
+  // 2026-08-03, or by any other path) means the camera, which is what every
+  // workout did before the choice existed.
+  const [manualMode] = useState(() => sessionData?.mode === 'manual');
 
   const [exercises]        = useState(sessionData?.exercises || []);
   const [currentIndex,     setCurrentIndex]     = useState(0);
@@ -169,10 +193,6 @@ export default function ActiveWorkout() {
   // early render's value and every hand-logged set would be filed under set 1
   // (a duplicate setIndex, which parks the whole workout at the contract).
   const engineSetKeyRef        = useRef(1);
-  // Whether the engine is analysing the CURRENT set. When it is, the engine
-  // emits that set's summary itself and the capture below must stay out of the
-  // way — two entries for one ordinal fail the contract's duplicate check.
-  const analysisAvailableRef   = useRef(false);
   // Per-set start, in wall-clock ms. Nothing on this page measured a single set
   // before (only whole-session elapsed, movement-gated active seconds, and
   // total rest), and durationMs is required on every set. Wall clock is fine
@@ -224,46 +244,231 @@ export default function ActiveWorkout() {
   }, []);
 
   const {
-    poseData, keypointsData, analysisAvailable,
+    poseData, keypointsData, analysisAvailable, analysisSettled,
     startStreaming, stop,
   } = usePoseDetection({
     exercise: currentExercise?.name?.toLowerCase().replace(/\s+/g, '_') || 'squat',
     setIndex: engineSetKey,
     enabled:  !paused && phase === 'workout',
     onSetComplete: handleSetSummary,
+    // The user chose to count their own reps: no model download, no engine
+    // session, nothing graded, on every exercise.
+    analysisEnabled: !manualMode,
   });
 
   // A new engine session counts from 0 again — every engineSetKey bump site
   // (rest-complete, next-exercise, manual reset) also resets the rep display
   // explicitly, so no reset-in-effect is needed.
 
-  // An EFFECT is right for this one (unlike the refs above): analysisAvailable
-  // is owned by the hook, not by this page, and it changes when a new set's
-  // session starts — never in the same tick as a set ENDING. The value read at
-  // set end therefore describes the set that just ended, which is what the
-  // capture needs.
-  useEffect(() => { analysisAvailableRef.current = analysisAvailable; }, [analysisAvailable]);
+  // ── When can the user count for themselves? ────────────────────────────────
+  // Whenever nothing else is counting. Three ways that happens:
+  //   1. they chose to (manualMode),
+  //   2. this exercise has no definition — 55 of the 58 (Part 6 §3.6),
+  //   3. they chose the camera and it is not delivering.
+  //
+  // (3) is the one that used to strand people. The engine reports itself
+  // "available" the moment a definition COMPILES, which says nothing about
+  // whether a camera ever started, so the manual button stayed hidden and the
+  // rep count sat at 0 with no way to move it — on a screen that looked like it
+  // was working. A camera error is known immediately; a camera that simply
+  // never produces frames (permission dialog left open, MediaPipe still
+  // downloading, a device that claims to exist and does not stream) is only
+  // knowable by waiting, so it is timed. The wait is deliberately short: the
+  // cost of offering the button early is a redundant button, and the cost of
+  // offering it late is a set the user cannot record.
+  // Stored as WHICH SET stalled, not as a bare boolean, so the clearing side is
+  // DERIVED rather than written: a set change or an arriving frame makes the
+  // expression below false on its own. A boolean needed a `setEngineStalled(false)`
+  // straight inside the effect, which the hook lint rules ban and which is one
+  // forgotten reset away from a button that never comes back.
+  const [stalledSetKey, setStalledSetKey] = useState(null);
 
-  /** File the set that is ending as a HAND-COUNTED set, if that is what it was.
+  // EVERY ARRIVING FRAME IS A HEARTBEAT, and the stall is a GAP between beats —
+  // not the absence of a first one. The previous version waited on
+  // `poseData == null`, which is only ever true before a set's first frame:
+  // `setPoseData(null)` is written in exactly one place (the hook's per-set
+  // effect, at set start) and `feed()` never returns null, so once one frame has
+  // landed poseData can never go back. A camera unplugged mid-set therefore
+  // produced no error and no null — the last frame just sat there — and the
+  // hand-counting button never appeared for the rest of that set (T3 F1). The
+  // smoke's step 6 was unreachable by the route it described.
+  // Kept in a ref and polled, rather than an effect keyed on poseData, so this
+  // costs one timer instead of arming and clearing one ~15 times a second.
+  // Initialised to 0, not to `Date.now()`: reading a clock during render is the
+  // thing this file's own comment (see `setRepsRef`) refuses to do. The value is
+  // written before it is ever read — the effect below stamps it as it arms.
+  const lastFrameAtRef = useRef(0);
+  useEffect(() => {
+    if (poseData != null) lastFrameAtRef.current = Date.now();
+  }, [poseData]);
+
+  // A HIDDEN TAB IS NOT A DEAD CAMERA (round 2 F2). The frame loop stops itself
+  // on `document.hidden`, and the browser pauses rAF regardless — but this poll
+  // is an interval reading the wall clock, which keeps running while hidden. So
+  // switching apps for six seconds looked exactly like an unplugged webcam:
+  // the user came back to a live preview, a "Camera not counting" badge that
+  // never cleared (the handover is sticky by ruling), and that set filed with no
+  // form score. Taking the camera off someone whose camera is fine is the
+  // failure mode this whole card is judged on.
+  //
+  // HELD IN STATE, not read from `document` at the point of use — round 4 F1,
+  // second half. Guarding only the sticky stamp was not enough: `cameraError` is
+  // ALSO a live term in `countItYourself`, so while the page was hidden with a
+  // muted track the screen still counted as handed over, and the ownership
+  // effect recorded the set as the user's even though no stamp was written. A
+  // plain `document.hidden` read cannot fix that, because it does not re-render
+  // when visibility changes — the value has to be state.
+  const [pageHidden, setPageHidden] = useState(false);
+  useEffect(() => {
+    const onVisible = () => {
+      setPageHidden(document.hidden);
+      if (!document.hidden) lastFrameAtRef.current = Date.now();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
+  useEffect(() => {
+    // Not while the user is counting anyway, and not while PAUSED or RESTING —
+    // frames legitimately stop then (the hook's feed is gated on `enabled`), and
+    // a pause longer than the threshold would otherwise fake a stall.
+    //
+    // `analysisAvailable` is deliberately NOT a condition. It is false during the
+    // window before the hook answers, and gating on it there would mean a hook
+    // that never answers at all — a crash inside MediaPipe's import, a device
+    // that hangs — leaves the user with no timer and therefore no way ever to
+    // record a rep. The timer is the floor under that window.
+    if (manualMode || paused || phase !== 'workout') return undefined;
+    // Restart the wait whenever counting resumes — a new set, an unpause, the
+    // end of a rest. Folding this in here is what keeps the reset from being a
+    // separate effect that a later edit can forget.
+    lastFrameAtRef.current = Date.now();
+    const id = setInterval(() => {
+      if (document.hidden) return;  // the handler above re-stamps on return
+      if (Date.now() - lastFrameAtRef.current >= ENGINE_STALL_MS) {
+        setStalledSetKey(engineSetKey);
+      }
+    }, STALL_POLL_MS);
+    return () => clearInterval(id);
+  }, [manualMode, paused, phase, engineSetKey]);
+
+  // A CAMERA ERROR IS STICKY FOR THE SET TOO, and it is folded into the SAME
+  // key rather than kept as a second live term — round 3 F2. `cameraError != null`
+  // used to sit directly in `countItYourself`, which was safe only while an error
+  // could never clear. Round 2's F3 fix added the `unmute` listener that clears
+  // it, and the two halves then disagreed: the rep button vanished mid-set the
+  // moment the camera recovered — the camera taking a set back, which Kd's ruling
+  // forbids — while `handOwnedSetsRef`, which is write-once, still filed the set
+  // as the user's own count with no form score. Mobile browsers mute the track on
+  // backgrounding, so this was the same user action round 2's F2 was about,
+  // arriving down the other path. One key, one stickiness rule, nothing to
+  // disagree with.
+  //
+  // AND NOT WHILE THE PAGE IS HIDDEN — round 4 F1. Mobile browsers MUTE the
+  // video track when the page is backgrounded, and `useCamera` turns a mute into
+  // a `cameraError`. So glancing at a notification produced an error, this
+  // effect stamped it permanently, and the set came back hand-counted with its
+  // form score discarded — on a camera that was fine before and after. Round 2's
+  // F2 added exactly this guard to the stall poll for exactly this user action;
+  // the error path was added later and skipped it. Same failure, third route.
+  // ONE expression for "the camera has failed", used by both the live term and
+  // the sticky stamp. Two separate reads is what let them disagree.
+  const cameraDown = cameraError != null && !pageHidden;
+  useEffect(() => {
+    if (cameraDown) setStalledSetKey(engineSetKey);
+  }, [cameraDown, engineSetKey]);
+
+  // STICKY FOR THE REST OF THE SET — Kd's ruling 2026-08-03: once a set has been
+  // handed to the user to count, the camera does not take it back mid-set. The
+  // `&& poseData == null` that used to be here is what let the camera reclaim
+  // the display the moment one late frame arrived, which is the same event that
+  // let it reclaim the SET (see reconcileSets rule 1). Clearing is still
+  // derived, not written: a new set changes engineSetKey and the match lapses.
+  const engineStalled = stalledSetKey === engineSetKey;
+
+  // `analysisSettled &&`, not a bare `!analysisAvailable` — round 2 F1. The hook
+  // reports "nothing is analysing" on the first render of EVERY camera workout,
+  // because its answer arrives from an effect one commit later. Reading that
+  // window as "this exercise has no definition" made set 1 hand-owned before the
+  // camera had said a word, and ownership is deliberately never taken back — so
+  // every camera workout's first set was filed as the user's own count with its
+  // form score discarded. Sets 2..N were correct, which is what made it invisible.
+  // The stall timer below is what covers the case where the answer never comes.
+  // `cameraError != null` stays as a LIVE term, and the effect above is what
+  // makes it STICKY — the two together, not one instead of the other. The effect
+  // alone lands a render late, and in that window the engine is still driving:
+  // a set whose target was one more rep would complete itself from the pose
+  // stream before the page noticed the camera had failed. Live term = no window;
+  // sticky key = the camera cannot take the set back when the error clears.
+  const countItYourself =
+    manualMode || (analysisSettled && !analysisAvailable) || engineStalled || cameraDown;
+
+  // The badge, and the sentence under the rep button, say WHY the user is
+  // counting — the three reasons are not interchangeable and one of them used
+  // to be worded as an apology for a choice the user had just made. `graded` is
+  // "the engine is actually counting this set", which is not the same as "a
+  // definition exists": while the camera is stalled the badge must not claim a
+  // form check is happening.
+  const graded = !countItYourself;
+  // `analysisSettled &&` here too — round 3 F6. Without it the badge reads
+  // "Log-only" during the window where the hook has not answered for this
+  // exercise yet, which is the exact conflation round 2's F1 was about, left
+  // standing in the one place that only affects wording.
+  const countingReason = manualMode ? 'chosen'
+    : (analysisSettled && !analysisAvailable) ? 'no-definition'
+    : 'camera-not-counting';
+
+  // WHICH SETS THE USER WAS COUNTING. Written the moment the hand-counting UI
+  // goes up and never cleared for that ordinal, because ownership is a fact
+  // about what the user was shown, not a state they can be moved out of.
+  //
+  // It cannot be re-derived at set end: `setRepsRef` holds WHAT THE SCREEN
+  // SHOWED, and in camera mode that is the engine's own count (the manual button
+  // continues from the displayed number rather than restarting at 1). So "reps
+  // > 0" does not distinguish a set the user tapped out from an ordinary graded
+  // one, and a reconcile rule built on the rep counts alone would strip the form
+  // score off every camera set in the workout.
+  const handOwnedSetsRef = useRef(new Set());
+  useEffect(() => {
+    if (countItYourself && phase === 'workout') handOwnedSetsRef.current.add(engineSetKey);
+  }, [countItYourself, phase, engineSetKey]);
+
+  /** Record what the USER counted for the set that is ending — ALWAYS, whatever
+   *  mode this workout is in and whether or not the engine is watching.
    *
    *  Called at all four points a set can end. Idempotent per ordinal, because
    *  those points overlap by design — finishing the last set both completes a
    *  set and ends the workout, and skipping an exercise ends a set without
    *  going through handleSetComplete at all.
    *
+   *  WHY IT NO LONGER CHECKS WHETHER THE ENGINE IS ANALYSING. It used to return
+   *  early when a definition existed for the exercise, on the reasoning that
+   *  the engine would file that set itself. A definition existing is not the
+   *  engine having filed anything: fed zero frames — camera refused, MediaPipe
+   *  still loading, or the set ended inside that window — the engine files
+   *  NOTHING, and this early return meant nobody did. The set vanished from a
+   *  workout that otherwise synced, which is worse than not syncing: a day's
+   *  history that shows less than the user actually did. Recording both and
+   *  letting `reconcileSets` pick at the end is what closes that, and it is the
+   *  only order that CAN close it — the engine's summary for a set arrives
+   *  after this runs, so at this moment there is nothing to ask.
+   *
    *  NEVER THROWS. Collecting data for the new API must not be able to break
    *  the workout in front of the user: if anything here fails, the set is not
    *  recorded, the workout carries on, and the legacy save still happens. */
-  const captureLogOnlySet = useCallback(() => {
+  const captureHandCountedSet = useCallback(() => {
     try {
-      if (analysisAvailableRef.current) return; // the engine files this one itself
       const name = exercises[currentIndexRef.current]?.name;
       const startedAtMs = setStartedAtMsRef.current;
-      recordLogOnlySet(setSummariesRef.current, {
+      recordHandCountedSet(setSummariesRef.current, {
         exerciseName: name,
         setIndex: engineSetKeyRef.current,
         reps: setRepsRef.current,
         durationMs: startedAtMs == null ? 0 : Date.now() - startedAtMs,
+        // Read from the ref, not from `countItYourself`: this function is called
+        // from memoized closures that can be pinned to an earlier render, the
+        // same reason the ordinal and the reps are read from refs here.
+        handOwned: handOwnedSetsRef.current.has(engineSetKeyRef.current),
       });
     } catch (err) {
       console.error('could not record hand-counted set:', err?.message);
@@ -278,14 +483,20 @@ export default function ActiveWorkout() {
   useEffect(() => {
     if (!sessionData) { navigate('/workout/builder'); return; }
     startSetClock(); // the first set's clock starts with the workout
-    const preferredCam = sessionData?.cameraDeviceId || null;
-    startCamera(preferredCam).then((stream) => {
-      if (stream) {
-        setTimeout(() => {
-          if (videoRef.current) startStreaming(videoRef.current);
-        }, 1000);
-      }
-    });
+    // A hand-counted workout never asks for the camera. Requesting it anyway
+    // would put a permission prompt in front of someone who just said they did
+    // not want one — and on a laptop, light up the recording indicator for a
+    // session that looks at nothing.
+    if (!manualMode) {
+      const preferredCam = sessionData?.cameraDeviceId || null;
+      startCamera(preferredCam).then((stream) => {
+        if (stream) {
+          setTimeout(() => {
+            if (videoRef.current) startStreaming(videoRef.current);
+          }, 1000);
+        }
+      });
+    }
     speakExercise(currentExercise?.name || 'workout');
     return () => { stopCamera(); stop(); };
   }, []);
@@ -400,6 +611,20 @@ export default function ActiveWorkout() {
   }, [poseData, paused, phase]);
 
   useEffect(() => {
+    // The user asked to count their own reps, so nothing else may count them.
+    // Belt and braces with `analysisEnabled: false` on the hook, which is what
+    // stops frames reaching the engine in the first place: this page has two
+    // independent reasons to ignore the pose stream and should not need the
+    // hook to be correct for the user's own count to stand. Proven by a test
+    // that hands the page a live rep stream in manual mode.
+    // `countItYourself`, not `manualMode`: the user may also be counting because
+    // the camera stalled or errored, and Kd's ruling 2026-08-03 is that a set
+    // handed over stays handed over. Guarding on manualMode alone let a camera
+    // that woke up late resume driving the display mid-set — and since the guard
+    // below only advances on `reps > lastRepCountRef`, whose value the manual
+    // button keeps in step, the visible effect was silent: the user's taps
+    // stopped registering as new reps while the engine caught up.
+    if (countItYourself) return;
     if (!poseData || paused || phase !== 'workout') return;
     if (poseData.logOnly) return; // log-only (Part 6 §3.6): manual counting owns the reps
 
@@ -428,7 +653,10 @@ export default function ActiveWorkout() {
 
       if (reps >= targetReps) handleSetComplete();
     }
-  }, [poseData]);
+    // `countItYourself` belongs here: the effect now reads it, and without it a
+    // set that stalls mid-frame keeps running the engine's counting branch from
+    // the render that was pinned before the handover.
+  }, [poseData, countItYourself]);
 
   const handleVoiceToggle = () => {
     const v = !voiceOn;
@@ -449,7 +677,25 @@ export default function ActiveWorkout() {
     startSetClock();
     if (analysisAvailable) {
       discardSetKeyRef.current = engineSetKey; // this key's summary (if any) is the discarded set
-      setEngineSetKey((k) => k + 1);
+      const nextKey = engineSetKey + 1;
+      // CARRY A LIVE STALL ACROSS THE REDO (round 2 F4). `engineStalled` is
+      // `stalledSetKey === engineSetKey`, so re-keying silently cleared it — and
+      // a user redoing a set precisely BECAUSE the camera had stopped counting
+      // watched the `+1 Rep` button vanish for another five seconds, with the
+      // camera still dead and no way to record anything in the meantime. The
+      // camera has not come back just because the set was restarted.
+      //
+      // BUT IT MIGHT HAVE — round 4 F2. The comment above was the whole
+      // justification and the condition never checked it, so a user who redid a
+      // set AFTER the camera recovered was locked out of grading for the new set
+      // too: live preview, skeleton drawing, badge still reading "Camera not
+      // counting", set filed unscored, no way out until the set ended. The carry
+      // now requires evidence the camera is STILL not delivering — an error
+      // standing, or the frame gap still past the threshold.
+      const stillDown =
+        cameraError != null || Date.now() - lastFrameAtRef.current >= ENGINE_STALL_MS;
+      if (stalledSetKey === engineSetKey && stillDown) setStalledSetKey(nextKey);
+      setEngineSetKey(nextKey);
       engineSetKeyRef.current += 1;
     }
   };
@@ -463,6 +709,13 @@ export default function ActiveWorkout() {
     // and it is what reads this ref. See the ref's declaration for why an
     // effect here would record every completed set one rep short.
     setRepsRef.current = n;
+    // Only reachable in camera mode when the engine had stalled — and a camera
+    // that recovers mid-set restarts its own count at 1. Without this, the
+    // engine's first rep would be "greater than the last engine count" (0) and
+    // the display would drop from the user's 7 back to 1. The engine takes the
+    // display over only once it genuinely passes what the user counted; whoever
+    // ends up owning the set is settled separately, at the end.
+    lastRepCountRef.current = n;
     playRepBeep();
     if (n >= targetReps) handleSetComplete();
   };
@@ -485,7 +738,7 @@ export default function ActiveWorkout() {
     // button both land here, which is why the capture hangs off this rather
     // than off the rep counter — the button ends a set early, and hooking the
     // counter would lose every set that did not run to target.
-    captureLogOnlySet();
+    captureHandCountedSet();
 
     const duration = restDuration;
     const setNow   = currentSetRef.current;
@@ -578,7 +831,7 @@ export default function ActiveWorkout() {
     // re-key emits its summary), so a hand-counted one must not be the version
     // that silently vanishes. Idempotent, so the ordinary rest→next path — which
     // already captured at set end — is unaffected.
-    captureLogOnlySet();
+    captureHandCountedSet();
     const idxNow = currentIndexRef.current;
     if (idxNow >= exercises.length - 1) {
       handleWorkoutComplete();
@@ -631,7 +884,7 @@ export default function ActiveWorkout() {
     // THAT — which is the load-bearing line, and the exact regression the review
     // before this one caught. If you are removing a capture call, the one that
     // matters is in goToNextExercise. T3 round 2, F-1.
-    captureLogOnlySet();
+    captureHandCountedSet();
     setEngineSetKey((k) => k + 1);
     engineSetKeyRef.current += 1;
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -645,11 +898,6 @@ export default function ActiveWorkout() {
     const finalActiveEffortSecs = activeEffortSecsRef.current;
     const finalRestSeconds = restSecondsTotalRef.current;
 
-    // Workout form average from every engine-scored rep (per-rep scores come
-    // from the collected §2.4 SetSummaries). Log-only sets contribute nothing;
-    // all-log-only workouts send 0, exactly as the old screen did.
-    const avgForm = averageFormScore(setSummariesRef.current) ?? 0;
-
     // Queue the workout for POST /v1/workouts/sync (offline-safe localStorage
     // queue; flush is fire-and-forget). Independent of the legacy
     // completeSession below — neither one's failure drops or duplicates the
@@ -661,11 +909,26 @@ export default function ActiveWorkout() {
     // before this the new API held only workouts made of squats, jump squats
     // and chair squats — and after the old backend is switched off, everything
     // else would have been saved nowhere at all.
+    // WHO OWNS EACH SET is settled HERE and nowhere else — after the wait above,
+    // which is what lets the last set's engine summary land first. Every set the
+    // user counted was recorded as they went; every set the engine measured was
+    // accumulated as it filed. Sets the engine measured win; the rest are the
+    // user's own count. A set that neither side has is a set nobody performed.
+    const { summaries, unresolved, repScores } = reconcileSets(setSummariesRef.current);
+
+    // AFTER the reconcile, and from ITS scores — round 4 F3. Computed before it,
+    // this counted the per-rep grades of sets that the reconcile then removed, so
+    // the legacy save (and therefore the summary screen, the dashboard and the
+    // calendar, which all still read it) reported a form score for a workout the
+    // new API holds as entirely ungraded. Log-only sets contribute nothing;
+    // all-log-only workouts send 0, exactly as the old screen did.
+    const avgForm = averageFormScore({ repScores }) ?? 0;
+
     queueWorkoutSync({
       workoutId: syncIdentity.workoutId,
       startedAt: syncIdentity.startedAt,
-      summaries: setSummariesRef.current.summaries,
-      unresolved: setSummariesRef.current.unresolved,
+      summaries,
+      unresolved,
     });
 
     try {
@@ -794,16 +1057,19 @@ export default function ActiveWorkout() {
           <div
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
             style={{
-              background: analysisAvailable ? 'rgba(34,197,94,0.1)' : 'rgba(251,191,36,0.1)',
-              border:     analysisAvailable ? '1px solid rgba(34,197,94,0.2)' : '1px solid rgba(251,191,36,0.2)',
-              color:      analysisAvailable ? '#4ade80' : '#fbbf24',
+              background: graded ? 'rgba(34,197,94,0.1)' : 'rgba(251,191,36,0.1)',
+              border:     graded ? '1px solid rgba(34,197,94,0.2)' : '1px solid rgba(251,191,36,0.2)',
+              color:      graded ? '#4ade80' : '#fbbf24',
             }}
           >
-            {analysisAvailable
+            {graded
               ? <Eye    className="w-3 h-3" />
               : <EyeOff className="w-3 h-3" />
             }
-            {analysisAvailable ? 'AI form check' : 'Log-only'}
+            {graded ? 'AI form check'
+              : countingReason === 'chosen' ? 'Counting yourself'
+              : countingReason === 'camera-not-counting' ? 'Camera not counting'
+              : 'Log-only'}
           </div>
           <div className="flex items-center gap-1.5 text-sm font-mono"
                style={{ color: 'rgba(255,255,255,0.70)' }}>
@@ -862,6 +1128,24 @@ export default function ActiveWorkout() {
               height={videoSize.h}
               mirrored={false}
             />
+          )}
+
+          {/* A black rectangle where a camera feed usually is reads as a broken
+              camera, not as a choice. Say which it is. */}
+          {manualMode && (
+            <div
+              className="absolute inset-0 flex items-center justify-center"
+              style={{ background: '#0D0C0B' }}
+            >
+              <div className="text-center p-6">
+                <EyeOff className="w-10 h-10 mx-auto mb-3"
+                        style={{ color: 'rgba(255,255,255,0.25)' }} />
+                <p className="text-white font-semibold mb-1">Camera off</p>
+                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.40)' }}>
+                  You chose to count your own reps — use the +1 Rep button.
+                </p>
+              </div>
+            </div>
           )}
 
           {cameraError && (
@@ -926,7 +1210,7 @@ export default function ActiveWorkout() {
                 <Row label="state" value={poseData?.state ?? '—'} />
                 <Row label="reps(engine)" value={poseData?.rep_count ?? '—'} />
                 <Row label="joints seen" value={`${visible}/33`} color={visible >= 28 ? '#4ade80' : '#fbbf24'} />
-                <Row label="mode" value={analysisAvailable ? 'engine' : 'log-only'} color={analysisAvailable ? '#4ade80' : '#fbbf24'} />
+                <Row label="mode" value={graded ? 'engine' : countingReason} color={graded ? '#4ade80' : '#fbbf24'} />
               </div>
             );
           })()}
@@ -1045,7 +1329,7 @@ export default function ActiveWorkout() {
                 }}
               />
             </div>
-            {!analysisAvailable && (
+            {countItYourself && (
               <>
                 <button
                   onClick={handleManualRep}
@@ -1058,8 +1342,11 @@ export default function ActiveWorkout() {
                   +1 Rep
                 </button>
                 <p className="text-2xs mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                  Form checking isn't available for this exercise yet — your workout
-                  still counts.
+                  {countingReason === 'chosen'
+                    ? "You're counting your own reps — tap once per rep."
+                    : countingReason === 'camera-not-counting'
+                    ? "The camera isn't counting right now — tap once per rep and your set still counts."
+                    : "Form checking isn't available for this exercise yet — your workout still counts."}
                 </p>
               </>
             )}

@@ -3716,3 +3716,402 @@ repo's recorded harness failures in one run.**
   "the engine filed this set", so when zero frames were fed (camera denied,
   MediaPipe still loading) neither side files. Harmless before this card; now it
   can sync a MIXED workout with the squat sets missing.
+
+## 2026-08-03 — Kd RULING: counting your own reps is a CHOICE, not only a fallback
+
+- (THE RULING, Kd's own words) "if a user wants to use camera they can, also if
+  they do not want to use camera and log sets them self then they should have
+  that option as well." Asked in response to a report that a camera-graded set
+  could be saved nowhere; the answer given was broader than the question, and
+  the broader answer is what shipped.
+- (**THIS IS AN EXTENSION OF THE SPEC, NOT AN IMPLEMENTATION OF IT** — recorded
+  as a ruling because R0.2 forbids inventing it) `06-part6-mobile.md:188` is the
+  only place log-only mode appears: "**log-only mode**: pose unavailable on this
+  device → manual rep counting UI + honest copy". That is the §3.6 automatic
+  degradation LADDER — a weak-phone fallback the app decides for you. A
+  user-CHOSEN log-only mode is nowhere in the spec set. Kd was told this in the
+  same message that carried the plan, in those terms, before approving.
+- (**THE DEFECT THE RULING TURNED OUT TO FIX, which is larger than the one it
+  was asked about**) `PreWorkout.jsx` gated Start on `allChecked`, and the
+  `camera` checklist item is `auto: true` — it ticks itself only when a stream
+  arrives and cannot be ticked by hand. **So NO CAMERA MEANT NO WORKOUT AT ALL**,
+  including a press-ups workout that never uses the camera for anything. All 58
+  exercises, not the 3 the original report was about. Found by reading the file
+  during planning, not by the report.
+- (**THE F-3 FIX** — OWED's "a camera-graded set can still land NOWHERE") The
+  page decided who files a set by asking `analysisAvailable`, which means "a
+  definition COMPILED", not "the engine filed this set". Fed zero frames —
+  camera refused, MediaPipe still loading, or the set ended inside that window —
+  `endSet()` returns null (`sessionController.js:123`, the P1.10b zero-frame
+  guard, deliberate) and the page stood aside for an engine that filed nothing.
+  Both sides declined. **The suite ASSERTED THAT AS CORRECT**: a test named
+  "files nothing itself when the engine is analysing the set" rendered exactly
+  this state and expected an EMPTY queue, calling it "nothing to send".
+- (**WHY THE OBVIOUS FIX IS IMPOSSIBLE, and this is the load-bearing paragraph**)
+  OWED proposed "reconcile at workout end — any ordinal with reps but no summary
+  from either side gets filed". Two things were wrong with it. First, in engine
+  mode there ARE no hand-counted reps to file: `+1 Rep` was rendered under
+  `!analysisAvailable`, so a camera-graded exercise had no counter at all and
+  the count sat at 0. Second, the seemingly cheaper fix — ask at set end whether
+  the engine filed this one — asks a question that HAS NO ANSWER YET: the
+  engine's summary is emitted from the pose hook's per-set effect CLEANUP, which
+  React runs after the render that ended the set, i.e. strictly after the page's
+  synchronous capture. So the page now records the user's count for EVERY set
+  unconditionally, and `reconcileSets` settles ownership ONCE, at workout end,
+  when both answers exist. Engine summary wins; otherwise the user's count.
+  Never both (a duplicate setIndex parks the whole workout), never neither.
+- (WHAT A USER SEES) Two buttons on the pre-workout screen. Choosing "I'll count
+  my own reps" hides the camera preview, the positioning tips and the whole
+  four-item checklist — none of it means anything with nothing watching — starts
+  no camera, downloads no pose model, and shows `+1 Rep` on every exercise. In
+  camera mode the button appears when the camera errors, and after 5 s of no
+  analysed frame when it simply goes quiet. The badge distinguishes all three:
+  "AI form check" / "Counting yourself" / "Camera not counting", and the sentence
+  under the button no longer apologises for a limitation to someone who chose it.
+- (A DEFECT THIS CARD INTRODUCED AND CAUGHT, recorded because it was mine)
+  `syncIdentity` called `crypto.randomUUID()` bare, under a comment reasoning
+  that a secure context was guaranteed "because getUserMedia (the camera) has
+  the same requirement". True when written; **false the moment a workout can
+  start without ever asking for a camera** — on a plain-http origin (a phone
+  opening the dev server by LAN address) `randomUUID` is undefined and the page
+  would throw on render. `newWorkoutId()` falls back to `getRandomValues`, which
+  is not secure-context restricted, so it is a real v4 and not a weaker id.
+  **The comment is the thing to notice: it recorded WHY the assumption held, and
+  that is the only reason the change was visible at all.**
+- (A SECOND DEFECT, caught by an adversarial mock rather than by review) The
+  page's rep effect read the pose stream in manual mode too. Unreachable through
+  the real hook — `analysisEnabled: false` means no frames — so it relied on the
+  hook being correct for the user's own count to stand. The test hands the page
+  a live `rep_count: 7` while the user is counting; before the guard it ended
+  sets the user had not finished. `if (manualMode) return;` at the top, and a
+  mutant (M18) proves the test sees it.
+- (**A THIRD FINDING, about the HARNESS rather than the code**) A `sed -i` used
+  for a rename rewrote `ActiveWorkout.jsx` from CRLF to LF. The mutation harness
+  forced CRLF anchors, so **NINE mutants silently stopped applying at once** —
+  including every one protecting the recorded 0-rep trap — and the table simply
+  got shorter. Anchors now match either ending, an unapplied mutant is a
+  **non-zero exit**, and the line endings were restored so the diff stays
+  readable. **Standing lesson: a harness that can be disarmed by an editing
+  accident reports a shorter table, not a failure — the "NOT APPLIED" row has to
+  be a gate, not a note.** Also fixed there: the RED classifier was matching
+  against vitest's ANSI-coloured output, so three genuinely-caught mutants were
+  filed as "not an assertion — check". A classifier that cannot read its own
+  input invites a reviewer to wave through the rows it failed to parse.
+- (PROVE) web **331/331** (was 330; +1 stall test, and the two tests that
+  encoded F-3 as correct were replaced by four that assert the opposite).
+  **26 mutants across 3 files, ALL RED**, 0 alive, 0 unapplied, all targets
+  restored byte-for-byte, post-run baseline re-checked GREEN. Lint on the six
+  pre-existing touched files: **identical rule multiset to HEAD** (5 no-unused-vars,
+  1 no-empty, 4 exhaustive-deps warnings, 3 immutability) — two new
+  `react-hooks/set-state-in-effect` errors were introduced and then designed out
+  rather than accepted, by deriving both values instead of writing them from an
+  effect. `vite build` green; shared/engine/api typecheck clean run directly.
+  (`pnpm -w typecheck` will not launch on this machine — a corepack/pnpm version
+  mismatch in `@app/config`, unrelated to this card, which touches no TypeScript.)
+- (SMOKE) `RUNBOOK/smoke-count-it-yourself.md`, six steps, two of them controls
+  (the camera path must still work; the camera checklist must still gate the
+  camera path). **NOT YET RUN — the card is not "done" until it passes.**
+- (OWED, opened by this card) Switching between camera and hand counting BY
+  CHOICE mid-workout (only the automatic fallback exists); remembering the
+  choice for next time; and the 5-second stall threshold, which is a UI patience
+  value with no spec basis and has never been watched by a human on a slow phone.
+
+## 2026-08-03 — the rep-choice card, T3 ROUND 1: two blocking findings, and Kd's ruling that closed the harder one
+
+- (CONTEXT) The smoke passed first — steps 1–5 confirmed in the DATABASE, not on
+  screen: `push_up`/`log_only`/3, `squat`/`log_only`/2 sets/6 reps, and TWO real
+  camera sets (`squat`/`engine`/3 reps, scores 100 and 67). Step 5 is the control
+  and it holds: the camera still grades and still stores.
+  **How the smoke nearly went wrong is worth more than the result.** Three
+  queries found no camera row and the chat concluded, in order, that steps 5–6
+  had written nothing, that an unflushed browser queue was "ruled out", and
+  finally — after tracing a real silent path — that a camera workout measuring
+  nothing vanishes without trace, "a real bug, and it's mine". All wrong. The
+  workout had simply not flushed yet; it landed TWELVE MINUTES after it started,
+  the instant Kd hard-reloaded, exactly as DECISIONS 2026-07-15 says it would
+  ("a liveness delay, never data loss"). **A database query taken moments after a
+  workout is not a test of whether it was saved**, and the runbook never said so.
+  It does now. Two self-inflicted confounds compounded it: the mutation harness
+  was run WHILE Kd was mid-smoke — it rewrites the workout screen 26 times under
+  his live dev server, so an unknown part of his session exercised sabotaged
+  code — and a genuinely silent code path was offered as the explanation for an
+  absence that had a duller cause.
+
+- (T3 F1, 🔴 FIXED) **A camera that died MID-SET never offered hand counting.**
+  `engineStalled` required `poseData == null`, and null is written in exactly one
+  place — the pose hook's per-set effect, at set start — while `feed()` never
+  returns null. So once one frame had landed for a set, the page could never see
+  silence again: the last frame simply sat there. The other trigger, `cameraError`,
+  was written only inside `startCamera`'s catch, which can only fire while the
+  camera is being OPENED — `useCamera` registered no `ended`/`mute` listener, so
+  an unplugged webcam raised nothing. Net: unplug mid-set → no error, no null → no
+  `+1 Rep` button for the rest of that set. **Smoke step 6 was unreachable by the
+  route it described**, so whatever Kd observed passing was not the stall path.
+  FIX: the stall is now a GAP between frames — each frame stamps a heartbeat ref,
+  a 1 s poll compares against `ENGINE_STALL_MS` — plus `track.addEventListener`
+  for `ended` and `mute` in `useCamera`. The poll is torn down while paused or
+  resting, where frames stop legitimately.
+
+- (T3 F2, 🔴 FIXED by Kd's RULING) **The camera could overwrite reps the user had
+  counted, with a smaller number or zero.** `reconcileSets` gave a shared ordinal
+  to the engine unconditionally, and `endSet()` returns a summary after a SINGLE
+  fed frame — reps possibly 0. Reachable, and it is the case the stall threshold
+  explicitly trades against: camera slow to load → handover at 5 s → user taps 7 →
+  model finally loads and manages 2 → the set stored as the engine's 2, with a
+  form score, and the 7 discarded. **Screen said 7, history said 2.** This card
+  CREATED the path by recording the user's count on every set; before it, no hand
+  count existed to lose.
+  **Kd RULED (asked to confirm the fix, answered with the rule instead):** "if
+  some chooses by hand then they can not change to camera in the middle of
+  exercise same for the other part." So ownership does not flip mid-set, in
+  either direction. The chat's own proposal — engine wins only when its count is
+  the larger — was DROPPED as worse: it makes the stored number depend on
+  arithmetic the user cannot see. FIX: `engineStalled` is sticky for the set it
+  fired on; the engine's counting branch is guarded on `countItYourself` rather
+  than `manualMode`; and `reconcileSets` rule 1 gives a hand-owned set to the
+  user, stored `log_only` with no form score, REPLACING the engine's entry rather
+  than sitting beside it (two entries under one ordinal park the whole workout).
+  **The automatic handover when the camera DIES is expressly NOT covered by the
+  ruling** — it is not a choice, it is the only alternative to a set the user
+  cannot finish, and removing it would restore the defect this card exists to
+  kill. Camera → hand on failure: yes. Hand → camera ever: no. The corresponding
+  OWED line (mid-workout switching by choice) is STRUCK, not deferred.
+
+- (WHY `handOwned` IS STORED AND NOT INFERRED) The first fix drafted was "the
+  hand count wins whenever it is non-zero", and it would have stripped the form
+  score off EVERY ordinary camera set in the app. `reps` on a hand record is
+  WHAT THE SCREEN SHOWED, and in camera mode that is the engine's own count —
+  the page keeps one displayed number and the manual button continues from it
+  rather than restarting at 1. So a non-zero hand count does not mean the user
+  counted anything. Ownership is now recorded as a fact at the moment the
+  hand-counting UI goes up, and a test asserts the ordinary camera set keeps its
+  engine summary — the trap, pinned.
+
+- (T3 F3–F6, FIXED) F3: the mixed-workout test set `poseData = null` mid-workout,
+  a state the app cannot produce, so it proved `reconcileSets` rather than the
+  fallback it was named for; it now leans on the camera error, which is producible
+  only BECAUSE of the F1 fix. F4: all four pose-hook changes were unasserted and
+  unreachable — the render suite replaces the hook with a mock that re-implements
+  the contract under test — so `usePoseDetection.test.js` and `useCamera.test.js`
+  now exist and both hooks are mutation targets. **The first version of the
+  stale-`analysisAvailable` test could not fail** (rendering straight into
+  `analysisEnabled: false` leaves the state at its initial false, so deleting the
+  guard changes nothing); it now renders true first and flips. F5: the harness's
+  two degenerate verdicts — "every test failed, likely a parse error" and "no test
+  summary" — counted toward nothing and the run still exited 0; they are now
+  counted and gate the exit, the same lesson this harness already recorded about
+  "NOT APPLIED".
+
+- (T3 F8/F9, REPORTED NOT FIXED, R1.1) `coachApi.js` still calls
+  `crypto.randomUUID()` bare under a comment citing the secure-context guarantee
+  THIS card deleted — so on a plain-http origin the coach throws where a workout
+  now survives; the stale comment is the dangerous part. And `PreWorkout` asks for
+  the camera on mount, before the user can decline it, so someone who always
+  counts their own reps is still prompted every time and the new "no camera is
+  used" copy is only true after they have been asked. Both have OWED lines.
+
+- (PROVE) See the HANDOFF block for the run output. The harness's own verdict is
+  the gate: 0 alive, 0 unapplied, 0 inconclusive, targets restored byte-for-byte,
+  baseline re-checked GREEN.
+
+## 2026-08-03 — the rep-choice card, T3 ROUND 2 (THE CAP): four blocking findings, and a guarantee that was recorded before it was true
+
+- (CORRECTION TO :3819) That entry says ownership is stored rather than inferred
+  "so ordinary camera sets keep their form score". **That guarantee held for sets
+  2..N only, and the entry was written as though it held for all of them.** The
+  reviewer was right to make correcting it part of the finding: a record that
+  overstates a guarantee teaches the next chat something false, and it did.
+
+- (F1, 🔴 FIXED) **The first set of EVERY camera workout was filed as the user's
+  own count, with its form score discarded.** `analysisAvailable` is state
+  initialised to `false` and flipped from the pose hook's per-set effect, so on
+  render 1 of every camera workout the page is told "nothing is analysing" — a
+  value that means "not known yet" and was read as "this exercise has no
+  definition". `phase` starts at `'workout'`, so the ownership effect ran in that
+  very render, added set 1 to `handOwnedSetsRef`, and ownership is deliberately
+  never taken back. Rule 1 then spliced the engine's summary out.
+  **Sets 2..N were correct, which is exactly why it read as working.**
+  FIX: the hook now reports `analysisSettled` — "has this hook answered?" — and
+  the page treats absent analysis as hand-counting only once it has. The stall
+  timer is now armed regardless of `analysisAvailable`, so a hook that never
+  answers at all still yields a rep button rather than a dead screen.
+  **THE MUTATION FIGURE DID NOT COVER THIS, and the review said so precisely.**
+  M32 exists to catch this exact outcome and was RED; the test that caught it
+  used a mock returning `analysisAvailable` synchronously, so the fixture could
+  not reach the state the bug lives in. "39 mutants, 0 alive" was true and did
+  not mean what it was being read to mean. **This is round 1's F4 recurring in a
+  new shape: a mock standing in for the thing under test proves the mock.** The
+  mock now models the real mount timing (false, then flipped from an effect),
+  which is what makes the regression test able to fail at all.
+  Confirmed independently in this chat before fixing: the new test failed with
+  `expected 'log_only' to be undefined`, matching the reviewer's own probe.
+
+- (F2, 🔴 FIXED) **Switching tabs for six seconds looked like an unplugged
+  webcam.** The frame loop stops itself on `document.hidden` and the browser
+  pauses rAF regardless, but the stall poll is an interval reading the wall
+  clock, which keeps running. The handover being sticky (by Kd's ruling) meant it
+  never cleared: the user returned to a live preview, a "Camera not counting"
+  badge for the rest of the set, and that set stored with no form score. The
+  pause and rest guards existed for exactly this reason and `hidden` was missing
+  from them. FIX: the poll skips hidden ticks and the heartbeat is re-stamped on
+  `visibilitychange`.
+
+- (F3, 🔴 FIXED) **A temporary camera interruption latched for the whole
+  workout.** `mute` is by definition temporary — the track raises `unmute` when
+  it resumes — but nothing listened for it, and `error` is otherwise cleared in
+  exactly one place, inside `startCamera`, which is not called again mid-workout.
+  So one app briefly grabbing the camera left a red error panel over a working
+  camera and every remaining set unscored. Blast radius was the workout, not the
+  set. FIX: an `unmute` listener that clears ONLY the mute message, so a real
+  `ended` is never painted over.
+
+- (F4, 🔴 FIXED) **Redoing a stalled set took the rep button away for another
+  five seconds.** `engineStalled` is `stalledSetKey === engineSetKey`, and the
+  redo re-keys — so a user who pressed redo BECAUSE the camera had stopped
+  counting lost the only control they had, with the camera still dead. FIX: a
+  live stall is carried onto the new key. The camera has not recovered just
+  because the set was restarted.
+
+- (F6/F7, FIXED) `useRef(Date.now())` read a clock during render, which this
+  file's own `setRepsRef` comment refuses to do — now initialised to 0 and
+  stamped by the effect that arms the poll. And rule 1's stated exception is now
+  written down: a hand-owned set with ZERO reps does not displace an engine
+  summary, because replacing a measured set with nothing would delete a set the
+  user actually performed.
+
+- (WHAT THE SMOKE NOW OWES) Step 5 — the control — passed on ROUND 1 code. Under
+  F1 it would have produced a `log_only` first set, so **its earlier pass cannot
+  be carried forward**; it must be re-run against this code, together with step 6,
+  whose round-1 expectation was unreachable. Both are recorded in OWED.
+
+## 2026-08-03 — the rep-choice card, T3 ROUND 3: two blocking findings, both the same bug at a new trigger
+
+- (F1, 🔴 FIXED) **A graded exercise FOLLOWING an ungraded one lost its form
+  score.** Round 2's `analysisSettled` was a bare boolean meaning "has this hook
+  EVER answered", which never returns to false — while `analysisAvailable` is
+  per-exercise state written from the same effect. So on the render where the
+  exercise CHANGES, settled was already true and available still held the
+  PREVIOUS exercise's answer: press-ups → squats presented the round-2 F1 state
+  again, and the squat set was marked hand-counted before the engine spoke. The
+  screen said "AI form check"; the history disagreed. FIX: the hook reports
+  `settledFor` — WHICH exercise the answer is about — and the page compares it to
+  the current one. **Every test in the suite used ONE exercise**, so the whole
+  class was structurally invisible.
+
+- (F2, 🔴 FIXED) **Round 2's own F3 fix created this one.** Making a camera error
+  CLEARABLE meant the live `cameraError` term in `countItYourself` and the
+  write-once `handOwnedSetsRef` disagreed on recovery: the `+1 Rep` button
+  vanished mid-set (the camera taking a set back, which Kd's ruling forbids), the
+  rep counter froze, and the set was filed as the user's own count anyway. Mobile
+  browsers mute the track on backgrounding, so this was round 2's F2 user action
+  arriving down a second path. FIX: an effect stamps the set key when an error
+  appears, making the handover sticky; the live term STAYS, because the effect
+  alone lands a render late and the engine could complete the set in that window.
+
+- (F3–F6, FIXED) Three fixtures returned module globals synchronously where
+  production returns state written from an effect — the pose mock (one value per
+  workout), the camera mock (a getter with no setter, so an error could never
+  arrive or clear mid-set), and the hook's controller stub. Two of the three were
+  where F1 and F2 hid. Also: three records disagreed about the retired M8; a hook
+  test asserted only the half never in doubt; `countingReason` still read a bare
+  `!analysisAvailable`.
+
+- (WHAT THE MUTATION FIGURE DID NOT MEAN, again) "50 mutants, 0 alive" was true
+  and did not cover either finding, because no fixture could reach the states
+  they live in. Third recurrence of the lesson at :3938.
+
+## 2026-08-03 — the rep-choice card, T3 ROUND 4: three blocking findings, and a claim the chat made that was simply false
+
+- (F1, 🔴 FIXED) **Glancing at your phone cost the set its grading.** Round 3's F2
+  fix stamped the sticky handover on ANY `cameraError`, with no `document.hidden`
+  guard — and `useCamera` turns a track MUTE into an error, which is exactly what
+  mobile browsers do when the page is backgrounded. Round 2's F2 had added that
+  guard to the stall poll for precisely this user action; the error path was
+  written later and skipped it. **The same failure, by a third route, in three
+  consecutive rounds.** FIX: the stamp is gated on `!document.hidden`.
+
+- (F2, 🔴 FIXED) **Redoing a set after the camera recovered lost grading anyway.**
+  Round 2's F4 carry-forward was justified in its own comment by "the camera has
+  not come back just because the set was restarted" — and never checked whether
+  it had. FIX: the carry now requires evidence the camera is still down (an error
+  standing, or the frame gap still past the threshold).
+
+- (F3, 🔴 FIXED) **The summary screen showed a form score for a workout stored as
+  entirely ungraded.** `reconcileSets` splices an engine summary out of the
+  payload but never touched `log.repScores`, which is what the workout form
+  average is computed from — so a set stored `log_only` / `avgFormScore: null`
+  still contributed its per-rep grades to the number the legacy save carries, and
+  the post-workout screen, dashboard and calendar all read that. `accumulateSummary`
+  already rebuilt that list when IT displaced an entry, with a comment explaining
+  the hazard: **the file contradicted itself on the same trap.** FIX: `reconcileSets`
+  returns rep scores rebuilt from the surviving summaries, and the page computes
+  the average AFTER the reconcile instead of before.
+
+- (F4, THE CHAT'S OWN FALSE CLAIM) Kd could not run a live smoke, and the chat
+  offered to drive a real browser instead, wrote the script, and told him it was
+  starting. **`playwright` is not installed and is not a dependency of this repo**
+  — `require.resolve` → MODULE_NOT_FOUND, `grep -c playwright pnpm-lock.yaml` → 0.
+  `npx playwright --version` answered 1.62.1 from a global npx cache, and that
+  single output was taken as proof the package was available. V1 says a claim
+  needs a command; it does not say any command that prints something will do.
+  The script is kept, cannot run, and now says so in its own header; adding the
+  dependency needs Kd's approval under R1.4.
+
+- (F5, FIXED BY DELETION) The round-3 test that killed mutant M51 used a
+  `neverSettles` fixture premised on MediaPipe failing to load holding the
+  "unsettled" window open. **False:** `setSettledFor(exercise)` runs
+  unconditionally in the per-set effect and never waits for MediaPipe. The
+  fixture modelled an unreachable state — the round-1 F3 shape, from the chat
+  that had just fixed two instances of it. Fixture and test deleted; M51 retired
+  with its reasoning; the code fix stays, unclaimed as covered.
+
+- (SECURITY, FIXED) `.codex-chrome-profile/` — a Chrome profile holding cookies
+  and session state — was untracked and NOT gitignored, one `git add -A` from
+  being committed. Added, with `.pnpm-store/`. The browser script's hardcoded
+  password is now generated at runtime instead.
+
+- (RECORDS, FIXED) Round 3 was recorded NOWHERE — no DECISIONS entry, no index
+  line, no HANDOFF block — while `OWED.md` already cited "T3 round 3" for M8's
+  retirement, a citation pointing at nothing. HANDOFF's top block still told the
+  next chat that round 2 was the cap and 345 tests passed. Under the grounding
+  rule that block is mandatory reading, so the next chat would have been
+  systematically misinformed. Both rounds are now written up, indexed, and the
+  HANDOFF block replaced.
+
+## 2026-08-04 — the rep-choice card's smoke PASSED; Kd RULED steps 6 and 8 out of the run
+
+The card's gate is discharged. Kd ran the smoke on the final post-round-4 code;
+every step run was verified in the database, not on screen (full table in
+`RUNBOOK/smoke-count-it-yourself.md`):
+
+- Steps 1–4: push-ups and squats with NO camera, hand-counted — both saved,
+  `log_only`, real reps, no fabricated score.
+- Step 5 (the control, and the OWED re-run): a TWO-set camera workout, BOTH
+  sets `mode` `engine` with real scores (83/83) — exactly the closure condition
+  the reopened OWED line demanded, because round 2's F1 had been filing set 1
+  as hand-counted. The camera path is intact.
+- Step 7 (never run before): push-ups then squats in ONE workout — the squat
+  sets kept real engine scores (77/91) beside the ungraded push-ups. The
+  score-loss-after-an-ungraded-exercise defect that rounds 2–4 kept refinding
+  is confirmed dead in a live browser.
+
+**KD'S RULING: smoke steps 6 and 8 (camera dies mid-set / camera cut and
+restored) are SKIPPED, not deferred.** His reasoning, twice affirmed: a user
+who chose the camera gets the camera, a user who chose hand-counting gets
+hand-counting; he does not consider the mid-set drills worth a manual run. The
+chat put the counter-case (these steps test the camera FAILING, not the user
+switching; unplug + Camera-app-steal drills) and he reaffirmed — that is a
+decision under the playbook, not an oversight. **What this does and does not
+mean:** the mid-set handover CODE AND ITS TESTS STAY — the automatic-handover
+behaviour is Kd-ruled elsewhere (2026-08-03, the unstruck half of the
+mid-workout-switching line) and is covered by unit tests and the mutation
+harness (54/54). What is skipped is only the live-browser verification of it.
+If a camera-death set-loss bug surfaces in real use, it lands as a defect card
+and its first step is running smoke 6/8.
+
+Also resolved during the run, worth one line because it looked like a
+regression: the summary screen's identical "35 min / 280 kcal / 88%" every
+workout (and "15m 0s" for a seconds-long session) is the mock rig's canned
+`SUMMARY_FULL` payload, byte-identical by construction — not app breakage. The
+summary screen still reads the old backend; its new-API home is already an
+OWED line.

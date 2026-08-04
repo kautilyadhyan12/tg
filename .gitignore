@@ -70,3 +70,9 @@ backend-ml/*.mp4
 # infra: the production env file lives on the deploy host, never in the repo
 # (R3.6, Part 8 §1 escrow). .gitignore's `.env` rule does not cover this name.
 infra/api.env
+
+# Local browser profile used for driving the app (holds cookies/session state)
+.codex-chrome-profile/
+
+# pnpm content-addressable store, if configured locally
+.pnpm-store/

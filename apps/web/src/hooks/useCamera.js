@@ -1,5 +1,9 @@
 import { useState, useRef, useCallback } from 'react';
 
+// Named because it is compared, not just displayed: `unmute` lifts THIS error
+// and no other.
+const MUTE_ERROR = 'Camera stopped sending video';
+
 export default function useCamera() {
   const [stream,        setStream]        = useState(null);
   const [error,         setError]         = useState(null);
@@ -74,6 +78,30 @@ export default function useCamera() {
 
       const track = videoTracks[0];
       setDeviceLabel(track?.label || 'Camera');
+
+      // A camera that DIES after streaming started reported nothing at all
+      // before this: `setError` was written only in the catch below, which can
+      // only fire while the camera is being opened. Unplug the webcam mid-set
+      // and the stream simply stopped producing frames — silently, with `error`
+      // still null — so the workout screen had no signal to fall back on and
+      // the user was left with no way to record the rest of the set (T3 F1).
+      // `ended` fires on unplug/device-removal; `mute` covers the OS or another
+      // app seizing the device, which stops frames without ending the track.
+      // `ended` is permanent — a removed device does not come back on this
+      // track. `mute` is BY DEFINITION temporary: the track raises `unmute` when
+      // it resumes, so it must be cleared again, or one app briefly grabbing the
+      // camera (or a mobile browser backgrounding the page) leaves a red "Camera
+      // Error" panel over a working camera for the rest of the workout, with
+      // every remaining set filed unscored. `error` is otherwise cleared in
+      // exactly one place — inside `startCamera`, which is not called again
+      // mid-workout — so nothing else would ever lift it (round 2 F3).
+      if (track) {
+        track.addEventListener('ended', () => setError('Camera disconnected'));
+        track.addEventListener('mute',  () => setError(MUTE_ERROR));
+        // Only the mute message is lifted: an `ended` that arrives afterwards
+        // must not be wiped by a late `unmute`.
+        track.addEventListener('unmute', () => setError((e) => (e === MUTE_ERROR ? null : e)));
+      }
 
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
