@@ -2,9 +2,22 @@
 
 ```
 TASK: `/v1/workouts` DATE WINDOW — **API HALF DONE 2026-08-04** (DECISIONS
-      :4434). Card 2, the WEB half, is NEXT and is what the 🔴 OWED line waits
-      on. **Nothing a user sees has changed yet: the endpoint can answer, the
-      calendar is not yet asking.**
+      :4434), **T3 ROUND 1 FIXED** (:4483, round 2 is the cap). Card 2, the WEB
+      half, is NEXT and is what the 🔴 OWED line waits on. **Nothing a user sees
+      has changed yet: the endpoint can answer, the calendar is not yet asking.**
+
+THE ONE TO CARRY OUT OF THE T3
+  `z.string().datetime({ offset: true })` ACCEPTS AN OFFSET `Date` REJECTS —
+  `+25:30`, `+99:00`. Measured. The schema proved a SHAPE while the code
+  assumed an INSTANT, so a request 500'd at the SQL layer where this card had
+  promised a 400. Now `instantSchema` in `packages/shared/src/time.ts`.
+  **Grepping the OPTION rather than the symptom found the second site** —
+  `workoutSyncPayloadSchema.startedAt` had carried it all along. The plain
+  `.datetime()` form is SOUND (zod rejects Feb 30, `Date.parse` does not), so
+  this is two sites, not a sweep.
+  **And the test lesson:** the both-bounds case was already a 400 for an
+  unrelated reason — the `from < to` refine only runs when BOTH are present —
+  so the hole looked covered from every angle a test had been written from.
 
 WHY IT EXISTS
   A client wanting ONE MONTH had to page backwards from today until it arrived,

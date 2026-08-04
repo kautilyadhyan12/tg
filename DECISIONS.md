@@ -4479,3 +4479,63 @@ month instead of walking backwards — is card 2 and is still owed.**
   suites 167 passed / 218 DB-skipped, 0 failed. Typecheck and lint clean on both
   packages. **Both new guarantees were mutation-checked** rather than assumed:
   deleting the upper bound → 2 failed; dropping the plan clamp → 1 failed.
+
+## 2026-08-04 — date-window T3 round 1: 4 findings, none user-visible, all
+## resolved — and the parser's guarantee was the thing that was false
+
+**Round 1 of two (the standing cap, :2866). The reviewer's F1 was re-measured
+here before it was fixed, and the measurement widened it.**
+
+- (**F1, NOT-VISIBLE, and it is a REAL 500 today**) `z.string().datetime({
+  offset: true })` accepts a UTC offset whose HOUR component is above 23 —
+  `+25:30`, `+99:00` — and `Date` rejects exactly those. Measured in this
+  session:
+  `"2026-07-01T00:00:00+25:30" | zod accepts: true | Date.parse: NaN`.
+  So the schema proved a SHAPE while the service assumed an INSTANT, and
+  `new Date(query.from)` produced an Invalid Date that reached postgres.js and
+  threw `RangeError: Invalid time value` — a 500 where this card had promised a
+  400. **R2.3's bargain is that inside the boundary types are trusted BECAUSE
+  the parser made them true; a parser that leaves one case untrue does not
+  weaken the boundary, it moves the failure somewhere with no error handling.**
+  Fixed at the boundary with a named `instantSchema` (`packages/shared/src/
+  time.ts`), never at the SQL layer.
+- (**THE CLASS, found by grepping the option rather than the symptom**) A grep
+  for `datetime({ offset: true })` returns exactly TWO sites: the new window,
+  and `workoutSyncPayloadSchema.startedAt` — **the sync payload has carried the
+  same hole all along**, where the unparseable value is handed to Postgres as a
+  timestamptz instead of to `new Date`, so it fails one layer further out. Both
+  now use `instantSchema`. Not fixed because a route was seen to break; fixed
+  because the parser's guarantee was false in both places. (The plain
+  `.datetime()` form does NOT share it — measured: zod rejects
+  `2026-02-30T00:00:00Z`, which `Date.parse` would roll forward to March 2. zod
+  is the stricter of the two there, so the other five date fields are sound.)
+- (**F2, and why it is NOT fixed separately**) The same input made `clamp`
+  return the Invalid Date and discard the plan floor, because `floor > since` is
+  a NaN comparison. Never exploitable — `input.since === null` is computed from
+  the same non-null object, so the SQL guard stays armed and fails closed — but
+  it was protected by accident. F1's fix closes it at the only place it can
+  enter. **Patching `clamp` instead would have been the instance fix**, and
+  would have left the same bad value flowing into `until`, which has no clamp.
+- (**F3, the test gap that let F1 through, and it is the interesting part**) The
+  two existing negative tests probed the FORMAT boundary (`last-tuesday`,
+  `2026-08-01`) and neither probed the PARSE boundary. Worse, the both-bounds
+  case WAS a 400 — for an unrelated reason, because the `from < to` refine only
+  runs when both are present — **so the hole looked covered from every angle a
+  test happened to be written from.** New tests hit each bound ALONE, plus a
+  positive control proving a real `+05:30` window still returns its rows (the
+  docstring claimed instant-comparison; nothing proved it). Mutation-checked:
+  reverting the fix turns the api test and the shared test RED.
+- (**F4 — a DECISION, and the reviewer's two options were not equal**) The
+  reviewer was right that `limitedToDays`'s comment ("results were clamped to
+  this many days") became false when a `from` newer than the gate means nothing
+  was clamped. **The comment is what changes, not the field.** DECISIONS
+  2026-07-11 (P2.4 GAP-4) fixes `null = unlimited`, so returning null on an
+  unclamped request would tell a free user their plan has NO history limit —
+  the more dangerous lie, and the one a reader cannot recover from. The field
+  answers "what does my plan allow", which is what `monthClamp` already treats
+  it as.
+- (**MEASURED**) api `workouts.history` **21/21** and `workouts.sync` **16/16**
+  against real Postgres (the sync suite matters here: it proves the tightened
+  `startedAt` still accepts every legitimate payload, including its existing
+  `+05:30` fixture). shared **43/43**. Typecheck and lint clean on both
+  packages. **Round 2 is the cap.**

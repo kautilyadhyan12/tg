@@ -1,5 +1,6 @@
 // @app/shared — Zod schemas, API types, constants (spec v1 §4).
 export * from "./auth.js";
+export * from "./time.js";
 export * from "./pose.js";
 export * from "./events.js";
 export * from "./session.js";

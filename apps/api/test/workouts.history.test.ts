@@ -331,6 +331,43 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     expect((await inject({ method: "GET", url: "/v1/workouts?from=2026-08-01", access: cookieA })).statusCode).toBe(400);
   });
 
+  it("a well-FORMED date that is not a real instant is also a 400, on either bound alone", { timeout: 30_000 }, async () => {
+    // The gap the two assertions above could not see, and the T3 on b80bd3c
+    // walked straight through it: `datetime({ offset: true })` accepts a UTC
+    // offset with hours ABOVE 23, and `Date` rejects exactly those. The string
+    // passed the FORMAT check and was not an INSTANT, so it reached the SQL
+    // layer and 500'd on `.toISOString()` of an Invalid Date.
+    //
+    // EACH BOUND ALONE, deliberately. The window's `from < to` refine only runs
+    // when BOTH are present, so the two-bound case was already a 400 for an
+    // unrelated reason — and that is precisely what made the hole look covered.
+    for (const q of ["from=2026-07-01T00:00:00%2B25:30", "to=2026-07-01T00:00:00%2B99:00"]) {
+      const res = await inject({ method: "GET", url: `/v1/workouts?${q}`, access: cookieA });
+      expect(res.statusCode).toBe(400);
+      expect(res.json<{ error: string }>().error).toBe("validation_error");
+    }
+  });
+
+  it("a REAL offset instant is honoured as an instant, not as a string", { timeout: 30_000 }, async () => {
+    // The docstring claims `…+05:30` sorts after `…Z` lexically while being
+    // earlier in time, and that the window compares instants. Nothing proved it.
+    // Ask for the day-2 window with its bounds written in +05:30 rather than Z:
+    // the same two workouts must come back.
+    const shift = (iso: string): string => {
+      const t = Date.parse(iso) + 5.5 * 3_600_000;
+      return new Date(t).toISOString().replace(/\.\d{3}Z$/, "+05:30");
+    };
+    const res = await inject({
+      method: "GET",
+      url: `/v1/workouts?limit=100&from=${encodeURIComponent(shift(daysAgoIso(2)))}&to=${encodeURIComponent(shift(daysAgoIso(1)))}`,
+      access: cookieA,
+    });
+    expect(res.statusCode).toBe(200);
+    const items = res.json<{ items: { startedAt: string }[] }>().items;
+    expect(items.length).toBe(2);
+    expect(items.every((i) => dayOf(i.startedAt) === dayOf(daysAgoIso(2)))).toBe(true);
+  });
+
   it("GET /v1/workouts/:id serves the sets to the owner; 404 for foreign and malformed ids", { timeout: 30_000 }, async () => {
     const id = workoutIds[0];
     if (id === undefined) throw new Error("fixture ordering");

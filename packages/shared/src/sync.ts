@@ -6,11 +6,21 @@
 // superseded (later, more specific part wins; recorded in DECISIONS.md).
 import { z } from "zod";
 import { INT4_MAX, SMALLINT_MAX, setSummarySchema } from "./events.js";
+import { instantSchema } from "./time.js";
 
 export const workoutSyncPayloadSchema = z
   .object({
     workoutId: z.string().uuid(), // client-generated: THE idempotency key (Part 4 §3.5)
-    startedAt: z.string().datetime({ offset: true }),
+    // THE CLASS, not just the case (the lesson this repo has recorded four
+    // times). The T3 on `b80bd3c` found `datetime({ offset: true })` admitting
+    // an offset JS cannot parse; a grep for that option found exactly two sites
+    // and this is the other one. Here the unparseable value is handed to
+    // Postgres as a timestamptz instead of to `new Date`, so it fails one layer
+    // further out — a different 500, the same hole in the same parser. Proven
+    // reachable only as far as "the driver rejects it"; not fixed because a
+    // route was seen to break, fixed because the parser's guarantee was the
+    // thing that was false.
+    startedAt: instantSchema,
     platform: z.enum(["web", "android", "ios"]),
     /** THE ENGINE BUILD THE CLIENT WAS RUNNING — not "the engine that scored
      *  this workout" (T3 round 1 F3, Kd ruled option A on 2026-08-01).

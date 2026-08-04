@@ -121,6 +121,21 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:4483** — 2026-08-04 — **date-window T3 round 1: 4 findings, none visible,
+  all resolved. READ BEFORE USING `z.string().datetime({ offset: true })`
+  ANYWHERE.** It accepts a UTC offset with an hour component above 23
+  (`+25:30`), and `Date` rejects exactly those — so the schema proved a SHAPE
+  while the code assumed an INSTANT, and the request 500'd at the SQL layer
+  where it had promised a 400. Fixed at the parse boundary as
+  `instantSchema` (`packages/shared/src/time.ts`). **A grep for the OPTION
+  rather than the symptom found the second site — `workoutSyncPayloadSchema.
+  startedAt` had carried the same hole all along** — and proved the plain
+  `.datetime()` form is sound (zod rejects Feb 30; `Date.parse` would not).
+  The test gap is the lesson: the both-bounds case was already a 400 for an
+  UNRELATED reason, so the hole looked covered. F4 ruled the other way from the
+  reviewer's first option: `limitedToDays` keeps its meaning because
+  2026-07-11 fixes `null = unlimited`; the COMMENT was what was false.
+  21/21 + 16/16 + 43/43, fix mutation-checked. **Round 2 is the cap.**
 - **:4434** — 2026-08-04 — **`/v1/workouts` gains a DATE WINDOW (`from`/`to`) —
   the API half of the blank-old-months fix.** **Read before adding any date
   filter, and before touching `listMealsForDay`.** Half-open (`from` inclusive,

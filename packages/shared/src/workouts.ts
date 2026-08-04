@@ -2,6 +2,7 @@
 // Part 4 §3.5 columns). List = keyset cursor on (started_at, id) DESC.
 import { z } from "zod";
 import { setModeSchema } from "./events.js";
+import { instantSchema } from "./time.js";
 
 export const workoutListQuerySchema = z
   .object({
@@ -30,17 +31,24 @@ export const workoutListQuerySchema = z
      *  read-gate still floors the result (service `clamp`), so a free user
      *  asking for last year gets the same honest empty answer plus
      *  `limitedToDays` — asking for a range is not a way around the gate. */
-    from: z.string().datetime({ offset: true }).optional(),
-    to: z.string().datetime({ offset: true }).optional(),
+    from: instantSchema.optional(),
+    to: instantSchema.optional(),
   })
   .strict()
   // An inverted window is a caller BUG, and it returns zero rows — which on a
   // history screen is indistinguishable from "you never trained". This card
   // exists because that exact confusion reached a user, so it is a 400 rather
   // than a silently empty page.
-  // Compared as INSTANTS, never as strings: `offset: true` admits
+  // Compared as INSTANTS, never as strings: an offset admits
   // `…T00:00:00+05:30`, which sorts after `…T00:00:00Z` lexically while being
   // five and a half hours EARLIER.
+  //
+  // NOTE FOR ANYONE READING THIS AS A SAFETY NET: it is not one. It only runs
+  // when BOTH bounds are present, so it can never be the place a single bad
+  // bound is caught — the T3 on `b80bd3c` found exactly that, a one-bound
+  // request reaching the DB layer and 500ing there while the two-bound request
+  // was politely refused. Each bound is now proven parseable by
+  // `instantSchema` on its own; this only orders two already-valid instants.
   .refine((q) => q.from === undefined || q.to === undefined || Date.parse(q.from) < Date.parse(q.to), {
     message: "`to` must be later than `from`",
     path: ["to"],
@@ -64,8 +72,23 @@ export type WorkoutListItem = z.infer<typeof workoutListItemSchema>;
 export const workoutPageSchema = z.object({
   items: z.array(workoutListItemSchema),
   nextCursor: z.string().nullable(),
-  /** Part 4 §0.2 history read-gate (P2.4 GAP-4): non-null = results were
-   *  clamped to this many days by the caller's plan; null = unlimited. */
+  /** Part 4 §0.2 history read-gate (P2.4 GAP-4): the PLAN'S history limit in
+   *  days — **whether or not it bound this particular request** — and null when
+   *  the plan is UNLIMITED.
+   *
+   *  Reworded 2026-08-04 (T3 on `b80bd3c`, F4). The old wording said "results
+   *  were clamped to this many days", which the date window made false: ask for
+   *  a `from` NEWER than the gate and nothing is clamped, yet the field still
+   *  reports 90. **The field's meaning is not changing to match** — DECISIONS
+   *  2026-07-11 (P2.4 GAP-4) fixes `null = unlimited`, so returning null when a
+   *  request happened not to be clamped would tell a free user their plan has
+   *  no limit. That is the more dangerous of the two lies, and it is the one a
+   *  reader cannot recover from. The comment was the thing that was wrong.
+   *
+   *  For a reader: this answers "what does my plan allow", not "was this
+   *  response cut short". The calendar's `monthClamp` already treats it that
+   *  way — it compares the plan window against the month on screen, which is a
+   *  plan question and not a request question. */
   limitedToDays: z.number().int().nullable(),
 });
 export type WorkoutPage = z.infer<typeof workoutPageSchema>;

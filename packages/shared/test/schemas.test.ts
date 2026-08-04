@@ -6,10 +6,12 @@ import {
   VISIBILITY_THRESHOLD,
   frameResultSchema,
   holdEventSchema,
+  instantSchema,
   poseFrameSchema,
   repEventSchema,
   sessionInputSchema,
   setSummarySchema,
+  workoutListQuerySchema,
   workoutSyncPayloadSchema,
 } from "../src/index.js";
 
@@ -120,6 +122,42 @@ describe("session input (§2.3)", () => {
     expect(
       sessionInputSchema.safeParse({ definition: { anything: "no longer accepted" } }).success,
     ).toBe(false);
+  });
+});
+
+describe("instantSchema — a shape that parses is not an instant", () => {
+  // Measured 2026-08-04: zod's `datetime({ offset: true })` admits an offset
+  // whose HOUR component is above 23, and `Date` rejects exactly those. Every
+  // schema carrying a caller-supplied offset instant goes through this, so the
+  // hole is closed once rather than per field (the T3 on b80bd3c, F1).
+  const syncPayload = {
+    workoutId: "7d9f8e1c-3b2a-4c5d-9e8f-1a2b3c4d5e6f",
+    startedAt: "2026-07-07T10:00:00+05:30",
+    platform: "web",
+    engineVersion: "1.0.0",
+    defsVersion: 1,
+    sets: [validSetSummary],
+    traceSample: null,
+  };
+
+  it("rejects an offset no clock has, on the two sites that take one", () => {
+    for (const bad of ["2026-07-01T00:00:00+25:30", "2026-07-01T00:00:00+99:00"]) {
+      expect(instantSchema.safeParse(bad).success).toBe(false);
+      // The two live users of it, asserted through the SCHEMAS rather than
+      // trusted to share an import: an edit that inlines `datetime()` back into
+      // either one fails here.
+      expect(workoutListQuerySchema.safeParse({ from: bad }).success).toBe(false);
+      expect(workoutSyncPayloadSchema.safeParse({ ...syncPayload, startedAt: bad }).success).toBe(false);
+    }
+  });
+
+  it("still accepts the real ones — Z and a genuine offset", () => {
+    // THE CONTROL. Without it the assertion above is satisfied by a schema that
+    // rejects every date, which would break every client instead of one input.
+    for (const good of ["2026-07-01T00:00:00Z", "2026-07-01T00:00:00.123Z", "2026-07-01T00:00:00+05:30"]) {
+      expect(instantSchema.safeParse(good).success).toBe(true);
+      expect(workoutListQuerySchema.safeParse({ from: good }).success).toBe(true);
+    }
   });
 });
 
