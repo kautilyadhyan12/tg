@@ -906,9 +906,20 @@ then; none may be hidden or reduced to close the gap.
       camera does not cost a whole set. Never measured on a real slow phone,
       where model load is exactly the case it is trading against — the mobile
       camera smoke below is where it would be observed.
-- [ ] 🔴 **Workout history calendar** (WorkoutCalendar → workoutApi.getHistory).
+- [x] 🔴 **Workout history calendar — DONE 2026-08-04** (WorkoutCalendar →
+      workoutApi.getHistory). **CLOSED under the two-round T3 cap after round 2
+      (DECISIONS :4355): 6 findings, 1 user-visible, all fixed.** The visible one
+      was a bold "0 active days this month" printed for a month the walk never
+      finished reading — beneath the very caption admitting so; five others were
+      states no render test had ever exercised (the truncation caption, the plan
+      clamp's straddling arm, the "+N more" chip), each measured to survive with
+      all 62 tests green. Round 1's two fixes were independently audited and both
+      hold. Final: web 426/426, 29/29 mutants RED, `vite build` green. No
+      re-smoke owed — both changed sentences need 1,000 workouts to reach, so no
+      step of the 8-step smoke touches them.
+      **HISTORY BELOW, kept because its lessons outlive the card.**
       **UNBLOCKED AND UNPARKED 2026-08-04 (DECISIONS :4119) — the code is now on
-      `web-repoint`. STILL UNTICKED.** Two-round T3 cap, set before round 1.
+      `web-repoint`.** Two-round T3 cap, set before round 1.
       **SMOKE ROUND 1 RAN 2026-08-04 AND FAILED — one defect, VISIBLE, now
       FIXED (DECISIONS :4182).** Every duration on Kd's screen was false: real
       `duration_ms` of 8491/4767/36290/37681 displayed as `0m`/`0m`/`1m`/`1m`,
@@ -929,9 +940,8 @@ then; none may be hidden or reduced to close the gap.
       the four sessions now read `8s`/`5s`/`36s`/`38s`, confirmed by Kd.
       Steps 5-8 had never run before today and all pass — including step 8, the
       hand-counted case written for this card's own new coverage.
-      **T3 ROUND 1 HAS RUN (2026-08-04, DECISIONS :4267): 6 findings, 1
-      VISIBLE, ALL FIXED. ROUND 2 IS THE CAP and is what this line now waits
-      on.**
+      **T3 ROUND 1 (2026-08-04, DECISIONS :4267): 6 findings, 1 VISIBLE, ALL
+      FIXED.**
       F1 (VISIBLE) was the duration defect's twin: the walk pages BACKWARDS from
       today, so an unreadable row from a NEWER month was counted and printed as
       "1 workout couldn't be read" over a month that had read perfectly — and
@@ -1819,6 +1829,53 @@ then; none may be hidden or reduced to close the gap.
          Round B touches only `Sidebar.jsx` and the two test files. Kd approved
          the plan as written, so it was not folded in and there is now no
          scheduled round that will pass this file.** It needs a card of its own.
+- [ ] 🔴 **A long-time user's OLD MONTHS GO BLANK on the calendar, and the page-
+      walk is why. `/v1/workouts` needs a date filter.** Raised by Kd on
+      2026-08-04, in response to this chat calling the truncated state
+      "unreachable" — **which was wrong, and the correction is the point of this
+      line.** 1,000 workouts is four sessions a week for five years. Real users
+      reach it; the app is being built for a lot of them.
+      **WHAT THEY SEE.** `/v1/workouts` is a keyset cursor list with NO date
+      filter, so `fetchMonth` assembles a month by paging BACKWARDS from today,
+      capped at `HISTORY_MAX_PAGES` × `HISTORY_PAGE_LIMIT` = 10 × 100 = 1,000
+      rows (`apps/web/src/api/workoutHistory.js`). Browse to a month with 1,000
+      workouts logged since, and the walk never reaches it: `truncated` comes
+      back true and the grid is EMPTY. The T3 round-2 fixes make that state stop
+      LYING (it no longer prints a bold "0 active days this month", and the
+      caption is now true) — **they do not make the month readable, and this line
+      exists so that is not mistaken for done.**
+      **THE FIX IS ON THE API, not the client.** A month filter on
+      `/v1/workouts` (or a dedicated month/range read) returns the month in one
+      request at any history size: no cap, no walk, no truncation caption, and
+      the ten requests per month view collapse to one. The client's page-walk was
+      always a stand-in for a filter the endpoint does not have — the Card-5d
+      precedent it cites (`listMealsForDay`, DECISIONS 2026-07-19) made the same
+      trade under the same constraint, so **the same question should be asked of
+      that reader when this is built.**
+      **Not a regression and not this card's defect** — the cap predates it and
+      the old backend answered `?month=&year=` server-side, which is exactly the
+      surface the repoint lost. Needs its own card (API half, then the client
+      simplification); size it against the P2.8 order at DECISIONS :2866.
+- [ ] ⚪ **The timezone-pin guard asserts only that the offset is NOT ZERO, so a
+      DST zone would satisfy it.** Raised by the calendar's T3 round 2
+      (2026-08-04, DECISIONS :4355) while auditing round 1's own fix, and
+      reported rather than patched — the fix is not free, since naming the zone
+      in the assertion duplicates the value the config already owns, and a
+      duplicated constant is its own drift risk.
+      `apps/web/vitest.config.js` pins `TZ=Asia/Kolkata` because under UTC the
+      local day and the UTC day are identical by definition, so no fixture can
+      tell a correct day-bucketing from the UTC-day defect (round 1's F2, which
+      was inert on the CI runner). The config's stated reason for THAT zone is
+      that it is the product's own market AND has no DST — a date fixture cannot
+      drift twice a year. The guard at `workoutHistory.test.js:112` checks
+      `getTimezoneOffset() !== 0`, which a DST zone passes. So the pin can be
+      edited to, say, `Europe/London` and every date test keeps passing while the
+      no-DST half of the rationale silently stops holding, and two fixtures a year
+      start landing on the wrong day. **Not visible and not urgent: nothing on
+      screen is wrong today, and the pin is not something a card routinely
+      touches.** Closing it means asserting the property the rationale actually
+      depends on — that January and July offsets agree — which is one line and
+      names no zone.
 - [ ] 🟡 **The calendar's stand-in for `safeParse` catches renamed fields but NOT
       changed UNITS — and a changed unit is what actually bit.** Raised inside
       the calendar T3 round 1's security pass (2026-08-04) as an observation

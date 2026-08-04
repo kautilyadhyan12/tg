@@ -338,9 +338,16 @@ export default function WorkoutCalendar() {
           {' '}<span style={{ color: 'rgba(255,255,255,0.65)' }}>Older workouts are still saved.</span>
         </p>
       )}
+      {/* T3 round 2, F4. This used to read "This month has more workouts than
+          this view reads back through" — false by construction. The walk starts
+          at TODAY and pages BACKWARDS, so the 1,000 rows it gave up after are
+          workouts NEWER than the month on screen, not workouts IN it. Round 1's
+          F1 was the same shape one caption over: a condition caused by OTHER
+          months, printed as a sentence about this one. */}
       {status === 'ready' && history?.truncated && (
         <p className="text-2xs mb-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          This month has more workouts than this view reads back through, so it may be incomplete.
+          There are too many workouts between today and this month for this view
+          to read back that far, so the days shown may be incomplete.
         </p>
       )}
       {status === 'ready' && history?.unreadable > 0 && (
@@ -454,12 +461,17 @@ export default function WorkoutCalendar() {
       )}
 
       {/* Month summary — the count is stated ONLY when the month was actually
-          read. On a failed read it is unknown, and "0 active days" would be a
-          claim about days nobody looked at. */}
+          read, AND read to the end. On a failed read it is unknown, and "0
+          active days" would be a claim about days nobody looked at.
+          A TRUNCATED read is the same lie in a quieter voice (T3 round 2, F2):
+          the walk gave up 1,000 workouts short of this month, so the caption
+          above already admits the days may be incomplete — and this line was
+          printing a confident bold "0 active days this month" directly beneath
+          it. Both states fall through to the honest wording. */}
       <div className="mt-4 pt-4 flex items-center justify-between"
            style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
         <p className="text-xs" style={{ color: MUTED }}>
-          {status === 'ready' ? (
+          {status === 'ready' && !history?.truncated ? (
             <>
               <span className="font-bold text-white">
                 {Object.keys(byDate).length}

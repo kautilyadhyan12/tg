@@ -142,7 +142,10 @@ MUTATIONS=(
   "M13 sessions are no longer oldest-first in a day|$READER|s#    byDate\[key\].sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt));#    byDate[key].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));#"
   "M14 distinct-exercise count becomes a set count|$READER|s#  return { names: seen.slice(0, 5), total: seen.length };#  return { names: seen.slice(0, 5), total: data.sets.length };#"
   "M15 a failed read renders as a ready empty month|$VIEW|s#        setStatus('failed');#        setStatus('ready');#"
-  "M16 the month count is claimed even when unread|$VIEW|s#          {status === 'ready' ? (#          {true ? (#"
+  # Re-anchored 2026-08-04 (T3 round 2, F2): the count's condition gained the
+  # truncation term, so the old anchor no longer exists. INTENT unchanged — a
+  # day count must never be stated for a month nobody read.
+  "M16 the month count is claimed even when unread|$VIEW|s#          {status === 'ready' \&\& !history?.truncated ? (#          {true ? (#"
   "M17 a failed detail read renders as no exercises|$VIEW|s#                  {chips === null \&\& (#                  {false \&\& (#"
   "M18 the repoint is reverted to the old backend|$CLIENT|s#  getHistory: (params) => authApi.get('/v1/workouts', { params }),#  getHistory: (params) => mlApi.get('/workouts', { params }),#"
   # ── M19–M22: the HAND-COUNTED workout, added 2026-08-04 ─────────────────────
@@ -164,6 +167,14 @@ MUTATIONS=(
   # ── M24-M25: T3 round 1 findings, added 2026-08-04 ──────────────────────────
   "M24 an unreadable row from ANOTHER month is blamed on this one|$READER|s#        const bad = Date.parse(text(item?.startedAt) ?? '');#        const bad = NaN;#"
   "M25 a big calorie number loses its thousands separator|$READER|s#  return formatCount(kcal);#  return kcal === null || kcal === undefined ? UNKNOWN : String(kcal);#"
+  # ── M26-M29: T3 round 2 findings, added 2026-08-04 ──────────────────────────
+  # Four states that had no assertion at all. Each was measured to survive
+  # before its test was written: with the condition replaced, all 62 tests
+  # stayed green — which is why "the code is correct" was not protection.
+  "M26 a truncated month stops warning it may be incomplete|$VIEW|s#      {status === 'ready' \&\& history?.truncated \&\& (#      {false \&\& (#"
+  "M27 the plan clamp reports the wrong half of the month|$VIEW|s#          {clamp.whole ?#          {!clamp.whole ?#"
+  "M28 a day count is claimed for a month the walk never reached|$VIEW|s#          {status === 'ready' \&\& !history?.truncated ? (#          {status === 'ready' ? (#"
+  "M29 the sixth exercise vanishes with no +N chip|$VIEW|s#                        {chips.total > chips.names.length \&\& (#                        {false \&\& (#"
 )
 
 PASSES=0

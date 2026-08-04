@@ -250,10 +250,14 @@ export async function fetchMonth(fetchPage, { month, year }) {
         //
         // A row whose date is READABLE can be placed even when the rest of it
         // is not, so an out-of-month one is skipped exactly as its readable
-        // siblings already are. A row with NO readable date cannot be excluded
-        // on month, and is counted for whichever month is on screen — that
-        // over-reports across months, and is the honest direction: a silent
-        // drop would make "N active days" a fabricated count.
+        // siblings already are. A row with NO readable date is counted for
+        // whichever month is on screen, because there is no date to rule it OUT
+        // of this month with — not because dropping it would distort the day
+        // count. T3 round 2, F6 corrects that reason where it was first
+        // written: an undatable row never enters `byDate` at all, so it can
+        // never be one of the "N active days", and dropping it silently could
+        // not have fabricated that count. What a silent drop WOULD hide is that
+        // the row exists — which is the whole point of surfacing it.
         const bad = Date.parse(text(item?.startedAt) ?? '');
         if (!Number.isFinite(bad) || (bad >= monthStart && bad < monthEnd)) {
           unreadable += 1;

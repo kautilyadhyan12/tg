@@ -121,6 +121,28 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:4355** — 2026-08-04 — **calendar T3 ROUND 2 (THE CAP) — CARD CLOSED.** 6
+  findings, 1 user-visible, all fixed. **Read before writing a render test for a
+  screen with more than two states.** F2 (visible): the bold day count was
+  printed on any successful read, so a TRUNCATED month showed "0 active days
+  this month" directly beneath its own caption saying the month may be
+  incomplete — the defect this card was built to remove, one degree quieter.
+  F4: that caption was false by construction ("this month has more workouts than
+  this view reads back through" — the rows it gave up on are NEWER months'),
+  round 1's F1 one caption over. **F1/F3/F5 were three states with NO render
+  assertion at all** — truncation, the clamp's straddling arm, the "+N more"
+  chip — each measured to survive with all 62 tests green; F5 is the
+  fixture-uniformity blind spot for the THIRD time on this card. F6 corrected a
+  wrong REASON attached to right behaviour. **Round 1's two fixes were audited
+  and both hold** (the bite-check repair reproduces; the TZ pin reaches the
+  worker under a forced `TZ=UTC`), with one residual reported not fixed: the pin
+  test asserts only a non-zero offset, so a DST zone would pass. 426/426, 29/29
+  mutants RED, M16 re-anchored. **Carries a same-day CORRECTION by Kd that
+  outlives the card:** this chat called the truncated state "unreachable"; 1,000
+  workouts is five years at four sessions a week, and underneath it an old month
+  comes back EMPTY, which these fixes stop lying about but do not repair. New 🔴
+  OWED line — `/v1/workouts` needs a date filter. **"The operator's account
+  cannot reach it" is a fact about a smoke test, never about users.**
 - **:4267** — 2026-08-04 — **calendar T3 ROUND 1: 6 findings, 1 VISIBLE, all
   fixed — and the mutation harness's own bite-check was BLIND.**
   **Read before trusting any "N mutants, 0 alive" table produced on Windows.**

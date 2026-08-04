@@ -288,10 +288,32 @@ describe('the plan read-gate', () => {
     fireEvent.click(screen.getAllByRole('button')[0]);
     fireEvent.click(screen.getAllByRole('button')[0]);
 
-    await waitFor(() =>
-      expect(screen.getByText(/Your plan shows the last 7 days/)).toBeTruthy(),
-    );
+    const notice = await screen.findByText(/Your plan shows the last 7 days/);
+    // WHICH ARM, not merely that the notice appeared. `monthClamp` is unit-
+    // tested both ways but nothing asserted that the SCREEN routes the two
+    // cases to different sentences, so flipping the ternary passed (T3 round 2,
+    // F3). This assertion and the straddling one below are a PAIR: either alone
+    // is satisfied by hardcoding the other's copy.
+    expect(notice.textContent).toMatch(/so this month isn’t shown/);
+    expect(notice.textContent).not.toMatch(/the earlier part/);
     expect(screen.getByText(/Older workouts are still saved/)).toBeTruthy();
+  });
+
+  it('says only the EARLIER part is missing when the window cuts into the month', async () => {
+    // A window whose floor lands MID-WAY through the month being viewed,
+    // whatever today's date is: aim at the 15th of last month and derive the
+    // day count from that, rather than hardcoding a number that only straddles
+    // on some days of some months.
+    const midLastMonth = new Date(Y, M - 1, 15, 12).getTime();
+    const days = Math.ceil((Date.now() - midLastMonth) / 86400000);
+    workoutService.getHistory.mockResolvedValue(pageOf([], days));
+    render(<WorkoutCalendar />);
+    await waitFor(() => expect(activeDays()).toBeTruthy());
+
+    fireEvent.click(screen.getAllByRole('button')[0]);   // back one month
+
+    const notice = await screen.findByText(/Your plan shows the last/);
+    expect(notice.textContent).toMatch(/the earlier part of this month isn’t shown/);
   });
 
   it('stays silent when the window covers the month', async () => {
@@ -299,6 +321,52 @@ describe('the plan read-gate', () => {
     render(<WorkoutCalendar />);
     await waitFor(() => expect(dayCell(15).disabled).toBe(false));
     expect(screen.queryByText(/Your plan shows the last/)).toBeNull();
+  });
+});
+
+describe('a month the walk never reached — TRUNCATION', () => {
+  // The walk starts at TODAY and pages BACKWARDS, capped at HISTORY_MAX_PAGES.
+  // A history dense enough to fill all ten pages with rows NEWER than the month
+  // on screen means that month was never reached at all — so every square is
+  // blank for a reason that has nothing to do with whether the user trained.
+  //
+  // The first call resolves a WHOLE month (no next cursor); every call after it
+  // hands back another page forever. So the opening month is read completely —
+  // that is the control — and stepping back one month truncates.
+  const wholeThenEndless = () => {
+    workoutService.getHistory.mockResolvedValueOnce(pageOf([item()]));
+    workoutService.getHistory.mockResolvedValue({
+      data: { items: [item()], nextCursor: 'c1', limitedToDays: null },
+    });
+  };
+
+  it('says the view could not read back that far', async () => {
+    wholeThenEndless();
+    render(<WorkoutCalendar />);
+
+    await waitFor(() => expect(activeDays().textContent).toMatch(/^1\s+active days this month$/));
+    expect(screen.queryByText(/too many workouts/i)).toBeNull();   // the control
+
+    fireEvent.click(screen.getAllByRole('button')[0]);   // back one month
+
+    expect(
+      await screen.findByText(/too many workouts between today and this month/i),
+    ).toBeTruthy();
+  });
+
+  it('never claims a day count for a month it did not finish reading', async () => {
+    // The defect this replaces (T3 round 2, F2): a bold "0 active days this
+    // month" printed directly beneath a caption admitting the month may be
+    // incomplete. The count is only knowable when the whole month was read.
+    wholeThenEndless();
+    render(<WorkoutCalendar />);
+
+    await waitFor(() => expect(activeDays().textContent).toMatch(/^1\s+active days this month$/));
+
+    fireEvent.click(screen.getAllByRole('button')[0]);   // back one month
+
+    await waitFor(() => expect(activeDays().textContent).toMatch(/unavailable/i));
+    expect(activeDays().textContent).not.toMatch(/\b0\b/);
   });
 });
 
@@ -316,6 +384,31 @@ describe('the exercise chips (a LIVE feature the old backend served)', () => {
     expect(await screen.findByText('Barbell Squat')).toBeTruthy();
     expect(screen.getByText('Push Up')).toBeTruthy();
     expect(screen.getByText(/Exercises · 2 total/)).toBeTruthy();
+  });
+
+  it('counts the ones it did not list when a workout has more than five', async () => {
+    // The old backend projected `exercises[:5]` + a total, so "+N more" is a
+    // LIVE feature the no-removal rule protects. Every other fixture on this
+    // screen has two exercises, which is the fixture-uniformity blind spot this
+    // card has now hit three times (T3 round 2, F5) — nothing had ever rendered
+    // the sixth.
+    workoutService.getHistory.mockResolvedValue(pageOf([item()]));
+    workoutService.getWorkout.mockResolvedValue({
+      data: {
+        sets: ['squat', 'push_up', 'lunge', 'plank', 'burpee', 'jumping_jack']
+          .map((exerciseSlug) => ({ exerciseSlug })),
+      },
+    });
+    render(<WorkoutCalendar />);
+    await waitFor(() => expect(dayCell(15).disabled).toBe(false));
+
+    fireEvent.click(dayCell(15));
+
+    expect(await screen.findByText('Squat')).toBeTruthy();
+    expect(screen.getByText('Burpee')).toBeTruthy();      // the fifth IS named
+    expect(screen.queryByText('Jumping Jack')).toBeNull(); // the sixth is not
+    expect(screen.getByText('+1 more')).toBeTruthy();
+    expect(screen.getByText(/Exercises · 6 total/)).toBeTruthy();
   });
 
   it('says the read failed rather than implying the workout had none', async () => {

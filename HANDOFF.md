@@ -1,6 +1,46 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: WORKOUT CALENDAR — **CARD CLOSED 2026-08-04 under the two-round cap.**
+      T3 round 2: 6 findings, 1 user-visible, all fixed. The 🔴 OWED line is
+      TICKED. Records: DECISIONS :4355 (round 2), :4267 (round 1), :4239 (smoke
+      passed), :4182 (the duration fix), :4119 (the unpark).
+
+STATE
+  · web **426/426**. **29 mutants / 3 files: 29 RED, 0 alive, 0 invalid**, green
+    baseline both sides. `vite build` green. Lint on the touched files: 1
+    pre-existing error (`react-hooks/set-state-in-effect`, has its own OWED line).
+  · No re-smoke owed: both sentences this round changed live behind `truncated`,
+    which needs 1,000 workouts newer than the month viewed, so no step of the
+    8-step smoke reaches them.
+  · **A NEW 🔴 OWED LINE CAME OUT OF THAT SENTENCE, and it is the one to read.**
+    This chat called that state "unreachable". Kd corrected it: 1,000 workouts is
+    five years at four sessions a week. Underneath the wording sits a real
+    defect — with 1,000 workouts logged since, an old month comes back EMPTY.
+    This round stops it LYING about that; it does not make the month readable.
+    The fix is a date filter on `/v1/workouts` (the client page-walk only exists
+    because the endpoint lost the old backend's `?month=&year=`). **"The
+    operator's account cannot reach it" is a fact about a smoke test, never a
+    fact about users.**
+
+THE ONE THING WORTH CARRYING
+  **Five of the six findings were states nobody had ever RENDERED.** Replacing
+  the truncation caption's condition, the plan clamp's ternary, or the "+N more"
+  chip's condition left ALL 62 TESTS GREEN. The behaviour was correct in every
+  case — what was missing was any assertion that would notice if it stopped
+  being. **A screen with more than two states needs a fixture per state, and
+  this card's fixtures kept being uniform in exactly the dimension that
+  mattered**: every duration 1,800,000 ms (the smoke caught that), every
+  unreadable row inside the viewed month (round 1 F1), every workout carrying two
+  exercises (round 2 F5, where the chip needs six). Three rounds, one shape.
+  **The visible one, F2**, is the same lie the card exists to remove, quieter: a
+  bold "0 active days this month" printed under a caption already saying the
+  month may be incomplete. The failed state's honest wording now covers it.
+
+NEXT: the repoint's card ORDER is at DECISIONS :2866. Nothing here blocks it.
+```
+
+```
 TASK: WORKOUT CALENDAR — **T3 ROUND 1 DONE: 6 findings, 1 VISIBLE, ALL FIXED.
       ROUND 2 IS THE CAP.** Records: DECISIONS :4267 (round 1), :4239 (smoke
       passed), :4182 (smoke round-1 duration fix), :4119 (the unpark).

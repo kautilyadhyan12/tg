@@ -123,9 +123,13 @@ the operational wrapper around it.
             server-side search (ExerciseLibrary) — the Part 4 §3.4 catalog is
             data-only (nameKey/family/tier/met…); exercise copy/media surface
             is owed (P4 production line / Part 2 Appendix A localization).
-      - [ ] Workout history calendar (WorkoutCalendar → workoutApi.getHistory)
-            — /v1/workouts EXISTS; the client repoint is owed to a web card
-            (found out-of-scope during Card 3, R1.1).
+      - [x] **Workout history calendar** (WorkoutCalendar → workoutApi.getHistory)
+            — **DONE 2026-08-04.** The month is assembled client-side by a capped
+            page-walk over the keyset list (`/v1/workouts` has no date filter),
+            and the exercise chips come from `/v1/workouts/:id` when a day opens.
+            Kd's browser smoke passed all 8 steps; T3 rounds 1 and 2 both ran and
+            the card closed under its two-round cap (DECISIONS :4355, :4267).
+            Full detail on the OWED.md line.
       - [x] **Groq model migration** — **DONE 2026-07-22, PR #44** (merge
             `ad3b1ee`), ahead of the 2026-08-16 decommission of
             `llama-3.1-8b-instant`. COACH_MODEL now defaults to

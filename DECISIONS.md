@@ -4351,3 +4351,82 @@ rather than reasoned about.**
   `react-hooks/set-state-in-effect` that already has its own OWED line —
   unchanged by this round.
 - (**ROUND 2 IS THE CAP.**) The OWED line stays UNTICKED until it comes back.
+
+## 2026-08-04 — calendar T3 round 2 (THE CAP): 6 findings, 1 user-visible, all
+## fixed — and five of them were states no test had ever rendered
+
+**Round 2 of two, the cap set before round 1 ran. The card CLOSES on this
+round's fixes (the :2692 cap pattern: a VISIBLE finding is fixed and the card
+closes ON that fix; it does not buy a round 3). Every finding re-verified
+against the files here before any fix was planned.**
+
+- (**F2, VISIBLE, and the only one that changed what a user reads**) The bold
+  active-day count was printed on any successful read — including a TRUNCATED
+  one. So the screen said "**0** active days this month" directly beneath its
+  own caption admitting it never finished reading the month. The failed state
+  already had honest wording ("Active days this month unavailable") and the
+  truncated state now falls through to it. **The same class as the state this
+  card was built to remove**, one degree quieter: the original defect drew a
+  blank grid captioned "0 active days" on a DEAD backend, and this drew it on a
+  backend that answered perfectly but was not read to the end.
+- (**F4, the caption above it, false by construction**) It read "This month has
+  more workouts than this view reads back through". The walk starts at TODAY and
+  pages BACKWARDS, so the 1,000 rows it gives up after are workouts NEWER than
+  the month on screen — the month itself may hold none. **Round 1's F1 was this
+  exact shape one caption over** (a condition caused by OTHER months, printed as
+  a sentence about this one), which is why it is recorded rather than quietly
+  reworded. Now: "There are too many workouts between today and this month for
+  this view to read back that far."
+- (**F1, F3, F5 — three states with NO render assertion at all, each MEASURED to
+  survive before its test was written**) The truncation caption, the plan-clamp
+  copy's straddling arm, and the "+N more" exercise chip. Replacing each
+  condition with `false` (or negating the clamp ternary) left **all 62 tests
+  green**. F5 is the fixture-uniformity shape for the THIRD time on this card —
+  every render fixture carried two exercises, and the chip needs six, exactly as
+  every duration was 1,800,000 ms and every unreadable row was inside the viewed
+  month. The clamp is now a PAIR of assertions (the existing whole-month test
+  gained "which arm", the new one covers the straddle) because either alone is
+  satisfied by hardcoding the other's copy — the M20/M21 discipline.
+- (**F6, a wrong REASON attached to right behaviour**) Round 1's comment
+  justified counting an undatable row by "a silent drop would make 'N active
+  days' a fabricated count". False for that branch: a row with no readable date
+  never enters `byDate`, so it can never be one of the N. The real reason is
+  that there is no date to rule it OUT of this month with. Behaviour unchanged;
+  the comment corrected where it was written. **A record is a claim** (:1173) —
+  a comment defending an assumption with the wrong argument is how the next chat
+  deletes the behaviour it protects.
+- (**THE ROUND-1 FIXES THE REVIEWER WAS ASKED TO AUDIT — both hold.**) The
+  harness bite-check repair reproduces exactly (a sed matching nothing moves the
+  raw md5, not the content md5) and holds for all mutants, since `restore()`
+  puts the CRLF snapshot back. The `Asia/Kolkata` pin reaches the test worker —
+  re-measured by forcing `TZ=UTC` in the shell, where the pinned test still
+  passes. **Residual, not fixed:** that test asserts only a non-zero offset, so
+  a future edit to a DST zone would pass while the config's own no-DST rationale
+  stopped holding. Not visible, cheap only in appearance (naming the zone in the
+  assertion duplicates the config), so it is REPORTED here rather than patched.
+- (**MEASURED**) web **426/426** (66 in the two calendar suites, up from 62).
+  **29 mutants: 29 RED, 0 survived, 0 invalid**, green baseline before and
+  after. M16 re-anchored (F2's fix moved its line); M26–M29 added, one per
+  unasserted state. **M28 restores F2's exact defect and goes RED — that is the
+  R9.5 red-first evidence for the one behavioural fix.** `vite build` green.
+  Lint on the touched files: **1** error, the pre-existing
+  `react-hooks/set-state-in-effect` with its own OWED line.
+- (**NO RE-SMOKE**) Both changed sentences live behind `truncated`, which needs
+  1,000 workouts newer than the month being viewed. Kd's TEST ACCOUNT cannot
+  reach that state, so no step of the 8-step smoke touches either one, and the
+  bytes behind every step he did judge are unchanged.
+- (**CORRECTION, made the same day, by Kd**) This chat first wrote that state up
+  as "unreachable" and let that stand as the whole answer. **It is not
+  unreachable — it is five years of training at four sessions a week**, on a
+  product being built for a lot of people. Worse, the framing hid the real
+  defect underneath: with 1,000 workouts logged since, an old month is not
+  merely warned about, it comes back EMPTY. This round's fixes stop that state
+  lying; they do not make the month readable. **The fix belongs on the API** — a
+  date filter on `/v1/workouts` returns a month in one request at any history
+  size, and the client's page-walk only exists because the endpoint lost the old
+  backend's `?month=&year=`. Given a 🔴 OWED line rather than folded in here,
+  because it is an API card and this one is closed. **The lesson is the
+  framing**: "the operator's account cannot reach it" is a fact about a smoke
+  test, never a fact about users, and stating it as if it settled the matter is
+  how a real limitation gets filed as a non-event.
+- (**THE CARD CLOSES.** The 🔴 OWED line ticks on this commit.)
