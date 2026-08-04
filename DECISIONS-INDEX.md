@@ -121,6 +121,14 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:4239** — 2026-08-04 — **calendar SMOKE PASSED, all 8 steps, on `5133114`.**
+  Steps 1-4 were RE-RUN on the fixed bytes rather than carried over — the numbers
+  Kd had judged were the ones that changed (XP-card precedent). Steps 5-8 had
+  never run before and all pass, step 8 being the hand-counted case written the
+  same morning. **Records the RESOLUTION of the report rather than inflating it**:
+  three "all passed" replies against numbered expectations, plus an explicitly
+  re-sought duration confirmation, plus screenshot + database cross-checks.
+  **Only the fresh-chat T3 remains before the OWED line ticks.**
 - **:4182** — 2026-08-04 — **calendar SMOKE ROUND 1 FAILED: every duration on
   screen was false.** Real `duration_ms` 8491/4767/36290/37681 displayed as
   `0m`/`0m`/`1m`/`1m` — two workouts shown as taking no time, two rounded UP

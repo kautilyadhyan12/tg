@@ -181,6 +181,30 @@ Covered by unit test + mutation M10 only.
 _Kd records the outcome here — per step, or as an explicit blanket pass. A
 record must not claim more resolution than the report it came from._
 
-- Date:
-- Commit:
-- Result:
+- Date: **2026-08-04**
+- Commit: **`5133114`** (steps 1–4 re-run on these bytes; the first attempt was
+  on `1b025ed` and FAILED — see below)
+- Result: **PASS, all 8 steps — after one round-1 failure that was fixed.**
+
+**ROUND 1 FAILED on the durations, and that is the record that matters.**
+On `1b025ed` the four sessions on screen read `0m` / `0m` / `1m` / `1m`. The
+stored `duration_ms` values were 8491 / 4767 / 36290 / 37681 — read out of the
+workouts table, not off the screen — so two workouts were displayed as taking
+no time at all and two were rounded UP past a minute they never reached. Cause
+and fix at DECISIONS :4182: the old backend sent whole MINUTES, so rounding was
+right for the field being replaced and wrong for milliseconds, and every fixture
+in the suite used 1,800,000 ms so no test could see it.
+
+**ROUND 2 (on `5133114`) PASSED.** Kd confirmed the same four sessions now read
+`8s` / `5s` / `36s` / `38s`.
+
+Resolution of the report, stated rather than inflated: steps **5**, **6** and
+**7+8** were each reported as "all passed" against the numbered expectations
+above, and the durations were confirmed explicitly when asked a third time.
+Steps 1–4's other content — 83%/84% in green on camera workouts, `—` in the
+NEUTRAL tint on hand-counted ones, the Push Up / Squat chips, and the MIXED
+camera+hand workout rendering as ONE session — was additionally verified from
+Kd's three screenshots and cross-checked against the database.
+
+**What this does NOT discharge:** the fresh-chat T3. The OWED line stays
+unticked until that comes back clean.

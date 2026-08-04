@@ -922,9 +922,15 @@ then; none may be hidden or reduced to close the gap.
       **STEPS 1-4 OTHERWISE PASSED** — camera workouts 83%/84% in green,
       hand-counted ones `—` in the neutral tint, chips correct, and the mixed
       camera+hand workout rendered as ONE session with both chips.
-      **STILL OWED TO TICK: a RE-SMOKE on the fixed bytes** (the durations Kd
-      saw have changed, so his pass does not carry over — the XP-card precedent),
-      **plus smoke steps 5-8, which have never run**, and the fresh-chat T3.
+      **SMOKE FULLY DISCHARGED 2026-08-04 — ALL 8 STEPS PASS on `5133114`**
+      (result table in `RUNBOOK/smoke-workout-calendar.md`). The re-smoke of
+      steps 1-4 was run on the FIXED bytes rather than carried over, because the
+      numbers Kd had judged were the ones that changed (the XP-card precedent):
+      the four sessions now read `8s`/`5s`/`36s`/`38s`, confirmed by Kd.
+      Steps 5-8 had never run before today and all pass — including step 8, the
+      hand-counted case written for this card's own new coverage.
+      **THE ONLY THING LEFT FOR THE TICK IS THE FRESH-CHAT T3** (two-round cap,
+      set before round 1). Nothing else is outstanding on this line.
       **WHAT DISCHARGED THE BLOCK** was other cards, not a ruling here: blocker 1
       below said the new API held only squat / jump-squat / chair-squat
       workouts, and the 58-exercise catalog (:3538) plus the web write path

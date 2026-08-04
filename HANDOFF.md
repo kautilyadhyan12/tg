@@ -1,6 +1,47 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: WORKOUT CALENDAR — **SMOKE PASSED, ALL 8 STEPS. ONLY THE T3 REMAINS.**
+      Records: DECISIONS :4239 (smoke pass), :4182 (round-1 failure + fix),
+      :4119 (the unpark). Smoke result table in
+      `RUNBOOK/smoke-workout-calendar.md`.
+
+STATE
+  · web **417/417**. **23 mutants / 3 files: 23 RED, 0 alive, 0 invalid**, green
+    baseline before AND after. `vite build` green.
+  · Commits `1b025ed` (unpark) + `5133114` (smoke round-1 fix). PUSHED to
+    `web-repoint`; PR #29 CI covers it.
+  · Smoke ran TWICE. Round 1 FAILED — every duration on screen was false. Round
+    2 passed on the fixed bytes, all 8 steps, durations confirmed
+    `8s`/`5s`/`36s`/`38s`.
+
+THE LESSON WORTH CARRYING OUT OF THIS CARD
+  **When a repoint changes a field's UNIT, the transform written for the old
+  unit is a defect, not a carry-over.** The old backend sent whole MINUTES;
+  `Math.round(ms/60000)` was the honest translation of the field being replaced
+  and its own comment defended it as "a display transform on a REAL value" — a
+  wrong transform wearing a considered-looking rationale. Two workouts were
+  displayed as taking NO TIME AT ALL.
+  **And no test could see it: every fixture used `durationMs: 1_800_000`,
+  including the five hand-counted tests added the same morning.** A test cannot
+  be wrong in a different direction from its fixture. Check the UNIT of every
+  numeric field a repoint touches, not just its name.
+
+NEXT
+  1. **Fresh-chat T3 on `t3-workout-calendar.diff`** — two-round cap, set before
+     round 1. Prompt is ready in that chat's handover.
+  2. Fix only what T3 finds; re-smoke only if a fix changes what a user sees.
+  3. Tick the OWED line. Then: the legacy dual-write removal is still blocked
+     (PostWorkout summary + Dashboard stats have no new-API home) — its own line.
+
+VERIFY:
+        corepack pnpm --filter web exec vitest run          # 417/417
+        bash apps/web/tools/mutate-workout-calendar.sh      # 23/23 RED, exit 0
+SPEC GAPs: none.  DEVIATIONS: none.
+```
+
+
+```
 TASK: WORKOUT CALENDAR — **SMOKE ROUND 1 FAILED, THE DEFECT IS FIXED, STILL NOT
       DONE.** Recorded at DECISIONS :4182 (the failure) and :4119 (the unpark).
 

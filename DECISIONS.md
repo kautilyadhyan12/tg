@@ -4235,3 +4235,31 @@ the one stat whose transform looked like arithmetic rather than a judgement.
   dozens of times, and vite pushes each one straight into the open tab — the
   standing lesson at :3819, incurred again and caught before he looked. The
   warning went out mid-run; it should have gone out before the command.
+
+## 2026-08-04 — calendar SMOKE PASSED, all 8 steps, on the fixed bytes
+
+**The gate :2912 set when it parked this work is half discharged: the smoke is
+done and it passes. Only the T3 remains.**
+
+- (**ROUND 2, on `5133114`**) Kd re-ran steps 1-4 on the FIXED bytes rather than
+  carrying his round-1 pass forward — right, because the numbers he had judged
+  were exactly the ones that changed (the XP-card precedent, where a re-smoke was
+  required for the same reason). The four sessions now read `8s` / `5s` / `36s` /
+  `38s` against stored `duration_ms` of 8491 / 4767 / 36290 / 37681.
+- (**STEPS 5-8 HAD NEVER RUN AND ALL PASS**) The retry-after-failure path, the
+  failed detail read, the plan window, and step 8 — the hand-counted case
+  written this morning for the shape this screen had no coverage of. That step
+  existing at all is what the coverage work was for; passing it in a browser is
+  what makes the claim more than a test result.
+- (**RESOLUTION OF THE REPORT, stated rather than inflated**) Kd reported "all
+  passed" three times, against a numbered expectation list each time, and
+  confirmed the durations explicitly when asked a third time — the first two
+  messages each carried two questions, so the confirmation was sought again
+  rather than assumed. Steps 1-4's other content (83%/84% green, `—` in the
+  neutral tint, the chips, the MIXED workout as one session) was additionally
+  verified from three screenshots and cross-checked against the workouts table.
+  Recorded at this resolution because a record must not claim more than the
+  report it came from.
+- (**WHAT IS STILL OWED**) The fresh-chat T3, two-round cap set before round 1.
+  The OWED line stays UNTICKED until it comes back clean — the google-login /
+  DPDP precedent, where a tick placed on a smoke alone had to be taken off again.
