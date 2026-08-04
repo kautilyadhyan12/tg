@@ -908,10 +908,23 @@ then; none may be hidden or reduced to close the gap.
       camera smoke below is where it would be observed.
 - [ ] 🔴 **Workout history calendar** (WorkoutCalendar → workoutApi.getHistory).
       **UNBLOCKED AND UNPARKED 2026-08-04 (DECISIONS :4119) — the code is now on
-      `web-repoint`. STILL UNTICKED, and the two things holding it are the two
-      :2912 named when it parked the work: Kd's browser SMOKE has not run, and
-      no fresh chat has reviewed it.** Neither is discharged by the code
-      arriving. Two-round T3 cap, set before round 1.
+      `web-repoint`. STILL UNTICKED.** Two-round T3 cap, set before round 1.
+      **SMOKE ROUND 1 RAN 2026-08-04 AND FAILED — one defect, VISIBLE, now
+      FIXED (DECISIONS :4182).** Every duration on Kd's screen was false: real
+      `duration_ms` of 8491/4767/36290/37681 displayed as `0m`/`0m`/`1m`/`1m`,
+      i.e. two workouts shown as taking no time and two rounded UP past a minute
+      they never reached. Cause: the OLD backend sent whole MINUTES, so rounding
+      was right for the field this replaced and wrong for milliseconds — and
+      every fixture in the suite used 1,800,000 ms, so no test could see it.
+      Fixed to whole seconds through the shared `secondsLabel`; reads
+      `8s`/`5s`/`36s`/`38s`. Failing tests shown RED first (R9.5); M23 guards the
+      regression. 417/417, 23/23 mutants RED.
+      **STEPS 1-4 OTHERWISE PASSED** — camera workouts 83%/84% in green,
+      hand-counted ones `—` in the neutral tint, chips correct, and the mixed
+      camera+hand workout rendered as ONE session with both chips.
+      **STILL OWED TO TICK: a RE-SMOKE on the fixed bytes** (the durations Kd
+      saw have changed, so his pass does not carry over — the XP-card precedent),
+      **plus smoke steps 5-8, which have never run**, and the fresh-chat T3.
       **WHAT DISCHARGED THE BLOCK** was other cards, not a ruling here: blocker 1
       below said the new API held only squat / jump-squat / chair-squat
       workouts, and the 58-exercise catalog (:3538) plus the web write path

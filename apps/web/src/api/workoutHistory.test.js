@@ -144,7 +144,7 @@ describe('readCalendarSession', () => {
     expect(readCalendarSession(validItem())).toEqual({
       id: '11111111-1111-4111-8111-111111111111',
       startedAt: '2026-07-15T09:00:00.000Z',
-      durationMinutes: 30,
+      durationSeconds: 1800,
       kcal: 210,
       formScore: 88,
     });
@@ -177,14 +177,14 @@ describe('readCalendarSession', () => {
     const s = readCalendarSession(
       validItem({ durationMs: null, kcalPoint: null, avgFormScore: null }),
     );
-    expect(s.durationMinutes).toBeNull();
+    expect(s.durationSeconds).toBeNull();
     expect(s.kcal).toBeNull();
     expect(s.formScore).toBeNull();
   });
 
   it('does not turn a real zero into an unknown', () => {
     const s = readCalendarSession(validItem({ durationMs: 0, kcalPoint: 0, avgFormScore: 0 }));
-    expect(s).toMatchObject({ durationMinutes: 0, kcal: 0, formScore: 0 });
+    expect(s).toMatchObject({ durationSeconds: 0, kcal: 0, formScore: 0 });
   });
 });
 
@@ -342,10 +342,50 @@ describe('display helpers', () => {
   });
 
   it('render real values, including real zeros', () => {
-    expect(formatDuration(0)).toBe('0m');
+    expect(formatDuration(0)).toBe('0s');
     expect(formatKcal(0)).toBe('0');
     expect(formatFormScore(0)).toBe('0%');
-    expect(formatDuration(35)).toBe('35m');
+    expect(formatDuration(2100)).toBe('35m 0s');
+  });
+
+  // ── Kd's smoke, 2026-08-04. Every one of these four is a REAL `duration_ms`
+  // read out of the workouts table for the sessions on his screen, and every
+  // one of them was displayed as a number that is not true: the two short ones
+  // as "0m" — a workout that took no time — and the two 36-38s ones as "1m",
+  // rounded UP past a minute they never reached. The old backend sent whole
+  // MINUTES, so rounding was right for its payload and wrong for this one.
+  // A confident false number is this card's own defect class, in the one field
+  // nobody had questioned.
+  it('tells the truth about a workout SHORTER THAN A MINUTE (Kd smoke 08-04)', () => {
+    expect(formatDuration(readCalendarSession(validItem({ durationMs: 8491 })).durationSeconds))
+      .toBe('8s');
+    expect(formatDuration(readCalendarSession(validItem({ durationMs: 4767 })).durationSeconds))
+      .toBe('5s');
+  });
+
+  it('does not round a 36-second workout UP to a whole minute (Kd smoke 08-04)', () => {
+    expect(formatDuration(readCalendarSession(validItem({ durationMs: 36290 })).durationSeconds))
+      .toBe('36s');
+    expect(formatDuration(readCalendarSession(validItem({ durationMs: 37681 })).durationSeconds))
+      .toBe('38s');
+  });
+
+  it('still reads a long workout the way it always did', () => {
+    expect(formatDuration(readCalendarSession(validItem({ durationMs: 1_800_000 })).durationSeconds))
+      .toBe('30m 0s');
+    expect(formatDuration(readCalendarSession(validItem({ durationMs: 5_430_000 })).durationSeconds))
+      .toBe('1h 30m');
+  });
+
+  it('never reaches the shared helper\'s "1m 60s" carry (OWED)', () => {
+    // `secondsLabel` carries on FRACTIONAL seconds — it has its own OWED line
+    // and is not this card's to fix. The reader passes whole seconds, so the
+    // carry cannot fire from here. Asserted rather than assumed, because that
+    // is the only thing keeping it true.
+    for (const ms of [119_600, 59_500, 59_999, 60_001]) {
+      expect(formatDuration(readCalendarSession(validItem({ durationMs: ms })).durationSeconds))
+        .not.toMatch(/60s/);
+    }
   });
 
   it('tints an UNKNOWN form score neutrally, never red', () => {

@@ -4178,3 +4178,60 @@ world underneath it to change, and it has.
   when it parked the work ("resumes at the smoke + T3"), and neither is
   discharged by the code arriving. Two-round cap, per the standing default
   (:2905), set here before the first round rather than after a bad fact-pattern.
+
+## 2026-08-04 — calendar smoke, round 1: the durations were ALL false
+
+**Kd ran the smoke and it FAILED on a field nobody had questioned.** Three
+screenshots, four sessions, and not one duration on screen was true. This is
+the card's own defect class — a confident number that is wrong — surviving in
+the one stat whose transform looked like arithmetic rather than a judgement.
+
+- (**THE MEASUREMENT, from the workouts table rather than from the screen**)
+  `duration_ms` 8491 · 4767 · 36290 · 37681. Displayed: `0m` · `0m` · `1m` ·
+  `1m`. The two short sessions were rendered as a workout that took **no time
+  at all**; the two 36-38 second ones were rounded **UP past a minute they never
+  reached**. The server had recorded every one of them correctly.
+- (**WHY IT WAS THERE, and it is not carelessness**) The OLD backend's history
+  payload carried whole MINUTES, so `Math.round(durationMs / 60000)` was the
+  honest translation of the field it replaced, and its comment said so:
+  "rounding is a display transform on a REAL value". True of a 35-minute
+  workout. False of every workout shorter than 90 seconds — which is what a
+  hand-counted test set IS, and increasingly what a real short session is.
+  **The repoint changed the unit under a transform that was written for the old
+  unit, and the comment defending it made it look considered.**
+- (**WHY NO TEST CAUGHT IT**) Every fixture used `durationMs: 1_800_000`. The
+  suite asserted `formatDuration(0) === '0m'` and `formatDuration(35) === '35m'`
+  — both correct for minutes, and both blind to the question of what unit was
+  arriving. A test can only be wrong in the same direction as its fixture.
+  The five hand-counted tests added THIS MORNING chose the same 30-minute
+  default and so missed it too, one commit before Kd's browser found it.
+- (**THE FIX**) The reader now carries whole SECONDS and the screen formats them
+  with `secondsLabel` — the helper PostWorkout and the share card already use,
+  now exported rather than re-spelled. Same reasoning as `UNKNOWN` being
+  imported into this file: a second spelling of one idea is how two screens come
+  to disagree about one fact. Reads `8s` · `5s` · `36s` · `38s`, and `30m 0s`
+  for the old 30-minute fixture.
+  **Whole seconds is load-bearing**: `secondsLabel` carries to "1m 60s" on
+  FRACTIONAL input — a known defect with its own OWED line, not fixed here
+  because PostWorkout and the share card read the same helper. A test pins that
+  the calendar cannot reach it.
+- (**R9.5 OBSERVED**) The four new assertions were written first and **shown RED
+  before any source changed** — `expected '—' to be '8s'`, `'36s'`, `'30m 0s'`.
+  The failing run is what proved the fixtures could reach the state at all.
+- (**M23**) A mutation restores the minute-rounding. Without it this entry would
+  be the only thing standing between the defect and its return, and this repo
+  has recorded four times that a fix without a mutation is a claim.
+  **23 mutants, 23 RED, 0 survived, 0 invalid**, green baseline both sides.
+  web **417/417**.
+- (**WHAT PASSED, recorded so the smoke is not read as a failure**) Steps 1-4
+  otherwise held, in the browser and against the DB: camera workouts showed
+  83% / 84% in GREEN; hand-counted ones showed `—` in the NEUTRAL tint, never
+  red and never `0%`; the exercise chips named "Push Up" and "Squat"; and the
+  MIXED workout (camera squat + hand-tapped press-ups) rendered as ONE session
+  with both chips and one form score. That is this morning's five tests holding
+  at the browser, which is exactly what they were added for.
+- (**A PROCESS NOTE, because it nearly cost the run**) The mutation harness was
+  started while Kd's browser sat on the live dev server. It rewrites the source
+  dozens of times, and vite pushes each one straight into the open tab — the
+  standing lesson at :3819, incurred again and caught before he looked. The
+  warning went out mid-run; it should have gone out before the command.

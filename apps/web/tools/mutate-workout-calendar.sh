@@ -110,11 +110,11 @@ echo ""
 # Each entry: <label>|<file>|<sed script>. Each restores a defect this card
 # removed, or breaks a rule it exists to enforce.
 MUTATIONS=(
-  "M1 unknown duration renders 0m|$READER|s#return minutes === null || minutes === undefined ? UNKNOWN : \`\${minutes}m\`;#return \`\${minutes ?? 0}m\`;#"
+  "M1 unknown duration renders 0s|$READER|s#return seconds === null || seconds === undefined ? UNKNOWN : secondsLabel(seconds);#return secondsLabel(seconds ?? 0);#"
   "M2 unknown calories render 0|$READER|s#return kcal === null || kcal === undefined ? UNKNOWN : String(kcal);#return String(kcal ?? 0);#"
   "M3 unknown form score renders 0%|$READER|s#return score === null || score === undefined ? UNKNOWN : \`\${score}%\`;#return \`\${score ?? 0}%\`;#"
   "M4 unknown form score tinted red|$READER|s#if (score === null || score === undefined) return FORM_NEUTRAL;##"
-  "M5 unknown duration defaulted to 0 at the reader|$READER|s#durationMinutes: durationMs === null ? null : Math.round(durationMs / 60000),#durationMinutes: Math.round((durationMs ?? 0) / 60000),#"
+  "M5 unknown duration defaulted to 0 at the reader|$READER|s#durationSeconds: durationMs === null ? null : Math.round(durationMs / 1000),#durationSeconds: Math.round((durationMs ?? 0) / 1000),#"
   "M6 kcal defaulted to 0 at the reader|$READER|s#kcal: finite(item.kcalPoint),#kcal: item.kcalPoint ?? 0,#"
   "M7 day key falls back to the UTC day|$READER|s#  const d = new Date(t);#  return s.split('T')[0];#"
   "M8 a failed page becomes an empty month|$READER|s#      return null; // the read FAILED — never the same thing as an empty month#      break;#"
@@ -141,6 +141,9 @@ MUTATIONS=(
   "M20 the screen hardcodes the neutral tint|$VIEW|s@              const tint = formColor(session.formScore);@              const tint = 'rgba(255,255,255,0.55)';@"
   "M21 the screen tints every form score red|$VIEW|s@              const tint = formColor(session.formScore);@              const tint = '#f87171';@"
   "M22 hand-counted exercises are dropped from the chips|$READER|s#    if (label === null) continue;#    if (label === null || set.mode === 'log_only') continue;#"
+  # M23: the defect Kd's smoke caught on 2026-08-04. Minute-rounding printed
+  # an 8-second workout as "0m" and a 36-second one as "1m". This restores it.
+  "M23 durations are rounded back to whole minutes|$READER|s#durationSeconds: durationMs === null ? null : Math.round(durationMs / 1000),#durationSeconds: durationMs === null ? null : Math.round(durationMs / 60000) * 60,#"
 )
 
 PASSES=0

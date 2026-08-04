@@ -1,6 +1,60 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: WORKOUT CALENDAR — **SMOKE ROUND 1 FAILED, THE DEFECT IS FIXED, STILL NOT
+      DONE.** Recorded at DECISIONS :4182 (the failure) and :4119 (the unpark).
+
+WHAT KD'S SMOKE CAUGHT, AND WHY IT MATTERS MORE THAN THE FIX
+  **Every duration on screen was false.** Real `duration_ms` 8491 / 4767 /
+  36290 / 37681 rendered as `0m` / `0m` / `1m` / `1m` — two workouts shown as
+  taking no time at all, two rounded UP past a minute they never reached.
+  · CAUSE: the OLD backend's history payload carried whole MINUTES, so
+    `Math.round(ms/60000)` was the honest translation of the field being
+    replaced, **and its own comment defended it as "a display transform on a
+    REAL value"** — a wrong transform wearing a considered-looking rationale.
+  · WHY NO TEST SAW IT: every fixture used `durationMs: 1_800_000`, **including
+    the five hand-counted tests added the same morning**. A test cannot be wrong
+    in a different direction from its fixture.
+  · **THE GENERAL RULE: when a repoint changes a field's UNIT, the transform
+    written for the old unit is a defect, not a carry-over.** Check the unit of
+    every numeric field a repoint touches, not just its name.
+
+STATE
+  · web **417/417**. **23 mutants / 3 files: 23 RED, 0 alive, 0 invalid**, green
+    baseline before AND after. `vite build` green (pre-fix run).
+  · Fix: the reader carries whole SECONDS; the screen formats with
+    `secondsLabel`, now EXPORTED from gamificationApi rather than re-spelled
+    (the `UNKNOWN` precedent). Whole seconds is load-bearing — that helper
+    carries to "1m 60s" on fractional input (its own OWED line, untouched).
+  · R9.5 observed: assertions shown RED first (`expected '—' to be '8s'`).
+  · M23 restores the minute-rounding, so the defect cannot come back silently.
+
+WHAT PASSED (do not re-litigate)
+  Camera workouts 83%/84% in GREEN; hand-counted `—` in the NEUTRAL tint, never
+  red, never 0%; chips named Push Up / Squat; and the MIXED workout (camera
+  squat + hand-tapped press-ups) rendered as ONE session, both chips, one score.
+  That is the morning's five new tests holding at the browser.
+
+NEXT
+  1. **RE-SMOKE steps 1-4 on the fixed bytes** — Kd's pass does NOT carry over,
+     because the numbers he judged have changed (the XP-card precedent).
+  2. **Smoke steps 5-8 have NEVER RUN** (retry, failed detail read, plan window,
+     hand-counted). Step 8 is the one written for this card's own new coverage.
+  3. Fresh-chat T3, two-round cap.
+
+PROCESS NOTE, INCURRED AGAIN
+  The mutation harness was started while Kd's browser sat on the live dev
+  server; vite pushes each mutation straight into his open tab (:3819's standing
+  lesson). Caught before he looked, but the warning belonged BEFORE the command.
+
+VERIFY:
+        corepack pnpm --filter web exec vitest run          # 417/417
+        bash apps/web/tools/mutate-workout-calendar.sh      # 23/23 RED, exit 0
+SPEC GAPs: none.  DEVIATIONS: none.
+```
+
+
+```
 TASK: WORKOUT CALENDAR — **UNPARKED AND ON `web-repoint`. COMMITTED, NOT DONE.**
       The card ticks only when Kd's browser SMOKE passes AND a fresh-chat T3
       comes back clean. Two-round cap, set BEFORE round 1 (:2905's standing

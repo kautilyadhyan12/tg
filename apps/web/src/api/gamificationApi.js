@@ -600,8 +600,16 @@ export function formGrade(score) {
 }
 
 /** Seconds as a compact duration. Shared by the page and the share card, which
- *  spelled it identically in two places. */
-function secondsLabel(totalSeconds) {
+ *  spelled it identically in two places — and, since 2026-08-04, by the workout
+ *  CALENDAR, which had rounded milliseconds to whole minutes and so printed a
+ *  9-second workout as "0m" and a 36-second one as "1m". Exported for the same
+ *  reason `UNKNOWN` is: a second spelling of the same idea is how two screens
+ *  come to disagree about one fact.
+ *
+ *  CALLERS MUST PASS WHOLE SECONDS. On fractional input this carries to
+ *  "1m 60s" — a real defect with its own OWED line, deliberately not fixed
+ *  here because PostWorkout and the share card also read it. */
+export function secondsLabel(totalSeconds) {
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = Math.round(totalSeconds % 60);

@@ -108,7 +108,7 @@ describe('the healthy month — THE CONTROL', () => {
 
     fireEvent.click(dayCell(15));
 
-    expect(await screen.findByText('30m')).toBeTruthy();
+    expect(await screen.findByText('30m 0s')).toBeTruthy();
     expect(screen.getByText('210')).toBeTruthy();
     expect(screen.getByText('88%')).toBeTruthy();
     expect(screen.queryByText(UNKNOWN)).toBeNull();
@@ -199,7 +199,7 @@ describe('a HAND-COUNTED workout — the shape this screen was built before', ()
 
     fireEvent.click(dayCell(15));
 
-    expect(await screen.findByText('30m')).toBeTruthy();
+    expect(await screen.findByText('30m 0s')).toBeTruthy();
     expect(screen.getByText('210')).toBeTruthy();
     // EXACTLY one — not "at least one". A floor here would pass while duration
     // and calories were dashed out too (round 8 F6's lesson: `>= 3` had two
@@ -214,7 +214,7 @@ describe('a HAND-COUNTED workout — the shape this screen was built before', ()
     await waitFor(() => expect(dayCell(15).disabled).toBe(false));
 
     fireEvent.click(dayCell(15));
-    await screen.findByText('30m');
+    await screen.findByText('30m 0s');
 
     // "We did not measure this" must not read as "you did badly".
     expect(statIcon('Form').style.color).toBe(asRendered(FORM_NEUTRAL));

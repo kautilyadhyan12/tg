@@ -49,7 +49,7 @@
 // stores one running total per user (db/schema/game.ts:39) — so restoring it is
 // a migration, not a client change, and it keeps its OWED line.
 
-import { UNKNOWN } from './gamificationApi';
+import { UNKNOWN, secondsLabel } from './gamificationApi';
 
 /** `workoutListQuerySchema`'s own ceiling (packages/shared/src/workouts.ts:7:
  *  `.max(100)`) — quoted, not chosen. Asking for more is a 400. */
@@ -116,10 +116,18 @@ export function readCalendarSession(item) {
   return {
     id,
     startedAt,
-    // The old payload carried whole minutes; the new one carries milliseconds.
-    // Rounding is a display transform on a REAL value — an unknown duration
-    // stays null and is never rounded into a confident "0m".
-    durationMinutes: durationMs === null ? null : Math.round(durationMs / 60000),
+    // SECONDS, not minutes. The old payload carried whole MINUTES, so the first
+    // cut of this file rounded to match it — and Kd's smoke on 2026-08-04
+    // showed what that does to the new payload's milliseconds: 8,491 ms and
+    // 4,767 ms both printed "0m", a workout that took no time at all, while
+    // 36,290 ms printed "1m", rounded UP past a minute it never reached. Four
+    // sessions on screen and four false numbers, every one of them derived from
+    // a duration the server had recorded perfectly well.
+    //
+    // WHOLE seconds, because the shared `secondsLabel` carries to "1m 60s" on
+    // fractional input (its own OWED line, not this card's to fix). An unknown
+    // duration stays NULL and is never rounded into a confident anything.
+    durationSeconds: durationMs === null ? null : Math.round(durationMs / 1000),
     kcal: finite(item.kcalPoint),
     formScore: finite(item.avgFormScore),
   };
@@ -269,8 +277,8 @@ export async function fetchMonth(fetchPage, { month, year }) {
 /** Display helpers. Each renders the em dash for an unknown rather than a
  *  confident zero — `UNKNOWN` is imported from gamificationApi so this screen
  *  cannot drift to a second glyph (the ONE-LADDER lesson, DECISIONS :2480). */
-export function formatDuration(minutes) {
-  return minutes === null || minutes === undefined ? UNKNOWN : `${minutes}m`;
+export function formatDuration(seconds) {
+  return seconds === null || seconds === undefined ? UNKNOWN : secondsLabel(seconds);
 }
 export function formatKcal(kcal) {
   return kcal === null || kcal === undefined ? UNKNOWN : String(kcal);

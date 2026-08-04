@@ -136,7 +136,7 @@ function SessionDetail({ sessions, dateStr, onClose }) {
                   {/* Stats grid */}
                   <div className="grid grid-cols-3 gap-2 mb-3">
                     {[
-                      { icon: Clock,  value: formatDuration(session.durationMinutes),  label: 'Duration', color: '#60a5fa' },
+                      { icon: Clock,  value: formatDuration(session.durationSeconds),  label: 'Duration', color: '#60a5fa' },
                       { icon: Flame,  value: formatKcal(session.kcal),                 label: 'Calories', color: '#f97316' },
                       { icon: Target, value: formatFormScore(session.formScore),       label: 'Form',     color: tint },
                     ].map(({ icon: Icon, value, label, color }) => (

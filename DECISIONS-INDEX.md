@@ -121,6 +121,22 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:4182** — 2026-08-04 — **calendar SMOKE ROUND 1 FAILED: every duration on
+  screen was false.** Real `duration_ms` 8491/4767/36290/37681 displayed as
+  `0m`/`0m`/`1m`/`1m` — two workouts shown as taking no time, two rounded UP
+  past a minute they never reached. **Read before repointing any field whose
+  UNIT changes between backends**: the old payload carried whole MINUTES, so
+  `Math.round(ms/60000)` was the honest translation of the field it replaced,
+  and its own comment defended it as "a display transform on a REAL value" —
+  which made a wrong transform look considered. **Every fixture in the suite
+  used 1_800_000 ms, including the five hand-counted tests added the same
+  morning, so no test could be wrong in a different direction from its
+  fixture.** Fixed by carrying whole SECONDS and exporting `secondsLabel`
+  rather than re-spelling it (the `UNKNOWN` precedent); whole seconds is
+  load-bearing because that helper carries to "1m 60s" on fractional input.
+  R9.5 observed — the four assertions were shown RED first. M23 restores the
+  rounding. 417/417, 23/23 mutants RED. Steps 1-4 otherwise PASSED, including
+  the mixed camera+hand workout as one session.
 - **:4119** — 2026-08-04 — **the workout calendar is UNPARKED and on
   `web-repoint`.** :2912's single blocking reason (the new API held only 3
   exercises' workouts) was discharged by the catalog (:3538) and the write path
