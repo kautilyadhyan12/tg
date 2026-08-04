@@ -3,7 +3,11 @@
 //   · a FAILED read resolves to null and is never a month with no days in it;
 //   · unknown numbers stay null and render as the em dash, never `0m`/`0%`;
 //   · the day key is the viewer's LOCAL day, not `iso.split('T')[0]`;
-//   · the walk stops, and SAYS it stopped, instead of drawing a short month.
+//   · the read stops, and SAYS it stopped, instead of drawing a short month;
+//   · the month is ASKED FOR — a half-open window of the viewer's own local
+//     boundaries, on every page — and not walked to from today. Deleting that
+//     window restores the defect that drew a long-time user's old months blank,
+//     so it is pinned here rather than left to a comment.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { workoutListItemSchema } from '@app/shared';
 import authApi from './authApi';
@@ -326,28 +330,111 @@ describe('fetchMonth', () => {
     expect(r.unreadable).toBe(1);
   });
 
-  it('walks pages until one lands before the month starts', async () => {
+  // ── THE CARD ITSELF. ─────────────────────────────────────────────────────
+  // The reader used to page BACKWARDS FROM TODAY until it stumbled into the
+  // month, capped at 1,000 rows, so a user with 1,000 workouts logged since
+  // that month got an EMPTY grid. It now ASKS for the month. These are the
+  // assertions that make deleting the window a red test rather than a silent
+  // return to that behaviour — the M18 lesson (a repoint nothing asserts is one
+  // the next edit undoes) applied to the thing that replaced the repoint.
+  it('ASKS the API for the month instead of walking to it', async () => {
     const seen = [];
-    const bodies = [
-      page([validItem({ id: 'aug', startedAt: new Date(2026, 7, 3).toISOString() })], 'c1'),
-      page([validItem({ id: 'jul', startedAt: at(20) })], 'c2'),
-      page([validItem({ id: 'jun', startedAt: new Date(2026, 5, 28).toISOString() })], 'c3'),
-      page([validItem({ id: 'never', startedAt: at(1) })], null),
-    ];
-    const r = await fetchMonth(async (params) => {
-      seen.push(params.cursor);
-      return bodies.shift();
-    }, july);
-    expect(seen).toEqual([undefined, 'c1', 'c2']); // stopped at the June row
-    expect(Object.keys(r.byDate)).toEqual(['2026-07-20']);
+    await fetchMonth(async (p) => { seen.push(p); return page([], null); }, july);
+    expect(seen).toEqual([{
+      limit: HISTORY_PAGE_LIMIT,
+      from: new Date(2026, 6, 1).toISOString(),
+      to: new Date(2026, 7, 1).toISOString(),
+      cursor: undefined,
+    }]);
+    expect(HISTORY_PAGE_LIMIT).toBe(100); // shared workoutListQuerySchema's .max
   });
 
-  it('stops at the end of history without claiming truncation', async () => {
+  it('sends the VIEWER’S LOCAL month boundaries, not the UTC ones', async () => {
+    // The zone is pinned non-UTC (see the localDateKey block), so local
+    // midnight on 1 July is NOT `2026-07-01T00:00:00Z` — it is 18:30 on 30 June
+    // in Asia/Kolkata. Asserting the offset directly is what distinguishes the
+    // correct conversion from the `${year}-${month}-01T00:00:00Z` an author
+    // reaches for first, which would ask for the wrong 24 hours at each end and
+    // drop a workout from each edge of every month.
+    const seen = [];
+    await fetchMonth(async (p) => { seen.push(p); return page([], null); }, july);
+    expect(seen[0].from).not.toBe('2026-07-01T00:00:00.000Z');
+    expect(new Date(seen[0].from).getDate()).toBe(1);
+    expect(new Date(seen[0].from).getHours()).toBe(0);
+    expect(new Date(seen[0].to).getMonth()).toBe(7); // August, exclusive end
+    expect(new Date(seen[0].to).getDate()).toBe(1);
+    expect(new Date(seen[0].to).getHours()).toBe(0);
+  });
+
+  it('asks for a HALF-OPEN window, so adjacent months TILE', async () => {
+    // December is the rollover case: month 12 must ask up to 1 Jan of the NEXT
+    // year. And one month's exclusive end must equal the next month's inclusive
+    // start exactly — otherwise a workout at local midnight on the 1st is
+    // either counted twice or by neither month.
+    const dec = [];
+    const jan = [];
+    await fetchMonth(async (p) => { dec.push(p); return page([], null); }, { month: 12, year: 2026 });
+    await fetchMonth(async (p) => { jan.push(p); return page([], null); }, { month: 1, year: 2027 });
+    expect(dec[0].to).toBe(jan[0].from);
+    expect(new Date(dec[0].to).getFullYear()).toBe(2027);
+  });
+
+  it('carries the SAME window onto every page of a busy month', async () => {
+    // A month with >100 workouts still pages. The window must not be dropped on
+    // page 2, or the tail of a busy month silently becomes "the next 100
+    // workouts from anywhere".
+    const seen = [];
+    const bodies = [
+      page([validItem({ id: 'a', startedAt: at(20) })], 'c1'),
+      page([validItem({ id: 'b', startedAt: at(4) })], null),
+    ];
+    const r = await fetchMonth(async (p) => { seen.push(p); return bodies.shift(); }, july);
+    expect(seen.map((p) => p.cursor)).toEqual([undefined, 'c1']);
+    expect(seen[1].from).toBe(seen[0].from);
+    expect(seen[1].to).toBe(seen[0].to);
+    expect(Object.keys(r.byDate).sort()).toEqual(['2026-07-04', '2026-07-20']);
+  });
+
+  it('stops at the end of the month without claiming truncation', async () => {
     const r = await fetchMonth(async () => page([validItem({ startedAt: at(9) })], null), july);
     expect(r.truncated).toBe(false);
   });
 
-  it('caps the walk and SAYS so, rather than drawing a short month', async () => {
+  it('IGNORES a row outside the window rather than painting it on this month', async () => {
+    // The server is asked for July and answers with July, so this row cannot
+    // arrive today. The guard stays anyway: trusting it would put a workout on
+    // a square of a month it did not happen in, which to a user is
+    // indistinguishable from the app inventing sessions.
+    const r = await fetchMonth(
+      async () => page([
+        validItem({ id: 'aug', startedAt: new Date(2026, 7, 3).toISOString() }),
+        validItem({ id: 'jun', startedAt: new Date(2026, 5, 28).toISOString() }),
+        validItem({ id: 'jul', startedAt: at(20) }),
+      ], null),
+      july,
+    );
+    expect(Object.keys(r.byDate)).toEqual(['2026-07-20']);
+  });
+
+  it('does NOT stop the walk on an out-of-window row, it keeps reading the month', async () => {
+    // The early break that used to sit here fired on the first row older than
+    // the month, which under the window can only be a server disagreement — so
+    // keeping it would have ended the read early and drawn a SHORT month with
+    // no truncation caption, i.e. silently. Page 2's July row must still land.
+    const bodies = [
+      page([validItem({ id: 'jun', startedAt: new Date(2026, 5, 28).toISOString() })], 'c1'),
+      page([validItem({ id: 'jul', startedAt: at(11) })], null),
+    ];
+    const r = await fetchMonth(async () => bodies.shift(), july);
+    expect(Object.keys(r.byDate)).toEqual(['2026-07-11']);
+  });
+
+  it('caps a month of MORE THAN A THOUSAND WORKOUTS and SAYS so', async () => {
+    // What `truncated` means now: 1,000 workouts IN THIS ONE MONTH. It used to
+    // mean 1,000 workouts logged between today and this month, which is the
+    // state that drew old months blank and is what this card removed. Kept
+    // rather than deleted for being rare — "should be unreachable" is what this
+    // card was corrected for once already.
     let calls = 0;
     const r = await fetchMonth(async () => {
       calls += 1;
@@ -355,13 +442,6 @@ describe('fetchMonth', () => {
     }, july);
     expect(calls).toBe(HISTORY_MAX_PAGES);
     expect(r.truncated).toBe(true);
-  });
-
-  it('asks for the contract ceiling and omits the cursor on the first page', async () => {
-    const seen = [];
-    await fetchMonth(async (p) => { seen.push(p); return page([], null); }, july);
-    expect(seen).toEqual([{ limit: HISTORY_PAGE_LIMIT, cursor: undefined }]);
-    expect(HISTORY_PAGE_LIMIT).toBe(100); // shared workoutListQuerySchema's .max
   });
 
   it('resolves NULL when the request throws — a failure is not an empty month', async () => {

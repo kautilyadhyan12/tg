@@ -4618,3 +4618,87 @@ test RED — each site independently load-bearing, which round 1 had not shown.*
   typecheck and lint clean on both packages. **THE CARD IS CLOSED** under the
   cap. The 🔴 OWED line stays open for card 2 (the web half) — nothing a user
   sees has changed yet, which is what that line says.
+
+## 2026-08-04 — the CALENDAR ASKS for the month (`from`/`to` on the wire), the
+## web half of the blank-old-months fix — CARD 2, and the 🔴 line TICKS
+
+**Card 2 of two, and the one a user can see. Card 1 (:4434) taught
+`/v1/workouts` to answer a date window; until this commit nothing asked it, so
+the endpoint could answer and the calendar was still walking backwards from
+today. That is now over.**
+
+- (**WHAT CHANGED, in one line**) `fetchMonth` sends the month's own boundaries
+  as a half-open window and reads back one page instead of walking up to ten
+  pages from today to find the month. An older month no longer comes back blank
+  at any depth of history, and the ordinary month view costs ONE request rather
+  than up to ten.
+- (**THE BOUNDARIES ARE THE VIEWER'S OWN, converted HERE**) `from` = local
+  midnight on the 1st, `to` = local midnight on the 1st of the next month, both
+  `.toISOString()`. The conversion is deliberately client-side: a calendar month
+  is local to whoever is looking at it, and :4434 built the API to take absolute
+  instants precisely so no timezone decision moved to the server. Every day
+  boundary stays where it already lived — `users.timezone` server-side for
+  streaks, the viewer's local day for this grid's GROUPING only (2026-07-21,
+  playbook trap #8). **A test asserts the offset directly** (`from` is NOT
+  `2026-07-01T00:00:00.000Z` under the pinned non-UTC zone), because the
+  wrong implementation an author reaches for first — pasting the year and month
+  into a `…T00:00:00Z` string — is off by the zone's offset at BOTH ends and
+  drops a workout from each edge of every month.
+- (**HALF-OPEN, so months TILE**) December's `to` must equal January's `from`
+  exactly, including the year rollover. Pinned by a test that fetches both and
+  compares. A closed window cannot make that promise, and the workout at local
+  midnight on the 1st is the one that would be counted twice or by neither.
+- (**THE TRUNCATION STATE SURVIVES, and its caption changed because its MEANING
+  did**) The 10-page cap now bounds an IN-MONTH walk, so `truncated` means "more
+  than a thousand workouts IN THIS ONE MONTH" — a different and far rarer claim
+  than "a thousand workouts logged between today and this month", which is the
+  state that drew old months blank. **This sentence has now been wrong in two
+  directions.** T3 round 2 F4 struck "This month has more workouts than this view
+  reads back through" as FALSE BY CONSTRUCTION — the rows the walk gave up on
+  were NEWER months'. Its replacement was true of the walk and is false of the
+  window. The new wording goes back to being about this month's own volume,
+  which is what round 2 struck the ORIGINAL for claiming before it was true. The
+  superseded clause is pinned as an ABSENCE in the render suite: **a caption that
+  outlives the read it described is this card's most repeated defect.**
+  It is NOT deleted for being rare — the handover said so, and this card was
+  corrected once already for calling a state "unreachable".
+- (**THE EARLY BREAK IS GONE; THE OUT-OF-WINDOW FILTER STAYS**) They looked like
+  one thing and are two. The break ("the list is newest-first, so a row older
+  than the month means stop") could now only fire if the SERVER disagreed with
+  the window it was handed — and a guard that ends the read early on a server
+  bug draws a SHORT MONTH SILENTLY, with no truncation caption, which is the
+  card's own defect wearing the shape of a safety check. Removed. The per-row
+  filter stays: trusting the server there would paint a workout onto a square of
+  a month it did not happen in, which to a user is indistinguishable from the app
+  inventing sessions. Both decisions have a test, including one proving the walk
+  KEEPS READING past an out-of-window row.
+- (**NOT TOUCHED, deliberately**) `listMealsForDay` has the identical cap and the
+  identical failure and keeps its own 🟡 OWED line (raised on :4434). Its fix is
+  this shape, and this is now the worked precedent to copy.
+
+- (**MEASURED**) web **431/431** (426 → 431: +5 net — six new assertions on the
+  window, two superseded walk tests removed, one new render test on the wire).
+  **37 mutants / 3 files: 37 RED, 0 alive, 0 INVALID**, green baseline both
+  sides — the eight new ones (M30–M37) are this card's, and **no existing anchor
+  had drifted**, which the content-based bite check would have reported as
+  INVALID rather than as a survivor (the round-1 correction still holding).
+  `vite build` green in 59.43s. Lint on the four touched files: **1 error, and it
+  is `WorkoutCalendar.jsx:222` `react-hooks/set-state-in-effect` — verified
+  pre-existing by reading the same line at HEAD**, its own OWED line, untouched
+  by this card; the other three files clean.
+- (**WHAT THE MUTANTS ACTUALLY BUY, since "37 RED" on its own is a number and
+  not a guarantee**) M30 restores the page-walk in one line — the whole card
+  undone — and it goes RED. M31 builds the window from `Date.UTC` instead of the
+  viewer's clock; M32 makes adjacent months overlap; M33 drops the window on
+  page 2 only; M34 removes the out-of-window filter; M35 puts the early break
+  back; M36 drops the window between the screen and the client, which is the seam
+  no reader test can see; M37 restores the superseded caption. Each was measured
+  RED, so each of those sentences is a test's claim rather than mine.
+- (**SMOKE — NOT YET RUN, and it CANNOT prove the headline fix**) The addendum
+  in `RUNBOOK/smoke-workout-calendar.md` checks that one request goes out
+  carrying this month, that stepping months moves it, that the instants are the
+  viewer's midnight and not `…T00:00:00Z`, and that nothing else on the screen
+  moved. **Watching an old month go from blank to populated needs 1,000+
+  workouts logged since it, and no fixture account is near that** — stated in the
+  doc rather than implied, because "the operator's account cannot reach it" is a
+  fact about a smoke test and never a fact about users (:4355).

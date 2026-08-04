@@ -121,6 +121,26 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:4622** — 2026-08-04 — **the CALENDAR ASKS for the month — CARD 2, the WEB
+  half, and the 🔴 OWED line TICKS.** **Read before touching the calendar's read
+  path or the meal reader's.** `fetchMonth` sends the month's own boundaries as a
+  half-open window instead of paging backwards from today, so an older month is
+  readable at ANY depth of history and a month view costs one request, not ten.
+  The boundaries are converted CLIENT-side (local midnight to local midnight)
+  because :4434 built the API to take absolute instants precisely so no timezone
+  decision moved to the server; a test asserts the offset directly, since the
+  wrong implementation an author reaches for first — a `…T00:00:00Z` string built
+  from year and month — is off by the zone at both ends. December's `to` must
+  equal January's `from`, pinned. **The truncation caption has now been wrong in
+  TWO directions**: round 2's F4 struck the original as false of the walk, its
+  replacement is false of the window, and the new wording returns to this
+  month's own volume — the superseded clause is pinned as an ABSENCE, because a
+  caption that outlives the read it described is this card's most repeated
+  defect. The early break went (under the window it could only fire on a server
+  disagreement, and a guard that ends a read early there draws a SHORT MONTH
+  SILENTLY); the per-row window filter STAYED (trusting the server would paint a
+  workout onto a month it did not happen in). `listMealsForDay` keeps its own 🟡
+  line and this is now the worked precedent for it.
 - **:4556** — 2026-08-04 — **date-window T3 round 2 (THE CAP) — CARD CLOSED.**
   5 findings, none visible, **three of them in the RECORD rather than the
   code.** **Read before writing "the suite proves X" about any green suite.**

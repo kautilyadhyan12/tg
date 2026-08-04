@@ -1829,7 +1829,7 @@ then; none may be hidden or reduced to close the gap.
          Round B touches only `Sidebar.jsx` and the two test files. Kd approved
          the plan as written, so it was not folded in and there is now no
          scheduled round that will pass this file.** It needs a card of its own.
-- [ ] 🔴 **A long-time user's OLD MONTHS GO BLANK on the calendar, and the page-
+- [x] 🔴 **A long-time user's OLD MONTHS GO BLANK on the calendar, and the page-
       walk is why. `/v1/workouts` needs a date filter.** Raised by Kd on
       2026-08-04, in response to this chat calling the truncated state
       "unreachable" — **which was wrong, and the correction is the point of this
@@ -1856,10 +1856,16 @@ then; none may be hidden or reduced to close the gap.
       now takes `from`/`to`: half-open, absolute instants, narrowing only (the
       Part 4 §0.2 plan gate still out-ranks a wider `from`), inverted window =
       400. 19/19 against real Postgres, both new guarantees mutation-checked.
-      **THIS LINE STAYS OPEN FOR CARD 2 (WEB):** `fetchMonth` must ASK for the
-      month instead of walking backwards to it. Until it does, nothing a user
-      sees has changed — the endpoint can answer, and the calendar is not yet
-      asking.
+      **✅ CARD 2 (WEB) IS DONE 2026-08-04 — DECISIONS :4622. THE LINE IS
+      CLOSED.** `fetchMonth` now sends the month's own boundaries (local
+      midnight to local midnight, converted client-side so no timezone decision
+      moves to the server) and reads back one page instead of walking up to ten
+      from today. An older month is readable at any depth of history, and a
+      month view costs ONE request rather than up to ten. The truncation state
+      SURVIVES with an honest new caption — the 10-page cap now bounds an
+      in-month walk, so it means "more than a thousand workouts IN THIS MONTH",
+      which is a far rarer claim than the one it used to make and is NOT deleted
+      for being rare.
       **Not a regression and not this card's defect** — the cap predates it and
       the old backend answered `?month=&year=` server-side, which is exactly the
       surface the repoint lost. Needs its own card (API half, then the client

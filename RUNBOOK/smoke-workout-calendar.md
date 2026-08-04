@@ -208,3 +208,83 @@ Kd's three screenshots and cross-checked against the database.
 
 **What this does NOT discharge:** the fresh-chat T3. The OWED line stays
 unticked until that comes back clean.
+
+---
+
+# ADDENDUM — the DATE WINDOW (card 2, the web half), 2026-08-04
+
+The calendar now **asks the API for the month**. It used to ask for your latest
+100 workouts, then the next 100, up to ten times, hoping to bump into the month
+on the way — which is why a long-time user's older months came back blank.
+
+**Read this before running it:** the headline fix is **not smoke-reachable on
+Kd's account**. Seeing an old month go from blank to populated needs 1,000+
+workouts logged since that month; no fixture account is near that. What these
+steps CAN prove is that the app really sends the month, sends the right one, and
+that nothing on the screen regressed. Steps 1–8 above still stand and are worth
+a quick re-run on the same account.
+
+## Step A — ONE request, carrying THIS month
+
+Open devtools → **Network** tab **before** loading the page (a panel opened
+afterwards shows "Currently recording…" and has captured nothing — recorded on
+the timezone card). Then open `/progress`.
+
+Filter the network list for `workouts`.
+
+✅ **Expect:** exactly **ONE** `/v1/workouts?...` request for the calendar, and
+its query string carries **`from`** and **`to`**. Click the request → Headers →
+Query String Parameters. `from` is the **1st of the month on screen**, `to` is
+the **1st of the NEXT month**.
+
+❌ **Fail if:** there is no `from`/`to` at all (the window never reached the
+wire), or there are several `/v1/workouts` requests in a row with cursors (the
+old page-walk).
+
+⚠️ Ignore `/v1/workouts/<id>` requests — those are the exercise chips for a day
+panel and are a different, expected thing.
+
+## Step B — stepping months moves the window
+
+Click the **‹** arrow to go back a month.
+
+✅ **Expect:** one new request, whose `from`/`to` are the **previous** month's
+1st and this month's 1st. The grid redraws for that month.
+
+❌ **Fail if:** the request repeats the old month's dates, or no request is made
+at all.
+
+## Step C — the times are YOUR midnight, not UTC
+
+Still on the request from step A or B.
+
+✅ **Expect:** because India is +05:30, `from` reads as the **previous day at
+18:30 UTC** — e.g. for August it is `2026-07-31T18:30:00.000Z`, not
+`2026-08-01T00:00:00.000Z`. That is correct and is the whole point: the month
+sent is *your* calendar month, not Greenwich's.
+
+❌ **Fail if:** it reads exactly `…-01T00:00:00.000Z`. That is the UTC month, and
+it silently drops a workout from each end of every month.
+
+## Step D — nothing else moved
+
+✅ **Expect:** the day squares, the day-detail panel (duration, calories, form,
+exercise chips), the plan-limit sentence and the "couldn't load" state all
+behave exactly as they did in steps 1–8 above.
+
+## NOT REACHABLE, and stated rather than implied
+
+- **The blank-old-month fix itself** — needs 1,000+ workouts logged after the
+  month being viewed.
+- **The truncation caption** ("this month has more than a thousand workouts") —
+  needs 1,000+ workouts in a single month. Unit test + mutation only.
+
+Neither is a gap in this card; both are facts about the fixture account. "The
+operator's account cannot reach it" is a fact about a smoke test, never a fact
+about users (Kd's correction, DECISIONS :4355).
+
+## RESULT — addendum
+
+- Date: **pending**
+- Commit: **pending**
+- Result: **NOT YET RUN**

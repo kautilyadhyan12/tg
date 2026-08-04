@@ -175,6 +175,20 @@ MUTATIONS=(
   "M27 the plan clamp reports the wrong half of the month|$VIEW|s#          {clamp.whole ?#          {!clamp.whole ?#"
   "M28 a day count is claimed for a month the walk never reached|$VIEW|s#          {status === 'ready' \&\& !history?.truncated ? (#          {status === 'ready' ? (#"
   "M29 the sixth exercise vanishes with no +N chip|$VIEW|s#                        {chips.total > chips.names.length \&\& (#                        {false \&\& (#"
+  # ── M30-M37: THE DATE WINDOW, added 2026-08-04 (the web half) ───────────────
+  # The calendar now ASKS the API for one month instead of paging backwards from
+  # today until it arrives. Every mutation here restores some version of the
+  # defect that caused: a long-time user's older months coming back blank. M30
+  # is the whole card in one line, and it is the M18 shape — a repoint nothing
+  # asserts is a repoint the next edit silently undoes.
+  "M30 the month is never asked for — back to the page-walk|$READER|s#      raw = await fetchPage({ limit: HISTORY_PAGE_LIMIT, from, to, cursor });#      raw = await fetchPage({ limit: HISTORY_PAGE_LIMIT, cursor });#"
+  "M31 the window is the UTC month, not the viewer's|$READER|s#  const from = new Date(monthStart).toISOString();#  const from = new Date(Date.UTC(year, month - 1, 1)).toISOString();#"
+  "M32 the window stops tiling — adjacent months overlap|$READER|s#  const to = new Date(monthEnd).toISOString();#  const to = new Date(year, month, 2).toISOString();#"
+  "M33 the window is dropped after the first page|$READER|s#      raw = await fetchPage({ limit: HISTORY_PAGE_LIMIT, from, to, cursor });#      raw = await fetchPage(cursor === undefined ? { limit: HISTORY_PAGE_LIMIT, from, to, cursor } : { limit: HISTORY_PAGE_LIMIT, cursor });#"
+  "M34 a workout is painted on a month it did not happen in|$READER|s#      if (t < monthStart || t >= monthEnd) continue;##"
+  "M35 the early break returns — a short month, drawn silently|$READER|s#      if (t < monthStart || t >= monthEnd) continue;#      if (t < monthStart) break;\n      if (t >= monthEnd) continue;#"
+  "M36 the screen drops the window on the way to the client|$VIEW|s#        workoutService.getHistory({ limit, from, to, ...(cursor ? { cursor } : {}) })#        workoutService.getHistory({ limit, ...(cursor ? { cursor } : {}) })#"
+  "M37 the caption blames the months in between again|$VIEW|s#          This month has more than a thousand workouts, which is more than this#          There are too many workouts between today and this month for this view#"
 )
 
 PASSES=0

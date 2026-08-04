@@ -7,13 +7,30 @@
 //
 // 1. MONTH QUERIES. `/workouts/history?month=&year=` returned one month,
 //    server-grouped into `by_date`. `/v1/workouts` is a keyset cursor list
-//    (newest first, @app/shared `workoutListQuerySchema`) with NO date filter.
-//    The month is therefore assembled here by walking pages until one lands
-//    before the month starts — the Card-5d precedent (DECISIONS 2026-07-19:
-//    `listMealsForDay` page-walks the same way, capped, "NO API change, no
-//    date filter added"). The cap is load-bearing: a month drawn from a
-//    partial walk looks EMPTY, which is a lie about days the user trained, so
-//    `truncated` is returned and the page says so instead.
+//    (newest first, @app/shared `workoutListQuerySchema`) which since
+//    2026-08-04 takes a HALF-OPEN date window — `from` inclusive, `to`
+//    exclusive, absolute INSTANTS rather than calendar dates. So this file
+//    ASKS FOR THE MONTH: it converts the viewer's own local month boundaries
+//    to instants and sends them, and one request returns the month at any
+//    depth of history. Half-open is what makes adjacent months TILE — a
+//    workout at local midnight on the 1st belongs to exactly one of them.
+//
+//    IT DID NOT ALWAYS, and the reason the walk below still exists is the
+//    reason this comment is long. Until that API card there was no date
+//    filter, so the month was assembled by paging BACKWARDS FROM TODAY until a
+//    page landed before the month started, capped at 10 × 100 = 1,000 rows
+//    (the Card-5d precedent, DECISIONS 2026-07-19). Anyone with 1,000
+//    workouts logged SINCE the month they were browsing never reached it and
+//    got an EMPTY month — four sessions a week for five years, which is a real
+//    user and not a hypothetical one (Kd, 2026-08-04, correcting this file's
+//    own author for calling that state "unreachable").
+//
+//    What survives is in-month paging ONLY: a month holding more than 100
+//    workouts still needs a second page. The cap survives with it, so
+//    `truncated` still exists — but it now means "more than a thousand
+//    workouts IN THIS ONE MONTH", a different and far rarer claim than the one
+//    it used to make. It is NOT deleted for being rare. This card has already
+//    been bitten once for treating "should be unreachable" as "cannot happen".
 //
 // 2. THE PLAN READ-GATE. `/v1/workouts` clamps a free plan to `limitedToDays`
 //    (Part 4 §0.2 — a READ GATE, NOT deletion: seed.ts:44 says so, and
@@ -55,9 +72,12 @@ import { UNKNOWN, formatCount, secondsLabel } from './gamificationApi';
  *  `.max(100)`) — quoted, not chosen. Asking for more is a 400. */
 export const HISTORY_PAGE_LIMIT = 100;
 
-/** The walk's hard stop. 10 × 100 = 1,000 workouts scanned before a month is
- *  declared unreachable. Card 5d capped its own page-walk at 10 for the same
- *  reason: an uncapped walk on a long history is an unbounded request burst. */
+/** The in-month walk's hard stop. 10 × 100 = 1,000 workouts IN THE MONTH ON
+ *  SCREEN before it is declared incomplete — no longer 1,000 workouts scanned
+ *  on the way TO it, which is the whole of what this card changed. Kept at 10
+ *  deliberately (the handover's own instruction): an uncapped walk is an
+ *  unbounded request burst, and a month that could exhaust it is a month
+ *  nothing else in this screen is built for either. */
 export const HISTORY_MAX_PAGES = 10;
 
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -191,11 +211,20 @@ export function monthClamp({ month, year }, limitedToDays, now = new Date()) {
   return { days, whole: floor >= monthEnd };
 }
 
-/** Assemble one month by walking the cursor list.
+/** Assemble one month by ASKING the API for it.
  *
- *  `fetchPage({ limit, cursor })` must resolve to the RAW page body. Injected
- *  rather than imported so the walk is testable without a network layer, and
- *  so the component owns the client choice.
+ *  `fetchPage({ limit, from, to, cursor })` must resolve to the RAW page body.
+ *  Injected rather than imported so this is testable without a network layer,
+ *  and so the component owns the client choice.
+ *
+ *  `from`/`to` are the viewer's own LOCAL month boundaries converted to
+ *  absolute instants — local midnight on the 1st, inclusive, to local midnight
+ *  on the 1st of the next month, exclusive. The conversion happens HERE and not
+ *  on the server on purpose: a calendar month is local to whoever is looking at
+ *  it, and the server has no business deciding whose midnight that is. Every
+ *  day boundary therefore stays exactly where it already lived — `users.timezone`
+ *  server-side for streaks, the viewer's local day for this grid's GROUPING only
+ *  (DECISIONS 2026-07-21; playbook trap #8). No day maths moves anywhere.
  *
  *  Resolves to NULL when the history could not be read at all — the caller must
  *  render that as "couldn't load", NEVER as an empty month. Otherwise:
@@ -203,15 +232,25 @@ export function monthClamp({ month, year }, limitedToDays, now = new Date()) {
  *                  oldest-first so "Session 1" is the day's first workout (the
  *                  old handler's `.sort("completed_at", 1)`).
  *    limitedToDays the plan window from the last page read, or null.
- *    truncated     the walk hit HISTORY_MAX_PAGES with the month still not
- *                  fully behind it — the days shown may be incomplete.
+ *    truncated     the in-month walk hit HISTORY_MAX_PAGES — this ONE month
+ *                  holds more than 1,000 workouts and the days shown may be
+ *                  incomplete. Before the API's date window this meant
+ *                  something else and far more reachable: 1,000 workouts
+ *                  logged BETWEEN today and the month, which drew the month
+ *                  blank. That is the defect this card closed.
  *    unreadable    rows the reader could not place. Surfaced rather than
  *                  silently dropped: a silent drop makes "N active days" a
  *                  fabricated COUNT (the PostWorkout round-2 F5 finding). */
 export async function fetchMonth(fetchPage, { month, year }) {
   const monthStart = new Date(year, month - 1, 1).getTime();
   const monthEnd = new Date(year, month, 1).getTime();
+  // Load-bearing beyond the obvious: `new Date(NaN).toISOString()` THROWS, so
+  // this guard is what keeps a nonsense month/year a null return rather than an
+  // exception thrown out of a function whose contract is "resolves to null".
   if (!Number.isFinite(monthStart) || !Number.isFinite(monthEnd)) return null;
+
+  const from = new Date(monthStart).toISOString();
+  const to = new Date(monthEnd).toISOString();
 
   const byDate = {};
   let cursor;
@@ -228,7 +267,7 @@ export async function fetchMonth(fetchPage, { month, year }) {
 
     let raw;
     try {
-      raw = await fetchPage({ limit: HISTORY_PAGE_LIMIT, cursor });
+      raw = await fetchPage({ limit: HISTORY_PAGE_LIMIT, from, to, cursor });
     } catch {
       return null; // the read FAILED — never the same thing as an empty month
     }
@@ -237,16 +276,21 @@ export async function fetchMonth(fetchPage, { month, year }) {
     pages += 1;
     limitedToDays = page.limitedToDays;
 
-    let reachedStart = false;
     for (const item of page.items) {
       const session = readCalendarSession(item);
       if (session === null) {
-        // T3 round 1, F1 (VISIBLE): the walk starts at TODAY and pages
-        // BACKWARDS, so viewing an older month scans every NEWER month's rows
-        // on the way. Counting an unreadable row from one of them made the
+        // T3 round 1, F1 (VISIBLE): back when the walk started at TODAY and
+        // paged BACKWARDS, viewing an older month scanned every NEWER month's
+        // rows on the way. Counting an unreadable row from one of them made the
         // caption — "N workouts couldn't be read and are not shown" — a
         // statement about rows the user is not looking at, printed over a month
         // whose every workout was read perfectly.
+        //
+        // The window makes that route unreachable: the server is now asked for
+        // this month and answers with it. The test STAYS, and so does this
+        // guard, because "the server no longer sends those rows" is a claim
+        // about the server, and this function's caption is a claim to the user.
+        // The two should not be made to depend on each other.
         //
         // A row whose date is READABLE can be placed even when the rest of it
         // is not, so an out-of-month one is skipped exactly as its readable
@@ -265,14 +309,20 @@ export async function fetchMonth(fetchPage, { month, year }) {
         continue;
       }
       const t = Date.parse(session.startedAt);
-      // The list is newest-first, so the first row older than the month means
-      // every remaining row is too — but keep scanning THIS page, because a
-      // page may straddle the boundary.
-      if (t < monthStart) {
-        reachedStart = true;
-        continue;
-      }
-      if (t >= monthEnd) continue; // a later month; keep walking backwards
+      // Belt and braces, and deliberately not removed as dead code. The request
+      // carries the same half-open window this compares against, so a row
+      // outside it means the SERVER disagreed with us — and the failure mode of
+      // trusting it would be workouts painted onto squares of a month they did
+      // not happen in, which is indistinguishable to the user from the app
+      // inventing sessions. Cheap; keeps the grid true to its own dates.
+      //
+      // What DID go is the early break that used to sit here. The list is
+      // newest-first, so a row older than the month once meant "every remaining
+      // row is too — stop walking". Under the window no such row can arrive, so
+      // the break could only ever fire on the disagreement above, and a guard
+      // that stops the walk on a server bug hides it instead of showing it. The
+      // walk now ends where the month ends: on a null cursor.
+      if (t < monthStart || t >= monthEnd) continue;
       // No null guard here, and that is deliberate. `localDateKey` returns null
       // only for a non-string/blank value or one `Date.parse` rejects, and
       // `readCalendarSession` has already proven `startedAt` is neither. T3
@@ -284,8 +334,7 @@ export async function fetchMonth(fetchPage, { month, year }) {
       byDate[key].push(session);
     }
 
-    if (reachedStart) break;
-    if (page.nextCursor === null) break; // end of history, month fully covered
+    if (page.nextCursor === null) break; // end of the WINDOW: month fully read
     cursor = page.nextCursor;
   }
 

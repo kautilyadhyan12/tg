@@ -222,8 +222,12 @@ export default function WorkoutCalendar() {
     setStatus('loading');
     setSelected(null);
     fetchMonth(
-      ({ limit, cursor }) =>
-        workoutService.getHistory({ limit, ...(cursor ? { cursor } : {}) })
+      // `from`/`to` are the month's own boundaries — see workoutHistory.js.
+      // They are NOT optional decoration: without them this is the old
+      // page-walk from today, which draws a long-time user's older months
+      // blank. Forwarded verbatim rather than rebuilt here.
+      ({ limit, from, to, cursor }) =>
+        workoutService.getHistory({ limit, from, to, ...(cursor ? { cursor } : {}) })
           .then((res) => res?.data),
       { month, year },
     ).then((result) => {
@@ -338,16 +342,24 @@ export default function WorkoutCalendar() {
           {' '}<span style={{ color: 'rgba(255,255,255,0.65)' }}>Older workouts are still saved.</span>
         </p>
       )}
-      {/* T3 round 2, F4. This used to read "This month has more workouts than
-          this view reads back through" — false by construction. The walk starts
-          at TODAY and pages BACKWARDS, so the 1,000 rows it gave up after are
-          workouts NEWER than the month on screen, not workouts IN it. Round 1's
-          F1 was the same shape one caption over: a condition caused by OTHER
-          months, printed as a sentence about this one. */}
+      {/* This sentence has now been wrong in two different directions, which is
+          why it carries its own history.
+          T3 round 2, F4 removed "This month has more workouts than this view
+          reads back through" as FALSE BY CONSTRUCTION: the walk started at
+          TODAY and paged BACKWARDS, so the 1,000 rows it gave up after were
+          workouts NEWER than the month on screen, not workouts IN it. Its
+          replacement said so, and was true.
+          The date window (DECISIONS 2026-08-04) makes that replacement false in
+          turn — nothing is read "between today and this month" any more; the
+          month is asked for directly. What remains is the in-month cap, so the
+          sentence goes back to being about THIS month's own volume, which is
+          the thing round 2 struck it for claiming before it was true. A caption
+          is a claim about the read that actually happened, and the read
+          changed. */}
       {status === 'ready' && history?.truncated && (
         <p className="text-2xs mb-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          There are too many workouts between today and this month for this view
-          to read back that far, so the days shown may be incomplete.
+          This month has more than a thousand workouts, which is more than this
+          view can read, so the days shown may be incomplete.
         </p>
       )}
       {status === 'ready' && history?.unreadable > 0 && (
@@ -464,10 +476,11 @@ export default function WorkoutCalendar() {
           read, AND read to the end. On a failed read it is unknown, and "0
           active days" would be a claim about days nobody looked at.
           A TRUNCATED read is the same lie in a quieter voice (T3 round 2, F2):
-          the walk gave up 1,000 workouts short of this month, so the caption
-          above already admits the days may be incomplete — and this line was
-          printing a confident bold "0 active days this month" directly beneath
-          it. Both states fall through to the honest wording. */}
+          the read stopped short of the month's end, so the caption above
+          already admits the days may be incomplete — and this line was printing
+          a confident bold "0 active days this month" directly beneath it. Both
+          states fall through to the honest wording. (The date window changed
+          WHY a read can stop short, not that it can — so this stays.) */}
       <div className="mt-4 pt-4 flex items-center justify-between"
            style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
         <p className="text-xs" style={{ color: MUTED }}>

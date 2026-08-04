@@ -1,6 +1,65 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: DATE WINDOW, **CARD 2 — THE WEB HALF. CODE DONE 2026-08-04; the 🔴 OWED
+      line is TICKED. SMOKE AND T3 ARE BOTH UNRUN**, two-round cap set up front
+      (the standing rule, DECISIONS :2866). Records: DECISIONS :4622 (this),
+      :4434 (the API half), :4483/:4556 (its two T3 rounds).
+
+WHAT CHANGED, in one sentence
+  The calendar ASKS the API for the month instead of paging backwards from
+  today until it stumbles into it. An older month is readable at ANY depth of
+  history, and a month view costs ONE request rather than up to ten. This is
+  the first commit in the pair that a USER can see.
+
+STATE
+  · web **431/431**. **37 mutants / 3 files: 37 RED, 0 alive, 0 INVALID**, green
+    baseline both sides. `vite build` green. Lint on the four touched files: 1
+    error, `WorkoutCalendar.jsx:222` `react-hooks/set-state-in-effect`, verified
+    pre-existing by reading the same line at HEAD; it has its own OWED line.
+  · M30–M37 are this card's. **No existing anchor had drifted** — worth knowing,
+    because the bite check has been wrong about exactly that before (round 1).
+
+THE ONE TO CARRY: A CAPTION IS A CLAIM ABOUT THE READ THAT HAPPENED, AND THE
+READ CHANGED
+  The truncation sentence has now been wrong in TWO DIRECTIONS on this screen.
+  T3 round 2's F4 struck "this month has more workouts than this view reads back
+  through" as FALSE BY CONSTRUCTION — the rows the walk gave up on were NEWER
+  months'. Its replacement ("too many workouts between today and this month")
+  was true of the walk. **The window makes that replacement false in turn**:
+  nothing is read between today and the month any more. The wording goes back to
+  being about this month's own volume — which is what round 2 struck the
+  ORIGINAL for claiming before it was true. **The superseded clause is now pinned
+  as an ABSENCE in the render suite**, because a caption outliving the read it
+  described is this card's single most repeated defect.
+
+THE OTHER ONE: THE BREAK AND THE FILTER LOOKED LIKE ONE THING AND ARE TWO
+  Both guarded "a row outside the month". Under the window neither can fire
+  except on a SERVER disagreement — and that is where they diverge. The early
+  break would END THE READ, drawing a short month with no truncation caption,
+  i.e. this card's own defect wearing the shape of a safety check: REMOVED. The
+  per-row filter merely SKIPS the row, and trusting the server instead would
+  paint a workout onto a square of a month it did not happen in: KEPT. Both have
+  a test, including one proving the walk keeps reading PAST an out-of-window row.
+
+WHAT THE SMOKE CANNOT DO, and it is written into the doc rather than implied
+  Watching an old month go from blank to populated needs 1,000+ workouts logged
+  since that month. No fixture account is near it. The addendum in
+  `RUNBOOK/smoke-workout-calendar.md` (steps A–D) proves the window reaches the
+  WIRE, is the right month, is the viewer's midnight rather than `…T00:00:00Z`,
+  and that nothing else moved. **Do not let a passed smoke be reported as proof
+  of the fix itself.**
+
+STILL OWED, UNCHANGED BY THIS CARD
+  `listMealsForDay` has the identical cap and the identical failure and keeps
+  its own 🟡 line. Its fix is this exact shape; this card is the worked
+  precedent to copy. At ~5 meals a day its cap is about six months — SOONER than
+  the workouts one was, not later.
+
+NEXT: the repoint's card ORDER is at DECISIONS :2866. Nothing here blocks it.
+```
+
+```
 TASK: `/v1/workouts` DATE WINDOW — **API HALF DONE and CLOSED 2026-08-04**
       under the two-round cap (DECISIONS :4434 card, :4483 round 1, :4556 round
       2). Card 2, the WEB half, is NEXT and is what the 🔴 OWED line waits on.

@@ -10,9 +10,9 @@
 // have is dashing out figures the backend really sent. No unknown-state test
 // can catch that; only a healthy-state assertion on real numbers can.
 //
-// Only the NETWORK is mocked. `api/workoutHistory` — the page-walk, the local
-// day key, every decision about what is knowable — runs for real, because that
-// logic is exactly what is under test.
+// Only the NETWORK is mocked. `api/workoutHistory` — the month request, the
+// local day key, every decision about what is knowable — runs for real, because
+// that logic is exactly what is under test.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { UNKNOWN } from '../../api/gamificationApi';
@@ -324,11 +324,14 @@ describe('the plan read-gate', () => {
   });
 });
 
-describe('a month the walk never reached — TRUNCATION', () => {
-  // The walk starts at TODAY and pages BACKWARDS, capped at HISTORY_MAX_PAGES.
-  // A history dense enough to fill all ten pages with rows NEWER than the month
-  // on screen means that month was never reached at all — so every square is
-  // blank for a reason that has nothing to do with whether the user trained.
+describe('a month too big to finish reading — TRUNCATION', () => {
+  // WHAT THIS STATE MEANS NOW, and it changed with the date window: the reader
+  // asks for ONE month, so filling all ten pages means this single month holds
+  // more than a thousand workouts. It used to mean the month was never REACHED
+  // — ten pages of rows NEWER than it, from a walk that started at today — and
+  // that state drew a long-time user's old months blank. The window removed it;
+  // the cap and this caption survive it (the handover's own instruction: do not
+  // delete the truncation state for being rare).
   //
   // The first call resolves a WHOLE month (no next cursor); every call after it
   // hands back another page forever. So the opening month is read completely —
@@ -340,18 +343,23 @@ describe('a month the walk never reached — TRUNCATION', () => {
     });
   };
 
-  it('says the view could not read back that far', async () => {
+  it('says the month is too big to read, and does NOT blame the months in between', async () => {
     wholeThenEndless();
     render(<WorkoutCalendar />);
 
     await waitFor(() => expect(activeDays().textContent).toMatch(/^1\s+active days this month$/));
-    expect(screen.queryByText(/too many workouts/i)).toBeNull();   // the control
+    expect(screen.queryByText(/more than a thousand/i)).toBeNull();   // the control
 
     fireEvent.click(screen.getAllByRole('button')[0]);   // back one month
 
     expect(
-      await screen.findByText(/too many workouts between today and this month/i),
+      await screen.findByText(/this month has more than a thousand workouts/i),
     ).toBeTruthy();
+    // The superseded wording, pinned as an ABSENCE. It was true of the walk and
+    // is false of the window — nothing is read "between today and this month"
+    // any more — and a caption that survives the read it described is exactly
+    // the failure this line of the file keeps recording (T3 round 2, F4).
+    expect(screen.queryByText(/between today and this month/i)).toBeNull();
   });
 
   it('never claims a day count for a month it did not finish reading', async () => {
@@ -426,10 +434,34 @@ describe('the exercise chips (a LIVE feature the old backend served)', () => {
 });
 
 describe('the repoint itself', () => {
-  it('asks the NEW api, and asks it for the shared contract ceiling', async () => {
+  it('asks the NEW api for THIS MONTH, at the shared contract ceiling', async () => {
     workoutService.getHistory.mockResolvedValue(pageOf([]));
     render(<WorkoutCalendar />);
     await waitFor(() => expect(workoutService.getHistory).toHaveBeenCalled());
-    expect(workoutService.getHistory).toHaveBeenCalledWith({ limit: 100 });
+    expect(workoutService.getHistory).toHaveBeenCalledWith({
+      limit: 100,
+      from: new Date(Y, M, 1).toISOString(),
+      to: new Date(Y, M + 1, 1).toISOString(),
+    });
+  });
+
+  // THE WIRE, not the reader. `workoutHistory.test.js` proves `fetchMonth`
+  // BUILDS the window; nothing there proves the screen hands it to the client —
+  // and dropping it between the two is silent, because every fixture in this
+  // file returns the same page whatever it is asked for. That is the M18 shape
+  // exactly (a repoint all 46 tests were happy to see undone), so it is pinned
+  // from both ends.
+  it('carries the window when the user steps to ANOTHER month', async () => {
+    workoutService.getHistory.mockResolvedValue(pageOf([]));
+    render(<WorkoutCalendar />);
+    await waitFor(() => expect(workoutService.getHistory).toHaveBeenCalled());
+
+    fireEvent.click(screen.getAllByRole('button')[0]);   // back one month
+
+    await waitFor(() => expect(workoutService.getHistory).toHaveBeenCalledWith({
+      limit: 100,
+      from: new Date(Y, M - 1, 1).toISOString(),
+      to: new Date(Y, M, 1).toISOString(),
+    }));
   });
 });
