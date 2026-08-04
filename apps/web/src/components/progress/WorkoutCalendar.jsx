@@ -235,6 +235,12 @@ export default function WorkoutCalendar() {
       }
       setHistory(result);
       setStatus('ready');
+    }).catch(() => {
+      // T3 round 1, F4. `fetchMonth` wraps its only await, so this is
+      // near-unreachable today — but "near-unreachable" is how the loading
+      // spinner becomes permanent the day something in the walk throws. The
+      // failed state this card exists to build is one line away; take it.
+      if (!cancelled) { setHistory(null); setStatus('failed'); }
     });
     return () => { cancelled = true; };
   }, [month, year, reloads]);

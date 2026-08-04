@@ -9,7 +9,7 @@
       "inputs": ["src/**", "test/**", "eslint.config.js", "tsconfig.json", "package.json"]
     },
     "test": {
-      "inputs": ["src/**", "test/**", "vitest.config.ts", "tsconfig.json", "package.json"],
+      "inputs": ["src/**", "test/**", "vitest.config.{ts,js}", "tsconfig.json", "package.json"],
       "dependsOn": ["^typecheck"]
     },
     "build": {

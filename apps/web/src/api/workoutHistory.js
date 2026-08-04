@@ -49,9 +49,9 @@
 // stores one running total per user (db/schema/game.ts:39) — so restoring it is
 // a migration, not a client change, and it keeps its OWED line.
 
-import { UNKNOWN, secondsLabel } from './gamificationApi';
+import { UNKNOWN, formatCount, secondsLabel } from './gamificationApi';
 
-/** `workoutListQuerySchema`'s own ceiling (packages/shared/src/workouts.ts:7:
+/** `workoutListQuerySchema`'s own ceiling (packages/shared/src/workouts.ts:8:
  *  `.max(100)`) — quoted, not chosen. Asking for more is a 400. */
 export const HISTORY_PAGE_LIMIT = 100;
 
@@ -241,7 +241,23 @@ export async function fetchMonth(fetchPage, { month, year }) {
     for (const item of page.items) {
       const session = readCalendarSession(item);
       if (session === null) {
-        unreadable += 1;
+        // T3 round 1, F1 (VISIBLE): the walk starts at TODAY and pages
+        // BACKWARDS, so viewing an older month scans every NEWER month's rows
+        // on the way. Counting an unreadable row from one of them made the
+        // caption — "N workouts couldn't be read and are not shown" — a
+        // statement about rows the user is not looking at, printed over a month
+        // whose every workout was read perfectly.
+        //
+        // A row whose date is READABLE can be placed even when the rest of it
+        // is not, so an out-of-month one is skipped exactly as its readable
+        // siblings already are. A row with NO readable date cannot be excluded
+        // on month, and is counted for whichever month is on screen — that
+        // over-reports across months, and is the honest direction: a silent
+        // drop would make "N active days" a fabricated count.
+        const bad = Date.parse(text(item?.startedAt) ?? '');
+        if (!Number.isFinite(bad) || (bad >= monthStart && bad < monthEnd)) {
+          unreadable += 1;
+        }
         continue;
       }
       const t = Date.parse(session.startedAt);
@@ -253,11 +269,13 @@ export async function fetchMonth(fetchPage, { month, year }) {
         continue;
       }
       if (t >= monthEnd) continue; // a later month; keep walking backwards
+      // No null guard here, and that is deliberate. `localDateKey` returns null
+      // only for a non-string/blank value or one `Date.parse` rejects, and
+      // `readCalendarSession` has already proven `startedAt` is neither. T3
+      // round 1 found the guard that used to sit here was UNREACHABLE — and an
+      // unreachable guard reads as protection while protecting nothing, the
+      // same class as an assertion that cannot fail.
       const key = localDateKey(session.startedAt);
-      if (key === null) {
-        unreadable += 1;
-        continue;
-      }
       if (!byDate[key]) byDate[key] = [];
       byDate[key].push(session);
     }
@@ -281,7 +299,11 @@ export function formatDuration(seconds) {
   return seconds === null || seconds === undefined ? UNKNOWN : secondsLabel(seconds);
 }
 export function formatKcal(kcal) {
-  return kcal === null || kcal === undefined ? UNKNOWN : String(kcal);
+  // T3 round 1, F5: this was `String(kcal)`, which printed 1240 where the
+  // Dashboard's sibling printed 1,240 — two spellings of one number, the
+  // one-ladder class this file already cites for UNKNOWN. It IS that sibling
+  // now rather than a copy of it. Every fixture used 210, so nothing saw it.
+  return formatCount(kcal);
 }
 export function formatFormScore(score) {
   return score === null || score === undefined ? UNKNOWN : `${score}%`;

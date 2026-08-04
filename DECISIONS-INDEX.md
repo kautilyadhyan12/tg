@@ -121,6 +121,31 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:4267** — 2026-08-04 — **calendar T3 ROUND 1: 6 findings, 1 VISIBLE, all
+  fixed — and the mutation harness's own bite-check was BLIND.**
+  **Read before trusting any "N mutants, 0 alive" table produced on Windows.**
+  The harness claims in its header that every sed is proven to have bitten
+  (md5 must change). FALSE: files are CRLF, `sed -i` rewrites them to LF, so
+  the md5 moves on a sed matching NOTHING — measured directly. INVALID could
+  never fire, so a mutation whose anchor had DRIFTED was reported as a missing
+  test. Same class as :3720. Now compares content (`tr -d ''`); restore
+  verification stays byte-exact.
+  **F1 (VISIBLE) is the duration defect's twin**: the walk pages backwards from
+  today, so an unreadable row from a NEWER month was counted and printed as
+  "1 workout couldn't be read" over a month that read perfectly — and every
+  fixture put its unreadable rows INSIDE the viewed month.
+  **F2 (blocking) — measured both ways: the day-bucketing guard was INERT IN
+  CI.** With the UTC-day defect live, 57/57 GREEN under TZ=UTC and 1 RED under
+  Asia/Kolkata; runners are UTC. Unfixable in test data (under UTC the two
+  implementations are identical by definition), so the zone is pinned in
+  `apps/web/vitest.config.js` and a test asserts the pin survives. `turbo.json`
+  listed `vitest.config.ts` for a `.js` file, so the pin would not have busted
+  the cache — widened, out-of-diff but load-bearing for F2.
+  Two untracked deferrals got OWED lines: calorie BANDING (spec §2.3 requires a
+  ±20% range, verified in the spec here, tracked nowhere before) and the
+  reader's stand-in for `safeParse` catching renamed fields but NOT changed
+  UNITS — which is precisely what the duration bug was.
+  422/422, 25/25 mutants RED. **Round 2 is the cap.**
 - **:4239** — 2026-08-04 — **calendar SMOKE PASSED, all 8 steps, on `5133114`.**
   Steps 1-4 were RE-RUN on the fixed bytes rather than carried over — the numbers
   Kd had judged were the ones that changed (XP-card precedent). Steps 5-8 had

@@ -4263,3 +4263,91 @@ done and it passes. Only the T3 remains.**
 - (**WHAT IS STILL OWED**) The fresh-chat T3, two-round cap set before round 1.
   The OWED line stays UNTICKED until it comes back clean — the google-login /
   DPDP precedent, where a tick placed on a smoke alone had to be taken off again.
+
+## 2026-08-04 — calendar T3 round 1: 6 findings, 1 VISIBLE, all fixed — and the
+## harness's own bite-check was blind
+
+**Round 1 of two (cap set before it ran). Every finding independently
+re-verified against the files before any fix was planned; two were measured
+rather than reasoned about.**
+
+- (**F1, VISIBLE, and it is this card's own defect class again**) The walk
+  starts at TODAY and pages BACKWARDS, so viewing an older month scans every
+  NEWER month's rows on the way — and an unreadable row from any of them was
+  counted, then printed as a sentence about the month on screen: "1 workout
+  couldn't be read and is not shown", over a month whose every workout was read
+  perfectly. **Same blind spot as the durations, one field over: every fixture
+  put its unreadable rows INSIDE the viewed month**, so none could see one leak
+  in from outside. Fixed by scoping the count — a row whose date is READABLE is
+  skipped when out of month, exactly as its readable siblings already are; a row
+  with NO readable date cannot be excluded on month and is still counted, which
+  over-reports across months and is the honest direction, because a silent drop
+  would make "N active days" a fabricated count. Three tests, one of them the
+  positive control (without it the fix is satisfiable by never counting at all).
+- (**F1's second half**) The `unreadable += 1` after `localDateKey` returned null
+  was UNREACHABLE — `readCalendarSession` has already proven `startedAt` is a
+  non-empty string `Date.parse` accepts, which are that helper's only two null
+  conditions. Deleted rather than left: an unreachable guard reads as protection
+  while protecting nothing, the same class as an assertion that cannot fail.
+- (**F2, NOT-VISIBLE, blocking, and MEASURED BOTH WAYS**) With the day-bucketing
+  mutated to the UTC day — the exact defect `localDateKey` exists to prevent —
+  both suites went **57/57 GREEN under TZ=UTC** and **1 failed under
+  Asia/Kolkata**. GitHub runners are UTC, so the guard was inert on the machine
+  that gates merges while the local table read "23/23 RED" and looked like
+  protection. **This cannot be fixed in test data**: under UTC the local day and
+  the UTC day are identical by definition, so no fixture can tell the two
+  implementations apart. The zone is pinned in `apps/web/vitest.config.js`
+  (Asia/Kolkata — the product's own market, +05:30, no DST so a date fixture
+  cannot drift twice a year). Re-measured after the pin: the same mutation now
+  goes **RED with TZ=UTC in the shell**. A test asserts
+  `getTimezoneOffset() !== 0`, so deleting the pin fails loudly instead of
+  silently disarming every date test in the package.
+- (**F2's dependency, out of the diff and fixed anyway**) The reviewer's closing
+  note: `turbo.json`'s test `inputs` listed `vitest.config.ts` while the web
+  package's file is `vitest.config.js`. Ordinarily R1.1 says report and leave —
+  fixed here because **F2's fix lives in that file**, so without it the pin
+  could be deleted and turbo would serve a cached pass. Glob widened to
+  `vitest.config.{ts,js}`, which only ever adds invalidation.
+- (**THE HARNESS'S BITE-CHECK WAS BLIND — found while investigating M2, not
+  reported by the review**) M2 came back "GREEN — SURVIVED". It was not a test
+  hole: the F5 fix had rewritten the line M2 was anchored to, so its sed matched
+  nothing. The harness is supposed to catch exactly that and report INVALID, and
+  its header lists "EVERY sed IS PROVEN TO HAVE BITTEN (md5 must change)" as one
+  of four things it verifies about itself. **That guarantee was false.** Every
+  file here has CRLF terminators and `sed -i` rewrites them to LF, so the md5
+  moved on a sed that matched NOTHING — proven directly with the pattern
+  `THIS_PATTERN_MATCHES_ABSOLUTELY_NOTHING_XYZ`, raw md5 CHANGED, content md5
+  unchanged. So INVALID could never fire, and a drifted anchor was reported as
+  a missing test — sending the operator to hunt the wrong fault. Same class as
+  :3720, where a `sed -i` line-ending flip silently disarmed nine mutants at
+  once. The check now strips `\r` and compares CONTENT; restore verification
+  stays on the RAW md5, where byte-for-byte really is the requirement. **The
+  false claim in the header is corrected in place, not deleted.**
+- (**F3, F5, F6**) F5: `formatKcal` was `String(kcal)`, printing 1240 where the
+  Dashboard's sibling printed 1,240 — the one-ladder class this very file cites
+  for `UNKNOWN`. It now IS `formatCount` rather than a copy of it, and the test
+  asserts AGREEMENT with the sibling rather than a literal, so it cannot drift
+  by locale. F6: a cited line number was 7, is 8 (`grep -n`). F3 is a deferral
+  with no tracker and got an OWED line — **spec re-verified here rather than
+  taken on the reviewer's word**: `02-part2b-trust-layer.md:148-152` mandates
+  "Range = point estimate ± 20% … `CALORIE_BAND = 0.20`" and the :475 table
+  marks session calories "always".
+- (**F4, fixed WITHOUT a test, and that is deliberate**) The month effect had no
+  `.catch`, so anything throwing in the walk would hold the loading spinner
+  forever instead of reaching the failed state this card built. `fetchMonth`
+  wraps its only await, so the path is unreachable by construction today — and a
+  test for a state the code cannot produce is the vacuous-assertion class this
+  project has recorded four times. The reason lives in a source comment instead.
+- (**A SECOND UNTRACKED GAP, from the security pass**) The reviewer noted that
+  the reader's stand-in for `safeParse` catches a RENAMED field but not a
+  CHANGED UNIT — "which is exactly the class that produced the duration bug".
+  Correct, and it is this card's own defect: `durationMs` kept its name while
+  the payload changed from minutes, and the drift test was green throughout.
+  Given its own OWED line, with the same question posed to the other four
+  per-field readers on the repoint.
+- (**MEASURED**) web **422/422**. **25 mutants: 25 RED, 0 survived, 0 invalid**,
+  green baseline both sides, on a bite-check that now actually works. `vite
+  build` green. Lint on the six touched files: **1** error, the pre-existing
+  `react-hooks/set-state-in-effect` that already has its own OWED line —
+  unchanged by this round.
+- (**ROUND 2 IS THE CAP.**) The OWED line stays UNTICKED until it comes back.

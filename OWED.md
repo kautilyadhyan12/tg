@@ -929,8 +929,30 @@ then; none may be hidden or reduced to close the gap.
       the four sessions now read `8s`/`5s`/`36s`/`38s`, confirmed by Kd.
       Steps 5-8 had never run before today and all pass — including step 8, the
       hand-counted case written for this card's own new coverage.
-      **THE ONLY THING LEFT FOR THE TICK IS THE FRESH-CHAT T3** (two-round cap,
-      set before round 1). Nothing else is outstanding on this line.
+      **T3 ROUND 1 HAS RUN (2026-08-04, DECISIONS :4267): 6 findings, 1
+      VISIBLE, ALL FIXED. ROUND 2 IS THE CAP and is what this line now waits
+      on.**
+      F1 (VISIBLE) was the duration defect's twin: the walk pages BACKWARDS from
+      today, so an unreadable row from a NEWER month was counted and printed as
+      "1 workout couldn't be read" over a month that had read perfectly — and
+      every fixture put its unreadable rows INSIDE the viewed month, so none
+      could see it. F2 (blocking, not visible) was measured both ways: the
+      day-bucketing guard was **inert in CI** — with the UTC-day defect live the
+      suites went 57/57 GREEN under TZ=UTC and RED only under Asia/Kolkata, and
+      runners are UTC. Zone now pinned in `apps/web/vitest.config.js`, with a
+      test asserting the pin survives and `turbo.json`'s input glob widened so
+      deleting it cannot be masked by a cache hit.
+      **The harness's OWN bite-check was blind** and that is the finding to
+      remember: it claimed "every sed is proven to have bitten (md5 must
+      change)", but the files are CRLF and `sed -i` rewrites them to LF, so the
+      md5 moved on a sed matching nothing. A mutation whose anchor had DRIFTED
+      was therefore reported as a missing TEST. Fixed to compare content; the
+      false header claim corrected in place. Same class as DECISIONS :3720.
+      Two untracked deferrals it surfaced now have their own lines below (the
+      calorie BANDING rule, and the unit-drift gap in the reader's stand-in for
+      `safeParse`).
+      Measured after the round: web **422/422**, **25 mutants 25 RED, 0 alive,
+      0 invalid**, `vite build` green, lint 1 pre-existing error (own line).
       **WHAT DISCHARGED THE BLOCK** was other cards, not a ruling here: blocker 1
       below said the new API held only squat / jump-squat / chair-squat
       workouts, and the 58-exercise catalog (:3538) plus the web write path
@@ -1797,6 +1819,56 @@ then; none may be hidden or reduced to close the gap.
          Round B touches only `Sidebar.jsx` and the two test files. Kd approved
          the plan as written, so it was not folded in and there is now no
          scheduled round that will pass this file.** It needs a card of its own.
+- [ ] 🟡 **The calendar's stand-in for `safeParse` catches renamed fields but NOT
+      changed UNITS — and a changed unit is what actually bit.** Raised inside
+      the calendar T3 round 1's security pass (2026-08-04) as an observation
+      rather than a numbered finding, and given a line because an observation
+      with no tracker is how this exact thing gets lost.
+      `readCalendarSession` deliberately reads per field instead of running
+      `workoutListItemSchema.safeParse`, and the documented reason is sound: a
+      strict parse would DROP a row the calendar could draw perfectly, over a
+      field the screen never shows. The substitute is a contract-drift test that
+      feeds a schema-valid row through the reader and fails if a field NAME
+      moves. **That substitute is narrower than the R2.3 rule it replaces**: a
+      field whose unit, scale or range changes keeps its name and sails through.
+      **Not hypothetical — it is this card's own duration defect exactly.**
+      `durationMs` kept its name while the payload changed from the old
+      backend's whole minutes; the drift test was green throughout, and the
+      screen printed a 9-second workout as "0m" until Kd's browser caught it.
+      Closing it means asserting the SHAPE of values, not just the presence of
+      keys — a unit fixture per numeric field (1000 ms ⇒ 1 s; a 0-100 form
+      score; integer kcal), or a narrowed parse that validates only the fields
+      this screen reads and keeps the drop-nothing property. Belongs with
+      whichever card next revisits the reader, and the same question should be
+      asked of every other per-field reader on the repoint (`readSummaryView`,
+      `readOverviewView`, `readStatsView`, `readLeaderboardView`).
+- [ ] 🟡 **Calories are shown as a flat number where the spec requires a RANGE.**
+      Raised by the calendar's T3 round 1 (F3, NOT-VISIBLE) on 2026-08-04 and
+      given a line the same day — it was tracked NOWHERE, which is the exact
+      shape the deferral rule exists to stop, and it had survived every card
+      that ever rendered a kcal figure.
+      **Verified this session, not taken on the reviewer's word:**
+      `docs/spec/02-part2b-trust-layer.md:148-152` — "**Range = point estimate
+      ± 20%**, both ends rounded to the nearest 5 kcal; e.g. computed 212.4 →
+      **'≈ 170–255 kcal.'** … constant, `CALORIE_BAND = 0.20`, versioned under
+      `calc_version`" — and the §2.3 display table at :475 marks the session
+      calories row "range ±20% / nearest 5 kcal / **always**".
+      `grep -in "banding|CALORIE_BAND|calorie range" OWED.md` returned nothing
+      before this line.
+      **Why it is a trust requirement and not polish:** the number is an
+      estimate derived from MET × body weight × time, and the spec's whole
+      Trust-Layer argument is that a point value presented as fact overstates
+      what the app knows. Same family as this project's em-dash rule, one step
+      further on: `210` claims a precision the calculation does not have.
+      **Not the calendar's to fix (R1.1)** — it is the display rule for EVERY
+      surface reading a kcal point value from the new API. Both shared contracts
+      already say so and are the pointer to the work:
+      `packages/shared/src/workouts.ts:23` ("2B §2.3: display banding is the
+      client's job") and `packages/shared/src/progress.ts:15`. One shared
+      formatter, `CALORIE_BAND = 0.20` quoted from the spec and never
+      re-derived, plus the "estimated" label — then every consumer switched to
+      it, the one-ladder rule (a second spelling is how two screens come to
+      disagree about one number).
 - [ ] 🟡 **Exercise names in the workout calendar are TITLE-CASED SLUGS.**
       Created 2026-08-01 by the calendar repoint (DECISIONS :2912) in the same
       commit that deferred it. The old `/workouts/history` projected up to five

@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { workoutListItemSchema } from '@app/shared';
 import authApi from './authApi';
 import mlApi from './mlApi';
-import { UNKNOWN } from './gamificationApi';
+import { UNKNOWN, formatCount } from './gamificationApi';
 import { workoutService } from './workoutApi';
 import {
   HISTORY_MAX_PAGES, HISTORY_PAGE_LIMIT, FORM_NEUTRAL,
@@ -96,11 +96,22 @@ const page = (items, nextCursor = null, limitedToDays = null) => ({
 });
 
 describe('localDateKey', () => {
-  // Constructed from LOCAL components, so the expectation holds in any zone.
-  // In a zone with a non-zero offset at least one of these two instants falls
-  // on a different UTC day, which is what makes them a real guard against
-  // `iso.split('T')[0]`. On a UTC machine neither crosses and the pair cannot
-  // distinguish the two implementations — stated rather than papered over.
+  // THE GUARD ON THE GUARD. Every test below is constructed from LOCAL
+  // components, so it holds in any zone — and in a zone with a NON-ZERO offset
+  // at least one of these instants falls on a different UTC day, which is the
+  // only thing that makes them a real check on `iso.split('T')[0]`.
+  //
+  // Under UTC the local day and the UTC day are identical by definition and no
+  // fixture here can tell the two implementations apart. That was not
+  // hypothetical: T3 round 1 F2 measured both suites at 57/57 GREEN with the
+  // UTC-day defect live, because GitHub runners are UTC. The zone is now
+  // pinned in `vitest.config.js`, and this asserts the pin is still there —
+  // without it, removing one line from that config silently disarms every
+  // date test in the package and nothing goes red.
+  it('THE ZONE IS PINNED — a UTC run cannot judge any test in this block', () => {
+    expect(new Date().getTimezoneOffset()).not.toBe(0);
+  });
+
   it('buckets an early-morning workout on its local day', () => {
     expect(localDateKey(new Date(2026, 6, 15, 1, 0).toISOString())).toBe('2026-07-15');
   });
@@ -267,6 +278,54 @@ describe('fetchMonth', () => {
     });
   });
 
+  // ── T3 round 1, F1 (VISIBLE). ────────────────────────────────────────────
+  // The walk starts at TODAY and pages BACKWARDS, so viewing an older month
+  // scans every newer month's rows first — and an unreadable row from any of
+  // them was counted, then printed as a sentence about the month on screen:
+  // "1 workout couldn't be read and is not shown", on a month whose every
+  // workout was read perfectly.
+  //
+  // The same blind spot as the durations: every fixture above puts its
+  // unreadable rows INSIDE the viewed month, so none could see one leak in
+  // from outside it.
+  it('does not blame this month for an unreadable row from ANOTHER month', async () => {
+    const r = await fetchMonth(
+      async () => page([
+        // August, and unreadable — belongs to neither this month nor this
+        // caption. It is scanned only because the walk passes through it.
+        validItem({ id: null, startedAt: new Date(2026, 7, 3).toISOString() }),
+        validItem({ id: 'jul', startedAt: at(15) }),
+      ]),
+      july,
+    );
+    expect(Object.keys(r.byDate)).toEqual(['2026-07-15']);
+    expect(r.unreadable).toBe(0);
+  });
+
+  it('still counts an unreadable row that IS in this month', async () => {
+    // The positive control. Without it the fix above is satisfiable by never
+    // counting anything at all.
+    const r = await fetchMonth(
+      async () => page([
+        validItem({ id: null, startedAt: at(9) }),
+        validItem({ id: 'jul', startedAt: at(15) }),
+      ]),
+      july,
+    );
+    expect(r.unreadable).toBe(1);
+  });
+
+  it('counts a row whose month cannot be established at all', async () => {
+    // No readable date, so it cannot be excluded on month — and a silent drop
+    // would make "N active days" a fabricated count. Counted for whichever
+    // month is being viewed, which is the honest reading of "we do not know".
+    const r = await fetchMonth(
+      async () => page([validItem({ startedAt: 'sometime' }), validItem({ id: 'jul', startedAt: at(15) })]),
+      july,
+    );
+    expect(r.unreadable).toBe(1);
+  });
+
   it('walks pages until one lands before the month starts', async () => {
     const seen = [];
     const bodies = [
@@ -386,6 +445,17 @@ describe('display helpers', () => {
       expect(formatDuration(readCalendarSession(validItem({ durationMs: ms })).durationSeconds))
         .not.toMatch(/60s/);
     }
+  });
+
+  // T3 round 1, F5. `String(kcal)` printed 1240 where the Dashboard's sibling
+  // printed 1,240 — two spellings of one number, the one-ladder class this
+  // file already cites for UNKNOWN. Asserted as AGREEMENT with the sibling
+  // rather than against a literal, so the test cannot itself drift by locale.
+  it('spells a big calorie number the way the rest of the app does', () => {
+    for (const v of [1240, 1000, 999, 12345]) {
+      expect(formatKcal(v)).toBe(formatCount(v));
+    }
+    expect(formatKcal(1240)).not.toBe('1240');
   });
 
   it('tints an UNKNOWN form score neutrally, never red', () => {

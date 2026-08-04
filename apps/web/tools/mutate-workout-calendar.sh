@@ -15,8 +15,22 @@
 #     crashed or mis-filtered runner reports INVALID, never RED. `vitest -t
 #     "NoSuchName"` exits 0 with everything skipped, which is how a renamed
 #     describe block once passed the gate as a no-op.
-#   · EVERY sed IS PROVEN TO HAVE BITTEN (md5 must change), so a pattern that
-#     silently matched nothing cannot be recorded as a surviving mutant.
+#   · EVERY sed IS PROVEN TO HAVE BITTEN, so a pattern that silently matched
+#     nothing cannot be recorded as a surviving mutant.
+#     **CORRECTED 2026-08-04 — this guarantee was FALSE as originally written,
+#     and measured to be false, not argued.** It compared a raw md5 before and
+#     after. Every file here has CRLF terminators and `sed -i` rewrites them to
+#     LF, so the md5 changed on a sed that matched NOTHING — proven with the
+#     pattern `THIS_PATTERN_MATCHES_ABSOLUTELY_NOTHING_XYZ`, which shifted the
+#     checksum. The bite-check could therefore never report INVALID, and a
+#     mutation whose anchor had drifted was reported as "GREEN — SURVIVED":
+#     the operator is sent hunting for a missing test when the real fault is a
+#     stale mutation. That is exactly what M2 did in the round-1 run, after the
+#     F5 fix rewrote the line it was anchored to. The same class as DECISIONS
+#     :3720, where a `sed -i` line-ending flip silently disarmed nine mutants.
+#     The comparison now strips `\r` first, so it measures CONTENT. Restore
+#     verification is deliberately left on the RAW md5 — there the requirement
+#     really is byte-for-byte, line endings included.
 #   · EVERY RESTORE IS CHECKSUM-VERIFIED AND FATAL on mismatch. A failed
 #     restore once left two mutations live at once while the table still read
 #     "ALL MUTANTS CAUGHT".
@@ -111,7 +125,10 @@ echo ""
 # removed, or breaks a rule it exists to enforce.
 MUTATIONS=(
   "M1 unknown duration renders 0s|$READER|s#return seconds === null || seconds === undefined ? UNKNOWN : secondsLabel(seconds);#return secondsLabel(seconds ?? 0);#"
-  "M2 unknown calories render 0|$READER|s#return kcal === null || kcal === undefined ? UNKNOWN : String(kcal);#return String(kcal ?? 0);#"
+  # M2's anchor was rewritten by the F5 fix (formatKcal now delegates to
+  # formatCount). Re-anchored to the line that exists; the INTENT is unchanged
+  # — an unknown kcal must not render as a confident 0.
+  "M2 unknown calories render 0|$READER|s#  return formatCount(kcal);#  return String(kcal ?? 0);#"
   "M3 unknown form score renders 0%|$READER|s#return score === null || score === undefined ? UNKNOWN : \`\${score}%\`;#return \`\${score ?? 0}%\`;#"
   "M4 unknown form score tinted red|$READER|s#if (score === null || score === undefined) return FORM_NEUTRAL;##"
   "M5 unknown duration defaulted to 0 at the reader|$READER|s#durationSeconds: durationMs === null ? null : Math.round(durationMs / 1000),#durationSeconds: Math.round((durationMs ?? 0) / 1000),#"
@@ -144,6 +161,9 @@ MUTATIONS=(
   # M23: the defect Kd's smoke caught on 2026-08-04. Minute-rounding printed
   # an 8-second workout as "0m" and a 36-second one as "1m". This restores it.
   "M23 durations are rounded back to whole minutes|$READER|s#durationSeconds: durationMs === null ? null : Math.round(durationMs / 1000),#durationSeconds: durationMs === null ? null : Math.round(durationMs / 60000) * 60,#"
+  # ── M24-M25: T3 round 1 findings, added 2026-08-04 ──────────────────────────
+  "M24 an unreadable row from ANOTHER month is blamed on this one|$READER|s#        const bad = Date.parse(text(item?.startedAt) ?? '');#        const bad = NaN;#"
+  "M25 a big calorie number loses its thousands separator|$READER|s#  return formatCount(kcal);#  return kcal === null || kcal === undefined ? UNKNOWN : String(kcal);#"
 )
 
 PASSES=0
@@ -159,9 +179,12 @@ for entry in "${MUTATIONS[@]}"; do
   file="${rest%%|*}"
   script="${rest#*|}"
 
-  before="$(md5sum "$file" | cut -d' ' -f1)"
+  # CONTENT, not bytes — `tr -d '\r'` first. See the header: sed -i normalises
+  # CRLF to LF, so a raw md5 moves even when the pattern matched nothing, and
+  # this check could never fire.
+  before="$(tr -d '\r' < "$file" | md5sum | cut -d' ' -f1)"
   sed -i "$script" "$file"
-  after="$(md5sum "$file" | cut -d' ' -f1)"
+  after="$(tr -d '\r' < "$file" | md5sum | cut -d' ' -f1)"
 
   if [ "$before" = "$after" ]; then
     printf '%-52s %s\n' "$label" "INVALID (sed matched nothing)"

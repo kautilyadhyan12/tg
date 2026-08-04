@@ -1,6 +1,59 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: WORKOUT CALENDAR — **T3 ROUND 1 DONE: 6 findings, 1 VISIBLE, ALL FIXED.
+      ROUND 2 IS THE CAP.** Records: DECISIONS :4267 (round 1), :4239 (smoke
+      passed), :4182 (smoke round-1 duration fix), :4119 (the unpark).
+
+STATE
+  · web **422/422**. **25 mutants / 3 files: 25 RED, 0 alive, 0 invalid**, green
+    baseline both sides. `vite build` green. Lint on the six touched files: 1
+    pre-existing error (`react-hooks/set-state-in-effect`, has its own OWED line).
+  · Kd's browser SMOKE passed all 8 steps on `5133114`, BEFORE this round.
+    Round 1 changed no user-visible behaviour except F1's caption, so no
+    re-smoke is owed — F1 REMOVES a false sentence, it does not add a claim.
+
+READ THIS BEFORE TRUSTING ANY MUTATION TABLE IN THIS REPO ON WINDOWS
+  **The harness's own bite-check was BLIND, and it had been telling the truth
+  by luck.** Its header claims "EVERY sed IS PROVEN TO HAVE BITTEN (md5 must
+  change)". The files are CRLF; `sed -i` rewrites them to LF; so the md5 moves
+  on a sed that matched NOTHING — measured with a deliberately impossible
+  pattern. INVALID could therefore never fire, and a mutation whose ANCHOR HAD
+  DRIFTED was reported as "GREEN — SURVIVED", i.e. as a missing TEST. That is
+  the wrong fault to go hunting. Found only because M2 survived after the F5
+  fix rewrote the line it was anchored to. Now compares content (`tr -d ''`);
+  restore verification deliberately stays byte-exact. Same class as :3720.
+
+THE TWO FINDINGS WORTH CARRYING
+  · **F1 is the duration bug's twin.** The walk pages BACKWARDS from today, so
+    viewing an older month scans newer months first — and an unreadable row from
+    one of them was counted, then printed as "1 workout couldn't be read" over a
+    month that read perfectly. **Every fixture put unreadable rows INSIDE the
+    viewed month.** Fixtures too uniform to expose the bug is now this card's
+    recurring shape: durations (all 1_800_000 ms), then this.
+  · **F2: a guard can be inert on the machine that gates merges.** With the
+    UTC-day defect live: 57/57 GREEN under TZ=UTC, RED under Asia/Kolkata.
+    Runners are UTC. Unfixable in test data — under UTC the local day and the
+    UTC day are identical BY DEFINITION. Zone pinned in vitest.config.js, a test
+    asserts the pin survives, and turbo.json's input glob was widened
+    (`vitest.config.ts` -> `{ts,js}`) or deleting the pin would be masked by a
+    cache hit.
+
+NEXT
+  1. **T3 ROUND 2 — the cap.** Fresh chat, `t3-workout-calendar.diff`.
+  2. Zero VISIBLE => the card closes and the OWED line ticks. A VISIBLE finding
+     is fixed and the card closes ON that fix.
+  3. Then: the legacy dual-write removal is still blocked (PostWorkout summary +
+     Dashboard stats have no new-API home) — its own line.
+
+VERIFY:
+        corepack pnpm --filter web exec vitest run          # 422/422
+        bash apps/web/tools/mutate-workout-calendar.sh      # 25/25 RED, exit 0
+SPEC GAPs: none.  DEVIATIONS: none.
+```
+
+
+```
 TASK: WORKOUT CALENDAR — **SMOKE PASSED, ALL 8 STEPS. ONLY THE T3 REMAINS.**
       Records: DECISIONS :4239 (smoke pass), :4182 (round-1 failure + fix),
       :4119 (the unpark). Smoke result table in
