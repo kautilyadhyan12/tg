@@ -4115,3 +4115,66 @@ workout (and "15m 0s" for a seconds-long session) is the mock rig's canned
 `SUMMARY_FULL` payload, byte-identical by construction — not app breakage. The
 summary screen still reads the old backend; its new-API home is already an
 OWED line.
+
+## 2026-08-04 — the workout calendar: UNPARKED, brought onto `web-repoint`
+
+**The block is discharged, and it was discharged by other cards rather than by
+anything decided here.** :2912 parked this work with one blocking reason: the
+new API held only workouts containing squat / jump squat / chair squat, so
+repointing the calendar would have blanked every other trained day — "history
+showing less training than actually happened". The 58-exercise catalog
+(:3538) and the web write path (:3610) closed that between them, and the
+rep-choice card's smoke (:4081) confirmed hand-counted workouts reach the API
+in the browser. Nothing about the parked code needed re-deciding; it needed the
+world underneath it to change, and it has.
+
+- (**HOW IT CAME ACROSS**) The seven files were taken from
+  `workout-calendar-parked` by path, NOT by merging the branch — its commit
+  says "PARKED (do not merge)" in its own subject line, and dragging that
+  sentence into `web-repoint`'s history would misdescribe what the branch now
+  holds. Verified before the copy, not assumed: `git merge-tree` reported **0**
+  conflicts, and the two changed-file sets are disjoint — the parked work
+  touches 7 files, none of which `web-repoint` has touched since the shared
+  base `7aab8a0`.
+- (**WHAT WAS RE-VERIFIED RATHER THAN INHERITED**, S5) The reader consumes
+  `workoutListItemSchema` (id / startedAt / durationMs / kcalPoint /
+  avgFormScore) and `sets[].exerciseSlug`. The log-only card changed
+  `workoutSetViewSchema` ONLY — `repScores` nullable, `mode` added,
+  `engineVersion`/`definitionVersion` nullable — and the list item is
+  byte-unchanged since the base. `exerciseSlug` is not among the changed
+  fields, so the chips read as before. Checked by diffing the shared contract,
+  not by reasoning about it.
+- (**THE GAP THE CARD ACTUALLY HAD, and it is a date**) This screen was built
+  2026-08-01. Hand-counted workouts could first reach the new API on
+  2026-08-02. **Every fixture in the parked suite therefore predates the shape
+  it will now meet most often**: real duration, real kcal, and NO form score,
+  because migration 0009's CHECK forbids a log-only set from carrying one.
+  The parked code handles it correctly — `finite()` per field, `formColor(null)`
+  neutral — but correctness nobody has tried to break is a claim, and this repo
+  has lost eight rounds to exactly that gap. **Five render tests and four
+  mutations were added for it**, and the four are the point:
+  **M19** a missing form score poisoning its siblings (the envelope-gate class,
+  round 4 F2's shape); **M20** the screen hardcoding the neutral tint;
+  **M21** the screen tinting every score red; **M22** log-only sets dropped from
+  the exercise chips. M20/M21 exist as a PAIR because either alone is
+  satisfiable by a constant — the neutral assertion needed a positive control
+  before it protected anything (the round 9 F2/F3 lesson).
+- (**A FALSE CLAIM IN THE SMOKE DOC, CORRECTED IN THIS COMMIT**) Its
+  "NOT browser-reachable" section bracketed an unknown **Form** score with
+  unknown duration and kcal as un-producible on demand. True on 2026-08-01;
+  false since 2026-08-02, when a hand-counted workout became the ordinary way to
+  produce one. Step 8 now walks it in the browser. Recorded rather than quietly
+  edited — a record is a claim (:1950), and this one had simply not been
+  re-measured after the ground moved.
+- (**MEASURED, NOT RECALLED**) web **413/413** across 23 files.
+  **22 mutants / 3 files: 22 RED, 0 survived, 0 invalid**, with the harness's
+  own green baseline passing BEFORE and AFTER, so every restore is proven
+  (:2614 F3's requirement). `vite build` green. Lint on the five calendar files:
+  **1** error, `react-hooks/set-state-in-effect` — re-measured independently
+  today and it reproduces :2912's figure exactly (pre-repoint file **2** errors,
+  post **1**), which is why OWED's line for it needs no amendment.
+- (**WHAT IS NOT DONE, and the line does NOT tick**) Kd's browser smoke has not
+  run, and no fresh chat has reviewed this. Those are the two gates :2912 named
+  when it parked the work ("resumes at the smoke + T3"), and neither is
+  discharged by the code arriving. Two-round cap, per the standing default
+  (:2905), set here before the first round rather than after a bad fact-pattern.

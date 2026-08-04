@@ -1,10 +1,24 @@
-import { useState, useEffect } from 'react';
+// P2.8 web repoint (workout calendar card) — reads `GET /v1/workouts` on the
+// NEW API through `api/workoutHistory.js`. See that file's header for why the
+// month is assembled client-side, why the day key is LOCAL, and why the
+// exercise chips are fetched from `/v1/workouts/:id` only when a day opens.
+//
+// THE STATE THIS SCREEN MUST KEEP APART, and did not before: a FAILED read and
+// an EMPTY month. The old code did `.catch(console.error)` and left `byDate`
+// at `{}`, so a dead backend drew a blank grid captioned "0 active days this
+// month" — a confident claim about days the user may well have trained. Three
+// states now, never two (OWED.md:1302's family).
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft, ChevronRight, X,
-  Flame, Clock, Dumbbell, Target, Zap,
+  Flame, Clock, Target,
 } from 'lucide-react';
 import { workoutService } from '../../api/workoutApi';
+import {
+  fetchMonth, formatDuration, formatFormScore, formatKcal, formColor,
+  monthClamp, readWorkoutExercises,
+} from '../../api/workoutHistory';
 
 const DAYS    = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS  = [
@@ -12,8 +26,31 @@ const MONTHS  = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
+const MUTED = 'rgba(255,255,255,0.40)';
+
 // ── Session detail panel ──────────────────────────────────────────────────────
 function SessionDetail({ sessions, dateStr, onClose }) {
+  // id → {names,total} (loaded) | null (the detail read failed) | absent (in
+  // flight). An absent entry renders NOTHING: "we have not asked yet" must not
+  // look like "this workout had no exercises".
+  const [exercises, setExercises] = useState({});
+
+  useEffect(() => {
+    if (!sessions || sessions.length === 0) return undefined;
+    let cancelled = false;
+    Promise.all(
+      sessions.map((s) =>
+        workoutService
+          .getWorkout(s.id)
+          .then((res) => [s.id, readWorkoutExercises(res?.data)])
+          .catch(() => [s.id, null]),
+      ),
+    ).then((pairs) => {
+      if (!cancelled) setExercises(Object.fromEntries(pairs));
+    });
+    return () => { cancelled = true; };
+  }, [sessions]);
+
   if (!sessions || sessions.length === 0) return null;
 
   const date = new Date(dateStr + 'T00:00:00');
@@ -68,12 +105,15 @@ function SessionDetail({ sessions, dateStr, onClose }) {
           {/* Sessions */}
           <div className="overflow-y-auto no-scrollbar" style={{ maxHeight: '60vh' }}>
             {sessions.map((session, i) => {
-              const time = new Date(session.completed_at)
+              // START time, not finish: the new schema has no completion
+              // timestamp (`workoutListItemSchema` carries `startedAt` only),
+              // and deriving one from a duration that can itself be unknown
+              // would be an invented number. Labelled "Started" so the reading
+              // is unambiguous rather than silently shifted.
+              const time = new Date(session.startedAt)
                 .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-              const formColor =
-                session.form_accuracy >= 80 ? '#4ade80' :
-                session.form_accuracy >= 60 ? '#FF8A1F' : '#f87171';
+              const tint = formColor(session.formScore);
+              const chips = exercises[session.id];
 
               return (
                 <div
@@ -88,26 +128,17 @@ function SessionDetail({ sessions, dateStr, onClose }) {
                   {/* Time + session number */}
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-xs font-medium"
-                          style={{ color: 'rgba(255,255,255,0.40)' }}>
-                      {sessions.length > 1 ? `Session ${i + 1} · ` : ''}{time}
+                          style={{ color: MUTED }}>
+                      {sessions.length > 1 ? `Session ${i + 1} · ` : ''}Started {time}
                     </span>
-                    {session.xp_earned > 0 && (
-                      <div className="flex items-center gap-1">
-                        <Zap className="w-3 h-3" style={{ color: '#FF8A1F' }} />
-                        <span className="text-xs font-bold"
-                              style={{ color: '#FF8A1F' }}>
-                          +{session.xp_earned} XP
-                        </span>
-                      </div>
-                    )}
                   </div>
 
                   {/* Stats grid */}
                   <div className="grid grid-cols-3 gap-2 mb-3">
                     {[
-                      { icon: Clock,  value: `${session.duration_minutes}m`, label: 'Duration', color: '#60a5fa' },
-                      { icon: Flame,  value: `${session.calories_burned}`,   label: 'Calories', color: '#f97316' },
-                      { icon: Target, value: `${session.form_accuracy}%`,    label: 'Form',     color: formColor },
+                      { icon: Clock,  value: formatDuration(session.durationMinutes),  label: 'Duration', color: '#60a5fa' },
+                      { icon: Flame,  value: formatKcal(session.kcal),                 label: 'Calories', color: '#f97316' },
+                      { icon: Target, value: formatFormScore(session.formScore),       label: 'Form',     color: tint },
                     ].map(({ icon: Icon, value, label, color }) => (
                       <div
                         key={label}
@@ -123,17 +154,23 @@ function SessionDetail({ sessions, dateStr, onClose }) {
                     ))}
                   </div>
 
-                  {/* Exercises */}
-                  {session.exercises?.length > 0 && (
+                  {/* Exercises — absent while in flight (no claim), an honest
+                      line when the read failed, nothing when there are none. */}
+                  {chips === null && (
+                    <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.30)' }}>
+                      Couldn&apos;t load this workout&apos;s exercises.
+                    </p>
+                  )}
+                  {chips && chips.total > 0 && (
                     <div>
                       <p className="text-2xs uppercase tracking-wider mb-1.5"
                          style={{ color: 'rgba(255,255,255,0.30)' }}>
-                        Exercises · {session.exercise_count} total
+                        Exercises · {chips.total} total
                       </p>
                       <div className="flex flex-wrap gap-1.5">
-                        {session.exercises.map((ex, j) => (
+                        {chips.names.map((name) => (
                           <span
-                            key={j}
+                            key={name}
                             className="text-2xs font-medium px-2 py-1 rounded-lg"
                             style={{
                               background: 'rgba(255,138,31,0.08)',
@@ -141,10 +178,10 @@ function SessionDetail({ sessions, dateStr, onClose }) {
                               border:     '1px solid rgba(255,138,31,0.15)',
                             }}
                           >
-                            {ex.name}
+                            {name}
                           </span>
                         ))}
-                        {session.exercise_count > session.exercises.length && (
+                        {chips.total > chips.names.length && (
                           <span
                             className="text-2xs font-medium px-2 py-1 rounded-lg"
                             style={{
@@ -152,7 +189,7 @@ function SessionDetail({ sessions, dateStr, onClose }) {
                               color:      'rgba(255,255,255,0.35)',
                             }}
                           >
-                            +{session.exercise_count - session.exercises.length} more
+                            +{chips.total - chips.names.length} more
                           </span>
                         )}
                       </div>
@@ -173,17 +210,34 @@ export default function WorkoutCalendar() {
   const today = new Date();
   const [month,    setMonth]    = useState(today.getMonth() + 1);
   const [year,     setYear]     = useState(today.getFullYear());
-  const [byDate,   setByDate]   = useState({});
-  const [loading,  setLoading]  = useState(true);
+  const [status,   setStatus]   = useState('loading'); // loading | ready | failed
+  const [history,  setHistory]  = useState(null);
   const [selected, setSelected] = useState(null);  // dateStr
+  const [reloads,  setReloads]  = useState(0);
+
+  const retry = useCallback(() => setReloads((n) => n + 1), []);
 
   useEffect(() => {
-    setLoading(true);
-    workoutService.getHistory(month, year)
-      .then((res) => setByDate(res.data.by_date || {}))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [month, year]);
+    let cancelled = false;
+    setStatus('loading');
+    setSelected(null);
+    fetchMonth(
+      ({ limit, cursor }) =>
+        workoutService.getHistory({ limit, ...(cursor ? { cursor } : {}) })
+          .then((res) => res?.data),
+      { month, year },
+    ).then((result) => {
+      if (cancelled) return;
+      if (result === null) {
+        setHistory(null);
+        setStatus('failed');
+        return;
+      }
+      setHistory(result);
+      setStatus('ready');
+    });
+    return () => { cancelled = true; };
+  }, [month, year, reloads]);
 
   const prevMonth = () => {
     if (month === 1) { setMonth(12); setYear((y) => y - 1); }
@@ -222,6 +276,11 @@ export default function WorkoutCalendar() {
   const isCurrentMonth =
     month === today.getMonth() + 1 && year === today.getFullYear();
 
+  const byDate = status === 'ready' && history ? history.byDate : {};
+  const clamp  = status === 'ready' && history
+    ? monthClamp({ month, year }, history.limitedToDays)
+    : null;
+
   return (
     <div className="card-glass h-full flex flex-col">
       {/* Header */}
@@ -250,7 +309,7 @@ export default function WorkoutCalendar() {
         </div>
 
         <div className="flex items-center gap-3 text-2xs"
-             style={{ color: 'rgba(255,255,255,0.40)' }}>
+             style={{ color: MUTED }}>
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5 rounded-sm"
                  style={{ background: '#FF8A1F' }} />
@@ -264,6 +323,26 @@ export default function WorkoutCalendar() {
         </div>
       </div>
 
+      {/* Plan read-gate — the window is a READ GATE, never deletion, and the
+          copy says so (progressClamp.js's rule, same fact, same sentence). */}
+      {clamp && (
+        <p className="text-2xs mb-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          Your plan shows the last {clamp.days} days, so
+          {clamp.whole ? ' this month isn’t shown' : ' the earlier part of this month isn’t shown'}.
+          {' '}<span style={{ color: 'rgba(255,255,255,0.65)' }}>Older workouts are still saved.</span>
+        </p>
+      )}
+      {status === 'ready' && history?.truncated && (
+        <p className="text-2xs mb-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          This month has more workouts than this view reads back through, so it may be incomplete.
+        </p>
+      )}
+      {status === 'ready' && history?.unreadable > 0 && (
+        <p className="text-2xs mb-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          {history.unreadable} workout{history.unreadable === 1 ? '' : 's'} couldn&apos;t be read and {history.unreadable === 1 ? 'is' : 'are'} not shown.
+        </p>
+      )}
+
       {/* Day headers */}
       <div className="grid grid-cols-7 gap-1 mb-2">
         {DAYS.map((d) => (
@@ -276,10 +355,23 @@ export default function WorkoutCalendar() {
       </div>
 
       {/* Calendar grid */}
-      {loading ? (
+      {status === 'loading' ? (
         <div className="flex justify-center py-12">
           <div className="w-5 h-5 border-2 rounded-full animate-spin"
                style={{ borderColor: 'rgba(255,138,31,0.2)', borderTopColor: '#FF8A1F' }} />
+        </div>
+      ) : status === 'failed' ? (
+        <div className="flex flex-col items-center gap-3 py-12">
+          <p className="text-xs text-center" style={{ color: MUTED }}>
+            Couldn&apos;t load your workout history.
+          </p>
+          <button
+            onClick={retry}
+            className="px-3 py-1.5 rounded-lg text-2xs font-bold"
+            style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+          >
+            Try again
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-7 gap-1">
@@ -355,21 +447,29 @@ export default function WorkoutCalendar() {
         </div>
       )}
 
-      {/* Month summary */}
+      {/* Month summary — the count is stated ONLY when the month was actually
+          read. On a failed read it is unknown, and "0 active days" would be a
+          claim about days nobody looked at. */}
       <div className="mt-4 pt-4 flex items-center justify-between"
            style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.40)' }}>
-          <span className="font-bold text-white">
-            {Object.keys(byDate).length}
-          </span> active days this month
+        <p className="text-xs" style={{ color: MUTED }}>
+          {status === 'ready' ? (
+            <>
+              <span className="font-bold text-white">
+                {Object.keys(byDate).length}
+              </span> active days this month
+            </>
+          ) : (
+            <span>Active days this month unavailable</span>
+          )}
         </p>
-        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.40)' }}>
+        <p className="text-xs" style={{ color: MUTED }}>
           Click a highlighted day to view details
         </p>
       </div>
 
       {/* Session detail modal */}
-      {selected && (
+      {selected && byDate[selected] && (
         <SessionDetail
           sessions={byDate[selected]}
           dateStr={selected}

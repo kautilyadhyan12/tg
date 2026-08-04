@@ -121,6 +121,20 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:4119** — 2026-08-04 — **the workout calendar is UNPARKED and on
+  `web-repoint`.** :2912's single blocking reason (the new API held only 3
+  exercises' workouts) was discharged by the catalog (:3538) and the write path
+  (:3610), not by anything re-decided here. Files copied BY PATH, never by
+  merging the parked branch, whose commit subject says "do not merge"; 0
+  conflicts and disjoint file sets verified first. **Read before touching any
+  workout-history fixture: the whole parked suite predates hand-counted
+  workouts by one day**, so its shape — real duration, real kcal, NO form score
+  — had no coverage at all; five render tests and mutations M19–M22 were added,
+  M20/M21 deliberately as a PAIR because either alone is satisfiable by a
+  constant. A "not browser-reachable" claim in the smoke doc is corrected in the
+  same commit: it went stale the day the write path shipped. 413/413, 22/22
+  mutants RED. **NOT ticked — smoke and T3 are both unrun**, two-round cap set
+  up front.
 - **:4081** — 2026-08-04 — **rep-choice card SMOKE PASSED (steps 1–5, 7, all
   DB-verified) — the card's gate is discharged. Kd RULING: steps 6 and 8
   (mid-set camera-failure drills) SKIPPED; the handover code and its tests

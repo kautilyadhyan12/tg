@@ -1,6 +1,68 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: WORKOUT CALENDAR — **UNPARKED AND ON `web-repoint`. COMMITTED, NOT DONE.**
+      The card ticks only when Kd's browser SMOKE passes AND a fresh-chat T3
+      comes back clean. Two-round cap, set BEFORE round 1 (:2905's standing
+      default). Recorded at DECISIONS :4119.
+
+WHAT THIS IS
+  The calendar on /progress now reads `GET /v1/workouts` (new API) instead of
+  the old backend. The code was BUILT AND PARKED on 2026-08-01 and has been
+  waiting on other cards, not on itself.
+
+STATE
+  · web **413/413** across 23 files. **22 mutants / 3 files: 22 RED, 0 alive,
+    0 invalid**, green baseline before AND after (every restore proven).
+    `vite build` green.
+  · Lint, the five calendar files: **1** error
+    (`react-hooks/set-state-in-effect`). Re-measured independently today and it
+    reproduces :2912's figure exactly — pre-repoint file 2 errors, post 1. Its
+    OWED line needs no amendment.
+  · Files came across BY PATH from `workout-calendar-parked`, not by merging
+    it: that branch's commit subject says "PARKED (do not merge)". 0 conflicts
+    and disjoint changed-file sets were verified BEFORE the copy. The branch is
+    left unmerged as provenance.
+
+THE ONE THING THIS SESSION ADDED, AND WHY
+  The parked screen was built 2026-08-01. Hand-counted workouts first reached
+  the new API on 2026-08-02. **So not one parked fixture carried the shape this
+  screen will now meet most often**: real duration, real kcal, and NO form score
+  (0009's CHECK forbids a log-only set from carrying one). The code handled it
+  correctly already — the COVERAGE was missing, which is the gap this repo has
+  lost eight rounds to. 5 render tests + mutations M19–M22.
+  **M20 and M21 are a PAIR on purpose**: either alone is satisfiable by a
+  constant tint, so the neutral-tint assertion needed a positive control before
+  it protected anything.
+
+READ THIS IF YOU TOUCH THIS AREA
+  **A "not browser-reachable" note went stale and was cited as fact.** The smoke
+  doc bracketed an unknown Form score with unknown duration/kcal as impossible
+  to produce on demand. True 2026-08-01, false 2026-08-02. Corrected in this
+  commit, with the correction written down rather than the sentence quietly
+  swapped. Whenever a card is unparked, its RECORDS are as stale as its code.
+
+  **Pre-2026-08-02 workouts are not in the new API at all** — they exist in the
+  old backend alone. Older months therefore look emptier here than in the old
+  app. That is not a defect and the smoke's setup says so, so it is not
+  reported as one.
+
+NEXT
+  1. **Kd runs `RUNBOOK/smoke-workout-calendar.md`, all 8 steps.** Step 8
+     (hand-counted workout) is new and has never run. Step 1 is the control and
+     must be judged on a CAMERA workout.
+  2. Fresh-chat T3 on the diff. Fix only what smoke/T3 find.
+  3. Then: the legacy dual-write removal is still blocked (PostWorkout summary +
+     Dashboard stats have no new-API home yet) — see its OWED line.
+
+VERIFY:
+        corepack pnpm --filter web exec vitest run          # 413/413
+        bash apps/web/tools/mutate-workout-calendar.sh      # 22/22 RED, exit 0
+SPEC GAPs: none.  DEVIATIONS: none.
+```
+
+
+```
 TASK: COUNTING YOUR OWN REPS IS A CHOICE — **DONE. SMOKE PASSED 2026-08-04,
       DB-VERIFIED, COMMITTED.** Steps 1–5 and 7 pass (7 had never run: the
       ungraded-then-graded score loss did NOT recur — squat scored 77/91 beside

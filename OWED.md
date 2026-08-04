@@ -907,8 +907,37 @@ then; none may be hidden or reduced to close the gap.
       where model load is exactly the case it is trading against — the mobile
       camera smoke below is where it would be observed.
 - [ ] 🔴 **Workout history calendar** (WorkoutCalendar → workoutApi.getHistory).
-      **BLOCKED — NOT a client repoint. Do not pick this up as a quick win.**
-      **BUILT AND PARKED 2026-08-01 (DECISIONS :2912), still unticked.** A chat
+      **UNBLOCKED AND UNPARKED 2026-08-04 (DECISIONS :4119) — the code is now on
+      `web-repoint`. STILL UNTICKED, and the two things holding it are the two
+      :2912 named when it parked the work: Kd's browser SMOKE has not run, and
+      no fresh chat has reviewed it.** Neither is discharged by the code
+      arriving. Two-round T3 cap, set before round 1.
+      **WHAT DISCHARGED THE BLOCK** was other cards, not a ruling here: blocker 1
+      below said the new API held only squat / jump-squat / chair-squat
+      workouts, and the 58-exercise catalog (:3538) plus the web write path
+      (:3610) closed that; the rep-choice smoke (:4081) confirmed a hand-counted
+      workout reaches the API from a real browser.
+      **THE ONE GAP THE PARKED CODE HAD, and it is a date.** The screen was
+      built 2026-08-01; hand-counted workouts first reached the new API on
+      2026-08-02. So no parked fixture carried their shape — real duration, real
+      kcal, and NO form score (migration 0009's CHECK forbids a log-only set
+      from carrying one). The code was already correct; the COVERAGE was absent,
+      which is the gap this repo has lost eight rounds to. Five render tests and
+      mutations M19–M22 added. Measured: web 413/413, 22/22 mutants RED with a
+      green baseline before AND after, `vite build` green.
+      **ALSO CORRECTED IN THAT COMMIT:** `RUNBOOK/smoke-workout-calendar.md`
+      claimed an unknown Form score was "not browser-reachable". True when
+      written, false since 2026-08-02. Step 8 walks it now, and the smoke's setup
+      warns that pre-2026-08-02 months look emptier here than in the old app —
+      those workouts exist in the old backend alone, so that is not a defect to
+      report.
+      **The blockers below are kept as the record of why it waited. Blocker 1 is
+      DISCHARGED; 2 and 3 were solved in the parked work itself.**
+      **THE ORIGINAL ENTRY FOLLOWS AND ITS PRESENT TENSE IS 2026-08-01's** — in
+      particular "code is on branch `workout-calendar-parked`, deliberately NOT
+      on `web-repoint`" was true then and is superseded above. The branch is
+      left in place unmerged as the provenance of these files.
+      A chat
       recommended this card to Kd as the cheapest one left — the THIRD time,
       on the reasoning the next line pre-refutes — built it to PROVE (320/321,
       18/18 mutants), and only then read this entry. Code is on branch
