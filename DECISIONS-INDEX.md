@@ -121,8 +121,29 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:4718** — 2026-08-04 — **date-window card 2, T3 round 1: 5 findings, none
+  visible, 4 fixed + 1 recorded. Read before writing a mutation table, and
+  before ticking anything in OWED.md.** **F2 is the one with teeth: a mutant RED
+  FOR THE WRONG REASON certifies the wrong assertion.** M35 claimed to restore
+  the removed early break; `break` inside the item loop exits one PAGE, not the
+  walk, so it was red for M34's reason while the test written to pin the break's
+  removal passed underneath it — measured both ways, rewritten faithfully (flag +
+  set + OUTER break), and :4622's "each was measured RED" struck in place. A
+  table's value is the mapping between label and cause; "it went red" does not
+  verify that mapping. **F3, the only code defect and the caption's THIRD wrong
+  direction:** `truncated` does not mean "this month is huge" — a server that
+  accepts the window and mis-applies it fills every page with another month's
+  rows, all discarded, and the screen captioned an EMPTY grid "more than a
+  thousand workouts", fabricating a volume; now gated on `inWindow`, counted
+  conservatively, and **the render suite's own truncation fixture turned out to BE
+  that case all along**. F1: `workoutApi.js` still told the next author in
+  writing that the API has no date filter — :4556's F1 shape, one file over. **F4:
+  the 🔴 line was ticked in the same commit whose message said "smoke and T3
+  unrun"** — reverted, precedent at :4119 four commits back on this same screen.
+  F5 reported not fixed: two assertions encode "local midnight always exists",
+  false only in a midnight-DST zone the pinned zone can never see.
 - **:4622** — 2026-08-04 — **the CALENDAR ASKS for the month — CARD 2, the WEB
-  half, and the 🔴 OWED line TICKS.** **Read before touching the calendar's read
+  half. (Its 🔴 tick was PREMATURE — struck by :4718's F4.)** **Read before touching the calendar's read
   path or the meal reader's.** `fetchMonth` sends the month's own boundaries as a
   half-open window instead of paging backwards from today, so an older month is
   readable at ANY depth of history and a month view costs one request, not ten.

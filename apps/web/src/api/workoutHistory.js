@@ -232,12 +232,32 @@ export function monthClamp({ month, year }, limitedToDays, now = new Date()) {
  *                  oldest-first so "Session 1" is the day's first workout (the
  *                  old handler's `.sort("completed_at", 1)`).
  *    limitedToDays the plan window from the last page read, or null.
- *    truncated     the in-month walk hit HISTORY_MAX_PAGES — this ONE month
- *                  holds more than 1,000 workouts and the days shown may be
- *                  incomplete. Before the API's date window this meant
+ *    truncated     the in-month walk hit HISTORY_MAX_PAGES and the days shown
+ *                  may be incomplete. Before the API's date window this meant
  *                  something else and far more reachable: 1,000 workouts
  *                  logged BETWEEN today and the month, which drew the month
  *                  blank. That is the defect this card closed.
+ *    inWindow      rows the server returned that PROVABLY belong to this month
+ *                  — placed ones, plus unreadable ones whose date is readable
+ *                  and inside it. It exists so the caller can tell the two
+ *                  truncation causes apart, and it is deliberately CONSERVATIVE
+ *                  (a row with no readable date is not counted, because it is
+ *                  not known to be in this month). It can therefore under-state
+ *                  the volume, never over-state it, and under-stating only
+ *                  costs a vaguer sentence.
+ *
+ *                  WHY IT EXISTS — the T3 on d28ace5, F3, measured. `truncated`
+ *                  alone does NOT mean "this month has a thousand workouts". A
+ *                  server that ACCEPTS the window and mis-applies it — answering
+ *                  July's request with August's rows — fills all ten pages while
+ *                  the in-window filter below places NOTHING, so the screen
+ *                  drew an empty grid captioned "this month has more than a
+ *                  thousand workouts": the caption false in a THIRD direction,
+ *                  and this time fabricating a volume out of rows that were
+ *                  never this month's. Removing the early break was argued only
+ *                  from "a short month with no caption"; it also turned that
+ *                  silent short month into a falsely-captioned empty one, and
+ *                  the argument had not covered it.
  *    unreadable    rows the reader could not place. Surfaced rather than
  *                  silently dropped: a silent drop makes "N active days" a
  *                  fabricated COUNT (the PostWorkout round-2 F5 finding). */
@@ -257,6 +277,7 @@ export async function fetchMonth(fetchPage, { month, year }) {
   let pages = 0;
   let truncated = false;
   let unreadable = 0;
+  let inWindow = 0;
   let limitedToDays = null;
 
   for (;;) {
@@ -303,9 +324,15 @@ export async function fetchMonth(fetchPage, { month, year }) {
         // not have fabricated that count. What a silent drop WOULD hide is that
         // the row exists — which is the whole point of surfacing it.
         const bad = Date.parse(text(item?.startedAt) ?? '');
-        if (!Number.isFinite(bad) || (bad >= monthStart && bad < monthEnd)) {
+        const datedIntoThisMonth = Number.isFinite(bad) && bad >= monthStart && bad < monthEnd;
+        if (!Number.isFinite(bad) || datedIntoThisMonth) {
           unreadable += 1;
         }
+        // Counted toward the VOLUME only when its date proves it belongs here.
+        // An undatable row is counted as `unreadable` (we must say it exists)
+        // but never as evidence of this month's size — those are two different
+        // questions and one of them is answerable.
+        if (datedIntoThisMonth) inWindow += 1;
         continue;
       }
       const t = Date.parse(session.startedAt);
@@ -329,6 +356,7 @@ export async function fetchMonth(fetchPage, { month, year }) {
       // round 1 found the guard that used to sit here was UNREACHABLE — and an
       // unreachable guard reads as protection while protecting nothing, the
       // same class as an assertion that cannot fail.
+      inWindow += 1;
       const key = localDateKey(session.startedAt);
       if (!byDate[key]) byDate[key] = [];
       byDate[key].push(session);
@@ -342,8 +370,15 @@ export async function fetchMonth(fetchPage, { month, year }) {
     byDate[key].sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt));
   }
 
-  return { byDate, limitedToDays, truncated, unreadable };
+  return { byDate, limitedToDays, truncated, inWindow, unreadable };
 }
+
+/** The most rows a single month view can read: HISTORY_MAX_PAGES × the page
+ *  ceiling. `truncated` with `inWindow` at this number means the month really
+ *  does hold more workouts than the view can show; `truncated` with FEWER means
+ *  the read stopped short for a reason we cannot name, and the caller must not
+ *  claim a volume it did not see. (T3 on d28ace5, F3.) */
+export const HISTORY_MAX_ROWS = HISTORY_MAX_PAGES * HISTORY_PAGE_LIMIT;
 
 /** Display helpers. Each renders the em dash for an unknown rather than a
  *  confident zero — `UNKNOWN` is imported from gamificationApi so this screen

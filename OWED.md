@@ -1829,7 +1829,7 @@ then; none may be hidden or reduced to close the gap.
          Round B touches only `Sidebar.jsx` and the two test files. Kd approved
          the plan as written, so it was not folded in and there is now no
          scheduled round that will pass this file.** It needs a card of its own.
-- [x] 🔴 **A long-time user's OLD MONTHS GO BLANK on the calendar, and the page-
+- [ ] 🔴 **A long-time user's OLD MONTHS GO BLANK on the calendar, and the page-
       walk is why. `/v1/workouts` needs a date filter.** Raised by Kd on
       2026-08-04, in response to this chat calling the truncated state
       "unreachable" — **which was wrong, and the correction is the point of this
@@ -1856,8 +1856,16 @@ then; none may be hidden or reduced to close the gap.
       now takes `from`/`to`: half-open, absolute instants, narrowing only (the
       Part 4 §0.2 plan gate still out-ranks a wider `from`), inverted window =
       400. 19/19 against real Postgres, both new guarantees mutation-checked.
-      **✅ CARD 2 (WEB) IS DONE 2026-08-04 — DECISIONS :4622. THE LINE IS
-      CLOSED.** `fetchMonth` now sends the month's own boundaries (local
+      **CARD 2 (WEB): CODE LANDED 2026-08-04 (`d28ace5` + its T3 fixes) —
+      DECISIONS :4622. THE LINE STAYS OPEN UNTIL THE SMOKE AND THE T3 ARE BOTH
+      CLEAN.** It was ticked in `d28ace5`, in the same commit whose own message
+      said "Smoke and T3 unrun" — **struck by that T3's F4, and the precedent it
+      cited is four commits back on this very screen** (:4119, "NOT ticked —
+      smoke and T3 are both unrun"). This file's header rule is that nothing
+      leaves except by being DONE, and CLAUDE.md Part I §2 is explicit that no
+      user-facing card is done without its SMOKE. A tick is the only signal this
+      file carries; spending it early is how the list stops being trustworthy.
+      What has landed: `fetchMonth` now sends the month's own boundaries (local
       midnight to local midnight, converted client-side so no timezone decision
       moves to the server) and reads back one page instead of walking up to ten
       from today. An older month is readable at any depth of history, and a

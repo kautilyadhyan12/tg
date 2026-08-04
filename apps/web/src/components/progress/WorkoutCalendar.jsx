@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { workoutService } from '../../api/workoutApi';
 import {
+  HISTORY_MAX_ROWS,
   fetchMonth, formatDuration, formatFormScore, formatKcal, formColor,
   monthClamp, readWorkoutExercises,
 } from '../../api/workoutHistory';
@@ -355,11 +356,20 @@ export default function WorkoutCalendar() {
           sentence goes back to being about THIS month's own volume, which is
           the thing round 2 struck it for claiming before it was true. A caption
           is a claim about the read that actually happened, and the read
-          changed. */}
+          changed.
+          AND THE THIRD DIRECTION, found by the T3 on d28ace5 (F3): the volume
+          clause is only true when the read actually SAW that many of this
+          month's workouts. A server that accepts the window and mis-applies it
+          fills all ten pages with another month's rows, which the in-window
+          filter then discards — an EMPTY grid captioned "more than a thousand
+          workouts", fabricating a volume out of rows that were never this
+          month's. So the volume is claimed only when it was counted, and the
+          truncation is otherwise reported without inventing a cause. */}
       {status === 'ready' && history?.truncated && (
         <p className="text-2xs mb-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          This month has more than a thousand workouts, which is more than this
-          view can read, so the days shown may be incomplete.
+          {history.inWindow >= HISTORY_MAX_ROWS
+            ? 'This month has more than a thousand workouts, which is more than this view can read, so the days shown may be incomplete.'
+            : 'This month couldn’t be read all the way through, so the days shown may be incomplete.'}
         </p>
       )}
       {status === 'ready' && history?.unreadable > 0 && (

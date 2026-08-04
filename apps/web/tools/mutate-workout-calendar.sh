@@ -36,6 +36,26 @@
 #     "ALL MUTANTS CAUGHT".
 #
 # Run from the repo root:  bash apps/web/tools/mutate-workout-calendar.sh
+# Subset:  MUTATE_ONLY="M30 M31" bash apps/web/tools/mutate-workout-calendar.sh
+#
+# ⚠️ KILLING THIS SCRIPT DOES NOT NECESSARILY STOP IT, and a zombie run will
+# make your OTHER test runs lie. Measured 2026-08-04: a background run was
+# stopped, a grep of the sources came back clean (it happened to land between a
+# mutate and its restore), and the next run of the suites reported a FAILING
+# TEST — `expected 2 to be 1` on the undatable-row assertion, which is M40's
+# exact signature. It looked like a fresh code defect and was chased as one. The
+# script was still alive and still cycling; when it finished, the same suites
+# passed three times running.
+#
+# TWO RULES, and the first is the existing one from DECISIONS :3819 with its
+# other half now known:
+#   1. Never run this while a browser smoke is in progress — it sabotages the
+#      dev server the operator is testing against.
+#   2. Never trust ANY test result taken while this may still be running.
+#      Before believing a red, confirm no process survives (`ps -ef | grep
+#      mutate-workout`) and that the sources carry no mutant text. **A test
+#      failure whose shape matches a mutant in this file is a mutant until
+#      proven otherwise.**
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -186,10 +206,64 @@ MUTATIONS=(
   "M32 the window stops tiling — adjacent months overlap|$READER|s#  const to = new Date(monthEnd).toISOString();#  const to = new Date(year, month, 2).toISOString();#"
   "M33 the window is dropped after the first page|$READER|s#      raw = await fetchPage({ limit: HISTORY_PAGE_LIMIT, from, to, cursor });#      raw = await fetchPage(cursor === undefined ? { limit: HISTORY_PAGE_LIMIT, from, to, cursor } : { limit: HISTORY_PAGE_LIMIT, cursor });#"
   "M34 a workout is painted on a month it did not happen in|$READER|s#      if (t < monthStart || t >= monthEnd) continue;##"
-  "M35 the early break returns — a short month, drawn silently|$READER|s#      if (t < monthStart || t >= monthEnd) continue;#      if (t < monthStart) break;\n      if (t >= monthEnd) continue;#"
+  # M35 REWRITTEN by the T3 on d28ace5 (F2), and the correction is the point:
+  # as first shipped it was `if (t < monthStart) break;`, which exits only the
+  # item loop for THAT PAGE — the walk carried on to the next page. So it did
+  # not restore the removed break at all, and it went RED for M34's reason
+  # (an out-of-window row landing in `byDate`), leaving the test written to pin
+  # the break's removal passing underneath it. A mutant that is red for the
+  # wrong reason certifies the wrong assertion, which is the :4556 F2 class one
+  # commit later. The real break was THREE things — a flag declared before the
+  # item loop, set on the first row older than the month, and an OUTER break
+  # after it — so the faithful mutant restores all three.
+  "M35 the early break returns — a short month, drawn silently|$READER|s#    for (const item of page.items) {#    let reachedStart = false;\n    for (const item of page.items) {#; s#      if (t < monthStart || t >= monthEnd) continue;#      if (t < monthStart) { reachedStart = true; continue; }\n      if (t >= monthEnd) continue;#; s#    if (page.nextCursor === null) break; // end of the WINDOW: month fully read#    if (reachedStart) break;\n    if (page.nextCursor === null) break;#"
   "M36 the screen drops the window on the way to the client|$VIEW|s#        workoutService.getHistory({ limit, from, to, ...(cursor ? { cursor } : {}) })#        workoutService.getHistory({ limit, ...(cursor ? { cursor } : {}) })#"
-  "M37 the caption blames the months in between again|$VIEW|s#          This month has more than a thousand workouts, which is more than this#          There are too many workouts between today and this month for this view#"
+  # M37 re-anchored by the T3 on d28ace5 (F3): the caption became a ternary, so
+  # the old anchor no longer exists. INTENT unchanged — the superseded wording
+  # must not come back.
+  "M37 the caption blames the months in between again|$VIEW|s#            ? 'This month has more than a thousand workouts, which is more than this view can read, so the days shown may be incomplete.'#            ? 'There are too many workouts between today and this month for this view to read back that far, so the days shown may be incomplete.'#"
+  # ── M38-M40: the T3 on d28ace5, F3 — a VOLUME must be counted, not assumed ──
+  "M38 a stopped read claims a volume it never counted|$VIEW|s#          {history.inWindow >= HISTORY_MAX_ROWS#          {true#"
+  "M39 another month's rows count toward this month's volume|$READER|s#      if (t < monthStart || t >= monthEnd) continue;#      inWindow += 1;\n      if (t < monthStart || t >= monthEnd) continue;#"
+  "M40 an undatable row counts toward this month's volume|$READER|s#        if (datedIntoThisMonth) inWindow += 1;#        inWindow += 1;#"
 )
+
+# ── OPTIONAL SUBSET, added 2026-08-04 ─────────────────────────────────────────
+# `MUTATE_ONLY="M30 M31"` runs only those mutants. A full run is 40 × both
+# suites ≈ 1.5 hours, which is a real cost when a fix touched four of them.
+#
+# THE DANGER IS THE REPORT, NOT THE RUN, so the filter is built to make itself
+# impossible to miss: the banner below, `(SUBSET)` on every line of the summary,
+# and — the part that matters — **a filtered run NEVER prints "ALL MUTANTS
+# CAUGHT"**, because that sentence is a claim about all of them. This file's own
+# history is three harnesses that reported success they had not earned; a subset
+# quietly described as a clean sweep would be the fourth.
+SELECTED=()
+for entry in "${MUTATIONS[@]}"; do
+  if [ -n "${MUTATE_ONLY:-}" ]; then
+    id="${entry%% *}"
+    case " $MUTATE_ONLY " in
+      *" $id "*) SELECTED+=("$entry") ;;
+      *) continue ;;
+    esac
+  else
+    SELECTED+=("$entry")
+  fi
+done
+
+if [ -n "${MUTATE_ONLY:-}" ]; then
+  echo "############################################################"
+  echo "# SUBSET RUN — ${#SELECTED[@]} of ${#MUTATIONS[@]} mutants."
+  echo "# MUTATE_ONLY=$MUTATE_ONLY"
+  echo "# This does NOT certify the untouched mutants. Do not report"
+  echo "# it as a clean sweep; say which ones ran."
+  echo "############################################################"
+  echo ""
+  if [ "${#SELECTED[@]}" -eq 0 ]; then
+    echo "FATAL: MUTATE_ONLY matched no mutant labels. Refusing to report a vacuous pass."
+    exit 2
+  fi
+fi
 
 PASSES=0
 SURVIVORS=0
@@ -198,7 +272,7 @@ INVALIDS=0
 printf '%-52s %s\n' "MUTATION" "RESULT"
 printf '%-52s %s\n' "----------------------------------------------------" "------"
 
-for entry in "${MUTATIONS[@]}"; do
+for entry in "${SELECTED[@]}"; do
   label="${entry%%|*}"
   rest="${entry#*|}"
   file="${rest%%|*}"
@@ -238,9 +312,17 @@ fi
 echo "baseline PASS"
 
 echo ""
-echo "caught: $PASSES   survived: $SURVIVORS   invalid: $INVALIDS   of ${#MUTATIONS[@]}"
+if [ -n "${MUTATE_ONLY:-}" ]; then
+  echo "caught: $PASSES   survived: $SURVIVORS   invalid: $INVALIDS   of ${#SELECTED[@]} SELECTED (SUBSET of ${#MUTATIONS[@]})"
+else
+  echo "caught: $PASSES   survived: $SURVIVORS   invalid: $INVALIDS   of ${#MUTATIONS[@]}"
+fi
 if [ "$SURVIVORS" -ne 0 ] || [ "$INVALIDS" -ne 0 ]; then
   echo "NOT CLEAN — a survivor is an assertion that cannot fail; an invalid is a mutation that never ran."
   exit 1
 fi
-echo "ALL MUTANTS CAUGHT"
+if [ -n "${MUTATE_ONLY:-}" ]; then
+  echo "SELECTED MUTANTS CAUGHT — this is a SUBSET and certifies nothing about the rest."
+else
+  echo "ALL MUTANTS CAUGHT"
+fi

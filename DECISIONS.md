@@ -4620,7 +4620,8 @@ test RED — each site independently load-bearing, which round 1 had not shown.*
   sees has changed yet, which is what that line says.
 
 ## 2026-08-04 — the CALENDAR ASKS for the month (`from`/`to` on the wire), the
-## web half of the blank-old-months fix — CARD 2, and the 🔴 line TICKS
+## web half of the blank-old-months fix — CARD 2 (the 🔴 tick in this entry was
+## PREMATURE and is struck below by the T3's F4)
 
 **Card 2 of two, and the one a user can see. Card 1 (:4434) taught
 `/v1/workouts` to answer a date window; until this commit nothing asked it, so
@@ -4690,10 +4691,21 @@ today. That is now over.**
   not a guarantee**) M30 restores the page-walk in one line — the whole card
   undone — and it goes RED. M31 builds the window from `Date.UTC` instead of the
   viewer's clock; M32 makes adjacent months overlap; M33 drops the window on
-  page 2 only; M34 removes the out-of-window filter; M35 puts the early break
-  back; M36 drops the window between the screen and the client, which is the seam
-  no reader test can see; M37 restores the superseded caption. Each was measured
-  RED, so each of those sentences is a test's claim rather than mine.
+  page 2 only; M34 removes the out-of-window filter; ~~M35 puts the early break
+  back~~; M36 drops the window between the screen and the client, which is the
+  seam no reader test can see; M37 restores the superseded caption. Each was
+  measured RED, so each of those sentences is a test's claim rather than mine.
+  **STRUCK 2026-08-04 by this card's T3, F2 — the M35 clause was FALSE and is
+  the one claim in this paragraph that its own "measured RED" did not support.**
+  M35 as shipped was `if (t < monthStart) break;`, which leaves the ITEM loop for
+  one page while the walk continues — so it did not restore the removed break,
+  and its RED came from M34's assertion (a foreign row reaching `byDate`), with
+  the test written to pin the break's removal passing underneath it. **A mutant
+  red for the wrong reason certifies the wrong assertion**, which is :4556's F2
+  one commit later. Rewritten faithfully (flag + set + OUTER break) and
+  re-measured: it now fails exactly `does NOT stop the walk on an out-of-window
+  row` and nothing else. The CODE was never wrong here — the faithful mutant is
+  caught — only the harness and this sentence were.
 - (**SMOKE — NOT YET RUN, and it CANNOT prove the headline fix**) The addendum
   in `RUNBOOK/smoke-workout-calendar.md` checks that one request goes out
   carrying this month, that stepping months moves it, that the instants are the
@@ -4702,3 +4714,114 @@ today. That is now over.**
   workouts logged since it, and no fixture account is near that** — stated in the
   doc rather than implied, because "the operator's account cannot reach it" is a
   fact about a smoke test and never a fact about users (:4355).
+
+## 2026-08-04 — date-window CARD 2 (web), T3 ROUND 1: 5 findings, none
+## user-visible, 4 fixed and 1 recorded — and the ticked box was one of them
+
+**Round 1 of two (the standing cap, :2866). The reviewer re-measured its own
+claims and so did I; three of the five are things a green suite was saying that
+it could not support.**
+
+- (**F1 — the comment on the file BETWEEN the reader and the wire**)
+  `workoutApi.js`'s docstring on `getHistory` still read "there is no month
+  filter by design; callers that need one walk the pages". Both clauses false
+  since :4434, and the second describes the very code :4622 deleted. **This is
+  the card's own thesis landing one file over**: a description that outlives the
+  read it described. It is also an active invitation to rebuild the defect — the
+  next author is told IN WRITING that the API cannot filter by date. Same shape
+  as :4556's F1: one contract, two comment sites, the correction landing on one.
+  Rewritten, and the false version is quoted in the replacement rather than
+  quietly dropped.
+- (**F2 — A MUTANT RED FOR THE WRONG REASON CERTIFIES THE WRONG ASSERTION**)
+  M35 claimed to restore the early break. It did not: `if (t < monthStart)
+  break;` exits the ITEM loop for one page and the walk carries on. Its RED came
+  from M34's assertion, and the test written to pin the break's removal PASSED
+  underneath it. Measured both ways — as shipped it kills `IGNORES a row outside
+  the window`; rewritten faithfully (the flag, the set, and the OUTER break — it
+  was three things, not one) it kills `does NOT stop the walk on an
+  out-of-window row` and nothing else. **:4622's "each was measured RED" was
+  therefore true of the runs and false of the sentence it was attached to**;
+  struck in place there. **The class: a mutation table's value is entirely in
+  the mapping between label and cause, and "it went red" does not verify that
+  mapping.** :4556's F2 was the same failure about a suite; this is it about a
+  harness, one commit later.
+- (**F3, the only CODE defect, and the caption's THIRD wrong direction**)
+  `truncated` does not mean "this month is huge". A server that ACCEPTS the
+  window and mis-applies it fills all ten pages with another month's rows, the
+  in-window filter discards every one, and the screen drew an EMPTY grid
+  captioned "this month has more than a thousand workouts" — **a volume
+  fabricated out of rows that were never this month's**. Measured: pages 10,
+  truncated true, placed 0. Removing the early break was argued in :4622 only
+  from "a short month with no caption at all"; it ALSO converts that silent
+  short month into a falsely-captioned empty one, and **the argument did not
+  cover the case it created**. Fixed by counting what was actually seen:
+  `inWindow` counts rows PROVABLY in the month (placed, plus unreadable ones
+  whose date is readable and inside it), deliberately conservative so it can
+  only under-state; the volume sentence is claimed only at `HISTORY_MAX_ROWS`,
+  and the read otherwise reports that it stopped short WITHOUT inventing a
+  reason. **The render suite's own truncation fixture turned out to BE the
+  disagreement case** — its endless pages are dated in the month the calendar
+  has left — so the state was already on screen in every run and nothing looked
+  at it. Not user-visible today: `.strict()` on the query schema means an API too
+  old to know `from`/`to` returns 400 and the screen says "couldn't load", so
+  this needs a server that accepts the window and gets it wrong.
+- (**F4 — THE TICK WAS SPENT BEFORE IT WAS EARNED**) `d28ace5` ticked the 🔴
+  OWED line in the same commit whose own message says "Smoke and T3 unrun".
+  OWED.md's header allows an item out only by being DONE; CLAUDE.md Part I §2
+  says no user-facing card is done without its SMOKE. **The precedent is four
+  commits back on this same screen** — :4119, "NOT ticked — smoke and T3 are
+  both unrun". Reverted to `[ ]` with the progress kept in the line. A tick is
+  the only signal that file carries, and spending it early is how the list stops
+  being worth reading.
+- (**F5 — REPORTED, NOT FIXED, and the reason is the point**) Two assertions
+  encode "local midnight always exists". False in a zone whose DST jump is at
+  midnight (America/Asuncion, Oct 2017: `from` lands at 01:00 local — still the
+  first instant of the month, still tiling, still CORRECT). Asia/Kolkata has no
+  DST and cannot see it, so the assertion is harmless here. Left as the plainest
+  statement of intent with a comment saying **the assertion is what is wrong if
+  it ever fails**, so nobody "fixes" a correct conversion to satisfy it.
+- (**WHAT THE ROUND CHECKED AND FOUND SOUND, worth recording because it is the
+  expensive half**) The month→instant conversion was re-measured across 10 zones
+  × 6 years × 12 months — Kolkata, New York, Santiago, Havana, Asunción, São
+  Paulo, Chatham (+12:45), Lord Howe (30-minute DST), Apia, Lisbon: zero tiling
+  breaks, `from` always the first instant of the local month, `to` always the
+  first of the next, and December's `to` byte-identical to January's `from`
+  because both evaluate `new Date(y + 1, 0, 1)`. Negative offsets, half-hour and
+  three-quarter-hour offsets, DST edges and the year rollover all hold. The
+  security pass found no new reach: `from`/`to` were parsed and plan-gated in
+  :4434 and this commit only starts sending them; `monthClamp` still answers a
+  PLAN question, not a request question, so the narrowed window cannot make it
+  disagree with the server.
+
+- (**MEASURED, post-round-1**) web **435/435** (+4 on `d28ace5`'s 431: three
+  reader tests for the volume count, one render test as the volume caption's
+  positive control). **Mutants: a SUBSET of 15 of 40 — 15 RED, 0 alive, 0
+  INVALID**, green baseline both sides — M30–M40 (this card's, including the
+  rewritten M35 and the re-anchored M37) plus M10/M18/M26/M28, the four whose
+  SUBJECT this round touched. **The other 25 are NOT certified by this run** and
+  are named as uncertified rather than folded into a total: they cover display
+  helpers and the exercise chips, untouched here, and were RED on `d28ace5`. The
+  harness gained `MUTATE_ONLY=` and **refuses to print "ALL MUTANTS CAUGHT" for
+  a subset** — a full run is ~1.5 h, and the danger of a partial run is the
+  REPORT, not the run. `vite build` green. Lint on the five touched files: 1
+  error, `WorkoutCalendar.jsx:223` `react-hooks/set-state-in-effect`,
+  pre-existing (verified at HEAD; the line moved 222→223 only because an import
+  was added), its own OWED line.
+- (**AND AN INCIDENT WORTH MORE THAN THE FINDINGS — KILLING THE HARNESS DID NOT
+  STOP IT**) The full run was stopped to save 1.5 h. A grep of the sources came
+  back CLEAN — it happened to land between a mutate and its restore — and the
+  next suite run reported a FAILING TEST: `expected 2 to be 1` on the
+  undatable-row assertion. That is **M40's exact signature**, and M40 is the LAST
+  mutant in the file. The script was still alive and still cycling; when it
+  finished, the same suites passed three times running. It read as a fresh code
+  defect and roughly forty minutes went into it before the shape of the failure
+  gave it away. **:3819's rule — "never run the mutation harness while a smoke is
+  in progress" — had only ever named the browser; the general form is that no
+  test result taken while it MAY be running is evidence of anything.** Recorded
+  in the harness header, where the next person will be standing: check
+  `ps -ef | grep mutate-workout` before diagnosing, and treat a failure whose
+  shape matches a mutant as a mutant until proven otherwise. The one silver
+  lining is not claimed as a result: M40 was in fact caught, but by accident, so
+  it was re-run properly on a verified-clean tree rather than credited.
+- (**THE CARD IS NOT DONE.** Round 2 is the cap and is unrun; the browser smoke
+  addendum is unrun; the 🔴 OWED line stays open until both are clean.)

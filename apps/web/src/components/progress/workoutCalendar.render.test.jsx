@@ -343,23 +343,52 @@ describe('a month too big to finish reading — TRUNCATION', () => {
     });
   };
 
-  it('says the month is too big to read, and does NOT blame the months in between', async () => {
+  // NOTE WHAT THIS FIXTURE ACTUALLY IS, because it was mistaken for the other
+  // one until the T3 on d28ace5 (F3): after stepping back a month, the endless
+  // pages are dated in the month the calendar has LEFT. That is a server
+  // answering the request for one month with another month's rows — the
+  // DISAGREEMENT case, not a busy month — and every row is discarded by the
+  // in-window filter. So it truncates with NOTHING placed, which is precisely
+  // the state that must not claim a volume.
+  it('reports a read that stopped short WITHOUT inventing a reason for it', async () => {
     wholeThenEndless();
     render(<WorkoutCalendar />);
 
     await waitFor(() => expect(activeDays().textContent).toMatch(/^1\s+active days this month$/));
-    expect(screen.queryByText(/more than a thousand/i)).toBeNull();   // the control
+    expect(screen.queryByText(/couldn’t be read all the way through/i)).toBeNull();  // the control
 
     fireEvent.click(screen.getAllByRole('button')[0]);   // back one month
 
     expect(
+      await screen.findByText(/this month couldn’t be read all the way through/i),
+    ).toBeTruthy();
+    // An EMPTY grid must not be captioned with a volume. This is the F3 defect
+    // stated as an absence: not one of these rows was this month's, so the
+    // screen knows nothing about how many workouts this month holds.
+    expect(screen.queryByText(/more than a thousand workouts/i)).toBeNull();
+    // The superseded wording, pinned as an ABSENCE too. It was true of the walk
+    // and is false of the window — nothing is read "between today and this
+    // month" any more — and a caption that survives the read it described is
+    // exactly the failure this file keeps recording (T3 round 2, F4).
+    expect(screen.queryByText(/between today and this month/i)).toBeNull();
+  });
+
+  it('claims the volume ONLY when it counted that many of THIS month’s workouts', async () => {
+    // The positive control for the test above, and the state the volume
+    // sentence was written for: ten full pages, every row inside the window.
+    // Without this, "never say the volume" is satisfiable by never saying it.
+    const fullPage = Array.from({ length: 100 }, (_, i) => item({
+      id: `1111111${String(i).padStart(4, '0')}-1111-4111-8111-111111111111`,
+    }));
+    workoutService.getHistory.mockResolvedValue({
+      data: { items: fullPage, nextCursor: 'c1', limitedToDays: null },
+    });
+    render(<WorkoutCalendar />);
+
+    expect(
       await screen.findByText(/this month has more than a thousand workouts/i),
     ).toBeTruthy();
-    // The superseded wording, pinned as an ABSENCE. It was true of the walk and
-    // is false of the window — nothing is read "between today and this month"
-    // any more — and a caption that survives the read it described is exactly
-    // the failure this line of the file keeps recording (T3 round 2, F4).
-    expect(screen.queryByText(/between today and this month/i)).toBeNull();
+    expect(screen.queryByText(/couldn’t be read all the way through/i)).toBeNull();
   });
 
   it('never claims a day count for a month it did not finish reading', async () => {

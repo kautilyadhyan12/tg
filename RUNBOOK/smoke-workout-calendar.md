@@ -278,6 +278,11 @@ behave exactly as they did in steps 1–8 above.
   month being viewed.
 - **The truncation caption** ("this month has more than a thousand workouts") —
   needs 1,000+ workouts in a single month. Unit test + mutation only.
+- **Its sibling** ("this month couldn't be read all the way through") — added by
+  the T3's F3. It appears when the read stops short WITHOUT having seen a
+  thousand of this month's workouts, which needs a server that accepts the date
+  window and then answers with the wrong month. Not producible against a correct
+  API. Unit test + mutation only.
 
 Neither is a gap in this card; both are facts about the fixture account. "The
 operator's account cannot reach it" is a fact about a smoke test, never a fact

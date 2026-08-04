@@ -1,10 +1,14 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
-TASK: DATE WINDOW, **CARD 2 — THE WEB HALF. CODE DONE 2026-08-04; the 🔴 OWED
-      line is TICKED. SMOKE AND T3 ARE BOTH UNRUN**, two-round cap set up front
-      (the standing rule, DECISIONS :2866). Records: DECISIONS :4622 (this),
-      :4434 (the API half), :4483/:4556 (its two T3 rounds).
+TASK: DATE WINDOW, **CARD 2 — THE WEB HALF. T3 ROUND 1 DONE: 5 findings, none
+      visible, 4 fixed + 1 recorded. ROUND 2 IS THE CAP. The 🔴 OWED line is
+      NOT ticked and SMOKE IS STILL UNRUN.** Records: DECISIONS :4718 (round 1),
+      :4622 (the card), :4434 (the API half), :4483/:4556 (its two T3 rounds).
+      **CORRECTION to this block's first version, which said "the 🔴 OWED line
+      is TICKED": it was, in the same commit whose message said "smoke and T3
+      unrun", and round 1's F4 struck it.** Precedent :4119, four commits back on
+      this same screen.
 
 WHAT CHANGED, in one sentence
   The calendar ASKS the API for the month instead of paging backwards from
@@ -12,13 +16,58 @@ WHAT CHANGED, in one sentence
   history, and a month view costs ONE request rather than up to ten. This is
   the first commit in the pair that a USER can see.
 
-STATE
-  · web **431/431**. **37 mutants / 3 files: 37 RED, 0 alive, 0 INVALID**, green
-    baseline both sides. `vite build` green. Lint on the four touched files: 1
-    error, `WorkoutCalendar.jsx:222` `react-hooks/set-state-in-effect`, verified
-    pre-existing by reading the same line at HEAD; it has its own OWED line.
-  · M30–M37 are this card's. **No existing anchor had drifted** — worth knowing,
-    because the bite check has been wrong about exactly that before (round 1).
+STATE (post-round-1; the pre-T3 figures were web 431/431 and 37 mutants)
+  · web **435/435** (+4: three reader tests for the volume count, one render
+    test for the volume caption's positive control). `vite build` green.
+    Lint on the five touched files: **1 error, `WorkoutCalendar.jsx:223`
+    `react-hooks/set-state-in-effect`** — pre-existing, verified by reading the
+    same line at HEAD before the card began; it has its own OWED line. The line
+    moved 222→223 because an import was added, nothing else.
+  · **Mutants: a SUBSET of 15 of 40 — 15 RED, 0 alive, 0 INVALID**, green
+    baseline both sides. Ran M30–M40 (this card's) plus M10/M18/M26/M28 (the
+    four whose SUBJECT this round touched: the truncation state, the caption,
+    and the which-backend guard, since `workoutApi.js` was edited). **The other
+    25 are NOT certified by this run** — they cover display helpers and the
+    chips, untouched here, and were 37/37 RED on `d28ace5` hours earlier. The
+    harness now takes `MUTATE_ONLY=` and REFUSES to print "ALL MUTANTS CAUGHT"
+    for a subset; a full run is ~1.5 h, which is why the option exists.
+  · M30–M40 are this card's; M35 was REWRITTEN and M37 re-anchored by round 1.
+
+READ THIS BEFORE YOU BELIEVE A RED FROM ANY SUITE IN THIS PACKAGE
+  **Killing the mutation harness does not necessarily stop it, and a zombie run
+  makes every other test run lie.** Measured here: the background run was
+  stopped, a grep of the sources came back CLEAN (it landed between a mutate and
+  its restore), and the next suite run reported a failing test — `expected 2 to
+  be 1` on the undatable-row assertion, which is **M40's exact signature**. It
+  read as a fresh code defect and was chased as one. The script was still alive;
+  once it finished, the same suites passed three times running. The existing
+  rule (:3819, never run it during a smoke) had only ever named the browser.
+  Now recorded in the harness header itself: **a test failure whose shape
+  matches a mutant in that file is a mutant until proven otherwise** — check
+  `ps -ef | grep mutate-workout` before diagnosing anything.
+
+THE ONE TO CARRY OUT OF ROUND 1: A MUTANT RED FOR THE WRONG REASON CERTIFIES
+THE WRONG ASSERTION
+  M35 said it restored the removed early break. It did not — `break` inside the
+  item loop leaves ONE PAGE, not the walk — so it went red for M34's reason,
+  and the test written to pin the break's removal PASSED underneath it. Measured
+  both ways before and after the rewrite. **The value of a mutation table is
+  entirely in the mapping between label and cause, and "it went red" does not
+  verify that mapping.** :4556's F2 was this failure about a green SUITE; this
+  is it about a HARNESS, one commit later. If you write a mutant, run it and
+  read WHICH test failed.
+
+THE CODE FINDING (F3): `truncated` NEVER MEANT "this month is huge"
+  A server that ACCEPTS the window and mis-applies it fills all ten pages with
+  another month's rows; the in-window filter discards every one; the screen drew
+  an EMPTY grid captioned "this month has more than a thousand workouts" — a
+  volume fabricated from rows that were never this month's, and the third
+  direction in which that one caption has now been wrong. Now gated on
+  `inWindow`, which counts only rows PROVABLY in the month and is deliberately
+  conservative (an undatable row counts as `unreadable` but never as evidence of
+  size). **The render suite's own truncation fixture WAS this case all along** —
+  its endless pages are dated in the month the calendar has left — so the state
+  had rendered in every run and no assertion looked at it.
 
 THE ONE TO CARRY: A CAPTION IS A CLAIM ABOUT THE READ THAT HAPPENED, AND THE
 READ CHANGED

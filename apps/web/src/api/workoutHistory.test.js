@@ -364,6 +364,15 @@ describe('fetchMonth', () => {
     expect(new Date(seen[0].to).getMonth()).toBe(7); // August, exclusive end
     expect(new Date(seen[0].to).getDate()).toBe(1);
     expect(new Date(seen[0].to).getHours()).toBe(0);
+    // ⚠️ THE TWO `getHours() === 0` LINES ARE OVER-SPECIFIED, and nobody should
+    // "fix" the conversion to keep them true. They encode "local midnight always
+    // exists", which is false in a zone whose DST jump is AT midnight — the T3
+    // on d28ace5 (F5) measured America/Asuncion, Oct 2017, where `from` lands at
+    // 01:00 local. That is still the first instant of the local month and still
+    // tiles, i.e. still CORRECT. This suite is pinned to Asia/Kolkata, which has
+    // no DST and can never see it, so the assertion is harmless HERE and is left
+    // as the plainest statement of intent. If it ever fails under a different
+    // pin, the assertion is what is wrong.
   });
 
   it('asks for a HALF-OPEN window, so adjacent months TILE', async () => {
@@ -442,6 +451,54 @@ describe('fetchMonth', () => {
     }, july);
     expect(calls).toBe(HISTORY_MAX_PAGES);
     expect(r.truncated).toBe(true);
+    // …and it SAW that many of this month's workouts, which is what entitles
+    // the screen to say so. One row per page here, so the count is the pages.
+    expect(r.inWindow).toBe(HISTORY_MAX_PAGES);
+  });
+
+  // ── T3 on d28ace5, F3. ───────────────────────────────────────────────────
+  // `truncated` does NOT by itself mean "this month is huge". A server that
+  // ACCEPTS the window and mis-applies it fills every page with another month's
+  // rows; the in-window filter discards them all; and the screen drew an EMPTY
+  // grid captioned "this month has more than a thousand workouts" — a volume
+  // fabricated out of rows that were never this month's, and the third
+  // direction in which this one caption has now been wrong.
+  it('does NOT count another month’s rows toward THIS month’s volume', async () => {
+    let calls = 0;
+    const r = await fetchMonth(async () => {
+      calls += 1;
+      // The server answers July's request with AUGUST rows, endlessly.
+      return page([validItem({ id: `x${calls}`, startedAt: new Date(2026, 7, 3).toISOString() })], `c${calls}`);
+    }, july);
+    expect(calls).toBe(HISTORY_MAX_PAGES);
+    expect(r.truncated).toBe(true);     // the read did stop short — say so
+    expect(Object.keys(r.byDate)).toEqual([]);
+    expect(r.inWindow).toBe(0);         // …but claim NO volume for this month
+  });
+
+  it('does not count an UNDATABLE row toward the volume, only toward unreadable', async () => {
+    // Two different questions, and only one of them is answerable about a row
+    // with no readable date: "does this exist" (yes, say so) and "does it prove
+    // this month's size" (unknowable). Conservative on the second, so the count
+    // can only ever UNDER-state the month — which costs a vaguer sentence and
+    // never a false one.
+    const r = await fetchMonth(
+      async () => page([validItem({ startedAt: 'sometime' }), validItem({ id: 'jul', startedAt: at(15) })], null),
+      july,
+    );
+    expect(r.unreadable).toBe(1);
+    expect(r.inWindow).toBe(1);         // the July row only
+  });
+
+  it('DOES count an unreadable row that is dated into this month', async () => {
+    // The positive control for the line above: a row can be unplaceable and
+    // still be proof this month is busy, as long as its date is readable.
+    const r = await fetchMonth(
+      async () => page([validItem({ id: null, startedAt: at(9) }), validItem({ id: 'jul', startedAt: at(15) })], null),
+      july,
+    );
+    expect(r.unreadable).toBe(1);
+    expect(r.inWindow).toBe(2);
   });
 
   it('resolves NULL when the request throws — a failure is not an empty month', async () => {

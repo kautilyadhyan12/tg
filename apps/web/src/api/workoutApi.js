@@ -37,8 +37,21 @@ import mlApi from './mlApi';
 
 export const workoutService = {
   /** NEW API. Keyset page, newest first — `@app/shared workoutListQuerySchema`
-   *  ({limit ≤ 100, cursor}). There is no month filter by design; callers that
-   *  need one walk the pages (see `workoutHistory.fetchMonth`). */
+   *  (`{ limit ≤ 100, cursor, from, to }`).
+   *
+   *  `from`/`to` are a HALF-OPEN date window of absolute INSTANTS — `from`
+   *  inclusive, `to` exclusive — added 2026-08-04 (DECISIONS :4434) and first
+   *  used by the calendar the same day (:4622). Pass them.
+   *
+   *  **This comment said the opposite until :4622 and was WRONG on both
+   *  clauses**: "there is no month filter by design; callers that need one walk
+   *  the pages". The page-walk existed because the endpoint had no filter, not
+   *  by design, and that walk is what :4622 deleted — it drew a long-time
+   *  user's older months BLANK. A comment telling the next author the API
+   *  cannot filter by date is an invitation to rebuild exactly that defect,
+   *  which is why this is spelled out rather than quietly replaced. Same shape
+   *  as :4556's F1, one file over: one contract, two comment sites, and the
+   *  correction landed on only one of them. */
   getHistory: (params) => authApi.get('/v1/workouts', { params }),
 
   /** NEW API. One workout with its sets — `@app/shared workoutDetailSchema`.
