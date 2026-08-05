@@ -121,6 +121,27 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:5034** — 2026-08-05 — **exercise library: browser SMOKE PASSED 9/9 on
+  `b96c009` — and BOTH first-run failures were the SMOKE DOCUMENT's, not the
+  card's.** **Read before writing the setup section of any smoke doc, and before
+  reading a smoke failure as a card failure.** Recorded as Kd's REPORT, not a
+  measurement (:4829). **The pass is on the card's own bytes**: `git status`
+  across the whole smoke shows ONE modified file — the doc itself. **Failure 1:**
+  step 8 ("start a workout") needs a THIRD server — starting a workout still
+  calls the OLD backend, whose stand-in is `mock-ml-backend.mjs` on :8000 — and
+  **starting it is not enough, it boots `dead` by design**, so a half-informed
+  run fails identically. **Failure 2:** step 5 leaves a category pill AND
+  `advanced` switched on; only 4 of 58 rows are advanced and both of step 6's
+  exercises are `beginner`. Nothing was missing — measured BEFORE re-running:
+  DB `{total: 58, live: 58}`, and in the screen's own sort **Bicep Curls is #3,
+  Chair Squats #11 of 58**, both inside the first page of 20. Step 6 said "clear
+  all filters" — **an instruction with no button behind it**: the Clear-filters
+  control renders ONLY in the `filtered.length === 0` arm. **The shape: a smoke
+  doc is a TEST and its SETUP is part of the claim** (:4855's fixture lesson, one
+  level out); a step must not depend on state an earlier step leaves behind, and
+  a doc must name every server its steps reach — including other cards'.
+  **The 🔴 OWED line is UN-TICKED**: `b96c009` ticked it while its own HANDOFF
+  said smoke and T3 were unrun — :4718's F4, third occurrence on this branch.
 - **:4945** — 2026-08-05 — **THE EXERCISE LIBRARY IS OFF THE OLD BACKEND, and
   the WORDS SHIP AS A FILE.** **Read before adding any column for exercise copy,
   before writing a "port" of anything, and before badging a feature the engine

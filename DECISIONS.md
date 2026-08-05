@@ -5030,3 +5030,67 @@ of anything, and before badging a feature the engine cannot actually do.**
   now exports a component and nothing else) and three `setState`-in-effect sites
   were removed by design: the filter reset moved into the click handlers where it
   belongs, and the deep link resolves inside the read's own callback.
+
+## 2026-08-05 — exercise library: browser SMOKE PASSED 9/9, and both first-run failures were the SMOKE DOCUMENT's
+
+**Read before writing the setup section of any smoke doc, and before reading a
+smoke failure as a card failure.**
+
+- (**THE RESULT**) Kd ran `RUNBOOK/smoke-exercise-library.md` on `b96c009` and
+  reports **all 9 steps pass**. Recorded as his REPORT, not as my measurement —
+  the browser is his instrument and I did not read those values out of it
+  (:4829's precedent, kept deliberately).
+- (**THE PASS IS ON THE CARD'S OWN BYTES**) `git status` across the entire smoke
+  shows exactly ONE modified file, `RUNBOOK/smoke-exercise-library.md`. No
+  application code was touched between the failing run and the passing one, so
+  there is no question of a fix having quietly moved what was being judged —
+  the failure/pass difference is entirely in how the app was STARTED and DRIVEN.
+- (**FAILURE 1 — THE DOC ASKED FOR A WORKOUT WITH A SERVER MISSING.**) Step 8
+  failed with "Failed to start workout". The doc's setup section listed TWO
+  terminals. The app needs THREE on this branch: starting a workout still calls
+  the OLD backend (`workoutApi.createSession` → `mlApi` → `VITE_ML_API_URL`, an
+  owed leftover the PreWorkout/ActiveWorkout repoint card owns and which this
+  card must not touch, R1.1), whose stand-in is
+  `apps/web/tools/mock-ml-backend.mjs` on :8000. **And starting it is not
+  enough — it boots in the `dead` state by design**, so a run that started it
+  and stopped there would fail identically and look like the same bug. Both
+  facts are now in the setup section, with the reason, so the next reader cannot
+  reach step 8 without them. Verified after starting and switching it:
+  `POST :8000/api/workouts → 200 {"session":{"id":"smoke-1785929178432"}}`.
+  Every earlier smoke doc in `RUNBOOK/` names this server; THIS one was written
+  as if the card were read-only, which it is not at step 8 — the step whose own
+  heading calls it "THE ONE THAT PROTECTS YOUR WORKOUTS".
+- (**FAILURE 2 — THE DOC LEFT ITS OWN FILTERS ON.**) Steps 6 and 7 failed:
+  Chair Squats and Bicep Curls "not found", and 58 doubted. **Nothing was
+  missing.** Measured BEFORE re-running rather than after, against the live DB
+  and the content table: `select count(*) … from exercises` → `{ total: 58,
+  live: 58 }` with `bicep_curl` and `chair_squat` both `live`, and sorted the way
+  `buildLibraryRows` sorts, **Bicep Curls is #3 and Chair Squats is #11 of 58** —
+  both inside the first `LIMIT` of 20, so both were on screen before any "Load
+  more". Step 5 ends by design with a category pill AND `advanced` selected; only
+  **4** of the 58 rows are `advanced` and both of step 6's exercises are
+  `beginner`. Step 6 opened "Clear all filters" — an instruction with **no
+  button behind it**: `clearFilters` is wired only to the empty-state's "Clear
+  filters" control, which renders in the `filtered.length === 0` arm
+  (`ExerciseLibrary.jsx:572-587`), so a filter combination leaving even ONE card
+  on screen offers no reset at all. Step 6 now opens with a reload and searches
+  by name instead of hunting the grid.
+- (**THE SHAPE, which is why this is worth an entry**) A smoke document is a
+  TEST, and a test's SETUP is part of its claim — the fixture lesson of :4855
+  ("a test is a claim and the FIXTURE is part of the claim"), one level further
+  out. Both failures were red for reasons the card does not own, and both were
+  the kind that reads as a product defect to the person clicking: "start workout
+  failed" and "the exercises are missing" are exactly what a broken card would
+  look like. **A smoke step must not depend on state an earlier step silently
+  leaves behind**, and **a smoke doc must name every server the steps reach**,
+  including the ones that belong to other cards.
+- (**THE 🔴 OWED LINE IS UN-TICKED, not ticked**) `b96c009` ticked
+  `OWED.md`'s exercise-library line `[x]` while its own HANDOFF block said "Kd's
+  browser smoke and the fresh-chat T3 are both UNRUN". That is **:4718's F4
+  exactly**, reverted there, and at :4119 before that, on this same branch —
+  third occurrence. Reverted to `[ ]` with the state spelled out: code landed,
+  smoke passed 9/9, T3 round 1 of 2 unrun. It re-ticks when the review closes.
+- (**NOT DEFECTS, named so a future run does not report them**) The post-workout
+  summary's numbers are the stand-in rig's canned payload, identical for every
+  workout (:4081). A finished workout may reach the calendar only after a
+  reload — the queue flushes at next app load (:3819).

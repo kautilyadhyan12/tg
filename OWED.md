@@ -502,7 +502,16 @@ then; none may be hidden or reduced to close the gap.
       plausibility checks (P4.y) are the home for closing them, and v1 §14's
       "verified entries only" for global boards is the other half.
 - [ ] 🔴 **Predictions** (PredictionsSection) — the 2B §5 card (P2.3 carve).
-- [x] 🔴 **Exercise library content — DONE 2026-08-05** (the exercise-library
+- [ ] 🔴 **Exercise library content — CODE LANDED `b96c009`; browser SMOKE PASSED
+      9/9 2026-08-05; the fresh-chat T3 (round 1 of 2) is UNRUN, so this line
+      does NOT tick yet.** UN-TICKED 2026-08-05: `b96c009` ticked it `[x]` while
+      its own HANDOFF block said "Kd's browser smoke and the fresh-chat T3 are
+      both UNRUN". That is :4718's F4 exactly — a 🔴 line ticked in the same
+      commit whose message says the gates are unrun — reverted there, and at
+      :4119 before that, on this same branch. Ticks are what OWED.md is FOR:
+      a ticked line is the answer to "is this still to do?", and review rounds
+      are still to do. Re-tick when the T3 closes.
+      (the exercise-library
       repoint; DECISIONS 2026-08-05). The screen is off the old backend: the LIST
       comes from `/v1/exercises`, and the WORDS come from `EXERCISE_CONTENT` in
       `packages/shared/src/exerciseContent.ts` — a verbatim port of

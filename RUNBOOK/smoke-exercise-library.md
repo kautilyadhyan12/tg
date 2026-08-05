@@ -7,7 +7,58 @@ exactly that reason.
 
 **Screen:** the **Exercises** page (`/exercises`).
 
-## Setup — two terminals, one command each
+## RESULT — RUN 2026-08-05 (Kd), on `b96c009`: **ALL 9 STEPS PASS.**
+
+**Recorded as Kd's REPORT, not as my measurement** (the :4829 precedent — the
+browser is his instrument and I did not read these values out of it).
+
+**No application code changed during the run.** `git status` across the whole
+smoke shows one modified file, THIS one. So the pass certifies `b96c009`'s bytes,
+and the two first-run failures were the DOCUMENT's defects, not the card's:
+
+| step | run 1 (2 terminals) | run 2 (3 terminals, reload first) | why run 1 failed |
+|------|---------------------|------------------------------------|------------------|
+| 1, 2 | pass | pass | — |
+| 3 | could not find Chair Squats (detail panel itself correct) | pass | see below |
+| 4, 5 | pass | pass | — |
+| 6 | **FAIL** — Chair Squats / Bicep Curls not found | pass | stale filters |
+| 7 | doubted 58 were present | pass | stale filters |
+| 8 | **FAIL** — "Failed to start workout" | pass | missing 3rd server |
+| 9 | not run | pass | — |
+
+**Run 1's step 8 was a SETUP defect in this document, now fixed above.** The doc
+listed two terminals; starting a workout still calls the OLD backend
+(`workoutApi.createSession`), whose stand-in was not running — and that stand-in
+boots `dead` by design, so merely starting it is not enough. Verified directly
+once running and switched to `healthy`:
+`POST :8000/api/workouts → 200 {"session":{"id":"smoke-1785929178432"}}`.
+
+**Run 1's steps 6–7 were step 5's filters left switched on**, also now fixed
+above. Evidence gathered before re-running, not after: the live DB holds
+`{ total: 58, live: 58 }` including `bicep_curl` and `chair_squat`, and sorted the
+way the screen sorts them **Bicep Curls is #3 and Chair Squats is #11 of 58** —
+both on the first page of 20, so neither was ever missing. Step 5 ends with a
+category pill AND `advanced` selected; only 4 of 58 exercises are advanced and
+both of step 6's exercises are `beginner`. **The trap worth keeping:** the
+**Clear filters** button renders ONLY in the `filtered.length === 0` arm
+(`ExerciseLibrary.jsx:572-587`), so a filter combination that leaves even one
+card on screen offers no reset control at all — "clear all filters" was an
+instruction with no button behind it.
+
+**Not a defect, and named here so a future run does not report it as one:** the
+post-workout summary's numbers are the stand-in rig's canned payload, identical
+for every workout (existing OWED line, precedent DECISIONS :4081). And a finished
+workout may only reach the calendar after a reload — the sync queue flushes at
+next app load, which is the standing lesson at DECISIONS :3819.
+
+## Setup — THREE terminals, one command each
+
+**Step 8 starts a workout, and "start workout" still calls the OLD backend**
+(`workoutApi.createSession` → `mlApi` → `VITE_ML_API_URL`, an owed leftover the
+PreWorkout/ActiveWorkout repoint card owns). Without terminal 3 below, step 8
+fails with "Failed to start workout" and the failure says nothing about this
+card. Measured 2026-08-05, mid-smoke: the doc listed only two terminals and Kd's
+step 8 failed for exactly this reason.
 
 Terminal 1 — the API:
 
@@ -16,7 +67,16 @@ node --import tsx --env-file=.env src/index.ts
 ```
 (run from `apps/api`)
 
-Terminal 2 — the web app:
+Terminal 2 — the old-backend stand-in:
+
+```
+node apps/web/tools/mock-ml-backend.mjs
+```
+**It boots in the `dead` state on purpose.** Switch it before smoking by opening
+<http://localhost:8000/__state/healthy> in a browser tab; confirm with
+<http://localhost:8000/__state>.
+
+Terminal 3 — the web app:
 
 ```
 corepack pnpm --filter web exec vite
@@ -123,7 +183,16 @@ that category, not one filter quietly cancelling the other.
 
 ## Step 6 — the AI badge tells the truth
 
-Clear all filters. Find **Chair Squats** and **Bicep Curls**.
+**Reload the page first (F5).** Step 5 leaves a category pill AND difficulty
+`advanced` switched on, and only 4 of the 58 exercises are advanced — both
+exercises below are `beginner`, so leaving those filters on hides them and this
+step fails for a reason that has nothing to do with the badge. The **Clear
+filters** button appears ONLY when nothing at all matches, so with one card still
+on screen there is no button to press; a reload is the reliable reset. (Measured
+2026-08-05: this is the most likely cause of Kd's step-6 fail on the first run.)
+
+Now find **Chair Squats** and **Bicep Curls** — type each name in the search box
+rather than hunting the grid.
 
 ✅ **Expected:** Chair Squats has a purple **AI** badge. **Bicep Curls does
 not.**

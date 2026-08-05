@@ -1,8 +1,39 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
-TASK: THE EXERCISE LIBRARY REPOINT. **NOT ticked as smoke-passed — Kd's browser
-      smoke and the fresh-chat T3 are both UNRUN.** Two-round review cap SET
+TASK: EXERCISE LIBRARY — BROWSER SMOKE PASSED 9/9. The fresh-chat T3 (round 1
+      of 2) is the ONLY gate left. Record: DECISIONS :5034.
+
+SMOKE RESULT, and the part worth carrying forward
+  All 9 steps pass on `b96c009`. Kd's REPORT, not my measurement (:4829).
+  **No application code changed during the smoke** — `git status` across the
+  whole run shows one modified file, the smoke doc — so the pass certifies the
+  card's own bytes and nothing was quietly fixed underneath the judgement.
+  BOTH first-run failures were the DOCUMENT's, and both looked exactly like
+  product defects to the person clicking:
+  - step 8 "Failed to start workout" — the doc listed TWO terminals; the app
+    needs THREE, because starting a workout still calls the OLD backend
+    (another card's owed leftover, R1.1 says don't touch it). Its stand-in is
+    `apps/web/tools/mock-ml-backend.mjs` on :8000, and **it boots `dead` by
+    design** — starting it is not enough. Both facts are now in the setup
+    section, with the reason.
+  - steps 6/7 "Chair Squats and Bicep Curls missing, and 58 doubted" — step 5
+    leaves a category pill AND `advanced` on. Nothing was missing: DB
+    `{total:58, live:58}`, and in the screen's own sort Bicep Curls is #3 and
+    Chair Squats #11 of 58. Step 6 said "clear all filters" — an instruction
+    with **no button behind it**, since the Clear-filters control renders only
+    in the `filtered.length === 0` arm.
+  THE SHAPE: a smoke doc is a TEST and its SETUP is part of the claim.
+
+THE 🔴 OWED LINE IS UN-TICKED, deliberately
+  `b96c009` ticked it while this very block said smoke and T3 were unrun —
+  :4718's F4, third occurrence on this branch (:4119 before that). Reverted to
+  `[ ]` with the real state written out. It re-ticks when the T3 closes.
+
+--- the block below is the card's own handover, unchanged ---
+
+TASK: THE EXERCISE LIBRARY REPOINT. **Smoke has since PASSED (above); the
+      fresh-chat T3 remains UNRUN.** Two-round review cap SET
       BEFORE the card ran, per :2866. Record: DECISIONS :4945.
 
 WHAT CHANGED, in one sentence
