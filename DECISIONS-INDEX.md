@@ -121,6 +121,28 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:5199** — 2026-08-05 — **exercise library, T3 ROUND 2 (THE CAP) — CARD
+  CLOSED, 🔴 LINE TICKED.** 3 findings, ZERO visible. **Read before trusting any
+  harness that reports its own restore, and before ticking an OWED line on a
+  mutant that lives in another file.** **F1 is the FIFTH unearned harness pass
+  here and the first to leave broken source in the working tree**: round 1 added
+  a mutation target to neither `TARGETS` (snapshot-and-restore) nor `SUITES`
+  (what runs), so the harness damaged `poseAdapter.js` and never put it back —
+  twice — while its closing "proves every restore landed" check printed PASS,
+  because that check re-runs the SUITES and the damaged file's tests were not in
+  them. M23 read "survived", M24 "never ran"; both assertions were sound and
+  unreachable. **Class fix: a mutation naming a file outside `TARGETS` now ABORTS
+  the run** (verified by deliberately breaking it). **F2 is round 1's own F5
+  lesson inside round 1's own fixes** — its detail-panel fix was rendered by no
+  test, the defect went straight back with 494/494 GREEN, and the OWED tick cited
+  M20/M21 from a different file; now a render PAIR plus M28. **F3: :5104's
+  "M23–M27 all RED and restored byte-exact" was true of a hand-rolled loop and
+  FALSE of the committed harness** — corrected in place. **The lesson is the
+  INSTRUMENT: "I measured it RED" and "the committed harness measures it RED" are
+  different claims, and only the second is reproducible by the next chat.**
+  **28/28 RED, 0 survived, 0 invalid — the full sweep run to completion for the
+  first time — with all six targets then verified restored via `git diff HEAD`
+  rather than on the harness's word.** 496/496, lint unchanged, build green.
 - **:5104** — 2026-08-05 — **exercise library, T3 ROUND 1: 7 findings, ZERO
   visible, all fixed — and the FIX FOR F5 SHIPPED UNPROTECTED.** **Read before
   ticking an OWED line, and before believing a fix is pinned by the test written
@@ -145,9 +167,11 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   by a synthetic TAG-ONLY row. F6/F7 correct the record. **The artwork item was
   promoted from a reviewer's record-note to an OWED line — it is the one thing
   here a USER CAN SEE** (Mountain Pose and Brisk Walking draw the placeholder;
-  56 of 58 resolve, measured through the real lookup). 494/494, M23–M27 all RED
-  and restored byte-exact. **The full 22-mutant sweep was NOT re-run by either
-  chat — round 2 owns it.** 🔴 line still does not tick; round 2 is the cap.
+  56 of 58 resolve, measured through the real lookup). 494/494. **The "M23–M27
+  all RED and restored byte-exact" claim in that entry is CORRECTED IN PLACE by
+  round 2's F3 — true of my hand-rolled loop, false of the committed harness,
+  which could not reach them at all.** 🔴 line does not tick here; round 2 is
+  the cap.
 - **:5034** — 2026-08-05 — **exercise library: browser SMOKE PASSED 9/9 on
   `b96c009` — and BOTH first-run failures were the SMOKE DOCUMENT's, not the
   card's.** **Read before writing the setup section of any smoke doc, and before

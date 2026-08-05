@@ -263,6 +263,15 @@ then; none may be hidden or reduced to close the gap.
       (:1239) recurring for at least the fifth time — the check that would have
       caught it is a grep for the OPTION (`DIFF_COLORS`), not for the symptom, at
       the moment of ticking.**
+      **CORRECTED AGAIN 2026-08-05 by T3 round 2 (F2): the re-tick above cited
+      M20/M21, which live in a DIFFERENT FILE and pin the GRID's pill.** Nothing
+      rendered the detail panel, so round 2 put the defect straight back and all
+      494 tests stayed GREEN — measured. A tick citing mutants that cannot fail
+      for the code being ticked is the same defect as the tick it replaced, one
+      level up. Now real: two render assertions open the panel and check the pill
+      (absent for a row with no difficulty, present and correct for `beginner` —
+      a PAIR, because the negative alone is satisfied by never drawing a pill),
+      and **M28** restores the `|| beginner` in that file. M28 measured RED.
       **WAS:** Raised by round 11 under R1.1 as out of scope: a
       FOURTH site of the one-of-N shape round 7 F2 declared fixed as a class, on
       a screen this card does not own — an unknown difficulty painted as a
@@ -513,15 +522,18 @@ then; none may be hidden or reduced to close the gap.
       plausibility checks (P4.y) are the home for closing them, and v1 §14's
       "verified entries only" for global boards is the other half.
 - [ ] 🔴 **Predictions** (PredictionsSection) — the 2B §5 card (P2.3 carve).
-- [ ] 🔴 **Exercise library content — CODE LANDED `b96c009`; browser SMOKE PASSED
-      9/9 2026-08-05; the fresh-chat T3 (round 1 of 2) is UNRUN, so this line
-      does NOT tick yet.** UN-TICKED 2026-08-05: `b96c009` ticked it `[x]` while
-      its own HANDOFF block said "Kd's browser smoke and the fresh-chat T3 are
-      both UNRUN". That is :4718's F4 exactly — a 🔴 line ticked in the same
-      commit whose message says the gates are unrun — reverted there, and at
-      :4119 before that, on this same branch. Ticks are what OWED.md is FOR:
-      a ticked line is the answer to "is this still to do?", and review rounds
-      are still to do. Re-tick when the T3 closes.
+- [x] 🔴 **Exercise library content — DONE 2026-08-05, ALL THREE GATES PASSED.**
+      Code `b96c009` · browser SMOKE 9/9 (:5034) · T3 round 1, 7 findings, zero
+      visible, all fixed (:5104) · T3 round 2 THE CAP, 3 findings, zero visible,
+      all fixed (:5199). **28/28 mutants RED, 0 survived, 0 invalid, and every
+      target verified restored byte-exact against HEAD rather than on the
+      harness's own say-so** — which is the point, since round 2's F1 was that
+      harness printing PASS over live damage. 496/496.
+      **This line was UN-TICKED once and re-ticked here.** `b96c009` ticked it
+      `[x]` while its own HANDOFF block said "smoke and the fresh-chat T3 are
+      both UNRUN" — :4718's F4 exactly, reverted there and at :4119 before that,
+      third occurrence on this branch. A ticked line is the answer to "is this
+      still to do?", and review rounds were still to do.
       (the exercise-library
       repoint; DECISIONS 2026-08-05). The screen is off the old backend: the LIST
       comes from `/v1/exercises`, and the WORDS come from `EXERCISE_CONTENT` in

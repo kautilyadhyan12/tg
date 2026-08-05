@@ -32,10 +32,22 @@ HIST="apps/web/src/api/workoutHistory.js"
 # T3 round 1 F1: the AI badge's own definition moved here so it could be tested
 # at all. M23/M24 are the mutants that had no home while it lived in the page.
 ADAPTER="apps/web/src/engine/poseAdapter.js"
+# T3 round 2 F2: the detail panel's difficulty pill — round 1's F3 fix, which no
+# test rendered. M28 restores that defect.
+DETAIL="apps/web/src/components/exercise/ExerciseDetail.jsx"
 # EVERY file any mutation touches must be listed here. A file mutated but not
 # snapshotted would stay mutated for the rest of the run.
-TARGETS=("$CLIENT" "$READER" "$VIEW" "$VIEWC" "$HIST")
-SUITES=(src/api/exerciseLibrary.test.js src/pages/exerciseLibrary.render.test.jsx src/api/workoutHistory.test.js src/components/progress/workoutCalendar.render.test.jsx)
+# T3 round 2, F1 — THE FIFTH UNEARNED PASS BY A HARNESS IN THIS PROJECT.
+# Round 1 added $ADAPTER and $DETAIL as mutation targets and added neither here.
+# TARGETS is the snapshot-and-restore list, so a mutant in a file missing from it
+# is never put back: two runs damaged poseAdapter.js, left the damage live, and
+# the final "baseline again" check still printed PASS. SUITES is what actually
+# runs, so the tests guarding those files never executed either — which is why
+# M23 read "survived" and M24 "never ran" while both assertions were sound.
+# **A file appears in a mutation entry ⇒ it appears in TARGETS, and its test file
+# appears in SUITES.** The check below enforces that rather than trusting it.
+TARGETS=("$CLIENT" "$READER" "$VIEW" "$VIEWC" "$HIST" "$ADAPTER" "$DETAIL")
+SUITES=(src/api/exerciseLibrary.test.js src/pages/exerciseLibrary.render.test.jsx src/api/workoutHistory.test.js src/components/progress/workoutCalendar.render.test.jsx src/engine/poseAdapter.test.js)
 
 RUN=(corepack pnpm --filter web exec vitest run "${SUITES[@]}" --reporter=basic)
 
@@ -174,7 +186,37 @@ MUTATIONS=(
   "M25 a stuck cursor repeats rows into the count|$READER|s#      if (seen.has(item.slug)) continue;##"
   "M26 an all-unreadable page becomes an empty library|$READER|s#  if (items.length === 0 \&\& data.items.length > 0) return null;##"
   "M27 the pill cross-check goes back to primary categories only|$READER|s#    for (const tag of r.categories || \[\]) add(tag);##"
+  # M28: T3 round 2 F2. Round 1's F3 fixed the detail panel's `|| beginner` and
+  # NOTHING rendered that panel, so the defect could be put straight back with
+  # all 494 tests green (measured). The OWED tick cited M20/M21 — which live in
+  # a different file and pin the GRID's pill, not this one.
+  "M28 the detail panel paints an ungraded exercise beginner again|$DETAIL|s#  const diff  = difficultyStyle(exercise.difficulty);#  const diff  = difficultyStyle(exercise.difficulty) || { bg: 'x', color: 'y', border: 'z' };#"
 )
+
+# ── A MUTATION TARGET THAT IS NEVER RESTORED ────────────────────────────────
+# T3 round 2, F1, and the CLASS behind it. Round 1 added mutants against a file
+# it did not add to TARGETS. TARGETS is the snapshot-and-restore list, so the
+# damage was never undone — two full runs left a broken `poseAdapter.js` in the
+# working tree while the closing "baseline again" check printed PASS, because
+# that check re-runs the suites and the suites did not include the damaged
+# file's tests either. Fifth unearned harness pass in this project.
+#
+# Fixing the two lists is the INSTANCE. This is the CLASS: a mutation naming a
+# file outside TARGETS is a bug in the table, and the run refuses to start. It
+# cannot be satisfied by remembering — which is what failed.
+for _entry in "${MUTATIONS[@]}"; do
+  _f="$(printf '%s' "$_entry" | cut -d'|' -f2)"
+  _found=0
+  for _t in "${TARGETS[@]}"; do [ "$_t" = "$_f" ] && _found=1 && break; done
+  if [ "$_found" -ne 1 ]; then
+    echo "FATAL: mutation '$(printf '%s' "$_entry" | cut -d'|' -f1)' targets"
+    echo "  $_f"
+    echo "  which is NOT in TARGETS, so it would be damaged and never restored."
+    echo "  Add it to TARGETS (and its test file to SUITES) before running."
+    exit 2
+  fi
+done
+unset _entry _f _t _found
 
 # ── ZERO MUTANTS IS NEVER A PASS ─────────────────────────────────────────────
 # Added 2026-08-05 after this harness printed "ALL MUTANTS CAUGHT", exit 0, on a

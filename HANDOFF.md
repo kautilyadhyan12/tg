@@ -1,9 +1,38 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
-TASK: EXERCISE LIBRARY — SMOKE PASSED 9/9, T3 ROUND 1 DONE (7 findings, ZERO
-      visible, all fixed). **ROUND 2 IS THE CAP and is the only gate left.**
-      Records: DECISIONS :5104 (round 1), :5034 (smoke).
+TASK: THE EXERCISE LIBRARY REPOINT — **CARD CLOSED. 🔴 OWED LINE TICKED.**
+      All three gates passed: smoke 9/9 (:5034) · T3 round 1, 7 findings, zero
+      visible (:5104) · T3 round 2, the cap, 3 findings, zero visible (:5199).
+      **28/28 mutants RED, 0 survived, 0 invalid** — the full sweep, run to
+      completion for the FIRST time, with all six targets then verified restored
+      by `git diff HEAD` rather than on the harness's own report.
+      496/496 · `vite build` green · lint unchanged (1 error + 1 warning).
+
+THE ONE THING TO CARRY OUT OF THIS CARD
+  **An instrument that reports its own success is a claim, not a result.** Round
+  2's F1: the harness damaged a source file and never restored it, TWICE, while
+  printing "baseline PASS — proves every restore landed" — because the file was
+  a mutation target but was in neither the restore list nor the suite list, so
+  the closing check could not see its own damage. Fifth unearned harness pass in
+  this project (:2614 F3, :2736 F1, the `cp` failure, :4855's zero-mutant run).
+  The fix that matters is not the two list entries: **a mutation naming a file
+  outside TARGETS now ABORTS the run**, verified by deliberately breaking it.
+  Corollary, from F3: "I measured it RED" and "the committed harness measures it
+  RED" are DIFFERENT CLAIMS. Only the second survives this session.
+
+WHAT THIS CARD LEFT BEHIND, all tracked in OWED.md, none blocking
+  Mountain Pose and Brisk Walking have no artwork (the only 2 of 58, and exactly
+  the two this card un-hid — an asset task, and the one thing here a USER CAN
+  SEE) · hi/as translation of the copy · server-side search if the catalog ever
+  passes ~100 rows, with its re-entry trigger written down · the Dashboard's
+  `?exercise=<mongo id>` deep link, which belongs to the recommendations repoint
+  that owns the id · `readCatalogPage` added to the per-field-reader UNIT
+  question · the pre-existing `setWorkoutCount` lint error.
+
+NEXT: Kd's call. The three local commits are UNPUSHED (PR #29 gates on push).
+      `web-repoint` is a Kd-RULED long-lived branch that merges at the P2.8
+      cutover (:280, :2825) — do NOT propose merging it early.
 
 ROUND 1, AND THE THING TO CARRY INTO ROUND 2
   F1 had the teeth: the AI badge's engine-version half was protected by

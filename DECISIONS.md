@@ -5179,8 +5179,78 @@ pinned by the test you wrote with it.**
 - (**STATE**) web **494/494** (484 + 10 new), `vite build` green, lint UNCHANGED
   from the card's baseline at 1 error + 1 warning. Five new mutants
   (M23–M27) each measured RED, and each **restored byte-exact** afterwards.
+  **CORRECTED 2026-08-05 by T3 round 2, F3 — the sentence above is true of how I
+  measured M23–M27 and FALSE of the harness as committed.** I checked them with
+  a hand-rolled loop that named the file and suite explicitly; run through
+  `mutate-exercise-library.sh` itself, **M23 SURVIVED, M24 NEVER RAN, and neither
+  was restored** — because round 1 added `$ADAPTER` as a mutation target and to
+  neither `TARGETS` (the snapshot-and-restore list) nor `SUITES` (what actually
+  runs). The assertions were sound; the harness could not reach them. Fixed in
+  the closing commit, and the class is now enforced: a mutation naming a file
+  outside `TARGETS` aborts the run. **The lesson is the measurement instrument:
+  "I measured it RED" and "the committed harness measures it RED" are different
+  claims, and only the second is reproducible by the next chat.**
   **NOT verified by me: the full 22-mutant sweep was not re-run** — the reviewer
   did not run it either and said so; what they checked is that all 22 seds still
   bite their anchors (0 INVALID), which is the :4267 failure mode. Round 2 owns
   the full sweep.
 - (**THE 🔴 LINE STILL DOES NOT TICK.** Round 2 is the cap and is unrun.)
+
+## 2026-08-05 — exercise library, T3 ROUND 2 (THE CAP) — CARD CLOSED, 🔴 LINE TICKED
+
+**Read before trusting any harness that reports its own restore, and before
+ticking an OWED line on the strength of a mutant that lives in another file.**
+
+- (**THE RESULT**) 3 findings, **ZERO VISIBLE**, all fixed here. Under the cap
+  set before the card ran (:2866) and the stopping rule (:2365), the card CLOSES
+  and the 🔴 line TICKS on this commit. The reviewer re-derived every claim the
+  prompt told them to distrust; 494/494, the lint figure, and the 56-of-58
+  artwork measurement all held.
+- (**F1 — THE FIFTH UNEARNED HARNESS PASS IN THIS PROJECT, and the first that
+  left broken source in the working tree.**) Round 1 added `$ADAPTER` as a
+  mutation target and added it to NEITHER `TARGETS` (the snapshot-and-restore
+  list, three lines above, under a comment saying every damaged file must be
+  listed) NOR `SUITES` (what actually runs). Consequences, all measured: the
+  harness damaged `poseAdapter.js` and never restored it — **twice, across two
+  full runs** — while the closing "baseline again, proves every restore landed"
+  check printed **PASS**, because that check re-runs the SUITES and the suites
+  did not include the damaged file's tests either. M23 was reported SURVIVED and
+  M24 NEVER RAN, not because the badge was unprotected but because the harness
+  could not reach the tests that protect it (both bite when checked directly).
+  Prior four: :2614 F3, :2736 F1, the silent `cp` failure, :4855's zero-mutant
+  run. **The instance fix is two list entries. The CLASS fix, added here, is that
+  a mutation naming a file outside `TARGETS` now ABORTS the run** — verified by
+  deliberately removing `$ADAPTER` from `TARGETS` and watching it FATAL. A rule
+  that has to be remembered is the one that just failed.
+- (**F2 — round 1's own F5 lesson, occurring INSIDE round 1's own fixes.**) Round
+  1 (F3) fixed the detail panel's private `|| DIFF_COLORS.beginner` and **nothing
+  rendered that panel**: round 2 put the defect straight back and all 494 tests
+  stayed GREEN. Worse, the OWED line was re-ticked citing **M20/M21, which live
+  in a different file and pin the GRID's pill.** Now real: two render assertions
+  open the panel (anchored on "Add to Workout", which exists only there) and
+  check the pill as a PAIR — absent for a row with no difficulty, present and
+  reading `beginner` for one that has it, because the negative alone is satisfied
+  by a panel that never draws a pill. **M28** added; measured RED.
+- (**F3 — the record**) :5104 claimed "M23–M27 all RED and restored byte-exact".
+  True of the hand-rolled loop I measured them with, **false of the committed
+  harness**, which could not reach them. Corrected in place in DECISIONS and the
+  index. **The lesson is the instrument: "I measured it RED" and "the committed
+  harness measures it RED" are different claims, and only the second is
+  reproducible by the next chat.** A private measurement that cannot be re-run is
+  evidence for one session only.
+- (**A CORRECTION TO THE REVIEWER, in their own spirit**) Their report ends "my
+  working tree is clean — git status shows no modified files." It showed an
+  untracked `apps/web/src/__t3tmp_artwork.test.js`, their own scratch file, left
+  behind. Removed. Same class as F1: an instrument reporting a state it did not
+  check.
+- (**STATE, and the one figure that had never been earned**) **28/28 mutants RED,
+  0 survived, 0 invalid** — the FULL sweep, run to completion for the first time
+  since the card landed (neither round 1's reviewer nor I had run it, and both
+  said so). **Every one of the six targets then verified restored byte-exact with
+  `git diff HEAD`, not on the harness's own report** — the only honest way to
+  read a pass from an instrument whose failure mode is exactly a false pass.
+  496/496 (484 at card landing, +10 round 1, +2 round 2). `vite build` green.
+  Lint unchanged from the card's baseline: 1 error (pre-existing) + 1 warning
+  (this card's own load effect, per :5104's F7 correction).
+- (**THE CARD CLOSES.** Zero user-visible findings across both rounds, Kd's
+  browser smoke passed 9/9, and the 🔴 OWED line ticks on this commit.)

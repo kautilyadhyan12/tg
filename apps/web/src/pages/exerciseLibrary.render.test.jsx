@@ -57,6 +57,16 @@ const cardFor = (name) => screen.getByText(name).closest('div.group');
 const hasAiBadge = (name) =>
   [...cardFor(name).querySelectorAll('span, div')].some((el) => el.textContent.trim() === 'AI');
 
+/** The detail panel that opens on a card click. Anchored on "Add to Workout",
+ *  which exists ONLY in that panel (the grid card has no such button), so this
+ *  cannot accidentally match the page behind it. */
+const detailPanel = () => screen.getByText('Add to Workout').closest('div.fixed');
+
+/** The panel's difficulty pill, or null when it draws none. `span.capitalize`
+ *  is the pill and nothing else in the panel carries that class — the equipment
+ *  chips beside it are deliberately not capitalized. */
+const panelDifficultyPill = () => detailPanel().querySelector('span.capitalize');
+
 beforeEach(() => {
   localStorage.clear();
   vi.clearAllMocks();
@@ -218,6 +228,36 @@ describe('difficultyStyle — the one-of-N fix', () => {
     const { container } = draw();
     await screen.findByText('Brand New Move');
     expect(container.textContent).not.toMatch(/beginner/i);
+  });
+
+  // T3 round 2, F2 — THE ASSERTIONS ROUND 1'S FIX SHIPPED WITHOUT. Round 1
+  // (F3) found the DETAIL PANEL still painting an ungraded exercise green as
+  // "beginner" from its own private DIFF_COLORS copy, and fixed it. Nothing
+  // rendered that panel: the defect was put straight back and all 494 tests
+  // stayed green (measured). The OWED line was then re-ticked citing M20/M21,
+  // which pin the GRID's pill in a different file. The pair below is what makes
+  // that tick true — the negative alone is satisfied by "never draw a pill".
+  it('DETAIL PANEL: draws no difficulty pill for a row with no difficulty', async () => {
+    exerciseService.getExercisePage.mockResolvedValue({
+      data: { items: [catalogRow('brand_new_move')], nextCursor: null },
+    });
+    draw();
+    fireEvent.click(await screen.findByText('Brand New Move'));
+    await screen.findByText('Add to Workout');
+    expect(panelDifficultyPill()).toBeNull();
+    expect(detailPanel().textContent).not.toMatch(/beginner/i);
+  });
+
+  it('DETAIL PANEL: draws the real difficulty when there is one', async () => {
+    exerciseService.getExercisePage.mockResolvedValue(wholeCatalog());
+    draw();
+    // Chair Squats is `beginner` in the content table — a REAL value, so the
+    // pill must appear and say so. Without this control the assertion above is
+    // satisfied by a panel that never draws a pill at all.
+    fireEvent.click(await screen.findByText('Chair Squats'));
+    await screen.findByText('Add to Workout');
+    expect(panelDifficultyPill()).not.toBeNull();
+    expect(panelDifficultyPill().textContent.trim()).toBe('beginner');
   });
 });
 
