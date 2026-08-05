@@ -9,6 +9,7 @@ export * from "./definition.js";
 export * from "./users.js";
 export * from "./catalog.js";
 export * from "./exerciseCatalog.js";
+export * from "./exerciseContent.js";
 export * from "./workouts.js";
 export * from "./progress.js";
 export * from "./gamification.js";

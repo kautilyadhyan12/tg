@@ -4941,3 +4941,92 @@ numbers I had invented, and a tenth defect was mine, found while fixing theirs.*
   its own OWED line. `bash -n` clean on the harness.
 - (**THE CARD CLOSES.** Zero user-visible findings across both rounds; Kd's
   browser smoke passed (:4829); the 🔴 OWED line ticks on this commit.)
+
+## 2026-08-05 — THE EXERCISE LIBRARY IS OFF THE OLD BACKEND, and the words ship as a FILE
+
+**Read this before adding any column for exercise copy, before writing a "port"
+of anything, and before badging a feature the engine cannot actually do.**
+
+- (**THE CARD**) `ExerciseLibrary.jsx` was the last screen whose repoint needed
+  no new backend work — and that framing, carried in the kickoff, was WRONG in a
+  way worth recording. `/v1/exercises` exists and serves all 58 rows, but it
+  serves `slug/nameKey/family/tier/tracking/met` and NOTHING a person reads. The
+  gap was confirmed BEFORE any code, against the live database rather than the
+  schema file: `SELECT count(*) ... FROM exercises` → **58 rows, 58 live,
+  `count(difficulty)=0, count(equipment)=0, count(muscles)=0`**. The three
+  columns the DDL does declare for content are empty on every row.
+- (**KD'S RULING — a FILE, not columns**) Put to him as two options with the
+  blast radius of each. The Part 4 §3.4 DDL declares `slug, name_key, family,
+  tier, tracking, status, met, difficulty, equipment, muscles, legacy_mongo_id`
+  and no more; a column for `description`/`instructions`/`common_mistakes` would
+  be **inventing schema (R0.2)**, and `name_key` is the DDL saying out loud where
+  the text belongs — v1 §14's "message keys, not strings", so hi/as is a
+  translation task and not an engineering one (Part 2 Appendix A's own framing of
+  the fault table). Kd chose the file. **So this card has NO migration.**
+- (**THE PORT IS PROVEN, NOT ASSERTED**) `EXERCISE_CONTENT`
+  (`packages/shared/src/exerciseContent.ts`) is a verbatim port of
+  `scripts/seed_exercises.py`, which Part 2 §6:721 and Appendix B both name as
+  the canonical catalog. It was **extracted with Python's own `ast.literal_eval`
+  and written out mechanically** — never retyped — in the SEED FILE'S OWN ORDER,
+  so row N here is row N there. Then diffed back: **58 rows × 14 fields = 812
+  values compared, 0 differences.** The join to slugs came from `CATALOG_58`
+  (Kd-signed, 2026-08-01), proven TOTAL in both directions first: 58 seed names,
+  58 catalog names, zero unmatched either way. One table means the API seed and
+  the web cannot disagree about what an exercise is called.
+- (**THE AI BADGE — a capability, never stored copy. Kd ruled.**) The Mongo seed
+  marks **EIGHT** exercises `ai_supported: true`; the engine ships **THREE**
+  definitions (squat, jump_squat, chair_squat — verified in the live DB). Porting
+  the flag would have put a purple "AI" badge promising camera form-checking on
+  five exercises that get none. The badge is now `getDefinition(slug) !== null &&
+  engineSupports(def)` — the I4 client gate included, because a definition
+  needing a newer engine is one this build cannot offer either. It is true today
+  and lights up BY ITSELF as the P4 line publishes each new definition, with no
+  edit to this screen. Kd was shown the "keep the old 8" option and refused it.
+- (**WHAT THE OLD BACKEND DID THAT THE NEW ONE DOES NOT — five things, each
+  answered, none dropped**) (1) the words → the file above; (2) server-side
+  search/filter/paging → `catalogListQuerySchema` is `.strict()` with `{limit,
+  cursor}` ONLY, so 58 rows are read whole and filtered in memory, which is
+  faster, not smaller; (3) the `total` the headline prints → a cursor page has
+  none, so it is the row count once every page is read, and is NOT printed while
+  loading or failed; (4) `getExercise(<mongo id>)` for the `?exercise=` deep link
+  → resolved against rows already in hand, no request; (5) the metered RapidAPI
+  media endpoint → **it never had a caller**; photos and GIFs have always been
+  local files matched by name.
+- (**FOUR OLD CLIENT CALLS WERE DELETED AND THE NO-REMOVAL RULE IS NOT ENGAGED**,
+  which is a claim, so here is the evidence: `exerciseService` is imported by
+  exactly ONE file, and it used only `getExercises` and `getExercise`.
+  `getCategories`, `getMuscles` and `getMedia` had **no caller anywhere**. Every
+  FEATURE they nominally served is still on screen and now served from data —
+  the category pills are even checked against the content table in both
+  directions, which they never were.)
+- (**TWO VISIBLE CHANGES, deliberate, both spec-cited**) The library lists **58,
+  not 56**: Part 4 §3.4:366-369 rules Mountain Pose `status 'live'` and says in
+  as many words that "the `REMOVED_EXERCISES` frontend hack dies with the
+  migration". And a FAILED read now says so, instead of drawing "No exercises
+  found" over an empty grid — a dead server reported as an empty library, and
+  offering "Clear filters" for it blamed the user's search.
+- (**THIS SCREEN WAS ALREADY BROKEN, which is why the card matters more than it
+  looked**) Card 1 stopped writing `localStorage.accessToken`; `mlApi` attaches
+  its Bearer header only `if (token)`; and every route in `backend-ml`'s
+  `exercises.py` sits behind `Depends(get_current_user)`, which is `HTTPBearer`
+  and reads no cookie. So every call this screen made was refused, and its 401
+  interceptor redirects to `/login`. **PreWorkout sends you to `/exercises` when
+  your workout list is empty**, so the front door to starting a workout was shut.
+  Recorded as a code-level conclusion from files read this session, NOT as a
+  browser observation — Kd's smoke is where that gets measured.
+- (**TWO OWED LINES CLOSED, both of which named this card in writing**) The
+  `DIFF_COLORS[d] || DIFF_COLORS.beginner` one-of-N site (an unknown difficulty
+  asserted as `beginner`) — now neutral for unknown, and **null for missing, so
+  no pill is drawn at all**. And the workout calendar's title-cased slugs:
+  `exerciseLabel` reads the same content table, so the chips say `Push-ups`
+  rather than `Push Up`, with the derived label surviving as the fallback for a
+  slug the table does not stock. Six existing assertions went RED on that change
+  and were updated to the new truth rather than the change being reverted —
+  they were pinning the placeholder.
+- (**LINT WENT DOWN, not up**) Measured against HEAD by linting the HEAD copy of
+  the file: baseline **2 errors + 2 warnings**, now **1 error + 1 warning**, and
+  the survivor is a pre-existing `setWorkoutCount` effect in code this card did
+  not touch. Two exports moved to `pages/exerciseLibraryView.js` (the page file
+  now exports a component and nothing else) and three `setState`-in-effect sites
+  were removed by design: the filter reset moved into the click handlers where it
+  belongs, and the deep link resolves inside the read's own callback.

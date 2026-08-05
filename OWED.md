@@ -244,8 +244,15 @@ then; none may be hidden or reduced to close the gap.
       survived there. The overclaiming comment ("a wrong helper cannot make this
       test agree with itself") is CORRECTED in place; the structural fix is to
       derive the fixture from a pinned clock and literal dates.
-- [ ] 🟡 **`ExerciseLibrary.jsx:63` — `DIFF_COLORS[exercise.difficulty] ||
-      DIFF_COLORS.beginner`.** Raised by round 11 under R1.1 as out of scope: a
+- [x] 🟡 **`ExerciseLibrary.jsx:63` — `DIFF_COLORS[exercise.difficulty] ||
+      DIFF_COLORS.beginner` — DONE 2026-08-05** by the exercise-library repoint,
+      the card this line was explicitly waiting for. `difficultyStyle()` now
+      lives in `apps/web/src/pages/exerciseLibraryView.js` and returns a NEUTRAL
+      style for an unrecognised value and **null** for a missing one, so the
+      caller draws no pill at all rather than being handed a default that reads
+      as a fact. Mutation-checked both ways (M20 restores the `|| beginner`
+      fallback, M21 makes a missing difficulty draw a pill; both RED).
+      **WAS:** Raised by round 11 under R1.1 as out of scope: a
       FOURTH site of the one-of-N shape round 7 F2 declared fixed as a class, on
       a screen this card does not own — an unknown difficulty painted as a
       definite `beginner`. Belongs to whichever card repoints the exercise
@@ -495,11 +502,66 @@ then; none may be hidden or reduced to close the gap.
       plausibility checks (P4.y) are the home for closing them, and v1 §14's
       "verified entries only" for global boards is the other half.
 - [ ] 🔴 **Predictions** (PredictionsSection) — the 2B §5 card (P2.3 carve).
-- [ ] 🔴 **Exercise library content**: display names, instructions, media/GIFs,
-      server-side search. The Part 4 §3.4 catalog is data-only
+- [x] 🔴 **Exercise library content — DONE 2026-08-05** (the exercise-library
+      repoint; DECISIONS 2026-08-05). The screen is off the old backend: the LIST
+      comes from `/v1/exercises`, and the WORDS come from `EXERCISE_CONTENT` in
+      `packages/shared/src/exerciseContent.ts` — a verbatim port of
+      `scripts/seed_exercises.py`, joined by slug. **Kd ruled the file, not
+      columns**, shown both options: the Part 4 §3.4 DDL declares no column for
+      name text / description / instructions, adding them would be inventing
+      schema (R0.2), and `name_key` exists precisely because v1 §14's "message
+      keys, not strings" model puts human text in locale tables. So there is NO
+      migration in this card.
+      **The port was PROVEN, not asserted**: 58 rows × 14 fields = 812 values
+      compared against the JSON that Python's own `ast.literal_eval` produced
+      from the seeder — 0 differences.
+      **Each of the five old behaviours is answered, none dropped:**
+      display names ✓ · instructions / common mistakes / muscles / equipment /
+      difficulty / category / cal-per-min / default reps+sets ✓ · media ✓ (it was
+      always local files in `utils/exerciseMedia.js`, matched by name — the old
+      metered RapidAPI endpoint had NO caller) · search + category + difficulty
+      filters ✓ **client-side** · the "58 Exercises" headline ✓ (exact, since the
+      whole catalog is read).
+      **`ai_supported` was deliberately NOT ported** — the seed marks EIGHT true
+      and the engine ships THREE definitions, so copying it would badge five
+      exercises with camera form-checking that does not happen. Kd ruled the
+      badge is derived from the definitions the client holds, so it is true today
+      and lights up by itself as the P4 line publishes each one.
+      **Two behaviour changes a smoke will see:** the library now lists **58,
+      not 56** (Part 4 §3.4:366-369 — "the `REMOVED_EXERCISES` frontend hack dies
+      with the migration"), and a FAILED read now says so instead of drawing
+      "No exercises found" over an empty grid.
+      **WAS:** display names, instructions, media/GIFs, server-side search. The
+      Part 4 §3.4 catalog is data-only
       (slug/nameKey/family/tier/met/equipment/muscles) and stores none of it.
       Owed to the P4 production line / Part 2 Appendix A localization.
       (DECISIONS 2026-07-16, Card 3.)
+- [ ] 🟡 **Hindi and Assamese exercise copy.** `EXERCISE_CONTENT` is ENGLISH
+      ONLY. This is not a regression — the old backend was English-only too — but
+      it is the half of the 2026-08-05 ruling that is not yet built, and the
+      ruling is what makes it buildable: the words are now a file keyed by slug,
+      so translating them is a translation task and not an engineering one (Part
+      2 Appendix A's own words about the fault-message table). Blocks nothing
+      until a pilot gym wants it; belongs with the Appendix A locale work.
+- [ ] ⚪ **Server-side exercise search, if the catalog ever outgrows one page.**
+      Answered for now rather than deferred: 58 rows over a 100-row page limit is
+      ONE request, so search and filters run in memory and respond with no round
+      trip. **Re-entry trigger, stated so it is not a judgement call later:** if
+      the catalog passes ~100 rows the client starts making two or more requests
+      before it can draw anything, and `catalogListQuerySchema` (`.strict()`,
+      `{limit, cursor}`) would need a search parameter. `CATALOG_MAX_PAGES` = 20
+      is the guard until then, and a truncated read tells the user rather than
+      drawing a short library.
+- [ ] 🟡 **The Dashboard's "open this exercise" link still sends an OLD-backend
+      id.** `Dashboard.jsx` links `/exercises?exercise=<ex.id>` where `ex` comes
+      from `recommendationApi` — still on the old backend, so the id is a Mongo
+      ObjectId. The library now resolves that parameter as a SLUG against the
+      rows it has already read, so an old id matches nothing and simply opens no
+      panel — which is exactly what a stale id already did, and the link is
+      dead today anyway (the old backend gets no token since Card 1). NOT
+      half-fixed from the library side: inventing a Mongo-id→slug map would be
+      the fabrication class this project keeps deleting. **Closes with the
+      recommendations repoint**, which owns the id.
 - [x] 🔴 **THE EXERCISE CATALOG — DONE 2026-08-01** (DECISIONS :3538, commit on
       `web-repoint` the same day). 3 → **58** rows, verified against the live DB
       (`SELECT count(*) FROM exercises` = 58; pose 57 / timer 1). The reviewed
@@ -1983,7 +2045,15 @@ then; none may be hidden or reduced to close the gap.
       re-derived, plus the "estimated" label — then every consumer switched to
       it, the one-ladder rule (a second spelling is how two screens come to
       disagree about one number).
-- [ ] 🟡 **Exercise names in the workout calendar are TITLE-CASED SLUGS.**
+- [x] 🟡 **Exercise names in the workout calendar are TITLE-CASED SLUGS — DONE
+      2026-08-05** by the exercise-library content card, which is the card this
+      line named in writing as the one that closes it. `exerciseLabel` now looks
+      the slug up in `EXERCISE_CONTENT` — the same table the library screen draws
+      from, so the two cannot call one exercise two things — and falls back to
+      the derived `Slug Case` label for a slug the table does not stock (e.g.
+      `barbell_squat`, which is not one of the 58). Both arms are pinned by test
+      and mutation-checked (M22). The chips read `Push-ups`, not `Push Up`.
+      **WAS:**
       Created 2026-08-01 by the calendar repoint (DECISIONS :2912) in the same
       commit that deferred it. The old `/workouts/history` projected up to five
       exercise NAMES per session (`workouts.py:388-393`) — a live feature, so the

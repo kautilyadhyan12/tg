@@ -66,6 +66,7 @@
 // stores one running total per user (db/schema/game.ts:39) — so restoring it is
 // a migration, not a client change, and it keeps its OWED line.
 
+import { contentForSlug } from '@app/shared';
 import { UNKNOWN, formatCount, secondsLabel } from './gamificationApi';
 
 /** `workoutListQuerySchema`'s own ceiling (packages/shared/src/workouts.ts:8:
@@ -153,15 +154,25 @@ export function readCalendarSession(item) {
   };
 }
 
-/** `slug_case` → `Slug Case`. A LABEL DERIVED FROM THE VALUE, not a name
- *  invented for it: the identifier is unchanged, only its punctuation is.
- *  Real display names (and their hi/as translations) are the exercise-content
- *  card's job — `workoutDetailSchema` carries only the slug today, and
- *  inventing a friendlier name for a slug we do not stock would be the
- *  fabrication class this project keeps deleting. */
+/** A slug → the name a person reads.
+ *
+ *  THE REAL NAME NOW, where we stock one. This closes the OWED 🟡 line that the
+ *  calendar repoint opened on 2026-08-01 and assigned, in writing, to "the
+ *  exercise-library content card" — which is the card this change belongs to.
+ *  `workoutDetailSchema` still carries only `sets[].exerciseSlug`, so the lookup
+ *  is client-side against `EXERCISE_CONTENT`, the same verbatim table the
+ *  library screen draws from; one source means the calendar and the library
+ *  cannot call one exercise two things.
+ *
+ *  The fallback is unchanged and still the point: for a slug we stock no words
+ *  for, `slug_case` → `Slug Case` is a LABEL DERIVED FROM THE VALUE, not a name
+ *  invented for it — the identifier is unchanged, only its punctuation. A
+ *  friendlier guess would be the fabrication class this project keeps deleting. */
 export function exerciseLabel(slug) {
   const s = text(slug);
   if (s === null) return null;
+  const stocked = contentForSlug(s);
+  if (stocked !== null) return stocked.name;
   return s
     .split(/[_-]+/)
     .filter((w) => w !== '')

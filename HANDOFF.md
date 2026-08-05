@@ -1,6 +1,91 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE EXERCISE LIBRARY REPOINT. **NOT ticked as smoke-passed — Kd's browser
+      smoke and the fresh-chat T3 are both UNRUN.** Two-round review cap SET
+      BEFORE the card ran, per :2866. Record: DECISIONS :4945.
+
+WHAT CHANGED, in one sentence
+  The exercise library reads the NEW /v1 API, and the words a person reads
+  (names, descriptions, steps, mistakes, muscles, equipment, difficulty,
+  categories) ship as a FILE in @app/shared rather than as new database columns.
+  A user can see all of it: the screen was BROKEN before this commit.
+
+READ THIS FIRST — THE SCREEN WAS ALREADY DEAD, AND IT IS THE FRONT DOOR
+  Card 1 stopped writing `localStorage.accessToken`; `mlApi` attaches its Bearer
+  header only `if (token)`; every route in backend-ml's `exercises.py` sits
+  behind `Depends(get_current_user)`, which is `HTTPBearer` and reads NO cookie.
+  So every call this screen made was refused, and its 401 interceptor redirects
+  to /login. **PreWorkout sends you to /exercises when your workout list is
+  empty** — so the route into starting any workout was shut. Recorded as a
+  code-level conclusion from files read this session, NOT a browser observation.
+
+THE RULING THAT SHAPED THE CARD (Kd, shown both options with blast radius)
+  The words live in a FILE, not in new columns. Part 4 §3.4's DDL declares
+  slug/name_key/family/tier/tracking/status/met/difficulty/equipment/muscles and
+  no more; a `description` column would be inventing schema (R0.2), and
+  `name_key` is the DDL saying where text belongs (v1 §14 "message keys, not
+  strings" → hi/as is a translation task). **SO THERE IS NO MIGRATION HERE.**
+  Second ruling: the AI badge is a CAPABILITY, not stored copy — the Mongo seed
+  marks EIGHT ai_supported, the engine ships THREE definitions, so the badge is
+  `getDefinition(slug)` + the I4 engine gate and lights up by itself as P4
+  publishes each new one.
+
+THE PORT WAS PROVEN, NOT ASSERTED — do this before believing any "port"
+  `EXERCISE_CONTENT` was extracted from `scripts/seed_exercises.py` by Python's
+  own `ast.literal_eval` (nothing in that module executes — no pymongo import),
+  written out mechanically in the SOURCE'S OWN ROW ORDER so row N here is row N
+  there, then **diffed back: 58 rows x 14 fields = 812 values, 0 differences.**
+  The slug join came from CATALOG_58 and was proven TOTAL in both directions
+  first (58 seed names, 58 catalog names, zero unmatched either way).
+
+STATE (6511f64 484/25 -> this commit **484/484 web, 43/43 shared**)
+  - web **484/484**, shared **43/43**, api **387/387 against the real Postgres**.
+  - **22 mutants / 5 files: 22 RED, 0 alive, 0 INVALID**, green baseline both
+    sides, THE FULL SET (not a subset). Harness at
+    `apps/web/tools/mutate-exercise-library.sh` — machinery copied VERBATIM from
+    the calendar harness, carrying all four of its earned guards. Its
+    unknown-label guard was verified by deliberately breaking it (MUTATE_ONLY
+    "M1 M99" -> FATAL) and a 3-mutant subset was run before the full set.
+  - typecheck clean (shared, api). `vite build` green. gitleaks: no leaks,
+    255 commits scanned.
+  - **LINT WENT DOWN, measured against HEAD** by linting the HEAD copy of the
+    page: baseline 2 errors + 2 warnings -> **1 error + 1 warning**, and the
+    survivor is a pre-existing `setWorkoutCount` effect in code untouched here.
+
+WHAT A SMOKE WILL SEE THAT IS DELIBERATE, so it is not reported as a defect
+  - **58 exercises, not 56.** Part 4 §3.4:366-369 rules Mountain Pose live and
+    says "the `REMOVED_EXERCISES` frontend hack dies with the migration".
+  - **A failed read now SAYS so** ("Couldn't load the exercises") instead of
+    drawing "No exercises found" over an empty grid and offering to clear
+    filters, which blamed the user's search for a dead server.
+  - **The workout calendar's chips read `Push-ups`, not `Push Up`** — the second
+    OWED line this card closes.
+
+TWO OWED LINES CLOSED, BOTH OF WHICH NAMED THIS CARD IN WRITING
+  The `DIFF_COLORS[d] || DIFF_COLORS.beginner` one-of-N site (unknown difficulty
+  asserted as `beginner`; now neutral for unknown and **null for missing, so no
+  pill is drawn at all**), and the calendar's title-cased slugs. **Six existing
+  assertions went RED on the second of those and were updated to the new truth
+  rather than the change being reverted — they were pinning the placeholder.**
+
+THREE NEW OWED LINES (every deferral gets one, same commit)
+  hi/as translation of the copy (the ruling is what makes it a translation task);
+  server-side search IF the catalog outgrows one page, with the re-entry trigger
+  written down rather than left as a later judgement call; and the Dashboard's
+  `?exercise=<mongo id>` deep link, which belongs to the recommendations repoint
+  that owns the id — deliberately NOT half-fixed from the library side.
+
+NEXT: Kd's browser smoke — `RUNBOOK/smoke-exercise-library.md`, 9 steps.
+      **Step 8 is the one that must not be skipped**: add an exercise, do a
+      hand-counted workout, and check it appears in the calendar. The library
+      hands the exercise NAME to the builder and `slugForLegacyName` is an
+      exact-match lookup, so a "tidied" name would silently stop workouts
+      syncing. Pinned by test (M8), but no test can see the browser.
+      Then the fresh-chat T3. Round 1 of 2.
+```
+
+```
 TASK: DATE WINDOW, **CARD 2 — THE WEB HALF. CARD CLOSED 2026-08-05 under the
       two-round cap. The 🔴 OWED line is TICKED, and this is the SECOND tick —
       the first was premature and was struck by round 1's F4.** Round 1: 5
@@ -270,7 +355,8 @@ READ THIS BEFORE TRUSTING ANY MUTATION TABLE IN THIS REPO ON WINDOWS
   pattern. INVALID could therefore never fire, and a mutation whose ANCHOR HAD
   DRIFTED was reported as "GREEN — SURVIVED", i.e. as a missing TEST. That is
   the wrong fault to go hunting. Found only because M2 survived after the F5
-  fix rewrote the line it was anchored to. Now compares content (`tr -d ''`);
+  fix rewrote the line it was anchored to. Now compares content (`tr -d '
+'`);
   restore verification deliberately stays byte-exact. Same class as :3720.
 
 THE TWO FINDINGS WORTH CARRYING

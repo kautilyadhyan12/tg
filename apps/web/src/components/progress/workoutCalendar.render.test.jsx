@@ -249,8 +249,10 @@ describe('a HAND-COUNTED workout — the shape this screen was built before', ()
 
     fireEvent.click(dayCell(15));
 
-    expect(await screen.findByText('Push Up')).toBeTruthy();
-    expect(screen.getByText('Lunge')).toBeTruthy();
+    // Real names since the exercise-library content card (2026-08-05) — these
+    // read 'Push Up' / 'Lunge' before it, which was the title-cased slug.
+    expect(await screen.findByText('Push-ups')).toBeTruthy();
+    expect(screen.getByText('Lunges')).toBeTruthy();
     expect(screen.getByText(/Exercises · 2 total/)).toBeTruthy();
   });
 
@@ -471,8 +473,10 @@ describe('the exercise chips (a LIVE feature the old backend served)', () => {
 
     fireEvent.click(dayCell(15));
 
+    // `barbell_squat` is NOT in the 58-row catalog, so it keeps the derived
+    // label — the two arms of `exerciseLabel`, side by side in one panel.
     expect(await screen.findByText('Barbell Squat')).toBeTruthy();
-    expect(screen.getByText('Push Up')).toBeTruthy();
+    expect(screen.getByText('Push-ups')).toBeTruthy();
     expect(screen.getByText(/Exercises · 2 total/)).toBeTruthy();
   });
 
@@ -494,9 +498,14 @@ describe('the exercise chips (a LIVE feature the old backend served)', () => {
 
     fireEvent.click(dayCell(15));
 
-    expect(await screen.findByText('Squat')).toBeTruthy();
+    expect(await screen.findByText('Squats')).toBeTruthy();
     expect(screen.getByText('Burpee')).toBeTruthy();      // the fifth IS named
-    expect(screen.queryByText('Jumping Jack')).toBeNull(); // the sixth is not
+    // The sixth is not — and it is checked under BOTH spellings, because the
+    // real name ('Jumping Jacks') and the derived label ('Jumping Jack') are
+    // different strings now, and an absence pinned on only one of them would
+    // pass while the other rendered. :4855's F1 shape, on an absence.
+    expect(screen.queryByText('Jumping Jack')).toBeNull();
+    expect(screen.queryByText('Jumping Jacks')).toBeNull();
     expect(screen.getByText('+1 more')).toBeTruthy();
     expect(screen.getByText(/Exercises · 6 total/)).toBeTruthy();
   });

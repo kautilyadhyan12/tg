@@ -121,6 +121,33 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:4945** — 2026-08-05 — **THE EXERCISE LIBRARY IS OFF THE OLD BACKEND, and
+  the WORDS SHIP AS A FILE.** **Read before adding any column for exercise copy,
+  before writing a "port" of anything, and before badging a feature the engine
+  cannot do.** **Kd RULING: a file, not columns** — the Part 4 §3.4 DDL declares
+  no column for name text/description/instructions, adding them is R0.2 schema
+  invention, and `name_key` is the DDL saying where text belongs (v1 §14 message
+  keys; hi/as becomes a translation task). **NO MIGRATION in this card.** The gap
+  was measured against the LIVE DB before any code: 58 rows, and
+  `count(difficulty)=count(equipment)=count(muscles)=0`. `EXERCISE_CONTENT` is a
+  verbatim port of `scripts/seed_exercises.py` — extracted by Python's own
+  `ast.literal_eval`, never retyped, kept in the source's row order — then
+  **diffed back: 812 values, 0 differences**. **Kd RULING 2: the AI badge is a
+  CAPABILITY** (`getDefinition` + the I4 engine gate), not the seed's
+  `ai_supported` — the seed says EIGHT, the engine ships THREE, so porting the
+  flag would promise camera form-checking on five exercises that get none; it
+  now lights up by itself as P4 publishes each definition. Search/filters run in
+  memory because the endpoint is `.strict()` `{limit,cursor}` and 58 rows is one
+  request. **Four old client calls deleted with the no-removal rule NOT engaged —
+  three had no caller at all** (the metered RapidAPI media endpoint among them;
+  photos were always local files). **The screen was ALREADY BROKEN**: Card 1
+  stopped writing the token `mlApi` needs and every old exercise route is behind
+  `HTTPBearer`, so the front door to starting a workout (PreWorkout redirects
+  here) was shut. Lists **58 not 56** (§3.4:366-369 kills `REMOVED_EXERCISES`); a
+  failed read now says so instead of drawing "No exercises found". **Closes two
+  OWED lines that named this card**: the `|| DIFF_COLORS.beginner` one-of-N site,
+  and the calendar's title-cased slugs. Lint went DOWN (2 errors → 1, measured
+  against HEAD).
 - **:4855** — 2026-08-05 — **date-window card 2, T3 ROUND 2 (THE CAP) — CARD
   CLOSED, 🔴 line TICKED.** 9 findings, ZERO user-visible. **Read before writing
   a test fixture, and before trusting any harness in this repo.**

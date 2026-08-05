@@ -204,10 +204,22 @@ describe('readCalendarSession', () => {
 });
 
 describe('exerciseLabel', () => {
-  it('titles a slug without inventing a name', () => {
+  // CHANGED BY THE EXERCISE-LIBRARY CONTENT CARD (2026-08-05), which is the card
+  // OWED.md named in writing as the one that closes this: a stocked slug now
+  // gets its REAL name. `expect('squat') → 'Squat'` was the placeholder, and
+  // asserting it here today would re-pin the thing that was just fixed.
+  it('gives a stocked slug its real name, from the same table the library draws', () => {
+    expect(exerciseLabel('squat')).toBe('Squats');
+    expect(exerciseLabel('push_up')).toBe('Push-ups');
+    expect(exerciseLabel('chair_squat')).toBe('Chair Squats');
+    // Not the title-cased slug, which is what it used to be.
+    expect(exerciseLabel('squat')).not.toBe('Squat');
+  });
+
+  it('still titles a slug it stocks no words for, inventing nothing', () => {
+    // The fallback is unchanged and still the point: punctuation only.
     expect(exerciseLabel('barbell_squat')).toBe('Barbell Squat');
     expect(exerciseLabel('jump-squat')).toBe('Jump Squat');
-    expect(exerciseLabel('squat')).toBe('Squat');
   });
 
   it('is null for anything that is not a slug', () => {
@@ -225,12 +237,16 @@ describe('readWorkoutExercises', () => {
       detail(['squat', 'squat', 'push_up', 'lunge', 'plank', 'burpee', 'crunch']),
     );
     expect(r.total).toBe(6);
-    expect(r.names).toEqual(['Squat', 'Push Up', 'Lunge', 'Plank', 'Burpee']);
+    // Real names now (see exerciseLabel above) — and this fixture happens to
+    // exercise BOTH branches, which is why it is left as it is: the catalog's
+    // slug is `burpees`, so the `burpee` in this list is stocked by nothing and
+    // takes the derived-label fallback. Four real names and one honest label.
+    expect(r.names).toEqual(['Squats', 'Push-ups', 'Lunges', 'Plank', 'Burpee']);
   });
 
   it('skips unreadable set rows rather than throwing', () => {
     const r = readWorkoutExercises({ sets: [null, 'x', { exerciseSlug: 42 }, { exerciseSlug: 'squat' }] });
-    expect(r).toEqual({ names: ['Squat'], total: 1 });
+    expect(r).toEqual({ names: ['Squats'], total: 1 });
   });
 
   it('is null when there is no set list at all', () => {

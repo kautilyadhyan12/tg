@@ -119,10 +119,19 @@ the operational wrapper around it.
             either a minimal read lands early or Kd explicitly accepts a dark
             window; DECIDE AT THIS CHECKBOX, do not silently flip it.
       - [ ] Predictions (PredictionsSection) — 2B §5 card (P2.3 carve).
-      - [ ] Exercise library content: display names, instructions, media,
-            server-side search (ExerciseLibrary) — the Part 4 §3.4 catalog is
-            data-only (nameKey/family/tier/met…); exercise copy/media surface
-            is owed (P4 production line / Part 2 Appendix A localization).
+      - [x] **Exercise library** (ExerciseLibrary → exerciseApi) — **DONE
+            2026-08-05.** The list rides `GET /v1/exercises`; the WORDS ship as a
+            file (`EXERCISE_CONTENT` in `@app/shared`, a verbatim port of
+            `scripts/seed_exercises.py`, 812 values diffed against the source
+            with 0 differences), joined by slug. **No migration**: Kd ruled the
+            file over new columns, because the Part 4 §3.4 DDL declares none for
+            exercise copy and `name_key` says why (v1 §14 message keys). Search
+            and filters run in memory — 58 rows is one request — and the AI badge
+            is derived from the definitions the client actually holds (3), not
+            from the seed's `ai_supported` (8). The library lists 58 not 56, per
+            §3.4:366-369. Still owed and tracked in OWED.md, blocking nothing
+            here: hi/as translation of that copy, and the Dashboard deep link's
+            old-backend id (it belongs to the recommendations repoint).
       - [x] **Workout history calendar** (WorkoutCalendar → workoutApi.getHistory)
             — **DONE 2026-08-04**, and the read path was REPLACED 2026-08-05.
             **CORRECTED 2026-08-05 (T3 round 2, F8): this entry said the month is

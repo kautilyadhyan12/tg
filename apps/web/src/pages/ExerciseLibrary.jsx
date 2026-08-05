@@ -1,4 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+// P2.8 web repoint (exercise library card) — this screen reads the NEW /v1 API.
+// Every decision the repoint makes lives in `api/exerciseLibrary.js`, which is
+// testable without a DOM; this file draws the result. Read that header first.
+//
+// `isExerciseRemoved` is no longer applied here: Part 4 §3.4:366-369 rules
+// Mountain Pose live and says "the `REMOVED_EXERCISES` frontend hack dies with
+// the migration". The library lists 58 where it listed 56. The helper stays in
+// `utils/exerciseMedia.js` — other callers are not this card's business (R1.1).
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -8,33 +16,26 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { exerciseService } from '../api/exerciseApi';
-import { isExerciseRemoved } from '../utils/exerciseMedia';
+import { fetchAllExercises, buildLibraryRows, filterLibrary } from '../api/exerciseLibrary';
+import { CATEGORIES, DIFFICULTIES, difficultyStyle } from './exerciseLibraryView';
+import { getDefinition, engineSupports } from '../engine/poseAdapter';
 import ExerciseDetail from '../components/exercise/ExerciseDetail';
 import { getExercisePhoto } from '../utils/exerciseMedia';
 import { getItem, setItem } from '../utils/storage';
 
-const CATEGORIES = [
-  { name: 'All', emoji: '⚡', image: null },
-  { name: 'Strength Training', emoji: '🏋️', image: '/images/exercises/lifting.jpg' },
-  { name: 'Bodyweight Exercises', emoji: '🤸', image: '/images/exercises/squat.png' },
-  { name: 'HIIT', emoji: '⚡', image: '/images/wellness/ropping.jpg' },
-  { name: 'Yoga', emoji: '🧘', image: '/images/wellness/yoga.jpg' },
-  { name: 'Core & Abs', emoji: '🧠', image: '/images/wellness/regularexercise.jpg' },
-  { name: 'Cardio', emoji: '❤️', image: '/images/wellness/running.jpg' },
-  { name: 'Upper Body', emoji: '💪', image: '/images/exercises/weight.jpg' },
-  { name: 'Lower Body', emoji: '🦵', image: '/images/exercises/squat.png' },
-  { name: 'Flexibility & Mobility', emoji: '🧘‍♂️', image: '/images/wellness/yoga1.jpg' },
-  { name: 'Endurance & Stamina', emoji: '🏃', image: '/images/wellness/running.jpg' },
-  { name: 'Rehabilitation', emoji: '🧩', image: '/images/wellness/yoga2.jpg' },
-];
+/** The AI badge's meaning, in one place: this client holds a definition for the
+ *  exercise AND its engine is new enough to run it (the I4 client gate). Both
+ *  halves matter — a definition needing a newer engine is one this build cannot
+ *  offer, and badging it would promise analysis that never starts. */
+function hasCameraAnalysis(slug) {
+  const def = getDefinition(slug);
+  return def !== null && engineSupports(def);
+}
 
-const DIFFICULTIES = ['All', 'beginner', 'intermediate', 'advanced'];
-
-const DIFF_COLORS = {
-  beginner: { bg: 'rgba(34,197,94,0.12)', color: '#4ade80', border: 'rgba(34,197,94,0.2)' },
-  intermediate: { bg: 'rgba(234,179,8,0.12)', color: '#fbbf24', border: 'rgba(234,179,8,0.2)' },
-  advanced: { bg: 'rgba(239,68,68,0.12)', color: '#f87171', border: 'rgba(239,68,68,0.2)' },
-};
+/** How many cards a "page" of the grid draws. The whole catalog is already in
+ *  memory, so this is a rendering choice, not a request size — it keeps the
+ *  first paint small and preserves the "Load more" button the screen had. */
+const LIMIT = 20;
 
 function CategoryPill({ cat, active, onClick }) {
   return (
@@ -60,7 +61,7 @@ function CategoryPill({ cat, active, onClick }) {
 }
 
 function ExerciseCard({ exercise, onClick, index }) {
-  const diff = DIFF_COLORS[exercise.difficulty] || DIFF_COLORS.beginner;
+  const diff = difficultyStyle(exercise.difficulty);
   const photo = getExercisePhoto(exercise.name);
 
   return (
@@ -138,16 +139,18 @@ function ExerciseCard({ exercise, onClick, index }) {
         </div>
 
         <div className="flex items-center gap-2 mb-3">
-          <span
-            className="text-2xs font-semibold px-2 py-0.5 rounded-full capitalize"
-            style={{
-              background: diff.bg,
-              color: diff.color,
-              border: `1px solid ${diff.border}`,
-            }}
-          >
-            {exercise.difficulty}
-          </span>
+          {diff && (
+            <span
+              className="text-2xs font-semibold px-2 py-0.5 rounded-full capitalize"
+              style={{
+                background: diff.bg,
+                color: diff.color,
+                border: `1px solid ${diff.border}`,
+              }}
+            >
+              {exercise.difficulty}
+            </span>
+          )}
           {exercise.ai_supported && (
             <span
               className="text-2xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1"
@@ -184,15 +187,18 @@ function ExerciseCard({ exercise, onClick, index }) {
           className="flex items-center gap-3 pt-3"
           style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
         >
+          {/* A dash, never a blank or the word "null": a catalog row this build
+              stocks no words for has no calorie rate and no default, and saying
+              so is the honest version of an empty gap. */}
           <span className="flex items-center gap-1 text-2xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
             <Flame className="w-3 h-3" style={{ color: '#f97316' }} />
-            {exercise.calories_per_min} cal/min
+            {exercise.calories_per_min === null ? '—' : `${exercise.calories_per_min} cal/min`}
           </span>
           <span className="flex items-center gap-1 text-2xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
             <Clock className="w-3 h-3" style={{ color: '#60a5fa' }} />
             {exercise.duration_seconds
               ? `${exercise.duration_seconds}s`
-              : `${exercise.reps_default} reps`
+              : exercise.reps_default === null ? '—' : `${exercise.reps_default} reps`
             }
           </span>
         </div>
@@ -205,73 +211,81 @@ export default function ExerciseLibrary() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [exercises, setExercises] = useState([]);
+  // THE WHOLE CATALOG, read once. 58 rows over a 100-row page limit is one
+  // request; filtering and paging happen below without touching the network,
+  // because `/v1/exercises` accepts neither a search term nor a page number.
+  const [allRows, setAllRows] = useState([]);
   const [selectedEx, setSelectedEx] = useState(null);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All');
   const [difficulty, setDifficulty] = useState('All');
   const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  // A FAILED read is its own state, not an empty list. Without this, a server
+  // that is down draws "No exercises found" over an empty grid — the screen
+  // asserting that the library is empty when it does not know.
+  const [failed, setFailed] = useState(false);
+  const [shown, setShown] = useState(LIMIT);
   const [showFilters, setShowFilters] = useState(false);
   const [workoutCount, setWorkoutCount] = useState(0);
 
-  const LIMIT = 20;
-
-  const fetchExercises = useCallback(async (reset = false) => {
-    setLoading(true);
-    try {
-      const params = { limit: LIMIT, page: reset ? 1 : page, sort: 'name' };
-      if (search) params.search = search;
-      if (category !== 'All') params.category = category;
-      if (difficulty !== 'All') params.difficulty = difficulty;
-
-      const res = await exerciseService.getExercises(params);
-      const data = res.data;
-
-      const filteredExercises = (data.exercises || []).filter(
-        (ex) => !isExerciseRemoved(ex.name)
-      );
-
-      if (reset || page === 1) {
-        setExercises(filteredExercises);
-      } else {
-        setExercises((prev) => [...prev, ...filteredExercises]);
-      }
-      setTotal(data.total);
-      if (reset) setPage(1);
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to load exercises');
-    } finally {
-      setLoading(false);
-    }
-  }, [search, category, difficulty, page]);
+  // Changing any filter starts the list again from the top — the old code
+  // refetched page 1 for exactly this reason. Done in the HANDLERS rather than
+  // in an effect watching the filters: an effect that writes state the same
+  // render is a cascading render, and the reset is a consequence of the click,
+  // not of the state arriving.
+  const changeSearch = (v) => { setSearch(v); setShown(LIMIT); };
+  const changeCategory = (v) => { setCategory(v); setShown(LIMIT); };
+  const changeDifficulty = (v) => { setDifficulty(v); setShown(LIMIT); };
+  const clearFilters = () => { changeSearch(''); setCategory('All'); setDifficulty('All'); };
 
   useEffect(() => {
-    fetchExercises(true);
-  }, [search, category, difficulty]);
-
-  // Auto-open detail panel when ?exercise=<id> is in the URL
-  useEffect(() => {
-    const targetId = searchParams.get('exercise');
-    if (!targetId) return;
-
-    // Fetch the specific exercise directly from the API
-    exerciseService.getExercise(targetId)
-      .then((res) => {
-        if (res.data && res.data.exercise) {
-          setSelectedEx(res.data.exercise);
+    let live = true;
+    fetchAllExercises(exerciseService.getExercisePage)
+      .then(({ items, truncated }) => {
+        if (!live) return;
+        const rows = buildLibraryRows(items, hasCameraAnalysis);
+        setAllRows(rows);
+        if (truncated) {
+          // Said out loud rather than drawn as a complete library.
+          toast('Showing part of the library', { icon: '⚠️' });
         }
-        searchParams.delete('exercise');
-        setSearchParams(searchParams, { replace: true });
+        // The ?exercise=<slug> deep link, resolved against the rows just read —
+        // no second request, and a value that matches nothing opens nothing.
+        // The Dashboard still links with an OLD-backend id until its own
+        // repoint; such a link lands in the "matches nothing" arm, exactly as a
+        // stale id already did. Tracked in OWED.md, not half-fixed here.
+        const target = searchParams.get('exercise');
+        if (target) {
+          const found = rows.find((r) => r.slug === target);
+          if (found) setSelectedEx(found);
+          searchParams.delete('exercise');
+          setSearchParams(searchParams, { replace: true });
+        }
       })
       .catch((err) => {
-        console.error('Failed to load exercise:', err);
-        searchParams.delete('exercise');
-        setSearchParams(searchParams, { replace: true });
+        if (!live) return;
+        // Message only (R3.10) — the axios error carries the URL, the request
+        // body and any headers.
+        console.error('exercise library load failed:', err?.message);
+        setFailed(true);
+        toast.error('Failed to load exercises');
+      })
+      .finally(() => {
+        if (live) setLoading(false);
       });
+    return () => { live = false; };
   }, []);
+
+  // Filtering is derived, never stored: one source of truth for what is on
+  // screen, so a filter and its result cannot drift apart.
+  const filtered = useMemo(
+    () => filterLibrary(allRows, { search, category, difficulty }),
+    [allRows, search, category, difficulty],
+  );
+
+  const visible = filtered.slice(0, shown);
+  const hasMore = filtered.length > visible.length;
+  const loadMore = () => setShown((n) => n + LIMIT);
 
   useEffect(() => {
     const stored = getItem('workout_builder', []);
@@ -295,32 +309,6 @@ export default function ExerciseLibrary() {
     setWorkoutCount(updated.length);
     toast.success(`${exercise.name} added`);
     setSelectedEx(null);
-  };
-
-  const hasMore = exercises.length < total;
-
-  const loadMore = () => {
-    const nextPage = page + 1;
-    setPage(nextPage);
-    setLoading(true);
-    const params = { limit: LIMIT, page: nextPage, sort: 'name' };
-    if (search) params.search = search;
-    if (category !== 'All') params.category = category;
-    if (difficulty !== 'All') params.difficulty = difficulty;
-
-    exerciseService.getExercises(params).then((res) => {
-      const data = res.data;
-      const filtered = (data.exercises || []).filter(
-        (ex) => !isExerciseRemoved(ex.name)
-      );
-      setExercises((prev) => [...prev, ...filtered]);
-      setTotal(data.total);
-    }).catch((err) => {
-      console.error(err);
-      toast.error('Failed to load more exercises');
-    }).finally(() => {
-      setLoading(false);
-    });
   };
 
   return (
@@ -375,7 +363,12 @@ export default function ExerciseLibrary() {
                   className="text-7xl font-bold tracking-tighter mb-3"
                   style={{ color: 'rgba(255,255,255,0.95)' }}
                 >
-                  {total} Exercises
+                  {/* The old payload carried a server-side `total`; a cursor
+                      page carries none. Once every page is read the count IS
+                      the number of rows — exact, and never printed as a
+                      confident "0 Exercises" while the read is still running or
+                      has failed. */}
+                  {loading || failed ? 'Exercises' : `${allRows.length} Exercises`}
                 </h1>
                 <p className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
                   AI-powered form detection on selected exercises
@@ -404,7 +397,7 @@ export default function ExerciseLibrary() {
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => changeSearch(e.target.value)}
               placeholder="Search exercises, muscles..."
               className="w-full pl-11 pr-4 py-3 rounded-2xl text-sm outline-none
                          transition-all duration-200"
@@ -424,7 +417,7 @@ export default function ExerciseLibrary() {
             />
             {search && (
               <button
-                onClick={() => setSearch('')}
+                onClick={() => changeSearch('')}
                 className="absolute right-3 top-1/2 -translate-y-1/2 btn-icon w-6 h-6"
               >
                 <X className="w-3.5 h-3.5" />
@@ -460,7 +453,7 @@ export default function ExerciseLibrary() {
                 {DIFFICULTIES.map((d) => (
                   <button
                     key={d}
-                    onClick={() => setDifficulty(d)}
+                    onClick={() => changeDifficulty(d)}
                     className="px-4 py-1.5 rounded-full text-sm font-medium
                                transition-all duration-200 capitalize"
                     style={{
@@ -484,7 +477,7 @@ export default function ExerciseLibrary() {
               key={cat.name}
               cat={cat}
               active={category === cat.name}
-              onClick={() => setCategory(cat.name)}
+              onClick={() => changeCategory(cat.name)}
             />
           ))}
         </div>
@@ -504,7 +497,7 @@ export default function ExerciseLibrary() {
                 transition={{ delay: i * 0.05 }}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => setCategory(cat.name)}
+                onClick={() => changeCategory(cat.name)}
                 className="relative overflow-hidden rounded-2xl text-left"
                 style={{ height: 110 }}
               >
@@ -531,14 +524,18 @@ export default function ExerciseLibrary() {
 
         {/* Results count */}
         <div className="flex items-center justify-between mb-4">
+          {/* Counts what the filters actually matched, which is what the line
+              claimed on the old server too (`total` was the FILTERED total, not
+              the library's). Silent while loading or failed — a count is a
+              claim, and neither state knows one. */}
           <p className="text-sm" style={{ color: 'rgba(255,255,255,0.35)' }}>
-            {loading ? 'Loading...' : `${total} exercises`}
-            {category !== 'All' && ` in ${category}`}
+            {loading ? 'Loading...' : failed ? '' : `${filtered.length} exercises`}
+            {!loading && !failed && category !== 'All' && ` in ${category}`}
           </p>
         </div>
 
         {/* Exercise grid */}
-        {loading && exercises.length === 0 ? (
+        {loading ? (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <div
@@ -555,7 +552,24 @@ export default function ExerciseLibrary() {
               </div>
             ))}
           </div>
-        ) : exercises.length === 0 ? (
+        ) : failed ? (
+          /* The library could not be read. Distinct from "nothing matched":
+             offering "Clear filters" here would blame the user's search for the
+             server being unreachable, and an empty grid would state that the
+             library is empty. */
+          <div className="empty-state">
+            <div className="empty-state-icon">
+              <Dumbbell className="w-8 h-8" style={{ color: 'rgba(255,255,255,0.2)' }} />
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">Couldn&apos;t load the exercises</h3>
+            <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.35)' }}>
+              Check your connection and try again
+            </p>
+            <button onClick={() => window.location.reload()} className="btn-secondary">
+              Try again
+            </button>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon">
               <Dumbbell className="w-8 h-8" style={{ color: 'rgba(255,255,255,0.2)' }} />
@@ -565,7 +579,7 @@ export default function ExerciseLibrary() {
               Try a different search or category
             </p>
             <button
-              onClick={() => { setSearch(''); setCategory('All'); setDifficulty('All'); }}
+              onClick={clearFilters}
               className="btn-secondary"
             >
               Clear filters
@@ -574,7 +588,7 @@ export default function ExerciseLibrary() {
         ) : (
           <>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {exercises.map((ex, i) => (
+              {visible.map((ex, i) => (
                 <ExerciseCard
                   key={ex.id}
                   exercise={ex}
@@ -585,12 +599,8 @@ export default function ExerciseLibrary() {
             </div>
             {hasMore && (
               <div className="text-center mt-8">
-                <button
-                  onClick={loadMore}
-                  disabled={loading}
-                  className="btn-secondary px-8"
-                >
-                  {loading ? 'Loading...' : 'Load more'}
+                <button onClick={loadMore} className="btn-secondary px-8">
+                  Load more
                 </button>
               </div>
             )}
