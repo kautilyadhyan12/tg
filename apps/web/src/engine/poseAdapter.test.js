@@ -11,6 +11,7 @@ import {
   EngineUnsupportedError,
   engineSupports,
   getDefinition,
+  hasCameraAnalysis,
   landmarksToFrame,
   startSet,
 } from "./poseAdapter.js";
@@ -49,6 +50,35 @@ describe("engineSupports (I4 minEngineVersion client gate)", () => {
     const future = { ...squatDef, minEngineVersion: "2.0.0" };
     expect(engineSupports(future)).toBe(false);
     expect(() => startSet(future, 1)).toThrow(EngineUnsupportedError);
+  });
+});
+
+describe("hasCameraAnalysis (the exercise library's AI badge)", () => {
+  it("badges an exercise this build holds a runnable definition for", () => {
+    expect(hasCameraAnalysis("squat")).toBe(true);
+    expect(hasCameraAnalysis("chair_squat")).toBe(true);
+  });
+
+  it("does not badge an exercise with no definition at all", () => {
+    // 55 of the 58 catalog rows are this case.
+    expect(hasCameraAnalysis("bicep_curl")).toBe(false);
+  });
+
+  // T3 round 1, F1 — THE ASSERTION THAT DID NOT EXIST. `&& engineSupports(def)`
+  // was deleted and all 45 tests stayed green, because every other badge test
+  // injects a stub for this whole function and never reaches the I4 gate. A
+  // definition can EXIST and still be unrunnable here, and badging it promises
+  // camera grading that `startSet` refuses to start (the throw asserted above).
+  it("does NOT badge a definition that needs a newer engine (I4)", () => {
+    const future = { ...squatDef, minEngineVersion: "2.0.0" };
+    expect(hasCameraAnalysis("squat", () => future)).toBe(false);
+  });
+
+  it("still badges when the definition's engine requirement is met", () => {
+    // The control for the case above: same injection, satisfiable requirement.
+    // Without this pair, "always false" would satisfy the assertion above.
+    const ok = { ...squatDef, minEngineVersion: "1.0.0" };
+    expect(hasCameraAnalysis("squat", () => ok)).toBe(true);
   });
 });
 

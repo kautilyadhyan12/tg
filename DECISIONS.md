@@ -5026,7 +5026,13 @@ of anything, and before badging a feature the engine cannot actually do.**
 - (**LINT WENT DOWN, not up**) Measured against HEAD by linting the HEAD copy of
   the file: baseline **2 errors + 2 warnings**, now **1 error + 1 warning**, and
   the survivor is a pre-existing `setWorkoutCount` effect in code this card did
-  not touch. Two exports moved to `pages/exerciseLibraryView.js` (the page file
+  not touch.
+  **CORRECTED 2026-08-05 by T3 round 1, F7 — "the survivor" was TWO survivors and
+  only one of them is old.** The remaining ERROR is indeed the pre-existing
+  `setWorkoutCount` effect. The remaining WARNING is the card's OWN new load
+  effect (an exhaustive-deps warning on the `searchParams`/`setSearchParams`
+  pair). The 2+2 → 1+1 figure stands and was re-measured after round 1's fixes;
+  the sentence simply attributed both survivors to code the card did not write. Two exports moved to `pages/exerciseLibraryView.js` (the page file
   now exports a component and nothing else) and three `setState`-in-effect sites
   were removed by design: the filter reset moved into the click handlers where it
   belongs, and the deep link resolves inside the read's own callback.
@@ -5094,3 +5100,87 @@ smoke failure as a card failure.**
   summary's numbers are the stand-in rig's canned payload, identical for every
   workout (:4081). A finished workout may reach the calendar only after a
   reload — the queue flushes at next app load (:3819).
+
+## 2026-08-05 — exercise library, T3 ROUND 1: 7 findings, ZERO visible, all fixed — and the FIX for F5 shipped unprotected
+
+**Read before ticking an OWED line, and before believing a fix you just wrote is
+pinned by the test you wrote with it.**
+
+- (**THE RESULT**) A fresh chat reviewed the card against R0–R11. **7 findings,
+  every one NOT VISIBLE.** Under the stopping rule (:2365) none blocks the tick,
+  and under the cap set before the card ran (:2866) round 2 is the last round.
+  All 7 are fixed here anyway: five of them are "a test that cannot fail" or "a
+  comment claiming more than it checks", which is the shape that lets the NEXT
+  edit break something silently.
+- (**THE REVIEWER RE-DERIVED THE CARD'S BIG CLAIM AND IT HELD**) 812 values
+  compared via `ast.literal_eval` + a JS eval, 0 differences, names in the
+  source's order; the slug join total both ways 58/58; and — the question the
+  prompt put to them — the `name` round-trip that keeps a hand-logged workout
+  syncable is covered for **all 58**, not just the Push-ups the smoke clicked.
+- (**F1, the one with teeth: the AI badge's I4 half was protected by NOTHING.**)
+  MEASURED by the reviewer, not reasoned: deleting `&& engineSupports(def)` left
+  **45/45 green**. Every badge test injects a STUB for that whole function
+  (`(s) => s === 'squat'`), so none ever reached the real gate; M10/M11 mutate
+  the READER's injected `ai`, one layer below where the gate lives. The card's
+  own record (:4980-4982) claims "the I4 client gate included" — true of the
+  code, asserted by nothing. **:2912's lesson one half over from where the card
+  built its guard.** `hasCameraAnalysis` moved to `poseAdapter.js` (it could not
+  be tested inside a page component file, and the page must export a component
+  and nothing else), takes an injected `resolve` because all three bundled
+  definitions declare `minEngineVersion "1.0.0"` against `ENGINE_VERSION
+  "1.0.0"` — **with the real map the gate's FALSE arm is unreachable, so no test
+  could distinguish a live gate from a deleted one.** Four assertions added as
+  two PAIRS (each negative has its positive control, or "always false" satisfies
+  it). M23/M24 added; both RED.
+- (**F2 — :4855's F2, one screen over, the SAME DAY.**) `items.push(...)` never
+  deduplicated, so a cursor that does not advance yields `CATALOG_MAX_PAGES`
+  copies: an invented headline count, each card drawn 20 times under duplicate
+  React keys, and the truncation toast saying "showing part of" while showing
+  20× the library. **The card's own test asserted the defect** — it served ONE
+  slug on every page and called 20 rows correct. Now a `Set` on slug; the cap
+  test uses DISTINCT rows so it measures the cap and nothing else, and the stuck
+  cursor is its own test with a "distinct rows arriving late" control.
+- (**F3 — "fix the class, not the case", at least the FIFTH recurrence
+  (:1239).**) `ExerciseDetail.jsx` carried a PRIVATE copy of `DIFF_COLORS` and
+  its own `|| DIFF_COLORS.beginner`, on the panel that opens on every card
+  click — while `OWED.md:247` was ticked **DONE** for exactly that shape. A
+  ticked line that is false is worse than an unticked one, and this is the
+  SECOND false tick found on this card in two days (the other is the 🔴 line,
+  :5034). The check that would have caught it is a grep for the OPTION
+  (`DIFF_COLORS`) rather than the symptom, run at the moment of ticking.
+- (**F4**) `readCatalogPage` dropped unreadable rows one at a time, so a payload
+  where EVERY row was unreadable (a renamed `slug`) returned readable-and-empty:
+  "0 Exercises" + "No exercises found" + "Clear filters", blaming the user's
+  search for a payload the client could not parse — the exact lie the `failed`
+  state was built to remove, **composed from two individually-green assertions**.
+  Now: rows arrived and none usable ⇒ null. A genuinely empty page still reads
+  as empty, with that control pinned.
+- (**F5, AND THE LESSON OF THIS ROUND: MY FIX FOR IT WAS UNPROTECTED.**)
+  `categoryNames` read only `primaryCategory` while `filterLibrary` matches
+  primary OR tags, so the "agree in BOTH directions" comment was wider than the
+  check under it. I widened the function to primary ∪ tags — **and the mutant
+  removing the tag union came back ALIVE**, because both sets are the same 11 in
+  today's data, so nothing observable changed. **A fix whose protection cannot
+  fail is not a fixed class; it is the same defect with a comment on it.** Closed
+  with synthetic rows carrying a TAG-ONLY category — the case the real table
+  cannot produce today, which is precisely why it needed writing. M27 RED only
+  after that.
+- (**F6, F7 — the record**) `readCatalogPage` is a SIXTH per-field reader and was
+  missing from the OWED line that enumerates them (F4 is what that costs).
+  And :5026's "the survivor is a pre-existing `setWorkoutCount` effect" was TWO
+  survivors: the ERROR is old, the WARNING is the card's own new load effect.
+  Corrected in place; the 2+2 → 1+1 figure stands, re-measured after these fixes.
+- (**THE ARTWORK ITEM, promoted from a record note to an OWED line**) The
+  reviewer listed it as neither a violation nor a finding. **It is the one thing
+  on this card a user can SEE**: Mountain Pose and Brisk Walking draw the
+  placeholder. Measured through the real lookup — 56 of 58 resolve, and the two
+  misses are exactly the two exercises this card un-hid. Written down nowhere
+  before, so the next smoke would have reported it as a defect.
+- (**STATE**) web **494/494** (484 + 10 new), `vite build` green, lint UNCHANGED
+  from the card's baseline at 1 error + 1 warning. Five new mutants
+  (M23–M27) each measured RED, and each **restored byte-exact** afterwards.
+  **NOT verified by me: the full 22-mutant sweep was not re-run** — the reviewer
+  did not run it either and said so; what they checked is that all 22 seds still
+  bite their anchors (0 INVALID), which is the :4267 failure mode. Round 2 owns
+  the full sweep.
+- (**THE 🔴 LINE STILL DOES NOT TICK.** Round 2 is the cap and is unrun.)

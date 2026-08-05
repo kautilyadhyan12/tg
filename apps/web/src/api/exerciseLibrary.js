@@ -65,15 +65,26 @@ export const CATALOG_PAGE_LIMIT = 100;
  *  exercises, ~34× the catalog. */
 export const CATALOG_MAX_PAGES = 20;
 
-/** Every distinct `primaryCategory` in the content table, in the order the
- *  screen's pills declare them — derived, never a second hand-written list, so
- *  a category cannot exist in the data and be unreachable in the UI. */
+/** Every category a row can be FILTERED BY, first-seen order — derived, never a
+ *  second hand-written list, so a category cannot exist in the data and be
+ *  unreachable in the UI.
+ *
+ *  T3 round 1, F5: this read only `primaryCategory` while `filterLibrary` below
+ *  matches the primary category OR the row's `categories` TAGS, so the pill
+ *  cross-check was narrower than the claim written over it — a tag-only category
+ *  would have been unreachable on screen and unnoticed by the test. Harmless
+ *  today and measured so (both sets are the same 11; there are no tag-only
+ *  categories), which is exactly why it needed fixing before that stopped being
+ *  true. The union is now the definition, matching what the filter actually
+ *  does. */
 export function categoryNames(rows = EXERCISE_CONTENT) {
   const seen = [];
+  const add = (v) => {
+    if (typeof v === 'string' && v !== '' && !seen.includes(v)) seen.push(v);
+  };
   for (const r of rows) {
-    if (typeof r.primaryCategory === 'string' && !seen.includes(r.primaryCategory)) {
-      seen.push(r.primaryCategory);
-    }
+    add(r.primaryCategory);
+    for (const tag of r.categories || []) add(tag);
   }
   return seen;
 }
@@ -102,6 +113,15 @@ export function readCatalogPage(data) {
     if (typeof item.slug !== 'string' || item.slug === '') continue;
     items.push(item);
   }
+  // T3 round 1, F4. A page that HANDED BACK ROWS and yielded not one readable
+  // row is not an empty page — it is an unreadable one, and the difference is
+  // the whole point of returning null. Dropping rows one at a time meant a
+  // server that renamed `slug` composed two individually-correct behaviours into
+  // the exact lie the `failed` state was built to remove: "0 Exercises", "No
+  // exercises found", and a "Clear filters" button blaming the user's search for
+  // a payload the client could not read. An items array that is genuinely EMPTY
+  // still reads as empty — that is a server saying "no rows", which is an answer.
+  if (items.length === 0 && data.items.length > 0) return null;
   const cursor = typeof data.nextCursor === 'string' && data.nextCursor !== '' ? data.nextCursor : null;
   return { items, nextCursor: cursor };
 }
@@ -116,6 +136,15 @@ export function readCatalogPage(data) {
  *  catalog presented as the whole one is the failure this shape exists to stop. */
 export async function fetchAllExercises(fetchPage) {
   const items = [];
+  // T3 round 1, F2 — the SAME SHAPE :4855's F2 fixed on the calendar the same
+  // day, one screen over. A cursor that does not ADVANCE is not hypothetical
+  // (the calendar met it), and without this Set every page repeats the same rows
+  // until the cap: the hero headline and the results line print an INVENTED
+  // number, the grid draws each card CATALOG_MAX_PAGES times under duplicate
+  // React keys, and the truncation toast says "Showing part of the library"
+  // while showing 20× the library. Dedupe on slug, which is the catalog's own
+  // identity and this row's React key.
+  const seen = new Set();
   let cursor = null;
   for (let page = 0; page < CATALOG_MAX_PAGES; page++) {
     const params = { limit: CATALOG_PAGE_LIMIT };
@@ -123,7 +152,11 @@ export async function fetchAllExercises(fetchPage) {
     const res = await fetchPage(params);
     const read = readCatalogPage(res && res.data);
     if (read === null) throw new Error('exercise catalog: unreadable page');
-    items.push(...read.items);
+    for (const item of read.items) {
+      if (seen.has(item.slug)) continue;
+      seen.add(item.slug);
+      items.push(item);
+    }
     if (read.nextCursor === null) return { items, truncated: false };
     cursor = read.nextCursor;
   }

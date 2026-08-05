@@ -18,19 +18,14 @@ import toast from 'react-hot-toast';
 import { exerciseService } from '../api/exerciseApi';
 import { fetchAllExercises, buildLibraryRows, filterLibrary } from '../api/exerciseLibrary';
 import { CATEGORIES, DIFFICULTIES, difficultyStyle } from './exerciseLibraryView';
-import { getDefinition, engineSupports } from '../engine/poseAdapter';
+// The AI badge's meaning lives with the I4 gate it depends on, in poseAdapter —
+// see its comment there. It moved out of this file at T3 round 1 (F1) so it
+// could be tested at all: a function defined inside a page component file needs
+// a DOM to reach, and this file must export a component and nothing else.
+import { hasCameraAnalysis } from '../engine/poseAdapter';
 import ExerciseDetail from '../components/exercise/ExerciseDetail';
 import { getExercisePhoto } from '../utils/exerciseMedia';
 import { getItem, setItem } from '../utils/storage';
-
-/** The AI badge's meaning, in one place: this client holds a definition for the
- *  exercise AND its engine is new enough to run it (the I4 client gate). Both
- *  halves matter — a definition needing a newer engine is one this build cannot
- *  offer, and badging it would promise analysis that never starts. */
-function hasCameraAnalysis(slug) {
-  const def = getDefinition(slug);
-  return def !== null && engineSupports(def);
-}
 
 /** How many cards a "page" of the grid draws. The whole catalog is already in
  *  memory, so this is a rendering choice, not a request size — it keeps the

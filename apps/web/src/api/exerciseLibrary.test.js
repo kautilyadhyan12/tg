@@ -78,6 +78,21 @@ describe('readCatalogPage', () => {
     expect(read.items.map((i) => i.slug)).toEqual(['squat', 'plank']);
   });
 
+  // T3 round 1, F4. Rows arrived and NONE was readable — a renamed `slug` field
+  // is the realistic cause. That is unreadable, not empty: read as empty it
+  // painted "0 Exercises" + "No exercises found" + "Clear filters", blaming the
+  // user's search for a payload the client could not parse.
+  it('is UNREADABLE when rows arrived and not one was usable', () => {
+    expect(readCatalogPage({ items: [{ exerciseSlug: 'squat' }], nextCursor: null })).toBeNull();
+    expect(readCatalogPage({ items: [null, { slug: '' }], nextCursor: null })).toBeNull();
+  });
+
+  it('still reads a genuinely empty page as empty, not unreadable', () => {
+    // The control for the case above. A server saying "no rows" has ANSWERED;
+    // without this pair, "always null on zero rows" would satisfy it.
+    expect(readCatalogPage({ items: [], nextCursor: null })).toEqual({ items: [], nextCursor: null });
+  });
+
   it('treats an empty-string cursor as the end, not as a cursor', () => {
     expect(readCatalogPage({ items: [], nextCursor: '' }).nextCursor).toBeNull();
   });
@@ -97,12 +112,36 @@ describe('fetchAllExercises', () => {
 
   it('stops at the page cap and SAYS it was truncated', async () => {
     // A server that never stops handing back a cursor must not spin forever,
-    // and must not have its partial answer drawn as the whole library.
-    const fetchPage = vi.fn(() => Promise.resolve(page([row('x')], 'x')));
+    // and must not have its partial answer drawn as the whole library. The rows
+    // are DISTINCT here so this measures the cap and nothing else — the stuck
+    // cursor is the test below, and conflating them is what hid F2.
+    let n = 0;
+    const fetchPage = vi.fn(() => Promise.resolve(page([row('x' + n++)], 'more')));
     const { items, truncated } = await fetchAllExercises(fetchPage);
     expect(fetchPage).toHaveBeenCalledTimes(CATALOG_MAX_PAGES);
     expect(items).toHaveLength(CATALOG_MAX_PAGES);
     expect(truncated).toBe(true);
+  });
+
+  // T3 round 1, F2 — :4855's F2 one screen over. THIS TEST PREVIOUSLY ASSERTED
+  // THE DEFECT: it served the same single slug on every page and called 20 rows
+  // correct. A stuck cursor must not inflate the count the headline prints, and
+  // must not draw one exercise 20 times under 20 duplicate React keys.
+  it('does not repeat rows when the cursor never advances', async () => {
+    const fetchPage = vi.fn(() => Promise.resolve(page([row('squat'), row('plank')], 'stuck')));
+    const { items, truncated } = await fetchAllExercises(fetchPage);
+    expect(fetchPage).toHaveBeenCalledTimes(CATALOG_MAX_PAGES);
+    expect(items.map((i) => i.slug)).toEqual(['squat', 'plank']);
+    expect(truncated).toBe(true);
+  });
+
+  it('keeps a row that legitimately appears once per page boundary', async () => {
+    // The control: dedupe must not eat DISTINCT rows that merely arrive late.
+    const fetchPage = vi.fn()
+      .mockResolvedValueOnce(page([row('a'), row('b')], 'b'))
+      .mockResolvedValueOnce(page([row('b'), row('c')], null));
+    const { items } = await fetchAllExercises(fetchPage);
+    expect(items.map((i) => i.slug)).toEqual(['a', 'b', 'c']);
   });
 
   it('throws on an unreadable page rather than returning a partial catalog', async () => {
@@ -251,5 +290,26 @@ describe('categoryNames', () => {
 
   it('finds eleven in the content table', () => {
     expect(categoryNames()).toHaveLength(11);
+  });
+
+  // T3 round 1, F5 — and the assertion the FIX first shipped without. Widening
+  // the function to primary ∪ tags changed nothing observable, because the two
+  // sets are the same 11 in today's data: the mutant that removed the tag union
+  // was measured ALIVE against every other test in this file. A category that
+  // exists ONLY as a tag is the case the pill cross-check has to see, since
+  // `filterLibrary` matches tags and a tag-only category with no pill would be
+  // unreachable on screen. It needs synthetic rows precisely because the real
+  // table cannot produce it today.
+  it('includes a category that exists only as a TAG, never as a primary', () => {
+    const rows = [{ primaryCategory: 'Strength Training', categories: ['Upper Body'] }];
+    expect(categoryNames(rows)).toEqual(['Strength Training', 'Upper Body']);
+  });
+
+  it('does not repeat a category that is both a primary and a tag', () => {
+    const rows = [
+      { primaryCategory: 'Yoga', categories: ['Yoga', 'Flexibility & Mobility'] },
+      { primaryCategory: 'Flexibility & Mobility', categories: [] },
+    ];
+    expect(categoryNames(rows)).toEqual(['Yoga', 'Flexibility & Mobility']);
   });
 });

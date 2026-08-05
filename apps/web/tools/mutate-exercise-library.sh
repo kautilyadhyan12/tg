@@ -29,6 +29,9 @@ READER="apps/web/src/api/exerciseLibrary.js"
 VIEW="apps/web/src/pages/ExerciseLibrary.jsx"
 VIEWC="apps/web/src/pages/exerciseLibraryView.js"
 HIST="apps/web/src/api/workoutHistory.js"
+# T3 round 1 F1: the AI badge's own definition moved here so it could be tested
+# at all. M23/M24 are the mutants that had no home while it lived in the page.
+ADAPTER="apps/web/src/engine/poseAdapter.js"
 # EVERY file any mutation touches must be listed here. A file mutated but not
 # snapshotted would stay mutated for the rest of the run.
 TARGETS=("$CLIENT" "$READER" "$VIEW" "$VIEWC" "$HIST")
@@ -161,6 +164,16 @@ MUTATIONS=(
   "M21 a missing difficulty still draws a pill|$VIEWC|s#  if (typeof difficulty !== 'string' || difficulty === '') return null;#  if (typeof difficulty !== 'string' || difficulty === '') return DIFF_UNKNOWN;#"
   # M22: the calendar's names, the other half of the OWED line.
   "M22 the calendar goes back to title-cased slugs|$HIST|s#  if (stocked !== null) return stocked.name;##"
+  # ── T3 ROUND 1 FIXES. Every one of these was ALIVE against the table above:
+  # M23 is the finding itself (F1 deleted the gate and all 45 tests stayed
+  # green), and M24-M27 pin fixes whose absence this table could not see.
+  # M10/M11 mutate the READER's injected `ai`, which is why none of them
+  # reached the badge's real definition-and-engine check.
+  "M23 the AI badge ignores the I4 engine gate|$ADAPTER|s#  return def !== null \&\& engineSupports(def);#  return def !== null;#"
+  "M24 the AI badge ignores whether a definition exists|$ADAPTER|s#  return def !== null \&\& engineSupports(def);#  return engineSupports(def || {});#"
+  "M25 a stuck cursor repeats rows into the count|$READER|s#      if (seen.has(item.slug)) continue;##"
+  "M26 an all-unreadable page becomes an empty library|$READER|s#  if (items.length === 0 \&\& data.items.length > 0) return null;##"
+  "M27 the pill cross-check goes back to primary categories only|$READER|s#    for (const tag of r.categories || \[\]) add(tag);##"
 )
 
 # ── ZERO MUTANTS IS NEVER A PASS ─────────────────────────────────────────────

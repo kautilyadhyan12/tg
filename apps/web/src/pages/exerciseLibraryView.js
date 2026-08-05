@@ -8,7 +8,13 @@
  *  content table agree in BOTH directions — a category present in the data with
  *  no pill is unreachable on screen, and a pill for a category no exercise
  *  carries is a tab that opens onto "No exercises found". Neither is visible to
- *  a reader of this file, which is why it is a test and not a comment. */
+ *  a reader of this file, which is why it is a test and not a comment.
+ *
+ *  "The data" means what `filterLibrary` can MATCH: a row's primary category or
+ *  any of its category tags. It said BOTH DIRECTIONS before that was true of the
+ *  set being compared — `categoryNames` read primary categories only until T3
+ *  round 1's F5 (both sets are the same 11 today, so nothing was unreachable;
+ *  the claim was simply wider than the check underneath it). */
 export const CATEGORIES = [
   { name: 'All', emoji: '⚡', image: null },
   { name: 'Strength Training', emoji: '🏋️', image: '/images/exercises/lifting.jpg' },

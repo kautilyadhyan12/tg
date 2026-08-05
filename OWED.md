@@ -252,6 +252,17 @@ then; none may be hidden or reduced to close the gap.
       caller draws no pill at all rather than being handed a default that reads
       as a fact. Mutation-checked both ways (M20 restores the `|| beginner`
       fallback, M21 makes a missing difficulty draw a pill; both RED).
+      **CORRECTED 2026-08-05 — this tick was the INSTANCE, not the class, and was
+      briefly false.** The card's own T3 round 1 (F3) found a FIFTH site still
+      live: `components/exercise/ExerciseDetail.jsx` carried its own private copy
+      of `DIFF_COLORS` and its own `|| DIFF_COLORS.beginner`, on the panel that
+      opens on EVERY card click — so this line said DONE while an ungraded
+      exercise was still asserted to be `beginner` in green, one component over
+      from the fix. Now fixed: that file imports `difficultyStyle` and draws no
+      pill when there is nothing to say. **This is "fix the class, not the case"
+      (:1239) recurring for at least the fifth time — the check that would have
+      caught it is a grep for the OPTION (`DIFF_COLORS`), not for the symptom, at
+      the moment of ticking.**
       **WAS:** Raised by round 11 under R1.1 as out of scope: a
       FOURTH site of the one-of-N shape round 7 F2 declared fixed as a class, on
       a screen this card does not own — an unknown difficulty painted as a
@@ -545,6 +556,22 @@ then; none may be hidden or reduced to close the gap.
       (slug/nameKey/family/tier/met/equipment/muscles) and stores none of it.
       Owed to the P4 production line / Part 2 Appendix A localization.
       (DECISIONS 2026-07-16, Card 3.)
+- [ ] 🟡 **Mountain Pose and Brisk Walking have no artwork — the only two of the
+      58, and they are exactly the two this card un-hid.** Raised by the exercise
+      library's T3 round 1 (2026-08-05) as a record note rather than a violation,
+      and given a line here because **it is the one thing on this card a USER CAN
+      SEE** and it was written down nowhere — neither DECISIONS :5002-5007 nor the
+      smoke doc named it, so the next smoke run would report it as a defect (and
+      the run on 2026-08-05 nearly did).
+      **Measured, not inferred:** driving all 58 content names through the real
+      `getExerciseMedia` lookup returns null for exactly these two; 56 of 58
+      resolve. So both draw the 🏋️ placeholder card and open a detail panel with
+      no photo and no GIFs.
+      **Not a regression and not dishonest** — no artwork exists for them, and
+      the alternative (hiding them) is the `REMOVED_EXERCISES` hack that Part 4
+      §3.4:366-369 rules "dies with the migration". Closing this means SOURCING
+      two images and two GIF pairs, which is an asset task, not a code one.
+      Blocks nothing.
 - [ ] 🟡 **Hindi and Assamese exercise copy.** `EXERCISE_CONTENT` is ENGLISH
       ONLY. This is not a regression — the old backend was English-only too — but
       it is the half of the 2026-08-05 ruling that is not yet built, and the
@@ -2026,7 +2053,13 @@ then; none may be hidden or reduced to close the gap.
       this screen reads and keeps the drop-nothing property. Belongs with
       whichever card next revisits the reader, and the same question should be
       asked of every other per-field reader on the repoint (`readSummaryView`,
-      `readOverviewView`, `readStatsView`, `readLeaderboardView`).
+      `readOverviewView`, `readStatsView`, `readLeaderboardView`, and
+      **`readCatalogPage`** — added 2026-08-05 by the exercise library's T3 round
+      1, F6: that card shipped a SIXTH per-field reader without adding it here,
+      and its F4 is what the omission cost, a renamed `slug` field turning an
+      unreadable page into "0 Exercises" + "No exercises found". F4 is fixed; the
+      wider UNIT question — a reader that catches renamed fields but not changed
+      units — is still open for all six).
 - [ ] 🟡 **Calories are shown as a flat number where the spec requires a RANGE.**
       Raised by the calendar's T3 round 1 (F3, NOT-VISIBLE) on 2026-08-04 and
       given a line the same day — it was tracked NOWHERE, which is the exact

@@ -57,6 +57,32 @@ export function engineSupports(def) {
   return havePatch >= reqPatch;
 }
 
+/** Does THIS BUILD offer camera form-analysis for `slug`? The exercise library's
+ *  "AI" badge, in one place.
+ *
+ *  BOTH HALVES MATTER, and the second had no test until T3 round 1 F1 measured
+ *  it: `&& engineSupports(def)` could be deleted with every suite still green,
+ *  because every badge test injects a STUB for this function and none of them
+ *  ever reached the real I4 gate. A badge that ignored the gate would promise
+ *  camera grading this build cannot start — `startSet` above throws
+ *  EngineUnsupportedError on the very first frame of exactly that definition.
+ *
+ *  It lives HERE, next to the gate it depends on, rather than in the library
+ *  page: the page file must keep exporting a component and nothing else
+ *  (react-refresh/only-export-components, a lint error this card removed), and a
+ *  function inside a page component file cannot be tested without a DOM.
+ *
+ *  `resolve` is injected for the same reason the library reader injects
+ *  `hasDefinition`: the three bundled definitions all declare minEngineVersion
+ *  "1.0.0" and ENGINE_VERSION is "1.0.0", so with the real map the gate's FALSE
+ *  arm is unreachable — a test could not distinguish a live gate from a deleted
+ *  one. The default is the real resolver; the page never passes a second
+ *  argument. */
+export function hasCameraAnalysis(slug, resolve = getDefinition) {
+  const def = resolve(slug);
+  return def !== null && engineSupports(def);
+}
+
 /** Map one pose-provider result to a PoseFrame (§2.4 input). UN-MIRRORED: x/y/z
  *  pass through untouched (§2.2). Missing/empty landmarks → an empty `kp`, which
  *  the engine's ingest treats as an invalid frame (§3.1 fail-soft: hold state,

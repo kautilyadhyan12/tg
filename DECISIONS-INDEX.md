@@ -121,6 +121,33 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:5104** — 2026-08-05 — **exercise library, T3 ROUND 1: 7 findings, ZERO
+  visible, all fixed — and the FIX FOR F5 SHIPPED UNPROTECTED.** **Read before
+  ticking an OWED line, and before believing a fix is pinned by the test written
+  with it.** **F1 has the teeth: the AI badge's I4 half was protected by
+  nothing** — deleting `&& engineSupports(def)` left 45/45 green, because every
+  badge test injects a STUB for the whole function and M10/M11 mutate the
+  reader's injected `ai` one layer below the gate. Moved to `poseAdapter.js` with
+  an injected resolver, because all three bundled definitions declare
+  minEngineVersion 1.0.0 against ENGINE_VERSION 1.0.0 — **with the real map the
+  gate's FALSE arm is unreachable and no test could tell a live gate from a
+  deleted one.** **F2 is :4855's F2 one screen over, same day**: no dedupe on the
+  cursor walk, and the card's own test ASSERTED the defect (one slug served on
+  every page, 20 rows called correct). **F3 is "fix the class not the case"
+  (:1239) for at least the fifth time** — a private `DIFF_COLORS` + `|| beginner`
+  still live in `ExerciseDetail.jsx` while OWED:247 was ticked DONE for that
+  shape; second false tick on this card in two days. **F4:** an all-unreadable
+  page read as EMPTY, composing two green assertions into the exact lie the
+  `failed` state exists to remove. **F5 IS THIS ROUND'S LESSON: the fix's own
+  mutant came back ALIVE** — widening `categoryNames` to primary ∪ tags changed
+  nothing observable because both sets are the same 11 today; **a fix whose
+  protection cannot fail is the same defect with a comment on it**, closed only
+  by a synthetic TAG-ONLY row. F6/F7 correct the record. **The artwork item was
+  promoted from a reviewer's record-note to an OWED line — it is the one thing
+  here a USER CAN SEE** (Mountain Pose and Brisk Walking draw the placeholder;
+  56 of 58 resolve, measured through the real lookup). 494/494, M23–M27 all RED
+  and restored byte-exact. **The full 22-mutant sweep was NOT re-run by either
+  chat — round 2 owns it.** 🔴 line still does not tick; round 2 is the cap.
 - **:5034** — 2026-08-05 — **exercise library: browser SMOKE PASSED 9/9 on
   `b96c009` — and BOTH first-run failures were the SMOKE DOCUMENT's, not the
   card's.** **Read before writing the setup section of any smoke doc, and before

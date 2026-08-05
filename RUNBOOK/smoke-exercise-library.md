@@ -45,11 +45,17 @@ both of step 6's exercises are `beginner`. **The trap worth keeping:** the
 card on screen offers no reset control at all — "clear all filters" was an
 instruction with no button behind it.
 
-**Not a defect, and named here so a future run does not report it as one:** the
-post-workout summary's numbers are the stand-in rig's canned payload, identical
-for every workout (existing OWED line, precedent DECISIONS :4081). And a finished
-workout may only reach the calendar after a reload — the sync queue flushes at
-next app load, which is the standing lesson at DECISIONS :3819.
+**Not defects, and named here so a future run does not report them as such:**
+
+- **Mountain Pose and Brisk Walking have no photo and no GIFs** — they draw the
+  🏋️ placeholder. Measured through the real `getExerciseMedia` lookup: 56 of 58
+  resolve, and the two misses are exactly the two exercises this card un-hid.
+  No artwork exists for them; hiding them again is the `REMOVED_EXERCISES` hack
+  Part 4 §3.4:366-369 rules dead. Own OWED line (T3 round 1).
+- The post-workout summary's numbers are the stand-in rig's canned payload,
+  identical for every workout (existing OWED line, precedent DECISIONS :4081).
+- A finished workout may only reach the calendar after a reload — the sync queue
+  flushes at next app load, the standing lesson at DECISIONS :3819.
 
 ## Setup — THREE terminals, one command each
 

@@ -2,17 +2,18 @@ import { X, Dumbbell, Flame, Clock, Zap, AlertCircle, Play, ExternalLink } from 
 import { motion, AnimatePresence } from 'framer-motion';
 import GifCarousel from './GifCarousel';
 import { getExerciseMedia } from '../../utils/exerciseMedia';
-
-const DIFF_COLORS = {
-  beginner:     { bg: 'rgba(34,197,94,0.12)',  color: '#4ade80', border: 'rgba(34,197,94,0.2)'  },
-  intermediate: { bg: 'rgba(234,179,8,0.12)',  color: '#fbbf24', border: 'rgba(234,179,8,0.2)'  },
-  advanced:     { bg: 'rgba(239,68,68,0.12)',  color: '#f87171', border: 'rgba(239,68,68,0.2)'  },
-};
+// T3 round 1, F3 — the FIFTH site of the one-of-N shape, and the one on the
+// panel that opens on every card click. This file had its own copy of
+// DIFF_COLORS and its own `|| DIFF_COLORS.beginner`, so an ungraded exercise was
+// asserted to be BEGINNER in green. `OWED.md` was already ticked DONE for that
+// shape by the card that fixed the grid card — the instance, not the class.
+// One table now, shared with the grid: unknown is neutral, missing draws no pill.
+import { difficultyStyle } from '../../pages/exerciseLibraryView';
 
 export default function ExerciseDetail({ exercise, onClose, onAddToWorkout }) {
   if (!exercise) return null;
 
-  const diff  = DIFF_COLORS[exercise.difficulty] || DIFF_COLORS.beginner;
+  const diff  = difficultyStyle(exercise.difficulty);
   const media = getExerciseMedia(exercise.name);
   const photo = media ? media.photo : null;
   const gifs  = media ? media.gifs  : [];
@@ -148,12 +149,14 @@ export default function ExerciseDetail({ exercise, onClose, onAddToWorkout }) {
               {exercise.name}
             </h2>
             <div className="flex flex-wrap gap-2">
-              <span
-                className="text-xs font-semibold px-2.5 py-1 rounded-full capitalize"
-                style={{ background: diff.bg, color: diff.color, border: '1px solid ' + diff.border }}
-              >
-                {exercise.difficulty}
-              </span>
+              {diff && (
+                <span
+                  className="text-xs font-semibold px-2.5 py-1 rounded-full capitalize"
+                  style={{ background: diff.bg, color: diff.color, border: '1px solid ' + diff.border }}
+                >
+                  {exercise.difficulty}
+                </span>
+              )}
               {exercise.equipment && exercise.equipment.map((eq) => (
                 <span
                   key={eq}

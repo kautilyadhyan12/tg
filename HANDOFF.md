@@ -1,8 +1,38 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
-TASK: EXERCISE LIBRARY — BROWSER SMOKE PASSED 9/9. The fresh-chat T3 (round 1
-      of 2) is the ONLY gate left. Record: DECISIONS :5034.
+TASK: EXERCISE LIBRARY — SMOKE PASSED 9/9, T3 ROUND 1 DONE (7 findings, ZERO
+      visible, all fixed). **ROUND 2 IS THE CAP and is the only gate left.**
+      Records: DECISIONS :5104 (round 1), :5034 (smoke).
+
+ROUND 1, AND THE THING TO CARRY INTO ROUND 2
+  F1 had the teeth: the AI badge's engine-version half was protected by
+  NOTHING — deleting it left 45/45 green, because every badge test injects a
+  stub for the whole function. It moved to `poseAdapter.js` with an injected
+  resolver, because all three bundled definitions declare minEngineVersion
+  1.0.0 against ENGINE_VERSION 1.0.0: with the real map the gate's FALSE arm
+  is UNREACHABLE, so no test could tell a live gate from a deleted one.
+  **F5 IS THE LESSON OF THE ROUND AND ROUND 2 SHOULD ASSUME IT RECURS: the fix
+  I wrote for it was itself unprotected.** Widening `categoryNames` to
+  primary ∪ tags changed nothing observable (both sets are the same 11 today),
+  so its mutant came back ALIVE. A fix whose protection cannot fail is the
+  same defect with a comment on it. Closed only by a synthetic tag-only row.
+  F3 is "fix the class, not the case" for at least the fifth time, and the
+  SECOND false tick found on this card in two days.
+
+WHAT ROUND 2 OWNS THAT NOBODY HAS DONE
+  **The full 22-mutant sweep has NOT been re-run since the card landed**, by
+  me or by round 1's reviewer — who said so plainly. What IS verified is that
+  all 22 seds still bite their anchors (0 INVALID, the :4267 failure mode),
+  plus M23–M27 measured RED individually and restored byte-exact. Every "22
+  RED, 0 alive" figure still rests on the original run.
+
+STATE: web 494/494 (484 + 10) · `vite build` green · lint UNCHANGED from the
+  card's baseline, 1 error + 1 warning · 27 mutants declared, 5 of them new.
+
+NEXT: T3 round 2 — the prompt is `t3-exercise-library-r2-PROMPT.md`, the diff
+      `t3-exercise-library-r2.diff`. Zero VISIBLE ⇒ the card closes and the 🔴
+      OWED line ticks; a VISIBLE finding is fixed and the card closes ON it.
 
 SMOKE RESULT, and the part worth carrying forward
   All 9 steps pass on `b96c009`. Kd's REPORT, not my measurement (:4829).
