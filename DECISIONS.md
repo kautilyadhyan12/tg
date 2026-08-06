@@ -5255,21 +5255,23 @@ ticking an OWED line on the strength of a mutant that lives in another file.**
 - (**THE CARD CLOSES.** Zero user-visible findings across both rounds, Kd's
   browser smoke passed 9/9, and the 🔴 OWED line ticks on this commit.)
 
-## 2026-08-06 — the stopping rule: a CHAT-AUTHORED amendment, and the drift it exposed
+## 2026-08-06 — KD RULING: security and data-loss findings block regardless of visibility
 
-**Read with :2365. This entry is NOT a Kd ruling and must not be cited as one.**
+**Read with :2365, which this AMENDS. This is a Kd ruling and binds like one.**
 
-- (**PROVENANCE, first, because it decides how much weight this carries**)
-  Kd asked what happens if the final review round finds something critical. I
-  proposed a one-sentence amendment; he was offered authorship and **explicitly
-  declined it** — "it should be in the rules not as my decision, i think i don't
-  know". So this is a rule PROPOSED AND WRITTEN BY A CHAT, recorded because he
-  asked for it to exist, not because he judged it. **It therefore carries LESS
-  weight than a Kd ruling: a future chat MAY propose changing it on evidence,
-  which it may NOT do with :2365 or :2866 themselves.** Recording the difference
-  is the point — a chat-authored rule filed as case law is how a chat's opinion
-  becomes law it was never granted.
-- (**THE AMENDMENT**) **Security and data-loss findings block a 🔴 tick
+- (**PROVENANCE, recorded exactly because the authorship moved**) Kd asked what
+  happens if the final review round finds something critical. I proposed the
+  one-sentence amendment below and offered him authorship; he first declined it
+  ("it should be in the rules not as my decision, i think i don't know") and it
+  was recorded as chat-authored. **He then reversed that, deliberately and for a
+  stated reason: "if other chats give more importance to my rule then write as my
+  rule."** He was told plainly what adopting it costs and buys — a Kd ruling
+  OVERRIDES a chat's fresh judgment and may not be re-litigated on a chat's
+  opinion, where a chat-authored rule may. He adopted it knowing that. **So the
+  WORDING is a chat's draft and the RULING is Kd's**, which is the ordinary shape
+  of every ruling in this file; what is unusual is only that both states are on
+  the record. It binds from here.
+- (**THE RULING**) **Security and data-loss findings block a 🔴 tick
   regardless of visibility.** :2365's test asks whether a user could see the
   defect on screen. A leak of one person's data to another, or a write that is
   silently dropped, is invisible to its victim BY CONSTRUCTION — so visibility is

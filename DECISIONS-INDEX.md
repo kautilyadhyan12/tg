@@ -49,12 +49,14 @@ mid-file: re-derive them with
   any OTHER card … never a general licence to stop reviewing", and it has
   nevertheless been applied as STANDING since the date-window card (:4861,
   :5110, :5205). Kd made the two-round CAP standing at :2866; he never made this
-  standing. **Open for Kd — see §2.**
-- **:5258** — 2026-08-06 — **the stopping rule amended, BY A CHAT, and the drift
-  that amendment exposed. NOT a Kd ruling — do not cite it as one.** Kd was
-  offered authorship and declined it ("it should be in the rules not as my
-  decision, i think i don't know"), so it carries LESS weight than :2365 or
-  :2866 and a future chat MAY propose changing it on evidence. **The amendment:
+  standing. **Open for Kd — see §2.** Its security/data-loss exception is a KD
+  RULING at :5258 and binds.
+- **:5258** — 2026-08-06 — **KD RULING amending the stopping rule, and the drift
+  it exposed. This BINDS.** Kd first declined authorship, then reversed it
+  deliberately — "if other chats give more importance to my rule then write as my
+  rule" — having been told that a Kd ruling overrides a chat's fresh judgment and
+  may not be re-litigated on a chat's opinion. The wording is a chat's draft; the
+  RULING is his. **The ruling:
   security and data-loss findings block a 🔴 tick REGARDLESS of visibility** — a
   cross-account leak or a silently dropped write is invisible to its victim by
   construction, so visibility is the wrong test for those two classes; the cap
@@ -112,6 +114,9 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   treating a per-card ruling as general is what caused the drift. Until then,
   cards keep citing :2365 AND keep recording that they do so without a per-card
   ruling, so the gap stays visible instead of hardening into practice.
+  **What is NOT open: the security/data-loss exception at :5258 is a Kd ruling
+  and binds wherever the stopping rule is applied at all.** Only the SCOPE of
+  :2365 itself is unsettled.
 
 ## 3 · PHASE 2 — migration and backend (P2.x)
 

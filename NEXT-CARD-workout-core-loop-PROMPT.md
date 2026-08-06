@@ -10,9 +10,10 @@ which makes the cap standing). Two T3 rounds, then the card closes either way.
 are tagged VISIBLE / NOT VISIBLE and only VISIBLE ones block the tick (:2365) —
 **except that security and data-loss findings block REGARDLESS of visibility**,
 because a cross-account leak or a silently dropped write is invisible to its
-victim by construction. That exception is chat-authored, not a Kd ruling, and
-**this card is why it was written**: it is the first since the rule existed to
-touch other people's data. Also record, as every card now must, that :2365 is
+victim by construction. **That exception is a KD RULING (:5258) and binds — it
+is not a chat's suggestion you may weigh.** **This card is why it was written**:
+it is the first since the rule existed to touch other people's data. Also
+record, as every card now must, that :2365 is
 being cited WITHOUT a per-card ruling — that question is open for Kd at :5258 §2
 and a chat must not settle it.
 
