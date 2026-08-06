@@ -20,6 +20,13 @@ precedent, DECISIONS 2026-07-19).
 the same commit that records the deferral in DECISIONS. A deferral recorded in
 prose only is the exact failure this file was built to stop.
 
+**THIS FILE IS UNCHANGED by the 2026-08-06 review/fix ruling (DECISIONS :5348) —
+Kd said so in as many words: "owed will be there as usual, no change."** Every
+deferral still gets its line here, in the same commit that defers it. `BACKLOG.md`
+is a LOG of Low review findings and the commits that fixed them, not a second
+deferral list — a Low finding that genuinely cannot be fixed in its round has
+become a deferral and belongs HERE like anything else.
+
 Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ improvement
 · ⏰ has a real-world deadline
 

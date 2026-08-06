@@ -4973,6 +4973,7 @@ of anything, and before badging a feature the engine cannot actually do.**
   (Kd-signed, 2026-08-01), proven TOTAL in both directions first: 58 seed names,
   58 catalog names, zero unmatched either way. One table means the API seed and
   the web cannot disagree about what an exercise is called.
+
 - (**THE AI BADGE — a capability, never stored copy. Kd ruled.**) The Mongo seed
   marks **EIGHT** exercises `ai_supported: true`; the engine ships **THREE**
   definitions (squat, jump_squat, chair_squat — verified in the live DB). Porting
@@ -5343,3 +5344,93 @@ supersedes on scope only.**
   "what if round 2 finds a critical error" — an operator question about the
   PROCESS, not the code. **A rule nobody re-reads becomes whatever chats have
   been doing with it.**
+
+## 2026-08-06 — KD RULING: THE REVIEW/FIX PROCESS IS FIXED. Rounds end on an OUTCOME, not a count.
+
+**This is Kd's ruling, written out by a chat. It is STANDING — it binds every
+feature and every packet from this entry forward, not one card.** Its purpose in
+his own words: reviews must **converge instead of looping**. Recorded the day it
+was given, BEFORE the workout-core-loop card runs, so it cannot be read as a
+rationalisation of that card's findings (:2385's sentence, applied again).
+
+- (**THE SIX RULES, as given**)
+  1. **SEVERITY GATE.** A finding is either **Critical/High** — security, data
+     loss, privacy, money, or a broken core flow — or **Low** — spelling,
+     comments, naming, style. **A packet ships when a review round finds ZERO
+     Critical/High.** Low findings are listed in `BACKLOG.md` and **never trigger
+     another round** — see the correction below for what happens to them.
+  2. **DIFF-ONLY RE-REVIEWS.** After a fix round, the next review covers **only
+     the fixes and the surfaces they touch** — never a fresh full pass.
+  3. **REGRESSION TESTS.** Every Critical/High fix ships with a test that **fails
+     without the fix**. A fix without its test is not done.
+  4. **TEST AUDIT.** For each existing test, deliberately break the thing it
+     claims to check and confirm it goes RED. **Tests that stay green are liars**
+     — list them for Kd, then fix or delete them.
+  5. **PERMANENT GUARDS.** A recurring bug CLASS gets an automated check in the
+     suite (ownership enforced on every table, cross-user access denied, cleanup
+     jobs proven by advancing the clock) so a class found once cannot silently
+     return.
+  6. **MINIMAL DIFFS.** A fix round contains only the fix. No refactoring, no
+     improvements, no "while I'm here."
+- (**THE ESCAPE HATCH**) If **two consecutive rounds find Criticals in the same
+  subsystem, STOP PATCHING and flag it to Kd.** That subsystem gets a REDESIGN,
+  not more patches. This is the thing that stops rule 1 from becoming an open
+  cycle, and it is a Kd decision point — a chat may not redesign on its own.
+- (**THE APPROVAL GATE, extended**) "Do not change any code without listing
+  findings and getting my approval first." The plan gate (Part I §2) already said
+  this for a card; it now binds **every fix round** too. Findings are LISTED, Kd
+  approves, then code changes.
+
+- (**KD'S CORRECTION, made the same day, and it is the load-bearing half of rule
+  1**) A first draft of this entry read rule 1 as "Low findings go to BACKLOG and
+  are not fixed", and recorded that as a deliberate relaxation of :5307. **Kd
+  corrected it immediately: "no they will be fixed — and owed will be there as
+  usual, no change."** So: **EVERY finding is still FIXED before the packet
+  closes, whatever its severity.** :5307's sentence is NOT reversed and NOT
+  weakened; it stands word for word. What rule 1 governs is **whether a finding
+  buys ANOTHER REVIEW ROUND** — a Low one never does. That is the entire
+  difference, and it is a change to the review SCHEDULE, not to the quality bar.
+  Recorded verbatim because the drafting error and its correction are the same
+  shape as :5307's own lesson: a rule restated by a chat is a rule that can drift
+  in the restatement.
+
+### What this SUPERSEDES, precisely
+
+- (**THE TWO-ROUND CAP (:2866) IS SUPERSEDED AS THE STOPPING CONDITION.**) The cap
+  ended a card on a COUNT decided before the findings existed. Rule 1 ends it on
+  an OUTCOME: zero Critical/High. A card may now run one round or four. What
+  bounds it is the escape hatch, not a number. **:2866's other halves stand
+  untouched** — the code/deploy split of P2.8, the card order, and its insistence
+  that plan-gate → PROVE on pasted output → fresh-chat T3 → Kd's browser smoke
+  survives intact.
+- (**THE STOPPING RULE (:5307/:2365) CHANGES AXIS ONLY.**) Its test was VISIBLE /
+  NOT-VISIBLE; the test is now Critical/High vs Low. One severity vocabulary, not
+  two — tagging findings VISIBLE/NOT-VISIBLE is retired. :5258's security and
+  data-loss carve-out is now the CORE of the gate rather than an exception to it,
+  which is a strengthening. **Nothing in :5307 is reversed**: everything found is
+  still fixed before the packet closes (see Kd's correction above); what the gate
+  decides is TICKING and further ROUNDS, exactly as it always did.
+- (**`OWED.md` IS UNCHANGED — Kd said so in as many words.**) Every deferral still
+  gets its `OWED.md` line in the same commit that defers it, blocking and
+  non-blocking, code and rulings. **`BACKLOG.md` is not a second deferral list and
+  must never become one**: it is the LOG of Low findings — what was found, in
+  which round, and the commit that fixed it — and it exists so that a Low finding
+  is visibly accounted for without buying a review round. A Low finding that
+  genuinely cannot be fixed in its round has stopped being a log entry and become
+  a DEFERRAL, so it takes an `OWED.md` line like anything else. A Critical/High
+  finding never appears in either file: it is fixed, or it holds the packet.
+
+### What is NOT new, so no chat reads this as fresh work
+
+- Rule 6 is **R1.1**, already binding, now stated for fix rounds specifically.
+- Rule 3 is **R9.5** ("a bug fix starts with a failing test"), already binding.
+- Rule 4 is the mutation discipline this project has run ad hoc since :2546 and
+  that has caught FIVE unearned harness passes (:2614 F3, :2736 F1, the `cp`
+  failure, :4855's zero-mutant run, :5199 F1). It was never a standing
+  requirement; **now it is**, and the honest reading of that history is that
+  every one of those five was found by doing rule 4 rather than by reviewing.
+- Rule 5 is what :1239's "fix the class, not the case" was always asking for and
+  never got an instrument for. It now has one.
+- **This is the second time in three days a process rule has been made standing
+  after being applied ad hoc** (:5307 was the first). Same lesson, stated there:
+  a rule nobody re-reads becomes whatever chats have been doing with it.

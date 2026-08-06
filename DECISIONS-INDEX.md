@@ -42,17 +42,40 @@ mid-file: re-derive them with
 - **:1110** — 2026-07-26 — the hardcoded 100-XP-per-level curve must NEVER be
   copied into a client. The server sends `xpInLevel`/`xpForNext`/`progressPct`;
   clients render, never compute. (`xp.level + 1` survives as a label only.)
+- **:5348** — 2026-08-06 — **KD RULING: THE FIXED REVIEW/FIX PROCESS. Read this
+  BEFORE running or closing any review round — it changes when a packet ships.**
+  Six standing rules: a **SEVERITY GATE** (Critical/High = security, data loss,
+  privacy, money, broken core flows; everything else is Low) where a packet ships
+  on **ZERO Critical/High in a round** and a Low finding **never buys another
+  round** · **diff-only re-reviews** · a **regression test with every
+  Critical/High fix** · a **test audit** (break what each test claims to check;
+  tests that stay green are liars) · **permanent guards** for recurring bug
+  classes · **minimal fix diffs**. **Escape hatch: two consecutive rounds with
+  Criticals in the same subsystem ⇒ stop patching, flag to Kd, that subsystem gets
+  a REDESIGN.** Findings are listed and approved BEFORE any code changes, fix
+  rounds included. **Supersedes the two-round cap (:2866) as the stopping
+  condition** — rounds now end on an outcome, not a count — and **supersedes the
+  VISIBLE/NOT-VISIBLE axis of :5307/:2365**, replacing it with Critical/High vs
+  Low. **NOTHING IS RELAXED: every finding is still FIXED before the packet
+  closes, whatever its severity** — Kd corrected a draft of the entry that said
+  otherwise, and the correction is recorded inside it. **`OWED.md` is UNCHANGED**
+  and stays the authority for every deferral; `BACKLOG.md` is a LOG of Low
+  findings and their fixes, never a second deferral list.
 - **:2365** — 2026-07-29 — **THE STOPPING RULE** (per-card, XP display): a
   finding blocks a 🔴 tick only if a user could see it on screen. Everything
   else is fixed but holds nothing. Precedent: PostWorkout, :1678.
-  **⚠️ SUPERSEDED ON SCOPE by :5307 — read that first.** Its closing paragraph
+  **⚠️ SUPERSEDED ON SCOPE by :5307 and ON AXIS by :5348 — read both first.** Its closing paragraph
   ("does NOT apply to any OTHER card … never a general licence to stop
   reviewing") no longer holds: **Kd ruled the stopping rule STANDING on
   2026-08-06.** Everything else in :2365 stands, including the VISIBLE /
   NOT-VISIBLE tagging requirement. Its security/data-loss exception is a KD
   RULING at :5258 and binds.
 - **:5307** — 2026-08-06 — **KD RULING: THE STOPPING RULE IS STANDING, not
-  per-card.** Settles the question :5258 opened. Applies to EVERY card
+  per-card.** **⚠️ SUPERSEDED ON AXIS THE SAME DAY by :5348 — read that first.**
+  Its VISIBLE/NOT-VISIBLE test is replaced by Critical/High vs Low. **Its
+  "everything found is still FIXED" half STANDS, word for word** — Kd said so
+  explicitly when correcting a draft that had it reversed. Settles the question
+  :5258 opened. Applies to EVERY card
   automatically; a finding blocks completion only if a user could see it, EXCEPT
   security and data-loss findings (:5258), which block regardless.
   **EVERYTHING FOUND IS STILL FIXED before the card closes, whatever its
@@ -110,8 +133,10 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   drill, the DPDP worker actually running — deferred to the deployment moment).
   Carries the agreed card ORDER for the rest of the repoint, and a **standing
   two-round review cap set BEFORE each card runs** rather than after a bad
-  fact-pattern. **The DPDP Day-14 worker must be live before the first real
-  SIGNUP, not merely before the first deploy.**
+  fact-pattern — **the CAP is SUPERSEDED by :5348 (2026-08-06): a packet now ships
+  on ZERO Critical/High findings in a round, not on a round count. Everything else
+  in this entry stands.** **The DPDP Day-14 worker must be live before the first
+  real SIGNUP, not merely before the first deploy.**
 - **:2825** — 2026-07-31 — two false claims about CI and the branch strategy,
   corrected. **`web-repoint` is a Kd-RULED long-lived branch (:280) that merges at
   the P2.8 cutover — it is not an oversight, do not propose merging it early.** PR

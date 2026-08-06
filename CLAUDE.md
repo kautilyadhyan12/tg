@@ -214,6 +214,58 @@ COMMIT→ small commit, message references the task card ID and spec §.
 ```
 Nothing merges without PROVE and REVIEW — and no user-facing card is "done" without its SMOKE. This loop is where "no bugs" actually comes from — the spec's golden traces, test matrices, and CI gates only protect you if unverified code never lands.
 
+## 2.5 THE FIXED REVIEW/FIX PROCESS (Kd ruling 2026-08-06 — DECISIONS :5348; STANDING, binds every feature and packet)
+
+**Reviews must CONVERGE, not loop. A round no longer ends on a count — it ends on
+an outcome.** Full ruling and its supersessions at `DECISIONS.md:5348`; read that
+before running or closing any review round.
+
+1. **SEVERITY GATE.** Every finding is **Critical/High** (security, data loss,
+   privacy, money, a broken core flow) or **Low** (spelling, comments, naming,
+   style). **A packet SHIPS when a review round finds ZERO Critical/High.** A Low
+   finding is logged in `BACKLOG.md` and **never buys another review round**.
+   **IT IS STILL FIXED.** Kd ruled this explicitly: "no, they will be fixed."
+   What rule 1 changes is the SCHEDULE — which findings justify another round —
+   never the quality bar. Nothing found is left unfixed because it was Low.
+2. **DIFF-ONLY RE-REVIEWS.** After a fix round, the next review covers **only the
+   fixes and the surfaces they touch** — never a fresh full pass.
+3. **REGRESSION TESTS.** Every Critical/High fix ships with a test that **fails
+   without the fix**. A fix without its test is not done. (Restates R9.5.)
+4. **TEST AUDIT.** For each existing test, deliberately break the thing it claims
+   to check and confirm it goes RED. **Tests that stay green are liars** — list
+   them for Kd, then fix or delete them. (This is what caught all five recorded
+   unearned harness passes; it is now mandatory, not ad hoc.)
+5. **PERMANENT GUARDS.** A recurring bug CLASS gets an automated check in the
+   suite — ownership enforced on every table, cross-user access denied, cleanup
+   jobs proven by advancing the clock — so a class found once cannot silently
+   return. (The instrument "fix the class, not the case" never had.)
+6. **MINIMAL DIFFS.** A fix round contains **only the fix**. No refactoring, no
+   improvements, no "while I'm here." (Restates R1.1 for fix rounds.)
+
+**ESCAPE HATCH — two consecutive rounds finding Criticals in the SAME subsystem
+⇒ STOP PATCHING and flag it to Kd. That subsystem gets a REDESIGN, not more
+patches.** This is what keeps rule 1 from becoming an open cycle. A chat may not
+declare or perform the redesign on its own — it is Kd's call.
+
+**NO CODE CHANGES WITHOUT LISTED FINDINGS AND KD'S APPROVAL.** The plan gate above
+already said this for a card; it now binds **every fix round** too.
+
+**What this supersedes:** the two-round cap (:2866) as the STOPPING CONDITION, and
+the stopping rule's VISIBLE / NOT-VISIBLE axis (:5307, :2365) — one severity
+vocabulary now, Critical/High vs Low. **Nothing is relaxed.** :5307's "everything
+found is still FIXED before the card closes, whatever its severity" **stands word
+for word**; a draft of the ruling entry had it reversed and Kd corrected it the
+same day. Everything else in :2866 and :5307 stands too.
+
+**`OWED.md` IS UNCHANGED — Kd said so in as many words.** Every deferral still
+gets its `OWED.md` line in the same commit that defers it, exactly as before.
+**`BACKLOG.md` is a LOG, not a second deferral list**: what Low findings were
+found, in which round, and the commit that fixed them — so a Low finding is
+visibly accounted for without buying a round. A Low finding that genuinely cannot
+be fixed in its round has become a DEFERRAL and takes an `OWED.md` line like
+anything else. A Critical/High finding appears in neither file: it is fixed, or it
+holds the packet.
+
 ## 3. What goes into a session's context
 Every task chat gets: this playbook (via Project knowledge or upload) · the task card pasted in the prompt · **only** the spec files that card's Attach line lists · the **current contents of every source file being modified** (uploaded or pasted — the model cannot see your disk, and editing a file from memory of a previous chat is forbidden). Never attach all 182 pages, the raw PDF, or the old code zip — precision of attention beats volume of context; the spec was split into nine files for exactly this reason.
 
@@ -536,6 +588,17 @@ You are reviewing, not fixing. Audit this diff strictly against CLAUDE.md Part I
 and spec §<x>. Output only: (1) violations as rule# · file:line · one-line fix;
 (2) a security pass — authn/authz/tenancy, input parsing, idempotency, secrets/log leaks,
 SQL safety; (3) anything that would fail the phase's Done gate. No praise, no restating the diff.
+
+TAG EVERY FINDING **Critical/High** or **Low** (CLAUDE.md Part I §2.5, DECISIONS :5348).
+Critical/High = security, data loss, privacy, money, a broken core flow. Low = spelling,
+comments, naming, style. Justify a Critical/High tag by naming the concrete failure.
+Zero Critical/High ⇒ the packet SHIPS. A Low finding buys no further round — but it is
+STILL FIXED and logged in BACKLOG.md; report it at full severity, never soften it to duck a round.
+If this is a RE-REVIEW, cover ONLY the fixes and the surfaces they touch — no fresh full pass.
+Also report: any existing test that stays GREEN when the thing it claims to check is broken
+(rule 4 — list them, do not fix them), and whether each Critical/High fix carries a test that
+fails without it (rule 3). If Criticals appear in the SAME subsystem two rounds running, say so
+and STOP — that is Kd's redesign trigger, not a cue for another patch.
 ```
 
 **T4 · Parity port (engine, P1.8)**
