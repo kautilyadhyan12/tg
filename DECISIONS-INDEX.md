@@ -45,6 +45,26 @@ mid-file: re-derive them with
 - **:2365** — 2026-07-29 — **THE STOPPING RULE** (per-card, XP display): a
   finding blocks a 🔴 tick only if a user could see it on screen. Everything
   else is fixed but holds nothing. Precedent: PostWorkout, :1678.
+  **⚠️ READ :5258 WITH IT.** Its own closing paragraph says it "does NOT apply to
+  any OTHER card … never a general licence to stop reviewing", and it has
+  nevertheless been applied as STANDING since the date-window card (:4861,
+  :5110, :5205). Kd made the two-round CAP standing at :2866; he never made this
+  standing. **Open for Kd — see §2.**
+- **:5258** — 2026-08-06 — **the stopping rule amended, BY A CHAT, and the drift
+  that amendment exposed. NOT a Kd ruling — do not cite it as one.** Kd was
+  offered authorship and declined it ("it should be in the rules not as my
+  decision, i think i don't know"), so it carries LESS weight than :2365 or
+  :2866 and a future chat MAY propose changing it on evidence. **The amendment:
+  security and data-loss findings block a 🔴 tick REGARDLESS of visibility** — a
+  cross-account leak or a silently dropped write is invisible to its victim by
+  construction, so visibility is the wrong test for those two classes; the cap
+  does not close a card over one. Written BEFORE the workout-loop card because
+  that is the first card since the rule existed to touch other people's data.
+  **The drift is the larger finding and is NOT settled**: the per-card rule has
+  been used as standing for four cards, written into both exercise-library
+  review prompts by the chat that then closed the card. **Cost so far, measured:
+  nothing** — every finding was fixed or given an OWED line; the rule only ever
+  decided TICKING. Record-integrity failure, not a quality hole.
 - **:2692** — 2026-07-30 — **THE CAP** (per-card, PostWorkout summary reader):
   round 3 is the last review round, ruled BEFORE it ran. Zero VISIBLE ⇒ the card
   closes and ticks; a VISIBLE finding is fixed and the card closes ON that fix.
@@ -85,6 +105,13 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 - **:78** — Pending SPEC GAPs raised and not yet ruled on. **Read this section
   every session**; it is the only forward-looking part of the file.
 - **:592** — 2026-07-21 — OPEN QUESTION: privacy-law scope is wider than DPDP.
+- **:5258** — 2026-08-06 — **OPEN: is the STOPPING RULE standing or per-card?**
+  :2365 says per-card in its own words and has been applied as standing for four
+  cards. Either Kd rules it standing, or each card sets its own before its first
+  review round the way the cap is set. **A CHAT MUST NOT CHOOSE** — a chat
+  treating a per-card ruling as general is what caused the drift. Until then,
+  cards keep citing :2365 AND keep recording that they do so without a per-card
+  ruling, so the gap stays visible instead of hardening into practice.
 
 ## 3 · PHASE 2 — migration and backend (P2.x)
 

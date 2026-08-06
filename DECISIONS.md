@@ -5254,3 +5254,50 @@ ticking an OWED line on the strength of a mutant that lives in another file.**
   (this card's own load effect, per :5104's F7 correction).
 - (**THE CARD CLOSES.** Zero user-visible findings across both rounds, Kd's
   browser smoke passed 9/9, and the 🔴 OWED line ticks on this commit.)
+
+## 2026-08-06 — the stopping rule: a CHAT-AUTHORED amendment, and the drift it exposed
+
+**Read with :2365. This entry is NOT a Kd ruling and must not be cited as one.**
+
+- (**PROVENANCE, first, because it decides how much weight this carries**)
+  Kd asked what happens if the final review round finds something critical. I
+  proposed a one-sentence amendment; he was offered authorship and **explicitly
+  declined it** — "it should be in the rules not as my decision, i think i don't
+  know". So this is a rule PROPOSED AND WRITTEN BY A CHAT, recorded because he
+  asked for it to exist, not because he judged it. **It therefore carries LESS
+  weight than a Kd ruling: a future chat MAY propose changing it on evidence,
+  which it may NOT do with :2365 or :2866 themselves.** Recording the difference
+  is the point — a chat-authored rule filed as case law is how a chat's opinion
+  becomes law it was never granted.
+- (**THE AMENDMENT**) **Security and data-loss findings block a 🔴 tick
+  regardless of visibility.** :2365's test asks whether a user could see the
+  defect on screen. A leak of one person's data to another, or a write that is
+  silently dropped, is invisible to its victim BY CONSTRUCTION — so visibility is
+  the wrong question for those two classes. They are fixed before the card
+  closes, whatever round they surface in, and the two-round cap (:2866) does not
+  close a card over one. Written now, before the workout-loop card, because that
+  card is the first since this rule existed to touch OTHER PEOPLE'S DATA
+  (tenancy on stats, summaries and templates) — a stopping rule amended after
+  seeing the findings is a rationalisation of them (:2365's own words).
+- (**AND THE DRIFT, which is the larger finding and is NOT mine to rule on**)
+  :2365's closing paragraph says, verbatim, that it "does NOT apply to any OTHER
+  card — the PostWorkout precedent and this one are both per-card rulings made on
+  measured evidence about that card, **never a general licence to stop
+  reviewing**." **It has nevertheless been applied as a STANDING rule since at
+  least the date-window card:** invoked at :4861, :5110 and :5205, and written
+  into both exercise-library review prompts BY ME. No per-card ruling was sought
+  for any of them. What Kd made standing at :2866 was the two-round CAP; the
+  visibility rule was never included.
+- (**WHAT THE DRIFT HAS COST, measured rather than assumed: nothing yet.**) On
+  every card since, the rule decided only whether a card could TICK — every
+  finding was fixed in the closing commit or given an `OWED.md` line. No finding
+  has ever been left unfixed *because* it was not visible. So this is a
+  record-integrity failure, not a quality hole — but it is precisely the drift
+  :2365 wrote that sentence to prevent, and it went unnoticed for four cards.
+- (**OPEN FOR KD, and listed in the index's §2 rather than settled here**)
+  Either :2365 becomes standing by an explicit ruling, or each card sets its own
+  stopping rule before its first review round the way the cap is set. **A chat
+  must not choose between those** — the whole reason the drift happened is a
+  chat treating a per-card ruling as general. Until Kd rules, cards keep citing
+  :2365 and keep saying in their own entry that they are doing so without a
+  per-card ruling, so the gap stays visible instead of hardening.
