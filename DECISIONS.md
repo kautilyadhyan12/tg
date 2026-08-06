@@ -5303,3 +5303,43 @@ ticking an OWED line on the strength of a mutant that lives in another file.**
   chat treating a per-card ruling as general. Until Kd rules, cards keep citing
   :2365 and keep saying in their own entry that they are doing so without a
   per-card ruling, so the gap stays visible instead of hardening.
+
+## 2026-08-06 — KD RULING: the stopping rule is STANDING, not per-card
+
+**This settles the open question raised at :5258. Read with :2365, which it
+supersedes on scope only.**
+
+- (**THE RULING**) **The stopping rule applies to EVERY card automatically.** A
+  finding blocks a card's completion only if a user could see it on screen —
+  **except security and data-loss findings, which block regardless of visibility
+  (:5258, Kd).** **Everything found is still FIXED before the card closes,
+  whatever its severity and whatever round it surfaced in**; the rule governs
+  TICKING, never fixing, and that is unchanged from :2365's own text.
+- (**WHAT IT SUPERSEDES, precisely**) :2365's closing paragraph — "it does NOT
+  apply to any OTHER card … never a general licence to stop reviewing" — is
+  superseded ON SCOPE ONLY. Everything else in :2365 stands, including its
+  requirement that every finding be tagged VISIBLE or NOT-VISIBLE and that a
+  VISIBLE tag be justified by naming the state a user reaches it in.
+- (**WHY, and the case AGAINST is recorded too because it is real**) FOR: it is
+  already what happened on four cards (:4861, :5110, :5205 and this card's two
+  rounds), so leaving it unruled meant every card writing an apology into its own
+  entry instead of following a rule; the hole that actually mattered was closed
+  by :5258; and it removes a per-card decision Kd would have to make BEFORE the
+  findings exist, which is a decision he has no basis to judge (CLAUDE.md K4).
+  AGAINST, stated plainly: :2365 was per-card BECAUSE it answered one card's
+  measured fact-pattern — eleven rounds of diminishing returns — and generalising
+  it hands that leniency to cards that have not earned it. **Kd was shown that
+  argument before ruling.** The exposure is bounded by the sentence above: a
+  non-visible finding is still fixed, so what generalising costs is the right to
+  hold a card OPEN over one, not the fix itself.
+- (**WHAT DOES THE REAL WORK NOW**) The two-round cap (:2866, standing) is what
+  limits review effort; with it in force the stopping rule mostly decides when a
+  card may TICK. Recorded so a later chat does not read this as a loosening of
+  the quality bar — the plan-gate → PROVE on pasted output → fresh-chat T3 →
+  Kd's browser smoke loop is untouched, as is :2866's own insistence on it.
+- (**THE DRIFT IS NOW CLOSED, and how it was caught is the lesson**) Four cards
+  applied a per-card ruling as standing, and the chat that noticed had itself
+  written the rule into two review prompts. It surfaced only because Kd asked
+  "what if round 2 finds a critical error" — an operator question about the
+  PROCESS, not the code. **A rule nobody re-reads becomes whatever chats have
+  been doing with it.**

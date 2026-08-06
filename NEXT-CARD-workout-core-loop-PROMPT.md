@@ -6,16 +6,15 @@ want a PLAN, not code.**
 **The two-round review cap is SET NOW, before the card runs** (DECISIONS :2866,
 which makes the cap standing). Two T3 rounds, then the card closes either way.
 
-**The STOPPING RULE for this card, and read :5258 before applying it.** Findings
-are tagged VISIBLE / NOT VISIBLE and only VISIBLE ones block the tick (:2365) —
-**except that security and data-loss findings block REGARDLESS of visibility**,
-because a cross-account leak or a silently dropped write is invisible to its
-victim by construction. **That exception is a KD RULING (:5258) and binds — it
-is not a chat's suggestion you may weigh.** **This card is why it was written**:
-it is the first since the rule existed to touch other people's data. Also
-record, as every card now must, that :2365 is
-being cited WITHOUT a per-card ruling — that question is open for Kd at :5258 §2
-and a chat must not settle it.
+**The STOPPING RULE is STANDING** (Kd, :5307 — it no longer needs setting per
+card). Findings are tagged VISIBLE / NOT VISIBLE and only VISIBLE ones block the
+tick (:2365) — **except security and data-loss findings, which block REGARDLESS
+of visibility** (Kd, :5258), because a cross-account leak or a silently dropped
+write is invisible to its victim by construction. **This card is why that
+exception exists**: it is the first since the rule was written to touch other
+people's data, so treat tenancy findings as blocking on sight.
+**Everything found is still FIXED before the card closes, whatever its
+severity** — the rule governs ticking, never fixing.
 
 ## Ground yourself first (CLAUDE.md Part I.6 — binding on your first reply)
 

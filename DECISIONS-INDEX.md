@@ -45,12 +45,29 @@ mid-file: re-derive them with
 - **:2365** — 2026-07-29 — **THE STOPPING RULE** (per-card, XP display): a
   finding blocks a 🔴 tick only if a user could see it on screen. Everything
   else is fixed but holds nothing. Precedent: PostWorkout, :1678.
-  **⚠️ READ :5258 WITH IT.** Its own closing paragraph says it "does NOT apply to
-  any OTHER card … never a general licence to stop reviewing", and it has
-  nevertheless been applied as STANDING since the date-window card (:4861,
-  :5110, :5205). Kd made the two-round CAP standing at :2866; he never made this
-  standing. **Open for Kd — see §2.** Its security/data-loss exception is a KD
+  **⚠️ SUPERSEDED ON SCOPE by :5307 — read that first.** Its closing paragraph
+  ("does NOT apply to any OTHER card … never a general licence to stop
+  reviewing") no longer holds: **Kd ruled the stopping rule STANDING on
+  2026-08-06.** Everything else in :2365 stands, including the VISIBLE /
+  NOT-VISIBLE tagging requirement. Its security/data-loss exception is a KD
   RULING at :5258 and binds.
+- **:5307** — 2026-08-06 — **KD RULING: THE STOPPING RULE IS STANDING, not
+  per-card.** Settles the question :5258 opened. Applies to EVERY card
+  automatically; a finding blocks completion only if a user could see it, EXCEPT
+  security and data-loss findings (:5258), which block regardless.
+  **EVERYTHING FOUND IS STILL FIXED before the card closes, whatever its
+  severity — the rule governs TICKING, never fixing.** Supersedes :2365 ON SCOPE
+  ONLY. The case AGAINST is recorded in the entry and Kd was shown it before
+  ruling: :2365 was per-card because it answered ONE card's measured
+  fact-pattern (eleven rounds of diminishing returns), and generalising hands
+  that leniency to cards that have not earned it — bounded by the fact that a
+  non-visible finding is still fixed, so what generalising costs is the right to
+  hold a card OPEN over one. **What limits review effort is the two-round cap
+  (:2866), not this.** **The lesson: four cards applied a per-card ruling as
+  standing, and the chat that noticed had written it into two review prompts
+  itself — it surfaced only because Kd asked an operator question about the
+  PROCESS. A rule nobody re-reads becomes whatever chats have been doing
+  with it.**
 - **:5258** — 2026-08-06 — **KD RULING amending the stopping rule, and the drift
   it exposed. This BINDS.** Kd first declined authorship, then reversed it
   deliberately — "if other chats give more importance to my rule then write as my
@@ -107,16 +124,10 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 - **:78** — Pending SPEC GAPs raised and not yet ruled on. **Read this section
   every session**; it is the only forward-looking part of the file.
 - **:592** — 2026-07-21 — OPEN QUESTION: privacy-law scope is wider than DPDP.
-- **:5258** — 2026-08-06 — **OPEN: is the STOPPING RULE standing or per-card?**
-  :2365 says per-card in its own words and has been applied as standing for four
-  cards. Either Kd rules it standing, or each card sets its own before its first
-  review round the way the cap is set. **A CHAT MUST NOT CHOOSE** — a chat
-  treating a per-card ruling as general is what caused the drift. Until then,
-  cards keep citing :2365 AND keep recording that they do so without a per-card
-  ruling, so the gap stays visible instead of hardening into practice.
-  **What is NOT open: the security/data-loss exception at :5258 is a Kd ruling
-  and binds wherever the stopping rule is applied at all.** Only the SCOPE of
-  :2365 itself is unsettled.
+- ~~**:5258** — OPEN: is the STOPPING RULE standing or per-card?~~ **CLOSED
+  2026-08-06 by Kd's ruling at :5307 — STANDING.** Left struck rather than
+  deleted: it was open for less than a day, and the useful part is that it
+  existed at all. Cards no longer record an apology for citing :2365.
 
 ## 3 · PHASE 2 — migration and backend (P2.x)
 
