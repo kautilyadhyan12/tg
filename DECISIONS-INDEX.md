@@ -42,6 +42,20 @@ mid-file: re-derive them with
 - **:1110** — 2026-07-26 — the hardcoded 100-XP-per-level curve must NEVER be
   copied into a client. The server sends `xpInLevel`/`xpForNext`/`progressPct`;
   clients render, never compute. (`xp.level + 1` survives as a label only.)
+- **:5807** — 2026-08-07 — **KD AMENDMENT to the severity gate: WHAT A USER CAN
+  SEE AND IS FALSE IS CRITICAL/HIGH.** ADDS to :5348's rule 1, replaces nothing
+  ("add it but don't delete previous rules"). A finding is Critical/High if a user
+  could see something **FALSE** — a wrong number, a wrong state, a promise that is
+  not true — **or** is blocked from finishing something. **Cosmetic-but-TRUE stays
+  Low** (spelling, wording, naming, layout). **The test is not "is it on screen",
+  it is "is it on screen AND wrong".** Prompted by the two defects at :5618 that
+  fell through the original list — "+60 XP" when 50 was awarded, and "31s" above
+  "1 min total" with a tooltip explaining rest that never happened. **NOT the old
+  VISIBLE/NOT-VISIBLE stopping rule returning**: that decided TICKING, this decides
+  CLASSIFICATION. Carries the standing point Kd's question produced: **reviews were
+  never the protection** — both of that card's visible defects were found by his
+  BROWSER and by a SURVIVING MUTANT, and what is most likely to bite after deploy
+  is on `OWED.md` and invisible to any review. `CLAUDE.md` Part I §2.5 rule 1a.
 - **:5348** — 2026-08-06 — **KD RULING: THE FIXED REVIEW/FIX PROCESS. Read this
   BEFORE running or closing any review round — it changes when a packet ships.**
   Six standing rules: a **SEVERITY GATE** (Critical/High = security, data loss,
@@ -189,6 +203,22 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:5748** — 2026-08-07 — **summary card, T3 ROUND 2 (diff-only): ZERO
+  Critical/High — CARD CLOSED. The first packet ever closed by the SEVERITY GATE
+  rather than by a round count.** 5 Low, all fixed. **The two that would have
+  bitten later are both INSTRUMENTS quietly ceasing to protect:** the permanent
+  guard hard-coded `GET`, so a later `POST /v1/workouts/:id/share` would be swept
+  in and **fail for the wrong reason**; and **the sweep exited 0 while SKIPPING
+  the six apiDb mutants** — including the two guarding round 1's Critical/High —
+  printing "6 skipped" and succeeding, which is the shape this project has been
+  burned by five times, every one of them "technically reported". Now non-zero
+  unless `--allow-skipped`. **Round 1's over-claim was still standing in the test
+  file's own header** after being corrected in DECISIONS: **a correction applied
+  to the record and not to the artifact is half a correction** (:4556 F1's shape).
+  **21/21 mutants RED, 0 alive, 0 skipped, one completed run** · api 419/419 ·
+  web 507/507. **No tick was invented for a line that did not exist** — this card
+  had no standalone OWED line; the tracking lives in the legacy-dual-write entry,
+  now 2 of 3 surfaces done, the Dashboard's stats being the last.
 - **:5618** — 2026-08-07 — **summary card, T3 ROUND 1: one Critical/High, seven
   Low — and a defect the SWEEP found that the review did not.** **Read before
   crediting to a WORKOUT a number the system credits to a DAY, and before

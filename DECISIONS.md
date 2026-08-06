@@ -5717,6 +5717,13 @@ just does not spend another round on them). Escape hatch not triggered — round
   this project has been burned by five times; a correct verdict with nothing
   behind it is the same shape wearing a better outcome.**
 
+- (**THIS ROUND PROMPTED A RULE CHANGE — see :5807**) Both of this card's
+  user-visible defects (the "+60 XP" over-claim and the invented rest time) fell
+  through the severity gate's original list, which named security, data loss,
+  privacy, money and broken core flows and nothing about a screen simply being
+  WRONG. Kd amended the gate the same day: **what a user can see and is FALSE is
+  Critical/High.** Recorded at :5807; `CLAUDE.md` Part I §2.5 rule 1a.
+
 - (**KD RULING on L-7, 2026-08-07 — LEAVE IT, and the condition he attached**)
   The plan's history window stays a BROWSE gate, not a READ gate: your own old
   workout remains readable by direct id, and the records section stays scoped to
@@ -5737,3 +5744,112 @@ just does not spend another round on them). Escape hatch not triggered — round
   licence to loosen the `(id, userId)` key would be inverting it. The plan window
   and the tenancy key are different mechanisms and the ruling touches only the
   first.
+
+## 2026-08-07 — summary card, T3 ROUND 2 (diff-only): ZERO Critical/High — CARD CLOSED
+
+**The first packet ever closed by the severity gate rather than by a round
+count** (:5348 rule 1; rule 2's diff-only scope). Five Low, all fixed in the
+round. Escape hatch not triggered.
+
+- (**WHAT ROUND 2 CONFIRMED, by reading rather than assuming**) The day bucketing
+  in `hasEarlierWorkoutOnDay` uses the IDENTICAL expression and WHERE as
+  `getActivityDays`, so the bonus is awarded on the same bucket the total counts;
+  the tie-break admits exactly one workout, never both or neither; the new test is
+  not time-of-day flaky (the fixture anchors at UTC noon, so a +1h second workout
+  cannot cross a day boundary in any zone from UTC−12 to UTC+14); fix 6 is
+  genuinely equivalent; and `authApi` re-rejects the ORIGINAL axios error, so
+  `err.request` really does survive to the handler and the `{request:{}}` fixture
+  is faithful rather than convenient.
+- (**THE TWO LOWS THAT WOULD HAVE BITTEN LATER — both are INSTRUMENTS quietly
+  ceasing to protect**) (1) The permanent guard scraped paths but hard-coded
+  `GET` and asserted 200, so a later `POST /v1/workouts/:id/share` would be swept
+  in and **fail for the wrong reason** — which reads as a broken test, not a
+  catch. It now captures the verb and accepts any 2xx for the owner. (2) **The
+  sweep exited 0 while SKIPPING the six apiDb mutants** — including M19/M20, the
+  two guarding round 1's Critical/High. It printed "6 skipped", so it was not
+  lying; but a green exit on a run that never exercised the C/H guard is the
+  shape this project has been burned by five times, and every one of those was
+  also "technically reported". **Exit codes are what CI and a tired human read.**
+  Now non-zero unless `--allow-skipped` is passed, which says out loud what "0"
+  never did.
+- (**AND THE OVER-CLAIM WAS STILL STANDING ONE FILE AWAY**) Round 1 corrected the
+  guard's "covers the route someone adds next year" in DECISIONS; the same
+  sentence was still in the test file's own header. **A correction applied to the
+  record and not to the artifact is half a correction** — :4556's F1 shape (a
+  shared field with two declarations has two comments, and the second is where a
+  correction gets lost). The header now states the bound honestly: the guard
+  covers the next route added IN THIS FILE IN THIS STYLE, because it matches
+  `app.<verb>("…")` with a double-quoted full path — not a prefixed registration,
+  not single quotes, not a differently-named param.
+- (**L-4/L-5**) The one-kick fix shipped with no test and no mutant, so changing
+  it back to five kicks — or to none — left every suite green; now asserted as a
+  NUMBER (both directions fail) and pinned by M22. And the tooltip called the
+  session total "the smaller 'total' figure" when a whole-session total is by
+  definition the LARGER one; latent, since the sub-line now only draws when the
+  two genuinely differ.
+- (**THE REVIEWER DISTURBED THE TREE AND SAID SO**) It accidentally ran the
+  harness while probing it, which edited one source file; it killed the run and
+  restored via git. **Verified independently before this entry was written**:
+  `git status` clean, `git diff HEAD` empty across all three round-1 files.
+  Recorded because a reviewer that reports its own side effects is the behaviour
+  to reward — the alternative is a mutated file discovered three cards later.
+- (**PROVE**) **21 mutants, 21 RED, 0 ALIVE, 0 SKIPPED, one completed run**, every
+  target byte-identical afterwards · api **419/419** · web **507/507** ·
+  typecheck clean · api lint clean · web lint at its exact baseline.
+- (**WHAT CLOSING MEANT HERE, since it is the first time**) There was **no
+  standalone OWED line for this card** — the tracking lived inside the
+  legacy-dual-write entry, which names three surfaces that must move before
+  `completeSession` can be dropped. That entry goes from 1 of 3 to 2 of 3; the
+  Dashboard's stats are the last. **No tick was invented for a line that did not
+  exist**, which is the opposite failure to :4718's F4 and worth naming as the
+  same discipline.
+
+## 2026-08-07 — KD AMENDMENT to the severity gate: what a user can SEE and is FALSE is Critical/High
+
+**Kd's amendment to rule 1 of :5348. It ADDS to the Critical/High list and
+replaces nothing** — his instruction was "add it but don't delete previous
+rules". Written into `CLAUDE.md` Part I §2.5 as rule **1a** in the same commit.
+
+- (**THE AMENDMENT**) A finding is **Critical/High** if a user could see something
+  **FALSE** — a wrong number, a wrong state, or a promise that is not true — **or**
+  is blocked from finishing something they should be able to do.
+  **Cosmetic-but-TRUE findings stay Low**: spelling, wording, naming, layout.
+  **The test is not "is it on screen", it is "is it on screen AND wrong".**
+- (**WHY, and the two worked examples are from the card that prompted it**) The
+  original list — security, data loss, privacy, money, broken core flows — had a
+  gap, and the summary card put two defects straight through it: **"+60 XP"
+  printed when 50 was awarded** (:5618 C/H-1), and **"31s" above "1 min total"
+  with a tooltip explaining rest between sets that never happened** (:5618, the
+  mutant that survived). Neither is security, money or data loss. Both are the
+  app lying to the person using it. One was called Critical only because the
+  reviewer said so; the other was found by an instrument, not by the gate.
+- (**HOW IT AROSE — worth recording, because the question was better than the
+  answer it got**) Kd asked why the older cards produced endless review rounds
+  (eleven on one) while this one closed in two, and whether the difference was
+  something that would "bite us after we deploy". The honest answer, from this
+  file's own numbers: those rounds were mostly finding TEST-QUALITY defects, not
+  product ones — the PostWorkout XP card recorded **32 findings, 7 blocking,
+  ZERO user-visible**, and the XP display card's visible count ran 3 → 2 → 1 → 0
+  across rounds 8-11. That supply is endless and had no stopping condition.
+  He then asked the question this entry records: **is a thing a user can see
+  Critical or not?** — which is exactly the classification the gap had left
+  unanswered.
+- (**IT CLOSES A HOLE IN THE GATE ITSELF**) Severity is a judgement made by the
+  chat, so the gate's weakest point is UNDER-calling — and this removes the most
+  likely under-call from the table. Kd was shown that reasoning, and the residual
+  risk with it: a mislabelled Critical closes a card early, which no rule can
+  prevent, only make less likely.
+- (**WHAT IT IS NOT**) **Not the old VISIBLE / NOT-VISIBLE stopping rule
+  returning.** That rule asked whether a finding blocks a TICK; this asks how a
+  finding is CLASSIFIED. Visibility was retired as the gate (:5348 superseding
+  :5307/:2365) and is re-imported here only as one of the things that makes a
+  finding SEVERE. A chat must not read 1a as reviving the tagging requirement.
+- (**THE STANDING POINT KD MADE IN THE SAME BREATH, recorded because it outlives
+  this amendment**) Reviews were never the thing standing between this project
+  and a bad deploy. On the card that prompted this, **both user-visible defects
+  were found by Kd's BROWSER and by a SURVIVING MUTANT — neither by reading
+  code.** What is most likely to bite after deployment is already on `OWED.md` and
+  is invisible to any review: nothing is deployed at all, the DPDP Day-14 worker
+  runs nowhere and must be live before the first real SIGNUP, offline start is
+  broken, the pose model downloads from a CDN, and **nothing has ever run on a
+  real phone, on a real mobile network, or under real load.**

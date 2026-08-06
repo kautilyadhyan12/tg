@@ -3,11 +3,19 @@
 //
 // Two things this file is for beyond the happy path:
 //   1. THE CROSS-TENANT DENIAL (R3.2) — a foreign id must read as absent.
-//   2. THE PERMANENT GUARD (Kd's review/fix rule 5, DECISIONS :5348): a
-//      table-driven sweep asserting EVERY workout-scoped :id route denies
-//      another user's id. Cross-account leakage is the class this card is most
-//      exposed to, and a guard over the route TABLE catches the route someone
-//      adds next year, which a per-route test never will.
+//   2. THE PERMANENT GUARD (Kd's review/fix rule 5, DECISIONS :5348): a sweep
+//      asserting that every workout-scoped :id route it can SEE denies another
+//      user's id. Cross-account leakage is the class this card is most exposed
+//      to.
+//      **THE CLAIM IS BOUNDED, and stating the bound is the point** (T3 round 2,
+//      Low-2 — the unbounded version of this sentence, "catches the route someone
+//      adds next year", was corrected in DECISIONS one file away and was still
+//      standing here). The guard reads `routes.ts` and matches
+//      `app.<verb>("...")` with a double-quoted, full path spelling the param
+//      `:id`. A route registered under a prefix, with single quotes, or with a
+//      differently-named param is NOT seen — and is not seen SILENTLY. So the
+//      honest claim is: **it covers the next route added in this file in this
+//      style.** That is most of them, by R7.1; it is not all conceivable ones.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import postgres from "postgres";
@@ -355,10 +363,30 @@ d("GET /v1/workouts/:id/summary (real Postgres)", () => {
       new URL("../src/modules/workouts/routes.ts", import.meta.url),
       "utf8",
     );
-    const declared = [...routeSrc.matchAll(/"(\/v1\/workouts\/:id[^"]*)"/g)]
-      .map((m) => m[1])
-      .filter((p): p is string => p !== undefined);
-    const routes = [...new Set(declared)].map((r) => r.replace(":id", id));
+    // THE VERB IS CAPTURED WITH THE PATH (T3 round 2, Low-1). The first version
+    // hard-coded GET and asserted the owner gets 200, so a route added later with
+    // a different verb — `app.post("/v1/workouts/:id/share", …)` — would be swept
+    // in and fail for the WRONG REASON, which reads as a broken guard rather than
+    // as the guard working.
+    //
+    // AND THE MATCH IS DELIBERATELY NARROW, WHICH IS A LIMIT WORTH STATING (Low-2):
+    // it recognises `app.<verb>(...)` with a DOUBLE-QUOTED, FULL path spelling the
+    // param `:id`. A route registered under a prefix, with single quotes, or with
+    // a differently-named param is NOT seen — silently. The two `toContain`
+    // assertions below prove only that the pattern still matches the two routes
+    // that exist today. **So this guard covers the next route added IN THIS FILE
+    // IN THIS STYLE — which is the honest claim, and is what the file header now
+    // says instead of "the route someone adds next year".** Making it truly total
+    // needs the route table, and Fastify only offers a pretty-printed tree.
+    const declared = [
+      ...routeSrc.matchAll(/app\.(get|post|put|patch|delete)[^(]*\(\s*"(\/v1\/workouts\/:id[^"]*)"/g),
+    ]
+      .map((m) => ({ verb: m[1], path: m[2] }))
+      .filter((r): r is { verb: string; path: string } => r.verb !== undefined && r.path !== undefined);
+    const routes = [...new Map(declared.map((r) => [`${r.verb} ${r.path}`, r])).values()].map((r) => ({
+      method: r.verb.toUpperCase() as "GET" | "POST",
+      url: r.path.replace(":id", id),
+    }));
 
     // A sweep over nothing is not a pass (:4855, where a run with zero mutants
     // printed "ALL MUTANTS CAUGHT"). If the regex ever stops matching, this
@@ -366,19 +394,22 @@ d("GET /v1/workouts/:id/summary (real Postgres)", () => {
     expect(routes.length, "no /v1/workouts/:id routes found in routes.ts").toBeGreaterThan(0);
     // Both known ones must be in there — a regex that silently narrowed would
     // otherwise still satisfy the check above.
-    expect(routes).toContain(`/v1/workouts/${id}`);
-    expect(routes).toContain(`/v1/workouts/${id}/summary`);
+    const urls = routes.map((r) => r.url);
+    expect(urls).toContain(`/v1/workouts/${id}`);
+    expect(urls).toContain(`/v1/workouts/${id}/summary`);
 
     for (const route of routes) {
-      const mine = await inject({ method: "GET", url: route, access: cookieA });
-      const theirs = await inject({ method: "GET", url: route, access: cookieB });
-      const anon = await inject({ method: "GET", url: route, access: "" });
-      // The owner can read it — without this the denial below would pass on a
-      // route that is simply broken for everyone.
-      expect(mine.statusCode, `${route} for its owner`).toBe(200);
-      expect(theirs.statusCode, `${route} for a stranger`).toBe(404);
-      expect(anon.statusCode, `${route} signed out`).toBe(401);
-      expect(theirs.body, `${route} must not leak the workout to a stranger`).not.toContain(id);
+      const mine = await inject({ method: route.method, url: route.url, access: cookieA });
+      const theirs = await inject({ method: route.method, url: route.url, access: cookieB });
+      const anon = await inject({ method: route.method, url: route.url, access: "" });
+      const at = `${route.method} ${route.url}`;
+      // The owner reaches it — without this the denial below would pass on a
+      // route that is simply broken for everyone. Any 2xx counts: a future POST
+      // may answer 201 or 204, and pinning 200 would fail for the wrong reason.
+      expect(mine.statusCode, `${at} for its owner`).toBeLessThan(300);
+      expect(theirs.statusCode, `${at} for a stranger`).toBe(404);
+      expect(anon.statusCode, `${at} signed out`).toBe(401);
+      expect(theirs.body, `${at} must not leak the workout to a stranger`).not.toContain(id);
     }
   });
 

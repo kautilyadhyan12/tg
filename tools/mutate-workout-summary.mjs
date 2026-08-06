@@ -247,6 +247,15 @@ const MUTATIONS = [
     suites: ["apiDb"],
   },
   {
+    // T3 round 2, Low-4 — the one-kick fix was unprotected.
+    id: "M22",
+    claim: "the sync queue is kicked ONCE across the retries, not once per retry",
+    file: "apps/web/src/pages/PostWorkout.jsx",
+    from: "            if (triesLeft === SYNC_RETRY_ATTEMPTS) {",
+    to: "            if (triesLeft > 0) {",
+    suites: ["webRender"],
+  },
+  {
     id: "M13",
     claim: "the waiting state shows SAVING copy, not the ordinary loading copy",
     file: "apps/web/src/pages/PostWorkout.jsx",
@@ -475,4 +484,25 @@ console.log(
     ? "every TARGET is byte-identical to its pre-run snapshot"
     : `*** TARGETS NOT RESTORED: ${dirty.join(", ")} ***`,
 );
-process.exit(alive.length > 0 || dirty.length > 0 ? 1 : 0);
+
+// A RUN THAT SKIPPED MUTANTS DOES NOT SUCCEED (T3 round 2, Low-3).
+//
+// Without DATABASE_URL the six apiDb mutants are skipped — and those include
+// M19 and M20, the two that guard the Critical/High fix this card's round 1 was
+// about. The run printed "6 skipped" and exited 0. The count was visible, so it
+// was not a lie; but a GREEN EXIT on a run that never exercised the C/H guard is
+// the shape this project has been burned by five times (:2614 F3, :2736 F1, the
+// `cp` failure, :4855's zero-mutant run, :5199 F1), and every one of those was
+// also "technically reported". Exit codes are what CI and a hurried human read.
+//
+// `--allow-skipped` exists for the deliberate case (a quick web-only pass while
+// iterating) and says so out loud, which "0" never did.
+const allowSkipped = argv.includes("--allow-skipped");
+if (skipped.length > 0 && !allowSkipped) {
+  console.error(
+    `\n*** ${skipped.length} mutant(s) SKIPPED — this run did not exercise them. ***\n` +
+      `    ${skipped.map((r) => r.id).join(", ")}\n` +
+      `    Set DATABASE_URL to run them, or pass --allow-skipped to accept a partial run.`,
+  );
+}
+process.exit(alive.length > 0 || dirty.length > 0 || (skipped.length > 0 && !allowSkipped) ? 1 : 0);

@@ -227,6 +227,29 @@ before running or closing any review round.
    **IT IS STILL FIXED.** Kd ruled this explicitly: "no, they will be fixed."
    What rule 1 changes is the SCHEDULE — which findings justify another round —
    never the quality bar. Nothing found is left unfixed because it was Low.
+
+   **1a. WHAT A USER CAN SEE AND IS FALSE IS CRITICAL/HIGH** (Kd amendment
+   2026-08-07 — DECISIONS :5807; ADDS to the list above, replaces nothing).
+   A finding is **Critical/High** if a user could see something **FALSE** — a
+   wrong number, a wrong state, or a promise that is not true — **or** is blocked
+   from finishing something they should be able to do.
+   **Cosmetic-but-TRUE findings stay Low**: spelling, wording, naming, layout.
+   The test is not "is it on screen", it is **"is it on screen AND wrong"**.
+
+   **Why the amendment exists, in its own worked examples.** The original list
+   named security, data loss, privacy, money and broken core flows — and the
+   summary card put two defects straight through the gap: **"+60 XP" printed when
+   50 was awarded** (:5618 C/H-1) and **"31s" above "1 min total" with a tooltip
+   explaining rest that never happened** (:5618, the surviving mutant). Neither is
+   security, money or data loss. Both are the app lying to the person using it,
+   and both should have been Critical on sight.
+   **It also closes a hole in the gate itself**: severity is a judgement made by
+   the chat, so the gate's weakest point is under-calling. This removes the most
+   likely under-call from the table. Kd was shown that reasoning before ruling.
+   **NB this is not the old VISIBLE/NOT-VISIBLE stopping rule returning.** That
+   rule asked whether a finding blocks a TICK; this one asks how a finding is
+   CLASSIFIED. Visibility was retired as the gate (:5348) and is re-imported here
+   only as one of the things that makes a finding severe.
 2. **DIFF-ONLY RE-REVIEWS.** After a fix round, the next review covers **only the
    fixes and the surfaces they touch** — never a fresh full pass.
 3. **REGRESSION TESTS.** Every Critical/High fix ships with a test that **fails

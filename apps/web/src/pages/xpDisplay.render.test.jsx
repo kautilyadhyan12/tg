@@ -78,7 +78,7 @@ vi.mock('../context/TransitionContext', () => ({
 
 const { gamificationService } = await import('../api/gamificationApi');
 const { workoutService }      = await import('../api/workoutApi');
-const { isAwaitingSync }      = await import('../sync/syncClient');
+const { isAwaitingSync, flushSyncQueue } = await import('../sync/syncClient');
 const { recommendationService } = await import('../api/recommendationApi');
 // The toast is normally a side effect and not a claim under test (see the mock
 // above) — but for the empty-200 case it IS the claim: the page's only honest
@@ -1759,6 +1759,33 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     expect(text).not.toMatch(/Workout Complete!/);
     expect(text).not.toMatch(/undefined|NaN|null/);
   }, 10000);
+
+  it('kicks the sync queue ONCE across all the retries, not once per retry', async () => {
+    // T3 round 2, Low-4: the one-kick fix shipped with no test and no mutant, so
+    // changing it back to five kicks — or to none — left every suite green.
+    // Every kick sets the queue's `rerunRequested`, so five of them ask for up to
+    // five extra full passes inside four seconds; and the point of the kick is to
+    // cover a flush that lost its race with the navigation, which one call does.
+    // Asserted as a NUMBER, so both directions of the mistake fail.
+    toast.error.mockClear();
+    flushSyncQueue.mockClear();
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    const notYet = Object.assign(new Error('not found'), { response: { status: 404 } });
+    workoutService.getSummary.mockRejectedValue(notYet);
+
+    renderPostWorkout();
+
+    await waitFor(
+      () => expect(toast.error).toHaveBeenCalledWith(
+        "Your workout is saved and will sync when you're back online.",
+      ),
+      { timeout: 8000 },
+    );
+    // Five attempts happened…
+    expect(workoutService.getSummary.mock.calls.length).toBeGreaterThan(1);
+    // …and exactly one of them kicked the queue.
+    expect(flushSyncQueue).toHaveBeenCalledTimes(1);
+  }, 12000);
 
   it('a 404 that OUTLASTS the retries says the workout is SAVED, not lost', async () => {
     toast.error.mockClear();

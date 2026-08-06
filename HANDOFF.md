@@ -1,12 +1,22 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
-TASK: THE POST-WORKOUT SUMMARY REPOINT — card 1 of 4 in the workout core loop.
-      **SMOKE PASSED 8/8 (:5543). T3 ROUND 1 DONE — 1 Critical/High + 7 Low, all
-      fixed (:5618). ROUND 2 IS UNRUN, so no OWED line is ticked yet.**
-      Round 2 is DIFF-ONLY (Kd's rule 2): it reviews the round-1 fixes and the
-      surfaces they touch, NOT the whole card again. Zero Critical/High ⇒ the
-      card closes and its 🔴 line ticks.
+TASK: THE POST-WORKOUT SUMMARY REPOINT — **CARD CLOSED 2026-08-07.**
+      All three gates passed: smoke 8/8 (:5543) · T3 round 1, 1 Critical/High +
+      7 Low, all fixed (:5618) · **T3 round 2 (diff-only, Kd's rule 2): ZERO
+      Critical/High, 5 Low, all fixed** (:5748). Under the severity gate
+      (:5348) zero Critical/High closes the packet.
+      **21 mutants, 21 RED, 0 ALIVE, 0 SKIPPED — one completed run.**
+      api 419/419 · web 507/507 · typecheck + api lint clean.
+
+ON TICKING: THERE WAS NO STANDALONE OWED LINE FOR THIS CARD, and saying so
+      matters more than inventing a tick. The tracking lived INSIDE the
+      legacy-dual-write entry, which names three surfaces that must move before
+      `completeSession` can go: the summary (THIS card — now done), the calendar
+      (done earlier, :4622) and the **Dashboard's stats (still open)**. That
+      entry is amended to record 1 of 3 → 2 of 3. The per-workout-XP line is
+      also amended: half of its claim is now false, and the correction is the
+      useful part (a per-workout XP DISPLAY needed no migration after all).
 
 THE FINDING TO CARRY OUT OF ROUND 1 — and it came from the SWEEP, not the review
   **M6 SURVIVED, and the survival was the finding.** `activeSeconds` and

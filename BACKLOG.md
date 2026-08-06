@@ -59,6 +59,34 @@ review round.
       baseline gate, where it merely aborted; one step later it would have scored
       every mutant "caught" while nothing was asserted. A runner error now ABORTS
       instead of resolving to a verdict. — fixed same commit.
+### T3 round 2 — the Low findings (2026-08-07). ZERO Critical/High; the card closed.
+
+Five Low, all fixed in the round. The first two are the ones that mattered: both
+are INSTRUMENTS quietly ceasing to protect, which is the failure that does not
+announce itself.
+
+- [x] **The permanent guard hard-coded `GET`.** A workout-scoped route added later
+      with a different verb — `POST /v1/workouts/:id/share` — would be swept in
+      and fail for the WRONG REASON, reading as a broken test rather than a catch.
+      Now captures the verb, and accepts any 2xx for the owner so a future 201 or
+      204 does not fail spuriously.
+- [x] **The sweep exited 0 while SKIPPING the checks that guard the Critical/High
+      fix.** Without `DATABASE_URL` the six apiDb mutants — M19/M20 among them —
+      were skipped, "6 skipped" was printed, and the run SUCCEEDED. Visible, so
+      not a lie; but a green exit on a run that never exercised the C/H guard is
+      the shape this repo has been burned by five times, and every one of those
+      was also technically reported. **Exit codes are what CI and a tired human
+      read.** Now non-zero unless `--allow-skipped` is passed.
+- [x] **Round 1's over-claim was still standing one file away.** The "covers the
+      route someone adds next year" sentence was corrected in DECISIONS and left
+      in the test file's own header. The header now states the real bound: it
+      covers the next route added in this file, in this style.
+- [x] **The one-kick fix had no test and no mutant** — changing it back to five
+      kicks, or to none, left every suite green. Now asserted as a NUMBER so both
+      directions fail, pinned by M22.
+- [x] **A backwards tooltip**: it called the session total "the smaller 'total'
+      figure" when a whole-session total is by definition the larger one.
+
 ### T3 round 1 — the Low findings (2026-08-07)
 
 Seven Low findings from the fresh-chat review. All FIXED in the round; none

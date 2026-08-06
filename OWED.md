@@ -1718,6 +1718,21 @@ then; none may be hidden or reduced to close the gap.
       STAYS on the old summary payload, because the new API has no [per-workout
       XP]"). One backend card would close both surfaces; neither can be closed
       from the web side.
+      **AMENDED 2026-08-07 — HALF OF THIS IS NOW WRONG, and the correction is the
+      useful part.** The summary card (DECISIONS :5438) closed the PostWorkout
+      surface **without** a migration and **without** a sync-time write:
+      `xpEarnedForWorkout` DERIVES the figure from the ported `XP_REWARDS`
+      constants and facts already stored (the workout's `avg_form_score`, and
+      whether its day continued a streak). So "a MIGRATION plus a sync-time
+      write" was true of STORING a per-workout total and false of DISPLAYING one.
+      The quoted `PostWorkout.jsx:40` comment is gone with it.
+      **What is still open is the CALENDAR's per-workout XP**, which would need
+      the same derivation applied to a list — cheap now that the function exists.
+      **And a real trap this card met, worth carrying:** the derivation must
+      credit `streak_day` the way the TOTAL does — once per DAY, not once per
+      workout — or two workouts in a day each claim it and the screen out-runs
+      the total (:5618 C/H-1, fixed by `hasEarlierWorkoutOnDay`). Any list
+      version inherits that hazard.
 - [x] 🔴 **Google login — DONE, SMOKE PASSED (Kd, 2026-07-24).** End-to-end
       browser click-through on the local stack succeeded: `/login` → "Continue
       with Google" → Google account chooser → callback → logged in. All three
