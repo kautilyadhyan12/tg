@@ -2,9 +2,25 @@
 
 ```
 TASK: THE POST-WORKOUT SUMMARY REPOINT — card 1 of 4 in the workout core loop.
-      **SMOKE PASSED 8/8 (Kd, 2026-08-07; record :5543). THE FRESH-CHAT T3 IS
-      STILL UNRUN, so no OWED line is ticked and the card is NOT done.**
-      (:4718's F4 is the third-occurrence precedent for ticking early.)
+      **SMOKE PASSED 8/8 (:5543). T3 ROUND 1 DONE — 1 Critical/High + 7 Low, all
+      fixed (:5618). ROUND 2 IS UNRUN, so no OWED line is ticked yet.**
+      Round 2 is DIFF-ONLY (Kd's rule 2): it reviews the round-1 fixes and the
+      surfaces they touch, NOT the whole card again. Zero Critical/High ⇒ the
+      card closes and its 🔴 line ticks.
+
+THE FINDING TO CARRY OUT OF ROUND 1 — and it came from the SWEEP, not the review
+  **M6 SURVIVED, and the survival was the finding.** `activeSeconds` and
+  `durationSeconds` are the SAME NUMBER: `repo.syncWorkout:65` derives a
+  workout's `duration_ms` as the sum of its set durations. Measured against the
+  live DB — 12 of 12 workouts equal, Kd's own smoke workouts among them. What
+  shipped was "31s" for Workout Time above "1 min total", with a tooltip
+  explaining rest that never happened; the MINUTE ROUNDING made one number look
+  like two. **No test could ever have caught it** — no input distinguishes two
+  equivalent expressions — so the fix is a RENDER RULE (M21) plus an OWED line
+  for the real gap: the new API stores no wall-clock session duration at all.
+  **M6 is RETIRED WITH ITS REASON RECORDED, not deleted.** A mutant nothing can
+  kill is not noise; it is the shape of a distinction the code claims and does
+  not have.
 
 THE SMOKE IS THE STORY, AND IT FOUND TWO DEFECTS 501 GREEN TESTS DID NOT
   1. Pasting ANOTHER ACCOUNT'S summary link said "Your workout is saved and
@@ -71,8 +87,17 @@ A FOURTH FINDING THAT IS NOT THIS CARD'S — do not "fix" it here
   the SAVE half works while the START half does not. A sibling OWED line (the
   pose model silently falling back to a CDN) is a second, independent reason.
 
-STATE: api 418/418 (10 new, real Postgres) · web 505/505 (was 494) ·
-  18 mutants declared, all RED (M15-M18 are the smoke's own fixes) ·
+A FALSE CLAIM OF MINE IN THIS BLOCK, STRUCK 2026-08-07 (T3 round 1, L-1)
+  It read "18 mutants declared, all RED". **THAT WAS NEVER ONE RUN.** I ran
+  M1-M14, then later M15-M18 separately — and by then the step-8 fix had
+  broken M11 and M12's anchors, so a full sweep could not even complete. "I
+  measured it RED" and "the committed harness measures it RED" are different
+  claims and only the second is reproducible by the next chat (:5199 F3, the
+  same lesson, one card later). The figure below is a single completed run.
+
+STATE (post-round-1): api **419/419** · web **506/506** ·
+  **20 mutants, 20 RED, 0 ALIVE — ONE COMPLETED RUN**, baseline green on all
+  four suites first, every target byte-identical afterwards ·
   typecheck clean · api lint clean · web lint at its exact baseline (measured
   by stashing) · `vite build` green.
   Harness: `tools/mutate-workout-summary.mjs`. **Its anchor guard earned its

@@ -875,6 +875,68 @@ then; none may be hidden or reduced to close the gap.
       **NB the sibling line above** (the local pose model silently falling back to
       a CDN) means camera workouts need the internet too — two independent reasons
       the offline promise is not yet true, and they must both close.
+- [ ] 🟡 **THE NEW API DOES NOT STORE A WORKOUT'S WALL-CLOCK DURATION.** Found
+      2026-08-07 by the summary card's own mutation sweep (M6 survived), then
+      measured against the live DB: **12 of 12 workouts had `duration_ms` exactly
+      equal to the sum of their sets' durations**, because
+      `repo.syncWorkout` derives it that way (`repo.ts:65`).
+      **So "active time" and "total time" are ONE number, and the app had been
+      drawing them as two.** The summary printed e.g. "31s" for Workout Time with
+      "1 min total" beneath it and a tooltip explaining that the total includes
+      "standing between reps and camera setup" — a rest gap that does not exist.
+      The minute rounding is what made one number look like two.
+      **Already done, so this line is only about the missing DATA:** the sub-line
+      now renders only when the two genuinely differ (M21 pins it), and the
+      contract's comment no longer claims a wall clock it does not have.
+      **What is owed:** the old backend carried a real session duration
+      (`duration_minutes`, the whole time on the workout screen). `ActiveWorkout`
+      still measures it — `finalElapsedSecs` — and the v1 §5.3 sync payload has no
+      field to put it in, so adding one is a CONTRACT change and needs a ruling,
+      not a patch. Until then the summary honestly reports one duration.
+      **The sub-line returns by itself the day a real total is stored** — no
+      client change needed, which is why the field was kept rather than deleted.
+- [x] ~~🟡 **RULING NEEDED: reading a workout by DIRECT ID ignores the plan's
+      history window.**~~ **RULED BY KD 2026-08-07: LEAVE IT. Struck, not
+      deferred** (the desktop-webcam precedent, :456 — an item leaves this file by
+      being done or by a ruling that it will never be built).
+      **The ruling:** your own old workout stays readable by direct link; the
+      records section stays scoped to the plan window. Kd was shown both
+      alternatives and why each is worse — blocking the read hides a user's own
+      data from them, and ungating the records would make the summary and the
+      Progress screen disagree about who holds a record, which is the exact thing
+      the summary card unified. What remains is a mild oddity, not a falsehood: a
+      very old workout's records section is simply empty, because it cannot be a
+      record inside the visible window.
+      **KD ATTACHED A CONDITION, and it is already met — recorded so nobody
+      "relaxes" the read gate and takes the tenancy with it:** *"if someone else
+      puts that link they should not get access."* They do not, and it is proven
+      three ways — Kd's own smoke step 7 (a second account got "Failed to load
+      summary" and no figures), the cross-tenant test asserting a stranger's 404
+      is byte-identical to an unknown id's, and mutation M8, which deletes
+      `AND user_id = ${userId}` from the shared detail read and is caught.
+      **This ruling is about the PLAN WINDOW only. It grants nothing about
+      ownership, and the two must never be conflated.**
+      Original text below.
+- [ ] 🟡 ~~**RULING NEEDED: reading a workout by DIRECT ID ignores the plan's
+      history window.**~~ (superseded by the ruling above; kept for its evidence)
+      Raised by the summary card's T3 (round 1, L-7),
+      2026-08-07, reported not fixed — it is a RULING, not a defect, and it is
+      pre-existing.
+      `GET /v1/workouts/:id` and `/v1/workouts/:id/summary` apply no
+      `historyGate`, while `listWorkouts` and every `/v1/progress/*` read do. So
+      a free user whose plan shows 90 days can still open a two-year-old workout
+      by its id and read its calories, form score and duration — and, on the
+      summary, the personal-records section beside those numbers IS gated, so one
+      screen answers the same question two ways.
+      **Not a regression and not a leak**: it is the caller's own data, and the
+      detail route has behaved this way since P2.3. The summary is new SURFACE on
+      the old behaviour, which is why the reviewer raised it here.
+      **The question for Kd:** is the history window a LIST gate (you cannot
+      browse past it) or a READ gate (you cannot see past it at all)? Part 4 §0.2
+      says "read-gate, not deletion" and DECISIONS 2026-07-21 says older workouts
+      are "still saved" — both consistent with either answer. Do NOT guess: a
+      chat that clamps this silently makes a paying-feature decision (R3.1), and
+      one that leaves it silently makes the summary's own two halves disagree.
 - [ ] ⚪ **The post-workout summary's WORDS ship as English strings.** Created
       2026-08-06. Meal ideas, stretch suggestions and the three personal-record
       labels are a verbatim port of the old backend's hardcoded English

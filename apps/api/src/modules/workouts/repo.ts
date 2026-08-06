@@ -404,6 +404,41 @@ async function topWorkoutBy(
   return r === undefined || r.v === null ? null : { workoutId: r.id, value: r.v };
 }
 
+/** Does this user have an EARLIER workout on the same user-local day?
+ *
+ *  THE STREAK BONUS BELONGS TO THE DAY, NOT TO THE WORKOUT (T3 round 1, C/H-1).
+ *  `computeTotalXp` credits `streak_day` once per adjacent pair of DISTINCT
+ *  activity days (`getActivityDays` is `SELECT DISTINCT … day`), so a user with
+ *  two workouts on one continuation day earns +10 ONCE. The summary's
+ *  `xpEarnedForWorkout` was adding it to EVERY workout on that day, so two
+ *  summaries each printed +60 while the total moved by 110 — the same
+ *  "this number disagrees with the number beside it" defect this endpoint was
+ *  built to remove, pointing the other way.
+ *
+ *  So the bonus is awarded to the FIRST workout of the day and no other, and
+ *  "first" is decided here rather than in JS because the day bucket is a
+ *  timezone question the database is already answering everywhere else (Part 7
+ *  §3.1; playbook trap #8). `id` breaks an exact `started_at` tie so the answer
+ *  is deterministic for every workout of the pair, never "both" or "neither". */
+export async function hasEarlierWorkoutOnDay(
+  sql: Sql,
+  userId: string,
+  workoutId: string,
+  startedAt: Date,
+  timeZone: string,
+): Promise<boolean> {
+  const rows = await sql<{ earlier: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1 FROM workouts
+      WHERE user_id = ${userId}
+        AND to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')
+          = to_char(${startedAt}::timestamptz AT TIME ZONE ${timeZone}, 'YYYY-MM-DD')
+        AND (started_at < ${startedAt}
+             OR (started_at = ${startedAt} AND id < ${workoutId}))
+    ) AS earlier`;
+  return rows[0]?.earlier ?? false;
+}
+
 export async function getPersonalRecords(
   sql: Sql,
   userId: string,

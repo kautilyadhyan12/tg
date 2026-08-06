@@ -95,13 +95,27 @@ const MUTATIONS = [
     to: "  if (false) {",
     suites: ["apiUnit"],
   },
+  // ── M6 IS RETIRED, and this is the record of why ──────────────────────────
+  // It read: "activeSeconds is the SUM OF SET durations, not the workout's
+  // total", mutating the sum to `workout.durationMs`. It came back ALIVE on the
+  // first COMPLETE sweep — and it is EQUIVALENT, not uncaught: `repo.syncWorkout`
+  // derives `duration_ms` as `sets.reduce((a, s) => a + s.durationMs, 0)`, so the
+  // two expressions compute the same number for every input. Measured against
+  // the live DB rather than reasoned: 12 of 12 workouts had them exactly equal.
+  //
+  // **Deleting it silently would have been the wrong move**, because the survival
+  // was the finding: the summary was printing "31s" over "1 min total" with a
+  // tooltip explaining a rest gap that does not exist. A mutant nothing can kill
+  // is not noise — it is the shape of a distinction the code claims and does not
+  // have (:5104 F5: "a fix whose protection cannot fail is the same defect with a
+  // comment on it"). M21 below pins what actually needed pinning.
   {
-    id: "M6",
-    claim: "activeSeconds is the SUM OF SET durations, not the workout's total",
-    file: "apps/api/src/modules/workouts/service.ts",
-    from: "    activeSeconds: sets.length === 0 ? null : Math.floor(activeMs / 1000),",
-    to: "    activeSeconds: workout.durationMs === null ? null : Math.floor(workout.durationMs / 1000),",
-    suites: ["apiDb"],
+    id: "M21",
+    claim: "no 'total' sub-line is drawn when the total IS the active time",
+    file: "apps/web/src/pages/PostWorkout.jsx",
+    from: "sublabel: summary.activeSeconds !== null && summary.durationSeconds !== null && summary.durationSeconds !== summary.activeSeconds ? totalTimeLabel(summary.durationMinutes) : null",
+    to: "sublabel: summary.activeSeconds !== null ? totalTimeLabel(summary.durationMinutes) : null",
+    suites: ["webRender"],
   },
   {
     id: "M7",
@@ -136,19 +150,29 @@ const MUTATIONS = [
     suites: ["webReader", "webRender"],
   },
   {
+    // RE-ANCHORED (T3 round 1, L-1). Both M11 and M12 pointed at
+    // `if (err?.response?.status === 404 && triesLeft > 0) {`, which the step-8
+    // fix replaced — so each matched ZERO times and the sweep died at M11 after
+    // ten minutes of green suites. **The retry itself therefore had no live
+    // mutant**: M15/M17/M18 mutate the CONDITIONS, and nothing asserted that the
+    // retry HAPPENS. This is the one that restores that.
     id: "M11",
-    claim: "a 404 is RETRIED rather than reported as a failure",
+    claim: "the retry actually happens — without it a first failure is fatal",
     file: "apps/web/src/pages/PostWorkout.jsx",
-    from: "          if (err?.response?.status === 404 && triesLeft > 0) {",
+    from: "          if (awaitingSync && triesLeft > 0) {",
     to: "          if (false && triesLeft > 0) {",
     suites: ["webRender"],
   },
   {
+    // REPOINTED, and its CLAIM corrected. It used to read "ONLY a 404 is
+    // retried", which the step-8 fix made false — a no-response error is retried
+    // too. What is still true, and what this now mutates, is that a response
+    // WITH a status other than 404 (a 500) is not.
     id: "M12",
-    claim: "ONLY a 404 is retried — a 500 fails immediately",
+    claim: "a 5xx is NOT retried — only 'not here yet' shapes are",
     file: "apps/web/src/pages/PostWorkout.jsx",
-    from: "          if (err?.response?.status === 404 && triesLeft > 0) {",
-    to: "          if (triesLeft > 0) {",
+    from: "          const notHereYet = noResponse || err?.response?.status === 404;",
+    to: "          const notHereYet = true;",
     suites: ["webRender"],
   },
   {
@@ -191,12 +215,36 @@ const MUTATIONS = [
     // The other half of that fix: our OWN "this body is not a summary" throw has
     // no `err.response` either, so without the tag it is mistaken for a dropped
     // network and retried. The empty-200 test is what caught this.
+    // RE-ANCHORED (T3 round 1, L-3 rewrote this line). The property is the same
+    // — an unreadable 200 body must not be read as a dropped connection — but it
+    // is now enforced by requiring the POSITIVE signal `err.request` rather than
+    // by tagging our own throw. Dropping that half is exactly the old defect.
     id: "M18",
     claim: "an unreadable 200 body is NOT mistaken for a dropped connection",
     file: "apps/web/src/pages/PostWorkout.jsx",
-    from: "          const noResponse = err?.response === undefined && err?.unreadableBody !== true;",
+    from: "          const noResponse = err?.request !== undefined && err?.response === undefined;",
     to: "          const noResponse = err?.response === undefined;",
     suites: ["webRender"],
+  },
+  {
+    // T3 round 1, C/H-1 — the blocking finding. Without the day gate, two
+    // workouts on one continuation day each claim the +10 the total awarded once.
+    id: "M19",
+    claim: "ONE streak bonus per DAY — not one per workout on that day",
+    file: "apps/api/src/modules/workouts/service.ts",
+    from: "  const isStreakContinuation = isContinuation && !hasEarlierToday;",
+    to: "  const isStreakContinuation = isContinuation;",
+    suites: ["apiDb"],
+  },
+  {
+    // …and the tie-break, so the bonus lands on exactly one of a same-instant
+    // pair rather than on both or neither.
+    id: "M20",
+    claim: "the day's FIRST workout owns the bonus (earlier started_at wins)",
+    file: "apps/api/src/modules/workouts/repo.ts",
+    from: "        AND (started_at < ${startedAt}",
+    to: "        AND (started_at > ${startedAt}",
+    suites: ["apiDb"],
   },
   {
     id: "M13",
@@ -250,6 +298,30 @@ for (const m of MUTATIONS) {
   }
 }
 
+// Safeguard 2, HOISTED — every anchor is checked UP FRONT, for the whole table,
+// before a single suite runs (T3 round 1, L-1).
+//
+// It used to be checked inside the mutant loop, which is technically sufficient
+// and practically useless: two anchors had gone stale (the step-8 fix rewrote
+// the line they pointed at), and the run spent TEN MINUTES executing M1–M10
+// before dying at M11. A harness that can only tell you it is broken after ten
+// minutes is one nobody runs. Now it costs one second, and — the part that
+// matters — it reports EVERY stale anchor at once instead of the first.
+{
+  const stale = [];
+  for (const m of MUTATIONS) {
+    const text = readFileSync(resolve(ROOT, m.file), "utf8");
+    const hits = text.split(m.from).length - 1;
+    if (hits !== 1) stale.push(`${m.id}  (${hits} matches in ${m.file})`);
+  }
+  if (stale.length > 0) {
+    console.error("FATAL: stale anchors — a drifted anchor reports as a missing test.\n");
+    for (const s of stale) console.error(`  ${s}`);
+    console.error("\nRe-anchor them against the current source. Do not delete the mutant.");
+    process.exit(2);
+  }
+}
+
 const hasDb = typeof process.env["DATABASE_URL"] === "string" && process.env["DATABASE_URL"] !== "";
 
 /** Snapshot every target as BYTES, so restore is byte-exact regardless of line
@@ -274,6 +346,9 @@ function restoreAll() {
  *  A genuine test failure sets a numeric exit `status`. Anything else — a
  *  signal, a buffer overflow, a timeout, corepack not found — has no business
  *  being read as evidence about the code under test. */
+/** Output of the most recent RED run, so a verdict can show its working. */
+let lastFailure = "";
+
 function runSuite(name) {
   const s = SUITES[name];
   try {
@@ -286,7 +361,14 @@ function runSuite(name) {
     });
     return "GREEN";
   } catch (err) {
-    if (typeof err.status === "number" && err.status !== 0) return "RED";
+    if (typeof err.status === "number" && err.status !== 0) {
+      // KEEP THE EVIDENCE. A bare "RED" is a verdict with nothing behind it, and
+      // a baseline that goes red for a reason nobody can see is indistinguishable
+      // from a harness fault — this run had exactly that, on a suite that passed
+      // standalone seconds later. The tail is printed by the baseline gate.
+      lastFailure = `${String(err.stdout ?? "")}\n${String(err.stderr ?? "")}`.trimEnd();
+      return "RED";
+    }
     console.error(`\nFATAL: the runner itself failed on suite ${name} — this is NOT a test result.`);
     console.error(`  ${err.code ?? ""} ${err.message}`);
     restoreAll();
@@ -305,6 +387,8 @@ for (const name of needed) {
   const r = runSuite(name);
   if (r !== "GREEN") {
     console.error(`FATAL: baseline ${name} is ${r}. A red baseline makes every "RED" below meaningless.`);
+    console.error("\n──── tail of the failing run ────");
+    console.error(lastFailure.split("\n").slice(-40).join("\n"));
     process.exit(2);
   }
   console.log(`  baseline ${name}: GREEN`);

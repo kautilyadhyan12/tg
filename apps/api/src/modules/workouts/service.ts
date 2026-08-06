@@ -207,11 +207,27 @@ export async function getWorkoutSummary(
   const { workout, sets } = found;
 
   const ctx = await getUserSyncContext(deps.sql, userId);
-  const [me, records, isStreakContinuation] = await Promise.all([
+  const tz = safeTimeZone(ctx.timezone);
+  // The records come from `repo.getPersonalRecords` under the SAME plan gate the
+  // records screen uses, rather than from the `personalRecords` SERVICE (T3
+  // round 1, L-6). The service additionally reconciles the streak and re-reads
+  // the user context — both of which `getGamificationMe` below already do — so
+  // calling it here ran `SELECT … FOR UPDATE` twice per summary read on a
+  // single-connection pool, serialized, for a value that was then discarded.
+  // The guarantee that matters is unchanged: same query, same gate, so the
+  // summary and the records screen cannot disagree about who holds a record.
+  const gate = await historyGate(deps, userId);
+  const [me, records, isContinuation, hasEarlierToday] = await Promise.all([
     getGamificationMe({ sql: deps.sql }, userId, ctx.timezone),
-    personalRecords(deps, userId),
+    repo.getPersonalRecords(deps.sql, userId, gate.floor),
     isContinuationDay({ sql: deps.sql }, userId, ctx.timezone, workout.startedAt),
+    repo.hasEarlierWorkoutOnDay(deps.sql, userId, workout.id, workout.startedAt, tz),
   ]);
+
+  // ONE STREAK BONUS PER DAY, awarded to the day's FIRST workout — see
+  // `hasEarlierWorkoutOnDay`. Crediting it per workout made two summaries on one
+  // day claim +60 each while the XP total moved by 110 (T3 round 1, C/H-1).
+  const isStreakContinuation = isContinuation && !hasEarlierToday;
 
   // Active time = the sum of the per-set durations, i.e. time actually spent
   // mid-set. Whole seconds, floored: `secondsLabel` on the client carries to

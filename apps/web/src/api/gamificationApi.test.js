@@ -1078,7 +1078,7 @@ describe('readSummaryView — NULL is the signal that fixes the blank page', () 
     // above carries all three precisely so this stays honest. Round 6's lesson —
     // unused surface reads as protection and is not.
     expect(readSummaryView(full)).toEqual({
-      activeSeconds: 900, durationMinutes: 35, caloriesBurned: 280,
+      activeSeconds: 900, durationSeconds: 2100, durationMinutes: 35, caloriesBurned: 280,
       formAccuracy: 88, exercisesCount: 3, currentStreak: 3, xpEarned: 70,
       personalRecords: ['Best form accuracy!'],
       mealSuggestions: [{ meal: 'Paneer bhurji', timing: 'within 45 min' }],
@@ -1103,7 +1103,7 @@ describe('readSummaryView — NULL is the signal that fixes the blank page', () 
     // read fields off it with `?? 0`, so a 200 carrying `{stats:{}}` printed
     // "0 workouts / 0h / 0 kcal" as fact. Per-field means that cannot recur here.
     expect(readSummaryView({ workoutId: ID })).toEqual({
-      activeSeconds: null, durationMinutes: null, caloriesBurned: null,
+      activeSeconds: null, durationSeconds: null, durationMinutes: null, caloriesBurned: null,
       formAccuracy: null, exercisesCount: null, currentStreak: null, xpEarned: null,
       personalRecords: null, mealSuggestions: null, stretches: null,
     });

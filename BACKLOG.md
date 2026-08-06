@@ -59,6 +59,42 @@ review round.
       baseline gate, where it merely aborted; one step later it would have scored
       every mutant "caught" while nothing was asserted. A runner error now ABORTS
       instead of resolving to a verdict. — fixed same commit.
+### T3 round 1 — the Low findings (2026-08-07)
+
+Seven Low findings from the fresh-chat review. All FIXED in the round; none
+bought another round (Kd's rule 1). The Critical/High one is not here — it was
+fixed and is recorded in DECISIONS.
+
+- [x] **The audit harness could not complete a run.** M11 and M12 both anchored
+      to a line the step-8 fix had deleted, so they matched ZERO times and the
+      sweep died at M11 — after ten minutes of green suites. **Worse than the
+      inconvenience: the retry itself had no live mutant**, so "a 404 RETRIES and
+      then renders" had never been proven to fail with the retry removed. M11
+      re-anchored, M12 repointed (its old claim, "ONLY a 404 is retried", became
+      false at step 8), and **the anchor check is hoisted to run for the whole
+      table BEFORE any suite** — it now reports every stale anchor in one second
+      instead of the first one after ten minutes. It fired immediately on M18.
+- [x] **The permanent guard was a hand-written list claiming to be a sweep.** It
+      read `[/v1/workouts/:id, /v1/workouts/:id/summary]` under a comment saying
+      "a route added later is covered by construction". It was not. Now derived
+      from `routes.ts` itself, with an assertion that both known routes are
+      found so a silently-narrowed regex cannot pass.
+- [x] **The offline branch identified itself by what it LACKED.** `err.response
+      === undefined` swept in every throw that has no response — which is how our
+      own bad-body error was read as offline. Now `err.request !== undefined`,
+      the positive signal axios actually sets, and the `unreadableBody` tag added
+      an hour earlier is deleted as the dead surface it became.
+- [x] **A stale comment**: "the retry is scoped to one status on purpose" was
+      false after step 8. The test under it was correct throughout.
+- [x] **The retry kicked the sync queue five times and swallowed every error.**
+      Each kick sets `rerunRequested`, so a failing flush asked for up to five
+      extra full passes in four seconds, silently. One kick, on the first retry,
+      and the failure is logged.
+- [x] **Three redundant transactions per summary read.** `reconciledStreak`
+      (`SELECT … FOR UPDATE` plus a conditional write) ran twice per request, on
+      a single-connection pool, for a value that was discarded. Records now come
+      from the repo under the same gate — same query, same guarantee, half the
+      round trips.
 - [x] **Two comments in `PostWorkout.jsx` asserted the opposite of the code**
       after the repoint (that the new API has no per-workout XP field, and why the
       XP bar starts empty). Rewritten rather than deleted, per :3610's lesson that

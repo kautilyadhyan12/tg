@@ -9,6 +9,7 @@
 //      exposed to, and a guard over the route TABLE catches the route someone
 //      adds next year, which a per-route test never will.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
@@ -242,6 +243,38 @@ d("GET /v1/workouts/:id/summary (real Postgres)", () => {
     expect(secondBody.xpEarned).toBe(60); // 50 + streak_day
   });
 
+  it("TWO workouts on one continuation day share ONE streak bonus (T3 C/H-1)", { timeout: 40_000 }, async () => {
+    // THE DEFECT THIS PINS: the XP TOTAL credits `streak_day` once per adjacent
+    // pair of DISTINCT activity days, but the summary was adding it to every
+    // workout on that day. Two summaries printed +60 each while the total moved
+    // by 110 — the screen claiming more XP than the user was given, which is the
+    // "this number disagrees with the number beside it" defect this endpoint
+    // exists to remove, pointing the other way.
+    //
+    // The existing continuation test above CANNOT see this: it syncs one workout
+    // per day, so per-workout and per-day are the same number. That is exactly
+    // why it stayed green.
+    const prior = crypto.randomUUID();
+    const firstOfDay = crypto.randomUUID();
+    const secondOfDay = crypto.randomUUID();
+    await sync(prior, daysAgoIso(21), [logOnlySet(1)], cookieA);
+    // Same tz-day, two different instants — the earlier one owns the bonus.
+    const day = daysAgoIso(20);
+    const later = new Date(Date.parse(day) + 3_600_000).toISOString();
+    await sync(firstOfDay, day, [logOnlySet(1)], cookieA);
+    await sync(secondOfDay, later, [logOnlySet(1)], cookieA);
+
+    const a = workoutSummarySchema.parse((await summary(firstOfDay, cookieA)).json());
+    const b = workoutSummarySchema.parse((await summary(secondOfDay, cookieA)).json());
+
+    // Exactly ONE of the two carries the bonus, and it is the earlier one.
+    expect(a.xpEarned).toBe(60); // 50 base + streak_day
+    expect(b.xpEarned).toBe(50); // 50 base, no second bonus
+    // Stated as the property too, so a future change that moves the bonus to the
+    // LATER workout still fails only if the total stops adding up.
+    expect(a.xpEarned + b.xpEarned).toBe(110);
+  });
+
   it("names a personal record the workout actually holds, and stays silent otherwise", { timeout: 30_000 }, async () => {
     // A deliberately huge workout so it takes the duration record outright.
     const big = crypto.randomUUID();
@@ -305,8 +338,36 @@ d("GET /v1/workouts/:id/summary (real Postgres)", () => {
     const id = crypto.randomUUID();
     await sync(id, daysAgoIso(6), [engineSet(1)], cookieA);
 
-    const routes = [`/v1/workouts/${id}`, `/v1/workouts/${id}/summary`];
-    expect(routes.length).toBeGreaterThan(0);
+    // DERIVED FROM THE ROUTE SOURCE, not a hand-written list (T3 round 1, L-2).
+    // The first version was `[/v1/workouts/:id, /v1/workouts/:id/summary]` under
+    // a comment claiming "a route added later is covered by construction". It
+    // was not — it was covered only if somebody remembered to edit the array, so
+    // the guard would stay green through exactly the event it exists to catch.
+    // The list was CORRECT the day it was written, which is what makes that kind
+    // of claim so easy to leave in place.
+    //
+    // The SOURCE and not `printRoutes()`: Fastify prints a nested tree whose full
+    // paths have to be rebuilt from indentation, and a guard that depends on
+    // parsing pretty-printed output fails in a way nobody can read. Reading the
+    // module that declares them follows the `nutritionApi.test.js` usage-guard
+    // precedent, and R7.1 keeps every workout-scoped route in this one file.
+    const routeSrc = readFileSync(
+      new URL("../src/modules/workouts/routes.ts", import.meta.url),
+      "utf8",
+    );
+    const declared = [...routeSrc.matchAll(/"(\/v1\/workouts\/:id[^"]*)"/g)]
+      .map((m) => m[1])
+      .filter((p): p is string => p !== undefined);
+    const routes = [...new Set(declared)].map((r) => r.replace(":id", id));
+
+    // A sweep over nothing is not a pass (:4855, where a run with zero mutants
+    // printed "ALL MUTANTS CAUGHT"). If the regex ever stops matching, this
+    // fails loudly instead of certifying an empty list.
+    expect(routes.length, "no /v1/workouts/:id routes found in routes.ts").toBeGreaterThan(0);
+    // Both known ones must be in there — a regex that silently narrowed would
+    // otherwise still satisfy the check above.
+    expect(routes).toContain(`/v1/workouts/${id}`);
+    expect(routes).toContain(`/v1/workouts/${id}/summary`);
 
     for (const route of routes) {
       const mine = await inject({ method: "GET", url: route, access: cookieA });

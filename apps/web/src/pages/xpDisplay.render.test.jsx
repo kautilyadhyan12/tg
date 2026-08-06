@@ -1872,10 +1872,14 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     isAwaitingSync.mockReturnValue(true);
   }, 10000);
 
-  it('a NON-404 failure does NOT retry — it fails immediately, as before', async () => {
-    // The retry is scoped to one status on purpose. A 500 that got retried five
-    // times would turn a server fault into four extra requests and a four-second
-    // stare at a spinner.
+  it('a 5xx does NOT retry — it fails immediately, as before', async () => {
+    // CORRECTED WORDING (T3 round 1, L-4). This said "the retry is scoped to one
+    // status on purpose", which the step-8 fix made FALSE — a no-response error
+    // is retried too. The retry is scoped to the "not here YET" shapes: a 404,
+    // or no response at all. A server that ANSWERS with 500 has been reached and
+    // has failed, so retrying it five times would turn one server fault into
+    // four extra requests and a four-second stare at a spinner.
+    // The test itself was right all along; only the sentence above it was wrong.
     toast.error.mockClear();
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     workoutService.getSummary.mockRejectedValue(
@@ -1939,6 +1943,37 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     fireEvent.click(screen.getByText('Cool Down Stretches'));
     expect(screen.getAllByText('—').length).toBe(8);
   });
+
+  it('draws NO "total" sub-line when the total IS the active time (the shipping case)', async () => {
+    // FOUND BY THE MUTATION SWEEP, not by review: M6 survived because
+    // `activeSeconds` and `durationSeconds` are computed from the same stored
+    // number — `repo.syncWorkout` derives a workout's `duration_ms` as the sum of
+    // its set durations. Measured against the live DB: 12 of 12 workouts had them
+    // exactly equal, including the ones from Kd's own smoke.
+    //
+    // What that printed: "31s" for Workout Time with "1 min total" beneath it and
+    // a tooltip explaining that the total "includes standing between reps and
+    // camera setup". There is no such gap. The MINUTE ROUNDING is what made one
+    // number look like two — 31 s and round(31/60)=1 min — so the fabrication
+    // was invisible at every layer that compared labels rather than values.
+    //
+    // No test could have caught it: the two expressions are equivalent, so no
+    // input distinguishes them. That is why this pins the RENDER RULE instead.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    workoutService.getSummary.mockResolvedValue({
+      data: { ...SUMMARY, activeSeconds: 31, durationSeconds: 31 },
+    });
+
+    const { container } = renderPostWorkout();
+    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
+
+    // The headline still reports the real figure…
+    expect(tileValues('Workout Time')).toEqual(['31s', '31s']);
+    // …and nothing claims a larger total beneath it.
+    expect(container.textContent).not.toMatch(/total/i);
+    const sub = pageTile('Workout Time').nextElementSibling.nextElementSibling;
+    expect(sub === null || !/total/i.test(sub.textContent ?? '')).toBe(true);
+  }, 10000);
 
   it('renders the LIST bodies — both record shapes, a meal, a stretch', async () => {
     // T3 F3. Every other fixture leaves these four `.map` bodies unexecuted, and
@@ -2013,6 +2048,12 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     // renaming its field printed "NaNh NaNm total" here — in the healthy state —
     // with every test green. Read as the node AFTER the value, so it also fails
     // if the sub-line vanishes.
+    //
+    // THIS FIXTURE KEEPS active (900s) AND total (2100s) DIFFERENT ON PURPOSE.
+    // Production sends the SAME number for both — the server derives a workout's
+    // duration as the sum of its set durations — so this control covers the case
+    // where a real wall-clock total eventually exists, and the test below covers
+    // the case that actually ships today.
     expect(pageTile('Workout Time').nextElementSibling.nextElementSibling.textContent)
       .toBe('35 min total');
 

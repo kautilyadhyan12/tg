@@ -725,6 +725,14 @@ export function readSummaryView(data) {
   const durationSeconds = finite(data.durationSeconds);
   return {
     activeSeconds:   finite(data.activeSeconds),
+    // EXPOSED ALONGSIDE the minutes, so a consumer can ask whether the total is
+    // actually a DIFFERENT figure from the active time before drawing them as a
+    // contrast. Today it never is — the server derives the workout's duration as
+    // the sum of its set durations, so both are one number — and the summary
+    // screen was printing "31s" above "1 min total" with a tooltip explaining a
+    // gap that does not exist. Rounding to minutes made them LOOK different,
+    // which is what hid it.
+    durationSeconds,
     // Minutes for the two consumers that want minutes; see the note above. The
     // rounding is here and NOWHERE else, so the page and the share card cannot
     // round differently — which is how two surfaces come to disagree about one

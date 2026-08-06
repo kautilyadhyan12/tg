@@ -148,7 +148,24 @@ export const workoutSummarySchema = z.object({
    *  what printed a 9-second workout as "0m" on the calendar (DECISIONS :4182);
    *  the unit a duration is carried in should not change on its way to a label. */
   activeSeconds: z.number().int().nullable(),
-  /** The whole session, wall clock, in WHOLE SECONDS (workouts.duration_ms). */
+  /** `workouts.duration_ms` in WHOLE SECONDS.
+   *
+   *  **TODAY THIS IS THE SAME NUMBER AS `activeSeconds`, and callers must not
+   *  present the two as a contrast.** The first version of this comment said
+   *  "the whole session, wall clock" — FALSE, and it is the reason the summary
+   *  screen printed "31s" above "1 min total" with a tooltip explaining the
+   *  difference: `repo.syncWorkout` derives `duration_ms` as
+   *  `sets.reduce((a, s) => a + s.durationMs, 0)`, i.e. the identical sum.
+   *  Verified against the live DB before this wording was changed: 12 of 12
+   *  workouts had `duration_ms` exactly equal to the sum of their sets.
+   *
+   *  **The wall-clock session time is not stored anywhere in the new API.** The
+   *  client measures it (`ActiveWorkout`'s elapsed seconds) and the sync
+   *  contract has no field for it; the old backend carried it as
+   *  `duration_minutes`. That gap has its own `OWED.md` line. The field stays
+   *  because it is the honest name for what IS stored, and because the day a
+   *  real session duration lands it is where it belongs — at which point the two
+   *  diverge and every consumer works unchanged. */
   durationSeconds: z.number().int().nullable(),
   /** kcal_point — 2B §2.3 display banding stays the client's job. NULL means
    *  the workout carries no estimate, never 0. */

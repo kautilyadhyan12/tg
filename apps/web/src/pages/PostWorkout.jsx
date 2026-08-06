@@ -369,17 +369,17 @@ export default function PostWorkout() {
           // redirect, no text. Throwing routes it into the failure path this page
           // ALREADY has, rather than growing a second one worded differently for
           // the same event.
-          // TAGGED, and the tag is load-bearing. This throw is OUR code, not a
-          // transport failure, so it has no `err.response` — which is the very
-          // signal the offline retry below keys on. Untagged, a 200 carrying the
-          // wrong shape was mistaken for "we never reached the server" and
-          // RETRIED four times before failing. The suite's own empty-200 test
-          // caught it the moment the offline case was added.
-          if (view === null) {
-            throw Object.assign(new Error('summary missing from response'), {
-              unreadableBody: true,
-            });
-          }
+          // A plain Error, deliberately. This throw briefly carried an
+          // `unreadableBody: true` tag, because the offline branch below asked
+          // "is `err.response` missing?" and this error also has no response —
+          // so a 200 with the wrong shape was mistaken for a dropped connection
+          // and retried four times. The tag fixed the symptom; asking the right
+          // question fixed the cause (T3 round 1, L-3). The branch now tests for
+          // the PRESENCE of `err.request`, which axios sets only when a request
+          // actually went out, and this error has none. The tag became dead
+          // surface the moment that landed, and dead surface reads as protection
+          // without being any.
+          if (view === null) throw new Error('summary missing from response');
           setSummary(view);
           setLoading(false);
         })
@@ -387,12 +387,30 @@ export default function PostWorkout() {
           if (cancelled) return;
           // "Not here yet" = the server said 404, OR we never got a response at
           // all (offline). Both are only "yet" if our own outbox still holds it.
-          const noResponse = err?.response === undefined && err?.unreadableBody !== true;
+          // IDENTIFIED BY WHAT IT IS, NOT BY WHAT IT LACKS (T3 round 1, L-3).
+          // `err.request` is set by axios exactly when a request went out and no
+          // response came back — a dropped network. Testing for the ABSENCE of
+          // `response` instead swept in every other throw that happens to have
+          // no response, which is how our own bad-body error was mistaken for
+          // offline and retried. That was the third instance of this shape on
+          // this card (DECISIONS :5543 names three); reading the positive signal
+          // is what stops there being a fourth, and it makes the
+          // `unreadableBody` tag redundant rather than load-bearing.
+          const noResponse = err?.request !== undefined && err?.response === undefined;
           const notHereYet = noResponse || err?.response?.status === 404;
           const awaitingSync = notHereYet && isAwaitingSync(workoutId);
           if (awaitingSync && triesLeft > 0) {
             setSyncing(true);
-            flushSyncQueue().catch(() => {});
+            // KICKED ONCE, ON THE FIRST RETRY ONLY (T3 round 1, L-5). Every call
+            // sets the queue's `rerunRequested`, so kicking on all five retries
+            // asked for up to five extra full passes inside four seconds — and
+            // the bare `.catch(() => {})` made a permanently failing flush
+            // completely silent. One kick is all the situation needs: the queue
+            // retries on its own triggers, and this one exists only to cover a
+            // flush that lost its race with the navigation.
+            if (triesLeft === SYNC_RETRY_ATTEMPTS) {
+              flushSyncQueue().catch((e) => console.error('sync flush failed:', e?.message));
+            }
             timer = setTimeout(() => attempt(triesLeft - 1), SYNC_RETRY_MS);
             return;
           }
@@ -585,7 +603,17 @@ export default function PostWorkout() {
           className="grid grid-cols-2 gap-4"
         >
           {[
-            { icon: Clock,    label: 'Workout Time',  value: workoutTimeLabel(summary.activeSeconds, summary.durationMinutes), color: 'text-blue-400',     bg: 'bg-blue-500/10', sublabel: summary.activeSeconds !== null ? totalTimeLabel(summary.durationMinutes) : null, sublabelTip: 'Time you were actually moving through reps. The smaller "total" figure is the whole time on the workout screen, including standing between reps and camera setup.' },
+            // THE "N min total" SUB-LINE ONLY RENDERS WHEN THE TOTAL IS
+            // GENUINELY A DIFFERENT FIGURE. It used to render whenever active
+            // time was known, and the server sends the same number for both —
+            // `duration_ms` is derived as the sum of the set durations — so the
+            // screen printed "31s" above "1 min total" and a tooltip explaining
+            // rest time that never happened. The minute rounding is what made
+            // one number look like two. Measured, not reasoned: 12 of 12
+            // workouts in the live DB had the two exactly equal.
+            // This returns BY ITSELF if a real wall-clock session time is ever
+            // stored (its own OWED line) — nothing here needs changing then.
+            { icon: Clock,    label: 'Workout Time',  value: workoutTimeLabel(summary.activeSeconds, summary.durationMinutes), color: 'text-blue-400',     bg: 'bg-blue-500/10', sublabel: summary.activeSeconds !== null && summary.durationSeconds !== null && summary.durationSeconds !== summary.activeSeconds ? totalTimeLabel(summary.durationMinutes) : null, sublabelTip: 'Time you were actually moving through reps. The smaller "total" figure is the whole time on the workout screen, including standing between reps and camera setup.' },
             { icon: Flame,    label: 'Calories',  value: `${orUnknown(summary.caloriesBurned)} kcal`, color: 'text-orange-400',   bg: 'bg-orange-500/10', sublabel: 'Estimate', sublabelTip: 'Calculated from your body weight and active movement time using standard MET values — not measured by a heart-rate sensor, so treat it as a planning estimate rather than an exact figure.' },
             { icon: Dumbbell, label: 'Exercises', value: orUnknown(summary.exercisesCount),      color: 'text-primary-400',  bg: 'bg-primary-500/10' },
             { icon: Target,   label: 'Avg Form',  value: formatPercent(summary.formAccuracy),    color: formInfo.color,      bg: 'bg-white/5' },

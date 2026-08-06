@@ -5530,8 +5530,16 @@ check.** First card run under the fixed review/fix process (:5348).
 - (**A PERMANENT GUARD, rule 5's first**) A table-driven test asserts that EVERY
   workout-scoped `:id` route serves its owner, 404s a stranger and 401s an
   anonymous caller — with the owner's 200 asserted first, so the denial cannot
-  pass on a route that is simply broken for everyone. It covers the route added
-  next year, which a per-route test never does.
+  pass on a route that is simply broken for everyone.
+  **CORRECTED IN PLACE 2026-08-07 (T3 round 1, L-2): the sentence that stood here
+  — "It covers the route added next year, which a per-route test never does" —
+  WAS FALSE.** The list was a hand-written array; a route added next year is
+  covered only if somebody edits it, so the guard would have stayed green through
+  exactly the event it claims to catch. The list was CORRECT on the day it was
+  written, which is what makes that kind of claim so easy to leave standing. It
+  is now derived from `routes.ts`, and asserts both known routes are found so a
+  silently-narrowed regex cannot pass either. **A guard is a claim, and this one
+  was checked against its intent rather than its behaviour.**
 - (**PROVE**) api **418/418** (10 new, real Postgres) · web **501/501** (was 494)
   · typecheck clean · api lint clean · web lint at its exact baseline, **measured
   by stashing the diff and re-running** (ActiveWorkout 10E/3W, PostWorkout 4E/1W,
@@ -5606,3 +5614,126 @@ occurrence of premature ticking on this branch would be one too many).
   CRLF tree, once when the step-8 fix split the line M15 was anchored to. Both
   times it ABORTED rather than reporting a missing test — :4267's failure mode
   caught by the guard written for it.
+
+## 2026-08-07 — summary card, T3 ROUND 1: one Critical/High, seven Low, and a defect the SWEEP found that the review did not
+
+**Read before crediting a number to a WORKOUT that the system credits to a DAY,
+and before believing any two fields that "obviously" mean different things.**
+First card judged by the severity gate (:5348). One Critical/High, fixed with its
+regression test; all seven Low fixed in the same round (rule 1 fixes them, it
+just does not spend another round on them). Escape hatch not triggered — round 1.
+
+- (**C/H-1 — THE SCREEN COULD CLAIM MORE XP THAN WAS AWARDED.**) `computeTotalXp`
+  credits `streak_day` once per adjacent pair of **DISTINCT activity days**
+  (`getActivityDays` is `SELECT DISTINCT … day`). `xpEarnedForWorkout` was adding
+  it to **every workout on that day**. Two workouts on one continuation day
+  therefore printed **+60 each while the total moved by 110** — and the level bar
+  two tiles away is derived from the 110.
+  **This is the exact defect the card's own departure-from-the-port was written to
+  remove** (:5438: the old endpoint UNDER-reported by omitting the bonus),
+  reintroduced as an OVER-report. Fixed by awarding the bonus to the day's FIRST
+  workout — `repo.hasEarlierWorkoutOnDay`, bucketed in the user's timezone by the
+  database like every other day boundary, with `id` breaking an exact tie so the
+  answer is "exactly one" and never "both" or "neither".
+  **The existing continuation test could not see it**: one workout per day makes
+  per-workout and per-day the same number. The new test syncs two on one day and
+  asserts 60 / 50 / sum 110. M19 + M20.
+- (**THE SWEEP FOUND A DEFECT THE REVIEW DID NOT — M6 SURVIVED, and the survival
+  WAS the finding.**) M6 mutated `activeSeconds` (Σ set durations) to
+  `workout.durationMs` and came back ALIVE on the first COMPLETE run. It is an
+  EQUIVALENT mutant: `repo.syncWorkout:65` derives `duration_ms` as
+  `sets.reduce((a, s) => a + s.durationMs, 0)` — **the same number**. Measured,
+  not reasoned: **12 of 12 workouts in the live DB, including Kd's own smoke
+  workouts, had them exactly equal.**
+  **What that shipped:** the summary printed "31s" for Workout Time with
+  "1 min total" beneath it, and a tooltip explaining that the total includes
+  "standing between reps and camera setup". **There is no such gap.** The MINUTE
+  ROUNDING is what made one number look like two (31 s vs `round(31/60)` = 1 min),
+  which is why it survived every layer that compared labels rather than values —
+  and why the schema comment I wrote ("the whole session, wall clock") was false.
+  **No test could ever have caught this**, because no input distinguishes two
+  equivalent expressions. The fix is a RENDER RULE — the sub-line draws only when
+  the two genuinely differ (M21) — plus an `OWED.md` line for the real gap: the
+  new API stores no wall-clock session duration at all, the client still measures
+  one, and the sync contract has nowhere to put it. **The sub-line returns by
+  itself the day that lands.**
+  **The lesson, and it is why M6 was RETIRED WITH ITS REASON rather than
+  deleted:** a mutant nothing can kill is not noise, it is the shape of a
+  distinction the code claims and does not have — :5104's F5 ("a fix whose
+  protection cannot fail is the same defect with a comment on it") arriving from
+  the opposite direction.
+- (**L-1 — THE AUDIT HARNESS COULD NOT COMPLETE A RUN, and that is worse than it
+  sounds**) M11 and M12 both anchored to a line the step-8 fix had deleted, so the
+  sweep died at M11 **after ten minutes of green suites** — and **the retry itself
+  had no live mutant**, so "a 404 RETRIES and then renders" had never been shown
+  to fail with the retry removed. M11 re-anchored; M12 repointed (its claim "ONLY
+  a 404 is retried" became false at step 8); and **the anchor check is hoisted to
+  run over the whole table before any suite**, reporting every stale anchor in one
+  second. It fired immediately, on a third anchor broken minutes earlier.
+- (**L-2 — A GUARD THAT CLAIMED A PROPERTY IT DID NOT HAVE**) The permanent guard
+  was a hand-written array under the comment "a route added later is covered by
+  construction". It was not: covered only if somebody edits the array, so it would
+  stay green through exactly the event it exists to catch. **The list was correct
+  the day it was written, which is what makes that kind of claim so easy to
+  leave.** Now derived from `routes.ts`, asserting both known routes are found so
+  a silently-narrowed regex cannot pass either. The false sentence in :5438 is
+  **corrected in place**.
+- (**L-3 — THE FOURTH INSTANCE OF ONE SHAPE IN TWO DAYS**) The offline branch
+  asked "is `err.response` missing?", which sweeps in every throw that has no
+  response — how our own bad-body error became "offline". Now `err.request !==
+  undefined`, the signal axios actually sets. The `unreadableBody` tag added
+  hours earlier is deleted as the dead surface it became. **A condition
+  identified by what it LACKS will keep finding new things that lack it.**
+- (**L-4 to L-6, fixed**) A comment that outlived its code ("the retry is scoped
+  to one status"); five queue kicks in four seconds with every error swallowed,
+  now one kick and logged; and `reconciledStreak` — a `SELECT … FOR UPDATE` plus
+  a conditional write — running **twice per summary read on a single-connection
+  pool** for a value that was discarded, now once.
+- (**L-7 — REPORTED, NOT FIXED: it is a RULING**) Reading a workout by direct id
+  applies no history gate, while the personal-records section **on the same
+  screen** does — so one screen answers the same question two ways. Pre-existing
+  (the detail route has done this since P2.3), not a leak, the caller's own data.
+  Is the plan's history window a LIST gate or a READ gate? `OWED.md` line; a chat
+  that decides it silently is making a paid-feature decision (R3.1).
+- (**A FALSE CLAIM OF MINE, STRUCK**) HANDOFF said "18 mutants declared, all
+  RED". **That was never one run** — M1-M14, then M15-M18 separately, and by then
+  M11/M12 could not run at all. :5199 F3's lesson, one card later: "I measured it
+  RED" and "the committed harness measures it RED" are different claims.
+
+- (**PROVE — and this figure IS one completed run, deliberately**) **20 mutants,
+  20 caught, 0 ALIVE, 20 applied**, baseline GREEN on all four suites first, every
+  target verified byte-identical to its pre-run snapshot afterwards. api
+  **419/419** · web **506/506** · typecheck clean · api lint clean · web lint at
+  its exact baseline. The sweep was re-run from scratch after the last fix rather
+  than composed from earlier partial runs — which is the whole point of the
+  struck claim above.
+- (**AN UNEXPLAINED RED, AND WHY THE HARNESS NOW SHOWS ITS WORKING**) One sweep
+  aborted on a RED apiDb baseline for a suite that passed standalone 60 seconds
+  later — transient contention with the 419-test run that had just finished
+  against the same Neon database. It was the right outcome (a red baseline must
+  stop the run) reached with no evidence attached, which is indistinguishable
+  from a harness fault. `runSuite` now KEEPS the failing run's output and the
+  baseline gate prints its tail. **A verdict with nothing behind it is the thing
+  this project has been burned by five times; a correct verdict with nothing
+  behind it is the same shape wearing a better outcome.**
+
+- (**KD RULING on L-7, 2026-08-07 — LEAVE IT, and the condition he attached**)
+  The plan's history window stays a BROWSE gate, not a READ gate: your own old
+  workout remains readable by direct id, and the records section stays scoped to
+  the window. Kd was shown both alternatives and why each is worse — blocking the
+  read hides a user's own data from them; ungating the records would make the
+  summary and the Progress screen disagree about who holds a record, which is the
+  thing this card unified. The residue is an oddity, not a falsehood: a very old
+  workout's records section is empty because it cannot be a record inside the
+  visible window. `OWED.md`'s line is STRUCK with this ruling cited (:456's
+  precedent), not left open.
+  **HIS CONDITION, in his words: "if someone else puts that link they should not
+  get access."** They cannot, and it was already true when he said it — proven by
+  his own smoke step 7, by the cross-tenant test asserting a stranger's 404 is
+  byte-identical to an unknown id's, and by mutation M8, which deletes
+  `AND user_id = ${userId}` from the shared detail read and is caught.
+  **RECORDED AS A GUARD AGAINST A FUTURE MISREADING:** this ruling relaxes
+  NOTHING about ownership. A later chat reading "direct reads are not gated" as
+  licence to loosen the `(id, userId)` key would be inverting it. The plan window
+  and the tenancy key are different mechanisms and the ruling touches only the
+  first.

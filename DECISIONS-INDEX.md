@@ -189,6 +189,30 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:5618** — 2026-08-07 — **summary card, T3 ROUND 1: one Critical/High, seven
+  Low — and a defect the SWEEP found that the review did not.** **Read before
+  crediting to a WORKOUT a number the system credits to a DAY, and before
+  believing two fields that "obviously" mean different things.** **C/H-1: the
+  screen could claim MORE XP than was awarded** — `streak_day` is credited once
+  per DISTINCT activity day but was added to every workout on that day, so two
+  workouts in a day printed +60 each while the total moved 110; the card's own
+  departure-from-the-port existed to fix the UNDER-report and reintroduced it as
+  an OVER-report. Fixed by giving the bonus to the day's FIRST workout
+  (`hasEarlierWorkoutOnDay`). **THE ONE WITH TEETH IS NOT IN THE REVIEW: M6
+  SURVIVED, and the survival WAS the finding** — `activeSeconds` and
+  `durationSeconds` are the SAME number (`duration_ms` is derived as the sum of
+  set durations; 12/12 workouts in the live DB, Kd's own smoke among them), so the
+  summary printed "31s" over "1 min total" with a tooltip explaining a rest gap
+  that does not exist, and **no test could ever have caught it** because no input
+  distinguishes equivalent expressions. M6 is RETIRED WITH ITS REASON, not
+  deleted. Also: **the audit harness could not complete a run** (two anchors
+  pointed at a deleted line, so the retry had no live mutant at all) — anchors are
+  now checked up front for the whole table; **the permanent guard's "covered by
+  construction" claim was FALSE** and is corrected in place at :5438; and the
+  offline branch stopped identifying itself by what it LACKS. **20/20 mutants RED
+  on one completed run** · api 419/419 · web 506/506. **Carries Kd's L-7 ruling
+  (LEAVE the plan window as a browse gate) and the condition he attached — which
+  grants NOTHING about ownership.**
 - **:5543** — 2026-08-07 — **the summary SMOKE PASSED 8/8 — and the browser found
   TWO defects that 505 green tests could not.** **Read before writing a fixture
   for a NETWORK failure, and before trusting "the tests cover the offline path".**
