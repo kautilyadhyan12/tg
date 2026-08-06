@@ -959,7 +959,13 @@ export default function ActiveWorkout() {
     } catch (err) {
       console.error('Failed to save workout:', err);
     }
-    setTimeout(() => navigate(`/workout/summary/${sessionData.sessionId}`), 2000);
+    // THE SUMMARY SCREEN IS NOW KEYED BY THE SYNC ID, not the legacy session id
+    // (repointed 2026-08-06). `syncIdentity.workoutId` is what went to
+    // `POST /v1/workouts/sync` a few lines above, so it is the id the new API
+    // knows this workout by. `sessionData.sessionId` is still live and still
+    // used — the legacy save above needs it and STAYS (Kd, DECISIONS :3424) —
+    // it is simply no longer what the next screen reads.
+    setTimeout(() => navigate(`/workout/summary/${syncIdentity.workoutId}`), 2000);
   };
 
   const handleStop = () => {

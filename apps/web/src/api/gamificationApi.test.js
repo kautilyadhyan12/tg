@@ -1044,28 +1044,38 @@ describe('readPersonalRecord — both shapes the old backend sends', () => {
 });
 
 describe('readSummaryView — NULL is the signal that fixes the blank page', () => {
+  // REPOINTED 2026-08-06 to the NEW API's payload: camelCase, no `summary`
+  // envelope, whole SECONDS. `workoutId` is present in every valid fixture
+  // because the reader now uses it to tell a summary from any other 200.
+  const ID = '11111111-1111-4111-8111-111111111111';
   const full = {
-    summary: {
-      active_seconds: 900, duration_minutes: 35, calories_burned: 280,
-      form_accuracy: 88, exercises_count: 3, current_streak: 3, xp_earned: 70,
-      personal_records: ['Best form accuracy!'],
-      meal_suggestions: [{ meal: 'Paneer bhurji', timing: 'within 45 min' }],
-      stretches: ['Hamstring stretch'],
-    },
+    workoutId: ID, startedAt: '2026-08-06T10:00:00Z',
+    activeSeconds: 900, durationSeconds: 2100, caloriesBurned: 280,
+    formAccuracy: 88, exercisesCount: 3, currentStreak: 3, xpEarned: 70,
+    currentLevel: 4, currentXp: 1200,
+    personalRecords: ['Best form accuracy!'],
+    mealSuggestions: [{ meal: 'Paneer bhurji', timing: 'within 45 min' }],
+    stretches: ['Hamstring stretch'],
   };
 
-  it('returns null when there is no summary OBJECT at all', () => {
-    // The empty-200 case. `{}` is a 200 the old backend really sends, and
-    // `setSummary(res.data.summary)` stored undefined from it WITHOUT throwing, so
-    // the page's catch never ran and it rendered a blank white screen.
-    for (const v of [{}, null, undefined, { summary: null }, { summary: 'x' }, { summary: [] }]) {
+  it('returns null when the response is not a summary at all', () => {
+    // The empty-200 case, and the reason the envelope's removal did not cost
+    // this guard. `{}` used to be caught by "no `summary` key"; now it is caught
+    // by "no `workoutId`". Without that second test `{}` yields a view of
+    // all-nulls and the page renders every tile as "—" instead of taking its
+    // failure path — the blank-white-page defect wearing a politer face.
+    for (const v of [{}, null, undefined, 'x', [], { workoutId: null }, { workoutId: '' }]) {
       expect(readSummaryView(v)).toBe(null);
     }
+    // The OLD shape is also refused, which matters during a repoint: a stale
+    // client reading the old backend must fail loudly, not render blanks.
+    expect(readSummaryView({ summary: { active_seconds: 900 } })).toBe(null);
   });
 
   it('reads every rendered field, and nothing that is not rendered', () => {
     // `toEqual` on the WHOLE object is what keeps dead surface out: adding
-    // session_id / completed_at / exercises here would fail it. Round 6's lesson —
+    // workoutId / startedAt / currentLevel here would fail it, and the fixture
+    // above carries all three precisely so this stays honest. Round 6's lesson —
     // unused surface reads as protection and is not.
     expect(readSummaryView(full)).toEqual({
       activeSeconds: 900, durationMinutes: 35, caloriesBurned: 280,
@@ -1076,16 +1086,28 @@ describe('readSummaryView — NULL is the signal that fixes the blank page', () 
     });
   });
 
+  it('converts the total to minutes ONCE, here — and rounds it', () => {
+    // The page and the share card both want minutes and spell them differently;
+    // the conversion lives here so they cannot round differently. The exact
+    // figure the headline uses (`activeSeconds`) is untouched.
+    expect(readSummaryView({ ...full, durationSeconds: 2100 }).durationMinutes).toBe(35);
+    expect(readSummaryView({ ...full, durationSeconds: 29 }).durationMinutes).toBe(0);
+    expect(readSummaryView({ ...full, durationSeconds: 90 }).durationMinutes).toBe(2);
+    expect(readSummaryView({ ...full, durationSeconds: null }).durationMinutes).toBe(null);
+    // A string is not a duration, and must not become NaN minutes.
+    expect(readSummaryView({ ...full, durationSeconds: 'lots' }).durationMinutes).toBe(null);
+  });
+
   it('nulls each field independently — no envelope gate to get wrong', () => {
     // Round 4 F2: `Boolean(stats?.stats)` asserted the ENVELOPE and six sites then
     // read fields off it with `?? 0`, so a 200 carrying `{stats:{}}` printed
     // "0 workouts / 0h / 0 kcal" as fact. Per-field means that cannot recur here.
-    expect(readSummaryView({ summary: {} })).toEqual({
+    expect(readSummaryView({ workoutId: ID })).toEqual({
       activeSeconds: null, durationMinutes: null, caloriesBurned: null,
       formAccuracy: null, exercisesCount: null, currentStreak: null, xpEarned: null,
       personalRecords: null, mealSuggestions: null, stretches: null,
     });
-    const v = readSummaryView({ summary: { form_accuracy: 88, calories_burned: 'lots' } });
+    const v = readSummaryView({ workoutId: ID, formAccuracy: 88, caloriesBurned: 'lots' });
     expect(v.formAccuracy).toBe(88);
     expect(v.caloriesBurned).toBe(null);            // a string is not a number
   });
@@ -1095,18 +1117,18 @@ describe('readSummaryView — NULL is the signal that fixes the blank page', () 
     // `?.length > 0`, then `.map is not a function` throws during render and
     // blanks the whole page — there is no ErrorBoundary anywhere in apps/web.
     const v = readSummaryView({
-      summary: {
-        personal_records: 'Best form accuracy!',
-        meal_suggestions: 'Paneer bhurji',
-        stretches: 'Hamstring stretch',
-      },
+      workoutId: ID,
+      personalRecords: 'Best form accuracy!',
+      mealSuggestions: 'Paneer bhurji',
+      stretches: 'Hamstring stretch',
     });
     expect(v.personalRecords).toBe(null);
     expect(v.mealSuggestions).toBe(null);
     expect(v.stretches).toBe(null);
     // An EMPTY list is a truthful "none" and stays a list — the round 6 F1
-    // inverse, where a real empty result got denied as "unavailable".
-    const e = readSummaryView({ summary: { personal_records: [], stretches: [] } });
+    // inverse, where a real empty result got denied as "unavailable". This is
+    // now the COMMON case: the new API sends [] for "no record set".
+    const e = readSummaryView({ workoutId: ID, personalRecords: [], stretches: [] });
     expect(e.personalRecords).toEqual([]);
     expect(e.stretches).toEqual([]);
   });
@@ -1115,11 +1137,10 @@ describe('readSummaryView — NULL is the signal that fixes the blank page', () 
     // Round 7 F7: `earnedBadgeCount([null])` threw one layer inside the fix for
     // the list-level version of the same bug. Same shape, checked here first.
     const v = readSummaryView({
-      summary: {
-        personal_records: [null, 42, {}],
-        meal_suggestions: [null, { meal: 'Dal' }],
-        stretches: [null, 7, 'Quad stretch'],
-      },
+      workoutId: ID,
+      personalRecords: [null, 42, {}],
+      mealSuggestions: [null, { meal: 'Dal' }],
+      stretches: [null, 7, 'Quad stretch'],
     });
     expect(v.personalRecords).toEqual([null, null, null]);
     expect(v.mealSuggestions).toEqual([

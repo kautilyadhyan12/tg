@@ -92,7 +92,10 @@ export default function App() {
                 <AppLayout><WorkoutBuilder /></AppLayout>
               </ProtectedRoute>
             } />
-            <Route path="/workout/summary/:sessionId" element={
+            {/* :workoutId is the CLIENT-generated workout id (the sync key), not
+                the old backend's session id — repointed 2026-08-06 with the
+                summary itself. The param NAME matters: `useParams` keys by it. */}
+            <Route path="/workout/summary/:workoutId" element={
               <ProtectedRoute>
                 <AppLayout><PostWorkout /></AppLayout>
               </ProtectedRoute>

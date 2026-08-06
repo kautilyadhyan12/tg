@@ -5434,3 +5434,175 @@ rationalisation of that card's findings (:2385's sentence, applied again).
 - **This is the second time in three days a process rule has been made standing
   after being applied ad hoc** (:5307 was the first). Same lesson, stated there:
   a rule nobody re-reads becomes whatever chats have been doing with it.
+
+## 2026-08-06 — THE POST-WORKOUT SUMMARY IS OFF THE OLD BACKEND (workout core loop, card 1 of 4)
+
+**Read before touching the post-workout screen, before repointing any field whose
+UNITS differ between backends, and before writing a mutation harness's restore
+check.** First card run under the fixed review/fix process (:5348).
+
+- (**THE SCOPE PROPOSAL, and Kd approved the split**) The eight remaining
+  old-backend workout calls are FOUR cards, not one — :2158's recorded lesson is
+  that eleven review rounds was a fault of the CARD's scope. Order: **(1) the
+  summary** — this card; (2) the Dashboard's stats; (3) workout templates
+  (independent, blocks nothing); (4) retire the legacy start+save. Each has an
+  `OWED.md` line as of this commit.
+- (**A CORRECTION TO THE CARD PROMPT, made before planning**) The prompt's
+  motivation was that every smoke needs a THIRD server. **That cannot be fixed
+  first, and this card does not fix it.** `completeSession` STAYS by Kd's ruling
+  (:3424) and needs the session id that `createSession` hands out, so the two
+  retire TOGETHER — and only once the summary AND the Dashboard's stats have
+  new-API homes, because those are what read the legacy save. The third server
+  goes LAST. That coupling was written down nowhere; it is now in `OWED.md` and in
+  `workoutApi.js`'s header.
+- (**WHAT SHIPPED**) `GET /v1/workouts/:id/summary` — time, calories, form,
+  distinct exercise count, streak, level, total XP, XP earned, personal records,
+  meal ideas, stretches. **No migration: every field already existed.** The screen
+  is now keyed by the CLIENT-generated workout id (the sync key) rather than the
+  legacy session id; both ids stay live until card 4.
+- (**COMPOSED FROM EXISTING READS, deliberately**) The workout comes from
+  `getWorkoutDetail`, which is keyed `(id, userId)` — so the route INHERITS its
+  tenancy rather than re-implementing it (R3.2). Records come from the same
+  `personalRecords` the records screen reads, so the two screens cannot disagree
+  about who holds a record. XP and streak cross the module boundary through the
+  gamification SERVICE (R7.1), never its tables.
+- (**THREE SPEC GAPS, all put to Kd, none invented**) `getSummary` returns meal
+  ideas, stretches and record labels that **the spec names nowhere** — verified by
+  grep over `docs/spec` before asking. Under R0.2 the choice was "port what
+  exists" or "invent"; under the no-removal rule, dropping them was never an
+  option. **Kd ruled: port verbatim.** `summaryContent.ts` is a line-for-line port
+  of `workouts.py:562-639` — the bands, the `> 400` / `> 200` thresholds, the
+  muscle names and the strings, in the Python file's order. Muscle names come from
+  `EXERCISE_CONTENT` (:4945's verbatim seed port), which matters because the
+  stretch rules match on those exact spellings.
+- (**THE ONE DELIBERATE DEPARTURE FROM THE PORT, and it FIXES a recorded
+  defect**) The old SUMMARY endpoint derived XP as base + form bonus only, while
+  its own COMPLETE endpoint also awarded `streak_day` — so the figure under
+  "XP Earned" understated the real award whenever a streak continued, **on the
+  same screen as the total it disagreed with**. Recorded at T3 round 4 F5 as
+  pre-existing and out of scope; it is in scope here. `xpEarnedForWorkout` sums
+  the SAME ported `XP_REWARDS` constants for one workout. Kd approved at the plan
+  gate. Badge XP stays out: badges are awarded by their own evaluator and are not
+  a property of one workout.
+- (**THE SYNC RACE, which had no answer before this card**) `queueWorkoutSync`
+  enqueues and kicks a FIRE-AND-FORGET flush; nothing awaits it. So this screen
+  can open before the workout reaches the server and the read 404s. That is a
+  normal, temporary state — the id was minted by this browser seconds earlier.
+  The page RETRIES (5 × 800 ms, re-kicking the queue), shows "Saving your
+  workout…", and on an outlasted 404 says **the workout is saved and will sync**
+  rather than "failed to load", which would be the more alarming lie about data
+  sitting safely in localStorage. **Only 404 retries**; a 500 fails at once.
+- (**A REGRESSION I NEARLY SHIPPED, caught by the reader's own tests**) Dropping
+  the old `{success, summary:{…}}` envelope nearly cost the blank-page guard: with
+  only an object test, a 200 carrying `{}` produced a view of all-nulls instead of
+  NULL, so the page rendered every tile as "—" instead of taking its failure path
+  — the blank-white-page defect wearing a politer face. Closed by testing
+  `workoutId`, the contract's one non-nullable field.
+- (**A CLAIM OF MINE THAT WAS FALSE, and the tests are what found it**) I told Kd
+  "nothing on screen moves", on the reasoning that the minutes arm of
+  `workoutTimeLabel` was already unreachable. **True of the headline, FALSE of the
+  sub-line**: `totalTimeLabel` always renders, and my seconds-based replacement
+  turned "35 min total" into "35m 0s total". Three render tests failed. Reverted
+  to the minimal change — the API sends whole SECONDS, the READER converts once to
+  minutes for the two consumers that want minutes, and the headline keeps the
+  exact figure. **:4182 is not violated by that rounding**: its defect was a
+  HEADLINE rounded to minutes with no sub-minute arm; here the precise value is on
+  screen and only a secondary "total" line is minute-granular, as it always was.
+- (**THE TEST AUDIT — rule 4's first outing, and it is the strongest evidence
+  here**) 14 mutants, **14 RED, 0 ALIVE, 14 applied**, baseline GREEN on all four
+  suites first. Every claim this card makes has a mutant behind it, including the
+  TENANCY one (M8 removes `AND user_id = ${userId}` from the shared detail read
+  and the guard test goes red). Harness at `tools/mutate-workout-summary.mjs`.
+- (**THE HARNESS FAILED TWICE AT ITS OWN JOB, and both are the same shape**)
+  (1) `execFileSync`'s default 1 MB `maxBuffer` threw ENOBUFS on the ~3-minute DB
+  suite and a bare `catch { return "RED" }` turned a PASSING suite into a verdict.
+  It surfaced on the baseline gate, where it merely aborted — one step later every
+  mutant would have been scored "caught" with nothing asserted (:2614 F3 by a new
+  route). A runner error now ABORTS rather than resolving to a verdict.
+  (2) The final restore check asked `git diff`, **which cannot answer the question
+  it was asked**: git compares against HEAD, so on any branch with uncommitted
+  work it reports the CARD'S OWN changes as harness damage — a clean 14/14 sweep
+  ended "TARGETS STILL MODIFIED", exit 1. Now each target is compared against its
+  pre-run BYTE SNAPSHOT. **Both failed toward a false ALARM rather than a false
+  pass, which is the safe direction and the only reason they are Low.** The lesson
+  is :5199's, one instrument along: **a safeguard can read authoritative while
+  asserting something adjacent to what it claims.**
+- (**A PERMANENT GUARD, rule 5's first**) A table-driven test asserts that EVERY
+  workout-scoped `:id` route serves its owner, 404s a stranger and 401s an
+  anonymous caller — with the owner's 200 asserted first, so the denial cannot
+  pass on a route that is simply broken for everyone. It covers the route added
+  next year, which a per-route test never does.
+- (**PROVE**) api **418/418** (10 new, real Postgres) · web **501/501** (was 494)
+  · typecheck clean · api lint clean · web lint at its exact baseline, **measured
+  by stashing the diff and re-running** (ActiveWorkout 10E/3W, PostWorkout 4E/1W,
+  the other three 0) · `vite build` green.
+- (**NOT DONE, each with an `OWED.md` line in this commit**) The Dashboard's
+  stats; workout templates; retiring the legacy start+save; and hi/as translation
+  of the ported English strings.
+
+## 2026-08-07 — the summary SMOKE PASSED 8/8, and the browser found two defects 505 tests could not
+
+**Read before writing a fixture for a network failure, and before believing any
+"the tests cover it" claim about an offline path.** Kd's REPORT, not my
+measurement (:4829) — the browser is his instrument; steps 7 and 8 carry
+screenshot evidence. All 8 steps pass on the current bytes. **The 🔴 OWED line
+does NOT tick here: the fresh-chat T3 is unrun** (:4718's F4, the fourth
+occurrence of premature ticking on this branch would be one too many).
+
+- (**IT PASSED ON RUNS 2 AND 3, and that is the entry**) The card's suites were
+  GREEN the whole time — 501/501 when the smoke started. Both defects below were
+  live underneath them.
+- (**DEFECT 1, step 7 — a FALSE REASSURANCE shown to a stranger.**) Signed in as
+  a second account and pasting the first account's summary link produced "Saving
+  your workout…" and then **"Your workout is saved and will sync when you're back
+  online."** **NOTHING LEAKED**: the tenancy held, no figure of the other
+  account's was ever rendered, and the 404 is correct. What was wrong was the
+  SENTENCE — false in every clause for the person reading it.
+  **The cause is a deliberate design property**: `GET /v1/workouts/:id/summary`
+  answers 404 for "not synced yet" AND "no such workout" AND "somebody else's",
+  one response so it is not an existence oracle (R3.2). The server therefore
+  cannot tell the client which it is — **but the CLIENT knows something the
+  server does not: whether the id is in its own outbox**, and that outbox is
+  per-user (`userKey`), so a different account reads a different bucket and gets
+  `false`. `isAwaitingSync` (syncClient.js). No server change, no new oracle.
+- (**DEFECT 2, step 8 — THE CASE THE FEATURE WAS BUILT FOR DID NOT WORK, and a
+  passing test said it did.**) Offline, the request never reaches the server, so
+  `err.response` is **undefined and there is no status code**. The retry keyed on
+  `404`, so finishing a workout offline went straight to "Failed to load summary"
+  — about a workout sitting safely in the queue, which is the exact alarming lie
+  the copy was written to avoid. **A test for this existed and was GREEN: its
+  fixture rejected with `{response:{status:404}}`, a shape offline never
+  produces.** :4855's lesson — a test is a claim and the FIXTURE is part of the
+  claim — reproduced one card later, in the fixture written for the case.
+- (**AND FIXING IT EXPOSED A THIRD, within a minute**) Our own "this body is not
+  a summary" throw ALSO has no `err.response`, so a garbled 200 was mistaken for
+  a dropped network and retried four times before failing. Caught immediately by
+  the suite's existing empty-200 test — the one guard on this page old enough to
+  have been written for a different reason. The throw is now tagged
+  (`unreadableBody`) rather than identified by the absence of a field.
+  **Three levels in one evening — the status code, the fixture, and the
+  discriminator — one shape: a condition identified by what it LACKS rather than
+  by what it IS.**
+- (**A FOURTH FINDING THAT IS NOT THIS CARD'S**) **A workout cannot be STARTED
+  offline at all** — `createSession` still calls the old backend, so the
+  pre-workout screen says "Failed to start workout" and nothing begins.
+  Screenshot-evidenced (three failed `POST /workouts` XHRs). Pre-existing, out of
+  scope (R1.1), tracked nowhere until now; its own 🟡 `OWED.md` line, discharged
+  by card 4. **It matters because the offline story is a headline promise** (Part
+  6 §3.6 "your workout still counts"; the P1.10 gate's "a full workout completes
+  with the API server off") — the SAVE half works and the START half does not.
+  A sibling line (the pose model silently falling back to a CDN) is a second,
+  independent reason that promise is not yet true; both must close.
+- (**THE SMOKE DOC WAS ALSO WRONG, and this is the recurring one**) Step 8 told
+  Kd to go offline and THEN start a workout — an instruction with nothing behind
+  it, exactly :5034's "clear all filters" with no such button. Corrected to start
+  online and go offline mid-workout. **A smoke doc is a TEST and its steps are
+  part of the claim.**
+- (**PROVE, post-fix**) web **505/505** (4 new, all using a REAL offline error
+  shape — no `response`, with `request` set) · the four smoke-driven guarantees
+  are mutation-checked (M15-M18, all RED) · lint unchanged from baseline ·
+  api untouched by these fixes.
+- (**THE HARNESS'S ANCHOR GUARD EARNED ITS KEEP TWICE**) Once on a `\n` in a
+  CRLF tree, once when the step-8 fix split the line M15 was anchored to. Both
+  times it ABORTED rather than reporting a missing test — :4267's failure mode
+  caught by the guard written for it.

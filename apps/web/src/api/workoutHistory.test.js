@@ -46,14 +46,20 @@ afterEach(() => {
 // silently undoes. Same shape as the `getPredictions` guard in
 // progressApi.test.js and the leaderboard one in gamificationApi.test.js.
 describe('the repoint itself', () => {
-  it('history and detail ride the NEW cookie client on /v1', async () => {
+  it('history, detail and the SUMMARY ride the NEW cookie client on /v1', async () => {
     const newSeen = recordRequests(authApi);
     const oldSeen = recordRequests(mlApi);
     await workoutService.getHistory({ limit: 100 });
     await workoutService.getWorkout('w-1');
+    // Added 2026-08-06 with the post-workout summary repoint. Without this line
+    // the summary could silently fall back to the old backend and every other
+    // test here would still pass — a repoint nothing asserts is one the next
+    // edit undoes, which is this file's whole reason for existing.
+    await workoutService.getSummary('w-1');
     expect(newSeen).toEqual([
       { url: '/v1/workouts', method: 'get', params: { limit: 100 } },
       { url: '/v1/workouts/w-1', method: 'get', params: undefined },
+      { url: '/v1/workouts/w-1/summary', method: 'get', params: undefined },
     ]);
     expect(oldSeen).toEqual([]);
   });
@@ -63,15 +69,21 @@ describe('the repoint itself', () => {
     // regression here means someone "finished" the repoint by deleting a
     // feature. mlApi's request interceptor reads localStorage (browser-only;
     // it dies at P2.8), so stub it for the node env.
+    //
+    // `getSummary` LEFT this list on 2026-08-06 — it moved UP, to the new API,
+    // which is the only legitimate way out of it. `createSession` and
+    // `completeSession` stay and are COUPLED: the legacy save needs the session
+    // id the legacy start hands out, and DECISIONS :3424 rules that save stays
+    // until the Dashboard's stats have a new-API home too.
     vi.stubGlobal('localStorage', { getItem: () => null });
     const oldSeen = recordRequests(mlApi);
     const newSeen = recordRequests(authApi);
     await workoutService.getStats();
-    await workoutService.getSummary('w-1');
+    await workoutService.createSession({});
     await workoutService.getTemplates();
     expect(oldSeen.map((s) => s.url)).toEqual([
       '/workouts/stats',
-      '/workouts/w-1/summary',
+      '/workouts',
       '/workouts/templates',
     ]);
     expect(newSeen).toEqual([]);

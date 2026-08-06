@@ -30,6 +30,12 @@ function parseQuery<S extends z.ZodTypeAny>(
   return parsed.data;
 }
 
+/** Route-level uuid shape check. ONE spelling, used by every :id route here —
+ *  a second copy is how two routes come to disagree about what an id looks like,
+ *  which is this project's most-recorded defect class. (The detail route below
+ *  carried the only copy until the summary route needed the same test.) */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function authedUserId(req: FastifyRequest): string {
   const userId = req.authUser?.id;
   if (userId === undefined) throw new Error("authenticate preHandler did not run");
@@ -103,13 +109,28 @@ export function registerWorkoutRoutes(app: FastifyInstance, deps: { sql: Sql; re
     const notFound = () =>
       reply.status(404).send({ error: "not_found", message: "workout not found", requestId: req.id });
     // Non-uuid ids read as absent (same 404 as a foreign id — R3.2, no oracle).
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
-      return notFound();
-    }
+    if (!UUID_RE.test(id)) return notFound();
     const detail = await service.getWorkout(deps.sql, authedUserId(req), id);
     if (detail === null) return notFound();
     return reply.status(200).send(detail);
   });
+
+  // The post-workout summary. Same tenancy and same 404 shape as the detail
+  // route above: a non-uuid, an unknown id and ANOTHER USER'S id are one
+  // response, so the endpoint is not an existence oracle (R3.2).
+  app.get<{ Params: { id: string } }>(
+    "/v1/workouts/:id/summary",
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const { id } = req.params;
+      const notFound = () =>
+        reply.status(404).send({ error: "not_found", message: "workout not found", requestId: req.id });
+      if (!UUID_RE.test(id)) return notFound();
+      const summary = await service.getWorkoutSummary(readDeps, authedUserId(req), id);
+      if (summary === null) return notFound();
+      return reply.status(200).send(summary);
+    },
+  );
 
   // ── progress (progress.py ports) ─────────────────────────────────────────
   app.get("/v1/progress/overview", { preHandler: [app.authenticate] }, async (req, reply) => {

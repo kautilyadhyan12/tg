@@ -189,6 +189,43 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:5543** — 2026-08-07 — **the summary SMOKE PASSED 8/8 — and the browser found
+  TWO defects that 505 green tests could not.** **Read before writing a fixture
+  for a NETWORK failure, and before trusting "the tests cover the offline path".**
+  (1) Pasting another account's summary link said **"Your workout is saved and
+  will sync"** — nothing leaked, the tenancy held, but every clause was false for
+  the reader; the 404 is deliberately ambiguous (not-synced / no-such / not-yours,
+  so it is no oracle), and only the CLIENT'S OWN per-user outbox can disambiguate
+  → `isAwaitingSync`. (2) **Offline there is NO status code**, so a retry keyed on
+  `404` failed the very case it was built for — **and a GREEN test said otherwise
+  because its fixture used `{response:{status:404}}`, a shape offline never
+  produces** (:4855's fixture lesson, one card later). Fixing it exposed a third:
+  our own bad-body throw also lacks `response`, so a garbled 200 was read as a
+  dropped network. **One shape three times: a condition identified by what it
+  LACKS rather than what it IS.** Also: **a workout cannot be STARTED offline at
+  all** (own 🟡 OWED line, card 4 discharges it), and the smoke doc told Kd to do
+  exactly that — :5034's "instruction with no button behind it". 505/505,
+  M15-M18 RED. **🔴 line NOT ticked — T3 unrun.**
+- **:5438** — 2026-08-06 — **THE POST-WORKOUT SUMMARY IS OFF THE OLD BACKEND**
+  (workout core loop, card 1 of 4). **Read before touching the post-workout
+  screen, before repointing any field whose UNITS differ between backends, and
+  before writing a mutation harness's restore check.** New endpoint
+  `GET /v1/workouts/:id/summary`, **no migration** — every field already existed;
+  composed from `getWorkoutDetail` (so tenancy is INHERITED, not re-implemented)
+  and the same `personalRecords` the records screen reads, so the two cannot
+  disagree. **Three SPEC GAPS — meal ideas, stretches, record labels are named
+  NOWHERE in the spec; Kd ruled PORT VERBATIM** (`summaryContent.ts`, line-for-line
+  from `workouts.py:562-639`). **One deliberate departure FIXES a recorded defect:**
+  the old endpoint's XP figure omitted `streak_day` and so understated the award on
+  the same screen as the total it disagreed with (T3 round 4 F5). **The sync race
+  gets its first answer:** the queue flushes fire-and-forget, so a 404 here means
+  "not synced yet" — the page retries and says the workout is SAVED rather than
+  "failed to load". **Corrects the card prompt: the third server goes LAST, not
+  first** — `completeSession` needs `createSession`'s session id and both wait on
+  the Dashboard's stats. **14/14 mutants RED, 0 alive**; first card under the fixed
+  review/fix process (:5348), and the first permanent guard (rule 5). **Its harness
+  failed twice at its own job — reading a PASSING suite as RED, and asking `git
+  diff` a question git cannot answer — both toward a false ALARM.**
 - **:5199** — 2026-08-05 — **exercise library, T3 ROUND 2 (THE CAP) — CARD
   CLOSED, 🔴 LINE TICKED.** 3 findings, ZERO visible. **Read before trusting any
   harness that reports its own restore, and before ticking an OWED line on a

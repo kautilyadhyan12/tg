@@ -1,6 +1,97 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE POST-WORKOUT SUMMARY REPOINT — card 1 of 4 in the workout core loop.
+      **SMOKE PASSED 8/8 (Kd, 2026-08-07; record :5543). THE FRESH-CHAT T3 IS
+      STILL UNRUN, so no OWED line is ticked and the card is NOT done.**
+      (:4718's F4 is the third-occurrence precedent for ticking early.)
+
+THE SMOKE IS THE STORY, AND IT FOUND TWO DEFECTS 501 GREEN TESTS DID NOT
+  1. Pasting ANOTHER ACCOUNT'S summary link said "Your workout is saved and
+     will sync when you're back online." Nothing leaked — tenancy held, no
+     figure rendered — but the sentence was false in every clause for the
+     reader. The 404 is deliberately ambiguous (not-synced / no-such /
+     not-yours) so it is not an existence oracle; only the CLIENT'S OWN
+     per-user outbox can disambiguate. Fixed: `isAwaitingSync`.
+  2. **OFFLINE THERE IS NO STATUS CODE.** The retry keyed on `404`, so
+     finishing a workout offline — the case the waiting state exists for —
+     said "Failed to load summary" about a workout safely in the queue.
+     **A test for it was GREEN: its fixture used `{response:{status:404}}`,
+     a shape offline never produces.** Fixing that exposed a third: our own
+     bad-body throw also has no `response`, so a garbled 200 was read as a
+     dropped network and retried. **One shape three times — a condition
+     identified by what it LACKS rather than by what it IS.**
+  If you write a fixture for a network failure, make it `{request:{}}` with NO
+  `response`. That is what axios actually produces and what these now use.
+      Record: DECISIONS :5438. First card under Kd's fixed review/fix
+      process (:5348), so the SEVERITY GATE applies: the card closes on a
+      round with ZERO Critical/High.
+
+WHAT CHANGED, in one sentence
+  The screen shown after a workout reads `GET /v1/workouts/:id/summary` on the
+  NEW api instead of the old backend, so it shows THAT workout's real numbers.
+  No migration — every field already existed.
+
+THE CORRECTION THE NEXT CHAT MUST NOT UNDO
+  **The third server goes LAST, not first.** The card prompt's motivation was
+  that every smoke needs a third server; that is card 4. `completeSession`
+  STAYS (Kd, :3424) and needs the session id `createSession` hands out, so the
+  two retire TOGETHER — and only after the DASHBOARD's stats also have a
+  new-API home, because the legacy save is what those read. Now written in
+  OWED.md and in workoutApi.js's header, where it was recorded nowhere before.
+
+THE TWO THINGS I GOT WRONG, both found by tests rather than by me
+  1. I told Kd "nothing on screen moves". TRUE of the headline, FALSE of the
+     "35 min total" sub-line, which my seconds-based helper turned into
+     "35m 0s total". Three render tests failed. The fix is the MINIMAL one:
+     API sends whole SECONDS, the READER converts once to minutes for the two
+     consumers that want minutes, headline keeps the exact figure.
+  2. Dropping the `{summary:{…}}` envelope nearly cost the blank-page guard —
+     a 200 carrying `{}` would have rendered every tile as "—" instead of
+     failing. Closed by testing `workoutId`, the one non-nullable field.
+
+THE HARNESS FAILED TWICE AT ITS OWN JOB — read this before writing one
+  (a) `execFileSync`'s default 1 MB maxBuffer threw ENOBUFS on the 3-minute DB
+      suite, and a bare `catch { return "RED" }` turned a PASSING suite into a
+      verdict. It landed on the BASELINE gate, so it only aborted; one step
+      later every mutant would have read "caught" with nothing asserted.
+  (b) The final restore check asked `git diff`, which compares against HEAD —
+      so on a branch with uncommitted work it reports the CARD'S OWN changes as
+      damage. A clean 14/14 sweep ended "TARGETS STILL MODIFIED", exit 1.
+  Both failed toward a false ALARM, not a false pass. **The shape is :5199's:
+  a safeguard can read authoritative while asserting something adjacent to what
+  it claims.** Now: a runner error ABORTS, and restores are checked against the
+  pre-run BYTE SNAPSHOT.
+
+A FOURTH FINDING THAT IS NOT THIS CARD'S — do not "fix" it here
+  **A workout cannot be STARTED offline at all**: `createSession` still calls
+  the old backend, so the pre-workout screen says "Failed to start workout".
+  Screenshot-evidenced. Pre-existing, R1.1, its own 🟡 OWED line, discharged by
+  card 4. It matters because the offline story is a headline promise, and today
+  the SAVE half works while the START half does not. A sibling OWED line (the
+  pose model silently falling back to a CDN) is a second, independent reason.
+
+STATE: api 418/418 (10 new, real Postgres) · web 505/505 (was 494) ·
+  18 mutants declared, all RED (M15-M18 are the smoke's own fixes) ·
+  typecheck clean · api lint clean · web lint at its exact baseline (measured
+  by stashing) · `vite build` green.
+  Harness: `tools/mutate-workout-summary.mjs`. **Its anchor guard earned its
+  keep twice** — a `\n` in a CRLF tree, and a line M15 was anchored to being
+  split by a later fix; both ABORTED rather than reporting a missing test.
+  Smoke doc: `RUNBOOK/smoke-workout-summary-repoint.md` (NEW — the old
+  `smoke-postworkout-summary.md` points at the mock rig this no longer uses;
+  the rig boots `dead` BY DESIGN; and step 8 must start ONLINE, see above).
+
+NEXT: the fresh-chat T3 — prompt + `t3-workout-summary.diff` at the repo root.
+      Zero Critical/High ⇒ the card closes and the OWED line ticks (:5348's
+      severity gate; this is the first card judged by it).
+      Then cards 2-4, each with its own OWED line already written: Dashboard
+      stats (🔴, unblocks the legacy dual-write), templates (🟡, independent,
+      table already exists, no migration), retire the legacy start+save (🔴,
+      needs 2 first, and closes the offline-start gap above).
+```
+
+```
 TASK: THE EXERCISE LIBRARY REPOINT — **CARD CLOSED. 🔴 OWED LINE TICKED.**
       All three gates passed: smoke 9/9 (:5034) · T3 round 1, 7 findings, zero
       visible (:5104) · T3 round 2, the cap, 3 findings, zero visible (:5199).

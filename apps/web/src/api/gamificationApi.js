@@ -654,7 +654,9 @@ export function totalTimeLabel(minutes) {
  *  `{icon, value, label}` — the render already branched on `typeof`, which is the
  *  evidence both shapes are real. A partly-known object still renders what it
  *  has; `value` accepts a number OR a string because the payload has no contract
- *  saying which. */
+ *  saying which. The NEW API sends plain strings (chosen server-side), which is
+ *  the first branch; the object branch stays because it costs nothing and this
+ *  reader is the only thing standing between a shape change and a thrown render. */
 export function readPersonalRecord(pr) {
   if (typeof pr === 'string') return text(pr);
   const icon  = text(pr?.icon);
@@ -668,35 +670,73 @@ export function readMealSuggestion(m) {
   return { meal: text(m?.meal), timing: text(m?.timing) };
 }
 
-/** `res.data` of `GET /workouts/:id/summary` → a view, or NULL when there is no
- *  summary object in it at all.
+/** `res.data` of `GET /v1/workouts/:id/summary` → a view, or NULL when the
+ *  response is not a summary object at all.
  *
- *  NULL is the signal that fixes the blank white page: a 200 carrying `{}` had
- *  `setSummary(res.data.summary)` store `undefined` WITHOUT throwing, so the
- *  catch never ran — no toast, no redirect, no text. The rig documents that state
- *  (tools/mock-ml-backend.mjs:118). Per-field below, so there is nothing for an
- *  envelope gate to get wrong — round 4 F2's lesson, where `Boolean(stats?.stats)`
- *  asserted the envelope and six sites then read fields off it with `?? 0`.
+ *  REPOINTED TO THE NEW API 2026-08-06. Three things changed and each is a
+ *  deliberate choice, not a rename sweep:
  *
- *  Only the NINE fields the page renders. `session_id`, `completed_at` and
- *  `exercises` are deliberately absent: dead surface reads as protection and is
- *  not (round 6, where deleting two unused flags also deleted five assertions). */
+ *  1. NO `summary` ENVELOPE. The old backend wrapped its payload in
+ *     `{success, summary:{…}}`; the new endpoint returns the object itself, like
+ *     every other /v1 read. The NULL guard therefore tests `data` rather than
+ *     `data.summary` — and it still exists for the same reason it always did: a
+ *     200 carrying the wrong shape used to store `undefined` WITHOUT throwing,
+ *     so the catch never ran and the page rendered BLANK WHITE (no toast, no
+ *     redirect, no text).
+ *  2. camelCase, because the API speaks camelCase and the web renames at the
+ *     reader (the nutrition-targets precedent, DECISIONS 2026-07-11).
+ *  3. `durationMinutes` IS DERIVED HERE, from the payload's whole SECONDS.
+ *
+ *  ON THAT THIRD POINT, because it is the one that looks wrong. The new endpoint
+ *  sends `durationSeconds`; the page's two consumers of the total both want
+ *  MINUTES (`workoutTimeLabel`'s fallback arm and the "N min total" sub-line),
+ *  and those two spell minutes deliberately differently — the page says
+ *  "35 min", the share card "35m". Repointing them to seconds would change both
+ *  strings on screen, an unrequested display change to a real value (R1.1), and
+ *  a first cut of this card did exactly that: it printed "35m 0s total" and
+ *  three render tests caught it.
+ *
+ *  So the conversion happens ONCE, here, and the HEADLINE still uses exact
+ *  seconds (`activeSeconds`), which is what :4182 was about — the calendar
+ *  printing a 9-second workout as "0m" because its headline had been rounded to
+ *  minutes with no sub-minute arm. Rounding a secondary "total" line to minutes
+ *  is presentation, not a lost measurement, and `workoutTimeLabel`'s minutes arm
+ *  has its own `< 1 min` case for the short ones.
+ *
+ *  Per-field, still, so there is nothing for an envelope gate to get wrong —
+ *  round 4 F2's lesson, where `Boolean(stats?.stats)` asserted the envelope and
+ *  six sites then read fields off it with `?? 0`.
+ *
+ *  Only the fields the page renders. `workoutId` and `startedAt` are deliberately
+ *  absent: dead surface reads as protection and is not (round 6, where deleting
+ *  two unused flags also deleted five assertions). */
 export function readSummaryView(data) {
-  const s = data?.summary;
-  if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
-  const records = list(s.personal_records);
-  const meals   = list(s.meal_suggestions);
-  const stretch = list(s.stretches);
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  // AND IT MUST ACTUALLY BE A SUMMARY. Dropping the envelope nearly cost this
+  // guard: with only the object test above, a 200 carrying `{}` produced a view
+  // of all-nulls instead of NULL, so the page rendered every tile as "—" rather
+  // than taking its failure path — the blank-white-page defect wearing a
+  // politer face. `workoutId` is non-nullable in `workoutSummarySchema`, so its
+  // absence means the response is not this endpoint's payload.
+  if (typeof data.workoutId !== 'string' || data.workoutId === '') return null;
+  const records = list(data.personalRecords);
+  const meals   = list(data.mealSuggestions);
+  const stretch = list(data.stretches);
+  const durationSeconds = finite(data.durationSeconds);
   return {
-    activeSeconds:   finite(s.active_seconds),
-    durationMinutes: finite(s.duration_minutes),
-    caloriesBurned:  finite(s.calories_burned),
-    formAccuracy:    finite(s.form_accuracy),
-    exercisesCount:  finite(s.exercises_count),
-    currentStreak:   finite(s.current_streak),
-    xpEarned:        finite(s.xp_earned),
+    activeSeconds:   finite(data.activeSeconds),
+    // Minutes for the two consumers that want minutes; see the note above. The
+    // rounding is here and NOWHERE else, so the page and the share card cannot
+    // round differently — which is how two surfaces come to disagree about one
+    // duration.
+    durationMinutes: durationSeconds === null ? null : Math.round(durationSeconds / 60),
+    caloriesBurned:  finite(data.caloriesBurned),
+    formAccuracy:    finite(data.formAccuracy),
+    exercisesCount:  finite(data.exercisesCount),
+    currentStreak:   finite(data.currentStreak),
+    xpEarned:        finite(data.xpEarned),
     // A non-array with a positive `length` — a bare string — used to reach
-    // `.map` and throw, blanking the WHOLE page: `personal_records?.length > 0`
+    // `.map` and throw, blanking the WHOLE page: `personalRecords?.length > 0`
     // is true for a non-empty string and there is no ErrorBoundary anywhere in
     // apps/web. Round 6 F2's class, three sites along.
     personalRecords: records === null ? null : records.map(readPersonalRecord),

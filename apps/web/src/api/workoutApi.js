@@ -20,10 +20,11 @@
 //                     /v1/gamification/me, but the rest of it is not).
 //   createSession   — PreWorkout opens a session server-side; the new model is
 //   completeSession   client-side capture + `POST /v1/workouts/sync`, which the
-//                     ActiveWorkout/PreWorkout repoint card owns.
-//   getSummary      — the rich PostWorkout summary (personal records, meal
-//                     suggestions, stretches) has no new-API surface;
-//                     `workoutDetailSchema` carries sets, not those three.
+//                     ActiveWorkout/PreWorkout repoint card owns. NOTE the two
+//                     are COUPLED and cannot be dropped separately: the legacy
+//                     save needs the session id the legacy start hands out, and
+//                     :3424 rules the legacy save STAYS until the Dashboard's
+//                     stats have a new-API home too.
 //   templates ×4    — WorkoutBuilder. CORRECTED 2026-08-01: an earlier version
 //                     of this comment said "no templates table or endpoint
 //                     exists on the new API at all". The TABLE exists —
@@ -58,11 +59,25 @@ export const workoutService = {
    *  The calendar's detail panel reads exercise names out of `sets`. */
   getWorkout: (id) => authApi.get(`/v1/workouts/${id}`),
 
+  /** NEW API (repointed 2026-08-06). The post-workout screen's payload —
+   *  `@app/shared workoutSummarySchema`, read by `readSummaryView`.
+   *
+   *  `id` IS THE CLIENT-GENERATED WORKOUT ID, not the old backend's session id.
+   *  Both exist during a workout: `ActiveWorkout` mints the workout id for
+   *  `POST /v1/workouts/sync` and still holds the legacy session id for the
+   *  legacy save, which STAYS (Kd, DECISIONS :3424). It navigates to this screen
+   *  with the workout id.
+   *
+   *  404 IS AN EXPECTED, TEMPORARY STATE here and is not an error: the sync queue
+   *  flushes in the background, so the screen can open before the workout has
+   *  reached the server. `PostWorkout` retries rather than treating it as a
+   *  failed read — see its comment. */
+  getSummary: (id) => authApi.get(`/v1/workouts/${id}/summary`),
+
   // OLD BACKEND (see header note) — do not repoint without a new-API surface.
   getStats: () => mlApi.get('/workouts/stats'),
   createSession: (data) => mlApi.post('/workouts', data),
   completeSession: (id, data) => mlApi.patch(`/workouts/${id}/complete`, data),
-  getSummary: (id) => mlApi.get(`/workouts/${id}/summary`),
   saveTemplate: (name, exercises) => mlApi.post('/workouts/templates', { name, exercises }),
   getTemplates: () => mlApi.get('/workouts/templates'),
   deleteTemplate: (id) => mlApi.delete(`/workouts/templates/${id}`),

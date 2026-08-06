@@ -5,10 +5,19 @@
 // sync is either keyed-idempotent or skipped on status==='duplicate'.
 import type { Sql } from "postgres";
 import {
+  getMe as getGamificationMe,
+  isContinuationDay,
   onWorkoutSynced,
   reconciledStreak,
   safeTimeZone,
 } from "../gamification/service.js";
+import { xpEarnedForWorkout } from "../gamification/xp.js";
+import {
+  mealSuggestionsFor,
+  personalRecordsFor,
+  primaryMusclesFor,
+  stretchesFor,
+} from "./summaryContent.js";
 import { getEntitlements } from "../entitlements/service.js";
 import type { RedisLike } from "../../redis.js";
 import { z } from "zod";
@@ -27,6 +36,7 @@ import type {
   WorkoutDetail,
   WorkoutListQuery,
   WorkoutPage,
+  WorkoutSummary,
   WorkoutSyncPayload,
 } from "./schemas.js";
 
@@ -171,6 +181,69 @@ export async function getWorkout(
       engineVersion: s.engineVersion,
       definitionVersion: s.definitionVersion,
     })),
+  };
+}
+
+/** The post-workout summary (v1 §6.1 workouts "history, PRs"; the new-API home
+ *  for the old backend's `GET /workouts/:id/summary`).
+ *
+ *  COMPOSED FROM READS THAT ALREADY EXIST, deliberately. The workout and its
+ *  sets come from `getWorkoutDetail` — which is keyed `(id, userId)`, so a
+ *  foreign id reads as absent and this function inherits that tenancy rather
+ *  than re-implementing it (R3.2). The records come from the same
+ *  `personalRecords` the records screen reads, so the two cannot disagree about
+ *  who holds a record. XP and streak come from the gamification module through
+ *  its service interface (R7.1), never from its tables.
+ *
+ *  Returns NULL for "no such workout for this user" — the route maps that to the
+ *  same 404 a bad id gets, so the response is not an existence oracle. */
+export async function getWorkoutSummary(
+  deps: ReadDeps,
+  userId: string,
+  workoutId: string,
+): Promise<WorkoutSummary | null> {
+  const found = await repo.getWorkoutDetail(deps.sql, userId, workoutId);
+  if (found === null) return null;
+  const { workout, sets } = found;
+
+  const ctx = await getUserSyncContext(deps.sql, userId);
+  const [me, records, isStreakContinuation] = await Promise.all([
+    getGamificationMe({ sql: deps.sql }, userId, ctx.timezone),
+    personalRecords(deps, userId),
+    isContinuationDay({ sql: deps.sql }, userId, ctx.timezone, workout.startedAt),
+  ]);
+
+  // Active time = the sum of the per-set durations, i.e. time actually spent
+  // mid-set. Whole seconds, floored: `secondsLabel` on the client carries to
+  // "1m 60s" on fractional input (its own OWED line), and a duration should not
+  // change units on the way to a label (DECISIONS :4182).
+  const activeMs = sets.reduce((total, s) => total + s.durationMs, 0);
+
+  return {
+    workoutId: workout.id,
+    startedAt: workout.startedAt.toISOString(),
+    // No sets is not reachable through sync (the contract requires ≥1), but an
+    // empty sum would report 0 seconds of activity as if measured — null says
+    // "unknown" instead, which is what the client's UNKNOWN arm is for.
+    activeSeconds: sets.length === 0 ? null : Math.floor(activeMs / 1000),
+    durationSeconds: workout.durationMs === null ? null : Math.floor(workout.durationMs / 1000),
+    caloriesBurned: workout.kcalPoint,
+    formAccuracy: workout.avgFormScore,
+    exercisesCount: new Set(sets.map((s) => s.exerciseSlug)).size,
+    currentStreak: me.streak.current,
+    currentLevel: me.xp.level,
+    currentXp: me.xp.total,
+    xpEarned: xpEarnedForWorkout({ avgFormScore: workout.avgFormScore, isStreakContinuation }),
+    personalRecords: personalRecordsFor(workout.id, {
+      maxKcalWorkoutId: records.maxKcalWorkout?.workoutId ?? null,
+      longestWorkoutId: records.longestWorkout?.workoutId ?? null,
+      bestAvgFormWorkoutId: records.bestAvgForm?.workoutId ?? null,
+      maxKcalValue: records.maxKcalWorkout?.value ?? null,
+      longestValue: records.longestWorkout?.value ?? null,
+      bestAvgFormValue: records.bestAvgForm?.value ?? null,
+    }),
+    mealSuggestions: mealSuggestionsFor(workout.kcalPoint),
+    stretches: stretchesFor(primaryMusclesFor(sets.map((s) => s.exerciseSlug))),
   };
 }
 

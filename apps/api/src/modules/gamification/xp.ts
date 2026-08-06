@@ -169,6 +169,45 @@ export function computeTotalXp(inp: XpAccrualInputs): number {
   );
 }
 
+/** What ONE workout's completion contributed, for the post-workout summary.
+ *
+ *  Built from `XP_REWARDS` and the SAME thresholds `computeTotalXp` uses, so the
+ *  figure the summary prints is a component of the total the level bar beside it
+ *  is derived from — not a second opinion about the same event. Pure; the caller
+ *  supplies both facts.
+ *
+ *  THE STREAK BONUS IS INCLUDED, and that is a deliberate departure from the old
+ *  backend's SUMMARY endpoint (workouts.py:591-596), which counted base + form
+ *  only while its own COMPLETE endpoint (:221-247) also awarded `streak_day`.
+ *  The old summary therefore under-reported by 10 on any workout that continued
+ *  a streak — a number that disagreed with the XP total shown two tiles away on
+ *  the same screen. Kd approved including it (2026-08-06 plan gate), on the
+ *  stated grounds that every constant here is already ported and Kd-approved and
+ *  the only change is summing them for one workout instead of all of them.
+ *
+ *  `avgFormScore` NULL = nothing scored this workout, so no form bonus — which
+ *  is what Python's `session.get("form_accuracy", 0)` did by another route. */
+export function xpEarnedForWorkout(inp: {
+  avgFormScore: number | null;
+  isStreakContinuation: boolean;
+}): number {
+  let xp: number = XP_REWARDS.workout_completed;
+  if (inp.avgFormScore !== null) {
+    if (inp.avgFormScore >= 100) xp += XP_REWARDS.form_perfect_bonus;
+    else if (inp.avgFormScore >= 80) xp += XP_REWARDS.form_excellent_bonus;
+  }
+  if (inp.isStreakContinuation) xp += XP_REWARDS.streak_day;
+  return xp;
+}
+
+/** Is `day` a continuation — i.e. is the immediately preceding calendar day also
+ *  an activity day? The per-day form of `countStreakContinuationDays`' test, and
+ *  deliberately expressed with the same `dayDiff(prev, cur) === 1` comparison so
+ *  the two can never drift apart. Freeze-bridged gaps do NOT count here either. */
+export function isStreakContinuationDay(days: readonly string[], day: string): boolean {
+  return days.some((d) => dayDiff(d, day) === 1);
+}
+
 /** workouts.py:245-247 awarded +10 each time a workout landed on the calendar
  *  day immediately after the previous workout day. Recomputed here as the count
  *  of adjacent pairs exactly one day apart in the sorted DISTINCT activity days.

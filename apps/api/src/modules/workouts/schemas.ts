@@ -3,12 +3,19 @@
 // module surface stays self-describing.
 import { z } from "zod";
 
-export { workoutSyncPayloadSchema, workoutListQuerySchema, progressQuerySchema } from "@app/shared";
+export {
+  workoutSyncPayloadSchema,
+  workoutListQuerySchema,
+  progressQuerySchema,
+  workoutSummarySchema,
+} from "@app/shared";
 export type {
   WorkoutSyncPayload,
   WorkoutListQuery,
   WorkoutPage,
   WorkoutDetail,
+  WorkoutSummary,
+  MealSuggestion,
   ProgressQuery,
   ProgressPeriod,
   ProgressOverview,

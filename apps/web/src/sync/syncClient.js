@@ -12,7 +12,7 @@
 import axios from 'axios';
 import { ENGINE_VERSION } from '@app/engine';
 import { workoutSyncPayloadSchema } from '@app/shared';
-import { enqueue, flush, park } from './syncQueue';
+import { enqueue, flush, park, peekQueue } from './syncQueue';
 
 // Static-bridge defs bundle version (DECISIONS.md 2026-07-10): definitions
 // ship as compiled-in package exports until the P2.2 catalog bundle API
@@ -61,6 +61,36 @@ export function buildSyncPayload({ workoutId, startedAt, summaries }) {
   const result = workoutSyncPayloadSchema.safeParse(payload);
   if (!result.success) return { ok: false, payload, error: result.error };
   return { ok: true, payload };
+}
+
+/** Is THIS browser, signed in as THIS user, still waiting to send this workout?
+ *
+ *  WHY THIS EXISTS — a smoke found it (Kd, 2026-08-06, step 7). The post-workout
+ *  screen treats a 404 as "not synced yet" and waits, because the id was minted
+ *  here seconds ago. But `GET /v1/workouts/:id/summary` answers 404 for THREE
+ *  different situations, deliberately indistinguishable from outside so the
+ *  endpoint is not an existence oracle (R3.2): not synced yet · no such workout ·
+ *  **somebody else's workout**. Pasting another account's summary link therefore
+ *  produced "Saving your workout…" followed by "Your workout is saved and will
+ *  sync when you're back online" — reassuring, and false in every clause. Nothing
+ *  leaked; the sentence was simply not true.
+ *
+ *  The client can tell the cases apart WITHOUT the server distinguishing them,
+ *  because it knows something the server does not: whether the id is sitting in
+ *  its own outbox. `peekQueue` reads the per-user bucket (`userKey`), so a
+ *  different signed-in account reads a different bucket and gets `false` — which
+ *  is exactly the answer step 7 needed.
+ *
+ *  A PARKED payload deliberately reads FALSE: it was permanently rejected and is
+ *  never going to sync, so promising that it will would be the same false
+ *  sentence by another route. */
+export function isAwaitingSync(workoutId) {
+  try {
+    return peekQueue().some((p) => p?.workoutId === workoutId);
+  } catch {
+    // Storage unreadable → we cannot claim the workout is safely queued.
+    return false;
+  }
 }
 
 /** POST one payload. `http` is injectable for tests. */

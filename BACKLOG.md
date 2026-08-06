@@ -36,4 +36,30 @@ side a finding falls on, it is Critical/High.
 
 ## Log
 
-_(empty — created with the ruling, before the first round that can feed it.)_
+### Post-workout summary repoint (card 1 of the workout core loop), 2026-08-06
+
+The first card run under the fixed review/fix process. Its own test audit
+(rule 4) produced these; all three are Low, all three are FIXED, none bought a
+review round.
+
+- [x] **The mutation harness's final restore check asked GIT, which cannot answer
+      it.** `git diff --name-only` compares the tree against HEAD, so on a branch
+      with uncommitted work — i.e. every branch a sweep runs on — it reports the
+      CARD'S OWN changes as harness damage. A clean 14/14 sweep ended
+      `*** TARGETS STILL MODIFIED ***` and exit 1, naming four files whose
+      mutated lines were each verified back to their originals. Failed toward a
+      FALSE ALARM, which is the safe direction and the only reason this is Low
+      rather than an incident — the shape is :5199's. Now compares each target
+      against its pre-run byte snapshot; re-verified on a 2-mutant subset, exit 0.
+      — found by the audit itself, fixed same commit
+      (`tools/mutate-workout-summary.mjs`).
+- [x] **The harness read a PASSING suite as RED.** `execFileSync` with the default
+      1 MB `maxBuffer` threw ENOBUFS on the ~3-minute api DB suite, and a bare
+      `catch { return "RED" }` turned that into a verdict. It surfaced on the
+      baseline gate, where it merely aborted; one step later it would have scored
+      every mutant "caught" while nothing was asserted. A runner error now ABORTS
+      instead of resolving to a verdict. — fixed same commit.
+- [x] **Two comments in `PostWorkout.jsx` asserted the opposite of the code**
+      after the repoint (that the new API has no per-workout XP field, and why the
+      XP bar starts empty). Rewritten rather than deleted, per :3610's lesson that
+      a wrong comment can re-arm a fixed bug. — fixed same commit.

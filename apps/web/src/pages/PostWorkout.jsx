@@ -8,6 +8,7 @@ import {
   Apple, Heart, Download, Share2,
 } from 'lucide-react';
 import { workoutService } from '../api/workoutApi';
+import { flushSyncQueue, isAwaitingSync } from '../sync/syncClient';
 import { useXp } from '../hooks/useXp';
 import {
   UNKNOWN, formGrade, formatLevel, formatNextLevel, formatPercent, formatXpEarned,
@@ -16,6 +17,14 @@ import {
 } from '../api/gamificationApi';
 import toast from 'react-hot-toast';
 import html2canvas from 'html2canvas';
+
+// How long to wait for the background sync before giving up on the summary, and
+// in how many steps. 5 × 800 ms ≈ 4 s of patience: long enough to cover a flush
+// that lost its race with the navigation, short enough that a genuinely offline
+// user is not left staring at a spinner. Neither number is a spec value — they
+// are UX choices, recorded here rather than buried as literals.
+const SYNC_RETRY_ATTEMPTS = 5;
+const SYNC_RETRY_MS = 800;
 
 // ── XP on this screen ─────────────────────────────────────────────────────────
 // THE LEVEL AND THE POSITION WITHIN IT COME FROM `GET /v1/gamification/me` via
@@ -37,19 +46,32 @@ import html2canvas from 'html2canvas';
 // exact shape as the thing not to copy). Unknown renders as an em dash — never a
 // Level 1, never a 0.
 //
-// `xp_earned` STAYS on the old summary payload, because the new API has no
-// per-workout field at all (`xpViewSchema` carries total, level, xpInLevel,
-// xpForNext, progressPct, nextLevelAt — no delta). Keeping it is the NO-REMOVAL
-// rule; guarding it is R2.3 — an absent field must read "—" and not "+0", which
-// would claim the workout earned nothing.
+// `xpEarned` NOW COMES FROM THE NEW API (repointed 2026-08-06). This block said
+// the opposite until that day and every clause of it is superseded, so it is
+// rewritten rather than left to mislead — a wrong comment can re-arm a fixed bug
+// (:3610's recorded lesson, where a comment naming the wrong call as
+// load-bearing invited deletion of the one that was).
 //
-// IT IS NOT "THIS WORKOUT'S DELTA", and this comment used to say it was (T3
-// round 4 F5, verified against the file it cites): the summary endpoint
-// RE-DERIVES the figure as base + form bonus only, while the amount actually
-// awarded at completion also included streak_day and badge XP. So it
-// understates the real award whenever a streak continued or a badge landed.
-// Pre-existing and out of this card's scope — but the comment must not assert
-// what the source contradicts.
+// WHAT IT USED TO SAY, and why it is gone: that the field "STAYS on the old
+// summary payload, because the new API has no per-workout field at all". True
+// when written — `xpViewSchema` carries total/level/xpInLevel/xpForNext/
+// progressPct/nextLevelAt and no delta — and false now: `workoutSummarySchema`
+// carries `xpEarned`, computed server-side by `xpEarnedForWorkout` from the
+// ported `XP_REWARDS` constants.
+//
+// THE UNDERSTATEMENT IT RECORDED IS FIXED, and that is the part worth knowing.
+// T3 round 4 F5 established that the OLD endpoint re-derived this figure as base
+// + form bonus only, while the amount actually awarded at completion also
+// included `streak_day` — so the number under "XP Earned" understated the real
+// award whenever a streak continued, on the same screen that shows the total it
+// disagreed with. The new endpoint includes the streak-day bonus (Kd approved at
+// the 2026-08-06 plan gate). Badge XP is still not in this figure: badges are
+// awarded by their own evaluator at sync and are not a property of one workout.
+//
+// Guarding it is still R2.3 — an absent field must read "—" and not "+0", which
+// would claim the workout earned nothing. That state is now unreachable through
+// a well-behaved server (the field is non-nullable in the contract), which is
+// exactly when a guard rots unnoticed, so it keeps its test.
 
 // ── Confetti ──────────────────────────────────────────────────────────────────
 function Confetti() {
@@ -261,7 +283,11 @@ function ShareCard({ summary, xp, cardRef }) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function PostWorkout() {
-  const { sessionId } = useParams();
+  // The route param is the CLIENT-GENERATED workout id (the one this browser
+  // minted for `POST /v1/workouts/sync`), not the old backend's session id. The
+  // param kept its old NAME for one commit and that was a trap for the next
+  // reader, so it is renamed here with the route.
+  const { workoutId } = useParams();
   const navigate       = useNavigate();
   const { triggerTransition } = useTransition();
 
@@ -274,6 +300,10 @@ export default function PostWorkout() {
 
   const [summary,     setSummary]     = useState(null);
   const [loading,     setLoading]     = useState(true);
+  // True once a read has come back 404 and a retry is pending — i.e. the
+  // workout is still on its way to the server. Drives the loading COPY only;
+  // it never lets a number render.
+  const [syncing,     setSyncing]     = useState(false);
   const [rating,      setRating]      = useState(0);
   const [showStretch, setShowStretch] = useState(false);
   const [exporting,   setExporting]   = useState(false);
@@ -282,39 +312,120 @@ export default function PostWorkout() {
   const cardRef = useRef(null);
 
   useEffect(() => {
-    if (!sessionId) { navigate('/dashboard'); return; }
-    workoutService.getSummary(sessionId)
-      .then((res) => {
-        const view = readSummaryView(res.data);
-        // A 200 carrying no `summary` OBJECT is a failed read, not a page. What
-        // stood here — `setSummary(res.data.summary)` — stored `undefined`
-        // without throwing, so this promise resolved, the catch never ran, and
-        // `if (!summary) return null` rendered a BLANK WHITE PAGE: no toast, no
-        // redirect, no text. The smoke rig's `empty200` state serves exactly that
-        // and its own comment says a white screen there is the known state
-        // (tools/mock-ml-backend.mjs:118). Throwing routes it into the failure
-        // path this page ALREADY has, rather than growing a second one worded
-        // differently for the same event.
-        if (view === null) throw new Error('summary missing from response');
-        setSummary(view);
-      })
-      .catch((err) => {
-        // Message only (R3.10) — the axios error carries `config`, i.e. the URL,
-        // the request body and any headers. `useXp.js`, imported by this very
-        // file, logs `err?.message` and cites this rule by name, so a full-error
-        // dump here was two standards eight inches apart. NB the T3 that raised
-        // it said the leak includes `Authorization: Bearer <token>`; on THIS
-        // branch it does not — `mlApi` attaches the header only `if (token)` and
-        // Card 1 stopped writing `localStorage.accessToken` — which is the same
-        // overstatement OWED.md already corrected once, on 2026-07-26. Real but
-        // less urgent than reported, and fixed here because it is one line in a
-        // file already open. The wider sweep stays on its own OWED line.
-        console.error('summary load failed:', err?.message);
-        toast.error('Failed to load summary');
-        navigate('/dashboard');
-      })
-      .finally(() => setLoading(false));
-  }, [sessionId]);
+    if (!workoutId) { navigate('/dashboard'); return; }
+    // Cancelled on unmount so a late arrival cannot setState on a dead page, and
+    // so a pending retry timer dies with the screen.
+    let cancelled = false;
+    let timer = null;
+
+    // THE WORKOUT MAY NOT HAVE REACHED THE SERVER YET, and that is normal.
+    // `queueWorkoutSync` enqueues to localStorage and kicks a FIRE-AND-FORGET
+    // flush (syncClient.js) — nothing awaits it, so this screen can open first.
+    // A 404 here therefore means "not synced yet", not "no such workout": the id
+    // was minted by this browser moments ago and the server has simply not been
+    // told about it.
+    //
+    // TWO failures mean "not here YET", and BOTH are retried — but only when
+    // this browser is genuinely still waiting to send THIS workout
+    // (`isAwaitingSync`):
+    //   · a 404          — reached the server; it has not been told yet.
+    //   · NO RESPONSE    — never reached the server at all (offline, DNS, a
+    //                      dropped connection). `err.response` is undefined.
+    // Anything else (401, 5xx, a malformed body) is a real failure and takes the
+    // existing failure path immediately. The retry also re-kicks the queue,
+    // because the most likely reason the workout has not arrived is that the
+    // first flush lost its race with this navigation or failed while offline.
+    //
+    // THE NO-RESPONSE HALF CAME FROM KD'S SMOKE, step 8, and it is the case the
+    // whole waiting state was BUILT for: going offline mid-workout and finishing.
+    // The first cut keyed only on 404 — but offline the request never reaches the
+    // server, so there IS no status, and the page went straight to "Failed to
+    // load summary" for a workout sitting safely in the outbox. **The unit test
+    // did not catch it because its fixture rejected with `{response:{status:404}}`
+    // — a shape offline never produces.** A test is a claim and the FIXTURE is
+    // part of the claim (:4855), proven here one card later.
+    //
+    // THE `isAwaitingSync` HALF CAME FROM KD'S SMOKE, step 7, and without it the
+    // waiting state is reachable by anyone pasting a link. The route answers 404
+    // for "not synced yet", "no such workout" AND "somebody else's workout" —
+    // one response by design, so the endpoint is not an existence oracle. Only
+    // the outbox can tell them apart, and it is per-user, so another account
+    // gets `false` and the ordinary failure path. Nothing ever leaked; what was
+    // wrong was telling a stranger their workout was saved and would sync.
+    //
+    // WHAT IT MUST NOT DO is show zeros while it waits. A summary screen that
+    // renders "0 kcal, 0 exercises, grade D" for a workout that exists is the
+    // fabrication class this file's whole history is about (:2444); "saving your
+    // workout…" is true at every instant it is on screen.
+    const attempt = (triesLeft) => {
+      workoutService.getSummary(workoutId)
+        .then((res) => {
+          if (cancelled) return;
+          const view = readSummaryView(res.data);
+          // A 200 carrying the wrong SHAPE is a failed read, not a page. What
+          // stood here — `setSummary(res.data.summary)` — stored `undefined`
+          // without throwing, so this promise resolved, the catch never ran, and
+          // `if (!summary) return null` rendered a BLANK WHITE PAGE: no toast, no
+          // redirect, no text. Throwing routes it into the failure path this page
+          // ALREADY has, rather than growing a second one worded differently for
+          // the same event.
+          // TAGGED, and the tag is load-bearing. This throw is OUR code, not a
+          // transport failure, so it has no `err.response` — which is the very
+          // signal the offline retry below keys on. Untagged, a 200 carrying the
+          // wrong shape was mistaken for "we never reached the server" and
+          // RETRIED four times before failing. The suite's own empty-200 test
+          // caught it the moment the offline case was added.
+          if (view === null) {
+            throw Object.assign(new Error('summary missing from response'), {
+              unreadableBody: true,
+            });
+          }
+          setSummary(view);
+          setLoading(false);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          // "Not here yet" = the server said 404, OR we never got a response at
+          // all (offline). Both are only "yet" if our own outbox still holds it.
+          const noResponse = err?.response === undefined && err?.unreadableBody !== true;
+          const notHereYet = noResponse || err?.response?.status === 404;
+          const awaitingSync = notHereYet && isAwaitingSync(workoutId);
+          if (awaitingSync && triesLeft > 0) {
+            setSyncing(true);
+            flushSyncQueue().catch(() => {});
+            timer = setTimeout(() => attempt(triesLeft - 1), SYNC_RETRY_MS);
+            return;
+          }
+          // Message only (R3.10) — the axios error carries `config`, i.e. the URL,
+          // the request body and any headers. `useXp.js`, imported by this very
+          // file, logs `err?.message` and cites this rule by name, so a full-error
+          // dump here was two standards eight inches apart.
+          console.error('summary load failed:', err?.message);
+          // A 404 that OUTLASTS the retries is the offline case, and it gets its
+          // own words: the workout is not lost, it is queued, and telling the
+          // user "failed to load" about data sitting safely in their browser
+          // would be the more alarming of the two available lies.
+          //
+          // GATED ON `awaitingSync`, NOT ON THE STATUS ALONE. Keyed on the 404
+          // by itself, this sentence was shown to anyone opening a summary link
+          // that is not theirs — see the note above. The message must be true of
+          // the person reading it, and it is true only of someone whose own
+          // outbox still holds this workout.
+          toast.error(
+            awaitingSync
+              ? "Your workout is saved and will sync when you're back online."
+              : 'Failed to load summary',
+          );
+          navigate('/dashboard');
+        });
+    };
+    attempt(SYNC_RETRY_ATTEMPTS);
+
+    return () => {
+      cancelled = true;
+      if (timer !== null) clearTimeout(timer);
+    };
+  }, [workoutId]);
 
   // `formatTime`, `formatSeconds` and `getFormGrade` used to live here. They are
   // now `workoutTimeLabel` / `workoutTimeLabelShort` / `totalTimeLabel` /
@@ -394,7 +505,14 @@ export default function PostWorkout() {
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 border-4 border-primary-500
                           border-t-transparent rounded-full animate-spin" />
-          <p className="text-gray-400">Loading your results...</p>
+          {/* Two different waits, said differently, because they ARE different:
+              "loading" is a read in flight, "saving" is a workout that has not
+              reached the server yet. Telling someone their results are loading
+              while their workout is still in the outbox is the smaller lie of
+              the two available, but it is still one. */}
+          <p className="text-gray-400">
+            {syncing ? 'Saving your workout…' : 'Loading your results...'}
+          </p>
         </div>
       </div>
     );
@@ -625,12 +743,14 @@ export default function PostWorkout() {
             </div>
             <div className="h-2 bg-dark-300 rounded-full overflow-hidden">
               {/* The bar starts EMPTY. It used to animate from the pre-workout
-                  position via `xpProgress - summary.xp_earned` — which cannot
-                  survive the repoint: the width now comes from the new API's
-                  `progressPct` while the delta is the OLD store's, so
-                  subtracting one from the other is arithmetic across two stores
-                  that diverge by design. Reconstructing a true "before" would be
-                  client-side XP math, which is the thing this card deletes. */}
+                  position via `xpProgress - summary.xp_earned`, and that stays
+                  deleted even though BOTH numbers now come from the new API
+                  (2026-08-06): the reason was never only that they came from two
+                  diverging stores. Reconstructing a true "before" from a total
+                  and a delta is client-side XP math, and the 2026-07-26 ruling
+                  (:1110) is that clients render the server's numbers and never
+                  compute their own. The curve is not linear, so the subtraction
+                  is not even valid across a level boundary. */}
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: xpBarWidth(xp) }}

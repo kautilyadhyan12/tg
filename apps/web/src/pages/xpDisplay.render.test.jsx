@@ -48,6 +48,17 @@ vi.mock('../api/gamificationApi', async (importOriginal) => {
 vi.mock('../api/workoutApi', () => ({
   workoutService: { getStats: vi.fn(), getSummary: vi.fn() },
 }));
+// PostWorkout re-kicks the offline sync queue while it waits for a workout to
+// reach the server (the 404-retry path). Mocked so these tests never depend on
+// VITE_API_URL or on axios — the retry BEHAVIOUR is asserted through
+// getSummary's call count, which is the observable that matters.
+vi.mock('../sync/syncClient', () => ({
+  flushSyncQueue: vi.fn(() => Promise.resolve()),
+  // Defaults to TRUE — "this browser is still waiting to send this workout" —
+  // because that is the state the retry path exists for. The test that proves a
+  // STRANGER'S link does not get the waiting treatment overrides it to false.
+  isAwaitingSync: vi.fn(() => true),
+}));
 // PostWorkout imports both at module scope. html2canvas touches canvas APIs
 // jsdom does not implement, and the toast is a side effect, not a claim under
 // test — neither is exercised by any assertion below.
@@ -67,6 +78,7 @@ vi.mock('../context/TransitionContext', () => ({
 
 const { gamificationService } = await import('../api/gamificationApi');
 const { workoutService }      = await import('../api/workoutApi');
+const { isAwaitingSync }      = await import('../sync/syncClient');
 const { recommendationService } = await import('../api/recommendationApi');
 // The toast is normally a side effect and not a claim under test (see the mock
 // above) — but for the empty-200 case it IS the claim: the page's only honest
@@ -1235,22 +1247,25 @@ describe('Achievements — the three payloads are independent — round 4 F4', (
  *  two agree would pass with the bug live, which is the trap this project has
  *  recorded repeatedly — most recently at round 7 F3, where an assertion could
  *  not fail for the defect it named. */
+// REPOINTED 2026-08-06 to the NEW API's payload: camelCase, no `summary`
+// envelope, and WHOLE SECONDS instead of minutes (`workoutSummarySchema`).
+// `currentLevel`/`currentXp` are still deliberately WRONG-looking numbers for
+// the reason the comment above gives — they must not reach the screen.
 const SUMMARY = {
-  session_id: 's1',
-  duration_minutes: 35,
-  active_seconds: 900,
-  calories_burned: 280,
-  form_accuracy: 88,
-  exercises_count: 3,
-  completed_at: '2026-07-27T10:00:00Z',
-  personal_records: [],
-  xp_earned: 70,
-  current_level: 7,
-  current_xp: 578,
-  current_streak: 3,
-  meal_suggestions: [],
+  workoutId: '11111111-1111-4111-8111-111111111111',
+  startedAt: '2026-07-27T10:00:00Z',
+  durationSeconds: 2100, // 35 min, as the old fixture's minutes
+  activeSeconds: 900,
+  caloriesBurned: 280,
+  formAccuracy: 88,
+  exercisesCount: 3,
+  personalRecords: [],
+  xpEarned: 70,
+  currentLevel: 7,
+  currentXp: 578,
+  currentStreak: 3,
+  mealSuggestions: [],
   stretches: [],
-  exercises: [],
 };
 
 /** The same workout with every METRIC absent — the state OWED.md:730 is about.
@@ -1274,7 +1289,7 @@ const SUMMARY = {
  *  that dropped it too would let a test pass on the wrong dash. */
 const SUMMARY_UNSCORED = (({
   // eslint-disable-next-line no-unused-vars
-  form_accuracy, calories_burned, exercises_count, active_seconds, duration_minutes,
+  formAccuracy, caloriesBurned, exercisesCount, activeSeconds, durationSeconds,
   ...rest
 }) => rest)(SUMMARY);
 
@@ -1287,9 +1302,9 @@ const SUMMARY_UNSCORED = (({
  *  does send strings here, and `{}` has no `length` so it merely hides. */
 const SUMMARY_BAD_LISTS = {
   ...SUMMARY,
-  personal_records: 'Best form accuracy!',
-  meal_suggestions: 'Paneer bhurji + rice',
-  stretches:        'Hamstring stretch, 30s each side',
+  personalRecords: 'Best form accuracy!',
+  mealSuggestions: 'Paneer bhurji + rice',
+  stretches:       'Hamstring stretch, 30s each side',
 };
 
 /** T3 F3: every other fixture carries EMPTY lists (SUMMARY, and SUMMARY_UNSCORED
@@ -1308,23 +1323,25 @@ const SUMMARY_BAD_LISTS = {
  *  around. */
 const SUMMARY_LISTS = {
   ...SUMMARY,
-  personal_records: ['Best form accuracy!', { icon: '🔥', value: 12, label: 'reps' }],
-  meal_suggestions: [{ meal: 'Paneer bhurji + rice', timing: 'within 45 min' }],
-  stretches:        ['Hamstring stretch, 30s each side'],
+  personalRecords: ['Best form accuracy!', { icon: '🔥', value: 12, label: 'reps' }],
+  mealSuggestions: [{ meal: 'Paneer bhurji + rice', timing: 'within 45 min' }],
+  stretches:       ['Hamstring stretch, 30s each side'],
 };
 
-/** ROUND 2 F1: NO fixture had `active_seconds` absent with `duration_minutes`
- *  present, so the MINUTES-FALLBACK arm never executed at either surface — and
- *  three mutants lived in that hole, one of which prints a real fabrication
- *  ("NaNh NaNm total", the literal string this card exists to delete, in the
- *  HEALTHY state). It also meant the page/card divergence the card declares
- *  "PRESERVED ON PURPOSE" — the page says "35 min", the card says "35m" — was
- *  interchangeable as far as the render suite could tell, pinned only at the unit
- *  layer. That is the same gap that let `getFormGrade` be a page-local defect in
- *  the first place. */
-const SUMMARY_MINUTES_ONLY = (({
+/** ROUND 2 F1: NO fixture had the active figure absent with the total present,
+ *  so the FALLBACK arm never executed at either surface — and three mutants lived
+ *  in that hole, one of which prints a real fabrication ("NaNh NaNm total", the
+ *  literal string this card exists to delete, in the HEALTHY state).
+ *
+ *  STILL WORTH KEEPING AFTER THE 2026-08-06 REPOINT, and the reason changed:
+ *  the new API derives `activeSeconds` from the workout's own sets, and sync
+ *  requires at least one set, so on real data the fallback arm is now
+ *  UNREACHABLE. An unreachable arm is exactly where a defect can live forever
+ *  (:5104's F1 — a gate whose false arm no test could reach was protected by
+ *  nothing), so it keeps a fixture that reaches it deliberately. */
+const SUMMARY_TOTAL_ONLY = (({
   // eslint-disable-next-line no-unused-vars
-  active_seconds, ...rest
+  activeSeconds, ...rest
 }) => rest)(SUMMARY);
 
 /** ROUND 2 F5: elements the reader could not read are PRESERVED as null (unit-
@@ -1335,8 +1352,8 @@ const SUMMARY_MINUTES_ONLY = (({
  *  fixture pins what the code does today either way. */
 const SUMMARY_NULL_ELEMENTS = {
   ...SUMMARY,
-  personal_records: [null, {}],
-  meal_suggestions: [null],
+  personalRecords: [null, {}],
+  mealSuggestions: [null],
   // ROUND 3 F3: this inherited `stretches: []` from SUMMARY, so the THIRD list's
   // element path was unreached at every layer — the fixture built for unreadable
   // elements gave them to two of the three lists.
@@ -1359,8 +1376,14 @@ function xpBar(container) {
   return found[0];
 }
 
-/** PostWorkout reads `:sessionId` with useParams, so it needs a real route —
+/** PostWorkout reads `:workoutId` with useParams, so it needs a real route —
  *  without one the id is undefined and the page redirects instead of rendering.
+ *
+ *  THE PARAM NAME IS LOAD-BEARING, not cosmetic: `useParams` keys by it, so if
+ *  this route and the page ever disagree the id is `undefined` and every test
+ *  here redirects to /dashboard instead of rendering. Renamed with the page on
+ *  2026-08-06, when the screen started being keyed by the CLIENT-generated
+ *  workout id rather than the old backend's session id.
  *
  *  T3 F4: `/dashboard` is a real route here now. Without it the empty-200 test
  *  could assert only that the TOAST fired, so deleting `navigate('/dashboard')`
@@ -1371,7 +1394,7 @@ const renderPostWorkout = () =>
   render(
     <MemoryRouter initialEntries={['/workout/summary/s1']}>
       <Routes>
-        <Route path="/workout/summary/:sessionId" element={<PostWorkout />} />
+        <Route path="/workout/summary/:workoutId" element={<PostWorkout />} />
         <Route path="/dashboard" element={<div>DASHBOARD REACHED</div>} />
       </Routes>
     </MemoryRouter>,
@@ -1434,7 +1457,7 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
   // reads as flaky infrastructure and hides the assertion that did the work.
   it('renders the server curve, never `total % 100`', async () => {
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
-    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY } });
+    workoutService.getSummary.mockResolvedValue({ data: SUMMARY });
 
     const { container } = renderPostWorkout();
     await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
@@ -1509,7 +1532,7 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
 
   it('XP read fails: dashes, and the rest of the page survives', async () => {
     gamificationService.getMe.mockImplementation(DEAD);
-    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY } });
+    workoutService.getSummary.mockResolvedValue({ data: SUMMARY });
 
     const { container } = renderPostWorkout();
     await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
@@ -1558,13 +1581,22 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     expect(text).not.toMatch(/undefined|NaN|null/);   // round 3 F5
   }, 10000);   // waits out the animation window, same reason as the test above
 
-  it('a summary with no xp_earned reads "—", never "+0"', async () => {
+  it('a summary with no xpEarned reads "—", never "+0"', async () => {
     // R2.3 on the one summary field this card touches. `+0` would claim the
     // workout earned nothing, which is a different statement from "we were not
     // told" — the standing rule, applied to the delta.
-    const { xp_earned, ...noXpEarned } = SUMMARY;   // eslint-disable-line no-unused-vars
+    //
+    // STILL WORTH TESTING AFTER THE 2026-08-06 REPOINT, and the reason changed:
+    // `xpEarned` is non-nullable in `workoutSummarySchema`, so a well-behaved
+    // server always sends it and this state is now UNREACHABLE in production.
+    // That is exactly when a guard rots unnoticed (:5104 F1), so the fixture
+    // reaches it deliberately. NB the field is camelCase now — destructuring
+    // the OLD name removed nothing, and the test then asserted "—" against a
+    // payload that still carried +70. It failed loudly, which is the only
+    // reason this rename was not a silently vacuous assertion.
+    const { xpEarned, ...noXpEarned } = SUMMARY;   // eslint-disable-line no-unused-vars
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
-    workoutService.getSummary.mockResolvedValue({ data: { summary: noXpEarned } });
+    workoutService.getSummary.mockResolvedValue({ data: noXpEarned });
 
     const { container } = renderPostWorkout();
     await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
@@ -1604,7 +1636,7 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
 
   it('an unscored workout reads "—" everywhere, never grade D', async () => {
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
-    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY_UNSCORED } });
+    workoutService.getSummary.mockResolvedValue({ data: SUMMARY_UNSCORED });
 
     const { container } = renderPostWorkout();
     await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
@@ -1688,11 +1720,180 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     await waitFor(() => expect(screen.getByText('DASHBOARD REACHED')).toBeTruthy());
   });
 
+  // ── the workout has not reached the server yet (repoint, 2026-08-06) ────────
+  // The sync queue flushes fire-and-forget, so this screen can open BEFORE the
+  // workout arrives and the read 404s. That is a normal, temporary state, not a
+  // failure — and the one thing it must never do is render zeros.
+
+  it('a 404 RETRIES and then renders, rather than reporting a failure', async () => {
+    toast.error.mockClear();
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    const notYet = Object.assign(new Error('not found'), { response: { status: 404 } });
+    workoutService.getSummary
+      .mockRejectedValueOnce(notYet)
+      .mockResolvedValue({ data: SUMMARY });
+
+    renderPostWorkout();
+
+    // It gets there — the first answer was 404 and the page did not give up.
+    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy(), { timeout: 6000 });
+    expect(workoutService.getSummary.mock.calls.length).toBeGreaterThanOrEqual(2);
+    // And it never told the user anything was wrong, because nothing was.
+    expect(toast.error).not.toHaveBeenCalled();
+  }, 10000);
+
+  it('while retrying it shows "Saving your workout…" and NO numbers', async () => {
+    // THE ASSERTION THAT MATTERS ON THIS PATH. A summary screen that renders
+    // "0 kcal / 0 exercises / grade D" for a workout still in the outbox is the
+    // fabrication class this whole file is about — and it is what a naive
+    // "treat 404 as empty" implementation produces. Pinned as an ABSENCE.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    const notYet = Object.assign(new Error('not found'), { response: { status: 404 } });
+    workoutService.getSummary.mockRejectedValue(notYet);
+
+    const { container } = renderPostWorkout();
+
+    await waitFor(() => expect(screen.getByText('Saving your workout…')).toBeTruthy());
+    const text = container.textContent;
+    expect(text).not.toMatch(/kcal/);
+    expect(text).not.toMatch(/Workout Complete!/);
+    expect(text).not.toMatch(/undefined|NaN|null/);
+  }, 10000);
+
+  it('a 404 that OUTLASTS the retries says the workout is SAVED, not lost', async () => {
+    toast.error.mockClear();
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    const notYet = Object.assign(new Error('not found'), { response: { status: 404 } });
+    workoutService.getSummary.mockRejectedValue(notYet);
+
+    renderPostWorkout();
+
+    // "Failed to load summary" would be the alarming lie here: the workout is
+    // sitting safely in this browser's queue. Different cause, different words.
+    await waitFor(
+      () => expect(toast.error).toHaveBeenCalledWith(
+        "Your workout is saved and will sync when you're back online.",
+      ),
+      { timeout: 8000 },
+    );
+    await waitFor(() => expect(screen.getByText('DASHBOARD REACHED')).toBeTruthy());
+  }, 12000);
+
+  // OFFLINE IS A DIFFERENT ERROR SHAPE FROM 404, AND THAT IS THE WHOLE POINT.
+  // An axios failure with NO `response` is what a dropped network produces; the
+  // 404 fixtures above cannot stand in for it. Kd's smoke, step 8: he went
+  // offline mid-workout, finished, and got "Failed to load summary" for a
+  // workout sitting safely in his outbox — because the retry keyed on the status
+  // code, and offline there is no status code. Every assertion below would have
+  // passed with the defect live if it had used the 404 shape.
+  const offlineError = () => Object.assign(new Error('Network Error'), { request: {} });
+
+  it('OFFLINE (no response at all) is treated as "not sent yet", not as a failure', async () => {
+    toast.error.mockClear();
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    workoutService.getSummary
+      .mockRejectedValueOnce(offlineError())
+      .mockResolvedValue({ data: SUMMARY });
+
+    renderPostWorkout();
+
+    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy(), { timeout: 6000 });
+    expect(workoutService.getSummary.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(toast.error).not.toHaveBeenCalled();
+  }, 10000);
+
+  it('OFFLINE throughout: says the workout is SAVED, never "failed to load"', async () => {
+    // The exact end state of Kd's step 8.
+    toast.error.mockClear();
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    workoutService.getSummary.mockRejectedValue(offlineError());
+
+    renderPostWorkout();
+
+    await waitFor(() => expect(screen.getByText('Saving your workout…')).toBeTruthy());
+    await waitFor(
+      () => expect(toast.error).toHaveBeenCalledWith(
+        "Your workout is saved and will sync when you're back online.",
+      ),
+      { timeout: 8000 },
+    );
+    expect(toast.error).not.toHaveBeenCalledWith('Failed to load summary');
+    await waitFor(() => expect(screen.getByText('DASHBOARD REACHED')).toBeTruthy());
+  }, 12000);
+
+  it('OFFLINE on somebody ELSE\'S link still fails plainly — the outbox decides', async () => {
+    // The two smoke findings meet here: no response AND not ours. Without the
+    // outbox check this is where "your workout is saved" would be told to a
+    // stranger, which is step 7's defect arriving through step 8's door.
+    toast.error.mockClear();
+    isAwaitingSync.mockReturnValue(false);
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    workoutService.getSummary.mockRejectedValue(offlineError());
+
+    renderPostWorkout();
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to load summary'));
+    expect(workoutService.getSummary).toHaveBeenCalledTimes(1);
+    expect(toast.error).not.toHaveBeenCalledWith(
+      "Your workout is saved and will sync when you're back online.",
+    );
+    isAwaitingSync.mockReturnValue(true);
+  }, 10000);
+
+  it("SOMEBODY ELSE'S summary link is NOT treated as a workout in flight", async () => {
+    // KD'S SMOKE, step 7, 2026-08-06 — and the screenshots are what caught it.
+    // Signed in as a second account, pasting the first account's summary link
+    // showed "Saving your workout…" and then "Your workout is saved and will
+    // sync when you're back online". NOTHING LEAKED — the tenancy held, no
+    // figure of the other account's was ever rendered — but every clause of
+    // that sentence was false for the person reading it.
+    //
+    // The route cannot tell the cases apart and must not: 404 means "not synced
+    // yet" OR "no such workout" OR "not yours", one answer by design so it is
+    // not an existence oracle. The OUTBOX is what distinguishes them, and it is
+    // per-user, so a stranger's browser says no.
+    toast.error.mockClear();
+    isAwaitingSync.mockReturnValue(false);
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    const notMine = Object.assign(new Error('not found'), { response: { status: 404 } });
+    workoutService.getSummary.mockRejectedValue(notMine);
+
+    renderPostWorkout();
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to load summary'));
+    // The reassuring sentence must not appear for someone it is not true of.
+    expect(toast.error).not.toHaveBeenCalledWith(
+      "Your workout is saved and will sync when you're back online.",
+    );
+    // And it must not sit on the waiting screen either — one attempt, no retry.
+    expect(workoutService.getSummary).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Saving your workout…')).toBeNull();
+    await waitFor(() => expect(screen.getByText('DASHBOARD REACHED')).toBeTruthy());
+    isAwaitingSync.mockReturnValue(true);
+  }, 10000);
+
+  it('a NON-404 failure does NOT retry — it fails immediately, as before', async () => {
+    // The retry is scoped to one status on purpose. A 500 that got retried five
+    // times would turn a server fault into four extra requests and a four-second
+    // stare at a spinner.
+    toast.error.mockClear();
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    workoutService.getSummary.mockRejectedValue(
+      Object.assign(new Error('boom'), { response: { status: 500 } }),
+    );
+
+    renderPostWorkout();
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to load summary'));
+    expect(workoutService.getSummary).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByText('DASHBOARD REACHED')).toBeTruthy());
+  }, 10000);
+
   it('falls back to total minutes, in each surface\'s own spelling', async () => {
     // ROUND 2 F1. Three mutants lived in this hole, one of them printing the
     // literal "NaNh NaNm" this card exists to delete.
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
-    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY_MINUTES_ONLY } });
+    workoutService.getSummary.mockResolvedValue({ data: SUMMARY_TOTAL_ONLY });
 
     const { container } = renderPostWorkout();
     await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
@@ -1716,7 +1917,7 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     // them instead is a Kd call recorded on OWED, and this assertion moves with
     // that ruling if it lands.
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
-    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY_NULL_ELEMENTS } });
+    workoutService.getSummary.mockResolvedValue({ data: SUMMARY_NULL_ELEMENTS });
 
     const { container } = renderPostWorkout();
     await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
@@ -1743,7 +1944,7 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     // T3 F3. Every other fixture leaves these four `.map` bodies unexecuted, and
     // they are the sites this card rewrote most heavily.
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
-    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY_LISTS } });
+    workoutService.getSummary.mockResolvedValue({ data: SUMMARY_LISTS });
 
     const { container } = renderPostWorkout();
     await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
@@ -1772,7 +1973,7 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
 
   it('lists arriving as strings do not blank the page', async () => {
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
-    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY_BAD_LISTS } });
+    workoutService.getSummary.mockResolvedValue({ data: SUMMARY_BAD_LISTS });
 
     const { container } = renderPostWorkout();
     // Today `personal_records.map` and `meal_suggestions.map` are called on
@@ -1797,7 +1998,7 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     // unconditionally. Round 9 F2's lesson: a tile helper that covered two of
     // three sites let a fabricated Level 1 through all three protections.
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
-    workoutService.getSummary.mockResolvedValue({ data: { summary: SUMMARY } });
+    workoutService.getSummary.mockResolvedValue({ data: SUMMARY });
 
     const { container } = renderPostWorkout();
     await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
@@ -1849,7 +2050,7 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     expect(screen.getByText('0%').nextElementSibling.textContent).toBe('88%');
 
     await waitFor(
-      () => expect(formBar(container).style.width).toBe(`${SUMMARY.form_accuracy}%`),
+      () => expect(formBar(container).style.width).toBe(`${SUMMARY.formAccuracy}%`),
       { timeout: 6000 },
     );
   }, 10000);

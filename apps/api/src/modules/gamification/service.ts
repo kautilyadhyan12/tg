@@ -5,7 +5,12 @@
 import type { Sql } from "postgres";
 import * as repo from "./repo.js";
 import { badgeXpForCodes, earnedCodes } from "./badges.js";
-import { computeTotalXp, countStreakContinuationDays, xpProgress } from "./xp.js";
+import {
+  computeTotalXp,
+  countStreakContinuationDays,
+  isStreakContinuationDay,
+  xpProgress,
+} from "./xp.js";
 import { dayInTz, reconcile, replayActivityDays, safeTimeZone, type StreakState } from "./streak.js";
 import type { GamificationMe } from "@app/shared";
 
@@ -119,6 +124,26 @@ export async function reconciledStreak(
     }
     return after;
   });
+}
+
+/** Did the workout that happened at `when` land on the day after another
+ *  activity day? Part of this module's service interface (R7.1) — the workouts
+ *  module needs it for the post-workout summary's XP figure and must not reach
+ *  into gamification's repo or its streak internals to get it.
+ *
+ *  The day is bucketed in the USER'S timezone, like every other day boundary in
+ *  this system (Part 7 §3.1; playbook trap #8). Wrapped in `begin` because
+ *  `getActivityDays` takes a transaction handle; the read needs no isolation of
+ *  its own, so this is a type obligation rather than a correctness one. */
+export async function isContinuationDay(
+  deps: GamificationDeps,
+  userId: string,
+  timezone: string | null,
+  when: Date,
+): Promise<boolean> {
+  const tz = safeTimeZone(timezone);
+  const days = await deps.sql.begin(async (tx) => repo.getActivityDays(tx, userId, tz));
+  return isStreakContinuationDay(days, dayInTz(when, tz));
 }
 
 export async function getMe(

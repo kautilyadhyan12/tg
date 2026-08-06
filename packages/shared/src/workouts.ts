@@ -124,3 +124,51 @@ export const workoutDetailSchema = workoutListItemSchema.extend({
   sets: z.array(workoutSetViewSchema),
 });
 export type WorkoutDetail = z.infer<typeof workoutDetailSchema>;
+
+// ── the post-workout summary (GET /v1/workouts/:id/summary) ──────────────────
+//
+// The new-API home for the screen shown straight after a workout. It replaces
+// the old backend's `GET /workouts/:id/summary`, whose payload was snake_case;
+// this one is camelCase and the web renames at the reader (the nutrition-targets
+// precedent, DECISIONS 2026-07-11 — "the API speaks camelCase").
+//
+// EVERY FIELD IS SERVER-COMPUTED (R3.1). The client sends nothing that decides
+// XP, records, calories or form — it renders what it is given. That is the whole
+// reason this endpoint exists rather than the page assembling it from three
+// other reads: two surfaces computing one number is how they come to disagree.
+
+export const mealSuggestionSchema = z.object({ meal: z.string(), timing: z.string() });
+export type MealSuggestion = z.infer<typeof mealSuggestionSchema>;
+
+export const workoutSummarySchema = z.object({
+  workoutId: z.string().uuid(),
+  startedAt: z.string(),
+  /** Time the user was actually mid-set: Σ per-set durationMs, in WHOLE
+   *  SECONDS. Seconds and not minutes because a rounded-to-minutes duration is
+   *  what printed a 9-second workout as "0m" on the calendar (DECISIONS :4182);
+   *  the unit a duration is carried in should not change on its way to a label. */
+  activeSeconds: z.number().int().nullable(),
+  /** The whole session, wall clock, in WHOLE SECONDS (workouts.duration_ms). */
+  durationSeconds: z.number().int().nullable(),
+  /** kcal_point — 2B §2.3 display banding stays the client's job. NULL means
+   *  the workout carries no estimate, never 0. */
+  caloriesBurned: z.number().int().nullable(),
+  /** avg_form_score. NULL = nothing scored this workout (every set log-only),
+   *  which the client must render as "not scored" and never as a grade. */
+  formAccuracy: z.number().int().nullable(),
+  /** DISTINCT exercises in the workout — the count the old screen showed. */
+  exercisesCount: z.number().int(),
+  currentStreak: z.number().int(),
+  currentLevel: z.number().int(),
+  currentXp: z.number().int(),
+  /** What THIS workout's completion contributed, from the ported XP constants
+   *  (badges.py via xp.ts). Server-computed; the 100-XP-per-level curve is
+   *  never copied into a client (DECISIONS :1110). */
+  xpEarned: z.number().int(),
+  /** Display strings, already chosen server-side — empty array means "no record
+   *  set", which is a fact, not a failed read. */
+  personalRecords: z.array(z.string()),
+  mealSuggestions: z.array(mealSuggestionSchema),
+  stretches: z.array(z.string()),
+});
+export type WorkoutSummary = z.infer<typeof workoutSummarySchema>;

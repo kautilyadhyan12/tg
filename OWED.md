@@ -821,10 +821,69 @@ then; none may be hidden or reduced to close the gap.
       (`backend-ml/app/routers/workouts.py:591`). A screen that looks true and
       is false.
       **Discharged only when all three of those surfaces have new-API homes.**
-      Two of them already have OWED lines (the calendar below; PostWorkout's
-      summary reader is done but still reads the OLD payload). Until then the
-      dual-write is the correct behaviour, and a chat that proposes deleting it
-      as tidy-up has not read this line.
+      **PROGRESS 2026-08-06: one of the three is DONE** — the post-workout
+      summary now reads `GET /v1/workouts/:id/summary` on the new API
+      (DECISIONS, this date). The calendar was already repointed (:4622). **What
+      remains is the Dashboard's stats**, its own line below.
+      **AND A COUPLING THAT WAS NOT WRITTEN DOWN UNTIL NOW:** `createSession`
+      cannot be dropped BEFORE `completeSession`, because the legacy save needs
+      the session id the legacy start hands out. They retire together, in one
+      card, after the Dashboard line below is ticked. A chat that proposes
+      deleting either one alone has not read this paragraph.
+- [ ] 🔴 **THE DASHBOARD'S STATS HAVE NO NEW-API HOME (`workoutService.getStats`).**
+      Created 2026-08-06 by the post-workout-summary card, which deliberately did
+      NOT touch it (one backend surface per card — :2158's recorded lesson that
+      eleven review rounds was a fault of the CARD's scope).
+      `Dashboard.jsx:305` calls the old backend's `/workouts/stats` for total
+      workouts, total calories, total minutes, this week's count, the 7-day
+      activity strip and the last 5 workouts.
+      **Most of it already exists on the new API and needs composing, not
+      building:** `/v1/progress/overview` carries totals and streak,
+      `/v1/gamification/me` carries level and XP, `/v1/workouts` carries the
+      recent list, `/v1/progress/heatmap` carries daily activity. What has no
+      home is the WEEKLY count and the exact shape.
+      **This line is what the legacy dual-write above is waiting on.** Until it
+      is ticked, `completeSession` stays and the app needs three servers to run.
+- [ ] 🟡 **WORKOUT TEMPLATES HAVE NO ENDPOINTS (`WorkoutBuilder`).** Created
+      2026-08-06 by the same card, same reason. Four old-backend calls —
+      `saveTemplate` / `getTemplates` / `deleteTemplate` / `useTemplate`.
+      **The TABLE already exists** (`workout_templates`, Part 4 §3.5 DDL,
+      `db/schema/training.ts`, and in migration `0001_init` — verified). Only the
+      endpoints are missing, so this is a smaller card than it looks and needs NO
+      migration. Independent of everything above: it blocks nothing and nothing
+      blocks it.
+- [ ] 🟡 **A WORKOUT CANNOT BE STARTED OFFLINE AT ALL.** Found in Kd's smoke,
+      2026-08-07, step 8 — with the network set to Offline the pre-workout screen
+      says **"Failed to start workout"** and nothing begins. Screenshot evidence:
+      three failed `POST /workouts` XHRs from `workoutApi.js` (`createSession`)
+      against the OLD backend, each preceded by a CORS preflight.
+      **Pre-existing, NOT caused by the summary card, and out of its scope
+      (R1.1) — recorded because it was tracked nowhere.**
+      **Why it matters more than it looks:** the offline story is a headline
+      promise of this product — Part 6 §3.6's copy says "your workout still
+      counts", and the P1.10 Done gate is "a full workout completes with the API
+      server off, then syncs". Today the sync half works and the START half does
+      not, so the promise is half-true in the direction a user notices first.
+      **Discharged by card 4** (retire the legacy start+save): once the workout id
+      is minted client-side and nothing is asked of a server to begin, starting
+      offline costs nothing. Until then it cannot be fixed without deleting the
+      legacy save, which :3424 forbids.
+      **Its second victim is the SMOKE DOC**, which told Kd to go offline and
+      *then* start a workout — an instruction with nothing behind it, the same
+      shape as :5034's "clear all filters". `RUNBOOK/smoke-workout-summary-
+      repoint.md` step 8 now says start ONLINE, go offline mid-workout, finish.
+      **NB the sibling line above** (the local pose model silently falling back to
+      a CDN) means camera workouts need the internet too — two independent reasons
+      the offline promise is not yet true, and they must both close.
+- [ ] ⚪ **The post-workout summary's WORDS ship as English strings.** Created
+      2026-08-06. Meal ideas, stretch suggestions and the three personal-record
+      labels are a verbatim port of the old backend's hardcoded English
+      (`apps/api/src/modules/workouts/summaryContent.ts`), not v1 §14 message
+      keys. Same debt, same shape, as the exercise library's copy (:4945) — hi/as
+      is a translation task, and these strings should move with those when it
+      runs. Kd approved porting them as-is rather than inventing a scheme
+      (2026-08-06 plan gate); recorded so "why is there English in the API?" has
+      an answer that is not "nobody noticed".
 - [x] 🔴 **A camera-graded set can still land NOWHERE — and now it can leave a
       workout with sets MISSING.** **CODE COMPLETE 2026-08-03 (DECISIONS :3720);
       TICKED 2026-08-04 on the smoke**: step 4 passed and is DB-verified
