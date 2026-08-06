@@ -258,6 +258,39 @@ before running or closing any review round.
    to check and confirm it goes RED. **Tests that stay green are liars** — list
    them for Kd, then fix or delete them. (This is what caught all five recorded
    unearned harness passes; it is now mandatory, not ad hoc.)
+
+   **4a. THE AUDIT IS SCOPED BY SEVERITY, NOT APPLIED UNIFORMLY** (Kd ruling
+   2026-08-07 — DECISIONS :5857; CALIBRATES rule 4, does not weaken it).
+   **The audit stays MANDATORY. What changes is what gets the expensive
+   treatment.** A slow, database-backed mutant is spent on what rule 1/1a calls
+   **Critical/High** and nowhere else:
+
+   | Always mutated | Never mutated |
+   |---|---|
+   | Ownership — can another person see it | Wording, labels, copy |
+   | Numbers a user sees (XP, calories, records, durations) | Ported constant tables |
+   | Data loss — anything that saves, syncs or queues | Comments, naming |
+   | Money, once billing exists | Layout |
+
+   Plus: **database mutants run only on cards that change server behaviour** — a
+   web-only card audits in minutes — and the sweep should point at a LOCAL
+   Postgres rather than the cloud one when a card allows it.
+
+   **Why, measured on the card that prompted it.** The summary card's audit took
+   ~40 minutes, of which ~18 was six database mutants each re-running the whole
+   DB suite against a database in another country. It gave the same three minutes
+   to "is the meal-suggestion threshold `>400` or `>=400`" as to "can a stranger
+   read your workout". **The value was real and unevenly distributed**: the audit
+   caught the surviving-mutant defect (a fabricated rest time on screen) and its
+   own two broken instruments — all in the Critical/High rows above.
+   **UNVERIFIED and to be measured on the next card that uses it:** how much the
+   local-Postgres switch actually saves. It is expected to be large and has not
+   been timed; do not quote a number until it has.
+
+   **What this does NOT do:** it does not make the audit optional, and it does not
+   let a Critical/High guarantee ship unmutated. The full sweep stays available
+   and should be used for the riskiest work (money, the migration, anything
+   touching other people's data at scale).
 5. **PERMANENT GUARDS.** A recurring bug CLASS gets an automated check in the
    suite — ownership enforced on every table, cross-user access denied, cleanup
    jobs proven by advancing the clock — so a class found once cannot silently

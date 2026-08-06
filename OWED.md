@@ -875,6 +875,28 @@ then; none may be hidden or reduced to close the gap.
       **NB the sibling line above** (the local pose model silently falling back to
       a CDN) means camera workouts need the internet too — two independent reasons
       the offline promise is not yet true, and they must both close.
+- [ ] ⚪ **THE MUTATION HARNESS DOES NOT YET DO WHAT RULE 4a SAYS.** Created
+      2026-08-07 with Kd's audit-scoping ruling (DECISIONS :5857), because the
+      RULE now says something the TOOL does not do — and a gap between what is
+      written and what runs is exactly what this file exists to stop.
+      Two things missing from `tools/mutate-workout-summary.mjs`:
+      1. **No severity class per mutant.** 4a says slow DB mutants are spent only
+         on Critical/High surfaces (ownership · numbers a user sees · anything
+         that saves or syncs · money). Today every mutant is equal, so the rule
+         can only be followed by hand — which is how a rule quietly becomes
+         whatever chats have been doing with it (:5307's recorded lesson).
+         Wanted: a `class` field, and a default run that skips the cosmetic ones.
+      2. **No local-Postgres switch.** Every DB mutant round-trips to Neon in
+         ap-southeast-1. `docker-compose.dev.yml` already runs
+         `pgvector/pgvector:pg16` on host port 5433 — the same image CI uses — so
+         the pieces exist and nothing needs building, only wiring.
+      **AND THE MEASUREMENT IS PART OF THIS LINE (V1):** the local-DB saving is
+      **UNVERIFIED**. It is expected to be large and has been timed by nobody.
+      The next card that uses it must measure it, and no record may quote a
+      number before then. The ~40 min / ~18 min figures in :5857 ARE measured and
+      are the baseline to beat.
+      **Not blocking anything.** The audit works today; it is simply more
+      expensive than the rule now asks for.
 - [ ] 🟡 **THE NEW API DOES NOT STORE A WORKOUT'S WALL-CLOCK DURATION.** Found
       2026-08-07 by the summary card's own mutation sweep (M6 survived), then
       measured against the live DB: **12 of 12 workouts had `duration_ms` exactly

@@ -42,6 +42,23 @@ mid-file: re-derive them with
 - **:1110** — 2026-07-26 — the hardcoded 100-XP-per-level curve must NEVER be
   copied into a client. The server sends `xpInLevel`/`xpForNext`/`progressPct`;
   clients render, never compute. (`xp.level + 1` survives as a label only.)
+- **:5857** — 2026-08-07 — **KD RULING: the TEST AUDIT is SCOPED BY SEVERITY, not
+  applied uniformly.** Calibrates :5348's rule 4; **does NOT weaken it — the audit
+  stays mandatory.** Slow database-backed mutants are spent ONLY on what rules
+  1/1a call Critical/High (ownership · numbers a user sees · anything that
+  saves/syncs/queues · money), **never** on wording, ported constant tables,
+  comments, naming or layout; **database mutants run only on cards that change
+  SERVER behaviour**; and the sweep should point at a LOCAL Postgres when the card
+  allows. **Measured cause:** the summary card's audit took ~40 min, ~18 of it six
+  DB mutants each re-running the whole suite against a Neon instance in another
+  country — giving the same ~3 minutes to a meal-threshold boundary as to "can a
+  stranger read your workout", while everything it actually caught sat in the
+  Critical/High rows. **The real argument is alignment:** the audit's cost now
+  follows the same axis as the severity gate, where before the gate and the
+  instrument graded risk differently. **UNVERIFIED and owed a measurement:** the
+  local-Postgres saving is untimed — quote no number until it is. The tool has no
+  severity classes and no local-DB switch yet; own `OWED.md` line.
+  `CLAUDE.md` Part I §2.5 rule 4a.
 - **:5807** — 2026-08-07 — **KD AMENDMENT to the severity gate: WHAT A USER CAN
   SEE AND IS FALSE IS CRITICAL/HIGH.** ADDS to :5348's rule 1, replaces nothing
   ("add it but don't delete previous rules"). A finding is Critical/High if a user

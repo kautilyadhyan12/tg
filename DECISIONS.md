@@ -5853,3 +5853,52 @@ rules". Written into `CLAUDE.md` Part I §2.5 as rule **1a** in the same commit.
   runs nowhere and must be live before the first real SIGNUP, offline start is
   broken, the pose model downloads from a CDN, and **nothing has ever run on a
   real phone, on a real mobile network, or under real load.**
+
+## 2026-08-07 — KD RULING: the test audit is SCOPED BY SEVERITY, not applied uniformly
+
+**Calibrates rule 4 of :5348. It does NOT weaken it — the audit stays mandatory.
+What changes is what gets the EXPENSIVE treatment.** Written into `CLAUDE.md`
+Part I §2.5 as rule **4a** in the same commit. Kd asked for the recommendation
+("what is your verdict on database sweep, what should we do") and approved it.
+
+- (**THE RULING, three parts**)
+  1. **Slow, database-backed mutants are spent on what rules 1/1a call
+     Critical/High and nowhere else** — ownership (can another person see it),
+     numbers a user sees, anything that saves/syncs/queues, and money once
+     billing exists. **Never** on wording, labels, ported constant tables,
+     comments, naming or layout.
+  2. **Database mutants run only on cards that change SERVER behaviour.** A
+     web-only card audits in minutes.
+  3. **Point the sweep at a LOCAL Postgres** rather than the cloud one when the
+     card allows it.
+- (**WHY, and the numbers are this card's own, measured not estimated**) The
+  summary card's audit took **~40 minutes**, of which **~18 was six database
+  mutants**, each re-running the entire DB suite against a Neon instance in
+  ap-southeast-1. It gave the same ~3 minutes to *"is the meal-suggestion
+  threshold `>400` or `>=400`"* as to *"can a stranger read your workout"*.
+  **The value was real and unevenly distributed.** Everything the audit actually
+  caught on this card sits in the Critical/High rows: the surviving mutant that
+  exposed a fabricated rest time on screen (:5748), and its own two broken
+  instruments — a sweep that could not complete, and a sweep that exited 0 while
+  skipping the checks guarding a Critical.
+- (**THE ALIGNMENT THAT MAKES IT COHERENT, and is the real argument for it**)
+  This makes the audit's cost follow the SAME axis as the severity gate. Before
+  it, two rules disagreed about what matters: rule 1a says a wrong number on
+  screen is Critical while a typo is Low, and rule 4 was spending identical
+  effort on both. **A process whose gate and whose instrument grade risk
+  differently will always over-spend somewhere and under-spend somewhere else.**
+- (**UNVERIFIED, and flagged rather than quoted**) How much the local-Postgres
+  switch actually saves **has not been timed**. It is expected to be large — every
+  step currently makes a round trip to another country — but no number belongs in
+  any record until it is measured, and the next card that uses it must measure it.
+  (V1. The ~40 min / ~18 min figures above ARE measured, from this card's runs.)
+- (**WHAT IT DOES NOT DO**) It does not make the audit optional. It does not let a
+  Critical/High guarantee ship unmutated. The full uniform sweep stays available
+  and is the right tool for the riskiest work — money, the Mongo→PG migration,
+  anything touching other people's data at scale.
+- (**OWED, because the RULE now says something the TOOL does not do**)
+  `tools/mutate-workout-summary.mjs` has no notion of a mutant's severity class
+  and no local-DB switch; both are its own `OWED.md` line rather than a silent
+  gap between what is written and what runs. Recording the rule without the tool
+  is deliberate — Kd said he would take the next card later, and a rule not
+  written down when it is decided is the failure `OWED.md` exists to stop.
