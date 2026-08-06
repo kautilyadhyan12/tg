@@ -127,6 +127,20 @@ K5. **Length is a cost he pays.** A wall of text reads as evasion and he has
     not change what he does next.
 K6. **The read-aloud test.** If a sentence would not survive being read aloud
     to someone who has never seen code, rewrite it before sending.
+K7. **A message that ASKS KD TO DECIDE has a fixed shape, and it is short.**
+    The first thing in it — before any heading, table, evidence or history — is
+    three things in plain words: **what the decision is · what you recommend ·
+    what changes if he picks it.** That opening must fit in about FIVE LINES and
+    he must be able to answer having read only those. Everything else goes
+    BELOW, clearly optional. **If the recommendation cannot be said in one
+    sentence, it is not ready to put to him** — go and finish the thinking
+    instead of handing him the pieces.
+K8. **A REPORT or SUMMARY leads with the outcome and then stops.** Say what
+    happened and what it means for him, then stop writing. Tables, headings,
+    line citations, self-audits and measurement logs are for `DECISIONS.md`,
+    `OWED.md` and commit messages, whose reader is the next chat. Putting them
+    in front of Kd is not thoroughness — it buries the one sentence he needed.
+    **A long message is not evidence of care; it is a cost he pays.**
 
 (Operator-added 2026-08-01 after the THIRD recorded recurrence — 2026-07-19,
 2026-07-21, and a session where he wrote "i am not understanding anything" four
@@ -134,6 +148,19 @@ times before the chat adjusted. His words: "i have constantly remind every chat
 that i am a beginner... needs to be in normal english so that even a child can
 understand to make judgement". A rule he has to repeat every chat is a rule the
 repo failed to record; that is what this section fixes.)
+
+(**K7–K8 operator-added 2026-08-06, the FOURTH recurrence — and the one that
+proves K1–K6 were not enough.** Kd asked again, in a session where he had been
+handed multi-section replies with tables and headings for what were one-line
+answers, and where a decision he could have made in ten seconds arrived wrapped
+in evidence he never asked for. His words: "when it reports or give summary and
+asks me to make decision, then it should be in simple english and not too long
+so that i can understand". **K1–K6 told a chat HOW to write; they set no limit
+on HOW MUCH, so a chat could obey every one of them and still bury him.** That
+is the gap K7–K8 close. Note the shape of the failure, because it will recur:
+the offending messages were not careless — they were careful, evidenced, and
+correct, and that is exactly why the chat writing them could not see the
+problem. **Thoroughness aimed at the wrong reader is a defect.**)
 
 ---
 
