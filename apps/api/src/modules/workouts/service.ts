@@ -22,7 +22,13 @@ import { getEntitlements } from "../entitlements/service.js";
 import type { RedisLike } from "../../redis.js";
 import { z } from "zod";
 import { getUserSyncContext } from "../users/service.js";
-import { KCAL_CALC_VERSION, kcalPointForSets } from "./calories.js";
+import {
+  KCAL_CALC_VERSION_V1,
+  KCAL_CALC_VERSION_V2,
+  kcalPointForSets,
+  kcalPointForSetsV2,
+  type KcalSetInputV2,
+} from "./calories.js";
 import * as repo from "./repo.js";
 import type {
   PersonalRecords,
@@ -49,13 +55,34 @@ export async function handleWorkoutSync(
   const exerciseBySlug = await repo.getExerciseIdsBySlug(sql, slugs);
   const ctx = await getUserSyncContext(sql, userId);
 
-  // 2B §2.2: kcal computed server-side at sync, ACTIVE time only (GAP-2),
-  // MET per exercise from the catalog, weight from users (70 kg fallback).
-  const kcalInputs = payload.sets
-    .map((s) => ({ ref: exerciseBySlug.get(s.exercise), durationMs: s.durationMs }))
-    .filter((x): x is { ref: repo.ExerciseRef; durationMs: number } => x.ref !== undefined)
-    .map((x) => ({ met: x.ref.met, durationMs: x.durationMs }));
-  const kcal = { point: kcalPointForSets(kcalInputs, ctx.weightKg), calcVersion: KCAL_CALC_VERSION };
+  // 2B §2.2: kcal computed server-side at sync, MET per exercise from the
+  // catalog, weight from users (70 kg fallback). WHICH formula runs is the
+  // PAYLOAD's shape, not the deploy date: `restSeconds` present = a client
+  // that understands the v2 three-tier accounting (Kd, 2026-08-07); absent =
+  // a payload queued before the card, priced by v1 byte-for-byte and stamped
+  // v1, so a stored number is always explicable from its own row.
+  const kcalInputs: KcalSetInputV2[] = [];
+  for (const s of payload.sets) {
+    const ref = exerciseBySlug.get(s.exercise);
+    if (ref === undefined) continue; // unknown slug: set is skipped by the repo too
+    kcalInputs.push({
+      met: ref.met,
+      durationMs: s.durationMs,
+      reps: s.reps,
+      tempoMsAvg: s.tempoMsAvg,
+      logOnly: s.mode === "log_only",
+    });
+  }
+  const kcal =
+    payload.restSeconds === undefined
+      ? { point: kcalPointForSets(kcalInputs, ctx.weightKg), calcVersion: KCAL_CALC_VERSION_V1 }
+      : {
+          point: kcalPointForSetsV2(kcalInputs, ctx.weightKg, {
+            restSeconds: payload.restSeconds,
+            durationSeconds: payload.durationSeconds,
+          }),
+          calcVersion: KCAL_CALC_VERSION_V2,
+        };
 
   const outcome = await repo.syncWorkout(sql, userId, payload, exerciseBySlug, kcal);
 
@@ -235,14 +262,34 @@ export async function getWorkoutSummary(
   // change units on the way to a label (DECISIONS :4182).
   const activeMs = sets.reduce((total, s) => total + s.durationMs, 0);
 
+  const durationSeconds = workout.durationMs === null ? null : Math.floor(workout.durationMs / 1000);
+  // No sets is not reachable through sync (the contract requires ≥1), but an
+  // empty sum would report 0 seconds of activity as if measured — null says
+  // "unknown" instead, which is what the client's UNKNOWN arm is for.
+  const measuredActiveSeconds = sets.length === 0 ? null : Math.floor(activeMs / 1000);
+  // ACTIVE TIME CANNOT EXCEED THE SESSION IT HAPPENED IN. Kd's smoke,
+  // 2026-08-07: a workout that ran 92 s carried set spans summing to 188 s
+  // (the client stopwatch counted paused time — fixed at source in
+  // `setElapsedMs`), and this screen printed "3m 8s" above "2 min total". A
+  // part larger than its whole is FALSE on its face, whatever produced it.
+  //
+  // The clamp stays even though the source is fixed, and that is deliberate:
+  // rows already stored carry the inflated spans and would keep printing the
+  // contradiction, the per-second timer can legitimately trail the set spans
+  // by a tick, and a client is a thing that can be wrong again. Clamping is
+  // sound because the bound is a DEFINITION, not an estimate — time inside
+  // sets is a subset of time in the session. Equal values then render as one
+  // number: the summary's sub-line already draws only when they differ.
+  const activeSeconds =
+    measuredActiveSeconds !== null && durationSeconds !== null
+      ? Math.min(measuredActiveSeconds, durationSeconds)
+      : measuredActiveSeconds;
+
   return {
     workoutId: workout.id,
     startedAt: workout.startedAt.toISOString(),
-    // No sets is not reachable through sync (the contract requires ≥1), but an
-    // empty sum would report 0 seconds of activity as if measured — null says
-    // "unknown" instead, which is what the client's UNKNOWN arm is for.
-    activeSeconds: sets.length === 0 ? null : Math.floor(activeMs / 1000),
-    durationSeconds: workout.durationMs === null ? null : Math.floor(workout.durationMs / 1000),
+    activeSeconds,
+    durationSeconds,
     caloriesBurned: workout.kcalPoint,
     formAccuracy: workout.avgFormScore,
     exercisesCount: new Set(sets.map((s) => s.exerciseSlug)).size,

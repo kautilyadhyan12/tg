@@ -1006,8 +1006,32 @@ describe('workout time — the "NaNh NaNm" case, and a real zero', () => {
   });
 
   it('the "total" sub-line is NULL rather than "undefined total"', () => {
-    expect(totalTimeLabel(35)).toBe('35 min total');
     expect(totalTimeLabel(null)).toBe(null);
+  });
+
+  // Kd's smoke, 2026-08-07. The sub-line took MINUTES and rounded, while the
+  // figure directly above it is exact to the second: a 1 m 44 s session printed
+  // "2 min total" under "1m 27s". Shown RED against `totalTimeLabel(minutes)`
+  // before the fix landed (R9.5).
+  it('the "total" sub-line speaks SECONDS, at the precision of the figure above it', () => {
+    expect(totalTimeLabel(104)).toBe('1m 44s total');   // was "2 min total"
+    expect(totalTimeLabel(87)).toBe('1m 27s total');
+    // The rounding used to swallow these whole: 44 s became "1 min", 20 s "0 min".
+    expect(totalTimeLabel(44)).toBe('44s total');
+    expect(totalTimeLabel(20)).toBe('20s total');
+    // A real zero is a real zero, not the em dash and not "undefined total".
+    expect(totalTimeLabel(0)).toBe('0s total');
+    // Long sessions keep the hours spelling `secondsLabel` already owns, so the
+    // page and the share card cannot disagree about one duration.
+    expect(totalTimeLabel(3_720)).toBe('1h 2m total');
+  });
+
+  it('the total NEVER prints at a coarser precision than the active time beside it', () => {
+    // The invariant the defect broke, stated directly: same helper, same
+    // vocabulary, so the two figures on that tile cannot contradict each other.
+    for (const s of [7, 44, 87, 104, 599, 3_720]) {
+      expect(totalTimeLabel(s)).toBe(`${workoutTimeLabel(s, null)} total`);
+    }
   });
 });
 

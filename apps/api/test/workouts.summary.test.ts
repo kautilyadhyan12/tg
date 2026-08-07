@@ -146,7 +146,13 @@ d("GET /v1/workouts/:id/summary (real Postgres)", () => {
    *  setup step that fails silently turns every assertion downstream of it into
    *  a claim about the wrong thing (:5034's "a smoke doc's SETUP is part of the
    *  claim", one level in). */
-  const sync = async (workoutId: string, startedAt: string, sets: unknown[], access: string) => {
+  const sync = async (
+    workoutId: string,
+    startedAt: string,
+    sets: unknown[],
+    access: string,
+    extra: Record<string, number> = {},
+  ) => {
     const res = await inject({
       method: "POST",
       url: "/v1/workouts/sync",
@@ -158,6 +164,7 @@ d("GET /v1/workouts/:id/summary (real Postgres)", () => {
         defsVersion: 1,
         sets,
         traceSample: null,
+        ...extra,
       },
       access,
       headers: { "idempotency-key": workoutId },
@@ -219,6 +226,32 @@ d("GET /v1/workouts/:id/summary (real Postgres)", () => {
     expect(body.xpEarned).toBe(70);
     expect(body.mealSuggestions.length).toBeGreaterThan(0);
     expect(body.stretches.length).toBeGreaterThan(0);
+  });
+
+  it("active time can never exceed the session it happened in — Kd's smoke, a part larger than its whole", { timeout: 30_000 }, async () => {
+    const id = crypto.randomUUID();
+    // The exact shape the smoke produced: set spans summing WELL BEYOND the
+    // session the timer measured, because the client stopwatch counted paused
+    // time. Fixed at source (`setElapsedMs`) — the clamp is what stops rows
+    // ALREADY stored that way from printing the contradiction forever.
+    await sync(
+      id,
+      daysAgoIso(30),
+      [engineSet(1, { durationMs: 94_000 }), engineSet(2, { durationMs: 94_000 })],
+      cookieA,
+      { durationSeconds: 92, restSeconds: 0 },
+    );
+
+    const res = await summary(id, cookieA);
+    expect(res.statusCode).toBe(200);
+    const body = workoutSummarySchema.parse(res.json());
+    expect(body.durationSeconds).toBe(92); // the timer, stored verbatim
+    expect(body.activeSeconds).toBe(92); // clamped from 188, not printed as-is
+    // The invariant itself, stated so a future change cannot quietly break it
+    // in some other arithmetic while both figures still "look plausible".
+    expect(body.activeSeconds).not.toBeNull();
+    expect(body.durationSeconds).not.toBeNull();
+    expect(body.activeSeconds ?? 0).toBeLessThanOrEqual(body.durationSeconds ?? 0);
   });
 
   it("an UNSCORED (all hand-counted) workout reports formAccuracy NULL and base XP only", { timeout: 30_000 }, async () => {

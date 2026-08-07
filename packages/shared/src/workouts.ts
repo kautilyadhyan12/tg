@@ -146,7 +146,12 @@ export const workoutSummarySchema = z.object({
   /** Time the user was actually mid-set: Σ per-set durationMs, in WHOLE
    *  SECONDS. Seconds and not minutes because a rounded-to-minutes duration is
    *  what printed a 9-second workout as "0m" on the calendar (DECISIONS :4182);
-   *  the unit a duration is carried in should not change on its way to a label. */
+   *  the unit a duration is carried in should not change on its way to a label.
+   *
+   *  **CLAMPED to `durationSeconds` when both are known** (2026-08-07): a part
+   *  cannot exceed its whole, and a client stopwatch that counted paused time
+   *  made it do exactly that on screen. The bound is a definition, not an
+   *  estimate — time inside sets is a subset of time in the session. */
   activeSeconds: z.number().int().nullable(),
   /** `workouts.duration_ms` in WHOLE SECONDS.
    *

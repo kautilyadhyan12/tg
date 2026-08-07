@@ -36,8 +36,17 @@ const syncApi = axios.create({
 /** Shape one workout's collected §2.4 SetSummaries into the v1 §5.3 sync
  *  payload and validate it against the shared contract schema. Summaries pass
  *  through VERBATIM — setIndex is an opaque, NON-contiguous workout ordinal
- *  (manual resets skip numbers) and must never be renumbered. */
-export function buildSyncPayload({ workoutId, startedAt, summaries }) {
+ *  (manual resets skip numbers) and must never be renumbered.
+ *
+ *  `durationSeconds` / `restSeconds` (Kd-ruled payload addition, 2026-08-07):
+ *  the on-screen workout timer (stops on pause — that property is why the
+ *  server trusts it as the pause guard in the kcal formula) and the rest-break
+ *  counter. Guarded per field: a page that cannot supply one omits it rather
+ *  than sending a guess — `restSeconds` presence is what selects the server's
+ *  v2 calorie formula, so a fabricated 0 here would be a formula choice, not
+ *  a placeholder. A 0-second timer is omitted too (the contract wants a
+ *  POSITIVE duration; the server then falls back to Σ set spans). */
+export function buildSyncPayload({ workoutId, startedAt, summaries, durationSeconds, restSeconds }) {
   const engineRan = hasEngineSet(summaries);
   const payload = {
     workoutId,
@@ -58,6 +67,12 @@ export function buildSyncPayload({ workoutId, startedAt, summaries }) {
     sets: summaries,
     traceSample: null,
   };
+  if (Number.isInteger(durationSeconds) && durationSeconds > 0) {
+    payload.durationSeconds = durationSeconds;
+  }
+  if (Number.isInteger(restSeconds) && restSeconds >= 0) {
+    payload.restSeconds = restSeconds;
+  }
   const result = workoutSyncPayloadSchema.safeParse(payload);
   if (!result.success) return { ok: false, payload, error: result.error };
   return { ok: true, payload };
@@ -127,7 +142,9 @@ export function flushSyncQueue() {
  *  intact record instead of splitting it across two systems, neither complete.
  *  It cannot happen today (all 58 library names resolve — asserted in
  *  activeWorkoutEngine.test.js); it is the guard for the 59th. */
-export function queueWorkoutSync({ workoutId, startedAt, summaries, unresolved = [] }) {
+export function queueWorkoutSync({
+  workoutId, startedAt, summaries, unresolved = [], durationSeconds, restSeconds,
+}) {
   if (!summaries || summaries.length === 0) return { queued: false, reason: 'no-sets' };
   if (unresolved.length > 0) {
     console.error(
@@ -136,7 +153,7 @@ export function queueWorkoutSync({ workoutId, startedAt, summaries, unresolved =
     );
     return { queued: false, reason: 'unresolved-exercise' };
   }
-  const built = buildSyncPayload({ workoutId, startedAt, summaries });
+  const built = buildSyncPayload({ workoutId, startedAt, summaries, durationSeconds, restSeconds });
   if (!built.ok) {
     // A payload our own engine produced failing our own contract is a
     // programming error; park it (kept, inspectable — R10.3) instead of

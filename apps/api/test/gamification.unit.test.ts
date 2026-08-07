@@ -20,7 +20,7 @@ import {
   xpForLevel,
   xpProgress,
 } from "../src/modules/gamification/xp.js";
-import { DEFAULT_WEIGHT_KG, kcalPointForSets } from "../src/modules/workouts/calories.js";
+import { DEFAULT_WEIGHT_KG, kcalPointForSets, kcalPointForSetsV2 } from "../src/modules/workouts/calories.js";
 
 const state = (s: Partial<StreakState>): StreakState => ({ ...EMPTY_STREAK, ...s });
 
@@ -180,6 +180,62 @@ describe("kcal formula (2B §2.2: MET × weight × active hours)", () => {
     expect(kcalPointForSets(sets, null)).toBe(6 * DEFAULT_WEIGHT_KG);
     expect(kcalPointForSets(sets, 0)).toBe(6 * DEFAULT_WEIGHT_KG);
     expect(kcalPointForSets(sets, 100)).toBe(600);
+  });
+});
+
+describe("kcal v2 (three-tier, Kd-ruled 2026-08-07: reps at MET · idle at REST_MET 1.8 · pause at nothing)", () => {
+  // The scenario Kd caught, hand-computed: camera on for 2.5 min, idle for 2
+  // of them, 10 reps × 3 s. v1 bills the whole span at the exercise MET; v2
+  // bills 30 s at MET 6 + 120 s at 1.8.
+  // v2 = 6×70×(30000/3.6e6) + 1.8×70×(120000/3.6e6) = 3.5 + 4.2 = 7.7 → 8.
+  const kdSet = { met: 6, durationMs: 150_000, reps: 10, tempoMsAvg: 3_000, logOnly: false };
+
+  it("bills only rep time at the exercise MET (the Kd scenario)", () => {
+    expect(kcalPointForSetsV2([kdSet], 70, { restSeconds: 0, durationSeconds: undefined })).toBe(8);
+    // The v1 comparator on the same set: 6 × 70 × (150000/3.6e6) = 17.5 → 18.
+    expect(kcalPointForSets([kdSet], 70)).toBe(18);
+  });
+
+  it("a ZERO-rep engine set (camera running, nobody exercising) is all REST_MET", () => {
+    // 1.8 × 70 × (150000/3.6e6) = 5.25 → 5. tempoMsAvg null: no rep was timed.
+    const idle = { met: 6, durationMs: 150_000, reps: 0, tempoMsAvg: null, logOnly: false };
+    expect(kcalPointForSetsV2([idle], 70, { restSeconds: 0, durationSeconds: undefined })).toBe(5);
+  });
+
+  it("a log-only set keeps the v1 treatment exactly (no rep timings exist)", () => {
+    const logOnly = { met: 6, durationMs: 1_800_000, reps: 10, tempoMsAvg: null, logOnly: true };
+    expect(kcalPointForSetsV2([logOnly], 70, { restSeconds: 0, durationSeconds: undefined })).toBe(
+      kcalPointForSets([logOnly], 70), // = 210
+    );
+  });
+
+  it("rest breaks are billed at REST_MET via restSeconds", () => {
+    // 210 (log-only above) + 1.8 × 70 × (600/3600) = 210 + 21 = 231.
+    const logOnly = { met: 6, durationMs: 1_800_000, reps: 10, tempoMsAvg: null, logOnly: true };
+    expect(kcalPointForSetsV2([logOnly], 70, { restSeconds: 600, durationSeconds: undefined })).toBe(231);
+  });
+
+  it("rep time is CAPPED at the set span (reps × tempo can exceed it after rounding)", () => {
+    // 100 × 3000 = 300000 > span 150000 → the whole span at MET, idle 0 —
+    // identical to v1's 17.5 → 18, and never a negative idle term.
+    const over = { met: 6, durationMs: 150_000, reps: 100, tempoMsAvg: 3_000, logOnly: false };
+    expect(kcalPointForSetsV2([over], 70, { restSeconds: 0, durationSeconds: undefined })).toBe(18);
+  });
+
+  it("the timer cap keeps PAUSED time out of the idle bill", () => {
+    // Same set as the Kd scenario, but the span's 120 s of 'idle' contains a
+    // 90 s pause: the timer (which stops on pause) read only 60 s total, so
+    // chargeable idle = 60 − 30 = 30 s, not 120.
+    // 6×70×(30000/3.6e6) + 1.8×70×(30000/3.6e6) = 3.5 + 1.05 = 4.55 → 5.
+    expect(kcalPointForSetsV2([kdSet], 70, { restSeconds: 0, durationSeconds: 60 })).toBe(5);
+    // And the cap never LIFTS the bill: a timer longer than the span-idle
+    // (real between-set standing time) leaves the span-derived idle as-is.
+    expect(kcalPointForSetsV2([kdSet], 70, { restSeconds: 0, durationSeconds: 600 })).toBe(8);
+  });
+
+  it("falls back to 70 kg on null weight, exactly as v1 does", () => {
+    const set = { met: 6, durationMs: 150_000, reps: 10, tempoMsAvg: 3_000, logOnly: false };
+    expect(kcalPointForSetsV2([set], null, { restSeconds: 0, durationSeconds: undefined })).toBe(8);
   });
 });
 

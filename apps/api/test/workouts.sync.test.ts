@@ -202,6 +202,16 @@ d("POST /v1/workouts/sync (real Postgres, real cookie authn)", () => {
       // driver and answer 500, which the client's retry policy reads as
       // transient and would replay forever.
       { ...payload(wid, [set(1)]), startedAt: "2026-07-10T09:30:00+25:30" },
+      // The 2026-08-07 duration/rest fields: negative, zero-duration, non-int
+      // and over-int4-in-ms values are all refused at the parse boundary —
+      // a value Zod passed but PG overflowed would 500, which the client's
+      // retry policy reads as transient (a poison payload, P1.10d T3).
+      { ...payload(wid, [set(1)]), durationSeconds: -5 },
+      { ...payload(wid, [set(1)]), durationSeconds: 0 },
+      { ...payload(wid, [set(1)]), durationSeconds: 2_147_484 }, // floor(INT4_MAX/1000) + 1
+      { ...payload(wid, [set(1)]), durationSeconds: 90.5 },
+      { ...payload(wid, [set(1)]), restSeconds: -1 },
+      { ...payload(wid, [set(1)]), restSeconds: 2_147_484 },
     ];
     for (const bad of cases) {
       const res = await inject(bad, { "idempotency-key": wid });
@@ -232,6 +242,46 @@ d("POST /v1/workouts/sync (real Postgres, real cookie authn)", () => {
     const [s] = await sql`SELECT count(*)::int AS n FROM workout_sets WHERE workout_id = ${wid}`;
     expect(w?.["n"]).toBe(1);
     expect(s?.["n"]).toBe(2);
+  });
+
+  it("durationSeconds + restSeconds → timer stored as duration_ms, kcal v2 stamped and computed", { timeout: 30_000 }, async () => {
+    const wid = "aaaaaaaa-1111-4111-8111-000000000010";
+    // One engine set: span 21000 ms, 5 reps × 3900 ms tempo → 19500 ms of rep
+    // time at MET 6 (squat, seed), 1500 ms of in-set idle at REST_MET 1.8.
+    // Timer 300 s (cap not binding: 300000 − 19500 ≫ 1500) + 60 s rest.
+    // kcal = 6×70×(19500/3.6e6) + 1.8×70×((1500 + 60000)/3.6e6)
+    //      = 2.275 + 2.1525 = 4.4275 → 4.  (v1 on this payload was 2.45 → 2.)
+    const body = { ...payload(wid, [set(1)]), durationSeconds: 300, restSeconds: 60 };
+    const res = await post(body);
+    expect(res.statusCode).toBe(201);
+    const [w] = await sql`SELECT duration_ms, kcal_point, kcal_calc_version FROM workouts WHERE id = ${wid}`;
+    expect(w?.["duration_ms"]).toBe(300_000); // the TIMER, not Σ set spans (21000)
+    expect(w?.["kcal_calc_version"]).toBe(2);
+    expect(w?.["kcal_point"]).toBe(4);
+
+    // A retry carrying a DIFFERENT timer is still a no-op: the stored duration
+    // is the first write's (ON CONFLICT DO NOTHING), never silently re-priced.
+    const retryBody = { ...body, durationSeconds: 900 };
+    const retry = await post(retryBody);
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json<Record<string, unknown>>()).toEqual({ workoutId: wid, status: "duplicate" });
+    const [after] = await sql`SELECT duration_ms, kcal_point FROM workouts WHERE id = ${wid}`;
+    expect(after?.["duration_ms"]).toBe(300_000);
+    expect(after?.["kcal_point"]).toBe(4);
+  });
+
+  it("fields ABSENT → v1 formula, v1 stamp, Σ-of-sets duration — byte-identical pre-card behaviour", { timeout: 30_000 }, async () => {
+    // The happy-path test above already pins this (duration 63000, version 1,
+    // kcal 7) — this case exists to say so EXPLICITLY next to the v2 test, and
+    // to pin the pair that matters for old queued payloads: same sets, no new
+    // fields, nothing about the row changes.
+    const wid = "aaaaaaaa-1111-4111-8111-000000000011";
+    const res = await post(payload(wid, [set(1)]));
+    expect(res.statusCode).toBe(201);
+    const [w] = await sql`SELECT duration_ms, kcal_point, kcal_calc_version FROM workouts WHERE id = ${wid}`;
+    expect(w?.["duration_ms"]).toBe(21_000); // Σ set spans, as before the card
+    expect(w?.["kcal_calc_version"]).toBe(1);
+    expect(w?.["kcal_point"]).toBe(2); // 6 × 70 × (21000/3.6e6) = 2.45 → 2
   });
 
   it("concurrent duplicate POSTs: exactly one workout, no 500 (T3 P1.10c: cross-tab flush)", { timeout: 30_000 }, async () => {

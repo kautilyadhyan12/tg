@@ -643,10 +643,24 @@ export function workoutTimeLabel(active, minutes) {
 export function workoutTimeLabelShort(active, minutes) {
   return workoutTime(active, minutes, (m) => (m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`));
 }
-/** The page's "N min total" sub-line, or NULL when there is no total to name —
- *  never the string "undefined total". */
-export function totalTimeLabel(minutes) {
-  return minutes === null ? null : `${workoutTimeLabel(null, minutes)} total`;
+/** The page's "1m 44s total" sub-line, or NULL when there is no total to name —
+ *  never the string "undefined total".
+ *
+ *  **TAKES WHOLE SECONDS, not minutes, since 2026-08-07 — Kd's smoke.** It
+ *  rounded to whole minutes while the figure directly ABOVE it is exact to the
+ *  second, so a **1 m 44 s** session printed **"2 min total"** underneath
+ *  "1m 27s": sixteen seconds more than the timer the user had just watched, at
+ *  a coarser precision than its own headline. That is :4182's minute-rounding
+ *  defect — a 9-second workout drawn as "0m" — at the one site where it had
+ *  never been reachable, because until the duration card the total and the
+ *  active time were always the same number and this sub-line never drew at all.
+ *
+ *  `durationMinutes` still exists and is still right for what it does: it feeds
+ *  `workoutTimeLabel`'s FALLBACK arm, which speaks minutes on purpose. Only the
+ *  total sub-line moved, because it is the only one rendered BESIDE an exact
+ *  figure it must not contradict. */
+export function totalTimeLabel(totalSeconds) {
+  return totalSeconds === null ? null : `${secondsLabel(totalSeconds)} total`;
 }
 
 /** One personal record as its display string, or NULL when the entry carries
@@ -688,20 +702,26 @@ export function readMealSuggestion(m) {
  *  3. `durationMinutes` IS DERIVED HERE, from the payload's whole SECONDS.
  *
  *  ON THAT THIRD POINT, because it is the one that looks wrong. The new endpoint
- *  sends `durationSeconds`; the page's two consumers of the total both want
- *  MINUTES (`workoutTimeLabel`'s fallback arm and the "N min total" sub-line),
- *  and those two spell minutes deliberately differently — the page says
- *  "35 min", the share card "35m". Repointing them to seconds would change both
- *  strings on screen, an unrequested display change to a real value (R1.1), and
- *  a first cut of this card did exactly that: it printed "35m 0s total" and
+ *  sends `durationSeconds`; `workoutTimeLabel`'s FALLBACK arm wants MINUTES, and
+ *  the page and the share card spell minutes deliberately differently — the page
+ *  says "35 min", the card "35m". Repointing that arm to seconds would change
+ *  both strings on screen, an unrequested display change to a real value (R1.1),
+ *  and a first cut of this card did exactly that: it printed "35m 0s total" and
  *  three render tests caught it.
  *
  *  So the conversion happens ONCE, here, and the HEADLINE still uses exact
  *  seconds (`activeSeconds`), which is what :4182 was about — the calendar
  *  printing a 9-second workout as "0m" because its headline had been rounded to
- *  minutes with no sub-minute arm. Rounding a secondary "total" line to minutes
- *  is presentation, not a lost measurement, and `workoutTimeLabel`'s minutes arm
- *  has its own `< 1 min` case for the short ones.
+ *  minutes with no sub-minute arm.
+ *
+ *  **THIS PARAGRAPH USED TO END "rounding a secondary 'total' line to minutes is
+ *  presentation, not a lost measurement", AND THAT WAS WRONG — struck 2026-08-07
+ *  by Kd's smoke.** It was defensible only while the sub-line could not be seen:
+ *  the total equalled the active time on every workout, so it never drew. The day
+ *  a real session duration was stored, it drew — "2 min total" under "1m 27s" for
+ *  a workout of 1 m 44 s. A comment reasoning its way to a defect is how the
+ *  defect survives the next reader (:3610), so the reasoning is struck here
+ *  rather than quietly replaced. `totalTimeLabel` now takes SECONDS.
  *
  *  Per-field, still, so there is nothing for an envelope gate to get wrong —
  *  round 4 F2's lesson, where `Boolean(stats?.stats)` asserted the envelope and

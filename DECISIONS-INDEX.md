@@ -220,6 +220,33 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:5906** — 2026-08-07 — **THE REAL WORKOUT TIME IS SAVED, and calories stop
+  billing idle time as exercise (kcal v2).** **Read before touching anything that
+  measures time in a workout, before writing a comment that reasons its way to a
+  rounding, and before running ANY tool that owns the working tree.** Two OPTIONAL
+  payload fields (`durationSeconds` — the on-screen timer, which STOPS on pause —
+  and `restSeconds`); this IS the "ruled payload change" P2.3 GAP-2 deferred.
+  **§2.4 SetSummary untouched, so the byte-match gate is unaffected**; no
+  migration. Three-tier kcal v2: reps at the exercise MET · idle + rest at the
+  ported `REST_MET` 1.8 · **paused time at NOTHING**. **Version selected by the
+  PAYLOAD's shape, not the deploy date**, so a pre-card queued workout is priced
+  and stamped v1 byte-for-byte. **Kd's smoke found THREE Critical/High the 991
+  green tests could not**: the set stopwatch counted paused time (seven sets
+  claiming 188 s inside a 92 s session, printed as "3m 8s" over "2 min total" and
+  billed at the exercise rate); nothing stopped a part exceeding its whole on
+  screen (now clamped server-side, and the clamp STAYS because stored rows carry
+  the old spans); and — **found by Kd's instinct alone** — "2 min total" for a
+  1 m 44 s workout, :4182's minute-rounding at the one site never before
+  reachable. **The comment defending that rounding is STRUCK IN PLACE and the
+  render test that asserted `'35 min total'` was ASSERTING THE DEFECT.**
+  **Carries a protocol failure of mine: I cancelled a card Kd had already
+  approved, on my own judgement** — a chat may not reverse a Kd ruling, it
+  proposes and stops. **And three instrument failures**: `git stash` run while a
+  sweep was live (verdicts unusable — a mutant reddens just as well when git
+  reverted the source); **a sweep that never ran reporting exit 0 through a
+  `| tail` pipe**, the first unearned pass here from a PIPE rather than a
+  harness; and Kd smoking a **stale API server** because `tsx` has no `--watch`.
+  12/12 mutants RED · api 429/429 · web 519/519 · shared 45/45.
 - **:5748** — 2026-08-07 — **summary card, T3 ROUND 2 (diff-only): ZERO
   Critical/High — CARD CLOSED. The first packet ever closed by the SEVERITY GATE
   rather than by a round count.** 5 Low, all fixed. **The two that would have

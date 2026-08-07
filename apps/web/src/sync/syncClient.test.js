@@ -93,6 +93,46 @@ describe('buildSyncPayload', () => {
     expect(built.error).toBeDefined();
   });
 
+  // The 2026-08-07 Kd-ruled fields: on-screen timer + rest-break counter.
+  it('carries durationSeconds and restSeconds when the page supplies them', () => {
+    const built = buildSyncPayload({
+      workoutId: WORKOUT_ID, startedAt: STARTED_AT, summaries: [summary(1)],
+      durationSeconds: 300, restSeconds: 60,
+    });
+    expect(built.ok).toBe(true);
+    expect(built.payload.durationSeconds).toBe(300);
+    expect(built.payload.restSeconds).toBe(60);
+    expect(workoutSyncPayloadSchema.parse(built.payload)).toEqual(built.payload);
+  });
+
+  it('restSeconds 0 is a REAL value (no rest taken) and still travels', () => {
+    // Its presence selects the server's v2 formula, so dropping a genuine 0
+    // would silently re-price the workout under v1.
+    const built = buildSyncPayload({
+      workoutId: WORKOUT_ID, startedAt: STARTED_AT, summaries: [summary(1)],
+      durationSeconds: 300, restSeconds: 0,
+    });
+    expect(built.ok).toBe(true);
+    expect(built.payload.restSeconds).toBe(0);
+  });
+
+  it('omits what it cannot honestly say: 0/absent/fractional timer, absent rest', () => {
+    for (const durationSeconds of [undefined, 0, 90.5]) {
+      const built = buildSyncPayload({
+        workoutId: WORKOUT_ID, startedAt: STARTED_AT, summaries: [summary(1)],
+        durationSeconds,
+      });
+      expect(built.ok).toBe(true);
+      expect('durationSeconds' in built.payload).toBe(false);
+      expect('restSeconds' in built.payload).toBe(false);
+    }
+    // The pre-card call shape still builds the pre-card payload byte-for-byte.
+    const legacy = build([summary(1)]);
+    expect(legacy.ok).toBe(true);
+    expect('durationSeconds' in legacy.payload).toBe(false);
+    expect('restSeconds' in legacy.payload).toBe(false);
+  });
+
   it('builds a valid payload for a workout where NOTHING was scored', () => {
     // The case that used to be impossible: `summaries[0].engineVersion` on an
     // empty-of-engine-sets list. This is the whole hand-logged write path.

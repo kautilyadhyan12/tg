@@ -11,6 +11,32 @@
 // four call sites inside a 1,300-line component.
 import { slugForLegacyName } from "@app/shared";
 
+/** How long the CURRENT set has actually been running, with PAUSED TIME TAKEN
+ *  OUT. Pure, so the arithmetic that can be wrong lives where a test can reach
+ *  it — the page cannot be unit-tested and this file is (the `syncTimezone`
+ *  precedent: a fix parked in a JSX file shipped with no protection at all).
+ *
+ *  WHY IT EXISTS — Kd's smoke, 2026-08-07. The set stopwatch was raw wall
+ *  clock (`Date.now() - startedAtMs`), so a 20-second pause inside a set was
+ *  recorded as 20 seconds of exercise. Measured on that workout: seven sets
+ *  claiming 188 s between them across a session that ran 92 s. The summary
+ *  then printed "3m 8s" of Workout Time above "2 min total" — **a total
+ *  smaller than its own part**, and the same inflated span was billed at the
+ *  full exercise rate in the calories.
+ *
+ *  `pauseStartedAtMs` non-null means a pause is OPEN right now: its elapsed
+ *  part is subtracted too, so a set captured while paused is still honest.
+ *  Never negative, and a set with no clock reports 0 rather than a guess. */
+export function setElapsedMs({ startedAtMs, nowMs, pausedMs = 0, pauseStartedAtMs = null }) {
+  if (startedAtMs == null || !Number.isFinite(startedAtMs)) return 0;
+  const closed = Number.isFinite(pausedMs) ? Math.max(0, pausedMs) : 0;
+  const open =
+    pauseStartedAtMs == null || !Number.isFinite(pauseStartedAtMs)
+      ? 0
+      : Math.max(0, nowMs - pauseStartedAtMs);
+  return Math.max(0, nowMs - startedAtMs - closed - open);
+}
+
 /** A fresh per-workout log.
  *
  *  `summaries`  — ENGINE summaries only. Nothing hand-counted is ever pushed

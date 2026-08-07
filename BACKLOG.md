@@ -127,3 +127,9 @@ fixed and is recorded in DECISIONS.
       after the repoint (that the new API has no per-workout XP field, and why the
       XP bar starts empty). Rewritten rather than deleted, per :3610's lesson that
       a wrong comment can re-arm a fixed bug. — fixed same commit.
+- [x] **The Workout Time tooltip described a total the app no longer reports.**
+      It said the total is "the whole time on the workout screen, including
+      standing between reps and camera setup". True of the old backend's figure;
+      false of the timer now stored, which stops on pause and does not run during
+      a rest break. Rewritten to say exactly that. — fixed same commit
+      (kcal-v2 card, DECISIONS :5906).

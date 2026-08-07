@@ -9,6 +9,7 @@ import {
   newWorkoutId,
   reconcileSets,
   recordHandCountedSet,
+  setElapsedMs,
 } from "./activeWorkoutEngine.js";
 
 const summary = (over = {}) => ({
@@ -17,6 +18,63 @@ const summary = (over = {}) => ({
   reps: 2,
   repScores: [90, 80],
   ...over,
+});
+
+// Kd's smoke, 2026-08-07. The defect these pin: the set stopwatch was raw wall
+// clock, so a pause inside a set was recorded as exercise — seven sets claiming
+// 188 s across a 92 s session, printed as "3m 8s" over "2 min total" and billed
+// at the full exercise rate. R9.5: each of these was shown RED against
+// `nowMs - startedAtMs` before the fix landed.
+describe("setElapsedMs — paused time is not exercise", () => {
+  const T = 1_000_000; // an arbitrary epoch; only differences matter
+
+  it("subtracts a pause that has ENDED", () => {
+    // 100 s wall clock, 20 s of it paused → 80 s of set.
+    expect(setElapsedMs({ startedAtMs: T, nowMs: T + 100_000, pausedMs: 20_000 })).toBe(80_000);
+  });
+
+  it("subtracts a pause that is STILL OPEN at capture", () => {
+    // Paused 30 s ago and never resumed: the open pause counts too, or a set
+    // ended from the paused screen banks all of it as work.
+    expect(
+      setElapsedMs({ startedAtMs: T, nowMs: T + 100_000, pauseStartedAtMs: T + 70_000 }),
+    ).toBe(70_000);
+  });
+
+  it("subtracts BOTH a closed and an open pause", () => {
+    expect(
+      setElapsedMs({
+        startedAtMs: T,
+        nowMs: T + 100_000,
+        pausedMs: 20_000,
+        pauseStartedAtMs: T + 90_000,
+      }),
+    ).toBe(70_000); // 100 − 20 closed − 10 open
+  });
+
+  it("is unchanged from wall clock when nothing was paused", () => {
+    expect(setElapsedMs({ startedAtMs: T, nowMs: T + 45_000 })).toBe(45_000);
+  });
+
+  it("never returns a negative duration, whatever the inputs claim", () => {
+    // A clock that jumped, or a pause longer than the set — a negative here
+    // would reach `buildLogOnlySet`, which floors at 0 and would hide it.
+    expect(setElapsedMs({ startedAtMs: T, nowMs: T + 10_000, pausedMs: 999_000 })).toBe(0);
+    expect(setElapsedMs({ startedAtMs: T + 50_000, nowMs: T })).toBe(0);
+  });
+
+  it("reports 0 — not a guess — when the set has no clock", () => {
+    expect(setElapsedMs({ startedAtMs: null, nowMs: T })).toBe(0);
+    expect(setElapsedMs({ startedAtMs: undefined, nowMs: T })).toBe(0);
+  });
+
+  it("ignores junk in the pause fields rather than propagating NaN", () => {
+    // NaN would sail through `Math.max(0, NaN)` as NaN and land in the payload.
+    expect(setElapsedMs({ startedAtMs: T, nowMs: T + 30_000, pausedMs: NaN })).toBe(30_000);
+    expect(
+      setElapsedMs({ startedAtMs: T, nowMs: T + 30_000, pauseStartedAtMs: NaN }),
+    ).toBe(30_000);
+  });
 });
 
 describe("accumulateSummary", () => {

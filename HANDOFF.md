@@ -1,6 +1,62 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE REAL WORKOUT TIME + KCAL v2 — code done, Kd's SMOKE PASSED on the
+      final bytes. **T3 IS UNRUN — this is NOT ticked.**
+      shared 45/45 · api 429/429 · web 519/519 · 12/12 mutants RED (0 alive,
+      0 skipped, one completed run) · typecheck + api lint clean · build green.
+
+WHAT CHANGED, in one sentence
+  The app now tells the server how long the workout actually ran (the on-screen
+  timer — it STOPS on pause), and calories are billed in three tiers: reps at
+  the exercise rate, idle and rest at 1.8, paused time at nothing.
+
+THE THING THAT WILL BITE THE NEXT CHAT, AND IT IS NOT IN THE CODE
+  **`node --import tsx src/index.ts` DOES NOT WATCH.** Kd ran a whole smoke
+  round against an API server started before the fix was written, reported the
+  defect correctly, and I explained it as a code bug. If you start servers for
+  a smoke, RESTART THE API after every api-side edit, and say so in the doc.
+
+THREE DEFECTS THE BROWSER FOUND THAT 991 GREEN TESTS DID NOT
+  1. The set stopwatch was raw wall clock, so a 20 s pause was recorded as 20 s
+     of exercise: seven sets claiming 188 s inside a session that ran 92 s,
+     printed as "3m 8s" over "2 min total" — a part larger than its whole — and
+     billed at the full exercise rate. Fixed at source (`setElapsedMs`).
+  2. Nothing stopped that contradiction reaching the screen. Now clamped
+     server-side, and **the clamp STAYS after the source fix**: stored rows
+     carry the old spans, and the per-second timer can trail the spans by a tick.
+  3. **Kd found this one by instinct, with no instrument:** "2 min total" for a
+     1 m 44 s workout. The sub-line rounded to minutes while the figure above it
+     was exact. `totalTimeLabel` takes SECONDS now.
+
+TWO RECORD-LEVEL FINDINGS INSIDE (3), WORTH MORE THAN THE FIX
+  - A comment REASONED its way to the defect ("rounding a secondary total line
+    to minutes is presentation, not a lost measurement") and was true only while
+    the sub-line was unreachable. STRUCK IN PLACE, not replaced (:3610).
+  - A render test ASSERTED THE DEFECT (`'35 min total'`). Updated with its
+    reason written into the test, so the old string cannot read as a baseline.
+
+MY OWN INSTRUMENT FAILURES THIS SESSION — read before running any harness
+  - **I ran `git stash` while a sweep was live.** Its 12/12 was unusable: a
+    mutant goes red just as readily when git has reverted the source. Re-run
+    clean. :3819 says never during a SMOKE; the rule is wider — nothing may move
+    the tree while the harness owns it.
+  - **A sweep that never ran reported exit 0**: `node … | tail -30` returns
+    `tail`'s status, and a stale `cd` had the shell in `apps/api`. First
+    unearned pass here from a PIPE — the harness's safeguards were never
+    reached. Redirect to a file and echo `$?`.
+
+SCOPE HONESTY
+  A LOG-ONLY set still bills its whole span at the exercise MET — no rep
+  timings exist to do better. Disclosed to Kd BEFORE he approved; its own 🟡
+  OWED line, and it is a RULING request, not a bug.
+
+NEXT: the fresh-chat T3 — `t3-duration-kcal.diff` + `t3-duration-kcal-PROMPT.md`
+      at the repo root. After it closes: the DASHBOARD STATS card (card 2 of the
+      workout core loop), whose plan is in this conversation and unchanged.
+```
+
+```
 TASK: THE POST-WORKOUT SUMMARY REPOINT — **CARD CLOSED 2026-08-07.**
       All three gates passed: smoke 8/8 (:5543) · T3 round 1, 1 Critical/High +
       7 Low, all fixed (:5618) · **T3 round 2 (diff-only, Kd's rule 2): ZERO

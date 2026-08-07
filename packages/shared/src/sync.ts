@@ -8,6 +8,13 @@ import { z } from "zod";
 import { INT4_MAX, SMALLINT_MAX, setSummarySchema } from "./events.js";
 import { instantSchema } from "./time.js";
 
+/** Ceiling for second-denominated payload fields whose ms form lands in an
+ *  int4 column: floor(2_147_483_647 / 1000). A value Zod passed but PG
+ *  overflowed would 500, which the client's R10.3 retry policy reads as
+ *  transient — a poison payload halting the queue forever (the P1.10d T3
+ *  lesson, applied to the fields added 2026-08-07). */
+const INT4_SECONDS_MAX = Math.floor(INT4_MAX / 1000);
+
 export const workoutSyncPayloadSchema = z
   .object({
     workoutId: z.string().uuid(), // client-generated: THE idempotency key (Part 4 §3.5)
@@ -46,6 +53,27 @@ export const workoutSyncPayloadSchema = z
      *  `1` would be a lie about which bundle produced it. No migration: the
      *  column already allows null. */
     defsVersion: z.number().int().positive().max(INT4_MAX).nullable(),
+    /** The on-screen workout timer, in WHOLE SECONDS — Kd-ruled payload
+     *  addition (2026-08-07; the "ruled payload change" DECISIONS P2.3 GAP-2
+     *  said rest calories were waiting for). Two properties define it and both
+     *  are load-bearing:
+     *  - it counts only workout-phase time: PAUSE STOPS IT, rest breaks are
+     *    NOT in it (they travel separately below);
+     *  - it is a CLIENT MEASUREMENT the server cannot observe or re-derive —
+     *    same class as rep counts (v1 §14 nuance to R3.1), bounded here and
+     *    plausibility-checked at P4.y like everything else the client reports.
+     *  OPTIONAL: payloads queued before this card exist and must keep syncing;
+     *  absent → the server keeps deriving duration as Σ set spans, byte-for-
+     *  byte today's behaviour. Bound: lands in `duration_ms` int4, so
+     *  ≤ floor(INT4_MAX / 1000). */
+    durationSeconds: z.number().int().positive().max(INT4_SECONDS_MAX).optional(),
+    /** Accumulated rest-break seconds (the client's rest-phase counter).
+     *  Feeds the kcal v2 rest term at REST_MET 1.8 (calories.py:85, the
+     *  constant DECISIONS P2.3 GAP-2 deferred). Its PRESENCE is what selects
+     *  the v2 formula server-side — the client that understands this
+     *  accounting always sends it, 0 included; older queued payloads lack it
+     *  and get the v1 formula + stamp unchanged. */
+    restSeconds: z.number().int().nonnegative().max(INT4_SECONDS_MAX).optional(),
     sets: z
       .array(setSummarySchema)
       // min: a workout with NO sets at all is still not creatable — the reps

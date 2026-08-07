@@ -2077,12 +2077,19 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     // if the sub-line vanishes.
     //
     // THIS FIXTURE KEEPS active (900s) AND total (2100s) DIFFERENT ON PURPOSE.
-    // Production sends the SAME number for both — the server derives a workout's
-    // duration as the sum of its set durations — so this control covers the case
-    // where a real wall-clock total eventually exists, and the test below covers
-    // the case that actually ships today.
+    // It stopped being hypothetical on 2026-08-07: the client now sends its own
+    // workout timer, so the two ARE different on every real workout, and this
+    // control is the shipping case rather than the future one.
+    //
+    // EXPECTATION CHANGED THE SAME DAY, from '35 min total' — and the reason
+    // matters more than the string. The sub-line took MINUTES and rounded while
+    // the figure above it is exact to the second, so Kd's smoke saw "2 min total"
+    // under "1m 27s" for a workout of 1 m 44 s. Both now speak `secondsLabel`,
+    // which is why this reads "35m 0s": the tile's own headline has always
+    // spelled an exact 15 minutes "15m 0s", and the sub-line matching it is the
+    // point. The old string was the defect, not the baseline.
     expect(pageTile('Workout Time').nextElementSibling.nextElementSibling.textContent)
-      .toBe('35 min total');
+      .toBe('35m 0s total');
 
     // ROUND 2 F2: the control swept for no fabrication spelling at ALL, which is
     // why F1's mutant was invisible to it. This is the state Kd's smoke leans on.

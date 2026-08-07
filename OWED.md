@@ -897,7 +897,20 @@ then; none may be hidden or reduced to close the gap.
       are the baseline to beat.
       **Not blocking anything.** The audit works today; it is simply more
       expensive than the rule now asks for.
-- [ ] 🟡 **THE NEW API DOES NOT STORE A WORKOUT'S WALL-CLOCK DURATION.** Found
+- [x] ~~🟡 **THE NEW API DOES NOT STORE A WORKOUT'S WALL-CLOCK DURATION.**~~
+      **DONE 2026-08-07** (DECISIONS :5906) — Kd RULED the contract change this
+      line said was needed. `durationSeconds` (the on-screen workout timer) and
+      `restSeconds` are now OPTIONAL fields on the sync payload, stored in
+      `duration_ms`; the §2.4 SetSummary is untouched, so the byte-match gate is
+      unaffected, and there is no migration. **The prediction below held exactly:
+      the sub-line returned by itself** the first time a real total was stored —
+      and then printed "2 min total" under "1m 27s", because it rounded to
+      minutes while the figure above it was exact. That is fixed too.
+      **What this line did NOT anticipate:** the stored total made the SET spans
+      falsifiable for the first time, and they were wrong — the set stopwatch
+      counted paused time. Both were found by Kd's browser, not by the suites.
+      Original text kept below, because the reasoning is what dated well.
+- [ ] 🟡 ~~**THE NEW API DOES NOT STORE A WORKOUT'S WALL-CLOCK DURATION.**~~ Found
       2026-08-07 by the summary card's own mutation sweep (M6 survived), then
       measured against the live DB: **12 of 12 workouts had `duration_ms` exactly
       equal to the sum of their sets' durations**, because
@@ -917,6 +930,33 @@ then; none may be hidden or reduced to close the gap.
       not a patch. Until then the summary honestly reports one duration.
       **The sub-line returns by itself the day a real total is stored** — no
       client change needed, which is why the field was kept rather than deleted.
+- [ ] 🟡 **A HAND-COUNTED SET STILL BILLS IDLE TIME AS EXERCISE.** Created
+      2026-08-07 by the kcal-v2 card (DECISIONS :5906), and **disclosed to Kd
+      before he approved it** — not discovered afterwards.
+      **This is Kd's own founding scenario, still unclosed for one branch:**
+      "someone was doing something and camera was going but not doing exercise".
+      For an ENGINE set that is now handled — rep time (reps × tempoMsAvg) is
+      billed at the exercise MET and the rest of the span at `REST_MET` 1.8, so a
+      zero-rep set costs the idle rate. **A LOG-ONLY set has no rep timings at
+      all** — nothing measured it — so its whole span is billed at the exercise
+      MET, exactly as v1 did.
+      **Why it is not simply fixed:** there is no measurement to fix it WITH. The
+      honest options are a per-set "how long were you actually working" input, or
+      a definition-derived expected rep duration, or accepting it. All three are
+      product decisions, not patches — **this line is a RULING request, not a bug
+      report.**
+      **Scope, so nobody over-reads it:** 55 of 58 exercises have no engine
+      definition today, so this is the common path until P4 publishes more.
+- [ ] ⚪ **`secondsLabel` prints "35m 0s" for a whole number of minutes.**
+      Created 2026-08-07 by the kcal-v2 card. Now visible in TWO places rather
+      than one: the Workout Time headline has always spelled an exact 15 minutes
+      "15m 0s", and the total sub-line now matches it (deliberately — the
+      mismatch was the defect Kd found). True, never wrong, and slightly clunky.
+      **Deliberately NOT fixed here**: the helper is shared by the calendar, the
+      share card and both summary figures, so dropping a zero seconds component
+      is a display change to a real value across four surfaces (R1.1) and wants
+      its own card. Sits with the existing fractional-input line for the same
+      helper.
 - [x] ~~🟡 **RULING NEEDED: reading a workout by DIRECT ID ignores the plan's
       history window.**~~ **RULED BY KD 2026-08-07: LEAVE IT. Struck, not
       deferred** (the desktop-webcam precedent, :456 — an item leaves this file by

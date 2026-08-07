@@ -200,6 +200,28 @@ describe("workout sync payload (v1 §5.3)", () => {
     const dup = { ...payload, sets: [validSetSummary, { ...validSetSummary }] };
     expect(workoutSyncPayloadSchema.safeParse(dup).success).toBe(false);
   });
+  // The 2026-08-07 Kd-ruled fields: the on-screen timer and the rest-break
+  // counter. OPTIONAL (queued pre-card payloads must keep parsing), bounded at
+  // floor(INT4_MAX/1000) because the ms form lands in an int4 column.
+  it("accepts durationSeconds/restSeconds, together, alone, or absent", () => {
+    expect(
+      workoutSyncPayloadSchema.parse({ ...payload, durationSeconds: 300, restSeconds: 60 }),
+    ).toBeDefined();
+    expect(workoutSyncPayloadSchema.parse({ ...payload, restSeconds: 0 })).toBeDefined();
+    expect(workoutSyncPayloadSchema.parse(payload)).toBeDefined(); // the pre-card shape
+  });
+  it("rejects duration/rest values the columns or the formula cannot hold", () => {
+    const parses = (extra: Record<string, number>) =>
+      workoutSyncPayloadSchema.safeParse({ ...payload, ...extra }).success;
+    expect(parses({ durationSeconds: 0 })).toBe(false); // positive: 0 means "omit"
+    expect(parses({ durationSeconds: -5 })).toBe(false);
+    expect(parses({ durationSeconds: 90.5 })).toBe(false);
+    expect(parses({ durationSeconds: 2_147_484 })).toBe(false); // ms form > int4
+    expect(parses({ restSeconds: -1 })).toBe(false);
+    expect(parses({ restSeconds: 2_147_484 })).toBe(false);
+    // The boundary itself is legal on both fields.
+    expect(parses({ durationSeconds: 2_147_483, restSeconds: 2_147_483 })).toBe(true);
+  });
   // R2-F4: the old title said "all-log-only workouts are never synced", citing
   // DECISIONS 2026-07-10. That bar was REINTERPRETED on 2026-08-01 — log-only
   // sets are expressible now, so an all-log-only workout satisfies this with

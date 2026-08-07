@@ -62,7 +62,20 @@ export async function syncWorkout(
   // (R3.1) — never trusted as separate client fields. kcal computed by the
   // service (2B §2.2 port, P2.3) and stored with its calc version.
   const totalReps = known.reduce((acc, s) => acc + s.reps, 0);
-  const durationMs = known.reduce((acc, s) => acc + s.durationMs, 0);
+  // ONE deliberate exception to the derive-everything rule above, Kd-ruled
+  // 2026-08-07: `durationSeconds` is the client's on-screen workout timer — a
+  // measurement the server cannot observe or reconstruct (same class as rep
+  // counts, v1 §14's nuance to R3.1; Zod-bounded so it cannot overflow the
+  // int4 column). When present it IS the workout's duration; the Σ-of-set-
+  // spans fallback keeps every payload queued before the card syncing with
+  // byte-identical behaviour. This is the day the summary contract's
+  // `durationSeconds` comment foretold — the two duration fields now genuinely
+  // diverge, and the summary's total-vs-active sub-line (pinned by M21) is
+  // live again. The wall-clock OWED line ticks with this change.
+  const durationMs =
+    payload.durationSeconds !== undefined
+      ? payload.durationSeconds * 1000
+      : known.reduce((acc, s) => acc + s.durationMs, 0);
   const scored = known.filter((s) => s.avgFormScore !== null);
   const avgFormScore =
     scored.length === 0

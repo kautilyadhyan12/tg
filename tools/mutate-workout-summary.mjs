@@ -110,12 +110,24 @@ const MUTATIONS = [
   // have (:5104 F5: "a fix whose protection cannot fail is the same defect with a
   // comment on it"). M21 below pins what actually needed pinning.
   {
+    // RE-ANCHORED 2026-08-07: `totalTimeLabel` now takes SECONDS, so the old
+    // anchor (…durationMinutes) matched zero times. The claim is unchanged.
     id: "M21",
     claim: "no 'total' sub-line is drawn when the total IS the active time",
     file: "apps/web/src/pages/PostWorkout.jsx",
-    from: "sublabel: summary.activeSeconds !== null && summary.durationSeconds !== null && summary.durationSeconds !== summary.activeSeconds ? totalTimeLabel(summary.durationMinutes) : null",
-    to: "sublabel: summary.activeSeconds !== null ? totalTimeLabel(summary.durationMinutes) : null",
+    from: "sublabel: summary.activeSeconds !== null && summary.durationSeconds !== null && summary.durationSeconds !== summary.activeSeconds ? totalTimeLabel(summary.durationSeconds) : null",
+    to: "sublabel: summary.activeSeconds !== null ? totalTimeLabel(summary.durationSeconds) : null",
     suites: ["webRender"],
+  },
+  {
+    // Kd's smoke, 2026-08-07: "2 min total" printed under "1m 27s" for a
+    // 1 m 44 s workout. Reverting to the minutes spelling must go RED.
+    id: "M23",
+    claim: "the 'total' sub-line speaks SECONDS, not rounded minutes",
+    file: "apps/web/src/api/gamificationApi.js",
+    from: "  return totalSeconds === null ? null : `${secondsLabel(totalSeconds)} total`;",
+    to: "  return totalSeconds === null ? null : `${workoutTimeLabel(null, Math.round(totalSeconds / 60))} total`;",
+    suites: ["webReader", "webRender"],
   },
   {
     id: "M7",

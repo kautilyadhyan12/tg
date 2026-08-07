@@ -22,6 +22,7 @@ import {
   newWorkoutId,
   reconcileSets,
   recordHandCountedSet,
+  setElapsedMs,
 } from './activeWorkoutEngine';
 import {
   speakExercise, speakCorrection,
@@ -205,6 +206,13 @@ export default function ActiveWorkout() {
   // call more than once. A set that somehow ends before that effect runs is
   // recorded with a duration of 0 rather than the 56 years since the epoch.
   const setStartedAtMsRef      = useRef(null);
+  // PAUSE ACCOUNTING for the set stopwatch (Kd's smoke, 2026-08-07). Refs, not
+  // state: `captureHandCountedSet` runs inside memoized closures pinned to an
+  // early render, the same reason the reps and the ordinal are refs.
+  //   `setPausedMsRef`      — pause time already CLOSED within this set.
+  //   `pauseStartedAtMsRef` — the OPEN pause, if one is running right now.
+  const setPausedMsRef         = useRef(0);
+  const pauseStartedAtMsRef    = useRef(null);
 
   const currentExercise = exercises[currentIndex];
   // Per-exercise manual override of the rep target, editable mid-workout. Keyed
@@ -459,12 +467,19 @@ export default function ActiveWorkout() {
   const captureHandCountedSet = useCallback(() => {
     try {
       const name = exercises[currentIndexRef.current]?.name;
-      const startedAtMs = setStartedAtMsRef.current;
       recordHandCountedSet(setSummariesRef.current, {
         exerciseName: name,
         setIndex: engineSetKeyRef.current,
         reps: setRepsRef.current,
-        durationMs: startedAtMs == null ? 0 : Date.now() - startedAtMs,
+        // PAUSED TIME IS NOT EXERCISE. This was `Date.now() - startedAtMs`,
+        // raw wall clock, until Kd's smoke found it billing a 20-second pause
+        // as 20 seconds of work (see `setElapsedMs`).
+        durationMs: setElapsedMs({
+          startedAtMs: setStartedAtMsRef.current,
+          nowMs: Date.now(),
+          pausedMs: setPausedMsRef.current,
+          pauseStartedAtMs: pauseStartedAtMsRef.current,
+        }),
         // Read from the ref, not from `countItYourself`: this function is called
         // from memoized closures that can be pinned to an earlier render, the
         // same reason the ordinal and the reps are read from refs here.
@@ -477,8 +492,39 @@ export default function ActiveWorkout() {
 
   /** Begin a new set's clock. Paired with every rep-count reset — the two are
    *  the same event ("a fresh set starts now") and separating them is how the
-   *  duration of set N ends up measuring set N-1. */
-  const startSetClock = () => { setStartedAtMsRef.current = Date.now(); };
+   *  duration of set N ends up measuring set N-1.
+   *
+   *  The pause accounting resets WITH it, for that same reason: carrying set
+   *  N-1's paused milliseconds into set N would subtract them twice. An OPEN
+   *  pause is re-stamped rather than dropped — a set can only begin while the
+   *  workout is running, but if that ever changes, re-stamping keeps the
+   *  subtraction bounded by this set instead of by the whole workout. */
+  const startSetClock = () => {
+    const now = Date.now();
+    setStartedAtMsRef.current = now;
+    setPausedMsRef.current = 0;
+    if (pauseStartedAtMsRef.current !== null) pauseStartedAtMsRef.current = now;
+  };
+
+  /** The ONE place `paused` flips, so the accounting cannot drift from it.
+   *  Deliberately not a `useEffect` on `paused`: an effect runs after the
+   *  render that a set capture can happen in, and this must be exact at the
+   *  instant of the click. */
+  const togglePause = () => {
+    setPaused((wasPaused) => {
+      const now = Date.now();
+      if (wasPaused) {
+        // Resuming: bank the pause that just ended.
+        if (pauseStartedAtMsRef.current !== null) {
+          setPausedMsRef.current += Math.max(0, now - pauseStartedAtMsRef.current);
+          pauseStartedAtMsRef.current = null;
+        }
+      } else {
+        pauseStartedAtMsRef.current = now;
+      }
+      return !wasPaused;
+    });
+  };
 
   useEffect(() => {
     if (!sessionData) { navigate('/workout/builder'); return; }
@@ -929,6 +975,12 @@ export default function ActiveWorkout() {
       startedAt: syncIdentity.startedAt,
       summaries,
       unresolved,
+      // Kd-ruled payload addition (2026-08-07): the on-screen timer (workout-
+      // phase only; PAUSE STOPS IT — the property the server's kcal pause-cap
+      // relies on) and the rest-break counter. Same refs the legacy save
+      // below has always read; the two writes cannot disagree about time.
+      durationSeconds: finalElapsedSecs,
+      restSeconds: finalRestSeconds,
     });
 
     try {
@@ -1406,7 +1458,7 @@ export default function ActiveWorkout() {
 
           <div className="flex flex-col gap-1.5 flex-shrink-0">
             <button
-              onClick={() => setPaused((p) => !p)}
+              onClick={togglePause}
               className="w-full flex items-center justify-center gap-2
                          py-2.5 rounded-xl text-sm font-medium transition-all"
               style={{
