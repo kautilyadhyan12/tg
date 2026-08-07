@@ -220,6 +220,30 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:6277** — 2026-08-07 — **T3 ROUND 2: round 1's own Low fix shipped a
+  Critical, and the mutant round 1 retired was catchable all along.** **Read
+  before writing or rewording ANY on-screen sentence that explains a
+  server-side calculation, and before trusting an `expectAlive` row in any
+  mutation harness.** **C/H: the Calories tooltip, rewritten by round 1, is true
+  for the 3 exercises with an engine definition and FALSE for the other 55** —
+  `kcalPointForSetsV2`'s `logOnly` branch bills the WHOLE set span at the
+  exercise MET, so a hand-counted workout's standing-around is charged at the
+  full rate while the tooltip promised a resting one (:5807's "on screen AND
+  wrong"). **A fix aimed at a Low created a Critical.** **THE INSTRUMENT FINDING:
+  :6225 declared `ENGINE_STALL_MS = 0` unfixable-by-assertion; that was true of
+  the TEST'S SHAPE (frame and poll in one `act()`), not of the page, which polls
+  between frames ~15×/s. The control now takes one such poll and the mutant is
+  RED.** **An `expectAlive` row is a factual claim and V1 binds it like a count —
+  it was copied into three places and never re-measured.** Guard: the harness took
+  a per-mutant `target` so MX8 pins the tooltip on a second page. **KD RULED
+  PATCH, NOT REDESIGN** on :5348's escape hatch (different screens; one-sentence
+  fix) — but **the defect CLASS was identical both rounds: on-screen text drifted
+  from the computation it describes.** Read a third occurrence against that
+  ruling, not fresh. Low ×3: the `'+1 Rep'` line does not pin the ruling; harness
+  counted 7 runs as 7 mutations and scored runner faults as RED; `graded`'s
+  comment called a user-reachable debug row "dev-only". web 524/524 · 8 mutants,
+  8 RED, 0 ALIVE, restores sha256-verified · lint identical to HEAD, measured.
+  **SMOKE STILL UNRUN — nothing ticked; round 3 is diff-only.**
 - **:6150** — 2026-08-07 — **T3 ROUND 1 on the camera ruling + duration/kcal
   packet: TWO Critical/High, both the screen saying something FALSE.** **Read
   before deriving any badge, cue or label from `countItYourself`, and before
@@ -242,9 +266,11 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   it; three now go RED under their own mutation, and **the shape to remember is
   that a ruling narrowing a variable's meaning can void a whole family of
   assertions without touching one line of test code, all of them staying green.**
-  **One mutant RETIRED WITH ITS REASON rather than faked green** (`ENGINE_STALL_MS
-  = 0`: the fresh-frame clearing masks the threshold — measured both ways), and
-  that test's false comment is corrected IN PLACE per :5748. Low: the Calories
+  ~~**One mutant RETIRED WITH ITS REASON rather than faked green**
+  (`ENGINE_STALL_MS = 0`: the fresh-frame clearing masks the threshold — measured
+  both ways)~~ **— WRONG, and overturned by :6277: it was catchable, and the
+  control test now catches it.** That test's false comment is corrected IN PLACE
+  per :5748 — twice, in successive rounds. Low: the Calories
   tooltip described the pre-v2 sum; :6048's "every other assertion untouched" was
   true of six of ten tests, corrected in place; **the review's Low-1 was checked
   and does not reproduce.** web 523/523 · 7 mutants, 6 RED, 0 never ran, restores

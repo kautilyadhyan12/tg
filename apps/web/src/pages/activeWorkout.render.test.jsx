@@ -805,24 +805,28 @@ describe('a hand-counted workout reaches the new API', () => {
   });
 
   it('A CAMERA THAT IS WORKING is never interrupted by the stall timer', async () => {
-    // The positive control for the gap check.
+    // The positive control for the gap check — and, since T3 round 2, a real
+    // one again.
     //
-    // ITS OLD COMMENT IS CORRECTED HERE, MEASURED (T3 round 1, rule 4). It
-    // claimed to catch two mutations — never refreshing the heartbeat, and
-    // ignoring the gap entirely. It catches NEITHER any more, and the reason is
-    // :6008 rather than anything wrong with the test: a fresh frame now CLEARS
-    // the stall, so a camera that is delivering frames cannot sustain the offer
-    // whatever the threshold says. `ENGINE_STALL_MS = 0` leaves this green
-    // (measured), because the stamp and the next frame's clear land in the same
-    // commit; deleting the heartbeat refresh reddens 'a redo AFTER the camera
-    // recovers' instead (measured). The guarantee this test is named for is now
-    // carried by the CLEARING, which is pinned by the KD RULING test and by the
-    // badge test below it — both go red when the clearing line is removed.
+    // ITS COMMENT HAS NOW BEEN WRONG TWICE, AND THIS IS THE SECOND CORRECTION.
+    // Round 1 found it caught neither mutation it claimed (never refreshing the
+    // heartbeat; ignoring the gap) and concluded the threshold was UNOBSERVABLE:
+    // a fresh frame CLEARS the stall since :6008, so the stamp and the clear
+    // land in the same flush. That was true of THE LOOP BELOW AS IT WAS THEN
+    // WRITTEN — every iteration delivered a new frame inside the same `act` as
+    // the poll — and it was mistaken for a property of the page. It is not.
     //
-    // The assertions below therefore document intent rather than do the
-    // catching, and that is said out loud instead of being left to look like
-    // protection. What they would still catch is an offer or a lost badge with
-    // no stall behind it at all.
+    // The page polls once a second while frames land about fifteen times a
+    // second, so the poll fires BETWEEN frames nearly every time, and that gap
+    // is exactly where the threshold is visible. The step after the loop is
+    // that gap: half a second since the last frame, nowhere near five seconds.
+    // `ENGINE_STALL_MS = 0` reddens this test (measured both ways, 2026-08-07),
+    // because at zero a perfectly healthy camera offers to hand every set over,
+    // once a second, for the whole workout.
+    //
+    // The CLEARING is still real and still pinned elsewhere — deleting that line
+    // reddens the KD RULING test and the badge test. The threshold is pinned
+    // here.
     vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval'] });
     try {
       poseState = {
@@ -841,13 +845,26 @@ describe('a hand-counted workout reaches the new API', () => {
           vi.advanceTimersByTime(1000);
         });
       }
-      // T3 ROUND 1, rule 4 — THIS TEST HAD STOPPED PROTECTING ANYTHING. The
-      // '+1 Rep' line below went GREEN with `ENGINE_STALL_MS = 0`, because since
+      // ONE POLL BETWEEN TWO FRAMES — where a real camera spends almost all of
+      // its time, and the case the loop above never reached. No new frame lands
+      // in this `act`, so nothing clears the stall and nothing re-stamps the
+      // heartbeat: whatever the poll decides here is what the user is left
+      // looking at. Half a second of gap must not be read as a dead camera.
+      await act(async () => {
+        clockOffset = 6500;
+        vi.advanceTimersByTime(1000);
+      });
+
+      // T3 ROUND 1, rule 4 — the '+1 Rep' line below is NOT what protects this
+      // test, and round 2 corrected the reason given for keeping it. Since
       // :6008 no stall can ever produce that button: only the user's own press
       // can. The stall machinery's whole remaining output is the OFFER and the
-      // BADGE, so that is what a stall test has to look at. The old line stays —
-      // it still pins the ruling itself (nothing hands over automatically) — but
-      // it is no longer the assertion doing the work here.
+      // BADGE, so that is what a stall test has to look at. The old line stays
+      // as a cheap cross-check — but it does NOT "pin the ruling", which is what
+      // round 1's comment claimed: no stall ever registers in this test, so
+      // there is nothing here for the ruling to be violated BY. The ruling is
+      // pinned by the tests that assert WHILE A STALL IS LIVE — 'KD RULING
+      // 2026-08-07' and the two round-1 badge tests.
       expect(screen.queryByText('Count this set myself')).toBeNull();
       expect(screen.getByText('AI form check')).toBeTruthy();
       expect(screen.queryByText('+1 Rep')).toBeNull();
@@ -971,7 +988,7 @@ describe('a hand-counted workout reaches the new API', () => {
     // `countItYourself` — correctly — but the badge was derived as
     // `!countItYourself`, so it stayed GREEN, eye icon, "AI form check",
     // directly above its own panel saying the camera had stopped. It told the
-    // it was grading a set it was not grading, and the set filed with no form
+    // user it was grading a set it was not grading, and the set filed with no form
     // score. Nothing in the suite looked at this badge at all, which is why it
     // shipped.
     //

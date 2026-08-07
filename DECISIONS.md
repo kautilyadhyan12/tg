@@ -6222,6 +6222,19 @@ line of test code, and every one of them stays green while it happens.**
 
 ### THE MUTANT THAT SURVIVED, RETIRED WITH ITS REASON RATHER THAN FAKED GREEN
 
+> **⚠ CORRECTED IN PLACE 2026-08-07 BY T3 ROUND 2 (see :6277). THE PARAGRAPH
+> BELOW IS WRONG AND IS KEPT ONLY SO THE MISTAKE IS LEGIBLE.** `ENGINE_STALL_MS
+> = 0` **is** catchable, and the control test now catches it. What was measured
+> was true of THE TEST AS IT WAS THEN WRITTEN — its loop delivered a fresh frame
+> inside the same `act()` as the poll, so the stamp and the clear flushed
+> together — and that was mistaken for a property of the PAGE. The page polls
+> once a second while frames arrive ~15×/s, so the poll lands BETWEEN frames
+> nearly every time; the control now takes one such poll and `ENGINE_STALL_MS =
+> 0` reddens it (measured both ways). `expectAlive` is gone from the harness.
+> **The shape of the error: an ALIVE mutant was explained by a claim about the
+> code, the claim was written into three places, and no one re-measured it. An
+> expected-alive row is a factual claim and V1 binds it like any number.**
+
 `ENGINE_STALL_MS = 0` still leaves the working-camera control green, and it is
 **not** fixable by a better assertion. Measured, not reasoned: since :6008 a
 fresh frame CLEARS the stall, so a camera that is delivering frames cannot
@@ -6260,3 +6273,112 @@ record — is the v1 §14 nuance to R3.1 and is already sequenced to P4.y by :59
   verified byte-exact by sha256.**
 - (**NOT DONE**) **The camera SMOKE is still UNRUN and NOTHING here is ticked.**
   Round 2 is diff-only per :5348 rule 2.
+
+## 2026-08-07 — T3 ROUND 2: round 1's own Low fix shipped a Critical, and the mutant it retired was catchable all along
+
+Diff-only re-review of :6150's fixes (`b0a857b..82b137e`, `apps/web`). **ONE
+Critical/High, three Low. The packet did not ship this round; it ships now.**
+
+### THE CRITICAL/HIGH — a tooltip that is true for 3 exercises and false for 55
+
+Round 1 rewrote the Calories tooltip because it still described the pre-v2
+calculation (logged Low, :6239). **The rewrite described only the half of the
+calculation that runs when the camera is grading you.** It promised the user
+their "standing-around and rest-break time" was billed "at a low resting rate".
+For a set with no engine definition — **55 of the 58 catalog exercises; the repo
+has exactly three definition files** (`packages/engine/src/definitions/`) —
+`kcalPointForSetsV2`'s `logOnly` branch (`calories.ts:88-92`) bills the **WHOLE
+set span at the exercise MET** and adds **nothing** to the idle tier.
+
+Concrete: 10 push-ups in 30 s, then 60 s standing there getting your breath back
+before pressing "Complete Set" ⇒ all 90 s charged at the push-up rate, while the
+tooltip says the 60 s was cheap. **The kcal number is correct. The sentence under
+it flatters the number** — :5807's "on screen AND wrong" in its purest form.
+
+Fixed by saying what is true of BOTH paths: rest breaks and paused time first
+(identical either way — `setElapsedMs` subtracts pause from a hand-counted span,
+the `durationSeconds` cap does it for engine sets), then the camera case, then
+the hand-counted case explicitly.
+
+**It is a REGRESSION, not a leftover.** The pre-round-1 wording ("from your body
+weight and active movement time") was *accurate* for these workouts. A fix aimed
+at a Low finding created a Critical, which is the fact worth carrying forward.
+
+**Narrower second half, recorded and NOT separately fixed:** `workoutSummarySchema`
+carries no `kcalCalcVersion` (checked `packages/shared/src/workouts.ts:143-195` —
+it is on `workoutListItemSchema` at :67 and nowhere else), so a v1-priced workout
+gets the v2 explanation. Only reachable by pasting the URL of an old workout,
+which :5543 records as a thing that happens. **No `OWED.md` line: the new wording
+describes the v2 method, and v1 differs only by not counting rest at all — the
+sentence is now vaguer-but-true there rather than false.**
+
+### THE INSTRUMENT FINDING — :6225's "unfixable" mutant was fixable, and this is the second time in two rounds
+
+`ENGINE_STALL_MS = 0` was retired as `expectAlive` one round ago on a measured
+claim. **The measurement was right and the conclusion was wrong.** The control
+test's loop delivered a fresh frame inside the *same* `act()` as the poll, so the
+stall stamp and the frame's clear flushed together and no assertion could see the
+gap. That was read as a property of the page. It is a property of the test.
+
+The page polls once a second (`STALL_POLL_MS`) while frames arrive ~15×/s, so
+**the poll lands between two frames nearly every time it fires** — and at a
+threshold of 0 a perfectly healthy camera would offer to hand every set over,
+once a second, for the whole workout. The control now takes exactly one such
+poll (half a second of gap, nowhere near five seconds).
+
+**Measured both ways this session, before the harness was touched:** unmutated
+GREEN; `ENGINE_STALL_MS = 0` **RED** on `queryByText('Count this set myself')`.
+`expectAlive` is deleted, :6225 is corrected in place above, and the test's own
+comment is corrected for the second round running.
+
+**The lesson, which is bigger than the mutant:** an alive mutant explained by a
+claim about the code was really a claim about one test's shape; the explanation
+was copied into the harness, the test and DECISIONS, and nothing re-measured it.
+**An `expectAlive` row is a factual claim. V1 binds it exactly like a count.**
+
+### The three Low, all fixed this round (`BACKLOG.md`), none bought a round
+
+1. The `'+1 Rep'` line kept in the four re-anchored guards was justified in
+   round 1 as still "pinning the ruling". It does not: no stall ever registers
+   in those tests, so there is nothing there for the ruling to be violated by.
+   Line kept as a cross-check, claim corrected. The ruling is pinned by the
+   tests that assert **while a stall is live**.
+2. Harness honesty: MX1/MX2 are the **same** source mutation aimed at two
+   different tests, so the run is **8 runs over 7 distinct mutations** — now
+   DERIVED and printed as such, along with the expected-alive count, which had
+   been a hardcoded `(1 expected)` that stayed "true" for a round after it
+   stopped being. A **runner** failure (ENOBUFS, signal, timeout, missing
+   corepack) no longer scores as RED: only a numeric non-zero exit is a test
+   result — the class fix already living in `tools/mutate-workout-summary.mjs`,
+   brought across rather than left as one file's lesson. **It aborts AFTER the
+   restore, never instead of it** — aborting from inside the catch would have
+   re-created :5199's exact defect while fixing a different one.
+3. `graded`'s comment called the diagnostic readout "dev-only". It is behind a
+   `debug` button rendered on the camera panel that **any user can press**
+   (`ActiveWorkout.jsx:1322-1331`). Corrected. Plus a dropped word in the C/H-1
+   test's comment ("It told the it was grading").
+
+### PERMANENT GUARD (:5348 rule 5) — the harness now covers both pages
+
+**Two rounds running, the defect class was on-screen text that had drifted from
+the computation it describes** (round 1: the badge; round 2: the tooltip). The
+tooltip fix therefore ships as **MX8** rather than as a hand-run measurement: the
+harness takes a per-mutant `target`, and MX8 restores the round-1 wording to
+`PostWorkout.jsx` and requires the new test to go red. Anyone can re-run it.
+
+### KD'S RULING — the escape hatch did NOT fire
+
+Put to him under :5348's "two consecutive rounds, same subsystem ⇒ redesign,
+Kd's call": round 1's Criticals were `ActiveWorkout.jsx`'s badge and cue, this
+one is `PostWorkout.jsx`'s tooltip. **He ruled PATCH, on the recommendation that
+different screens plus a one-sentence fix is not a broken design.** Recorded
+because the class *is* identical across both rounds and a third occurrence should
+be read against this ruling, not fresh.
+
+- (**PROVE**) web **524/524** (25 files, +1: the first test ever to assert the
+  Calories tooltip) · **8 mutants run, 8 RED, 0 ALIVE, 0 never ran**, every
+  restore byte-exact by sha256 · lint on the five changed files **18 problems,
+  identical to `HEAD` measured this session by checkout-and-compare**, so nothing
+  was added · rule 3 proved by hand in both directions before the mutant existed.
+- (**NOT DONE**) **The camera SMOKE is still UNRUN and NOTHING is ticked.**
+  Round 3 is diff-only per :5348 rule 2.

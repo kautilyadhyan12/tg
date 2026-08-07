@@ -484,10 +484,11 @@ export default function ActiveWorkout() {
   // deleted feature — and this is the one the ruling explicitly KEPT
   // ("engineStalled/cameraDown still drive the BADGE and the CUE").
   //
-  // Nothing else moves: `graded` is read only by the badge below and the
-  // dev-only diagnostic row. Ownership is untouched, so the ruling holds — the
-  // badge tells the truth about what the camera is doing while the SET stays
-  // the camera's.
+  // Nothing else moves: `graded` is read only by the badge below and by the
+  // debug readout — which is NOT dev-only, T3 round 2: it sits behind a `debug`
+  // button rendered on the camera panel, and any user can press it. Ownership
+  // is untouched, so the ruling holds — the badge tells the truth about what
+  // the camera is doing while the SET stays the camera's.
   const graded = !countItYourself && !engineStalled && !cameraDown;
   // `analysisSettled &&` here too — round 3 F6. Without it the badge reads
   // "Log-only" during the window where the hook has not answered for this

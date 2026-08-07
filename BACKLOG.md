@@ -158,3 +158,45 @@ fixed and is recorded in DECISIONS.
       reason can only be one of those two, so **both arms are live and correct**.
       There is nothing to delete. Logged rather than silently dropped, because a
       finding a chat declines to act on is exactly the kind that gets re-found.
+
+## T3 round 2 — the fix round's own fixes (2026-08-07)
+
+*(Record at `DECISIONS.md:6277`. The round's one Critical/High is not here — a
+Critical is fixed or it holds the packet; it never becomes a logged item.)*
+
+- [x] **The `'+1 Rep'` line kept in the four re-anchored stall guards was
+      justified with a claim that is false.** Round 1's comment said the line
+      "still pins the ruling itself (nothing hands over automatically)". It does
+      not: in all four of those tests **no stall or camera error ever registers**,
+      so `countItYourself` cannot become true however the ruling is mutated, and
+      the assertion is true by construction — the exact vacuity round 1 was
+      opened to fix, re-created in the sentence explaining the fix. The line is
+      KEPT (it is a cheap cross-check) and the claim is corrected. The ruling is
+      pinned by the tests that assert **while a stall is live** — 'KD RULING
+      2026-08-07' and the two round-1 badge tests. — fixed same commit.
+- [x] **Three record/instrument inaccuracies in `mutate-badge-cue.mjs`.**
+      (a) MX1 and MX2 apply the **identical** source mutation against two
+      different tests, so "7 mutants" read as seven independent defects; the
+      summary now DERIVES and prints "N runs over M distinct mutations", and the
+      expected-alive count is derived too — it had been a hardcoded `(1 expected)`
+      that went on reading as true for a round after MX4 stopped being alive.
+      (b) A **runner** failure (ENOBUFS, signal, timeout, missing corepack) was
+      caught and scored RED, indistinguishable from a test failure. Only a
+      numeric non-zero exit is a test result now; anything else ABORTS — the class
+      fix that already existed in `tools/mutate-workout-summary.mjs`, brought
+      across rather than left as one file's lesson, **and it aborts AFTER the
+      restore**, because aborting from inside the catch would have left mutated
+      source on disk (:5199's defect, re-created by the fix for another one).
+      `maxBuffer` raised to 64 MB, which removes the one cause ever observed here.
+      — fixed same commit.
+- [x] **`graded`'s comment called the diagnostic readout "dev-only".** It is
+      behind a `debug` button rendered on the camera panel
+      (`ActiveWorkout.jsx:1322-1331`) that **any user can press**. Corrected.
+      Plus a dropped word in the C/H-1 test's comment ("It told the it was
+      grading" → "the user"). — fixed same commit.
+- [ ] **REPORTED, NOT A DEFECT, WORTH A MUTANT LATER — nothing asserts the
+      badge's `'Counting yourself'` or `'Log-only'` strings** (grep: zero hits
+      outside comments). Two of the three arms of the expression round 1 rewrote
+      are pinned by nothing. Not acted on this round: :5348 rule 6 keeps a fix
+      round to the fix, and the review itself called it "not a defect today".
+      Logged so it is not re-found from scratch.

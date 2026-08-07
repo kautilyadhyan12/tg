@@ -1720,6 +1720,42 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
     await waitFor(() => expect(screen.getByText('DASHBOARD REACHED')).toBeTruthy());
   });
 
+  // ── the Calories tooltip explains a calculation, so it has to match it ─────
+  //
+  // T3 ROUND 2, C/H-1. Round 1 rewrote this sentence to describe the new
+  // three-tier estimate and described only HALF of it — the half that runs when
+  // the camera is grading you. THREE exercises have a definition; the other 55
+  // are counted by hand, and for those the server bills the WHOLE set span at
+  // the exercise's own rate, standing-there-getting-your-breath-back included
+  // (`kcalPointForSetsV2`, the `logOnly` branch: it adds nothing to the idle
+  // tier). So the screen told nearly every user that their standing-around had
+  // been charged at a low resting rate when it had been charged at the full
+  // one. The kcal number was right; the explanation flattered it.
+  //
+  // NOTHING ASSERTED THIS STRING BEFORE — which is exactly how a rewrite made it
+  // false without one test noticing, one round after a rewrite made the Workout
+  // Time tooltip false the same way. It is pinned as CLAIMS, not as a frozen
+  // sentence: reword it freely, but it may not go back to describing one path as
+  // though it were both.
+  it('the Calories tooltip covers hand-counted sets, not just camera-graded ones', async () => {
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    workoutService.getSummary.mockResolvedValue({ data: SUMMARY });
+
+    renderPostWorkout();
+    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
+
+    const tip = screen.getByText('Estimate').getAttribute('title');
+    expect(tip).toBeTruthy();
+    // The camera path — rep time at the exercise rate, the rest of the set as rest.
+    expect(tip).toMatch(/camera/i);
+    // THE HALF ROUND 1 LEFT OUT, and the case nearly every workout is actually
+    // in. Both halves of the claim are asserted, because "mentions hand-counting"
+    // without "says the whole set is charged" is how the old sentence would have
+    // squeaked through a looser test.
+    expect(tip).toMatch(/count yourself/i);
+    expect(tip).toMatch(/whole set/i);
+  });
+
   // ── the workout has not reached the server yet (repoint, 2026-08-06) ────────
   // The sync queue flushes fire-and-forget, so this screen can open BEFORE the
   // workout arrives and the read 404s. That is a normal, temporary state, not a

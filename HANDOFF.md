@@ -1,6 +1,55 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: T3 ROUND 2 FIXES — the tooltip that was true for 3 exercises and false for
+      55, and the mutant we retired for no reason. web 524/524 · 8 mutants, 8 RED,
+      0 ALIVE, 0 never ran · lint identical to HEAD (measured by checkout, not
+      recalled). Record at DECISIONS :6277.
+      **SMOKE STILL UNRUN. NOTHING IS TICKED. Round 3 is DIFF-ONLY (:5348 r2).**
+
+THE ONE CRITICAL/HIGH, in plain words
+  The Calories box explains how the estimate was worked out. ROUND 1 REWROTE IT
+  AND MADE IT FALSE for nearly every workout. It promised that standing around
+  mid-set was charged at a low resting rate. That is true only for the THREE
+  exercises with an engine definition; for the other 55 the server bills the
+  WHOLE set span at the exercise rate (`calories.ts:88-92`, the `logOnly`
+  branch). 10 push-ups in 30s then 60s catching your breath = all 90s billed as
+  push-ups, under a sentence saying otherwise. The NUMBER was always right.
+  **A fix aimed at a LOW finding created a CRITICAL. That is the fact to carry.**
+
+READ THIS BEFORE YOU TRUST ANY `expectAlive` ROW, IN ANY HARNESS
+  Round 1 retired `ENGINE_STALL_MS = 0` as uncatchable and wrote the reason into
+  three places (harness, test comment, DECISIONS). **It was catchable.** The
+  claim was true of the TEST'S SHAPE — its loop delivered a frame inside the same
+  `act()` as the poll, so the stall stamp and the frame's clear flushed together
+  — and was mistaken for a property of the page. The page polls once a second
+  while frames arrive ~15x/s, so it polls BETWEEN frames nearly every time. The
+  control now takes one such poll and the mutant is RED. Measured both ways
+  BEFORE the harness was touched. **An expectAlive row is a factual claim; V1
+  binds it exactly like a count. Nothing inherits it.**
+
+WHAT THE HARNESS DOES NOW THAT IT DID NOT
+  - takes a per-mutant `target`, so it mutates BOTH pages; MX8 restores round 1's
+    tooltip wording and requires the new test to go red
+  - a RUNNER fault (ENOBUFS, signal, timeout) ABORTS instead of scoring RED —
+    and aborts AFTER the restore, not instead of it
+  - prints "8 runs over 7 distinct mutations": MX1 and MX2 are the same mutation
+
+KD RULED ONE THING: PATCH, NOT REDESIGN
+  Two rounds running produced a Critical, so :5348's escape hatch was put to him.
+  Different screens (badge vs tooltip), one-sentence fix → he ruled patch.
+  **But the CLASS was identical both rounds: on-screen text drifted from the
+  computation it describes. A third one is read against that ruling, not fresh.**
+
+NEXT, in order:
+  (1) T3 ROUND 3, diff-only, FRESH chat — `t3-badge-cue-r3.diff` +
+      `t3-badge-cue-r3-PROMPT.md` at the repo root.
+  (2) Kd's CAMERA SMOKE — `RUNBOOK/smoke-duration-kcal-camera.md`. Still the one
+      thing this whole area has never had.
+  (3) The camera-counting card (DECISIONS :6062), then Dashboard stats.
+```
+
+```
 TASK: T3 ROUND 1 FIXES — the badge that claimed a form check over a dead camera.
       web 523/523 · 7 mutants (6 RED, 1 alive-with-reason, 0 never ran) · lint at
       baseline on both changed pages. Record at DECISIONS :6150.
