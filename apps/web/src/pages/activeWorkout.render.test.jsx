@@ -750,6 +750,16 @@ describe('a hand-counted workout reaches the new API', () => {
 
       // Hidden → the track mutes → an error arrives → and it clears on return.
       await act(async () => { hide(true); setCameraError('Camera stopped sending video'); });
+
+      // T3 ROUND 1, rule 4 — the payload assertions at the end of this test go
+      // GREEN with `&& !pageHidden` deleted from `cameraDown`. Since :6008 a
+      // camera error decides nothing about ownership, so the set files as the
+      // engine's either way and the guard's only remaining job is the SCREEN.
+      // A muted track on a backgrounded tab must not offer to hand the set over
+      // and must not take the badge off "AI form check" — the camera is fine.
+      expect(screen.queryByText('Count this set myself')).toBeNull();
+      expect(screen.getByText('AI form check')).toBeTruthy();
+
       await act(async () => { setCameraError(null); hide(false); });
 
       // End the set by hand so the workout finishes and the payload is written.
@@ -795,11 +805,24 @@ describe('a hand-counted workout reaches the new API', () => {
   });
 
   it('A CAMERA THAT IS WORKING is never interrupted by the stall timer', async () => {
-    // The positive control for the gap check, and it earns its keep: two
-    // mutations survived without it — never refreshing the heartbeat (so every
-    // camera set stalls after five seconds) and ignoring the gap entirely (so
-    // the button appears at once). Both would take the camera away from someone
-    // whose camera is fine, which is the failure the whole card is judged on.
+    // The positive control for the gap check.
+    //
+    // ITS OLD COMMENT IS CORRECTED HERE, MEASURED (T3 round 1, rule 4). It
+    // claimed to catch two mutations — never refreshing the heartbeat, and
+    // ignoring the gap entirely. It catches NEITHER any more, and the reason is
+    // :6008 rather than anything wrong with the test: a fresh frame now CLEARS
+    // the stall, so a camera that is delivering frames cannot sustain the offer
+    // whatever the threshold says. `ENGINE_STALL_MS = 0` leaves this green
+    // (measured), because the stamp and the next frame's clear land in the same
+    // commit; deleting the heartbeat refresh reddens 'a redo AFTER the camera
+    // recovers' instead (measured). The guarantee this test is named for is now
+    // carried by the CLEARING, which is pinned by the KD RULING test and by the
+    // badge test below it — both go red when the clearing line is removed.
+    //
+    // The assertions below therefore document intent rather than do the
+    // catching, and that is said out loud instead of being left to look like
+    // protection. What they would still catch is an offer or a lost badge with
+    // no stall behind it at all.
     vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval'] });
     try {
       poseState = {
@@ -818,6 +841,15 @@ describe('a hand-counted workout reaches the new API', () => {
           vi.advanceTimersByTime(1000);
         });
       }
+      // T3 ROUND 1, rule 4 — THIS TEST HAD STOPPED PROTECTING ANYTHING. The
+      // '+1 Rep' line below went GREEN with `ENGINE_STALL_MS = 0`, because since
+      // :6008 no stall can ever produce that button: only the user's own press
+      // can. The stall machinery's whole remaining output is the OFFER and the
+      // BADGE, so that is what a stall test has to look at. The old line stays —
+      // it still pins the ruling itself (nothing hands over automatically) — but
+      // it is no longer the assertion doing the work here.
+      expect(screen.queryByText('Count this set myself')).toBeNull();
+      expect(screen.getByText('AI form check')).toBeTruthy();
       expect(screen.queryByText('+1 Rep')).toBeNull();
     } finally {
       vi.useRealTimers();
@@ -848,6 +880,13 @@ describe('a hand-counted workout reaches the new API', () => {
       await act(async () => { hide(true); clockOffset = 6000; vi.advanceTimersByTime(6000); });
       await act(async () => { hide(false); vi.advanceTimersByTime(1000); });
 
+      // T3 ROUND 1, rule 4 — same story as the working-camera control above:
+      // deleting `if (document.hidden) return` from the poll left the '+1 Rep'
+      // line GREEN, because a stall no longer reaches that button. What coming
+      // back from another app must not show is the OFFER, and a badge that has
+      // given up on a camera which never stopped working.
+      expect(screen.queryByText('Count this set myself')).toBeNull();
+      expect(screen.getByText('AI form check')).toBeTruthy();
       expect(screen.queryByText('+1 Rep')).toBeNull();
     } finally {
       hide(false);
@@ -927,6 +966,97 @@ describe('a hand-counted workout reaches the new API', () => {
     expect(set.avgFormScore).not.toBeNull(); // the grade survived the stall
   });
 
+  it('T3 ROUND 1 C/H-1: a STALLED camera never wears the green "AI form check" badge', async () => {
+    // THE DEFECT: the ruling took `engineStalled || cameraDown` out of
+    // `countItYourself` — correctly — but the badge was derived as
+    // `!countItYourself`, so it stayed GREEN, eye icon, "AI form check",
+    // directly above its own panel saying the camera had stopped. It told the
+    // it was grading a set it was not grading, and the set filed with no form
+    // score. Nothing in the suite looked at this badge at all, which is why it
+    // shipped.
+    //
+    // It also stranded the 'Camera not counting' wording, which the ruling had
+    // explicitly KEPT: that arm needs the badge to be un-green, which the old
+    // expression made impossible.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval'] });
+    try {
+      poseState = {
+        analysisAvailable: true,
+        poseData: { rep_count: 1, logOnly: false, corrections: [], form_correct: true },
+        emitSummary: null,
+      };
+      startWorkout([exercise({ name: 'Squats', sets: 1, reps: 9 })]);
+      await waitFor(() => expect(screen.getByText('AI form check')).toBeTruthy());
+
+      // Frames stop for six seconds.
+      clockOffset = 6000;
+      await act(async () => { vi.advanceTimersByTime(1000); });
+
+      expect(screen.queryByText('AI form check')).toBeNull();
+      expect(screen.getByText('Camera not counting')).toBeTruthy();
+      // And the ruling still holds underneath it: the SET was not taken away.
+      expect(screen.getByText('Count this set myself')).toBeTruthy();
+      expect(screen.queryByText('+1 Rep')).toBeNull();
+
+      // Step back into frame: the badge goes green again by itself.
+      await act(async () => {
+        poseState.poseData = { rep_count: 2, logOnly: false, corrections: [], form_correct: true };
+        clockOffset = 6100;
+        vi.advanceTimersByTime(1000);
+      });
+      expect(screen.getByText('AI form check')).toBeTruthy();
+      expect(screen.queryByText('Camera not counting')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('T3 ROUND 1 C/H-1: a camera ERROR never wears the green "AI form check" badge either', async () => {
+    // The second route into the same false badge. `cameraDown` is the other
+    // term the ruling left driving the badge, and it was equally unread.
+    poseState = {
+      analysisAvailable: true,
+      poseData: { rep_count: 1, logOnly: false, corrections: [], form_correct: true },
+      emitSummary: null,
+    };
+    startWorkout([exercise({ name: 'Squats', sets: 1, reps: 9 })]);
+    await waitFor(() => expect(screen.getByText('AI form check')).toBeTruthy());
+
+    await act(async () => { setCameraError('Camera stopped sending video'); });
+
+    expect(screen.queryByText('AI form check')).toBeNull();
+    expect(screen.getByText('Camera not counting')).toBeTruthy();
+    expect(screen.queryByText('+1 Rep')).toBeNull();
+  });
+
+  it('T3 ROUND 1 C/H-2: the stall cue does not name a cause the app cannot know', async () => {
+    // THE DEFECT: "The camera can't see you well enough to count. Step back
+    // into frame and it carries on." — asserted as the diagnosis on a path
+    // reached by ANY absence of frames. :6008 exists precisely because the app
+    // cannot tell a user out of shot from a camera that has died, so on a hung
+    // model or a device that never streams this named the wrong cause and made
+    // a promise it never kept: the user steps back and forth while nothing
+    // loads. The out-of-shot case is now offered as a possibility, not asserted.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval'] });
+    try {
+      poseState = {
+        analysisAvailable: true,
+        poseData: { rep_count: 1, logOnly: false, corrections: [], form_correct: true },
+        emitSummary: null,
+      };
+      startWorkout([exercise({ name: 'Squats', sets: 1, reps: 9 })]);
+      clockOffset = 6000;
+      await act(async () => { vi.advanceTimersByTime(1000); });
+
+      expect(
+        screen.getByText("The camera isn't counting right now. If you're out of shot, step back in — or count this set yourself."),
+      ).toBeTruthy();
+      expect(screen.queryByText(/can't see you well enough/)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('a PAUSED workout is not mistaken for a dead camera', async () => {
     // Frames legitimately stop while paused — the hook stops feeding the engine.
     // Without the pause guard the wait keeps running, and because the handover is
@@ -946,6 +1076,12 @@ describe('a hand-counted workout reaches the new API', () => {
       fireEvent.click(screen.getByText('Resume'));
 
       await act(async () => { vi.advanceTimersByTime(1000); });
+      // T3 ROUND 1, rule 4 — removing the pause guard from the stall poll left
+      // the '+1 Rep' line GREEN for the same reason as the two above. Someone
+      // who paused to take a breath must come back to a screen that still says
+      // the camera is watching, with no offer to abandon it.
+      expect(screen.queryByText('Count this set myself')).toBeNull();
+      expect(screen.getByText('AI form check')).toBeTruthy();
       expect(screen.queryByText('+1 Rep')).toBeNull();
     } finally {
       vi.useRealTimers();

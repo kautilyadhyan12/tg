@@ -6052,9 +6052,211 @@ that decides who counts a set.
   such place and its JSDoc says why. Kd was told the tests would change BEFORE
   the work started — "some existing tests currently assert the handover" — so
   that it could never look like tests bent to fit code.
+  **CORRECTED IN PLACE by T3 round 1's Low-3 (2026-08-07): "every other
+  assertion in them is untouched" is OVERSTATED.** In six the only edit is the
+  added `takeOverSet()` call and every assertion is byte-identical; in the other
+  four (`:522`, `:556`, `:671`, `:1050`) a `+1 Rep` expectation was **replaced,
+  not supplemented** — five `expect(` lines in total, each becoming the
+  equivalent assertion on the OFFER (`'Count this set myself'`). The
+  substitutions are faithful and three are strictly stronger, because the offer
+  can only be on screen while the set is still the camera's — which is the thing
+  the ruling is about and which `+1 Rep` could not say. No assertion about the
+  payload, ownership, recovery or form score was removed, weakened or reordered.
+  The accurate wording is "replaced with the equivalent assertion on the offer",
+  and the reviewer re-derived the claim independently before it was corrected.
 - (**PROVE**) web **520/520** (35 in the workout render suite, +1 new) · lint at
   its exact 13-problem baseline · `vite build` green.
 - (**NOT DONE**) **The camera SMOKE is UNRUN and this is NOT ticked.** It is also
   the smoke that has never run for this whole area — the first smoke used
   hand-counting throughout, which Kd caught: *"there was no checking for camera
   we only tested the hand counted one?"* He was right, and the omission was mine.
+
+## 2026-08-07 — THE CAMERA SMOKE STOPPED PART-WAY: real squats were not counted, and the pose model counted furniture
+
+**Read before touching rep counting, the pose provider, or anything that decides
+why a rep did not happen.** No code was changed. Kd stopped the smoke, ruled the
+work belongs in its own card, and opened a fresh chat for it.
+
+- (**WHAT KD SAW**) *"when i do proper squat even then it does not count"*, and
+  *"the camera instead of detecting my body sometimes detects other objects
+  nearby like a chair, fan etc and takes its shape ... sometimes in taking those
+  shape a correct angle happens then rep count happens"*. Then: *"should i give
+  up this project?"* — the answer given was no, and the two defects were named.
+- (**WHAT DID PASS, and it is card 1's own claim**) **Pause stops the timer**,
+  confirmed by Kd in the browser. Nothing else in the camera smoke completed.
+  **Both cards' smokes remain UNRUN and neither ticks.**
+
+### The measured facts (files read this session, not recalled)
+
+1. `packages/engine/src/definitions/squat.json` — `rep.metric` is `knee_L`,
+   `downAt` 100, `upAt` 160, `bilateralGate` 150. A rep needs the knee angle
+   below **100°** and back above **160°**.
+2. `packages/engine/src/definition/compile.ts:84-86` — **the left→right fallback
+   is AUTOMATIC and hard-wired**: `metric === "knee_L"` compiles
+   `metricFallback: "knee_R"`, the legacy `rep_counter` `joint.replace("left_",
+   "right_")` behaviour. **A hidden left leg is NOT a counting failure.**
+3. `packages/engine/src/pipeline/fsm.ts:119-126` — **the bilateral gate is the
+   rule that bites.** When BOTH knees are visible, the other knee must also be
+   under 150° or the descent does not register at all. One knee that never bends
+   blocks every rep.
+4. `packages/engine/src/pipeline/faults.ts:252-258` — `evaluateFrame` SKIPS
+   rep-scoped rules. `shallow_depth` is `perRep: true`, so **the only message
+   that would say "go deeper" is evaluated at rep COMPLETION.** A squat too
+   shallow to complete a rep therefore produces **silence by construction** —
+   the app says nothing in the exact case the user needs telling.
+5. `packages/engine/src/pipeline/ingest.ts:44-46` — frame validity is 33
+   landmarks of finite numbers. **Nothing checks that the pose is a PERSON.** The
+   per-landmark gate is `VIS_USABLE = 0.3` (conditioning.ts:15). MediaPipe is
+   configured `minPoseDetectionConfidence/Presence/Tracking = 0.5`, `numPoses: 1`
+   (`usePoseDetection.js:118-120`), and `person_detected` is
+   `landmarks.length > 0` with no confidence test.
+
+### The hypothesis that ties both symptoms to ONE cause — UNVERIFIED
+
+If the model puts a knee landmark on a chair leg, **that landmark never bends**,
+so fact 3's bilateral gate blocks every rep — while the overlay looks roughly
+right and fact 4 guarantees nothing is said. **The fake dots would then not
+merely ADD reps the user did not do; they would EAT the reps the user did.**
+This was NOT measured. It fits Kd's report exactly and is the first thing the
+new card should test.
+
+### Kd's ruling in this session
+
+**The depth number STAYS.** Offered the choice between leaving it and a proposal
+to loosen it, he chose leaving it — the app must instead SAY when a squat was too
+shallow. This is consistent with 2026-07-10, which recorded the sub-100° counting
+as threshold-correct against his own recordings and deferred shallow-rep UX
+feedback to the P4 §9.1 tuning protocol, **NOT hand-edited (R5.4)**.
+
+### A protocol failure of mine, and Kd caught it
+
+I told him the app watches the left knee only, so a hidden left leg would count
+nothing. **That was false** — fact 2 above. It was stated before reading
+`compile.ts`, i.e. from the shape of the definition file rather than from the
+code that consumes it. He replied *"what kind of rule is this?"* and then
+*"seems like everything is being said from memory"*, and closed the chat. **V1
+applies to a claim about BEHAVIOUR exactly as it applies to a count**: reading
+the data file is not reading the code path. The correction turned up fact 3,
+which is worth more than the claim it replaced — but the correction was his
+doing, not my diligence.
+
+### Where the work goes
+
+**A NEW CARD, in a NEW CHAT, planned in more detail — Kd's decision, not a
+deferral I chose.** Two OWED lines carry it. The T3 for the two committed cards
+is UNAFFECTED and can run now: none of the code above is in its diff
+(`t3-camera-duration-kcal.diff`, `394f528..b0a857b`).
+
+## 2026-08-07 — T3 ROUND 1 on the camera ruling + duration/kcal packet: TWO Critical/High, and both were the screen telling the user something false
+
+**Read before deriving any badge, cue or label from `countItYourself`, and
+before writing a sentence that names WHY the camera is not counting.**
+
+The packet did not ship on round 1. Both Critical/High are the class Kd's
+amendment at :5807 exists for — **on screen AND wrong** — and neither is
+security, money or data loss, so under the original severity list both would
+have been argued down to Low. That is the second card in two days where the
+amendment did the work the original list could not.
+
+### C/H-1 — the green "AI form check" badge over a dead camera
+
+`graded` was `!countItYourself`. The moment :6008 took `engineStalled ||
+cameraDown` OUT of `countItYourself` — correctly, that is the whole ruling —
+`!countItYourself` stopped being the question the badge asks. With the camera
+unplugged mid-set the top bar showed **green, eye icon, "AI form check"**
+directly above its own panel saying *"The camera stopped."* The user believes
+the set is being graded. It is not, and it files with no form score.
+
+**The file's own comment three lines above already specified the correct
+behaviour** — *"while the camera is stalled the badge must not claim a form
+check is happening"* — and so does :6008 itself (*"engineStalled/cameraDown
+still drive the BADGE and the CUE"*). **This is not a case of nobody knowing the
+rule. The rule was written down, in the right place, and the code drifted out
+from under it in the same commit that wrote it.** A comment is not a test.
+
+It also silently deleted a string: `'Camera not counting'` needs `graded` false,
+which under the old expression forced `countItYourself` true, which forces the
+reason to 'chosen' or 'no-definition'. **The one badge state the ruling
+explicitly KEPT had no path to it at all.**
+
+Fixed as `!countItYourself && !engineStalled && !cameraDown`. `graded` is read
+only by the badge and a dev-only diagnostic row, so ownership is untouched and
+the ruling holds: **the badge tells the truth about the camera while the SET
+stays the camera's.**
+
+**No test in the suite asserted the badge text — at all. That is why it
+shipped**, and it is the same shape as :5104's F1 (a gate protected by nothing
+reads exactly like a gate that works).
+
+### C/H-2 — a cue that named a cause the app cannot know
+
+*"The camera can't see you well enough to count. Step back into frame and it
+carries on."* — asserted as the diagnosis on a branch reached by ANY absence of
+frames. **:6008 exists precisely because the app cannot tell a user out of shot
+from a camera that has died**; both are five seconds of nothing. So on a hung
+model or a device that never streams, the sentence named the wrong cause and
+made a promise it then never kept — the user steps back and forth while nothing
+loads. Now: *"The camera isn't counting right now. If you're out of shot, step
+back in — or count this set yourself."* The out-of-shot case is offered as a
+possibility, not asserted as the finding.
+
+### THE INSTRUMENT FINDING, and it is the one with teeth
+
+**Four tests had quietly stopped protecting anything, and all four are the
+guards on "a working camera is never taken away" — the failure this whole area
+is judged on.** They assert `queryByText('+1 Rep')).toBeNull()`. Since :6008
+**no stall, error, pause or hidden tab can ever produce that button** — only the
+user's own press can — so the assertion is now true by construction:
+
+| Test | Mutation | Was | Now |
+|---|---|---|---|
+| A CAMERA THAT IS WORKING is never interrupted | `ENGINE_STALL_MS = 0` | GREEN | **still green — see below** |
+| a PAUSED workout is not mistaken for a dead camera | pause guard removed | GREEN | **RED** |
+| SWITCHING TABS is not mistaken for a dead camera | `if (document.hidden) return` removed | GREEN | **RED** |
+| BACKGROUNDING THE TAB does not cost the set its grading | `&& !pageHidden` removed from `cameraDown` | GREEN | **RED** |
+
+Each now also asserts the OFFER and the BADGE, which are what the stall
+machinery still drives. **The shape to remember: a ruling that narrows what a
+variable means can turn a whole family of assertions vacuous without touching a
+line of test code, and every one of them stays green while it happens.**
+
+### THE MUTANT THAT SURVIVED, RETIRED WITH ITS REASON RATHER THAN FAKED GREEN
+
+`ENGINE_STALL_MS = 0` still leaves the working-camera control green, and it is
+**not** fixable by a better assertion. Measured, not reasoned: since :6008 a
+fresh frame CLEARS the stall, so a camera that is delivering frames cannot
+sustain the offer whatever the threshold says — the stamp and the next frame's
+clear land in the same commit. Deleting the heartbeat refresh instead reddens
+*'a redo AFTER the camera recovers'* (measured), and deleting the CLEARING line
+reddens the KD RULING test and the new badge test (measured). **The guarantee is
+real and protected; it is just carried by the clearing, not by the threshold.**
+The test's old comment claimed it caught both of those mutations — it catches
+neither — and **that comment is corrected in place rather than in this file
+alone** (:5748's lesson, applied the round it was learnt).
+
+### Low, all fixed, logged in `BACKLOG.md`
+
+The Calories tooltip still described the pre-v2 calculation; the ruling entry's
+"every other assertion is untouched" was true of six of ten tests and is
+corrected in place at :6048. **Low-1 was checked and does not reproduce** — the
+sentence under "+1 Rep" has two arms and both are reachable; logged as declined
+rather than dropped.
+
+### What was NOT re-verified here, said plainly
+
+The reviewer could not run `M5`, `M6`, `M12` or the two database suites (no
+`DATABASE_URL` in that session), so the previous card's **12/12 is verified to
+9/12 by the reviewer** — the other three were measured by the card's own chat
+and are not re-measured here. Per :5857 this fix round is **web-only and takes
+no database mutants**. The accepted risk the review names — `durationSeconds` is
+a client measurement now feeding the stored duration and the "Longest workout"
+record — is the v1 §14 nuance to R3.1 and is already sequenced to P4.y by :5906;
+**no new OWED line, and it is not a finding.**
+
+- (**PROVE**) web **523/523** (38 in the workout render suite, +3 new) ·
+  `ActiveWorkout.jsx` lint at its exact 13-problem baseline, `PostWorkout.jsx` at
+  its 5 (both compared against `HEAD`, not recalled) · new test file clean ·
+  **7 mutants run, 6 RED, 1 ALIVE-with-reason, 0 never ran, every restore
+  verified byte-exact by sha256.**
+- (**NOT DONE**) **The camera SMOKE is still UNRUN and NOTHING here is ticked.**
+  Round 2 is diff-only per :5348 rule 2.

@@ -133,3 +133,28 @@ fixed and is recorded in DECISIONS.
       false of the timer now stored, which stops on pause and does not run during
       a rest break. Rewritten to say exactly that. — fixed same commit
       (kcal-v2 card, DECISIONS :5906).
+
+## T3 round 1 — camera ruling + duration/kcal packet (2026-08-07)
+
+- [x] **The Calories tooltip still described the OLD calculation.** It said the
+      figure comes "from your body weight and active movement time" — true before
+      kcal v2, incomplete after it, because the estimate now also bills idle and
+      rest-break time at a resting rate and bills paused time at nothing. The
+      number on screen was right; the explanation under it was a version behind.
+      Rewritten to the three tiers actually implemented (verified against
+      `calories.ts:61-106`, not recalled). — fixed same commit.
+- [x] **The ruling entry's "TEN TESTS CHANGED" bullet overstated its own
+      account.** "Every other assertion in them is untouched" was true of six of
+      the ten; in four, five `+1 Rep` expectations were REPLACED by the
+      equivalent assertion on the offer. Faithful substitutions, but the record
+      claimed more than it did. Corrected in place at `DECISIONS.md:6048` rather
+      than restated elsewhere — :5748's lesson that a correction applied to the
+      record and not to the artifact is half a correction, applied to the record
+      itself. — fixed same commit.
+- [ ] **REPORTED AND NOT ACTED ON — the review's Low-1 does not reproduce.** It
+      called the `camera-not-counting` arm of the sentence under "+1 Rep" dead
+      code. Read at `ActiveWorkout.jsx:1465-1467`: that ternary has two arms —
+      'chosen' and the no-definition copy — and inside `countItYourself` the
+      reason can only be one of those two, so **both arms are live and correct**.
+      There is nothing to delete. Logged rather than silently dropped, because a
+      finding a chat declines to act on is exactly the kind that gets re-found.

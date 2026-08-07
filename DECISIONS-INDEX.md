@@ -220,6 +220,61 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:6150** — 2026-08-07 — **T3 ROUND 1 on the camera ruling + duration/kcal
+  packet: TWO Critical/High, both the screen saying something FALSE.** **Read
+  before deriving any badge, cue or label from `countItYourself`, and before
+  writing a sentence that names WHY the camera is not counting.** **C/H-1: a
+  green "AI form check" badge over a dead camera** — `graded` was
+  `!countItYourself`, and the moment :6008 took `engineStalled || cameraDown` out
+  of that expression it stopped asking the right question, so the top bar claimed
+  a form check directly above its own panel saying "The camera stopped"; it also
+  left `'Camera not counting'` — the one badge state the ruling explicitly KEPT —
+  with **no path to it at all**. **The file's own comment three lines up already
+  specified the correct behaviour, and :6008 says it too: the rule was written
+  down in the right place and the code drifted out from under it in the same
+  commit. A comment is not a test** — and no test asserted the badge text at all.
+  **C/H-2: a cue naming a cause the app cannot know** ("can't see you well
+  enough" on a branch reached by any absence of frames, when :6008 exists
+  precisely because out-of-shot and dead-camera are indistinguishable).
+  **THE INSTRUMENT FINDING HAS THE TEETH: four tests — every guard on "a working
+  camera is never taken away" — had gone vacuous**, because they assert `'+1
+  Rep'` is absent and since :6008 nothing but the user's own press can produce
+  it; three now go RED under their own mutation, and **the shape to remember is
+  that a ruling narrowing a variable's meaning can void a whole family of
+  assertions without touching one line of test code, all of them staying green.**
+  **One mutant RETIRED WITH ITS REASON rather than faked green** (`ENGINE_STALL_MS
+  = 0`: the fresh-frame clearing masks the threshold — measured both ways), and
+  that test's false comment is corrected IN PLACE per :5748. Low: the Calories
+  tooltip described the pre-v2 sum; :6048's "every other assertion untouched" was
+  true of six of ten tests, corrected in place; **the review's Low-1 was checked
+  and does not reproduce.** web 523/523 · 7 mutants, 6 RED, 0 never ran, restores
+  sha256-verified. **SMOKE STILL UNRUN — nothing ticked; round 2 is diff-only.**
+- **:6062** — 2026-08-07 — **THE CAMERA SMOKE STOPPED PART-WAY: real squats were
+  not counted, and the pose model counted FURNITURE.** **Read before touching rep
+  counting, the pose provider, or anything that decides why a rep did not
+  happen.** No code changed; Kd stopped the smoke and sent the work to its own
+  card in a new chat. **Pause-stops-the-timer PASSED** and is the only part of
+  either card's camera smoke that did — **both cards stay UNTICKED**. Measured,
+  not recalled: a rep needs the knee under **100°** and back over **160°**
+  (`squat.json`); **the left→right fallback is AUTOMATIC** (`compile.ts:84-86`
+  compiles `knee_L` → `metricFallback: knee_R`), so a hidden left leg is NOT the
+  failure; **the BILATERAL GATE is the rule that bites** — with both knees visible
+  the OTHER knee must also pass 150° or the descent never registers
+  (`fsm.ts:119-126`); **`evaluateFrame` SKIPS rep-scoped rules**, so
+  `shallow_depth` (`perRep`) is evaluated only at rep COMPLETION and a squat too
+  shallow to complete a rep produces **silence by construction** (`faults.ts:252`);
+  and **frame validity never checks that the pose is a PERSON** — 33 finite
+  landmarks pass, per-landmark gate 0.3, MediaPipe confidences 0.5
+  (`ingest.ts:44`, `usePoseDetection.js:118`). **UNVERIFIED hypothesis that ties
+  both symptoms to ONE cause:** a knee landmark stuck on a chair leg never bends,
+  so the bilateral gate blocks every real rep — the fake dots would EAT reps, not
+  just add them. **Kd RULING: the depth number STAYS** (he chose it over a
+  loosening proposal); the app must SAY when a squat was too shallow — consistent
+  with 2026-07-10's R5.4 "not hand-edited". **Carries a protocol failure of mine
+  he caught:** I claimed left-knee-only from the DEFINITION file without reading
+  the code that consumes it — **V1 binds a claim about BEHAVIOUR exactly as it
+  binds a count.** Two OWED lines. The T3 for the two committed cards is
+  UNAFFECTED and can run now.
 - **:6008** — 2026-08-07 — **KD RULING: if the user chose the CAMERA, the app
   NEVER switches them to hand counting.** **Read before touching anything that
   decides who counts a set.** **Supersedes the automatic handover :3819 expressly

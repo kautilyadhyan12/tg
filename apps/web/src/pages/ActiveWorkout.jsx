@@ -466,7 +466,29 @@ export default function ActiveWorkout() {
   // "the engine is actually counting this set", which is not the same as "a
   // definition exists": while the camera is stalled the badge must not claim a
   // form check is happening.
-  const graded = !countItYourself;
+  //
+  // T3 ROUND 1 C/H-1, and the comment above was ALREADY the specification the
+  // code had stopped meeting. The moment the ruling took `engineStalled ||
+  // cameraDown` out of `countItYourself`, `!countItYourself` stopped being the
+  // question this variable asks: with the camera unplugged mid-set the badge
+  // went GREEN, eye icon, "AI form check" — directly above a panel saying "The
+  // camera stopped." The user believes the set is being graded; it is not, and
+  // it files with no form score. This is the class :5807 names — something on
+  // screen AND false — and it is the very badge Kd was looking at when he made
+  // the ruling that broke it.
+  //
+  // It also took the 'Camera not counting' wording out of reach entirely: that
+  // arm needs `graded` false, which under the old expression forced
+  // `countItYourself` true, which forces the reason to 'chosen' or
+  // 'no-definition'. A string with no path to it is not wording, it is a
+  // deleted feature — and this is the one the ruling explicitly KEPT
+  // ("engineStalled/cameraDown still drive the BADGE and the CUE").
+  //
+  // Nothing else moves: `graded` is read only by the badge below and the
+  // dev-only diagnostic row. Ownership is untouched, so the ruling holds — the
+  // badge tells the truth about what the camera is doing while the SET stays
+  // the camera's.
+  const graded = !countItYourself && !engineStalled && !cameraDown;
   // `analysisSettled &&` here too — round 3 F6. Without it the badge reads
   // "Log-only" during the window where the hook has not answered for this
   // exercise yet, which is the exact conflation round 2's F1 was about, left
@@ -1485,10 +1507,23 @@ export default function ActiveWorkout() {
                 >
                   Count this set myself
                 </button>
+                {/* T3 ROUND 1 C/H-2. The second arm used to say "The camera
+                    can't see you well enough to count. Step back into frame and
+                    it carries on." — a CAUSE the app provably cannot know. This
+                    arm is reached whenever frames simply stopped arriving, and
+                    :6008's whole reason for existing is that the app CANNOT
+                    tell a user standing out of shot from a camera that has
+                    died: both are five seconds of nothing. So for a hung
+                    MediaPipe worker, a device that never streams, or a laptop
+                    lid closing on the model, the sentence named the wrong cause
+                    and made a promise it then never kept — the user steps back
+                    and forth while nothing loads. Says only what is known now;
+                    the out-of-shot case is offered as a possibility, not
+                    asserted as the diagnosis. */}
                 <p className="text-2xs mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
                   {cameraDown
                     ? "The camera stopped. Fix it and counting resumes by itself — or count this set yourself."
-                    : "The camera can't see you well enough to count. Step back into frame and it carries on."}
+                    : "The camera isn't counting right now. If you're out of shot, step back in — or count this set yourself."}
                 </p>
               </>
             )}

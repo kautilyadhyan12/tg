@@ -1,6 +1,116 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: T3 ROUND 1 FIXES — the badge that claimed a form check over a dead camera.
+      web 523/523 · 7 mutants (6 RED, 1 alive-with-reason, 0 never ran) · lint at
+      baseline on both changed pages. Record at DECISIONS :6150.
+      **SMOKE STILL UNRUN. NOTHING IS TICKED. Round 2 is DIFF-ONLY (:5348 r2).**
+
+THE TWO CRITICAL/HIGH, in plain words
+  1. Camera dies mid-set -> the top bar still showed a GREEN "AI form check"
+     badge, right above its own panel saying "The camera stopped." The app told
+     the user it was grading a set it was not grading. `graded` was
+     `!countItYourself`, and :6008 had just taken the stall OUT of that
+     expression - so the badge went on meaning something it no longer meant.
+  2. The stall cue asserted a CAUSE the app provably cannot know ("can't see you
+     well enough... step back into frame"), on a branch reached by ANY absence of
+     frames. :6008 exists BECAUSE out-of-shot and dead-camera are the same five
+     seconds of nothing. Now cause-agnostic.
+
+READ THIS BEFORE YOU TOUCH ANY STALL / CAMERA TEST
+  **Four tests had gone vacuous and every one of them stayed green while it
+  happened.** They assert `queryByText('+1 Rep')` is null; since :6008 nothing
+  but the user's own press can ever produce that button, so the assertion is true
+  by construction. Three are now RED under their own mutation (pause guard,
+  hidden-tab guard, `!pageHidden` in `cameraDown`). If you write a stall test,
+  assert on **'Count this set myself'** and on the BADGE - those are what the
+  stall still drives. A ruling that narrows what a variable MEANS can void a
+  whole family of assertions without editing one line of test code.
+
+THE MUTANT THAT SURVIVED, AND WHY IT IS NOT A GAP TO CLOSE
+  `ENGINE_STALL_MS = 0` leaves the working-camera control green and no better
+  assertion fixes that: a fresh frame CLEARS the stall, so a camera delivering
+  frames cannot sustain the offer whatever the threshold says. Measured both
+  ways - deleting the CLEARING reddens two tests, deleting the heartbeat reddens
+  a third. The test's old comment claimed it caught both of those; it catches
+  neither, and the comment is corrected IN PLACE, not just in DECISIONS.
+
+ONE REVIEW FINDING I DECLINED, checked rather than dropped
+  Low-1 (a "dead arm" in the sentence under +1 Rep) does not reproduce - that
+  ternary has two arms and both are reachable. Logged in BACKLOG.md as declined.
+
+NEXT, in order:
+  (1) Kd's CAMERA SMOKE - `RUNBOOK/smoke-duration-kcal-camera.md`. Still the one
+      thing this whole area has never had, and it now has a badge worth watching.
+  (2) T3 ROUND 2, diff-only, fresh chat - fixes and the surfaces they touch only.
+  (3) The camera-counting card (DECISIONS :6062) and then Dashboard stats.
+```
+
+```
+TASK: THE CAMERA SMOKE — STOPPED PART-WAY BY OLDER DEFECTS. NO CODE CHANGED.
+      Record at DECISIONS :6062. Two 🔴 OWED lines opened.
+      **BOTH committed cards stay UNTICKED.** T3 is UNRUN and is UNAFFECTED.
+
+WHAT HAPPENED, in Kd's words
+  "when i do proper squat even then it does not count", and "the camera instead
+  of detecting my body sometimes detects other objects nearby like a chair, fan
+  etc and takes its shape ... sometimes in taking those shape a correct angle
+  happens then rep count happens". Then: "should i give up this project?"
+  He stopped the smoke and sent the work to a NEW CARD in a NEW CHAT, asking for
+  more detail than the plan I had given him.
+
+THE ONE THING THAT PASSED, and it is card 1's own claim
+  **Pause stops the timer.** Confirmed in the browser. Nothing else completed.
+
+THE FIVE MEASURED FACTS — all read from the code this session, none recalled
+  1. squat.json: rep needs knee under 100° and back over 160°; bilateralGate 150.
+  2. compile.ts:84-86: the left→right fallback is AUTOMATIC (knee_L →
+     metricFallback knee_R). **A hidden left leg is NOT a counting failure.**
+  3. fsm.ts:119-126: **the bilateral gate is the rule that bites** — with both
+     knees visible the OTHER knee must also pass 150° or the descent never
+     registers. One knee that never bends blocks every rep.
+  4. faults.ts:252-258: evaluateFrame SKIPS rep-scoped rules, and shallow_depth
+     is perRep — so "go deeper" is evaluated ONLY at rep completion. A squat too
+     shallow to complete a rep produces **silence by construction**.
+  5. ingest.ts:44-46: frame validity is 33 finite landmarks. **Nothing checks the
+     pose is a PERSON.** Per-landmark gate 0.3; MediaPipe confidences 0.5.
+
+THE HYPOTHESIS THE NEW CARD SHOULD TEST FIRST — UNVERIFIED, and it is the point
+  A knee landmark stuck on a chair leg NEVER BENDS, so fact 3 blocks every real
+  rep while fact 4 guarantees nothing is said. **The fake dots may be EATING the
+  user's reps, not merely adding fake ones** — one defect causing both of Kd's
+  complaints. Not measured. Measure it before designing anything.
+
+KD RULED ONE THING HERE: **THE DEPTH NUMBER STAYS.**
+  Offered "leave it and make the app say 'go lower'" versus "come back with a
+  proposal to loosen it", he chose the first. Consistent with 2026-07-10, which
+  verified sub-100° counting against his own recordings and deferred shallow-rep
+  UX feedback to P4 §9.1, NOT hand-edited (R5.4).
+
+MY PROTOCOL FAILURE, AND HE CAUGHT IT — read this before writing any plan
+  I told him the app watches the left knee only, so a hidden left leg counts
+  nothing. **False** (fact 2). I said it after reading the DEFINITION file and
+  before reading the code that CONSUMES it. He answered "what kind of rule is
+  this?", then "seems like everything is being said from memory", and closed the
+  chat. **V1 binds a claim about BEHAVIOUR exactly as it binds a count.** The
+  correction turned up fact 3, which is worth more than the claim it replaced —
+  but the correction was his doing, not my diligence.
+
+A SESSION NOTE THAT WILL COST THE NEXT CHAT TIME
+  The API server would not boot under the tool sandbox — it hung with no output
+  and never bound its port. It starts fine with the sandbox disabled. The web
+  dev server and the mock rig are unaffected.
+
+NEXT, in order:
+  (1) The T3 — `t3-camera-duration-kcal.diff` + `t3-camera-duration-kcal-PROMPT.md`
+      at the repo root, FRESH chat. It covers BOTH committed cards and is
+      unaffected by today's findings (none of that code is in the diff).
+  (2) The new CAMERA COUNTING card, in its own chat, from the two 🔴 OWED lines.
+      Kd asked for a more detailed plan than he was given.
+  (3) The camera smoke re-run, which both committed cards still need.
+```
+
+```
 TASK: KD RULING — THE APP NEVER SWITCHES A CAMERA SET TO HAND COUNTING.
       Code done, web 520/520, lint at baseline, build green.
       **CAMERA SMOKE UNRUN AND T3 UNRUN — NOT TICKED.** Record at DECISIONS :6008.

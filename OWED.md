@@ -85,6 +85,48 @@ Legend: 🔴 blocks the P2.8 cutover · 🟡 needed before real users · ⚪ imp
 
 ## 🔴 Blocks the cutover — the old backend cannot be switched off until these exist
 
+### Camera counting — found by Kd's smoke 2026-08-07, tracked nowhere before
+
+Both lines are 🔴 for one reason and it is stated so a later chat can downgrade
+them with a ruling rather than by opinion: **they BLOCK the camera smoke, and that
+smoke gates BOTH committed cards on `web-repoint`** (the workout time + kcal v2
+card and the camera-ownership ruling), which merges at P2.8. They are product
+defects, not missing API surfaces. Full record: DECISIONS :6062.
+
+- [ ] 🔴 **The pose model draws a skeleton on FURNITURE, and the app believes
+      it.** Kd, in his own room: *"the camera instead of detecting my body
+      sometimes detects other objects nearby like a chair, fan etc and takes its
+      shape ... sometimes in taking those shape a correct angle happens then rep
+      count happens"*. **Measured cause:** frame validity is 33 landmarks of
+      finite numbers (`ingest.ts:44-46`) — **nothing checks the pose is a
+      person**; per-landmark gate is `VIS_USABLE = 0.3`; MediaPipe runs at
+      `minPoseDetectionConfidence/Presence/Tracking = 0.5` with `person_detected`
+      = `landmarks.length > 0` (`usePoseDetection.js:118-120`). **This invents
+      reps the user did not do — Critical/High under the :5807 amendment (a
+      number on screen that is FALSE).** **UNVERIFIED and the first thing to
+      test:** a knee landmark stuck on a chair leg never bends, so the bilateral
+      gate (below) would block every REAL rep — the fake dots may be EATING reps,
+      not only adding them, which would make this one defect the cause of both of
+      Kd's complaints. **No threshold may be picked from judgement**: the card
+      must MEASURE what the confidence actually reads on an empty chair versus on
+      a person, in Kd's own room, before choosing a cut-off (V1).
+- [ ] 🔴 **A squat too shallow to count says NOTHING — silence by
+      construction.** Kd: *"when i do proper squat even then it does not count ...
+      what would a user be thinking doing multiple correct squat but not being
+      counted"*. **Measured cause:** `evaluateFrame` skips rep-scoped rules
+      (`faults.ts:252-258`) and `shallow_depth` is `perRep: true`, so the only
+      message that would say "go deeper" is evaluated **at rep completion** — a
+      squat that never completes a rep can never trigger it. **KD RULING
+      2026-08-07: the depth number STAYS** (100° down / 160° up, `squat.json`);
+      he was offered a loosening proposal and chose the message instead. So the
+      fix is a live cue, and the 2026-07-10 precedent is the shape to follow —
+      the "cannot see your legs" cue was added in the WEB BRIDGE, not the engine,
+      because the engine was already right to refuse to count and only the
+      presentation lied. **Do not re-derive or widen any ported constant (R5.4).**
+      **Second-order and NOT in this line's scope:** the bilateral gate means one
+      knee that never bends blocks every rep (`fsm.ts:119-126`); whether the cue
+      must also explain THAT depends on what the furniture line above measures.
+
 ### Screens still reading the OLD backend (no new-API home yet)
 Each needs an API surface built BEFORE its screen can be repointed. Per the
 no-removal rule these UIs stay untouched and working on the old backend until
