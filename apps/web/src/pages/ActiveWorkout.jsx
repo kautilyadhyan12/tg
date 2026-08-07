@@ -291,6 +291,13 @@ export default function ActiveWorkout() {
   // forgotten reset away from a button that never comes back.
   const [stalledSetKey, setStalledSetKey] = useState(null);
 
+  // WHICH SET THE USER CHOSE TO COUNT THEMSELVES (Kd's ruling, 2026-08-07).
+  // Same shape as the stall key above and for the same reason — the clearing
+  // side is DERIVED from the set ordinal, so there is no reset to forget. The
+  // difference that matters is who writes it: this one is only ever written by
+  // a button press, and the app has no path to it.
+  const [selfCountedSetKey, setSelfCountedSetKey] = useState(null);
+
   // EVERY ARRIVING FRAME IS A HEARTBEAT, and the stall is a GAP between beats —
   // not the absence of a first one. The previous version waited on
   // `poseData == null`, which is only ever true before a set's first frame:
@@ -307,7 +314,22 @@ export default function ActiveWorkout() {
   // written before it is ever read — the effect below stamps it as it arms.
   const lastFrameAtRef = useRef(0);
   useEffect(() => {
-    if (poseData != null) lastFrameAtRef.current = Date.now();
+    if (poseData == null) return;
+    lastFrameAtRef.current = Date.now();
+    // A FRESH FRAME ENDS THE STALL (2026-08-07). This clearing could not exist
+    // while `engineStalled` decided WHO OWNED THE SET — clearing it would have
+    // been the camera taking a set back mid-set, which Kd forbade on 2026-08-03,
+    // and stickiness was the guard. Ownership no longer reads it: it is decided
+    // by `manualMode` and by the user's own takeover, both of which are sticky
+    // in their own right. So the stall is free to mean what its name says —
+    // "the camera is not delivering RIGHT NOW" — and the offer to take over
+    // disappears the moment it starts delivering again.
+    //
+    // Without this the button sat on screen for the rest of the set beside a
+    // camera that was counting perfectly well: a trap that costs the user their
+    // form score if they press it. Caught by the test written for the ruling,
+    // not by review.
+    setStalledSetKey((k) => (k === engineSetKeyRef.current ? null : k));
   }, [poseData]);
 
   // A HIDDEN TAB IS NOT A DEAD CAMERA (round 2 F2). The frame loop stops itself
@@ -394,6 +416,12 @@ export default function ActiveWorkout() {
   // derived, not written: a new set changes engineSetKey and the match lapses.
   const engineStalled = stalledSetKey === engineSetKey;
 
+  // THE USER'S OWN takeover, keyed per set ordinal exactly as the stall is, so
+  // it lapses on the next set by the same derivation (no clearing to forget).
+  // Written ONLY by the button below — never by a timer, an error, or a frame
+  // gap. That is the whole of Kd's 2026-08-07 ruling in one variable.
+  const userTookOver = selfCountedSetKey === engineSetKey;
+
   // `analysisSettled &&`, not a bare `!analysisAvailable` — round 2 F1. The hook
   // reports "nothing is analysing" on the first render of EVERY camera workout,
   // because its answer arrives from an effect one commit later. Reading that
@@ -408,8 +436,29 @@ export default function ActiveWorkout() {
   // a set whose target was one more rep would complete itself from the pose
   // stream before the page noticed the camera had failed. Live term = no window;
   // sticky key = the camera cannot take the set back when the error clears.
+  // KD RULING 2026-08-07: **IF THE USER CHOSE THE CAMERA, THE APP NEVER SWITCHES
+  // THEM TO HAND COUNTING — no matter what happens.** This SUPERSEDES the
+  // automatic handover that :3819 expressly excluded from his earlier "the mode
+  // does not flip mid-set" ruling.
+  //
+  // What it fixes, in his words: "if someone chooses camera why the fuck in mid
+  // set reverses to hand". The app could not tell a camera that had DIED from a
+  // user standing slightly out of frame — five seconds of unusable frames looked
+  // identical to both — so stepping out of shot converted the set permanently and
+  // silently discarded its form score. The cure was worse than the disease it
+  // was written for.
+  //
+  // `engineStalled` and `cameraDown` are NOT deleted: they still drive the badge
+  // and the cue, so the screen keeps saying WHY it is not counting. What they no
+  // longer do is decide FOR the user. Stepping back into frame simply resumes
+  // counting, because nothing was taken away in the meantime.
+  //
+  // `userTookOver` is the escape hatch Kd approved in the same breath: with no
+  // automatic switch, a genuinely dead camera would leave a workout with no way
+  // to record a rep at all — the exact hole :3720 was built to close. So the
+  // BUTTON stays and the user presses it. The app never presses it for them.
   const countItYourself =
-    manualMode || (analysisSettled && !analysisAvailable) || engineStalled || cameraDown;
+    manualMode || (analysisSettled && !analysisAvailable) || userTookOver;
 
   // The badge, and the sentence under the rep button, say WHY the user is
   // counting — the three reasons are not interchangeable and one of them used
@@ -422,7 +471,12 @@ export default function ActiveWorkout() {
   // "Log-only" during the window where the hook has not answered for this
   // exercise yet, which is the exact conflation round 2's F1 was about, left
   // standing in the one place that only affects wording.
-  const countingReason = manualMode ? 'chosen'
+  // `userTookOver` reads as 'chosen' because it IS a choice — the only route to
+  // it is the button. 'camera-not-counting' now describes a camera that is not
+  // counting while the SET IS STILL THE CAMERA'S: the badge says why the reps
+  // are not climbing, and no longer doubles as an announcement that the app has
+  // taken the set away.
+  const countingReason = (manualMode || userTookOver) ? 'chosen'
     : (analysisSettled && !analysisAvailable) ? 'no-definition'
     : 'camera-not-counting';
 
@@ -741,6 +795,14 @@ export default function ActiveWorkout() {
       const stillDown =
         cameraError != null || Date.now() - lastFrameAtRef.current >= ENGINE_STALL_MS;
       if (stalledSetKey === engineSetKey && stillDown) setStalledSetKey(nextKey);
+      // THE USER'S TAKEOVER CARRIES THE SAME WAY, and under the same condition
+      // (2026-08-07). Someone who chose to count themselves BECAUSE the camera
+      // was dead must not be handed back to a still-dead camera by pressing
+      // redo — they would have to choose again, mid-set, for no reason. And the
+      // `stillDown` half is what keeps the redo-after-recovery case working:
+      // once the camera is delivering again, a redo gets grading back, which is
+      // the whole point of :4023's round-4 F2.
+      if (selfCountedSetKey === engineSetKey && stillDown) setSelfCountedSetKey(nextKey);
       setEngineSetKey(nextKey);
       engineSetKeyRef.current += 1;
     }
@@ -1402,9 +1464,31 @@ export default function ActiveWorkout() {
                 <p className="text-2xs mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
                   {countingReason === 'chosen'
                     ? "You're counting your own reps — tap once per rep."
-                    : countingReason === 'camera-not-counting'
-                    ? "The camera isn't counting right now — tap once per rep and your set still counts."
                     : "Form checking isn't available for this exercise yet — your workout still counts."}
+                </p>
+              </>
+            )}
+            {/* THE CAMERA STILL OWNS THIS SET, and this is the only door out of
+                that — pressed by the user, never by the app (Kd, 2026-08-07).
+                Shown only while the camera is genuinely not delivering, so it
+                is not an invitation to abandon a working camera. */}
+            {!countItYourself && (engineStalled || cameraDown) && (
+              <>
+                <button
+                  onClick={() => setSelfCountedSetKey(engineSetKey)}
+                  className="w-full mt-2 py-2 rounded-xl text-sm font-semibold"
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    border:     '1px solid rgba(255,255,255,0.10)',
+                    color:      'rgba(255,255,255,0.75)',
+                  }}
+                >
+                  Count this set myself
+                </button>
+                <p className="text-2xs mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  {cameraDown
+                    ? "The camera stopped. Fix it and counting resumes by itself — or count this set yourself."
+                    : "The camera can't see you well enough to count. Step back into frame and it carries on."}
                 </p>
               </>
             )}

@@ -200,6 +200,18 @@ const engineSummary = (setIndex, over = {}) => ({
 
 const tapRep = () => fireEvent.click(screen.getByText('+1 Rep'));
 
+/** THE USER takes the set over. Kd RULED on 2026-08-07 that the app must NEVER
+ *  switch a camera set to hand counting by itself — not on a stall, not on a
+ *  camera error — because it cannot tell a dead camera from someone standing
+ *  out of frame, and the conversion was permanent and silent.
+ *
+ *  **Every appearance of this call below marks a place the app used to decide
+ *  and the user now decides.** The tests' claims are otherwise unchanged: what
+ *  each one asserts about ownership, recovery and what reaches the API still
+ *  holds, and still would have failed before its fix. The step that moved is
+ *  WHO pressed the button, which is the whole of the ruling. */
+const takeOverSet = () => fireEvent.click(screen.getByText('Count this set myself'));
+
 /** The one workout the queue holds, or undefined. */
 const queued = () => peekQueue()[0];
 
@@ -507,9 +519,11 @@ describe('a hand-counted workout reaches the new API', () => {
     };
     startWorkout([exercise({ name: 'Squats', reps: 3 })]);
 
-    // The user is not stranded: the button is offered because nothing else is
+    // The user is not stranded: the TAKEOVER is offered because nothing else is
     // counting, and it is offered at once — a camera error needs no waiting.
-    await waitFor(() => expect(screen.getByText('+1 Rep')).toBeTruthy());
+    // What changed on 2026-08-07 is that it is an OFFER and not a conversion.
+    await waitFor(() => expect(screen.getByText('Count this set myself')).toBeTruthy());
+    takeOverSet();
     tapRep();
     tapRep();
     tapRep();
@@ -523,7 +537,7 @@ describe('a hand-counted workout reaches the new API', () => {
     expect(sets[0].avgFormScore).toBeNull();
   });
 
-  it('offers hand counting after a camera that reports no error and sends no frames', async () => {
+  it('OFFERS the takeover after a camera that reports no error and sends no frames — and does not take it', async () => {
     // The quieter half of the same failure: permission dialog left sitting
     // open, MediaPipe still downloading, or a device that claims to exist and
     // never streams. There is no error to react to — only silence — so the
@@ -539,17 +553,23 @@ describe('a hand-counted workout reaches the new API', () => {
       startWorkout([exercise({ name: 'Squats', reps: 2 })]);
 
       // Not offered immediately — a slow start must not flash the button.
-      expect(screen.queryByText('+1 Rep')).toBeNull();
+      expect(screen.queryByText('Count this set myself')).toBeNull();
 
       clockOffset = 6000;                                    // six seconds of silence
       await act(async () => { vi.advanceTimersByTime(1000); });  // one poll tick
+      expect(screen.getByText('Count this set myself')).toBeTruthy();
+      // KD'S RULING, ASSERTED DIRECTLY: the offer appeared and the app did NOT
+      // act on it. Before 2026-08-07 the rep button was already on screen here
+      // and the set had already been taken from the camera.
+      expect(screen.queryByText('+1 Rep')).toBeNull();
+      takeOverSet();
       expect(screen.getByText('+1 Rep')).toBeTruthy();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('THE CAMERA DIES MID-SET: frames stop, no error is raised, hand counting is offered', async () => {
+  it('THE CAMERA DIES MID-SET: frames stop, no error is raised, the takeover is offered', async () => {
     // T3 F1, and the reason smoke step 6 could not pass by the route it claimed.
     // The old guard asked `poseData == null`, which is only ever true BEFORE a
     // set's first frame: null is written once, at set start, and the engine's
@@ -574,6 +594,9 @@ describe('a hand-counted workout reaches the new API', () => {
       // that is the real behaviour, and the state the old guard was blind to.
       clockOffset = 6000;
       await act(async () => { vi.advanceTimersByTime(1000); });
+      expect(screen.getByText('Count this set myself')).toBeTruthy();
+      expect(screen.queryByText('+1 Rep')).toBeNull();  // offered, not taken
+      takeOverSet();
       expect(screen.getByText('+1 Rep')).toBeTruthy();
     } finally {
       vi.useRealTimers();
@@ -645,7 +668,10 @@ describe('a hand-counted workout reaches the new API', () => {
     startWorkout([exercise({ name: 'Squats', sets: 1, reps: 4 })]);
 
     act(() => setCameraError('Camera stopped sending video'));
-    await waitFor(() => expect(screen.getByText('+1 Rep')).toBeTruthy());
+    // THE USER takes it over (2026-08-07): the error offers, it no longer
+    // converts. Everything this test claims begins after that press.
+    await waitFor(() => expect(screen.getByText('Count this set myself')).toBeTruthy());
+    takeOverSet();
     tapRep();
     tapRep();
 
@@ -676,6 +702,7 @@ describe('a hand-counted workout reaches the new API', () => {
 
       clockOffset = 6000;
       await act(async () => { vi.advanceTimersByTime(1000); });
+      takeOverSet();                                  // THE USER takes it (2026-08-07)
       tapRep();
       tapRep();                                       // the user has counted 2
 
@@ -750,7 +777,8 @@ describe('a hand-counted workout reaches the new API', () => {
 
       clockOffset = 6000;
       await act(async () => { vi.advanceTimersByTime(1000); });
-      expect(screen.getByText('+1 Rep')).toBeTruthy();      // stalled
+      takeOverSet();                                        // THE USER takes it
+      expect(screen.getByText('+1 Rep')).toBeTruthy();      // stalled, and taken
 
       // Frames resume: the camera is demonstrably alive again.
       await act(async () => {
@@ -839,13 +867,64 @@ describe('a hand-counted workout reaches the new API', () => {
 
       clockOffset = 6000;
       await act(async () => { vi.advanceTimersByTime(1000); });
+      takeOverSet();                                    // THE USER takes it
       expect(screen.getByText('+1 Rep')).toBeTruthy();
 
       fireEvent.click(screen.getByTitle('Reset reps for this set'));
+      // The CHOICE carries too, not just the stall — otherwise redo would hand
+      // the user back to a still-dead camera and make them choose again.
       expect(screen.getByText('+1 Rep')).toBeTruthy();   // still there, same instant
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('KD RULING 2026-08-07: a stalled camera NEVER takes the set — and stepping back into frame resumes counting', async () => {
+    // THE DEFECT THIS REPLACES, in Kd's words: "if someone chooses camera why
+    // the fuck in mid set reverses to hand". Five seconds of unusable frames
+    // looked identical whether the camera had DIED or the user had simply
+    // stepped out of shot, and either way the set was converted permanently and
+    // its form score silently discarded.
+    //
+    // This is the positive control for the ruling: the app offers and waits.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval'] });
+    try {
+      poseState = {
+        analysisAvailable: true,
+        poseData: { rep_count: 1, logOnly: false, corrections: [], form_correct: true },
+        emitSummary: () => engineSummary(1, { reps: 4 }),
+      };
+      startWorkout([exercise({ name: 'Squats', sets: 1, reps: 4 })]);
+      await waitFor(() => expect(screen.getAllByText('1').length).toBeGreaterThan(0));
+
+      // The user steps out of frame: frames stop being usable for six seconds.
+      clockOffset = 6000;
+      await act(async () => { vi.advanceTimersByTime(1000); });
+
+      // THE SET IS STILL THE CAMERA'S. The offer is there; nothing was taken.
+      expect(screen.getByText('Count this set myself')).toBeTruthy();
+      expect(screen.queryByText('+1 Rep')).toBeNull();
+
+      // They step BACK into frame. Counting simply carries on — there is no
+      // ownership to win back, because none was ever surrendered.
+      await act(async () => {
+        poseState.poseData = { rep_count: 2, logOnly: false, corrections: [], form_correct: true };
+        clockOffset = 6100;
+        vi.advanceTimersByTime(1000);
+      });
+      expect(screen.queryByText('+1 Rep')).toBeNull();
+      expect(screen.queryByText('Count this set myself')).toBeNull();
+
+      fireEvent.click(screen.getByText('Complete Set ✓'));
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // And it reaches the wire as the ENGINE's graded set, not as a hand count.
+    await waitFor(() => expect(queued()).toBeDefined(), { timeout: 3000 });
+    const [set] = queued().sets;
+    expect(set.mode).toBeUndefined();        // the engine's entry
+    expect(set.avgFormScore).not.toBeNull(); // the grade survived the stall
   });
 
   it('a PAUSED workout is not mistaken for a dead camera', async () => {
@@ -889,6 +968,7 @@ describe('a hand-counted workout reaches the new API', () => {
 
       clockOffset = 6000;
       await act(async () => { vi.advanceTimersByTime(1000); });
+      takeOverSet();                  // THE USER takes it (2026-08-07)
       tapRep();
       tapRep();
       tapRep();                       // hits the target → set ends → workout ends
@@ -920,6 +1000,7 @@ describe('a hand-counted workout reaches the new API', () => {
 
       clockOffset = 6000;
       await act(async () => { vi.advanceTimersByTime(1000); });
+      takeOverSet();                  // THE USER takes it (2026-08-07)
       fireEvent.click(screen.getByText('+1 Rep'));
       fireEvent.click(screen.getByText('+1 Rep'));
 
@@ -966,7 +1047,11 @@ describe('a hand-counted workout reaches the new API', () => {
     act(() => setCameraError('Camera disconnected'));
     fireEvent.click(screen.getByText('Skip Rest →'));
 
-    await waitFor(() => expect(screen.getByText('+1 Rep')).toBeTruthy());
+    // THE USER takes set 2 over (2026-08-07). The camera being disconnected
+    // now OFFERS this rather than performing it — which is exactly the point
+    // of Kd's ruling, and this test still proves the mixed workout survives.
+    await waitFor(() => expect(screen.getByText('Count this set myself')).toBeTruthy());
+    takeOverSet();
     tapRep();                            // set 2, counted by hand
 
     await waitFor(() => expect(queued()).toBeDefined());

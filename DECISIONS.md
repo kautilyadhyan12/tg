@@ -6004,3 +6004,57 @@ rounding.**
      the clamp; `tsx` without `--watch` does not reload. He was told the fix was
      live when it was not — the defect he reported was real, and my explanation
      of it was the thing at fault.
+
+## 2026-08-07 — KD RULING: if the user chose the CAMERA, the app NEVER switches them to hand counting
+
+**Supersedes the automatic handover that :3819 expressly excluded from his
+earlier "the mode does not flip mid-set" ruling.** Read before touching anything
+that decides who counts a set.
+
+- (**THE RULING, his words**) *"if someone chooses camera no matter what happen
+  there should not be any switch to hand counting"* — raised as *"if someone
+  chooses camera why the fuck in mid set reverses to hand"*. He found it in his
+  own smoke, on a screen showing "Camera not counting" while he stood too close
+  to the webcam.
+- (**WHAT WAS ACTUALLY WRONG, and why the old design looked reasonable**) The app
+  could not tell a camera that had DIED from a user standing out of frame: both
+  are "five seconds without a usable frame". So `engineStalled || cameraDown` fed
+  `countItYourself` directly, and because ownership is write-once, **stepping out
+  of shot converted the set permanently and silently discarded its form score.**
+  The handover was built to stop a dead camera stranding a user (:3720); the cure
+  reached far wider than the disease.
+- (**WHAT NOW HAPPENS**) `countItYourself = manualMode || no-definition ||
+  userTookOver`. `engineStalled`/`cameraDown` still drive the BADGE and the CUE —
+  the screen still says why the reps are not climbing — but they no longer decide
+  for the user. **Step back into frame and counting resumes**, because nothing
+  was taken away in the meantime.
+- (**THE ESCAPE HATCH, approved in the same breath**) With no automatic switch a
+  genuinely dead camera would leave a workout with no way to record a rep — the
+  exact hole :3720 closed. So a **"Count this set myself"** button appears while
+  the camera is not delivering. **The user presses it; the app has no path to
+  it.** Kd was shown this consequence before he ruled and approved the button.
+- (**A CARRY THAT HAD TO BE DECIDED, not inherited**) The user's takeover carries
+  across a REDO under the same `stillDown` condition the stall already used — so
+  someone who chose to count because the camera was dead is not handed back to a
+  still-dead camera by pressing redo, while a redo AFTER recovery still gets
+  grading back (:4023 round-4 F2 preserved).
+- (**THE FIX'S OWN TEST CAUGHT A DEFECT IN THE FIX**) The test written FOR the
+  ruling failed: the "Count this set myself" button **stayed on screen after the
+  camera recovered** — a trap beside a working camera that costs a form score if
+  pressed. A fresh frame now clears `stalledSetKey`. **That clearing could not
+  have existed before**: while the stall decided ownership, clearing it would
+  have been the camera taking a set back, which :3819 forbids. The ruling is what
+  made the stall free to mean what its name says.
+- (**TEN TESTS CHANGED, and this is the honest account**) They asserted the
+  automatic handover. Each now has the USER pressing the button where the app
+  used to decide; **every other assertion in them is untouched**, so each still
+  fails without the fix it was written for. A `takeOverSet()` helper marks every
+  such place and its JSDoc says why. Kd was told the tests would change BEFORE
+  the work started — "some existing tests currently assert the handover" — so
+  that it could never look like tests bent to fit code.
+- (**PROVE**) web **520/520** (35 in the workout render suite, +1 new) · lint at
+  its exact 13-problem baseline · `vite build` green.
+- (**NOT DONE**) **The camera SMOKE is UNRUN and this is NOT ticked.** It is also
+  the smoke that has never run for this whole area — the first smoke used
+  hand-counting throughout, which Kd caught: *"there was no checking for camera
+  we only tested the hand counted one?"* He was right, and the omission was mine.

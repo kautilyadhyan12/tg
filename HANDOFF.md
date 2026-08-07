@@ -1,6 +1,53 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD RULING — THE APP NEVER SWITCHES A CAMERA SET TO HAND COUNTING.
+      Code done, web 520/520, lint at baseline, build green.
+      **CAMERA SMOKE UNRUN AND T3 UNRUN — NOT TICKED.** Record at DECISIONS :6008.
+
+WHAT IT FIXES, in Kd's words
+  "if someone chooses camera why the fuck in mid set reverses to hand". The app
+  could not tell a DEAD camera from a user standing out of frame — both are five
+  seconds without a usable frame — so stepping out of shot converted the set
+  permanently and threw away its form score. Now the stall drives only the badge
+  and the cue; step back into frame and counting resumes. A "Count this set
+  myself" button covers a genuinely dead camera, and ONLY the user presses it.
+
+READ THIS BEFORE YOU CHANGE ANY TEST IN activeWorkout.render.test.jsx
+  Ten of them asserted the old automatic handover. Each now calls `takeOverSet()`
+  where the app used to decide; every OTHER assertion is untouched, so each still
+  fails without the fix it was written for. Kd was warned the tests would change
+  BEFORE the work began — that warning is what keeps this from looking like tests
+  bent to fit code, and the next chat should hold itself to the same standard.
+
+THE FIX'S OWN TEST CAUGHT A DEFECT IN THE FIX
+  The button stayed on screen after the camera recovered — a trap beside a
+  working camera. A fresh frame now clears `stalledSetKey`, which COULD NOT have
+  been done before: while the stall decided ownership, clearing it would have
+  been the camera taking a set back (:3819 forbids that). The ruling is what made
+  the stall free to mean what its name says.
+
+WHAT IS STILL OWED ON THIS AREA, and it is the important line
+  **The CAMERA path has never been smoked at all.** The duration/kcal smoke used
+  hand-counting throughout and Kd caught it: "there was no checking for camera we
+  only tested the hand counted one?" Steps are written and ready at
+  `RUNBOOK/smoke-duration-kcal-camera.md` — only Squats, Jump Squats and Chair
+  Squats are camera-graded, and the laptop must see the user head to feet.
+
+TWO SESSION HAZARDS THAT COST REAL TIME TODAY — both mine
+  - `node --import tsx src/index.ts` DOES NOT WATCH. Kd smoked a stale API server
+    for a whole round. Restart it after every api-side edit.
+  - A `cd apps/web` left in the shell sent a `cat >> DECISIONS.md` into a STRAY
+    apps/web/DECISIONS.md. Caught immediately (the real file was untouched, the
+    stray deleted, content moved), but use absolute paths for record files.
+
+NEXT, in order: (1) Kd's camera smoke; (2) the fresh-chat T3 covering BOTH this
+      ruling and the duration/kcal card — `t3-duration-kcal.diff` must be
+      REGENERATED after this commit; (3) then the DASHBOARD STATS card, whose
+      plan is unchanged.
+```
+
+```
 TASK: THE REAL WORKOUT TIME + KCAL v2 — code done, Kd's SMOKE PASSED on the
       final bytes. **T3 IS UNRUN — this is NOT ticked.**
       shared 45/45 · api 429/429 · web 519/519 · 12/12 mutants RED (0 alive,

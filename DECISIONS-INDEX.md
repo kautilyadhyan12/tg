@@ -220,6 +220,26 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:6008** — 2026-08-07 — **KD RULING: if the user chose the CAMERA, the app
+  NEVER switches them to hand counting.** **Read before touching anything that
+  decides who counts a set.** **Supersedes the automatic handover :3819 expressly
+  excluded from his earlier "the mode does not flip mid-set" ruling.** The app
+  could not tell a camera that had DIED from a user standing out of frame — both
+  are five seconds without a usable frame — so **stepping out of shot converted
+  the set permanently and silently discarded its form score**; the handover built
+  to stop a dead camera stranding a user (:3720) reached far wider than the
+  disease. Now `countItYourself` reads only `manualMode`, no-definition, and the
+  user's OWN takeover; the stall still drives the badge and the cue but decides
+  nothing, so **stepping back into frame just resumes counting**. Escape hatch
+  approved in the same breath and shown to him first: a **"Count this set myself"**
+  button for a genuinely dead camera — **the user presses it, the app has no path
+  to it**. **The test written FOR the ruling caught a defect in the fix**: the
+  button stayed on screen after the camera recovered, a trap costing a form score
+  if pressed — a fresh frame now clears the stall, **which could not have been
+  done while the stall decided ownership**. **Ten tests changed** and the account
+  is in the entry: each now has the USER pressing the button where the app used to
+  decide, every other assertion untouched, and Kd was warned BEFORE the work that
+  tests would change. web 520/520. **CAMERA SMOKE UNRUN — not ticked.**
 - **:5906** — 2026-08-07 — **THE REAL WORKOUT TIME IS SAVED, and calories stop
   billing idle time as exercise (kcal v2).** **Read before touching anything that
   measures time in a workout, before writing a comment that reasons its way to a
