@@ -1,6 +1,88 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: CAMERA-ACCURACY CARD, PHASE 1 — the MEASURING INSTRUMENT is built and
+      committed (44f4ad2). **NO FIX HAS BEEN DESIGNED AND NO THRESHOLD EXISTS.**
+      web 529/529 · engine traces 20/20 · 6 mutants, 6 RED, 0 ALIVE, restore
+      byte-exact (baseline GREEN first) · lint clean on the changed dir.
+      **THE CARD IS BLOCKED ON KD'S RECORDINGS AND ON NOTHING ELSE.**
+
+WHERE THIS CARD IS, IN ONE LINE
+  Kd approved the plan; phase 1 (instrument) is done; **phase 2 (the fix) has
+  not started and must not start until the clips exist.** Steps for him are at
+  `RUNBOOK/measure-camera-accuracy.md`; he shut the laptop down before running
+  them. The three servers were up and verified responding — they are gone now.
+
+THE DEFECT PHASE 1 FOUND IN THE INSTRUMENT ITSELF, and it is the point
+  **A clip of an EMPTY ROOM recorded nothing and downloaded nothing** —
+  `recordFrame` returned before doing anything on a poseless frame, and the time
+  origin was anchored to a 33-landmark frame that in that clip never arrives. So
+  "the camera saw nobody" and "the recorder was not running" produced identical
+  output: none. **The empty-room clip is the control the whole card rests on.**
+  The instrument would not have failed loudly — it would have handed back a
+  smaller, plausible session. Now every offered frame is logged to a
+  `.detect.jsonl` sidecar with its landmark count, so ABSENCE IS DATA.
+  Two time origins on purpose: detections from the clip, frames from the first
+  pose, so the §7.1 trace is unchanged in shape/timing/fps and a leading empty
+  room cannot push a future golden outside validate-trace's 8–40 fps contract.
+
+WHAT WAS MEASURED, AND WHAT WAS NOT
+  **Measured, on the one live recording that already existed**
+  (`squat_sitting_idle_desk_nocount`, Kd at his desk, via the new
+  `packages/engine/scripts/measure-pose.ts`): the engine called it a PERSON on
+  **600 of 600 frames** while hip/knee/ankle confidence sat at ~0.01 and **0 of
+  600 frames had a usable knee**; 55.7% of all landmark confidences were under
+  the 0.3 gate; **0 of 19,800 values were exactly 1.000**, so the bridge's
+  `visibility ?? 1.0` fallback is NOT firing on that device and the §3.2 gate is
+  live. ⇒ "a person is here" currently means "33 dots arrived" and nothing else.
+  **NOT measured, and it is the whole card: what the model reports on an EMPTY
+  CHAIR in Kd's room.** No cut-off may be chosen until that exists (the OWED
+  line forbids picking one from judgement, and V1 binds it).
+
+THE HYPOTHESIS IS STILL UNVERIFIED — do not treat the above as confirming it
+  The four defects may be ONE. Two links are now traced in code but NOT proven
+  against a chair: `trunk_lean` is the ONLY frame-scoped fault squat has
+  (`shallow_depth` and `knee_valgus` are `perRep`, and `evaluateFrame` skips
+  rep-scoped rules), and `frameToDisplay` sets `form_correct = liveCue == null`
+  while `ActiveWorkout.jsx:755` gates `speakCorrection` on `form_correct ===
+  false` ⇒ **the only sentence the app can repeat mid-squat-set is the
+  chest-up cue, plus `speakProgress` on rep increments.** If Kd's babbling was
+  those, the voice is downstream of the pose input. **He was asked and has not
+  answered yet — that answer is free and may redirect the card.**
+  Note the step-back cue sets `form_correct = null`, NOT false, so it is never
+  spoken; that path is not the babble.
+
+DECIDED THIS SESSION, with evidence, so it is not re-litigated
+  **The fix goes in the WEB BRIDGE, not the engine.** The engine is handed 33
+  numbers and cannot know they came from a chair; only the camera layer sees
+  what MediaPipe actually said. A person-check in the engine needs a cut-off the
+  spec never names (R0.2), and R5.6 forbids exercise/scene special-cases in
+  engine code. Same shape as 2026-07-10, where the engine was already right to
+  refuse and only the presentation lied. **The shallow-squat cue is the same
+  call** — Kd ruled the depth number STAYS, so the engine is right to refuse the
+  rep and only the silence is wrong.
+
+THE ONE NUMBER I REFUSED TO PICK, and phase 2 must not pick it either
+  "How far down counts as *tried and came up short*" has no source yet. It comes
+  from the recordings or from the definition's own ported constants (`downAt`
+  100), or it goes to Kd as a question. **It is not an engineering taste call.**
+
+NEXT, in order:
+  (1) **Kd records the 5 clips** — `RUNBOOK/measure-camera-accuracy.md`. Blocked
+      on him and on nothing else. Three servers, one boots switched off by
+      design; the web one needs `VITE_TRACE_RECORD=1` or the widget never
+      renders.
+  (2) Read them with `pnpm --filter @app/engine exec tsx
+      scripts/measure-pose.ts <clip.jsonl> ...` — it prints distributions and
+      chooses NOTHING by design.
+  (3) Then, and only then, phase 2: one plan, one Kd decision (how much the app
+      should say, and whether it speaks by default — his call per the OWED line,
+      NOT to be assumed).
+  Also still unrun and untouched by this card: the camera smoke, which is what
+  stopped part-way and produced these defects in the first place.
+```
+
+```
 TASK: T3 ROUND 3 — ZERO CRITICAL/HIGH, THE PACKET SHIPS. Its three Low findings
       fixed (:5348 rule 1 — the schedule changes, never the bar).
       Commits 1ecb86d (the fixes) and fbfb40d (the voice line below).

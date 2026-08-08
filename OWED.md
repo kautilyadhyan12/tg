@@ -110,6 +110,17 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       Kd's complaints. **No threshold may be picked from judgement**: the card
       must MEASURE what the confidence actually reads on an empty chair versus on
       a person, in Kd's own room, before choosing a cut-off (V1).
+      **STATUS 2026-08-08 — the INSTRUMENT exists, the MEASUREMENT does not**
+      (commit 44f4ad2). The dev trace recorder could not have produced the
+      empty-room control at all — a clip with no pose in any frame recorded
+      nothing and downloaded nothing — and that is fixed, tested and
+      mutation-checked; `packages/engine/scripts/measure-pose.ts` reads a clip
+      back and prints distributions, choosing nothing. Steps for Kd are at
+      `RUNBOOK/measure-camera-accuracy.md`. **The blocking next action is KD
+      RECORDING FIVE CLIPS in his own room; no fix may be designed before that.**
+      Measured meanwhile on the one live recording that already existed: the
+      engine calls it a person on 600/600 frames while 0/600 have a usable knee,
+      so "a person is here" today means "33 dots arrived" and nothing more.
 - [ ] 🔴 **A squat too shallow to count says NOTHING — silence by
       construction.** Kd: *"when i do proper squat even then it does not count ...
       what would a user be thinking doing multiple correct squat but not being
