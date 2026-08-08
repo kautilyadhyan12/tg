@@ -6382,3 +6382,149 @@ be read against this ruling, not fresh.
   was added · rule 3 proved by hand in both directions before the mutant existed.
 - (**NOT DONE**) **The camera SMOKE is still UNRUN and NOTHING is ticked.**
   Round 3 is diff-only per :5348 rule 2.
+
+## 2026-08-08 — THE CAMERA MEASUREMENT RAN: the four defects are ONE, no confidence cut-off exists, and Kd dropped the object-detector option
+
+Phase 1's instrument (44f4ad2) was finally pointed at Kd's room. He recorded all
+five clips of `RUNBOOK/measure-camera-accuracy.md`; they are NOT in the repo (raw
+pose of a real person — his Desktop only). Everything below is command output
+from this session, not inference.
+
+### The headline: furniture EATS reps, and that was the UNVERIFIED half of :6062
+
+`OWED.md`'s furniture line predicted it in as many words — *"the fake dots may be
+EATING reps, not only adding them, which would make this one defect the cause of
+both of Kd's complaints"*. **Confirmed.** Measured by counting downward crossings
+of `squat.json`'s `downAt` (100°) in the raw knee angle, per clip:
+
+| clip | length | knee crossed 100° | reps engine credited | what Kd says he did |
+|---|---|---|---|---|
+| `me_squatting` (alone) | 113.5s | **19** | 13 | setup, then skipped squats + used the manual button; *"when i squatted the reps were couting though"* |
+| `me_and_furniture` | 116.6s | **4** | 3 | *"Most of it — I squatted steadily"* (AskUserQuestion, this session) |
+
+Same man, same squat, two minutes each. **With furniture in shot his knee stopped
+appearing to bend at all.** The landmark is not tracking him; it is being dragged
+toward an object that never moves. This is Kd's *"even when i do proper squat it
+does not count"* and his *"irregular counting"*, and it is the SAME defect as the
+skeleton-on-furniture line, not a second one.
+
+**KD'S TESTIMONY RETIRES A CLAIM I MADE EARLIER IN THE SESSION.** I first read
+13-vs-3 as the furniture eating three-quarters of his reps. That comparison was
+void — he was not squatting steadily in `me_squatting`. It was withdrawn to him
+in plain words and then re-established by the knee-crossing count above, which
+depends on nothing he did. Recorded because the corrected route is the citable
+one; the rep-count comparison is not.
+
+### The empty room is FINE — and that is what makes the chair the defect
+
+`empty_room`, 717 frames offered, whole-clip detection 58% — **and the 58% is an
+artefact of him walking out and back in.** Bucketed by time (12 buckets, printed
+this session), detection runs 98/100/100 → 54/15/2/5/0/25 → 98/100/98. In the
+genuinely-empty window (19–42s) it is **18 of 288 frames, 6.2%**.
+
+So the person detector is NOT blind — it rejects empty space. It has a false
+positive on chair-shaped objects specifically: `furniture_only`, 82.4s with Kd
+out of shot the whole time, **976 of 1018 frames (95.9%) carried a full 33-point
+pose**, holding 87–100% in every one of 12 time buckets. It locks on and never
+lets go.
+
+### NO CONFIDENCE CUT-OFF SEPARATES A CHAIR FROM A PERSON — the cheap fix is dead
+
+The furniture line demanded this be measured before any threshold was chosen
+(V1). It was. Per-frame MINIMUM visibility over the four torso landmarks
+(11/12/23/24), p05/p25/median:
+
+| clip | torso min | legs min (hip/knee/ankle) p05/p25/med/p75 |
+|---|---|---|
+| `furniture_only` | **0.99 / 0.99 / 0.99** | 0.20 / 0.22 / 0.26 / 0.35 |
+| `me_standing` | 1.00 / 1.00 / 1.00 | 0.22 / 0.39 / 0.55 / 0.80 |
+| `me_squatting` | 0.99 / 0.99 / 1.00 | 0.17 / 0.27 / 0.38 / 0.54 |
+
+**A chair reports 0.99 on its chest and hips — indistinguishable from a person.**
+The legs shift but overlap hard: `me_squatting`'s p25 (0.27) sits ON
+`furniture_only`'s median (0.26), so any leg-confidence gate that rejects the
+chair also eats real squat frames. **No threshold may be picked from these
+numbers, and none was.** This is a NEGATIVE result and it is the card's most
+valuable output: it rules out the one-line fix everyone would have reached for.
+
+**WHY the 0.99 is not a contradiction, and the next chat must not re-derive it:**
+`PoseLandmarker` is two-stage. Per-landmark `visibility` is the LANDMARK model's
+confidence *given a box it was already handed* — "the chest goes here **in this
+crop**" — not the DETECTOR saying "this is a person". `usePoseDetection.js:227`
+sets `person_detected = landmarks.length > 0`; the app's entire personhood test
+is *"did an array come back"*. The number that would answer the question is
+computed upstream and `PoseLandmarker` does not expose it.
+
+### The lever that DOES separate them, measured, threshold deliberately NOT picked
+
+A hallucinated skeleton jitters; a real body does not. Body-centre shift per
+frame, normalised by torso length, median: `furniture_only` **0.0432** ·
+`me_standing` **0.0061** · `me_squatting` **0.0153** · `me_and_furniture` 0.0171
+· `empty_room` 0.0732. **~3× a squatting person, ~7× a standing one**, and it
+costs nothing — arithmetic on landmarks already in hand, no model, no download,
+no battery. **It is ONE chair in ONE room; a cut-off from this is exactly what
+the OWED line forbids.** It needs more furniture recorded, or it goes to Kd with
+the distributions attached.
+
+### The voice was never a fourth defect
+
+`fault.squat.lean` is the only frame-scoped cue squat has (:6062 traced this in
+code; this session measured it firing). Frames where the engine would speak:
+**`furniture_only` 85.6% · `empty_room` 89.4% · `me_squatting` 1.1% ·
+`me_and_furniture` 0.8%.** Kd this session: *"as for voice its working fine"* —
+he stayed in frame. **The babble is the app reading a chair's posture aloud.**
+Fix the pose input and it stops. A throttle would have hidden it, as the OWED
+line warned.
+
+### KD'S RULING — the object-detector option is DROPPED, on cost
+
+He proposed running a general object detector ("this is an apple, this is a
+mango") to find the human and ignore furniture. **The idea is architecturally
+sound and already half-present** — that is stage 1 of BlazePose. He was shown
+why it still fails (`numPoses: 1` always crowns a winner; tracking re-uses the
+previous ROI and a stationary chair is trivially trackable; the detector's score
+is never surfaced), and what a second model would cost against Part 6 §3.4's
+budget (inference ≤ 35 ms full / ≤ 22 ms lite), §3.5's floor (₹10–12k Android,
+3 GB, Android 9+) and its ≤ 20% battery per 20-min session.
+**He ruled: drop it.** *"yeah drop my idea"* — recorded, not silently discarded,
+so a later chat does not re-propose it as new. **It is not struck for being
+wrong; it is deferred for being the most expensive option on a table that still
+has two free ones.** If the free levers fail it comes back, and then it runs at
+~1 Hz, never per frame.
+
+### WHAT ORDER PHASE 2 TRIES THINGS — free first, and NOT because free is better
+
+1. **The three MediaPipe dials** (`usePoseDetection.js:118-120`, all at the 0.5
+   default, chosen by nobody) and **`numPoses`** — zero download, zero per-frame
+   cost.
+2. **The jitter signal** above — zero cost, needs threshold evidence.
+3. **The model** — see the new OWED line; the spec already rules on this.
+4. Kd's detector, only if 1–3 fail.
+
+**NONE of 1–4 can be evaluated against the five recorded clips.** They hold
+landmark OUTPUT, not video, so any change to the camera stage needs FRESH
+recordings. The next recording session should capture video alongside. Said to
+Kd this session; it is the main limitation of the instrument as built.
+
+### Two defects found in our own work while measuring
+
+- **The instrument's `exercise` slug does not match the definitions.** The
+  recorder writes the workout's DISPLAY name (`ActiveWorkout.jsx:1159` —
+  `currentExercise.name.toLowerCase()` ⇒ `squats`), `measure-pose.ts` loads
+  `definitions/${h.exercise}.json` ⇒ `squats.json`, ENOENT. **Section 3 — the
+  engine replay, the entire point of the script — silently did not run on the
+  first pass over all five clips** and printed a per-clip `FAIL` line under
+  sections 1 and 2 that had rendered normally. Worked around this session by
+  rewriting the header in scratchpad copies (Kd's files untouched); NOT fixed.
+  Same shape as the empty-room bug phase 1 found in the same instrument: it
+  degraded quietly instead of failing loudly.
+- **`pose_landmarker_lite` is hard-wired as the only model**, and Part 6 §3.3
+  says the opposite: *"BlazePose **full** as default, **lite** as the automatic
+  step-down (§3.6)"*. §3.6's ladder (full → lite below 15 Hz for 10 s → 640p →
+  log-only) **does not exist in the web app at all**. We ship the fallback as the
+  default, everywhere, including laptops. A weaker model is a more credulous one,
+  so this is plausibly UPSTREAM of the furniture defect — untested.
+  **Counter-evidence against a naive switch, and it is Kd's own machine:**
+  `FEED_INTERVAL_MS = 67` targets ~15 fps and his clips landed at **11.6–12.5**
+  (7.2 on `empty_room`). He is already UNDER target on the LIGHT model.
+  Inference time itself was NOT measured this session.

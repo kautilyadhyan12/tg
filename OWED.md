@@ -110,17 +110,33 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       Kd's complaints. **No threshold may be picked from judgement**: the card
       must MEASURE what the confidence actually reads on an empty chair versus on
       a person, in Kd's own room, before choosing a cut-off (V1).
-      **STATUS 2026-08-08 — the INSTRUMENT exists, the MEASUREMENT does not**
-      (commit 44f4ad2). The dev trace recorder could not have produced the
-      empty-room control at all — a clip with no pose in any frame recorded
-      nothing and downloaded nothing — and that is fixed, tested and
-      mutation-checked; `packages/engine/scripts/measure-pose.ts` reads a clip
-      back and prints distributions, choosing nothing. Steps for Kd are at
-      `RUNBOOK/measure-camera-accuracy.md`. **The blocking next action is KD
-      RECORDING FIVE CLIPS in his own room; no fix may be designed before that.**
-      Measured meanwhile on the one live recording that already existed: the
-      engine calls it a person on 600/600 frames while 0/600 have a usable knee,
-      so "a person is here" today means "33 dots arrived" and nothing more.
+      **STATUS 2026-08-08 — MEASURED. Kd recorded all five clips; full numbers
+      at DECISIONS :6386. The blocking action is no longer his.** What the
+      measurement settled, so no chat re-derives it:
+      (a) **THE CHEAP FIX IS DEAD.** A chair reports **0.99** per-frame minimum
+      visibility on its four torso landmarks — the same as a person. Legs shift
+      but overlap hard (`me_squatting` p25 0.27 sits ON `furniture_only` median
+      0.26), so any leg gate that rejects the chair also eats real squat frames.
+      **No confidence cut-off separates them, and none was picked.**
+      (b) **THE "EATING REPS" HYPOTHESIS ABOVE IS CONFIRMED.** Kd squatted
+      steadily for 2 min with furniture in shot: his knee crossed `downAt` (100°)
+      **4 times**, against **19** in the clip without furniture where he squatted
+      LESS. Furniture in frame does not merely add fake reps — it destroys real
+      counting, which makes this line the cause of the shallow-squat line below.
+      (c) **An empty room is FINE** — 6.2% detection over the genuinely-empty
+      window, vs **95.9% over 82 s** pointed at a chair and fan. The detector is
+      not blind; it false-positives on chair-shaped objects and then TRACKS them.
+      (d) **The lever is JITTER**, not confidence: the fake skeleton's body
+      centre moves ~3× a squatting person and ~7× a standing one. **Its threshold
+      is deliberately NOT picked — one chair, one room.** More furniture must be
+      recorded, or the distributions go to Kd. This line's "no threshold from
+      judgement" rule is UNCHANGED and still binds.
+      (e) **KD RULING 2026-08-08 — his object-detector proposal is DROPPED on
+      cost** (a second model against Part 6 §3.4/§3.5 budgets). Deferred, not
+      struck: it returns if the free levers fail, at ~1 Hz, never per frame.
+      **NOT measurable from the recorded clips:** they hold landmark OUTPUT, not
+      video, so every candidate camera-stage fix needs FRESH recordings that
+      capture video too. That is the instrument's main limit as built.
 - [ ] 🔴 **A squat too shallow to count says NOTHING — silence by
       construction.** Kd: *"when i do proper squat even then it does not count ...
       what would a user be thinking doing multiple correct squat but not being
@@ -137,6 +153,16 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       **Second-order and NOT in this line's scope:** the bilateral gate means one
       knee that never bends blocks every rep (`fsm.ts:119-126`); whether the cue
       must also explain THAT depends on what the furniture line above measures.
+      **STATUS 2026-08-08 — MEASURED, and this line is now DOWNSTREAM of the
+      furniture line** (DECISIONS :6386). Kd's *"i do proper squat and it does not
+      count"* was reproduced and its cause is NOT depth: with furniture in shot
+      his knee crossed 100° only 4 times in 2 minutes of steady squatting, vs 19
+      times in the clip without it. **The squats were deep enough; the app was
+      watching a chair.** So the cue this line owes is still owed — a genuinely
+      shallow squat must still say something — but **fixing the pose input comes
+      first, and building the cue before it would attach a message to a number
+      that is currently fiction.** Kd's ruling that the depth number STAYS is
+      untouched by this and still binds.
 
 - [ ] 🔴 **THE SPOKEN COACHING IS CONSTANT AND IRRELEVANT.** Reported by Kd
       2026-08-08, from his own camera testing the day before, and **recorded
@@ -164,6 +190,54 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       rules.
       **Do not "fix" this by deleting the feature** (the no-removal rule): a
       coach that talks while your eyes are on your own form is the point of it.
+      **STATUS 2026-08-08 — the SYMPTOM hypothesis is CONFIRMED; this is not a
+      fourth defect** (DECISIONS :6386). Measured share of frames on which the
+      engine would speak: **85.6%** pointed at furniture and **89.4%** on an
+      empty room, against **1.1%** with Kd squatting in shot and **0.8%** with
+      him and the furniture both in frame. **The babble is the app reading a
+      chair's posture aloud.** Kd 2026-08-08: *"as for voice its working fine"* —
+      he stayed in frame, which is exactly the condition under which it is quiet.
+      **So: fix the pose input FIRST and re-listen before touching `voice.js`.**
+      A throttle now would hide the furniture defect, which is why this line said
+      so before the numbers existed. **Kd's product decision is still owed and
+      still his** — how much the app says, and whether it speaks by default — but
+      it must be put to him AFTER the pose fix, on what the app then actually
+      says, not on today's chair-driven noise.
+
+- [ ] 🔴 **THE MEASURING INSTRUMENT SILENTLY SKIPPED ITS OWN MAIN SECTION.**
+      Found 2026-08-08 while reading Kd's five clips (DECISIONS :6386). The trace
+      recorder stamps the workout's DISPLAY name into the trace header
+      (`ActiveWorkout.jsx:1159`, `currentExercise.name.toLowerCase()` ⇒ `squats`)
+      but definitions are keyed singular (`packages/engine/src/definitions/
+      squat.json`), so `measure-pose.ts`'s `definitionFor(h.exercise)` throws
+      ENOENT. **Section 3 — the engine replay, the whole point of the script —
+      did not run on ANY of the five clips on the first pass**, while sections 1
+      and 2 printed normally above a one-line `FAIL`. It reads as a partial
+      success, which is how it nearly went unnoticed.
+      **This is the SECOND time this same instrument degraded quietly instead of
+      failing loudly** — the first was the empty-room clip that recorded nothing
+      (commit 44f4ad2). **Fix the class:** a clip whose definition cannot be
+      loaded must ABORT with the mismatch named, not print two sections and a
+      FAIL; and the header slug must be the definition id, not a display name.
+      Worked around on 2026-08-08 by rewriting the header in scratchpad copies
+      (Kd's files untouched) — **the workaround is not the fix and no golden
+      trace may be recorded until the slug is right**, or every future golden
+      carries a header that cannot find its own definition.
+- [ ] 🔴 **WE SHIP THE FALLBACK POSE MODEL AS THE DEFAULT, AND THE DEGRADATION
+      LADDER DOES NOT EXIST.** Found 2026-08-08 (DECISIONS :6386).
+      `usePoseDetection.js` hard-wires `pose_landmarker_lite` on every device.
+      Part 6 §3.3 says the opposite — *"BlazePose **full** as default, **lite**
+      as the automatic step-down (§3.6)"* — and §3.6's ladder (full → lite below
+      15 Hz for 10 s → 640p → **log-only mode with honest copy**) is not
+      implemented at all. A weaker model is a more credulous one, so this is
+      plausibly UPSTREAM of the furniture defect; **UNTESTED, and it must not be
+      switched blind.** Counter-evidence from Kd's own machine, measured:
+      `FEED_INTERVAL_MS = 67` targets ~15 fps and his five clips landed at
+      **11.6–12.5** (7.2 on one) — he is already UNDER target on the LIGHT model,
+      so `full` may make his laptop worse. **Inference time has never been
+      measured on any device.** Measure first, then choose; and the ladder is
+      owed regardless of which model wins, because the whole point of §3.6 is
+      that the choice is made per-device at runtime rather than by us guessing.
 
 ### Screens still reading the OLD backend (no new-API home yet)
 Each needs an API surface built BEFORE its screen can be repointed. Per the

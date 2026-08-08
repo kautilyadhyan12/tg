@@ -220,6 +220,25 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:6386** — 2026-08-08 — **THE CAMERA MEASUREMENT RAN: the four camera defects
+  are ONE defect, and NO confidence cut-off can separate a chair from a person.**
+  **Read before touching the pose provider, rep counting, the voice, or any
+  "is a person there" check.** Kd recorded five clips in his own room; measured:
+  a chair reports **0.99** on its chest and hips (identical to a person), so the
+  one-line confidence fix is DEAD; furniture **EATS** reps (knee crossed the
+  counting line 4× in 2 min with furniture in shot vs 19× without), confirming
+  :6062's unverified prediction; an empty room is fine (6.2%); the voice babble
+  is the app reading a chair's posture aloud (85.6% of frames vs 1.1% with Kd in
+  shot) and is NOT a fourth defect. **KD RULING: his object-detector proposal is
+  DROPPED on cost** (a second model vs Part 6 §3.4/§3.5 budgets) — deferred, not
+  struck; do not re-propose it as new, and do not treat it as forbidden either.
+  The measured lever is **jitter** (fake skeleton moves ~3–7× more) and **its
+  threshold was deliberately NOT picked** — one chair, one room. Also records two
+  defects in our own work: the recorder's `exercise` slug (`squats`) does not
+  match the definitions (`squat.json`) so the engine-replay half of
+  `measure-pose.ts` silently did not run, and `pose_landmarker_lite` is
+  hard-wired though Part 6 §3.3 makes **full** the default with a step-down
+  ladder that does not exist. **No fix designed; no threshold chosen.**
 - **:6277** — 2026-08-07 — **T3 ROUND 2: round 1's own Low fix shipped a
   Critical, and the mutant round 1 retired was catchable all along.** **Read
   before writing or rewording ANY on-screen sentence that explains a

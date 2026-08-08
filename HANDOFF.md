@@ -1,6 +1,86 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: CAMERA-ACCURACY CARD, PHASE 1 COMPLETE — THE MEASUREMENT RAN.
+      Kd recorded all five clips. **THE CARD IS NO LONGER BLOCKED ON HIM.**
+      No code changed this session. No fix designed. No threshold chosen.
+      Full numbers: DECISIONS :6386. OWED lines updated in the same commit.
+
+WHERE THIS CARD IS, IN ONE LINE
+  Phase 1 (instrument + measurement) is DONE. **Phase 2 is a fix nobody has
+  designed yet, and its first step is a PLAN put to Kd — not code.** The clips
+  live on Kd's Desktop only (`traces/`), never in the repo: raw pose of a real
+  person. Ten files, two per clip.
+
+THE FOUR DEFECTS ARE ONE DEFECT. That is the session's result.
+  Furniture in frame does not just ADD fake reps — it EATS real ones. Kd
+  squatted steadily for 2 minutes with his chair in shot: his knee crossed
+  `downAt` (100°) **4 times**. In the clip without furniture, where he squatted
+  LESS, it crossed **19**. The shallow-squat complaint, the irregular counting
+  and the babbling voice are all this one defect wearing different faces, and
+  each OWED line now says so with its own numbers.
+
+THE CHEAP FIX IS DEAD — do not propose it, it has been measured
+  **A chair reports 0.99 minimum visibility on its chest and hips. Identical to
+  a person.** Legs overlap hard (`me_squatting` p25 0.27 sits ON
+  `furniture_only` median 0.26), so a leg gate that rejects the chair also eats
+  real squat frames. **No confidence cut-off separates them.** The reason is
+  structural and is written out at :6386: per-landmark `visibility` is the
+  LANDMARK model's confidence given a box it was already handed, not the
+  DETECTOR saying "this is a person" — and `PoseLandmarker` never exposes that
+  number. The app's whole personhood test is `landmarks.length > 0`.
+
+THE LEVER, AND THE NUMBER STILL REFUSED
+  The fake skeleton JITTERS: body-centre shift per frame, median — furniture
+  0.0432 · standing person 0.0061 · squatting person 0.0153. ~3–7×, and it costs
+  nothing (arithmetic on landmarks already in hand; no model, no download, no
+  battery). **The cut-off was NOT picked. One chair, one room.** It needs more
+  furniture recorded, or the distributions go to Kd. The OWED rule against
+  picking thresholds from judgement is unchanged.
+
+KD RULED THIS SESSION
+  He proposed a general object detector ("apple / mango") to find the human.
+  **DROPPED, on cost** — a second model against Part 6 §3.4's inference budget
+  and §3.5's ₹10–12k / 3 GB floor. *"yeah drop my idea"*. **Deferred, not
+  struck**: it returns if the free levers fail, at ~1 Hz, never per frame. Do not
+  re-propose it as new; do not treat it as forbidden either.
+  He also confirmed the voice is fine when he is in frame — which is the
+  measurement, not a contradiction of his earlier complaint.
+
+WHAT THE NEXT CHAT MUST NOT DO
+  **Do not evaluate any camera-stage fix against the five recorded clips.** They
+  hold landmark OUTPUT, not video. Every candidate needs FRESH recordings, and
+  the next recording session should capture video alongside. This is the
+  instrument's main limit as built and it was told to Kd.
+
+TWO DEFECTS IN OUR OWN WORK, both now on OWED
+  (1) The recorder stamps the DISPLAY name (`squats`) into the trace header while
+  definitions are keyed `squat.json`, so `measure-pose.ts` threw ENOENT and
+  **section 3 — the engine replay, the entire point — silently did not run on any
+  clip**, printing two good sections above a one-line FAIL. Worked around by
+  rewriting headers in scratchpad copies; NOT fixed. **Second time this same
+  instrument degraded quietly rather than failing loudly.** No golden trace may
+  be recorded until the slug is the definition id.
+  (2) `pose_landmarker_lite` is hard-wired everywhere though Part 6 §3.3 makes
+  **full** the default with an automatic step-down, and §3.6's ladder does not
+  exist at all. Plausibly upstream of the furniture defect — **untested**, and
+  not to be switched blind: Kd's clips landed at 11.6–12.5 fps against a ~15 fps
+  target, so he is already under target on the LIGHT model. Inference time has
+  never been measured on any device.
+
+NEXT, in order:
+  (1) **Phase 2 PLAN to Kd — one plan, one decision, no code.** Order to try:
+      the three MediaPipe dials + `numPoses` (zero cost) → jitter (zero cost,
+      needs threshold evidence) → the model/ladder question → Kd's detector last.
+  (2) The two instrument/model OWED lines above; the slug one blocks goldens.
+  (3) Kd's voice product decision — **after** the pose fix, on what the app
+      then actually says, not on today's chair-driven noise.
+  Also still unrun and untouched by this card: the camera smoke, which is what
+  stopped part-way and produced these defects in the first place.
+```
+
+
+```
 TASK: CAMERA-ACCURACY CARD, PHASE 1 — the MEASURING INSTRUMENT is built and
       committed (44f4ad2). **NO FIX HAS BEEN DESIGNED AND NO THRESHOLD EXISTS.**
       web 529/529 · engine traces 20/20 · 6 mutants, 6 RED, 0 ALIVE, restore
