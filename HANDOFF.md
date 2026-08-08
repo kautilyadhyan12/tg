@@ -1,6 +1,64 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: T3 ROUND 3 — ZERO CRITICAL/HIGH, THE PACKET SHIPS. Its three Low findings
+      fixed (:5348 rule 1 — the schedule changes, never the bar).
+      Commits 1ecb86d (the fixes) and fbfb40d (the voice line below).
+      web 524/524 · 8 mutants, 8 RED, 0 ALIVE · lint 74, identical to HEAD
+      (measured by stashing the diff, not recalled).
+      **THE CAMERA SMOKE IS STILL UNRUN. THE BADGE/CUE CARD IS STILL NOT TICKED.**
+
+WHAT ROUND 3 FIXED, AND THE ONE THAT MATTERS
+  The tooltip test asserted /camera/, /count yourself/ and /whole set/ loosely
+  over the whole string. SWAPPING THE TWO CLAUSES — camera billed for the whole
+  set, hand-counting for rep time only, both false — LEFT ALL THREE GREEN.
+  Measured (1 passed, ALIVE) before the line was touched. Each clause is now
+  located first and then asked what it says; the inversion is RED.
+  **The lesson, and it is the same one as round 2's:** a test can name the right
+  defect, quote the right ruling in its comment, and still be checking spelling.
+  The comment above it CLAIMED it was "pinned as CLAIMS, not as a frozen
+  sentence". It was not. A comment asserting a test's strength is not evidence of
+  it — mutate the test or the claim is unearned.
+  Also: the harness header and MX2 comment both read "SEVEN RUNS OVER SIX" while
+  the file carried eight over seven and PRINTED so. Fixed as the class — no count
+  is typed anywhere now; the prose points at the derived line.
+  Deferred with its OWED line: the tooltip is false for a v1-priced workout and
+  the summary payload carries no kcalCalcVersion, so the screen cannot branch.
+  Unreachable today — verified end to end this session (restSecondsTotalRef only
+  increments from 0 → syncClient admits any non-negative integer → the service
+  picks v2 whenever restSeconds is present), NOT inherited from round 2.
+
+KD REPORTED FOUR CAMERA DEFECTS FROM HIS OWN TESTING — READ THIS BEFORE PLANNING
+  Three were ALREADY on OWED in his words with measured causes (the furniture
+  skeleton; the shallow squat that says nothing; the irregular counting, which
+  the furniture line already names as possibly one defect with two faces).
+  THE FOURTH WAS TRACKED NOWHERE and is now on OWED: the spoken coaching babbles
+  constantly and irrelevantly. `apps/web/src/utils/voice.js`, six live triggers.
+  **UNVERIFIED HYPOTHESIS, AND THE FIRST THING TO MEASURE — the four may be ONE
+  defect with four faces.** speakCorrection reads out form faults; a skeleton
+  latched onto a chair produces faults computed FROM the chair, i.e. continuous
+  nonsense read aloud. And a chair leg standing in for a knee never bends, so the
+  bilateral gate (`fsm.ts:119-126`) would REFUSE real reps. One bad input could
+  be inventing reps, eating reps, and doing the talking. Do not fix these as four
+  problems, and do not throttle the voice first — a throttle would HIDE the
+  evidence that connects them.
+
+KD'S STANDING WARNING ABOUT PREVIOUS CHATS, IN HIS WORDS
+  "the older chats were very poor performance they does not check things properly
+  at all just gives things from imagination". He is right and it is recorded
+  here rather than defended. V1 is the answer: no cause, count or threshold
+  without a command run in-session with its output shown. The furniture OWED line
+  already binds this specifically — **no threshold may be picked from judgement;
+  the card must MEASURE what the model reports on an empty chair versus on a
+  person, IN KD'S OWN ROOM, before choosing any cut-off.**
+
+NEXT: the camera-accuracy card (RECOMMENDED, and Kd was told why) — fix the
+      camera BEFORE running the unrun smoke, because that smoke asks him to do 10
+      squats and read the count, which is the very thing that is unreliable.
+      Do not run the mutation harness while any smoke is in progress (OWED).
+```
+
+```
 TASK: T3 ROUND 2 FIXES — the tooltip that was true for 3 exercises and false for
       55, and the mutant we retired for no reason. web 524/524 · 8 mutants, 8 RED,
       0 ALIVE, 0 never ran · lint identical to HEAD (measured by checkout, not
