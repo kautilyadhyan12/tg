@@ -22,10 +22,15 @@
  *     else ABORTS — after the restore, never instead of it (T3 round 2, the
  *     class fix from `tools/mutate-workout-summary.mjs`)
  *
- * SEVEN RUNS OVER SIX DISTINCT MUTATIONS — MX1 and MX2 apply the identical edit
- * and differ only in which test is asked to catch it. Counted honestly here
- * because "7 mutants" reads as seven independent defects and is not what this
- * file measures.
+ * RUNS ARE NOT DISTINCT MUTATIONS — MX1 and MX2 apply the identical edit and
+ * differ only in which test is asked to catch it, so the run count always runs
+ * ahead of the mutation count. BOTH FIGURES ARE DERIVED AND PRINTED BY THE
+ * SUMMARY LINE at the foot of this file, and are deliberately not written out
+ * here: this header read "seven runs over six" for a round after MX8 landed and
+ * made it eight over seven — the same drift the hardcoded "(1 expected)" had
+ * already caused once (T3 round 2). A count that is typed is a count that lies
+ * later. "7 mutants" would also read as seven independent defects, which is not
+ * what this file measures.
  *
  * NO MUTANT IS EXPECTED ALIVE. MX4 was, for exactly one round, on a claim about
  * the code that turned out to be a claim about one test's shape; it was
@@ -68,11 +73,12 @@ const MUTANTS = [
   },
   {
     id: 'MX2',
-    // NOT A SEVENTH MUTATION — T3 round 2. MX1 and MX2 apply the IDENTICAL edit
-    // and differ only in which test is asked to catch it, so this file runs
-    // SEVEN TIMES over SIX DISTINCT mutations. Both rows are kept, because the
-    // two routes to the badge (stall, camera error) are separately worth
-    // pinning, but the summary must not read as seven independent defects.
+    // NOT A DISTINCT MUTATION — T3 round 2. MX1 and MX2 apply the IDENTICAL edit
+    // and differ only in which test is asked to catch it. Both rows are kept,
+    // because the two routes to the badge (stall, camera error) are separately
+    // worth pinning, but the summary must not read as two independent defects —
+    // which is why it prints DERIVED "N runs over M distinct" figures instead of
+    // any count typed into this file (T3 round 3, Low-2).
     why: 'the same reversion as MX1, reached by the camera-error route instead',
     expect: 'T3 ROUND 1 C/H-1: a camera ERROR never wears',
     from: 'const graded = !countItYourself && !engineStalled && !cameraDown;',

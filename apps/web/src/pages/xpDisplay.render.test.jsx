@@ -1746,14 +1746,32 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
 
     const tip = screen.getByText('Estimate').getAttribute('title');
     expect(tip).toBeTruthy();
-    // The camera path — rep time at the exercise rate, the rest of the set as rest.
-    expect(tip).toMatch(/camera/i);
+
+    // PINNED AS A PAIRING, NOT AS VOCABULARY — T3 round 3, Low-3. Three loose
+    // `toMatch`es over the whole string (/camera/, /count yourself/, /whole set/)
+    // stood here and ALL THREE still passed when the two halves were SWAPPED, so
+    // that the camera path billed the whole set and the hand-counted path billed
+    // rep time only. Every word was still on screen, attached to the wrong path.
+    // A test that survives an inversion of the very claim it is named for is
+    // checking spelling, and the failure this file exists to catch is not a
+    // spelling failure — it is one path being described as though it were both.
+    // So each clause is located FIRST and then asked what it says.
+    const clauses = tip.split(/(?<=\.)\s+/);
+    const cameraClause = clauses.find((c) => /camera/i.test(c));
+    const handClause = clauses.find((c) => /count yourself/i.test(c));
+    expect(cameraClause).toBeTruthy();
+    expect(handClause).toBeTruthy();
+    // One sentence covering "both" is round 1's defect wearing a longer coat.
+    expect(cameraClause).not.toBe(handClause);
+
+    // The camera path: rep time at the exercise's rate, the remainder as rest.
+    expect(cameraClause).toMatch(/rep time/i);
+    expect(cameraClause).not.toMatch(/whole set/i);
     // THE HALF ROUND 1 LEFT OUT, and the case nearly every workout is actually
-    // in. Both halves of the claim are asserted, because "mentions hand-counting"
-    // without "says the whole set is charged" is how the old sentence would have
-    // squeaked through a looser test.
-    expect(tip).toMatch(/count yourself/i);
-    expect(tip).toMatch(/whole set/i);
+    // in: nothing measured when the user was moving, so the WHOLE span is billed
+    // at the exercise's own rate — standing-around included.
+    expect(handClause).toMatch(/whole set/i);
+    expect(handClause).toMatch(/exercise/i);
   });
 
   // ── the workout has not reached the server yet (repoint, 2026-08-06) ────────

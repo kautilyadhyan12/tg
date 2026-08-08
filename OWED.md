@@ -989,6 +989,30 @@ then; none may be hidden or reduced to close the gap.
       report.**
       **Scope, so nobody over-reads it:** 55 of 58 exercises have no engine
       definition today, so this is the common path until P4 publishes more.
+- [ ] ⚪ **THE CALORIE TOOLTIP IS TRUE FOR A v2 WORKOUT AND FALSE FOR A v1 ONE.**
+      Created 2026-08-08 by T3 round 3 (Low-1) on the badge/calorie-cue card.
+      The sentence under Calories describes the THREE-TIER v2 estimate: rest
+      breaks at a low resting rate, paused time not counted, a camera-graded set
+      billed for its rep time and a hand-counted set for its whole span. **A
+      v1-priced workout (`kcalPointForSets`) does none of that** — the whole span
+      goes at the exercise MET and rest is not counted at all — so three of the
+      four clauses are wrong for one and only the hand-counted clause survives.
+      **Why it is not fixed here: the screen cannot tell which formula priced the
+      workout.** `workoutSummarySchema` carries no `kcalCalcVersion` and the
+      service serves the stored figure, so branching the wording is a CONTRACT
+      change — the same shape as the wall-clock-duration line above — not a
+      client patch.
+      **Why ⚪ and not a defect today, measured rather than assumed:** every
+      workout a user can reach is v2. `ActiveWorkout` always sends an integer
+      `restSeconds`, the sync client always admits it, and the service selects v2
+      whenever it is present. The only route to this screen is completing a
+      workout — nothing links to it from history — and legacy Mongo rows land at
+      `kcal_calc_version = 0` under NEW uuids, so an old bookmark cannot resolve
+      to one. **No reachable path exists today or at first cutover.**
+      **What is owed:** the day `kcalCalcVersion` reaches the summary payload,
+      the tooltip branches on it. Until then it describes the only formula any
+      user can actually be shown, which is why it was left alone rather than made
+      vaguer — a sentence true of everything says nothing about anything.
 - [ ] ⚪ **`secondsLabel` prints "35m 0s" for a whole number of minutes.**
       Created 2026-08-07 by the kcal-v2 card. Now visible in TWO places rather
       than one: the Workout Time headline has always spelled an exact 15 minutes

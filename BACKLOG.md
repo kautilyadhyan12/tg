@@ -200,3 +200,46 @@ Critical is fixed or it holds the packet; it never becomes a logged item.)*
       are pinned by nothing. Not acted on this round: :5348 rule 6 keeps a fix
       round to the fix, and the review itself called it "not a defect today".
       Logged so it is not re-found from scratch.
+
+## T3 round 3 — ZERO Critical/High, the packet ships (2026-08-08)
+
+*(Round 3 found no Critical/High, so under :5348 rule 1 the packet ships and no
+further round is owed. These three Lows are fixed anyway — rule 1's schedule
+changes, never the bar. Kd approved the fix round before any file was touched.)*
+
+- [x] **The mutation harness stated a count its own output contradicted.**
+      Two prose copies — the header and the MX2 comment — both read "SEVEN RUNS
+      OVER SIX DISTINCT MUTATIONS" while the file carried eight mutants over
+      seven distinct edits and PRINTED exactly that. Both copies were written in
+      the same commit that added MX8, so they were false on arrival. **Fixed as
+      the class, not the case:** neither figure is typed anywhere now — the prose
+      points at the derived summary line and says why, which is the same fix
+      round 2 applied to the hardcoded `(1 expected)` one round earlier. A count
+      that is typed is a count that lies later. — fixed same commit.
+- [x] **The new tooltip test pinned vocabulary, not claims.** Its own comment
+      promised the sentence was "pinned as CLAIMS, not as a frozen sentence", and
+      it was not: three loose `toMatch`es over the whole string all still passed
+      when the camera and hand-counted halves were SWAPPED — camera billed for
+      the whole set, hand-counting billed for rep time only, both false, every
+      word still present. **Measured, not argued** (`1 passed`, mutant ALIVE)
+      before the line was touched. Each clause is now located first and then
+      asked what it says, so an inversion fails. MX8 already pinned round 1's
+      exact wording, so the gap was a NEW false rewrite, not a regression. —
+      fixed same commit.
+- [ ] **The Calories tooltip is true for a v2-priced workout and false for a v1
+      one.** Round 2 judged the wording "vaguer but true for v1"; checked against
+      `calories.ts`, three of its four clauses are false there, not vague.
+      **NOT fixed in code this round and it needs no code:** the summary payload
+      carries no `kcalCalcVersion`, so the screen cannot branch, and no user can
+      reach a v1 workout today (measured — see the OWED line). **Deferred, so it
+      has an `OWED.md` line in this same commit**, per the deferral rule.
+
+## T3 round 3 — reported, not acted on
+
+- [ ] **MX8's explanatory comment sits above `from` but describes `to`.** "The
+      round-1 wording, verbatim" reads as though it labels the anchor, which is
+      the CURRENT correct sentence; the round-1 wording is the replacement below
+      it. Same family as the count above — a true statement filed against the
+      wrong line. Not touched: :5348 rule 6 keeps a fix round to the findings Kd
+      approved, and this was found while fixing them. Logged so it is not
+      re-found from scratch.
