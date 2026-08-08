@@ -127,6 +127,33 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       knee that never bends blocks every rep (`fsm.ts:119-126`); whether the cue
       must also explain THAT depends on what the furniture line above measures.
 
+- [ ] 🔴 **THE SPOKEN COACHING IS CONSTANT AND IRRELEVANT.** Reported by Kd
+      2026-08-08, from his own camera testing the day before, and **recorded
+      NOWHERE until now** — no OWED line, no BACKLOG line, no DECISIONS entry
+      (grepped this session; the only prior hits for voice/speech in the whole
+      record are an unrelated `voiceOn` dependency note and a camelCase line).
+      A user-facing complaint that survived a testing session untracked is the
+      exact failure this file exists to prevent.
+      Kd: *"the voice commands also does not seem relevent at all it keeps
+      bubling anything and very annoyning, in this way user will abondoned my
+      product"*.
+      **What exists:** `apps/web/src/utils/voice.js` (250 lines), six live
+      triggers imported by `ActiveWorkout` — `speakExercise`, `speakCorrection`,
+      `speakProgress`, `speakRest`, `speakSetStart`, `speakComplete`.
+      **UNVERIFIED, AND THE FIRST THING THE CARD MUST TEST: this may be a
+      SYMPTOM of the furniture line above rather than a separate defect.**
+      `speakCorrection` reads out form faults. If the skeleton is sitting on a
+      chair, the faults are computed from the chair — so the app would be
+      reading nonsense corrections aloud, continuously, which is what "keeps
+      babbling anything" describes. **Measure the two together before treating
+      them as two problems**; repairing the pose input may quiet most of this on
+      its own, and a throttle added first would only hide it.
+      **The product decision is KD'S and is not assumed here:** how much the app
+      should say, and whether it speaks by default. No behaviour changes until he
+      rules.
+      **Do not "fix" this by deleting the feature** (the no-removal rule): a
+      coach that talks while your eyes are on your own form is the point of it.
+
 ### Screens still reading the OLD backend (no new-API home yet)
 Each needs an API surface built BEFORE its screen can be repointed. Per the
 no-removal rule these UIs stay untouched and working on the old backend until
