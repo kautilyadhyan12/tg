@@ -10,6 +10,7 @@ import {
   startRecording,
   stopRecording,
   frameCount,
+  detectionCount,
 } from './traceRecorder';
 
 export default function TraceRecorderWidget({ exercise }) {
@@ -59,13 +60,18 @@ export default function TraceRecorderWidget({ exercise }) {
           cursor: 'pointer',
         }}
       >
-        {recording ? `■ stop & download (${frameCount()} frames)` : '● record trace'}
+        {recording ? `■ stop & download (${detectionCount()} frames)` : '● record trace'}
       </button>
       <div style={{ marginTop: 4 }}>
+        {/* BOTH counts, because on a clip of an empty room the second is
+            SUPPOSED to be 0 and only the first says the recorder is alive.
+            Showing frames-with-a-pose alone made a working recorder look
+            broken in exactly the case worth recording. */}
         {recording
-          ? `recording ${exercise}…`
+          ? `recording ${exercise}… ${frameCount()} with a person`
           : summary
-            ? `saved: ${summary.frames} frames, ${summary.reps} reps @ ${summary.fps}fps`
+            ? `saved: ${summary.detections} frames, ${summary.withPose} with a person, ` +
+              `${summary.reps} reps @ ${summary.fps}fps`
             : 'trace recorder (dev)'}
       </div>
     </div>

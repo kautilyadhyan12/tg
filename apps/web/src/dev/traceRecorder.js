@@ -23,8 +23,10 @@ export const TRACE_RECORD_ENABLED = import.meta.env.VITE_TRACE_RECORD === '1';
 const state = {
   recording: false,
   exercise: null,
-  t0: null,
-  frames: [],       // { t, kp }
+  t0: null,         // CLIP origin — the first frame offered, of any kind
+  frameT0: null,    // TRACE origin — the first frame carrying a pose
+  frames: [],       // { t, kp }   — 33-landmark frames only (§7.1 format)
+  detections: [],   // { t, n }    — EVERY frame offered, including n = 0
   responses: [],    // { t, ...server response }
   startedAt: null,  // for fps calc only (duration), not stored per-frame
 };
@@ -37,20 +39,47 @@ export function frameCount() {
   return state.frames.length;
 }
 
+/** Frames the loop OFFERED, whether or not the model found a pose in them.
+ *  `frameCount()` counts only the ones with a pose, so on a clip of an empty
+ *  room the two differ — which is the entire point of recording one. */
+export function detectionCount() {
+  return state.detections.length;
+}
+
 export function startRecording(exercise) {
   if (!TRACE_RECORD_ENABLED) return;
   state.recording = true;
   state.exercise = exercise;
   state.t0 = null;
+  state.frameT0 = null;
   state.frames = [];
+  state.detections = [];
   state.responses = [];
 }
 
-/** Called with the EXACT keypoints array sent to the server (33×[x,y,z,vis]). */
+/** Called with the EXACT keypoints array handed to the engine (33×[x,y,z,vis]),
+ *  or an EMPTY array when the model found no pose in that frame.
+ *
+ *  Empty frames used to return here before recording anything, which made
+ *  "the model saw nothing" and "the recorder was not running" the same file:
+ *  a clip of an empty room downloaded as nothing at all, because `t0` was
+ *  anchored to a 33-landmark frame that never arrived. Both are now logged —
+ *  `detections` counts every frame offered, so absence of a pose is DATA.
+ *
+ *  Two origins, deliberately. `detections` is timed from the first frame of any
+ *  kind (the clip), `frames` from the first frame with a pose (the trace), so
+ *  the §7.1 trace this still emits is unchanged in shape and timing from before
+ *  — leading empty frames do not shift its `t` axis or its measured fps. */
 export function recordFrame(keypoints, nowMs) {
-  if (!state.recording || !Array.isArray(keypoints) || keypoints.length !== 33) return;
+  if (!state.recording) return;
+  const n = Array.isArray(keypoints) ? keypoints.length : 0;
+
   if (state.t0 === null) state.t0 = nowMs;
-  state.frames.push({ t: +(nowMs - state.t0).toFixed(1), kp: keypoints });
+  state.detections.push({ t: +(nowMs - state.t0).toFixed(1), n });
+
+  if (n !== 33) return;
+  if (state.frameT0 === null) state.frameT0 = nowMs;
+  state.frames.push({ t: +(nowMs - state.frameT0).toFixed(1), kp: keypoints });
 }
 
 /** Called with every non-keepalive server message (the Python analyzer output). */
@@ -79,11 +108,18 @@ export function stopRecording(meta) {
   state.recording = false;
 
   const frames = state.frames;
+  const detections = state.detections;
   const responses = state.responses;
-  if (frames.length === 0) return null;
+  // Only a clip where the loop never ran at all is nothing. A clip with frames
+  // but NO pose in any of them is a result — it is what an empty room looks
+  // like, and returning null here would have thrown that measurement away.
+  if (frames.length === 0 && detections.length === 0) return null;
 
-  const durationMs = frames[frames.length - 1].t;
-  const fps = durationMs > 0 ? +((frames.length - 1) / (durationMs / 1000)).toFixed(1) : 0;
+  const durationMs = frames.length > 0 ? frames[frames.length - 1].t : 0;
+  const fps =
+    frames.length > 1 && durationMs > 0
+      ? +((frames.length - 1) / (durationMs / 1000)).toFixed(1)
+      : 0;
 
   const last = responses[responses.length - 1] || {};
   const activeScores = responses
@@ -112,11 +148,26 @@ export function stopRecording(meta) {
 
   const traceText =
     [JSON.stringify(header), ...frames.map((f) => JSON.stringify(f))].join('\n') + '\n';
-  const sidecarText = responses.map((r) => JSON.stringify(r)).join('\n') + '\n';
+  const detectText = detections.map((d) => JSON.stringify(d)).join('\n') + '\n';
 
   const base = `${state.exercise}-${header.label}`.replace(/[^a-z0-9_-]/gi, '_');
   download(`${base}.jsonl`, traceText);
-  download(`${base}.responses.jsonl`, sidecarText);
+  download(`${base}.detect.jsonl`, detectText);
+  // The responses sidecar is the LEGACY Python analyzer's output, and that
+  // server is gone (`recordResponse` has no caller since the WS path was
+  // deleted), so this array is now always empty. Downloading an empty file per
+  // clip is a file the recorder's operator has to identify and discard; write
+  // it only if something ever feeds it again.
+  if (responses.length > 0) {
+    download(`${base}.responses.jsonl`, responses.map((r) => JSON.stringify(r)).join('\n') + '\n');
+  }
 
-  return { frames: frames.length, responses: responses.length, reps: header.expected.reps, fps };
+  return {
+    frames: frames.length,
+    detections: detections.length,
+    withPose: detections.filter((d) => d.n === 33).length,
+    responses: responses.length,
+    reps: header.expected.reps,
+    fps,
+  };
 }
