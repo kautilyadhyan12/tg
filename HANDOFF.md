@@ -1,6 +1,90 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: CAMERA-ACCURACY PHASE 2 — CARDS 1 AND 2 ARE DONE AND COMMITTED
+      (6d255c4, 69871e4, 261a2fc, b8f3d88). **CARD 3 (the settings sweep) RAN,
+      FAILED, AND HAS BEEN DOWNGRADED TO A RESERVE — see below.**
+      **THE NEXT CARD IS CARD 4: BUILD THE GATE.** Kd asked for a
+      recommendation and was given one; his go-ahead is the only thing in front
+      of it. web 552/552 · engine 168/168 · typecheck + lint clean · vite build
+      green · 24 mutants across two harnesses, all RED.
+      Full record: DECISIONS :6532, :6662, :6749, :6856 (read in that order).
+
+WHERE THIS CARD IS, IN ONE LINE
+  The measurement is finished and answered twice. **What is left is to build a
+  bridge-layer gate that stops the app counting reps when the pose is not a
+  person** — and nothing else is blocking it.
+
+THE MEASURED PICTURE, from TWO recording sessions in Kd's room
+  **The harm that remains is INVENTED reps, not lost ones.** Session 2's four
+  empty-chair clips counted **6, 2, 0 and 2 reps** — ten reps from an empty
+  room. In the same session, with Kd AND the chair in frame, counting was
+  CORRECT (engine 13/11/12/14; his words: *"detecting me and counting reps
+  properly"*).
+  **This is a material change from :6386**, which measured furniture DESTROYING
+  counting (knee crossed the line 4× in 2 min vs 19× without). Conditions differ
+  between sessions — chair detection ran 59–76% in session 2 against 95.9% in
+  session 1 — so **neither is wrong and the defect is situational.** Do not cite
+  either session as the whole truth.
+
+WHICH SIGNAL TO BUILD THE GATE ON — two sessions agree, and it is NOT the one :6386 named
+  person vs furniture, separation (1.00 = never overlap, 0.50 = worthless):
+    bone_stretch        0.949 → 0.985   catches 86% of furniture at 1% cost
+    motion_incoherence  0.967 → 0.976   catches 87% at 5% cost
+    limb_asymmetry      0.790 → 0.916
+    centre_drift        0.865 → 0.765   ← :6386's jitter lever, WEAKEST in both
+  **A ratio of medians is not a separation.** :6386's "3–7× more jitter" was
+  real and is nearly useless as a per-frame gate, because the distributions
+  overlap in the tails and a gate lives in the tails.
+  **Combining signals was never measured.** It may beat either alone. That is
+  card 4's question.
+
+WHAT CARD 4 MUST NOT DO
+  **It must not pick a cut-off on its own.** `OWED`'s rule is unchanged: the
+  number goes to Kd with the distributions and the cost on BOTH sides attached.
+  `measure-pose.ts` already prints operating points pinned by the harmful side
+  first (at most N% of real frames rejected → what share of furniture that
+  catches) — that framing is deliberate and should carry into the ruling.
+  **The gate goes in the WEB BRIDGE, not the engine** (decided 2026-08-07): the
+  engine is handed 33 numbers and cannot know they came from a chair, and R5.6
+  forbids scene special-cases in engine code.
+  **It must not make the screen lie.** A gate that suppresses counting must SAY
+  so — :5807: a user seeing something false is Critical/High. The shallow-squat
+  cue OWED line is next door and still owed.
+
+THE SWEEP IS FIXED AND IN RESERVE, not abandoned
+  Kd's 8 sweep clips ALL recorded at the defaults: `App.jsx:150` routes `/` to a
+  bare-path react-router `Navigate`, which carries no search string, so the
+  settings died before login. **Only card 2's `provider` stamp revealed it.**
+  Fixed (capture once at first import into `sessionStorage`; `main.jsx` imports
+  `poseTuning` first so lazy-loading cannot break it). `RUNBOOK/record-camera-
+  settings-sweep.md` is corrected and ready if the gate proves insufficient.
+
+THE STANDING LESSON FROM THAT FAILURE — it is about instructions, not routers
+  The operator's check was *"a yellow line appears — if you do NOT see it,
+  stop"*. **Kd did not notice the absence and recorded all eight clips.**
+  **Asking a person to spot a MISSING thing is not a check.** The widget now
+  always shows the settings, grey `(default)` or yellow with values. Same family
+  as :5034 and :6062. Apply it to every smoke doc.
+
+STILL OWED, and none of it is card 4's job
+  - **T3 review for cards 1 and 2.** `t3-camera-discriminators-PROMPT.md` at the
+    repo root covers card 1; card 2 has no prompt written yet.
+  - **The camera SMOKE is UNRUN** and both committed cards on `web-repoint`
+    stay UNTICKED.
+  - The shallow-squat cue, and Kd's voice product decision (put to him AFTER the
+    pose fix, on what the app then actually says).
+  - `pose_landmarker_lite` as the hard-wired default and the missing §3.6
+    ladder — own OWED line, untouched.
+  - A label containing a comma cannot be passed to `--person`/`--nobody`
+    (Kd typed `both_A,`). Cost one clip out of eight. Not fixed (R1.1).
+
+SERVERS: three dev servers were started this session (mock :8000, api :3000,
+  web :5173) and have been STOPPED. A new chat starts its own.
+```
+
+
+```
 TASK: CAMERA-ACCURACY CARD, PHASE 2 CARD 2 — the recorder stamps a definition id
       and the camera's four settings are testable from the URL. **NO GATE BUILT,
       NO SETTING CHOSEN, NOTHING RECORDED.** web 545/545 (+16) · engine 168/168 ·
