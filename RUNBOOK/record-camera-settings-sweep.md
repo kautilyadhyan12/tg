@@ -53,10 +53,26 @@ $env:VITE_TRACE_RECORD="1"; corepack pnpm exec vite
 **Each one is a different web address.** Open the address, log in, start a
 Squats workout, record your two clips, then move to the next address.
 
-**A yellow line appears in the recorder box showing the settings**, except on
-run A which is the normal ones. **If you do not see the yellow line on B, C or
-D, the address did not take — stop and tell me.** That check is the whole point
-of the yellow line.
+> ### ⚠️ THE FIRST ATTEMPT AT THIS SESSION FAILED, and it was our bug
+>
+> On 2026-08-09 Kd recorded all eight clips and **every one of them came out at
+> the default settings.** The app's router throws the settings away when it
+> sends you to the login page, so the camera never saw them. Fixed the same day.
+>
+> **The instruction was also at fault, and that half matters more.** It said
+> "a yellow line appears — if you do NOT see it, stop". Asking someone to notice
+> something MISSING is not a check, and he did not notice. **The recorder box
+> now always shows the settings**, so you compare two lines instead of hunting
+> for an absence.
+
+**Your check, before recording anything on each run:** look at the bottom-left
+black box. It shows a line beginning `⚙`.
+
+- On run **A** it should say `lite n=1 det=0.5 pres=0.5 track=0.5  (default)` in **grey**.
+- On runs **B, C, D** it must be **yellow**, with no `(default)`, and must show
+  the value you asked for.
+
+**If run B does not say `det=0.9` in yellow, stop and tell me.** Do not record.
 
 | Run | Open this address | What it changes |
 |---|---|---|

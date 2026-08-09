@@ -6852,3 +6852,106 @@ reasoning rather than re-derive it.
 - (**NOT DONE**) **Nothing is recorded and no setting is chosen.** Kd runs
   `RUNBOOK/record-camera-settings-sweep.md` — 8 clips, ~25 min. The camera SMOKE
   is still UNRUN and both committed cards on `web-repoint` stay UNTICKED.
+
+## 2026-08-09 — THE SWEEP SESSION FAILED AND THE STAMP CAUGHT IT: eight clips, four addresses, one set of settings — and the fresh data says the gate may be the whole fix
+
+Kd recorded all eight clips of `RUNBOOK/record-camera-settings-sweep.md`.
+**Every one of them carries `lite numPoses=1 detect=0.5 presence=0.5
+track=0.5`.** Four rounds at four different addresses produced four IDENTICAL
+runs. **The `provider` stamp added hours earlier in card 2 is the only reason
+this is known** — without it the comparison would have "shown" that no setting
+changes anything, which is the most confident wrong conclusion available.
+
+### The cause: one line of routing
+
+`App.jsx:150` sends `/` to `<Navigate to="/login" replace />`, and a bare
+react-router `to` carries **no search string**. So `?detectConf=0.9` was gone
+before the login screen, long before the workout page mounted and MediaPipe read
+anything.
+
+**Fixed** by reading the URL once at first import and keeping it in
+`sessionStorage` (per-tab, survives every in-app navigation and reload, dies with
+the tab). A page load naming at least one tuning parameter REPLACES what is
+stored — so `?model=lite` is how you get back to defaults, and nobody has to be
+told about storage. `main.jsx` now imports `poseTuning` **first and explicitly**,
+so the capture cannot later be broken by lazy-loading a page.
+
+### THE INSTRUCTION WAS THE OTHER HALF OF THE DEFECT, and it is the standing lesson
+
+The operator's check was *"a yellow line appears — if you do NOT see it, stop"*.
+**Kd did not notice the absence and recorded all eight clips.** Asking a person
+to spot a MISSING thing is not a check. The widget now shows the settings
+**always** — grey `(default)` or yellow with the values — so the check is
+comparing two visible lines. Same family as :5034 ("an instruction with no button
+behind it") and :6062: **a smoke instruction is part of the claim, and an
+instruction that relies on noticing an absence will be obeyed and still fail.**
+
+### What the eight clips DID prove, at default settings, and it changes the plan
+
+| clip | reps the engine counted |
+|---|---|
+| `chair_A/B/C/D` — **nobody in the room** | **6 · 2 · 0 · 2** |
+| `both_*` — Kd squatting, chair in shot | 13 · 11 · 12 · 14 |
+
+**Ten reps invented from an empty chair across four clips.** And Kd's own report
+of the `both_*` runs: *"when both chair and me were there it were detecting me
+and counting reps properly ... detection and counting was correct"*.
+
+**That is a material change from :6386**, where furniture in shot appeared to
+DESTROY counting (knee crossed the counting line 4× in 2 min with furniture vs
+19× without). On this session, with him in frame, counting worked. Conditions
+differ between sessions (framing, distance, light; `chair_*` detection ran
+59–76% here against `furniture_only`'s 95.9% before), so **neither session is
+wrong — the defect is situational, and its worst form is the one measured here:
+reps invented when the room is empty.**
+
+### The discriminators, re-measured on the fresh data — two sessions now agree
+
+Person = `both_B/C/D` · nobody = `chair_A/B/C/D` (4 furniture clips, against
+session 1's one):
+
+| signal | separation (session 2) | catches, at 1% of real frames rejected | (session 1) |
+|---|---|---|---|
+| **`bone_stretch`** | **0.985** | **85.9%** | 0.949 |
+| **`motion_incoherence`** | **0.976** | 54.0% (86.6% at 5%) | 0.967 |
+| `limb_asymmetry` | 0.916 | 5.6% | 0.790 |
+| `centre_drift` (**:6386's jitter lever**) | **0.765** | 11.9% | 0.865 |
+
+**Two independent sessions, different days, different framing, five furniture
+clips in total, and the ordering is stable: the two strong signals are strong in
+both, and :6386's centre-drift lever is the weakest in both.** That is a far
+better evidential position than one chair in one room, and it is the first time
+this card's central question has been answered twice.
+
+### THE RECOMMENDATION PUT TO KD, and why it saves him 25 minutes
+
+The sweep exists to make the model lock onto the PERSON. **The fresh evidence
+says that already works when he is in frame** — his report and the 11–14 rep
+counts agree. **The remaining measured harm is reps invented from an empty
+chair, and that is exactly what the card-1 gate suppresses.** So: build the gate
+(card 4) and re-run the sweep only if the gate proves insufficient. The sweep
+now WORKS and costs nothing to keep in reserve.
+**Kd's decision, not a chat's** — put to him in plain words with the numbers.
+
+### One more thing verified rather than assumed
+
+Kd reported *"when out of sight it was correctly switching to manual mode"*,
+which would have contradicted :6008 (the app never switches you off the camera).
+Read the code: `countItYourself = manualMode || (analysisSettled &&
+!analysisAvailable) || userTookOver` — **no `engineStalled`.** The app offered
+the button and he took it. **:6008 holds; there is no regression.** Checked
+because a Kd ruling being quietly violated is worth three minutes of grep.
+
+- (**PROVE**) web **552/552** (+7 over card 2's 545) · `vite build` green ·
+  **13 mutants, 13 RED, 0 ALIVE, 0 never ran**, green baseline for both suites
+  first, restores sha256-verified. `poseTuning.test.js` moved to **jsdom** —
+  the node default has no `sessionStorage`, so a node run would have exercised
+  only the graceful-degradation path and proved nothing about the behaviour that
+  actually failed in Kd's browser.
+- (**A WRINKLE WORTH KNOWING**) Kd typed labels `both_A,` and `both_D.` with
+  trailing punctuation. The FILENAME sanitiser turned those into `both_A_` /
+  `both_D_` while the HEADER kept the raw text, and `--person`/`--nobody` take a
+  comma-separated list, so a label containing a comma cannot be expressed at all.
+  Not fixed (R1.1); it cost one clip out of eight from the pool.
+- (**NOT DONE**) The gate is not built. The camera SMOKE is still UNRUN and both
+  committed cards on `web-repoint` stay UNTICKED. T3 for cards 1 and 2 is owed.

@@ -82,9 +82,7 @@ export function startRecording(exercise) {
   // is created, and reading them at stop would report whatever the URL says by
   // then. A clip attributed to settings it was not recorded under is worse than
   // one with no settings at all.
-  state.tuning = readPoseTuning(
-    typeof window === 'undefined' ? '' : window.location.search,
-  );
+  state.tuning = readPoseTuning();
   state.t0 = null;
   state.frameT0 = null;
   state.frames = [];

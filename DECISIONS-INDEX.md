@@ -220,6 +220,40 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:6856** — 2026-08-09 — **THE SWEEP SESSION FAILED AND THE STAMP CAUGHT IT:
+  eight clips, four addresses, ONE set of settings — and the fresh data says the
+  gate may be the whole fix.** **Read before writing any operator instruction,
+  before putting settings in a URL in this app, and before citing :6386 on
+  whether furniture destroys counting.** All eight of Kd's clips came out at the
+  DEFAULTS: `App.jsx:150` routes `/` to a bare-path react-router `Navigate`,
+  which carries **no search string**, so the settings died before login. **Only
+  card 2's `provider` stamp revealed it** — without it the comparison would have
+  "shown" that no setting changes anything, the most confident wrong conclusion
+  available. Fixed by capturing the URL once at first import into
+  `sessionStorage`, with `main.jsx` importing `poseTuning` first and explicitly
+  so lazy-loading a page cannot break it later.
+  **THE STANDING LESSON IS THE INSTRUCTION, NOT THE ROUTER: the operator's check
+  was "a yellow line appears — if you do NOT see it, stop", and Kd did not notice
+  the absence and recorded all eight clips. Asking a person to spot a MISSING
+  thing is not a check.** The widget now shows the settings ALWAYS, grey
+  `(default)` or yellow with values, so the check compares two visible lines.
+  Same family as :5034 and :6062.
+  **WHAT THE CLIPS DID PROVE, at defaults: the four empty-chair clips counted
+  6, 2, 0 and 2 reps — ten reps invented from an empty room — while Kd reports
+  counting was CORRECT with him in frame** (engine counted 13/11/12/14).
+  **That is a material change from :6386's "furniture EATS reps"**: conditions
+  differ between sessions (chair detection 59–76% here vs 95.9% there), neither
+  session is wrong, and the defect is situational — its worst measured form is
+  now INVENTED reps, not lost ones.
+  **Two independent sessions now agree on the discriminators**: `bone_stretch`
+  0.985 and `motion_incoherence` 0.976 are strong in both, and **`centre_drift`
+  — :6386's own lever — is the weakest in both (0.765).**
+  **RECOMMENDED TO KD: build the gate, keep the now-working sweep in reserve** —
+  it saves him 25 minutes and the gate addresses the measured harm. His call.
+  Also verifies **:6008 is NOT regressed** (`countItYourself` carries no
+  `engineStalled`; the button was offered and he took it).
+  web 552/552 · 13 mutants 13 RED · `poseTuning.test.js` moved to jsdom because
+  the node default has no `sessionStorage` and would have proved nothing.
 - **:6749** — 2026-08-09 — **PHASE 2 CARD 2: the recorder stamps a definition id,
   the camera's four settings become testable, and a dial nobody chose was reading
   ZERO.** **Read before touching `usePoseDetection`'s MediaPipe options, before
@@ -781,7 +815,8 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   (md5 must change). FALSE: files are CRLF, `sed -i` rewrites them to LF, so
   the md5 moves on a sed matching NOTHING — measured directly. INVALID could
   never fire, so a mutation whose anchor had DRIFTED was reported as a missing
-  test. Same class as :3720. Now compares content (`tr -d ''`); restore
+  test. Same class as :3720. Now compares content (`tr -d '
+'`); restore
   verification stays byte-exact.
   **F1 (VISIBLE) is the duration defect's twin**: the walk pages backwards from
   today, so an unreadable row from a NEWER month was counted and printed as

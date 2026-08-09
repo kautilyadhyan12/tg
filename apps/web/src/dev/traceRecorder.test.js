@@ -25,6 +25,18 @@ let hadDocument;
 beforeEach(() => {
   downloads = [];
   lastBlob = null;
+  // The recorder stamps the pose settings into every header, and those live in
+  // sessionStorage (poseTuning.js), which the `node` environment does not have.
+  // A minimal real-behaviour stand-in rather than jsdom: this file hand-builds
+  // `document` for the download path, and a real DOM would fight it. The
+  // storage SEMANTICS are covered in poseTuning.test.js, which runs in jsdom.
+  const cells = new Map();
+  globalThis.sessionStorage = {
+    getItem: (k) => (cells.has(k) ? cells.get(k) : null),
+    setItem: (k, v) => cells.set(k, String(v)),
+    removeItem: (k) => cells.delete(k),
+    clear: () => cells.clear(),
+  };
   globalThis.Blob = class {
     constructor(parts) {
       this._text = parts.join('');
@@ -205,17 +217,17 @@ describe('traceRecorder', () => {
     });
   });
 
-  it('captures the settings at START, so mid-clip URL edits cannot relabel it', async () => {
+  it('captures the settings at START, so a mid-clip change cannot relabel it', async () => {
+    const { capturePoseTuning } = await import('./poseTuning.js');
     const rec = await loadRecorder();
-    const original = globalThis.window;
-    globalThis.window = { location: { search: '?detectConf=0.9' } };
+    capturePoseTuning('?detectConf=0.9');
     rec.startRecording('squat');
-    // Someone edits the URL while the clip is running. The model in memory was
-    // built at 0.9 and is still running at 0.9; the header must say so.
-    globalThis.window = { location: { search: '?detectConf=0.1' } };
+    // Someone opens a differently-tuned address while the clip is running. The
+    // model in memory was built at 0.9 and is STILL running at 0.9, so a header
+    // that said 0.1 would be describing a recording that never happened.
+    capturePoseTuning('?detectConf=0.1');
     rec.recordFrame(KP33(), 0);
     rec.stopRecording({ label: 'midedit', view: 'side', device: 'laptop' });
-    globalThis.window = original;
 
     const header = JSON.parse(linesOf(fileNamed('-midedit.jsonl').text)[0]);
     expect(header.provider.minPoseDetectionConfidence).toBe(0.9);

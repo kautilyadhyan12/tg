@@ -51,7 +51,7 @@ const MUTANTS = [
     target: 'tuning',
     why: 'ABSENT IS ZERO again — every unmentioned dial reads 0.0 and the model is set to trust anything',
     expect: 'returns exactly the shipped defaults when the URL says nothing',
-    from: '  return raw !== null && raw !== \'\';',
+    from: `  return raw !== null && raw !== undefined && raw !== '';`,
     to: '  return true;',
   },
   {
@@ -122,9 +122,9 @@ const MUTANTS = [
     id: 'T3',
     target: 'recorder',
     why: 'settings are read at STOP — a URL edited mid-clip relabels a recording that already happened',
-    expect: 'captures the settings at START, so mid-clip URL edits cannot relabel it',
+    expect: 'captures the settings at START, so a mid-clip change cannot relabel it',
     from: '    provider: state.tuning === null ? undefined : { ...state.tuning },',
-    to: "    provider: readPoseTuning(typeof window === 'undefined' ? '' : window.location.search),",
+    to: '    provider: readPoseTuning(),',
   },
   {
     id: 'T4',
@@ -133,6 +133,22 @@ const MUTANTS = [
     expect: 'records WHICH camera settings produced the clip',
     from: '    provider: state.tuning === null ? undefined : { ...state.tuning },',
     to: '    provider: undefined,',
+  },
+  {
+    id: 'P8',
+    target: 'tuning',
+    why: 'a page load naming NOTHING overwrites the capture — every navigation after the first wipes the settings',
+    expect: 'a later page load naming NOTHING does not wipe what was captured',
+    from: '  if (store === null || !hasTuningParams(search)) return;',
+    to: '  if (store === null) return;',
+  },
+  {
+    id: 'P9',
+    target: 'tuning',
+    why: 'stored settings are trusted unvalidated — hand-edited storage reconfigures the model',
+    expect: 're-validates on the way OUT',
+    from: '    model: Object.hasOwn(MODEL_FILES, parsed.model) ? parsed.model : POSE_DEFAULTS.model,',
+    to: '    model: parsed.model,',
   },
 ];
 

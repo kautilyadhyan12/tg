@@ -112,9 +112,7 @@ export default function usePoseDetection({
         // (poseTuning.js). In dev they are whatever the query string asked for,
         // so one recording session can cover several candidate settings instead
         // of costing Kd a session each (DECISIONS :6386's phase-2 order).
-        const tuning = readPoseTuning(
-          typeof window === 'undefined' ? '' : window.location.search,
-        );
+        const tuning = readPoseTuning();
         const { local: LOCAL_MODEL, remote: REMOTE_MODEL } = modelUrls(tuning.model);
 
         async function createLandmarker(delegate, modelAssetPath) {

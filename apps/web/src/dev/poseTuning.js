@@ -85,7 +85,7 @@ export function modelUrls(model) {
  *  written with this file, in the same shape as :5543: a condition identified
  *  by what it LACKS rather than what it IS. */
 function present(raw) {
-  return raw !== null && raw !== '';
+  return raw !== null && raw !== undefined && raw !== '';
 }
 
 function clamp01(raw, fallback) {
@@ -102,16 +102,18 @@ function clampPoses(raw, fallback) {
   return n;
 }
 
+/** Every query parameter this module answers to. Used to decide whether a page
+ *  load is ASKING for settings at all, which is a different question from what
+ *  those settings resolve to. */
+const TUNING_PARAMS = ['model', 'numPoses', 'detectConf', 'presenceConf', 'trackConf'];
+
 /**
- * Read the settings for this page load.
- *
- * `search` is passed in rather than read from `window` so this is testable and
- * has no hidden global — the caller supplies `window.location.search`.
+ * Resolve a query string to settings. Pure — no globals, no storage.
  *
  * In a production build this returns the frozen defaults without looking at the
  * query string at all.
  */
-export function readPoseTuning(search = '') {
+export function parsePoseTuning(search = '') {
   if (!POSE_TUNING_ENABLED) return { ...POSE_DEFAULTS };
   const q = new URLSearchParams(search);
   const model = q.get('model');
@@ -129,6 +131,111 @@ export function readPoseTuning(search = '') {
     minTrackingConfidence: clamp01(q.get('trackConf'), POSE_DEFAULTS.minTrackingConfidence),
   };
 }
+
+// ── Surviving the router, which is what the first real session tripped over ──
+//
+// THE DEFECT, measured 2026-08-09 on eight clips Kd recorded: **all eight say
+// `detect=0.5 track=0.5 lite numPoses=1` in their headers.** Four rounds at four
+// different addresses produced four IDENTICAL runs, and only the `provider`
+// stamp built in the same card revealed it — without that the comparison would
+// have "shown" that no setting makes any difference.
+//
+// The cause is one line of routing: `App.jsx` sends `/` to
+// `<Navigate to="/login" replace />`, and a react-router `to` of a bare path
+// carries NO search string. So the query is gone before login, long before the
+// workout screen mounts and the camera reads anything.
+//
+// So the URL is read ONCE, at first import, and kept in `sessionStorage`:
+// per-tab, survives every in-app navigation and reload, and dies with the tab —
+// which is also how it gets reset. Any page load that names at least one tuning
+// parameter REPLACES what is stored, so an explicit `?model=lite` returns to
+// defaults without having to explain storage to anyone.
+//
+// The wider lesson, and it is the one to carry: **the operator's check was
+// "look for a yellow line and stop if it is missing" — an ABSENCE.** Kd did not
+// notice it was missing and recorded all eight clips, which is exactly what
+// asking someone to spot a missing thing gets you. The widget now shows the
+// settings ALWAYS, so the check is comparing two visible lines instead.
+
+const STORAGE_KEY = 'aihg.poseTuning';
+
+function storage() {
+  try {
+    return typeof sessionStorage === 'undefined' ? null : sessionStorage;
+  } catch {
+    return null; // storage disabled (private mode, blocked cookies)
+  }
+}
+
+/** True when this page load is ASKING for settings — as opposed to resolving
+ *  to the defaults because it named nothing. Those are different, and treating
+ *  them the same would let a plain reload wipe the captured settings. */
+export function hasTuningParams(search = '') {
+  const q = new URLSearchParams(search);
+  return TUNING_PARAMS.some((p) => q.has(p));
+}
+
+/** Read the URL once and remember it for this tab. Exported for tests; called
+ *  at module load below, which in a dev build happens before the router has had
+ *  a chance to rewrite anything. */
+export function capturePoseTuning(search) {
+  if (!POSE_TUNING_ENABLED) return;
+  const store = storage();
+  if (store === null || !hasTuningParams(search)) return;
+  try {
+    store.setItem(STORAGE_KEY, JSON.stringify(parsePoseTuning(search)));
+  } catch {
+    /* storage full or blocked — the run is simply untuned, and the widget says so */
+  }
+}
+
+/**
+ * The settings in force for this tab.
+ *
+ * Anything unreadable or unrecognised falls back to the shipped defaults rather
+ * than to a half-populated object: a partly-applied setting recorded in a trace
+ * header as deliberate is worse than no setting at all.
+ */
+export function readPoseTuning() {
+  if (!POSE_TUNING_ENABLED) return { ...POSE_DEFAULTS };
+  const store = storage();
+  if (store === null) return { ...POSE_DEFAULTS };
+  let raw = null;
+  try {
+    raw = store.getItem(STORAGE_KEY);
+  } catch {
+    return { ...POSE_DEFAULTS };
+  }
+  if (raw === null) return { ...POSE_DEFAULTS };
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { ...POSE_DEFAULTS };
+  }
+  if (typeof parsed !== 'object' || parsed === null) return { ...POSE_DEFAULTS };
+  // Re-validated on the way OUT as well as in. Storage is editable by hand and
+  // is external input like any other (R2.3).
+  return {
+    model: Object.hasOwn(MODEL_FILES, parsed.model) ? parsed.model : POSE_DEFAULTS.model,
+    numPoses: clampPoses(parsed.numPoses, POSE_DEFAULTS.numPoses),
+    minPoseDetectionConfidence: clamp01(
+      parsed.minPoseDetectionConfidence,
+      POSE_DEFAULTS.minPoseDetectionConfidence,
+    ),
+    minPosePresenceConfidence: clamp01(
+      parsed.minPosePresenceConfidence,
+      POSE_DEFAULTS.minPosePresenceConfidence,
+    ),
+    minTrackingConfidence: clamp01(
+      parsed.minTrackingConfidence,
+      POSE_DEFAULTS.minTrackingConfidence,
+    ),
+  };
+}
+
+// Runs at first import — before the router can strip the query string.
+if (typeof window !== 'undefined') capturePoseTuning(window.location.search);
 
 /** True when this page load is running anything other than shipped behaviour.
  *  The widget shows it, so an operator cannot record a clip believing it was

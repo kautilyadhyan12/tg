@@ -22,10 +22,7 @@ export default function TraceRecorderWidget({ exercise }) {
   if (!TRACE_RECORD_ENABLED) return null;
 
   const recording = isRecording();
-  const tuning = readPoseTuning(
-    typeof window === 'undefined' ? '' : window.location.search,
-  );
-  const tuned = isTuned(tuning);
+  const tuning = readPoseTuning();
 
   const onClick = () => {
     if (!recording) {
@@ -80,14 +77,19 @@ export default function TraceRecorderWidget({ exercise }) {
               `${summary.reps} reps @ ${summary.fps}fps`
             : 'trace recorder (dev)'}
       </div>
-      {/* THE SETTINGS, ON SCREEN, WHENEVER THEY ARE NOT THE SHIPPED ONES.
-          Card 3 records the same scene several times under different settings,
-          and the one thing that ruins that session is finishing a clip unsure
-          which run it was. The header records it too — this is so the operator
-          can see it BEFORE spending a minute recording, not only afterwards. */}
-      {tuned && (
-        <div style={{ marginTop: 4, color: '#ffd166' }}>⚙ {describeTuning(tuning)}</div>
-      )}
+      {/* THE SETTINGS, ON SCREEN, ALWAYS — not only when they are non-default.
+          This line used to render only when tuned, and that cost Kd a whole
+          session: his eight clips all recorded at the defaults because the
+          router had stripped the query string, and the check he had been given
+          was "look for a yellow line and stop if it is MISSING". He did not
+          notice the absence and recorded all eight. **Asking someone to spot a
+          missing thing is not a check.** Two visible lines can be compared;
+          one absent line cannot be. Colour still marks the difference, and the
+          word `default` is spelled out so a screenshot is self-explanatory. */}
+      <div style={{ marginTop: 4, color: isTuned(tuning) ? '#ffd166' : '#8a8a8a' }}>
+        ⚙ {describeTuning(tuning)}
+        {isTuned(tuning) ? '' : '  (default)'}
+      </div>
     </div>
   );
 }
