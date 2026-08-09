@@ -6658,3 +6658,90 @@ never a false pass), so nothing already recorded is in doubt.
 - (**NOT DONE**) **Nothing is measured on real furniture yet.** Kd runs
   `RUNBOOK/measure-camera-discriminators.md`. The camera SMOKE is still UNRUN and
   nothing is ticked.
+
+## 2026-08-09 — THE WOBBLE TEST RAN ON THE REAL CLIPS: it works, and the signal :6386 built phase 2 on is the WEAKEST of the four
+
+Ran here, on Kd's own machine, against the five clips on his Desktop (copies in
+scratchpad; his files untouched). **Kd's correction is what produced this: he
+asked why he was being told to run a command when the terminal is right here.
+He was right, and the answer is that CLAUDE.md's PROVE rule ("a chat cannot run
+your repo") was written for the upload-a-zip chat workflow and does not describe
+Claude Code with a terminal.** The files were local; asking him to type it was
+wasted effort. Same class as the recording-session runbook, which already said
+"say the word and I'll start all three for you instead" — the offer existed and
+was not extended here.
+
+### The result, on the clean piles (person = `me_squatting` + `me_standing`, nobody = `furniture_only`)
+
+'separation' = chance a random furniture reading scores above a random person
+reading. 1.00 = never overlap · 0.50 = worthless.
+
+| signal | separation | at 5% of users hurt, furniture caught |
+|---|---|---|
+| **`motion_incoherence`** | **0.967** | **80.1%** |
+| `bone_stretch` | 0.949 | 54.6% |
+| `centre_drift` (**:6386's jitter lever**) | 0.865 | **7.6%** |
+| `limb_asymmetry` | 0.790 | 10.2% |
+
+**THE HEADLINE IS A CORRECTION TO :6386.** That entry made body-centre jitter
+the lever phase 2 was to be built on ("~3× a squatting person, ~7× a standing
+one"). Measured as a per-frame GATE it is the second-worst of the four: at a
+cut-off costing 5% of real frames it catches **7.6%** of furniture. The ratio of
+medians was real; a ratio of medians is not a separation, because the
+distributions overlap in the tails and a gate lives in the tails. **The signal
+that works is the one :6386 did not have** — `motion_incoherence`, the spread of
+the 33 individual displacements, i.e. "do the landmarks agree with each other
+about where the body went". Centre drift can be fooled by a person genuinely
+moving; agreement cannot.
+
+### A methodological error of mine, caught and corrected in the same session
+
+The first run put `empty_room` in the `--nobody` pile. **It is not nobody.**
+:6386 already established its 58% detection is Kd walking out of shot and back
+in, so the pile was contaminated with real-person frames — which inflated every
+score (`motion_incoherence` 0.975 → 0.967, `limb_asymmetry` 0.851 → 0.790).
+The numbers in the table above are the clean run. Recorded because the polluted
+run was printed first and a later chat reading only the transcript would cite it.
+`RUNBOOK/measure-camera-discriminators.md` is corrected.
+
+### The number that matters most for the PRODUCT, and it is not in the table
+
+On `me_and_furniture` — Kd present, chair present, the actual failure condition —
+a `motion_incoherence` gate set at the 5%-cost cut-off fires on **44.8% of
+frames**. So the app would notice something was wrong nearly half the time.
+
+**WHAT THAT DOES AND DOES NOT BUY, and this reframes the plan.** A gate detects
+a bad read; it does not make the model track Kd instead of the chair. It turns
+"silently counts wrong" into "says it cannot see you properly" — worth having
+(:5807: a screen that is FALSE is the severe case) and it makes the voice stop
+babbling, because the babble is the engine reading a chair's posture aloud
+(:6386, 85.6% of frames). **But Kd's original complaint — "i do proper squat and
+it does not count" — is not fixed by a gate.** For his squats to count, the
+model must lock onto him, which is the dials/`numPoses`/model track. **Both
+halves are needed and the card plan should say so.** Kd was told this in plain
+words as soon as it was measured, rather than after card 4 disappointed him.
+
+### What is NOT settled
+
+**No cut-off is chosen.** One chair, one room — the `OWED` rule is unchanged and
+still binds. What this run settles is only that two signals are worth recording
+more furniture for, and that centre drift is not the one to build on.
+Combining signals was not measured and may beat any single one; that is card 4's
+question, not this one's.
+
+- (**PROVE**) The run is reproducible by anyone: `corepack pnpm --filter
+  @app/engine exec tsx scripts/measure-pose.ts --exercise squat --person
+  me_squatting,me_standing --nobody furniture_only <folder>`. Sidecar line counts
+  (717 `empty_room`, 1018 `furniture_only`) match :6386's own figures exactly,
+  so these are the same files that entry measured.
+- (**A THIRD DEFECT IN THE DOC, mine**) The runbook shipped a command that
+  cannot run — `--filter` already sets the package as cwd, so the full
+  `packages/engine/scripts/…` path resolves to `packages/engine/packages/engine/…`.
+  **The doc cited :5034's "an instruction with no working command behind it" and
+  then shipped exactly one**, because the path was edited into the doc after the
+  last time the command was executed. Corrected, and the correction is written
+  into the doc rather than only here (:5748's "a correction applied to the record
+  and not to the artifact is half a correction").
+- (**NOT DONE**) The camera SMOKE is still UNRUN and nothing is ticked. The
+  recorder-slug half of the instrument line is still owed, so the golden-trace
+  ban stands.

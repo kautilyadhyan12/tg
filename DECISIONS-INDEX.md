@@ -220,6 +220,31 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:6662** — 2026-08-09 — **THE WOBBLE TEST RAN ON THE REAL CLIPS: it works,
+  and the signal :6386 built phase 2 on is the WEAKEST of the four.** **Read
+  before citing :6386's jitter figures, before designing the camera gate, and
+  before telling Kd to run a command on his own machine.** Clean piles (person =
+  `me_squatting`+`me_standing`, nobody = `furniture_only`): **`motion_incoherence`
+  0.967 separation, catching 80% of furniture at a 5% cost to real frames** ·
+  `bone_stretch` 0.949 · **`centre_drift` — :6386's lever — 0.865, catching just
+  7.6% at that cost** · `limb_asymmetry` 0.790. **:6386's ratio of medians was
+  real and is not a separation**: the distributions overlap in the tails and a
+  gate lives in the tails. The signal that works is the one :6386 did not have.
+  **THE PRODUCT NUMBER: on `me_and_furniture` the gate fires on 44.8% of frames
+  — so it detects the bad read, and that is ALL it does.** It converts "silently
+  counts wrong" into "says it cannot see you", and it stops the voice babbling
+  (:6386's 85.6%), **but it does NOT make the model track Kd instead of the
+  chair, so his "i do proper squat and it does not count" is not fixed by a gate
+  alone.** Both halves are needed; Kd was told so when it was measured.
+  **Carries a methodological error of mine, corrected in-session**: `empty_room`
+  was first put in the nobody pile though :6386 already showed its 58% detection
+  is Kd walking in and out, which inflated every score. **And a third doc defect:
+  the runbook shipped a command that cannot run** (`--filter` already sets cwd,
+  so the full path doubles) — in a doc that cited :5034's "instruction with no
+  working command behind it". **KD'S CORRECTION IS THE STANDING ONE: CLAUDE.md's
+  PROVE rule ("a chat cannot run your repo") describes the upload-a-zip chat
+  workflow, NOT Claude Code with a terminal** — when the files and the repo are
+  local, run it. **No cut-off chosen; one chair, one room; the OWED rule binds.**
 - **:6532** — 2026-08-09 — **PHASE 2 CARD 1: the jitter lever becomes a
   COMMITTED instrument, and the measurement script can no longer half-run.**
   **Read before proposing any phase-2 camera work, before quoting :6386's jitter

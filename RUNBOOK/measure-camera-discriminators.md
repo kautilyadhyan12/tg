@@ -1,13 +1,27 @@
 # The wobble test — one command, on the files you already have
 
-**Nothing to record.** This reads the ten files you sent last time and answers
-one question: **can we tell your chair apart from you, using only the dots the
-camera already reports?**
+**ALREADY RUN, 2026-08-09, by me on Kd's own machine** — the files were on his
+Desktop and the terminal was right here, so asking him to type it was wasted
+effort. Results at `DECISIONS.md`. This doc stays because the command is worth
+re-running whenever new clips arrive.
 
-**Time: about 10 minutes**, nearly all of it waiting.
+**Nothing to record.** This reads the ten files from the 2026-08-08 session and
+answers one question: **can we tell the chair apart from a person, using only
+the dots the camera already reports?**
 
-**It cannot pass or fail.** It prints numbers. I read them and come back with
-one recommendation.
+**It cannot pass or fail.** It prints numbers.
+
+**TWO CORRECTIONS FROM THE FIRST REAL RUN, both mine, both in this document:**
+1. The command below originally carried the full path
+   `packages/engine/scripts/measure-pose.ts`. **`--filter` already runs from the
+   package folder, so that path resolves to `packages/engine/packages/engine/…`
+   and the run dies.** It is `scripts/measure-pose.ts`. This doc cited :5034's
+   "an instruction with no working command behind it" **and then shipped one** —
+   the command was edited after the last time it was executed.
+2. `empty_room` was originally listed under `--nobody`. **It is not nobody:**
+   its 58% detection rate is Kd walking out of shot and back in (:6386), so the
+   pile was polluted with real-person frames. `furniture_only` is the only clean
+   no-person clip.
 
 ---
 
@@ -17,7 +31,7 @@ One line. Put your ten files in one folder first (they probably already are —
 the folder you saved them to). Then:
 
 ```
-corepack pnpm --filter @app/engine exec tsx packages/engine/scripts/measure-pose.ts --exercise squat --person me_squatting,me_standing --nobody furniture_only,empty_room "C:\Users\kautilya\Desktop\traces"
+corepack pnpm --filter @app/engine exec tsx scripts/measure-pose.ts --exercise squat --person me_squatting,me_standing --nobody furniture_only "C:\Users\kautilya\Desktop\traces"
 ```
 
 **Change the path at the end** to wherever your ten files actually are. Keep the
