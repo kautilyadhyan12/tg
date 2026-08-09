@@ -131,6 +131,36 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       is deliberately NOT picked — one chair, one room.** More furniture must be
       recorded, or the distributions go to Kd. This line's "no threshold from
       judgement" rule is UNCHANGED and still binds.
+      **STATUS 2026-08-09 — the jitter finding was UNREPRODUCIBLE and now is
+      not.** Those figures came from a throwaway script that no longer exists
+      (`grep -rniE "jitter|bodyCentre|centroidShift" packages apps tools` →
+      only unrelated hits), so the card's headline lever rested on numbers
+      nobody could re-derive — :5199's class exactly. `packages/engine/scripts/
+      discriminators.ts` is that measurement, committed, unit-tested and
+      mutation-audited (11/11 RED), and `measure-pose.ts` grew section 4 (per-
+      clip distributions) and section 5 (separation + operating points with the
+      error each costs on BOTH sides). **Three deliberate departures from
+      :6386's numbers, so they will NOT match and that is not drift:** rates are
+      per SECOND not per frame (browser frames arrive irregularly, and the gate
+      will too); pairs more than 500 ms apart are SKIPPED (measuring across a
+      lost pose measures the gap — `empty_room`'s high figure may be that
+      artefact); and body-centre/torso-length are defined in the file because
+      the deleted script's definitions are unrecoverable.
+      Three signals join jitter, all landmark-only and all free: bone-length
+      stretch, left/right limb asymmetry, and motion incoherence (the spread of
+      the 33 individual displacements — a real body moves as one piece, and
+      centre drift alone can be fooled by someone genuinely moving).
+      **NOTHING IS MEASURED YET on real furniture.** Kd runs
+      `RUNBOOK/measure-camera-discriminators.md` — one command over the ten
+      files already on his Desktop, no recording. **No cut-off may be picked
+      from that run either**: it is still one chair in one room. What it can
+      settle is whether any signal is worth recording more furniture for.
+      **THIS IS NOT A CAMERA-STAGE FIX and the "needs fresh recordings"
+      limitation above does not bite it.** That limit is true of anything that
+      changes what MediaPipe OUTPUTS (settings, model); a bridge-layer gate
+      consumes the landmark output the clips already contain. A later chat must
+      not read the limitation so broadly that it shelves the one lever testable
+      on data in hand.
       (e) **KD RULING 2026-08-08 — his object-detector proposal is DROPPED on
       cost** (a second model against Part 6 §3.4/§3.5 budgets). Deferred, not
       struck: it returns if the free levers fail, at ~1 Hz, never per frame.
@@ -223,6 +253,21 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       (Kd's files untouched) — **the workaround is not the fix and no golden
       trace may be recorded until the slug is right**, or every future golden
       carries a header that cannot find its own definition.
+      **STATUS 2026-08-09 — HALF DONE, and the half that is done is the CLASS
+      fix.** `measure-pose.ts` now resolves EVERY clip's definition BEFORE it
+      prints a single line of per-clip output, and one unresolvable definition
+      aborts the whole run naming the mismatch, the available ids and the
+      `--exercise` flag to re-run with. **There is no longer a path on which
+      some sections print and the main one silently does not** — the shape that
+      made this defect nearly invisible twice. Proved by running it: the abort
+      fires on a `squats` header with nothing printed above it.
+      **STILL OWED, and this line does NOT tick until it lands:** the RECORDER
+      half — `ActiveWorkout.jsx:258,1159` stamps `currentExercise.name
+      .toLowerCase()` into the header. Until that is the definition id, every
+      new clip still needs `--exercise`, and **the ban on recording a golden
+      trace stands unchanged.** `--exercise` is a documented way past a NAMED
+      mismatch, never a silent guess: it deliberately does not singularise a
+      plural, for the same reason `slugForLegacyName` is exact-match (:3538).
 - [ ] 🔴 **WE SHIP THE FALLBACK POSE MODEL AS THE DEFAULT, AND THE DEGRADATION
       LADDER DOES NOT EXIST.** Found 2026-08-08 (DECISIONS :6386).
       `usePoseDetection.js` hard-wires `pose_landmarker_lite` on every device.

@@ -220,6 +220,39 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:6532** — 2026-08-09 — **PHASE 2 CARD 1: the jitter lever becomes a
+  COMMITTED instrument, and the measurement script can no longer half-run.**
+  **Read before proposing any phase-2 camera work, before quoting :6386's jitter
+  numbers, and before writing a mutation harness that strips ANSI colour.**
+  **The finding that justified the card: :6386's headline lever was
+  UNREPRODUCIBLE** — the whole basis for phase 2 came from a throwaway script
+  that no longer exists (grep-verified), which is :5199's class applied to the
+  one number the card rests on. Now `packages/engine/scripts/discriminators.ts`:
+  pure, unit-tested, mutation-audited, portable into the web bridge.
+  **:6386's figures will NOT reproduce and that is not drift** — rates are per
+  SECOND (browser frames arrive irregularly and the gate will too), pairs over
+  500 ms apart are SKIPPED (so `empty_room`'s high jitter may have been that
+  artefact), and body-centre/torso-length are defined here because the deleted
+  script's are unrecoverable. **Three new landmark-only signals**, the important
+  one being `motion_incoherence`: centre drift can be fooled by a person
+  genuinely moving, "do the 33 landmarks agree where the body went" cannot.
+  **THE ORDER WAS FLIPPED from :6386's dials-first, and the reason is a standing
+  reading a later chat will need: ":6386 says none of 1–4 can be evaluated
+  against the five clips" is TRUE OF CAMERA-STAGE CHANGES and FALSE of a
+  bridge-layer gate**, which consumes exactly the landmark output those files
+  contain — read broadly it shelves the only lever testable today. Kd approved
+  the four-card plan and the flip. :6386's object-detector ruling untouched.
+  **Operating points are pinned by the HARMFUL side first** (at most 1% of real
+  users wrongly rejected → what share of furniture that catches), because the two
+  errors are not symmetric. **NO CUT-OFF CHOSEN — still one chair, one room; the
+  OWED rule binds.** Also: the CLASS half of the instrument line (every
+  definition resolved before any per-clip output; one failure aborts the run) —
+  **the recorder half is still owed and the line does NOT tick**, so the golden-
+  trace ban stands. `scripts/` joins typecheck+lint. **The harness caught its own
+  ANSI-strip defect on run 1, in the fail-safe direction** (PROVES NOTHING, never
+  a false RED); the same strip lives in `mutate-badge-cue.mjs`, equally fail-safe.
+  engine 168/168 · 11 mutants 11 RED 0 alive · **nothing measured on real
+  furniture yet — Kd runs `RUNBOOK/measure-camera-discriminators.md`.**
 - **:6386** — 2026-08-08 — **THE CAMERA MEASUREMENT RAN: the four camera defects
   are ONE defect, and NO confidence cut-off can separate a chair from a person.**
   **Read before touching the pose provider, rep counting, the voice, or any

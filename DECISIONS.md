@@ -6528,3 +6528,133 @@ Kd this session; it is the main limitation of the instrument as built.
   `FEED_INTERVAL_MS = 67` targets ~15 fps and his clips landed at **11.6–12.5**
   (7.2 on `empty_room`). He is already UNDER target on the LIGHT model.
   Inference time itself was NOT measured this session.
+
+## 2026-08-09 — PHASE 2 CARD 1: the jitter lever becomes a COMMITTED instrument, and the measurement script can no longer half-run
+
+Phase 2 (the fix) begins. Kd approved a four-card plan and this is card 1. **No
+fix is designed, no cut-off is chosen, and nothing user-facing changed.** What
+changed is that the card's central claim is now reproducible by anyone.
+
+### The order was flipped, deliberately, and it is a recommendation not a ruling
+
+:6386 sequenced phase 2 as dials → jitter → model → detector, ranked by RUNTIME
+cost. **That ranking omits the cost of the INSTRUMENT each candidate needs.**
+Measured against what exists:
+
+| candidate | evaluable on the five recorded clips? |
+|---|---|
+| jitter / geometry (a bridge-layer gate) | **YES** — landmark arithmetic on data in hand |
+| the three MediaPipe dials + `numPoses` | no — they change what MediaPipe OUTPUTS |
+| `lite` → `full` | no — same reason |
+
+So the free-to-RUN option was also the only free-to-TEST one, and it goes first.
+Kd was given this in plain words and said go. **:6386's own ruling — the object
+detector is dropped on cost — is untouched and not re-proposed.**
+
+**A STANDING READING, because a later chat will hit it.** :6386's *"none of 1–4
+can be evaluated against the five recorded clips"* is TRUE OF CAMERA-STAGE
+CHANGES and false of a bridge-layer gate, which consumes precisely the landmark
+output those files contain. Read broadly it would shelve the one lever testable
+today. The distinction is now written into `discriminators.ts`'s header, `OWED`
+and here.
+
+### The finding that justified the card: the headline lever was unreproducible
+
+:6386 made jitter the whole basis for phase 2 — furniture 0.0432 vs a standing
+person 0.0061. **Nothing in the repo computes it.** Verified this session:
+`grep -rniE "jitter|bodyCentre|body_centre|centroidShift" packages apps tools`
+returns fuzz-test fps jitter and GPS smoothing, nothing else. The numbers came
+from a scratchpad script that no longer exists. **That is :5199's class one
+level up — "I measured it" and "the committed harness measures it" are different
+claims — and this time it was the finding the entire card rests on.**
+
+`packages/engine/scripts/discriminators.ts` is that measurement, committed: pure,
+no I/O, unit-tested, and portable into the web bridge when the gate is built.
+
+### Three deliberate departures — :6386's figures will NOT reproduce, and that is not drift
+
+1. **Rates are per SECOND, not per frame.** Kd's clips ran 7.2–12.5 fps against
+   a 15 fps target; the browser gate will see the same irregularity, so
+   per-frame is the wrong unit for the thing being built.
+2. **Frame pairs more than 500 ms apart are SKIPPED.** Stitching across a lost
+   pose measures the gap, not the subject — and `empty_room` is mostly gaps, so
+   its headline-high jitter figure may have been that artefact all along.
+3. **Body centre and torso length are DEFINED in the file.** The deleted
+   script's definitions are unrecoverable, so nothing here claims to reproduce
+   it. Torso length reuses the engine's own `1e-8` degeneracy guard
+   (`pipeline/signals.ts:167`) rather than a new number.
+
+### Three signals join jitter, all landmark-only, all free
+
+`bone_stretch` (a drawn limb's length flickers, a real one's does not),
+`limb_asymmetry`, and `motion_incoherence` — the SPREAD of the 33 individual
+displacements. That last one is the signal :6386 did not have and the one most
+likely to matter: **centre drift can be fooled by a person genuinely moving;
+"do the landmarks agree about where the body went" cannot.** All four run one
+direction (higher = more like furniture) so a silent sign flip cannot invert a
+gate, and a test pins that direction.
+
+### The presentation is the ruling-shaped part, and it is deliberate
+
+Section 5 reports, per signal: a **separation** score (AUC — chance a random
+furniture reading beats a random person reading, 1.00 = never overlap, 0.50 =
+worthless), then operating points **pinned by the HARMFUL side first** — "at
+most 1% of users hurt → catches X% of furniture". A gate that wrongly rejects a
+real user stops them counting reps in their own workout; one that wrongly
+accepts a chair leaves today's behaviour exactly as it already is. Those costs
+are not symmetric, so the person cost is the CONSTRAINT and the furniture catch
+is the reported benefit, never the reverse. The mirror view is printed too, so
+the trade-off is visible from both ends rather than argued from one.
+**No cut-off is chosen, and the script says so in its own output.** It is still
+one chair in one room; the `OWED` rule against picking a threshold from
+judgement is unchanged and still binds.
+
+### The class fix for the instrument that silently skipped its own main section
+
+`OWED`'s instrument line: on 2026-08-08 `definitionFor` threw ENOENT (`squats`
+vs `squat.json`) and the caller's catch printed a one-line FAIL **underneath**
+sections 1 and 2, so the engine replay did not run on any of five clips and the
+output read as a partial success. **Now every clip's definition is resolved
+BEFORE one line of per-clip output**, and one failure aborts the whole run
+naming the mismatch, the available ids, and the `--exercise` flag. Proved by
+running it: the abort fires with nothing printed above it.
+**The RECORDER half is still owed and the line does NOT tick** — until
+`ActiveWorkout.jsx:258,1159` stamps the definition id, every new clip needs the
+flag and **the ban on recording a golden trace stands**. `--exercise` steps past
+a NAMED mismatch and deliberately does not singularise a plural (:3538).
+
+### Two scope calls, stated rather than slipped in
+
+- **`scripts/` joins typecheck and lint** (`tsconfig.json` include, `package.json`
+  lint script). The instrument producing this project's decisive numbers was the
+  one directory with no static checking at all. Measured before committing to
+  it: `scripts/` typechecked clean already, and lint surfaced exactly one
+  pre-existing dead `??` in `measure-pose.ts`, fixed in place.
+- **`measure-pose.ts` takes a FOLDER and skips `.detect.jsonl` sidecars.** For
+  the operator, not for us: PowerShell does not expand `*.jsonl`, so a glob is
+  not something Kd can type, and one that did expand would sweep in every
+  headerless sidecar and abort the run. :5034's lesson — an instruction with no
+  working command behind it is a defect in the instruction.
+
+### The harness caught its own defect on the first run, in the fail-safe direction
+
+`mutate-discriminators.mjs` aborted every mutant with "the suite produced no
+test tally". Cause: the ANSI strip dropped the `[NNm` tail but left the ESC
+byte, so `Tests` was followed by an escape and the tally regex never matched.
+**It reported PROVES NOTHING rather than a false RED** — which is what the tally
+guard is for, and the first time in this repo a harness's own guard caught the
+harness rather than the code. Fixed by building the sequence from
+`String.fromCharCode(27)`.
+**Noted, out of scope (R1.1):** `apps/web/tools/mutate-badge-cue.mjs` carries the
+same strip. Its failure mode is identical and equally fail-safe (a false ABORT,
+never a false pass), so nothing already recorded is in doubt.
+
+- (**PROVE**) engine **168/168** · typecheck clean · lint clean **including
+  `scripts/` for the first time** · **11 mutants, 11 RED, 0 ALIVE, 0 never ran**,
+  green baseline first, every restore sha256-verified, tree confirmed clean by
+  `git status` rather than on the harness's word (:5199) · both the ABORT path
+  and the full five-section run executed here on synthetic clips, so the command
+  handed to Kd is one that has been run.
+- (**NOT DONE**) **Nothing is measured on real furniture yet.** Kd runs
+  `RUNBOOK/measure-camera-discriminators.md`. The camera SMOKE is still UNRUN and
+  nothing is ticked.

@@ -1,6 +1,86 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: CAMERA-ACCURACY CARD, PHASE 2 CARD 1 — the jitter lever is now a COMMITTED,
+      TESTED, MUTATION-AUDITED instrument. **NO FIX DESIGNED. NO CUT-OFF CHOSEN.
+      NOTHING USER-FACING CHANGED.** engine 168/168 · typecheck + lint clean
+      (lint now covers `scripts/` for the first time) · 11 mutants, 11 RED,
+      0 ALIVE, 0 never ran, green baseline first, restores sha256-verified,
+      tree confirmed clean by `git status` not by the harness's word.
+      Full record: DECISIONS :6532. OWED updated in the same commit.
+      **THE CARD IS BLOCKED ON KD RUNNING ONE COMMAND AND NOTHING ELSE.**
+
+WHERE THIS CARD IS, IN ONE LINE
+  Kd approved a FOUR-CARD plan for phase 2. This was card 1 of 4. Next is him
+  running `RUNBOOK/measure-camera-discriminators.md` — one line, ~10 minutes,
+  **no recording** — over the ten files already on his Desktop, and pasting the
+  output. Card 2 (recorder slug + dev dial overrides) does not start until that
+  output is read, because it could change what card 3 needs to record.
+
+THE FINDING THAT JUSTIFIED CARD 1, and it is worth knowing
+  **:6386's headline lever was UNREPRODUCIBLE.** Phase 2's entire basis — the
+  fake skeleton jitters 3–7× more — came from a scratchpad script that no longer
+  exists. Verified: `grep -rniE "jitter|bodyCentre|body_centre|centroidShift"
+  packages apps tools` returns fuzz-test fps jitter and GPS smoothing, nothing
+  else. That is :5199's class ("I measured it" vs "the committed harness measures
+  it") applied to the one number the whole card rests on.
+
+THE NUMBERS WILL NOT MATCH :6386, AND THAT IS DELIBERATE — do not read it as drift
+  (1) rates are per SECOND not per frame (Kd's clips ran 7.2–12.5 fps against a
+  15 fps target, and the gate will see the same irregularity); (2) frame pairs
+  more than 500 ms apart are SKIPPED, because measuring across a lost pose
+  measures the gap — **`empty_room`'s alarming 0.0732 may have been exactly that
+  artefact**; (3) body centre and torso length are DEFINED in the new file, since
+  the deleted script's definitions are unrecoverable.
+
+THE ORDER WAS FLIPPED FROM :6386, and the reason is a STANDING READING
+  :6386 sequenced dials → jitter → model → detector by RUNTIME cost. That
+  ignores the INSTRUMENT each candidate needs. **":6386 says none of 1–4 can be
+  evaluated against the five clips" is TRUE OF CAMERA-STAGE CHANGES and FALSE of
+  a bridge-layer gate**, which consumes precisely the landmark output those files
+  contain. Read broadly it shelves the only lever testable on data in hand. Kd
+  was shown this in plain words and said go. **:6386's object-detector ruling is
+  untouched — do not re-propose it, do not treat it as forbidden.**
+
+WHAT THE NEXT CHAT MUST NOT DO
+  **Do not pick a cut-off from Kd's output when it arrives.** It is still one
+  chair in one room and the OWED rule against thresholds-from-judgement is
+  unchanged. What that run can settle is whether any signal is worth recording
+  MORE furniture for. The script prints operating points pinned by the HARMFUL
+  side first (at most 1% of real users wrongly rejected → what that catches),
+  because being wrongly ignored mid-squat is worse than a chair sneaking through.
+
+THE INSTRUMENT OWED LINE IS HALF DONE AND DOES NOT TICK
+  The CLASS half landed: every clip's definition is resolved BEFORE any per-clip
+  output, and one failure aborts the whole run naming the mismatch and the
+  `--exercise` flag. There is no longer a path where some sections print and the
+  main one silently does not. **The RECORDER half is card 2** —
+  `ActiveWorkout.jsx:258,1159` still stamps the display name — so **the ban on
+  recording any golden trace STANDS**.
+
+THE HARNESS CAUGHT ITSELF, in the fail-safe direction
+  `mutate-discriminators.mjs` aborted all 11 mutants with "produced no test
+  tally" on its first run: the ANSI strip dropped `[NNm` but left the ESC byte.
+  It reported PROVES NOTHING rather than a false RED. First time here a harness's
+  own guard caught the harness rather than the code. `mutate-badge-cue.mjs`
+  carries the same strip — identical, equally fail-safe, out of scope (R1.1), so
+  nothing already recorded is in doubt.
+
+NEXT, in order:
+  (1) **Kd runs the one command; paste the output.** Nothing else starts first.
+  (2) Card 2: recorder slug (unblocks goldens) + dev-only MediaPipe dial/model
+      overrides + settings stamped into the trace header.
+  (3) Card 3: ONE recording session — more furniture for the threshold, and the
+      dial sweep on two fixed scenes. ~25 min of Kd's time.
+  (4) Card 4: choose with evidence, build the gate in the WEB BRIDGE (decided
+      2026-08-07), tests, smoke.
+  Downstream and untouched: the shallow-squat cue and Kd's voice product
+  decision, both of which wait on the pose input being fixed. The camera SMOKE
+  is still UNRUN and both committed cards on `web-repoint` stay UNTICKED.
+```
+
+
+```
 TASK: CAMERA-ACCURACY CARD, PHASE 1 COMPLETE — THE MEASUREMENT RAN.
       Kd recorded all five clips. **THE CARD IS NO LONGER BLOCKED ON HIM.**
       No code changed this session. No fix designed. No threshold chosen.
