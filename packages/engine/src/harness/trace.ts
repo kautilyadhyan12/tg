@@ -17,6 +17,23 @@ export interface TraceExpected {
   phaseSequence?: string[]; // optional FSM-sensitive assertion (§7.4)
 }
 
+/** The pose-provider settings a clip was recorded under (camera-accuracy card,
+ *  phase 2). OPTIONAL and absent from every trace recorded before 2026-08-09,
+ *  so no existing golden changes.
+ *
+ *  Why it is in the format at all: phase 2 records the same scene under several
+ *  candidate MediaPipe settings, and a clip that cannot say which settings
+ *  produced it makes the whole comparison rest on the operator's filenames.
+ *  §7.1's header is authoring metadata — `device`, `platform`, `recordedWith` —
+ *  and this is the same kind of fact about how the clip came to exist. */
+export interface TraceProvider {
+  model: string;
+  numPoses: number;
+  minPoseDetectionConfidence: number;
+  minPosePresenceConfidence: number;
+  minTrackingConfidence: number;
+}
+
 export interface TraceHeader {
   traceVersion: 1;
   exercise: string;
@@ -27,6 +44,7 @@ export interface TraceHeader {
   view: string;
   label: string;
   expected: TraceExpected;
+  provider?: TraceProvider;
 }
 
 export interface Trace {

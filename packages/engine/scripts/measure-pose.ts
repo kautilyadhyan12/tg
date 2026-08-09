@@ -199,6 +199,21 @@ function measure(
     `      label='${h.label}'  exercise=${h.exercise}  view=${h.view}  ` +
       `device=${h.device}  fps=${String(h.fps)}`,
   );
+  // WHICH SETTINGS PRODUCED THIS CLIP. Card 3 records one scene several times
+  // under different MediaPipe settings, so a comparison that cannot name them
+  // per clip is a comparison resting on filenames. Absent on every clip
+  // recorded before 2026-08-09 — said out loud rather than defaulted, because
+  // "no settings recorded" and "recorded at the defaults" are not the same
+  // claim and only one of them is knowable.
+  const p = h.provider;
+  console.log(
+    p === undefined
+      ? `      provider: NOT RECORDED (clip predates settings capture)`
+      : `      provider: ${p.model}  numPoses=${String(p.numPoses)}  ` +
+          `detect=${String(p.minPoseDetectionConfidence)}  ` +
+          `presence=${String(p.minPosePresenceConfidence)}  ` +
+          `track=${String(p.minTrackingConfidence)}`,
+  );
 
   // ── 1. Did the model see a pose at all? ─────────────────────────────────────
   console.log(`\n1. DID THE MODEL FIND A POSE?`);

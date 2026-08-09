@@ -251,11 +251,18 @@ export default function ActiveWorkout() {
     setRepFormScores([...setSummariesRef.current.repScores]);
   }, []);
 
+  // ONE declaration, deliberately. This expression used to appear twice — here
+  // and on the trace-recorder widget — and a shared value with two declarations
+  // is where a correction gets lost (:4556 F1). The recorder canonicalises it to
+  // a definition id on its own side; the engine accepts the alias directly.
+  const engineExerciseKey =
+    currentExercise?.name?.toLowerCase().replace(/\s+/g, '_') || 'squat';
+
   const {
     poseData, keypointsData, analysisAvailable, analysisSettled,
     startStreaming, stop,
   } = usePoseDetection({
-    exercise: currentExercise?.name?.toLowerCase().replace(/\s+/g, '_') || 'squat',
+    exercise: engineExerciseKey,
     setIndex: engineSetKey,
     enabled:  !paused && phase === 'workout',
     onSetComplete: handleSetSummary,
@@ -1155,9 +1162,7 @@ export default function ActiveWorkout() {
   return (
     <>
     {/* DEV-ONLY (P1.3): renders nothing unless VITE_TRACE_RECORD=1 */}
-    <TraceRecorderWidget
-      exercise={currentExercise?.name?.toLowerCase().replace(/\s+/g, '_') || 'squat'}
-    />
+    <TraceRecorderWidget exercise={engineExerciseKey} />
     <div
       className="h-screen flex flex-col overflow-hidden"
       style={{ background: '#0A0908' }}

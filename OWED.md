@@ -234,7 +234,11 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       it must be put to him AFTER the pose fix, on what the app then actually
       says, not on today's chair-driven noise.
 
-- [ ] 🔴 **THE MEASURING INSTRUMENT SILENTLY SKIPPED ITS OWN MAIN SECTION.**
+- [x] 🔴 **DONE 2026-08-09** (card 1 `6d255c4` = the abort half, card 2 = the
+      recorder half). **THE GOLDEN-TRACE BAN IS LIFTED**: the recorder stamps the
+      definition id, so a newly recorded trace can find its own definition.
+      `--exercise` remains for clips recorded BEFORE this date and for nothing
+      else. **THE MEASURING INSTRUMENT SILENTLY SKIPPED ITS OWN MAIN SECTION.**
       Found 2026-08-08 while reading Kd's five clips (DECISIONS :6386). The trace
       recorder stamps the workout's DISPLAY name into the trace header
       (`ActiveWorkout.jsx:1159`, `currentExercise.name.toLowerCase()` ⇒ `squats`)
@@ -253,21 +257,24 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       (Kd's files untouched) — **the workaround is not the fix and no golden
       trace may be recorded until the slug is right**, or every future golden
       carries a header that cannot find its own definition.
-      **STATUS 2026-08-09 — HALF DONE, and the half that is done is the CLASS
-      fix.** `measure-pose.ts` now resolves EVERY clip's definition BEFORE it
+      **BOTH HALVES ARE NOW DONE — see the tick above.** The record of how:
+      **CARD 1 — the CLASS fix.** `measure-pose.ts` now resolves EVERY clip's definition BEFORE it
       prints a single line of per-clip output, and one unresolvable definition
       aborts the whole run naming the mismatch, the available ids and the
       `--exercise` flag to re-run with. **There is no longer a path on which
       some sections print and the main one silently does not** — the shape that
       made this defect nearly invisible twice. Proved by running it: the abort
       fires on a `squats` header with nothing printed above it.
-      **STILL OWED, and this line does NOT tick until it lands:** the RECORDER
-      half — `ActiveWorkout.jsx:258,1159` stamps `currentExercise.name
-      .toLowerCase()` into the header. Until that is the definition id, every
-      new clip still needs `--exercise`, and **the ban on recording a golden
-      trace stands unchanged.** `--exercise` is a documented way past a NAMED
-      mismatch, never a silent guess: it deliberately does not singularise a
-      plural, for the same reason `slugForLegacyName` is exact-match (:3538).
+      **CARD 2 — the RECORDER half.** `traceRecorder.definitionIdFor` resolves
+      the slug through `getDefinition` — **the same lookup the engine uses**, so
+      the header and the engine can never disagree about which definition a clip
+      belongs to. `squats` → `squat`; an exercise with no definition (55 of 58)
+      keeps its raw slug rather than having one guessed for it (:3538's
+      exact-match-or-null shape). The expression that produced the bug existed
+      TWICE in `ActiveWorkout.jsx` (:258 and :1159) and is now one `const` —
+      a shared value with two declarations is where a correction gets lost
+      (:4556 F1), which is exactly what happened here.
+      Mutation-audited: T1 restores the original defect and the test goes RED.
 - [ ] 🔴 **WE SHIP THE FALLBACK POSE MODEL AS THE DEFAULT, AND THE DEGRADATION
       LADDER DOES NOT EXIST.** Found 2026-08-08 (DECISIONS :6386).
       `usePoseDetection.js` hard-wires `pose_landmarker_lite` on every device.

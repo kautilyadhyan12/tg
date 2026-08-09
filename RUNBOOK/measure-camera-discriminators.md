@@ -47,10 +47,11 @@ Run it from the `D:\Projects\ai-home-gym` folder.
 
 You do not need this to run it, but in case it errors:
 
-- `--exercise squat` — your files say `squats` inside them, and the app's rules
-  file is called `squat`. That mismatch is a bug on our side that I am fixing in
-  the next piece of work; until then this flag steps over it. **If you leave it
-  out the command stops immediately and tells you so** — that is deliberate.
+- `--exercise squat` — **needed only for clips recorded before 2026-08-09.**
+  Those files say `squats` inside them while the app's rules file is called
+  `squat`; the recorder now writes the right name, so clips recorded from card 2
+  onwards do not need this flag. **If an old clip needs it and you leave it out,
+  the command stops immediately and tells you so** — that is deliberate.
 - `--person me_squatting,me_standing` — the clips with you in them.
 - `--nobody furniture_only,empty_room` — the clips with no one in them.
 - The fifth clip, `me_and_furniture`, is in neither list on purpose: it has both

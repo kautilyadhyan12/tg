@@ -20,6 +20,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { SessionController } from '../engine/sessionController.js';
 // DEV-ONLY (P1.3): raw-frame recorder tee. No-op unless VITE_TRACE_RECORD=1.
 import { TRACE_RECORD_ENABLED, recordFrame } from '../dev/traceRecorder';
+// DEV-ONLY: MediaPipe settings from the URL. Returns the frozen shipped
+// defaults in a production build, so this import changes nothing there.
+import { modelUrls, readPoseTuning } from '../dev/poseTuning';
 
 // Send/overlay throttles now live client-side (§2.1: the provider adapter owns
 // fps, not the engine). Analysis + overlay both run locally, no network.
@@ -104,20 +107,24 @@ export default function usePoseDetection({
           'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm'
         );
 
-        const LOCAL_MODEL  = '/models/pose_landmarker_lite.task';
-        const REMOTE_MODEL =
-          'https://storage.googleapis.com/mediapipe-models/' +
-          'pose_landmarker/pose_landmarker_lite/float16/1/' +
-          'pose_landmarker_lite.task';
+        // In a production build these ARE the previous hard-wired values —
+        // `readPoseTuning` returns the frozen defaults and never reads the URL
+        // (poseTuning.js). In dev they are whatever the query string asked for,
+        // so one recording session can cover several candidate settings instead
+        // of costing Kd a session each (DECISIONS :6386's phase-2 order).
+        const tuning = readPoseTuning(
+          typeof window === 'undefined' ? '' : window.location.search,
+        );
+        const { local: LOCAL_MODEL, remote: REMOTE_MODEL } = modelUrls(tuning.model);
 
         async function createLandmarker(delegate, modelAssetPath) {
           return PoseLandmarker.createFromOptions(filesetResolver, {
             baseOptions: { modelAssetPath, delegate },
             runningMode:  'VIDEO',
-            numPoses:     1,
-            minPoseDetectionConfidence:  0.5,
-            minPosePresenceConfidence:   0.5,
-            minTrackingConfidence:       0.5,
+            numPoses:     tuning.numPoses,
+            minPoseDetectionConfidence:  tuning.minPoseDetectionConfidence,
+            minPosePresenceConfidence:   tuning.minPosePresenceConfidence,
+            minTrackingConfidence:       tuning.minTrackingConfidence,
           });
         }
 

@@ -6745,3 +6745,110 @@ question, not this one's.
 - (**NOT DONE**) The camera SMOKE is still UNRUN and nothing is ticked. The
   recorder-slug half of the instrument line is still owed, so the golden-trace
   ban stands.
+
+## 2026-08-09 — PHASE 2 CARD 2: the recorder stamps a definition id, the camera's four settings become testable, and a dial that was never chosen was reading ZERO
+
+Card 2 of 4. Setup work for the recording session; **no gate is built and no
+setting is chosen.** The instrument OWED line is now **TICKED** — both halves
+done — and **the golden-trace ban is LIFTED.**
+
+### The defect this card found in its own new code, and it is the interesting one
+
+`readPoseTuning` clamps every dial to a valid range and otherwise falls back to
+the shipped default. The first implementation did the range check and nothing
+else, and **`Number(null)` is `0`** — a perfectly valid confidence. So every
+dial the URL did not mention read as **0.0**, not 0.5: merely opening the app
+would have set the pose model to *trust anything*, and the trace header would
+have recorded that as a deliberate setting.
+
+**It was caught by the test written with the file, not by review** — the
+"returns exactly the shipped defaults when the URL says nothing" case. It is
+:5543's shape for at least the fourth time in this repo: **a condition
+identified by what it LACKS rather than by what it IS.** The guard is now an
+explicit `present()` predicate with the reason written above it, and mutant P1
+restores the defect.
+
+### The recorder half of the instrument line — the OWED line TICKS
+
+`traceRecorder.definitionIdFor` resolves the slug through `getDefinition`, **the
+same lookup the engine uses**, so the header and the engine can never disagree
+about which definition a clip belongs to. `squats` → `squat`. An exercise with no
+definition (55 of 58) keeps its raw slug rather than having one guessed for it —
+:3538's exact-match-or-null shape.
+
+**The expression that caused the bug existed TWICE** in `ActiveWorkout.jsx`
+(:258 feeding the engine, :1159 feeding the recorder widget) and is now one
+`const`. :4556 F1 recorded that a shared value with two declarations is where a
+correction gets lost; this is that, with the correction lost for a year of
+commits. Spec §7.1's own header example writes `"exercise": "squat"`, so the fix
+obeys the format rather than inventing a convention.
+
+**`--exercise` survives** and its scope narrows to clips recorded before today.
+
+### The four settings become testable, and the gate is `import.meta.env.DEV`
+
+`apps/web/src/dev/poseTuning.js` reads `model`, `numPoses`, `detectConf`,
+`presenceConf`, `trackConf` from the query string. **Gated on
+`import.meta.env.DEV` alone, deliberately**: a production build sets it false and
+Vite dead-code-eliminates the branch, whereas an env var can be set in a
+production build by mistake. Model URLs come from a frozen map and are never
+built by interpolating the query string, so a typo cannot fetch nothing (or
+anything else).
+
+**Why these four, and none of them was ever chosen by anyone** (:6386): the three
+confidences and `numPoses` sit at MediaPipe's defaults.
+`minPoseDetectionConfidence` gates stage one, the detector — the closest thing
+to the "is this a person" score `PoseLandmarker` never exposes, and therefore
+where that question actually lives. `minTrackingConfidence` decides when tracking
+is abandoned; **a stationary chair is trivially trackable, so a lock-on
+persists** — which is why the sweep raises both together rather than either
+alone. `numPoses: 1` always crowns a winner. The model question is Part 6 §3.3's
+own ruling (`full` default, `lite` the step-down) and **is not switched blind**:
+Kd's clips ran 7.2–12.5 fps against a 15 fps target, so he is already under
+budget on the LIGHT model.
+
+**A synergy worth recording before card 3 runs:** `numPoses: 2` returns
+candidates instead of a winner, and card 1's `motion_incoherence` is exactly the
+rule for choosing between them. Neither half is worth much alone; together they
+are a real design. **Not built, not assumed — it depends on what the sweep says.**
+
+### Every clip now says which settings produced it
+
+The §7.1 header gains an **optional** `provider` block (`TraceProvider` in
+`harness/trace.ts`), absent from every trace recorded before today, so no
+existing golden changes. Card 3 records one scene four times under different
+settings; a clip that cannot name its own settings makes the entire comparison
+rest on the operator's filenames. "A record is a claim" (:1173) applies to a clip
+exactly as it does to a comment.
+
+**Captured at START, not at stop** — the settings are read once when MediaPipe is
+created, so reading them at stop would report whatever the URL said by then.
+Mutant T3 restores the stop-read and the test goes RED.
+`measure-pose.ts` prints the block, and prints **"NOT RECORDED"** rather than the
+defaults when it is absent: "no settings recorded" and "recorded at the defaults"
+are different claims and only one of them is knowable.
+
+The recorder widget shows the settings **on screen in yellow whenever they are
+not the shipped ones**, and the card-3 runbook makes that the operator's check
+that the URL took effect — before spending a minute recording, not after.
+
+### On adding a field to the trace format (R0.2 stated, not slipped past)
+
+§7.1 shows the header as a jsonc example and `assertHeader` is structural and
+permissive. `provider` is authoring metadata of exactly the same kind as
+`device`, `platform` and `recordedWith` — a fact about how the clip came to
+exist. It is optional, so nothing that exists is affected. Recorded here rather
+than assumed because it IS a format change and the next chat should see the
+reasoning rather than re-derive it.
+
+- (**PROVE**) web **545/545** (27 files, **+16**: 12 new `poseTuning`, 4 new
+  `traceRecorder`) · engine **168/168** · engine typecheck + lint clean ·
+  `vite build` green · **11 mutants, 11 RED, 0 ALIVE, 0 never ran**, green
+  baseline for BOTH suites first, every restore sha256-verified ·
+  **`ActiveWorkout.jsx` lint = 13 problems, IDENTICAL to `HEAD` measured this
+  session** by checkout-and-compare with a byte-exact restore verified by
+  sha256, so nothing was added to a file the root gate does not cover; the four
+  other changed files are 0.
+- (**NOT DONE**) **Nothing is recorded and no setting is chosen.** Kd runs
+  `RUNBOOK/record-camera-settings-sweep.md` — 8 clips, ~25 min. The camera SMOKE
+  is still UNRUN and both committed cards on `web-repoint` stay UNTICKED.

@@ -18,7 +18,34 @@
  * the engine contract (§2.1) — wall-clock never enters the file.
  */
 
+import { getDefinition } from '../engine/poseAdapter';
+import { readPoseTuning } from './poseTuning';
+
 export const TRACE_RECORD_ENABLED = import.meta.env.VITE_TRACE_RECORD === '1';
+
+/**
+ * The header's `exercise` must be a DEFINITION ID, not a display name.
+ *
+ * THE DEFECT THIS CLOSES (OWED, "the measuring instrument silently skipped its
+ * own main section"). The caller hands over the workout's display name lowered
+ * and underscored — `squats` — and the app works anyway, because `squat.json`
+ * declares `squats` as an alias, so the ENGINE resolves it. The trace header
+ * does not get that help: `measure-pose.ts` loads `definitions/<exercise>.json`
+ * by filename, got ENOENT on all five of Kd's clips, and the engine-replay
+ * section — the whole point of the script — did not run, underneath two
+ * sections that had rendered normally.
+ *
+ * Spec §7.1's own header example writes `"exercise": "squat"`, so this is the
+ * format being obeyed rather than a convention being invented.
+ *
+ * Resolution goes through the SAME lookup the engine uses, so the two can never
+ * disagree about which definition a clip belongs to. An exercise with no
+ * definition (55 of the 58) keeps its raw slug: there is nothing to be
+ * canonical about, and the clip is still worth having as raw pose data.
+ */
+export function definitionIdFor(exercise) {
+  return getDefinition(exercise)?.key ?? exercise;
+}
 
 const state = {
   recording: false,
@@ -29,6 +56,7 @@ const state = {
   detections: [],   // { t, n }    — EVERY frame offered, including n = 0
   responses: [],    // { t, ...server response }
   startedAt: null,  // for fps calc only (duration), not stored per-frame
+  tuning: null,     // the MediaPipe settings this clip was recorded under
 };
 
 export function isRecording() {
@@ -49,7 +77,14 @@ export function detectionCount() {
 export function startRecording(exercise) {
   if (!TRACE_RECORD_ENABLED) return;
   state.recording = true;
-  state.exercise = exercise;
+  state.exercise = definitionIdFor(exercise);
+  // Captured at START, not at stop: the settings are read once when MediaPipe
+  // is created, and reading them at stop would report whatever the URL says by
+  // then. A clip attributed to settings it was not recorded under is worse than
+  // one with no settings at all.
+  state.tuning = readPoseTuning(
+    typeof window === 'undefined' ? '' : window.location.search,
+  );
   state.t0 = null;
   state.frameT0 = null;
   state.frames = [];
@@ -137,6 +172,13 @@ export function stopRecording(meta) {
     fps,
     view: meta.view || 'unknown',
     label: meta.label || 'unlabeled',
+    // WHICH SETTINGS PRODUCED THIS CLIP. Card 3 records the same two scenes
+    // under several candidate settings; without this a clip cannot be told
+    // apart from one recorded under different ones, and the whole comparison
+    // rests on the operator's filenames. "A record is a claim" (:1173) applies
+    // to a clip exactly as it does to a comment. Optional in the trace format,
+    // so every existing golden is unaffected.
+    provider: state.tuning === null ? undefined : { ...state.tuning },
     expected: {
       reps: typeof last.rep_count === 'number' ? last.rep_count : 0,
       // Authored in P1.8b from the sidecar (python corrections → TS fault ids):

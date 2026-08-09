@@ -1,6 +1,69 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: CAMERA-ACCURACY CARD, PHASE 2 CARD 2 — the recorder stamps a definition id
+      and the camera's four settings are testable from the URL. **NO GATE BUILT,
+      NO SETTING CHOSEN, NOTHING RECORDED.** web 545/545 (+16) · engine 168/168 ·
+      engine typecheck + lint clean · vite build green · 11 mutants, 11 RED,
+      0 ALIVE, restores sha256-verified · ActiveWorkout.jsx lint IDENTICAL to
+      HEAD measured by checkout-and-compare. Full record: DECISIONS :6749.
+      **THE CARD IS BLOCKED ON KD RECORDING 8 CLIPS AND NOTHING ELSE.**
+
+WHERE THIS CARD IS, IN ONE LINE
+  Card 2 of 4 done. Next is Kd running `RUNBOOK/record-camera-settings-sweep.md`
+  — 8 clips, ~25 minutes, four settings × two scenes, one sitting, same light.
+  Card 4 (choose + build the gate) cannot start until those files exist.
+
+TWO OWED LINES CLOSED, AND THE GOLDEN-TRACE BAN IS LIFTED
+  The instrument line is TICKED, both halves: card 1 made the script abort loudly
+  rather than skip its main section, card 2 made the recorder stamp the
+  definition id (`squats` → `squat`, resolved through the SAME `getDefinition`
+  the engine uses, so the two can never disagree). **A newly recorded trace can
+  now find its own definition, so goldens may be recorded again.** `--exercise`
+  survives for clips recorded BEFORE 2026-08-09 and for nothing else.
+
+THE DEFECT THIS CARD FOUND IN ITS OWN NEW CODE — worth knowing, it will recur
+  `Number(null)` is 0, and 0 is a valid confidence. So every dial the URL did not
+  mention read as **0.0 instead of 0.5**: opening the app would have set the pose
+  model to "trust anything" and the header would have recorded that as
+  deliberate. Caught by the test written with the file. **:5543's shape for the
+  fourth time — a condition identified by what it LACKS rather than what it IS.**
+  Mutant P1 restores it.
+
+WHAT THE NEXT CHAT MUST NOT DO
+  **Do not switch the pose model on the strength of Part 6 §3.3 alone.** It does
+  say `full` is the default and `lite` the step-down, and we ship `lite`
+  everywhere — but Kd's clips ran 7.2–12.5 fps against a 15 fps target, so he is
+  already UNDER budget on the LIGHT model. Run C of the sweep measures it. Its
+  own OWED line stands either way, because §3.6's ladder does not exist at all.
+  **Do not assume the numPoses:2 + coherence-picker design works.** It is
+  recorded in :6749 as a synergy worth TESTING (numPoses returns candidates,
+  card 1's `motion_incoherence` is the rule for choosing between them). The sweep
+  says whether it is real.
+
+WHAT PHASE 2 ACTUALLY BUYS, restated because it reframes the remaining cards
+  Card 1's gate DETECTS a bad read; it does not make the model track Kd instead
+  of the chair. It converts "silently counts wrong" into "says it cannot see
+  you", and it stops the voice babbling (:6386's 85.6% of frames). **Kd's
+  original complaint — "i do proper squat and it does not count" — needs the
+  settings half, which is what card 3 measures.** He was told this in plain words
+  on 2026-08-09.
+
+NEXT, in order:
+  (1) **Kd records 8 clips** per `RUNBOOK/record-camera-settings-sweep.md`, into
+      a NEW folder. Nothing else starts first.
+  (2) Read them with `measure-pose.ts` — it now prints each clip's settings, so
+      the four runs are comparable per scene. No `--exercise` needed.
+  (3) Card 4: choose with evidence, put the gate in the WEB BRIDGE (decided
+      2026-08-07), tests, smoke.
+  Downstream and untouched: the shallow-squat cue and Kd's voice product
+  decision, both waiting on the pose input. The camera SMOKE is still UNRUN and
+  both committed cards on `web-repoint` stay UNTICKED. T3 for cards 1 and 2 is
+  owed — `t3-camera-discriminators-PROMPT.md` covers card 1.
+```
+
+
+```
 TASK: CAMERA-ACCURACY CARD, PHASE 2 CARD 1 — the jitter lever is now a COMMITTED,
       TESTED, MUTATION-AUDITED instrument. **NO FIX DESIGNED. NO CUT-OFF CHOSEN.
       NOTHING USER-FACING CHANGED.** engine 168/168 · typecheck + lint clean

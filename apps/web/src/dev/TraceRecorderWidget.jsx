@@ -6,12 +6,14 @@
 import { useState } from 'react';
 import {
   TRACE_RECORD_ENABLED,
+  definitionIdFor,
   isRecording,
   startRecording,
   stopRecording,
   frameCount,
   detectionCount,
 } from './traceRecorder';
+import { describeTuning, isTuned, readPoseTuning } from './poseTuning';
 
 export default function TraceRecorderWidget({ exercise }) {
   const [, force] = useState(0);
@@ -20,6 +22,10 @@ export default function TraceRecorderWidget({ exercise }) {
   if (!TRACE_RECORD_ENABLED) return null;
 
   const recording = isRecording();
+  const tuning = readPoseTuning(
+    typeof window === 'undefined' ? '' : window.location.search,
+  );
+  const tuned = isTuned(tuning);
 
   const onClick = () => {
     if (!recording) {
@@ -68,12 +74,20 @@ export default function TraceRecorderWidget({ exercise }) {
             Showing frames-with-a-pose alone made a working recorder look
             broken in exactly the case worth recording. */}
         {recording
-          ? `recording ${exercise}… ${frameCount()} with a person`
+          ? `recording ${definitionIdFor(exercise)}… ${frameCount()} with a person`
           : summary
             ? `saved: ${summary.detections} frames, ${summary.withPose} with a person, ` +
               `${summary.reps} reps @ ${summary.fps}fps`
             : 'trace recorder (dev)'}
       </div>
+      {/* THE SETTINGS, ON SCREEN, WHENEVER THEY ARE NOT THE SHIPPED ONES.
+          Card 3 records the same scene several times under different settings,
+          and the one thing that ruins that session is finishing a clip unsure
+          which run it was. The header records it too — this is so the operator
+          can see it BEFORE spending a minute recording, not only afterwards. */}
+      {tuned && (
+        <div style={{ marginTop: 4, color: '#ffd166' }}>⚙ {describeTuning(tuning)}</div>
+      )}
     </div>
   );
 }

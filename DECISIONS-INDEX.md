@@ -220,6 +220,37 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:6749** — 2026-08-09 — **PHASE 2 CARD 2: the recorder stamps a definition id,
+  the camera's four settings become testable, and a dial nobody chose was reading
+  ZERO.** **Read before touching `usePoseDetection`'s MediaPipe options, before
+  recording any trace, and before writing a fallback for a value that might be
+  absent.** **THE DEFECT IS THE ONE TO KNOW: `Number(null) === 0`, so every dial
+  the URL did not mention read as 0.0 rather than the 0.5 default** — merely
+  opening the app would have set the pose model to *trust anything* and the trace
+  header would have recorded that as deliberate. Caught by the test written with
+  the file, not by review; :5543's shape for the fourth time — **a condition
+  identified by what it LACKS rather than what it IS.** Guard is now an explicit
+  `present()`; mutant P1 restores it.
+  **THE INSTRUMENT OWED LINE IS TICKED, BOTH HALVES, AND THE GOLDEN-TRACE BAN IS
+  LIFTED** — `definitionIdFor` resolves through `getDefinition`, the SAME lookup
+  the engine uses, so header and engine cannot disagree; `--exercise` now applies
+  only to clips recorded before 2026-08-09. The expression that caused the bug
+  existed TWICE in `ActiveWorkout.jsx` and is now one `const` (:4556 F1).
+  **Dev-only dials** (`apps/web/src/dev/poseTuning.js`): `model`, `numPoses`,
+  `detectConf`, `presenceConf`, `trackConf`, gated on `import.meta.env.DEV`
+  **alone and deliberately** (an env var can be set in a prod build; `DEV` cannot),
+  model URLs from a frozen map never interpolated from the query string.
+  **§7.1's header gains an OPTIONAL `provider` block** recording which settings
+  produced a clip — captured at START not stop (mutant T3), printed as **"NOT
+  RECORDED"** rather than defaulted when absent, because "no settings recorded"
+  and "recorded at the defaults" are different claims. R0.2 reasoning stated in
+  the entry rather than slipped past. **Records a synergy for card 3 to test, not
+  to assume: `numPoses: 2` returns candidates instead of a winner, and card 1's
+  `motion_incoherence` is exactly the rule for choosing between them.**
+  web 545/545 (+16) · 11 mutants 11 RED · **`ActiveWorkout.jsx` lint identical to
+  HEAD, measured by checkout-and-compare with a sha256-verified restore.**
+  **Nothing recorded, no setting chosen — Kd runs
+  `RUNBOOK/record-camera-settings-sweep.md`, 8 clips, ~25 min.**
 - **:6662** — 2026-08-09 — **THE WOBBLE TEST RAN ON THE REAL CLIPS: it works,
   and the signal :6386 built phase 2 on is the WEAKEST of the four.** **Read
   before citing :6386's jitter figures, before designing the camera gate, and

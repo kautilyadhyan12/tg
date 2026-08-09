@@ -156,6 +156,71 @@ describe('traceRecorder', () => {
     expect(fileNamed('.detect.jsonl')).toBeDefined();
   });
 
+  // ── The slug, and the settings a clip was recorded under (card 2) ─────────
+  //
+  // THE DEFECT THESE PIN: the recorder stamped the workout's DISPLAY name
+  // (`squats`) into the header while definitions are keyed `squat.json`, so
+  // measure-pose.ts threw ENOENT and its engine-replay section — the whole
+  // point of the script — silently did not run on ANY of Kd's five clips,
+  // underneath two sections that had rendered normally.
+  it('stamps the DEFINITION ID in the header, not the display name', async () => {
+    const rec = await loadRecorder();
+    rec.startRecording('squats'); // what ActiveWorkout actually passes
+    rec.recordFrame(KP33(), 0);
+    rec.stopRecording({ label: 'slug', view: 'side', device: 'laptop' });
+
+    const header = JSON.parse(linesOf(fileNamed('-slug.jsonl').text)[0]);
+    // `squat.json` — loadable by filename. `squats` was not, and that is the bug.
+    expect(header.exercise).toBe('squat');
+  });
+
+  it('leaves an exercise with no definition alone rather than inventing a key', async () => {
+    // 55 of the 58 have no engine definition. There is nothing to be canonical
+    // about, and guessing a singular would be the `slugForLegacyName` mistake
+    // (:3538 — exact match, or null; never a guess).
+    const rec = await loadRecorder();
+    rec.startRecording('bicep_curls');
+    rec.recordFrame(KP33(), 0);
+    rec.stopRecording({ label: 'nodef', view: 'side', device: 'laptop' });
+
+    const header = JSON.parse(linesOf(fileNamed('-nodef.jsonl').text)[0]);
+    expect(header.exercise).toBe('bicep_curls');
+  });
+
+  it('records WHICH camera settings produced the clip', async () => {
+    const rec = await loadRecorder();
+    rec.startRecording('squat');
+    rec.recordFrame(KP33(), 0);
+    rec.stopRecording({ label: 'settings', view: 'side', device: 'laptop' });
+
+    const header = JSON.parse(linesOf(fileNamed('-settings.jsonl').text)[0]);
+    // Card 3 records one scene several times under different settings. A clip
+    // that cannot name its own settings makes the comparison rest on filenames.
+    expect(header.provider).toEqual({
+      model: 'lite',
+      numPoses: 1,
+      minPoseDetectionConfidence: 0.5,
+      minPosePresenceConfidence: 0.5,
+      minTrackingConfidence: 0.5,
+    });
+  });
+
+  it('captures the settings at START, so mid-clip URL edits cannot relabel it', async () => {
+    const rec = await loadRecorder();
+    const original = globalThis.window;
+    globalThis.window = { location: { search: '?detectConf=0.9' } };
+    rec.startRecording('squat');
+    // Someone edits the URL while the clip is running. The model in memory was
+    // built at 0.9 and is still running at 0.9; the header must say so.
+    globalThis.window = { location: { search: '?detectConf=0.1' } };
+    rec.recordFrame(KP33(), 0);
+    rec.stopRecording({ label: 'midedit', view: 'side', device: 'laptop' });
+    globalThis.window = original;
+
+    const header = JSON.parse(linesOf(fileNamed('-midedit.jsonl').text)[0]);
+    expect(header.provider.minPoseDetectionConfidence).toBe(0.9);
+  });
+
   it('stays inert when the dev flag is off', async () => {
     vi.stubEnv('VITE_TRACE_RECORD', '0');
     vi.resetModules();
