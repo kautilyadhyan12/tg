@@ -40,6 +40,28 @@ export const PERSON_GATE = Object.freeze({
    *  (usePoseDetection.js FEED_INTERVAL_MS), and the default the ruling was
    *  measured at. */
   window: 15,
+  /** THE CADENCE THE CUT-OFF WAS MEASURED AT. Not a second threshold — it is
+   *  part of the FIRST one, and leaving it out made 0.923 mean different things
+   *  on different machines.
+   *
+   *  `bone_stretch` is reported as a rate per second, so it reads higher when
+   *  frames arrive closer together — but a bone does not change length when its
+   *  owner moves, so almost all of what it measures is per-frame estimator
+   *  noise that does not grow with the gap. Kd's thirteen clips ARE the app's
+   *  own engine feed on his laptop (`usePoseDetection.js` records inside the
+   *  same interval check that feeds the engine), pooled median 82.1 ms over
+   *  12,075 measured pairs. `FEED_INTERVAL_MS` is only a FLOOR, so a quicker
+   *  machine reaches ~67 ms, reads ~1.22× higher, and silences about twice as
+   *  many frames — measured on these clips, it costs a real rep on two of the
+   *  six containing Kd, which is the exact harm `motion_incoherence` was
+   *  rejected for (:7062).
+   *
+   *  Fixing the conversion here makes the verdict a function of the FRAMES and
+   *  not of the machine, and it reproduces the ruled table on the ruled clips
+   *  exactly — 3 invented reps left on `chair_A`, all 66 of Kd's own reps kept.
+   *  That equality is asserted in this module's suite; if it ever breaks, the
+   *  shipped gate has stopped being the one Kd approved. */
+  nominalDtMs: 82,
 });
 
 // ── WHEN THE SCREEN SPEAKS, AND WHEN IT STOPS ───────────────────────────────
@@ -95,6 +117,7 @@ export class SceneGate {
       new PersonGate({
         rules: [{ signal: PERSON_GATE.signal, cutoff: PERSON_GATE.cutoff }],
         window: PERSON_GATE.window,
+        nominalDtMs: PERSON_GATE.nominalDtMs,
       });
     this._blockedRun = 0;
     this._cleanRun = 0;

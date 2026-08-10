@@ -175,6 +175,34 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       STILL does not tick — T3 is unrun** (:4718 F4). The smoke also surfaced a
       SEPARATE Critical/High that is not this line's: calories bill a mid-set
       absence as vigorous exercise — its own line above.
+      **STATUS 2026-08-10 (e) — T3 ROUND 1 RAN AND FOUND TWO CRITICAL/HIGH,
+      BOTH FIXED. The line STILL does not tick: the diff-only re-review is
+      unrun** (:5348 rule 2). Both were the screen or the number being wrong,
+      neither touched Kd's cut-off, and the ruled table came out BETTER on both
+      sides. (1) **The panel said "Not counting" while it was counting** — the
+      sentence is held for up to fourteen frames after blocking stops so it can
+      be read, but counting resumes on the FIRST clean frame, so the count rose
+      and the rep beep sounded underneath it; measured on FOUR of the six clips
+      containing Kd. There are now two sentences, present tense while blocking
+      and past tense after. (2) **The cut-off meant something different on every
+      machine.** `bone_stretch` is a rate per second and `FEED_INTERVAL_MS` is
+      only a FLOOR — Kd's laptop achieved a pooled median 82.1 ms over 12,075
+      pairs, a quicker machine reaches 67 — so the shipped gate read ~1.22×
+      higher on faster hardware and, replayed at that cadence, **lost a real rep
+      on two of the six clips of Kd**: the exact harm `motion_incoherence` was
+      rejected for (:7062), arriving on hardware nobody owns yet. The ruled
+      cadence is now part of the ruled configuration (`nominalDtMs: 82`), so the
+      verdict is a function of the FRAMES and not the machine.
+      **THE RULED TABLE MOVED, IN KD'S FAVOUR ON BOTH SIDES, and he was told:**
+      invented reps 11 → **2** (the ruling's table said 3), all **66** of his own
+      reps still counted, and person frames silenced **4.5% → 1.8%**. Re-measured
+      through the committed instrument at the shipped setting
+      (`measure-pose.ts --gate "bone_stretch>0.923" --window 15 --nominal-dt 82`,
+      which gained that flag in the same commit — without it the script could no
+      longer reproduce what ships). web 585/585 · engine 190/190 · 23 mutants,
+      22 RED, 1 ALIVE (PG14, pre-existing, reason recorded), 0 never ran,
+      restores sha256-verified. Eight Low findings fixed, logged in `BACKLOG.md`;
+      the one deferral has its own line below.
       **STATUS 2026-08-10 (c) — IT IS WIRED, AND THE SCREEN SAYS SO. The line
       still does NOT tick: the SMOKE WAS UNRUN at the time of writing.** (DECISIONS :7104.) Every frame
       the app feeds the engine goes through the check first at the ruled setting;
@@ -241,6 +269,23 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       **Deferred out of the person-check card deliberately** (R1.1): the defect
       lives in `calories.ts` and the engine's rep timing, neither of which that
       card touches. DECISIONS :7104 records the smoke that found it.
+- [ ] ⚪ **A user the person check is WRONG about cannot take over the set.**
+      "Count this set myself" is offered only on a frame GAP or a camera error
+      (`ActiveWorkout.jsx`), and a blocked frame is not a gap — frames keep
+      arriving, the check keeps refusing them, and the button never appears. So
+      the one person the check has misjudged has no way out of it.
+      **Deferred, not dismissed, and the severity is honest:** measured on Kd's
+      own clips the worst run on a person clip is 18 frames (~1.5 s), which is
+      an annoyance rather than a lost workout, and the frame-rate fix in the
+      same commit cuts the silencing of a real user from 4.5% to 1.8%. It is
+      recorded because it is the ESCALATION PATH for that defect — if the
+      check is ever wrong for longer, this is what turns it from a pause into a
+      dead set. Found by the T3 review of the person-check card (its Low-8);
+      out of scope for a fix round under :5348 rule 6, which keeps a round to
+      the findings Kd approved.
+      **The no-removal rule is NOT engaged** — nothing is being hidden; this
+      is a button that needs one more reason to appear.
+
 - [ ] 🔴 **A squat too shallow to count says NOTHING — silence by
       construction.** Kd: *"when i do proper squat even then it does not count ...
       what would a user be thinking doing multiple correct squat but not being

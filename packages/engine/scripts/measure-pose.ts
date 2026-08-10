@@ -14,6 +14,11 @@
 //                       from a label that happens to start with "me_".
 //   --window <n>        frames in the rolling median (default 15, ~1s @15fps)
 //   --max-gap <ms>      frame pairs further apart than this are skipped (500)
+//   --nominal-dt <ms>   convert every rate at THIS interval instead of the real
+//                       one, so a reading depends on the frames and not on how
+//                       fast the machine produced them. The shipped gate sets it
+//                       (apps/web/src/engine/sceneGate.js) — pass the same value
+//                       here or section 6 is not measuring what ships.
 //   --gate <spec>       measure THIS gate in section 6 instead of the derived
 //                       candidates; repeatable. See parseGateSpec for the
 //                       grammar (`bone_stretch>0.80`, `bone_stretch@2%`,
@@ -195,6 +200,8 @@ interface Options {
   readonly nobody: ReadonlySet<string>;
   readonly window: number;
   readonly maxGapMs: number;
+  /** null = the honest per-second rate, as sections 4 and 5 report it. */
+  readonly nominalDtMs: number | null;
   /** Empty = section 6 derives its own candidates from section 5. Non-empty =
    *  these exact gates, and nothing else, so a ruled number can be re-measured
    *  by name rather than approximated. */
@@ -499,6 +506,7 @@ function gatedReplay(
     mode: candidate.mode,
     window: opts.window,
     maxGapMs: opts.maxGapMs,
+    ...(opts.nominalDtMs === null ? {} : { nominalDtMs: opts.nominalDtMs }),
   });
   const session = createSession(compileDefinition(clip.definition, 1));
   let blocked = 0;
@@ -811,6 +819,7 @@ function parseArgs(argv: readonly string[]): { files: string[]; opts: Options } 
   let nobody = new Set<string>();
   let window = 15;
   let maxGapMs: number = MAX_GAP_MS;
+  let nominalDtMs: number | null = null;
 
   const labels = (v: string): Set<string> =>
     new Set(
@@ -844,6 +853,9 @@ function parseArgs(argv: readonly string[]): { files: string[]; opts: Options } 
       case "--window":
         window = Math.round(number("--window", argv[++i]));
         break;
+      case "--nominal-dt":
+        nominalDtMs = number("--nominal-dt", argv[++i]);
+        break;
       case "--max-gap":
         maxGapMs = number("--max-gap", argv[++i]);
         break;
@@ -855,7 +867,7 @@ function parseArgs(argv: readonly string[]): { files: string[]; opts: Options } 
         files.push(arg);
     }
   }
-  return { files, opts: { exercise, person, nobody, window, maxGapMs, gates } };
+  return { files, opts: { exercise, person, nobody, window, maxGapMs, nominalDtMs, gates } };
 }
 
 /**

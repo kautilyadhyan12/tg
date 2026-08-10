@@ -220,6 +220,38 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:7298** — 2026-08-10 — **PERSON CHECK, T3 ROUND 1: two Critical/High — the
+  screen saying "Not counting" while it counted, and the ruled cut-off meaning a
+  different strictness on every machine.** **Read before touching
+  `sceneGate.js`, before writing a sentence that outlives the condition that
+  raised it, and before treating a per-second rate in `discriminators.ts` as a
+  property of the frames.** Neither finding touched Kd's number. **C/H-1:** the
+  message is held ~14 frames so it can be READ, but counting resumes on the
+  FIRST clean frame — measured, a rep was counted under that sentence on FOUR of
+  the six clips of Kd. Two sentences now, and in the tail a live engine cue
+  outranks it. **C/H-2:** `bone_stretch` is a rate per second and
+  `FEED_INTERVAL_MS` is a FLOOR — his laptop achieved a pooled median 82.1 ms
+  over 12,075 pairs, a faster machine reaches 67, so the gate read ~1.22x higher
+  there and **lost a real rep on two of six clips**, the exact harm
+  `motion_incoherence` was rejected for (:7062). **The fix is a UNIT, not a
+  threshold**: a bone does not change length when its owner moves, so the
+  conversion was injecting the machine's speed — `nominalDtMs: 82` joins the
+  cut-off because **a cut-off and the cadence it was measured at are ONE
+  ruling**. **THE RULED TABLE MOVED, BETTER ON BOTH SIDES: invented 11 -> 2 (the
+  ruling said 3), all 66 real reps kept, person frames silenced 4.5% -> 1.8%.**
+  82 is measured, not tuned — 75 scores better and picking it for that reason is
+  a threshold from judgement. **THREE INSTRUMENT FINDINGS, and two are my own
+  tests: BOTH first-draft regression tests were VACUOUS and only mutation found
+  it** — one asserted a property over a fixture whose reps never reached the
+  state (true of an empty list), the other compared two cadences on clips an
+  order of magnitude either side of the cut-off, where doubling moves nothing.
+  **A gate lives in the tails and so must its test.** Third: `measure-pose.ts`
+  built its own gate without the new field, so the committed instrument would
+  have measured a DIFFERENT gate from the app (:5199's class) — `--nominal-dt`
+  added here. PG12 aborted the sweep on a drifted anchor (:4267 working);
+  PG15b was ALIVE because its `expect` named a suite that never ran. web
+  585/585 · engine 190/190 · 23 mutants, 22 RED, 1 ALIVE (PG14), 0 never ran.
+  **OWED does NOT tick — the diff-only re-review is unrun.**
 - **:7222** — 2026-08-10 — **THE PERSON-CHECK SMOKE PASSED — ZERO reps from the
   chair — and KD'S INSTINCT FOUND A CRITICAL/HIGH THE PASS WAS SITTING ON TOP
   OF.** **Read before writing a smoke doc, and before touching `calories.ts` or

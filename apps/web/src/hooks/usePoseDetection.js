@@ -270,8 +270,28 @@ export default function usePoseDetection({
 
   // Resume the loop when the page becomes visible again mid-session.
   useEffect(() => {
+    // A HIDDEN TAB IS A PAUSE THE APP NEVER CALLED ONE. `enabled` does not
+    // change, so the per-set resume effect — the only thing that reached
+    // `resetScene` — never fires. The person check then measures the last frame
+    // before the switch against the first frame after, minutes apart and often
+    // a different room, and a "not counting" sentence raised beforehand is
+    // still on screen explaining a moment the user cannot remember.
+    //
+    // THE STOP IS DONE HERE RATHER THAN LEFT TO THE LOOP, and that is the part
+    // that makes the rule hold. Browsers do not run frame callbacks in a hidden
+    // tab, so the loop's own `document.hidden` check usually never runs: the
+    // pending callback simply resumes when the tab does, `loopRunningRef` was
+    // never cleared, and the guard below quietly does nothing. Cancelling on the
+    // way out makes coming back deterministic instead of dependent on whether
+    // one more frame happened to fire.
     const onVisibility = () => {
-      if (!document.hidden && videoRef.current && !loopRunningRef.current) {
+      if (document.hidden) {
+        if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+        loopRunningRef.current = false;
+        return;
+      }
+      if (videoRef.current && !loopRunningRef.current) {
+        controllerRef.current.resetScene();
         startStreaming(videoRef.current);
       }
     };

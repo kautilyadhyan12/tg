@@ -217,10 +217,37 @@ const NOTHING: FrameReading = {
  *                       :6386 did not have — centre drift can be fooled by a
  *                       body genuinely moving, spread cannot.
  */
+/**
+ * `nominalDtMs` — read this before changing it.
+ *
+ * Every rate below is `per-frame quantity × 1000/dt`, so a reading depends on
+ * how fast the machine happens to be feeding frames. That is correct for the
+ * two signals that measure DISPLACEMENT (`centre_drift`, `motion_incoherence`):
+ * a body really does travel further in 100 ms than in 67 ms.
+ *
+ * It is WRONG for `bone_stretch`, and that is the signal the shipped gate runs
+ * on. A bone does not change length when its owner moves, so the numerator is
+ * almost entirely per-frame estimator noise — which does not grow with dt. The
+ * per-second conversion therefore injects the machine's speed into a quantity
+ * that has nothing to do with it: the same clip re-stamped from the recording
+ * machine's ~82 ms cadence to the app's 67 ms feed floor reads ~1.22× higher
+ * and silences roughly twice as many frames, costing a real rep on two of Kd's
+ * six clips (measured; DECISIONS entry for this round).
+ *
+ * Passing a nominal interval makes the reading a function of the FRAMES ALONE
+ * and not of their timestamps, so a fast laptop and a slow one behave alike.
+ * The value belongs to whoever owns the cut-off — the web bridge — because a
+ * cut-off and the cadence it was measured at are one ruling, not two. This file
+ * still chooses nothing: `null` keeps the honest per-second rate.
+ *
+ * The gap test above continues to use the REAL interval. Skipping a pair
+ * because the model lost the pose is a fact about the recording, not a unit.
+ */
 export function readFrame(
   frame: PoseFrame,
   previous: PoseFrame | null,
   maxGapMs: number = MAX_GAP_MS,
+  nominalDtMs: number | null = null,
 ): FrameReading {
   const torso = torsoLength(frame);
   if (torso === null) return NOTHING;
@@ -243,7 +270,7 @@ export function readFrame(
   if (previous === null) return { ...NOTHING, limb_asymmetry: limbAsymmetry };
   const dtMs = frame.t - previous.t;
   if (!(dtMs > 0) || dtMs > maxGapMs) return { ...NOTHING, limb_asymmetry: limbAsymmetry };
-  const perSecond = 1000 / dtMs;
+  const perSecond = 1000 / (nominalDtMs !== null && nominalDtMs > 0 ? nominalDtMs : dtMs);
 
   const here = bodyCentre(frame);
   const there = bodyCentre(previous);

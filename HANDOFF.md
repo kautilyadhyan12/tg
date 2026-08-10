@@ -1,6 +1,77 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: PERSON CHECK — T3 ROUND 1 FINDINGS ARE FIXED AND COMMITTED. **TWO
+      CRITICAL/HIGH, both the app saying something FALSE, NEITHER touching Kd's
+      cut-off.** web 585/585 (+7) · engine 190/190 · typecheck + I1 purity grep
+      clean · eslint clean on all 13 touched files · `vite build` OK · 23
+      mutants, 22 RED, 1 ALIVE (PG14, pre-existing with its reason), 0 never
+      ran, restores sha256-verified. Full record: DECISIONS :7298.
+
+WHAT IS LEFT, AND IT IS ONE THING
+  **THE DIFF-ONLY RE-REVIEW** (:5348 rule 2 — cover ONLY these fixes and the
+  surfaces they touch, never a fresh full pass). **THE OWED LINE DOES NOT TICK
+  UNTIL IT IS CLEAN.** The smoke has also not been re-run on these bytes; the
+  message text changed, so smoke step wording will not match verbatim.
+
+THE TWO FIXES, in one paragraph each
+  1. **The panel said "Not counting" while it was counting.** The sentence is
+     held ~14 frames so it can be read; counting resumes on the FIRST clean one.
+     Measured: a rep was counted underneath it on FOUR of the six clips of Kd.
+     Now two sentences — present tense while blocking, past tense after — and in
+     the tail a live engine cue outranks it.
+  2. **The ruled cut-off meant a different strictness on every machine.**
+     `bone_stretch` is a rate per SECOND; `FEED_INTERVAL_MS = 67` is a FLOOR.
+     Kd's laptop achieved a pooled median 82.1 ms (12,075 pairs, all 13 clips);
+     a faster machine reaches 67, reads ~1.22x higher, and LOST A REAL REP on
+     two of his six clips. `nominalDtMs: 82` now sits in the frozen ruling
+     object beside the cut-off.
+
+**THE RULED TABLE MOVED AND KD WAS TOLD.** Better on both sides: invented reps
+  11 -> **2** (his table said 3), all **66** of his own reps kept, person frames
+  silenced **4.5% -> 1.8%**. Re-measured through the committed instrument at the
+  shipped setting.
+
+THE LESSON FROM THIS SESSION, and it is about MY OWN TESTS
+  **BOTH first-draft regression tests were VACUOUS, and mutation is the only
+  reason I know.** One asserted "no frame both counts a rep and says 'not
+  counting'" over a fixture whose reps never landed inside the message — TRUE OF
+  AN EMPTY LIST, green with the defect fully restored. The other compared two
+  frame rates on clips reading an order of magnitude either side of the cut-off,
+  where doubling every reading moves no verdict. **A gate lives in the tails and
+  so must its test.** Both fixtures are now measured to sit ON the boundary, and
+  both tests assert that the state they check is actually REACHED.
+
+THINGS A LATER CHAT WILL BE TEMPTED TO DO, AND MUST NOT
+  - **Tune `nominalDtMs`.** 75 ms scores marginally better on the table (1
+    invented rep instead of 2). 82 is the MEASURED cadence of the recordings the
+    ruling was made on; picking 75 because it scores better is a threshold from
+    judgement, which the OWED line forbids. PG19 makes that edit go red.
+  - **Build a `PersonGate` without `nominalDtMs`.** Any oracle, script or test
+    that does is measuring a different gate from the app. PG18 covers the
+    shipped path; the whole-object assertion in `sceneGate.test.js` is what
+    forces a new field into every mirror of the config.
+  - **Re-run `measure-pose.ts` without `--nominal-dt 82`** and compare the
+    numbers to this entry. Without it the script measures the pre-fix gate.
+
+A WRINKLE THAT STILL BITES
+  Pointing `measure-pose.ts` at `Desktop\traces` ABORTS on a stray
+  `squats-empty_room.detect (2).jsonl`. **The abort is card 1 working
+  correctly.** Name the clips explicitly. Labels containing a comma or a period
+  (`both_A,`, `both_D.`) break `--person`/`--nobody` — still owed; I worked
+  around it by copying the 13 clips to a scratch dir with clean labels.
+
+STILL OWED, and none of it is this round's job
+  - **NEW ⚪ line: no escape hatch while the check is blocking.** "Count this
+    set myself" needs a frame gap or a camera error, and blocked frames are
+    neither, so a user the check is wrong about cannot take over.
+  - The mid-set-absence calorie defect (:7222, own card); the shallow-squat cue;
+    the voice decision; `pose_landmarker_lite` hard-wired; the comma-in-label bug.
+
+SERVERS: none started this session.
+```
+
+```
 TASK: CAMERA-ACCURACY PHASE 2, CARD 4 — ALL THREE STEPS ARE BUILT AND COMMITTED.
       **THE CHECK IS WIRED AND THE SCREEN SAYS SO — the first change in this
       whole card a user can see.** web 578/578 (+26) · engine 190/190 · engine

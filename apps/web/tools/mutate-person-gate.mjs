@@ -173,12 +173,32 @@ const MUTANTS = [
   {
     id: 'PG12',
     target: 'controller',
-    why: 'the verdict survives the message, so the screen grades a frame it refused to look at',
-    // Anchored across two lines because the identical statement appears in the
-    // blocked branch as well; PG13 mutates that one.
-    expect: 'gives no form verdict while it is saying it cannot count',
-    from: '    if (scene.showMessage) {\n      display.form_correct = null;\n',
-    to: '    if (scene.showMessage) {\n',
+    why: 'one present-tense sentence for both states — "Not counting" printed over a rising count',
+    // RE-ANCHORED. Its first form removed `form_correct = null` from the message
+    // block, which no longer lives there: withholding the verdict belongs to the
+    // BLOCKED branch (PG13), and withholding it through the tail was itself half
+    // of the defect this row now restores. What it puts back is the shipped
+    // behaviour of the first round — the sentence chosen once, regardless of
+    // whether it is still true — measured to count a rep underneath itself on
+    // four of the six clips of Kd.
+    expect: "never says 'not counting' on a frame where it counted a rep",
+    from:
+      '    if (scene.showMessage) {\n      if (scene.blocked) {\n' +
+      '        display.corrections = [translate("cue.scene.no_person")];\n' +
+      '      } else if (display.corrections.length === 0) {\n' +
+      '        display.corrections = [translate("cue.scene.no_person_recent")];\n' +
+      '      }\n    }',
+    to:
+      '    if (scene.showMessage) {\n      display.form_correct = null;\n' +
+      '      display.corrections = [translate("cue.scene.no_person")];\n    }',
+  },
+  {
+    id: 'PG12b',
+    target: 'controller',
+    why: 'the tail sentence outranks a live cue again, hiding "cannot see your legs" for fourteen frames',
+    expect: 'lets a real engine cue through once counting has resumed',
+    from: '      } else if (display.corrections.length === 0) {',
+    to: '      } else if (true) {',
   },
   {
     id: 'PG13',
@@ -213,8 +233,17 @@ const MUTANTS = [
     target: 'messages',
     why: 'the sentence names a cause the app cannot know',
     expect: 'has a sentence for the person check, and it names no cause',
-    from: '"Not counting — the camera isn\'t sure it\'s looking at you. Step into full view.",',
+    from:
+      '"Not counting — the camera isn\'t sure it\'s looking at you. Check that your whole body is in the picture.",',
     to: '"Not counting — that looks like a chair, not a person. Move the chair out of shot.",',
+  },
+  {
+    id: 'PG15b',
+    target: 'messages',
+    why: 'the recovered sentence is written in the present tense again, so it is false the moment it appears',
+    expect: 'does not claim the app is stopped',
+    from: '"cue.scene.no_person_recent": "Counting again — the camera lost sight of you for a moment.",',
+    to: '"cue.scene.no_person_recent": "Not counting — the camera cannot see you.",',
   },
   {
     id: 'PG16',
@@ -231,6 +260,41 @@ const MUTANTS = [
     expect: 'forgets the scene when a paused set RESUMES',
     from: '    if (enabled && !wasEnabled) controllerRef.current.resetScene();',
     to: '    controllerRef.current.resetScene();',
+  },
+  {
+    id: 'PG18',
+    target: 'scene',
+    why: 'the gate stops being told the cadence the cut-off was measured at, so 0.923 means something different on every machine',
+    expect: 'reaches the same verdict on a fast machine as on a slow one',
+    from: '        window: PERSON_GATE.window,\n        nominalDtMs: PERSON_GATE.nominalDtMs,\n',
+    to: '        window: PERSON_GATE.window,\n',
+  },
+  {
+    id: 'PG19',
+    target: 'scene',
+    why: 'the cadence is nudged — invisible in every behavioural fixture, a different set of a real user’s frames silenced in the app',
+    // PG2's shape, one field over, and for the same reason: this number is part
+    // of the ruled operating point, and 60 ms sits inside the plausible range of
+    // real machines exactly as 0.5 sits between the two piles.
+    expect: 'is bone_stretch above 0.923',
+    from: '  nominalDtMs: 82,',
+    to: '  nominalDtMs: 60,',
+  },
+  {
+    id: 'PG20',
+    target: 'controller',
+    why: 'a resumed set keeps its occlusion streak, so "cannot see your legs" fires on the first frame back',
+    expect: 'forgets the occlusion streak when a paused set resumes',
+    from: '    this._metricUnusableStreak = 0;\n  }\n\n  /** Per-rep scores',
+    to: '  }\n\n  /** Per-rep scores',
+  },
+  {
+    id: 'PG21',
+    target: 'hook',
+    why: 'a hidden tab is no longer stopped deterministically, so coming back never forgets the scene',
+    expect: 'forgets the scene when the TAB comes back too',
+    from: '      if (document.hidden) {\n        if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }\n        loopRunningRef.current = false;\n        return;\n      }\n',
+    to: '      if (document.hidden) return;\n',
   },
 ];
 

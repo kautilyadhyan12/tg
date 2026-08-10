@@ -146,9 +146,24 @@ export class SessionController {
     // caused it — it clears after a run of clean ones, so that it can be read.
     // Written once: a rule with two declarations is where a correction gets lost
     // (:4556 F1), and the first draft of this method had exactly two.
+    //
+    // WHICH SENTENCE DEPENDS ON WHETHER IT IS STILL TRUE. Counting resumes on
+    // the FIRST clean frame, while the message has up to fourteen more to run,
+    // so the present-tense sentence used to sit under a count that was moving
+    // and a rep beep that was sounding — measured on four of the six clips
+    // containing Kd (:5807, and :5618's "31s over 1 min total" is the shape).
+    //
+    // AND IN THE TAIL A LIVE CUE OUTRANKS IT. While blocking, there is nothing
+    // else to say — the frame was blanked, so any engine cue would be about a
+    // frame the app refused to look at. Once counting has resumed the engine is
+    // reading real landmarks again, and an explanation of a pause that has ended
+    // must not stand in front of "cannot see your legs clearly" or a real fault.
     if (scene.showMessage) {
-      display.form_correct = null;
-      display.corrections = [translate("cue.scene.no_person")];
+      if (scene.blocked) {
+        display.corrections = [translate("cue.scene.no_person")];
+      } else if (display.corrections.length === 0) {
+        display.corrections = [translate("cue.scene.no_person_recent")];
+      }
     }
     return display;
   }
@@ -160,6 +175,12 @@ export class SessionController {
    *  where there is no check to reset. */
   resetScene() {
     if (this._scene != null) this._scene.reset();
+    // The occlusion streak is forgotten too, for the same reason and it was
+    // missed the first time: it counts CONSECUTIVE frames, and the frame before
+    // a pause is not the frame before now. Left standing, two unusable frames
+    // before a pause plus one after it raise "cannot see your legs clearly" on
+    // the first frame back — a cue about a run of frames that never happened.
+    this._metricUnusableStreak = 0;
   }
 
   /** Per-rep scores observed so far this set (engine RepEvent.score, §2.4). */

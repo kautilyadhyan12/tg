@@ -64,6 +64,14 @@ export interface PersonGateOptions {
   /** Frame pairs further apart than this are not measured (the model had lost
    *  the pose; measuring across the gap measures the gap). Default 500 ms. */
   readonly maxGapMs?: number;
+  /** The frame interval the cut-off was MEASURED at, in ms. Supplied, every
+   *  reading is converted at this interval instead of the real one, so the
+   *  verdict depends on the frames and not on how fast the machine produced
+   *  them — see `readFrame`'s own note, which carries the measurement. Omitted,
+   *  the honest per-second rate is used and the gate reads higher on a faster
+   *  machine. A gate whose strictness varies by device is a gate that silences
+   *  a real user on hardware nobody tested, so the shipped bridge supplies it. */
+  readonly nominalDtMs?: number;
 }
 
 export interface GateVerdict {
@@ -95,6 +103,7 @@ export class PersonGate {
   private readonly checks: readonly Check[];
   private readonly mode: GateMode;
   private readonly maxGapMs: number;
+  private readonly nominalDtMs: number | null;
   private previous: PoseFrame | null = null;
 
   constructor(options: PersonGateOptions) {
@@ -109,11 +118,12 @@ export class PersonGate {
     }));
     this.mode = options.mode ?? "any";
     this.maxGapMs = options.maxGapMs ?? MAX_GAP_MS;
+    this.nominalDtMs = options.nominalDtMs ?? null;
   }
 
   /** One frame in, one verdict out. */
   push(frame: PoseFrame): GateVerdict {
-    const reading = readFrame(frame, this.previous, this.maxGapMs);
+    const reading = readFrame(frame, this.previous, this.maxGapMs, this.nominalDtMs);
     this.previous = frame;
 
     const values: (number | null)[] = [];

@@ -243,3 +243,42 @@ changes, never the bar. Kd approved the fix round before any file was touched.)*
       wrong line. Not touched: :5348 rule 6 keeps a fix round to the findings Kd
       approved, and this was found while fixing them. Logged so it is not
       re-found from scratch.
+
+## Person check (camera card 4 step 3) — T3 round 1, Low findings
+
+All eight were found in the same review that raised the two Critical/High above
+them, and all eight are FIXED in the same commit (:5348 rule 1 — a Low buys no
+round, it is still fixed). Recorded here so the next chat knows they were
+accounted for rather than absorbed silently.
+
+- [x] **L1 · A hidden tab never forgot the scene.** `enabled` does not change
+      when a tab is switched away, so the resume path that calls `resetScene`
+      was never reached — the check kept a window of readings from minutes
+      earlier and a stale sentence. **The fix went in deeper than the finding
+      described**: browsers do not run frame callbacks in a hidden tab, so the
+      loop's own `document.hidden` check usually never runs and the guard would
+      have stayed a no-op. The hide is now cancelled explicitly. Mutant PG21.
+- [x] **L2 · `resetScene` cleared the check but not `_metricUnusableStreak`,**
+      so two unusable frames before a pause plus one after could raise "cannot
+      see your legs clearly" on the first frame back. Mutant PG20.
+- [x] **L3 · The scene sentence outranked a live engine cue for up to fourteen
+      frames after counting resumed.** Fixed with C/H-1: while blocking it still
+      wins (the frame was blanked, so any engine cue is about a frame the app
+      refused to look at); in the tail a real cue wins. Mutant PG12b.
+- [x] **L4 · Four `toBeGreaterThan(50)` assertions.** A floor is satisfied by a
+      cut-off loosened until it barely works — PG1's shape. Restated as set
+      equality against the shipped gate, frame by frame.
+- [x] **L5 · `slice(0, 7)` was one frame short of the real warm-up boundary**
+      (`ceil(15/2)` = 8 readings, first frame has no predecessor ⇒ frame 9 is
+      the earliest that can block). Now asserts the exact boundary.
+- [x] **L6 · `resetCalls: 0` on the `scripted()` fake was never read.** Deleted.
+- [x] **L7 · "Step into full view" instructed an action the app cannot know is
+      needed** — measured, 0.7–10.5% of frames of a user fully in frame were
+      blocked. Now "Check that your whole body is in the picture": a suggestion
+      to verify, not a claim about what is wrong. Mutant PG15.
+- [ ] **L8 · No escape hatch while the check is blocking.** "Count this set
+      myself" is gated on a frame gap or a camera error, and blocked frames
+      still arrive, so a user the check is wrong about cannot take over.
+      **NOT fixed — deferred, and it has an `OWED.md` line in this same commit**
+      per the deferral rule. Low on measured evidence (worst person-clip run 18
+      frames, ~1.5 s) but it is the escalation path for the frame-rate defect.

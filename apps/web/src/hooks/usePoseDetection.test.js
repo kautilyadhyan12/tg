@@ -169,6 +169,30 @@ describe('usePoseDetection — the user counting their own reps', () => {
     expect(resetScene).toHaveBeenCalledTimes(1);        // still enabled: nothing to forget
   });
 
+  it('forgets the scene when the TAB comes back too — the other way a set pauses', async () => {
+    // A hidden tab stops the frame loop without anything setting `enabled` to
+    // false, so the resume above never fires. The set can sit there for minutes
+    // and come back to a completely different room, with the person check still
+    // holding the readings from before and a "not counting" sentence still on
+    // screen explaining a moment nobody remembers. Same rule, second doorway —
+    // the one the card wrote the rule for and did not wire.
+    const props = { exercise: 'squat', setIndex: 1, enabled: true, analysisEnabled: true };
+    let out;
+    await act(async () => { out = render(props); });
+    // A video element must exist, or the visibility handler has nothing to
+    // resume and the test would pass on the wrong branch.
+    await act(async () => { out.result.current.startStreaming(document.createElement('video')); });
+    expect(resetScene).not.toHaveBeenCalled();
+
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    expect(resetScene).not.toHaveBeenCalled();          // going away is not coming back
+
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    expect(resetScene).toHaveBeenCalledTimes(1);
+  });
+
   it('emits the finished set summary when the set ordinal changes', async () => {
     endSet.mockReturnValue({ setIndex: 1, reps: 3 });
     const onSetComplete = vi.fn();

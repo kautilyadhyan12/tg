@@ -9,7 +9,12 @@
 //      "three in a row" would have to hand-build a clip that blocks on exactly
 //      frames 4, 5 and 6, and would then be testing the fixture.
 import { describe, expect, it } from "vitest";
-import { FRAME_MS, furnitureClip, personClip } from "./__fixtures__/sceneClips.js";
+import {
+  FRAME_MS,
+  furnitureClip,
+  personClip,
+  shakenSquat,
+} from "./__fixtures__/sceneClips.js";
 import {
   BLOCKED_RUN_BEFORE_MESSAGE,
   CLEAN_RUN_BEFORE_MESSAGE_CLEARS,
@@ -31,7 +36,17 @@ describe("the numbers that ship are the numbers Kd ruled", () => {
     // scored an indistinguishable 0.980 separation and LOSES A REAL REP in both
     // recording sessions, so a second rule appearing here — or a nudged cut-off
     // — is a silent reversal of a ruling made on measured evidence.
-    expect(PERSON_GATE).toEqual({ signal: "bone_stretch", cutoff: 0.923, window: 15 });
+    // `nominalDtMs` is part of the SAME ruling, not an addition to it: without
+    // it 0.923 meant a different strictness on every machine, because the signal
+    // is reported per second and the app's frame interval is a floor, not a
+    // guarantee. Measured pooled median of the thirteen clips the ruling was
+    // made on.
+    expect(PERSON_GATE).toEqual({
+      signal: "bone_stretch",
+      cutoff: 0.923,
+      window: 15,
+      nominalDtMs: 82,
+    });
   });
 
   it("never blocks a body whose bones keep their lengths", () => {
@@ -65,8 +80,47 @@ describe("the numbers that ship are the numbers Kd ruled", () => {
   it("reads nothing, and so blocks nothing, until the window has filled", () => {
     // "No reading means pass" is load-bearing: the first second of every set
     // would otherwise be taken away from the user on no evidence at all.
-    const early = run(furnitureClip(200)).slice(0, 7);
-    expect(early.every((v) => v.blocked === false)).toBe(true);
+    //
+    // Stated as the exact boundary, not a comfortable margin. The window needs
+    // `ceil(15/2)` = 8 real readings and the first frame has no predecessor, so
+    // frame 9 is the earliest that can block; an earlier draft checked 7 and
+    // would have stayed green if the warm-up had been shortened by a frame.
+    const verdicts = run(furnitureClip(200));
+    expect(verdicts.slice(0, 8).every((v) => v.blocked === false)).toBe(true);
+    expect(verdicts.findIndex((v) => v.blocked)).toBe(8);
+  });
+
+  it("reaches the same verdict on a fast machine as on a slow one", () => {
+    // THE SECOND HALF OF THE RULING, and the one that was missing.
+    //
+    // `bone_stretch` is reported as a rate per SECOND, so the same frames read
+    // higher when they arrive closer together. `FEED_INTERVAL_MS` is only a
+    // FLOOR — Kd's laptop achieved ~82 ms and a quicker machine reaches 67 —
+    // so before this the shipped gate was ~1.22× stricter on faster hardware
+    // and silenced about twice as many frames. Replayed over his own thirteen
+    // recordings at the app's floor, that cost a REAL rep on two of the six
+    // clips containing him: the exact harm `motion_incoherence` was rejected
+    // for (:7062), arriving through the back door on hardware nobody owns yet.
+    //
+    // A bone does not change length when its owner moves, so the honest reading
+    // was never a rate in the first place. Stated as a property rather than a
+    // number: the verdict is a function of the FRAMES, and timestamps decide
+    // only whether a pair is close enough to measure at all.
+    // THE FIXTURE IS THE TEST HERE, and the first draft's was worthless. A clip
+    // of obvious furniture reads an order of magnitude above the cut-off and a
+    // clean body an order below, so doubling every reading moves NO verdict and
+    // the assertion passed with the defect fully restored. A gate lives in the
+    // tails: this shake amount is the one measured to sit ON the cut-off — 43 of
+    // 109 frames blocked — and without the fix 101 of those 109 verdicts change
+    // between the two cadences.
+    const frames = shakenSquat(0.035);
+    const at = (ms) => run(frames.map((f, i) => ({ t: i * ms, kp: f.kp })));
+    const slow = at(100).map((v) => v.blocked);
+    const fast = at(50).map((v) => v.blocked);
+    expect(fast).toEqual(slow);
+    // And the fixture really is on the boundary, not comfortably one side of it.
+    expect(slow.filter(Boolean).length).toBeGreaterThan(20);
+    expect(slow.filter((b) => !b).length).toBeGreaterThan(20);
   });
 
   it("keeps counting through frames it cannot measure at all", () => {
@@ -97,7 +151,6 @@ function scripted(pattern) {
       i = 0;
       last = false;
     },
-    resetCalls: 0,
   };
 }
 
@@ -151,6 +204,14 @@ describe("the message stays up long enough to read", () => {
     // The message outlives the blocked frames deliberately. Counting must NOT:
     // the moment the camera is happy again the reps resume, which is the whole
     // reason the clean-run rule is about the message and not about the gate.
+    //
+    // THIS PAIR OF FLAGS IS A REAL STATE AND USED TO BE A LIE. `showMessage`
+    // with `blocked` false means "counting, and the screen is still explaining
+    // the pause that just ended" — and the bridge printed a present-tense "Not
+    // counting" through all of it, over a rising count. That the GATE is right
+    // here is exactly why the defect was invisible from this file; the sentence
+    // is chosen in `sessionController`, and its suite is where the honesty of
+    // this state is now pinned.
     const scene = new SceneGate(scripted([true, true, true, false]));
     const verdict = after(scene, 3 + 5);
     expect(verdict.showMessage).toBe(true);

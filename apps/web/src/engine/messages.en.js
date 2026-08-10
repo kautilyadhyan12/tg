@@ -25,8 +25,19 @@ const EN = {
   // from a user half out of shot — it knows only that its own reading says "not
   // a body". A cue that named the reason would be naming a cause the app cannot
   // know, which is the defect recorded at :6150.
+  //
+  // THERE ARE TWO OF THEM, AND THE SECOND ONE IS A BUG FIX. The sentence stays
+  // up for a run of clean frames after blocking stops, so that it can be read —
+  // but counting resumes on the FIRST clean frame, so a single present-tense
+  // "not counting" was on screen while the count moved and the rep beep played.
+  // Measured on Kd's own recordings: a rep was counted underneath that sentence
+  // on four of the six clips containing him. Two figures on one screen that
+  // cannot both be true is :5807, and :5618's "31s over 1 min total" is the same
+  // shape. The state that is still blocking says so in the present tense; the
+  // state that has recovered says so in the past.
   "cue.scene.no_person":
-    "Not counting — the camera isn't sure it's looking at you. Step into full view.",
+    "Not counting — the camera isn't sure it's looking at you. Check that your whole body is in the picture.",
+  "cue.scene.no_person_recent": "Counting again — the camera lost sight of you for a moment.",
   // Setup camera hints (§4 cameraHint; setup.<exercise>.camera family, Appendix A)
   "setup.squat.camera": "Place your phone sideways, about 3 m away, with your full body in frame",
   "setup.jump_squat.camera": "Place your phone sideways, about 3 m away, with your full body in frame",

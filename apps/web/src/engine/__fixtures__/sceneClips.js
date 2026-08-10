@@ -137,6 +137,43 @@ export function shakenSquat(amount, seed = 3) {
   }));
 }
 
+/**
+ * The golden squat with a BURST of shaking in the middle: frames 50–61.
+ *
+ * This is the clip the screen's honesty depends on, and neither of the others
+ * can express it. `shakenSquat` blocks for its whole length, so the message is
+ * never up while the app is counting; `goldenSquat` never blocks at all. Here
+ * the check blocks, falls silent, and the engine goes on to count a REAL rep
+ * while the sentence explaining the pause is still on screen — the window in
+ * which a present-tense "Not counting" was a lie.
+ *
+ * THE NUMBERS ARE MEASURED, NOT CHOSEN FOR TIDINESS, and both matter:
+ *   - the clean golden counts its two reps at frames 34 and 71;
+ *   - with this burst it still counts TWO (34 and 73) — the shaking costs no
+ *     rep, so the fixture is not proving something about a broken clip;
+ *   - the message's tail runs frames 67–80, so rep 73 lands inside it.
+ * A burst that starts earlier eats the first rep; one 20 frames later leaves
+ * the tail empty and every assertion below passes vacuously. That combination
+ * was found by sweeping, and the tests assert the overlap exists rather than
+ * trusting these comments — a fixture is part of the claim (:4855).
+ */
+export function burstShakenSquat(amount = 0.05, from = 50, to = 62, seed = 3) {
+  const rnd = mulberry32(seed);
+  return goldenSquat().frames.map((f, i) =>
+    i >= from && i < to
+      ? {
+          t: f.t,
+          kp: f.kp.map(([x, y, z, v]) => [
+            x + (rnd() - 0.5) * amount,
+            y + (rnd() - 0.5) * amount,
+            z,
+            v,
+          ]),
+        }
+      : { t: f.t, kp: f.kp },
+  );
+}
+
 /** Trace rows → the shape the pose provider hands the bridge. */
 export function toLandmarks(kp) {
   return kp.map(([x, y, z, visibility]) => ({ x, y, z, visibility }));

@@ -7294,3 +7294,109 @@ instrument this project has no substitute for.
   includes a pause; the on-screen timer does not) and covered for display by that
   card's server-side clamp. **UNVERIFIED whether any screen can still show the
   contradiction**; flagged to the T3 reviewer rather than investigated here.
+
+## 2026-08-10 — PERSON CHECK, T3 ROUND 1: two Critical/High, and the second one is the ruled number meaning something different on every machine
+
+**Read before touching `sceneGate.js`, before writing a sentence that stays on
+screen longer than the condition that raised it, and before quoting any signal
+in `discriminators.ts` as if a rate per second were a property of the frames.**
+
+**Both findings are the app saying something FALSE, and the review that found
+them reproduced its own numbers before reporting.** Neither touches Kd's
+cut-off; both were fixed under his approval per :5348, with a regression test
+each proven RED against the restored defect.
+
+**C/H-1 — the panel said "Not counting" while it was counting.** The sentence is
+deliberately held for up to fourteen clean frames so that it can be READ
+(`CLEAN_RUN_BEFORE_MESSAGE_CLEARS = 15`), but counting resumes on the FIRST
+clean frame. So the count rose, the rep beep played, and the words underneath
+said neither was happening — measured through the real bridge on **four of the
+six clips containing Kd** (`me_and_furniture` 1, `me_squatting` 2, `both_B` 1,
+`both_D` 1). :5807's "on screen AND wrong", and :5618's "31s over 1 min total"
+one card over. There are now two sentences: present tense while blocking, past
+tense in the tail. **And in the tail a live engine cue OUTRANKS it** — while
+blocking there is nothing else to say (the frame was blanked), but once real
+landmarks are flowing again, an explanation of a pause that has ENDED must not
+stand in front of "cannot see your legs clearly".
+
+**C/H-2 — the cut-off was frame-rate dependent, so 0.923 meant a different
+strictness on every machine.** `bone_stretch` is reported as a rate per second
+and `FEED_INTERVAL_MS = 67` is a FLOOR, not a guarantee: Kd's laptop achieved a
+**pooled median 82.1 ms across 12,075 measured pairs** (command-verified over
+all 13 clips), a quicker machine reaches 67. Replayed at the app's own floor the
+shipped gate read **~1.22x higher, silenced about twice as many frames, and lost
+a REAL rep on two of the six clips of Kd** — the exact harm `motion_incoherence`
+was rejected for at :7062, arriving through the back door on hardware nobody
+owns yet, and the direction :6532 says to pin an operating point by.
+
+**THE FIX IS A UNIT, NOT A THRESHOLD, AND THE ARGUMENT IS PHYSICAL.** A bone
+does not change length when its owner moves, so `bone_stretch`'s numerator is
+almost entirely per-frame estimator noise, which does not grow with the gap —
+the per-second conversion was injecting the machine's speed into a quantity that
+has nothing to do with it. (Note what this says about the two signals that were
+REJECTED: `centre_drift` and `motion_incoherence` measure displacement, where
+the rate is correct. The signal Kd chose is the one the conversion was wrong
+for.) `nominalDtMs: 82` now lives in the same frozen object as the cut-off,
+because **a cut-off and the cadence it was measured at are ONE ruling, not two**,
+and the whole-object assertion is what forces any future field into every oracle
+that mirrors the config.
+
+**THE RULED TABLE MOVED — BETTER ON BOTH SIDES — AND KD WAS TOLD RATHER THAN
+LET IT PASS.** Through the committed instrument at the shipped setting: **reps
+invented 11 -> 2** (the table he ruled on said 3), **all 66 of his own reps still
+counted**, **person frames silenced 4.5% -> 1.8%**. A sensitivity sweep says the
+82 is not load-bearing — every nominal from 75 ms up keeps all 66 reps and is
+machine-independent; below ~70 it starts eating them. **82 was taken from the
+recordings, not tuned**: 75 scores marginally better (1 invented instead of 2)
+and choosing it for that reason would be picking a threshold from judgement,
+which the OWED line forbids, and it sits closer to the edge where real reps go.
+
+**THE INSTRUMENT FINDINGS ARE THE PART THAT OUTLIVES THE CARD, and there are
+three.**
+
+1. **My first regression test for C/H-1 was VACUOUS and I only found it by
+   mutating.** It asserted "no frame both counts a rep and shows 'not counting'"
+   over a fixture whose reps all landed OUTSIDE the message — an assertion that
+   is TRUE OF AN EMPTY LIST. It stayed GREEN with the defect fully restored. The
+   fixture is now a measured burst (frames 50-61) chosen by sweeping for one
+   that keeps BOTH reps and lands one inside the tail, and the test asserts that
+   overlap EXISTS. :4855's "a test is a claim and the FIXTURE is part of the
+   claim", one round later, inside the test written to close a Critical.
+2. **My first regression test for C/H-2 was vacuous for the OPPOSITE reason.**
+   It replayed obvious furniture and a clean body at two cadences and asserted
+   the verdicts matched. They matched with the defect restored too: those clips
+   read an order of magnitude either side of the cut-off, so doubling every
+   reading moves no verdict. **A gate lives in the tails and so must its test** —
+   now `shakenSquat(0.035)`, measured to sit ON the cut-off (43 of 109 frames
+   blocked), where 101 of 109 verdicts change without the fix. Same shape as
+   PG1 surviving the first sweep by grading on a curve.
+3. **The committed measurement script could no longer reproduce what ships.**
+   `measure-pose.ts` built its own `PersonGate` without the new field, so
+   section 6 would have quietly measured a DIFFERENT gate from the one in the
+   app — the same class as :5199's "I measured it RED" vs "the committed harness
+   measures it RED". It gained `--nominal-dt` in this commit, and the figures
+   above come from it.
+
+**PG12's anchor drifted and the sweep ABORTED rather than reporting a pass** —
+:4267's rule working as intended. It was re-anchored to restore the actual
+defect (one sentence for both states) rather than patched to match the new text.
+**PG15b was ALIVE on its first run and the cause was the HARNESS, not the code**:
+its `expect` pointed at the messages suite while the assertion that would catch
+it lived in `sessionController.test.js`, so the suite that could go red never
+ran. The message catalog gained its own assertion instead of the row being
+re-pointed at a distant test — a sentence's meaning should be pinned where the
+sentence lives.
+
+Low x8, all fixed, logged in `BACKLOG.md`; one deferral (no escape hatch while
+blocking) has its own `OWED.md` line in this commit. **L1's fix went deeper than
+the finding**: browsers do not run frame callbacks in a hidden tab, so the loop's
+own `document.hidden` check usually never runs, `loopRunningRef` is never
+cleared, and the one-line resume guard the finding implied would have been a
+no-op. The hide is now cancelled explicitly.
+
+web **585/585** · engine **190/190** · engine typecheck + I1 purity grep clean ·
+eslint clean on every touched file · `vite build` OK · **23 mutants, 22 RED, 1
+ALIVE (PG14, pre-existing, reason recorded in the harness), 0 never ran, restores
+sha256-verified after every mutant.** **THE OWED LINE DOES NOT TICK — the
+diff-only re-review (:5348 rule 2) is unrun, and the smoke has not been re-run
+on these bytes.**
