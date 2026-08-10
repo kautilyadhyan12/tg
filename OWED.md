@@ -169,8 +169,14 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       **"No threshold from judgement" is now SATISFIED for this line, not
       waived.** It does not reach zero and never claimed to; the settings sweep
       stays in reserve. **The line still does NOT tick: nothing is wired.**
+      **STATUS 2026-08-10 (d) — THE SMOKE PASSED: ZERO reps from the chair, over
+      two minutes, in Kd's own room** (DECISIONS :7222). His own squats still
+      counted; both sets stayed camera-graded with real form scores. **The line
+      STILL does not tick — T3 is unrun** (:4718 F4). The smoke also surfaced a
+      SEPARATE Critical/High that is not this line's: calories bill a mid-set
+      absence as vigorous exercise — its own line above.
       **STATUS 2026-08-10 (c) — IT IS WIRED, AND THE SCREEN SAYS SO. The line
-      still does NOT tick: the SMOKE IS UNRUN.** (DECISIONS :7104.) Every frame
+      still does NOT tick: the SMOKE WAS UNRUN at the time of writing.** (DECISIONS :7104.) Every frame
       the app feeds the engine goes through the check first at the ruled setting;
       a blocked frame reaches the engine with no landmarks, and after three
       blocked frames in a row the camera panel says *"Not counting — the camera
@@ -202,6 +208,39 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       **NOT measurable from the recorded clips:** they hold landmark OUTPUT, not
       video, so every candidate camera-stage fix needs FRESH recordings that
       capture video too. That is the instrument's main limit as built.
+- [ ] 🔴 **CALORIES BILL A MID-SET ABSENCE AS VIGOROUS EXERCISE — one rep's
+      clock swallows the whole gap.** Found by **Kd's instinct** on the
+      person-check smoke, 2026-08-10: 14 reps over a 2m41s workout reported
+      **22 kcal**, and he asked whether that could be right. It is not.
+      **MEASURED, not reasoned** (`kcalPointForSetsV2`, `calories.ts:93-97`):
+      rep time is `reps × tempoMsAvg` capped at the SET SPAN, and his set 1
+      reported `tempoMsAvg` of **21,267 ms — 21 seconds per squat**. So
+      **171.7 s were billed at the squat MET inside a workout whose timer ran
+      161.0 s**: more vigorous exercise than the workout lasted. Honest figure is
+      roughly half.
+      **THE CAUSE IS IN THE ENGINE, and it is reproducible** (`fsm.ts:167`,
+      `cycleStartT ??= t`): a rep's clock starts when the metric LEAVES THE TOP
+      and is cleared only by a completed rep, while a null metric HOLDS
+      everything (`fsm.ts:106-115`). So a user who leaves the dead zone and then
+      stops being measurable — walks out of shot, rests without pausing, is
+      occluded, or **is silenced by the person check** — has that entire absence
+      charged to the next rep. Swept over the golden squat with a 120 s absence
+      inserted at each frame: **60 of 108 start points produce a single rep of
+      123,100 ms and a `tempoMsAvg` of 63,000 ms.**
+      **NOT CAUSED BY THE PERSON CHECK, and the check makes it far more likely.**
+      The mechanism predates it and fires on any long mid-set gap; what the check
+      changes is that long in-set silences are now the DESIGNED behaviour rather
+      than an accident. Before it, invented chair reps kept resetting the clock,
+      which masked the inflation.
+      **A HINT FOR WHOEVER FIXES IT, not a design:** the arithmetic already had
+      the evidence that it had gone wrong — `chargedMetMs` (171.7 s) exceeded
+      `session.durationSeconds` (161 s), which the code notices only to floor
+      idle at zero. Rep time that exceeds the on-screen timer is not a number to
+      clamp quietly; it is a contradiction. **Its own card, with Kd's approval
+      before any code (Part I §2.5), and R9.5 — a failing test first.**
+      **Deferred out of the person-check card deliberately** (R1.1): the defect
+      lives in `calories.ts` and the engine's rep timing, neither of which that
+      card touches. DECISIONS :7104 records the smoke that found it.
 - [ ] 🔴 **A squat too shallow to count says NOTHING — silence by
       construction.** Kd: *"when i do proper squat even then it does not count ...
       what would a user be thinking doing multiple correct squat but not being

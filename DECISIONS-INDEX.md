@@ -220,6 +220,29 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:7222** — 2026-08-10 — **THE PERSON-CHECK SMOKE PASSED — ZERO reps from the
+  chair — and KD'S INSTINCT FOUND A CRITICAL/HIGH THE PASS WAS SITTING ON TOP
+  OF.** **Read before writing a smoke doc, and before touching `calories.ts` or
+  the engine's rep timing.** Two minutes of a room with a chair and nobody: the
+  counter did not move (measured starting point was 10 invented reps across four
+  clips, :6856). Stored row corroborates independently — both sets `mode
+  ='engine'`, real scores 93/100, set 2 an uninterrupted 7 reps in 34.3 s. **What
+  the row CANNOT show is said rather than glossed**: it holds the final count,
+  not the count over time, so the headline number exists only in Kd's report.
+  **THE FINDING: he accepted every step, then asked why 14 reps burned 22 kcal.**
+  Reproduced from the stored fields — rep time is `reps × tempoMsAvg` capped at
+  the set span, his set carried **21,267 ms per squat**, so **171.7 s were billed
+  at the squat MET inside a 161.0 s workout.** Cause measured in the engine
+  (`fsm.ts:167`, `cycleStartT ??= t` cleared only by a completed rep while a null
+  metric holds): sweeping a 120 s absence across the golden squat, **60 of 108
+  start points give one rep of 123,100 ms.** **NOT the person check's defect —
+  and the check makes it far more likely**, because long in-set silences are now
+  designed behaviour where invented chair reps used to keep resetting the clock.
+  Own OWED line, own card, R1.1. **STANDING LESSON: a smoke doc bounds what gets
+  CHECKED, not what is WRONG.** Eight numbered questions all passed; the defect
+  was in the one figure nothing asked about. **:5906's "found by Kd's instinct
+  alone", recurring on the screen next door.** **T3 UNRUN — the OWED line does
+  NOT tick.**
 - **:7104** — 2026-08-10 — **CARD 4 STEP 3: THE PERSON CHECK IS WIRED AND THE
   SCREEN SAYS SO — the first change in the whole camera card a user can see.**
   **Read before touching `apps/web/src/engine/sceneGate.js`, before writing an

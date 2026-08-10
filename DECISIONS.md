@@ -7218,3 +7218,79 @@ quietly dropped (:5618's M6 precedent).
   line does NOT tick (:4718 F4, :5034). **T3 is unrun** for cards 1, 2 and this
   one. Nothing here re-measures the cut-off on real furniture: that was done in
   step 2 and no test in this repo can repeat it.
+
+## 2026-08-10 — THE PERSON-CHECK SMOKE PASSED, ZERO REPS FROM THE CHAIR — and Kd's instinct found a calorie defect the pass concealed
+
+**The card's own gate is discharged.** Recorded as **Kd's REPORT**, not as my
+measurement (:4829) — the browser is his instrument — with the stored row read
+back afterwards as corroboration.
+
+### What he reported
+
+**"When I started the camera I first kept the chairs and count was zero; it was
+still zero when I came [back]."** Two full minutes of a room containing a chair
+and nobody, and the counter did not move. **Ten invented reps across four clips
+was the measured starting point (:6856); the headline number here is ZERO** —
+better than the 3 that survived on `chair_A` in the simulation, on this room and
+this chair. Everything else passed too: the sentence appeared and was readable,
+his own squats counted when he stepped back in, and nothing was handed to hand
+counting.
+
+### What the stored row corroborates, independent of the report
+
+Both sets `mode = 'engine'` — **the check never took a set away from the camera**
+— with real per-rep scores (93, 100; avg 97, not a dash) and real tempos, so the
+camera genuinely graded a workout it had spent two minutes refusing to count.
+Set 2 is 7 reps in 34.3 s, ~3.3 s a rep: an uninterrupted run, which is the
+"does not interrupt you while you work" check passing in the data rather than in
+an impression. `quality_flags` empty.
+
+**What the row CANNOT show, said rather than glossed:** it stores the final count,
+not the count over time, so set 1's 7 reps cannot be split into "during the
+absence" and "after he returned". **That number exists only in Kd's report**, and
+this entry does not pretend otherwise.
+
+### KD'S INSTINCT FOUND A CRITICAL/HIGH THE PASS WAS SITTING ON TOP OF
+
+He accepted every step and then asked one question: *"calorie burn was 22 kcal
+but all I did was 14 reps, is this a bug?"* **It is.** Reproduced exactly from
+the stored fields (`calories.ts:93-97`): rep time is `reps × tempoMsAvg` capped
+at the set span, his set 1 carried a `tempoMsAvg` of **21,267 ms — 21 seconds per
+squat** — and so **171.7 s were billed at the squat MET inside a workout whose
+timer ran 161.0 s.** More vigorous exercise than the workout lasted.
+
+**The cause is in the engine and was measured, not inferred.** `fsm.ts:167`
+starts a rep's clock when the metric leaves the top (`cycleStartT ??= t`) and
+clears it only on a completed rep, while a null metric HOLDS everything. So any
+long stretch where nothing is measurable gets charged to the next rep. Sweeping a
+120 s absence across every frame of the golden squat: **60 of 108 start points
+produce one rep of 123,100 ms and a `tempoMsAvg` of 63,000 ms.**
+
+**NOT this card's defect, and this card makes it much more likely.** The
+mechanism predates the person check and fires on any long mid-set gap — a rest
+without a pause, an occlusion, walking away. What changes is that **long in-set
+silences are now DESIGNED behaviour**; before, invented chair reps kept resetting
+the clock and masked it. Deferred to its own card under R1.1 (it lives in
+`calories.ts` and the engine's rep timing, neither of which this card touches),
+with its own `OWED.md` line written in this commit.
+
+**The standing lesson is about the SMOKE, not the calories.** This card's smoke
+asked eight numbered questions and every one passed. The defect was found by the
+ONE thing the smoke did not ask about — a figure Kd happened to look at and
+disbelieve. **:5906 recorded the identical shape three months of cards ago**
+("found by Kd's instinct alone"), and it has now happened again on the screen
+next door. **A smoke doc bounds what gets checked; it does not bound what is
+wrong.** The operator reading a number and saying "that seems too big" is an
+instrument this project has no substitute for.
+
+- (**RESULT**) **SMOKE PASSED**, all steps, on `8d6e2c3`. Chair alone: **0 reps.**
+- (**STILL NOT TICKED**) **T3 is UNRUN.** `t3-camera-person-check-PROMPT.md` and
+  its diff are written and waiting. The OWED line ticks when that is done and not
+  before (:4718 F4, :5034 — three recorded occurrences of ticking early on this
+  branch).
+- (**ALSO OBSERVED, not this card**) Set 1's stored span (166.9 s) exceeds the
+  workout's own `duration_ms` (161.0 s) — a part longer than its whole. Expected
+  under :5906's design (the set span runs first-frame-to-last-frame and so
+  includes a pause; the on-screen timer does not) and covered for display by that
+  card's server-side clamp. **UNVERIFIED whether any screen can still show the
+  contradiction**; flagged to the T3 reviewer rather than investigated here.
