@@ -48,12 +48,34 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 const TARGETS = {
   discriminators: {
-    file: resolve(ROOT, 'packages/engine/scripts/discriminators.ts'),
+    file: resolve(ROOT, 'packages/engine/src/scene/discriminators.ts'),
     suite: 'test/discriminators.test.ts',
+  },
+  // Card 4. The file moved out of scripts/ and into src/ because the gate now
+  // SHIPS this arithmetic; the gate itself is its own target because a mutant
+  // that damages it must run the suite that claims to protect it, not another.
+  personGate: {
+    file: resolve(ROOT, 'packages/engine/src/scene/personGate.ts'),
+    suite: 'test/personGate.test.ts',
   },
 };
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
+
+/**
+ * A test NAME turned into a shell-quoted regex that matches only itself.
+ *
+ * TWO SEPARATE TRAPS, both measured here rather than reasoned about:
+ *  1. vitest `-t` COMPILES its argument, so a test named "reset() forgets ..."
+ *     is a regex containing an empty group and matches nothing.
+ *  2. `JSON.stringify` then DOUBLES the escaping backslashes, so `0\.5` reaches
+ *     vitest as `0\\.5` — which matches nothing either, one trap fixed into
+ *     the next. Quote by hand instead; these names contain no double quotes,
+ *     and one that did would be escaped below.
+ * Both failures aborted the run rather than scoring a false RED, which is the
+ * direction the tally guard exists for.
+ */
+const pattern = (s) => `"${s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/"/g, '\\"')}"`;
 
 const MUTANTS = [
   {
@@ -88,14 +110,14 @@ const MUTANTS = [
     id: 'M5',
     why: 'the window averages instead of taking the median — one glitch trips the gate',
     expect: 'takes the median, so one spiking frame cannot trip a gate',
-    from: '    out.push(quantile(bucket, 0.5));',
-    to: '    out.push(bucket.reduce((a, b) => a + b, 0) / bucket.length);',
+    from: '    return quantile(bucket, 0.5);',
+    to: '    return bucket.reduce((a, b) => a + b, 0) / bucket.length;',
   },
   {
     id: 'M6',
     why: 'the window reports a confident number built from one reading',
     expect: 'stays null until the window holds enough real readings',
-    from: '    if (bucket.length < need) {',
+    from: '    if (bucket.length < this.need) {',
     to: '    if (bucket.length < 1) {',
   },
   {
@@ -133,6 +155,65 @@ const MUTANTS = [
     from: '    stretchSum += Math.abs(now - before) / torso;',
     to: '    stretchSum += (now - before) / torso;',
   },
+  {
+    id: 'M12',
+    why: 'the rolling window never forgets — one bad stretch blocks the rest of the set',
+    expect: 'stops blocking once the body is back, rather than latching for the set',
+    target: 'discriminators',
+    suite: 'test/personGate.test.ts',
+    from: '    if (this.recent.length > this.size) this.recent.shift();',
+    to: '    if (this.recent.length > this.size * 1000) this.recent.shift();',
+  },
+
+  // ── the gate itself (card 4) ────────────────────────────────────────────────
+  {
+    id: 'P1',
+    why: 'NO READING becomes BLOCK — the app stops counting on no evidence at all',
+    expect: 'counts — a gate with no reading yet never blocks',
+    target: 'personGate',
+    from: '      fired.push(value !== null && value > check.rule.cutoff);',
+    to: '      fired.push(value === null || value > check.rule.cutoff);',
+  },
+  {
+    id: 'P2',
+    why: 'the comparison runs backwards — every real user is rejected and every chair passes',
+    expect: 'blocks the fake skeleton and passes the real body at one shared cut-off',
+    target: 'personGate',
+    from: '      fired.push(value !== null && value > check.rule.cutoff);',
+    to: '      fired.push(value !== null && value < check.rule.cutoff);',
+  },
+  {
+    id: 'P3',
+    why: '"block only if BOTH fire" silently behaves as "block if either does"',
+    expect: "'all' does not block unless every rule fires",
+    target: 'personGate',
+    from: '    const blocked = this.mode === "any" ? fired.includes(true) : !fired.includes(false);',
+    to: '    const blocked = fired.includes(true);',
+  },
+  {
+    id: 'P4',
+    why: 'reset() leaves the previous frame behind — a new set opens measured against the old one',
+    expect: 'reset() forgets the previous frame, so a new set is not measured against the old one',
+    target: 'personGate',
+    from: '    this.previous = null;\n    for (const check of this.checks) check.roll.reset();',
+    to: '    for (const check of this.checks) check.roll.reset();',
+  },
+  {
+    id: 'P5',
+    why: 'no frame is ever remembered, so nothing is ever measured and the gate is inert',
+    expect: 'blocks the fake skeleton and passes the real body at one shared cut-off',
+    target: 'personGate',
+    from: '    this.previous = frame;',
+    to: '    this.previous = null;',
+  },
+  {
+    id: 'P6',
+    why: 'a gate with no rules is accepted and answers "never block" while looking like a gate',
+    expect: "refuses to be built with no rules rather than answering 'never block'",
+    target: 'personGate',
+    from: '    if (options.rules.length === 0) {',
+    to: '    if (options.rules.length < 0) {',
+  },
 ];
 
 const abort = (msg) => {
@@ -143,9 +224,18 @@ const abort = (msg) => {
 // :5199 — a mutation naming a file outside TARGETS damaged it and was never
 // restored, while the harness's own closing check printed PASS. Checked up
 // front for the WHOLE table, before a single byte is written.
+const SUITES = new Set(Object.values(TARGETS).map((t) => t.suite));
 for (const m of MUTANTS) {
   if (!Object.hasOwn(TARGETS, m.target ?? 'discriminators')) {
     abort(`${m.id}: names target '${m.target}', which is not in TARGETS. Nothing has been written yet.`);
+  }
+  // A mutant may be PROTECTED by a suite other than its own file's — card 4's
+  // rolling window lives in one file and is guarded behaviourally from the
+  // gate's suite. Without this the harness runs the wrong suite, finds no test
+  // of that name, and aborts as "proves nothing" (it did, first run). Same
+  // shape as the per-mutant `target` :6277 added to the web harness.
+  if (m.suite !== undefined && !SUITES.has(m.suite)) {
+    abort(`${m.id}: names suite '${m.suite}', which no target declares. Nothing has been written yet.`);
   }
 }
 
@@ -155,20 +245,27 @@ const originals = new Map(
 
 // A GREEN BASELINE FIRST (:2614). Without it "RED" cannot tell a caught mutant
 // from a suite that was already failing before this harness touched anything.
+// EVERY target's suite, not just the first one. A baseline that skips a suite
+// cannot tell that suite's caught mutant from a suite that was already failing —
+// which is the same hole :2614 found, re-opened by adding a second target.
 console.log('baseline (unmutated) ...');
-try {
-  execSync(`corepack pnpm --filter @app/engine exec vitest run ${TARGETS.discriminators.suite}`, {
-    cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024,
-  });
-} catch {
-  abort('the suite is RED before any mutation. Every verdict below would be meaningless.');
+for (const [key, t] of Object.entries(TARGETS)) {
+  try {
+    execSync(`corepack pnpm --filter @app/engine exec vitest run ${t.suite}`, {
+      cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024,
+    });
+  } catch {
+    abort(`${key}: the suite is RED before any mutation. Every verdict below would be meaningless.`);
+  }
+  console.log(`  baseline GREEN — ${t.suite}`);
 }
-console.log('baseline GREEN\n');
+console.log('');
 
 const results = [];
 for (const m of MUTANTS) {
   const key = m.target ?? 'discriminators';
   const target = TARGETS[key];
+  const suite = m.suite ?? target.suite;
   const original = originals.get(key);
   const mutated = original.text.replace(m.from, m.to);
   if (mutated === original.text) {
@@ -181,7 +278,10 @@ for (const m of MUTANTS) {
   let runnerFault = null;
   try {
     out = execSync(
-      `corepack pnpm --filter @app/engine exec vitest run ${target.suite} -t ${JSON.stringify(m.expect)}`,
+      // `expect` means the LITERAL test name — see `pattern` for the two ways
+      // that went wrong. Fixed as a class rather than by renaming one test,
+      // because the next name with a bracket in it would fail the same way.
+      `corepack pnpm --filter @app/engine exec vitest run ${suite} -t ${pattern(m.expect)}`,
       { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 },
     );
   } catch (e) {

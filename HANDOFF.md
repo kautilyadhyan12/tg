@@ -1,6 +1,69 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: CAMERA-ACCURACY PHASE 2, CARD 4 STEP 1 — THE GATE IS BUILT AND COMMITTED
+      (engine half). **NOTHING A USER SEES HAS CHANGED: the gate is wired to
+      NOTHING and no cut-off has been chosen.** This session was a TAKEOVER —
+      the previous chat's terminal was closed mid-card, leaving ~500 lines
+      uncommitted and one test RED. engine 190/190 · web 552/552 · typecheck +
+      lint + I1 purity grep clean (real exit codes) · 18 mutants, 18 RED, 0
+      ALIVE. Full record: DECISIONS :6959 (read after :6856).
+
+WHERE THIS CARD IS, IN ONE LINE
+  Card 4 is being run as THREE steps. **Step 1 (the arithmetic) is DONE and
+  committed. Step 2 is the evidence table and it needs no one to record
+  anything. Step 3 is the web wiring, and until it lands the invented chair
+  reps are still on screen.**
+
+THE THREE STEPS, and who each one belongs to
+  1. DONE — `src/scene/personGate.ts` + the moved `discriminators.ts`, tested
+     and mutation-audited. Invisible to users by design.
+  2. NEXT, and A CHAT CAN RUN IT ALONE — replay all 13 clips through candidate
+     gates with `measure-pose.ts --gate`, and put ONE table to Kd: per
+     candidate, how many of the 10 invented chair-reps it kills and what it
+     costs on the four `both_*` clips where counting already worked.
+     **Kd rules the number. He does not produce the evidence.**
+  3. THEN, IN A FRESH CHAT — wire it into the web bridge, and the screen must
+     SAY when it blocks (:5807: a user seeing something false is Critical/High;
+     silent suppression would be a new lie, not a fix).
+
+THE BLOCKER THAT WASN'T — do not repeat it
+  `:6856` and the OWED line both read as though the next measurement waits on
+  Kd. **It does not.** Session 1's five clips are at
+  `C:\Users\kautilya\Desktop\traces` and session 2's eight at `...\traces2`, on
+  the same machine as the repo. Verified by listing them this session.
+
+WHAT THE TAKEOVER FOUND, and it is a new corner of :5199
+  One test was RED: `shareAbove` compared `>=` while the gate blocks on `>`, so
+  the operating-point table over-reported the cost to real users and
+  over-promised the furniture caught — by exactly the frames sitting ON the
+  number. Not a rare tie: **every cut-off `cutoffAtPersonCost` returns is one of
+  the person's own readings**, so the boundary is the normal case.
+  **Mutant M9 mutates that exact line. The source was left holding a hand-typed
+  mutant.** The harness's byte-exact restore protects only mutations run THROUGH
+  it. It surfaced because M9's anchor then matches nothing and
+  `mutate-discriminators.mjs:271` aborts — **so no full sweep had ever run
+  against the tree as inherited.** Fixed, plus a permanent guard from the other
+  side: the live gate's actual block rate must EQUAL the table's promise.
+
+WHAT STEP 3 MUST NOT DO (unchanged from the last block, restated because it binds)
+  **It must not pick a cut-off on its own** — the number goes to Kd with the
+  cost on BOTH sides attached. **The gate goes in the WEB BRIDGE** (2026-08-07;
+  R5.6). **It must not make the screen lie.**
+
+STILL OWED, and none of it is step 2's job
+  - T3 review for cards 1, 2 and 4. `t3-camera-discriminators-PROMPT.md` covers
+    card 1; cards 2 and 4 have no prompt written yet.
+  - **The camera SMOKE is UNRUN** and both committed cards on `web-repoint`
+    stay UNTICKED.
+  - The shallow-squat cue; the voice product decision; `pose_landmarker_lite`
+    as the hard-wired default; a label containing a comma breaking
+    `--person`/`--nobody`.
+
+SERVERS: none started this session.
+```
+
+```
 TASK: CAMERA-ACCURACY PHASE 2 — CARDS 1 AND 2 ARE DONE AND COMMITTED
       (6d255c4, 69871e4, 261a2fc, b8f3d88). **CARD 3 (the settings sweep) RAN,
       FAILED, AND HAS BEEN DOWNGRADED TO A RESERVE — see below.**

@@ -14,6 +14,10 @@
 //                       from a label that happens to start with "me_".
 //   --window <n>        frames in the rolling median (default 15, ~1s @15fps)
 //   --max-gap <ms>      frame pairs further apart than this are skipped (500)
+//   --gate <spec>       measure THIS gate in section 6 instead of the derived
+//                       candidates; repeatable. See parseGateSpec for the
+//                       grammar (`bone_stretch>0.80`, `bone_stretch@2%`,
+//                       `a@2%,b@2%:all`).
 //
 // WHAT THIS IS FOR. Kd's own testing found the model draws a skeleton on
 // FURNITURE and the app believes it (OWED, "the pose model draws a skeleton on
@@ -31,7 +35,7 @@
 // validate-trace.ts), so fs/console are fine here and banned in src/.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { exerciseDefinitionSchema, type ExerciseDefinition } from "@app/shared";
+import { exerciseDefinitionSchema, type ExerciseDefinition, type PoseFrame } from "@app/shared";
 import { compileDefinition, createSession, lintDefinition, parseTrace, replay } from "../src/index.js";
 import {
   cutoffAtCatchRate,
@@ -44,7 +48,9 @@ import {
   SIGNAL_NAMES,
   type ClipReadings,
   type OperatingPoint,
-} from "./discriminators.js";
+  type SignalName,
+} from "../src/scene/discriminators.js";
+import { PersonGate, type GateMode, type GateRule } from "../src/scene/personGate.js";
 
 const DEFS_DIR = join(import.meta.dirname, "../src/definitions");
 
@@ -170,18 +176,43 @@ function readDetections(file: string): { t: number; n: number }[] | null {
   return out;
 }
 
+/** One rule of a `--gate` spec: either an absolute cut-off, or one derived from
+ *  the person pile at a stated cost ("the number that rejects 2% of my frames"),
+ *  which is how a candidate is explored without hand-computing a percentile. */
+type GateSpecRule =
+  | { readonly signal: SignalName; readonly kind: "absolute"; readonly value: number }
+  | { readonly signal: SignalName; readonly kind: "personCost"; readonly value: number };
+
+interface GateSpec {
+  readonly rules: readonly GateSpecRule[];
+  readonly mode: GateMode;
+  readonly source: string;
+}
+
 interface Options {
   readonly exercise: string | null;
   readonly person: ReadonlySet<string>;
   readonly nobody: ReadonlySet<string>;
   readonly window: number;
   readonly maxGapMs: number;
+  /** Empty = section 6 derives its own candidates from section 5. Non-empty =
+   *  these exact gates, and nothing else, so a ruled number can be re-measured
+   *  by name rather than approximated. */
+  readonly gates: readonly GateSpec[];
 }
 
-/** What one clip contributes to the cross-clip comparison in section 5. */
+/** What one clip contributes to the cross-clip sections 5 and 6. */
 interface ClipResult {
   readonly label: string;
   readonly readings: ClipReadings;
+  /** Kept so section 6 can replay the clip again with a gate in front of the
+   *  engine. Section 5's cut-offs are only known once every clip has been read,
+   *  so the frames cannot be discarded when the clip is first measured. */
+  readonly frames: readonly PoseFrame[];
+  readonly definition: ExerciseDefinition;
+  /** Reps the engine counted with NO gate — section 3's headline, carried so
+   *  section 6 compares against a measured number rather than re-deriving one. */
+  readonly repsOff: number;
 }
 
 function measure(
@@ -361,7 +392,13 @@ function measure(
     );
   }
 
-  return { label: h.label, readings };
+  return {
+    label: h.label,
+    readings,
+    frames: trace.frames,
+    definition,
+    repsOff: result.repEvents.length,
+  };
 }
 
 // ── 5. The cross-clip comparison — the only section that answers the card ─────
@@ -426,10 +463,349 @@ function compare(results: readonly ClipResult[], opts: Options): void {
   );
 }
 
+// ── 6. What would the gate actually DO? ──────────────────────────────────────
+//
+// Section 5 says how well a signal SEPARATES two piles. That is not the question
+// Kd rules on. His question is "does the app still count my squats, and does it
+// stop counting the chair" — so this section replays every clip through the REAL
+// engine a second time, with the gate in front of it, and prints reps.
+//
+// The gate is the shipped class (`src/scene/personGate.ts`), not a re-implementation
+// here: the number chosen from this table is enforced by the same code that
+// produced it. A blocked frame is handed to the engine as a frame with NO
+// landmarks, which is exactly what the web bridge will do and what the engine's
+// ingest already treats as "invalid — hold state, count nothing".
+//
+// STILL NO NUMBER IS CHOSEN. The candidates below are derived from section 5's
+// operating points, which are pinned by the cost to real users. Which row ships
+// is Kd's ruling on this table.
+
+interface Candidate {
+  readonly id: string;
+  readonly label: string;
+  readonly rules: readonly GateRule[];
+  readonly mode: GateMode;
+}
+
+/** Reps the engine counts on one clip with one candidate gate in front of it,
+ *  and how much of the clip that gate silenced. */
+function gatedReplay(
+  clip: ClipResult,
+  candidate: Candidate,
+  opts: Options,
+): { reps: number; blocked: number; frames: number; longestRun: number } {
+  const gate = new PersonGate({
+    rules: candidate.rules,
+    mode: candidate.mode,
+    window: opts.window,
+    maxGapMs: opts.maxGapMs,
+  });
+  const session = createSession(compileDefinition(clip.definition, 1));
+  let blocked = 0;
+  // The LONGEST unbroken silence, because it is a different question from how
+  // much of the clip was silenced and the screen depends on it: 4% of frames
+  // blocked in ones and twos is a message that flickers, while 4% in one run is
+  // a message that appears once and means something.
+  let longestRun = 0;
+  let run = 0;
+  for (const frame of clip.frames) {
+    if (gate.push(frame).blocked) {
+      blocked++;
+      run++;
+      if (run > longestRun) longestRun = run;
+      const empty: PoseFrame = { t: frame.t, kp: [] };
+      session.processFrame(empty);
+      continue;
+    }
+    run = 0;
+    session.processFrame(frame);
+  }
+  // The set's own §2.4 count, taken from the summary rather than by tallying
+  // rep events: it is the number the app files for the set, so a gate that
+  // changed one without the other could not hide in this table.
+  const reps = session.end().reps;
+  return { reps, blocked, frames: clip.frames.length, longestRun };
+}
+
+/** Build the candidate gates from section 5's own operating points: the two
+ *  best-separating signals at 1% and 5% person cost, plus the two ways of
+ *  combining them. Combination was never measured before this card — it is a
+ *  candidate here, not an assumption.
+ *
+ *  `--gate` REPLACES all of that with exactly what was asked for, so a number
+ *  that has been ruled on can be re-measured under its own name instead of
+ *  being approximated by whichever percentile happens to land near it. */
+function buildCandidates(
+  person: readonly ClipResult[],
+  nobody: readonly ClipResult[],
+  opts: Options,
+): Candidate[] {
+  const pooled = (
+    clips: readonly ClipResult[],
+    name: SignalName,
+  ): (number | null)[] => clips.flatMap((c) => c.readings.windows[name]);
+
+  if (opts.gates.length > 0) {
+    const out: Candidate[] = [];
+    const ids = "ABCDEFGHIJKL";
+    for (const spec of opts.gates) {
+      const rules: GateRule[] = [];
+      for (const rule of spec.rules) {
+        if (rule.kind === "absolute") {
+          rules.push({ signal: rule.signal, cutoff: rule.value });
+          continue;
+        }
+        const point = cutoffAtPersonCost(
+          pooled(person, rule.signal),
+          pooled(nobody, rule.signal),
+          rule.value,
+        );
+        if (point === null) {
+          console.log(`     (skipped '${spec.source}' — no cut-off computable for ${rule.signal})`);
+          continue;
+        }
+        rules.push({ signal: rule.signal, cutoff: point.cutoff });
+      }
+      if (rules.length !== spec.rules.length) continue;
+      out.push({
+        id: ids[out.length] ?? `#${String(out.length + 1)}`,
+        label:
+          rules.map((r) => `${r.signal} > ${fmt(r.cutoff)}`).join(spec.mode === "all" ? " AND " : " OR ") +
+          `   [${spec.source}]`,
+        rules,
+        mode: spec.mode,
+      });
+    }
+    return out;
+  }
+
+  const ranked = SIGNAL_NAMES.map((name) => ({
+    name,
+    auc: separation(pooled(person, name), pooled(nobody, name)),
+  }))
+    .filter((s) => Number.isFinite(s.auc))
+    .sort((a, b) => b.auc - a.auc);
+
+  const out: Candidate[] = [];
+  const ids = "ABCDEFGH";
+  const nextId = (): string => ids[out.length] ?? `#${String(out.length + 1)}`;
+  const best: { name: SignalName; cutoff: number }[] = [];
+
+  for (const { name } of ranked.slice(0, 2)) {
+    const p = pooled(person, name);
+    const n = pooled(nobody, name);
+    for (const cost of [0.01, 0.05]) {
+      const point = cutoffAtPersonCost(p, n, cost);
+      if (point === null) continue;
+      out.push({
+        id: nextId(),
+        label: `${name} > ${fmt(point.cutoff)}  (${pct(cost, 1)} person cost)`,
+        rules: [{ signal: name, cutoff: point.cutoff }],
+        mode: "any",
+      });
+      if (cost === 0.01) best.push({ name, cutoff: point.cutoff });
+    }
+  }
+
+  if (best.length === 2) {
+    const rules: GateRule[] = best.map((b) => ({ signal: b.name, cutoff: b.cutoff }));
+    const names = best.map((b) => b.name).join(" + ");
+    out.push({
+      id: nextId(),
+      label: `${names}  — block if EITHER fires (stricter)`,
+      rules,
+      mode: "any",
+    });
+    out.push({
+      id: nextId(),
+      label: `${names}  — block only if BOTH fire (looser)`,
+      rules,
+      mode: "all",
+    });
+  }
+  return out;
+}
+
+function gateReport(results: readonly ClipResult[], opts: Options): void {
+  const person = results.filter((r) => opts.person.has(r.label));
+  const nobody = results.filter((r) => opts.nobody.has(r.label));
+
+  console.log(`\n${"=".repeat(72)}`);
+  console.log(`6. WHAT WOULD THE GATE ACTUALLY DO? (reps, replayed through the real engine)`);
+  if (person.length === 0 || nobody.length === 0) {
+    console.log(
+      `\n   Not computed — needs BOTH --person and --nobody, exactly as section 5 does.`,
+    );
+    return;
+  }
+
+  const candidates = buildCandidates(person, nobody, opts);
+  if (candidates.length === 0) {
+    console.log(`\n   No candidate cut-off was computable from these piles.`);
+    return;
+  }
+
+  console.log(
+    opts.gates.length > 0
+      ? `\n   candidates (given on the command line):`
+      : `\n   candidates (all derived from section 5, pinned by the cost to real users):`,
+  );
+  for (const c of candidates) console.log(`     ${c.id}  ${c.label}`);
+
+  const pile = (r: ClipResult): string =>
+    opts.person.has(r.label) ? "person" : opts.nobody.has(r.label) ? "NOBODY" : "mixed";
+
+  console.log(
+    `\n   REPS COUNTED — 'off' is today's app. Everything right of it is with a gate.`,
+  );
+  console.log(
+    `     ${"clip".padEnd(20)} ${"pile".padEnd(7)} ${"off".padStart(4)}` +
+      candidates.map((c) => c.id.padStart(6)).join(""),
+  );
+
+  let offNobody = 0;
+  let offPerson = 0;
+  const gatedNobody = candidates.map(() => 0);
+  const gatedPerson = candidates.map(() => 0);
+  const blockedPerson = candidates.map(() => ({ blocked: 0, frames: 0, longestRun: 0 }));
+  const longestNobody = candidates.map(() => 0);
+
+  for (const clip of results) {
+    const row = candidates.map((c) => gatedReplay(clip, c, opts));
+    console.log(
+      `     ${clip.label.padEnd(20)} ${pile(clip).padEnd(7)} ${String(clip.repsOff).padStart(4)}` +
+        row.map((r) => String(r.reps).padStart(6)).join(""),
+    );
+    const isPerson = opts.person.has(clip.label);
+    const isNobody = opts.nobody.has(clip.label);
+    if (isNobody) offNobody += clip.repsOff;
+    if (isPerson) offPerson += clip.repsOff;
+    for (let i = 0; i < row.length; i++) {
+      const r = row[i];
+      if (r === undefined) continue;
+      if (isNobody) {
+        gatedNobody[i] = (gatedNobody[i] ?? 0) + r.reps;
+        longestNobody[i] = Math.max(longestNobody[i] ?? 0, r.longestRun);
+      }
+      if (isPerson) {
+        gatedPerson[i] = (gatedPerson[i] ?? 0) + r.reps;
+        const b = blockedPerson[i];
+        if (b !== undefined) {
+          blockedPerson[i] = {
+            blocked: b.blocked + r.blocked,
+            frames: b.frames + r.frames,
+            longestRun: Math.max(b.longestRun, r.longestRun),
+          };
+        }
+      }
+    }
+  }
+
+  console.log(`\n   THE TWO NUMBERS THAT DECIDE IT:`);
+  console.log(
+    `     ${"".padEnd(28)} ${"off".padStart(4)}` + candidates.map((c) => c.id.padStart(6)).join(""),
+  );
+  console.log(
+    `     ${"reps invented (NOBODY)".padEnd(28)} ${String(offNobody).padStart(4)}` +
+      gatedNobody.map((v) => String(v).padStart(6)).join("") +
+      `   <- want 0`,
+  );
+  console.log(
+    `     ${"real reps kept (person)".padEnd(28)} ${String(offPerson).padStart(4)}` +
+      gatedPerson.map((v) => String(v).padStart(6)).join("") +
+      `   <- want unchanged`,
+  );
+  console.log(
+    `     ${"person frames silenced".padEnd(28)} ${"—".padStart(4)}` +
+      blockedPerson
+        .map((b) => (b.frames === 0 ? "—" : pct(b.blocked, b.frames)).padStart(6))
+        .join(""),
+  );
+  // What the SCREEN does, which is not what the counter does. A single blocked
+  // frame must not flash a message; a long run must show one. These two rows are
+  // the evidence for how long the app waits before it says anything.
+  console.log(
+    `     ${"longest silence, person".padEnd(28)} ${"—".padStart(4)}` +
+      blockedPerson.map((b) => `${String(b.longestRun)}f`.padStart(6)).join(""),
+  );
+  console.log(
+    `     ${"longest silence, NOBODY".padEnd(28)} ${"—".padStart(4)}` +
+      longestNobody.map((v) => `${String(v)}f`.padStart(6)).join(""),
+  );
+
+  console.log(
+    `\n   NO ROW IS CHOSEN HERE. 'real reps kept' moving at all is a real user losing\n` +
+      `   reps they did — the cost this whole ordering exists to keep visible. The\n` +
+      `   ruling is Kd's, on this table (OWED: no threshold from judgement).`,
+  );
+}
+
 // ── CLI ──────────────────────────────────────────────────────────────────────
+
+/**
+ * `--gate` grammar, kept deliberately small:
+ *
+ *   bone_stretch=0.80                        one signal, an absolute cut-off
+ *   bone_stretch@2%                          the cut-off costing 2% of person frames
+ *   bone_stretch@2%,motion_incoherence@2%    two rules, block if EITHER fires
+ *   bone_stretch@2%,motion_incoherence@2%:all       ...only if BOTH fire
+ *
+ * `=` and not `>`, though `>` is accepted: PowerShell hands `--gate "x>0.8"`
+ * down the pnpm/corepack chain and the `>0.8` is eaten as a redirect long
+ * before this file sees it — measured, not guessed. A flag the operator's own
+ * shell cannot type is a defect in the flag (:5034, :6662).
+ *
+ * Every failure is named and ABORTS: a mistyped signal that quietly measured
+ * nothing would leave a column of plausible reps under a heading nobody could
+ * reproduce, which is the class of defect this whole card is about.
+ */
+function parseGateSpec(text: string): GateSpec {
+  const trimmed = text.trim();
+  const colon = trimmed.lastIndexOf(":");
+  let body = trimmed;
+  let mode: GateMode = "any";
+  if (colon > 0) {
+    const tail = trimmed.slice(colon + 1).trim();
+    if (tail !== "any" && tail !== "all") {
+      throw new Error(`--gate '${text}': mode must be ':any' or ':all', got ':${tail}'`);
+    }
+    mode = tail;
+    body = trimmed.slice(0, colon);
+  }
+
+  const rules: GateSpecRule[] = [];
+  for (const part of body.split(",")) {
+    const piece = part.trim();
+    if (piece === "") continue;
+    const match = /^([a-z_]+)\s*(=|>|@)\s*([0-9.]+)(%?)$/.exec(piece);
+    if (match === null) {
+      throw new Error(
+        `--gate '${text}': cannot read '${piece}'. Expected e.g. bone_stretch=0.80 or bone_stretch@2%` +
+          (piece.includes(">") ? `` : ` (if you typed '>', your shell ate it — use '=')`),
+      );
+    }
+    const [, name = "", op = "=", raw = "", percent = ""] = match;
+    if (!(SIGNAL_NAMES as readonly string[]).includes(name)) {
+      throw new Error(`--gate '${text}': '${name}' is not a signal. Known: ${SIGNAL_NAMES.join(", ")}`);
+    }
+    const value = Number(raw);
+    if (!Number.isFinite(value)) throw new Error(`--gate '${text}': '${raw}' is not a number`);
+    const signal = name as SignalName;
+    if (op === "@") {
+      if (percent !== "%") throw new Error(`--gate '${text}': '@' takes a percentage, e.g. @2%`);
+      if (value <= 0 || value >= 100) throw new Error(`--gate '${text}': ${raw}% is out of range`);
+      rules.push({ signal, kind: "personCost", value: value / 100 });
+      continue;
+    }
+    rules.push({ signal, kind: "absolute", value });
+  }
+  if (rules.length === 0) throw new Error(`--gate '${text}': no rules in it`);
+  return { rules, mode, source: trimmed };
+}
 
 function parseArgs(argv: readonly string[]): { files: string[]; opts: Options } {
   const files: string[] = [];
+  const gates: GateSpec[] = [];
   let exercise: string | null = null;
   let person = new Set<string>();
   let nobody = new Set<string>();
@@ -471,12 +847,15 @@ function parseArgs(argv: readonly string[]): { files: string[]; opts: Options } 
       case "--max-gap":
         maxGapMs = number("--max-gap", argv[++i]);
         break;
+      case "--gate":
+        gates.push(parseGateSpec(argv[++i] ?? ""));
+        break;
       default:
         if (arg.startsWith("--")) throw new Error(`unknown option '${arg}'`);
         files.push(arg);
     }
   }
-  return { files, opts: { exercise, person, nobody, window, maxGapMs } };
+  return { files, opts: { exercise, person, nobody, window, maxGapMs, gates } };
 }
 
 /**
@@ -559,6 +938,7 @@ function main(): number {
   }
 
   compare(results, opts);
+  gateReport(results, opts);
   return failed ? 1 : 0;
 }
 

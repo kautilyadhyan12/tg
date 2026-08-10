@@ -6955,3 +6955,81 @@ because a Kd ruling being quietly violated is worth three minutes of grep.
   Not fixed (R1.1); it cost one clip out of eight from the pool.
 - (**NOT DONE**) The gate is not built. The camera SMOKE is still UNRUN and both
   committed cards on `web-repoint` stay UNTICKED. T3 for cards 1 and 2 is owed.
+
+## 2026-08-10 — CARD 4, THE GATE IS BUILT (engine half): the arithmetic that asks "is this a person?", and the boundary bug it was found holding
+
+**The previous session was killed by a closed terminal mid-card and left ~500
+lines of uncommitted work.** This entry is the takeover: what was inherited,
+what was wrong with it, and what is now committed. **Nothing user-visible
+changed and no cut-off has been chosen** — that ruling is still Kd's and still
+unmade.
+
+### What now exists
+
+`packages/engine/src/scene/personGate.ts` — a stateful, per-set object that
+takes one frame and answers **block / do not block**. It chooses nothing: the
+signal, the cut-off and the combining mode are constructor arguments, and what
+the screen then says belongs to the web bridge (the 2026-08-07 ruling; R5.6).
+Two properties are load-bearing and pinned by tests: **no reading means PASS**
+(the first second of a set, or any stretch the model reported nothing, counts
+exactly as today — blocking on no evidence is the harmful direction), and
+**every signal runs one way**, higher = more like furniture, so the comparison
+is always `reading > cutoff`.
+
+`scripts/discriminators.ts` **moved to `src/scene/`**, which is the change that
+matters most and was the inherited session's own good idea: **the code Kd rules
+a cut-off on is now literally the code that enforces it.** `windowed()` became a
+`RollingWindow` class that both sides share, so "the last second" cannot come to
+mean two different things (:4556 F1). Moving into `src/` also puts it under the
+engine's purity grep, which now covers it — a gain, not a cost. It is kept out
+of the package index and reachable only through the `@app/engine/scene` entry
+point, and `test/personGate.test.ts` fails the day anything under `src/pipeline`,
+`src/definition`, `src/harness` or `session.ts` imports it.
+
+### THE DEFECT IN THE INHERITED TREE — a file left holding its own mutant
+
+One test was RED on takeover. `shareAbove` — the function that answers "at this
+cut-off, what share of real frames is rejected?" — was comparing **`>=` while
+the gate blocks on `>`**. So the operating-point table over-reported the cost to
+real users and over-promised the furniture caught, by exactly the frames sitting
+**ON** the number. That is not a rare tie: `cutoffAtPersonCost` returns a
+quantile **of the person's own readings**, so the cut-off IS one of them every
+single time. Kd would have ruled on a table describing something the app does
+not do, and both sides would have looked self-consistent while disagreeing.
+
+**The interesting part is where the `>=` came from.** Mutant **M9 mutates that
+exact line, `>` → `>=`**, and its `why` reads "the reported cost is off by the
+boundary". The mutant was written; the source was left holding it. **The
+harness's byte-exact restore only protects a mutation run THROUGH the harness —
+a mutation typed by hand while AUTHORING a mutant has no such protection**, and
+that is a new corner of :5199's class rather than a repeat of it. It was caught
+only because the anchor is one-directional: with `>=` on disk M9's `from` string
+matches nothing and `mutate-discriminators.mjs:271` aborts the whole sweep, so
+**a full sweep had never run against the tree as inherited.**
+
+Fixed by restoring `>`, with the reason written at the function so the next
+reader cannot mistake it for style. A **permanent guard** was added on the other
+side (:5348 rule 5): `test/personGate.test.ts` now runs a clip through the live
+gate at the operating point's own cut-off and asserts the share it actually
+blocks **equals the share the table promised**, on both piles. Flip either
+comparison and it goes red — proven by flipping it.
+
+### THE BLOCKER THAT WASN'T: both clip sets are on the dev machine
+
+`:6856` and the OWED line both read as though the next measurement waits on Kd.
+**It does not.** Session 1's five clips are at `C:\Users\kautilya\Desktop\traces`
+and session 2's eight at `...\traces2`, on the same machine the repo is on, so
+**the gate simulation is a command this chat can run** — no recording, no
+typing by Kd. He decides the number; he does not have to produce the evidence.
+`measure-pose.ts` grew a `--gate` mode for exactly this and it has **not been
+run on real clips yet** — that is card 4 step 2.
+
+- (**PROVE**) engine **190/190** (+22 over :6856's 168) · typecheck, lint and
+  the I1 purity grep clean, all with real exit codes · **18 mutants, 18 RED,
+  0 ALIVE, 0 never ran**, green baseline for both suites first, restores
+  sha256-verified · the `>=` regression re-introduced by hand and confirmed to
+  turn 3 tests RED, then restored sha256-identical.
+- (**NOT DONE, and none of it silently**) No cut-off is chosen. The gate is
+  **wired to nothing** — `apps/web` is untouched, so a user sees exactly what
+  they saw yesterday, including the invented chair reps. T3 for cards 1, 2 and
+  this one is owed, and the camera SMOKE is still UNRUN.

@@ -161,6 +161,20 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       consumes the landmark output the clips already contain. A later chat must
       not read the limitation so broadly that it shelves the one lever testable
       on data in hand.
+      **STATUS 2026-08-10 — THE GATE EXISTS BUT IS WIRED TO NOTHING, so this
+      line does NOT tick.** `packages/engine/src/scene/personGate.ts` is the
+      arithmetic that asks "does this move like a body?", committed with 190/190
+      engine tests and an 18/18-RED mutation sweep (DECISIONS :6959). It chooses
+      nothing: signal, cut-off and mode are arguments. **`apps/web` is untouched,
+      so a user still sees the invented chair reps** — the fix is not delivered
+      until step 3 wires it in AND the screen says so when it blocks (:5807).
+      **The "Kd must run the measurement" blocker in the paragraphs above is NOT
+      REAL and a later chat must not repeat it**: both clip sets sit on the dev
+      machine (`C:\Users\kautilya\Desktop\traces` and `...\traces2`), so the gate
+      simulation (`measure-pose.ts --gate`) is a command a chat runs unattended.
+      **The no-threshold-from-judgement rule is UNCHANGED and still binds** — the
+      run produces a table of what each candidate costs on BOTH sides, and Kd
+      rules the number on it.
       (e) **KD RULING 2026-08-08 — his object-detector proposal is DROPPED on
       cost** (a second model against Part 6 §3.4/§3.5 budgets). Deferred, not
       struck: it returns if the free levers fail, at ~1 Hz, never per frame.

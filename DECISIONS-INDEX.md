@@ -220,6 +220,29 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:6959** — 2026-08-10 — **PHASE 2 CARD 4, ENGINE HALF: the person gate is
+  built, tested and committed — and was found holding its own mutant.**
+  **Read before touching `src/scene/`, before quoting an operating-point table,
+  before writing a mutant by hand, and before telling Kd he must record or run
+  anything for this card.** `PersonGate` answers block / do-not-block per frame
+  and chooses NOTHING (signal, cut-off and mode are arguments; the screen belongs
+  to the web bridge, 2026-08-07). Two pinned properties: **no reading means
+  PASS**, and every signal runs one way so the test is always `reading > cutoff`.
+  `discriminators.ts` moved `scripts/` → `src/scene/` so **the code Kd rules a
+  cut-off on IS the code that enforces it**, sharing one `RollingWindow`.
+  **THE DEFECT INHERITED: `shareAbove` compared `>=` while the gate blocks on
+  `>`** — and every cut-off `cutoffAtPersonCost` returns is one of the person's
+  own readings, so the boundary is the NORMAL case, not a tie. **M9 mutates that
+  exact line: the source was left holding a hand-typed mutant.** New corner of
+  :5199 — **the harness's byte-exact restore protects only mutations run THROUGH
+  it.** Caught because M9's anchor then matches nothing and the sweep aborts,
+  which proves **no full sweep had run against the inherited tree.** Permanent
+  guard added from the other side (:5348 rule 5). **THE BLOCKER THAT WASN'T:
+  both clip sets are on the dev machine (`Desktop\traces`, `traces2`), so the
+  gate simulation is a command a chat runs — Kd rules the number, he does not
+  produce the evidence.** engine 190/190 · 18 mutants 18 RED 0 ALIVE ·
+  **NO CUT-OFF CHOSEN and the gate is wired to NOTHING — `apps/web` untouched,
+  so the invented chair reps are still there.**
 - **:6856** — 2026-08-09 — **THE SWEEP SESSION FAILED AND THE STAMP CAUGHT IT:
   eight clips, four addresses, ONE set of settings — and the fresh data says the
   gate may be the whole fix.** **Read before writing any operator instruction,

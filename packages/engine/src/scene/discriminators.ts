@@ -1,5 +1,5 @@
 // Landmark-only "is a body actually there?" discriminators.
-// Camera-accuracy card, phase 2 — THE MEASUREMENT, NOT THE FIX.
+// Camera-accuracy card, phase 2 — THE MEASUREMENT, AND NOW ALSO WHAT SHIPS.
 //
 // ── WHY THIS FILE EXISTS ────────────────────────────────────────────────────
 // Kd's five recorded clips settled that no CONFIDENCE cut-off can separate a
@@ -7,18 +7,33 @@
 // and hips, identical to a person (DECISIONS :6386). The one lever that DID
 // separate them was MOVEMENT — a hallucinated skeleton crawls over whatever it
 // is draped on; a real body does not. **That measurement was produced by a
-// throwaway script which no longer exists**: `grep -rniE "jitter|bodyCentre|
-// centroidShift" packages apps tools` returns only unrelated hits, so the
-// project's headline lever currently rests on numbers nobody can reproduce.
-// That is the failure class recorded at :5199 — "I measured it RED" and "the
-// committed harness measures it RED" are different claims, and only the second
-// survives the chat that made it. This file is that measurement, committed.
+// throwaway script which no longer exists**, which is the failure class
+// recorded at :5199 — "I measured it RED" and "the committed harness measures
+// it RED" are different claims, and only the second survives the chat that made
+// it. This file is that measurement, committed.
 //
-// ── WHAT IT DELIBERATELY DOES NOT DO ────────────────────────────────────────
-// It chooses no cut-off. Every export returns a distribution, or an operating
-// point WITH the error it costs on BOTH sides. The number is Kd's ruling on the
-// printed evidence: the OWED line forbids picking one from judgement, and that
-// rule is untouched by this file existing.
+// ── WHY IT MOVED OUT OF scripts/ (card 4, 2026-08-09) ───────────────────────
+// It used to live in `packages/engine/scripts/`, i.e. tooling. Card 4 builds
+// the gate, so this arithmetic now RUNS IN THE APP — and the measurement Kd
+// rules a cut-off on must be the same code that then enforces it. Two copies
+// would mean the number he approves describes the measurement while the number
+// that ships describes something else (:4556 F1, one level up). So: one
+// implementation, imported by `scripts/measure-pose.ts` and by the web bridge.
+//
+// ── WHAT LIVES HERE AND WHAT DOES NOT ───────────────────────────────────────
+// This file computes SIGNALS and reports DISTRIBUTIONS. It chooses no cut-off:
+// every operating point is returned WITH the error it costs on both sides, and
+// the number itself is Kd's ruling on printed evidence (the OWED rule forbids
+// picking one from judgement, and is untouched by this file existing).
+// The DECISION — which signal, which number, what the screen then says — lives
+// in the web bridge, per the 2026-08-07 ruling that a scene check does not
+// belong in the engine: the engine is handed 33 numbers and cannot know they
+// came from a chair, and R5.6 forbids scene special-cases in engine code.
+// **NOTHING UNDER src/pipeline, src/definition, src/harness OR session.ts MAY
+// IMPORT THIS FILE**, and `test/personGate.test.ts` fails if one ever does.
+// It is reachable from outside only through the `@app/engine/scene` entry
+// point, never from the package index — deliberately, so wiring it into the
+// pipeline takes a visible decision rather than an autocomplete.
 //
 // ── WHY THESE ARE MEASURABLE ON CLIPS ALREADY RECORDED ──────────────────────
 // They read landmark OUTPUT, which is exactly what a §7.1 trace contains.
@@ -33,17 +48,16 @@
 // difference is not drift:
 //   1. Rates are PER SECOND, not per frame. Browser frames arrive irregularly
 //      (Kd's clips ran 7.2–12.5 fps against a 15 fps target), and the gate this
-//      feeds will see the same irregularity, so per-frame is the wrong unit for
-//      the thing being built.
+//      feeds sees the same irregularity, so per-frame is the wrong unit for the
+//      thing being built.
 //   2. Frame pairs separated by more than MAX_GAP_MS are SKIPPED. Stitching
 //      across a lost pose measures the gap, not the subject — and `empty_room`
 //      is mostly gaps, so its high jitter figure may have been that artefact.
 //   3. "Body centre" and "torso length" are DEFINED below. The deleted script's
 //      definitions are unrecoverable, so nothing here claims to reproduce it.
 //
-// PURE: no I/O, no clock, no randomness — unit-testable, and portable into the
-// web bridge when the gate is finally built. It sits in scripts/ (outside the
-// I1 purity boundary) but is written to src/ rules anyway.
+// PURE: no I/O, no clock, no randomness (I1). It sits in src/ now, so the
+// engine's own purity grep covers it — which is a gain, not a cost.
 import { KP } from "@app/shared";
 import type { PoseFrame } from "@app/shared";
 
@@ -279,38 +293,64 @@ export function quantile(sorted: readonly number[], q: number): number {
 }
 
 /**
- * Roll a per-frame series into what a GATE would actually see: the MEDIAN of
- * the last `window` readings.
+ * The rolling median a gate actually reads, as ONE stateful object shared by
+ * the live gate and the offline measurement.
  *
- * Why a median and not a mean: one landmark glitch must not be able to switch
- * a real user off mid-rep. Why a window at all: the per-frame value is far too
- * noisy to gate on, and the app's decision is "is a person here", which is a
- * question about the last second, not the last 80 ms.
+ * Why a median and not a mean: one landmark glitch must not be able to switch a
+ * real user off mid-rep. Why a window at all: the per-frame value is far too
+ * noisy to gate on, and the app's question is "is a person here", which is
+ * about the last second, not the last 80 ms.
  *
- * The output is index-aligned with the input; entries stay null until the
- * window holds at least `Math.ceil(window / 2)` real readings, so a gate is
- * never handed a confident number built from two frames.
+ * `push` returns null until the window holds at least `ceil(size / 2)` real
+ * readings, so a gate is never handed a confident number built from two frames.
+ *
+ * WHY IT IS A CLASS AND NOT A LOOP. `windowed()` below is a fold over this
+ * object rather than a second copy of the rule. A live gate and an offline
+ * measurement that implement "the last second" separately will agree on the
+ * day they are written and drift afterwards — and the drift would be invisible,
+ * because each is self-consistent (:4556 F1: a rule with two declarations is
+ * where a correction gets lost). `test/personGate.test.ts` pins the equality on
+ * real frame sequences, not just on the shape of this file.
  */
-export function windowed(
-  series: readonly (number | null)[],
-  window: number,
-): (number | null)[] {
-  const out: (number | null)[] = [];
-  const need = Math.ceil(window / 2);
-  for (let i = 0; i < series.length; i++) {
+export class RollingWindow {
+  private readonly size: number;
+  private readonly need: number;
+  private readonly recent: (number | null)[] = [];
+
+  constructor(size: number) {
+    this.size = Math.max(1, Math.floor(size));
+    this.need = Math.ceil(this.size / 2);
+  }
+
+  /** Feed one raw reading (null = not computable on this frame); get what a
+   *  gate would read NOW, or null while there is not enough to be sure. */
+  push(value: number | null): number | null {
+    this.recent.push(value);
+    if (this.recent.length > this.size) this.recent.shift();
     const bucket: number[] = [];
-    for (let j = Math.max(0, i - window + 1); j <= i; j++) {
-      const v = series[j];
-      if (typeof v === "number") bucket.push(v);
-    }
-    if (bucket.length < need) {
-      out.push(null);
-      continue;
+    for (const v of this.recent) if (typeof v === "number") bucket.push(v);
+    if (bucket.length < this.need) {
+      return null;
     }
     bucket.sort((a, b) => a - b);
-    out.push(quantile(bucket, 0.5));
+    return quantile(bucket, 0.5);
   }
-  return out;
+
+  /** Forget everything — a new set is not a continuation of the last one. */
+  reset(): void {
+    this.recent.length = 0;
+  }
+}
+
+/**
+ * Roll a per-frame series into what a GATE would see, offline: the same
+ * `RollingWindow` rule applied across a whole recorded clip. Index-aligned with
+ * the input. For any positive size this is exactly what the live gate reads
+ * frame by frame, because it IS the live gate's own rolling median.
+ */
+export function windowed(series: readonly (number | null)[], window: number): (number | null)[] {
+  const rolling = new RollingWindow(window);
+  return series.map((v) => rolling.push(v));
 }
 
 /** Every signal's windowed series for a whole clip, plus how many frame pairs
@@ -373,6 +413,17 @@ function sortedNumbers(values: readonly (number | null)[]): number[] {
   return out;
 }
 
+/**
+ * Share of readings the GATE would block at this cut-off — so the comparison is
+ * `>` and must stay `>`, because `PersonGate` blocks on `reading > cutoff`.
+ *
+ * This is not pedantry about a tie. Every cut-off `cutoffAtPersonCost` returns
+ * IS one of the person's own readings, so the boundary is not a rare case here,
+ * it is the normal one: with `>=` the printed cost and the shipped behaviour
+ * disagree on exactly the frames that sit on the number Kd approved, and both
+ * sides would look self-consistent while doing it. `test/personGate.test.ts`
+ * holds the two together from the other end.
+ */
 function shareAbove(sorted: readonly number[], cutoff: number): number {
   if (sorted.length === 0) return Number.NaN;
   let n = 0;
