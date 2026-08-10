@@ -29,12 +29,14 @@ vi.mock('@mediapipe/tasks-vision', () => ({
 
 const startSet = vi.fn();
 const endSet = vi.fn(() => null);
+const resetScene = vi.fn();
 vi.mock('../engine/sessionController.js', () => ({
   SessionController: class {
     constructor() { this.analysisAvailable = true; }
     startSet(...a) { startSet(...a); }
     endSet() { return endSet(); }
     feed() { return { rep_count: 0 }; }
+    resetScene() { resetScene(); }
   },
 }));
 
@@ -44,6 +46,7 @@ beforeEach(() => {
   createFromOptions.mockClear();
   startSet.mockClear();
   endSet.mockClear();
+  resetScene.mockClear();
 });
 
 const render = (props) =>
@@ -138,6 +141,32 @@ describe('usePoseDetection — the user counting their own reps', () => {
     await act(async () => { out = render({ analysisEnabled: false }); });
     expect(out.result.current.analysisSettled).toBe(true);
     expect(out.result.current.analysisAvailable).toBe(false);
+  });
+
+  it('forgets the scene when a paused set RESUMES — and only then', async () => {
+    // `enabled` false is a pause or a rest: the frame feed stops, the SET does
+    // not end, and frames start again from a scene that may have changed
+    // completely. Without this the person check's rolling window carries
+    // readings from before the break, and a message raised before it is still on
+    // screen explaining a moment that is over.
+    //
+    // THE "AND ONLY THEN" HALF IS THE ONE THAT CAN FAIL QUIETLY. A reset on
+    // every render of the effect — or on the pause rather than the resume —
+    // would wipe the window while frames are still arriving, and the check would
+    // spend its first second of every re-render unable to block anything.
+    const props = { exercise: 'squat', setIndex: 1, enabled: true, analysisEnabled: true };
+    let out;
+    await act(async () => { out = render(props); });
+    expect(resetScene).not.toHaveBeenCalled();          // starting a set is not a resume
+
+    await act(async () => { out.rerender({ ...props, enabled: false }); });
+    expect(resetScene).not.toHaveBeenCalled();          // pausing is not a resume either
+
+    await act(async () => { out.rerender({ ...props, enabled: true }); });
+    expect(resetScene).toHaveBeenCalledTimes(1);
+
+    await act(async () => { out.rerender({ ...props, enabled: true }); });
+    expect(resetScene).toHaveBeenCalledTimes(1);        // still enabled: nothing to forget
   });
 
   it('emits the finished set summary when the set ordinal changes', async () => {

@@ -86,7 +86,16 @@ export default function usePoseDetection({
   const loopRunningRef  = useRef(false);
   const onSetCompleteRef = useRef(onSetComplete);
 
-  useEffect(() => { enabledRef.current = enabled; }, [enabled]);
+  // A RESUMED SET IS NOT A CONTINUATION. `enabled` false is a pause or a rest —
+  // the feed below stops, the SET does not end, and frames start arriving again
+  // from a scene that may have changed completely. The person check's rolling
+  // window would otherwise carry readings from before the break, and any message
+  // it had raised would still be on screen explaining a moment that is over.
+  useEffect(() => {
+    const wasEnabled = enabledRef.current;
+    enabledRef.current = enabled;
+    if (enabled && !wasEnabled) controllerRef.current.resetScene();
+  }, [enabled]);
   useEffect(() => { onSetCompleteRef.current = onSetComplete; }, [onSetComplete]);
 
   // ── Initialise MediaPipe on mount (unchanged from the WS version) ───────────

@@ -6,10 +6,12 @@
 import {
   EngineUnsupportedError,
   getDefinition,
+  landmarksToFrame,
   startSet as adapterStartSet,
 } from "./poseAdapter.js";
 import { frameToDisplay } from "./frameMapping.js";
 import { translate } from "./messages.en.js";
+import { SceneGate } from "./sceneGate.js";
 
 // §3.1's rule, applied at the signal level: after this many consecutive frames
 // where the exercise's rep-metric joints are unusable (occluded legs — the
@@ -47,6 +49,7 @@ export class SessionController {
     this._framesFed = 0;
     this._metricSignals = [];
     this._metricUnusableStreak = 0;
+    this._scene = null;
   }
 
   get analysisAvailable() {
@@ -64,11 +67,16 @@ export class SessionController {
     this._metricUnusableStreak = 0;
     this._session = null;
     this._analysisAvailable = false;
+    this._scene = null;
     if (def == null) return; // no definition yet → log-only (Part 6 §3.6)
     try {
       this._session = adapterStartSet(def, setIndex);
       this._metricSignals = this._session.metricSignals;
       this._analysisAvailable = true;
+      // ONE PERSON CHECK PER SET, and only where there is something to protect:
+      // in log-only mode the user is counting, so there are no reps to invent
+      // and nothing to take away from them.
+      this._scene = new SceneGate();
       this._session.onRep((e) => {
         this._lastRepScore = e.score;
         this._repScores.push(e.score);
@@ -90,22 +98,68 @@ export class SessionController {
   feed(landmarks, tMs, keypointsPresent) {
     if (this._session == null) return logOnlyDisplay(keypointsPresent);
     this._framesFed += 1;
-    const fr = this._session.feed(landmarks, tMs);
+
+    // ── THE PERSON CHECK, BEFORE THE ENGINE SEES ANYTHING ────────────────────
+    // It reads the REAL frame — always, including the ones it goes on to block.
+    // That is what the simulation Kd ruled the cut-off on did, and a gate fed
+    // its own blanked output would build a different rolling median from the
+    // one the printed table described.
+    const scene = this._scene.push(landmarksToFrame(landmarks, tMs));
+    // A blocked frame reaches the engine with NO landmarks, which is exactly
+    // what `measure-pose.ts` replayed and what the engine's ingest already
+    // treats as "invalid — hold state, count nothing" (§3.1 fail-soft). The
+    // engine is not told why, and does not need to be: it is handed 33 numbers
+    // and cannot know where they came from (the 2026-08-07 ruling).
+    const fr = this._session.feed(scene.blocked ? [] : landmarks, tMs);
     const display = { ...frameToDisplay(fr), form_score: this._lastRepScore };
 
-    // Honest degradation when the measured joints are occluded: the engine
-    // already refuses to count (metric null → FSM holds), but with no fault
-    // firing the UI would read "Good Form" while seeing only a face. Surface
-    // the legacy legs warning and withdraw the form verdict instead.
-    const metricUsable = this._metricSignals.some(
-      (name) => typeof fr.signals[name] === "number",
-    );
-    this._metricUnusableStreak = metricUsable ? 0 : this._metricUnusableStreak + 1;
-    if (fr.visibilityOk && this._metricUnusableStreak >= METRIC_UNUSABLE_STREAK) {
-      display.form_correct = null; // no verdict — nothing is being measured
-      display.corrections = [translate("cue.visibility.step_back")];
+    if (scene.blocked) {
+      // NO VERDICT ON A FRAME WE OURSELVES BLANKED. Without this the screen
+      // keeps grading through short blocks — the engine reports no live cue for
+      // the first two invalid frames, so `form_correct` comes back TRUE and "✓
+      // Good Form" sits over a frame the app deliberately refused to look at;
+      // once its own visibility cue arrives it comes back FALSE, which is worse
+      // (:5807: on screen AND wrong, in both directions).
+      display.form_correct = null;
+      // AND THE OCCLUSION STREAK BELOW IS NOT ADVANCED. A blanked frame is
+      // evidence about the SCENE, not about whether the user's legs are visible.
+      // Letting our own blanking feed that counter would raise the engine's
+      // "cannot see your legs clearly" at a user standing in full view — a cue
+      // naming a cause the app cannot know (:6150 C/H-2).
+    } else {
+      // Honest degradation when the measured joints are occluded: the engine
+      // already refuses to count (metric null → FSM holds), but with no fault
+      // firing the UI would read "Good Form" while seeing only a face. Surface
+      // the legacy legs warning and withdraw the form verdict instead.
+      const metricUsable = this._metricSignals.some(
+        (name) => typeof fr.signals[name] === "number",
+      );
+      this._metricUnusableStreak = metricUsable ? 0 : this._metricUnusableStreak + 1;
+      if (fr.visibilityOk && this._metricUnusableStreak >= METRIC_UNUSABLE_STREAK) {
+        display.form_correct = null; // no verdict — nothing is being measured
+        display.corrections = [translate("cue.visibility.step_back")];
+      }
+    }
+
+    // THE ONE PLACE THE SENTENCE GOES ON SCREEN. It deliberately sits outside
+    // the branch above, because the message outlives the blocked frames that
+    // caused it — it clears after a run of clean ones, so that it can be read.
+    // Written once: a rule with two declarations is where a correction gets lost
+    // (:4556 F1), and the first draft of this method had exactly two.
+    if (scene.showMessage) {
+      display.form_correct = null;
+      display.corrections = [translate("cue.scene.no_person")];
     }
     return display;
+  }
+
+  /** Forget the scene check's history without ending the set — an un-pause.
+   *  Frames stop arriving while a set is paused or resting, so the frame before
+   *  the pause is not the frame before now, and a message raised before it would
+   *  be explaining something the user can no longer see. No-op in log-only mode,
+   *  where there is no check to reset. */
+  resetScene() {
+    if (this._scene != null) this._scene.reset();
   }
 
   /** Per-rep scores observed so far this set (engine RepEvent.score, §2.4). */

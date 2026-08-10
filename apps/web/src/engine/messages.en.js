@@ -14,6 +14,19 @@ const EN = {
   "fault.jump_squat.valgus": "Push your knees out — don't let them cave inward",
   // Visibility hint (engine liveCue when landmarks drop)
   "cue.visibility.step_back": "Cannot see your legs clearly — step back so your full body is in frame",
+  // THE PERSON CHECK (card 4 step 3). NOT an Appendix A key and not an engine
+  // key — Appendix A has no string for "what I am tracking does not move like a
+  // body", because the check that asks did not exist when it was written. The
+  // cue is raised in the web bridge, where the 2026-08-07 ruling puts the scene
+  // decision and the screen; it lives in this catalog anyway so every sentence a
+  // user reads is in one place and testable without a browser.
+  //
+  // IT DELIBERATELY NAMES NO CAUSE. The app cannot tell a chair from a bad angle
+  // from a user half out of shot — it knows only that its own reading says "not
+  // a body". A cue that named the reason would be naming a cause the app cannot
+  // know, which is the defect recorded at :6150.
+  "cue.scene.no_person":
+    "Not counting — the camera isn't sure it's looking at you. Step into full view.",
   // Setup camera hints (§4 cameraHint; setup.<exercise>.camera family, Appendix A)
   "setup.squat.camera": "Place your phone sideways, about 3 m away, with your full body in frame",
   "setup.jump_squat.camera": "Place your phone sideways, about 3 m away, with your full body in frame",

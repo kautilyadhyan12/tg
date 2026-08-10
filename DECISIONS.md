@@ -7100,3 +7100,121 @@ five clips explicitly, or delete the stray file. Session 2's folder is clean.
   number ruled here is enforced by the code that produced it.
 - (**NOT DONE**) `apps/web` is untouched. **Until step 3 lands, a user still
   sees the invented reps** — the ruling changes nothing on screen by itself.
+
+## 2026-08-10 — CARD 4 STEP 3: the person check is WIRED, and the screen says so — the first change in this whole card a user can see
+
+**Steps 1 and 2 built the arithmetic and chose its number; neither changed
+anything on screen.** This one does. Every frame the app feeds the engine now
+goes through `PersonGate` first, at Kd's ruled setting, and a frame it blocks
+reaches the engine carrying **no landmarks** — byte-identical to what
+`measure-pose.ts` replayed, so the shipped behaviour is the behaviour the table
+he ruled on described.
+
+### The numbers are quoted, never re-derived (R5.4)
+
+`apps/web/src/engine/sceneGate.js` holds one frozen object: **`bone_stretch`,
+cut-off `0.923`, window `15`** — :7041, plus the window and gap guard the
+measurement itself defaulted to (`measure-pose.ts:812-813`). A test asserts that
+object **whole**, and it is the assertion with the most teeth here: mutant PG2
+nudges the cut-off to `0.5`, which sits between the two piles exactly as `0.923`
+does, so **every behavioural test stays green while the shipped app silences a
+different set of a real user's frames**. Only an assertion on the number itself
+catches that. PG3 does the same for the signal — swapping in
+`motion_incoherence`, the one the cross-check rejected for eating a real rep,
+which is the edit a later chat reading the separation figures alone would make.
+
+### THE SCREEN, which is the half :5807 required
+
+A blocked frame produces **no verdict** (the "✓ Good Form" tag is withdrawn),
+and after **three blocked frames in a row** the camera panel says: *"Not counting
+— the camera isn't sure it's looking at you. Step into full view."* It clears
+after **fifteen clean frames**.
+
+- **Three is not a number of mine.** It is §3.1's own count
+  (`INVALID_STREAK_FOR_VISIBILITY`), which makes the sentence appear at exactly
+  the frame where the engine — fed the blanks we hand it — **would otherwise put
+  its own sentence on screen**: "cannot see your legs clearly", at a user
+  standing in full view. That is a cue naming a cause the app cannot know, the
+  defect :6150 C/H-2 recorded. One message replaces the other; a test pins that
+  they never appear together.
+- **Fifteen IS a number of mine**, and it is a UI patience threshold in the
+  `ENGINE_STALL_MS` tradition — the spec names none. ~1 s at the app's feed, and
+  the gate's own window length. Without an off-delay, blocking that arrives in
+  ones and twos flashes the sentence several times a second, which is why
+  `measure-pose.ts` prints the LONGEST run and not just the share.
+- **The cue key is NOT from Appendix A** and is not an engine key. Appendix A has
+  no string for "what I am tracking does not move like a body" because the check
+  did not exist when it was written. It is raised in the web bridge — the
+  2026-08-07 ruling's home for the scene decision and the screen — and lives in
+  the EN catalog anyway so every sentence a user reads is in one testable place.
+  **It names no cause deliberately**, and a test forbids the words chair /
+  furniture / object appearing in it.
+
+### The proof that the blanking works needs no way to switch it off
+
+`shakenSquat` is this package's own golden squat with every landmark shaken. The
+engine counts its **2 reps at every shake amount tried** — the squat is still a
+squat — so feeding ONE clip down both paths says it plainly: **2 reps ungated, 0
+through the bridge.** Delete the blanking and the second number becomes 2. The
+counterfactual is inside one test; nothing has to be disabled to get it.
+
+### WHAT THE AUDIT CAUGHT, and it was my own test
+
+**PG1 SURVIVED on the first sweep.** It raises the cut-off tenfold — the check
+would never fire — and the test asserting a redrawn skeleton is blocked stayed
+GREEN, because that test asserted a SHARE ("more than 150 of 200 frames"), and a
+badly loosened cut-off still blocks most of a clip whose every reading is an
+order of magnitude above the number. **A share is satisfied by a threshold that
+has been loosened until it barely works.** Restated as "once it starts blocking,
+not one frame gets through" — an absolute, not a proportion — and PG1 is RED.
+This is :5104's F5 shape (a fix whose protection cannot fail) arriving from the
+assertion side.
+
+**And the harness caught its own instrument defect on run 1, in the fail-safe
+direction** (:6532's twin): its ANSI stripper removed the bracket sequence but
+left the ESC byte, so `Tests` and its count were separated by a character `\s`
+does not match, and the tally guard read a perfectly good run as "the suite never
+ran" and ABORTED. It never scored a false RED. Anchors are also EOL-normalised
+per file — this card touches CRLF and LF files in the same sweep, which is
+:4267's class arriving from the authoring side rather than from `sed`.
+
+### One mutant is ALIVE, with its reason recorded rather than the row deleted
+
+**PG14** removes the `else` that keeps our own blanking out of the occlusion
+counter. The corner it protects needs the streak to already stand at 2 from
+genuinely unusable frames at the moment a block begins, AND the engine's own
+visibility to still be true — the first two frames of that block and no others.
+No clip in this repo reaches that state and a fixture built to reach it would be
+asserting its own construction. **The `else` stays**: it is the honest expression
+of "a frame we blanked is not evidence about the user's legs". Reported, not
+quietly dropped (:5618's M6 precedent).
+
+### Also, and deliberately
+
+- **One gate per set, reset on a RESUME as well.** Frames stop during a pause or
+  a rest, so the frame before the break is not the frame before now. The test
+  pins both halves — that it fires on the resume, and that it does NOT fire on
+  the pause or on an ordinary re-render, which would wipe the window while frames
+  are still arriving.
+- **Log-only sets never construct a check at all.** The user is counting; there
+  are no reps to invent and none to take away.
+- **The recorder still records the REAL frames**, not the gated ones. Recording
+  what the check let through would make every future measurement a measurement of
+  the check.
+- **A first draft had the message rule written TWICE** (once in the blocked
+  branch, once after it). Collapsed to one before any test ran — :4556 F1 is
+  precisely a rule with two declarations, and this file would have been the third
+  occurrence.
+
+- (**PROVE**) web **578/578** (+26 over :7037's 552) · engine **190/190**
+  unchanged · engine typecheck clean · **I1 purity grep prints nothing** ·
+  eslint clean on all nine touched files · **`vite build` ✓**, which is what
+  proves the `@app/engine/scene` subpath resolves in a production bundle and not
+  merely under vitest · **17 mutants: 16 RED, 1 ALIVE (expected, reason above),
+  0 never ran**, restores sha256-verified after every one · `git status` shows
+  only the planned files, `packages/` untouched.
+- (**NOT DONE, and none of it silently**) **The SMOKE IS UNRUN** —
+  `RUNBOOK/smoke-person-check.md` is written and waiting for Kd, and the OWED
+  line does NOT tick (:4718 F4, :5034). **T3 is unrun** for cards 1, 2 and this
+  one. Nothing here re-measures the cut-off on real furniture: that was done in
+  step 2 and no test in this repo can repeat it.

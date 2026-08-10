@@ -1,6 +1,64 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: CAMERA-ACCURACY PHASE 2, CARD 4 — ALL THREE STEPS ARE BUILT AND COMMITTED.
+      **THE CHECK IS WIRED AND THE SCREEN SAYS SO — the first change in this
+      whole card a user can see.** web 578/578 (+26) · engine 190/190 · engine
+      typecheck + I1 purity grep clean · eslint clean on all nine touched files ·
+      `vite build` ✓ · 17 mutants, 16 RED, 1 ALIVE (expected, reason in the
+      harness), 0 never ran, restores sha256-verified. Full record: DECISIONS
+      :7104 (read after :7037).
+
+WHAT IS LEFT, AND IT IS ONLY TWO THINGS
+  1. **THE SMOKE — `RUNBOOK/smoke-person-check.md`, written and UNRUN.** Kd runs
+     it. The pair that matters is step 2 vs step 4: chair alone in shot must stop
+     counting, AND Kd squatting must still count. **Either half alone proves
+     nothing** — a check that blocks everything passes the first and is worse
+     than the bug.
+  2. **T3, in a FRESH CHAT.** Cards 1, 2 and 4 are all still unreviewed.
+  **THE OWED LINE DOES NOT TICK UNTIL BOTH ARE DONE** (:4718 F4, :5034).
+
+WHAT SHIPPED, in one paragraph
+  `apps/web/src/engine/sceneGate.js` holds Kd's ruling in one frozen object —
+  `bone_stretch`, 0.923, window 15 — plus the screen's hysteresis. The bridge
+  runs it on the REAL frame before the engine sees anything, and hands the engine
+  a frame with NO landmarks when it blocks, which is byte-identical to what
+  `measure-pose.ts` replayed. A blanked frame gets no form verdict; three blocked
+  frames in a row raise the sentence; fifteen clean ones clear it.
+
+THE LESSON FROM THIS SESSION, and it is about ASSERTIONS not code
+  **PG1 SURVIVED THE FIRST SWEEP.** It loosens the cut-off tenfold — the check
+  would never fire — and the test asserting "furniture is blocked" stayed GREEN,
+  because it asserted a SHARE (">150 of 200 frames") and a badly loosened
+  threshold still blocks most of a clip whose every reading is ten times the
+  number. **A SHARE IS SATISFIED BY A THRESHOLD LOOSENED UNTIL IT BARELY WORKS.**
+  Restated as an absolute — "once it starts, not one frame gets through" — and it
+  goes red. Assert thresholds absolutely, or the assertion grades on a curve.
+
+TWO THINGS A LATER CHAT WILL BE TEMPTED TO DO, AND MUST NOT
+  - **Add `motion_incoherence`** because its separation (0.980) reads as good as
+    `bone_stretch`'s (0.983). It EATS A REAL REP in both sessions (:7062). Mutant
+    PG3 exists to make that edit go red.
+  - **Tidy the cut-off.** 0.923 is Kd's ruling on printed evidence (R5.4). PG2
+    nudges it to 0.5 — invisible in every behavioural test, a reversal in the
+    app — which is why one test asserts the whole config object literally.
+
+A WRINKLE THAT STILL BITES
+  Pointing `measure-pose.ts` at `Desktop\traces` ABORTS on a stray
+  `squats-empty_room.detect (2).jsonl`. **The abort is card 1 working
+  correctly.** Name the five clips explicitly. `traces2` is clean.
+
+STILL OWED, and none of it is this card's job
+  - The shallow-squat cue (downstream of this line, :6386); the voice product
+    decision; `pose_landmarker_lite` as the hard-wired default; a label
+    containing a comma breaking `--person`/`--nobody`.
+  - Three invented reps survive on `chair_A` BY DESIGN. Not a smoke failure. The
+    settings sweep stays in reserve and its runbook is fixed and ready.
+
+SERVERS: none started this session.
+```
+
+```
 TASK: CAMERA-ACCURACY PHASE 2, CARD 4 — STEPS 1 AND 2 ARE DONE. **THE CUT-OFF
       IS RULED AND THE ONLY THING LEFT IS STEP 3: WIRE IT INTO THE WEB BRIDGE.**
       Kd's ruling: **`bone_stretch > 0.923`, that signal ALONE** (DECISIONS

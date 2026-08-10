@@ -220,6 +220,33 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:7104** — 2026-08-10 — **CARD 4 STEP 3: THE PERSON CHECK IS WIRED AND THE
+  SCREEN SAYS SO — the first change in the whole camera card a user can see.**
+  **Read before touching `apps/web/src/engine/sceneGate.js`, before writing an
+  assertion about a threshold as a SHARE, and before adding any sentence to the
+  camera panel.** Every frame the app feeds the engine goes through `PersonGate`
+  first at the ruled setting; a blocked frame reaches the engine with **no
+  landmarks**, byte-identical to what `measure-pose.ts` replayed. The ruled
+  numbers sit in ONE frozen object and a test asserts it **whole** — **the
+  assertion with the most teeth here, because mutant PG2 nudges the cut-off to
+  0.5, which sits between the two piles exactly as 0.923 does, so every
+  behavioural test stays green while the app silences a different set of a real
+  user's frames.** THE SCREEN: no verdict on a blanked frame, and after **3
+  blocked frames in a row** (§3.1's own count — the frame where the engine would
+  otherwise show its OWN "cannot see your legs" at a user in full view, :6150
+  C/H-2) the panel says *"Not counting — the camera isn't sure it's looking at
+  you"*, clearing after **15 clean frames** (a UI patience threshold in the
+  `ENGINE_STALL_MS` tradition; without an off-delay the sentence flickers). **The
+  cue key is NOT from Appendix A** and names no cause, by test. **THE AUDIT
+  CAUGHT MY OWN TEST: PG1 survived** — a tenfold-loosened cut-off, and the
+  "blocks furniture" assertion stayed GREEN because it asserted a SHARE; **a
+  share is satisfied by a threshold loosened until it barely works.** Restated as
+  an absolute. The harness also caught its own ANSI-strip defect on run 1, in the
+  fail-safe direction (:6532's twin), and EOL-normalises anchors per file
+  (:4267's class from the authoring side). **PG14 is ALIVE with its reason
+  recorded** (:5618's M6 precedent). web 578/578 · engine 190/190 · `vite build`
+  ✓ · 17 mutants, 16 RED, 1 ALIVE, 0 never ran. **SMOKE UNRUN, T3 UNRUN, the
+  OWED line does NOT tick.**
 - **:7037** — 2026-08-10 — **KD RULES THE CUT-OFF: `bone_stretch > 0.923`, that
   signal ALONE — and the cross-check is what killed the signal that scored just
   as well.** **Read before quoting a separation number as if it settled

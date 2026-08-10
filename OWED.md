@@ -169,6 +169,19 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       **"No threshold from judgement" is now SATISFIED for this line, not
       waived.** It does not reach zero and never claimed to; the settings sweep
       stays in reserve. **The line still does NOT tick: nothing is wired.**
+      **STATUS 2026-08-10 (c) — IT IS WIRED, AND THE SCREEN SAYS SO. The line
+      still does NOT tick: the SMOKE IS UNRUN.** (DECISIONS :7104.) Every frame
+      the app feeds the engine goes through the check first at the ruled setting;
+      a blocked frame reaches the engine with no landmarks, and after three
+      blocked frames in a row the camera panel says *"Not counting — the camera
+      isn't sure it's looking at you. Step into full view."*, clearing after
+      fifteen clean ones. **This is the first change in the whole camera card a
+      user can see.** web 578/578 · `vite build` ✓ · 17 mutants, 16 RED, 1 ALIVE
+      with its reason. **What this line still needs before it ticks:**
+      `RUNBOOK/smoke-person-check.md` run by Kd (chair alone in shot must stop
+      counting AND Kd squatting must still count — either half alone proves
+      nothing), and the T3 review. **Three invented reps on `chair_A` survive by
+      design and are not a smoke failure** — the settings sweep stays in reserve.
       **STATUS 2026-08-10 (a) — THE GATE EXISTS BUT IS WIRED TO NOTHING, so this
       line does NOT tick.** `packages/engine/src/scene/personGate.ts` is the
       arithmetic that asks "does this move like a body?", committed with 190/190
