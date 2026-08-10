@@ -7033,3 +7033,70 @@ run on real clips yet** — that is card 4 step 2.
   **wired to nothing** — `apps/web` is untouched, so a user sees exactly what
   they saw yesterday, including the invented chair reps. T3 for cards 1, 2 and
   this one is owed, and the camera SMOKE is still UNRUN.
+
+## 2026-08-10 — KD RULES THE CUT-OFF: bone-length only, 0.923 — and the cross-check is what killed the signal that looked just as good
+
+**The number is chosen and the OWED rule is satisfied the way it was written to
+be: measured first, ruled by Kd on a printed table showing the cost on BOTH
+sides.** The gate ships as **one rule — `bone_stretch > 0.923`** — and nothing
+else. He was shown two options in plain words ("stricter" / "gentler") and took
+the stricter one on recommendation.
+
+### The evidence he ruled on, from `measure-pose.ts --gate` over all 13 clips
+
+Session 2 (`traces2`: four `both_*`, four `chair_*`), candidates derived from
+section 5's operating points and replayed through the REAL engine:
+
+| | today | **bs>0.923** | bs>1.174 | mi>1.953 | either(1%) | both(1%) |
+|---|---|---|---|---|---|---|
+| reps invented, 4 empty-room clips | **10** | **3** | 5 | 2 | 4 | 9 |
+| real reps kept (person pile) | 23 | **23** | 23 | **22** | 23 | 23 |
+| person frames silenced | — | 4.5% | 1.0% | 4.9% | 1.7% | 0.2% |
+| longest silence, person | — | 18f | 13f | 14f | 13f | 3f |
+
+**Across BOTH sessions at 0.923: 11 invented reps → 3, and all 66 reps counted
+on the six clips with Kd in them are still counted.**
+
+### THE CROSS-CHECK EARNED ITS KEEP — read this before trusting any one session
+
+`motion_incoherence` scored 0.980 separation against `bone_stretch`'s 0.983 —
+indistinguishable on paper, and :6856 named both as the strong pair. **Replayed
+through the engine it loses a real rep in BOTH sessions**: 23→22 on session 2 at
+its 5% point, and 3→2 on session 1's `me_and_furniture` at BOTH the 5% and 1%
+points. Every combination containing it inherited that. **`bone_stretch` alone
+lost nothing on any of the 13 clips at either cut-off.**
+**The standing lesson: SEPARATION IS NOT THE OUTCOME.** Two signals can be
+equally good at telling two piles of numbers apart and unequally good at leaving
+a real user's reps alone — because a gate does not fire on a distribution, it
+fires on the particular frames of a particular rep. Section 6 exists for this
+and a chat that rules from section 5 alone will pick the rep-eating signal.
+**Had only session 2 been run, the recommendation put to Kd would have been the
+combination — which quietly eats his reps.**
+
+### What this does NOT claim
+
+- **It does not reach zero.** Three invented reps survive on `chair_A`. This is
+  a large cut, not a cure, and Kd was told so before he ruled. The settings
+  sweep stays in reserve (:6856), and `RUNBOOK/record-camera-settings-sweep.md`
+  is fixed and ready.
+- **It is still one room, one chair, one person.** The number is ruled on the
+  evidence that exists; more furniture would be better evidence.
+- **4.5% of a squatting person's frames are silenced, longest run 18 frames**
+  (~1.5 s at these clips' 12 fps). That silence is invisible today because
+  nothing is wired. **Step 3 must make the screen SAY it** — a user who squats
+  and sees the count sit still, with no explanation, has been told something
+  false by omission (:5807).
+
+### A wrinkle a later chat will hit
+
+Pointing the script at `Desktop\traces` ABORTS: `squats-empty_room.detect (2)
+.jsonl` is a duplicate-download that does not end in `.detect.jsonl`, so it is
+not filtered out, and it is not a trace. **The abort is card 1 working
+correctly** (a run that half-succeeds is worse than one that stops). Name the
+five clips explicitly, or delete the stray file. Session 2's folder is clean.
+
+- (**PROVE**) Both runs pasted from real terminal output; the shipped
+  `PersonGate` class is what section 6 replays, not a re-implementation, so the
+  number ruled here is enforced by the code that produced it.
+- (**NOT DONE**) `apps/web` is untouched. **Until step 3 lands, a user still
+  sees the invented reps** — the ruling changes nothing on screen by itself.

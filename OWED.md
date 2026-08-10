@@ -161,7 +161,15 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       consumes the landmark output the clips already contain. A later chat must
       not read the limitation so broadly that it shelves the one lever testable
       on data in hand.
-      **STATUS 2026-08-10 — THE GATE EXISTS BUT IS WIRED TO NOTHING, so this
+      **STATUS 2026-08-10 (b) — THE CUT-OFF IS RULED: `bone_stretch > 0.923`,
+      that signal alone (Kd, DECISIONS :7037).** Measured on all 13 clips and
+      replayed through the real engine: **11 invented reps → 3, all 66 reps on
+      the six clips containing Kd still counted.** `motion_incoherence` is OUT —
+      equal separation on paper, loses a real rep in both sessions.
+      **"No threshold from judgement" is now SATISFIED for this line, not
+      waived.** It does not reach zero and never claimed to; the settings sweep
+      stays in reserve. **The line still does NOT tick: nothing is wired.**
+      **STATUS 2026-08-10 (a) — THE GATE EXISTS BUT IS WIRED TO NOTHING, so this
       line does NOT tick.** `packages/engine/src/scene/personGate.ts` is the
       arithmetic that asks "does this move like a body?", committed with 190/190
       engine tests and an 18/18-RED mutation sweep (DECISIONS :6959). It chooses

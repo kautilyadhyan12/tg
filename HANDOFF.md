@@ -1,6 +1,66 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: CAMERA-ACCURACY PHASE 2, CARD 4 — STEPS 1 AND 2 ARE DONE. **THE CUT-OFF
+      IS RULED AND THE ONLY THING LEFT IS STEP 3: WIRE IT INTO THE WEB BRIDGE.**
+      Kd's ruling: **`bone_stretch > 0.923`, that signal ALONE** (DECISIONS
+      :7037). engine 190/190 · web 552/552 · typecheck + lint + I1 purity grep
+      clean · 18 mutants, 18 RED, 0 ALIVE. Read :6959 then :7037.
+
+WHERE THIS CARD IS, IN ONE LINE
+  The gate exists, the number is chosen, and **`apps/web` is untouched — so a
+  user still sees the invented reps.** Nothing about this card is visible to
+  anyone until step 3 lands.
+
+WHAT STEP 3 IS, EXACTLY
+  1. Feed every frame the app feeds the engine through `PersonGate` FIRST,
+     from `@app/engine/scene` — the package index does not export it and a test
+     fails if anything under `src/pipeline`, `src/definition`, `src/harness` or
+     `session.ts` imports it. One gate per set; `reset()` on a new or resumed set.
+  2. A blocked frame is handed to the engine as a frame with NO landmarks —
+     that is exactly what section 6 replayed, so the shipped behaviour matches
+     the table Kd ruled on. Do not invent a different suppression.
+  3. **THE SCREEN MUST SAY SO.** 4.5% of a squatting person's frames are
+     silenced, longest run 18 frames (~1.5 s). A user who squats and watches the
+     count sit still with no explanation has been told something false by
+     omission (:5807 — Critical/High). The 2026-07-10 "cannot see your legs" cue
+     is the precedent for where and how.
+  4. **Do not re-derive the number** (R5.4). 0.923 is Kd's ruling on printed
+     evidence, not a constant to tidy.
+
+THE STANDING LESSON FROM STEP 2 — it will recur on the next signal
+  **SEPARATION IS NOT THE OUTCOME.** `motion_incoherence` scored 0.980 against
+  `bone_stretch`'s 0.983 — indistinguishable, and :6856 named both as the strong
+  pair. Replayed through the engine it **loses a real rep in BOTH sessions**, at
+  every cut-off tried, and every combination containing it inherits that.
+  A gate does not fire on a distribution; it fires on the frames of a particular
+  rep. **Rule from section 6, never from section 5 alone.**
+
+WHAT STEP 2 DID NOT ACHIEVE, said plainly
+  It does not reach zero — 3 invented reps survive on `chair_A`. Still one room,
+  one chair, one person. The settings sweep stays in reserve and its runbook is
+  fixed and ready.
+
+A WRINKLE THAT WILL BITE
+  Pointing `measure-pose.ts` at `Desktop\traces` ABORTS on a stray
+  `squats-empty_room.detect (2).jsonl` (a duplicate download, not a trace, and
+  not filtered because it does not end `.detect.jsonl`). **The abort is card 1
+  working correctly.** Name the five clips explicitly. `traces2` is clean.
+
+STILL OWED, and none of it is step 3's job
+  - T3 review for cards 1, 2 and 4. `t3-camera-discriminators-PROMPT.md` covers
+    card 1 only.
+  - **The camera SMOKE is UNRUN** and both committed cards on `web-repoint`
+    stay UNTICKED.
+  - The shallow-squat cue; the voice product decision; `pose_landmarker_lite`
+    as the hard-wired default; a label containing a comma breaking
+    `--person`/`--nobody` (it cost both_A and both_D their person classification
+    in step 2's own run — they were scored as "mixed").
+
+SERVERS: none started this session.
+```
+
+```
 TASK: CAMERA-ACCURACY PHASE 2, CARD 4 STEP 1 — THE GATE IS BUILT AND COMMITTED
       (engine half). **NOTHING A USER SEES HAS CHANGED: the gate is wired to
       NOTHING and no cut-off has been chosen.** This session was a TAKEOVER —

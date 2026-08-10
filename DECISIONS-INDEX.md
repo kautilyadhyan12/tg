@@ -220,6 +220,25 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:7037** — 2026-08-10 — **KD RULES THE CUT-OFF: `bone_stretch > 0.923`, that
+  signal ALONE — and the cross-check is what killed the signal that scored just
+  as well.** **Read before quoting a separation number as if it settled
+  anything, before adding a second signal to the gate, and before ruling from
+  one recording session.** The OWED rule is satisfied as written: measured
+  first, ruled by Kd on a table showing the cost on BOTH sides, in plain words.
+  **11 invented reps → 3 across both sessions, with all 66 reps on the six clips
+  containing Kd still counted.** **`motion_incoherence` (0.980 separation vs
+  `bone_stretch`'s 0.983 — indistinguishable on paper, and :6856 named both)
+  LOSES A REAL REP IN BOTH SESSIONS** at every cut-off tried, and every
+  combination containing it inherits that. **STANDING LESSON: SEPARATION IS NOT
+  THE OUTCOME** — a gate does not fire on a distribution, it fires on the
+  frames of a particular rep, which is what section 6 replays. **Had only
+  session 2 been run, Kd would have been handed the rep-eating combination.**
+  Does NOT reach zero (3 survive on `chair_A`); still one room, one chair;
+  silences 4.5% of a squatting person's frames, longest 18f (~1.5 s) — **so
+  step 3 must make the screen SAY it (:5807).** `apps/web` untouched: **the
+  ruling changes nothing on screen by itself.** Wrinkle: `Desktop\traces`
+  contains a stray `.detect (2).jsonl` that correctly ABORTS the script.
 - **:6959** — 2026-08-10 — **PHASE 2 CARD 4, ENGINE HALF: the person gate is
   built, tested and committed — and was found holding its own mutant.**
   **Read before touching `src/scene/`, before quoting an operating-point table,
