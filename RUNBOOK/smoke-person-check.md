@@ -11,12 +11,16 @@ never happened**. The check that spots this is now wired in: when the camera
 isn't sure it's looking at a person, the app **stops counting** and **says so on
 screen**.
 
-So this smoke has two halves, and both matter:
+So this smoke has three halves, and all of them matter:
 
 - **The chair must stop counting.** That is the fix.
 - **You must still count.** That is the thing the fix could break, and it is the
   worse failure of the two — a rep counter that ignores you is worse than one
   that counts a chair.
+- **The screen must not say anything untrue while you watch it.** There are two
+  sentences now, one for while it is stopped and one for the moment it starts
+  again, because a single sentence was caught claiming nothing was being counted
+  over a count that was climbing. Step 4 is where you check that.
 
 **Only 3 of 58 exercises are camera-graded**: Squats, Jump Squats, Chair Squats.
 Use **Squats**.
@@ -86,8 +90,8 @@ can't see your legs.
 
 ✅ **Expected — both:**
 - The rep count is **still 0**, or very close to it.
-- The screen says something like **"Not counting — the camera isn't sure it's
-  looking at you. Step into full view."**
+- The screen says **"Not counting — the camera isn't sure it's looking at you.
+  Check that your whole body is in the picture."**
 
 ❌ **Fail if:** the counter has climbed on its own, or nothing on screen explains
 why it is not counting.
@@ -112,17 +116,27 @@ off several times a second.
 **This is the most important step in the whole smoke.** If the check has broken
 your own workout, it is worse than the bug it fixes.
 
-8. **Step back into full view.** Wait two or three seconds.
+8. **Step back into full view**, and **watch the screen as you do it.** Wait two
+   or three seconds.
 9. Do **10 squats** at a normal pace, deep enough to count.
 10. **Write down the rep count.**
 
-✅ **Expected — all three:**
-- The message goes away by itself, about a second after you are back in view.
+✅ **Expected — all four:**
 - **Your squats are counted.**
-- The counter carries on from whatever step 2 left it at — it does not reset.
+- 🔴 **While the count is climbing, the screen must NOT say "Not counting".**
+  This is the exact thing round one fixed. The explanation is held on screen for
+  about a second so it can be read — but counting restarts the instant you are
+  back, so the old wording sat there in the present tense, saying nothing was
+  being counted, over a number that was visibly going up.
+- If you catch the sentence in that first second, it should now read **"Counting
+  again — the camera lost sight of you for a moment."** It is only up for about a
+  second, so **missing it is not a failure — seeing the wrong one is.**
+- The message then goes away by itself, and the counter carries on from whatever
+  step 2 left it at — it does not reset.
 
-❌ **Fail if:** your reps are not counted, or the message keeps coming back while
-you are plainly standing in front of the camera.
+❌ **Fail if:** your reps are not counted; the words **"Not counting"** are on
+screen while the counter is climbing; or the message keeps coming back while you
+are plainly standing in front of the camera.
 
 ⚠️ It needn't be exactly 10 — the app has always counted a bit under. What
 matters is that it climbs roughly as it did before this change.
@@ -164,9 +178,14 @@ Send me:
 - the rep count after **step 2** (the empty room) — the headline number,
 - pass/fail on the **message appearing** in step 2,
 - the rep counts from **steps 4, 5 and 6**,
+- 🔴 **step 4: were the words "Not counting" ever on screen while the counter was
+  climbing?** Yes/no is enough. If you caught the sentence as you stepped back
+  in, tell me which one it was.
 - roughly how often the message appeared while you were actually squatting
   (step 5),
 - whether Avg Form was a percentage or a dash.
 
 **The pair of numbers I care about most is step 2 versus step 4.** Chair near
-zero, you counting normally. Either one alone proves nothing.
+zero, you counting normally. Either one alone proves nothing. **The one WORD I
+care about most is "Not counting" in step 4** — on screen over a climbing
+counter, that is a failure however good the numbers are.
