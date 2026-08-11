@@ -15,7 +15,27 @@ tested the hand counted one?" — he was right, and the omission was mine.
 Extended the same day to cover the ruling, which the first version could not
 have tested because it predates it.
 
-## RESULT — not yet run
+## RESULT — steps 1–8 PASSED (Kd, 2026-08-11) · **STEP 9 NOT DONE**
+
+Run in one session together with `smoke-person-check.md` (same room setup; the two
+sheets overlap on squats-on-camera, walking out of frame and stepping back in).
+Kd's report was **"all working"** — a global pass, not per-step numbers.
+
+**STEP 9 — the stored-row check — WAS NOT RUN, and it is the half only the chat
+can do.** Kd stopped the query ("i am bored testing lets go to the next p"), which
+is his call and was not pushed back on. So these four claims remain UNVERIFIED and
+have an `OWED.md` line as of this commit:
+  - `duration_ms` close to the step-15 timer and EXCLUDING the 20-second pause;
+  - the walked-out set's `tempo_ms_avg` not null;
+  - that set's `mode` = `'engine'` and not `'log_only'` — the ruling, in the data;
+  - `kcal_point` / `kcal_calc_version` reflecting v2, arithmetic shown back to Kd.
+
+**Do not read steps 1–8 as covering these.** What Kd saw was the SCREEN behaving:
+the counter kept its reps, the button appeared, the set was not taken away. What
+step 9 checks is whether the row WRITTEN for that workout says the same thing —
+and the calorie rule, the headline of one of the two cards this sheet covers, is
+only visible there. A pause billed as exercise would look identical on screen.
+**Neither card ticks on this run alone.**
 
 ## Why this smoke exists, in plain words
 

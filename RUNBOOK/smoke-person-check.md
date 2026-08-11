@@ -2,7 +2,33 @@
 
 Branch `web-repoint`. **This card does not tick until this passes.**
 
-## RESULT — not yet run
+## RESULT — PASSED TWICE: first 2026-08-10, RE-RUN on the fixed code 2026-08-11
+
+**RUN 1 — 2026-08-10 (Kd), full result at DECISIONS :7222.** Zero reps from the
+chair over two full minutes in his own room, against a measured starting point of
+ten invented reps across four clips. His own squats counted when he stepped back
+in, nothing was handed to hand counting, and the stored row corroborated it: both
+sets `mode = 'engine'` with real per-rep scores (93, 100; avg 97). **That run also
+found, by his instinct rather than by any step on this sheet, the calorie defect
+now tracked in `OWED.md`.**
+
+**RUN 2 — 2026-08-11 (Kd), on commit `ca5b687`: "all working".** A re-run was owed
+because T3 round 1 changed BOTH on-screen sentences after run 1, so run 1 could not
+have tested the words a user now reads. Recorded as a global pass, not per-step
+numbers — the counts this sheet asks for were not captured, so a future regression
+in the exact numbers is not covered by this record. What it does settle: the two
+new sentences were exercised in a browser and neither lied.
+
+**⚠️ WHY THIS HEADING NOW NAMES BOTH RUNS.** Until this commit this line still read
+"not yet run" — **eleven days after run 1 passed.** The result had been written into
+`DECISIONS.md` and `OWED.md` and never here, so the sheet contradicted the record
+and lost. On 2026-08-11 a chat read this line, told Kd the test "has genuinely never
+been run", and asked him to do it again; he answered "i had already done these tests
+in previous chats why again are we stuck in the same thing" — **and he was right.**
+A smoke sheet is the first thing a chat reads about its own gate, so a stale RESULT
+line here does not merely go out of date: it spends the operator's time. **Whoever
+runs a smoke writes the result INTO THE SHEET in the same commit as the DECISIONS
+entry** — the same discipline `OWED.md` exists to enforce, applied to this file.
 
 ## What you are testing, in plain words
 
