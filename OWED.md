@@ -93,8 +93,9 @@ smoke gates BOTH committed cards on `web-repoint`** (the workout time + kcal v2
 card and the camera-ownership ruling), which merges at P2.8. They are product
 defects, not missing API surfaces. Full record: DECISIONS :6062.
 
-- [ ] 🔴 **The pose model draws a skeleton on FURNITURE, and the app believes
-      it.** Kd, in his own room: *"the camera instead of detecting my body
+- [x] 🔴 **DONE 2026-08-11** (`6fd7725` · `cd6c6a7`; T3 round 2 clean, both smoke
+      runs recorded in `RUNBOOK/smoke-person-check.md`). **The pose model draws a
+      skeleton on FURNITURE, and the app believes it.** Kd, in his own room: *"the camera instead of detecting my body
       sometimes detects other objects nearby like a chair, fan etc and takes its
       shape ... sometimes in taking those shape a correct angle happens then rep
       count happens"*. **Measured cause:** frame validity is 33 landmarks of
@@ -203,6 +204,27 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       22 RED, 1 ALIVE (PG14, pre-existing, reason recorded), 0 never ran,
       restores sha256-verified. Eight Low findings fixed, logged in `BACKLOG.md`;
       the one deferral has its own line below.
+      **STATUS 2026-08-11 (f) — THE LAST BLOCKER IS DISCHARGED AND THIS LINE
+      TICKS.** The diff-only re-review named in (e) ran and found **ZERO
+      Critical/High**, so the packet ships (:5348 rule 1). Two Low findings, both
+      fixed in `6fd7725` and logged as L9/L10 in `BACKLOG.md`, both comment-only:
+      the burst fixture's comment mis-stated how the fixture fails, and
+      `nominalDtMs` is applied to all three rate signals while being physically
+      right for one — signposted at both sites rather than split per signal,
+      because splitting it moves readings the ruled table was measured against.
+      **The round also audited its own instruments**, which is where its value
+      was: every control on both new regression fixtures was proven to go RED
+      when the fixture drifts off the boundary (measured — shake 0.02 blocks
+      nothing, 0.08 leaves only the 8 warm-up frames, a burst 20 frames later
+      puts no rep inside the message, a burst 26 frames earlier costs a rep), and
+      a mutant deleting one line of the tab-resume fix turns its test red. **At
+      shake 0.02 the cadence test's headline assertion passes vacuously** — its
+      boundary controls are the only thing holding that test up, which is exactly
+      the trap round 1 fell into twice.
+      **WHAT THIS LINE DOES NOT CARRY WITH IT**, so nothing is quietly closed by
+      this tick: the escape hatch for a user the check is wrong about (its own ⚪
+      line below) and the calorie defect the 2026-08-10 smoke surfaced (its own 🔴
+      line below) are SEPARATE and both still open.
       **STATUS 2026-08-10 (c) — IT IS WIRED, AND THE SCREEN SAYS SO. The line
       still does NOT tick: the SMOKE WAS UNRUN at the time of writing.** (DECISIONS :7104.) Every frame
       the app feeds the engine goes through the check first at the ruled setting;
