@@ -282,3 +282,29 @@ accounted for rather than absorbed silently.
       **NOT fixed — deferred, and it has an `OWED.md` line in this same commit**
       per the deferral rule. Low on measured evidence (worst person-clip run 18
       frames, ~1.5 s) but it is the escalation path for the frame-rate defect.
+
+## Person check (camera card 4 step 3) — T3 round 2, Low findings
+
+Round 2 found ZERO Critical/High, so the packet ships (:5348 rule 1). Both Lows
+below are FIXED in the same commit. Both are comment-only: no shipped arithmetic
+was touched, deliberately — see L10.
+
+- [x] **L9 · The burst fixture's comment mis-stated how it fails.** It said "a
+      burst that starts earlier eats the first rep", implying one failure mode
+      either side. Measured by drifting the fixture and reading which control
+      went red: starting at frame 24 or earlier eats a rep (1, not 2), but
+      starting 26–34 keeps both reps and empties the message tail instead — a
+      different worthless clip. Comment corrected with all four measured drifts.
+      Found by the round-2 fixture audit, not by a test.
+- [x] **L10 · `nominalDtMs` is applied to all three rate signals, and is right
+      for one.** The fix for round 1's C/H-2 converts every reading at a fixed
+      82 ms. That is physically correct for `bone_stretch` (per-frame estimator
+      noise, does not grow with dt) and WRONG for `centre_drift` and
+      `motion_incoherence`, which measure displacement — a fixed interval erases
+      the elapsed time they are made of. **Nothing on screen is wrong today**:
+      the shipped gate runs one rule and `measure-pose.ts` sections 4/5 pass
+      null, which is why this is Low and not C/H. The trap is for whoever adds
+      the second rule — their cut-off would silently stop being the number it
+      was measured at. **Fixed as a warning at both sites, NOT as a per-signal
+      split**: splitting the conversion would move readings the ruled table was
+      measured against, which is a ruling, not a Low fix (:5348 rule 6).

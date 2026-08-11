@@ -240,6 +240,16 @@ const NOTHING: FrameReading = {
  * cut-off and the cadence it was measured at are one ruling, not two. This file
  * still chooses nothing: `null` keeps the honest per-second rate.
  *
+ * NOTE WHAT THAT MEANS FOR THE OTHER TWO, because the argument above justifies
+ * it for ONE signal and the code applies it to THREE. `perSecond` below is a
+ * single shared factor: supply a nominal interval and `centre_drift` and
+ * `motion_incoherence` are converted at it too, which is exactly wrong for
+ * them — they measure displacement, and a fixed interval erases the elapsed
+ * time they are made of. Harmless today because the shipped gate runs one rule
+ * (`bone_stretch`) and sections 4/5 of `measure-pose.ts` pass null. It stops
+ * being harmless the moment a second rule is added; see the warning on
+ * `PersonGateOptions.nominalDtMs`, which is where someone doing that will look.
+ *
  * The gap test above continues to use the REAL interval. Skipping a pair
  * because the model lost the pose is a fact about the recording, not a unit.
  */

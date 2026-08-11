@@ -152,10 +152,18 @@ export function shakenSquat(amount, seed = 3) {
  *   - with this burst it still counts TWO (34 and 73) — the shaking costs no
  *     rep, so the fixture is not proving something about a broken clip;
  *   - the message's tail runs frames 67–80, so rep 73 lands inside it.
- * A burst that starts earlier eats the first rep; one 20 frames later leaves
- * the tail empty and every assertion below passes vacuously. That combination
- * was found by sweeping, and the tests assert the overlap exists rather than
- * trusting these comments — a fixture is part of the claim (:4855).
+ * MOVE ANY OF THE THREE AND THE CLIP STOPS PROVING ANYTHING — in two different
+ * ways, which is why the tests assert all three rather than trusting this
+ * comment (a fixture is part of the claim, :4855). Measured, 12-frame burst:
+ *   - starting at frame 24 or earlier EATS the first rep — 1 counted, not 2,
+ *     so the clip is proving something about a broken recording instead;
+ *   - starting between 26 and 34 keeps both reps but leaves NO rep inside the
+ *     message tail, so the assertion above passes over an empty list;
+ *   - starting 20 frames later (70) empties the tail the same way;
+ *   - shaking at 0.02 instead of 0.05 never blocks, so the sentence the whole
+ *     test is about never appears at all.
+ * (Frame 25 happens to satisfy every control too; 50 is not unique, it is the
+ * middle of the range that does.)
  */
 export function burstShakenSquat(amount = 0.05, from = 50, to = 62, seed = 3) {
   const rnd = mulberry32(seed);

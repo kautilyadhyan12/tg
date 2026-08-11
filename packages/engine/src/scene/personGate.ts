@@ -70,7 +70,20 @@ export interface PersonGateOptions {
    *  them — see `readFrame`'s own note, which carries the measurement. Omitted,
    *  the honest per-second rate is used and the gate reads higher on a faster
    *  machine. A gate whose strictness varies by device is a gate that silences
-   *  a real user on hardware nobody tested, so the shipped bridge supplies it. */
+   *  a real user on hardware nobody tested, so the shipped bridge supplies it.
+   *
+   *  BEFORE ADDING A SECOND RULE, READ THIS. The conversion is applied to EVERY
+   *  rate signal, not just the one it was reasoned about. It is physically right
+   *  only for `bone_stretch`, whose numerator is per-frame estimator noise that
+   *  does not grow with dt. `centre_drift` and `motion_incoherence` measure
+   *  DISPLACEMENT, and a body really does travel further in 100 ms than in 67 —
+   *  for those, a fixed interval throws away the very thing they measure. So a
+   *  gate that supplies this and then adds one of them has silently changed what
+   *  that signal means, and its cut-off would no longer be the number it was
+   *  measured at. The two are one ruling, never two (:7062). Splitting the
+   *  conversion per signal is the fix if that day comes; it is deliberately NOT
+   *  done here, because today nothing ships on those two and changing the
+   *  arithmetic would move readings the ruled table was measured against. */
   readonly nominalDtMs?: number;
 }
 
