@@ -8,6 +8,16 @@
 //   · bilateral gate: other knee's own smoothed buffer < 150° required to
 //     ENTER down when both knees visible; occluded other leg = open gate
 // Modes B–D land in P1.6b — their configs throw, never fake counts.
+//
+// ONE DEPARTURE FROM THE PORT, and it is about TIME, never about COUNTING
+// (OWED "calories bill a mid-set absence as vigorous exercise"). The legacy
+// counter holds an open rep's clock across a stretch the camera could not
+// watch, so the absence lands in that rep's duration and `reps × tempoMsAvg`
+// bills it at the exercise MET. `loseSight()` re-arms the open CYCLE — state,
+// debounce counters, `reachedBottom` and the smoothing buffer are all
+// untouched, so the rep still completes and no rep is lost; the only thing
+// that moves is which stretch of time the rep is credited with.
+import { INVALID_STREAK_FOR_VISIBILITY } from "./ingest.js";
 
 export const MIN_DOWN_FRAMES = 3; // rep_counter.py _min_down_frames
 export const MIN_UP_FRAMES = 2; // rep_counter.py _min_up_frames
@@ -62,6 +72,10 @@ export interface RepCompletion {
   /** t of completion minus t of cycle start (descent begin). */
   durationMs: number;
   phaseTimings: { descent: number; bottom: number; ascent: number };
+  /** The camera lost the user mid-cycle, so `durationMs` is only the WATCHED
+   *  remainder of this rep. The rep counts; its duration must not enter the
+   *  set's average tempo (see session.end). */
+  interrupted: boolean;
 }
 
 export interface ModeAFrameResult {
@@ -92,6 +106,12 @@ export class ModeAFsm {
   private cycleStartT: number | null = null; // descent begin (left `top`)
   private prevSmoothed: number | null = null;
 
+  // Lost-sight tracking (§3.1's own 3-frame count, applied to the METRIC here;
+  // the session applies it to unusable FRAMES and calls loseSight directly).
+  private nullMetricStreak = 0;
+  private cycleInterrupted = false;
+  private rearmCycleOnNextUsableFrame = false;
+
   constructor(private readonly config: ModeAConfig) {
     this.minRepMs = Math.max(MIN_REP_INTERVAL_MS, config.minRepMs ?? 0);
     if (config.countOn !== "up") {
@@ -105,6 +125,14 @@ export class ModeAFsm {
   update(t: number, metric: number | null, otherKnee: number | null): ModeAFrameResult {
     if (metric === null) {
       // No usable metric — hold everything (rep_counter.py None branch).
+      // §3.1's own 3-frame count applies here exactly as it does to frames that
+      // stop arriving: legs that stop being MEASURABLE are the camera losing
+      // the user just as surely (the web bridge already reads it that way for
+      // its "cannot see your legs" cue, DECISIONS 2026-07-10). Measured on this
+      // package's clips: an occlusion bills 127,200 ms of a set the engine
+      // watched 8,400 ms of — the same size as walking out of shot.
+      this.nullMetricStreak++;
+      if (this.nullMetricStreak >= INVALID_STREAK_FOR_VISIBILITY) this.loseSight();
       return {
         repCount: this.repCount,
         state: this.state,
@@ -112,6 +140,24 @@ export class ModeAFsm {
         isActive: false,
         currentMetric: null,
       };
+    }
+    this.nullMetricStreak = 0;
+
+    if (this.rearmCycleOnNextUsableFrame) {
+      // Measurable again: pin the cycle HERE. Not to null, and not to where it
+      // began before the absence.
+      //   · left null, a rep completing before the metric next dips below
+      //     `upAt` reports `durationMs: 0` — a fabricated zero traded for a
+      //     fabricated two minutes;
+      //   · `cycleMinT`/`cycleMinLastT` predate the absence, so pinning the
+      //     start alone makes `phaseTimings.descent` NEGATIVE.
+      // `cycleMin` is deliberately NOT reset: the depth reached before the
+      // absence was really watched and really happened. It is the CLOCK that
+      // was lying, never the ROM — so scores and the chair target are unmoved.
+      this.rearmCycleOnNextUsableFrame = false;
+      this.cycleStartT = t;
+      this.cycleMinT = t;
+      this.cycleMinLastT = t;
     }
 
     const smoothed = this.metricBuf.push(metric);
@@ -153,6 +199,7 @@ export class ModeAFsm {
             bottom: this.cycleMinLastT - this.cycleMinT,
             ascent: t - this.cycleMinLastT,
           },
+          interrupted: this.cycleInterrupted,
         };
         this.resetCycle();
       }
@@ -197,11 +244,24 @@ export class ModeAFsm {
     return this.state === "down" ? "bottom" : "descent";
   }
 
+  /** The camera stopped being able to WATCH the user: no usable frame (the
+   *  session calls this once §3.1's visibility streak trips) or no usable
+   *  metric (counted above). Idempotent — production calls it on every frame of
+   *  an absence, and the first call is the one that matters. */
+  loseSight(): void {
+    if (this.cycleStartT === null) return; // no rep in progress — nothing to re-arm
+    this.cycleStartT = null;
+    this.cycleInterrupted = true;
+    this.rearmCycleOnNextUsableFrame = true;
+  }
+
   private resetCycle(): void {
     this.cycleMin = Number.POSITIVE_INFINITY;
     this.cycleMinT = 0;
     this.cycleMinLastT = 0;
     this.cycleStartT = null;
+    this.cycleInterrupted = false;
+    this.rearmCycleOnNextUsableFrame = false;
   }
 
   get reps(): number {

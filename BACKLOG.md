@@ -308,3 +308,18 @@ was touched, deliberately — see L10.
       was measured at. **Fixed as a warning at both sites, NOT as a per-signal
       split**: splitting the conversion would move readings the ruled table was
       measured against, which is a ruling, not a Low fix (:5348 rule 6).
+- [x] **L11 · the red-test commit did not typecheck or lint, and a green vitest
+      run said nothing about it.** `repTimingAbsence.test.ts` (`84ff14d`)
+      imported `RepEvent` — a `@app/shared` payload type the engine re-exports
+      nowhere — from `../src/index.js`. `tsc --noEmit` fails on it; vitest runs
+      it green regardless, because esbuild strips types without checking them.
+      So a file committed "deliberately red on one assertion" was also red for a
+      second reason nobody had seen. **Fixing the import then exposed three lint
+      errors it had been masking** (the unresolved type made the whole file
+      error-typed, so `no-unnecessary-condition` could not fire), including a
+      dead `summary?.reps ?? 0` — `end()` returns a SetSummary, never null, and
+      had that ever fired the helper would have reported **0 reps** and every
+      assertion in the file would have passed for the wrong reason. Low: no user
+      can see it, and the assertions themselves were sound. **The lesson is the
+      instrument — a green vitest run is not evidence that a test file
+      compiles.** Fixed in the rep-timing fix commit; DECISIONS :7404.

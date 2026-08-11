@@ -324,6 +324,57 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       !== null ? t - cycleStartT : 0`) — a fabricated zero replacing a fabricated
       123 s; and `cycleMinT`/`cycleMinLastT` predate the absence, so re-arming the
       start without them yields a NEGATIVE `phaseTimings.descent`.
+      **STATUS 2026-08-11 (evening) — THE ENGINE HALF IS DONE AND THE TEST IS
+      GREEN; THE LINE DOES NOT TICK.** Both parts of the agreed design shipped in
+      `fsm.ts` + `session.ts`, and BOTH traps above are now covered by a test and
+      by a mutant each (6 mutants, 6 RED, restores sha256-verified). Counting is
+      provably unmoved: 2 reps at all 84 absence positions, before and after.
+      **The occlusion path was added on Kd's approval after being measured** —
+      every frame valid, legs unmeasurable, **127,200 ms billed against 8,400 ms
+      watched**, the same size as the absence and invisible to the committed
+      sweep. Full record: DECISIONS :7404.
+      **WHAT IS STILL OWED ON THIS LINE, and it is two things:**
+      (1) **the API half** — `kcalPointForSetsV2` still bills an unwatched
+      stretch as IDLE at `REST_MET` rather than as nothing, because the on-screen
+      timer does not stop when the camera stops seeing (a 2-minute absence is
+      ~4 kcal at 70 kg instead of ~14, better but not right); its own step, its
+      own tests. (2) **T3 in a fresh chat** — engine, 🔴 tier.
+- [ ] 🔴 **A REST TAKEN IN FULL VIEW IS BILLED AS SQUATTING — if the knees are
+      slightly bent.** **Found by Kd's question on 2026-08-11**, one day after his
+      instinct found the absence defect above: he asked what happens when a user
+      does a rep, rests a few seconds without leaving the camera, then does the
+      next one. **MEASURED, not reasoned** (this package's own squat clip, a rest
+      spliced in after rep 1):
+
+      | resting posture | knee | 10 s rest | 60 s rest |
+      |---|---|---|---|
+      | upright | 178.8° | costs nothing | costs nothing |
+      | knees slightly bent | 159.3° | all 10 s billed at the squat MET | all 60 s billed; rep 2 reported as **63,931 ms** |
+
+      **Both are "standing still" to the person doing it** — nobody can see 20°
+      of knee bend, and the app's number turns on which side of an invisible line
+      a resting knee sits. **THE CAUSE IS THE SAME ONE LINE as the absence defect
+      above** (`fsm.ts`: `cycleStartT ??= t` arms on the first frame at or below
+      `upAt` and is cleared only by a completed rep) — one window with two entry
+      points, which is why the 2026-08-11 fix cannot reach it: nobody is ever
+      lost, every frame is usable. **IT FITS KD'S ORIGINAL 21,267 ms PER SQUAT
+      BETTER THAN THE ABSENCE DOES** — a 15–20 s rest between reps produces
+      exactly that — but **the stored row cannot say which occurred** (it holds
+      the final count, not the count over time), so this is recorded as a FIT and
+      never as a cause.
+      **WHY IT IS ITS OWN CARD AND NOT A PATCH: it needs a NUMBER that does not
+      exist.** Separating "resting still" from "descending" is a stillness
+      judgement; R0.2 forbids inventing the threshold, and §3.5's C3 precedent
+      (DECISIONS 2026-07-07) already rules that a stillness threshold is
+      definition-declared with NO engine default. So the card is: measure
+      candidates on Kd's real clips, put a table showing the cost on BOTH sides
+      to him, he rules — the shape of the camera cut-off ruling (:7037).
+      **Two cheap wrong answers, both rejected before this line was written:**
+      re-arming on a return to the top never fires (a soft-knee rest never goes
+      back above 160), and re-arming while the metric is not descending would cut
+      the real descent out of every rep's duration, which §3.6 defines as part of
+      it. **Kd ruled the split on 2026-08-11** (land the absence half, take this
+      as its own card). DECISIONS :7404 records the measurement and the ruling.
 - [ ] ⚪ **A user the person check is WRONG about cannot take over the set.**
       "Count this set myself" is offered only on a frame GAP or a camera error
       (`ActiveWorkout.jsx`), and a blocked frame is not a gap — frames keep

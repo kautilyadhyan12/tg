@@ -220,6 +220,46 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:7404** — 2026-08-11 — **AN ABSENCE STOPS BEING BILLED AS EXERCISE (engine
+  half) — and KD'S QUESTION FOUND THE SECOND WAY IN, which this does NOT close.**
+  **Read before touching rep timing, before keying anything to "the camera lost
+  the user", and before assuming the absence sweep covers this defect.** The R9.5
+  test committed red at `84ff14d` is green on BOTH paths a user can take.
+  **The fix in one sentence: a rep's clock re-arms when the camera stops being
+  able to watch, and the part-measured rep is left OUT of the set's average
+  tempo** — part 2 is Kd's, because `reps × tempoMsAvg` is what the server
+  charges, so averaging a half-measured rep in trades an over-count for a quieter
+  UNDER-count. No payload shape changes. **COUNTING IS PROVABLY UNMOVED** (state,
+  `reachedBottom`, both debounce counters and the smoothing buffer all hold):
+  2 reps at all 84 positions before and after, now pinned by a test.
+  **KD'S FINDING, NOT FIXED HERE: a rest taken IN FULL VIEW is billed as
+  squatting if the knees are slightly bent.** Measured — upright (178.8°) costs
+  nothing at any length; 159.3° bills the WHOLE rest, a 60 s rest reporting rep 2
+  as 63,931 ms. Both are "standing still" to the user; the clock arms on the first
+  frame at or below `upAt` and clears only on a completed rep, so an invisible
+  160° line decides the number. **Same line of logic as the absence — one window,
+  two entry points** — and it fits Kd's original 21,267 ms better than the absence
+  does, though **the stored row cannot say which occurred** (recorded as a fit,
+  never a cause). Own OWED line, own card; it needs a NUMBER (still vs descending)
+  that R0.2 forbids inventing and §3.5's stillness precedent says must be
+  definition-declared. Kd ruled the split.
+  **The occlusion path was added ON EVIDENCE and pre-approved**: every frame
+  valid, legs unmeasurable, bills **127,200 ms against 8,400 ms watched** — the
+  same size as the absence and invisible to the committed sweep. Both key to
+  §3.1's count of 3. Parity risk re-measured for BOTH kinds: nine clips carry
+  zero unusable frames either way; the tenth is 600/600 unmeasurable and expects
+  zero reps. **`cycleMin` is deliberately NOT re-armed** — a first draft that
+  reset it emitted `romExtreme: Infinity` into `romStats` and the chair target;
+  the depth was really watched, only the CLOCK lied.
+  **THE RED-TEST COMMIT DID NOT TYPECHECK OR LINT and only `tsc` said so** —
+  `RepEvent` imported from the engine, which re-exports it nowhere, while vitest
+  ran green because esbuild strips types without checking them; the fix then
+  exposed a dead `summary?.reps ?? 0` that would have reported **0 reps**.
+  **A green vitest run is not evidence that a test file compiles.** Low, in
+  `BACKLOG.md`. engine 199/199 · web 585/585 · 6 mutants 6 RED 0 alive, restores
+  sha256-verified; **the harness ABORTED on run 1** (\n anchors vs CRLF files) —
+  :4267 and :5199 working together. **OWED does NOT tick: the API half is
+  unwritten and T3 is unrun.**
 - **:7298** — 2026-08-10 — **PERSON CHECK, T3 ROUND 1: two Critical/High — the
   screen saying "Not counting" while it counted, and the ruled cut-off meaning a
   different strictness on every machine.** **Read before touching

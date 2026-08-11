@@ -93,6 +93,10 @@ export function createSession(
 
   let repListener: ((e: RepEvent) => void) | undefined;
   const repEvents: RepEvent[] = [];
+  /** Parallel to repEvents: was the camera unable to watch part of that rep?
+   *  Kept beside the events rather than inside them — RepEvent is a §2.4
+   *  payload shape and this fix changes no payload shape. */
+  const repInterrupted: boolean[] = [];
   const repScores: number[] = [];
   let severeInSet = false;
   let firstT: number | null = null;
@@ -169,6 +173,13 @@ export function createSession(
     lastT = frame.t;
     firstT ??= frame.t;
     if (!accepted.ok) {
+      // §3.1's visibility streak has tripped — three frames running that the
+      // engine cannot use (in production: `feed([], t)` from a blocked or
+      // person-check-silenced frame). The rep in progress keeps its state and
+      // still counts; only its CLOCK re-arms, so the stretch nobody could watch
+      // is never billed as exercise. Out-of-order drops leave visibilityOk
+      // alone by design (DECISIONS 2026-07-07), so they cannot trip this.
+      if (!accepted.visibilityOk) fsm.loseSight();
       return {
         phase: "top",
         repCount: fsm.reps,
@@ -240,6 +251,7 @@ export function createSession(
         view,
       };
       repEvents.push(event);
+      repInterrupted.push(fsmResult.completed.interrupted);
       repListener?.(event);
       aggregates = emptyAggregates(); // rep-scoped aggregates reset per cycle
     }
@@ -265,7 +277,21 @@ export function createSession(
       repScores.length > 0
         ? Math.round(repScores.reduce((a, b) => a + b, 0) / repScores.length)
         : null;
-    const tempos = repEvents.map((r) => r.durationMs);
+    // A rep the camera only half-watched carries the WATCHED remainder as its
+    // duration — honest, but shorter than the rep really took. Averaging it in
+    // would drag the tempo down and UNDER-bill every rep in the set, because
+    // `reps × tempoMsAvg` is what the server charges: an over-count traded for
+    // a quieter under-count (Kd found this in the one-part design, 2026-08-11).
+    // So the average is taken over the reps watched end to end, and the
+    // interrupted one is billed at the rate of the reps we actually saw.
+    // If NONE was watched whole, the watched parts are all there is — still
+    // better than reporting nothing, which would bill zero exercise time and
+    // hand every reader a shape it has never seen (reps > 0 has always implied
+    // a tempo).
+    const wholeTempos = repEvents
+      .filter((_, i) => repInterrupted[i] !== true)
+      .map((r) => r.durationMs);
+    const tempos = wholeTempos.length > 0 ? wholeTempos : repEvents.map((r) => r.durationMs);
     ended = {
       exercise: config.exercise,
       setIndex: config.setIndex,

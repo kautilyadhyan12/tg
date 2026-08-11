@@ -1,6 +1,56 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE ABSENCE FIX IS DONE (engine half, test green). NEXT: T3 in a FRESH
+      chat, then the API half. **Kd found a SECOND defect of the same family
+      during this session — it has its own OWED line and its own card.**
+
+WHAT IS DONE (this session)
+  · `repTimingAbsence.test.ts` is GREEN — the R9.5 test committed red at
+    `84ff14d` now passes, on BOTH paths (out of shot AND legs unmeasurable).
+  · Fix: `fsm.ts` + `session.ts`. A rep's clock re-arms when the camera stops
+    being able to watch; the part-measured rep is left out of `tempoMsAvg`.
+    NO payload shape changed. COUNTING PROVABLY UNMOVED (2 reps at all 84
+    positions, before and after, now pinned by a test).
+  · Occlusion path added on Kd's approval AFTER measuring it: 127,200 ms billed
+    against 8,400 ms watched — same size as the absence, invisible to the
+    committed sweep.
+  · engine 199/199 · web 585/585 · typecheck + eslint + I1 purity grep clean ·
+    6 mutants, 6 RED, 0 alive, restores sha256-verified.
+  · Full record: DECISIONS :7404. Low finding logged as BACKLOG L11.
+
+WHAT TO DO NEXT, IN ORDER
+  1. **T3 in a FRESH chat** (engine = keystone, 🔴). Prompt is ready in the
+     session that wrote this; the diff is 3 files.
+  2. The API half: `kcalPointForSetsV2` still bills an unwatched stretch as
+     IDLE at REST_MET rather than as nothing — the on-screen timer does not
+     stop when the camera stops seeing. Its own step, its own tests.
+  3. **The new card: a rest taken IN FULL VIEW is billed as squatting.** See
+     its OWED line — it is measured, and it needs a KD RULING on a number
+     (still vs descending) before any code.
+
+THE MEASUREMENTS, so no chat re-derives them
+  · Clean clip: 2 reps, durations 3400 + 3600 ms, span 8400 ms.
+  · Before the fix: worst billed 127,000 ms (blank) / 127,200 ms (occluded).
+  · Rest in full view after rep 1: upright 178.8° costs nothing at any length;
+    knees at 159.3° bills the WHOLE rest — 60 s makes rep 2 read 63,931 ms.
+  · Traces: 9 parity clips have ZERO unusable frames of EITHER kind; the 10th
+    (`squat_sitting_idle_desk_nocount`) is 600/600 unmeasurable, expects 0 reps.
+
+TWO INSTRUMENT FINDINGS WORTH NOT REPEATING
+  · **A green vitest run is not evidence that a test file compiles.** The
+    red-test commit failed `tsc` and `eslint` and nobody saw it, because
+    esbuild strips types without checking them (BACKLOG L11).
+  · The mutation harness ABORTED on run 1 instead of reporting a pass: anchors
+    written with 
+ against CRLF files matched nothing (:4267 + :5199 working
+    together). Anchors must be converted to the FILE'S ending, never the file
+    to the anchor's.
+
+NEXT TASK CARD: the T3 review, step 1 above.
+```
+
+```
 TASK: CALORIES BILL AN ABSENCE AS EXERCISE — THE FAILING TEST IS COMMITTED RED,
       THE FIX IS NOT WRITTEN. Start here; the design is already agreed with Kd.
 

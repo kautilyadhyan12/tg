@@ -7400,3 +7400,86 @@ ALIVE (PG14, pre-existing, reason recorded in the harness), 0 never ran, restore
 sha256-verified after every mutant.** **THE OWED LINE DOES NOT TICK — the
 diff-only re-review (:5348 rule 2) is unrun, and the smoke has not been re-run
 on these bytes.**
+
+## 2026-08-11 — AN ABSENCE STOPS BEING BILLED AS EXERCISE (engine half) — and Kd's question found the SECOND way in, which this does not close
+
+**Read before touching rep timing, before keying anything to "the camera lost
+the user", and before assuming the absence sweep covers the defect.** The R9.5
+failing test committed red at `84ff14d` is GREEN, on both of the paths a user
+can actually take. `apps/api` and `apps/web` are untouched.
+
+**THE FIX IS ONE SENTENCE: a rep's clock re-arms when the camera stops being
+able to watch, and the part-measured rep is left out of the set's average
+tempo.** Part 2 is Kd's, from the one-part draft: `reps × tempoMsAvg` is what
+`kcalPointForSetsV2` charges, so a half-measured rep left in the average drags
+it down and UNDER-bills every rep in the set — an over-count traded for a
+quieter under-count. The interrupted rep is therefore billed at the rate of the
+reps actually watched. **No payload shape changes**, so §2.4's byte-match gate,
+stored history and every reader are untouched.
+
+**COUNTING IS PROVABLY UNMOVED, and that is the whole argument for touching the
+FSM at all.** `loseSight()` clears the cycle clock and nothing else: state,
+`reachedBottom`, both debounce counters and the 7-sample smoothing buffer all
+hold, exactly as the legacy None-branch does. Measured before and after: 2 reps
+at all 84 absence positions, both kinds, and a test now pins it.
+
+**KD'S QUESTION IS THE FINDING OF THE SESSION AND IT IS NOT FIXED HERE.** He
+asked what happens when a user rests IN FULL VIEW between reps. Measured on this
+package's own clip, resting after rep 1:
+
+| resting posture | knee | 10 s rest | 60 s rest |
+|---|---|---|---|
+| upright | 178.8° | costs nothing | costs nothing |
+| knees slightly bent | 159.3° | **all 10 s billed at the squat MET** | **all 60 s billed; rep 2 reported as 63,931 ms** |
+
+**Both are "standing still" to the person doing it.** The clock arms on the
+first frame at or below `upAt` (160) and is cleared only by a completed rep, so
+which side of an invisible 160° line a resting knee sits on decides the number.
+**This is the SAME line of logic as the absence defect** — the two are entry
+points into one window, which is why the fix here cannot reach it: nobody is
+ever lost. **It also fits Kd's original 21,267 ms per squat better than the
+absence does, and the stored row cannot say which occurred** (it holds the final
+count, not the count over time) — recorded as a fit, NOT as a cause. Own OWED
+line, own card, and it needs a NUMBER — what counts as "still" versus
+"descending" — which R0.2 forbids inventing and §3.5's stillness precedent
+(2026-07-07) says must be definition-declared. **Kd ruled the split**: land this
+half now, take that one as its own card.
+
+**THE OCCLUSION PATH WAS ADDED ON EVIDENCE, and Kd approved it before any code.**
+The committed sweep feeds frames with no keypoints. Measured this session, the
+other path — every frame valid, the legs simply not measurable — bills
+**127,200 ms against 8,400 ms watched**, versus 127,000 for the absence: the
+same defect at the same size, invisible to the committed sweep. Both now key to
+§3.1's own count of 3, the count the web bridge already uses for its
+legs-occluded cue (2026-07-10). **Parity risk re-measured and widened, not
+assumed**: all nine parity clips carry ZERO unusable frames of EITHER kind; the
+tenth (`squat_sitting_idle_desk_nocount`) is 600 of 600 unmeasurable and expects
+ZERO reps, so nothing it asserts can move. The fuzz pass exercises the new path
+free — its dropout bursts are 5–20 frames of visibility 0 across 40 seeds × 3
+exercises.
+
+**`cycleMin` IS DELIBERATELY NOT RE-ARMED, against a first draft that did.** The
+OWED note's trap names `cycleMinT`/`cycleMinLastT` — the TIMES. Resetting the
+ROM VALUE too would have emitted `romExtreme: Infinity` on a rep completing
+after a resume with no frame below `upAt`, straight into `romStats` and the
+chair adaptive target. The depth was really reached and really watched; it was
+the CLOCK that lied. Scores and the chair target are unmoved as a result.
+
+**THE RED-TEST COMMIT DID NOT TYPECHECK OR LINT, and only `tsc` said so.** It
+imported `RepEvent` — a `@app/shared` payload type the engine re-exports
+nowhere — from `../src/index.js`. Vitest ran it green regardless, because
+esbuild strips types without checking them, so a test file can be committed
+"deliberately red on one assertion" while being red for a second reason nobody
+saw. Fixing the import then exposed three more lint errors it had masked, one of
+them a dead `summary?.reps ?? 0` that would have reported **0 reps** had it ever
+fired. **The lesson is the instrument again: a green vitest run is not evidence
+that a test file compiles.** Low, logged in `BACKLOG.md`, fixed here.
+
+engine **199/199** (190 + 9 new) · typecheck + eslint + I1 purity grep clean ·
+web **585/585** · **6 mutants, 6 RED, 0 alive, restores sha256-verified**, one
+per guarantee: the session's lost-sight call, the null-metric trigger, the
+3-frame threshold, the tempo exclusion, and both re-pin traps. **The harness
+ABORTED on its first run rather than reporting a pass** — anchors written with
+`\n` against CRLF files matched nothing — which is :4267's rule and :5199's
+abort working together. **THE OWED LINE DOES NOT TICK: the API half is unwritten
+and T3 is unrun.**
