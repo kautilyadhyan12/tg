@@ -1,6 +1,54 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: CALORIES BILL AN ABSENCE AS EXERCISE — THE FAILING TEST IS COMMITTED RED,
+      THE FIX IS NOT WRITTEN. Start here; the design is already agreed with Kd.
+
+WHAT IS DONE (this session)
+  · Person-check T3 ROUND 2: ZERO Critical/High -> the packet SHIPS. Two Low
+    (L9/L10 in BACKLOG.md), both comment-only, fixed in `6fd7725`.
+  · The OWED FURNITURE LINE IS TICKED (`d877088`) — the chair defect Kd opened in
+    his own room is closed end to end.
+  · Both camera smoke sheets now carry results (`cd6c6a7`).
+  · THE CALORIE CARD IS STARTED: failing test + measurements + agreed design, all
+    recorded in the OWED entry. **Nothing about the fix is written.**
+
+WHAT TO DO NEXT, IN ORDER
+  1. Read the OWED entry "CALORIES BILL A MID-SET ABSENCE AS VIGOROUS EXERCISE",
+     its STATUS 2026-08-11 block especially — it holds the measurements, the
+     two-part design, and two traps found by reading that no test covers yet.
+  2. Write the fix in `packages/engine/src/pipeline/fsm.ts` + `session.ts`.
+     `packages/engine/test/repTimingAbsence.test.ts` is the gate; it is RED now
+     and must go green WITHOUT touching the clean-control assertion.
+  3. Then the API half: `kcalPointForSetsV2` must refuse to bill more exercise
+     than the on-screen timer saw, instead of noticing the contradiction only to
+     floor idle at zero. Its own step, its own tests.
+  4. T3 in a FRESH chat (engine = the keystone, 🔴 tier).
+
+**DO NOT MERGE `web-repoint` WHILE `repTimingAbsence.test.ts` IS RED.** It is
+committed red deliberately, as the R9.5 proof that the bug is real, and its
+message says so.
+
+THE MEASUREMENTS, so no chat re-derives them
+  · 70 of 84 absence positions bill unwatched time as exercise.
+  · Worst: 127,000 ms charged at the squat MET while the engine watched 8,400 ms.
+  · One single rep credited 123,600 ms.
+  · All ten repo traces: ZERO unusable frames, largest frame gap 112 ms — so the
+    lost-sight-keyed fix cannot move any golden/parity trace. Risk measured, zero.
+
+A PROCESS FAILURE WORTH NOT REPEATING
+  A smoke sheet said "RESULT — not yet run" eleven days after that smoke had
+  PASSED (the result went into DECISIONS.md and OWED.md, never into the sheet).
+  This chat believed the sheet, told Kd the test had never been run, and asked him
+  to redo it. His words: "i had already done these tests in previous chats why
+  again are we stuck in the same thing" — he was right. **Before telling Kd
+  anything is outstanding, grep DECISIONS.md and OWED.md, not just the sheet.**
+  Fixed in `cd6c6a7`, which also writes the rule into both sheets.
+
+NEXT TASK CARD: the calorie fix, step 2 above.
+```
+
+```
 TASK: PERSON CHECK — T3 ROUND 1 FINDINGS ARE FIXED AND COMMITTED. **TWO
       CRITICAL/HIGH, both the app saying something FALSE, NEITHER touching Kd's
       cut-off.** web 585/585 (+7) · engine 190/190 · typecheck + I1 purity grep

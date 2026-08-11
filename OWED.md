@@ -291,6 +291,39 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       **Deferred out of the person-check card deliberately** (R1.1): the defect
       lives in `calories.ts` and the engine's rep timing, neither of which that
       card touches. DECISIONS :7104 records the smoke that found it.
+      **STATUS 2026-08-11 — THE FAILING TEST EXISTS AND IS COMMITTED RED. THE FIX
+      IS NOT WRITTEN.** `packages/engine/test/repTimingAbsence.test.ts` reproduces
+      it from this package's OWN trace (`traces/parity/squat_sideview2goodform
+      .jsonl`, 85 frames), splicing a 120 s absence in as frames with no
+      keypoints — production, not a convenience: `sessionController.js` hands a
+      blocked frame to the engine as `feed([], tMs)`. **Measured, swept over every
+      frame boundary: 70 of 84 positions bill unwatched time as exercise; the
+      worst charges 127,000 ms at the squat MET when the engine watched 8,400 ms;
+      one single rep is credited 123,600 ms.** The clean-control test passes, so
+      the suite is not simply broken. **DO NOT MERGE while this test is red.**
+      **THE PARITY RISK IS MEASURED AND IT IS ZERO.** All ten traces under
+      `test/traces/{parity,regression}` scanned: **every one has ZERO frames the
+      engine cannot use, and the largest gap between consecutive frames is
+      112 ms.** So a fix keyed to the engine's existing lost-sight rule
+      (`INVALID_STREAK_FOR_VISIBILITY = 3`, §3.1) cannot alter any existing trace —
+      the golden/parity gates stay green by construction, not by luck.
+      **THE DESIGN IS AGREED WITH KD AND HAS TWO PARTS, because he found the flaw
+      in the one-part version.** (1) On losing sight, the open cycle's clock and
+      ROM bookkeeping re-arm, so the interrupted rep is timed only from when the
+      user was visible again — never the absence. It STILL COUNTS; no rep is lost,
+      which was his first question. (2) **That partial duration is EXCLUDED from
+      `tempoMsAvg`.** He asked what happens to reps completed before the absence,
+      and the answer exposed part 2: calories bill `reps × tempoMsAvg`, so a
+      half-measured rep in the average drags it down and UNDER-charges every rep in
+      the set — trading an over-count for a quieter under-count. Excluding it bills
+      the interrupted rep at the rate of the reps actually watched. **Neither part
+      changes a payload shape**, so §2.4's byte-match gate and stored history are
+      untouched.
+      **TWO TRAPS FOUND BY READING, NEITHER COVERED BY A TEST YET:** clearing
+      `cycleStartT` alone makes `durationMs` fall to 0 (`fsm.ts`: `cycleStartT
+      !== null ? t - cycleStartT : 0`) — a fabricated zero replacing a fabricated
+      123 s; and `cycleMinT`/`cycleMinLastT` predate the absence, so re-arming the
+      start without them yields a NEGATIVE `phaseTimings.descent`.
 - [ ] ⚪ **A user the person check is WRONG about cannot take over the set.**
       "Count this set myself" is offered only on a frame GAP or a camera error
       (`ActiveWorkout.jsx`), and a blocked frame is not a gap — frames keep
