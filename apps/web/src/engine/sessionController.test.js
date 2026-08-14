@@ -299,7 +299,7 @@ describe("SessionController — the person check (card 4 step 3)", () => {
     for (const f of shakenSquat(0.05).slice(0, 40)) d = c.feed(toLandmarks(f.kp), f.t, true);
     expect(SCENE_CUE.test(d.corrections[0] ?? "")).toBe(true);
 
-    c.resetScene();
+    c.framesResumed();
     // A frame of the real recording, a long way later in wall time — which is
     // what coming back from a pause looks like.
     d = c.feed(toLandmarks(goldenSquat().frames[0].kp), 100000, true);
@@ -324,19 +324,53 @@ describe("SessionController — the person check (card 4 step 3)", () => {
     cueAt(0);
     expect(cueAt(67)).toBe(false); // two is not yet three
 
-    c.resetScene();
+    c.framesResumed();
     expect(cueAt(100000)).toBe(false);
     // THE CONTROL: three IN A ROW after the resume still raises it.
     cueAt(100067);
     expect(cueAt(100134)).toBe(true);
   });
 
+  it("TELLS THE ENGINE it stopped watching — the half a rename would drop silently", () => {
+    // THE CLOCK HALF, asserted on its own. The two scene assertions above pass
+    // whether or not the engine is ever told, so without this the pause fix
+    // could be deleted and this file would stay entirely green — which is
+    // exactly how the badge guards went vacuous (:6150).
+    //
+    // Measured through the REAL engine rather than a spy, because a spy would
+    // only prove a call happened, not that it moves the number the server bills
+    // from. A pause is spliced by advancing the timestamps with NO frames in
+    // between — production, since the app tears the feed down.
+    const frames = goldenSquat().frames;
+    const PAUSE = 120000;
+    const watchedWith = (told) => {
+      const c = new SessionController();
+      c.startSet("squat", 1);
+      const at = Math.floor(frames.length / 2);
+      frames.forEach((f, i) => {
+        const t = i < at ? f.t : f.t + PAUSE;
+        if (i === at && told) c.framesResumed();
+        c.feed(toLandmarks(f.kp), t, true);
+      });
+      return c.endSet().watchedMs;
+    };
+    const undeclared = watchedWith(false);
+    const declared = watchedWith(true);
+    // The control: without the call the pause IS inside watched time. If this
+    // stops holding the fixture no longer reproduces the defect and the claim
+    // below proves nothing.
+    expect(undeclared).toBeGreaterThan(PAUSE);
+    // The claim: declaring it takes the whole pause out.
+    expect(undeclared - declared).toBeGreaterThanOrEqual(PAUSE);
+  });
+
   it("does not run at all in log-only mode", () => {
     // Nothing to protect: the user is counting, so there are no reps to invent
-    // and none to take away. resetScene must not throw where there is no check.
+    // and none to take away. framesResumed must not throw where there is neither a
+    // check nor an engine session to tell.
     const c = new SessionController();
     c.startSet("bench_press", 1);
-    expect(() => c.resetScene()).not.toThrow();
+    expect(() => c.framesResumed()).not.toThrow();
     const d = c.feed(toLandmarks(shakenSquat(0.05)[0].kp), 0, true);
     expect(d.logOnly).toBe(true);
     expect(d.corrections).toEqual([]);

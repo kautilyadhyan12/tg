@@ -391,6 +391,15 @@ export function createSession(
 
   return {
     processFrame,
+    /** The caller says it has stopped feeding. Routes into the SAME path both
+     *  blindness kinds already take, so a pause costs exactly what walking out
+     *  of shot costs — nothing — and no second mechanism exists to drift from
+     *  the first. Deliberately does NOT end the set, touch the rep count, or
+     *  clear the scene: it moves the CLOCK and nothing else. */
+    loseSight() {
+      fsm.loseSight();
+      blindSinceLastUsable = true;
+    },
     end,
     onRep(listener) {
       repListener = listener;

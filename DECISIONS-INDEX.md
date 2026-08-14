@@ -220,6 +220,31 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:7863** — 2026-08-14 (same evening) — **THE PAUSE IS FIXED AT THE ONLY PLACE
+  THAT KNOWS: the client tells the engine it stopped feeding.** **Read before
+  adding any new way for the frame feed to stop, before splitting
+  `framesResumed()` back into two methods, and before writing a second rep mode.**
+  Kd: *"i understand the pause problem no need to see the problem with my own eyes
+  just solve the problem"* — taken immediately after :7730 committed. Pause tears
+  the feed down so NO frames arrive, and the timestamps in the frames that resume
+  have moved on, so the pause sat inside the open rep and inside watched time:
+  **127,000 ms billed against 8,400 ms watched, 14.82 kcal against a truth of
+  0.98.** Fix: `EngineSession` gains **`loseSight()`**, the bridge calls it on
+  every resume, and it routes into the SAME path both blindness kinds already
+  take — no new threshold, no second mechanism. **Three decisions worth not
+  re-deriving:** it is ON THE INTERFACE so every future rep mode must answer the
+  question rather than inherit nothing (:7575's warning — it bit at once, the
+  scripted test engine would not compile until it answered); **`resetScene()`
+  became `framesResumed()` and the rename IS the design** (two consequences of one
+  event, discovered a card apart — a caller cannot remember half of one method,
+  and the old name would have become a comment/behaviour mismatch); and it is
+  declared on RESUME, which is identical in effect because no frames arrive in
+  between. **The server's timer budget STAYS** — now belt-and-braces, still the
+  only defence for clients that declare nothing. engine 212/212 · web 586/586 ·
+  4 mutants 4 RED 0 ALIVE, covering BOTH resume sites because the hidden-tab one
+  is what a rename drops quietly. **NOT TICKED: Kd declined the DEMONSTRATION,
+  which is not the same as waiving the smoke, and no chat widens a ruling for
+  him.**
 - **:7730** — 2026-08-14 — **THE API HALF: the server stops GUESSING how long you
   exercised — the camera reports what it WATCHED and the bill follows it. And a
   PAUSE is billed as squatting, which the new field CANNOT see.** **Read before

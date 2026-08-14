@@ -7858,3 +7858,69 @@ test to the file. **`0010` applying clean is proven by the two full green runs
 and by `drizzle-kit migrate` against the same database** · web **585/585**, unchanged and re-run because
 the shared contract moved under it · `tsc --noEmit` exit 0 in all three packages ·
 `eslint` exit 0 · I1 purity grep prints nothing.
+
+
+## 2026-08-14 (same evening) — THE PAUSE IS FIXED AT THE ONLY PLACE THAT KNOWS: the client tells the engine it stopped feeding
+
+**Read before adding any new way for the frame feed to stop, before splitting
+`framesResumed()` back into two methods, and before writing a second rep mode.**
+Kd, on being shown the measurement and offered a demonstration: *"i understand
+the pause problem no need to see the problem with my own eyes just solve the
+problem."* This is that fix, taken immediately after :7730 was committed.
+
+**THE DEFECT, restated in one line:** pressing pause tears the pose feed down, so
+NO frames arrive at all, and the timestamps inside the frames that eventually
+resume have moved on — so an undeclared pause sat inside the rep in progress and
+inside the set's watched time, and was billed at the exercise MET. Measured
+before the fix: **127,000 ms billed against 8,400 ms watched, 14.82 kcal where
+the truth is 0.98.**
+
+**THE FIX IS ONE SENTENCE: the party that knows says so.** `EngineSession` gains
+`loseSight()`, the web bridge calls it on every resume, and it routes into the
+SAME path both blindness kinds already take — so a pause costs exactly what
+walking out of shot costs, by construction rather than by agreement. No new
+threshold, no second mechanism to drift from the first.
+
+### Three decisions inside it that a later chat would otherwise re-derive
+
+- **It is on the INTERFACE, not on one implementation.** `EngineSession` is the
+  harness contract, and its own header says amending it happens in task cards,
+  visibly. Putting `loseSight()` there means **every future rep mode has to
+  answer the question rather than silently inherit nothing** — which is exactly
+  what :7575 warns gets forgotten. It bit immediately and correctly: the scripted
+  test engine failed to compile until it answered, and its answer (a no-op, with
+  the reason written down) is the honest one for a fixture with no clock.
+- **`resetScene()` became `framesResumed()`, and the rename is the design.** Two
+  things must happen when the feed restarts — the scene check forgets its
+  history, and the engine is told it was not watching — and they were discovered
+  a card apart. Left as two methods they would be called from the same two places
+  today and from one place each the moment somebody adds a third kind of gap.
+  **A caller cannot remember half of one method.** The old name would also have
+  become a comment/behaviour mismatch, the class this repo records most.
+- **Declared on RESUME, not on pause, and it is the same thing.** No frames
+  arrive during the gap, so the flag set at either end has identical effect — and
+  resume is where the bridge already had both call sites, tested.
+
+### The server keeps its timer budget, and its role changes
+
+`kcalPointForSetsV3`'s budget clamp is now belt-and-braces rather than the
+defence: with pauses declared, charged time ≤ watched ≤ the timer, so it cannot
+bite. **It stays** because a client that predates this evening declares nothing,
+and for those payloads it is the only thing standing between a pause and the
+bill. Nothing about it was relaxed on the strength of this fix.
+
+### The measurements
+
+engine **212/212** (208 before; +4 pause tests, one of which REPRODUCES the
+defect rather than asserting the fix — it pins what the engine cannot know, so
+the reason the caller must do any work stays visible) · web **586/586** (585
+before; +1, and it goes through the REAL engine rather than a spy, because a spy
+proves a call happened and not that the number moved) · `tsc --noEmit` exit 0 ·
+eslint exit 0 on every touched file · I1 purity grep silent · **4 mutants
+(P1–P4), 4 RED, 0 ALIVE, one completed run** — the engine method, the bridge
+call, and BOTH resume sites, because the hidden-tab one is the site a rename
+would quietly drop. `apps/api` untouched, so it stays where :7730 left it.
+
+**NOT TICKED. Kd declined the DEMONSTRATION of the defect, which is not the same
+as waiving the browser smoke** — and no chat may widen a ruling on his behalf.
+Smoke and T3 are both unrun for this and for :7730.

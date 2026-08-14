@@ -168,12 +168,29 @@ export class SessionController {
     return display;
   }
 
-  /** Forget the scene check's history without ending the set — an un-pause.
-   *  Frames stop arriving while a set is paused or resting, so the frame before
-   *  the pause is not the frame before now, and a message raised before it would
-   *  be explaining something the user can no longer see. No-op in log-only mode,
-   *  where there is no check to reset. */
-  resetScene() {
+  /** THE FEED STOPPED AND IS STARTING AGAIN — a pause, a rest, a tab the user
+   *  switched away from. The set did not end; frames simply were not arriving.
+   *
+   *  ONE METHOD FOR THE WHOLE EVENT, and that is the design rather than an
+   *  accident. Two separate things have to happen on a resume, and they were
+   *  discovered a card apart: the scene check must forget its history, and the
+   *  ENGINE must be told it was not watching. Left as two methods they would be
+   *  called from the same two places today and from one place each the moment
+   *  somebody adds a third kind of gap — which is how "fixed the instance, left
+   *  the class" happens here, repeatedly. A caller cannot remember half of this.
+   *
+   *  Renamed from `resetScene` for the same reason: a method that re-arms a
+   *  clock while calling itself a scene reset is a comment/behaviour mismatch,
+   *  the defect class this repo has recorded more than any other.
+   *
+   *  No-op in log-only mode, where there is neither a check nor an engine. */
+  framesResumed() {
+    // THE CLOCK. Without this a two-minute pause sits inside the rep in progress
+    // and inside the set's watched time, and the server bills it at the exercise
+    // MET: measured at 14.82 kcal where the truth is 0.98 (DECISIONS :7730).
+    // Routed through the engine's own lost-sight path, so a pause costs exactly
+    // what walking out of shot costs, by construction rather than by agreement.
+    if (this._session != null) this._session.loseSight();
     if (this._scene != null) this._scene.reset();
     // The occlusion streak is forgotten too, for the same reason and it was
     // missed the first time: it counts CONSECUTIVE frames, and the frame before

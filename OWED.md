@@ -416,6 +416,18 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       measurement, not a fix round (:5348 rule 6). **Its own smoke matters more
       than usual**: pausing is a thing a user does deliberately, so the wrong
       number here is one they can reproduce.
+      **STATUS 2026-08-14 (same evening) — BUILT EXACTLY AS DESCRIBED ABOVE, and
+      the line does NOT tick.** (DECISIONS :7863.) Kd read the measurement and
+      ruled: *"i understand the pause problem no need to see the problem with my
+      own eyes just solve the problem."* `EngineSession` gained `loseSight()`,
+      `sessionController.resetScene()` became `framesResumed()` and now moves the
+      CLOCK as well as the scene check, and both resume sites in
+      `usePoseDetection` call it. engine 212/212 · web 586/586 · 4 mutants 4 RED
+      0 ALIVE. **WHY IT STILL DOES NOT TICK: he declined the DEMONSTRATION of the
+      defect, which is not the same as waiving the browser smoke** — that rule is
+      his (2026-07-16) and only he can lift it. A chat may not widen a ruling on
+      his behalf; the precedent for ticking on a chat's own reading is :5034 and
+      :4718 F4, both reverted.
 - [ ] 🟡 **THE GOLDEN-TRACE GATE CANNOT SEE REP TIMING AT ALL.** `assertTrace`
       (`packages/engine/src/harness/assert.ts`) asserts rep count, fault
       multiset, scores, hold time and phase sequence — and **nothing about

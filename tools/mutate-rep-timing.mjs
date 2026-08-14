@@ -59,6 +59,8 @@ const TARGETS = [
   "apps/api/src/modules/workouts/calories.ts",
   "apps/api/src/modules/workouts/service.ts",
   "apps/api/src/modules/workouts/repo.ts",
+  "apps/web/src/engine/sessionController.js",
+  "apps/web/src/hooks/usePoseDetection.js",
 ];
 
 /** Suites, by the runner that owns them. `db: true` needs a real Postgres. */
@@ -67,6 +69,10 @@ const SUITES = {
   engineAll: { pkg: "@app/engine", files: [] }, // golden traces + parity + fuzz
   apiCalories: { pkg: "api", files: ["test/gamification.unit.test.ts"] },
   apiSync: { pkg: "api", files: ["test/workouts.sync.test.ts"], db: true },
+  webBridge: {
+    pkg: "web",
+    files: ["src/engine/sessionController.test.js", "src/hooks/usePoseDetection.test.js"],
+  },
 };
 
 const MUTATIONS = [
@@ -246,6 +252,40 @@ const MUTATIONS = [
     to:
       "      s.tempoMsAvg !== null ? Math.min(watched, s.reps * s.tempoMsAvg) : watched;",
     suites: ["apiCalories"],
+  },
+
+  // ── THE PAUSE FIX, 2026-08-14 (same evening, Kd: "just solve the problem") ─
+  {
+    id: "P1",
+    claim: "telling the engine the feed stopped actually re-arms the clock",
+    file: "packages/engine/src/session.ts",
+    from: "      fsm.loseSight();\n      blindSinceLastUsable = true;\n    },\n    end,",
+    to: "    },\n    end,",
+    suites: ["engineTiming"],
+  },
+  {
+    id: "P2",
+    claim: "the web bridge TELLS the engine on a resume — not only the scene check",
+    file: "apps/web/src/engine/sessionController.js",
+    from: "    if (this._session != null) this._session.loseSight();",
+    to: "    if (false) this._session.loseSight();",
+    suites: ["webBridge"],
+  },
+  {
+    id: "P3",
+    claim: "an un-pause reaches the bridge at all (the `enabled` resume site)",
+    file: "apps/web/src/hooks/usePoseDetection.js",
+    from: "    if (enabled && !wasEnabled) controllerRef.current.framesResumed();",
+    to: "    if (false) controllerRef.current.framesResumed();",
+    suites: ["webBridge"],
+  },
+  {
+    id: "P4",
+    claim: "a tab the user switched away from and back is a resume too",
+    file: "apps/web/src/hooks/usePoseDetection.js",
+    from: "        controllerRef.current.framesResumed();\n        startStreaming(videoRef.current);",
+    to: "        startStreaming(videoRef.current);",
+    suites: ["webBridge"],
   },
 
   // ── DATABASE mutants: the stored number and the stamp (4a Critical/High) ──

@@ -54,6 +54,14 @@ export function scriptedEngine(script: ScriptedBehavior): ReplayableEngine {
     onRep(l) {
       repListener = l;
     },
+    /** A scripted engine has no clock to re-arm — its reps are a list of frame
+     *  indices. Present because the CONTRACT requires it (that is the point of
+     *  putting it on `EngineSession`: no implementation gets to be silently
+     *  unaware of the question), and a no-op because there is honestly nothing
+     *  here to move. The harness never calls it. */
+    loseSight() {
+      // intentionally nothing — see above
+    },
     processFrame(frame): FrameResult {
       const i = frameIndex++;
       if (script.repAtFrames.includes(i)) {

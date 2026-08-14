@@ -91,10 +91,17 @@ export default function usePoseDetection({
   // from a scene that may have changed completely. The person check's rolling
   // window would otherwise carry readings from before the break, and any message
   // it had raised would still be on screen explaining a moment that is over.
+  //
+  // AND THE ENGINE HAS TO BE TOLD, which is the half added on 2026-08-14. It
+  // cannot see a gap that contains no frames — the timestamps inside the frames
+  // that resume have simply moved on — so an undeclared pause lands inside the
+  // rep in progress and inside the set's watched time, and gets billed at the
+  // exercise MET. Both consequences now travel through one call, because a
+  // caller that has to remember two of them will eventually remember one.
   useEffect(() => {
     const wasEnabled = enabledRef.current;
     enabledRef.current = enabled;
-    if (enabled && !wasEnabled) controllerRef.current.resetScene();
+    if (enabled && !wasEnabled) controllerRef.current.framesResumed();
   }, [enabled]);
   useEffect(() => { onSetCompleteRef.current = onSetComplete; }, [onSetComplete]);
 
@@ -272,7 +279,7 @@ export default function usePoseDetection({
   useEffect(() => {
     // A HIDDEN TAB IS A PAUSE THE APP NEVER CALLED ONE. `enabled` does not
     // change, so the per-set resume effect — the only thing that reached
-    // `resetScene` — never fires. The person check then measures the last frame
+    // `framesResumed` — never fires. The person check then measures the last frame
     // before the switch against the first frame after, minutes apart and often
     // a different room, and a "not counting" sentence raised beforehand is
     // still on screen explaining a moment the user cannot remember.
@@ -291,7 +298,7 @@ export default function usePoseDetection({
         return;
       }
       if (videoRef.current && !loopRunningRef.current) {
-        controllerRef.current.resetScene();
+        controllerRef.current.framesResumed();
         startStreaming(videoRef.current);
       }
     };

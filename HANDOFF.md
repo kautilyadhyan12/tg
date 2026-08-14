@@ -1,6 +1,62 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE PAUSE IS FIXED TOO. NEXT: the browser SMOKE (one sheet covering BOTH
+      commits), then T3 in a FRESH chat. **Neither OWED line ticks.**
+
+WHAT IS DONE (this session, TWO commits)
+  1. The API half — the camera reports what it WATCHED and the server bills from
+     it instead of guessing. DECISIONS :7730. Committed.
+  2. The PAUSE fix, taken immediately after, on Kd's instruction ("i understand
+     the pause problem no need to see the problem with my own eyes just solve the
+     problem"). DECISIONS :7863.
+
+THE PAUSE FIX IN ONE SENTENCE
+  · The party that KNOWS says so: `EngineSession` gains `loseSight()`, the web
+    bridge calls it on every resume, and it routes into the SAME path both
+    blindness kinds already take. No new threshold, no second mechanism.
+
+THINGS A LATER CHAT WILL OTHERWISE RE-DERIVE
+  · `loseSight()` is ON THE INTERFACE deliberately, so every future rep mode must
+    ANSWER the question rather than inherit nothing (:7575). It bit at once: the
+    scripted test engine would not compile until it answered.
+  · `resetScene()` IS NOW `framesResumed()` AND THE RENAME IS THE DESIGN. One
+    event, two consequences (forget the scene history, tell the engine), found a
+    card apart. Do not split them again — a caller cannot remember half of one
+    method, and the old name would have been a comment/behaviour mismatch.
+  · Declared on RESUME, not on pause. Identical in effect (no frames arrive in
+    between) and resume is where both call sites already were, tested.
+  · THE SERVER'S TIMER BUDGET STAYS and its role changed: belt-and-braces now,
+    but still the ONLY defence for a client that declares nothing. Not relaxed.
+  · A pause test that REPRODUCES the defect is kept alongside the ones that
+    assert the fix — it pins what the engine cannot know, so the reason the
+    caller has to do any work stays visible.
+
+MEASUREMENTS
+  · engine 212/212 · web 586/586 · api 443 of 444 (the one red is the
+    PRE-EXISTING `db.migration.test.ts` timeout flake against a database in
+    another country — NOT in either diff; its OWED line was widened today from
+    one test to the whole file). tsc 0 · eslint 0 · I1 purity grep silent.
+  · Mutants, all in completed runs: 17 non-DB RED · 3 DB RED · 4 pause RED · 0
+    ALIVE anywhere.
+  · INSTRUMENT: a command that piped vitest through `grep` reported EXIT 0 while
+    a test had failed (:5906's pipe defect, recurring). Read the output, never a
+    piped exit code.
+
+WHAT TO DO NEXT, IN ORDER
+  1. **The browser SMOKE, one sheet for BOTH commits.** It must include a PAUSE
+     step and an out-of-shot step, and check the calories on the summary.
+     **Kd declined the DEMONSTRATION of the defect; that is NOT a waiver of the
+     smoke** — the rule is his (2026-07-16) and only he can lift it.
+  2. **T3 in a FRESH chat**, covering both commits.
+     `t3-rep-timing-api-PROMPT.md` + `t3-rep-timing-api.diff`.
+  3. The rest-in-full-view card (still needs a Kd-ruled number: still vs
+     descending).
+
+NEXT TASK CARD: the browser smoke, item 1 above.
+```
+
+```
 TASK: REP TIMING, THE API HALF IS BUILT. NEXT: the browser SMOKE, then T3 in a
       FRESH CHAT. **The OWED line does NOT tick.**
 

@@ -111,6 +111,12 @@ export function startSet(def, setIndex) {
     feed(landmarks, tMs) {
       return session.processFrame(landmarksToFrame(landmarks, tMs));
     },
+    /** Tell the engine the app has stopped feeding frames (pause, hidden tab).
+     *  It cannot deduce that — no frames arriving is indistinguishable from a
+     *  slow camera in there — and without it the pause is billed as exercise. */
+    loseSight() {
+      session.loseSight();
+    },
     onRep(listener) {
       session.onRep(listener);
     },

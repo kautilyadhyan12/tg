@@ -561,6 +561,114 @@ describe("a rep the camera never watched is not a measurement", () => {
   }, 60_000);
 });
 
+/** A PAUSE, which is not an absence. No frames arrive AT ALL — not blank ones,
+ *  not unusable ones — and the timestamps inside the frames that resume have
+ *  advanced by the pause length. Nothing in the clip tells the engine this
+ *  happened; only the caller knows, which is the whole point of `loseSight()`.
+ *
+ *  @param told whether the caller says so. `false` reproduces the measured
+ *  defect; `true` is the fix. */
+function runWithPause(
+  frames: readonly PoseFrame[],
+  at: number,
+  gapMs: number,
+  told: boolean,
+): Run {
+  const session = squatSession();
+  const events: RepEvent[] = [];
+  session.onRep?.((e) => events.push(e));
+  const shifted = [
+    ...frames.slice(0, at),
+    ...frames.slice(at).map((f) => ({ t: f.t + gapMs, kp: f.kp })),
+  ];
+  shifted.forEach((f, i) => {
+    if (i === at && told) session.loseSight();
+    session.processFrame(f);
+  });
+  const summary = session.end();
+  const first = shifted[0];
+  const last = shifted[shifted.length - 1];
+  return {
+    reps: summary.reps,
+    tempoMsAvg: summary.tempoMsAvg,
+    repDurations: events.map((e) => e.durationMs),
+    spanMs: first !== undefined && last !== undefined ? last.t - first.t : 0,
+    watchedMs: summary.watchedMs,
+    events,
+  };
+}
+
+describe("a PAUSE is not exercise either — but only the caller can say so", () => {
+  it("REPRODUCES the defect: a pause nobody declares is billed as squatting", () => {
+    // THE MEASUREMENT THIS FIX EXISTS FOR, kept as a test rather than as prose in
+    // a commit message. It is not an assertion about desired behaviour — it pins
+    // what the engine CANNOT know, so that the reason `loseSight()` is on the
+    // interface stays visible when someone later wonders why the caller has to
+    // do any work at all.
+    const frames = squatFrames();
+    const at = Math.floor(frames.length / 2);
+    const g = runWithPause(frames, at, ABSENCE_MS, false);
+    expect(g.watchedMs, "the engine somehow noticed a gap with no frames in it").toBe(g.spanMs);
+    expect(
+      g.watchedMs ?? 0,
+      "a two-minute pause is no longer inside watched time — has the engine gained a clock?",
+    ).toBeGreaterThan(ABSENCE_MS);
+  }, 60_000);
+
+  it("a declared pause costs nothing, wherever it falls", () => {
+    // THE FIX. Same clip, same gap, same frames — the only difference is that the
+    // caller says it stopped feeding. Swept, because a pause taken between reps
+    // and a pause taken mid-descent are different states of the FSM and the first
+    // draft of the between-reps test proved that difference is where the bugs are.
+    const frames = squatFrames();
+    const offenders: { at: number; watchedMs: number; ceiling: number }[] = [];
+    for (let at = 1; at < frames.length; at++) {
+      const g = runWithPause(frames, at, ABSENCE_MS, true);
+      const ceiling = g.spanMs - ABSENCE_MS;
+      if ((g.watchedMs ?? Number.NaN) > ceiling) {
+        offenders.push({ at, watchedMs: g.watchedMs ?? Number.NaN, ceiling });
+      }
+    }
+    expect(
+      offenders.slice(0, 5),
+      `${String(offenders.length)} pause positions are still billed as watched`,
+    ).toEqual([]);
+  }, 120_000);
+
+  it("a declared pause does not move the rep COUNT", () => {
+    // The same argument that made `loseSight()` safe for absences (:7404) has to
+    // hold for the caller-driven route, and it is asserted rather than inherited:
+    // state, both debounce counters, `reachedBottom` and the smoothing buffer are
+    // all untouched, so every rep still completes.
+    const frames = squatFrames();
+    const clean = run(frames);
+    const counts = new Set<number>();
+    for (let at = 1; at < frames.length; at++) {
+      counts.add(runWithPause(frames, at, ABSENCE_MS, true).reps);
+    }
+    expect([...counts], "a declared pause changed the rep count somewhere").toEqual([clean.reps]);
+  }, 120_000);
+
+  it("a declared pause never leaves a rep timed as longer than the set was watched", () => {
+    // The headline promise, on the new path: the server's own arithmetic against
+    // the time the frames actually cover, minus the gap.
+    const frames = squatFrames();
+    const offenders: { at: number; billedMs: number; watchedMs: number }[] = [];
+    for (let at = 1; at < frames.length; at++) {
+      const g = runWithPause(frames, at, ABSENCE_MS, true);
+      const watched = g.watchedMs ?? 0;
+      const billedMs =
+        g.reps > 0 ? (g.tempoMsAvg !== null ? Math.min(watched, g.reps * g.tempoMsAvg) : watched) : 0;
+      const realWatchedMs = g.spanMs - ABSENCE_MS;
+      if (billedMs > realWatchedMs) offenders.push({ at, billedMs, watchedMs: realWatchedMs });
+    }
+    expect(
+      offenders.slice(0, 5),
+      `${String(offenders.length)} declared-pause positions bill unwatched time as exercise`,
+    ).toEqual([]);
+  }, 120_000);
+});
+
 describe("the set reports how long the camera watched", () => {
   /** Largest gap between consecutive frames in the untouched recording —
    *  DERIVED from the clip, never a number picked to make a test pass (R0.2).

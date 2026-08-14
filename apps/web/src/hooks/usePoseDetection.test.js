@@ -29,14 +29,14 @@ vi.mock('@mediapipe/tasks-vision', () => ({
 
 const startSet = vi.fn();
 const endSet = vi.fn(() => null);
-const resetScene = vi.fn();
+const framesResumed = vi.fn();
 vi.mock('../engine/sessionController.js', () => ({
   SessionController: class {
     constructor() { this.analysisAvailable = true; }
     startSet(...a) { startSet(...a); }
     endSet() { return endSet(); }
     feed() { return { rep_count: 0 }; }
-    resetScene() { resetScene(); }
+    framesResumed() { framesResumed(); }
   },
 }));
 
@@ -46,7 +46,7 @@ beforeEach(() => {
   createFromOptions.mockClear();
   startSet.mockClear();
   endSet.mockClear();
-  resetScene.mockClear();
+  framesResumed.mockClear();
 });
 
 const render = (props) =>
@@ -157,16 +157,16 @@ describe('usePoseDetection — the user counting their own reps', () => {
     const props = { exercise: 'squat', setIndex: 1, enabled: true, analysisEnabled: true };
     let out;
     await act(async () => { out = render(props); });
-    expect(resetScene).not.toHaveBeenCalled();          // starting a set is not a resume
+    expect(framesResumed).not.toHaveBeenCalled();          // starting a set is not a resume
 
     await act(async () => { out.rerender({ ...props, enabled: false }); });
-    expect(resetScene).not.toHaveBeenCalled();          // pausing is not a resume either
+    expect(framesResumed).not.toHaveBeenCalled();          // pausing is not a resume either
 
     await act(async () => { out.rerender({ ...props, enabled: true }); });
-    expect(resetScene).toHaveBeenCalledTimes(1);
+    expect(framesResumed).toHaveBeenCalledTimes(1);
 
     await act(async () => { out.rerender({ ...props, enabled: true }); });
-    expect(resetScene).toHaveBeenCalledTimes(1);        // still enabled: nothing to forget
+    expect(framesResumed).toHaveBeenCalledTimes(1);        // still enabled: nothing to forget
   });
 
   it('forgets the scene when the TAB comes back too — the other way a set pauses', async () => {
@@ -182,15 +182,15 @@ describe('usePoseDetection — the user counting their own reps', () => {
     // A video element must exist, or the visibility handler has nothing to
     // resume and the test would pass on the wrong branch.
     await act(async () => { out.result.current.startStreaming(document.createElement('video')); });
-    expect(resetScene).not.toHaveBeenCalled();
+    expect(framesResumed).not.toHaveBeenCalled();
 
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
     await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
-    expect(resetScene).not.toHaveBeenCalled();          // going away is not coming back
+    expect(framesResumed).not.toHaveBeenCalled();          // going away is not coming back
 
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
     await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
-    expect(resetScene).toHaveBeenCalledTimes(1);
+    expect(framesResumed).toHaveBeenCalledTimes(1);
   });
 
   it('emits the finished set summary when the set ordinal changes', async () => {
