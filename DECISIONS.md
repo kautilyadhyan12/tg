@@ -7924,3 +7924,49 @@ would quietly drop. `apps/api` untouched, so it stays where :7730 left it.
 **NOT TICKED. Kd declined the DEMONSTRATION of the defect, which is not the same
 as waiving the browser smoke** — and no chat may widen a ruling on his behalf.
 Smoke and T3 are both unrun for this and for :7730.
+
+
+## 2026-08-14 (same evening) — THE SMOKE PASSED, and the STORED ROWS prove the pause exclusion rather than the screen doing it
+
+**Read before designing a smoke for anything the user cannot see directly, and
+before reading a "close enough" comparison as the evidence.** Kd ran three
+workouts in his own browser against local api + web + the old-backend stand-in,
+and reported **A (normal) 3 kcal · B (paused 60 s) 5 kcal · C (walked away 60 s)
+4 kcal**, with "all passed ... i like it".
+
+**HIS REPORT IS A REPORT (:4829). The measurement is the stored rows, read
+afterwards, and they say it far more plainly than the screen could:**
+
+| workout | set | reps | set LASTED | camera WATCHED | thrown away |
+|---|---|---|---|---|---|
+| A normal | 1 | 6 | 22 s | 21 s | ~1 s |
+| A normal | 2 | 6 | 23 s | 21 s | ~2 s |
+| **B paused** | 1 | 6 | **96 s** | **30 s** | **~66 s** |
+| **B paused** | 2 | 6 | **94 s** | **31 s** | **~63 s** |
+| C away | 1 | 6 | 71 s | 24 s | ~47 s |
+| C away | 2 | 6 | 30 s | 22 s | ~8 s |
+
+All three stamped **`kcal_calc_version` 3** with `watched_ms` populated, so the
+whole chain — engine → payload → column → formula — is proven end to end by a
+real browser rather than by `fastify.inject`.
+
+**THE COMPARISON WAS THE WEAK PART OF THE SHEET, AND THE ROWS RESCUED IT.** The
+sheet asked Kd to check that B ≈ A. B came back 3→5, at the edge of the tolerance
+I had written, and a tolerance is exactly the kind of pass that hides a defect.
+**The rows explain the gap completely and it is not the pause:** his reps were
+slower in B (2.0 s and 3.1 s each) than in A (1.5 s and 1.4 s), so B contains
+30.6 s of real rep time against A's 17.4 s. Re-computed through the shipped
+formula at 70 kg: A = 6×70×(17.4/3600) + 1.8×70×(24.6/3600) = **2.89 → 3** ·
+B = 3.57 + 1.06 = **4.63 → 5** · C ≈ 3.33 plus its rest term = **4**. Every
+number he saw is reproduced from its own stored row.
+
+**THE LESSON FOR THE NEXT SMOKE OF AN INVISIBLE QUANTITY:** the user cannot see
+watched time, so no click-through can check it directly — the sheet could only
+ask him to compare two numbers that depend on how fast he happened to squat.
+**Design the sheet to produce the rows, and let the rows carry the claim.** A
+"within 1 or 2" expectation is a coin toss dressed as a criterion; had B come
+back at 7 I could not have told a real defect from a slow set without exactly
+this query.
+
+**STILL NOT TICKED: T3 is unrun** — the browser gate is discharged for both
+commits, the independent review is not.

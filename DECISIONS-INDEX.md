@@ -220,6 +220,23 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:7929** — 2026-08-14 (same evening) — **THE SMOKE PASSED, and the STORED ROWS
+  carry the claim rather than the screen.** **Read before designing a smoke for
+  anything a user cannot see, and before reading a "close enough" comparison as
+  evidence.** Kd ran three workouts in his own browser: **A normal 3 kcal · B
+  paused 60 s 5 kcal · C walked away 60 s 4 kcal**, "all passed". His report is a
+  REPORT (:4829); the measurement is the rows, and they are unambiguous — **B's
+  sets LASTED 96 s and 94 s and the camera was credited with 30 s and 31 s**, so
+  ~64 s per set was thrown away, while A's clean sets show watched ≈ length. All
+  stamped `kcal_calc_version` 3 with `watched_ms` populated, proving engine →
+  payload → column → formula end to end in a real browser. **THE SHEET'S WEAK
+  POINT, named: B came back at the EDGE of the tolerance I wrote (3→5), and the
+  rows are what showed the gap is not the pause but his own slower reps** (2.0 s
+  and 3.1 s each vs 1.5 s and 1.4 s — 30.6 s of rep time against 17.4 s); every
+  number he saw re-computes from its own row through the shipped formula.
+  **Standing lesson: for an invisible quantity, design the sheet to produce the
+  ROWS and let them carry the claim — a "within 1 or 2" expectation is a coin toss
+  dressed as a criterion.** T3 still unrun; nothing ticks.
 - **:7863** — 2026-08-14 (same evening) — **THE PAUSE IS FIXED AT THE ONLY PLACE
   THAT KNOWS: the client tells the engine it stopped feeding.** **Read before
   adding any new way for the frame feed to stop, before splitting

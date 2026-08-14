@@ -1,8 +1,20 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
-TASK: THE PAUSE IS FIXED TOO. NEXT: the browser SMOKE (one sheet covering BOTH
-      commits), then T3 in a FRESH chat. **Neither OWED line ticks.**
+TASK: BOTH COMMITS ARE SMOKED AND PASSED. NEXT: T3 in a FRESH chat — the ONLY
+      thing left. **Neither OWED line ticks until it runs.**
+
+THE SMOKE (2026-08-14, DECISIONS :7929) — PASSED, and the ROWS are the evidence
+  · Kd's three browser workouts: A normal 3 kcal · B paused 60 s 5 kcal ·
+    C walked away 60 s 4 kcal. "all passed ... i like it".
+  · VERIFIED IN THE STORED ROWS, not on his word: B's sets LASTED 96 s and 94 s
+    with the camera credited 30 s and 31 s — ~64 s per set thrown away. A's clean
+    sets show watched ~= set length. All three `kcal_calc_version` 3 with
+    `watched_ms` populated: engine -> payload -> column -> formula, end to end.
+  · B came back at the EDGE of the tolerance the sheet wrote (3 -> 5). The rows
+    show the gap is NOT the pause but his own slower reps (2.0 s / 3.1 s each vs
+    1.5 s / 1.4 s). **For an invisible quantity, design the sheet to produce the
+    ROWS — a "within 1 or 2" expectation is a coin toss dressed as a criterion.**
 
 WHAT IS DONE (this session, TWO commits)
   1. The API half — the camera reports what it WATCHED and the server bills from

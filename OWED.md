@@ -428,6 +428,12 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       his (2026-07-16) and only he can lift it. A chat may not widen a ruling on
       his behalf; the precedent for ticking on a chat's own reading is :5034 and
       :4718 F4, both reverted.
+      **SMOKE RUN AND PASSED 2026-08-14 (DECISIONS :7929) — the line still does
+      not tick, because T3 is unrun.** Kd's three browser workouts, verified in
+      the stored rows rather than on his word: **the paused workout's sets lasted
+      96 s and 94 s with the camera credited 30 s and 31 s**, so ~64 s per set was
+      correctly thrown away; the clean workout shows watched ≈ set length. All
+      three stamped `kcal_calc_version` 3.
 - [ ] 🟡 **THE GOLDEN-TRACE GATE CANNOT SEE REP TIMING AT ALL.** `assertTrace`
       (`packages/engine/src/harness/assert.ts`) asserts rep count, fault
       multiset, scores, hold time and phase sequence — and **nothing about
