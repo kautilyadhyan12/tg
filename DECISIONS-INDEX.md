@@ -220,6 +220,35 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:7974** — 2026-08-15 — **REP TIMING + PAUSE, T3 ROUND 1: ZERO Critical/High,
+  the packet SHIPS, and BOTH 🔴 `OWED.md` lines TICK.** **Read before writing a
+  comment that asserts an invariant, before trusting a sweep that compares a field
+  to a number the TEST computed, and before adding a formula-selection branch
+  keyed on one payload field.** Covers both commits (`faa7f06` API half,
+  `8c2d204` pause fix); Kd approved the fix round before any file was touched.
+  Escape hatch NOT armed. **L19 is the one with teeth and it is MINE, twice over:**
+  the `watchedMs` comment claimed the number "can never exceed the span … Asserted
+  rather than assumed" and **both halves were false** — `lastT` is stamped before
+  the ingest check so an out-of-order frame moves the span BACKWARDS (probe:
+  watched 8400 / duration 1), and **every sweep compared `watchedMs` to a span the
+  TEST computed from the fixture, never to the summary's own `durationMs`**, which
+  is the claim the server relies on. Second occurrence on this card, three lines
+  from where L17 corrected the first. Fixed BOTH ways (true comment + a test
+  comparing the two FIELDS); **mutant M16 is caught by the NEW test ALONE — 1
+  failed, 22 passed**, and those 22 are the sweeps that looked like coverage.
+  **L20: the v3 budget cap on a HAND-COUNTED set had no mutant and no test —
+  measured `*** ALIVE ***` before the fix**, on the branch that prices the 55
+  exercises with no engine definition; A6 now RED. **L21** (v1/v3 selection
+  asymmetry, unreachable today, own ⚪ OWED line) · **L22** a 126-char line.
+  **THE PATTERN, RESTATED AT FIVE: seven of this card's findings across four
+  rounds were in the APPARATUS, not the shipped behaviour** — the code kept being
+  right and the instruments kept not knowing it (:7634 named it at three).
+  **And the fix round hit R5.1's own trap: the CI purity grep READS COMMENTS**, so
+  naming the browser clock inside `packages/engine/src` would have failed the gate
+  that enforces engine purity — caught by running the Appendix grep, not by review.
+  engine 213/213 · shared 48/48 · web 586/586 · api 444 of 445 (the one red is the
+  pre-existing `db.migration.test.ts` flake, own OWED line, not in this diff) ·
+  tsc 0 · eslint 0 · purity grep silent.
 - **:7929** — 2026-08-14 (same evening) — **THE SMOKE PASSED, and the STORED ROWS
   carry the claim rather than the screen.** **Read before designing a smoke for
   anything a user cannot see, and before reading a "close enough" comparison as

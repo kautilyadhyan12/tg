@@ -63,6 +63,12 @@ interface Run {
   readonly repDurations: readonly number[];
   /** Wall span of the frames as fed, first to last. */
   readonly spanMs: number;
+  /** SetSummary.durationMs as emitted — the engine's OWN span, which is what
+   *  every reader of `watchedMs` clamps against. Kept separate from `spanMs`
+   *  above on purpose: that one is computed here from the frames, so comparing
+   *  the two fields of the summary is a different claim from comparing one
+   *  field to the fixture. */
+  readonly durationMs: number;
   /** SetSummary.watchedMs as emitted. Deliberately NOT defaulted to a number:
    *  `?? 0` here would make a field that stopped being emitted look like a set
    *  nobody watched, and every claim below would still pass. */
@@ -88,6 +94,7 @@ function run(frames: readonly PoseFrame[]): Run {
     tempoMsAvg: summary.tempoMsAvg,
     repDurations: events.map((e) => e.durationMs),
     spanMs: first !== undefined && last !== undefined ? last.t - first.t : 0,
+    durationMs: summary.durationMs,
     watchedMs: summary.watchedMs,
     events,
   };
@@ -593,6 +600,7 @@ function runWithPause(
     tempoMsAvg: summary.tempoMsAvg,
     repDurations: events.map((e) => e.durationMs),
     spanMs: first !== undefined && last !== undefined ? last.t - first.t : 0,
+    durationMs: summary.durationMs,
     watchedMs: summary.watchedMs,
     events,
   };
@@ -693,6 +701,45 @@ describe("the set reports how long the camera watched", () => {
     const clean = run(squatFrames());
     expect(clean.watchedMs, "the set no longer reports watched time at all").toBe(clean.spanMs);
   });
+
+  it("never claims to have watched more of the set than the set lasted", () => {
+    // THE COMMENT ON THE FIELD SAYS THIS IS "asserted rather than assumed",
+    // AND UNTIL NOW NOTHING ASSERTED IT. Every sweep in this file compares
+    // `watchedMs` to a span computed HERE from the fixture; none of them
+    // compares the two FIELDS OF THE SUMMARY to each other, which is the
+    // claim the server relies on and the claim the comment makes. A reader
+    // that trusted the comment would find it true only by luck.
+    //
+    // Both fields come off one `end()`, over every shape this file can build:
+    // the untouched clip, an absence of either kind at every frame boundary,
+    // and a pause both declared and not. The bound is `<=`, not `===`, because
+    // an absence is meant to be excluded — this is the ceiling, and the two
+    // sweeps below own the floor.
+    const frames = squatFrames();
+    const over: { shape: string; watchedMs: number | null | undefined; durationMs: number }[] = [];
+    const check = (shape: string, g: Run): void => {
+      const watched = g.watchedMs;
+      if (watched === null || watched === undefined || watched > g.durationMs) {
+        over.push({ shape, watchedMs: watched, durationMs: g.durationMs });
+      }
+    };
+    check("untouched", run(frames));
+    for (let at = 1; at < frames.length; at++) {
+      for (const kind of ["blank", "occluded"] as const) {
+        check(`${kind} absence at ${String(at)}`, run(withLostSight(frames, at, ABSENCE_MS, kind)));
+      }
+      for (const told of [true, false] as const) {
+        check(
+          `pause at ${String(at)}, ${told ? "declared" : "undeclared"}`,
+          runWithPause(frames, at, ABSENCE_MS, told),
+        );
+      }
+    }
+    expect(
+      over.slice(0, 5),
+      `${String(over.length)} shapes report watching more of the set than the set lasted`,
+    ).toEqual([]);
+  }, 300_000);
 
   it("excludes the absence, and excludes only the absence, wherever it falls", () => {
     // THE CLAIM, swept over every frame boundary. Two bounds, and both are

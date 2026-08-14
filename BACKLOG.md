@@ -425,3 +425,70 @@ was touched, deliberately — see L10.
       asserts a between-reps position exists for EACH before testing either;
       M11 is RED. Found by this card's own mutation sweep, 2026-08-14;
       DECISIONS :7730.
+
+## Rep timing + pause, T3 ROUND 1 — ZERO Critical/High, the packet SHIPS (2026-08-15)
+
+*(The fresh-chat review covering BOTH commits — the API half (`faa7f06`) and the
+pause fix (`8c2d204`) — found no Critical/High, so under :5348 rule 1 the packet
+ships and no further round is owed. All four Lows are fixed anyway: rule 1
+changes the SCHEDULE, never the bar. Kd approved the fix round before any file
+was touched. Every finding below was re-verified against the code IN THIS
+SESSION before being acted on — a review is another chat's claim, and V4 binds
+it like any other.)*
+
+- [x] **L19 · my own comment claimed an invariant the code does not have — the
+      SECOND time on this card, three lines from where L17 had just corrected
+      it.** `session.ts` said `watchedMs` is "never more than the span by
+      construction … Asserted rather than assumed", and **both halves were
+      false**. `lastT = frame.t` is stamped at `session.ts:202` BEFORE the
+      ingest check, and an out-of-order frame is dropped with `visibilityOk`
+      deliberately untouched (§3.1, `ingest.ts:48-53`), so nothing re-arms — the
+      span moves BACKWARDS while watched time keeps what it accrued. Measured:
+      a clean clip reports watched 8400 / duration 8400; one out-of-order final
+      frame reports watched 8400 / duration 1. **And nothing asserted it**:
+      every sweep in the file compared `watchedMs` to a span the TEST computed
+      from the fixture, never to the summary's own `durationMs` — which is a
+      different claim, and the one both readers actually rely on.
+      **Low, not Critical/High, on measured grounds**: no browser client can
+      reach it (the web feed stamps frames from a monotonic clock) and both
+      readers clamp to `durationMs` anyway (the write boundary and
+      `kcalPointForSetsV3`), so no user can see a wrong number. **Fixed BOTH
+      ways rather than by deleting the claim**: the comment now states the true
+      scope and names the ordering it does not cover, and a new test
+      ("never claims to have watched more of the set than the set lasted")
+      compares the two SUMMARY FIELDS across the untouched clip, both blindness
+      kinds at every frame boundary, and a pause declared and undeclared.
+      **Mutant M16 pins it** (`firstT ??=` → `firstT =`, collapsing the span
+      while leaving watched time alone) — **and it was measured to be caught by
+      the NEW test ALONE: 1 failed, 22 passed**, which is the whole point, since
+      those 22 are the sweeps that looked like coverage.
+      Found by T3 round 1 (its Low-1).
+- [x] **L20 · the v3 budget cap on a HAND-COUNTED set was protected by nothing,
+      and the sweep had no mutant for it.** `const metMs = Math.min(s.durationMs,
+      remaining)` (`calories.ts:173`) is new behaviour — v2 billed a log-only
+      span in full and never trimmed it — and mutants A1–A5 all sit on the
+      engine-set branch. **Measured before the fix, not argued: A6 came back
+      `*** ALIVE ***` with `apiCalories: GREEN`.** It matters more than its
+      severity suggests because the log-only branch prices the **55 exercises
+      with no engine definition**. Low because the cap only binds when charged
+      MET time approaches the whole timer, which an honest workout does not
+      reach — on Kd's own smoke A it was 17.3 s against a 46 s budget.
+      **Fixed:** a test pinning both the cap (30 minutes claimed inside a
+      10-minute workout bills 70, not 210) and that sets SHARE one budget rather
+      than each getting the whole timer; mutant **A6 is now RED**.
+      Found by T3 round 1 (its Low-2), which reported it under rule 4 (listed,
+      not fixed) — this round fixed it.
+- [x] **L21 · a payload carrying watched time but no rest time prices at v1,
+      which ignores the field.** `service.ts:85` selects on `restSeconds` first,
+      so that shape would be billed by a formula that cannot read the number it
+      is named for. **The stamp stays v1, so the stored row is still explicable
+      from itself** — this is a missed upgrade, never a wrong number. **No client
+      can produce it today** (verified: `ActiveWorkout.jsx:1074-1075` sends both
+      fields unconditionally); the plausible producer is the P5 mobile client.
+      **NOT fixed in code and it needs none — deferred, so it has an `OWED.md`
+      line in this same commit**, per the deferral rule.
+      Found by T3 round 1 (its Low-3).
+- [x] **L22 · a 126-character line in a file that wraps at ~100.** `calories.ts`'s
+      `timerIdleMs` ternary, measured against the file's next-longest line (100).
+      No prettier config exists, so eslint passed it — inconsistency, not a
+      violation. Wrapped. Found by T3 round 1 (its Low-4).

@@ -258,7 +258,20 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       **NOT measurable from the recorded clips:** they hold landmark OUTPUT, not
       video, so every candidate camera-stage fix needs FRESH recordings that
       capture video too. That is the instrument's main limit as built.
-- [ ] 🔴 **CALORIES BILL A MID-SET ABSENCE AS VIGOROUS EXERCISE — one rep's
+- [x] 🔴 **DONE 2026-08-15 — CALORIES BILL A MID-SET ABSENCE AS VIGOROUS
+      EXERCISE.** Closed on all three gates: the engine half (`cd6c6a7`,
+      DECISIONS :7404) and the API half (`faa7f06`, :7730) built it, the browser
+      SMOKE passed on Kd's own three workouts with the claim carried by the
+      STORED ROWS (:7929), and the fresh-chat **T3 round 1 found ZERO
+      Critical/High** (:7974) — so under :5348 rule 1 the packet ships and no
+      further round is owed. Its four Low findings are fixed in the closing
+      commit and logged as L19–L22 in `BACKLOG.md`; the one that needed no code
+      became its own OWED line below (the v1/v3 selection asymmetry).
+      **Full history kept below rather than summarised — this line took five
+      weeks and four measured design reversals, and the reasoning is the part a
+      later chat will need.**
+
+      **WAS: CALORIES BILL A MID-SET ABSENCE AS VIGOROUS EXERCISE — one rep's
       clock swallows the whole gap.** Found by **Kd's instinct** on the
       person-check smoke, 2026-08-10: 14 reps over a 2m41s workout reported
       **22 kcal**, and he asked whether that could be right. It is not.
@@ -385,7 +398,17 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       of a 3,400 ms rep is barely more of a measurement, and any higher floor is
       a NUMBER that R0.2 forbids a chat from picking — it goes to Kd on a table,
       the shape of :7037.
-- [ ] 🔴 **A MID-SET PAUSE IS BILLED AS SQUATTING — and the watched-time field
+- [x] 🔴 **DONE 2026-08-15 — A MID-SET PAUSE IS BILLED AS SQUATTING.** Built
+      exactly as the entry below describes (`8c2d204`, DECISIONS :7863): the
+      client tells the engine the feed stopped, which routes into the same
+      `loseSight()` path both blindness kinds already take. **SMOKE PASSED**
+      (:7929) — and the stored rows, not Kd's word, are what carry it: the
+      paused workout's sets LASTED 96 s and 94 s with the camera credited 30 s
+      and 31 s, so ~64 s per set was correctly thrown away. **T3 round 1 found
+      ZERO Critical/High** (:7974). Ticked together with the line above, which
+      is the same packet.
+
+      **WAS: A MID-SET PAUSE IS BILLED AS SQUATTING — and the watched-time field
       cannot see it.** **Found and MEASURED 2026-08-14 while building the API
       half above** (DECISIONS :7730), on the promise made to Kd in that card's
       plan that the pause question would be checked rather than assumed.
@@ -448,6 +471,31 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       trace must declare its expected timings, which is a card with a recording
       pass, not a fix. Found by T3 round 1 of the rep-timing card as its Low-3;
       logged as L14 in `BACKLOG.md`; DECISIONS :7487.
+
+- [ ] ⚪ **A PAYLOAD THAT REPORTS WATCHED TIME BUT NO REST TIME IS PRICED BY v1,
+      WHICH IGNORES WATCHED TIME.** Created 2026-08-15 by T3 round 1 of the
+      rep-timing packet (its Low-3; logged as L21 in `BACKLOG.md`).
+      `service.ts:85` selects the formula on `restSeconds` FIRST and only then
+      asks whether any set reported `watchedMs`, so a payload carrying the second
+      field without the first falls to `kcalPointForSets` — the v1 formula, which
+      has no parameter for watched time at all. **This is a missed upgrade, never
+      a wrong number**: the row is still stamped `kcal_calc_version` 1, so it
+      remains explicable from its own fields, which is the property the
+      payload-shape rule exists to hold (:5906).
+      **NOT REACHABLE TODAY, verified rather than assumed:** `ActiveWorkout.jsx`
+      sends `durationSeconds` and `restSeconds` unconditionally alongside the
+      sets (`:1074-1075`, read 2026-08-15), so no shipped client can produce the
+      shape. **The plausible producer is the P5 mobile client**, which will build
+      its own payload from the SQLite mirror and has no reason to inherit the
+      web's field ordering.
+      **NOT FIXED THIS ROUND deliberately** (:5348 rule 6 keeps a fix round to
+      the findings Kd approved, and the fix is a ruling about selection order,
+      not a typo): the honest options are to make v3 selectable on `watchedMs`
+      alone, or to reject the shape at the parse boundary, and choosing between
+      them is a decision about what a payload is allowed to omit. ⚪ because
+      nothing today can reach it. **Whoever writes the mobile sync path must
+      resolve this BEFORE the first payload ships**, or the field will be sent
+      and silently ignored.
 
 - [ ] 🔴 **A REST TAKEN IN FULL VIEW IS BILLED AS SQUATTING — if the knees are
       slightly bent.** **Found by Kd's question on 2026-08-11**, one day after his

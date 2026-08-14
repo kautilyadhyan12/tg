@@ -209,6 +209,22 @@ const MUTATIONS = [
     suites: ["engineTiming"],
   },
 
+  {
+    // Added 2026-08-15 by the T3 fix round, with the assertion it pins. The
+    // field's own comment claimed "asserted rather than assumed" and NOTHING
+    // asserted it: every sweep compared `watchedMs` to a span the TEST computed
+    // from the fixture, never to the summary's own `durationMs` — which is the
+    // number both readers clamp against. This mutant is the difference between
+    // the two claims: it leaves `watchedMs` untouched and collapses the span,
+    // so only a test comparing the two FIELDS can see it.
+    id: "M16",
+    claim: "the set's own span is measured from the FIRST frame, so watched time cannot exceed it",
+    file: "packages/engine/src/session.ts",
+    from: "    firstT ??= frame.t;",
+    to: "    firstT = frame.t;",
+    suites: ["engineTiming"],
+  },
+
   // ── the server's half of the same guarantee (no database needed) ──────────
   {
     id: "A1",
@@ -251,6 +267,21 @@ const MUTATIONS = [
       "      s.reps > 0 ? (s.tempoMsAvg !== null ? Math.min(watched, s.reps * s.tempoMsAvg) : watched) : 0;",
     to:
       "      s.tempoMsAvg !== null ? Math.min(watched, s.reps * s.tempoMsAvg) : watched;",
+    suites: ["apiCalories"],
+  },
+
+  {
+    // Added 2026-08-15 by the T3 fix round (its Low-2), with the test it pins.
+    // The budget cap on a LOG-ONLY set is new behaviour in v3 — v2 billed a
+    // hand-counted span in full and never trimmed it — and A1–A5 all sit on
+    // the engine-set branch, so nothing reached this line at all. It is on the
+    // always-mutated rows twice over (4a): a NUMBER A USER SEES, on the branch
+    // that prices the 55 exercises with no engine definition.
+    id: "A6",
+    claim: "a hand-counted set is billed against the workout's own timer too, not in full",
+    file: "apps/api/src/modules/workouts/calories.ts",
+    from: "      const metMs = Math.min(s.durationMs, remaining);",
+    to: "      const metMs = s.durationMs;",
     suites: ["apiCalories"],
   },
 

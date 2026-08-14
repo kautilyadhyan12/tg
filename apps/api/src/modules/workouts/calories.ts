@@ -183,7 +183,10 @@ export function kcalPointForSetsV3(
     idleSpanMs += watched - repMs;
     chargedMetMs += repMs;
   }
-  const timerIdleMs = budgetMs === Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : Math.max(0, budgetMs - chargedMetMs);
+  const timerIdleMs =
+    budgetMs === Number.POSITIVE_INFINITY
+      ? Number.POSITIVE_INFINITY
+      : Math.max(0, budgetMs - chargedMetMs);
   const idleMs = Math.min(idleSpanMs, timerIdleMs) + session.restSeconds * 1000;
   kcal += REST_MET * weight * (idleMs / 3_600_000);
   return Math.round(kcal);

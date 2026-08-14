@@ -1,6 +1,55 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: T3 RAN, ZERO Critical/High, THE PACKET SHIPS. BOTH 🔴 OWED LINES ARE
+      TICKED. The rep-timing + pause work is CLOSED.
+
+WHAT CLOSED, AND ON WHAT EVIDENCE
+  · Two OWED lines, open since 2026-08-10 and 2026-08-14: the mid-set ABSENCE
+    billed as exercise, and the mid-set PAUSE billed as squatting.
+  · All three gates discharged for BOTH: built (`cd6c6a7` engine, `faa7f06` API,
+    `8c2d204` pause) · browser SMOKE passed with the claim carried by the STORED
+    ROWS not by a screen (:7929) · fresh-chat T3, ZERO Critical/High (:7974).
+  · Four Low findings, all fixed this round, logged L19-L22 in BACKLOG.md. One
+    of them needed no code and became its own ⚪ OWED line instead.
+
+THE FINDING WORTH CARRYING FORWARD (L19, and it is mine)
+  · The `watchedMs` comment claimed "never more than the span … Asserted rather
+    than assumed". BOTH HALVES FALSE. `lastT` is stamped BEFORE the ingest check,
+    so an out-of-order frame moves the span backwards (probe: watched 8400 /
+    duration 1) — and every sweep in the file compared `watchedMs` to a span the
+    TEST computed from the fixture, never to the summary's OWN `durationMs`.
+  · **Those are different claims and only the second is what the server relies
+    on.** M16 is caught by the new test ALONE: 1 failed, 22 passed. The 22 are
+    the sweeps that looked like coverage. Expect this shape again.
+  · Second occurrence on this card, three lines from where L17 fixed the first.
+
+THINGS A LATER CHAT WILL OTHERWISE RE-DERIVE
+  · **The CI purity grep READS COMMENTS.** Naming the browser clock inside
+    `packages/engine/src` — even in prose explaining why the engine is pure —
+    fails the R5.1 gate. Describe it, do not name it. Caught by running the
+    Appendix grep, not by review.
+  · Seven of this card's findings across four rounds were in the APPARATUS, not
+    the shipped behaviour. Do not spend the next round on the code by reflex.
+  · A6 (log-only budget cap) and M16 are NEW in `tools/mutate-rep-timing.mjs`.
+
+MEASUREMENTS
+  · engine 213/213 · shared 48/48 · web 586/586 · api 444 of 445. The one red is
+    the PRE-EXISTING `db.migration.test.ts` timeout flake (own ⚪ OWED line, not
+    in this diff). tsc 0 · eslint 0 · I1 purity grep silent.
+  · Mutants: M16 RED · A6 measured ALIVE before its test, RED after. Completed
+    runs, targets byte-identical to snapshots.
+
+WHAT TO DO NEXT
+  1. The REST-IN-FULL-VIEW card (OWED, 🔴). It is BLOCKED on a Kd-ruled NUMBER —
+     still vs descending — which R0.2 forbids a chat from inventing. It goes to
+     him on a table, the shape of :7037. Do not start the code first.
+  2. Nothing else on this packet is owed. No re-review: a Low buys no round.
+
+NEXT TASK CARD: the rest-in-full-view ruling table for Kd.
+```
+
+```
 TASK: BOTH COMMITS ARE SMOKED AND PASSED. NEXT: T3 in a FRESH chat — the ONLY
       thing left. **Neither OWED line ticks until it runs.**
 

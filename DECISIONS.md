@@ -7970,3 +7970,101 @@ this query.
 
 **STILL NOT TICKED: T3 is unrun** — the browser gate is discharged for both
 commits, the independent review is not.
+
+## Rep timing + pause — T3 ROUND 1: ZERO Critical/High, the packet SHIPS, and both 🔴 lines TICK (2026-08-15)
+
+**Read before writing a comment that asserts an invariant, before trusting a
+sweep that compares a field to a number the TEST computed, and before adding a
+formula-selection branch keyed on one payload field.**
+
+The fresh-chat review covered both commits — the API half (`faa7f06`, :7730) and
+the pause fix (`8c2d204`, :7863). **Zero Critical/High, four Low.** Under :5348
+rule 1 the packet ships; no further round is owed. Kd approved the fix round
+before any file was touched. **The two 🔴 `OWED.md` lines tick here**: the
+mid-set absence line (open since 2026-08-10, Kd's instinct on the person-check
+smoke) and the mid-set pause line (opened 2026-08-14 by the API half's own
+measurement). All three gates are now discharged for both — built, smoked in a
+real browser with the claim carried by the STORED ROWS (:7929), reviewed.
+
+**EVERY FINDING WAS RE-VERIFIED AGAINST THE CODE BEFORE BEING ACTED ON.** A
+review is another chat's claim and V4 binds it like any other; two of the four
+were confirmed by running something rather than by reading.
+
+**L19 — MY OWN COMMENT CLAIMED AN INVARIANT THE CODE DOES NOT HAVE, AND CLAIMED
+IT WAS ASSERTED. Both halves false, and this is the SECOND occurrence on this
+card, three lines from where L17 corrected the first.** `session.ts` said
+`watchedMs` is "never more than the span by construction … Asserted rather than
+assumed". `lastT = frame.t` is stamped at `session.ts:202` BEFORE the ingest
+check, and an out-of-order frame is dropped with `visibilityOk` deliberately
+untouched (§3.1, `ingest.ts:48-53`) so nothing re-arms — the span moves
+BACKWARDS while watched time keeps what it accrued. Probe: clean clip watched
+8400 / duration 8400; one out-of-order final frame watched 8400 / duration 1.
+**And the "asserted" half was false in a way worth naming, because it is the
+shape that will recur: every sweep in the file compares `watchedMs` to a span
+the TEST computes from the fixture, and not one compares the two FIELDS OF THE
+SUMMARY to each other.** Those are different claims, and only the second is what
+the server relies on. Low on measured grounds — no browser client can reach the
+ordering (the web feed stamps frames from a monotonic clock) and both readers
+clamp to `durationMs` anyway — so no user can see a wrong number.
+**FIXED BOTH WAYS RATHER THAN BY DELETING THE CLAIM:** the comment now states
+its true scope and names the ordering it does not cover, AND a new test compares
+the two summary fields across the untouched clip, both blindness kinds at every
+frame boundary, and a pause declared and undeclared. **Mutant M16 pins it**
+(`firstT ??=` → `firstT =`, which collapses the span and leaves watched time
+alone) — **and M16 was measured to be caught by the NEW test ALONE: 1 failed, 22
+passed.** That number is the finding, not a footnote: the 22 are the sweeps that
+looked like coverage.
+
+**L20 — THE v3 BUDGET CAP ON A HAND-COUNTED SET WAS PROTECTED BY NOTHING, AND
+THE SWEEP HAD NO MUTANT FOR IT.** `const metMs = Math.min(s.durationMs,
+remaining)` (`calories.ts:173`) is new behaviour: v2 billed a log-only span in
+full and never trimmed it. Mutants A1–A5 all sit on the engine-set branch.
+**Measured before the fix rather than asserted: A6 came back `*** ALIVE ***`
+with `apiCalories: GREEN`.** It matters beyond its severity because the log-only
+branch is what prices the **55 exercises with no engine definition**. Low
+because the cap binds only when charged MET time approaches the whole timer,
+which an honest workout does not reach — on Kd's own smoke A it was 17.3 s
+against a 46 s budget. **Fixed:** a test pinning the cap (30 minutes claimed
+inside a 10-minute workout bills 70, not 210) and that sets SHARE one budget
+rather than each getting the whole timer; **A6 is now RED.** The review reported
+this under rule 4 (listed, not fixed); this round fixed it.
+
+**L21 — A PAYLOAD REPORTING WATCHED TIME BUT NO REST TIME PRICES AT v1, WHICH
+IGNORES THE FIELD.** `service.ts:85` selects on `restSeconds` first. The stamp
+stays v1, so the row remains explicable from its own fields (:5906's property
+holds) — a missed upgrade, never a wrong number. No client can produce the shape
+today (`ActiveWorkout.jsx:1074-1075` sends both unconditionally, read this
+session); the plausible producer is the P5 mobile client. **Deferred with its own
+`OWED.md` line in this commit**, because choosing between "select v3 on
+`watchedMs` alone" and "reject the shape at the parse boundary" is a ruling
+about what a payload may omit, not a typo (:5348 rule 6).
+
+**L22 — a 126-character line in a file whose next-longest is 100.** No prettier
+config exists, so eslint passed it. Wrapped.
+
+**THE PATTERN ACROSS THIS CARD'S FOUR ROUNDS, and it is now unmistakable: SEVEN
+of the findings were in the APPARATUS rather than in the shipped behaviour** —
+L13 a harness that did not exist, L15 one that could not fail, L16 a promise
+never asserted, L19 an assertion that compared the wrong two things, L20 a rule
+with no mutant. **The code kept being right and the instruments kept not
+knowing it.** :7634 named this at three; it is worth restating at five, because
+the next chat's instinct will be to spend the round on the code.
+
+**ONE THING THE FIX ROUND ITSELF PRODUCED, and it is R5.1's own trap:** the
+first draft of the L19 comment wrote the browser clock's NAME, which is a banned
+token under `packages/engine/src` — **the CI purity grep reads comments too**, so
+a comment explaining why the engine is pure would have failed the gate that
+enforces it. Caught by running the Appendix grep rather than by review. The
+clock is now described and not named, with a note saying why.
+
+**MEASUREMENTS** (all run this session, output read rather than piped —
+:5906's pipe defect). engine **213/213** (212 + the new test) · shared 48/48 ·
+web 586/586 · api **444 of 445**. The one red is the PRE-EXISTING
+`db.migration.test.ts` timeout flake against a database in another country,
+which has its own ⚪ `OWED.md` line and is not in this diff. tsc 0 · eslint 0 ·
+**I1 purity grep silent.** Mutants: **M16 RED · A6 ALIVE→RED**, both in
+completed runs, targets byte-identical to their pre-run snapshots; the hand-run
+M16 probe restored from a sha256-verified snapshot.
+
+**Escape hatch NOT armed** (:5348): it needs Criticals in the same subsystem two
+rounds running, and this round found none — as did :7634.

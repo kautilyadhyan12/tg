@@ -359,8 +359,27 @@ export function createSession(
       setIndex: config.setIndex,
       reps: fsm.reps,
       durationMs: Math.round(lastT - (firstT ?? lastT)),
-      // Never more than the span by construction: it accrues only between
-      // frames inside [firstT, lastT]. Asserted rather than assumed.
+      // Never more than the span, for every ordering a client can produce:
+      // watched time accrues only between frames ingest ACCEPTED, and those
+      // all sit inside [firstT, lastT]. Asserted rather than assumed — the
+      // absence sweep in `repTimingAbsence.test.ts` compares the two field to
+      // field at every position, so the claim fails here rather than in a
+      // stored row.
+      //
+      // THE ONE ORDERING IT DOES NOT COVER, said rather than glossed: `lastT`
+      // is stamped from every frame that ARRIVES, above, before ingest gets to
+      // drop it — so a final frame arriving OUT OF ORDER moves the span
+      // BACKWARDS while watched time keeps what it already accrued, and an
+      // out-of-order drop deliberately leaves `visibilityOk` alone (§3.1) so
+      // nothing re-arms. No browser client can reach it — the web feed stamps
+      // frames from a MONOTONIC clock, which cannot go backwards — and both
+      // readers clamp to `durationMs` regardless: the write boundary and
+      // `kcalPointForSetsV3`. (The clock is not named here on purpose: its name
+      // is one of R5.1's banned tokens, and the CI grep reads comments too.)
+      // Stated because the FIRST draft of this comment claimed an invariant
+      // the code does not carry, which is the defect class this repo has
+      // recorded more than any other, and it came back three lines from where
+      // L17 had just corrected it.
       watchedMs: Math.round(watchedMs),
       avgFormScore: avg,
       repScores,

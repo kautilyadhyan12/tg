@@ -396,6 +396,31 @@ describe("kcal v3 (Kd-ruled 2026-08-14: bill the time the camera WATCHED, guess 
     );
   });
 
+  it("bills a hand-counted set against the workout's own timer, and makes sets share it", () => {
+    // THE ONE v3 RULE NOTHING REACHED. v2 billed a log-only span in full and
+    // never trimmed it, so the budget cap on this branch is new behaviour —
+    // and every mutant on this file (A1–A5) sits on the ENGINE-SET branch, so
+    // removing the cap left the whole suite GREEN (measured ALIVE, 2026-08-15,
+    // before this test existed). It matters because the log-only branch is
+    // what prices the 55 exercises with no engine definition: a hand-counted
+    // set claiming half an hour inside a ten-minute workout is billed for ten.
+    const logOnly = {
+      met: 6,
+      durationMs: 1_800_000,
+      reps: 10,
+      tempoMsAvg: null,
+      logOnly: true,
+      watchedMs: null,
+    };
+    // 30 minutes claimed, 10 minutes of workout: 6×70×(600/3600) = 70, not 210.
+    expect(kcalPointForSetsV3([logOnly], 70, { restSeconds: 0, durationSeconds: 600 })).toBe(70);
+    // AND THE SETS SHARE ONE BUDGET rather than each getting the whole timer —
+    // two sets of 400 s inside a 600 s workout are billed 400 + 200, so the
+    // pair costs the same 70 as the single set above, not 93.
+    const half = { ...logOnly, durationMs: 400_000 };
+    expect(kcalPointForSetsV3([half, half], 70, { restSeconds: 0, durationSeconds: 600 })).toBe(70);
+  });
+
   it("falls back to 70 kg on null weight, exactly as v1 and v2 do", () => {
     const set = {
       met: 6,
