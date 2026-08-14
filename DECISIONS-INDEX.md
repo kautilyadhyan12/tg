@@ -220,6 +220,29 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:7575** — 2026-08-14 — **KD'S QUESTION: can one exercise's rules interfere
+  with another's? MEASURED — mostly no, and the "mostly" is ~20 squat-shaped
+  constants.** **Read before adding an exercise definition, before editing any
+  `export const` in `packages/engine/src/pipeline/`, and before building a second
+  rep mode.** ISOLATED, verified by command: the engine holds **zero**
+  module-level mutable state, names **no exercise** in any logic (R5.6 holding in
+  fact), and each definition carries its own `upAt`/`downAt`/`countOn`/
+  `minRepMs`/`maxRepMs`/`bilateralGate` — adding an exercise is adding a data
+  file. **THE ONE REAL PATH TO INTERFERENCE:** ~20 constants are shared by all 58
+  and their comments name `rep_counter.py` — squat-shaped numbers everything
+  inherits. Verified case: `Math.max(MIN_REP_INTERVAL_MS, config.minRepMs ?? 0)`
+  lets a definition make the rep gap only LONGER, so a fast exercise cannot go
+  below 450 ms without editing the constant every exercise reads. **The golden
+  traces CATCH that edit, they do not PREVENT it — and they assert NO timing**
+  (L14), so a duration-only shift passes green. **Remedy when first needed:
+  promote the constant into the definition schema with the engine value as
+  default; never retune the shared one** (R5.4, R5.7). **AND THE ONE A LATER CHAT
+  WOULD MISS: three of four rep modes do not exist and today's rep-timing fix does
+  NOT carry to them** — `session.ts:88` builds `ModeAFsm` unconditionally, so
+  hold/alternating-sides/cadence each need the lost-sight re-arm rule written
+  again. **A plank whose hold clock swallows an absence is Kd's defect again, in
+  the mode where it is worse** — a hold IS a duration, so no rep count exposes it.
+  Two `OWED.md` lines; no code changed.
 - **:7487** — 2026-08-14 — **REP TIMING, T3 ROUND 1: one Critical/High — a set
   could report ZERO seconds per rep, and the review's OWN proposed fix bills
   LESS.** **Read before changing what goes into `tempoMsAvg`, before quoting

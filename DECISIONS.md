@@ -7571,3 +7571,61 @@ nothing · **9 mutants, 9 RED, 0 ALIVE, 1 retired with its reason**, every TARGE
 byte-identical to its pre-run snapshot. **No payload shape changed**, so §2.4's
 byte-match gate and stored history are untouched. **The OWED line still does NOT
 tick: the API half is unwritten and the diff-only re-review is unrun.**
+
+## 2026-08-14 — KD'S QUESTION: can one exercise's rules interfere with another's? Measured — mostly no, and the "mostly" is ~20 squat-shaped constants
+
+**Read before adding an exercise definition, before editing any `export const`
+in `packages/engine/src/pipeline/`, and before building a second rep mode.**
+
+Kd, planning the run to 58 exercises: *"one exercise['s] rules should not
+interfere with other exercises etc i think you are understanding what i am
+saying"*. He is right that this is THE structural risk of the P4 volume phase, and
+the answer was measured rather than asserted (V1).
+
+**WHAT IS GENUINELY ISOLATED — three commands, three clean results.**
+(1) `grep -rnE "^(let|var) |^export (let|var) " packages/engine/src` returns
+**nothing**: the engine holds no module-level mutable state, so one set's session
+cannot leak into another's. (2) A grep for exercise names across
+`packages/engine/src` (excluding `definitions/`) returns **only comments** — no
+`if (exercise === ...)` anywhere, so **R5.6 is holding in fact and not just in
+policy**. (3) Each definition carries its own `upAt`, `downAt`, `countOn`,
+`minRepMs`, `maxRepMs`, `bilateralGate` (`fsm.ts:33-42`). **Adding an exercise is
+adding a data file, exactly as the spec intends.**
+
+**WHERE INTERFERENCE IS REAL, and it is one path.** ~20 constants are shared by
+every exercise and their own comments name `rep_counter.py` as the source — they
+are **squat-shaped numbers that all 58 will inherit**: `MIN_DOWN_FRAMES` 3,
+`MIN_UP_FRAMES` 2, `MIN_REP_INTERVAL_MS` 450, `BILATERAL_ENGAGE_ANGLE` 150,
+smoothing 7, `VIS_USABLE` 0.3, `STANDING_KNEE_MIN` 160, `NEUTRAL_SCORE` 80,
+`CORRECT_AT` 70 and the rest. **The concrete case, verified in the source:**
+`fsm.ts:116` computes `Math.max(MIN_REP_INTERVAL_MS, config.minRepMs ?? 0)`, so a
+definition can only make the gap between reps **LONGER** — a genuinely fast
+exercise cannot go below 450 ms without editing the constant every other exercise
+reads. **That edit is the interference, and it is the only path to it.**
+
+**THE PROTECTION IS PARTIAL AND THE DISTINCTION IS THE POINT: the golden traces
+CATCH such a change, they do not PREVENT it.** Squat's traces assert rep counts
+exactly, so a counting constant that moves goes loudly red — but `assertTrace`
+asserts **nothing about timing** (the same day's L14), so a shared constant that
+shifts durations only would pass green. **The remedy, when the first exercise
+actually needs a different value, is to promote that constant into the definition
+schema with the engine value as its default — never to retune the shared one**
+(R5.4 forbids re-deriving a ported constant, and R5.7 makes published definitions
+immutable). Not owed before exercise 4; owed before the first exercise that needs
+it.
+
+**AND THE ONE A LATER CHAT WOULD OTHERWISE MISS: three of the four rep modes do
+not exist, and today's rep-timing fix does NOT carry over to them.** `RepMode`
+declares `alternating_threshold | hold | alternating_sides | cadence`
+(`fsm.ts:28`) and `session.ts:88` constructs `ModeAFsm` **unconditionally** — only
+the first is built. Holds (plank), left-right alternating (lunges) and cadence
+each need a counter written, and **each must re-implement the rule that a rep's
+clock re-arms when the camera stops being able to watch** (:7404, :7487). That
+rule lives inside `ModeAFsm` and a sibling class inherits none of it. **A plank
+whose hold clock swallows a two-minute absence is Kd's own defect again, in the
+mode where it is arguably worse** — a hold IS a duration, so there is no rep count
+to make the error visible. Written down before those cards exist, because whoever
+writes the plank counter will not otherwise know this happened.
+
+**No code changed.** Both findings are `OWED.md` lines under "Phase-1 engine debt
+(blocks the P4 exercise line)", per the deferral rule, in the same commit.

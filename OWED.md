@@ -3060,6 +3060,58 @@ then; none may be hidden or reduced to close the gap.
       Recommendation on file: "Python rep score = min form_score within that
       rep's descent→completion window", asserted for squat only.
 
+### Adding exercises 4–58: what is genuinely shared, and can therefore interfere
+
+Raised by **Kd's question on 2026-08-14** — *"i will add all the 58 exercises and
+one exercise['s] rules should not interfere with other exercises"*. Recorded
+because he is right that this is the risk, and because **the answer is mostly
+reassuring and partly not**, which is exactly the shape that gets lost.
+**MEASURED that day, not reasoned** (commands in DECISIONS :7575):
+**what is genuinely isolated** — the engine declares **zero** module-level
+mutable state (`grep` for top-level `let`/`var` under `packages/engine/src`
+returns nothing), so one set's session cannot leak into another's; the engine
+names **no exercise** in any logic (R5.6 holds — the only hits are comments); and
+each definition carries its own `upAt`, `downAt`, `countOn`, `minRepMs`,
+`maxRepMs` and `bilateralGate`. Adding an exercise is adding a data file.
+
+- [ ] ⚪ **~20 ENGINE CONSTANTS ARE SHARED BY EVERY EXERCISE, AND THEY WERE PORTED
+      FROM THE SQUAT ANALYSER.** `MIN_DOWN_FRAMES` 3 · `MIN_UP_FRAMES` 2 ·
+      `MIN_REP_INTERVAL_MS` 450 · `BILATERAL_ENGAGE_ANGLE` 150 ·
+      `FSM_SMOOTHING_SAMPLES`/`SMOOTHING_WINDOW_FRAMES` 7 · `VIS_USABLE` 0.3 ·
+      `STANDING_KNEE_MIN` 160 · `NEUTRAL_SCORE` 80 · `CORRECT_AT` 70 and the rest
+      (`grep -rnE "^export const [A-Z_]+ =" packages/engine/src/pipeline/*.ts`).
+      Their own comments name `rep_counter.py` as the source, so **they are
+      squat-shaped numbers that all 58 exercises will inherit.** The concrete
+      case, verified: `fsm.ts` computes `Math.max(MIN_REP_INTERVAL_MS,
+      config.minRepMs ?? 0)`, so a definition can only make the gap between reps
+      LONGER — **a genuinely fast exercise cannot go below 450 ms without editing
+      the constant every other exercise reads.** That edit is the interference Kd
+      is asking about, and it is the one real path to it.
+      **THE PROTECTION EXISTS BUT IS PARTIAL, and the distinction matters: the
+      golden traces CATCH such a change, they do not PREVENT it** — squat's traces
+      assert rep counts exactly, so a counting constant that moves goes loudly red.
+      **They assert nothing about timing** (the L14 line above), so a shared
+      constant that shifts durations only would pass. **The fix, when the first
+      exercise actually needs it, is to promote that constant into the definition
+      schema with the engine value as the default** — never to retune the shared
+      one. Not owed before exercise 4; owed before the first exercise that needs a
+      different value, and R5.4 forbids re-deriving any of them meanwhile.
+- [ ] ⚪ **THREE OF THE FOUR REP MODES DO NOT EXIST, AND EACH WILL NEED ITS OWN
+      LOST-SIGHT HANDLING — today's rep-timing fix will NOT carry over to them.**
+      `RepMode` declares `alternating_threshold | hold | alternating_sides |
+      cadence` (`fsm.ts:28`), and `session.ts:88` constructs `ModeAFsm`
+      unconditionally: **only `alternating_threshold` is built.** So holds
+      (plank), left-right alternating (lunges) and cadence exercises each need a
+      counter written, and **each must re-implement the rule that a rep's clock
+      re-arms when the camera stops being able to watch** — the whole subject of
+      DECISIONS :7404 and :7487, which lives inside `ModeAFsm` and is not
+      inherited by a sibling class. Written down BEFORE those cards exist
+      precisely because whoever writes the plank counter will not otherwise know
+      this fix happened: a plank whose hold clock swallows a two-minute absence is
+      the same defect Kd found, in the mode where it is arguably worse. Part 2
+      §3.6 sequences the modes; §7.3's fixture matrix must cover an absence for
+      each new one.
+
 ## Open questions awaiting a Kd ruling (nothing built on these)
 
 - [ ] ❓ **Privacy-law scope beyond DPDP** (raised by Kd 2026-07-21). Should the
