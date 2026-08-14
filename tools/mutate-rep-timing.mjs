@@ -269,6 +269,22 @@ for (const m of selected) {
   console.log(`${m.id}: ${caught ? "RED (caught)" : "*** ALIVE ***"}  [${verdicts.join(" ")}]  ${m.claim}`);
 }
 
+// Safeguard 5: the LOOP must leave every TARGET clean BY ITSELF — and that is
+// measurable only BEFORE the final restore. Measured AFTER it, this compares the
+// snapshot against a copy of itself and can never fail: it printed
+// "byte-identical" unconditionally, and that line was quoted as evidence in a
+// commit message. Found by the diff-only re-review, BACKLOG L15 — the same class
+// as :5199 and :5748.
+//
+// This is NOT the per-mutant check in the loop, which has always been real. That
+// one only ever looks at the file THAT mutant named; this one covers every
+// target, so a mutation that writes somewhere it did not declare is caught here
+// and nowhere else. Never `git diff` — it answers a different question on a
+// branch with uncommitted work.
+const dirty = TARGETS.filter((f) => !readFileSync(resolve(ROOT, f)).equals(snapshot.get(f)));
+
+// The tree goes back to clean regardless of the verdict above, and before any
+// exit below — a failed sweep must not leave mutated source on disk.
 restoreAll();
 
 // Safeguard 4: attempted must equal what should have run.
@@ -277,18 +293,14 @@ if (attempted !== selected.length) {
   process.exit(2);
 }
 
-// Safeguard 5: byte-identical to the pre-run snapshot (never `git diff` — it
-// answers a different question on a branch with uncommitted work).
-const dirty = TARGETS.filter((f) => !readFileSync(resolve(ROOT, f)).equals(snapshot.get(f)));
-
 console.log("\n──────── summary ────────");
 for (const r of results) console.log(`${r.id.padEnd(4)} ${r.verdict.padEnd(14)} ${r.claim}`);
 const alive = results.filter((r) => r.verdict === "ALIVE");
 console.log(`\n${results.length - alive.length} caught · ${alive.length} ALIVE · ${attempted} applied`);
 console.log(
   dirty.length === 0
-    ? "every TARGET is byte-identical to its pre-run snapshot"
-    : `*** TARGETS NOT RESTORED: ${dirty.join(", ")} ***`,
+    ? "the mutation loop left every TARGET byte-identical to its pre-run snapshot"
+    : `*** THE LOOP LEFT THESE MODIFIED (restored before exit): ${dirty.join(", ")} ***`,
 );
 
 process.exit(alive.length > 0 || dirty.length > 0 ? 1 : 0);

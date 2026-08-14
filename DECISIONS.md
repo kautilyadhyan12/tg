@@ -7629,3 +7629,100 @@ writes the plank counter will not otherwise know this happened.
 
 **No code changed.** Both findings are `OWED.md` lines under "Phase-1 engine debt
 (blocks the P4 exercise line)", per the deferral rule, in the same commit.
+
+
+## 2026-08-14 — REP TIMING, THE DIFF-ONLY RE-REVIEW: ZERO Critical/High, the packet SHIPS — and both Lows were about EVIDENCE, not about the fix
+
+**Outcome: the round found zero Critical/High, so the packet ships (:5348 rule 1).**
+The escape hatch is NOT armed — that needs Criticals in the SAME subsystem two
+rounds running, and this round found none at all. **The `OWED.md` line still does
+NOT tick**: this closes the engine half's review, not the card. The API half (the
+watched-time payload field, §2.4 gate + migration) is untouched and still owed.
+
+**Both findings were Low, and both were about the INSTRUMENTS, not the fix.** That
+is worth naming, because it is now this card's pattern: L13 was a harness that did
+not exist, L15 is a harness safeguard that could not fail, L16 is a promise that
+was never asserted on the path the fix added. **Three rounds, three defects in the
+evidence rather than in the code.** The code has been right each time; what keeps
+failing is the apparatus that is supposed to PROVE it is right.
+
+### What was verified independently, rather than taken from the review
+
+The re-review arrived as a garbled paste (interleaved fragments; its line
+citations pointed past the end of the file it named — `mutate-rep-timing.mjs:571`
+in a 294-line file). **Every finding was therefore re-derived against the real
+files before anything was changed**, and two of the review's own claims were
+checked by measurement:
+
+- **M5's retirement was re-derived and CONFIRMED.** Deleting `this.cycleStartT =
+  null` from `loseSight()` leaves all 14 timing tests GREEN — exactly the
+  redundancy :7487 recorded, because `rearmCycleOnNextUsableFrame` re-pins the
+  clock at `fsm.ts:158` on the next usable frame regardless. The retired mutant is
+  retired for a real reason, not an unexamined one.
+- **The "no lost-sight handling" mutant was run in full** (`loseSight()` reduced to
+  the legacy no-op): **10 of 14 RED**, including the new L16 sweep. Confirms the
+  fix as a whole is load-bearing (:5348 rule 3).
+- A narrower mutant — `rearmCycleOnNextUsableFrame = false`, keeping the null-out —
+  fails ONLY the negative-timing guard, because it zeroes durations rather than
+  inflating them. **Recorded so a later chat does not mistake it for a billing
+  mutant**: it exercises the `cycleMinT`-predates-the-absence trap at `fsm.ts:152`,
+  and nothing else.
+
+### L15 — the safeguard that could not fail (fixed)
+
+Safeguard 5 restored every target and then compared those targets to the snapshot
+it had just restored them from. `dirty` was structurally always empty; the run
+always printed "every TARGET is byte-identical to its pre-run snapshot". **That
+sentence was quoted as evidence in the rep-timing fix commit and in the card's
+HANDOFF block.** The claim was true — the tree really was clean — but it was not
+EARNED, and :5199 / :5748 are the same class.
+
+**Proven both ways, same injected dirty file:** old order → "byte-identical",
+exit 0. New order → `*** THE LOOP LEFT THESE MODIFIED (restored before exit):
+packages/engine/src/pipeline/fsm.ts ***`, exit 1, **and the working tree clean
+afterwards** (`restoreAll()` still runs ahead of every exit path).
+
+**Not to be confused with the per-mutant check inside the loop, which was always
+real** — but that one only ever looks at the file its own mutant named. A mutation
+that writes somewhere it did not declare is caught by safeguard 5 and nowhere
+else, which is precisely the hole that was open.
+
+### L16 — the headline promise, untested on the path the fix added (fixed)
+
+The promise is "never bill more exercise than the camera watched" — `reps ×
+tempoMsAvg` ≤ watched time, the arithmetic `kcalPointForSetsV2` actually charges.
+**Every billing sweep in the file splices ONE absence into the two-rep clip, and
+one absence always leaves a rep watched end to end**, so the all-interrupted
+fallback :7487 added never runs under any of them. The three tests :7487 did add
+assert what the average EQUALS — a different claim, since an average can be
+well-formed and still bill more time than the camera ever saw.
+
+**This is :7487's own finding — that the FIXTURE's shape was the hole, not the
+assertions — one level up.** The same blind spot, one layer out.
+
+**Fixed** with a two-absence sweep: absence 1 pinned mid-descent of rep 1, absence
+2 walked across every remaining frame, both blindness kinds; it asserts its own
+fixture reaches an unmeasured rep BEFORE asserting the billing claim (:7298).
+**Non-vacuity proven two ways** — halving the budget yields 85 offenders, so the
+comparison computes real numbers rather than being structurally empty; and under
+the legacy no-op mutant it goes RED on its fixture guard, correctly refusing to
+pass vacuously. **The promise held before the test was written** — zero overbilled
+with absence 1 pinned and absence 2 walked across every remaining frame, both
+kinds. It simply was not pinned. **That is the sweep's actual shape, not every
+PAIR of positions**; the re-review quoted a differently-shaped sweep of its own
+and its count is deliberately not reproduced here (V1 — it was not run in this
+session).
+
+### The measurements this entry rests on
+
+`engine 204/204` (203 before; the +1 is L16's sweep) · `tsc --noEmit` exit 0 ·
+`eslint src test scripts` exit 0 · I1 purity grep silent · **mutation sweep 9 RED
+0 ALIVE, and its closing "byte-identical" line is now EARNED rather than
+decorative.** The web suite was NOT re-run: the diff touches no web file. **No app
+code changed at all** — the two fixes are one test file and one dev script, so the
+shipped fix is byte-identical to what the review passed.
+
+**A NOTE FOR WHOEVER TOUCHES THE FALLBACK NEXT.** Over-billing on that path is not
+hypothetical arithmetic. With 2 reps where one is unmeasured, the bill is `2 ×
+R` for a single watched remainder `R`, so anything that lets `R` exceed half the
+watched span overbills. Today it does not; the guard is what keeps it that way.

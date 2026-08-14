@@ -220,6 +220,28 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:7634** — 2026-08-14 — **REP TIMING, THE DIFF-ONLY RE-REVIEW: ZERO
+  Critical/High, the packet SHIPS — and BOTH Lows were about the EVIDENCE, not the
+  fix.** **Read before trusting any "byte-identical / all restored" line from a
+  mutation harness, before writing a rep-timing fixture, and before re-adding the
+  retired M5 mutant.** Escape hatch NOT armed (needs Criticals in the same
+  subsystem two rounds running; this round found none). **L15** — safeguard 5
+  restored every target then compared them to the snapshot it had just restored
+  from, so it printed "byte-identical" unconditionally, **and that sentence had
+  been quoted as evidence in the previous commit**; `dirty` is now computed BEFORE
+  `restoreAll()`, proven both ways with an injected dirty file (old order exit 0,
+  new order exit 1, tree clean after). **L16** — the headline promise ("never bill
+  more than the camera watched") was asserted nowhere on the all-interrupted
+  fallback :7487 added, because every billing sweep uses a ONE-absence clip which
+  always leaves a rep watched end to end; a two-absence sweep now pins it,
+  non-vacuity proven two ways. **THE PATTERN, NAMED: three rounds, three defects
+  in the apparatus rather than the code** (L13 a harness that did not exist, L15
+  one that could not fail, L16 a promise never asserted). **M5's retirement was
+  re-derived and CONFIRMED** — deleting `cycleStartT = null` leaves all 14 timing
+  tests green because `fsm.ts:158` re-pins anyway; do not re-add it. A NARROWER
+  mutant (`rearmCycleOnNextUsableFrame = false`) fails only the negative-timing
+  guard — it ZEROES durations, so it is not a billing mutant. 9 RED 0 ALIVE; no
+  app code changed; the `OWED.md` line does NOT tick (API half still owed).
 - **:7575** — 2026-08-14 — **KD'S QUESTION: can one exercise's rules interfere
   with another's? MEASURED — mostly no, and the "mostly" is ~20 squat-shaped
   constants.** **Read before adding an exercise definition, before editing any

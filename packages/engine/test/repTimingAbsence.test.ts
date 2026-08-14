@@ -476,4 +476,48 @@ describe("a rep the camera never watched is not a measurement", () => {
     const want = Math.round(measured.reduce((a, b) => a + b, 0) / measured.length);
     expect(g.tempoMsAvg, "the part-measured reps no longer set the set's rate").toBe(want);
   }, 60_000);
+
+  it("never bills more exercise than the camera watched, when sight is lost TWICE", () => {
+    // THE HEADLINE PROMISE OF THIS WHOLE CARD, on the one path the fix added.
+    //
+    // Every other billing sweep in this file splices ONE absence into the
+    // two-rep clip, and one absence always leaves a rep watched end to end — so
+    // the all-interrupted fallback never runs and the promise was never checked
+    // where the code is newest. The two tests above this one check what the
+    // average EQUALS, which is a different claim: an average can be perfectly
+    // well-formed and still bill more time than the camera ever saw. Found by
+    // the diff-only re-review as its Low-2 (BACKLOG L16); it is round 1's own
+    // finding — that the FIXTURE's shape was the hole — one level up.
+    //
+    // Same arithmetic the server actually charges (`reps × tempoMsAvg` at the
+    // exercise MET, `kcalPointForSetsV2`), against the time the engine could
+    // see: the span minus BOTH spliced absences.
+    const frames = squatFrames();
+    // Absence 1 mid-descent of rep 1, exactly as the test above places it, so
+    // rep 1 keeps a real watched remainder. Absence 2 then walks every frame
+    // after it, so the unmeasured rep arrives at many different points rather
+    // than the single hand-picked one.
+    const firstAt = Math.floor((repCompletionIndices(frames)[0] ?? 0) / 2);
+    const offenders: { kind: Lost; secondAt: number; billedMs: number; watchedMs: number }[] = [];
+    let unmeasured = 0;
+    for (const kind of ["blank", "occluded"] as const) {
+      for (let secondAt = firstAt + 1; secondAt < frames.length; secondAt++) {
+        const g = run(withTwoLostSights(frames, firstAt, secondAt, ABSENCE_MS, kind));
+        if (g.repDurations.includes(0)) unmeasured += 1;
+        const billedMs = g.reps * (g.tempoMsAvg ?? 0);
+        const watchedMs = g.spanMs - 2 * ABSENCE_MS;
+        if (billedMs > watchedMs) offenders.push({ kind, secondAt, billedMs, watchedMs });
+      }
+    }
+    // The fixture, asserted before the claim that rests on it (:7298). A sweep
+    // that never reaches an unmeasured rep would pass this test green while
+    // proving nothing at all — which is precisely how the one-absence sweeps
+    // missed the defect round 1 found.
+    expect(unmeasured, "no two-absence position leaves a rep unmeasured").toBeGreaterThan(0);
+    expect(
+      offenders.slice(0, 5),
+      `${String(offenders.length)} two-absence positions bill unwatched time as exercise ` +
+        `(worst first five shown)`,
+    ).toEqual([]);
+  }, 60_000);
 });

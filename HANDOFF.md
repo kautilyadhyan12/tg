@@ -1,6 +1,63 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: REP TIMING, THE ENGINE HALF IS REVIEWED AND SHIPS. NEXT: the API half.
+      **No further review round — the re-review found ZERO Critical/High.**
+
+WHAT IS DONE (this session)
+  · The diff-only re-review came back ZERO Critical/High ⇒ the packet SHIPS
+    (:5348 rule 1). Escape hatch NOT armed — that needs Criticals in the SAME
+    subsystem two rounds running, and this round found none at all.
+  · Two Low findings, BOTH about the INSTRUMENTS rather than the fix. Both FIXED
+    here and logged L15/L16 in BACKLOG.md. Neither took an OWED line — both were
+    fixed inside their own round.
+  · L15: the mutation harness's safeguard 5 COULD NOT FAIL — it restored every
+    target, then compared those targets to the snapshot it had just restored them
+    from, so it printed "byte-identical" unconditionally. **That sentence had been
+    quoted as evidence in the previous commit.** `dirty` is now computed BEFORE
+    `restoreAll()`; proven both ways with an injected dirty file (old order exit
+    0 and silent, new order exit 1 and named the file, tree clean afterwards).
+  · L16: the card's headline promise ("never bill more than the camera watched")
+    was asserted NOWHERE on the all-interrupted fallback :7487 added — every
+    billing sweep uses a ONE-absence clip, which always leaves a rep watched end
+    to end. A two-absence sweep now pins it; non-vacuity proven two ways.
+  · **The review arrived GARBLED** — interleaved fragments, and its line cites
+    pointed past the end of the file it named (`:571` in a 294-line file). Every
+    finding was re-derived against the real files before anything changed.
+  · engine 204/204 · tsc exit 0 · eslint exit 0 (scope `src test scripts`) · I1
+    purity grep silent · sweep 9 RED 0 ALIVE, its closing line now EARNED.
+  · Full record: DECISIONS :7634. NO payload shape changed. **NO app code changed
+    at all** — the two fixes are one test file and one dev script, so what ships
+    is byte-identical to what the review passed.
+
+WHAT TO DO NEXT, IN ORDER
+  1. **The API half**, carrying three items: the watched-time payload field (§2.4
+     gate + migration), and the all-interrupted set that still bills ~20% low
+     because half-measured reps set the rate at all — the one place Kd's ruled
+     part 2 is inverted.
+  2. The rest-in-full-view card (needs a Kd-ruled number: still vs descending).
+
+THINGS A LATER CHAT WILL OTHERWISE RE-DERIVE
+  · **M5's retirement was re-derived and CONFIRMED this session**: deleting
+    `cycleStartT = null` from `loseSight()` leaves all 14 timing tests GREEN,
+    because `rearmCycleOnNextUsableFrame` re-pins at `fsm.ts:158` regardless. It
+    is retired for a real reason — do not re-add it as a mutant.
+  · A NARROWER mutant — `rearmCycleOnNextUsableFrame = false` while KEEPING the
+    null-out — fails ONLY the negative-timing guard. It ZEROES durations rather
+    than inflating them, so it is NOT a billing mutant. Recorded so the next chat
+    does not mistake it for one.
+  · Over-billing on the fallback is REAL arithmetic, not hypothetical: with 2 reps
+    where one is unmeasured, the bill is `2 × R` for a single watched remainder
+    `R`, so anything letting `R` exceed half the watched span overbills. Today it
+    does not; L16's sweep is what keeps it shut.
+  · THREE OF FOUR REP MODES STILL DO NOT EXIST and inherit none of this (:7575's
+    closing note) — the plank counter must re-implement the re-arm rule itself,
+    and a hold has no rep count to make the error visible.
+
+NEXT TASK CARD: the API half, item 1 above.
+```
+
+```
 TASK: REP TIMING, T3 ROUND 1 IS FIXED. NEXT: the DIFF-ONLY re-review in a FRESH
       chat, then the API half. The OWED line does NOT tick.
 

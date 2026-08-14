@@ -354,3 +354,50 @@ was touched, deliberately — see L10.
       (:5348 rule 6 keeps a fix round to the fix; adding a field to the trace
       assertion layer means every golden trace must declare expected timings,
       which is a card). Found by T3 round 1 (Low-3); DECISIONS :7487.
+- [x] **L15 · the mutation harness's last safeguard could not fail.** Safeguard 5
+      restored every target from the snapshot and then, on the NEXT line, compared
+      those same targets to that same snapshot — so `dirty` was always empty and
+      the run always printed "every TARGET is byte-identical to its pre-run
+      snapshot", whatever had happened. That sentence was quoted as evidence in
+      the rep-timing fix commit and in the card's HANDOFF block, which is what
+      makes it worth a line: **the claim was true, but it was not EARNED, and the
+      instrument that was supposed to earn it was decorative.** :5199's and
+      :5748's class again, and the third time this card has produced one — L13
+      was the harness that did not exist, this is the harness that could not fail.
+      Low because nothing a user can see is affected and the tree really was clean
+      (verified by hand at the time). **Fixed:** `dirty` is computed BEFORE
+      `restoreAll()`, so it measures what the LOOP left; `restoreAll()` still runs
+      before every exit path, so a failed sweep never leaves mutated source on
+      disk; the message now says which files the loop left modified and that they
+      were restored. **Proven both ways 2026-08-14** — same injected dirty file,
+      old order: "byte-identical", exit 0; new order: `*** THE LOOP LEFT THESE
+      MODIFIED (restored before exit): packages/engine/src/pipeline/fsm.ts ***`,
+      exit 1, working tree clean afterwards. Note this is NOT the per-mutant check
+      inside the loop, which was always real — but that one only ever looks at the
+      file its own mutant named, so a mutation writing somewhere it did not
+      declare is caught by safeguard 5 and nowhere else. Found by the diff-only
+      re-review (Low-1).
+- [x] **L16 · the card's headline promise was untested on the one path the fix
+      added.** The promise is "never bill more exercise than the camera watched"
+      (`reps × tempoMsAvg` ≤ watched time, the arithmetic `kcalPointForSetsV2`
+      actually charges). Every billing sweep in `repTimingAbsence.test.ts` splices
+      ONE absence into the two-rep clip — and one absence always leaves a rep
+      watched end to end, so the all-interrupted fallback that round 1 added never
+      runs under any of them. The three tests round 1 did add check what the
+      average EQUALS, which is a different claim: an average can be perfectly
+      well-formed and still bill more time than the camera ever saw. **This is
+      round 1's own finding — that the FIXTURE's shape was the hole, not the
+      assertions — one level up.** Low because the promise does hold today, not
+      because it was checked: zero overbilled with absence 1 pinned mid-descent of
+      rep 1 and absence 2 walked across every remaining frame, both blindness
+      kinds. (**That is the sweep's actual shape, not every PAIR of positions** —
+      the re-review quoted a differently-shaped sweep of its own and its number is
+      deliberately not reproduced here.) **Fixed:** a two-absence billing sweep
+      that pins absence 1 mid-descent of rep 1 and walks absence 2 across every
+      remaining frame, asserting its own fixture reaches an unmeasured rep before
+      asserting the billing claim (:7298's rule against vacuous fixtures).
+      **Non-vacuity proven 2026-08-14**: halving the budget produces 85 offenders,
+      so the comparison computes real numbers; and with `loseSight()` reduced to
+      the legacy no-op the new test goes RED (on its fixture guard, correctly
+      refusing to pass vacuously) alongside 9 others. Found by the diff-only
+      re-review (Low-2).
