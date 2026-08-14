@@ -533,6 +533,29 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       the real descent out of every rep's duration, which §3.6 defines as part of
       it. **Kd ruled the split on 2026-08-11** (land the absence half, take this
       as its own card). DECISIONS :7404 records the measurement and the ruling.
+      **STATUS 2026-08-15 — THE CARD IS STARTED AND BLOCKED ON A RECORDING, NOT
+      ON A RULING. Do NOT re-run the measurement; it has been done.** The
+      instrument exists and is committed (`packages/engine/scripts/measure-rest.ts`,
+      typecheck+lint clean, and it ABORTS if declaring `stillness` moves the rep
+      count, so it cannot quietly measure a different engine from the shipped
+      one). Measured across the seven clips containing Kd: **none of them
+      contains a rest.** `me_standing` is UPRIGHT standing — 1 frame of 1,268 sits
+      at or below `upAt` — and the armed-not-repping stretches in every clean clip
+      are the ~0.2 s gaps BETWEEN reps, 8.5 s in total across six clips.
+      **THE TRAP, AND IT IS THE REASON THIS LINE SAYS "DO NOT RE-RUN":** priced
+      over all seven clips the table looks convincing — a cut-off costing 1% of
+      real-rep frames removes 9.0 s of 20.8 s. **12.4 s of that 20.8 s is
+      `me_and_furniture` ALONE**, the clip where the model draws the skeleton on
+      the chair (:6386), so those are not Kd's knees. Re-priced on the six clean
+      clips the same cut-off removes **0.0 s of 8.5 s**. A chat that runs the
+      instrument on everything and reads row 3 will hand Kd a confident table
+      built on furniture — :7037's "separation is not the outcome", one card over.
+      **WHAT UNBLOCKS IT:** `RUNBOOK/record-rest-clips.md` (written, committed,
+      unrun) — two ~2-minute clips, `rest_natural` and `rest_upright`, whose three
+      load-bearing instructions are that Kd must NOT pause, NOT leave the frame and
+      NOT end the set during the rest, since all three are already fixed and each
+      would hide the defect. **Kd deferred the recording on 2026-08-15** ("i think
+      it will be done later lets go to the next thing") — deferred, not declined.
 - [ ] ⚪ **A user the person check is WRONG about cannot take over the set.**
       "Count this set myself" is offered only on a frame GAP or a camera error
       (`ActiveWorkout.jsx`), and a blocked frame is not a gap — frames keep

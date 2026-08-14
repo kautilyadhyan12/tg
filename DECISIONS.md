@@ -8068,3 +8068,87 @@ M16 probe restored from a sha256-verified snapshot.
 
 **Escape hatch NOT armed** (:5348): it needs Criticals in the same subsystem two
 rounds running, and this round found none — as did :7634.
+
+## Rest-in-full-view: the instrument is built and the CLIPS DO NOT CONTAIN THE DEFECT — measured, and the all-clips table is a trap (2026-08-15)
+
+**Read before running `measure-rest.ts`, before quoting any row of its table, and
+before asking Kd to rule on a stillness cut-off.** No cut-off is chosen. No app
+code changed. `apps/web`, `apps/api` and `packages/engine/src` are untouched.
+
+**THE HEADLINE: the card is blocked on a RECORDING, not on a ruling.** The OWED
+line's plan — measure candidates on Kd's real clips, put a table showing the cost
+on both sides to him, he rules (:7404, the shape of :7037) — cannot execute,
+because the thirteen clips on the dev machine contain no rest. That is a
+measured fact, not an impression, and it is the reason this entry exists: the
+next chat must not repeat the measurement, and must not "improve" on it by
+splicing one.
+
+### What was measured
+
+`packages/engine/scripts/measure-rest.ts` (new; nothing else added). It replays a
+clip through the REAL compiled definition with `stillness` (§3.4 #21) added to
+the declared set, reconstructs the rep windows from public outputs only
+(`repCount` steps up, minus that rep's own `durationMs` — RepEvent carries no
+timestamp), and splits every armed frame into two piles: inside a counted rep
+(the HARM side) and armed-but-not-repping (the wrongly-billed side).
+
+**The instrument is pinned against measuring a different engine from the shipped
+one:** every clip is replayed TWICE, with and without the extra signal, and the
+run ABORTS if the rep count moves. It did not move on any clip.
+
+**Direction is inverted from the person gate and the file says so at the top.**
+The gate's signals read HIGHER for furniture and block on `>`; stillness reads
+LOWER the stiller you are and a re-arm fires on `<=`. `cutoffAtPersonCost` and
+its siblings encode the other direction and are deliberately NOT reused —
+borrowing them quietly is :6959's M9 (`>=` vs `>`) in a new place.
+
+| clip | reps | armed, not repping | longest unbroken |
+|---|---|---|---|
+| `me_squatting` | 13 | 58 frames / 3.1 s | 1.1 s |
+| `me_standing` | 0 | **1 frame** / 0.0 s | 0.0 s |
+| `me_and_furniture` | 3 | 178 frames / 12.4 s | 5.5 s |
+| `both_A`–`both_D` | 13/11/12/14 | 32/26/35/43 frames | **0.2 s each** |
+
+**`me_standing` is UPRIGHT standing** — one frame of 1,268 at or below `upAt`
+160, at 152.6°. The clip recorded to capture "Kd not moving" captures the
+harmless posture, which is exactly why the defect survived the session that
+produced it. **The `both_*` longest stretch is 0.2 s**: that is the gap BETWEEN
+two reps, not a rest.
+
+### THE TRAP, and it is the finding worth carrying forward
+
+Priced over all seven person clips the table is persuasive:
+
+| pinned at | cut-off | fires on real reps | rest time removed |
+|---|---|---|---|
+| 0.5% | 0.0141 | 0.54% | 5.4 s of 20.8 s |
+| **1.0%** | 0.0241 | 1.01% | **9.0 s of 20.8 s** |
+| 5.0% | 0.0513 | 5.05% | 10.5 s of 20.8 s |
+
+**12.4 s of that 20.8 s is `me_and_furniture` alone** — the clip where the model
+draws the skeleton on the chair (:6386), so those readings are not Kd's knees,
+and their very low stillness (median 0.0160 against 0.1134 in-rep) is furniture
+sitting still, which is the one thing furniture reliably does. **Re-priced on the
+six clean clips, the 1% cut-off removes 0.0 s of 8.5 s.** The benefit was
+entirely the confound.
+
+**So the standing lesson is :7037's, recurring one card later and from the other
+end: SEPARATION IS NOT THE OUTCOME — and a pile that separates beautifully may
+not be made of the thing you think it is.** There the cross-check killed a signal
+that scored as well as the winner; here it kills the winner's entire benefit. A
+chat that runs the instrument over every clip on the desktop and reads row 3 will
+hand Kd a confident table built on a chair. The OWED line now carries this in as
+many words, with "do NOT re-run" on it.
+
+### What unblocks it
+
+`RUNBOOK/record-rest-clips.md` — two ~2-minute clips (`rest_natural`,
+`rest_upright`), in the style of `measure-camera-accuracy.md`. **Three
+instructions in it are load-bearing and are called out as such: during the rest
+Kd must NOT pause, NOT walk out of frame and NOT end the set** — all three are
+already fixed, so any of them silently removes the defect being measured and
+turns a 10-minute recording into a wasted one. `rest_upright` is the control: if
+it prices the same as `rest_natural`, the explanation at :7404 is wrong.
+
+**Kd deferred the recording the same day** — *"i think it will be done later lets
+go to the next thing"*. Deferred, not declined; the OWED line stays 🔴 and open.

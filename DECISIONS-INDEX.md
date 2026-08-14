@@ -220,6 +220,28 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:8072** — 2026-08-15 — **REST-IN-FULL-VIEW: the instrument is built and KD'S
+  CLIPS DO NOT CONTAIN THE DEFECT — measured, and the all-clips table is a TRAP.**
+  **Read before running `measure-rest.ts`, before quoting any row of its table, and
+  before asking Kd to rule on a stillness cut-off.** The card is blocked on a
+  RECORDING, not on a ruling; **do NOT re-run the measurement and do NOT splice a
+  rest instead.** `measure-rest.ts` replays through the real definition with
+  `stillness` (§3.4 #21) declared, rebuilds rep windows from public outputs only,
+  and **ABORTS if the extra signal moves the rep count** (it did not). Direction is
+  INVERTED from the person gate — stillness fires on `<=`, so `cutoffAtPersonCost`
+  and siblings are deliberately not reused (:6959's M9 class). **Measured:
+  `me_standing` is UPRIGHT — 1 frame of 1,268 at or below `upAt` — and the
+  `both_*` armed-not-repping stretches are 0.2 s gaps BETWEEN reps.** **THE TRAP:
+  over all seven person clips a 1%-cost cut-off removes 9.0 s of 20.8 s, but
+  12.4 s of that 20.8 s is `me_and_furniture` ALONE — the chair-skeleton clip
+  (:6386) — and re-priced on the six clean clips the same cut-off removes 0.0 s of
+  8.5 s.** :7037's "separation is not the outcome" recurring from the other end: a
+  pile that separates beautifully may not be made of what you think. Unblocked by
+  `RUNBOOK/record-rest-clips.md` (written, unrun), whose three load-bearing
+  instructions are that Kd must NOT pause, NOT leave frame and NOT end the set
+  during the rest, since each is already fixed and would hide the defect. **Kd
+  deferred the recording the same day; the 🔴 OWED line stays open.** No cut-off
+  chosen, no app code changed.
 - **:7974** — 2026-08-15 — **REP TIMING + PAUSE, T3 ROUND 1: ZERO Critical/High,
   the packet SHIPS, and BOTH 🔴 `OWED.md` lines TICK.** **Read before writing a
   comment that asserts an invariant, before trusting a sweep that compares a field
