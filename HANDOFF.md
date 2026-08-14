@@ -1,6 +1,64 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: REST-IN-FULL-VIEW — the instrument is BUILT and the MEASUREMENT IS DONE.
+      The card is BLOCKED ON A RECORDING, not on a ruling. Committed at
+      `f50d350`. **NO NEXT CARD IS CHOSEN** — Kd was shown three candidates and
+      stopped before deciding. ASK HIM; do not pick for him.
+
+WHAT LANDED (`f50d350`, five files, ZERO app code — web/api/engine src untouched)
+  · `packages/engine/scripts/measure-rest.ts` — replays a clip through the REAL
+    compiled definition with `stillness` (§3.4 #21) declared, rebuilds rep
+    windows from public outputs only (`repCount` steps up, minus that rep's own
+    `durationMs` — RepEvent carries no timestamp), and splits armed frames into
+    in-rep (HARM) and armed-not-repping (the wrongly-billed side). It replays
+    every clip TWICE and ABORTS if the extra signal moves the rep count.
+  · `RUNBOOK/record-rest-clips.md` — WRITTEN, UNRUN. Two ~2-min clips.
+  · `OWED.md` rest line gets a STATUS block · `DECISIONS.md` :8072 · index line.
+
+THE FINDING, AND IT IS A TRAP THE NEXT CHAT WILL WALK INTO
+  · **Kd's thirteen clips contain NO rest.** `me_standing` is UPRIGHT — 1 frame
+    of 1,268 at or below `upAt` 160. The `both_*` armed-not-repping stretches
+    are **0.2 s** — the gap BETWEEN two reps, not a rest.
+  · **Priced over all seven person clips the table looks convincing**: a cut-off
+    costing 1% of real-rep frames removes 9.0 s of 20.8 s. **12.4 s of that
+    20.8 s is `me_and_furniture` ALONE** — the chair-skeleton clip (:6386) — so
+    those are not Kd's knees, and furniture's very low stillness (median 0.0160
+    vs 0.1134 in-rep) is furniture doing the one thing it reliably does.
+    **Re-priced on the six clean clips the same cut-off removes 0.0 s of 8.5 s.**
+  · So: run the instrument on everything, read row 3, and you hand Kd a
+    confident table built on a chair. :7037's "separation is not the outcome",
+    one card later and from the other end.
+  · **DO NOT re-run the measurement and DO NOT splice a rest instead.**
+
+THINGS A LATER CHAT WILL OTHERWISE RE-DERIVE
+  · Stillness fires on `<=` (lower = stiller) — the OPPOSITE direction to the
+    person gate, which blocks on `>`. `cutoffAtPersonCost` and its siblings
+    encode the other direction; reusing them is :6959's M9 in a new place.
+  · No shipped definition declares `stillness`, so the engine does not compute
+    it (I5). The instrument widens `declaredSignals` at measurement time only.
+  · Only **3** of 58 exercises have engine definitions, so this defect reaches
+    only the squat family today; the other 55 are hand-counted and priced off
+    the clock. Kd asked this explicitly and was told so.
+
+WHAT TO DO NEXT — ASK KD, HE HAS NOT RULED
+  1. **Dashboard stats** (`OWED` "THE DASHBOARD'S STATS HAVE NO NEW-API HOME") —
+     RECOMMENDED, and the recommendation was put to him unanswered. It is the
+     LAST of the three surfaces holding the legacy dual-write; after it, ONE more
+     card retires `completeSession` + `createSession` TOGETHER (they are coupled,
+     `OWED` says so in terms). Most of it is composing endpoints that exist.
+     Needs nothing from Kd until the smoke.
+  2. Pose model default + degradation ladder — feeds his "proper squat not
+     counted"; **likely needs him to record again**, which he has just parked.
+  3. The spoken coaching line — needs him to confirm what it says.
+  · The shallow-squat cue is NOT next: its own OWED line puts it DOWNSTREAM of
+    the pose-input work, because a cue attached to today's depth number would be
+    attached to fiction (:6386).
+
+NEXT TASK CARD: UNDECIDED — Kd's call between the three above.
+```
+
+```
 TASK: T3 RAN, ZERO Critical/High, THE PACKET SHIPS. BOTH 🔴 OWED LINES ARE
       TICKED. The rep-timing + pause work is CLOSED.
 
