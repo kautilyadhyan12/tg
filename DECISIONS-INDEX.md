@@ -220,6 +220,33 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:7487** — 2026-08-14 — **REP TIMING, T3 ROUND 1: one Critical/High — a set
+  could report ZERO seconds per rep, and the review's OWN proposed fix bills
+  LESS.** **Read before changing what goes into `tempoMsAvg`, before quoting
+  "null and 0 bill the same", and before writing a rep-timing fixture on the
+  two-rep clip.** A rep can be watched for literally no time (`fsm.ts` re-pins the
+  clock, the user returns already standing, the rep closes on that same frame —
+  `t - t`) and the all-interrupted fallback averaged that zero in: measured on the
+  one-rep clip, **reps 1, `tempoMsAvg` 0** against 3,400 ms clean, on BOTH paths.
+  **STANDING LESSON — the FIXTURE's shape was the hole, not the assertions:**
+  every sweep ran on the TWO-rep clip, where one absence interrupts at most one
+  rep, so a whole-watched rep always survived to set the rate and the fallback
+  branch was never evaluated. **THE REVIEW'S FIX WAS MEASURED AND REJECTED:**
+  `null` is identical to 0 only in the degenerate case; on a set shaped like Kd's
+  own smoke, **honest 10 kcal · today 8 · the review's null 6** through the real
+  `kcalPointForSetsV2`. Its "a null tempo is a shape no reader has seen" premise
+  is false too — `buildLogOnlySet` already ships `reps > 0` with a null tempo —
+  **so the defending comment was wrong twice, in opposite directions, and only one
+  error favoured the code it defended.** M9 pins the rejection. **Kd approved the
+  fix in plain words: a rep watched for NO time is not a measurement, so it is
+  dropped; the part-measured reps still set the rate.** **The audit retired its own
+  dead mutant** (M5, the `cycleStartT` re-pin, REDUNDANT with the bookkeeping's
+  `??=` — 67 ms on an unmeasured rep). Low ×3: **§3.1's count of three is enforced
+  TWICE and only the ingest half was pinned** (loosening the FSM's to 30 left all
+  199 green); the "6 mutants 6 RED" harness was never committed (:5199's class);
+  `assertTrace` covers no timing at all — own OWED line. engine 203/203 · 9
+  mutants 9 RED 0 ALIVE. **Does NOT close the ~20% under-bill on an
+  all-interrupted set — that needs a WATCHED-TIME payload field and is OWED.**
 - **:7404** — 2026-08-11 — **AN ABSENCE STOPS BEING BILLED AS EXERCISE (engine
   half) — and KD'S QUESTION FOUND THE SECOND WAY IN, which this does NOT close.**
   **Read before touching rep timing, before keying anything to "the camera lost

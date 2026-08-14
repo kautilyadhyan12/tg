@@ -333,12 +333,53 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       every frame valid, legs unmeasurable, **127,200 ms billed against 8,400 ms
       watched**, the same size as the absence and invisible to the committed
       sweep. Full record: DECISIONS :7404.
-      **WHAT IS STILL OWED ON THIS LINE, and it is two things:**
+      **STATUS 2026-08-14 — T3 ROUND 1 HAS RUN: ONE Critical/High, FIXED. The
+      line does NOT tick.** (DECISIONS :7487.) A rep can be watched for
+      literally NO time — the clock re-pins on the first usable frame and the
+      user returns already standing, so the rep closes on that same frame — and
+      the all-interrupted fallback averaged that zero in: measured on the one-rep
+      clip, **reps 1, `tempoMsAvg` 0** against 3,400 ms clean, on both paths. The
+      server reads `reps × tempoMsAvg` as exercise time, so a set containing a
+      real squat was billed as if nobody moved. **Fixed as Kd approved it in
+      plain words: a rep watched for no time is not a measurement, so it is
+      dropped from the average; the reps that WERE part-measured still set the
+      rate.** **The review's own proposed fix (`null`) was MEASURED AND
+      REJECTED** — on a set shaped like Kd's smoke, honest 10 kcal · today 8 ·
+      null 6. engine 203/203 · 9 mutants 9 RED 0 ALIVE (1 retired with its
+      reason) · Low ×3 as L12–L14 in `BACKLOG.md`.
+      **WHAT IS STILL OWED ON THIS LINE, and it is now THREE things:**
       (1) **the API half** — `kcalPointForSetsV2` still bills an unwatched
       stretch as IDLE at `REST_MET` rather than as nothing, because the on-screen
       timer does not stop when the camera stops seeing (a 2-minute absence is
       ~4 kcal at 70 kg instead of ~14, better but not right); its own step, its
-      own tests. (2) **T3 in a fresh chat** — engine, 🔴 tier.
+      own tests. (2) **the DIFF-ONLY re-review** (:5348 rule 2) — round 1's
+      findings are fixed and unreviewed. (3) **NEW, found by round 1 and not
+      closed by it: an all-interrupted set still bills ~20% low**, because
+      half-measured reps set the rate at all — **the one place Kd's ruled part 2
+      is inverted**, since that ruling exists precisely so a half-measured rep
+      cannot set the rate. Closing it honestly needs the engine to report **how
+      much of the set it actually WATCHED**, which is a new payload field (§2.4
+      byte-match gate + migration), so it belongs WITH the API half in (1) and
+      not in a fix round (:5348 rule 6). **The floor is `> 0` because that is
+      what Kd ruled in words** ("watched for no time at all"); a 100 ms remainder
+      of a 3,400 ms rep is barely more of a measurement, and any higher floor is
+      a NUMBER that R0.2 forbids a chat from picking — it goes to Kd on a table,
+      the shape of :7037.
+- [ ] 🟡 **THE GOLDEN-TRACE GATE CANNOT SEE REP TIMING AT ALL.** `assertTrace`
+      (`packages/engine/src/harness/assert.ts`) asserts rep count, fault
+      multiset, scores, hold time and phase sequence — and **nothing about
+      `durationMs` or `tempoMsAvg`**. So §7.4, the mechanism that is supposed to
+      make this engine safe to change, is structurally blind to the entire
+      subject of the two rep-timing cards above: every timing guarantee rests on
+      one hand-written test file, and a future change that silently doubles every
+      rep's reported duration replays all ten traces GREEN. **Pre-existing — not
+      introduced by either card**, and Low rather than 🔴 because nothing on
+      screen is wrong today. **Deferred out of the T3 fix round deliberately**
+      (:5348 rule 6): adding timing to the assertion layer means every golden
+      trace must declare its expected timings, which is a card with a recording
+      pass, not a fix. Found by T3 round 1 of the rep-timing card as its Low-3;
+      logged as L14 in `BACKLOG.md`; DECISIONS :7487.
+
 - [ ] 🔴 **A REST TAKEN IN FULL VIEW IS BILLED AS SQUATTING — if the knees are
       slightly bent.** **Found by Kd's question on 2026-08-11**, one day after his
       instinct found the absence defect above: he asked what happens when a user

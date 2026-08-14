@@ -1,6 +1,54 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: REP TIMING, T3 ROUND 1 IS FIXED. NEXT: the DIFF-ONLY re-review in a FRESH
+      chat, then the API half. The OWED line does NOT tick.
+
+WHAT IS DONE (this session)
+  · T3 round 1 found ONE Critical/High. Verified independently by reproduction
+    BEFORE any code changed, then fixed with a failing test first (R9.5).
+  · THE DEFECT: a rep can be watched for LITERALLY NO TIME (the clock re-pins on
+    the first usable frame; the user returns already standing; the rep closes on
+    that same frame). The all-interrupted fallback averaged that zero in ->
+    `reps 1, tempoMsAvg 0` on the one-rep clip, both paths. The server reads
+    `reps x tempoMsAvg` as exercise time, so a real squat billed as nothing.
+  · THE FIX (Kd approved it in plain words): a rep watched for no time is not a
+    measurement, so it is dropped from the average; the reps that WERE
+    part-measured still set the rate. ONE line in `session.ts`.
+  · **THE REVIEW'S OWN PROPOSED FIX WAS MEASURED AND REJECTED** — `null` instead.
+    Measured through the REAL `kcalPointForSetsV2` on a set shaped like Kd's
+    smoke: honest 10 kcal / today 8 / the review's null 6. Do not re-propose it.
+  · Low x3 fixed and logged L12-L14 in BACKLOG.md; L14 also took an OWED line.
+  · engine 203/203 - web 585/585 - tsc exit 0 - eslint exit 0 - I1 purity grep
+    prints nothing - 9 mutants 9 RED 0 ALIVE, restores byte-verified.
+  · Full record: DECISIONS :7487. NO payload shape changed.
+
+WHAT TO DO NEXT, IN ORDER
+  1. **DIFF-ONLY re-review in a FRESH chat** (:5348 rule 2) — cover ONLY these
+     fixes and the surfaces they touch. The ready-to-paste prompt was handed to
+     Kd with this work.
+  2. The API half — and it now carries a THIRD item: an all-interrupted set
+     still bills ~20% low because half-measured reps set the rate at all, which
+     is the one place Kd's ruled part 2 is inverted. Needs a WATCHED-TIME
+     payload field (§2.4 gate + migration), so it belongs with the API half.
+  3. The rest-in-full-view card (needs a Kd-ruled number: still vs descending).
+
+THINGS A LATER CHAT WILL OTHERWISE RE-DERIVE
+  · The FIXTURE's shape was the hole, not the assertions: every sweep ran on the
+    TWO-rep clip, where one absence interrupts at most ONE rep, so a
+    whole-watched rep always survived and the fallback branch never ran.
+  · §3.1's count of three is enforced TWICE (ingest for frames that do not
+    arrive, fsm for frames with no usable metric). Only the first was pinned;
+    loosening the FSM's to 30 left all 199 tests green. Now both, mutant M8.
+  · M5 (the `cycleStartT` re-pin) is RETIRED WITH ITS REASON: redundant with the
+    bookkeeping's `cycleStartT ??= t`, worth 67 ms on an already-unmeasured rep.
+  · The floor is `> 0` because that is Kd's wording. A higher floor is a NUMBER
+    (R0.2) and goes to him on a table, the shape of :7037.
+
+NEXT TASK CARD: the diff-only re-review, step 1 above.
+```
+
+```
 TASK: THE ABSENCE FIX IS DONE (engine half, test green). NEXT: T3 in a FRESH
       chat, then the API half. **Kd found a SECOND defect of the same family
       during this session — it has its own OWED line and its own card.**

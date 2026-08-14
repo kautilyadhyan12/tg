@@ -284,14 +284,30 @@ export function createSession(
     // a quieter under-count (Kd found this in the one-part design, 2026-08-11).
     // So the average is taken over the reps watched end to end, and the
     // interrupted one is billed at the rate of the reps we actually saw.
-    // If NONE was watched whole, the watched parts are all there is — still
-    // better than reporting nothing, which would bill zero exercise time and
-    // hand every reader a shape it has never seen (reps > 0 has always implied
-    // a tempo).
+    // If NONE was watched whole, the watched parts are all there is. Reporting
+    // nothing instead bills LESS: measured through the real `kcalPointForSetsV2`
+    // on a set shaped like Kd's own smoke (14 reps, 161 s) — honest 10 kcal ·
+    // part-measured 8 · null 6. (The reader-shape argument this comment used to
+    // make was FALSE and is struck: `reps > 0` with a null tempo already ships on
+    // every hand-counted set — `buildLogOnlySet` emits exactly that — and every
+    // schema, the column and the API are nullable. Only the BILLING justifies the
+    // fallback, so only the billing is claimed here.)
+    //
+    // A rep watched for NO TIME AT ALL is excluded even from that fallback,
+    // because it is not a measurement — it is a rep nobody timed. It arises when
+    // sight returns on the very frame the rep completes: `fsm.ts` re-pins the
+    // clock to `t` and the rep closes at `t`, so the watched remainder is `t - t`.
+    // Averaging it in reported "0 ms per rep" for a set that really contained
+    // reps, and `kcalPointForSetsV2` reads that as nobody having exercised —
+    // measured on this package's own clip truncated to one rep: reps 1,
+    // tempoMsAvg 0, against 3,400 ms clean. Dropped HERE and not in `fsm.ts`
+    // because 0 is an honest DURATION for that rep; it is worthless only as a
+    // RATE. (T3 round 1 of this card, 2026-08-14.)
     const wholeTempos = repEvents
       .filter((_, i) => repInterrupted[i] !== true)
       .map((r) => r.durationMs);
-    const tempos = wholeTempos.length > 0 ? wholeTempos : repEvents.map((r) => r.durationMs);
+    const partMeasured = repEvents.map((r) => r.durationMs).filter((d) => d > 0);
+    const tempos = wholeTempos.length > 0 ? wholeTempos : partMeasured;
     ended = {
       exercise: config.exercise,
       setIndex: config.setIndex,

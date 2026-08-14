@@ -323,3 +323,34 @@ was touched, deliberately — see L10.
       can see it, and the assertions themselves were sound. **The lesson is the
       instrument — a green vitest run is not evidence that a test file
       compiles.** Fixed in the rep-timing fix commit; DECISIONS :7404.
+- [x] **L12 · §3.1's count of three is enforced TWICE, and only one half was
+      pinned.** `ingest.ts` applies it to frames that do not ARRIVE; `fsm.ts`
+      applies it to frames that arrive carrying no usable METRIC (the occluded
+      path). **Measured 2026-08-14: loosening the FSM's own threshold tenfold
+      (`>= INVALID_STREAK_FOR_VISIBILITY` → `>= 30`) left all 199 tests GREEN**,
+      because the blink test — the one test whose whole subject is that boundary
+      — fed only blank frames and so exercised the ingest counter alone. Nothing
+      on screen was wrong, which is why it is Low: the shipped value is correct
+      and matches `sessionController.js`'s own `METRIC_UNUSABLE_STREAK = 3`. The
+      trap is for whoever changes it next, with a green suite telling them
+      nothing. **Fixed:** the blink test now runs over BOTH kinds via `it.each`,
+      and mutant **M8** is RED. Found by T3 round 1 (Low-1); DECISIONS :7487.
+- [x] **L13 · the card's "6 mutants, 6 RED" rested on a harness that was never
+      committed.** :5199's class, and the exact failure `DECISIONS :6532` was
+      written about — an evidence claim whose instrument cannot be re-run is not
+      evidence. `tools/` held two harnesses (duration-kcal, workout-summary),
+      neither for this card. **Fixed:** `tools/mutate-rep-timing.mjs`, carrying
+      the same five safeguards, EOL-normalising anchors per file (:4267), and
+      running 9 mutants over engine-only suites — no DB mutant, per the
+      severity-scoping rule 4a, since this card changes no server behaviour.
+      Found by T3 round 1 (Low-2); DECISIONS :7487.
+- [ ] **L14 · `assertTrace` is structurally blind to rep TIMING.** It asserts rep
+      count, fault multiset, scores, hold time and phase sequence — and nothing
+      about `durationMs` or `tempoMsAvg`. So the §7.4 golden gate, the mechanism
+      that is supposed to make this engine safe to change, cannot see the entire
+      subject of this card: every timing guarantee here rests on one hand-written
+      test file. Pre-existing and NOT introduced by this card. **NOT fixed in this
+      round and therefore promoted to a deferral with its own `OWED.md` line**
+      (:5348 rule 6 keeps a fix round to the fix; adding a field to the trace
+      assertion layer means every golden trace must declare expected timings,
+      which is a card). Found by T3 round 1 (Low-3); DECISIONS :7487.

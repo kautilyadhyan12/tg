@@ -7483,3 +7483,91 @@ ABORTED on its first run rather than reporting a pass** — anchors written with
 `\n` against CRLF files matched nothing — which is :4267's rule and :5199's
 abort working together. **THE OWED LINE DOES NOT TICK: the API half is unwritten
 and T3 is unrun.**
+
+## 2026-08-14 — REP TIMING, T3 ROUND 1: one Critical/High — a set could report ZERO seconds per rep, and the review's own fix for it bills LESS
+
+**Read before changing what goes into `tempoMsAvg`, before quoting "null and 0
+bill the same", and before writing a rep-timing fixture on the two-rep clip.**
+
+**THE FINDING, reproduced before a line was changed.** A rep can be watched for
+literally no time: `fsm.ts` re-pins the clock on the first usable frame, and if
+the user returns already standing the rep completes on that SAME frame — `t - t`.
+`session.ts`'s all-interrupted fallback then averaged that zero in. Measured on
+this package's own clip truncated to one rep: **reps 1, `tempoMsAvg` 0**, against
+3,400 ms clean — on BOTH paths (blank and occluded), at the frame rep 1
+completes. `kcalPointForSetsV2` reads `reps × tempoMsAvg` as the exercise time, so
+a set that really contained a squat was billed as if nobody moved.
+
+**WHY NO SWEEP COULD SEE IT, and this is the standing lesson: every test in the
+file ran on the TWO-REP clip, where one absence interrupts at most ONE rep.** A
+rep watched end to end therefore always survived to set the rate, and the
+fallback branch was never evaluated — measured, no position in either sweep
+produces a `tempoMsAvg` of 0. **The fixture's shape, not the assertions, was the
+hole.** The new tests run a ONE-rep clip (derived, never a pinned index) and a
+two-absence construction, and both assert their own precondition first.
+
+**THE REVIEW'S PROPOSED FIX WAS MEASURED AND REJECTED.** It argued for
+`tempoMsAvg: null` on the premise that "null and 0 produce identical billing".
+That is true only of the degenerate zero; in the general all-interrupted case the
+fallback bills strictly more and closer to the truth. Measured through the REAL
+`kcalPointForSetsV2` on a set shaped like Kd's own smoke (14 reps, 161 s, squat
+MET 6.0, 70 kg): **honest 10 kcal · today's fallback 8 · the review's null 6.**
+Its second premise — that a null tempo is "a shape no reader has seen" — is
+false in the other direction and the comment asserting it is STRUCK IN PLACE:
+`buildLogOnlySet` already emits `reps > 0` with `tempoMsAvg: null` on every
+hand-counted set, and `events.ts:85`, `workouts.ts:106` and the
+`tempo_ms_avg` column are all nullable. **So the comment was wrong twice, in
+opposite directions, and only one of the two errors favoured the code it
+defended.** Mutant M9 pins the rejection: reverting to `null` goes RED.
+
+**THE FIX, Kd-approved in plain words before any code: a rep the camera watched
+for NO time is not a measurement, so it is dropped from the average; the reps
+that WERE part-measured still set the rate.** One line in `session.ts`. It
+removes the impossible number, can never LOWER the average, and changes billing
+in the measured case not at all (0 → 0). Dropped there and not in `fsm.ts`
+because 0 is an honest DURATION for that rep — it is worthless only as a RATE.
+
+**WHAT THIS DOES NOT FIX, and it has an `OWED.md` line rather than a silence:**
+an all-interrupted set still bills ~20% low, because half-measured reps set the
+rate at all. Kd's ruled part 2 says a half-measured rep must not — and the
+fallback is the one place that ruling is inverted. Closing it honestly needs the
+engine to report **how much of the set it actually WATCHED**, which is a new
+payload field (§2.4 byte-match gate, migration, the API half) and therefore not a
+fix-round change (:5348 rule 6). **Related and NOT invented here:** the floor is
+`> 0` because that is what Kd ruled in words ("watched for no time at all"); a
+100 ms remainder of a 3,400 ms rep is barely more of a measurement, and any
+higher floor is a NUMBER, which R0.2 forbids a chat from picking.
+
+**THE AUDIT FOUND ITS OWN DEAD MUTANT — and it is the one the previous round
+would have counted as protection.** `M5`, the `cycleStartT = t` half of the
+re-pin, is ALIVE in two forms (`= t` → `??= t`, and deleting the line outright)
+and is **REDUNDANT, not untested**: the cycle bookkeeping thirty lines below runs
+`this.cycleStartT ??= t` on every frame at or below `upAt`. The only case the
+explicit line changes is a user returning ABOVE the top threshold, where it buys
+one frame (67 ms) on a rep that is unmeasured either way. **Retired with its
+reason rather than faked green** (:5618 M6, :7104 PG14). The `cycleMinT` half of
+the same block IS load-bearing — that is M4, RED.
+
+**THE THREE LOW FINDINGS, all real, all fixed, logged as L12–L14 in `BACKLOG.md`.**
+The one with teeth is **L12: §3.1's count of three is enforced TWICE** — by
+`ingest.ts` on frames that do not arrive and by `fsm.ts` on frames carrying no
+usable metric — **and only the first was pinned.** Measured: loosening the FSM's
+own threshold tenfold (`>= 3` → `>= 30`) left all **199** tests green, because
+the blink test fed only blank frames. It now runs over BOTH kinds and mutant M8
+is RED. **L13: the card's "6 mutants, 6 RED" rested on a harness that was never
+committed** — :5199's class, the exact thing :6532 was written about — now
+`tools/mutate-rep-timing.mjs`. **L14** (`assertTrace` asserts reps, faults,
+scores, hold and phase and NOTHING about `durationMs` or `tempoMsAvg`, so the
+§7.4 golden gate is structurally blind to this whole card's subject) is
+pre-existing and structural: it takes an `OWED.md` line rather than a fix round.
+
+**ONE CORRECTION TO THE REVIEW'S OWN NUMBERS**, per V1: it reported `tools/`
+holding three harnesses (duration-kcal, workout-summary, discriminators). It
+holds **two** — neither for this card, which is what made L13 true.
+
+engine **203/203** (199 + 3 new + the blink test split across two kinds) ·
+web 585/585 · `tsc --noEmit` exit 0 · eslint exit 0 · I1 purity grep prints
+nothing · **9 mutants, 9 RED, 0 ALIVE, 1 retired with its reason**, every TARGET
+byte-identical to its pre-run snapshot. **No payload shape changed**, so §2.4's
+byte-match gate and stored history are untouched. **The OWED line still does NOT
+tick: the API half is unwritten and the diff-only re-review is unrun.**

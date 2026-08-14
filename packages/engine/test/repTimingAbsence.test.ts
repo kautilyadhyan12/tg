@@ -153,8 +153,10 @@ describe("an absence is not exercise", () => {
     // The same defect stated as the thing a user could read on a set: a single
     // rep credited with minutes. Kept separate from the billing claim above
     // because a future fix could make the totals honest while still reporting one
-    // absurd rep — the tempo of a set is shown, and :5807 makes a wrong number on
-    // screen Critical whatever the totals do.
+    // absurd rep. `tempoMsAvg` is not rendered by any screen today (grepped
+    // 2026-08-14: `apps/web` reads it nowhere) — it is STORED and SERVED, so a
+    // wrong value here is a wrong number waiting for its first reader, and it
+    // drives the billed rep time in `kcalPointForSetsV2` right now.
     const frames = squatFrames();
     const worst = frames.slice(1).reduce<number>((max, _f, i) => {
       const gapped = run(withAbsence(frames, i + 1, ABSENCE_MS));
@@ -322,25 +324,156 @@ describe("what the fix must NOT change", () => {
     }
   }, 60_000);
 
-  it("ignores a blink — two unusable frames re-arm nothing, three do", () => {
-    // A gate lives in its tails and so must its test (:7298). Two frames is
-    // below §3.1's count of three, so nothing may be re-armed: a short gap only
-    // ADDS wall time, and no rep may come back SHORTER than it was clean.
-    const frames = squatFrames();
-    const clean = run(frames);
-    const shortened = (gapFrames: number): { at: number; rep: number }[] => {
-      const hits: { at: number; rep: number }[] = [];
-      for (let at = 1; at < frames.length; at++) {
-        const g = run(withLostSight(frames, at, gapFrames * FRAME_MS, "blank"));
-        g.repDurations.forEach((d, i) => {
-          if (d < (clean.repDurations[i] ?? Number.POSITIVE_INFINITY)) hits.push({ at, rep: i });
-        });
+  // BOTH KINDS, and the occluded half is the point. §3.1's count of three is
+  // enforced TWICE — once by `ingest.ts` on frames that do not arrive, once by
+  // `fsm.ts` on frames that arrive carrying no usable metric — and only the
+  // first was pinned. Measured 2026-08-14: loosening the FSM's own threshold
+  // tenfold (`>= 3` to `>= 30`) left all 199 tests green, so the occluded path's
+  // boundary was an unowned number. (T3 round 1 of this card, Low-1.)
+  it.each(["blank", "occluded"] as const)(
+    "ignores a blink — two unusable %s frames re-arm nothing, three do",
+    (kind) => {
+      // A gate lives in its tails and so must its test (:7298). Two frames is
+      // below §3.1's count of three, so nothing may be re-armed: a short gap only
+      // ADDS wall time, and no rep may come back SHORTER than it was clean.
+      const frames = squatFrames();
+      const clean = run(frames);
+      const shortened = (gapFrames: number): { at: number; rep: number }[] => {
+        const hits: { at: number; rep: number }[] = [];
+        for (let at = 1; at < frames.length; at++) {
+          const g = run(withLostSight(frames, at, gapFrames * FRAME_MS, kind));
+          g.repDurations.forEach((d, i) => {
+            if (d < (clean.repDurations[i] ?? Number.POSITIVE_INFINITY)) hits.push({ at, rep: i });
+          });
+        }
+        return hits;
+      };
+      expect(shortened(2).slice(0, 5), `a two-frame ${kind} blink re-armed a rep's clock`).toEqual(
+        [],
+      );
+      // …and the same sweep one frame longer MUST re-arm something, or the claim
+      // above is satisfied by a fix that does nothing at all.
+      expect(shortened(3).length, `three unusable ${kind} frames re-armed nothing`).toBeGreaterThan(
+        0,
+      );
+    },
+    60_000,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// THE CASE EVERY SWEEP ABOVE IS STRUCTURALLY BLIND TO — found by the T3 review
+// of the fix itself (2026-08-14) and reproduced before a line was changed.
+//
+// Every test above runs on the two-rep clip, where ONE absence can interrupt at
+// most ONE rep. So a rep watched end to end always survives to set the rate, and
+// `session.ts`'s all-interrupted fallback is never evaluated: measured, no
+// position in either sweep produces a `tempoMsAvg` of 0.
+//
+// A rep can be watched for LITERALLY NO TIME. The clock re-pins on the first
+// usable frame (`fsm.ts`), and if the user returns already standing the rep
+// completes on that SAME frame — `t - t`. Measured on this clip, truncated to
+// one rep: reps 1, tempoMsAvg 0, against 3,400 ms clean. That zero is not a fast
+// squat; it is a squat nobody timed, and `kcalPointForSetsV2` then bills the
+// whole set as rest.
+// ---------------------------------------------------------------------------
+
+/** The frame index at which each rep completes on the clean clip. DERIVED, never
+ *  pinned: a hard-coded index quietly stops meaning "rep N" the moment the clip
+ *  or the definition changes, and the fixture would go vacuous without saying so. */
+function repCompletionIndices(frames: readonly PoseFrame[]): readonly number[] {
+  const session = squatSession();
+  const at: number[] = [];
+  let seen = 0;
+  for (let i = 0; i < frames.length; i++) {
+    const f = frames[i];
+    if (f === undefined) continue;
+    const { repCount } = session.processFrame(f);
+    if (repCount > seen) {
+      seen = repCount;
+      at.push(i);
+    }
+  }
+  return at;
+}
+
+/** The same recording truncated the moment rep 1 completes — a ONE-rep set, so
+ *  losing sight once is enough to leave no rep watched end to end. */
+function oneRepFrames(): readonly PoseFrame[] {
+  const frames = squatFrames();
+  const at = repCompletionIndices(frames)[0];
+  return frames.slice(0, (at ?? 0) + 1);
+}
+
+/** Two absences in one clip. The later is spliced FIRST so the earlier index
+ *  still addresses the frame it named. */
+function withTwoLostSights(
+  frames: readonly PoseFrame[],
+  firstAt: number,
+  secondAt: number,
+  gapMs: number,
+  kind: Lost,
+): readonly PoseFrame[] {
+  return withLostSight(withLostSight(frames, secondAt, gapMs, kind), firstAt, gapMs, kind);
+}
+
+describe("a rep the camera never watched is not a measurement", () => {
+  it("has a one-rep fixture that really does reach the unmeasured case", () => {
+    // THE PRECONDITION, asserted rather than assumed. Both claims below are
+    // worthless if the fixture stops producing a rep of zero watched duration,
+    // and this is an FSM fact — unchanged by the session-level fix — so it pins
+    // the fixture on the boundary from both sides of that fix (:7298).
+    const oneRep = oneRepFrames();
+    expect(run(oneRep).reps, "the truncated clip is no longer a one-rep set").toBe(1);
+    const zeroWatched = [...Array(oneRep.length - 1).keys()]
+      .map((i) => i + 1)
+      .filter((at) => run(withLostSight(oneRep, at, ABSENCE_MS, "blank")).repDurations.includes(0));
+    expect(zeroWatched.length, "no absence position leaves a rep with zero watched time").toBeGreaterThan(0);
+  }, 60_000);
+
+  it("never reports a set average of zero for a set that counted reps", () => {
+    // THE CLAIM. "0 ms per rep" is not a slow reading or a fast one — it is
+    // impossible, and the server reads it as "nobody exercised".
+    const oneRep = oneRepFrames();
+    const offenders: { kind: Lost; at: number; reps: number }[] = [];
+    for (const kind of ["blank", "occluded"] as const) {
+      for (let at = 1; at < oneRep.length; at++) {
+        const g = run(withLostSight(oneRep, at, ABSENCE_MS, kind));
+        if (g.reps > 0 && g.tempoMsAvg === 0) offenders.push({ kind, at, reps: g.reps });
       }
-      return hits;
-    };
-    expect(shortened(2).slice(0, 5), "a two-frame blink re-armed a rep's clock").toEqual([]);
-    // …and the same sweep one frame longer MUST re-arm something, or the claim
-    // above is satisfied by a fix that does nothing at all.
-    expect(shortened(3).length, "three unusable frames re-armed nothing").toBeGreaterThan(0);
+    }
+    expect(
+      offenders.slice(0, 5),
+      `${String(offenders.length)} positions report a set average of 0 ms per rep`,
+    ).toEqual([]);
+  }, 60_000);
+
+  it("still uses the reps it DID part-measure, rather than reporting nothing", () => {
+    // THE OTHER HALF, and it is what separates this fix from the one the review
+    // proposed. Reporting `null` whenever no rep was watched whole would satisfy
+    // the claim above and would bill LESS: measured through the real
+    // `kcalPointForSetsV2` on a set shaped like Kd's own smoke (14 reps, 161 s),
+    // honest 10 kcal · part-measured 8 · null 6. So the zero is dropped and the
+    // reps that WERE part-measured still set the rate.
+    //
+    // Two absences, one inside each rep, so no rep is watched end to end and the
+    // fallback is the only path — the case the two-rep sweeps cannot construct.
+    const frames = squatFrames();
+    const completions = repCompletionIndices(frames);
+    const repOneAt = completions[0] ?? 0;
+    const repTwoAt = completions[1] ?? 0;
+    // Absence 1 lands mid-descent of rep 1, so rep 1 keeps a REAL watched
+    // remainder. Absence 2 lands on the frame rep 2 completes, so rep 2's
+    // remainder is `t - t` — the unmeasured rep this test exists for.
+    const g = run(withTwoLostSights(frames, Math.floor(repOneAt / 2), repTwoAt, ABSENCE_MS, "blank"));
+    const zeros = g.repDurations.filter((d) => d === 0);
+    const measured = g.repDurations.filter((d) => d > 0);
+    // The fixture, asserted before the claim that rests on it.
+    expect(zeros.length, "fixture no longer contains a zero-watched rep").toBeGreaterThan(0);
+    expect(measured.length, "fixture no longer contains a part-measured rep").toBeGreaterThan(0);
+    // The claim: the average is the part-measured reps' own average — neither
+    // dragged down by the unwatched one, nor thrown away with it.
+    const want = Math.round(measured.reduce((a, b) => a + b, 0) / measured.length);
+    expect(g.tempoMsAvg, "the part-measured reps no longer set the set's rate").toBe(want);
   }, 60_000);
 });
