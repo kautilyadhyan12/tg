@@ -100,6 +100,52 @@ describe("engine events (§2.4)", () => {
     expect(setSummarySchema.safeParse({ ...validSetSummary, reps: 1.5 }).success).toBe(false);
     expect(setSummarySchema.safeParse({ ...validSetSummary, bonus: 1 }).success).toBe(false);
   });
+
+  // ── watchedMs, the Kd-ruled §2.4 addition of 2026-08-14 ──────────────────
+  //
+  // THE GATE IS THE TEST ABOVE, and it is why this field is OPTIONAL: Part 2
+  // §10 requires the sync payload to byte-match the §2.4 document, and
+  // `validSetSummary` IS that document, copied from the spec. It still parses
+  // and still round-trips with the field added to the schema — so the gate
+  // holds by construction rather than by argument. If a later card makes this
+  // field required, that test goes red first, which is the intended alarm.
+  it("SetSummary accepts an engine set reporting watched time", () => {
+    const parsed = setSummarySchema.parse({ ...validSetSummary, watchedMs: 41000 });
+    expect(parsed).toEqual({ ...validSetSummary, watchedMs: 41000 });
+  });
+  it("SetSummary rejects a watched time that would overflow the column", () => {
+    expect(setSummarySchema.safeParse({ ...validSetSummary, watchedMs: 2_147_483_648 }).success).toBe(
+      false,
+    );
+    expect(setSummarySchema.safeParse({ ...validSetSummary, watchedMs: -1 }).success).toBe(false);
+    expect(setSummarySchema.safeParse({ ...validSetSummary, watchedMs: 1.5 }).success).toBe(false);
+  });
+  it("a log-only set cannot claim the camera watched it", () => {
+    // Nothing watched a hand-counted set, so the only honest value is null.
+    // A number here would let a client hand the server a watched time it can
+    // bill from — on a set no camera ever ran on.
+    const logOnly = {
+      exercise: "squat",
+      setIndex: 1,
+      reps: 10,
+      durationMs: 40000,
+      tempoMsAvg: null,
+      romStats: null,
+      view: "unknown",
+      holdMs: null,
+      calibration: null,
+      mode: "log_only",
+      avgFormScore: null,
+      repScores: null,
+      faultCounts: {},
+      engineVersion: null,
+      definitionVersion: null,
+    };
+    expect(setSummarySchema.safeParse(logOnly).success).toBe(true);
+    expect(setSummarySchema.safeParse({ ...logOnly, watchedMs: null }).success).toBe(true);
+    expect(setSummarySchema.safeParse({ ...logOnly, watchedMs: 40000 }).success).toBe(false);
+    expect(setSummarySchema.safeParse({ ...logOnly, watchedMs: 0 }).success).toBe(false);
+  });
 });
 
 describe("session input (§2.3)", () => {

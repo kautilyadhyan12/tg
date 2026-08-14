@@ -20,7 +20,12 @@ import {
   xpForLevel,
   xpProgress,
 } from "../src/modules/gamification/xp.js";
-import { DEFAULT_WEIGHT_KG, kcalPointForSets, kcalPointForSetsV2 } from "../src/modules/workouts/calories.js";
+import {
+  DEFAULT_WEIGHT_KG,
+  kcalPointForSets,
+  kcalPointForSetsV2,
+  kcalPointForSetsV3,
+} from "../src/modules/workouts/calories.js";
 
 const state = (s: Partial<StreakState>): StreakState => ({ ...EMPTY_STREAK, ...s });
 
@@ -236,6 +241,172 @@ describe("kcal v2 (three-tier, Kd-ruled 2026-08-07: reps at MET · idle at REST_
   it("falls back to 70 kg on null weight, exactly as v1 does", () => {
     const set = { met: 6, durationMs: 150_000, reps: 10, tempoMsAvg: 3_000, logOnly: false };
     expect(kcalPointForSetsV2([set], null, { restSeconds: 0, durationSeconds: undefined })).toBe(8);
+  });
+});
+
+describe("kcal v3 (Kd-ruled 2026-08-14: bill the time the camera WATCHED, guess nothing)", () => {
+  const noSession = { restSeconds: 0, durationSeconds: undefined };
+
+  it("charges NOTHING for the stretch the camera could not watch", () => {
+    // Kd's own scenario, now with the missing fact: the camera was on for
+    // 150 s but could only WATCH 30 s of it, and the 10 reps happened inside
+    // that 30 s. v2 had no way to know, so it billed the other 120 s as
+    // resting; v3 bills it as what it was — time nobody measured.
+    // v3 = 6×70×(30000/3.6e6) = 3.5 → 4.
+    const set = { met: 6, durationMs: 150_000, reps: 10, tempoMsAvg: 3_000, logOnly: false };
+    expect(kcalPointForSetsV3([{ ...set, watchedMs: 30_000 }], 70, noSession)).toBe(4);
+    // The v2 comparator on the identical set: 3.5 + 1.8×70×(120000/3.6e6) = 7.7 → 8.
+    expect(kcalPointForSetsV2([set], 70, noSession)).toBe(8);
+  });
+
+  it("bills a set with NO measurable rate at its watched time, not at a guess", () => {
+    // THE ~20% UNDER-BILL, closed. 5 reps, the camera watched 60 s of the set
+    // and never saw one rep end to end, so the engine reports no rate at all.
+    // v3 charges the watched 60 s: 6×70×(60000/3.6e6) = 7.0 → 7.
+    const rateless = {
+      met: 6,
+      durationMs: 150_000,
+      reps: 5,
+      tempoMsAvg: null,
+      logOnly: false,
+      watchedMs: 60_000,
+    };
+    expect(kcalPointForSetsV3([rateless], 70, noSession)).toBe(7);
+    // AND THE COMPARISON THAT JUSTIFIES REMOVING THE ENGINE'S FALLBACK. Had
+    // the engine kept guessing a rate from the half-seen reps — each watched
+    // for ~80% of its real length, so 9,600 ms where the truth is 12,000 — the
+    // same set prices at 5.6 + 1.8×70×(12000/3.6e6) = 6.02 → 6. Lower than the
+    // watched time can possibly justify, which is the inversion of Kd's part 2
+    // that :7487 recorded and this closes.
+    expect(kcalPointForSetsV3([{ ...rateless, tempoMsAvg: 9_600 }], 70, noSession)).toBe(6);
+  });
+
+  it("a ZERO-rep set still charges nothing at the exercise MET, watched or not", () => {
+    // Kd's 2026-08-10 defect stays fixed: `reps > 0` is what separates "we
+    // could not time the reps" from "there were no reps". A camera watching an
+    // empty room the whole time bills the REST rate and nothing more.
+    // 1.8×70×(150000/3.6e6) = 5.25 → 5.
+    const idle = { met: 6, durationMs: 150_000, reps: 0, tempoMsAvg: null, logOnly: false };
+    expect(kcalPointForSetsV3([{ ...idle, watchedMs: 150_000 }], 70, noSession)).toBe(5);
+    // And an empty room the camera could not even watch costs nothing at all.
+    expect(kcalPointForSetsV3([{ ...idle, watchedMs: 0 }], 70, noSession)).toBe(0);
+  });
+
+  it("the timer is a BUDGET: a pause inside the watched time cannot be billed as exercise", () => {
+    // A pause stops the frames but not their timestamps, and no frames arriving
+    // is indistinguishable to the engine from a slow camera — so a 90 s pause
+    // lands inside `watchedMs`. The on-screen timer is the one measurement that
+    // stops: it read 60 s, so at most 60 s of exercise can be charged.
+    // 6×70×(60000/3.6e6) = 7.0 → 7, and idle is budget-exhausted at 0.
+    const paused = {
+      met: 6,
+      durationMs: 150_000,
+      reps: 5,
+      tempoMsAvg: null,
+      logOnly: false,
+      watchedMs: 150_000,
+    };
+    expect(kcalPointForSetsV3([paused], 70, { restSeconds: 0, durationSeconds: 60 })).toBe(7);
+    // Without the timer (a client older than 2026-08-07) there is no pause
+    // information at all, so the budget is infinite rather than invented:
+    // 6×70×(150000/3.6e6) = 17.5 → 18.
+    expect(kcalPointForSetsV3([paused], 70, noSession)).toBe(18);
+  });
+
+  it("the MEASURED pause case: 15 kcal of squatting becomes the 1 kcal that really happened", () => {
+    // NOT A HYPOTHETICAL — these are the engine's own outputs, swept over this
+    // package's squat clip with a 120 s pause spliced at every frame boundary
+    // (2026-08-14): 70 of 84 positions produce span 128,400 ms, `watchedMs`
+    // 128,400 (the pause is inside it — the engine cannot see a gap where no
+    // frames arrive) and `tempoMsAvg` 63,500 against 8,400 ms really watched.
+    //
+    // So watched time ALONE does not fix a pause, and the timer is what does:
+    // it ran 8.4 s, and 8 s at MET 6 is 0.93 → 1 kcal, which is the truth
+    // (8,400 ms → 0.98). Unbudgeted the same set bills 127,000 ms → 14.82 → 15.
+    const paused = {
+      met: 6,
+      durationMs: 128_400,
+      reps: 2,
+      tempoMsAvg: 63_500,
+      logOnly: false,
+      watchedMs: 128_400,
+    };
+    expect(kcalPointForSetsV3([paused], 70, { restSeconds: 0, durationSeconds: 8 })).toBe(1);
+    expect(kcalPointForSetsV3([paused], 70, noSession)).toBe(15);
+    // v2 on the identical set bills the same 15 — the defect is PRE-EXISTING
+    // and this card neither introduces nor (without the timer) removes it.
+    expect(kcalPointForSetsV2([paused], 70, noSession)).toBe(15);
+  });
+
+  it("budget-trimmed exercise time does NOT leak back in as idle", () => {
+    // The trap in a running budget, answered with a test rather than by
+    // reasoning: once the budget is spent, each later set's `watched - repMs`
+    // grows by exactly what was refused — and if that landed in the idle term
+    // it would come straight back at REST_MET, turning a cap into a discount.
+    // Two 100 s sets, both fully watched, neither with a measurable rate, and a
+    // timer that saw only 60 s: 6×70×(60000/3.6e6) = 7.0 → 7, and idle is 0
+    // because the timer has nothing left to give it.
+    const s = {
+      met: 6,
+      durationMs: 100_000,
+      reps: 5,
+      tempoMsAvg: null,
+      logOnly: false,
+      watchedMs: 100_000,
+    };
+    expect(kcalPointForSetsV3([s, s], 70, { restSeconds: 0, durationSeconds: 60 })).toBe(7);
+    // And the cap must not bite an honest workout: the same two sets under a
+    // 300 s timer bill both in full — 6×70×(200000/3.6e6) = 23.33 → 23.
+    expect(kcalPointForSetsV3([s, s], 70, { restSeconds: 0, durationSeconds: 300 })).toBe(23);
+  });
+
+  it("clamps a watched time longer than the set itself", () => {
+    // The write path clamps too, but the function must be honest about its own
+    // input rather than about its caller — a set cannot be watched for longer
+    // than it lasted, whoever says otherwise.
+    const set = { met: 6, durationMs: 150_000, reps: 5, tempoMsAvg: null, logOnly: false };
+    expect(kcalPointForSetsV3([{ ...set, watchedMs: 999_999_999 }], 70, noSession)).toBe(
+      kcalPointForSetsV3([{ ...set, watchedMs: 150_000 }], 70, noSession),
+    );
+  });
+
+  it("a set that never reported watched time prices exactly as v2 did", () => {
+    // A payload can be mixed: one client version's sets alongside a hand-counted
+    // one. `null` means NOBODY TOLD US, and the honest fallback for that set is
+    // the whole span — which is v2's behaviour, byte for byte.
+    const set = { met: 6, durationMs: 150_000, reps: 10, tempoMsAvg: 3_000, logOnly: false };
+    expect(kcalPointForSetsV3([{ ...set, watchedMs: null }], 70, noSession)).toBe(
+      kcalPointForSetsV2([set], 70, noSession),
+    );
+  });
+
+  it("a log-only set keeps the v1 treatment, and rest breaks still bill at REST_MET", () => {
+    const logOnly = {
+      met: 6,
+      durationMs: 1_800_000,
+      reps: 10,
+      tempoMsAvg: null,
+      logOnly: true,
+      watchedMs: null,
+    };
+    expect(kcalPointForSetsV3([logOnly], 70, noSession)).toBe(kcalPointForSets([logOnly], 70));
+    // 210 + 1.8×70×(600/3600) = 231, unchanged from v2.
+    expect(kcalPointForSetsV3([logOnly], 70, { restSeconds: 600, durationSeconds: undefined })).toBe(
+      231,
+    );
+  });
+
+  it("falls back to 70 kg on null weight, exactly as v1 and v2 do", () => {
+    const set = {
+      met: 6,
+      durationMs: 150_000,
+      reps: 10,
+      tempoMsAvg: 3_000,
+      logOnly: false,
+      watchedMs: 30_000,
+    };
+    expect(kcalPointForSetsV3([set], null, noSession)).toBe(4);
+    expect(kcalPointForSetsV3([set], DEFAULT_WEIGHT_KG, noSession)).toBe(4);
   });
 });
 

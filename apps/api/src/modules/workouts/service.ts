@@ -25,9 +25,11 @@ import { getUserSyncContext } from "../users/service.js";
 import {
   KCAL_CALC_VERSION_V1,
   KCAL_CALC_VERSION_V2,
+  KCAL_CALC_VERSION_V3,
   kcalPointForSets,
   kcalPointForSetsV2,
-  type KcalSetInputV2,
+  kcalPointForSetsV3,
+  type KcalSetInputV3,
 } from "./calories.js";
 import * as repo from "./repo.js";
 import type {
@@ -61,7 +63,7 @@ export async function handleWorkoutSync(
   // that understands the v2 three-tier accounting (Kd, 2026-08-07); absent =
   // a payload queued before the card, priced by v1 byte-for-byte and stamped
   // v1, so a stored number is always explicable from its own row.
-  const kcalInputs: KcalSetInputV2[] = [];
+  const kcalInputs: KcalSetInputV3[] = [];
   for (const s of payload.sets) {
     const ref = exerciseBySlug.get(s.exercise);
     if (ref === undefined) continue; // unknown slug: set is skipped by the repo too
@@ -71,18 +73,32 @@ export async function handleWorkoutSync(
       reps: s.reps,
       tempoMsAvg: s.tempoMsAvg,
       logOnly: s.mode === "log_only",
+      watchedMs: s.watchedMs ?? null,
     });
   }
+  // v3 is selected by a set REPORTING watched time — the same payload-shape
+  // rule, one field further in. A log-only set pins the field null and an older
+  // client omits it, so neither can pull a workout into a formula that would
+  // then have to invent the number it is named for.
+  const watchedReported = kcalInputs.some((s) => s.watchedMs !== null);
   const kcal =
     payload.restSeconds === undefined
       ? { point: kcalPointForSets(kcalInputs, ctx.weightKg), calcVersion: KCAL_CALC_VERSION_V1 }
-      : {
-          point: kcalPointForSetsV2(kcalInputs, ctx.weightKg, {
-            restSeconds: payload.restSeconds,
-            durationSeconds: payload.durationSeconds,
-          }),
-          calcVersion: KCAL_CALC_VERSION_V2,
-        };
+      : watchedReported
+        ? {
+            point: kcalPointForSetsV3(kcalInputs, ctx.weightKg, {
+              restSeconds: payload.restSeconds,
+              durationSeconds: payload.durationSeconds,
+            }),
+            calcVersion: KCAL_CALC_VERSION_V3,
+          }
+        : {
+            point: kcalPointForSetsV2(kcalInputs, ctx.weightKg, {
+              restSeconds: payload.restSeconds,
+              durationSeconds: payload.durationSeconds,
+            }),
+            calcVersion: KCAL_CALC_VERSION_V2,
+          };
 
   const outcome = await repo.syncWorkout(sql, userId, payload, exerciseBySlug, kcal);
 

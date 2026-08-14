@@ -270,6 +270,101 @@ d("POST /v1/workouts/sync (real Postgres, real cookie authn)", () => {
     expect(after?.["kcal_point"]).toBe(4);
   });
 
+  it("watchedMs → stored, kcal v3 stamped, and the UNWATCHED stretch costs nothing", { timeout: 30_000 }, async () => {
+    // The 2026-08-14 card end to end. Same set as the v2 test — span 21000 ms,
+    // 5 reps, tempo 3900 — but the camera could only WATCH 6000 ms of it.
+    // v3 charges the watched time at MET 6 and the unwatched 15000 ms at
+    // nothing (v2 would have billed it at REST_MET):
+    //   6×70×(6000/3.6e6) + 1.8×70×(60000/3.6e6) = 0.7 + 2.1 = 2.8 → 3.
+    // The v2 test above prices the SAME payload without watchedMs at 4, so the
+    // stamp and the number both move — a version that changed the stamp alone
+    // would pass a weaker assertion than this one.
+    const wid = "aaaaaaaa-1111-4111-8111-000000000012";
+    const body = {
+      ...payload(wid, [set(1, { watchedMs: 6000 })]),
+      durationSeconds: 300,
+      restSeconds: 60,
+    };
+    expect((await post(body)).statusCode).toBe(201);
+    const [w] = await sql`SELECT kcal_point, kcal_calc_version FROM workouts WHERE id = ${wid}`;
+    expect(w?.["kcal_calc_version"]).toBe(3);
+    expect(w?.["kcal_point"]).toBe(3);
+    const [s] = await sql`SELECT watched_ms FROM workout_sets WHERE workout_id = ${wid}`;
+    expect(s?.["watched_ms"]).toBe(6000);
+  });
+
+  it("a set the camera watched end to end prices EXACTLY as v2 priced it", { timeout: 30_000 }, async () => {
+    // THE PROMISE MADE TO KD IN THE PLAN: an ordinary workout, where nothing was
+    // ever out of shot, does not change at all. Watched == span, so v3's rep
+    // term collapses to v2's and the in-set idle is the same 1500 ms:
+    //   6×70×(19500/3.6e6) + 1.8×70×((1500+60000)/3.6e6) = 4.4275 → 4,
+    // the identical figure the v2 test asserts on the identical sets.
+    const wid = "aaaaaaaa-1111-4111-8111-000000000013";
+    const body = {
+      ...payload(wid, [set(1, { watchedMs: 21_000 })]),
+      durationSeconds: 300,
+      restSeconds: 60,
+    };
+    expect((await post(body)).statusCode).toBe(201);
+    const [w] = await sql`SELECT kcal_point, kcal_calc_version FROM workouts WHERE id = ${wid}`;
+    expect(w?.["kcal_calc_version"]).toBe(3);
+    expect(w?.["kcal_point"]).toBe(4);
+  });
+
+  it("a watched time longer than the set is CLAMPED on the way in, not trusted", { timeout: 30_000 }, async () => {
+    // R3.1 / v1 §14: the client measures it, the server bills from it, so the
+    // one thing it may never do is exceed the set it describes. Clamped in
+    // code rather than by a CHECK on purpose — a constraint violation is a 500
+    // and the client's retry policy would jam that user's queue on it forever.
+    const wid = "aaaaaaaa-1111-4111-8111-000000000014";
+    const body = {
+      ...payload(wid, [set(1, { watchedMs: 999_999 })]),
+      durationSeconds: 300,
+      restSeconds: 60,
+    };
+    expect((await post(body)).statusCode).toBe(201);
+    const [s] = await sql`SELECT watched_ms, duration_ms FROM workout_sets WHERE workout_id = ${wid}`;
+    expect(s?.["watched_ms"]).toBe(21_000);
+    expect(s?.["watched_ms"]).toBe(s?.["duration_ms"]);
+  });
+
+  it("a hand-counted set stores NULL and does not pull the workout into v3", { timeout: 30_000 }, async () => {
+    // NULL is "nobody told us", not "watched for zero". A log-only set has no
+    // camera behind it, so it must not select a formula named for a number it
+    // cannot have — it stays on v2 and prices exactly as it did before.
+    const wid = "aaaaaaaa-1111-4111-8111-000000000015";
+    const body = { ...payload(wid, [logSet(1)]), durationSeconds: 300, restSeconds: 60 };
+    expect((await post(body)).statusCode).toBe(201);
+    const [w] = await sql`SELECT kcal_calc_version FROM workouts WHERE id = ${wid}`;
+    expect(w?.["kcal_calc_version"]).toBe(2);
+    const [s] = await sql`SELECT watched_ms FROM workout_sets WHERE workout_id = ${wid}`;
+    expect(s?.["watched_ms"]).toBeNull();
+  });
+
+  it("cross-tenant denial: a stranger cannot rewrite the watched time on your workout", { timeout: 30_000 }, async () => {
+    // R3.2 on THIS card's column. The two denial tests above prove the route
+    // refuses a foreign workoutId; this one proves what that refusal protects
+    // now that a stored number decides what a user is billed — user B posting
+    // A's id with a wildly different watched time must not move A's row.
+    const wid = "aaaaaaaa-1111-4111-8111-000000000016";
+    const mine = {
+      ...payload(wid, [set(1, { watchedMs: 6000 })]),
+      durationSeconds: 300,
+      restSeconds: 60,
+    };
+    expect((await post(mine)).statusCode).toBe(201);
+    const theirs = { ...payload(wid, [set(1, { watchedMs: 21_000 })]), durationSeconds: 300, restSeconds: 60 };
+    const res = await post(theirs, cookieB);
+    expect(res.statusCode).toBe(404);
+    const [w] = await sql`SELECT user_id, kcal_point FROM workouts WHERE id = ${wid}`;
+    expect(w?.["user_id"]).toBe(userA);
+    expect(w?.["kcal_point"]).toBe(3);
+    const [s] = await sql`SELECT watched_ms FROM workout_sets WHERE workout_id = ${wid}`;
+    expect(s?.["watched_ms"]).toBe(6000);
+    const [n] = await sql`SELECT count(*)::int AS n FROM workout_sets WHERE workout_id = ${wid}`;
+    expect(n?.["n"]).toBe(1);
+  });
+
   it("fields ABSENT → v1 formula, v1 stamp, Σ-of-sets duration — byte-identical pre-card behaviour", { timeout: 30_000 }, async () => {
     // The happy-path test above already pins this (duration 63000, version 1,
     // kcal 7) — this case exists to say so EXPLICITLY next to the v2 test, and

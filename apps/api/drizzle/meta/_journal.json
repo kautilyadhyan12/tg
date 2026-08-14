@@ -64,6 +64,13 @@
       "when": 1785579330804,
       "tag": "0009_log_only_sets",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786705224689,
+      "tag": "0010_set_watched_ms",
+      "breakpoints": true
     }
   ]
 }

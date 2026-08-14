@@ -111,6 +111,22 @@ export class ModeAFsm {
   private nullMetricStreak = 0;
   private cycleInterrupted = false;
   private rearmCycleOnNextUsableFrame = false;
+  /** Sight is lost AS OF THE LAST FRAME — read by the session to decide which
+   *  stretches of the set count as WATCHED (the API half of this card).
+   *
+   *  It is a separate field from `rearmCycleOnNextUsableFrame` and must stay
+   *  one: that flag is only set when a rep is in progress (`loseSight` returns
+   *  early at the top of a cycle), so keying watched time to it would count an
+   *  absence taken while the user stands STILL BETWEEN reps as time the camera
+   *  watched — the exact fabrication this card removes, at the one position the
+   *  last card's sweeps never place an absence.
+   *
+   *  Owned here rather than recomputed in the session because §3.1's count of
+   *  three already has two enforcement sites (ingest for frames that do not
+   *  arrive, this class for frames carrying no usable metric) and a third copy
+   *  is how L12 happened. Both sites funnel through `loseSight()`; this is what
+   *  they set. */
+  private sightLostNow = false;
 
   constructor(private readonly config: ModeAConfig) {
     this.minRepMs = Math.max(MIN_REP_INTERVAL_MS, config.minRepMs ?? 0);
@@ -142,6 +158,7 @@ export class ModeAFsm {
       };
     }
     this.nullMetricStreak = 0;
+    this.sightLostNow = false; // a usable metric IS the camera watching again
 
     if (this.rearmCycleOnNextUsableFrame) {
       // Measurable again: pin the cycle HERE. Not to null, and not to where it
@@ -249,6 +266,10 @@ export class ModeAFsm {
    *  metric (counted above). Idempotent — production calls it on every frame of
    *  an absence, and the first call is the one that matters. */
   loseSight(): void {
+    // Set BEFORE the early return, and deliberately: whether a rep happens to
+    // be open changes what has to be RE-ARMED, never whether the camera can
+    // see. Watched time reads this one.
+    this.sightLostNow = true;
     if (this.cycleStartT === null) return; // no rep in progress — nothing to re-arm
     this.cycleStartT = null;
     this.cycleInterrupted = true;
@@ -266,5 +287,13 @@ export class ModeAFsm {
 
   get reps(): number {
     return this.repCount;
+  }
+
+  /** True while the camera cannot watch (set by `loseSight`, cleared by the
+   *  next usable metric). NOT cleared by `resetCycle`: a rep completing does
+   *  not restore sight, and clearing it there would credit the absence that
+   *  followed to the next rep's watched time. */
+  get sightLost(): boolean {
+    return this.sightLostNow;
   }
 }

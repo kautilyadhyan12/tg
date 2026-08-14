@@ -1,6 +1,80 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: REP TIMING, THE API HALF IS BUILT. NEXT: the browser SMOKE, then T3 in a
+      FRESH CHAT. **The OWED line does NOT tick.**
+
+WHAT IS DONE (this session)
+  · KD RULED THE DESIGN and it partly REVERSES his own 2026-08-11 wording ("the
+    part-measured reps still set the rate"). That clause was a workaround for a
+    missing number, not a measurement, and it was the ONE place his part 2 was
+    inverted — it billed an all-interrupted set ~20% low (:7487).
+  · `SetSummary.watchedMs` (OPTIONAL — that is what holds Part 2 §10's byte-match
+    gate BY CONSTRUCTION; pinned `null` on the log-only branch), migration
+    `0010_set_watched_ms` (nullable; NULL = nobody told us, NOT zero; no CHECK
+    against `duration_ms` on purpose — a violation is a 500 and R10.3 jams the
+    offline queue on one), and `kcalPointForSetsV3` selected by payload shape.
+  · The 2026-08-07 three tiers are UNCHANGED. What moved is where the numbers
+    come from: unwatched time now costs NOTHING (v2 billed it at REST_MET), and a
+    set with no rep watched end to end is billed at its WATCHED time.
+  · A ZERO-rep set still charges nothing at the exercise MET — Kd's 2026-08-10
+    defect stays fixed, and `reps > 0` is the whole of what separates the two.
+  · `apps/web` UNTOUCHED: the summary passes through `sessionController.endSet()`
+    and `syncClient` whole, so the field rides along with no client change.
+  · Full record: DECISIONS :7730.
+  · engine 208/208 · shared 48/48 · web 585/585 · api 443 OF 444. **The one red
+    is a PRE-EXISTING TIMEOUT FLAKE, not an assertion and not in this diff**:
+    `db.migration.test.ts` rides vitest's 5000 ms default against a Neon branch
+    in Singapore. Four runs tonight: green, green, red on `0009 CHECKs` — and
+    that file re-run ALONE failed a DIFFERENT test (`created every Part 4 §2
+    table`, 5006 ms) while 0009 passed at 4165 ms. Its OWED line is widened from
+    one test to the whole file. Do NOT read it as this card's.
+  · INSTRUMENT: the command that produced that count piped vitest through
+    `grep`, so the SHELL SAID EXIT 0 while a test had failed (:5906's pipe
+    defect, recurring). Read the output, never the piped exit code.
+
+THE FINDING, MEASURED BECAUSE KD WAS PROMISED IT WOULD BE
+  · A MID-SET PAUSE IS BILLED AS SQUATTING, and `watchedMs` CANNOT SEE IT. Pause
+    tears the feed down, so NO frames arrive at all — every mechanism these three
+    cards built keys on frames RECEIVED and unusable (§3.1's count of three).
+  · Measured, 120 s pause swept across every frame boundary: 70 of 84 positions
+    report watchedMs 128,400 against 8,400 really watched, tempoMsAvg 63,500,
+    billing 127,000 ms — 14.82 kcal where the truth is 0.98.
+  · PRE-EXISTING and asserted by a test: v2 bills the IDENTICAL 127,000 ms.
+  · The timer is now a BUDGET, bringing that case to 1 kcal. A CLAMP IS NOT A FIX
+    (:7222's own warning) and does nothing without a timer. Own 🔴 OWED line.
+
+WHAT TO DO NEXT, IN ORDER
+  1. **The browser SMOKE** (Part I §2 — this changes a number on screen). It must
+     include a PAUSE step, because that is the one case still wrong.
+  2. **T3 in a FRESH chat.** The ready-to-paste prompt is
+     `t3-rep-timing-api-PROMPT.md`, the diff is `t3-rep-timing-api.diff`.
+  3. The pause card (web + engine: the client tells the engine it stopped
+     feeding — routes into the SAME `loseSight()` both blindness kinds use).
+  4. The rest-in-full-view card (still needs a Kd-ruled number: still vs
+     descending).
+
+THINGS A LATER CHAT WILL OTHERWISE RE-DERIVE
+  · `sightLostNow` is a SEPARATE field from `rearmCycleOnNextUsableFrame` and must
+    stay one: `loseSight()` returns early when no rep is open, so keying watched
+    time to the re-arm flag counts an absence taken while STANDING BETWEEN REPS as
+    watched. That is the position none of this card's ancestors ever tested.
+  · M11 SURVIVED its own first test, and the reason is structural: the BLANK path
+    never consults the FSM (the session marks blindness itself), so only the
+    OCCLUDED path reads the flag. A blank-only sweep cannot see it. BACKLOG L18.
+  · My own comment claimed watched time "can never exceed what was really seen".
+    FALSE for a pause, and written before the measurement ran. BACKLOG L17.
+  · Watched time and the rep clock re-arm on the SAME frame by construction — no
+    new threshold was invented. Keep it that way or a set can bill more rep time
+    than it claims to have watched.
+  · The other three rep modes inherit `watchedMs` (it lives in `session.ts`) but
+    NOT its occluded signal (`fsm.sightLost` is ModeA's). The server now BILLS
+    from this number, so that gap costs more than when :7575 recorded it.
+
+NEXT TASK CARD: the browser smoke, item 1 above.
+```
+
+```
 TASK: REP TIMING, THE ENGINE HALF IS REVIEWED AND SHIPS. NEXT: the API half.
       **No further review round — the re-review found ZERO Critical/High.**
 

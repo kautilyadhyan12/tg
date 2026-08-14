@@ -7713,6 +7713,15 @@ PAIR of positions**; the re-review quoted a differently-shaped sweep of its own
 and its count is deliberately not reproduced here (V1 — it was not run in this
 session).
 
+### One instrument note, because it nearly cost a false claim
+
+The command that produced the final count piped vitest through `grep`, so **the
+shell reported exit 0 while a test had failed** — the failure was visible only in
+the text. That is :5906's pipe defect exactly, recurring on this card, and the
+only reason it did not become a green claim is that the output was read rather
+than the exit code trusted. **A pipe launders an exit code.** Where a run's
+verdict matters, capture `PIPESTATUS[0]` or do not pipe at all.
+
 ### The measurements this entry rests on
 
 `engine 204/204` (203 before; the +1 is L16's sweep) · `tsc --noEmit` exit 0 ·
@@ -7726,3 +7735,126 @@ shipped fix is byte-identical to what the review passed.
 hypothetical arithmetic. With 2 reps where one is unmeasured, the bill is `2 ×
 R` for a single watched remainder `R`, so anything that lets `R` exceed half the
 watched span overbills. Today it does not; the guard is what keeps it that way.
+
+## 2026-08-14 — THE SERVER STOPS GUESSING HOW LONG YOU EXERCISED: the camera reports what it WATCHED, and the bill follows it
+
+**Read before touching `kcalPointForSets*`, before adding a field to a §2.4
+document, before writing anything that reasons about a PAUSE, and before
+assuming `watchedMs` means what its name suggests.** This is the API half the
+two rep-timing cards deferred; the engine half shipped at :7404/:7487 and was
+reviewed clean at :7634.
+
+**THE RULING, in Kd's terms and approved before any code: stop guessing a rate
+from half-seen reps — charge the time the camera actually watched, and charge
+nothing for the time it did not.** He was told plainly what it costs: it partly
+REVERSES his own 2026-08-11 wording ("the part-measured reps still set the
+rate"). That clause was never a measurement. It was a workaround for the server
+having no way to know how long the camera watched, and it was the single place
+his own part 2 was inverted — half-measured reps setting the rate is exactly what
+part 2 forbids, and it billed an all-interrupted set ~20% low (:7487).
+
+### What was built
+
+- **`SetSummary.watchedMs`** — ms of the set the camera could use. **OPTIONAL,
+  and that is what keeps Part 2 §10's byte-match gate green BY CONSTRUCTION
+  rather than by argument**: the §2.4 document in `schemas.test.ts` is the spec's
+  own example, and it still parses and still round-trips unchanged. A later card
+  making the field required turns that test red first, which is the intended
+  alarm. Pinned `null` on the log-only branch — nothing watched a hand-counted
+  set, and 0 would read as a measurement. Ruled extension, not R0.2 invention:
+  the same shape as 2026-08-07's `durationSeconds`/`restSeconds` one level out.
+- **Migration `0010_set_watched_ms`** — one nullable `integer`. Adding a nullable
+  column with no default is metadata-only in PG, no table rewrite. **NULL means
+  NOBODY TOLD US** — every pre-migration row, every older client, every log-only
+  set — which is a different claim from "watched for zero". **No CHECK tying it
+  to `duration_ms`, deliberately**: a constraint violation is a 500, and R10.3
+  reads a 500 as transient, so one poison payload would jam that user's offline
+  queue forever (the P1.10d T3 lesson). Clamped in code at the write boundary
+  instead, and clamped again inside the formula — a function should be honest
+  about its own input, not about its caller.
+- **`kcalPointForSetsV3`**, selected by a set REPORTING watched time — the same
+  payload-shape rule as v2, one field further in. **The 2026-08-07 three tiers
+  are UNCHANGED; only where the numbers come from moved.** Nothing outside the
+  watched time is charged at all (v2 billed it at `REST_MET`, so two minutes of an
+  empty room came out at ~4 kcal instead of 0), and a set with no rep watched end
+  to end is billed at its watched time rather than at a guessed rate. **A
+  ZERO-rep set still charges nothing at the exercise MET** — Kd's 2026-08-10
+  defect stays fixed, and `reps > 0` is the whole of what separates the two.
+- **The engine emits it** from the same signal the rep clock uses, so the two
+  re-arm on the same frame by construction and a set can never bill more rep time
+  than it claims to have watched. **No new threshold was invented**: §3.1's count
+  of three, funnelled through `loseSight()` from both of its enforcement sites.
+
+### THE FINDING, AND IT IS THE PART TO CARRY FORWARD: a PAUSE is billed as squatting, and `watchedMs` cannot see it
+
+Kd was promised in the plan that the pause question would be MEASURED rather than
+assumed. It was, and it is real.
+
+**Pressing pause tears the pose feed down** (`ActiveWorkout.jsx:267`), so **no
+frames arrive at all** — not blank ones, not unusable ones — while the timestamps
+inside the frames that resume have advanced. Every mechanism these three cards
+built keys on frames the engine RECEIVED and could not use. A pause is one long
+inter-frame gap, indistinguishable here from a slow camera.
+
+**Measured on this package's own squat clip, a 120 s pause swept across every
+frame boundary: 70 of 84 positions report `watchedMs` 128,400 ms against 8,400 ms
+really watched, `tempoMsAvg` 63,500, and bill 127,000 ms at the squat MET — 14.82
+kcal where the truth is 0.98.**
+
+**PRE-EXISTING, and said with a test rather than as prose: v2 bills the identical
+127,000 ms on the same input.** What v3 adds is the CLAMP — the on-screen timer
+is the one measurement that stops on pause, so exercise time is spent against it
+as a budget, bringing the measured case to 1 kcal against a truth of 0.98. **A
+clamp is not a fix**, which is :7222's own warning (rep time exceeding the timer
+is a contradiction, not a number to quietly trim), and it does nothing for a
+client that sends no timer. Own 🔴 `OWED.md` line; the real fix is the client
+telling the engine it stopped feeding, which needs no new number either.
+
+### Two defects of my own, both found by instruments rather than by reading
+
+- **The comment I wrote claimed the number "can never exceed what was really
+  seen".** False, for exactly the pause above — and it was written before the
+  measurement ran. **This is the class this repo has recorded more than any
+  other** (:6150, :4556 F3, :3610): a comment asserting a guarantee the code does
+  not carry, which re-arms the bug for whoever trusts it. Corrected in place
+  before the commit, with the figures in it. BACKLOG L17.
+- **M11 came back ALIVE**, and its survival is structural: the mutant moves
+  `sightLostNow = true` after `loseSight()`'s early return, and the first draft of
+  the between-reps test could not see it **because the BLANK path never consults
+  the FSM at all** — the session marks blindness itself for a frame that fails
+  ingest, so only the OCCLUDED path reads the flag, and the draft swept blank
+  frames only. **The fixture's shape was the hole, not the assertion — the third
+  time on this card** (:7487's lesson, :7634's restatement). Fixed by sweeping
+  both kinds and asserting a between-reps position exists for EACH first; M11 is
+  RED. BACKLOG L18.
+
+**Both of them are why `sightLostNow` is a SEPARATE FIELD from
+`rearmCycleOnNextUsableFrame` and not an alias for it.** `loseSight()` returns
+early when no rep is in progress, so keying watched time to the re-arm flag would
+count an absence taken while STANDING BETWEEN REPS as time the camera watched —
+the one position none of this card's ancestors ever placed an absence at.
+
+### What did NOT change
+
+`durationMs`, rep counting, the golden traces, scores, the chair target, and the
+whole v1/v2 pricing path for payloads that do not carry the new field. **A set the
+camera watched end to end prices to the same integer v2 gave it** — asserted
+against the real database, because that is the promise Kd was made when he
+approved this ("a normal workout: no change at all"). `apps/web` is untouched: the
+summary passes through `sessionController.endSet()` and `syncClient` whole, so the
+field rides along with no client change at all.
+
+### The measurements this entry rests on
+
+engine **208/208** (204 before; +4 watched-time tests) · shared **48/48** (45
+before; +3) · api **443 of 444** (429 before; +5 sync + 10 calories) — **the one
+red is a pre-existing TIMEOUT FLAKE, not an assertion**: `db.migration.test.ts`
+rides vitest's 5000 ms default against a Neon branch in Singapore, it is NOT in
+this diff (command-verified), and across four runs this evening the suite went
+green, green, then red on `0009 workout_sets CHECKs` — while a re-run of that
+file alone failed a DIFFERENT test in it (`created every Part 4 §2 table`, 5006
+ms) and passed the 0009 one at 4165 ms. Its `OWED.md` line is WIDENED from one
+test to the file. **`0010` applying clean is proven by the two full green runs
+and by `drizzle-kit migrate` against the same database** · web **585/585**, unchanged and re-run because
+the shared contract moved under it · `tsc --noEmit` exit 0 in all three packages ·
+`eslint` exit 0 · I1 purity grep prints nothing.

@@ -63,6 +63,10 @@ interface Run {
   readonly repDurations: readonly number[];
   /** Wall span of the frames as fed, first to last. */
   readonly spanMs: number;
+  /** SetSummary.watchedMs as emitted. Deliberately NOT defaulted to a number:
+   *  `?? 0` here would make a field that stopped being emitted look like a set
+   *  nobody watched, and every claim below would still pass. */
+  readonly watchedMs: number | null | undefined;
   /** The rep events as emitted — phase timings included. */
   readonly events: readonly RepEvent[];
 }
@@ -84,6 +88,7 @@ function run(frames: readonly PoseFrame[]): Run {
     tempoMsAvg: summary.tempoMsAvg,
     repDurations: events.map((e) => e.durationMs),
     spanMs: first !== undefined && last !== undefined ? last.t - first.t : 0,
+    watchedMs: summary.watchedMs,
     events,
   };
 }
@@ -448,16 +453,24 @@ describe("a rep the camera never watched is not a measurement", () => {
     ).toEqual([]);
   }, 60_000);
 
-  it("still uses the reps it DID part-measure, rather than reporting nothing", () => {
-    // THE OTHER HALF, and it is what separates this fix from the one the review
-    // proposed. Reporting `null` whenever no rep was watched whole would satisfy
-    // the claim above and would bill LESS: measured through the real
-    // `kcalPointForSetsV2` on a set shaped like Kd's own smoke (14 reps, 161 s),
-    // honest 10 kcal · part-measured 8 · null 6. So the zero is dropped and the
-    // reps that WERE part-measured still set the rate.
+  it("reports NO rate at all when no rep was watched end to end", () => {
+    // THE OTHER HALF, REWRITTEN FOR KD'S 2026-08-14 RULING. This test used to
+    // assert the opposite — that the part-measured reps set the set's rate —
+    // and that clause is now gone from `session.ts`. It was never a
+    // measurement: it was a workaround for the server having no way to know how
+    // long the camera watched, and it billed an all-interrupted set ~20% low
+    // (:7487), which is the one place Kd's own part 2 was inverted.
     //
-    // Two absences, one inside each rep, so no rep is watched end to end and the
-    // fallback is the only path — the case the two-rep sweeps cannot construct.
+    // The number now exists (`watchedMs`, asserted below), so the honest answer
+    // to "how long did one rep take" is that nobody knows, and the server
+    // charges the watched time instead of a guess. Reporting null used to bill
+    // LESS than the fallback — that was measured and it was true OF v2; it is
+    // what made the fallback removable only once `kcalPointForSetsV3` existed
+    // to read the watched time. Do not restore the fallback without also
+    // undoing v3, or the set is billed twice at half a rate.
+    //
+    // Two absences, one inside each rep, so no rep is watched end to end — the
+    // case the two-rep single-absence sweeps cannot construct.
     const frames = squatFrames();
     const completions = repCompletionIndices(frames);
     const repOneAt = completions[0] ?? 0;
@@ -468,13 +481,18 @@ describe("a rep the camera never watched is not a measurement", () => {
     const g = run(withTwoLostSights(frames, Math.floor(repOneAt / 2), repTwoAt, ABSENCE_MS, "blank"));
     const zeros = g.repDurations.filter((d) => d === 0);
     const measured = g.repDurations.filter((d) => d > 0);
-    // The fixture, asserted before the claim that rests on it.
+    // The fixture, asserted before the claim that rests on it. Without BOTH of
+    // these the null below is satisfied by a set that counted no reps at all.
+    expect(g.reps, "fixture no longer counts both reps").toBe(2);
     expect(zeros.length, "fixture no longer contains a zero-watched rep").toBeGreaterThan(0);
     expect(measured.length, "fixture no longer contains a part-measured rep").toBeGreaterThan(0);
-    // The claim: the average is the part-measured reps' own average — neither
-    // dragged down by the unwatched one, nor thrown away with it.
-    const want = Math.round(measured.reduce((a, b) => a + b, 0) / measured.length);
-    expect(g.tempoMsAvg, "the part-measured reps no longer set the set's rate").toBe(want);
+    // THE CLAIM: no rep survived whole, so there is no rate to report.
+    expect(g.tempoMsAvg, "a half-watched rep is setting the set's rate again").toBeNull();
+    // AND the replacement is present and usable — a null rate with no watched
+    // time would leave the server nothing to bill from, which is the failure
+    // mode this pair exists to make impossible.
+    expect(typeof g.watchedMs, "the set reports no watched time to bill from").toBe("number");
+    expect(g.watchedMs, "watched time is not a positive measurement").toBeGreaterThan(0);
   }, 60_000);
 
   it("never bills more exercise than the camera watched, when sight is lost TWICE", () => {
@@ -500,15 +518,36 @@ describe("a rep the camera never watched is not a measurement", () => {
     const firstAt = Math.floor((repCompletionIndices(frames)[0] ?? 0) / 2);
     const offenders: { kind: Lost; secondAt: number; billedMs: number; watchedMs: number }[] = [];
     let unmeasured = 0;
+    let ratelessRuns = 0;
     for (const kind of ["blank", "occluded"] as const) {
       for (let secondAt = firstAt + 1; secondAt < frames.length; secondAt++) {
         const g = run(withTwoLostSights(frames, firstAt, secondAt, ABSENCE_MS, kind));
         if (g.repDurations.includes(0)) unmeasured += 1;
-        const billedMs = g.reps * (g.tempoMsAvg ?? 0);
+        // The server's own arithmetic, mirrored: a rate when one was measured,
+        // otherwise the watched time itself (`kcalPointForSetsV3`). The old
+        // form of this line was `reps × (tempoMsAvg ?? 0)`, which since the
+        // fallback's removal would score every all-interrupted position as
+        // billing ZERO — the sweep would stay green by asserting nothing, the
+        // exact vacuity this file has been burned by twice.
+        if (g.reps > 0 && g.tempoMsAvg === null) ratelessRuns += 1;
+        const engineWatchedMs = g.watchedMs ?? 0;
+        const billedMs =
+          g.reps > 0
+            ? g.tempoMsAvg !== null
+              ? Math.min(engineWatchedMs, g.reps * g.tempoMsAvg)
+              : engineWatchedMs
+            : 0;
+        // The independent yardstick: the span the frames cover, minus the two
+        // gaps spliced into them. Deliberately NOT the engine's own
+        // `watchedMs` — a claim checked against itself is not a check.
         const watchedMs = g.spanMs - 2 * ABSENCE_MS;
         if (billedMs > watchedMs) offenders.push({ kind, secondAt, billedMs, watchedMs });
       }
     }
+    // Non-vacuity, second axis: the branch this card ADDED must actually be
+    // taken somewhere in the sweep, or the whole thing is a re-run of the v2
+    // path under a new name.
+    expect(ratelessRuns, "no sweep position reaches the rate-less branch").toBeGreaterThan(0);
     // The fixture, asserted before the claim that rests on it (:7298). A sweep
     // that never reaches an unmeasured rep would pass this test green while
     // proving nothing at all — which is precisely how the one-absence sweeps
@@ -519,5 +558,129 @@ describe("a rep the camera never watched is not a measurement", () => {
       `${String(offenders.length)} two-absence positions bill unwatched time as exercise ` +
         `(worst first five shown)`,
     ).toEqual([]);
+  }, 60_000);
+});
+
+describe("the set reports how long the camera watched", () => {
+  /** Largest gap between consecutive frames in the untouched recording —
+   *  DERIVED from the clip, never a number picked to make a test pass (R0.2).
+   *  It is the slack the lower bound below needs: watched time is credited
+   *  between frames, so the frame straddling a splice can cost at most one
+   *  ordinary frame interval. */
+  function maxFrameGapMs(frames: readonly PoseFrame[]): number {
+    let max = 0;
+    for (let i = 1; i < frames.length; i++) {
+      const prev = frames[i - 1];
+      const cur = frames[i];
+      if (prev !== undefined && cur !== undefined) max = Math.max(max, cur.t - prev.t);
+    }
+    return max;
+  }
+
+  it("watches the whole of a clip it never loses sight of", () => {
+    // THE CONTROL, and the tighter half of the pair: with every frame usable,
+    // watched time is the span EXACTLY. An implementation that under-counts
+    // (say by skipping the first interval) still satisfies every upper bound
+    // below, so the equality is where that would show.
+    const clean = run(squatFrames());
+    expect(clean.watchedMs, "the set no longer reports watched time at all").toBe(clean.spanMs);
+  });
+
+  it("excludes the absence, and excludes only the absence, wherever it falls", () => {
+    // THE CLAIM, swept over every frame boundary. Two bounds, and both are
+    // load-bearing in opposite directions:
+    //   · upper — the gap must be fully out, or the server bills a stretch
+    //     nobody watched (the whole point of the field);
+    //   · lower — no MORE than the gap may be out, or a set is billed short
+    //     and the fix trades Kd's over-count for a new under-count, which is
+    //     exactly the trap his part 2 was written to avoid.
+    const frames = squatFrames();
+    const slack = maxFrameGapMs(frames);
+    const tooMuch: { at: number; watchedMs: number; ceiling: number }[] = [];
+    const tooLittle: { at: number; watchedMs: number; floor: number }[] = [];
+    for (let at = 1; at < frames.length; at++) {
+      const g = run(withAbsence(frames, at, ABSENCE_MS));
+      const watched = g.watchedMs ?? Number.NaN;
+      const ceiling = g.spanMs - ABSENCE_MS;
+      const floor = ceiling - slack;
+      if (!(watched <= ceiling)) tooMuch.push({ at, watchedMs: watched, ceiling });
+      if (!(watched >= floor)) tooLittle.push({ at, watchedMs: watched, floor });
+    }
+    expect(
+      tooMuch.slice(0, 5),
+      `${String(tooMuch.length)} absence positions report watching time nobody watched`,
+    ).toEqual([]);
+    expect(
+      tooLittle.slice(0, 5),
+      `${String(tooLittle.length)} absence positions throw away time that WAS watched`,
+    ).toEqual([]);
+  }, 60_000);
+
+  it("excludes an absence taken BETWEEN reps, with no rep in progress", () => {
+    // THE POSITION EVERY OTHER SWEEP IN THIS FILE UNDER-WEIGHTS, and the one
+    // that decides whether watched time may be keyed to the rep clock's
+    // re-arm flag. It may not: `loseSight()` returns early when no cycle is
+    // open, so a user who steps away while STANDING between reps re-arms
+    // nothing — and an implementation reading that flag would count the whole
+    // absence as watched and bill it.
+    const frames = squatFrames();
+    const clean = run(frames);
+    // THE POSITIONS ARE FOUND, NOT ASSUMED. A hand-picked index was tried first
+    // and index 1 is already inside a cycle on this clip — the recording opens
+    // below `upAt`, so the "obvious" answer tested the wrong line and said so.
+    //
+    // The discriminator is exact rather than approximate: `loseSight()` sets
+    // `cycleInterrupted` AFTER its early return, so a rep whose cycle was open
+    // is dropped from the average. An unchanged `tempoMsAvg` AND unchanged rep
+    // durations therefore mean no cycle was open at the moment sight was lost —
+    // which is the only state in which the early return is taken.
+    // BOTH KINDS, and the second one is the whole reason this test survives.
+    // The first draft swept only blank frames and the mutant that moves the
+    // flag came back ALIVE — because on the blank path the SESSION marks
+    // blindness itself and never consults the FSM at all. The occluded path is
+    // the one that reads `fsm.sightLost`, so it is the only place the ordering
+    // is observable. The fixture's shape was the hole again (:7487), one card on.
+    const between: { kind: Lost; at: number }[] = [];
+    for (const kind of ["blank", "occluded"] as const) {
+      for (let at = 1; at < frames.length; at++) {
+        const g = run(withLostSight(frames, at, ABSENCE_MS, kind));
+        if (
+          g.tempoMsAvg === clean.tempoMsAvg &&
+          g.repDurations.length === clean.repDurations.length &&
+          g.repDurations.every((d, i) => d === clean.repDurations[i])
+        ) {
+          between.push({ kind, at });
+        }
+      }
+    }
+    for (const kind of ["blank", "occluded"] as const) {
+      expect(
+        between.filter((b) => b.kind === kind).length,
+        `no ${kind} position leaves every rep untouched — this clip cannot test the between-reps case`,
+      ).toBeGreaterThan(0);
+    }
+    const counted = between
+      .map(({ kind, at }) => ({ kind, at, g: run(withLostSight(frames, at, ABSENCE_MS, kind)) }))
+      .filter(({ g }) => (g.watchedMs ?? Number.NaN) > g.spanMs - ABSENCE_MS)
+      .map(({ kind, at, g }) => ({ kind, at, watchedMs: g.watchedMs, ceiling: g.spanMs - ABSENCE_MS }));
+    expect(
+      counted.slice(0, 5),
+      `${String(counted.length)} of ${String(between.length)} between-reps absences are counted as watched`,
+    ).toEqual([]);
+  }, 180_000);
+
+  it("counts a blink as watched, exactly as the rep clock does", () => {
+    // The two must AGREE. §3.1 needs three unusable frames before sight is
+    // lost, so one or two are not an absence: the rep clock runs through them
+    // and so must watched time. Were they excluded here but not there, a set
+    // could bill more rep time than it claims to have watched — the one
+    // contradiction the field exists to make impossible.
+    const frames = squatFrames();
+    const clean = run(frames);
+    const blink = run(withAbsence(frames, Math.floor(frames.length / 2), 2 * FRAME_MS));
+    expect(blink.repDurations, "a two-frame blink re-armed the rep clock").toEqual(
+      clean.repDurations,
+    );
+    expect(blink.watchedMs, "a two-frame blink was cut out of watched time").toBe(blink.spanMs);
   }, 60_000);
 });

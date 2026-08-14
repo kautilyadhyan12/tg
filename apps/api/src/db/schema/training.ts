@@ -69,6 +69,14 @@ export const workoutSets = pgTable(
     reps: smallint("reps").notNull().default(0),
     holdMs: integer("hold_ms"),
     durationMs: integer("duration_ms").notNull(),
+    // How much of the set the camera could actually watch (Kd-ruled payload
+    // addition, 2026-08-14; migration 0010). NULLABLE, and null means NOBODY
+    // TOLD US — every row written before this migration, and every set from a
+    // client that predates it, plus every hand-counted set, where the question
+    // has no answer. Distinct from 0, which is a client saying it watched
+    // nothing. Server-clamped to `duration_ms` on write, never CHECKed: a
+    // constraint violation is a 500 and the client retries a 500 forever.
+    watchedMs: integer("watched_ms"),
     avgFormScore: smallint("avg_form_score"),
     repScores: smallint("rep_scores").array(), // Part 2 §2.4 verbatim; no rep_events table (v1 §7.1)
     faultCounts: jsonb("fault_counts").notNull().default(sql`'{}'`),

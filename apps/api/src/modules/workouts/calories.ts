@@ -23,6 +23,16 @@ export const KCAL_CALC_VERSION_V1 = 1;
  *  NOTHING. Selected when the payload carries `restSeconds`. */
 export const KCAL_CALC_VERSION_V2 = 2;
 
+/** v3 = v2 with the GUESSING TAKEN OUT, Kd-ruled 2026-08-14. v2 reconstructs
+ *  exercise time as `reps × tempoMsAvg` — a rate the engine could only estimate
+ *  from whatever it managed to see, so a set the camera kept losing was billed
+ *  ~20% low (:7487) and the stretch nobody watched was still billed as resting.
+ *  v3 reads the engine's own `watchedMs`: nothing outside it is charged at all,
+ *  and when no rep was watched end to end (`tempoMsAvg` null with reps counted)
+ *  the watched time IS the exercise time rather than a guess at one.
+ *  Selected when the payload carries `watchedMs` on any set. */
+export const KCAL_CALC_VERSION_V3 = 3;
+
 /** calories.py:85 verbatim — "Resting between sets: standing/light movement,
  *  not lying down — closer to the Compendium's light-intensity band (1.6-2.9
  *  MET) than true sedentary". Ported, never re-derived (R5.4 discipline). */
@@ -100,6 +110,80 @@ export function kcalPointForSetsV2(
     session.durationSeconds === undefined
       ? Number.POSITIVE_INFINITY
       : Math.max(0, session.durationSeconds * 1000 - chargedMetMs);
+  const idleMs = Math.min(idleSpanMs, timerIdleMs) + session.restSeconds * 1000;
+  kcal += REST_MET * weight * (idleMs / 3_600_000);
+  return Math.round(kcal);
+}
+
+export interface KcalSetInputV3 extends KcalSetInputV2 {
+  /** SetSummary.watchedMs — ms of this set the camera could actually watch.
+   *  `null` means NOBODY TOLD US (a client older than the 2026-08-14 card, or a
+   *  hand-counted set), which is not the same claim as 0 and must not be
+   *  treated as one: null falls back to the set's whole span, i.e. exactly v2's
+   *  behaviour for that set. Already clamped to `durationMs` at the write
+   *  boundary; clamped again here so the function is honest about its own
+   *  input rather than about its caller. */
+  watchedMs: number | null;
+}
+
+/** The v3 point estimate. The three tiers of the 2026-08-07 ruling are
+ *  unchanged — reps at the exercise MET, idle at REST_MET, paused at nothing —
+ *  and v3 changes only WHERE the numbers come from:
+ *
+ *  - **Nothing outside the watched time is charged at all.** v2 billed the
+ *    non-rep remainder of the whole SET SPAN at REST_MET, so two minutes of an
+ *    empty room came out at ~4 kcal instead of 0. Idle is now the watched
+ *    remainder only.
+ *  - **A set with no rep watched end to end is billed at its watched time**,
+ *    not at a rate guessed from half-seen reps. `tempoMsAvg` is null in exactly
+ *    that case now (the engine stopped inventing the fallback in the same
+ *    card), and `reps > 0` is what separates it from a set where nobody moved —
+ *    a zero-rep set still charges NOTHING at the exercise rate, which is the
+ *    defect Kd caught on 2026-08-10 and it stays fixed.
+ *  - **THE TIMER IS A BUDGET, not just an idle floor.** A mid-set PAUSE stops
+ *    the frames but not the timestamps inside them, and no frames arriving is
+ *    indistinguishable to the engine from a slow camera — so a pause lands
+ *    inside `watchedMs` and would otherwise be billed as squatting. The
+ *    on-screen timer is the one measurement that stops, so exercise time is
+ *    spent against it in payload order and cannot exceed it. Absent the timer
+ *    (older client) the budget is infinite: those payloads carry no pause
+ *    information at all, and inventing a bound for them would be worse.
+ *    This CLAMPS the symptom; the cause is that the client never tells the
+ *    engine it stopped feeding, and that has its own `OWED.md` line. */
+export function kcalPointForSetsV3(
+  sets: readonly KcalSetInputV3[],
+  weightKg: number | null,
+  session: { restSeconds: number; durationSeconds: number | undefined },
+): number {
+  const weight = weightKg !== null && weightKg > 0 ? weightKg : DEFAULT_WEIGHT_KG;
+  const budgetMs =
+    session.durationSeconds === undefined
+      ? Number.POSITIVE_INFINITY
+      : session.durationSeconds * 1000;
+  let kcal = 0;
+  let chargedMetMs = 0; // time already billed at an exercise MET (rep time + log-only spans)
+  let idleSpanMs = 0; // watched-but-not-rep time
+  for (const s of sets) {
+    const remaining = Math.max(0, budgetMs - chargedMetMs);
+    if (s.logOnly) {
+      // No camera ran, so there is no watched time and the span is all we have
+      // — v1's treatment, unchanged since the log-only card. Still spent
+      // against the budget: a hand-counted set cannot last longer than the
+      // workout it happened in either.
+      const metMs = Math.min(s.durationMs, remaining);
+      kcal += s.met * weight * (metMs / 3_600_000);
+      chargedMetMs += metMs;
+      continue;
+    }
+    const watched = Math.min(s.watchedMs ?? s.durationMs, s.durationMs);
+    const repMsRaw =
+      s.reps > 0 ? (s.tempoMsAvg !== null ? Math.min(watched, s.reps * s.tempoMsAvg) : watched) : 0;
+    const repMs = Math.min(repMsRaw, remaining);
+    kcal += s.met * weight * (repMs / 3_600_000);
+    idleSpanMs += watched - repMs;
+    chargedMetMs += repMs;
+  }
+  const timerIdleMs = budgetMs === Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : Math.max(0, budgetMs - chargedMetMs);
   const idleMs = Math.min(idleSpanMs, timerIdleMs) + session.restSeconds * 1000;
   kcal += REST_MET * weight * (idleMs / 3_600_000);
   return Math.round(kcal);

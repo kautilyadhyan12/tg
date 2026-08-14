@@ -220,6 +220,39 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:7730** — 2026-08-14 — **THE API HALF: the server stops GUESSING how long you
+  exercised — the camera reports what it WATCHED and the bill follows it. And a
+  PAUSE is billed as squatting, which the new field CANNOT see.** **Read before
+  touching `kcalPointForSets*`, before adding a field to a §2.4 document, before
+  writing anything that reasons about a pause, and before assuming `watchedMs`
+  means what its name suggests.** **KD RULING, approved before any code and
+  partly REVERSING his own 2026-08-11 wording** ("the part-measured reps still set
+  the rate"): that clause was never a measurement, it was a workaround for the
+  missing number, and it was the one place his part 2 was inverted — it billed an
+  all-interrupted set ~20% low (:7487). Now: `SetSummary.watchedMs` (**OPTIONAL,
+  which is what holds Part 2 §10's byte-match gate BY CONSTRUCTION** — the §2.4
+  document still round-trips; pinned `null` for log-only), migration
+  `0010_set_watched_ms` (**nullable; NULL = nobody told us, not zero; NO CHECK
+  against `duration_ms` on purpose — a violation is a 500 and R10.3 jams the queue
+  on one**), and `kcalPointForSetsV3` selected by the payload's shape. The
+  2026-08-07 three tiers are unchanged; only where the numbers come from moved —
+  unwatched time now costs NOTHING (v2 billed it at `REST_MET`) and a rate-less
+  set is billed at its watched time. A ZERO-rep set still charges nothing at the
+  exercise MET. **THE FINDING TO CARRY FORWARD: a mid-set PAUSE feeds NO frames at
+  all, so it lands inside `watchedMs`** — measured, 70 of 84 positions bill
+  127,000 ms against 8,400 ms watched, **14.82 kcal where the truth is 0.98** —
+  and it is **PRE-EXISTING, asserted by a test: v2 bills the identical figure**.
+  The timer is now a BUDGET, which brings that case to 1 kcal, but **a clamp is
+  not a fix** (:7222's warning) and does nothing without a timer; own 🔴
+  `OWED.md` line. **Two defects of mine, both found by instruments not by
+  reading**: my own comment claimed a guarantee the code lacks (L17, the class
+  this repo records most), and **M11 came back ALIVE because the blank path never
+  consults the FSM** so a blank-only sweep could not see it (L18 — the fixture's
+  shape, third time on this card). `apps/web` untouched. engine 208/208 · shared
+  48/48 · api 443 of 444 (the one red is the PRE-EXISTING `db.migration.test.ts`
+  timeout flake, not in this diff — its OWED line is widened from one test to the
+  file) · web 585/585. **The OWED line does NOT tick — smoke and T3
+  are both unrun.**
 - **:7634** — 2026-08-14 — **REP TIMING, THE DIFF-ONLY RE-REVIEW: ZERO
   Critical/High, the packet SHIPS — and BOTH Lows were about the EVIDENCE, not the
   fix.** **Read before trusting any "byte-identical / all restored" line from a

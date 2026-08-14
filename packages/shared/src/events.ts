@@ -97,6 +97,24 @@ const setSummaryBase = z.object({
 export const engineSetSummarySchema = setSummaryBase
   .extend({
     mode: z.literal("engine").optional(),
+    /** HOW MUCH OF THIS SET THE CAMERA COULD ACTUALLY WATCH, in ms — the
+     *  Kd-ruled payload addition of 2026-08-14, and the thing that lets the
+     *  server stop guessing exercise time from `reps × tempoMsAvg`.
+     *
+     *  §2.4 declares SetSummary's fields and this adds one, so it is a ruled
+     *  extension, not an invention (R0.2) — the same shape as the 2026-08-07
+     *  `durationSeconds`/`restSeconds` ruling one level out. OPTIONAL is what
+     *  keeps Part 2 §10's byte-match gate green BY CONSTRUCTION rather than by
+     *  argument: the §2.4 document still parses and still round-trips
+     *  unchanged, and every payload queued in an outbox before this card
+     *  syncs and prices exactly as it would have.
+     *
+     *  A CLIENT MEASUREMENT the server cannot observe or re-derive — the v1
+     *  §14 nuance to R3.1, same class as the rep count beside it. The server
+     *  clamps it to the set's own span before storing (a set cannot be watched
+     *  for longer than it lasted) and P4.y plausibility-checks it like
+     *  everything else the client reports. Bound: `watched_ms` int4. */
+    watchedMs: z.number().int().nonnegative().max(INT4_MAX).optional(),
     avgFormScore: z.number().int().min(0).max(100).nullable(), // null: no scored reps (e.g. timer tracking)
     repScores: z.array(z.number().int().min(0).max(100)),
     faultCounts: z.record(z.string(), z.number().int().positive()),
@@ -119,6 +137,11 @@ export const engineSetSummarySchema = setSummaryBase
 export const logOnlySetSummarySchema = setSummaryBase
   .extend({
     mode: z.literal("log_only"),
+    /** Pinned null for the same reason every scoring field here is: nothing
+     *  watched a hand-counted set, so "how long did the camera watch" has no
+     *  answer but zero, and zero would read as a measurement. `.optional()`
+     *  because every client shipped before this card omits the key entirely. */
+    watchedMs: z.null().optional(),
     avgFormScore: z.null(),
     // T3 round 1 F5: this was `z.array(z.never()).max(0)`, so the WIRE demanded
     // `[]` while the COLUMN demands NULL, and repo.ts translated between them

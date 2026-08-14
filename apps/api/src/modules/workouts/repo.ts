@@ -110,6 +110,17 @@ export async function syncWorkout(
       // log-only card, and its branch of the union REQUIRES both provenance
       // fields — so 'engine' here is read off the data, not assumed.
       const mode = s.mode ?? "engine";
+      // CLAMPED, not trusted (R3.1 / v1 §14): a set cannot have been watched for
+      // longer than it lasted, and the server bills from this number. Clamped in
+      // code rather than by a CHECK deliberately — a constraint violation here
+      // is a 500, which the client's R10.3 retry policy reads as transient, so
+      // one poison payload would jam that user's queue forever (the P1.10d T3
+      // lesson). `undefined` (older client) and `null` (log-only) both store
+      // NULL: nobody told us is not the same claim as zero.
+      const watchedMs =
+        s.watchedMs === undefined || s.watchedMs === null
+          ? null
+          : Math.min(s.watchedMs, s.durationMs);
       // T3 round 1 F5: a `mode === "log_only" ? null : s.repScores` translation
       // used to live here, because the wire demanded `[]` while the column
       // demands NULL. The contract now says NULL too, so the value passes
@@ -117,12 +128,12 @@ export async function syncWorkout(
       await tx`
         INSERT INTO workout_sets (workout_id, user_id, exercise_id, started_at,
                                   set_index, view, mode, reps, hold_ms, duration_ms,
-                                  avg_form_score, rep_scores, fault_counts,
+                                  watched_ms, avg_form_score, rep_scores, fault_counts,
                                   tempo_ms_avg, rom_stats, calibration,
                                   engine_version, definition_version)
         VALUES (${payload.workoutId}, ${userId}, ${exerciseId},
                 ${payload.startedAt}, ${s.setIndex}, ${s.view}, ${mode}, ${s.reps},
-                ${s.holdMs}, ${s.durationMs}, ${s.avgFormScore},
+                ${s.holdMs}, ${s.durationMs}, ${watchedMs}, ${s.avgFormScore},
                 ${s.repScores}, ${tx.json(asJsonValue(s.faultCounts))}, ${s.tempoMsAvg},
                 ${s.romStats === null ? null : tx.json(asJsonValue(s.romStats))},
                 ${s.calibration === null ? null : tx.json(asJsonValue(s.calibration))},

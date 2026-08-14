@@ -8,15 +8,23 @@
 // 2026-08-14); this is that instrument.
 //
 // SEVERITY SCOPE (rule 4a): every mutant below sits in the always-mutated rows —
-// they all guard NUMBERS A USER SEES, because `reps × tempoMsAvg` is exactly what
-// `kcalPointForSetsV2` bills at the exercise MET. None needs a database: this is
-// an engine-only card, so per 4a no DB mutant runs and the whole sweep is
-// seconds, not minutes.
+// NUMBERS A USER SEES (`reps × tempoMsAvg` and now `watchedMs` are exactly what
+// the kcal formulas bill at the exercise MET) and, since the API half landed on
+// 2026-08-14, ANYTHING THAT SAVES (the sync write path).
+//
+// THE API HALF CHANGES SERVER BEHAVIOUR, so 4a's database mutants are in scope
+// here where they were out of scope for the engine half — but they stay FEW and
+// they stay on the Critical/High rows: three of them, on the stored number and
+// the formula version, not one on wording or a ported constant. Everything else
+// runs against unit suites in seconds.
 //
 // Usage:
 //   node tools/mutate-rep-timing.mjs              # every mutant
-//   node tools/mutate-rep-timing.mjs M1 M7        # only these
+//   node tools/mutate-rep-timing.mjs M1 A2        # only these
 //   node tools/mutate-rep-timing.mjs --list
+//
+// DB mutants need DATABASE_URL exported. If one is SELECTED and it is not set,
+// this ABORTS — a suite that skips is not a suite that passed (:5748).
 //
 // Safeguards 1–5 are mutate-duration-kcal.mjs's, unchanged in substance; each
 // exists because this project was burned by its absence (:5199 uncommitted
@@ -45,12 +53,20 @@ import { resolve } from "node:path";
 const ROOT = resolve(import.meta.dirname, "..");
 
 /** The ONLY files any mutation may touch. */
-const TARGETS = ["packages/engine/src/pipeline/fsm.ts", "packages/engine/src/session.ts"];
+const TARGETS = [
+  "packages/engine/src/pipeline/fsm.ts",
+  "packages/engine/src/session.ts",
+  "apps/api/src/modules/workouts/calories.ts",
+  "apps/api/src/modules/workouts/service.ts",
+  "apps/api/src/modules/workouts/repo.ts",
+];
 
-/** Suites, by the runner that owns them. No `db` flag: none of these need one. */
+/** Suites, by the runner that owns them. `db: true` needs a real Postgres. */
 const SUITES = {
   engineTiming: { pkg: "@app/engine", files: ["test/repTimingAbsence.test.ts"] },
   engineAll: { pkg: "@app/engine", files: [] }, // golden traces + parity + fuzz
+  apiCalories: { pkg: "api", files: ["test/gamification.unit.test.ts"] },
+  apiSync: { pkg: "api", files: ["test/workouts.sync.test.ts"], db: true },
 };
 
 const MUTATIONS = [
@@ -59,8 +75,12 @@ const MUTATIONS = [
     id: "M1",
     claim: "a frame the engine cannot USE re-arms the open rep's clock (session side)",
     file: "packages/engine/src/session.ts",
-    from: "      if (!accepted.visibilityOk) fsm.loseSight();",
-    to: "      if (false) fsm.loseSight();",
+    // RE-ANCHORED 2026-08-14: the API half turned this into a block, because
+    // losing sight now moves TWO things (the rep clock and watched time). The
+    // mutant deliberately removes only the clock re-arm, leaving the watched
+    // bookkeeping intact — so a RED here is still this claim and not M12's.
+    from: "        fsm.loseSight();\n        blindSinceLastUsable = true;",
+    to: "        blindSinceLastUsable = true;",
     suites: ["engineTiming"],
   },
   {
@@ -75,8 +95,11 @@ const MUTATIONS = [
     id: "M3",
     claim: "a half-watched rep is EXCLUDED from the set's average tempo (Kd's part 2)",
     file: "packages/engine/src/session.ts",
-    from: "      .filter((_, i) => repInterrupted[i] !== true)",
-    to: "      .filter(() => true)",
+    // RE-ANCHORED 2026-08-14: the fallback's removal collapsed three lines into
+    // one. The claim is unchanged and this is still the line that carries it.
+    from:
+      "    const tempos = repEvents.filter((_, i) => repInterrupted[i] !== true).map((r) => r.durationMs);",
+    to: "    const tempos = repEvents.map((r) => r.durationMs);",
     suites: ["engineTiming"],
   },
   {
@@ -99,14 +122,14 @@ const MUTATIONS = [
     suites: ["engineTiming"],
   },
   // ── T3 round 1, 2026-08-14 ────────────────────────────────────────────────
-  {
-    id: "M7",
-    claim: "a rep watched for ZERO time never sets the set's rate (the round-1 Critical)",
-    file: "packages/engine/src/session.ts",
-    from: "    const partMeasured = repEvents.map((r) => r.durationMs).filter((d) => d > 0);",
-    to: "    const partMeasured = repEvents.map((r) => r.durationMs);",
-    suites: ["engineTiming"],
-  },
+  // M7 was "a rep watched for ZERO time never sets the set's rate". RETIRED
+  // WITH ITS REASON on 2026-08-14 by the API half, not deleted quietly: the
+  // line it mutated (`partMeasured`) no longer exists, because Kd ruled the
+  // part-measured fallback out entirely. The guarantee did not weaken — it
+  // became STRUCTURAL. A rep watched for zero time is interrupted by
+  // construction, so M3's filter is now the only thing standing between it and
+  // the average, and M3 is RED. M15 covers the direction M7 could not: putting
+  // the fallback BACK.
   {
     id: "M8",
     claim:
@@ -116,22 +139,139 @@ const MUTATIONS = [
     to: "      if (this.nullMetricStreak >= 30) this.loseSight();",
     suites: ["engineTiming"],
   },
-  {
-    id: "M9",
-    claim:
-      "the part-measured reps still set the rate — NOT the `null` the review proposed (bills less)",
-    file: "packages/engine/src/session.ts",
-    from: "    const tempos = wholeTempos.length > 0 ? wholeTempos : partMeasured;",
-    to: "    const tempos = wholeTempos;",
-    suites: ["engineTiming"],
-  },
+  // M9 was "the part-measured reps still set the rate". RETIRED AND REVERSED by
+  // Kd's ruling of 2026-08-14, and the reversal is the point: that fallback was
+  // never a measurement, it was a workaround for the server not knowing how long
+  // the camera watched. It billed an all-interrupted set ~20% low (:7487) — the
+  // one place Kd's own part 2 was inverted. Its successor M15 asserts the
+  // opposite direction, which is the honest test now that `watchedMs` exists.
   {
     id: "M10",
     claim: "COUNTING is untouched by every one of the above — the whole engine suite says so",
     file: "packages/engine/src/pipeline/fsm.ts",
-    from: "  loseSight(): void {\n    if (this.cycleStartT === null) return;",
-    to: "  loseSight(): void {\n    this.repCount = 0;\n    if (this.cycleStartT === null) return;",
+    from: "    this.sightLostNow = true;\n    if (this.cycleStartT === null) return;",
+    to: "    this.sightLostNow = true;\n    this.repCount = 0;\n    if (this.cycleStartT === null) return;",
     suites: ["engineAll"],
+  },
+
+  // ── THE API HALF, 2026-08-14: watched time ────────────────────────────────
+  {
+    id: "M11",
+    claim:
+      "sight is lost even with NO rep in progress — an absence taken BETWEEN reps is not watched",
+    file: "packages/engine/src/pipeline/fsm.ts",
+    // The whole point of `sightLostNow` being a separate field: move it after
+    // the early return and it stops firing for a user standing at the top, so
+    // the absence they take between reps is billed as time the camera watched.
+    from: "    this.sightLostNow = true;\n    if (this.cycleStartT === null) return;",
+    to: "    if (this.cycleStartT === null) return;\n    this.sightLostNow = true;",
+    suites: ["engineTiming"],
+  },
+  {
+    id: "M12",
+    claim: "watched time EXCLUDES the stretch sight was lost in",
+    file: "packages/engine/src/session.ts",
+    from: "      if (lastUsableT !== null && !blindSinceLastUsable) watchedMs += frame.t - lastUsableT;",
+    to: "      if (lastUsableT !== null) watchedMs += frame.t - lastUsableT;",
+    suites: ["engineTiming"],
+  },
+  {
+    id: "M13",
+    claim: "the OCCLUDED path counts as unwatched too, not just frames that never arrive",
+    file: "packages/engine/src/session.ts",
+    from: "    if (metric === null && fsm.sightLost) blindSinceLastUsable = true;",
+    to: "    if (false) blindSinceLastUsable = true;",
+    suites: ["engineTiming"],
+  },
+  {
+    id: "M14",
+    claim: "the set reports WATCHED time, not its whole span",
+    file: "packages/engine/src/session.ts",
+    from: "      watchedMs: Math.round(watchedMs),",
+    to: "      watchedMs: Math.round(lastT - (firstT ?? lastT)),",
+    suites: ["engineTiming"],
+  },
+  {
+    id: "M15",
+    claim:
+      "the part-measured fallback stays GONE — restoring it re-inverts Kd's part 2 (M9's successor)",
+    file: "packages/engine/src/session.ts",
+    from:
+      "    const tempos = repEvents.filter((_, i) => repInterrupted[i] !== true).map((r) => r.durationMs);",
+    to:
+      "    const whole = repEvents.filter((_, i) => repInterrupted[i] !== true).map((r) => r.durationMs);\n    const tempos = whole.length > 0 ? whole : repEvents.map((r) => r.durationMs).filter((d) => d > 0);",
+    suites: ["engineTiming"],
+  },
+
+  // ── the server's half of the same guarantee (no database needed) ──────────
+  {
+    id: "A1",
+    claim: "the UNWATCHED stretch of a set is charged NOTHING, not REST_MET",
+    file: "apps/api/src/modules/workouts/calories.ts",
+    from: "    idleSpanMs += watched - repMs;",
+    to: "    idleSpanMs += s.durationMs - repMs;",
+    suites: ["apiCalories"],
+  },
+  {
+    id: "A2",
+    claim: "a set with no measurable rate is billed at its WATCHED time, not at nothing",
+    file: "apps/api/src/modules/workouts/calories.ts",
+    from:
+      "      s.reps > 0 ? (s.tempoMsAvg !== null ? Math.min(watched, s.reps * s.tempoMsAvg) : watched) : 0;",
+    to: "      s.reps > 0 ? (s.tempoMsAvg !== null ? Math.min(watched, s.reps * s.tempoMsAvg) : 0) : 0;",
+    suites: ["apiCalories"],
+  },
+  {
+    id: "A3",
+    claim: "the on-screen timer is a BUDGET — a pause inside watched time cannot be billed",
+    file: "apps/api/src/modules/workouts/calories.ts",
+    from: "    const repMs = Math.min(repMsRaw, remaining);",
+    to: "    const repMs = repMsRaw;",
+    suites: ["apiCalories"],
+  },
+  {
+    id: "A4",
+    claim: "a watched time longer than its own set is clamped in the formula too",
+    file: "apps/api/src/modules/workouts/calories.ts",
+    from: "    const watched = Math.min(s.watchedMs ?? s.durationMs, s.durationMs);",
+    to: "    const watched = s.watchedMs ?? s.durationMs;",
+    suites: ["apiCalories"],
+  },
+  {
+    id: "A5",
+    claim: "a ZERO-rep set still charges nothing at the exercise MET (Kd's 2026-08-10 defect)",
+    file: "apps/api/src/modules/workouts/calories.ts",
+    from:
+      "      s.reps > 0 ? (s.tempoMsAvg !== null ? Math.min(watched, s.reps * s.tempoMsAvg) : watched) : 0;",
+    to:
+      "      s.tempoMsAvg !== null ? Math.min(watched, s.reps * s.tempoMsAvg) : watched;",
+    suites: ["apiCalories"],
+  },
+
+  // ── DATABASE mutants: the stored number and the stamp (4a Critical/High) ──
+  {
+    id: "D1",
+    claim: "the watched time a client sends is STORED, not dropped",
+    file: "apps/api/src/modules/workouts/repo.ts",
+    from: "${s.holdMs}, ${s.durationMs}, ${watchedMs}, ${s.avgFormScore},",
+    to: "${s.holdMs}, ${s.durationMs}, ${null}, ${s.avgFormScore},",
+    suites: ["apiSync"],
+  },
+  {
+    id: "D2",
+    claim: "a client cannot claim it watched longer than the set lasted — the write path clamps",
+    file: "apps/api/src/modules/workouts/repo.ts",
+    from: "          : Math.min(s.watchedMs, s.durationMs);",
+    to: "          : s.watchedMs;",
+    suites: ["apiSync"],
+  },
+  {
+    id: "D3",
+    claim: "a payload reporting watched time is priced AND STAMPED v3, not silently v2",
+    file: "apps/api/src/modules/workouts/service.ts",
+    from: "  const watchedReported = kcalInputs.some((s) => s.watchedMs !== null);",
+    to: "  const watchedReported = false;",
+    suites: ["apiSync"],
   },
 ];
 
@@ -154,6 +294,21 @@ if (only.length > 0 && selected.length !== only.length) {
 if (selected.length === 0) {
   console.error("FATAL: nothing selected — a sweep over nothing is not a pass.");
   process.exit(2);
+}
+
+// Safeguard 1b: a DB suite with no database ABORTS. The api suites are
+// `describe.skipIf(DATABASE_URL === undefined)`, so without this a D-mutant
+// would run zero tests, exit 0, and be scored GREEN — i.e. reported ALIVE for a
+// reason that has nothing to do with the code. That is :5748's "6 skipped and
+// succeeded" in a new costume, and the rule is the same: a suite that skips is
+// not a suite that passed.
+if (selected.some((m) => m.suites.some((s) => SUITES[s].db === true))) {
+  const url = process.env.DATABASE_URL;
+  if (url === undefined || url === "") {
+    console.error("FATAL: a database mutant is selected but DATABASE_URL is not set.");
+    console.error("Export it, or select only the engine/unit mutants by id.");
+    process.exit(2);
+  }
 }
 
 // Safeguard 1: every mutation must name a file inside TARGETS (whole table).

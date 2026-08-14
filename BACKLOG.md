@@ -401,3 +401,27 @@ was touched, deliberately — see L10.
       the legacy no-op the new test goes RED (on its fixture guard, correctly
       refusing to pass vacuously) alongside 9 others. Found by the diff-only
       re-review (Low-2).
+- [x] **L17 · my own comment claimed a property the code does not have.** The
+      first draft of the watched-time block in `session.ts` said the number "can
+      never exceed what was really seen". **That is FALSE for a PAUSE**, which
+      feeds no frames at all and therefore lands inside watched time. Found by
+      measuring the pause case rather than by reading — the promise made to Kd in
+      the plan is what forced the measurement, and the comment was written before
+      it ran. **This is the defect class this repo has recorded more than any
+      other** (:6150, :4556 F3, :3610): a comment asserting a guarantee the code
+      does not carry, which then re-arms the bug for whoever trusts it.
+      **Fixed before the commit**: the comment now states what the number cannot
+      see, with the measured figures, and points at the `OWED.md` line for the
+      cause. Found in-card, 2026-08-14; DECISIONS :7730.
+- [x] **L18 · the between-reps test could not see its own mutant.** M11 (moving
+      `sightLostNow = true` after `loseSight()`'s early return) came back **ALIVE**
+      against the first draft of "excludes an absence taken BETWEEN reps". The
+      reason is structural and worth keeping: **the BLANK path never consults the
+      FSM at all** — `session.ts` sets `blindSinceLastUsable` itself for a frame
+      that fails ingest — so only the OCCLUDED path reads `fsm.sightLost`, and the
+      draft swept blank frames only. **The fixture's shape was the hole, not the
+      assertion, for the third time on this card** (:7487's own lesson, :7634's
+      restatement of it). **Fixed**: the sweep runs both blindness kinds and
+      asserts a between-reps position exists for EACH before testing either;
+      M11 is RED. Found by this card's own mutation sweep, 2026-08-14;
+      DECISIONS :7730.

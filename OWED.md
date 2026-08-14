@@ -347,6 +347,26 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       REJECTED** — on a set shaped like Kd's smoke, honest 10 kcal · today 8 ·
       null 6. engine 203/203 · 9 mutants 9 RED 0 ALIVE (1 retired with its
       reason) · Low ×3 as L12–L14 in `BACKLOG.md`.
+      **STATUS 2026-08-14 (evening) — THE API HALF IS BUILT AND ALL THREE ITEMS
+      BELOW ARE DISCHARGED IN CODE. THE LINE STILL DOES NOT TICK: the browser
+      SMOKE and the fresh-chat T3 are both unrun.** (DECISIONS :7730.) **Kd ruled
+      the design in plain words** — stop guessing a rate from half-seen reps,
+      charge the time the camera actually watched, and charge nothing for the time
+      it did not. `SetSummary` gains an OPTIONAL `watchedMs` (§2.4's document
+      still parses and round-trips, so Part 2 §10's byte-match gate holds by
+      construction), migration `0010_set_watched_ms` stores it NULLABLE (null =
+      nobody told us, which is not zero), and `kcalPointForSetsV3` reads it.
+      **This SUPERSEDES the 2026-08-11 clause "the part-measured reps still set
+      the rate"**, which was never a measurement — it was a workaround for the
+      missing number, and it was the inversion item (3) names.
+      **AND IT FOUND THE NEXT ONE, MEASURED: a mid-set PAUSE is billed as
+      exercise, and `watchedMs` cannot see it** — own 🔴 line below, because a
+      pause feeds NO frames at all, so the engine cannot tell it from a slow
+      camera. Pre-existing: v2 bills the identical 127,000 ms.
+      engine 208/208 · shared 48/48 · api 443 of 444 · web 585/585. (The one red is
+      the pre-existing `db.migration.test.ts` timeout flake, whose own line below
+      is widened today; it is not in this diff.)
+
       **WHAT IS STILL OWED ON THIS LINE, and it is now THREE things:**
       (1) **the API half** — `kcalPointForSetsV2` still bills an unwatched
       stretch as IDLE at `REST_MET` rather than as nothing, because the on-screen
@@ -365,6 +385,37 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       of a 3,400 ms rep is barely more of a measurement, and any higher floor is
       a NUMBER that R0.2 forbids a chat from picking — it goes to Kd on a table,
       the shape of :7037.
+- [ ] 🔴 **A MID-SET PAUSE IS BILLED AS SQUATTING — and the watched-time field
+      cannot see it.** **Found and MEASURED 2026-08-14 while building the API
+      half above** (DECISIONS :7730), on the promise made to Kd in that card's
+      plan that the pause question would be checked rather than assumed.
+      **THE CAUSE, and it is why `watchedMs` does not close it:** pressing pause
+      tears the pose feed down (`ActiveWorkout.jsx:267`, `enabled: !paused`), so
+      **no frames arrive at all** — not blank ones, not unusable ones — while the
+      timestamps inside the frames that resume have advanced by the pause length.
+      Every mechanism this card and the two before it built keys on FRAMES THE
+      ENGINE RECEIVED AND COULD NOT USE (§3.1's count of three). A pause produces
+      one long inter-frame gap, which is indistinguishable here from a slow
+      camera, so it lands INSIDE watched time.
+      **MEASURED on this package's own squat clip, a 120 s pause swept across
+      every frame boundary: 70 of 84 positions report `watchedMs` 128,400 ms
+      against 8,400 ms really watched, `tempoMsAvg` 63,500, and bill 127,000 ms
+      at the squat MET — 14.82 kcal where the truth is 0.98.**
+      **PRE-EXISTING, NOT INTRODUCED: `kcalPointForSetsV2` bills the identical
+      127,000 ms on the same input** — asserted by a test, so the claim is not
+      just prose. What the API half adds is the CLAMP: the on-screen timer is the
+      one measurement that stops on pause, and v3 spends exercise time against it
+      as a budget, which brings the measured case to 1 kcal. **A clamp is not a
+      fix** (:7222's own warning — rep time exceeding the timer is a
+      contradiction, not a number to quietly trim), and it does nothing at all for
+      a client that sends no timer.
+      **THE REAL FIX NEEDS NO NEW NUMBER: the client knows why the frames
+      stopped, and the engine does not.** The web bridge should tell the session
+      it has stopped feeding, which routes into the SAME `loseSight()` path both
+      blindness kinds already use. That is a web + engine card with its own
+      measurement, not a fix round (:5348 rule 6). **Its own smoke matters more
+      than usual**: pausing is a thing a user does deliberately, so the wrong
+      number here is one they can reproduce.
 - [ ] 🟡 **THE GOLDEN-TRACE GATE CANNOT SEE REP TIMING AT ALL.** `assertTrace`
       (`packages/engine/src/harness/assert.ts`) asserts rep count, fault
       multiset, scores, hold time and phase sequence — and **nothing about
@@ -2616,6 +2667,19 @@ then; none may be hidden or reduced to close the gap.
       log-only card. Whoever next edits that file should give this test its
       budget — a test that fails on network weather teaches the suite to be
       ignored.
+      **WIDENED 2026-08-14 (DECISIONS :7730), measured across four runs on one
+      evening: it is no longer ONE test.** Full-suite runs went 442/442 green,
+      443/443 green, then **"0009 workout_sets CHECKs" timed out** — and a
+      re-run of that file ALONE failed a DIFFERENT test in it, **"created every
+      Part 4 §2 table" at 5006 ms**, while the 0009 one passed at 4165 ms.
+      So the whole file is riding the 5000 ms default against a Neon branch in
+      another country, and WHICH test trips is network weather. **Still not this
+      card's**: `db.migration.test.ts` is not in its diff (command-verified), and
+      no assertion failed in any of the four runs — every failure was the
+      timeout. **The fix is now the FILE's budget, not one test's.** Note the
+      second-order cost, which is the real reason to fix it: an evening of
+      genuine green runs now ends in a red line that has to be re-diagnosed by
+      hand before anything can be claimed, and the next chat may not bother.
 - [ ] 🟡 **T3 round 8's four non-blocking findings (2026-07-28).** Given lines
       here in the same commit that deferred them, per the deferral rule — they
       were reported by a review that named them explicitly, which is exactly how
@@ -3111,6 +3175,14 @@ each definition carries its own `upAt`, `downAt`, `countOn`, `minRepMs`,
       the same defect Kd found, in the mode where it is arguably worse. Part 2
       §3.6 sequences the modes; §7.3's fixture matrix must cover an absence for
       each new one.
+      **EXTENDED 2026-08-14 by the API half (DECISIONS :7730): `watchedMs` is
+      accumulated in `session.ts` and so is mode-agnostic, but one of its two
+      blindness signals is NOT** — the occluded path reads `fsm.sightLost`, which
+      is `ModeAFsm`'s. A sibling counter that does not set it will report a hold
+      or a lunge set as fully watched through an occlusion, **and the server now
+      BILLS from that number**, so the consequence is larger than it was when this
+      line was written. Whoever writes the second counter owes the flag as well as
+      the clock.
 
 ## Open questions awaiting a Kd ruling (nothing built on these)
 

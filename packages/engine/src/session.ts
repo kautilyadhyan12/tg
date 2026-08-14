@@ -101,6 +101,35 @@ export function createSession(
   let severeInSet = false;
   let firstT: number | null = null;
   let lastT = 0;
+  // ── WATCHED TIME (the API half of the rep-timing card) ──────────────────
+  // How much of this set the camera could actually watch. The server bills
+  // from it. Time accrues ONLY between two frames the engine could use, with
+  // no loss of sight in between; `durationMs` (first frame → last frame) is
+  // the whole set including the stretches nobody watched, and this is the rest.
+  //
+  // No new threshold is invented for "how long a gap is an absence": the gap
+  // is exactly the one §3.1's count of three already defines, funnelled
+  // through `fsm.loseSight()` from both of its enforcement sites. So watched
+  // time and the rep clock re-arm on the same frame, by construction.
+  //
+  // WHAT THIS NUMBER CANNOT SEE, stated because the first draft of this
+  // comment claimed it could ("can never exceed what was really seen") and
+  // that was FALSE. A PAUSE feeds no frames AT ALL — not blank ones, not
+  // unusable ones — while the timestamps inside the frames that resume have
+  // advanced. One long inter-frame gap is indistinguishable here from a slow
+  // camera, so a pause lands INSIDE watched time. Measured on this package's
+  // own clip with a 120 s pause swept across every frame boundary: 70 of 84
+  // positions report `watchedMs` 128,400 against 8,400 ms really watched, and
+  // the worst bills 14.82 kcal where the truth is 0.98.
+  //
+  // That is PRE-EXISTING — v2 bills the identical 127,000 ms on the same
+  // clips — and the server clamps it with the on-screen timer, which is the
+  // one measurement that does stop on pause. The real fix is for the client to
+  // TELL the engine it stopped feeding; that needs no new threshold either,
+  // and it has its own `OWED.md` line rather than being smuggled in here.
+  let watchedMs = 0;
+  let lastUsableT: number | null = null;
+  let blindSinceLastUsable = false;
   let aggregates = emptyAggregates();
   const romExtremes: number[] = [];
   let ended: SetSummary | null = null;
@@ -179,7 +208,10 @@ export function createSession(
       // still counts; only its CLOCK re-arms, so the stretch nobody could watch
       // is never billed as exercise. Out-of-order drops leave visibilityOk
       // alone by design (DECISIONS 2026-07-07), so they cannot trip this.
-      if (!accepted.visibilityOk) fsm.loseSight();
+      if (!accepted.visibilityOk) {
+        fsm.loseSight();
+        blindSinceLastUsable = true;
+      }
       return {
         phase: "top",
         repCount: fsm.reps,
@@ -217,7 +249,26 @@ export function createSession(
     const bothVisible = kneeL !== null && kneeR !== null;
     const other = bothVisible ? (config.metric === "knee_L" ? kneeR : kneeL) : null;
 
+    // The frame is USABLE when the rep metric resolved — the same test the rep
+    // clock runs on. Credit the stretch since the last usable frame unless the
+    // camera lost sight inside it, then re-anchor here.
+    //
+    // A gap of one or two unusable frames is NOT an absence (§3.1 needs three),
+    // so it stays inside watched time — which is right, because the rep clock
+    // runs through it too. The two must agree, or the set can bill more rep
+    // time than it claims to have watched.
+    if (metric !== null) {
+      if (lastUsableT !== null && !blindSinceLastUsable) watchedMs += frame.t - lastUsableT;
+      blindSinceLastUsable = false;
+      lastUsableT = frame.t;
+    }
+
     const fsmResult = fsm.update(frame.t, metric, other);
+
+    // The OTHER blindness: every frame arrives and is valid, the legs simply
+    // are not measurable (:7404 measured it at the same size as walking out of
+    // shot). The FSM owns that streak, so ask it rather than counting again.
+    if (metric === null && fsm.sightLost) blindSinceLastUsable = true;
 
     // Rep-aggregate window = the CYCLE (descent begin → completion), not
     // wall-to-wall frames: standing-around between reps must not leak into the
@@ -282,37 +333,35 @@ export function createSession(
     // would drag the tempo down and UNDER-bill every rep in the set, because
     // `reps × tempoMsAvg` is what the server charges: an over-count traded for
     // a quieter under-count (Kd found this in the one-part design, 2026-08-11).
-    // So the average is taken over the reps watched end to end, and the
-    // interrupted one is billed at the rate of the reps we actually saw.
-    // If NONE was watched whole, the watched parts are all there is. Reporting
-    // nothing instead bills LESS: measured through the real `kcalPointForSetsV2`
-    // on a set shaped like Kd's own smoke (14 reps, 161 s) — honest 10 kcal ·
-    // part-measured 8 · null 6. (The reader-shape argument this comment used to
-    // make was FALSE and is struck: `reps > 0` with a null tempo already ships on
-    // every hand-counted set — `buildLogOnlySet` emits exactly that — and every
-    // schema, the column and the API are nullable. Only the BILLING justifies the
-    // fallback, so only the billing is claimed here.)
+    // So the average is taken over the reps watched END TO END, and nothing
+    // else. `tempoMsAvg` means "how long a rep took", and a rep the camera
+    // half-saw is not an answer to that question.
     //
-    // A rep watched for NO TIME AT ALL is excluded even from that fallback,
-    // because it is not a measurement — it is a rep nobody timed. It arises when
-    // sight returns on the very frame the rep completes: `fsm.ts` re-pins the
-    // clock to `t` and the rep closes at `t`, so the watched remainder is `t - t`.
-    // Averaging it in reported "0 ms per rep" for a set that really contained
-    // reps, and `kcalPointForSetsV2` reads that as nobody having exercised —
-    // measured on this package's own clip truncated to one rep: reps 1,
-    // tempoMsAvg 0, against 3,400 ms clean. Dropped HERE and not in `fsm.ts`
-    // because 0 is an honest DURATION for that rep; it is worthless only as a
-    // RATE. (T3 round 1 of this card, 2026-08-14.)
-    const wholeTempos = repEvents
-      .filter((_, i) => repInterrupted[i] !== true)
-      .map((r) => r.durationMs);
-    const partMeasured = repEvents.map((r) => r.durationMs).filter((d) => d > 0);
-    const tempos = wholeTempos.length > 0 ? wholeTempos : partMeasured;
+    // THE PART-MEASURED FALLBACK IS GONE — Kd ruled it out on 2026-08-14 and
+    // this supersedes his 2026-08-11 wording ("the part-measured reps still set
+    // the rate"). That clause was a workaround for a missing number, and it was
+    // the one place his own part 2 was inverted: it let half-measured reps set
+    // the rate after all, which billed an all-interrupted set ~20% low
+    // (:7487). The number now exists — `watchedMs`, below — so the honest
+    // answer to "how long did a rep take" is that we do not know, and the
+    // server charges the time the camera actually watched instead. Reporting
+    // null used to bill LESS than the fallback (measured: honest 10 kcal ·
+    // fallback 8 · null 6 through the real `kcalPointForSetsV2`); under the
+    // formula that reads `watchedMs` it does not, which is exactly what made
+    // the fallback removable rather than merely undesirable.
+    //
+    // The zero-duration rep this fallback used to have to exclude by hand
+    // (sight returning on the very frame a rep completes: `t - t`) needs no
+    // special case now — it is interrupted, so it was never a candidate.
+    const tempos = repEvents.filter((_, i) => repInterrupted[i] !== true).map((r) => r.durationMs);
     ended = {
       exercise: config.exercise,
       setIndex: config.setIndex,
       reps: fsm.reps,
       durationMs: Math.round(lastT - (firstT ?? lastT)),
+      // Never more than the span by construction: it accrues only between
+      // frames inside [firstT, lastT]. Asserted rather than assumed.
+      watchedMs: Math.round(watchedMs),
       avgFormScore: avg,
       repScores,
       faultCounts: { ...faults.faultCounts },
