@@ -1,6 +1,59 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE DASHBOARD'S STATS ARE OFF THE OLD BACKEND. **DONE — smoke 10/10,
+      three T3 rounds, OWED line TICKED.** Commits 1df8487 (build) + 8b681ef
+      (rounds 1-3 + smoke). DECISIONS :8267, :8340, :8405.
+
+THE SCOPE CHANGED MID-CARD AND THE OLD LINE STILL SAYS OTHERWISE IN PLACES
+  · It was web-only. **It is not any more.** Round 2 forced a server change:
+    `workoutPageSchema` gains `hasAnyWorkouts`, with a new repo function and a
+    line in `listWorkouts`. Still no migration and no new endpoint.
+
+WHAT TWO CRITICALS IN THE SAME THREE LINES ACTUALLY TAUGHT
+  · The Recent Workouts empty state shipped a Critical in round 1 (denied a real
+    history) and another in round 2 (told brand-new accounts their plan hid one).
+    **Neither was a wording bug.** Everyone is gated — no subscription resolves
+    to the free plan's 90 days — so a new account and a lapsed veteran send the
+    SAME page, and `getOverview` clamps by the same floor so the totals tile
+    reads 0 for both. A screen given only `limitedToDays` must guess.
+  · Part I §2.5's escape hatch fired and **Kd ruled for the redesign**. If you
+    are about to word your way out of an empty state, that is the precedent.
+
+TRAPS FOR THE NEXT CHAT
+  · **The UNKNOWN arm ("No workouts to show.") is load-bearing.** It is for a
+    server too old to answer `hasAnyWorkouts`. `?? false` there re-opens round
+    1's Critical. It is unreachable in a local smoke and covered by tests only.
+  · **`historyOk([])` in the render suite does NOT reach the UNKNOWN arm** — the
+    fixture defaults `hasAnyWorkouts` to `items.length > 0`. Mock
+    `workoutService.getHistory` directly and omit the field.
+  · **A leftover `vite` may already hold 5173.** A second one takes 5174, where
+    login silently fails — `WEB_ORIGIN` names 5173 exactly. Looks like a broken
+    app, is a CORS rejection.
+  · `tools/seed-backdated-workout.mjs <email> [daysAgo]` makes the >90-day
+    fixture the UI cannot produce. `bundle_version` and `definition_version` are
+    INTEGER columns, not the dotted strings the sync payload carries.
+  · **A fix that duplicates a rule to correct the duplicate is not a fix.** L26
+    added a singular by writing a fifth copy of a phrase `totalsWindowLabel`
+    already owned. Round 3 found it.
+
+STILL OPEN, WITH LINES
+  · `OWED.md` — first-render timezone offset (⚪); "Last 1 Days" in
+    `heatmapCaption`, `recordsNote`, `WorkoutCalendar.jsx:341` (⚪, fix as a
+    CLASS via `totalsWindowLabel`).
+  · `BACKLOG.md` L23 — Register.jsx demands a capital letter the server does not.
+  · **This card unblocks the legacy dual-write line in `OWED.md`** —
+    `createSession`/`completeSession` retire together, in their own card.
+
+MEASUREMENTS: web 624/624 · api history 23/23 on real Postgres · shared + api
+typecheck clean · lint clean · 6 web + 2 database mutants, all RED, restores
+sha256-verified.
+
+NEXT: no card chosen. The dual-write retirement is now unblocked and is the
+      obvious candidate; it is Kd's call.
+```
+
+```
 TASK: THE DASHBOARD'S STATS ARE OFF THE OLD BACKEND. Built, proven locally,
       committed. **THE OWED LINE DOES NOT TICK — smoke and T3 are both UNRUN,
       and those are the only two things left on this card.**
