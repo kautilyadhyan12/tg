@@ -220,6 +220,47 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:8156** — 2026-08-15 — **THE DASHBOARD'S NUMBERS COME OFF THE NEW API — and
+  the OWED line's own premise ("the weekly count has no home") was FALSE.**
+  **Read before touching the Dashboard's figures, before adding a second read to
+  a screen that had one, before writing any `toLocaleDateString`, and before
+  believing a mutation verdict produced under a `-t` filter.** Web only; no
+  migration, no new endpoint, `apps/api` untouched. Composes three P2.3
+  endpoints: `overview?period=all`, `trend?period=7d`, `/v1/workouts?limit=6`.
+  **The trend endpoint reports workouts per DAY in the user's own timezone, so
+  ONE read answers both the "This week" count and the seven dots** — round 10
+  F1's "10 of 7 days active" is now unreachable by construction rather than by
+  two fields agreeing. **THREE THINGS A USER SEES CHANGE, all corrections:** the
+  dots move to the viewer's OWN timezone (the retired `weekDates` keyed by
+  `toISOString()` deliberately, to match the old backend's `utcnow()`; round 11
+  F1's JSDoc parked the residual as "not this card's to fix" — **this is that
+  card**, pinned in BOTH tz directions with the switch positive control, since
+  under UTC the assertion is inert, :4267 F2); **"all time" becomes "last 90
+  days"** on a gated plan (`period=all` is unbounded so the floor cuts EVERY
+  time — :598's f.4 on the first screen a user sees; `totalsWindowLabel` joins
+  `heatmapCaption`/`recordsNote`, one ladder); and a recent workout's duration
+  stops being rounded to minutes (:4182, closed by reusing the CALENDAR's row
+  reader and formatters). **KD'S QUESTION — "is this becoming India-specific?" —
+  was CHECKED, not answered:** `PostWorkout.jsx:133` forces `'en-IN'` on every
+  user on earth and four sites force `'en-US'`; the Dashboard's own copy is fixed
+  here because that line was already being rewritten, the rest get an OWED line
+  naming every sibling (:1239, the class not the case). **`gyms.timezone`'s
+  `Asia/Kolkata` is the SPEC's own DDL** (`04-part4-database.md:172`), not a
+  defect; his wider privacy-scope point stays open at :592.
+  **THE AUDIT FOUND WHAT REVIEW AND WRITING THE CODE DID NOT: nothing pinned
+  WHICH windows the page requests** — every fixture mocks the network functions,
+  so `period=30d` captioned "all time" passed every other test. **And the audit's
+  own row was wrong first: P5 came back ALIVE because it named a test reaching
+  the UNKNOWN arm, where the mutant is inert** — re-aimed it fails `expected +0
+  to be 2`. :4718 F2 from the other side (that was RED for the wrong reason; this
+  ALIVE for the wrong reason), and the FOURTH instrument finding in five cards.
+  **The totals will DROP for pre-August history** — the new DB holds only what
+  has synced; P2.8 migrates the rest, and Kd was told before the card ran.
+  web 615/615 (+29) · `vite build` ✓ · 15 mutants 15 RED 0 ALIVE, restores
+  sha256-verified. **:3424's condition for retiring `completeSession` +
+  `createSession` is now MET so that pair is UNBLOCKED — it retires in its OWN
+  card and nothing about how a workout is SAVED changed here.** **OWED does NOT
+  tick: smoke and T3 both unrun.**
 - **:8072** — 2026-08-15 — **REST-IN-FULL-VIEW: the instrument is built and KD'S
   CLIPS DO NOT CONTAIN THE DEFECT — measured, and the all-clips table is a TRAP.**
   **Read before running `measure-rest.ts`, before quoting any row of its table, and

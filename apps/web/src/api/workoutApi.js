@@ -15,16 +15,17 @@
 // defect"). Owed per the NO-REMOVAL rule (CLAUDE.md MIGRATION STANCE) and
 // RUNBOOK/cutover.md; do NOT repoint without a new-API surface, and do NOT
 // delete one to "finish" the repoint:
-//   getStats        — the Dashboard's payload; `/workouts/stats` has no new-API
-//                     home (its `xp`/`level` are superseded by
-//                     /v1/gamification/me, but the rest of it is not).
 //   createSession   — PreWorkout opens a session server-side; the new model is
 //   completeSession   client-side capture + `POST /v1/workouts/sync`, which the
 //                     ActiveWorkout/PreWorkout repoint card owns. NOTE the two
 //                     are COUPLED and cannot be dropped separately: the legacy
-//                     save needs the session id the legacy start hands out, and
-//                     :3424 rules the legacy save STAYS until the Dashboard's
-//                     stats have a new-API home too.
+//                     save needs the session id the legacy start hands out.
+//                     :3424's condition for retiring them — "until the
+//                     Dashboard's stats have a new-API home too" — is MET as of
+//                     this card (`api/dashboardStats.js`), so the two are now
+//                     unblocked and retire together in their own card. They are
+//                     NOT dropped here: this card changes what the Dashboard
+//                     READS, and nothing about what a finished workout WRITES.
 //   templates ×4    — WorkoutBuilder. CORRECTED 2026-08-01: an earlier version
 //                     of this comment said "no templates table or endpoint
 //                     exists on the new API at all". The TABLE exists —
@@ -75,7 +76,6 @@ export const workoutService = {
   getSummary: (id) => authApi.get(`/v1/workouts/${id}/summary`),
 
   // OLD BACKEND (see header note) — do not repoint without a new-API surface.
-  getStats: () => mlApi.get('/workouts/stats'),
   createSession: (data) => mlApi.post('/workouts', data),
   completeSession: (id, data) => mlApi.patch(`/workouts/${id}/complete`, data),
   saveTemplate: (name, exercises) => mlApi.post('/workouts/templates', { name, exercises }),

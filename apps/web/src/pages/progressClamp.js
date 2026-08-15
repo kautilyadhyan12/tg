@@ -76,6 +76,24 @@ export function recordsNote(limitedToDays) {
   return `On your plan these cover the last ${days} days. Longest streak is all-time.`;
 }
 
+/** The Dashboard's three lifetime totals: "all time", or the window that
+ *  actually produced them.
+ *
+ *  Third sibling of `heatmapCaption` and `recordsNote`, and the same shape of
+ *  defect. The Dashboard asks `/v1/progress/overview?period=all` and prints
+ *  "all time" underneath — but `all` is unbounded, so a plan floor cuts it
+ *  EVERY time (`effectiveClamp('all', …)` returns the limit for exactly that
+ *  reason). A gated user therefore reads a 90-day total captioned "all time":
+ *  f.4's lie again, on the screen they see first.
+ *
+ *  Lives here rather than beside the reader so all three period-less captions
+ *  are one ladder — a fourth spelling of "the last N days" is how a screen
+ *  starts describing the same window two ways. */
+export function totalsWindowLabel(limitedToDays) {
+  const days = effectiveClamp("all", limitedToDays);
+  return days === null ? "all time" : `last ${days} ${days === 1 ? "day" : "days"}`;
+}
+
 /** What the page should render: whether to show the notice, and the caption
  *  for "in {…}" — corrected to the window actually shown, because a notice
  *  sitting beside a label still reading "1 Year" only half-fixes the lie. */

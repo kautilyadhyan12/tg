@@ -46,7 +46,15 @@ vi.mock('../api/gamificationApi', async (importOriginal) => {
   };
 });
 vi.mock('../api/workoutApi', () => ({
-  workoutService: { getStats: vi.fn(), getSummary: vi.fn() },
+  workoutService: { getHistory: vi.fn(), getSummary: vi.fn() },
+}));
+// The Dashboard's figures moved off the old backend's single `getStats`
+// envelope onto three new-API reads. Mocking the NETWORK functions only, as
+// above: `readDashboardOverview` / `readWeekActivity` / `readRecentWorkouts`
+// are the real implementations, because deciding whether a number is knowable
+// is precisely what is under test.
+vi.mock('../api/progressApi', () => ({
+  progressService: { getOverview: vi.fn(), getCaloriesTrend: vi.fn() },
 }));
 // PostWorkout re-kicks the offline sync queue while it waits for a workout to
 // reach the server (the 404-retry path). Mocked so these tests never depend on
@@ -78,6 +86,10 @@ vi.mock('../context/TransitionContext', () => ({
 
 const { gamificationService } = await import('../api/gamificationApi');
 const { workoutService }      = await import('../api/workoutApi');
+const { progressService }     = await import('../api/progressApi');
+// The REAL tint ladder, not a copy of its value: an assertion that hard-codes
+// the colour string passes just as happily against a second, drifted ladder.
+const { FORM_NEUTRAL }        = await import('../api/workoutHistory');
 const { isAwaitingSync, flushSyncQueue } = await import('../sync/syncClient');
 const { recommendationService } = await import('../api/recommendationApi');
 // The toast is normally a side effect and not a claim under test (see the mock
@@ -124,6 +136,38 @@ const DEAD = () => Promise.reject(new Error('ECONNREFUSED'));
 const HANGS = () => new Promise(() => {});
 
 const renderPage = (ui) => render(<MemoryRouter>{ui}</MemoryRouter>);
+
+/** The Dashboard's THREE reads, all failing. Named because every test below
+ *  that is about one of them still has to say what the other two did — three
+ *  independent requests is the whole reason round 7 F1 exists, so a helper that
+ *  hid them would be hiding the thing under test. */
+const dashboardDead = () => {
+  progressService.getOverview.mockImplementation(DEAD);
+  progressService.getCaloriesTrend.mockImplementation(DEAD);
+  workoutService.getHistory.mockImplementation(DEAD);
+};
+/** `GET /v1/progress/overview?period=all`. Fields omitted on purpose stay
+ *  omitted — these fixtures exist to prove an absent field does not become 0. */
+const overviewOk = (body) => progressService.getOverview.mockResolvedValue({ data: body });
+/** `GET /v1/progress/trend?period=7d`. The endpoint returns ONLY days that have
+ *  workouts, so a day absent from `points` is a real zero. */
+const weekOk = (points, limitedToDays = null) =>
+  progressService.getCaloriesTrend.mockResolvedValue({ data: { points, limitedToDays } });
+/** `GET /v1/workouts?limit=6`. */
+const historyOk = (items) =>
+  workoutService.getHistory.mockResolvedValue({ data: { items, nextCursor: null, limitedToDays: null } });
+/** A schema-valid `workoutListItemSchema` row. Every field the contract
+ *  requires is present, so a test that omits one is omitting it deliberately —
+ *  and if a field NAME moves in `@app/shared`, the rows stop reading and the
+ *  Recent Workouts assertions go red rather than silently drawing dashes. */
+const listRow = (over = {}) => ({
+  id: '11111111-1111-4111-8111-111111111111',
+  startedAt: '2026-07-25T10:00:00Z',
+  platform: 'web', setsCount: 2, totalReps: 20,
+  avgFormScore: 88, durationMs: 187_000, kcalPoint: 42,
+  kcalCalcVersion: 3, qualityFlags: [],
+  ...over,
+});
 
 /** ROUND 8 F6 — the instruments the dash FLOORS are replaced by.
  *
@@ -212,11 +256,11 @@ describe('Sidebar — where the original bug lived — round 8 F1', () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Dashboard — a real level never sits beside fabricated figures', () => {
-  it('old backend DEAD, XP ready: shows the true level and dashes for the rest', async () => {
+  it('every stats read DEAD, XP ready: shows the true level and dashes for the rest', async () => {
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     gamificationService.getOverview.mockImplementation(DEAD);
     gamificationService.getLeaderboard.mockImplementation(DEAD);
-    workoutService.getStats.mockImplementation(DEAD);
+    dashboardDead();
 
     const { container } = renderPage(<Dashboard />);
 
@@ -229,8 +273,8 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     expect(screen.queryByText(/Level 1\b/)).toBeNull();
     expect(screen.queryByText(/0 XP earned/)).toBeNull();
 
-    // The six old-backend figures are UNKNOWN, not zero.
-    expect(screen.queryByText('0 minutes')).toBeNull();
+    // Every figure is UNKNOWN, not zero.
+    expect(screen.queryByText(/0 minutes/)).toBeNull();
     expect(screen.queryByText(/0 of 7 days active/)).toBeNull();
     expect(screen.getByText('Weekly activity unavailable')).toBeTruthy();
 
@@ -257,22 +301,29 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     expect(container.textContent).not.toMatch(/\b0\b/);
   });
 
-  it('a 200 carrying {stats:{}} still shows dashes — round 4 F2', async () => {
-    // The exact payload F2 named: the ENVELOPE arrived, so `Boolean(stats.stats)`
-    // was true, and six sites then read absent fields with `?? 0`.
+  it('a 200 carrying an EMPTY BODY still shows dashes — round 4 F2', async () => {
+    // F2's payload, repointed: the response ARRIVED and carries none of the
+    // fields. The old shape was `{stats:{}}` behind a `Boolean(stats.stats)`
+    // envelope gate; the new one has no envelope at all, which is the point —
+    // there is nothing left for a gate to be wrong about, and the only way a
+    // zero reaches the screen now is somebody writing `?? 0` on purpose.
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     gamificationService.getOverview.mockImplementation(DEAD);
     gamificationService.getLeaderboard.mockImplementation(DEAD);
-    workoutService.getStats.mockResolvedValue({ data: { stats: {} } });
+    overviewOk({});
+    // The week read is a SEPARATE request and is still dead here, so the strip
+    // must still say so — an arrived overview may not vouch for it.
+    progressService.getCaloriesTrend.mockImplementation(DEAD);
+    workoutService.getHistory.mockImplementation(DEAD);
 
     const { container } = renderPage(<Dashboard />);
 
     await waitFor(() => expect(screen.getAllByText(/Level 3/).length).toBeGreaterThan(0));
-    expect(screen.queryByText('0 minutes')).toBeNull();
+    expect(screen.queryByText(/0 minutes/)).toBeNull();
     expect(screen.queryByText(/0 of 7 days active/)).toBeNull();
-    expect(screen.getByText('Weekly activity unavailable')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText('Weekly activity unavailable')).toBeTruthy());
 
-    // ROUND 8 F6, and this fixture is where it bites hardest: the ENVELOPE
+    // ROUND 8 F6, and this fixture is where it bites hardest: the response
     // arrived, so a `?? 0` on any absent field reads as a real server zero.
     expect(statValue('Total Workouts')).toBe('—');
     expect(statValue('Hours Trained')).toBe('—');
@@ -283,47 +334,115 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
   });
 
   it('a PARTIAL 200 fabricates nothing for the missing fields', async () => {
-    // total_minutes and total_calories absent — the subset case F2 called out.
+    // `totalDurationMs` and `totalKcal` absent — the subset case F2 called out,
+    // in the new payload's spelling.
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     gamificationService.getOverview.mockImplementation(DEAD);
     gamificationService.getLeaderboard.mockImplementation(DEAD);
-    workoutService.getStats.mockResolvedValue({
-      data: { stats: { total_workouts: 12, weekly_workouts: 2 }, activity: {} },
-    });
+    overviewOk({ totalWorkouts: 12 });
+    weekOk([]); // the week ARRIVED and is genuinely empty
+    workoutService.getHistory.mockImplementation(DEAD);
 
     renderPage(<Dashboard />);
 
-    // ROUND 10 F1: this used to wait on "2 of 7 days active" — the
-    // `weekly_workouts: 2` SESSION count. The caption is derived from
-    // `activity` now, which here is an empty (but arrived) map, so the honest
-    // answer is 0 days. The session count keeps its own tile below.
+    // An arrived-but-empty week is a real zero, not an unknown — that
+    // distinction is the whole of round 4 F3 and it survives the repoint.
     // (The stat number itself is not asserted here: StatCard animates it from 0
     // via requestAnimationFrame, so its intermediate value is a timing
     // artefact, not a claim.)
     await waitFor(() => expect(screen.getByText('0 of 7 days active')).toBeTruthy());
     // The two ABSENT fields must NOT have become zeros.
-    expect(screen.queryByText('0 minutes')).toBeNull();
-    expect(screen.queryByText('kcal total')).toBeTruthy();
+    expect(screen.queryByText(/0 minutes/)).toBeNull();
+    expect(screen.getByText(/kcal ·/)).toBeTruthy();
 
     // ROUND 8 F6, by identity. NO whole-document zero sweep in THIS test: the
-    // known `total_workouts: 12` is a number, so StatCard animates it from 0
+    // known `totalWorkouts: 12` is a number, so StatCard animates it from 0
     // and a bare "0" is a legitimate frame of that sweep, not a fabrication.
     // The absent fields are strings ('—') and never animate.
     expect(statValue('Hours Trained')).toBe('—');
     expect(statValue('Calories Burned')).toBe('—');
+    // THE STREAK is absent from this payload and must stay unknown, while the
+    // week's count beside it is a KNOWN zero from a different read. Two tiles,
+    // two sources, and only one of them is entitled to print a number — the
+    // exact confusion round 5 F8 was about.
     expect(tileValue('days')).toBe('—');
     // THE CONTROL, and it is the one that stops "everything is a dash" from
     // passing: a field the server DID send still renders its real value. The
     // tiles render {value} directly, so unlike StatCard there is no animation
     // to race here.
-    expect(tileValue('workouts')).toBe('2');
+    expect(tileValue('workouts')).toBe('0');
+  });
+
+  it('asks the server for the windows the screen claims', async () => {
+    // FOUND BY THE MUTATION AUDIT, and nothing else here could see it. Every
+    // fixture mocks the network functions, so they answer identically whatever
+    // they are ASKED — a page requesting `period=30d` and captioning the answer
+    // "all time" passes every other test in this file while printing a 30-day
+    // total as a lifetime one. The argument IS the claim: these three calls are
+    // the only thing making "all time", "of 7 days" and six rows true.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    overviewOk({ totalWorkouts: 1 });
+    weekOk([]);
+    historyOk([]);
+
+    renderPage(<Dashboard />);
+    await waitFor(() => expect(screen.getByText('No workouts logged yet.')).toBeTruthy());
+
+    expect(progressService.getOverview).toHaveBeenCalledWith('all');
+    expect(progressService.getCaloriesTrend).toHaveBeenCalledWith('7d');
+    expect(workoutService.getHistory).toHaveBeenCalledWith({ limit: 6 });
+  });
+
+  it('a plan-limited total is NOT captioned "all time"', async () => {
+    // DECISIONS :598's defect on the first screen a user sees. `period=all` is
+    // unbounded, so a 90-day plan floor cuts it EVERY time and the server says
+    // so in `limitedToDays` — which the page ignored before this card, printing
+    // a 90-day total under the words "all time".
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    overviewOk({ totalWorkouts: 12, totalKcal: 900, totalDurationMs: 3_930_000, limitedToDays: 90 });
+    weekOk([]);
+    workoutService.getHistory.mockImplementation(DEAD);
+
+    renderPage(<Dashboard />);
+    await waitFor(() => expect(screen.getAllByText(/last 90 days/).length).toBeGreaterThan(0));
+    // All THREE tiles name the same window — one label, so a gated user cannot
+    // read the truth on one tile and "all time" on the next.
+    expect(screen.getAllByText(/last 90 days/).length).toBe(3);
+    expect(screen.queryByText('all time')).toBeNull();
+  });
+
+  it('an UNLIMITED plan still reads "all time" — the control', async () => {
+    // Without this, "never say all time" would pass and the caption would be
+    // wrong in the other direction for every paying user.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    overviewOk({ totalWorkouts: 12, totalKcal: 900, totalDurationMs: 3_930_000, limitedToDays: null });
+    weekOk([]);
+    workoutService.getHistory.mockImplementation(DEAD);
+
+    renderPage(<Dashboard />);
+    await waitFor(() => expect(screen.getAllByText(/all time/).length).toBeGreaterThan(0));
+    expect(screen.queryByText(/last 90 days/)).toBeNull();
+    // …and the hours tile carries its own minutes figure beside it, derived
+    // from the MILLISECONDS rather than chained through the rounded minutes.
+    // The big number itself is NOT asserted here: `AnimatedNumber` renders
+    // `Math.floor(ease * value)`, so a fractional hours figure is both animated
+    // and floored on its way to the DOM. That is pre-existing and out of this
+    // card (R1.1) — it has its own OWED line — but it is why this assertion
+    // reads the sub-line, which is a string and never animates.
+    expect(screen.getByText(/66 minutes/)).toBeTruthy();
   });
 
   it('XP read fails too: no level is invented anywhere', async () => {
     gamificationService.getMe.mockImplementation(DEAD);
     gamificationService.getOverview.mockImplementation(DEAD);
     gamificationService.getLeaderboard.mockImplementation(DEAD);
-    workoutService.getStats.mockImplementation(DEAD);
+    dashboardDead();
 
     const { container } = renderPage(<Dashboard />);
 
@@ -347,46 +466,114 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     expect(tileValue('current')).toBe('—');
   });
 
-  it('a recent workout with only an id and a date fabricates nothing — round 5 F3', async () => {
-    // `recent_workouts` was the one list readStatsView passed through unparsed,
-    // and three sites then rendered `|| 0`: "0 min · 0 kcal · 0% form", with the
-    // unknown accuracy painted RED by the <60 branch.
+  it('a recent workout with no numbers fabricates nothing — round 5 F3', async () => {
+    // The list was passed through unparsed and three sites then rendered
+    // `|| 0`: "0 min · 0 kcal · 0% form", with the unknown accuracy painted RED
+    // by the <60 branch. The payload is `/v1/workouts` now and its three
+    // nullable fields are nullable IN THE CONTRACT (`workoutListItemSchema`),
+    // so this is the shape a real server sends for a hand-counted workout, not
+    // a hypothetical.
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     gamificationService.getOverview.mockImplementation(DEAD);
     gamificationService.getLeaderboard.mockImplementation(DEAD);
-    workoutService.getStats.mockResolvedValue({
-      data: {
-        stats: { total_workouts: 3 },
-        recent_workouts: [{ id: 'w1', completed_at: '2026-07-25T10:00:00Z' }],
-      },
-    });
+    overviewOk({ totalWorkouts: 3 });
+    weekOk([]);
+    historyOk([listRow({ durationMs: null, kcalPoint: null, avgFormScore: null })]);
 
     const { container } = renderPage(<Dashboard />);
     await waitFor(() => expect(screen.getByText('Workout Session')).toBeTruthy());
 
     const text = container.textContent;
-    expect(text).not.toMatch(/0 min/);
     expect(text).not.toMatch(/0 kcal/);
     expect(text).not.toMatch(/0% form/);
-    expect(text).toMatch(/— min/);
+    expect(text).not.toMatch(/0m 0s/);
     expect(text).toMatch(/— kcal/);
-    expect(text).toMatch(/—% form/);
+    expect(text).toMatch(/— form/);
+    // THE TINT, which is the half round 5 F3 was actually about: an unknown
+    // score must be neutral, never the <60 red. Asserted on the element rather
+    // than on the text, because the text was already right when the colour was
+    // not.
+    const formLine = screen.getByText(/— form/);
+    // Whitespace-normalised on BOTH sides: jsdom re-serialises `rgba(a,b,c,d)`
+    // with spaces after the commas, so a raw `toBe` compares the browser's
+    // spelling against the source's and fails on a colour that is identical.
+    const noSpace = (s) => s.replace(/\s+/g, '');
+    expect(noSpace(formLine.style.color)).toBe(noSpace(FORM_NEUTRAL));
   });
 
-  it('the week caption and the dots agree — round 5 F8', async () => {
-    // weeklyWorkouts known + activity unknown used to print "3 of 7 days
-    // active" beside seven dashed UNKNOWN dots.
+  it('a recent workout renders its REAL numbers — the positive control', async () => {
+    // Without this, every assertion above is satisfied by a pane that renders
+    // dashes unconditionally. It also pins the unit: 187,000 ms is 3m 7s, and
+    // the defect this replaces (:4182) printed exactly this shape of value as
+    // "3 min" — or, at 8,491 ms, as "0 min".
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     gamificationService.getOverview.mockImplementation(DEAD);
     gamificationService.getLeaderboard.mockImplementation(DEAD);
-    workoutService.getStats.mockResolvedValue({
-      data: { stats: { weekly_workouts: 3 } },   // no `activity`
-    });
+    overviewOk({ totalWorkouts: 3 });
+    weekOk([]);
+    historyOk([listRow()]);
+
+    const { container } = renderPage(<Dashboard />);
+    await waitFor(() => expect(screen.getByText('Workout Session')).toBeTruthy());
+
+    const text = container.textContent;
+    expect(text).toMatch(/3m 7s/);
+    expect(text).toMatch(/42 kcal/);
+    expect(text).toMatch(/88% form/);
+    expect(text).not.toMatch(/3 min/);
+  });
+
+  it('a page of rows it cannot read is UNAVAILABLE, never "no workouts" — :5104 F4', async () => {
+    // Two true statements — a page arrived; not one row could be drawn —
+    // composed into a false claim about a user's history. The empty-list arm
+    // says "No workouts logged yet.", which is a definite denial.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    overviewOk({ totalWorkouts: 3 });
+    weekOk([]);
+    historyOk([{ nope: true }, { id: 'not-a-row' }]);
+
+    renderPage(<Dashboard />);
+    await waitFor(() =>
+      expect(screen.getByText('Recent workouts are unavailable right now.')).toBeTruthy());
+    expect(screen.queryByText('No workouts logged yet.')).toBeNull();
+  });
+
+  it('a GENUINELY empty history says so — the other side of the same control', async () => {
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    overviewOk({ totalWorkouts: 0 });
+    weekOk([]);
+    historyOk([]);
+
+    renderPage(<Dashboard />);
+    await waitFor(() => expect(screen.getByText('No workouts logged yet.')).toBeTruthy());
+    expect(screen.queryByText('Recent workouts are unavailable right now.')).toBeNull();
+  });
+
+  it('the week caption and the dots agree — round 5 F8', async () => {
+    // A known session count beside an unknown week used to print "3 of 7 days
+    // active" over seven dashed UNKNOWN dots. After the repoint the count and
+    // the dots have ONE source, so the two can no longer be separately known —
+    // this test now proves that property rather than policing two fields, and
+    // a 200 that is not a trend at all is the way to reach the unknown arm.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    overviewOk({ totalWorkouts: 3 });
+    progressService.getCaloriesTrend.mockResolvedValue({ data: { limitedToDays: null } }); // no `points`
+    workoutService.getHistory.mockImplementation(DEAD);
 
     const { container } = renderPage(<Dashboard />);
     await waitFor(() => expect(screen.getByText('Weekly activity unavailable')).toBeTruthy());
-    expect(screen.queryByText('3 of 7 days active')).toBeNull();
+    expect(screen.queryByText(/of 7 days active/)).toBeNull();
     expect(container.querySelectorAll('[title="Activity unavailable"]').length).toBe(7);
+    // The TILE must go unknown with them. It reads the same map, so a number
+    // here beside "unavailable" there would be the two-standards defect with
+    // the sources merged — which is precisely what merging them prevents.
+    expect(tileValue('workouts')).toBe('—');
   });
 
   it('activity known but the COUNT unknown: the caption denies nothing — round 9 F4', async () => {
@@ -400,9 +587,9 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     gamificationService.getOverview.mockImplementation(DEAD);
     gamificationService.getLeaderboard.mockImplementation(DEAD);
-    workoutService.getStats.mockResolvedValue({
-      data: { stats: { total_workouts: 3 }, activity: {} },   // no weekly_workouts
-    });
+    overviewOk({ totalWorkouts: 3 });
+    weekOk([]); // the week ARRIVED and is genuinely empty
+    workoutService.getHistory.mockImplementation(DEAD);
 
     const { container } = renderPage(<Dashboard />);
     await waitFor(() => expect(screen.getAllByText(/Level 3/).length).toBeGreaterThan(0));
@@ -410,44 +597,45 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     // The week ARRIVED, so nothing may claim it did not.
     expect(screen.queryByText('Weekly activity unavailable')).toBeNull();
     expect(container.querySelectorAll('[title="Activity unavailable"]').length).toBe(0);
-    // ROUND 10 F1 changed what "the count" means here. The caption no longer
-    // reads `weekly_workouts` at all, so an `activity` that ARRIVED and is empty
-    // is a GENUINE zero — a fact the server sent, not a fabrication. Unknown
-    // now has exactly one home, the arm above ("Weekly activity unavailable"),
-    // which is the honest place for it once the number is derived from the very
-    // map the dots are drawn from.
+    // ROUND 10 F1 changed what "the count" means here, and the repoint makes it
+    // structural: a week that ARRIVED and is empty is a GENUINE zero — a fact
+    // the server sent, not a fabrication. Unknown now has exactly one home, the
+    // arm above ("Weekly activity unavailable"), which is the honest place for
+    // it once every number on this card comes off the one map the dots draw.
     expect(screen.getByText('0 of 7 days active')).toBeTruthy();
     expect(screen.queryByText(/\bnull of 7\b/)).toBeNull();
     expect(screen.queryByText(/undefined of 7/)).toBeNull();
   });
 
   it('the caption counts the SAME days the dots light — round 10 F1', async () => {
-    // `weekly_workouts` is a count of SESSIONS since Monday
-    // (backend-ml/app/routers/workouts.py:72-74); `activity` is keyed by DAY
-    // over a ROLLING seven days (:86-89) — two different measurements over two
-    // different windows. The caption printed the first while the dots drew the
-    // second, so two sessions on one day read "5 of 7 days active" over three
-    // flames, and past seven sessions "10 of 7 days active", which cannot be
-    // true. The tile eight inches to the left labels that same field
-    // "workouts", which is what it actually is.
+    // The old defect was TWO measurements: a count of SESSIONS since Monday
+    // beside a picture keyed by DAY over a rolling seven days, so two sessions
+    // on one day read "5 of 7 days active" over three flames, and past seven
+    // sessions "10 of 7 days active", which cannot be true. Both numbers now
+    // come off one response's day buckets — so this test's job changes from
+    // policing two fields to proving the derivation: WORKOUTS and DAYS are
+    // different numbers off the same map, and only the days reach the caption.
     //
     // ROUND 11 F4 — THE COMMENT THAT STOOD HERE OVERCLAIMED AND IS CORRECTED.
     // It said the fixture "cannot make this test agree with itself" because the
-    // dates are computed here rather than imported. That is only true of a
-    // DIFFERENTLY wrong helper: this fixture re-implements `weekDates`'s
-    // algorithm, `toISOString` included, so a helper wrong in the SAME way is
-    // invisible to it. Round 11 proved it — the UTC/local mixing survived here
-    // and was caught only by the unit tests in `gamificationApi.test.js`, which
-    // pin both the clock and the timezone. What this fixture buys is a check
-    // that the caption and the dots agree; what it does NOT buy is a check that
-    // either is right. Deriving it from a pinned clock and literal dates is on
-    // OWED.
+    // dates are computed here rather than imported. That was only true of a
+    // DIFFERENTLY wrong helper: the fixture re-implemented the helper's
+    // algorithm, `toISOString` included, so a helper wrong in the SAME way was
+    // invisible to it — round 11 proved it, and the unit tests caught what this
+    // one could not. THE FIXTURE IS NOW BUILT THE OTHER WAY ROUND: local
+    // `getFullYear/getMonth/getDate`, which is what the SERVER's day bucketing
+    // produces and what `weekOfDates` must therefore agree with. If the helper
+    // regressed to a UTC key, these keys would stop matching for part of every
+    // day in any non-UTC zone rather than never — still not a substitute for
+    // the pinned-clock unit tests, and no longer the same wrong shape.
     const t = new Date();
     const monIdx = (t.getDay() + 6) % 7;
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const localKey = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
     const dayKey = (offset) => {
       const d = new Date(t);
       d.setDate(t.getDate() - monIdx + offset);
-      return d.toISOString().split('T')[0];
+      return localKey(d);
     };
     // ROUND 11: a day OUTSIDE the displayed week. Without it, "count the days in
     // this week" and "count every key in the payload" return the same number
@@ -458,31 +646,31 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     const lastWeek = (() => {
       const d = new Date(t);
       d.setDate(t.getDate() - monIdx - 3);
-      return d.toISOString().split('T')[0];
+      return localKey(d);
     })();
 
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     gamificationService.getOverview.mockImplementation(DEAD);
     gamificationService.getLeaderboard.mockImplementation(DEAD);
-    workoutService.getStats.mockResolvedValue({
-      data: {
-        stats: { weekly_workouts: 5 },              // FIVE sessions…
-        activity: {
-          [dayKey(0)]: true, [dayKey(2)]: true,     // …on TWO days this week…
-          [lastWeek]: true,                         // …plus one OUTSIDE the window
-        },
-      },
-    });
+    overviewOk({ totalWorkouts: 8 });
+    weekOk([
+      { date: dayKey(0), kcal: 120, workouts: 4 },  // FOUR workouts…
+      { date: dayKey(2), kcal: 60, workouts: 1 },   // …on TWO days this week…
+      { date: lastWeek, kcal: 90, workouts: 3 },    // …plus a day OUTSIDE the window
+    ]);
+    workoutService.getHistory.mockImplementation(DEAD);
 
     renderPage(<Dashboard />);
     await waitFor(() => expect(screen.getByText(/of 7 days active/)).toBeTruthy());
 
-    // The SESSION count must never be the caption's number. ROUND 11 F2: this
-    // now runs BEFORE the identity assertions below, because `getByText(
+    // The WORKOUT count must never be the caption's number. ROUND 11 F2: this
+    // runs BEFORE the identity assertions below, because `getByText(
     // `${litDots} of 7 days active`)` THROWS on any other value and therefore
     // dominated it — a check that cannot fail because a stricter one fails
     // first is still a check that cannot fail.
     expect(screen.queryByText('5 of 7 days active')).toBeNull();
+    // …nor may it be the count INCLUDING the day outside the window.
+    expect(screen.queryByText('3 of 7 days active')).toBeNull();
 
     // THE INVARIANT, and it is source-independent: whatever the caption says,
     // it must equal what the strip actually DREW.
@@ -501,7 +689,11 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     // impossibility structural, which retires the assertion written for it.
     // Keeping it would be decoration, which is what rounds 6 F11, 7 F3, 9 F3
     // and this one are all about.
-    // The tile KEEPS the session count — its own label already says "workouts".
+    // The tile counts WORKOUTS — its own label says so — and it counts them
+    // over the SAME seven days, so the day outside the window is excluded from
+    // both. 4 + 1 = 5, not 8. This pair is what pins the two derivations apart:
+    // a mutant that made the tile count days would read 2, and one that dropped
+    // the window would read 8.
     expect(tileValue('workouts')).toBe('5');
   });
 
@@ -509,7 +701,7 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     gamificationService.getOverview.mockImplementation(DEAD);
     gamificationService.getLeaderboard.mockImplementation(DEAD);
-    workoutService.getStats.mockImplementation(DEAD);
+    dashboardDead();
 
     const { container } = renderPage(<Dashboard />);
     await waitFor(() => expect(screen.getByText('Weekly activity unavailable')).toBeTruthy());
@@ -526,17 +718,16 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
   });
 
   it('activity IN FLIGHT is never called unavailable — round 8 F3', async () => {
-    // WeekStrip and its caption branched on `stats.activity === null` ALONE, so
-    // loading and failed were one answer. mlApi sets no timeout, so against a
-    // hung old backend the page claimed a failed read PERMANENTLY — a caption
-    // plus seven "Activity unavailable" tooltips during a perfectly healthy
-    // in-flight request. `oldPayloadState` is the tested function for exactly
-    // this shape and round 7 applied it to recentState and recsState on this
-    // page while leaving the third read on two states.
+    // WeekStrip and its caption branched on the map being null ALONE, so
+    // loading and failed were one answer, and against a hung backend the page
+    // claimed a failed read PERMANENTLY — a caption plus seven "Activity
+    // unavailable" tooltips during a perfectly healthy in-flight request.
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     gamificationService.getOverview.mockImplementation(DEAD);
     gamificationService.getLeaderboard.mockImplementation(DEAD);
-    workoutService.getStats.mockImplementation(HANGS);
+    overviewOk({ totalWorkouts: 3 });
+    progressService.getCaloriesTrend.mockImplementation(HANGS);
+    workoutService.getHistory.mockImplementation(HANGS);
 
     const { container } = renderPage(<Dashboard />);
     await waitFor(() => expect(screen.getAllByText(/Level 3/).length).toBeGreaterThan(0));
@@ -551,9 +742,32 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     expect(container.querySelectorAll('[title="Loading activity…"]').length).toBe(7);
     expect(container.querySelectorAll('[title="Activity unavailable"]').length).toBe(0);
 
-    // The sibling pane, reading the SAME hung request, already got this right —
-    // the two must not disagree about one request.
+    // The sibling pane's own request is also hung, so it says the same thing.
     expect(screen.getByText('Loading recent workouts…')).toBeTruthy();
+  });
+
+  it('a SETTLED read is never held hostage by a hung sibling — round 7 F1', async () => {
+    // THE FAILURE MODE THE SPLIT INTRODUCES, and the reason each read carries
+    // its own flag. Three requests settle independently now: the totals can be
+    // known while the week is still in flight. If any state borrowed another
+    // read's knowability, the arrived one would be forced to wait — which is
+    // round 7 F1 with the sources swapped, and nothing else in this file would
+    // have caught it, because before the repoint there was only one request.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    overviewOk({ totalWorkouts: 12, totalKcal: 900, limitedToDays: null });
+    progressService.getCaloriesTrend.mockImplementation(HANGS);
+    historyOk([]);
+
+    renderPage(<Dashboard />);
+
+    // The history read ARRIVED and is empty, so it says so — while the week
+    // beside it is still loading and says THAT.
+    await waitFor(() => expect(screen.getByText('No workouts logged yet.')).toBeTruthy());
+    expect(screen.getByText('Loading this week…')).toBeTruthy();
+    // …and the totals, from a third settled request, are on screen as numbers.
+    expect(statValue('Calories Burned')).not.toBe('—');
   });
 });
 
@@ -602,7 +816,7 @@ describe('GamificationStrip — XP renders when the old backend does not', () =>
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     gamificationService.getOverview.mockImplementation(DEAD);
     gamificationService.getLeaderboard.mockImplementation(DEAD);
-    workoutService.getStats.mockImplementation(DEAD);
+    dashboardDead();
     recommendationService.getRecommendations.mockResolvedValue({
       data: { recommendations: 'oops' },
     });
@@ -619,7 +833,7 @@ describe('GamificationStrip — XP renders when the old backend does not', () =>
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     gamificationService.getOverview.mockImplementation(DEAD);
     gamificationService.getLeaderboard.mockImplementation(DEAD);
-    workoutService.getStats.mockImplementation(DEAD);
+    dashboardDead();
     recommendationService.getRecommendations.mockResolvedValue({
       data: { recommendations: [{ id: 'r1', name: 'Mystery Move' }] },
     });
@@ -654,7 +868,7 @@ describe('GamificationStrip — XP renders when the old backend does not', () =>
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     gamificationService.getOverview.mockImplementation(DEAD);
     gamificationService.getLeaderboard.mockImplementation(DEAD);
-    workoutService.getStats.mockImplementation(DEAD);
+    dashboardDead();
     recommendationService.getRecommendations.mockResolvedValue({
       data: { recommendations: [{ id: 'r1', name: 'Easy Move', difficulty: 'easy' }] },
     });
@@ -678,7 +892,12 @@ describe('GamificationStrip — XP renders when the old backend does not', () =>
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     gamificationService.getOverview.mockImplementation(DEAD);
     gamificationService.getLeaderboard.mockImplementation(DEAD);
-    workoutService.getStats.mockResolvedValue({ data: { stats: { total_workouts: 3 } } });
+    // The stats reads SETTLE here; the recommendations one hangs. That is the
+    // point of round 7 F1 and it survives the split: a settled sibling must not
+    // move the hanging read's state.
+    overviewOk({ totalWorkouts: 3 });
+    weekOk([]);
+    historyOk([]);
     recommendationService.getRecommendations.mockImplementation(HANGS);
 
     renderPage(<Dashboard />);
@@ -695,7 +914,12 @@ describe('GamificationStrip — XP renders when the old backend does not', () =>
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     gamificationService.getOverview.mockImplementation(DEAD);
     gamificationService.getLeaderboard.mockImplementation(DEAD);
-    workoutService.getStats.mockImplementation(HANGS);
+    // The mirror image: the stats reads HANG and the recommendations one has
+    // failed. Round 5 F1's defect was this pane saying "Loading…" forever
+    // because it read a state that belonged to another request.
+    progressService.getOverview.mockImplementation(HANGS);
+    progressService.getCaloriesTrend.mockImplementation(HANGS);
+    workoutService.getHistory.mockImplementation(HANGS);
     recommendationService.getRecommendations.mockImplementation(DEAD);
 
     renderPage(<Dashboard />);

@@ -14,13 +14,13 @@ import { fileURLToPath } from 'node:url';
 import authApi from './authApi';
 import mlApi from './mlApi';
 import {
-  UNKNOWN, difficultyColor, difficultyStyle, earnedBadgeCount, weekDates, formatCount, formatFraction, formatLevel, formatPercent, formatXpEarned,
+  UNKNOWN, difficultyColor, difficultyStyle, earnedBadgeCount, formatCount, formatFraction, formatLevel, formatPercent, formatXpEarned,
   formGrade, readMealSuggestion, readPersonalRecord, readSummaryView,
   totalTimeLabel, workoutTimeLabel, workoutTimeLabelShort,
   formatXpProgress, formatXpTotal, gamificationService, listState,
   oldPayloadState, orUnknown, progressWidth, readBadge, readChallenge, tierStyle, xpBarWidth,
   readLeaderboardEntry, readLeaderboardView, readOverviewView,
-  readRecentWorkout, readRecommendation, readRecommendations, readStatsView,
+  readRecommendation, readRecommendations,
   readXpView,
 } from './gamificationApi';
 
@@ -318,77 +318,14 @@ describe('old-payload readers: every field is a usable value or NULL', () => {
     }
   });
 
-  // ── ROUND 11 F1: the week strip's date axis ───────────────────────────────
-  // It had ZERO coverage — round 11 measured TEN surviving mutants, including
-  // "every cell prints 2026" and, worst, the CORRECT fix itself: the suite could
-  // not tell the defective helper from the fixed one.
-  //
-  // The defect: `weekDates` does its calendar arithmetic in LOCAL time
-  // (getDay/getDate/setDate) and serialises in UTC (toISOString). Round 10 then
-  // routed the PRINTED day number through that UTC string, replacing a local
-  // number that was always right with one that is wrong wherever local and UTC
-  // straddle midnight — for IST that is 00:00–05:29, five and a half hours of
-  // every day, in this app's home market.
-  describe('weekDates — the printed day is LOCAL, the lookup key is UTC', () => {
-    const ORIGINAL_TZ = globalThis.process.env.TZ;
-    afterEach(() => { globalThis.process.env.TZ = ORIGINAL_TZ; });
-
-    it('prints the local calendar day, not the UTC one — round 11 F1', () => {
-      globalThis.process.env.TZ = 'Asia/Kolkata';
-      // 20:30Z on Tue 28 Jul is 02:00 IST on WEDNESDAY 29 Jul.
-      const instant = new Date('2026-07-28T20:30:00Z');
-
-      // POSITIVE CONTROL, and it is load-bearing: if this runtime ignored the
-      // TZ switch, local would equal UTC and every assertion below would pass
-      // vacuously — which is exactly how the defect survived 90 tests.
-      expect(instant.getDate(), 'TZ switch did not take effect').toBe(29);
-
-      const w = weekDates(instant);
-      // What the user's calendar says that week is.
-      expect(w.map((d) => d.day)).toEqual([27, 28, 29, 30, 31, 1, 2]);
-
-      // The KEY stays UTC, because the old backend buckets by UTC
-      // (`datetime.utcnow()` / `strftime` in workouts.py). That a 01:00 IST
-      // workout lands on the previous UTC day is the EXISTING owed
-      // timezone-capture item, not this card's to fix — but the key must not
-      // quietly become local either, or the lookup stops matching the payload.
-      expect(w[0].key).toBe('2026-07-26');
-      expect(w.map((d) => d.key)).toEqual([
-        '2026-07-26', '2026-07-27', '2026-07-28',
-        '2026-07-29', '2026-07-30', '2026-07-31', '2026-08-01',
-      ]);
-    });
-
-    it('key and day agree when local time IS UTC — the control', () => {
-      globalThis.process.env.TZ = 'UTC';
-      const instant = new Date('2026-07-29T12:00:00Z');
-      expect(instant.getDate(), 'TZ switch did not take effect').toBe(29);
-
-      const w = weekDates(instant);
-      expect(w.map((d) => d.day)).toEqual([27, 28, 29, 30, 31, 1, 2]);
-      // Same seven days by both measures — so the test above is measuring the
-      // TZ mixing and not some unrelated arithmetic error.
-      expect(w.map((d) => Number(d.key.slice(-2)))).toEqual(w.map((d) => d.day));
-    });
-
-    it('is seven consecutive days starting MONDAY, across a month end', () => {
-      // Closes the cheap half of round 11 F3: "week starts Sunday", "dates
-      // reversed", "every cell prints 1" and "slice(0,4) prints the year" are
-      // all mutations no assertion could see before this.
-      globalThis.process.env.TZ = 'Asia/Kolkata';
-      const w = weekDates(new Date('2026-07-30T06:00:00Z'));   // Thu 30 Jul IST
-      expect(w).toHaveLength(7);
-      expect(w.map((d) => d.day)).toEqual([27, 28, 29, 30, 31, 1, 2]);
-      // Monday first: the key's own weekday, read back in UTC.
-      expect(new Date(`${w[0].key}T00:00:00Z`).getUTCDay()).toBe(1);
-      // Strictly consecutive, one day apart, no duplicate and no gap.
-      for (let i = 1; i < 7; i++) {
-        const prev = new Date(`${w[i - 1].key}T00:00:00Z`).getTime();
-        const cur  = new Date(`${w[i].key}T00:00:00Z`).getTime();
-        expect(cur - prev, `gap between ${w[i - 1].key} and ${w[i].key}`).toBe(86400000);
-      }
-    });
-  });
+  // ROUND 11 F1's `weekDates` block STOOD HERE and moves with its subject to
+  // `dashboardStats.test.js`, where the helper is now `weekOfDates`. Its
+  // assertions are not merely relocated — one of them REVERSED, and that is the
+  // point: the key used to be the UTC day on purpose, because the old backend
+  // bucketed by `datetime.utcnow()`. The new one buckets in the user's own
+  // timezone, so the same test now demands a LOCAL key, and the residual round
+  // 11 recorded as "not this card's to fix" is fixed. The TZ positive control
+  // travels with it, because under UTC either spelling passes.
 
   it('readLeaderboardEntry maps snake_case and nulls the rest', () => {
     const e = readLeaderboardEntry({
@@ -406,14 +343,6 @@ describe('old-payload readers: every field is a usable value or NULL', () => {
     expect(bare.isCurrentUser).toBeNull();   // F2: not `false`
   });
 
-  it('readRecentWorkout parses the list round 4 left unparsed (F3)', () => {
-    expect(readRecentWorkout({ id: 'w1', completed_at: '2026-07-25T10:00:00Z' })).toEqual({
-      id: 'w1', completedAt: '2026-07-25T10:00:00Z', exerciseName: null,
-      durationMinutes: null, caloriesBurned: null, formAccuracy: null,
-    });
-    expect(readRecentWorkout({ form_accuracy: 0 }).formAccuracy).toBe(0);
-    expect(readRecentWorkout({ duration_minutes: NaN }).durationMinutes).toBeNull();
-  });
 
   it('readRecommendation nulls every field it cannot trust — round 6 F3', () => {
     expect(readRecommendation({
@@ -475,31 +404,12 @@ describe('old-payload readers: every field is a usable value or NULL', () => {
     expect(readLeaderboardView(null).entries).toBeNull();
   });
 
-  it('readStatsView is per-field, so a partial 200 fabricates nothing', () => {
-    // The exact payload round 4 F2 was about: envelope present, fields absent.
-    const partial = readStatsView({ stats: {} });
-    expect(partial.totalWorkouts).toBeNull();
-    expect(partial.totalMinutes).toBeNull();
-    expect(partial.totalCalories).toBeNull();
-    expect(partial.weeklyWorkouts).toBeNull();
-    expect(partial.streak).toBeNull();
-    expect(partial.activity).toBeNull();
-    expect(partial.recent).toBeNull();
-
-    const some = readStatsView({
-      stats: { total_workouts: 12, streak: 0 },
-      activity: { '2026-07-25': true },
-      recent_workouts: [{ id: 'w', calories_burned: 300 }],
-    });
-    expect(some.totalWorkouts).toBe(12);
-    expect(some.streak).toBe(0);            // a real zero is not an unknown
-    expect(some.totalMinutes).toBeNull();
-    expect(some.activity).toEqual({ '2026-07-25': true });
-    expect(some.recent[0].caloriesBurned).toBe(300);
-    expect(some.recent[0].durationMinutes).toBeNull();
-    // An array is not an activity map.
-    expect(readStatsView({ activity: [] }).activity).toBeNull();
-  });
+  // `readStatsView`'s test STOOD HERE and moves, with its subject, to
+  // `dashboardStats.test.js`. Every property it asserted is asserted there
+  // against the new shape — a partial 200 fabricates nothing, a real zero is
+  // not an unknown, an array is not a map. Deleted rather than left green over
+  // a deleted function: a test with no subject still counts in the total, which
+  // is round 6 F10's "dead surface with test coverage reads as protection".
 });
 
 describe('listState — three states per LIST, not per envelope (round 5 F1)', () => {
@@ -872,19 +782,25 @@ describe('the old-payload cards claim nothing they do not know', () => {
     expect(src).not.toMatch(/entry\.is_current_user/);
   });
 
-  it('Dashboard reads its own old-stats payload through the reader', () => {
+  it('Dashboard reads its stats payload through a reader, not raw', () => {
     const { src } = codeAt('../pages/Dashboard.jsx');
-    // POSITIVE anchor.
-    expect(src).toMatch(/readStatsView\s*\(/);
-    // stats null => s = {} => every `|| 0` fired, so a real Level sat beside
-    // fabricated zeros and lent them credibility (review of 888e750, F1).
-    //
+    // POSITIVE anchor, repointed with the page. The old one was
+    // `readStatsView`, which parsed the old backend's envelope.
+    expect(src).toMatch(/readDashboardOverview\s*\(/);
+    expect(src).toMatch(/readWeekActivity\s*\(/);
+    expect(src).toMatch(/readRecentWorkouts\s*\(/);
     // ROUND 4 F2: the previous version of this line banned `|| 0` and PERMITTED
     // `?? 0` — which is the spelling the code had actually been written in, so
-    // the assertion was green against the live defect. Both operators now.
+    // the assertion was green against the live defect. Both operators now, and
+    // the field names are the NEW payload's: banning `total_workouts` after the
+    // repoint bans a string the file can no longer contain, which is a guard
+    // that cannot fail (round 8 F1's shape, in a regex).
     expect(src).not.toMatch(
-      /\b(total_workouts|total_minutes|total_calories|weekly_workouts|streak)\s*(\|\||\?\?)\s*0/,
+      /\b(totalWorkouts|totalKcal|totalDurationMs|currentStreak)\s*(\|\||\?\?)\s*0/,
     );
+    // …and the same ban at the DERIVED figures, which is where a `?? 0` would
+    // now be written: the tile reads a count that may legitimately be unknown.
+    expect(src).not.toMatch(/\b(weeklyWorkouts|activeDays)\s*(\|\||\?\?)\s*0/);
   });
 });
 

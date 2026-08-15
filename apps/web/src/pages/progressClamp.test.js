@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { PERIOD_DAYS, PERIODS, clampNotice, effectiveClamp, heatmapCaption, recordsNote } from "./progressClamp.js";
+import { PERIOD_DAYS, PERIODS, clampNotice, effectiveClamp, heatmapCaption, recordsNote, totalsWindowLabel } from "./progressClamp.js";
 
 // The plan read-gate (Part 4 §0.2; seed.ts:44 `history_days: 90`) is a READ
 // GATE, NOT DELETION — repo.ts adds `AND started_at >= since` and nothing
@@ -84,6 +84,34 @@ describe("recordsNote", () => {
 
   it("survives a malformed clamp without inventing a window", () => {
     for (const bad of [undefined, "90", 0, -1, NaN]) expect(recordsNote(bad)).toBeNull();
+  });
+});
+
+describe("totalsWindowLabel — the Dashboard's three lifetime tiles", () => {
+  it("says 'all time' only when the plan really is unlimited", () => {
+    expect(totalsWindowLabel(null)).toBe("all time");
+  });
+
+  // THE ONE THAT MATTERS. The Dashboard asks for `period=all`, which is
+  // unbounded, so a plan floor cuts it EVERY time — a gated user's 90-day
+  // total was captioned "all time". That is f.4's lie on the first screen a
+  // user sees, and it is what this label exists to stop.
+  it("names the real window when the plan gate cut it", () => {
+    expect(totalsWindowLabel(90)).toBe("last 90 days");
+    expect(totalsWindowLabel(30)).toBe("last 30 days");
+    expect(totalsWindowLabel(365)).toBe("last 365 days");
+  });
+
+  it("says 'day' for a one-day window, not '1 days'", () => {
+    // The exact defect T3 R9 found in the sibling caption: the module
+    // pluralised and the JSX did not, so a real user could read "1 days".
+    expect(totalsWindowLabel(1)).toBe("last 1 day");
+  });
+
+  it("falls back to 'all time' on a malformed clamp, never to a made-up window", () => {
+    for (const bad of [undefined, "90", 0, -1, NaN]) {
+      expect(totalsWindowLabel(bad)).toBe("all time");
+    }
   });
 });
 

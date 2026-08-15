@@ -8152,3 +8152,114 @@ it prices the same as `rest_natural`, the explanation at :7404 is wrong.
 
 **Kd deferred the recording the same day** — *"i think it will be done later lets
 go to the next thing"*. Deferred, not declined; the OWED line stays 🔴 and open.
+
+## 2026-08-15 — THE DASHBOARD'S NUMBERS COME OFF THE NEW API, and the "weekly count has no home" premise was FALSE
+
+**Read before touching the Dashboard's figures, before adding a second read to a
+screen that had one, before writing any `toLocaleDateString`, and before
+believing a mutation verdict produced under a `-t` filter.**
+
+- (SCOPE, and it is smaller than the OWED line implied) Web only. No migration,
+  no new endpoint, `apps/api` untouched — verified by `git status`, which lists
+  eleven files, all under `apps/web`. The card composes three endpoints that
+  have existed since P2.3: `/v1/progress/overview?period=all`,
+  `/v1/progress/trend?period=7d`, `/v1/workouts?limit=6`.
+- (**THE OWED LINE'S OWN PREMISE WAS WRONG AND WAS CORRECTED BY MEASUREMENT**)
+  It said "what has no home is the WEEKLY count and the exact shape". The trend
+  endpoint reports `workouts` per DAY, bucketed in the user's own timezone
+  (`workouts/repo.ts:354-359`, `to_char(started_at AT TIME ZONE …)` + `GROUP BY
+  day`, read this session). So the week's count is the sum over this week's days,
+  and the lit dots are the same days with a non-zero count. **ONE read answers
+  both numbers**, which is the part worth keeping: round 10 F1's defect — a
+  SESSION count printed over a picture of DAYS, producing "10 of 7 days active",
+  a sentence that cannot be true — is now unreachable by construction rather than
+  by two fields being kept in agreement. `/v1/progress/heatmap` was rejected: a
+  fixed 365-day read where seven days are wanted.
+- (**THE SEVEN DOTS MOVE TO THE USER'S OWN TIMEZONE, and this closes a residual
+  the repo had already written down and parked**) `weekDates` keyed by
+  `toISOString()` — the UTC day of a locally-computed date — **on purpose**,
+  because the old backend bucketed by `datetime.utcnow()`
+  (`backend-ml/app/routers/workouts.py:55,:89`). Round 11 F1's JSDoc named the
+  consequence exactly ("a 01:00 IST workout lands on the previous UTC day, so a
+  flame can sit under the wrong cell") and called it "the existing OWED
+  timezone-capture item, not this card's to fix". **This is the card that fixes
+  it, from the server's side, and the key had to follow** — a UTC key against a
+  local-timezone payload matches nothing for the first hours of every day east of
+  Greenwich. `weekOfDates` keys through `localDateKey`, the calendar's own
+  tested helper, rather than a fourth spelling of "which day is this instant in".
+  Pinned in BOTH directions (Asia/Kolkata and America/New_York, where the old
+  error had the opposite sign) with the TZ-switch positive control, because under
+  UTC the two spellings are identical and every assertion would pass vacuously —
+  :4267 F2's trap, and the reason the original defect survived 90 tests.
+- (**"ALL TIME" BECOMES "LAST 90 DAYS" ON A GATED PLAN**) `period=all` is
+  unbounded, so `effectiveClamp('all', …)` cuts EVERY time and the plan floor
+  always bites. The page printed "all time" over the clamped total: :598's f.4,
+  on the first screen a user sees. `totalsWindowLabel` joins `heatmapCaption` and
+  `recordsNote` in `progressClamp.js` — three period-less captions, one ladder —
+  and all three tiles name the same window from that one label, so a gated user
+  cannot read the truth on one tile and "all time" on the next.
+- (**THE UNIT TRAP, and it was already solved one screen over**) The old payload
+  carried whole MINUTES; the new one carries milliseconds. Rounding to match is
+  :4182 verbatim — 8,491 ms printed as "0m", 36,290 ms rounded UP past a minute
+  it never reached. The rows reuse the CALENDAR's `readCalendarSession` and its
+  `formatDuration`/`formatKcal`/`formColor`, so two screens cannot describe one
+  workout two ways, and the tint ladder's neutral-for-unknown arm (round 5 F3)
+  comes with it. At the totals, `totalMinutes` and `totalHours` are BOTH derived
+  from the milliseconds: chaining hours through the rounded minutes makes the big
+  number disagree with the line beneath it, and one fixture (62.5 minutes) is the
+  only one in the file where the two methods split.
+- (**KD'S QUESTION, and it was checked rather than answered**) He asked whether
+  the app was becoming India-specific, since it is for users everywhere. Measured
+  by grep, not by reassurance: `PostWorkout.jsx:133` forces `'en-IN'` on every
+  user on earth, and four more sites force `'en-US'`. The Dashboard's own copy is
+  fixed here because that line was already being rewritten for the repoint (`[]`
+  — the visitor's own locale — is what `Nutrition.jsx` and `Running.jsx` already
+  pass); the rest get an OWED line naming every sibling, so the next card does
+  the CLASS and not the case (:1239). **`gyms.timezone`'s `Asia/Kolkata` default
+  is NOT a defect** — it is the spec's own DDL at `04-part4-database.md:172`,
+  quoted — and whether a gym owner picks their country at onboarding is a P3.10
+  decision for Kd. His wider point is already open at :592 and is not closed by
+  any of this.
+- (**THE TOTALS WILL DROP, and Kd was told before the card ran**) The new
+  database holds only what has synced since the web write path shipped; older
+  workouts live in the old one until P2.8 migrates them. Expected, sequenced,
+  and not a defect — but it is the first thing he will see.
+- (**THE AUDIT FOUND WHAT NEITHER REVIEW NOR WRITING THE CODE DID**) Nothing
+  pinned WHICH windows the page requests. Every fixture mocks the network
+  functions, so they answer identically whatever they are ASKED — a page
+  requesting `period=30d` and captioning the result "all time" passed every other
+  test in the file. **The argument IS the claim**, and it now has an assertion
+  (P1 RED). Under :5857 rule 4a this was a minutes-long sweep with no database
+  mutants at all, spent entirely on the row 4a names first: numbers a user sees.
+- (**AND THE AUDIT'S OWN ROW WAS WRONG BEFORE THE CODE WAS**) P5 came back ALIVE
+  and the mutant was never the problem: the row named a test that reaches the
+  UNKNOWN arm, where the mutation is inert by construction. Re-aimed at the
+  lit-dots invariant it fails `expected +0 to be 2` — measured before the row was
+  changed, and the probe's restore verified sha256-identical. **:4718 F2's class
+  from the other side**: that finding was a mutant RED for the wrong reason; this
+  is a mutant ALIVE for the wrong reason. A `-t` filter makes the
+  mutant-to-assertion mapping a one-line thing to get wrong, and a wrong mapping
+  reports as a missing test. **Fourth instrument finding in five cards.**
+- (WHAT WAS DELETED, and why deletion rather than deprecation) `getStats`,
+  `readStatsView`, `readRecentWorkout` and `weekDates`, with their tests. Round 6
+  F10's rule: dead surface WITH test coverage reads as protection and is not.
+  What the deleted code KNEW is kept as prose at each site — round 4 F2's
+  per-field rule above the new reader, round 11 F1's reasoning above the moved
+  helper — because a repoint is exactly when a hard-won rule gets left behind
+  with the code that carried it. `readRecentWorkout`'s JSDoc was found orphaned
+  above `readRecommendation` mid-card: round 11 F5's shape, third occurrence in
+  this one file, and noted there rather than quietly deleted.
+- (PROVE) web **615/615** (was 586; +29) · `vite build` ✓ · the eleven touched
+  files lint clean (exit 0; `apps/web`'s 66 pre-existing errors are in files this
+  card does not open, and its exclusion from the root gate is its own OWED item) ·
+  `@app/shared` and `api` typecheck clean, both untouched · **15 mutants, 15 RED,
+  0 ALIVE, 0 never ran**, restores sha256-verified after every one.
+- (**WHAT THIS UNBLOCKS, AND THE PARAGRAPH A LATER CHAT WILL SKIP**) :3424's
+  condition for retiring `completeSession` + `createSession` — "until the
+  Dashboard's stats have a new-API home too" — is now MET, so the coupled pair is
+  unblocked and retires in its OWN card. **Nothing about how a workout is SAVED
+  changed here.** A chat reading the condition's lapse as licence to delete
+  either call has not read the coupling paragraph in `OWED.md`.
+- (**THE LINE DOES NOT TICK**) `RUNBOOK/smoke-dashboard-stats.md` (8 steps) and
+  the fresh-chat T3 are both unrun. :5034 and :4718 F4 are the precedent for
+  ticking early, and both were reverted.

@@ -1456,6 +1456,115 @@ then; none may be hidden or reduced to close the gap.
       home is the WEEKLY count and the exact shape.
       **This line is what the legacy dual-write above is waiting on.** Until it
       is ticked, `completeSession` stays and the app needs three servers to run.
+      **STATUS 2026-08-15 — BUILT AND PROVEN LOCALLY. THE LINE DOES NOT TICK:
+      the browser SMOKE and the fresh-chat T3 are both unrun.** (DECISIONS, this
+      date.) Web-only; no migration, no new endpoint, `apps/api` untouched.
+      **THE "WEEKLY COUNT HAS NO HOME" CLAIM ABOVE IS FALSE and was corrected by
+      measurement, not by opinion:** `/v1/progress/trend?period=7d` reports
+      `workouts` per DAY (`repo.ts:354-359`, `GROUP BY day` in the user's own
+      timezone), so the week's count is the sum over this week's days and the lit
+      dots are the same days with a non-zero count. **ONE read now answers both**,
+      which makes round 10 F1's defect — a session count printed over a picture
+      of days, "10 of 7 days active" — unreachable by construction rather than by
+      two fields agreeing. `/v1/progress/heatmap` was NOT used: it is a fixed
+      365-day read where seven days are wanted.
+      **THREE THINGS A USER CAN SEE CHANGED, all of them corrections:**
+      (1) **The seven dots move to the user's OWN timezone.** The retired
+      `weekDates` keyed by `toISOString()` — the UTC day of a locally-computed
+      date — deliberately, because the old backend bucketed by
+      `datetime.utcnow()`. Its own JSDoc called the residual "the existing OWED
+      timezone-capture item, not this card's to fix"; this is the card that fixes
+      it, and the key had to follow the server. Pinned by unit tests in BOTH
+      directions (Asia/Kolkata and America/New_York) with the TZ-switch positive
+      control, because under UTC the two spellings are identical and the
+      assertion would be inert (:4267 F2's trap).
+      (2) **"All time" becomes "last 90 days" on a gated plan.** `period=all` is
+      unbounded so the plan floor cuts it EVERY time; the page printed "all time"
+      over the clamped total, which is :598's f.4 on the first screen a user
+      sees. `totalsWindowLabel` joins `heatmapCaption`/`recordsNote` in
+      `progressClamp.js` — one ladder, three period-less captions.
+      (3) **A recent workout's duration is a real duration.** The old payload
+      carried whole MINUTES; the new one carries milliseconds, and rounding to
+      match is :4182 verbatim (8,491 ms printed as "0m"). The rows reuse the
+      CALENDAR's `readCalendarSession` + `formatDuration`/`formatKcal`/
+      `formColor`, so the two screens cannot describe one workout two ways.
+      **THE TOTALS WILL DROP for anyone with pre-August history, and this is not
+      a defect:** the new database holds only what has been synced since the web
+      write path shipped. The migration at P2.8 is what closes it. Kd was told
+      before the card ran.
+      **FOUND BY THE MUTATION AUDIT, not by review or by writing the code:**
+      nothing pinned WHICH windows the page requests. Every fixture mocks the
+      network functions, so they answer identically whatever they are asked — a
+      page asking `period=30d` and captioning the answer "all time" passed every
+      other test in the file. An argument assertion now pins all three calls
+      (P1 RED).
+      **AND THE AUDIT'S OWN ROW WAS WRONG FIRST:** P5 came back ALIVE, and the
+      mutant was never the problem — the row named a test that reaches the
+      UNKNOWN arm, where the mutation is inert by construction. Re-aimed at the
+      lit-dots invariant it fails `expected +0 to be 2`, measured. :4718 F2's
+      class from the other side: a `-t` filter makes the mutant→assertion mapping
+      a one-line thing to get wrong, and a wrong mapping reports as a missing
+      test.
+      web **615/615** (was 586; +29) · `vite build` ✓ · eleven touched files
+      lint clean · **15 mutants, 15 RED, 0 ALIVE, 0 never ran**, restores
+      sha256-verified (`apps/web/tools/mutate-dashboard-stats.mjs`).
+      **WHAT THIS UNBLOCKS AND DOES NOT DO:** :3424's condition for retiring
+      `completeSession` + `createSession` — "until the Dashboard's stats have a
+      new-API home too" — is now MET, so that pair is unblocked and retires in
+      its OWN card. Nothing about how a workout is SAVED changed here, and a chat
+      that reads this paragraph as licence to delete either call has not read the
+      coupling paragraph above it.
+      **UNRUN, and the tick waits on both:** `RUNBOOK/smoke-dashboard-stats.md`
+      (8 steps; step 5 — are the flames on the right days — is the one worth
+      doing in the evening or early morning, since that is the window the old
+      UTC key was wrong in) and the fresh-chat T3.
+- [ ] 🟡 **THE POST-WORKOUT SCREEN PRINTS THE INDIAN DATE FORMAT TO EVERY USER
+      ON EARTH.** Created 2026-08-15 by the Dashboard-stats card. **Found by KD'S
+      QUESTION, not by a review**: he asked whether the app was becoming
+      India-specific, since it is meant for users everywhere. It was checked
+      rather than reassured, and this is what the check found.
+      `PostWorkout.jsx:133` hard-codes `toLocaleDateString('en-IN', …)`, so a
+      user in Berlin or Chicago reads the day-month ordering of a country they
+      are not in. **Cosmetic-but-WRONG-for-the-reader**, which is why it is 🟡
+      and not ⚪: nothing is false, but the app is speaking one country's
+      convention to everyone.
+      **The Dashboard's own copy of this WAS fixed in the same card**, because
+      that line was already being rewritten for the repoint — `[]` (the visitor's
+      own locale) is what `Nutrition.jsx` and `Running.jsx` already pass, so the
+      correct spelling was already in the codebase three times over. PostWorkout
+      is out of that card's files (R1.1) and gets its own line rather than a
+      drive-by edit.
+      **Two SIBLINGS found in the same grep and NOT fixed either**, so the next
+      card does the class and not the case (:1239, recorded violated at least
+      five times): `MeasurementsTracker.jsx:245,:386` and `WorkoutCalendar.jsx:58`
+      and `Settings.jsx:501` hard-code `'en-US'`. Same defect, different country.
+      **NOT a defect and deliberately left alone:** `gyms.timezone` defaults to
+      `Asia/Kolkata` and `currencyDisplay` to `INR` (`db/schema/tenancy.ts:27-29`).
+      That is the SPEC's own DDL — `04-part4-database.md:172`, quoted — not an
+      invented default, and no gym exists yet. Whether a gym owner picks their
+      country during onboarding is a P3.10 product decision for Kd, and changing
+      the DDL default would need a DEVIATION PROPOSAL (R0.3). Recorded here so
+      the question is not lost, not as work owed.
+      **Kd's wider point is ALREADY OPEN and is not closed by this line:**
+      DECISIONS :592 — privacy-law scope beyond India (GDPR/CCPA/LGPD) — is his
+      ruling to make and nothing has been built on it either way.
+
+- [ ] ⚪ **A FRACTIONAL "HOURS TRAINED" IS FLOORED TO A WHOLE NUMBER ON SCREEN.**
+      Created 2026-08-15 by the Dashboard-stats card, which measured it while
+      writing an assertion and then could not write the assertion.
+      `AnimatedNumber` (`Dashboard.jsx`) renders `Math.floor(ease * value)`, so
+      the tile's 1.1 arrives in the DOM as **1**, and a user with 24 minutes of
+      training reads **"0h"** above a sub-line correctly saying "24 minutes".
+      **PRE-EXISTING and NOT introduced by the repoint** — the old payload's
+      hours figure went through the same component — and out of that card's scope
+      (R1.1), which is why the render test asserts the minutes sub-line instead
+      and says so in a comment.
+      ⚪ rather than 🟡 because the honest number is printed directly beneath it,
+      so nothing on screen is unrecoverable; but it is the same family as :4182
+      (a real duration displayed as a rounder, smaller one) and the fix is a
+      one-line decision about whether that component should animate decimals at
+      all — which also touches the three other tiles that use it.
+
 - [ ] 🟡 **WORKOUT TEMPLATES HAVE NO ENDPOINTS (`WorkoutBuilder`).** Created
       2026-08-06 by the same card, same reason. Four old-backend calls —
       `saveTemplate` / `getTemplates` / `deleteTemplate` / `useTemplate`.

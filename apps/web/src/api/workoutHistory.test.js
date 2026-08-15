@@ -70,23 +70,33 @@ describe('the repoint itself', () => {
     // feature. mlApi's request interceptor reads localStorage (browser-only;
     // it dies at P2.8), so stub it for the node env.
     //
-    // `getSummary` LEFT this list on 2026-08-06 — it moved UP, to the new API,
-    // which is the only legitimate way out of it. `createSession` and
-    // `completeSession` stay and are COUPLED: the legacy save needs the session
-    // id the legacy start hands out, and DECISIONS :3424 rules that save stays
-    // until the Dashboard's stats have a new-API home too.
+    // `getSummary` LEFT this list on 2026-08-06 and `getStats` on 2026-08-15 —
+    // both moved UP, to the new API, which is the only legitimate way out of
+    // it. (`getStats` did not simply move: its one envelope became three reads
+    // in `api/dashboardStats.js`, so there is no single function to name here
+    // any more. Its absence from this list is the repoint.)
+    //
+    // `createSession` and `completeSession` stay and are COUPLED: the legacy
+    // save needs the session id the legacy start hands out. DECISIONS :3424's
+    // condition — "until the Dashboard's stats have a new-API home too" — is
+    // now MET, so the pair is unblocked and retires in its OWN card. They are
+    // still here because this card changed what the Dashboard READS and nothing
+    // about what a finished workout WRITES; deleting them on the strength of
+    // the condition lapsing would be exactly the "finished the repoint by
+    // deleting a feature" move this test exists to catch.
     vi.stubGlobal('localStorage', { getItem: () => null });
     const oldSeen = recordRequests(mlApi);
     const newSeen = recordRequests(authApi);
-    await workoutService.getStats();
     await workoutService.createSession({});
     await workoutService.getTemplates();
     expect(oldSeen.map((s) => s.url)).toEqual([
-      '/workouts/stats',
       '/workouts',
       '/workouts/templates',
     ]);
     expect(newSeen).toEqual([]);
+    // …and the retired one is GONE, not merely unused: leaving a live
+    // `getStats` on the old client is how a future edit quietly reinstates it.
+    expect(workoutService.getStats).toBeUndefined();
   });
 });
 

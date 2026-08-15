@@ -3,12 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTransition } from '../context/TransitionContext';
 import { workoutService } from '../api/workoutApi';
+import { progressService } from '../api/progressApi';
 import { recommendationService } from '../api/recommendationApi';
 import {
   UNKNOWN, formatCount, formatLevel, formatNextLevel, formatXpFraction,
-  formatXpTotal, difficultyStyle, weekDates, oldPayloadState, orUnknown, readRecommendations,
-  readStatsView, xpBarWidth,
+  formatXpTotal, difficultyStyle, oldPayloadState, orUnknown, readRecommendations,
+  xpBarWidth,
 } from '../api/gamificationApi';
+import {
+  activeDayCount, readDashboardOverview, readRecentWorkouts, readWeekActivity,
+  weekOfDates, weekWorkoutCount,
+} from '../api/dashboardStats';
+import { formatDuration, formatFormScore, formatKcal, formColor } from '../api/workoutHistory';
+import { totalsWindowLabel } from './progressClamp';
 import { useXp } from '../hooks/useXp';
 import GamificationStrip from '../components/dashboard/GamificationStrip';
 import { motion } from 'framer-motion';
@@ -68,14 +75,16 @@ function WeekStrip({ activity, state, dates, todayIdx }) {
   const known  = state === 'ready';
   const title  = known ? undefined
     : state === 'loading' ? 'Loading activity…' : 'Activity unavailable';
-  // ROUND 10 F1: the week comes from `weekDates` so the caption above cannot
+  // ROUND 10 F1: the week comes from `weekOfDates` so the caption above cannot
   // count a different set of days than the dots draw. The caption used to read
-  // `weekly_workouts` — a count of SESSIONS over a different window — which is
-  // how "5 of 7 days active" ended up over three flames.
+  // a SESSION count over a different window, which is how "5 of 7 days active"
+  // ended up over three flames.
   // ROUND 11 F6: and it is now computed ONCE by the parent and passed in. This
-  // component and the caption each called `weekDates()` with their own
+  // component and the caption each called the helper with their own
   // `new Date()`, so "one source" was true of the function and not of the
   // INSTANT — the same class the round 10 fix closed, left half-open.
+  // REPOINT: both numbers now come off ONE response's day buckets, so the two
+  // measurements round 10 found disagreeing no longer exist separately.
   const dayIdx = todayIdx;
 
   return (
@@ -276,15 +285,29 @@ export default function Dashboard() {
   const quote    = getQuote();
   const greeting = getGreeting();
 
-  const [statsRaw,        setStatsRaw]        = useState(null);
-  const [loading,         setLoading]         = useState(true);
+  // THREE READS NOW, NOT ONE — and each carries its own settled flag.
+  //
+  // The old backend answered all of this in a single envelope, so one `loading`
+  // was honest. Three requests can settle in any order, and round 7 F1 is what
+  // happens when a state borrows another read's knowability: a pane says
+  // "unavailable" while its own request is still in flight, or "Loading…"
+  // forever after it failed. The rule that round produced — a state must never
+  // borrow another read's knowability — is why there are six pieces of state
+  // below and not four.
+  const [overviewRaw,     setOverviewRaw]     = useState(null);
+  const [overviewLoading, setOverviewLoading] = useState(true);
+  const [weekRaw,         setWeekRaw]         = useState(null);
+  const [weekLoading,     setWeekLoading]     = useState(true);
+  const [recentRaw,       setRecentRaw]       = useState(null);
+  const [recentLoading,   setRecentLoading]   = useState(true);
   // NULL = not known yet / read failed; [] = genuinely none. Round 6 F9 is the
   // same distinction for `recent`: `?? []` collapsed three states into two, so
   // a failed read looked exactly like a brand-new account with no workouts.
   const [recommendations, setRecommendations] = useState(null);
   // ROUND 7 F1: recommendations needs its OWN settled flag. Round 6 derived
-  // `recsState` from `loading`, which only the getStats chain sets — so the
-  // recommendations read had no way to move its own state. Both failure modes
+  // `recsState` from the one shared `loading`, which only the stats chain set —
+  // so the recommendations read had no way to move its own state. Both failure
+  // modes
   // this card exists to delete reproduced at once: stats settling first while
   // recommendations were still in flight printed "unavailable" (a false denial
   // during a healthy load, the defect oldPayloadState was written to remove),
@@ -295,17 +318,37 @@ export default function Dashboard() {
   const [recsLoading, setRecsLoading] = useState(true);
 
   useEffect(() => {
-    // ROUND 5 security pass (R3.10): these two were `.catch(console.error)`,
-    // which hands the WHOLE axios error to the console — and its `.config
-    // .headers` carries the `Authorization: Bearer <token>` that mlApi's request
-    // interceptor sets. GamificationStrip and Achievements fixed exactly this
-    // and cite R3.10; these two were left behind in the same commit. That it is
-    // harmless today only because Card 1 stopped writing localStorage is a
-    // mitigation, not a fix.
-    workoutService.getStats()
-      .then((res) => setStatsRaw(res.data))
-      .catch((err) => console.error('stats read failed:', err?.message))
-      .finally(() => setLoading(false));
+    // ROUND 5 security pass (R3.10), and it still binds after the repoint:
+    // every `.catch` here logs `err?.message` and never the error OBJECT.
+    // `.catch(console.error)` hands axios the whole thing, whose `.config
+    // .headers` carried the `Authorization: Bearer <token>` the old client set.
+    // The new client authenticates with an httpOnly COOKIE, which never appears
+    // in a JS-visible header at all — so the leak this rule was written for is
+    // now structurally absent rather than merely mitigated. The rule stays:
+    // a request id, a URL and a body all belong to the same object.
+    // `period=all` because these three tiles are lifetime totals. What comes
+    // back may still be a plan-limited window — the response says so in
+    // `limitedToDays`, and `totalsWindowLabel` is what puts that on screen
+    // instead of the words "all time".
+    progressService.getOverview('all')
+      .then((res) => setOverviewRaw(res.data))
+      .catch((err) => console.error('overview read failed:', err?.message))
+      .finally(() => setOverviewLoading(false));
+    // ONE read for the week: the caption's number and the dots' fills are both
+    // derived from these points, so they cannot describe different weeks
+    // (round 10 F1 — the caption used to print a SESSION count beside a DAY
+    // picture, which is how "10 of 7 days active" reached a screen).
+    progressService.getCaloriesTrend('7d')
+      .then((res) => setWeekRaw(res.data))
+      .catch((err) => console.error('week read failed:', err?.message))
+      .finally(() => setWeekLoading(false));
+    // Six, because the pane renders `slice(0, 6)`. Asking for exactly what is
+    // drawn keeps the "No workouts logged yet." arm honest: a seventh row
+    // existing must not change what this pane claims.
+    workoutService.getHistory({ limit: 6 })
+      .then((res) => setRecentRaw(res.data))
+      .catch((err) => console.error('recent workouts read failed:', err?.message))
+      .finally(() => setRecentLoading(false));
     // ROUND 6 F2: this was `res.data.recommendations || []`, which accepts ANY
     // type — a string, an object — and `.slice(0,6).map(...)` below then threw,
     // blanking the ENTIRE Dashboard including the XP header. With no
@@ -317,11 +360,8 @@ export default function Dashboard() {
       .finally(() => setRecsLoading(false));
   }, []);
 
-  // The old read fails on this branch permanently (mlApi's Bearer comes from
-  // localStorage, which Card 1 no longer writes), so EVERY figure below is
-  // unknown in the state Kd actually sees.
-  //
-  // ROUND 4 F2: the previous fix was `statsKnown = Boolean(stats?.stats)` —
+  // ROUND 4 F2's rule, carried across the repoint unchanged: the previous fix
+  // was `statsKnown = Boolean(stats?.stats)` —
   // which asserted the ENVELOPE arrived, then six sites read fields off it with
   // `?? 0`. A 200 carrying `{stats:{}}`, or any subset with `total_minutes`
   // missing, printed "0 workouts / 0h / 0 kcal" as fact. That is verbatim the
@@ -332,29 +372,37 @@ export default function Dashboard() {
   //
   // Per-field now, via the same reader treatment the new API's payload gets —
   // so there is no envelope gate left to be wrong, and `?? 0` appears nowhere.
-  const stats  = readStatsView(statsRaw);
+  const totals = readDashboardOverview(overviewRaw);
   // ROUND 6 F9: `stats.recent ?? []` then `.length > 0` made a FAILED read
   // indistinguishable from a genuine zero-workout account — the card simply
   // vanished. Three states, like everywhere else on this page.
   // Each read answers with its OWN settled flag (round 7 F1). `oldPayloadState`
-  // is the tested function for exactly this shape, so both go through it rather
-  // than repeating the ternary and getting one of them wrong again.
-  const recent      = stats.recent;
-  const recentState = oldPayloadState({ data: recent,          loading });
+  // is the tested function for exactly this shape, so all three go through it
+  // rather than repeating the ternary and getting one of them wrong again.
+  const recent      = readRecentWorkouts(recentRaw);
+  const recentState = oldPayloadState({ data: recent,          loading: recentLoading });
   const recsState   = oldPayloadState({ data: recommendations, loading: recsLoading });
   // ROUND 8 F3: the week strip was the THIRD read on this page and the only one
   // still on two states — round 7 applied oldPayloadState to the two above and
-  // left this. Against a hung old backend it claimed "Weekly activity
-  // unavailable" forever, eight inches from a pane correctly reading "Loading
-  // recent workouts…" about the very same request.
-  const weekState   = oldPayloadState({ data: stats.activity,  loading });
+  // left this. Against a hung backend it claimed "Weekly activity unavailable"
+  // forever, eight inches from a pane correctly reading "Loading recent
+  // workouts…" about the very same request. It now has its OWN request, so the
+  // two panes can legitimately differ — which makes the per-read state the only
+  // correct source rather than merely the tidy one.
+  const week        = readWeekActivity(weekRaw);
+  const weekState   = oldPayloadState({ data: week,            loading: weekLoading });
   // ROUND 11 F6: ONE instant, read once, shared by the strip and its caption.
   const now         = new Date();
-  const week        = weekDates(now);
+  const weekDays    = weekOfDates(now);
   const todayIdx    = (now.getDay() + 6) % 7;
-  const hours  = stats.totalMinutes === null
-    ? null
-    : Math.round((stats.totalMinutes / 60) * 10) / 10;
+  // Both from the same map over the same seven keys (round 10 F1): the tile
+  // counts WORKOUTS, the caption counts DAYS, and neither can be about a
+  // different week from the dots.
+  const weeklyWorkouts = weekWorkoutCount(week?.byDate ?? null, weekDays);
+  const activeDays     = activeDayCount(week?.byDate ?? null, weekDays);
+  // What window these lifetime totals actually cover. "all time" unless the
+  // plan's history gate cut it, in which case saying "all time" is the lie.
+  const windowLabel = totalsWindowLabel(totals.limitedToDays);
 
   return (
     <div className="min-h-screen p-6 relative" style={{ background: '#0A0908' }}>
@@ -379,11 +427,11 @@ export default function Dashboard() {
             <h1 className="text-4xl font-bold tracking-tighter" style={{ color: 'rgba(255,255,255,0.95)' }}>
               {user?.displayName?.split(' ')[0] || 'Athlete'}
             </h1>
-            {stats.streak !== null && stats.streak > 0 && (
+            {totals.currentStreak !== null && totals.currentStreak > 0 && (
               <div className="flex items-center gap-1.5 mt-2">
                 <Flame className="w-4 h-4" style={{ color: '#FF8A1F' }} />
                 <span className="text-sm font-semibold" style={{ color: '#FF8A1F' }}>
-                  {stats.streak} day streak
+                  {totals.currentStreak} day streak
                 </span>
                 <span className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>— keep it going!</span>
               </div>
@@ -439,9 +487,12 @@ export default function Dashboard() {
 
         {/* ── Stats grid ────────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard icon={Dumbbell} label="Total Workouts" value={orUnknown(stats.totalWorkouts)} sub="all time" color="#FF8A1F" delay={0.15} bgImage="/images/dashboard/totalworkout.png" />
-          <StatCard icon={Clock} label="Hours Trained" value={orUnknown(hours)} suffix="h" sub={stats.totalMinutes === null ? undefined : `${stats.totalMinutes} minutes`} color="#60a5fa" delay={0.2} bgImage="/images/dashboard/hourstrained.png" />
-          <StatCard icon={Flame} label="Calories Burned" value={orUnknown(stats.totalCalories)} sub="kcal total" color="#f97316" delay={0.25} bgImage="/images/dashboard/caloriesburned.png" />
+          {/* The three sub-lines all name the SAME window, from one label, so a
+              gated user cannot read "all time" on one tile and the truth on the
+              next. On an unlimited plan they read exactly as before. */}
+          <StatCard icon={Dumbbell} label="Total Workouts" value={orUnknown(totals.totalWorkouts)} sub={windowLabel} color="#FF8A1F" delay={0.15} bgImage="/images/dashboard/totalworkout.png" />
+          <StatCard icon={Clock} label="Hours Trained" value={orUnknown(totals.totalHours)} suffix="h" sub={totals.totalMinutes === null ? undefined : `${totals.totalMinutes} minutes · ${windowLabel}`} color="#60a5fa" delay={0.2} bgImage="/images/dashboard/hourstrained.png" />
+          <StatCard icon={Flame} label="Calories Burned" value={orUnknown(totals.totalCalories)} sub={`kcal · ${windowLabel}`} color="#f97316" delay={0.25} bgImage="/images/dashboard/caloriesburned.png" />
           <StatCard icon={Trophy} label="Current Level" value={`Level ${formatLevel(xp)}`} sub={`${formatXpTotal(xp)} XP earned`} color="#FFD66B" delay={0.3} bgImage="/images/dashboard/currentlevel.png" />
         </div>
 
@@ -458,8 +509,8 @@ export default function Dashboard() {
               </div>
               <div className="mt-4 grid grid-cols-3 gap-3" style={{ maxWidth: '65%' }}>
                 {[
-                  { label: 'This week', value: formatCount(stats.weeklyWorkouts), sub: 'workouts' },
-                  { label: 'Streak',    value: formatCount(stats.streak),         sub: 'days' },
+                  { label: 'This week', value: formatCount(weeklyWorkouts),        sub: 'workouts' },
+                  { label: 'Streak',    value: formatCount(totals.currentStreak), sub: 'days' },
                   { label: 'Level',     value: formatLevel(xp),                   sub: 'current' },
                 ].map(({ label, value, sub }) => (
                   <div key={label} className="text-center">
@@ -478,7 +529,7 @@ export default function Dashboard() {
                 <h3 className="text-sm font-semibold text-white">This Week</h3>
               </div>
               <div style={{ maxWidth: '70%' }}>
-                <WeekStrip activity={stats.activity} state={weekState} dates={week} todayIdx={todayIdx} />
+                <WeekStrip activity={week?.byDate ?? null} state={weekState} dates={weekDays} todayIdx={todayIdx} />
                 {/* ROUND 5 F8: the caption was gated on `weeklyWorkouts` and the
                     dots on `activity` — two different fields, so one could say
                     "3 of 7 days active" beside seven dashed UNKNOWN dots, or
@@ -505,7 +556,7 @@ export default function Dashboard() {
                     ? 'Loading this week…'
                     : weekState !== 'ready'
                       ? 'Weekly activity unavailable'
-                      : `${week.filter((d) => stats.activity?.[d.key]).length} of 7 days active`}
+                      : `${formatCount(activeDays)} of 7 days active`}
                 </p>
               </div>
             </BgCard>
@@ -721,25 +772,28 @@ export default function Dashboard() {
                       </button>
                     </div>
                     {recent.slice(0, 6).map((w, i) => {
-                      // ROUND 6 F7: `text()` validates non-empty-string, never
-                      // PARSEABILITY, so `completed_at: 'not-a-date'` printed
-                      // the literal "Invalid Date" beside siblings correctly
-                      // reading "—". A date that will not parse is unknown.
-                      const parsed = w.completedAt === null ? null : new Date(w.completedAt);
-                      const date = parsed !== null && !Number.isNaN(parsed.getTime())
-                        ? parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                        : UNKNOWN;
-                      // ROUND 5 F3: `w.form_accuracy || 0` fell through to the
-                      // <60 branch, so an UNKNOWN accuracy was painted RED —
-                      // a bad-form claim about a workout we know nothing about.
-                      // Unknown is neutral grey and reads "—".
-                      const formColor =
-                        w.formAccuracy === null ? 'rgba(255,255,255,0.40)' :
-                        w.formAccuracy >= 80 ? '#4ade80' :
-                        w.formAccuracy >= 60 ? '#FFB347' : '#f87171';
+                      // ROUND 6 F7: a string that is non-empty is not a string
+                      // that PARSES, so `'not-a-date'` printed the literal
+                      // "Invalid Date" beside siblings correctly reading "—".
+                      // `readCalendarSession` now rejects an unparseable
+                      // `startedAt` outright, so this branch is belt-and-braces
+                      // rather than the only guard — and it stays, because a
+                      // reader that starts letting one through must not reach a
+                      // render site that assumes it cannot.
+                      const parsed = new Date(w.startedAt);
+                      // LOCALE-NEUTRAL, deliberately. This was `'en-US'`, which
+                      // showed every user on earth the American ordering — the
+                      // same defect class as bucketing every user's days in one
+                      // fixed timezone. `[]` is the visitor's OWN locale, which
+                      // is what `Nutrition.jsx` and `Running.jsx` already pass;
+                      // the en-IN spelling on the post-workout screen is the
+                      // last one left and has its own OWED line.
+                      const date = Number.isNaN(parsed.getTime())
+                        ? UNKNOWN
+                        : parsed.toLocaleDateString([], { month: 'short', day: 'numeric' });
                       return (
                         <motion.div
-                          key={w.id ?? i}
+                          key={w.id}
                           initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.08 * i }}
                           className="flex items-center gap-3 py-2.5 rounded-xl px-3 mb-2"
@@ -753,16 +807,30 @@ export default function Dashboard() {
                             <p className="text-xs font-semibold text-white truncate" style={TS}>
                               Workout Session
                             </p>
+                            {/* SECONDS, through the calendar's own label. The
+                                old payload carried whole MINUTES; rounding the
+                                new one's milliseconds to match is :4182 — a
+                                real 8,491 ms workout printed as "0 min", and
+                                36,290 ms rounded UP past a minute it never
+                                reached. Four false numbers on one screen, all
+                                from durations the server had recorded fine. */}
                             <p className="text-2xs" style={{ color: 'rgba(255,255,255,0.70)', ...TS }}>
-                              {date} · {formatCount(w.durationMinutes)} min
+                              {date} · {formatDuration(w.durationSeconds)}
                             </p>
                           </div>
                           <div className="text-right flex-shrink-0">
                             <p className="text-xs font-semibold" style={{ color: '#FF8A1F', ...TS }}>
-                              {formatCount(w.caloriesBurned)} kcal
+                              {formatKcal(w.kcal)} kcal
                             </p>
-                            <p className="text-2xs" style={{ color: formColor, ...TS }}>
-                              {formatCount(w.formAccuracy)}% form
+                            {/* ROUND 5 F3: `w.form_accuracy || 0` fell through
+                                to the <60 branch, so an UNKNOWN score was
+                                painted RED — a bad-form claim about a workout
+                                nobody scored. `formColor` is the calendar's
+                                tested ladder for exactly that, and sharing it
+                                means the two screens cannot tint one score two
+                                colours (the ONE-LADDER lesson). */}
+                            <p className="text-2xs" style={{ color: formColor(w.formScore), ...TS }}>
+                              {formatFormScore(w.formScore)} form
                             </p>
                           </div>
                         </motion.div>
@@ -777,7 +845,10 @@ export default function Dashboard() {
         )}
 
         {/* ── CTA ───────────────────────────────────────────────────────────── */}
-        {!loading && (
+        {/* Gated on the totals read settling, which is what `loading` meant
+            before the split. It is a decoration, not a claim — it says nothing
+            about any figure — so it waits on one read rather than all three. */}
+        {!overviewLoading && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             transition={{ delay: 0.6 }}

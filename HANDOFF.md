@@ -1,6 +1,77 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE DASHBOARD'S STATS ARE OFF THE OLD BACKEND. Built, proven locally,
+      committed. **THE OWED LINE DOES NOT TICK — smoke and T3 are both UNRUN,
+      and those are the only two things left on this card.**
+
+WHAT LANDED (eleven files, ALL under apps/web — no migration, no endpoint,
+apps/api untouched; DECISIONS :8156)
+  · `api/dashboardStats.js` (NEW) + its suite — composes three endpoints that
+    already existed: `/v1/progress/overview?period=all` · `/v1/progress/trend
+    ?period=7d` · `/v1/workouts?limit=6`.
+  · `Dashboard.jsx` — three reads, THREE independent settled flags (round 7 F1
+    is why, and the split is what makes it load-bearing rather than tidy).
+  · `progressClamp.js` gains `totalsWindowLabel`; `workoutApi.getStats`,
+    `readStatsView`, `readRecentWorkout` and `weekDates` are DELETED with their
+    tests (round 6 F10 — dead surface with coverage reads as protection).
+  · `tools/mutate-dashboard-stats.mjs` (NEW), `RUNBOOK/smoke-dashboard-stats.md`
+    (NEW, UNRUN).
+
+THE PREMISE THE OWED LINE CARRIED WAS FALSE, and a later chat should not re-plan
+around it
+  · It said the WEEKLY count "has no home". It has one: the trend endpoint
+    reports `workouts` per DAY in the user's own timezone, so the week's count
+    is the sum over this week's days and the dots are the same days.
+  · ONE read answers both, so round 10 F1's "10 of 7 days active" is now
+    unreachable by construction, not by two fields being kept in step.
+
+TRAPS A LATER CHAT WILL OTHERWISE WALK INTO
+  · **The week key is now LOCAL, and that reversal is deliberate.** `weekDates`
+    keyed by `toISOString()` ON PURPOSE, to match the old backend's `utcnow()`.
+    The new server buckets in the user's timezone, so a UTC key matches nothing
+    for the first hours of every day east of Greenwich. Under TZ=UTC both
+    spellings pass — the tz positive control is what makes those tests real
+    (:4267 F2).
+  · **Every fixture mocks the network functions, so they answer the same
+    whatever they are ASKED.** `period=30d` captioned "all time" passed every
+    test in the file until the audit. If you add a read, assert its ARGUMENT.
+  · **A `-t`-filtered mutant is only as good as the test it names.** P5 came
+    back ALIVE against a test reaching the UNKNOWN arm, where it is inert; the
+    mutant was fine. :4718 F2 in its other direction.
+  · `AnimatedNumber` floors decimals, so "1.1h" reaches the DOM as "1" — own ⚪
+    OWED line, pre-existing, and the reason a render test reads the minutes
+    sub-line instead of the big number.
+
+KD'S QUESTION, ANSWERED WITH A GREP RATHER THAN A REASSURANCE
+  · He asked whether the app is becoming India-specific. It partly was:
+    `PostWorkout.jsx:133` forces the Indian date format on every user on earth,
+    and four more sites force the American one. The Dashboard's copy is fixed
+    here (its line was already being rewritten); the rest have an OWED line that
+    NAMES every sibling, so the next card fixes the class.
+  · `gyms.timezone`'s `Asia/Kolkata` default is the SPEC's own DDL, not a
+    shortcut — do not "fix" it without a DEVIATION PROPOSAL.
+
+MEASUREMENTS
+  · web 615/615 (was 586) · `vite build` ✓ · eleven touched files lint clean ·
+    shared + api typecheck clean (both untouched) · 15 mutants, 15 RED, 0 ALIVE,
+    0 never ran, restores sha256-verified.
+
+WHAT IS LEFT, IN ORDER
+  1. Kd runs `RUNBOOK/smoke-dashboard-stats.md` (8 steps). **Step 5 — are the
+     flames on the right days — is best done in the evening or early morning**,
+     because that is the window the old UTC key was wrong in.
+  2. Fresh-chat T3 on the diff.
+  3. THEN the OWED line ticks. Ticking earlier is :5034 / :4718 F4, both
+     reverted.
+  · NEXT CARD AFTER THAT, and it is now unblocked by this one: retire
+    `completeSession` + `createSession` TOGETHER (:3424's condition is met).
+    Nothing about how a workout is SAVED changed here.
+
+NEXT TASK CARD: the smoke, then T3. No new card until both are done.
+```
+
+```
 TASK: REST-IN-FULL-VIEW — the instrument is BUILT and the MEASUREMENT IS DONE.
       The card is BLOCKED ON A RECORDING, not on a ruling. Committed at
       `f50d350`. **NO NEXT CARD IS CHOSEN** — Kd was shown three candidates and

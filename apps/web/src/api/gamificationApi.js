@@ -239,61 +239,17 @@ export function formatXpEarned(v) {
   return Number.isFinite(v) ? `+${v.toLocaleString()}` : UNKNOWN;
 }
 
-/** The seven calendar days the week strip shows, Monday→Sunday, as the
- *  `YYYY-MM-DD` keys the old backend's `activity` map is keyed by.
- *
- *  ROUND 10 F1 — why this exists rather than the caption reading a count field.
- *  `weekly_workouts` and `activity` are DIFFERENT MEASUREMENTS of different
- *  things, and the caption printed the first while the dots drew the second:
- *
- *    · `weekly` is `{"$count": "count"}` over SESSIONS since `week_start`
- *      (backend-ml/app/routers/workouts.py:72-74) — two workouts on Monday
- *      count twice;
- *    · `activity` is keyed by `completed_at.strftime("%Y-%m-%d")` over
- *      `seven_days_ago` (workouts.py:86-89) — a DAY appears once, and the
- *      window is a rolling seven days, not Monday-to-Sunday.
- *
- *  So the caption said "5 of 7 days active" over three flames, and past seven
- *  sessions it said "10 of 7 days active" — a sentence that cannot be true,
- *  measured by round 10. The screen convicted itself: the tile eight inches
- *  left labels the SAME field "workouts".
- *
- *  Round 9 F4 fixed the READINESS axis of round 5 F8's invariant and left the
- *  COUNTING axis, which is why the caption now derives its number from the same
- *  map the dots do, over the same seven days. One source, so they cannot
- *  disagree — a count and a picture of the same week must not be two answers. */
-/** ROUND 11 F1 — why this returns a PAIR and not a string.
- *
- *  The arithmetic above is LOCAL (`getDay`/`getDate`/`setDate`); `toISOString`
- *  is UTC. Round 10 shipped the day NUMBER off the UTC string, replacing a local
- *  number that was always right with one that is wrong wherever local and UTC
- *  straddle midnight. Measured at 02:00 IST on Wed 29 Jul: the strip printed
- *  26 27 28 29 30 31 1 against a calendar reading 27 28 29 30 31 1 2, with the
- *  orange "today" cell showing yesterday — for five and a half hours of every
- *  day, in this app's home market. In UTC the two agree, which is why 90 tests
- *  never saw it.
- *
- *  So the two consumers get the two different things they actually need:
- *    · `key` stays UTC, because the old backend buckets by UTC
- *      (`datetime.utcnow()` at backend-ml/app/routers/workouts.py:55, the
- *      `strftime` at :89). A local key would stop matching the payload.
- *    · `day` is the LOCAL calendar day, because that is what the user's own
- *      calendar says and it is the only number the cell can honestly print.
- *
- *  The residual — a 01:00 IST workout landing on the previous UTC day, so a
- *  flame can sit under the wrong cell — is REAL and is the existing OWED
- *  timezone-capture item (users have been bucketed as UTC since 2026-07-11).
- *  It is not this card's to fix and is not silently closed by this comment. */
-export function weekDates(today = new Date()) {
-  const dayIdx = (today.getDay() + 6) % 7;   // Monday = 0
-  const out = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - dayIdx + i);
-    out.push({ key: d.toISOString().split('T')[0], day: d.getDate() });
-  }
-  return out;
-}
+// `weekDates` LIVED HERE and is now `weekOfDates` in `api/dashboardStats.js`.
+// IT MOVED BECAUSE ITS ANSWER CHANGED, which is the part worth keeping: its key
+// was the UTC day, deliberately, because the old backend bucketed by
+// `datetime.utcnow()`. The new one buckets each day in the USER'S OWN timezone,
+// so a UTC key stops matching the payload — east of Greenwich every key names
+// yesterday until the local morning, and the flames sit one cell left. Round 11
+// F1's own JSDoc called that residual "the existing OWED timezone-capture item,
+// not this card's to fix"; the repoint is the card that fixes it, from the
+// server's side, and the key had to follow.
+// Round 11 F1's OTHER half is unchanged and still binds: the printed day number
+// is the LOCAL calendar day. What is gone is the mismatch between the two.
 
 /** The accent colour for a difficulty, with UNKNOWN as neutral grey.
  *
@@ -304,11 +260,13 @@ export function weekDates(today = new Date()) {
  *  edit cannot fix a third of it. `easy`/`beginner` and `medium`/`intermediate`
  *  are the challenge and recommendation vocabularies respectively; both are
  *  matched here rather than in the call sites. *
- *  ROUND 11 F5: this block spent one commit orphaned above `weekDates`, because
- *  the new helper's own JSDoc was inserted between it and the function it
+ *  ROUND 11 F5: this block spent one commit orphaned above a date helper,
+ *  because that helper's own JSDoc was inserted between it and the function it
  *  describes. The rationale for this card's most-repeated rule was filed under
  *  a date utility. Reattached — a doc comment that drifts off its subject is
- *  the round 6 F10 / round 7 F4 shape, and this file has now hosted it twice. */
+ *  the round 6 F10 / round 7 F4 shape, and this file has now hosted it THREE
+ *  times: the repoint that deleted `readRecentWorkout` left ITS JSDoc sitting
+ *  above `readRecommendation`, describing a function one file away. */
 
 /** ROUND 9 F1 — the `${color}NN` hazard, enumerated properly this time.
  *
@@ -473,11 +431,6 @@ export function readLeaderboardEntry(e) {
   };
 }
 
-/** ROUND 5 F3: `recent_workouts` was the ONE list `readStatsView` passed through
- *  unparsed while badges/challenges/entries all got an element reader, and three
- *  Dashboard sites then fabricated with `|| 0` — "0 min · 0 kcal · 0% form", with
- *  an unknown accuracy painted RED by the <60 branch. Reachable on real data:
- *  the old backend returns serialized Mongo documents with no shape contract. */
 /** ROUND 6 F2/F3: `recommendationService.getRecommendations()` was the SECOND
  *  unparsed list in Dashboard — round 5's claim that `recent_workouts` was "the
  *  ONE list left unparsed" was false, and both were fixed in the same commit.
@@ -503,16 +456,12 @@ export function readRecommendations(data) {
   return l === null ? null : l.map(readRecommendation);
 }
 
-export function readRecentWorkout(w) {
-  return {
-    id:              text(w?.id),
-    completedAt:     text(w?.completed_at),
-    exerciseName:    text(w?.exercise_name),
-    durationMinutes: finite(w?.duration_minutes),
-    caloriesBurned:  finite(w?.calories_burned),
-    formAccuracy:    finite(w?.form_accuracy),
-  };
-}
+// `readRecentWorkout` LIVED HERE and is deleted with `readStatsView` below —
+// both parsed `GET /workouts/stats`, which no caller makes any more (the
+// Dashboard reads `/v1/workouts` through `api/dashboardStats.js`). Deleted
+// rather than kept "in case": round 6 F10's rule is that dead surface WITH TEST
+// COVERAGE reads as protection and is not, and these two had eleven rounds of
+// it. Their tests go in the same commit for the same reason.
 
 /** `{badges:{all,total_count}, challenges:{active}}` — a list is NULL when the
  *  payload cannot be enumerated, which is the question `listState` asks of it.
@@ -542,28 +491,18 @@ export function readLeaderboardView(data) {
   };
 }
 
-/** `workoutService.getStats()` — the Dashboard's own payload, and the one round
- *  4 F2 caught still fabricating: `Boolean(stats?.stats)` asserted the ENVELOPE
- *  and six sites then read fields off it with `?? 0`, so a 200 carrying
- *  `{stats:{}}` printed "0 workouts / 0h / 0 kcal" as fact. Per-field now, so
- *  there is nothing left for an envelope gate to get wrong. */
-export function readStatsView(data) {
-  const s = data?.stats;
-  const a = data?.activity;
-  const recent = list(data?.recent_workouts);
-  return {
-    totalWorkouts:  finite(s?.total_workouts),
-    totalMinutes:   finite(s?.total_minutes),
-    totalCalories:  finite(s?.total_calories),
-    weeklyWorkouts: finite(s?.weekly_workouts),
-    streak:         finite(s?.streak),
-    // A plain object keyed by date, or NULL. Round 4 F3: `|| {}` let the week
-    // strip render seven inactive dots — a visual "you trained on none of these
-    // days" — beside a caption that correctly read "unavailable".
-    activity: a && typeof a === 'object' && !Array.isArray(a) ? a : null,
-    recent:   recent === null ? null : recent.map(readRecentWorkout),
-  };
-}
+// `readStatsView` LIVED HERE. It parsed `workoutService.getStats()`, the old
+// backend's Dashboard payload, and it is deleted because that call is gone —
+// the figures come from `/v1/progress/overview`, `/v1/progress/trend` and
+// `/v1/workouts` now, through `api/dashboardStats.js`.
+//
+// WHAT MUST NOT BE LOST WITH IT, because it is the rule and not the code:
+// round 4 F2's fix was per-FIELD reading, after `Boolean(stats?.stats)` asserted
+// the ENVELOPE and six render sites then read fields off it with `?? 0` — so a
+// 200 carrying `{stats:{}}` printed "0 workouts / 0h / 0 kcal" as fact. The new
+// reader is written the same way and its tests assert the same property against
+// the new shape. A repoint is exactly when a hard-won rule gets left behind
+// with the code that carried it.
 
 // ── PostWorkout's summary payload (OWED.md:730) ───────────────────────────────
 // `GET /workouts/:id/summary`, the old backend's workout-complete response. It
@@ -571,9 +510,12 @@ export function readStatsView(data) {
 // nine fields — while the other three old payloads on these screens each got a
 // reader across rounds 4-7. Deferred by Kd's ruling at the PostWorkout XP card's
 // plan gate ("record as OWED, fix XP only", DECISIONS :1330); this is that line
-// being discharged. Lives HERE and not in `workoutApi.js` for the reason
-// `readStatsView`'s own JSDoc gives: that reader ALSO parses a `workoutService`
-// payload, and the text/finite/list primitives above are module-private.
+// being discharged. Lives HERE and not in `workoutApi.js` because the
+// text/finite/list primitives above are module-private. (The original reason
+// also named `readStatsView`, which parsed a second `workoutService` payload
+// from this file — that reader is gone as of the Dashboard repoint, so only the
+// primitives argument is left standing. Stated rather than quietly trimmed: a
+// reason that has lost half its support is worth knowing about.)
 
 /** The five grade arms plus the one the page did not have.
  *
