@@ -189,6 +189,13 @@ export async function listWorkouts(
     items: items.map(toListItem),
     nextCursor: hasMore && last !== undefined ? `${last.startedAt.toISOString()}|${last.id}` : null,
     limitedToDays: gate.limitedToDays,
+    // THE EXTRA QUERY ONLY RUNS WHEN IT CAN MATTER. A non-empty page has
+    // already answered the question — these rows ARE workouts — so the probe
+    // fires only on an empty one, which is the rare case and the only case a
+    // screen has to explain. The field is unconditional even so: a caller that
+    // sometimes gets the fact and sometimes gets null is back to guessing,
+    // which is the defect this exists to remove.
+    hasAnyWorkouts: items.length > 0 ? true : await repo.userHasAnyWorkout(deps.sql, userId),
   };
 }
 

@@ -153,9 +153,30 @@ const overviewOk = (body) => progressService.getOverview.mockResolvedValue({ dat
  *  workouts, so a day absent from `points` is a real zero. */
 const weekOk = (points, limitedToDays = null) =>
   progressService.getCaloriesTrend.mockResolvedValue({ data: { points, limitedToDays } });
-/** `GET /v1/workouts?limit=6`. */
-const historyOk = (items) =>
-  workoutService.getHistory.mockResolvedValue({ data: { items, nextCursor: null, limitedToDays: null } });
+/** `GET /v1/workouts?limit=6`.
+ *
+ *  `limitedToDays` is the PLAN's read-gate, reported on every page whether or
+ *  not it bit (`workouts/service.ts:191`). **Every user has one**: no
+ *  subscription resolves to the free plan (`entitlements/service.ts:95-99` →
+ *  `seed.ts:44`), so 90 is the DEFAULT reality and null is the rare one.
+ *
+ *  `hasAnyWorkouts` is what makes an empty page readable at all. The gate alone
+ *  cannot tell a brand-new account from one whose history is older than the
+ *  window — both are `{ items: [], limitedToDays: 90 }` — and the totals
+ *  endpoint is clamped by the same floor, so it reads 0 for both. Round 2's
+ *  Critical was that ambiguity being guessed at; the server now answers it.
+ *
+ *  `limitedToDays` defaults to UNGATED; `hasAnyWorkouts` defaults to what the
+ *  SERVER would compute for these items — true when rows are present, false when
+ *  they are not. **It does NOT default to unknown**, so `historyOk([])` exercises
+ *  the brand-new-account arm and not the old-server one. To reach UNKNOWN, mock
+ *  `workoutService.getHistory` directly and omit the field, as the UNKNOWN test
+ *  below does. (An earlier draft of this comment claimed both defaulted to
+ *  unknown, which would have sent the next author to the wrong arm.) */
+const historyOk = (items, limitedToDays = null, hasAnyWorkouts = items.length > 0) =>
+  workoutService.getHistory.mockResolvedValue({
+    data: { items, nextCursor: null, limitedToDays, hasAnyWorkouts },
+  });
 /** A schema-valid `workoutListItemSchema` row. Every field the contract
  *  requires is present, so a test that omits one is omitting it deliberately —
  *  and if a field NAME moves in `@app/shared`, the rows stop reading and the
@@ -353,7 +374,13 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     await waitFor(() => expect(screen.getByText('0 of 7 days active')).toBeTruthy());
     // The two ABSENT fields must NOT have become zeros.
     expect(screen.queryByText(/0 minutes/)).toBeNull();
-    expect(screen.getByText(/kcal ·/)).toBeTruthy();
+    // …NOR carry a caption. This assertion used to read `getByText(/kcal ·/)`,
+    // pinning "kcal · all time" under an em dash — the sub-line describing a
+    // window for a number that never arrived. That is this test's OWN subject
+    // ("fabricates nothing for the missing fields") one line lower than it was
+    // looking: the fabrication is the CAPTION, not a zero. The Hours tile has
+    // always been asserted this way two lines down; the other two now match.
+    expect(screen.queryByText(/kcal ·/)).toBeNull();
 
     // ROUND 8 F6, by identity. NO whole-document zero sweep in THIS test: the
     // known `totalWorkouts: 12` is a number, so StatCard animates it from 0
@@ -383,7 +410,11 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     gamificationService.getOverview.mockImplementation(DEAD);
     gamificationService.getLeaderboard.mockImplementation(DEAD);
-    overviewOk({ totalWorkouts: 1 });
+    // 0, not 1: `historyOk([])` now says the user owns NOTHING, and an ungated
+    // account cannot both own nothing and have a lifetime total — the server
+    // cannot emit that pair. This test is about the ARGUMENTS the page sends,
+    // so the total is incidental to its subject.
+    overviewOk({ totalWorkouts: 0 });
     weekOk([]);
     historyOk([]);
 
@@ -450,6 +481,11 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     expect(screen.queryByText(/Level 1\b/)).toBeNull();
     expect(screen.queryByText(/0 XP earned/)).toBeNull();
     expect(screen.queryByText(/\/100 XP/)).toBeNull(); // the hardcoded-100 curve
+
+    // …and no tile captions a number it does not have. "all time" is what
+    // `totalsWindowLabel` returns for an UNGATED plan, so printing it under an
+    // em dash describes a window this page was never told about.
+    expect(screen.queryByText(/all time/)).toBeNull();
 
     // WHOLE-DOCUMENT sweep, not a per-element query. `getByText` matches one
     // element's own text, so a fabrication INTERPOLATED into a longer string
@@ -551,6 +587,98 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     renderPage(<Dashboard />);
     await waitFor(() => expect(screen.getByText('No workouts logged yet.')).toBeTruthy());
     expect(screen.queryByText('Recent workouts are unavailable right now.')).toBeNull();
+  });
+
+  it('a BRAND-NEW account is not told its plan is hiding a history it does not have', async () => {
+    // ROUND 2's CRITICAL, and the reason the server now sends `hasAnyWorkouts`.
+    // Every user is on a plan with a 90-day gate — no subscription resolves to
+    // the free plan — so the server reports `limitedToDays: 90` to someone who
+    // signed up ten seconds ago. Round 2 read that gate as "your older workouts
+    // are hidden" and said so on the FIRST screen a new user ever sees. The
+    // gate cannot tell the two people apart; only this flag can.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    overviewOk({ totalWorkouts: 0, totalKcal: 0, limitedToDays: 90 });
+    weekOk([], 90);
+    historyOk([], 90, false); // gated like everyone, but genuinely empty
+
+    renderPage(<Dashboard />);
+    await waitFor(() => expect(screen.getByText('No workouts logged yet.')).toBeTruthy());
+    // NOT the gated copy: this user has nothing older, and telling them their
+    // plan is withholding something is the false claim :5807 rule 1a names.
+    expect(screen.queryByText(/No workouts in the last/)).toBeNull();
+    expect(screen.queryByText(/Older workouts are still saved/)).toBeNull();
+  });
+
+  it('an UNKNOWN history under a gate claims neither thing', async () => {
+    // W4's gap. A server shipped before `hasAnyWorkouts` sends the gate and
+    // nothing else — the exact input rounds 1 and 2 each guessed at. The pane
+    // must say the one sentence true for both people rather than pick a side,
+    // because picking a side is what shipped two Criticals.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    overviewOk({ totalWorkouts: 0, totalKcal: 0, limitedToDays: 90 });
+    weekOk([], 90);
+    // The field is ABSENT, not false — an old server, not a new empty account.
+    workoutService.getHistory.mockResolvedValue({
+      data: { items: [], nextCursor: null, limitedToDays: 90 },
+    });
+
+    renderPage(<Dashboard />);
+    await waitFor(() => expect(screen.getByText('No workouts to show.')).toBeTruthy());
+    expect(screen.queryByText('No workouts logged yet.')).toBeNull();
+    expect(screen.queryByText(/No workouts in the last/)).toBeNull();
+    expect(screen.queryByText(/Older workouts are still saved/)).toBeNull();
+  });
+
+  it('a ONE-DAY window says "day", not "1 days"', async () => {
+    // W5's gap. The reader accepts any positive gate, and the sibling caption on
+    // this same page already handles the singular (`progressClamp.js`) — two
+    // spellings of one window on one screen is the drift this file keeps citing.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    overviewOk({ totalWorkouts: 0, totalKcal: 0, limitedToDays: 1 });
+    weekOk([], 1);
+    historyOk([], 1, true);
+
+    renderPage(<Dashboard />);
+    await waitFor(() =>
+      expect(screen.getByText('No workouts in the last 1 day.')).toBeTruthy());
+    expect(screen.queryByText(/1 days/)).toBeNull();
+  });
+
+  it('an empty page under the PLAN GATE does not deny the history', async () => {
+    // A free plan reads 90 days back and the server says so on every page. A
+    // user whose last workout is 100 days old therefore gets an EMPTY page —
+    // and "No workouts logged yet." would be the screen calling a real history
+    // nonexistent. (An earlier draft said "under a tile counting it" — round 2
+    // showed that tile is clamped by the same floor and reads 0 too.) The tiles
+    // beside it already refuse this exact lie ("last 90 days", not "all time");
+    // this pane now refuses it too.
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    gamificationService.getOverview.mockImplementation(DEAD);
+    gamificationService.getLeaderboard.mockImplementation(DEAD);
+    // The totals are clamped by the SAME floor (`getOverview`'s `since`), so a
+    // user whose whole history predates the window reads 0 here too — the
+    // round-2 review's correction to round 1's stated rationale. The tile is
+    // not what makes this a lie; the pane's own sentence is.
+    overviewOk({ totalWorkouts: 0, totalKcal: 0, limitedToDays: 90 });
+    weekOk([], 90);
+    historyOk([], 90, true); // gated AND has history — the other person
+
+    renderPage(<Dashboard />);
+    await waitFor(() =>
+      expect(screen.getByText('No workouts in the last 90 days.')).toBeTruthy());
+    // The denial is GONE, and so is the failure notice — this is a healthy read.
+    expect(screen.queryByText('No workouts logged yet.')).toBeNull();
+    expect(screen.queryByText('Recent workouts are unavailable right now.')).toBeNull();
+    // …and the pane says the older ones still exist, which is what makes the
+    // sentence above honest rather than merely vaguer (Part 4 §0.2: the gate is
+    // a READ limit, not a deletion).
+    expect(screen.getByText(/Older workouts are still saved/)).toBeTruthy();
   });
 
   it('the week caption and the dots agree — round 5 F8', async () => {
@@ -756,7 +884,10 @@ describe('Dashboard — a real level never sits beside fabricated figures', () =
     gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
     gamificationService.getOverview.mockImplementation(DEAD);
     gamificationService.getLeaderboard.mockImplementation(DEAD);
-    overviewOk({ totalWorkouts: 12, totalKcal: 900, limitedToDays: null });
+    // Ungated and owning nothing, so the totals must read 0 — see the note on
+    // the arguments test above. The subject here is that a settled read does not
+    // wait on a hanging sibling, which the figures do not bear on.
+    overviewOk({ totalWorkouts: 0, totalKcal: 0, limitedToDays: null });
     progressService.getCaloriesTrend.mockImplementation(HANGS);
     historyOk([]);
 
@@ -895,7 +1026,8 @@ describe('GamificationStrip — XP renders when the old backend does not', () =>
     // The stats reads SETTLE here; the recommendations one hangs. That is the
     // point of round 7 F1 and it survives the split: a settled sibling must not
     // move the hanging read's state.
-    overviewOk({ totalWorkouts: 3 });
+    // Same correction: an empty, ungated history cannot sit under a total of 3.
+    overviewOk({ totalWorkouts: 0 });
     weekOk([]);
     historyOk([]);
     recommendationService.getRecommendations.mockImplementation(HANGS);

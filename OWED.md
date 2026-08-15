@@ -1442,7 +1442,7 @@ then; none may be hidden or reduced to close the gap.
       the session id the legacy start hands out. They retire together, in one
       card, after the Dashboard line below is ticked. A chat that proposes
       deleting either one alone has not read this paragraph.
-- [ ] 🔴 **THE DASHBOARD'S STATS HAVE NO NEW-API HOME (`workoutService.getStats`).**
+- [x] 🔴 **THE DASHBOARD'S STATS HAVE NO NEW-API HOME (`workoutService.getStats`).**
       Created 2026-08-06 by the post-workout-summary card, which deliberately did
       NOT touch it (one backend surface per card — :2158's recorded lesson that
       eleven review rounds was a fault of the CARD's scope).
@@ -1456,9 +1456,16 @@ then; none may be hidden or reduced to close the gap.
       home is the WEEKLY count and the exact shape.
       **This line is what the legacy dual-write above is waiting on.** Until it
       is ticked, `completeSession` stays and the app needs three servers to run.
-      **STATUS 2026-08-15 — BUILT AND PROVEN LOCALLY. THE LINE DOES NOT TICK:
-      the browser SMOKE and the fresh-chat T3 are both unrun.** (DECISIONS, this
-      date.) Web-only; no migration, no new endpoint, `apps/api` untouched.
+      **DONE 2026-08-16 — smoke 10/10 and THREE fresh-chat T3 rounds, the last
+      finding ZERO Critical/High in the code** (DECISIONS :8267, :8340, :8405).
+      The two rounds in between each shipped a Critical in the SAME empty state —
+      first denying a real history, then telling brand-new users their plan hid
+      one — which fired Part I §2.5's escape hatch. **Kd ruled for the redesign
+      over a third patch**, and `workoutPageSchema` gained `hasAnyWorkouts`
+      because the plan gate alone cannot tell a new account from a gated one.
+      That made this card touch `apps/api` after all — the "web-only" scope below
+      was true when written and stopped being true at round 2.
+      **This unblocks the legacy dual-write line above.** Web-only; no migration, no new endpoint, `apps/api` untouched.
       **THE "WEEKLY COUNT HAS NO HOME" CLAIM ABOVE IS FALSE and was corrected by
       measurement, not by opinion:** `/v1/progress/trend?period=7d` reports
       `workouts` per DAY (`repo.ts:354-359`, `GROUP BY day` in the user's own
@@ -1468,7 +1475,10 @@ then; none may be hidden or reduced to close the gap.
       of days, "10 of 7 days active" — unreachable by construction rather than by
       two fields agreeing. `/v1/progress/heatmap` was NOT used: it is a fixed
       365-day read where seven days are wanted.
-      **THREE THINGS A USER CAN SEE CHANGED, all of them corrections:**
+      **FIVE THINGS A USER CAN SEE CHANGED** (three listed below when this was
+      written; the empty-state rewrite and the form-score colour ladder are the
+      fourth and fifth — see `BACKLOG.md` L24 and DECISIONS :8340), **all of them
+      corrections:**
       (1) **The seven dots move to the user's OWN timezone.** The retired
       `weekDates` keyed by `toISOString()` — the UTC day of a locally-computed
       date — deliberately, because the old backend bucketed by
@@ -2986,6 +2996,42 @@ then; none may be hidden or reduced to close the gap.
       The fix is the same shape and now has a worked precedent to copy:
       `from`/`to` on the meals list query, half-open, absolute instants, clamped
       by the plan gate exactly as the workouts one is.
+- [ ] ⚪ **Two more captions would print "Last 1 Days".** `progressClamp.js:63`
+      (`heatmapCaption`) and `:76` (`recordsNote`), plus `WorkoutCalendar.jsx:341`
+      ("Your plan shows the last 1 days"), interpolate the plan window with a
+      hard-coded plural — the same defect as `BACKLOG.md` L26, in the three
+      siblings that card did not touch. **Latent, not live:** no seeded plan uses
+      `history_days: 1` (`seed.ts` has only -1 and 90), so nothing prints it
+      today. Named by T3 round 3 (2026-08-15) as out of scope for the
+      dashboard-stats card, and deferred here rather than swept up in a fix
+      round (rule 6 — minimal diffs).
+      **Fix the CLASS, not the three cases** (:1239): `totalsWindowLabel` already
+      owns the singular and the Dashboard now calls it rather than spelling it —
+      the other captions should reach the same owner, not each grow their own
+      ternary. That is what L28 was found for, one file over.
+- [ ] ⚪ **On the FIRST load of an account with no stored timezone, the week
+      strip can draw one flame a day out — for that one render only.**
+      Found by the dashboard-stats T3 round 1 (2026-08-15, its Low-3), tagged Low
+      with its argument shown, and **deferred rather than patched — so it is here
+      rather than only in `BACKLOG.md`** (Part I §2.5: a Low that cannot be fixed
+      in its round has become a deferral).
+      `syncTimezone` is called fire-and-forget from `AuthContext.jsx:95,120`, by a
+      DOCUMENTED decision recorded at both call sites: *"a best-effort write must
+      never delay rendering or hold the loading spinner open."* So on the very
+      first load of an account whose `users.timezone` is still null, the server
+      buckets that render's trend by UTC while the client keys the seven cells
+      LOCALLY — and east of Greenwich the two disagree for the early hours of a
+      day. It self-corrects on the next load, and it needs a stored-null
+      timezone, which the capture card makes rare.
+      **Why it was not fixed in the round:** the only two fixes are to await the
+      write before first paint — reversing the decision above, and delaying every
+      login for a best-effort call — or to hide the strip until the timezone is
+      known, which the no-removal rule forbids. Neither is a fix round's business
+      (rule 6: minimal diffs, only the fix). **It needs a card and a Kd ruling on
+      the trade-off, not a patch.**
+      **Strictly better than before the repoint**, which is why it is ⚪: the old
+      key was UTC permanently for the same user, so this is a one-render residual
+      of a defect that used to be constant.
 - [ ] ⚪ **The timezone-pin guard asserts only that the offset is NOT ZERO, so a
       DST zone would satisfy it.** Raised by the calendar's T3 round 2
       (2026-08-04, DECISIONS :4355) while auditing round 1's own fix, and

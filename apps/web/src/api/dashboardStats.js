@@ -140,7 +140,8 @@ export function activeDayCount(byDate, week) {
   return week.filter((d) => (finite(byDate[d.key]) ?? 0) > 0).length;
 }
 
-/** `GET /v1/workouts` → the Recent Workouts rows, or NULL when we cannot say.
+/** `GET /v1/workouts` → `{ rows, limitedToDays, hasAnyWorkouts }`, or NULL when
+ *  we cannot say.
  *
  *  Reuses the CALENDAR's row reader, which already turns this exact payload
  *  into `{ id, startedAt, durationSeconds, kcal, formScore }` and already
@@ -152,11 +153,51 @@ export function activeDayCount(byDate, week) {
  *  not one of them could be read, returning `[]` would render "No workouts
  *  logged yet." — a definite claim about a user's history built out of our own
  *  failure to parse it. That is :5104's F4 exactly, and it is the one case
- *  where a `.filter(Boolean)` quietly composes two true statements into a lie. */
+ *  where a `.filter(Boolean)` quietly composes two true statements into a lie.
+ *
+ *  AN EMPTY PAGE UNDER THE PLAN GATE IS THE SAME LIE FROM THE OTHER SIDE, and
+ *  it is why this returns an OBJECT rather than the bare array it shipped as.
+ *
+ *  **THE GATE ALONE IS NOT ENOUGH TO SAY ANYTHING, and round 2's Critical is
+ *  what proved it.** Everyone is gated — no subscription resolves to the free
+ *  plan's 90 days — so `{ items: [], limitedToDays: 90 }` is what a brand-new
+ *  account gets AND what someone with only-older history gets, and the totals
+ *  endpoint is clamped by the same floor so it reads 0 for both. Round 1 read
+ *  that shape as "you never trained" (false for the second person); round 2
+ *  read it as "your plan is hiding older workouts" (false for the first, who is
+ *  most people on their first day). `hasAnyWorkouts` is the server answering the
+ *  question instead of the screen guessing at it.
+ *  A free plan reads 90 days back (`seed.ts:44`) and `listWorkouts` clamps the
+ *  window to that floor and reports it on EVERY page, empty or not
+ *  (`workouts/service.ts:182,191`). So a user whose last workout is 100 days
+ *  old gets `{ items: [], limitedToDays: 90 }` — and dropping the flag here
+ *  rendered "No workouts logged yet." to someone with a real history, inches
+ *  under a totals tile that reads 0 for the same reason (round 2's correction:
+ *  `getOverview` clamps by the SAME floor, so the tile is NOT counting the
+ *  hidden history — only the pane's own sentence is wrong). The rows and the
+ *  gate are ONE answer to one
+ *  question ("what can this pane say about your history?"), so they travel
+ *  together: a caller holding the rows cannot fail to be holding the reason
+ *  they are empty. `monthClamp` (`workoutHistory.js:200-223`) is the same fix
+ *  for the calendar, and its header states the rule this now follows —
+ *  "drawing it as a blank month tells the user they never trained".
+ *
+ *  `<= 0` IS NO GATE, NOT A ZERO-DAY WINDOW — and that rule lives in
+ *  `readWorkoutPage`, not here. `historyGate` maps an unlimited plan to null
+ *  before it leaves the server (`service.ts:130`), so neither 0 nor -1 reaches a
+ *  healthy client — but this parses external input (R2.3) and "the last 0 days"
+ *  is a sentence no screen should be able to print. It was briefly enforced in
+ *  BOTH places, which is the thing this paragraph warns against happening. */
 export function readRecentWorkouts(data) {
   const page = readWorkoutPage(data);
   if (page === null) return null;
   const rows = page.items.map(readCalendarSession).filter((s) => s !== null);
   if (rows.length === 0 && page.items.length > 0) return null;
-  return rows;
+  return {
+    rows,
+    // Already normalised by `readWorkoutPage` — null here means NO gate, and
+    // this file deliberately does not re-decide that.
+    limitedToDays: page.limitedToDays,
+    hasAnyWorkouts: page.hasAnyWorkouts,
+  };
 }

@@ -492,3 +492,115 @@ it like any other.)*
       `timerIdleMs` ternary, measured against the file's next-longest line (100).
       No prettier config exists, so eslint passed it — inconsistency, not a
       violation. Wrapped. Found by T3 round 1 (its Low-4).
+- [ ] **L23 · sign-up demands a capital letter the server never asks for.**
+      `apps/web/src/pages/Register.jsx:47` refuses any password failing
+      `(?=.*[a-z])(?=.*[A-Z])(?=.*\d)` with "Password must contain uppercase,
+      lowercase, and a number". The API's `authPasswordSchema`
+      (`packages/shared/src/auth.ts:11`) accepts **any 8–128 characters**. So a
+      password the server would take is refused by the browser, and an account
+      created through the API with such a password logs in fine through the same
+      UI that would not let you register it — the login form checks only that the
+      boxes are non-empty (`Login.jsx:39`).
+      **Low, not Critical/High** (Part I §2.5 rule 1a): nothing false is shown and
+      no one is blocked from a flow — the stricter rule is a defensible policy.
+      **What is wrong is that the two disagree**, and the fix is to decide WHICH
+      is the policy and state it once, not to weaken either in passing.
+      **Found by Kd on 2026-08-15** during the dashboard-stats smoke, head-on: he
+      was handed `smoke1234` and the screen refused it. NOT fixed there (R1.1 —
+      out of that card's scope). Not part of the dashboard-stats diff.
+- [x] **L24 · a user-visible colour change went unrecorded.** The recent list's
+      form-score tint moved from an inline two-way ladder
+      (`Dashboard.jsx`, `>= 60 ? '#FFB347' : '#f87171'`) to the shared `formColor`
+      (`workoutHistory.js:435-439`: `>= 80` green, `>= 60` `#FF8A1F`, else red).
+      **The change is correct and deliberate** — it is the ONE-LADDER
+      consolidation, and it gives scores of 80+ the green band the inline version
+      had no concept of. What was wrong is that the card's DECISIONS entry
+      ENUMERATED the user-visible changes and this was not among them, so a
+      score of 85 changed colour with no line saying so.
+      **Low under Part I §2.5 rule 1a**: nothing false is shown — a tint is not a
+      claim — so it is cosmetic-and-true.
+      **Fixed:** recorded as the fourth user-visible change at `DECISIONS.md:8267`.
+      The fix for a Low that is a missing record IS the record.
+      Found by T3 round 1 (its Low-1).
+- [x] **L25 · a failed totals read still captioned the em dashes "all time".**
+      `totalsWindowLabel(null)` returns "all time", which is true of an UNGATED
+      plan and equally true of a read that never arrived — so three tiles showing
+      "—" sat under a sub-line describing a window nobody had told the page
+      about. **Low, not Critical/High**: no number is stated falsely, and the
+      value itself correctly reads "—". What is wrong is a caption asserting
+      something about a number that does not exist.
+      **Fixed:** the Total Workouts and Calories tiles now omit the sub-line when
+      their own value is null — per FIELD, matching the guard the Hours tile has
+      always had, because a 200 missing one field must still caption the others.
+      **An existing test was pinning the defect** (`getByText(/kcal ·/)` inside
+      "a PARTIAL 200 fabricates nothing for the missing fields" — one line below
+      its own subject); flipped, with the reasoning at the assertion. Mutants
+      **M5 and M6 are RED**.
+      Found by T3 round 1 (its Low-2).
+- [x] **L26 · "No workouts in the last 1 days."** The Dashboard's empty pane
+      interpolated the plan window with a hard-coded plural, while its sibling
+      caption on the SAME page already handles the singular
+      (`progressClamp.js`, `days === 1 ? "day" : "days"`) — so a 1-day gate would
+      print both spellings on one screen, the ONE-LADDER drift the pane's own
+      comment argues against. **Low**: grammar, and nothing false is stated.
+      Latent — no seeded plan uses `history_days: 1` (only -1 and 90) — but the
+      reader deliberately accepts any positive gate, so 1 is inside the range it
+      chose to admit. **Fixed** in the same expression as the round-2 redesign,
+      with a render test at a 1-day window; mutant **W5 is now RED**, having
+      survived the first sweep.
+      Found by T3 round 2 (its Low-1).
+- [x] **L27 · three line citations off by one.** `service.ts:131` was cited for
+      "maps an unlimited plan to null" (that is line **130**; 131 is the gated
+      branch) and `service.ts:182,190` for "clamps and reports it" (182 is right,
+      the report is line **191**; 190 is `nextCursor`). Four sites across
+      `dashboardStats.js`, `dashboardStats.test.js`. **Low**: nothing on screen,
+      nothing false to a user — but V2 says quote by line, and an off-by-one
+      citation sends the next chat to the wrong statement, which is the whole
+      cost the rule exists to avoid. **Fixed**, and my own new
+      `entitlements/service.ts` range was re-derived rather than copied while I
+      was there (95-99, not 95-98 — the free-plan fallback is only visible across
+      the whole `Promise.all`).
+      Found by T3 round 2 (its Low-2).
+- [x] **L28 · the fix for L26 was itself the drift L26 was about.** L26 added a
+      singular by writing a FIFTH inline spelling of "the last N days", with its
+      own pluralization, in `Dashboard.jsx` — while `totalsWindowLabel(90)` on
+      the same page already returns exactly `last 90 days` with the singular
+      handled, and `progressClamp.js`'s docstring names this by anticipation
+      ("a fourth spelling … is how a screen starts describing the same window
+      two ways"). **Fixed:** the pane calls `totalsWindowLabel`. Mutant **W5\***
+      (replace the call with an inline copy) is RED.
+      Found by T3 round 3.
+- [x] **L29 · a third copy of "≤ 0 is no gate", under a comment arguing there
+      must be one.** The rule was in `monthClamp` and `effectiveClamp` already;
+      the round-2 redesign added a third in `readRecentWorkouts`. **Fixed:**
+      normalised in `readWorkoutPage` — the one reader both the calendar and the
+      Dashboard pass through — and deleted from the consumer. `monthClamp` keeps
+      its guard because it is reachable with values that never came through that
+      reader. Mutant **W6\*** is RED.
+      Found by T3 round 3.
+- [x] **L30 · a test fixture's comment described a default it does not have.**
+      "Both default to the UNGATED, UNKNOWN case" — `limitedToDays` does;
+      `hasAnyWorkouts` defaults to `items.length > 0`, a definite boolean. An
+      author trusting it would believe `historyOk([])` reaches the UNKNOWN arm
+      when it reaches the brand-new-account arm. **Fixed:** the comment now says
+      what each default is and how to actually reach UNKNOWN.
+      Found by T3 round 3.
+- [x] **L31 · three render fixtures the server cannot emit.** Each paired a
+      totals tile counting 1 / 12 / 3 workouts with a history page saying the
+      user owns none, and no gate to explain the gap. Round 2 named the class —
+      "a fixture that cannot occur is a test asserting about nobody" — and the
+      round-2 default made these contradictions explicit rather than creating
+      them. **Fixed:** totals set to 0 in all three; each test's actual subject
+      (which arguments are sent, and that a settled read does not wait on a
+      hanging sibling) is untouched.
+      Found by T3 round 3.
+- [x] **L32 · a known-false sentence written fresh into DECISIONS.** The round-1
+      entry says the denial sat "inches under a Total Workouts tile counting the
+      very history it was denying"; the round-2 entry disproves it (that tile is
+      clamped by the same floor and reads 0). Both entries are in the SAME
+      uncommitted change, so this is not inherited diary — it would have shipped
+      a sentence known to be wrong. **Fixed:** a correction clause at the claim
+      itself, pointing at the entry that disproves it. Nothing rewritten or
+      deleted; the append-only record still reads in order.
+      Found by T3 round 3.
+

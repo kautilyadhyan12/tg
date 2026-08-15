@@ -8263,3 +8263,188 @@ believing a mutation verdict produced under a `-t` filter.**
 - (**THE LINE DOES NOT TICK**) `RUNBOOK/smoke-dashboard-stats.md` (8 steps) and
   the fresh-chat T3 are both unrun. :5034 and :4718 F4 are the precedent for
   ticking early, and both were reverted.
+
+## 2026-08-15 — DASHBOARD STATS, T3 ROUND 1: ONE Critical/High — an empty page under the plan's read-gate told users with a real history that they had none
+
+**Read before writing any "nothing here yet" empty state, and before a reader
+returns a bare list.**
+
+- (**THE DEFECT, in one sentence**) A free plan reads 90 days back. A user whose
+  last workout is older than that gets an EMPTY page from `/v1/workouts` — and
+  the Recent Workouts pane answered it with "No workouts logged yet.", inches
+  under a Total Workouts tile counting the very history it was denying
+  (**corrected in the round-2 entry below: that tile reads 0 — `getOverview`
+  clamps by the SAME floor. The defect was real; this sentence about it was
+  not.**).
+  Reachable today by any lapsed free user, and by everyone with older history
+  once P2.8 migrates it in.
+- (**IT IS :5104 F4 FROM THE OTHER SIDE, and that is the whole lesson**) The card
+  had ALREADY fixed this shape twice on this pane — an unreadable page returns
+  NULL rather than `[]` (the parser's side), and the totals say "last 90 days"
+  rather than "all time" (the gate's side, on the tiles). The pane BENEATH those
+  tiles kept the third instance. Two true statements — the page arrived; it holds
+  no rows — composed into a false claim about a history the server merely
+  declined to show. `monthClamp` (`workoutHistory.js:200-223`) had solved the
+  identical situation for the calendar BY NAME, and its header states the rule:
+  "drawing it as a blank month tells the user they never trained".
+- (**THE FIX IS THE SHAPE, NOT THE BRANCH**) `readRecentWorkouts` returned a bare
+  ARRAY, so `page.limitedToDays` had nowhere to go and was dropped at the only
+  place that knew it. It now returns `{ rows, limitedToDays }`: the rows and the
+  reason they are empty are ONE answer to one question, so a caller holding the
+  rows cannot fail to be holding the reason. A branch would have fixed the case;
+  the shape is what stops the next caller re-opening it — `readWeekActivity` and
+  `readWorkoutPage` already returned objects for exactly this reason.
+- (**`<= 0` IS NO GATE, and the rule lives in the reader**) `historyGate` maps an
+  unlimited plan to null server-side (`service.ts:131`), so neither 0 nor -1
+  reaches a healthy client — but this is external input (R2.3) and "the last 0
+  days" is a sentence no screen should be able to print. Normalised once in the
+  reader so the pane's own check stays a plain null test: two places deciding
+  what counts as a gate is how they come to disagree (ONE LADDER).
+- (**A COSMETIC-BUT-TRUE FINDING STILL RECORDED A USER-VISIBLE CHANGE THE CARD
+  HAD NOT**) The recent list's form-score colour moved from an inline two-way
+  ladder (`>= 60 ? '#FFB347' : '#f87171'`) to the shared `formColor`
+  (`>= 80` green, `>= 60` `#FF8A1F`, else red). Correct, deliberate and part of
+  the ONE-LADDER consolidation — but the card's entry enumerated the user-visible
+  changes and this was not among them, so scores of 80+ silently changed colour
+  with no line saying so. **Recorded here as the fourth.** Low under :5807 (the
+  colour was never FALSE), and the fix for a Low that is a missing record is the
+  record.
+- (**A CAPTION ABOUT AN UNKNOWN NUMBER IS A CLAIM**) `totalsWindowLabel` returns
+  "all time" for a null `limitedToDays` — true of an ungated plan AND of a read
+  that never arrived, so a failed overview printed "all time" under three em
+  dashes: a window nobody told us about, described with confidence. Guarded per
+  FIELD, not behind one page-level flag, because a 200 missing ONE field must
+  still caption the others — round 4 F2's rule, which is what this whole file is
+  built on. **An existing test was pinning the defect**: `getByText(/kcal ·/)` in
+  "a PARTIAL 200 fabricates nothing for the missing fields", one line below its
+  own subject. Flipped, with the reasoning at the assertion.
+- (**THE INSTRUMENT WAS WRONG BEFORE THE CODE WAS — fifth occurrence in six
+  cards**) The mutation sweep's first run reported all SIX mutants `*** ALIVE ***`
+  while every one of them had produced real failures. The verdict was a substring
+  sniff for `'Tests  '` against output carrying ANSI colour codes between the word
+  and its spaces. **A sweep whose own instrument is wrong reports exactly like a
+  missing test** — :4718 F2 and the `-t`-filter finding at :8156 are the same
+  class, and the standing answer is unchanged: parse the count line, never sniff
+  it. Re-run after the fix: **6 mutants, 6 RED, 0 ALIVE, restores sha256-verified
+  on both files.**
+- (**WHAT WAS NOT FIXED, and why it is a deferral rather than a silence**) The
+  first-render timezone offset (T3's Low-3): `syncTimezone` is fire-and-forget by
+  a DOCUMENTED decision — "a best-effort write must never delay rendering or hold
+  the loading spinner open" — so on the very first load of an account with no
+  stored timezone the server still buckets by UTC and a flame can sit one cell
+  left for that one render. It self-corrects on the next load. **Fixing it means
+  either awaiting the write before first paint (reversing that decision) or
+  hiding the strip (banned) — neither is a fix round's business (rule 6).** It has
+  an `OWED.md` line in this commit.
+- (MEASUREMENTS) web **618/618** (was 615; +3 tests) · four touched files lint
+  exit 0 · `vite build` ✓ · the four new/changed assertions proven RED before the
+  fix existed, by name.
+
+## 2026-08-15 — DASHBOARD STATS, T3 ROUND 2: the STOP trigger fired, Kd chose the redesign, and the server now answers a question the screen had been guessing at
+
+**Read before writing any empty state, and before adding a branch to one that
+already has two.**
+
+- (**WHAT ROUND 2 FOUND, and it was round 1's own fix**) The round-1 copy told
+  EVERY brand-new account "No workouts in the last 90 days. Your plan shows that
+  far back. Older workouts are still saved." Nobody had hidden anything from
+  them — they had never trained. **Everyone is gated**: no subscription resolves
+  to the free plan (`entitlements/service.ts:95-99` → `seed.ts:44`), so
+  `limitedToDays: 90` is the DEFAULT reality and null is the rare one. Round 1
+  traded a false sentence in a rare case for a false sentence in the universal
+  one, on the first screen a new user ever sees.
+- (**THE ESCAPE HATCH FIRED, AND IT WAS RIGHT TO**) Two consecutive rounds, two
+  Criticals, same three lines of JSX. Part I §2.5's trigger is not a formality:
+  the reviewer named the cause exactly — *"the client is asked to describe a
+  user's history using a signal that cannot distinguish gated from none"* — and
+  a third wording patch would have been the third guess at an unanswerable
+  question. **Kd was given the choice and ruled for the redesign (option B).**
+- (**THE TWO PEOPLE THE OLD SIGNAL COULD NOT SEPARATE**) A ten-second-old account
+  and a lapsed veteran both produce `{ items: [], limitedToDays: 90 }`, and the
+  totals endpoint cannot break the tie because `getOverview` clamps by the SAME
+  floor (`service.ts:398`) — `totalWorkouts` reads 0 for both. Identical input,
+  opposite correct answers. Any rule computed from the gate alone is a coin flip.
+- (**THE FIX IS A NEW FACT, NOT NEW WORDING**) `workoutPageSchema` gains
+  `hasAnyWorkouts: boolean` — does this user own ANY workout, ignoring the gate.
+  The pane now has three arms: nothing (`false`) → "No workouts logged yet.";
+  history behind the gate (`true` + a gate) → "No workouts in the last N days"
+  plus the reassurance; **not told (`null`) → "No workouts to show."**, the
+  sentence true either way. The UNKNOWN arm is load-bearing, not padding: an
+  older server omits the field, and `?? false` there is round 1's Critical
+  returning by the back door.
+- (**IT IS NOT A LEAK**) Part 4 §0.2 makes the gate an ACCESS gate and not a
+  deletion, and the calendar has told users their older workouts are still saved
+  since it shipped (`WorkoutCalendar.jsx:343`). The field reveals EXISTENCE,
+  which the product already promises, never content.
+- (**THE PROBE COSTS ONE QUERY, ON THE PAGES THAT NEED IT**) A non-empty page has
+  already answered the question — those rows ARE workouts — so
+  `userHasAnyWorkout` fires only on an EMPTY page, which is the rare case and
+  the only case a screen must explain. `EXISTS` not `COUNT(*)`, so Postgres stops
+  at the first row. **The FIELD is unconditional even so**: a caller that
+  sometimes receives the fact and sometimes receives null is back to guessing,
+  which is the whole defect.
+- (**ROUND 2 ALSO CORRECTED ROUND 1'S STATED RATIONALE, and the correction
+  matters more than the wording it fixed**) Round 1 justified itself with "inches
+  under a totals tile counting it". **That tile reads 0** — same floor, same
+  clamp — so the sentence describing the defect was wrong even though the defect
+  was real. Its render fixture mocked `totalWorkouts: 12` beside an empty gated
+  page, **a combination the server cannot emit**. A fixture that cannot occur is
+  a test asserting about nobody; both are corrected here.
+- (**TWO MUTANTS SURVIVED THE FIRST SWEEP, and both were real gaps rather than
+  bad mutants**) Removing the `hasAnyWorkouts === true` guard from the gated arm
+  stayed GREEN (nothing covered UNKNOWN-plus-a-gate), and so did dropping the
+  singular (nothing used a 1-day window). Tests added for both; re-run **7
+  mutants, 7 RED** — five web, and two against real Postgres including the
+  tenancy probe, which proves a stranger's history cannot answer for your
+  account (R3.2).
+- (MEASUREMENTS) web **624/624** (was 618) · api history suite **23/23** against
+  real Postgres · shared + api typecheck clean · nine touched files lint exit 0 ·
+  `vite build` ✓. The new-account render test was proven RED before the server
+  field existed.
+
+## 2026-08-15 — DASHBOARD STATS, T3 ROUND 3: ZERO Critical/High in the code — the redesign holds, and the only gate left is a human looking at it
+
+- (**THE ESCAPE HATCH DID NOT FIRE A THIRD TIME**) Rounds 1 and 2 each put a
+  Critical in the Recent Workouts empty state; round 3 put none there. The
+  reviewer looked for an input reaching no arm, an arm stating something false,
+  and a path where the pane still guesses, and found none. **Option B was the
+  right call**: the defect was a missing fact, and once the server supplied it
+  the wording stopped being a coin flip.
+- (**THE ONE Critical/High IS A GATE ITEM, NOT A CODE DEFECT**) The three new
+  sentences had never been seen in a browser. The recorded 8/8 smoke ran on an
+  account with FOUR workouts, so the empty pane — the whole subject of two
+  Criticals — was never once on screen during a smoke, and every arm was proven
+  only by mocked renders and `fastify.inject()`, the two instruments CLAUDE.md
+  names as structurally blind to the browser (the Card 4 CORS precedent).
+  **Steps 9 and 10 added to the sheet**: a fresh account must read "No workouts
+  logged yet.", and an account with a backdated workout must read "No workouts
+  in the last 90 days." with the reassurance. The UNKNOWN arm is unreachable
+  against a current server and the sheet SAYS so rather than leaving a blank.
+- (**THE L26 FIX WAS ITSELF THE DRIFT L26 WAS ABOUT, and that is the lesson**)
+  Round 2's Low added a singular by writing a FIFTH inline spelling of "the last
+  N days" — while `totalsWindowLabel` on the same page already returned exactly
+  that string with the singular handled, and `progressClamp.js`'s docstring had
+  named this failure by anticipation. **A fix that duplicates a rule to correct
+  the duplicate's behaviour is not a fix**; the pane now calls the function that
+  owns the phrase. Same shape one file over: the redesign added a THIRD copy of
+  "≤ 0 is no gate" underneath a comment arguing the rule must live in one place.
+  It now normalises in `readWorkoutPage`, the single reader both consumers pass
+  through.
+- (**A KNOWN-FALSE SENTENCE WAS ABOUT TO BE COMMITTED INTO THE RECORD**) The
+  round-1 entry's "inches under a Total Workouts tile counting it" is disproved
+  by the round-2 entry two screens below it, and **both were in the same
+  uncommitted change** — so this was not inherited diary, it was shipping a
+  sentence already known to be wrong. Corrected in place with a clause pointing
+  at the entry that disproves it; nothing rewritten or deleted, so the
+  append-only record still reads in order. **The correction belongs where the
+  claim is, not only where the correction was discovered.**
+- (**THE MUTANT THAT PROVES TENANCY DIES FOR A BROADER REASON THAN ITS OWN
+  ASSERTION**) The reviewer re-ran the unscoped-probe mutant and reported that it
+  fails on the FIRST assertion, from other test users' rows, rather than on the
+  dedicated cross-user line. Right answer, wider cause — recorded so no later
+  chat cites that mutant as proof of the Erin→Dana assertion specifically.
+- (MEASUREMENTS) web **624/624** · api history **23/23** on real Postgres ·
+  shared + api typecheck clean · lint exit 0 · six mutants re-run after the Low
+  fixes, **6 RED**, restores sha256-verified. Five Lows fixed and logged
+  (`BACKLOG.md` L28–L32); the singular's three remaining siblings deferred with
+  an `OWED.md` line, to be fixed as a CLASS.

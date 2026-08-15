@@ -309,6 +309,52 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     expect(body.limitedToDays).toBe(90);
   });
 
+  it("hasAnyWorkouts separates a NEW account from one gated out of its own history", { timeout: 60_000 }, async () => {
+    // THE FIELD EXISTS BECAUSE `limitedToDays` CANNOT ANSWER THIS. Every user is
+    // on the free plan's 90-day gate until they subscribe, so the two people
+    // below send byte-identical pages — empty items, limitedToDays 90 — while
+    // needing opposite sentences on screen. Two Criticals shipped on that
+    // ambiguity before the server was asked to resolve it.
+    const fresh = await session("p23-dana@example.com");
+    const lapsed = await session("p23-erin@example.com");
+
+    // Dana has never synced anything.
+    const dRes = await inject({ method: "GET", url: "/v1/workouts?limit=6", access: fresh.access });
+    expect(dRes.statusCode).toBe(200);
+    const dana = dRes.json<{ items: unknown[]; limitedToDays: number | null; hasAnyWorkouts: boolean }>();
+    expect(dana.items).toEqual([]);
+    expect(dana.limitedToDays).toBe(90);
+    expect(dana.hasAnyWorkouts).toBe(false);
+
+    // Erin trained 200 days ago and nothing since: the gate hides every row she
+    // owns, so her page is EMPTY and her gate is the SAME 90.
+    expect((await sync(crypto.randomUUID(), daysAgoIso(200), [squatSet(1)], lapsed.access)).statusCode).toBe(201);
+    const eRes = await inject({ method: "GET", url: "/v1/workouts?limit=6", access: lapsed.access });
+    expect(eRes.statusCode).toBe(200);
+    const erin = eRes.json<{ items: unknown[]; limitedToDays: number | null; hasAnyWorkouts: boolean }>();
+    expect(erin.items).toEqual([]);
+    expect(erin.limitedToDays).toBe(dana.limitedToDays);
+    // The ONLY field that differs — which is the whole point of adding it.
+    expect(erin.hasAnyWorkouts).toBe(true);
+
+    // R3.2: the probe is scoped to the caller. Erin's history must not make
+    // Dana's page claim she has one.
+    const dAgain = await inject({ method: "GET", url: "/v1/workouts?limit=6", access: fresh.access });
+    expect(dAgain.json<{ hasAnyWorkouts: boolean }>().hasAnyWorkouts).toBe(false);
+  });
+
+  it("a NON-EMPTY page reports hasAnyWorkouts without needing the probe", { timeout: 30_000 }, async () => {
+    // The rows themselves answer the question, so the service skips the extra
+    // query — but the FIELD is still unconditional, because a caller that only
+    // sometimes receives the fact is back to guessing.
+    const c = await session("p23-frank@example.com");
+    expect((await sync(crypto.randomUUID(), daysAgoIso(2), [squatSet(1)], c.access)).statusCode).toBe(201);
+    const res = await inject({ method: "GET", url: "/v1/workouts?limit=6", access: c.access });
+    const body = res.json<{ items: unknown[]; hasAnyWorkouts: boolean }>();
+    expect(body.items).toHaveLength(1);
+    expect(body.hasAnyWorkouts).toBe(true);
+  });
+
   it("an inverted or unparseable window is a 400, never a silently empty page", { timeout: 30_000 }, async () => {
     const inverted = await inject({
       method: "GET",

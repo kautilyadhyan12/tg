@@ -216,7 +216,7 @@ describe('readRecentWorkouts — an all-unreadable page is UNKNOWN, not empty', 
   });
 
   it('a page becomes rows the pane can draw', () => {
-    const rows = readRecentWorkouts({ items: [row()], nextCursor: null, limitedToDays: null });
+    const { rows } = readRecentWorkouts({ items: [row()], nextCursor: null, limitedToDays: null });
     expect(rows).toHaveLength(1);
     expect(rows[0].durationSeconds).toBe(187); // seconds, never rounded minutes
     expect(rows[0].kcal).toBe(42);
@@ -224,7 +224,72 @@ describe('readRecentWorkouts — an all-unreadable page is UNKNOWN, not empty', 
   });
 
   it('a GENUINELY empty page is an empty list — "No workouts logged yet."', () => {
-    expect(readRecentWorkouts({ items: [], nextCursor: null, limitedToDays: null })).toEqual([]);
+    expect(readRecentWorkouts({ items: [], nextCursor: null, limitedToDays: null }).rows)
+      .toEqual([]);
+  });
+
+  it('an empty page UNDER A PLAN GATE carries the gate — it is not "none ever"', () => {
+    // THE DEFECT THIS PINS. A free plan reads 90 days back (`seed.ts:44`) and
+    // the server reports that window on EVERY page, empty or not
+    // (`workouts/service.ts:191`). So a user whose last workout is 100 days old
+    // gets `{ items: [], limitedToDays: 90 }` — and dropping the flag here
+    // renders "No workouts logged yet." to someone with a real history, eight
+    // while the totals tile beside it reads 0 for the same reason — round 2's
+    // correction to this comment's first draft, which claimed the tile was
+    // counting the hidden workouts. It is clamped by the same floor.
+    //
+    // It is :5104 F4 from the PLAN's side rather than the parser's: two true
+    // statements — the page arrived; it holds no rows — composed into a false
+    // claim about a history the server merely declined to show. `monthClamp`
+    // solved the identical situation for the calendar by NAME
+    // (`workoutHistory.js:200-223`).
+    const out = readRecentWorkouts({ items: [], nextCursor: null, limitedToDays: 90 });
+    expect(out.rows).toEqual([]);
+    expect(out.limitedToDays).toBe(90);
+  });
+
+  it('the THREE people who reach an empty pane are told apart, not guessed at', () => {
+    // ROUND 2's CRITICAL. The gate cannot separate the first two — everyone is
+    // gated, so both send `{ items: [], limitedToDays: 90 }` — and whichever
+    // sentence the pane picks from the gate alone is false for one of them.
+    // The server answers it instead.
+    const gated = { items: [], nextCursor: null, limitedToDays: 90 };
+
+    // Brand-new account: nothing exists, and nothing is being withheld.
+    expect(readRecentWorkouts({ ...gated, hasAnyWorkouts: false }).hasAnyWorkouts)
+      .toBe(false);
+    // Lapsed veteran: the history is real and the window is hiding it.
+    expect(readRecentWorkouts({ ...gated, hasAnyWorkouts: true }).hasAnyWorkouts)
+      .toBe(true);
+    // Older server that never heard of the field: UNKNOWN, so the pane says the
+    // one thing true either way rather than inventing an answer.
+    expect(readRecentWorkouts(gated).hasAnyWorkouts).toBeNull();
+    // …and the gate still travels with all three.
+    expect(readRecentWorkouts({ ...gated, hasAnyWorkouts: false }).limitedToDays)
+      .toBe(90);
+  });
+
+  it('a page with ROWS carries hasAnyWorkouts: true from the server, not from the rows', () => {
+    // The server sets it true without a probe when the page is non-empty
+    // (`service.ts`), so the reader must not re-derive it — two answers to one
+    // question is how they come to disagree.
+    const out = readRecentWorkouts({
+      items: [row()], nextCursor: null, limitedToDays: 90, hasAnyWorkouts: true,
+    });
+    expect(out.rows).toHaveLength(1);
+    expect(out.hasAnyWorkouts).toBe(true);
+  });
+
+  it('a gate of 0 or -1 is NO gate, never a window of zero days', () => {
+    // `historyGate` maps unlimited to null before it leaves the server
+    // (`service.ts:130`), so neither reaches a healthy client — but this reader
+    // parses external input (R2.3), and "the last 0 days" is a sentence no
+    // screen should be able to print. One rule, in the reader, so the pane's
+    // check stays a plain null test (the ONE-LADDER lesson).
+    expect(readRecentWorkouts({ items: [], nextCursor: null, limitedToDays: 0 }).limitedToDays)
+      .toBeNull();
+    expect(readRecentWorkouts({ items: [], nextCursor: null, limitedToDays: -1 }).limitedToDays)
+      .toBeNull();
   });
 
   it('rows that arrived but cannot be read are UNKNOWN — :5104 F4', () => {
@@ -236,7 +301,7 @@ describe('readRecentWorkouts — an all-unreadable page is UNKNOWN, not empty', 
   });
 
   it('a PARTLY readable page draws what it can', () => {
-    const rows = readRecentWorkouts({ items: [row(), { nope: true }], nextCursor: null });
+    const { rows } = readRecentWorkouts({ items: [row(), { nope: true }], nextCursor: null });
     expect(rows).toHaveLength(1);
   });
 
@@ -247,7 +312,7 @@ describe('readRecentWorkouts — an all-unreadable page is UNKNOWN, not empty', 
   });
 
   it('a null duration/kcal/score stays null rather than becoming zero', () => {
-    const rows = readRecentWorkouts({
+    const { rows } = readRecentWorkouts({
       items: [row({ durationMs: null, kcalPoint: null, avgFormScore: null })],
       nextCursor: null,
     });

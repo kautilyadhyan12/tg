@@ -489,10 +489,20 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {/* The three sub-lines all name the SAME window, from one label, so a
               gated user cannot read "all time" on one tile and the truth on the
-              next. On an unlimited plan they read exactly as before. */}
-          <StatCard icon={Dumbbell} label="Total Workouts" value={orUnknown(totals.totalWorkouts)} sub={windowLabel} color="#FF8A1F" delay={0.15} bgImage="/images/dashboard/totalworkout.png" />
+              next. On an unlimited plan they read exactly as before.
+
+              A CAPTION ABOUT AN UNKNOWN NUMBER IS NOT PRINTED. `windowLabel`
+              falls back to "all time" when `limitedToDays` is null — which is
+              true of an ungated plan AND of a read that never arrived, so a
+              failed overview used to print "all time" under an em dash: a
+              window nobody told us about, described with confidence. The Hours
+              tile already guarded its sub-line this way; the other two now do
+              too, per field rather than behind one page-level flag, because a
+              200 missing ONE field must still caption the others (round 4 F2's
+              rule, which is the rule this whole file is built on). */}
+          <StatCard icon={Dumbbell} label="Total Workouts" value={orUnknown(totals.totalWorkouts)} sub={totals.totalWorkouts === null ? undefined : windowLabel} color="#FF8A1F" delay={0.15} bgImage="/images/dashboard/totalworkout.png" />
           <StatCard icon={Clock} label="Hours Trained" value={orUnknown(totals.totalHours)} suffix="h" sub={totals.totalMinutes === null ? undefined : `${totals.totalMinutes} minutes · ${windowLabel}`} color="#60a5fa" delay={0.2} bgImage="/images/dashboard/hourstrained.png" />
-          <StatCard icon={Flame} label="Calories Burned" value={orUnknown(totals.totalCalories)} sub={`kcal · ${windowLabel}`} color="#f97316" delay={0.25} bgImage="/images/dashboard/caloriesburned.png" />
+          <StatCard icon={Flame} label="Calories Burned" value={orUnknown(totals.totalCalories)} sub={totals.totalCalories === null ? undefined : `kcal · ${windowLabel}`} color="#f97316" delay={0.25} bgImage="/images/dashboard/caloriesburned.png" />
           <StatCard icon={Trophy} label="Current Level" value={`Level ${formatLevel(xp)}`} sub={`${formatXpTotal(xp)} XP earned`} color="#FFD66B" delay={0.3} bgImage="/images/dashboard/currentlevel.png" />
         </div>
 
@@ -737,16 +747,52 @@ export default function Dashboard() {
                     : 'Loading recent workouts…'}
                 </p>
               </div>
-            ) : recent.length === 0 ? (
+            ) : recent.rows.length === 0 ? (
               <div className="card-glass">
                 <h3 className="text-sm font-semibold text-white mb-1">Recent Workouts</h3>
+                {/* THREE PEOPLE REACH THIS PANE, and only two of them exist in
+                    the gate alone — which is what made rounds 1 and 2 each ship
+                    a Critical here.
+
+                      · has NOTHING            → "No workouts logged yet."
+                      · has history, gated out → "None in the last N days",
+                                                  plus the reassurance
+                      · we were not told       → the sentence true either way
+
+                    `limitedToDays` cannot separate the first two: EVERY user is
+                    gated (no subscription → the free plan's 90 days), so a
+                    ten-second-old account and a lapsed veteran send the exact
+                    same empty page, and the totals endpoint is clamped by the
+                    same floor so it reads 0 for both. Round 1 answered that
+                    shape with the first sentence and lied to the veteran; round
+                    2 answered it with the second and lied to the newcomer, on
+                    the first screen they ever see. `hasAnyWorkouts` is the
+                    server settling it. The UNKNOWN arm is not padding — an
+                    older server omits the field, and guessing either way there
+                    is how this defect returns a third time.
+
+                    The window is spelled by `totalsWindowLabel`, the function
+                    the three tiles above already use, and NOT inline here. L26
+                    fixed a missing singular by writing a fifth copy of "the
+                    last N days" with its own pluralization — which is the drift
+                    the fix was for, committed while fixing it. One phrase, one
+                    owner. */}
                 <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                  No workouts logged yet.
+                  {recent.hasAnyWorkouts === false
+                    ? 'No workouts logged yet.'
+                    : recent.hasAnyWorkouts === true && recent.limitedToDays !== null
+                      ? `No workouts in the ${totalsWindowLabel(recent.limitedToDays)}.`
+                      : 'No workouts to show.'}
                 </p>
+                {recent.hasAnyWorkouts === true && recent.limitedToDays !== null && (
+                  <p className="text-2xs mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                    Your plan shows that far back. Older workouts are still saved.
+                  </p>
+                )}
               </div>
             ) : null}
 
-            {recentState === 'ready' && recent.length > 0 && (
+            {recentState === 'ready' && recent.rows.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.55, duration: 0.5 }}
@@ -771,7 +817,7 @@ export default function Dashboard() {
                         View all <ChevronRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                    {recent.slice(0, 6).map((w, i) => {
+                    {recent.rows.slice(0, 6).map((w, i) => {
                       // ROUND 6 F7: a string that is non-empty is not a string
                       // that PARSES, so `'not-a-date'` printed the literal
                       // "Invalid Date" beside siblings correctly reading "—".

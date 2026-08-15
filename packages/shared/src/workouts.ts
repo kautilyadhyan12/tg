@@ -90,6 +90,29 @@ export const workoutPageSchema = z.object({
    *  way — it compares the plan window against the month on screen, which is a
    *  plan question and not a request question. */
   limitedToDays: z.number().int().nullable(),
+  /** Does this user have ANY workout at all, IGNORING the read-gate above?
+   *
+   *  Added 2026-08-15 after the dashboard-stats T3 round 2 found a Critical the
+   *  gate alone made unfixable. **`limitedToDays` cannot distinguish two people
+   *  who need opposite sentences.** Everyone is on a plan with a gate — no
+   *  subscription resolves to the free plan's 90 days
+   *  (`entitlements/service.ts:95-99` → `seed.ts:44`) — so BOTH of these are
+   *  `{ items: [], limitedToDays: 90 }`:
+   *
+   *    · someone who signed up ten seconds ago and has never trained;
+   *    · someone with years of history, all of it older than the window.
+   *
+   *  The totals endpoint cannot break the tie either — `getOverview` clamps by
+   *  the same floor, so `totalWorkouts` is 0 for both. A screen given only the
+   *  gate must GUESS, and it will be wrong for one of them whichever way it
+   *  guesses: round 1 denied the second person's history, round 2 told the
+   *  first person their plan was withholding one. This field is what ends that.
+   *
+   *  It is NOT a leak of gated data: Part 4 §0.2 makes the gate an ACCESS gate
+   *  and not a deletion, and the calendar has always told users their older
+   *  workouts are still saved (`WorkoutCalendar.jsx:343`). It reveals existence,
+   *  which the product already promises, never content. */
+  hasAnyWorkouts: z.boolean(),
 });
 export type WorkoutPage = z.infer<typeof workoutPageSchema>;
 

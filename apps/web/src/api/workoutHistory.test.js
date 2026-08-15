@@ -117,8 +117,8 @@ function validItem(over = {}) {
   };
 }
 
-const page = (items, nextCursor = null, limitedToDays = null) => ({
-  items, nextCursor, limitedToDays,
+const page = (items, nextCursor = null, limitedToDays = null, hasAnyWorkouts = items.length > 0) => ({
+  items, nextCursor, limitedToDays, hasAnyWorkouts,
 });
 
 describe('localDateKey', () => {
@@ -160,7 +160,7 @@ describe('localDateKey', () => {
 describe('readWorkoutPage', () => {
   it('reads a real page', () => {
     expect(readWorkoutPage(page([validItem()], 'c1', 90))).toEqual({
-      items: [validItem()], nextCursor: 'c1', limitedToDays: 90,
+      items: [validItem()], nextCursor: 'c1', limitedToDays: 90, hasAnyWorkouts: true,
     });
   });
 
@@ -172,7 +172,21 @@ describe('readWorkoutPage', () => {
 
   it('treats a non-string cursor and a non-numeric limit as absent, not as values', () => {
     const p = readWorkoutPage({ items: [], nextCursor: 7, limitedToDays: 'ninety' });
-    expect(p).toEqual({ items: [], nextCursor: null, limitedToDays: null });
+    expect(p).toEqual({
+      items: [], nextCursor: null, limitedToDays: null, hasAnyWorkouts: null,
+    });
+  });
+
+  it('a MISSING or non-boolean hasAnyWorkouts is UNKNOWN, never false', () => {
+    // Guessing `false` here is round 1's Critical returning by the back door:
+    // it renders "No workouts logged yet." to whoever the older server was
+    // talking about. Only a real boolean is a fact.
+    for (const bad of [undefined, null, 'yes', 1, 0]) {
+      expect(readWorkoutPage({ items: [], nextCursor: null, hasAnyWorkouts: bad })
+        .hasAnyWorkouts).toBeNull();
+    }
+    expect(readWorkoutPage({ items: [], nextCursor: null, hasAnyWorkouts: false })
+      .hasAnyWorkouts).toBe(false);
   });
 });
 

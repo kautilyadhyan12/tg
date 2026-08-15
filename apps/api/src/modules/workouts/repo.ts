@@ -227,6 +227,23 @@ export async function listWorkouts(
   return rows.map(toWorkoutRow);
 }
 
+/** Does this user own any workout at all — NO date floor, so the plan
+ *  read-gate does not apply.
+ *
+ *  Deliberately unbounded, which is the whole point: the caller already knows
+ *  what the GATED window holds and is asking the one question the gate cannot
+ *  answer. Existence only — no row, no column, nothing gated is returned.
+ *
+ *  `EXISTS` rather than `COUNT(*)`: Postgres stops at the first matching row,
+ *  so this is an index probe on `(user_id, started_at)` and not a scan of a
+ *  heavy user's whole history (R3.2 — `user_id` is in the WHERE, as it is on
+ *  every tenant read). */
+export async function userHasAnyWorkout(sql: Sql, userId: string): Promise<boolean> {
+  const rows = await sql<{ has: boolean }[]>`
+    SELECT EXISTS (SELECT 1 FROM workouts WHERE user_id = ${userId}) AS has`;
+  return rows[0]?.has ?? false;
+}
+
 export interface SetRow {
   setIndex: number;
   exerciseSlug: string;

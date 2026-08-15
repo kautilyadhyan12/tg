@@ -220,6 +220,46 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:8405** — 2026-08-15 — **DASHBOARD STATS, T3 ROUND 3: ZERO Critical/High in
+  the code; the redesign holds and the escape hatch did not fire a third time.**
+  The only Critical/High is a GATE item — the three new sentences had never been
+  seen in a browser, because the recorded 8/8 smoke ran on an account with four
+  workouts and the empty pane was never on screen. **Smoke steps 9 and 10
+  added.** Two standing lessons: **a fix that duplicates a rule in order to
+  correct the duplicate is not a fix** (L26's singular was a fifth inline copy of
+  a phrase `totalsWindowLabel` already owned; the redesign added a third copy of
+  "≤ 0 is no gate" under a comment forbidding exactly that), and **a correction
+  belongs where the false claim is, not only where it was discovered** — a
+  disproved sentence was about to be committed into DECISIONS alongside its own
+  refutation. Five Lows fixed (BACKLOG L28–L32); the singular's siblings deferred
+  as a CLASS with an `OWED.md` line.
+- **:8340** — 2026-08-15 — **DASHBOARD STATS, T3 ROUND 2: the STOP trigger fired
+  (two rounds, two Criticals, same three lines), Kd ruled for the REDESIGN, and
+  the server now answers what the screen had been guessing.** **Read before
+  writing any empty state.** Round 1's own fix told every BRAND-NEW account their
+  plan was hiding a history they did not have — everyone is gated (no
+  subscription → the free plan's 90 days), so a ten-second-old account and a
+  lapsed veteran send byte-identical empty pages and the totals endpoint clamps
+  by the same floor, reading 0 for both. **`workoutPageSchema` gains
+  `hasAnyWorkouts`**; the pane has three arms and the UNKNOWN one is
+  load-bearing (`?? false` there re-opens round 1). Not a leak — Part 4 §0.2
+  makes the gate access, not deletion. **Round 2 also corrected round 1's stated
+  rationale** ("under a tile counting it" — that tile reads 0) and killed a
+  fixture the server cannot emit. **Two mutants survived the first sweep and
+  both were real gaps**; re-run 7/7 RED, two against real Postgres.
+- **:8267** — 2026-08-15 — **DASHBOARD STATS, T3 ROUND 1: ONE Critical/High — an
+  empty page under the plan's 90-day read-gate told users with a real history
+  that they had none.** **Read before writing any "nothing here yet" empty state,
+  and before a reader returns a bare list.** `:5104` F4 from the gate's side
+  instead of the parser's; `monthClamp` had solved it by name one screen over.
+  **The fix is the SHAPE — `readRecentWorkouts` returns `{ rows, limitedToDays }`
+  so rows and the reason they are empty travel together** — a branch fixes the
+  case, the shape stops the next caller re-opening it. Also: a caption about an
+  unknown number is a claim ("all time" under an em dash), and an existing test
+  was pinning that defect. **Fifth instrument finding in six cards** — the
+  mutation sweep called six genuine REDs `ALIVE` on a substring sniff against
+  ANSI-coloured output; parse the count line, never sniff it. Re-run 6/6 RED.
+  Timezone first-render offset DEFERRED with an `OWED.md` line (rule 6).
 - **:8156** — 2026-08-15 — **THE DASHBOARD'S NUMBERS COME OFF THE NEW API — and
   the OWED line's own premise ("the weekly count has no home") was FALSE.**
   **Read before touching the Dashboard's figures, before adding a second read to

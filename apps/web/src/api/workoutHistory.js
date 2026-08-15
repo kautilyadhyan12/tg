@@ -109,7 +109,19 @@ export function readWorkoutPage(data) {
   return {
     items: data.items,
     nextCursor: text(data.nextCursor),
-    limitedToDays: finite(data.limitedToDays),
+    // `<= 0` IS NO GATE, not a window of zero days. Normalised HERE, at the one
+    // reader both the calendar and the Dashboard pass through, rather than in
+    // each consumer — a third copy of this rule was written in
+    // `readRecentWorkouts` while its own comment argued the rule must live in
+    // one place. `monthClamp` keeps its guard because it is also reachable with
+    // a value that never came through this reader.
+    limitedToDays: ((d) => (d === null || d <= 0 ? null : d))(finite(data.limitedToDays)),
+    // TRUE / FALSE are facts; anything else is NULL = nobody told us. A server
+    // shipped before this field existed omits it, and guessing `false` there
+    // would deny a history exactly as round 1 did — so unknown stays unknown
+    // and the pane says the one thing true either way (round 4 F2's per-field
+    // rule, which is why this is not `?? false`).
+    hasAnyWorkouts: typeof data.hasAnyWorkouts === 'boolean' ? data.hasAnyWorkouts : null,
   };
 }
 
