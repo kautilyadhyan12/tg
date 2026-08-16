@@ -42,6 +42,20 @@ mid-file: re-derive them with
 - **:1110** — 2026-07-26 — the hardcoded 100-XP-per-level curve must NEVER be
   copied into a client. The server sends `xpInLevel`/`xpForNext`/`progressPct`;
   clients render, never compute. (`xp.level + 1` survives as a label only.)
+- **:8771** — 2026-08-16 — **KD RULING: users NEVER add their own exercises —
+  the catalog is CLOSED, deliberately.** A struck item, not a deferral (:456's
+  precedent); no `OWED.md` line, nothing to build. **Read before proposing a
+  custom-exercise feature, before adding any WRITE route under `/v1/exercises`,
+  and before letting a user type a free-text exercise name anywhere it can reach
+  a saved workout.** Already true in code and verified rather than assumed —
+  the exercises module exposes exactly two routes, both `GET`. **The reason is
+  that counting and scoring are not free**: every row carries family, tier, MET
+  and tracking mode, and a camera-graded one carries hand-ported thresholds
+  (R5.4), so a user-typed row is either uncountable or scored against numbers
+  nobody chose — R0.2/R5.6. **Consequence: no USER path can produce an
+  unresolvable exercise name**, which bounds (but does not close) the same day's
+  `syncClient` guard hazard. **Does NOT restrict growing the catalog** — that is
+  P4's production line, one reviewed row plus a re-seed, and Kd asked expressly.
 - **:5857** — 2026-08-07 — **KD RULING: the TEST AUDIT is SCOPED BY SEVERITY, not
   applied uniformly.** Calibrates :5348's rule 4; **does NOT weaken it — the audit
   stays mandatory.** Slow database-backed mutants are spent ONLY on what rules

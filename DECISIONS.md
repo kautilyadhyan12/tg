@@ -8767,3 +8767,40 @@ mutants with the test that caught it.
   the 🟡 offline-start line BOTH TICK.** Three new 🟡 lines were opened by this
   card and its reviews (the nine camera mutants · the uncatalogued-exercise guard
   whose trade-off inverted · `weight_kg` accepting 787), none blocking.
+
+## 2026-08-16 — KD RULING: users NEVER add their own exercises. The catalog is closed, and it is closed on purpose
+
+**Read before proposing a custom-exercise feature, before adding any write route
+under `/v1/exercises`, and before "helpfully" letting a user type a free-text
+exercise name anywhere it can reach a saved workout.** A struck item, not a
+deferral — the desktop-webcam precedent (:456). Nothing to build, nothing owed,
+no `OWED.md` line.
+
+- (**THE RULING**) Kd: *"no user should not add exercise"*, agreeing with the
+  reasoning he was shown. The exercise catalog is authored, reviewed and seeded;
+  a user picks from it and arranges a workout. That is the whole of what a user
+  may do to the list.
+- (**IT IS ALREADY TRUE, VERIFIED IN CODE RATHER THAN ASSUMED**) There is no
+  create path today: `apps/api/src/modules/exercises/routes.ts` exposes exactly
+  two routes and both are `GET` (`/v1/exercises`, `/v1/exercise-definitions`),
+  and a grep across `apps/web/src` finds no custom-exercise UI. So this ruling
+  CONSERVES the current design; it does not change a line of code.
+- (**WHY IT IS A RULING AND NOT JUST A GAP**) The reason a user-authored
+  exercise is not a small feature: the app would have to know how to COUNT and
+  SCORE it. Every catalog row carries a family, a tier, a MET and a tracking
+  mode, and the three camera-graded exercises additionally carry a hand-ported
+  definition with thresholds taken verbatim from the legacy analyzer (R5.4,
+  P1.8a/b). A row a user typed has none of that, so it would either be
+  uncountable or be scored against numbers nobody chose for it — inventing
+  thresholds is exactly what R0.2 and R5.6 forbid.
+- (**THE CONSEQUENCE WORTH CARRYING**) It narrows the hazard recorded the same
+  day against `syncClient`'s uncatalogued-exercise guard: **no USER path can
+  produce an unresolvable exercise name.** Reaching that branch now requires a
+  row inserted into the database by hand, bypassing the seed — a mistake made by
+  us, not by a user. The guard's own 🟡 `OWED.md` line stands unchanged; this
+  only bounds who can arm it.
+- (**WHAT THIS DOES NOT RULE**) It says nothing about the CATALOG growing — it
+  should, and P4 is the production line that grows it. Adding exercise 59 is one
+  reviewed row in `CATALOG_58` plus a re-seed, and because the picker and the
+  save-side name resolver are both built from that one list, they cannot
+  disagree. Kd asked directly whether this blocks expansion: it does not.
