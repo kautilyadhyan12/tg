@@ -8804,3 +8804,60 @@ no `OWED.md` line.
   reviewed row in `CATALOG_58` plus a re-seed, and because the picker and the
   save-side name resolver are both built from that one list, they cannot
   disagree. Kd asked directly whether this blocks expansion: it does not.
+
+## 2026-08-16 — KD ASKED WHETHER WATCHES CAN WORK BOTH WAYS. They can, it is one channel not two, and the cost is a MOBILE APP rather than money
+
+**Read before proposing wearable work, before quoting any platform's API terms
+from this entry, and before building a second running-import path.** **NO
+DECISION WAS MADE and none was needed** — the spec already schedules this
+(`02-part2b-trust-layer.md:169`, §2.4 Roadmap: *"Wearable heart rate on mobile
+(Part 6) upgrades the method to HR-based estimation for users who have it, with
+MET as the universal fallback"*). Kd was asking whether it is POSSIBLE and
+COSTLY, in a conversation, and this records the answer so the next chat does not
+re-derive it. Kd explicitly said he is **not** asking to build it now.
+
+- (**THE QUESTION, IN HIS WORDS**) Can a camera workout also land on the user's
+  watch, and can a run they record on the watch come back into the app — and is
+  that expensive?
+- (**BOTH DIRECTIONS ARE ONE INTEGRATION, WHICH IS THE USEFUL PART**) On Apple
+  and Android the exchange happens through the phone's own health store, so
+  writing our workout out and reading their run in are the same permission and
+  the same connection used twice. It is not two features.
+- (**THE COST IS NOT MONEY, IT IS A DEPENDENCY**) The platforms charge nothing
+  per user or per request, and the payload is a handful of numbers — server cost
+  is noise next to what this app already does. **What it costs is the mobile
+  app**: the phone health stores are reachable only from a native app, never
+  from the web, and LIVE heart rate during a set additionally needs a companion
+  app on the watch itself. So this cannot start before P5 regardless of appetite.
+  The paid option — an aggregator giving one integration for every wearable,
+  billed per user per month — was recommended AGAINST while direct integrations
+  cover the majority for free.
+- (**UNVERIFIED — platform specifics, stated from model knowledge and NOT from a
+  source read this session. V5 applies; re-check every one before planning.**)
+  That Apple exposes no direct third-party watch access and routes everything
+  through the phone's health store; that Garmin/Fitbit/Whoop/Oura offer
+  server-to-server APIs usable without a mobile app, with Garmin gated behind an
+  approval; that Google's older web fitness API is being retired in favour of an
+  on-device store needing a native Android app; and the $99/yr Apple developer
+  fee. **These companies change their terms; none of this is a spec citation.**
+- (**THE PRODUCT POINT THAT MATTERS MORE THAN THE TECHNICAL ONE**) Recommended
+  ordering when it does land: **write OUT before reading IN.** Pushing our
+  finished workout into the user's health app closes their rings and costs far
+  less work than ingesting their data. And a caution about audience: the pilot is
+  Jorhat gyms, where Apple Watch and Garmin are rare and cheap bands that expose
+  no open API dominate — so a wearable card could serve very few of the first
+  users while costing a great deal. That is an argument about SEQUENCE, not about
+  worth.
+- (**A HAZARD RECORDED NOW SO IT IS NOT DISCOVERED LATE**) The app already has
+  its own GPS running feature. Once watch runs are imported, **the same run can
+  arrive twice** — once from our tracker, once from the watch — and a naive
+  import would double a user's distance and calories. Deduplication is part of
+  that card's definition, not an afterthought.
+- (**PRIVACY**) Heart-rate and health data are sensitive personal data. This
+  lands inside the open privacy-scope question at :592, which is Kd's and is
+  still unruled. Flagged, not resolved.
+- (**OWED**) The whole topic was tracked NOWHERE before today — grep-verified
+  across `OWED.md` and `RUNBOOK/cutover.md`, no hit for wearable/heart
+  rate/Apple Health/Garmin. It now has a ⚪ line. The spec's roadmap paragraph
+  was the only record, and a roadmap paragraph is not a to-do list — this is the
+  exact gap the 2026-07-21 audit created `OWED.md` for.

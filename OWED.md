@@ -3594,6 +3594,39 @@ each definition carries its own `upAt`, `downAt`, `countOn`, `minRepMs`,
       BILLS from that number**, so the consequence is larger than it was when this
       line was written. Whoever writes the second counter owes the flag as well as
       the clock.
+- [ ] ⚪ **WEARABLES — the app neither sends a workout to a user's watch nor
+      reads one from it.** Created 2026-08-16 from Kd's question (DECISIONS
+      :8808). **It was tracked NOWHERE before that day** — grep-verified across
+      this file and `RUNBOOK/cutover.md` — though `02-part2b-trust-layer.md:169`
+      has scheduled it since the spec was written (§2.4 Roadmap: wearable heart
+      rate upgrades the calorie method at Part 6, with MET as the universal
+      fallback). **A roadmap paragraph is not a to-do list**, which is the whole
+      reason this file exists.
+      **Not a decision and not a commitment** — Kd asked whether it is possible
+      and costly and said expressly he was not asking to build it now.
+      **BLOCKED ON P5 BY CONSTRUCTION, not by priority:** the phone health stores
+      are reachable only from a NATIVE app, and live heart rate during a set
+      additionally needs a companion app on the watch. Nothing here is buildable
+      from the web, so this cannot start before the mobile phase whatever the
+      appetite.
+      **When it does run, three things are already decided by argument and should
+      not be re-derived:** (1) **write OUT before reading IN** — pushing our
+      finished workout into the user's health app closes their rings, is far less
+      work than ingestion, and is what users actually notice; (2) **direct
+      integrations, not a paid aggregator** — the platforms charge nothing per
+      user while an aggregator bills monthly per user for a convenience that only
+      matters for the long tail; (3) **dedupe is part of the card, not an
+      afterthought** — the app already records runs by GPS, so an imported watch
+      run can land the SAME run twice and double a user's distance and calories.
+      **Audience caveat, recorded because it decides SEQUENCE:** the pilot is
+      Jorhat gyms, where Apple Watch and Garmin are rare and the dominant cheap
+      bands expose no open API at all. A wearable card may serve very few of the
+      first hundred users.
+      **Health data is sensitive personal data** and lands inside the open
+      privacy-scope question below (:592), still unruled.
+      **Platform specifics in the DECISIONS entry are marked UNVERIFIED** —
+      model knowledge, not a source read, and these companies change their terms.
+      Re-check every one at planning time (V5).
 
 ## Open questions awaiting a Kd ruling (nothing built on these)
 

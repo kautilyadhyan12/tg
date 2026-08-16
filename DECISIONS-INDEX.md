@@ -42,6 +42,27 @@ mid-file: re-derive them with
 - **:1110** — 2026-07-26 — the hardcoded 100-XP-per-level curve must NEVER be
   copied into a client. The server sends `xpInLevel`/`xpForNext`/`progressPct`;
   clients render, never compute. (`xp.level + 1` survives as a label only.)
+- **:8808** — 2026-08-16 — **WEARABLES: both directions are possible, they are
+  ONE integration rather than two, and the cost is a MOBILE APP rather than
+  money.** **NO DECISION WAS MADE — Kd asked whether it is possible and costly
+  and said expressly he is not asking to build it now.** The spec already
+  schedules it (`02-part2b-trust-layer.md:169`, §2.4 Roadmap — wearable HR
+  upgrades the calorie method at Part 6, MET staying the universal fallback).
+  **Read before proposing wearable work, before quoting any platform's API terms
+  FROM THIS ENTRY (they are marked UNVERIFIED — model knowledge, not a source
+  read), and before building a second running-import path.** Writing our workout
+  out and reading their run in share one permission and one channel; platforms
+  charge nothing per user and the payload is trivial, but the phone health stores
+  are reachable only from a NATIVE app (live HR needs a watch app too), so it
+  cannot precede P5. Recommended AGAINST the paid per-user aggregators.
+  **Two things worth more than the technical answer: write OUT before reading IN**
+  (closing the user's rings is cheaper and more loved than ingesting their data),
+  and **the pilot audience is Jorhat, where the dominant cheap bands expose no API
+  at all** — a sequencing argument, not a worth argument. **Hazard recorded early:
+  we already have GPS running, so an imported watch run can DOUBLE the same run
+  unless dedupe is in that card's definition.** Health data lands inside the open
+  privacy question at :592. Tracked NOWHERE before today (grep-verified); now has
+  a ⚪ `OWED.md` line.
 - **:8771** — 2026-08-16 — **KD RULING: users NEVER add their own exercises —
   the catalog is CLOSED, deliberately.** A struck item, not a deferral (:456's
   precedent); no `OWED.md` line, nothing to build. **Read before proposing a
