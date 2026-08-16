@@ -1,6 +1,104 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE LEGACY DUAL-WRITE IS RETIRED. **DONE — smoke 9/9, two T3 rounds, the
+      second ZERO Critical/High. BOTH `OWED.md` LINES TICK** (the 🔴 dual-write
+      and the 🟡 offline-start). On `web-repoint`.
+      DECISIONS :8452 (build) · :8610 (round 1) · :8707 (round 2).
+
+WHAT THIS SESSION ADDED TO THE CARD (no source file changed)
+  · The mutation sweep RE-RUN TO COMPLETION — the previous one was killed
+    part-way, so no verdict existed. **60 mutants · 47 RED · 4 ALIVE · 5 NOT
+    APPLIED**, targets restored byte-for-byte, post-run baseline GREEN.
+  · **THIS CARD'S OWN SEVEN (M56-M62) ARE ALL RED.** The nine bad rows are in
+    the camera-stall / rep-ownership area, which this card never touched.
+  · Gates: web **629/629** · the six touched files' lint **identical to HEAD**,
+    rule for rule · api + shared + engine lint clean and typecheck clean.
+
+THE FINDING, AND IT HAS ITS OWN 🟡 OWED LINE
+  · Nine mutants guarding the camera-handover fixes protect nothing. Five no
+    longer APPLY (a later card reformatted four one-line arrow functions into
+    blocks; every anchor through them died) and four are ALIVE.
+  · **"Pre-existing" was MEASURED, not argued**: the whole pre-card tree —
+    three sources AND the three test files this card edited — was restored to
+    HEAD, baseline green at 157, and all four ALIVE mutants are ALIVE there
+    too. Restores sha256-verified. NOT fixed here (R1.1); own card.
+  · Each guards a defect Kd hit in his own browser (:3917, :3987, :4023).
+
+TRAPS FOR THE NEXT CHAT
+  · **The harness prints its table only on completion.** Killing it mid-run
+    leaves no readable result AND can leave a mutant in the tree — that is what
+    happened on 2026-08-15 (M57 was found live in `ActiveWorkout.jsx`). Budget
+    ~25 minutes and let it finish.
+  · **`git diff` is not enough to trust the tree after a killed sweep** — hash
+    against a pre-sweep copy.
+  · The smoke sheet was corrected this session BEFORE he ran it, and two of the
+    corrections were the difference between an answerable step and an
+    impossible one: step 8 now CLEARS the network log and watches only
+    Start→summary (the Dashboard, Achievements and Progress legitimately call
+    port 8000), step 9 now builds the workout ONLINE first (the exercise list
+    is a server read), and step 4's XP list had omitted two legitimate totals.
+
+THE SMOKE, AND THE DEFECT IT DID NOT FIND
+  · PASSED 9/9 with NO old backend running. Row: one workout, two `log_only`
+    sets, `avg_form_score` NULL, 44,615 + 4,200 ms, `kcal_calc_version 2`
+    (correct — v3 keys on `watchedMs`, NULL for hand-counted).
+  · **Kd then asked why 12 squats burned 65 kcal.** His account holds
+    `users.weight_kg = 787.00`; the formula is right and its input is not.
+    `weightKg` is bounded only by its own column (`lt(1000)`, twice in shared,
+    mirrored in onboarding copy). Own 🟡 OWED line; the bound is Kd's to rule.
+
+T3 ROUND 1 RAN AND THE FIXES ARE IN (DECISIONS :8610)
+  · **1 Critical/High, 5 Low, all fixed**, Kd approved the round before any file
+    was touched. C/H-1: deleting `createSession` deleted the only thing in
+    `handleStart`'s `try` that could REJECT — `setItem` swallows — so a start
+    that could not be saved failed in SILENCE, under a comment of mine claiming
+    that path still worked. Fixed by READING THE WRITE BACK, and by CLEARING the
+    key first (without which a stale session opens the PREVIOUS workout).
+  · **I broke M60 while fixing it.** The one-line insert landed inside the span
+    M60's anchor matched, so the mutant guarding this card's HEADLINE fix
+    silently stopped applying — :5199's class, one round after the entry naming
+    it. Re-anchored on the SIGNATURE (nothing inside the `try`, where fixes
+    land), re-measured RED. **The only reason it surfaced is that the harness
+    treats NOT APPLIED as a failure rather than printing a shorter table.**
+  · Harness gains a 7th target (`utils/storage.js`) + M63–M66.
+
+FINAL MEASUREMENTS (all re-run after the fix round)
+  · web **634/634** · nine touched files' lint **identical to HEAD**, rule for
+    rule · api/shared/engine untouched, lint + typecheck clean.
+  · Sweep, one completed run: **64 mutants · 55 RED · 4 alive · 5 not applied ·
+    0 inconclusive**, targets restored byte-for-byte, post-run baseline GREEN.
+    The 9 bad rows are the pre-existing camera-subsystem ones with their own
+    🟡 line — measured pre-existing against the fully restored pre-card tree.
+
+ROUND 2 CLOSED IT (DECISIONS :8707) — four Low, none user-visible
+  · **The lesson to carry: a CORRECTION IS A CLAIM.** Round 1's fix of the
+    summary-id symptom was itself false — "waits for ever" became "after five
+    retries", and the retry is gated on the same `isAwaitingSync` a legacy id
+    fails, so it is the FIRST failed read. `xpDisplay.render.test.jsx` had
+    asserted "one attempt, no retry", green, the whole time. Two wrong versions,
+    both from reading the retry CONSTANTS instead of the BRANCH reaching them.
+  · Also: a fifth copy hid in M58's NAME; the test count was recorded 631 where
+    it is **634** (V1 on my own work); `OWED.md`'s dual-write line still said
+    smoke UNRUN while its SIBLING line had been updated the same round.
+  · Reviewer settled the one question I left open: **the smoke pass STANDS.**
+    `removeItem`+`setItem` on one key is a net no-op in a working browser, so
+    steps 1 and 9 ran the identical branch.
+
+THREE NEW 🟡 LINES THIS CARD OPENED, none blocking
+  · The nine camera-subsystem mutants (4 alive, 5 not applied) — pre-existing,
+    measured against the restored pre-card tree.
+  · `syncClient` refuses a workout with an uncatalogued exercise — which now
+    saves it NOWHERE, since the legacy save it relied on is gone. Unreachable
+    until a 59th exercise. **Needs a Kd ruling, not a patch.**
+  · `users.weight_kg` accepts 787 kg, which is why Kd's smoke workout priced at
+    65 kcal. Needs a bound, which is a number only Kd can rule.
+
+NEXT: no card chosen. `RUNBOOK/cutover.md` is the place to look for what P2.8
+      still needs.
+```
+
+```
 TASK: THE DASHBOARD'S STATS ARE OFF THE OLD BACKEND. **DONE — smoke 10/10,
       three T3 rounds, OWED line TICKED.** Commits 1df8487 (build) + 8b681ef
       (rounds 1-3 + smoke). DECISIONS :8267, :8340, :8405.

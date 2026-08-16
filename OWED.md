@@ -1419,7 +1419,46 @@ then; none may be hidden or reduced to close the gap.
          an exercise name cannot be resolved to a slug the workout is NOT synced
          at all rather than synced partially — the legacy save still holds it,
          so nothing is lost while `completeSession` stays.
-- [ ] 🔴 **REMOVE THE LEGACY DUAL-WRITE (`completeSession`) from ActiveWorkout.**
+- [x] 🔴 **REMOVE THE LEGACY DUAL-WRITE (`completeSession`) from ActiveWorkout.**
+      **DONE 2026-08-16.** Browser smoke **PASSED 9/9** with no old backend
+      running at all (`RUNBOOK/smoke-dual-write-retirement.md` §RESULT); the
+      mutation sweep — killed part-way on the first attempt, hence the earlier
+      wording here — completed at **64 mutants · 55 RED · 4 alive · 5 not
+      applied**, the nine bad rows being the pre-existing camera ones with their
+      own line; and the fresh-chat T3 ran **two rounds**, round 1 finding one
+      Critical/High (the Start button's error path deleted, DECISIONS :8610) and
+      round 2 finding **ZERO Critical/High**, which is the severity gate's own
+      ship condition (:5348). Ticking on code alone would have been :4718 F4 /
+      :5034 — this ticks on code, a browser, a completed sweep and two reviews.
+      The rest of this block describes what landed.
+      `createSession` and `completeSession` both retired,
+      in one card, as this line required. Every finished workout is now written
+      ONCE, to `POST /v1/workouts/sync`, and starting a workout asks nothing of
+      any server.
+      **The condition was DISCHARGED, not waived** — each of the three surfaces
+      named below was re-checked in the code before a line was deleted: the
+      post-workout summary reads `GET /v1/workouts/:id/summary`
+      (`PostWorkout.jsx:361`), the calendar reads `/v1/workouts`
+      (`WorkoutCalendar.jsx:231`), the Dashboard reads `api/dashboardStats.js`
+      (`Dashboard.jsx:14-16`). **The "+50 XP" this entry warns about is now
+      computed by the NEW server** (`modules/workouts/service.ts:322`,
+      `xpEarnedForWorkout`) and rendered from `summary.xpEarned`
+      (`PostWorkout.jsx:223`), so the failure it describes is unreachable.
+      **A FINDING WORTH KEEPING: the legacy write had not been landing anyway.**
+      `mlApi` sends a Bearer token read from `localStorage.accessToken`, and
+      nothing has written that key since Card 1 moved auth to cookies
+      (grep-verified: three hits, all reads). The old backend accepts nothing
+      else (`backend-ml/app/core/security.py:16`, `HTTPBearer`). So the four
+      OTHER old-backend surfaces fed by this write — badges, challenges, the
+      leaderboard, predictions — were already frozen and cannot have been
+      degraded by removing it. Each has its own line above, under Kd's
+      dark-window ruling (:1020).
+      **Also discharged by this card: the offline-start line below**, which
+      named it in advance.
+      Tests: 15 assertions measured RED against the pre-card source before the
+      change was restored byte-exact. Smoke:
+      `RUNBOOK/smoke-dual-write-retirement.md`.
+      The original follows.
       Created 2026-08-02, lifted OUT of the write-path entry above as that entry
       was ticked — it was item 2 there and the entry said in terms "this line is
       what holds it", so ticking without re-homing it is precisely the silent
@@ -1442,6 +1481,92 @@ then; none may be hidden or reduced to close the gap.
       the session id the legacy start hands out. They retire together, in one
       card, after the Dashboard line below is ticked. A chat that proposes
       deleting either one alone has not read this paragraph.
+- [ ] 🟡 **NINE MUTANTS GUARDING THE CAMERA-HANDOVER FIXES NO LONGER PROTECT
+      ANYTHING — measured 2026-08-16 by the dual-write retirement's own sweep,
+      and PRE-EXISTING, which was measured too rather than assumed.**
+      `apps/web/tools/mutate-write-path.mjs` ran to completion for the first time
+      since the camera cards landed: **60 mutants · 47 RED · 4 ALIVE · 5 NOT
+      APPLIED**. All nine bad rows sit in the camera-stall / rep-ownership
+      subsystem, which the dual-write card did not touch.
+      **ALIVE (the anchored line still exists; no test notices it changing):**
+      M44 a redo silently un-stalls a camera that is still dead · M50 a camera
+      error is not sticky, so the camera takes the set back on recovery · M52
+      backgrounding the tab kills the set's grading · M53 a redo carries the
+      stall even when the camera is alive.
+      **NOT APPLIED (anchor text no longer exists — silent disarmament, :5199's
+      class):** M5 the set clock never restarts · M21 a camera error no longer
+      offers hand counting · M28 the frame heartbeat is never updated · M40 the
+      round-2 F1 bug put back · M43 the heartbeat is not re-stamped when the tab
+      returns. Four one-line arrow functions were reformatted into blocks by a
+      later card and every anchor through them stopped matching.
+      **THE MEASUREMENT THAT MAKES "PRE-EXISTING" A FACT:** the entire pre-card
+      tree — three sources AND three test files — was restored to `HEAD`, the
+      baseline confirmed green at 157, and the four ALIVE mutants re-applied
+      there. **All four are ALIVE at HEAD too**, so the dual-write card's seven
+      re-anchored waiting points did not cause this. Restores sha256-verified.
+      **WHY IT MATTERS: every one of these guards a defect Kd hit in his own
+      browser** — :3917, :3987 and :4023 are three consecutive T3 rounds of the
+      same user action (backgrounding the tab, redoing a set) losing a set's form
+      score by a different route each time. The CODE still carries those fixes;
+      what is gone is anything that would notice them being undone.
+      **This is exactly :5348 rule 4's "tests that stay green are liars", found
+      by the instrument rather than by a review.**
+      **NOT FIXED HERE (R1.1):** re-anchoring five mutants and writing four
+      assertions is a different card's diff, and the fix must not be
+      re-anchoring alone — a mutant re-aimed until it goes red proves nothing
+      (:4718 F2). Its card re-anchors, then measures each of the nine RED, then
+      writes the missing assertion where it is not.
+      **Its card should also add the guard this cannot have: the harness must
+      fail LOUDER than exit 1** — the previous sweep was killed part-way and the
+      table prints only on completion, so nobody could see which rows were bad.
+- [ ] 🟡 **A USER CAN SAVE A BODY WEIGHT THE APP HAS NO BUSINESS ACCEPTING, AND
+      EVERY CALORIE AND NUTRITION NUMBER IS COMPUTED FROM IT.** Found 2026-08-16
+      during the dual-write smoke — **by Kd's question, not by the sheet**, which
+      passed 9/9 with the defect on screen the whole time (:7222's shape).
+      His account holds `users.weight_kg = 787.00`. **The formula is right and
+      its INPUT is wrong**: `kcal = MET × weight × hours` (`calories.ts`), so his
+      12 squats priced at 6.0 × 787 × 0.01356 h ≈ 64 kcal + rest = **65 kcal
+      where a plausible weight gives ~6**.
+      **The app never objected.** `weightKg` is bounded only by
+      `numeric(5,2)`'s own range — `z.number().positive().lt(1000)`
+      (`packages/shared/src/users.ts:41`, and the same bound again in
+      `nutrition.ts:133`), and `Onboarding.jsx:291` mirrors it with "enter
+      1–999 kg". **1–999 kg is a COLUMN's range being used as a HUMAN's range.**
+      **What it reaches:** every workout's `kcal_point`, the Part 2B nutrition
+      targets (Mifflin-St Jeor takes weight directly), and anything downstream
+      that bands or totals calories.
+      **What it does NOT do — stated so the severity is not overstated:** the
+      figure shown is arithmetically TRUE for the weight stored, so this is not
+      :5807's "on screen AND wrong" in the app's own terms. It is a missing
+      plausibility bound on a value the whole calorie model rests on.
+      **NOT FIXED HERE (R1.1)** — out of the dual-write card's diff entirely.
+      Its card needs a NUMBER, which R0.2 forbids inventing: the spec names no
+      bound, so the range is Kd's ruling, and the two schema sites plus the
+      onboarding copy must move together or they will disagree (:1239, the class
+      not the case). Kd was told about the 787 the moment it was traced.
+- [ ] 🟡 **THE UNCATALOGUED-EXERCISE GUARD NOW MEANS THE OPPOSITE OF WHAT IT
+      WAS BUILT TO MEAN, AND ONLY ITS COMMENT SAID SO.** Found by the
+      dual-write T3, round 1, L-4. `queueWorkoutSync` refuses to sync a WHOLE
+      workout if any one of its exercises has no catalog row
+      (`apps/web/src/sync/syncClient.js`). **That was the safe choice while a
+      legacy save existed to hold the workout intact; since 2026-08-16 there is
+      no second save, so refusing now stores the workout NOWHERE.** The comment
+      justifying it named the deleted function by name and has been corrected in
+      place; the BEHAVIOUR is unchanged, deliberately.
+      **Unreachable today and that is the only reason it is 🟡 rather than
+      blocking**: all 58 library names resolve (asserted in
+      `activeWorkoutEngine.test.js`), so no user can reach it. **It arms itself
+      the moment a 59th exercise is added** — which P4 does routinely, on the way
+      to 58→more definitions, and the person adding it will not naturally look
+      here.
+      **The ruling it needs is a choice between two losses** and is Kd's, not a
+      chat's: sync the workout WITHOUT the unknown sets (a record that
+      under-reports what the user did), or keep refusing (no record at all).
+      A third option exists and may be better than both — resolve the name at
+      sync time and reject at the CATALOG level instead, per DECISIONS
+      2026-07-10's "unknown slug does NOT 4xx the sync" ruling, which already
+      settled the same question on the server side and points at accepting the
+      workout while flagging it.
 - [x] 🔴 **THE DASHBOARD'S STATS HAVE NO NEW-API HOME (`workoutService.getStats`).**
       Created 2026-08-06 by the post-workout-summary card, which deliberately did
       NOT touch it (one backend surface per card — :2158's recorded lesson that
@@ -1583,7 +1708,29 @@ then; none may be hidden or reduced to close the gap.
       endpoints are missing, so this is a smaller card than it looks and needs NO
       migration. Independent of everything above: it blocks nothing and nothing
       blocks it.
-- [ ] 🟡 **A WORKOUT CANNOT BE STARTED OFFLINE AT ALL.** Found in Kd's smoke,
+- [x] 🟡 **A WORKOUT CANNOT BE STARTED OFFLINE AT ALL.**
+      **DONE 2026-08-16. SMOKE STEP 9 PASSED — Kd started a workout with the
+      browser's Offline toggle on, then finished it online and watched the
+      summary fill in.** The fresh-chat T3 closed at ZERO Critical/High in round
+      2, so this ticks with its parent line above. **Half of Part 6 §3.6 is now
+      true: the hand-counted path (55 of 58 exercises) works with no network at
+      all. The other half — the pose model's CDN download for the 3 camera
+      exercises — is still open and keeps its own line.**
+      This one is a browser claim above all others: only Kd's own Offline toggle
+      can settle it, and no jsdom test can. Built by the card this line named in
+      advance — the legacy
+      start went with the legacy save, so `handleStart` now writes the session
+      locally and navigates, with no request of any kind. Three tests pin it,
+      all measured RED against the pre-card source; smoke step 9 in
+      `RUNBOOK/smoke-dual-write-retirement.md` is Kd's own check with the browser
+      set to Offline.
+      **HALF THE PROMISE, NOT ALL OF IT — read the last paragraph of this entry
+      before quoting it as closed.** Its named sibling (the pose model
+      downloading from a CDN) is still open, so a CAMERA workout still needs the
+      internet to start. What is fixed is the hand-counted path, which is 55 of
+      the 58 exercises.
+      The original follows.
+      Found in Kd's smoke,
       2026-08-07, step 8 — with the network set to Offline the pre-workout screen
       says **"Failed to start workout"** and nothing begins. Screenshot evidence:
       three failed `POST /workouts` XHRs from `workoutApi.js` (`createSession`)
@@ -1606,6 +1753,26 @@ then; none may be hidden or reduced to close the gap.
       **NB the sibling line above** (the local pose model silently falling back to
       a CDN) means camera workouts need the internet too — two independent reasons
       the offline promise is not yet true, and they must both close.
+- [ ] ⚪ **TWO ACTIVE-TIME ACCUMULATORS ARE NOW WRITTEN AND NEVER READ.** Created
+      2026-08-16 by the legacy dual-write retirement, which removed their ONLY
+      reader. `ActiveWorkout.jsx`'s per-second timer still fills
+      `activeSecondsByExerciseRef` (per-exercise movement-gated seconds) and
+      `activeEffortSecsRef` (their sum); both existed to feed the old backend's
+      calorie estimate through `completeSession`, and nothing consumes either
+      one now. A third, `activeEffortSecs` state, was ALREADY write-only before
+      this card — its setter is called, its value is rendered nowhere.
+      **NOT deleted here, deliberately (R1.1):** the accumulators sit inside the
+      workout timer effect alongside `elapsedSecs`, which IS still read and IS
+      part of the sync payload, so unpicking them is a change to the timer rather
+      than a deletion of dead lines — a different blast radius from the one this
+      card was approved for.
+      **Why it is not free to leave:** dead surface reads as protection without
+      being any (:5104 F1's recorded shape). A later reader will reasonably
+      assume something depends on these numbers.
+      **The one thing to check before deleting them:** the new API prices
+      calories from what the ENGINE watched (`watchedMs`, kcal v3), not from a
+      client movement-gate, so these are not a fallback for anything — confirm
+      that against `kcalPointForSetsV3` and then remove all three together.
 - [ ] ⚪ **THE MUTATION HARNESS DOES NOT YET DO WHAT RULE 4a SAYS.** Created
       2026-08-07 with Kd's audit-scoping ruling (DECISIONS :5857), because the
       RULE now says something the TOOL does not do — and a gap between what is

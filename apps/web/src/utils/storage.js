@@ -42,6 +42,17 @@ export const setItem = (key, value) => {
   }
 };
 
+/** Guarded like its siblings — T3 round 1, L-1. This was the ONE helper here
+ *  that could throw, and the dual-write retirement moved `ActiveWorkout`'s two
+ *  calls OUT of the `try` that used to contain them: neither caller awaits or
+ *  catches `handleWorkoutComplete`, so a throw here became an unhandled
+ *  rejection that skipped the navigation to the summary and left the user on
+ *  "workout complete" for ever. Storage being unavailable must not be able to
+ *  strand a finished workout — the workout is already queued by this point. */
 export const removeItem = (key) => {
-  localStorage.removeItem(userKey(key));
+  try {
+    localStorage.removeItem(userKey(key));
+  } catch (err) {
+    console.error('Storage error:', err);
+  }
 };

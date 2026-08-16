@@ -8448,3 +8448,322 @@ already has two.**
   fixes, **6 RED**, restores sha256-verified. Five Lows fixed and logged
   (`BACKLOG.md` L28–L32); the singular's three remaining siblings deferred with
   an `OWED.md` line, to be fixed as a CLASS.
+
+## 2026-08-16 — THE LEGACY DUAL-WRITE IS RETIRED: a finished workout is written ONCE, and starting one asks no server at all
+
+**Read before deleting anything the no-removal rule has ever protected, before
+touching `handleStart` or `handleWorkoutComplete`, and before using a network
+call as a test's waiting point.** Web only — `apps/api` untouched, no migration,
+no endpoint. Kd approved the plan before any file was edited.
+
+- (**WHAT WENT, AND WHY IT COULD**) `workoutService.createSession`
+  (`PreWorkout.jsx`) and `workoutService.completeSession` (`ActiveWorkout.jsx`),
+  together, plus their two lines in `workoutApi.js`. **This is :3424's
+  replacement-before-removal ruling DISCHARGED, not waived**, and the discharge
+  was re-verified in the code this session rather than inherited from the OWED
+  line: the post-workout summary reads `GET /v1/workouts/:id/summary`
+  (`PostWorkout.jsx:361`), the calendar reads `/v1/workouts`
+  (`WorkoutCalendar.jsx:231`), the Dashboard reads `api/dashboardStats.js`
+  (`Dashboard.jsx:14-16`). **They retired TOGETHER because they could not retire
+  apart** — the save's only argument was the id the start returned.
+- (**THE SHARP EDGE, CHECKED FIRST AND NOT ASSUMED**) :3424's stated harm was a
+  screen printing duration, calories and form as 0 **and a plausible "+50 XP"
+  that was never awarded**, because the OLD handler recomputed that number
+  (`backend-ml/app/routers/workouts.py:591`). That harm is unreachable now:
+  `xpEarned` is computed by the NEW server (`modules/workouts/service.ts:322` →
+  `xpEarnedForWorkout`) and rendered from `summary.xpEarned`
+  (`PostWorkout.jsx:223`, `:762`). **The old handler's XP is on screen nowhere.**
+- (**THE FINDING THAT OUTLIVES THE CARD: the write being removed had not been
+  LANDING.**) `mlApi` attaches a Bearer token from `localStorage.accessToken`
+  (`mlApi.js:10`); **nothing has written that key since Card 1 moved auth to
+  httpOnly cookies** — `grep -rn accessToken apps/web/src` returns three hits,
+  all reads. The old backend accepts no other credential
+  (`backend-ml/app/core/security.py:16`, bare `HTTPBearer`, no cookie fallback).
+  **So the four other old-backend surfaces this write fed — badges, challenges,
+  the leaderboard, predictions — were ALREADY frozen, and removing a write that
+  never lands cannot degrade a read.** Each keeps its own `OWED.md` line under
+  Kd's dark-window ruling (:1020). Recorded because the honest reason this card
+  is safe is not "we repointed three screens" alone; it is that plus this.
+- (**WHAT A USER SEES CHANGE, and there are three, all improvements**)
+  (1) **A workout starts with the old backend absent.** It did not before: the
+  screen said "Failed to start workout" and nothing began — the defect
+  `OWED.md`'s offline-start line recorded on 2026-08-07, which named THIS card as
+  its discharge. (2) **It starts OFFLINE**, which is half of Part 6 §3.6's "your
+  workout still counts" promise; the other half (the pose model's CDN download)
+  is still open, so only the hand-counted path is fixed — 55 of 58 exercises.
+  (3) **The workout builder is empty after a workout.** Both `removeItem` calls
+  sat INSIDE the legacy save's `try`, so they ran only when that save succeeded,
+  and per the finding above it has not succeeded in weeks.
+- (**A DEFERRAL, TAKEN DELIBERATELY**) The removal left
+  `activeSecondsByExerciseRef` and `activeEffortSecsRef` written every second and
+  read nowhere — they existed to feed the old backend's calorie estimate. NOT
+  deleted here (R1.1): they live inside the workout-timer effect beside
+  `elapsedSecs`, which IS still read and IS in the sync payload, so removing them
+  is a change to the timer, not a deletion of dead lines. Own ⚪ `OWED.md` line,
+  written in this commit, and it carries the check a later chat needs (kcal v3
+  prices from `watchedMs`, so these are a fallback for nothing).
+- (**THE TEST LESSON, AND IT IS THE ONE TO CARRY**) **Seven existing tests used
+  `expect(completeSession).toHaveBeenCalled()` as their WAITING POINT**, and four
+  of them then asserted `peekQueue()` is EMPTY — which is also what the queue
+  looks like before the workout has finished. Deleting the call would have left
+  those four passing for the wrong reason, in the same commit that removed the
+  thing they were watching. **A removal can void an assertion without touching a
+  line of the test** — :6150's shape ("a ruling narrowing a variable's meaning
+  can void a whole family of assertions"), arriving here from the deletion side.
+  All seven are re-anchored on `active_session` being cleared, which is the LAST
+  thing the finish routine does and is now unconditional, so its absence means
+  "the routine ran to the end". Every one measured RED against the pre-card
+  source.
+- (**THE GAP THE CARD FOUND: nothing asserted WHICH id opens the summary.**)
+  Grep-verified while planning. Two ids existed during a workout and the new API
+  has only ever heard of one; handing it the legacy one 404s the summary
+  endpoint. ~~so the failure mode is a screen that never resolves, not one that
+  complains~~ **— STRUCK IN PLACE, T3 round 1 L-2: FALSE, and it had been copied
+  into four places** (this entry, the index, the `ActiveWorkout` comment and the
+  test's own comment). `PostWorkout` gates the "not synced yet" wording on
+  `isAwaitingSync(workoutId)`, and the outbox is keyed by the SYNC id — so a
+  legacy id answers FALSE and takes the immediate failure path: ~~five retries
+  (~4 s), then~~ **STRUCK AGAIN BY ROUND 2 — the retry is gated on the SAME
+  `awaitingSync`, so a legacy id never enters it: it is "Failed to load summary"
+  and a redirect to the Dashboard ON THE FIRST FAILED READ**, about a workout
+  that saved perfectly. **The defect is real and the test pins it; the SYMPTOM I
+  wrote over it was invented rather than read — and then invented a SECOND time
+  in the correction**, while `xpDisplay.render.test.jsx` asserted one call and no
+  retry, green, throughout. Pinned now
+  (`navigate` spied, `useNavigate` mocked with MemoryRouter left real), which is
+  cheapest to do at the exact moment the wrong id stops existing.
+- (**THE MOCKS ARE TRIPWIRES, NOT STUBS**) Both retired functions keep a mock in
+  their suites and both now THROW/reject. A resolving mock cannot tell the old
+  world from the new one: on the pre-card source every PreWorkout start test
+  would take the catch branch and write no session, which is exactly the
+  discrimination the fixture must make. Several tests assert the call was never
+  made.
+- (**PROVE**) The three source files were restored to HEAD with the new tests in
+  place, and **15 assertions went RED** (7 in `preWorkout.render.test.jsx` +
+  `workoutHistory.test.js`, 8 in `activeWorkout.render.test.jsx`); the sources
+  were then restored and **sha256-verified byte-identical** against the
+  pre-revert sums. Mutation sweep: `mutate-write-path.mjs` gains a SIXTH target
+  (`api/workoutApi.js`) and `workoutHistory.test.js` joins its suite list, so a
+  mutant putting the retired pair back on the old client is judged by the test
+  that actually looks at the client. Green baseline **162 passed (162)**.
+- (**AUDIT SCOPE, per :5857 rule 4a**) Web-only card, **no server behaviour
+  changes**, so **no database mutants** — the sweep is the web suites alone.
+- (**THE SWEEP WAS KILLED PART-WAY AND LEFT A MUTANT LIVE — recorded, not
+  glossed**) Kd needed to shut the laptop ~20 min into the 60-mutant run, so it
+  was killed. **The kill landed mid-mutant and `ActiveWorkout.jsx` was left
+  holding M57** (the clean-up wrapped in a rejecting `try`), which `git diff`
+  showed and a sha256 check against a pre-sweep copy confirmed; restored and
+  re-verified byte-identical, whole tree then clean. **This is :5199 F1's shape
+  from a new direction: that harness left broken source behind because a target
+  was outside `TARGETS`; this one restores faithfully and was simply not allowed
+  to finish.** A harness only guarantees its restore if it reaches its restore.
+  **NO MUTATION VERDICTS EXIST FOR THIS CARD YET** — the table prints only on
+  completion, so ~55 attempted mutants produced no readable result and none may
+  be quoted. The sweep re-runs from scratch. **Both `OWED.md` lines therefore do
+  NOT tick**: smoke unrun, T3 unrun, sweep incomplete.
+- (**THE RE-RUN, 2026-08-16, COMPLETE — AND IT FOUND NINE ROWS OF ROT IN A
+  SUBSYSTEM THIS CARD NEVER TOUCHED**) `60 mutants · 47 RED · 4 ALIVE · 5 NOT
+  APPLIED · 0 inconclusive`, all targets restored byte-for-byte, post-run
+  baseline GREEN. **THIS CARD'S OWN SEVEN ARE ALL RED** — M56 the legacy save
+  reinstated · M57 the clean-up back inside a failing save · M58 the summary
+  opened with the legacy id · M59 the sync write neutered · M60 PreWorkout asking
+  the old backend for permission to start · M61 a legacy session id written that
+  nothing consumes · M62 the retired pair put back on the old client.
+  **The nine bad rows are all in the camera-stall / rep-ownership area** (M5,
+  M21, M28, M40, M43 unapplied; M44, M50, M52, M53 alive), and **"pre-existing"
+  was MEASURED, not argued**: the whole pre-card tree — three sources AND the
+  three test files this card edited — was restored to `HEAD`, baseline green at
+  157, and **all four ALIVE mutants are ALIVE there too**. So the seven
+  re-anchored waiting points did not cause it; four one-line arrow functions
+  reformatted into blocks by a later card broke the five anchors, and the four
+  live ones lost their assertions somewhere earlier still. Own 🟡 `OWED.md` line,
+  written in this commit, NOT fixed here (R1.1). **The instrument-versus-review
+  pattern again: a completed sweep found what three T3 rounds on those very
+  behaviours could not — that their protection had since evaporated.**
+- (**THE SMOKE PASSED 9/9, 2026-08-16 — and the sheet's own corrections were
+  what made two of those steps answerable**) Kd's browser, local API and web,
+  **no old backend on :8000 at any point**. A REPORT, not a measurement (:4829);
+  the stored row is the measured half and it says one workout, two sets, both
+  `log_only`, `avg_form_score` NULL, real durations (44,615 ms + 4,200 ms),
+  `kcal_calc_version 2` — correct for a hand-counted payload, since v3 is
+  selected by `watchedMs` and a log-only set pins it NULL (:7730). Full result
+  and limits in the sheet's §RESULT.
+  **TWO STEPS WERE UNANSWERABLE AS WRITTEN and were fixed before he ran them**,
+  which is :5034's "a smoke doc is a TEST and its SETUP is part of the claim"
+  arriving a third time. Step 8 ("nothing spoke to :8000") had him filter the
+  network panel and roam — but the Dashboard, Achievements and Progress DO call
+  :8000 by design, so a pass was impossible; it now clears the log on the setup
+  screen and watches Start→summary only. Step 9 ("start offline") had him go
+  offline and THEN build a workout — the exercise list is a server read, so it
+  fails for a reason that is not this card's. Step 4's XP list omitted two
+  legitimate totals (80 and 110), so a correct result would have read as a fail.
+- (**KD'S QUESTION FOUND THE ONE DEFECT THE SHEET COULD NOT — :7222 EXACTLY,
+  AND ON THE SAME NUMBER**) He accepted all nine steps, then asked why 12 squats
+  burned 65 kcal. **Traced to `users.weight_kg = 787.00` on his own account**:
+  `kcal = MET × weight × hours`, so 6.0 × 787 × 0.01356 h ≈ 64, +rest = 65,
+  where a plausible weight gives ~6. **The formula is right; its INPUT is not**,
+  and the app never objected because `weightKg` is bounded only by its own
+  column — `positive().lt(1000)` in two schema sites, mirrored by onboarding's
+  "1–999 kg" copy. **A COLUMN'S RANGE IS NOT A HUMAN'S RANGE.** Own 🟡
+  `OWED.md` line; the bound is a number R0.2 forbids inventing, so it is Kd's to
+  rule. **Standing shape, now recorded twice on consecutive cards: the smoke
+  sheet bounds what gets CHECKED, not what is WRONG — and both times the thing
+  wrong was the one figure no step asked about.**
+
+## 2026-08-16 — DUAL-WRITE, T3 ROUND 1: one Critical/High — the Start button's only error message was deleted, and a comment was left behind saying it still worked
+
+**Read before deleting a call that could REJECT, before trusting a `catch` to
+report a storage failure, and before editing inside a function a mutation anchor
+spans.** One Critical/High, five Low, all fixed; Kd approved the fix round before
+any file was touched. The retirement itself was found sound — the reviewer
+re-derived the card's central safety argument in the code rather than accepting
+it (no writer of `localStorage.accessToken` anywhere; `HTTPBearer` with no cookie
+fallback), and re-ran the web suite itself rather than quoting mine.
+
+- (**C/H-1 — A FAILED START BECAME SILENT, AND THE COMMENT ASSERTING OTHERWISE
+  WAS MINE**) `handleStart` kept a `try/catch` whose `catch` produced
+  "Failed to start workout" and re-armed the button. **Removing `createSession`
+  removed the only thing in that block that could ever reject** — `setItem`
+  SWALLOWS its own errors (`utils/storage.js`) — so the catch became dead code
+  **in the same commit whose comment said it was "reachable solely if `setItem`
+  throws (blocked/full storage)"**. That sentence names the one helper that
+  cannot throw. A user with full storage tapped Start, watched the spinner, and
+  landed back on the builder with nothing said, every time.
+  **THE FIX IS A READ-BACK, NOT A CATCH** — a swallowing helper cannot be caught,
+  so the write is verified to have LANDED. **And the key is CLEARED FIRST, which
+  is the half a one-line fix would have missed**: the check is "did anything
+  land?", so a stale `active_session` from an earlier workout would answer YES
+  while this write failed, and the user would be dropped into the PREVIOUS
+  workout — worse than the silence. Two tests, both measured RED against the
+  unfixed source first (R9.5), the second of which fails on the reviewer's own
+  proposed one-liner.
+- (**THE CLASS, AND IT IS THIS REPO'S MOST RECORDED**) A comment asserting a
+  guarantee the code does not have — :7730's L17, :6150's "a comment is not a
+  test", :4556 F3. **Twice in one card**, because L-2 below is the same shape.
+- (**L-2 — I INVENTED A SYMPTOM AND COPIED IT INTO FOUR PLACES**) Every one of
+  them said that opening the summary with the wrong id leaves the screen waiting
+  "for ever". It does not: `PostWorkout` gates that wording on
+  `isAwaitingSync(workoutId)` and the outbox is keyed by the SYNC id, so a legacy
+  id answers false and takes the immediate failure path — ~~five retries (~4 s),
+  then~~ **CORRECTED BY ROUND 2 (Low-1): the retry is gated on that SAME
+  `awaitingSync`, so a legacy id never enters it — it is** "Failed to load
+  summary" and a redirect to the Dashboard **on the FIRST failed read**.
+  **The defect is real and the test pins it; the consequence written over it was
+  reasoned, not read — and I then reasoned a SECOND wrong one into the
+  correction, in all five places, while `xpDisplay.render.test.jsx` sat green
+  asserting one call and no retry.** Corrected at all five sites (:8405's rule —
+  a correction belongs where the false claim is, not only where it was found),
+  struck in place in DECISIONS. **The standing lesson is not about this
+  sentence: a correction is a claim and takes the same evidence as the thing it
+  corrects. Both wrong versions came from reading the retry CONSTANTS instead of
+  the BRANCH that reaches them.**
+- (**L-1, L-3, L-4, L-5**) `removeItem` was the one storage helper without a
+  guard, and this card moved its two calls OUT of the `try` that used to contain
+  them — a throw would have been an unhandled rejection that skipped the
+  navigation to the summary; guarded, with three tests, the `removeItem` one
+  mutation-proven RED · a `stopCamera` assertion was satisfied by an earlier
+  click, so it was green with the call deleted — the reviewer measured that ·
+  a test named "still saves" when nothing saves that workout any more ·
+  malformed markdown in `OWED.md`. Logged `BACKLOG.md` L33–L37.
+- (**L-4's SECOND HALF IS BIGGER THAN THE FINDING AND HAS ITS OWN 🟡 LINE**)
+  `syncClient` refuses to sync a whole workout containing an uncatalogued
+  exercise, and its comment justified that by the legacy save keeping the
+  workout intact elsewhere. **That save is what this card deleted, so the
+  trade-off INVERTED: refusing now stores the workout NOWHERE.** Unreachable
+  today (all 58 names resolve, asserted) and armed by the 59th. Behaviour left
+  alone deliberately (R1.1) — choosing between a partial record and no record is
+  Kd's ruling, and DECISIONS 2026-07-10 already settled the same question
+  server-side in the accept-and-flag direction.
+- (**THE FINDING THE INSTRUMENT MADE ABOUT THE FIX ROUND ITSELF**) The C/H-1 fix
+  inserted one line inside `handleStart`'s `try` — **and M60, the mutant guarding
+  this card's HEADLINE fix (the offline start), spanned exactly that seam and
+  silently stopped applying.** It did not fail; it ceased to exist, and the sweep
+  said `NOT APPLIED` where it had said `RED` an hour earlier. **:5199's silent
+  disarmament, incurred by me one round after writing the entry that names it.**
+  Re-anchored on the SIGNATURE and the first body line — nothing inside the
+  `try`, which is where fixes land — and it must still reach the signature
+  because the defect IS an `await` and an await needs the `async`.
+  **Re-MEASURED RED (8 failed), not assumed** (:4718 F2), by a probe that reads
+  the mutant OUT OF the committed harness rather than retyping it (:6959).
+  **The lesson is not "be careful": it is that the only reason this was caught is
+  that the harness treats NOT APPLIED as a FAILURE rather than printing a shorter
+  table.** A guard that reports its own absence is worth more than one that
+  cannot fail.
+- (**AUDIT SCOPE, per :5857 rule 4a**) Web-only fix round, no server behaviour
+  changed, so no database mutants. The harness gains a SEVENTH target
+  (`utils/storage.js`) and four mutants (M63–M66), because the C/H-1 fix now
+  DEPENDS on the swallow/throw behaviour of three storage helpers — a guarantee
+  two pages rely on must be mutated where it lives.
+- (**MEASUREMENTS**) web ~~631/631 (+2)~~ **634/634 (+5)** — corrected by round
+  2's Low-3: the figure was measured BEFORE the three `storage.test.js` cases
+  were added and then carried forward into three files unre-measured, which is
+  V1 on my own work · the touched files' lint identical to HEAD ·
+  api/shared/engine untouched, lint and typecheck clean. Sweep after the
+  re-anchor: **64 mutants · 55 RED · 4 alive · 5 not applied · 0 inconclusive**,
+  restored byte-for-byte, post-run baseline GREEN. **The card does NOT close
+  here — the diff-only re-review (:5348 rule 2) is the remaining gate, and both
+  `OWED.md` lines tick only after it.**
+
+## 2026-08-16 — DUAL-WRITE, T3 ROUND 2 (diff-only): ZERO Critical/High — THE CARD CLOSES, BOTH 🔴/🟡 LINES TICK, and the round's own lesson is that a CORRECTION IS A CLAIM
+
+**Read before writing a correction, before quoting a retry count, and before
+carrying a measured number into a second file.** Four Low, none user-visible,
+all fixed; no further round is owed (:5348 rule 1). The reviewer re-ran the
+harness itself rather than quoting mine, and reported each of the five fix-round
+mutants with the test that caught it.
+
+- (**THE PACKET SHIPS**) Round 1's Critical/High is fixed and PINNED: M63 (the
+  read-back deleted) RED at 2 failed, caught by both new tests · **M64 (the
+  clear-first line deleted) RED at 1 failed, caught by "a failed start does not
+  resurrect the PREVIOUS workout" AND BY NOTHING ELSE** — which is the answer to
+  whether that half was worth writing · M65 RED, so the `mockClear` turned a
+  vacuous assertion live · M66 RED · M60 RED at 8, matching the recorded figure.
+  **Rule 3 satisfied by measurement, not assertion.**
+- (**LOW-1 IS THE ONE WORTH KEEPING, AND IT IS MINE TWICE**) Round 1 struck "the
+  screen waits for ever" and replaced it with "after five retries (~4 s)".
+  **The replacement is ALSO FALSE.** `PostWorkout` gates the RETRY on the same
+  `isAwaitingSync(workoutId)` as the reassuring wording (`PostWorkout.jsx:401-402`),
+  so a legacy id — which the outbox cannot know — never enters the retry branch:
+  it is "Failed to load summary" and a redirect **on the FIRST failed read**.
+  **`xpDisplay.render.test.jsx` has asserted exactly that, with the comment "one
+  attempt, no retry", green, the whole time.** Both wrong versions came from
+  reading the retry CONSTANTS instead of the BRANCH that reaches them, and the
+  second one shipped into five places *inside a fix round created to correct the
+  first*. **STANDING LESSON: a correction is a claim and takes the same evidence
+  as the thing it corrects — V1 does not relax because you are fixing something.**
+  Round 1's comment had also come to contradict itself within one block (line
+  1082 "after five retries", line 1090 "takes the immediate failure path").
+- (**LOW-2**) A FIFTH copy survived in the harness — M58's own NAME still read
+  "screen never resolves". **A mutant's name is what a future chat reads to
+  decide what a red row proves**, so a false one mis-teaches at the exact moment
+  someone is judging evidence.
+- (**LOW-3 — V1 ON MY OWN WORK, IN THE SESSION THAT CITED V1**) The recorded web
+  count was **631/631; it is 634/634**. Measured before `storage.test.js`'s three
+  cases were added, then carried into `HANDOFF.md`, `DECISIONS.md` and the review
+  prompt without re-measuring. Re-run and corrected everywhere.
+- (**LOW-4**) `OWED.md`'s dual-write line still said the smoke was UNRUN and the
+  sweep KILLED, both false by then — and **L37 had updated the SIBLING line's
+  status in the same round while leaving this one**. A status written in two
+  places is a status that goes stale in one of them; the same shape as Low-1,
+  one file out.
+- (**WHAT THE REVIEWER SETTLED THAT I HAD FLAGGED AS OPEN**) The smoke pass
+  STANDS and needs no re-run: `removeItem` then `setItem` on one key is a net
+  no-op in a working browser, so steps 1 and 9 execute the identical branch they
+  passed on, and the new branch is unreachable unless storage is unwritable —
+  which Kd's run demonstrably was not. Also: all four `removeItem` call sites
+  were checked and silence is right at each; and the only remaining throwers
+  inside `handleStart`'s `try` are `stopCamera`/`triggerTransition`, where a
+  throw leaves `active_session` written and the next tap simply rewrites it.
+- (**RECORDED, NOT FIXED**) The read-back cannot distinguish "the write failed"
+  from "the write failed and the clear failed too". No browser is known to be in
+  that state (Safari private mode throws on `setItem` only; a blocked-storage
+  policy throws on `getItem` too, which the guard catches). Comparing the
+  read-back to the written value would close it; not done, because inventing a
+  case no browser produces is how a fix grows a branch nothing can test.
+- (**FINAL STATE**) web **634/634** · nine touched files' lint identical to HEAD ·
+  api/shared/engine untouched, lint + typecheck clean · sweep **64 mutants · 55
+  RED · 4 alive · 5 not applied**, the nine bad rows pre-existing with their own
+  🟡 line · smoke **9/9** · two T3 rounds. **`OWED.md`: the 🔴 dual-write line and
+  the 🟡 offline-start line BOTH TICK.** Three new 🟡 lines were opened by this
+  card and its reviews (the nine camera mutants · the uncatalogued-exercise guard
+  whose trade-off inverted · `weight_kg` accepting 787), none blocking.

@@ -42,12 +42,25 @@ const PRE = `${REPO}/apps/web/src/pages/PreWorkout.jsx`;
 const HOOK = `${REPO}/apps/web/src/hooks/usePoseDetection.js`;
 // Fifth: a camera that DIES mid-set is only noticed here, and nowhere else.
 const CAMERA = `${REPO}/apps/web/src/hooks/useCamera.js`;
+// Sixth target added 2026-08-16 with the legacy dual-write retirement. The two
+// retired functions lived HERE, and the guard that says which surface rides
+// which backend is an api-layer test — so a harness aimed only at the pages
+// could not tell a retired function from one quietly put back on the client.
+const API = `${REPO}/apps/web/src/api/workoutApi.js`;
+// Seventh target added 2026-08-16 with the dual-write T3's L-1 fix. `removeItem`
+// was the one storage helper that could throw, and the same T3's C/H-1 fix now
+// DEPENDS on these three helpers' failure behaviour — the start path detects a
+// failed write by reading it back, which only works because `getItem` swallows.
+// A guarantee two pages rely on must be mutated where it lives.
+const STORAGE = `${REPO}/apps/web/src/utils/storage.js`;
 const ORIGINALS = new Map([
   [PAGE, readFileSync(PAGE, "utf8")],
   [ENGINE, readFileSync(ENGINE, "utf8")],
   [PRE, readFileSync(PRE, "utf8")],
   [HOOK, readFileSync(HOOK, "utf8")],
   [CAMERA, readFileSync(CAMERA, "utf8")],
+  [API, readFileSync(API, "utf8")],
+  [STORAGE, readFileSync(STORAGE, "utf8")],
 ]);
 
 // The working tree is MOSTLY CRLF (autocrlf) — and "mostly" is the point. The
@@ -76,7 +89,13 @@ function anchorIn(haystack, needle) {
 // Both suites, so an engine-file mutant is judged by the tests that cover it.
 const TESTS =
   "src/pages/activeWorkout.render.test.jsx src/pages/activeWorkoutEngine.test.js" +
-  " src/pages/preWorkout.render.test.jsx src/hooks/usePoseDetection.test.js src/hooks/useCamera.test.js";
+  " src/pages/preWorkout.render.test.jsx src/hooks/usePoseDetection.test.js src/hooks/useCamera.test.js" +
+  // Added with the API target above: this is the suite that holds the
+  // which-backend guard, so without it a mutant restoring the retired pair
+  // would be judged by suites that never look at the client.
+  " src/api/workoutHistory.test.js" +
+  // Added with the STORAGE target above (T3 round 1, L-1).
+  " src/utils/storage.test.js";
 
 const MUTANTS = [
   {
@@ -417,6 +436,100 @@ const MUTANTS = [
     file: PRE,
     from: "        cameraDeviceId: manualMode ? null : selectedCam,",
     to: "        cameraDeviceId: selectedCam,",
+  },
+
+  // ── THE LEGACY DUAL-WRITE, RETIRED 2026-08-16 ─────────────────────────────
+  //
+  // Every mutant here puts some part of the legacy start/save BACK, because a
+  // removal is only protected by tests that notice it returning. That is the
+  // shape :2912's standing lesson names — "a repoint nothing asserts is one the
+  // next edit undoes" — applied to a retirement rather than a repoint.
+  {
+    name: "M56 the legacy save is reinstated — every workout written twice again",
+    prelude: "import { workoutService } from '../api/workoutApi';\n",
+    from: "    removeItem('active_session');\n    removeItem('workout_builder');",
+    to: "    try { await workoutService.completeSession(sessionData.sessionId, {}); } catch { /* as the old code did */ }\n    removeItem('active_session');\n    removeItem('workout_builder');",
+  },
+  {
+    name: "M57 the clean-up goes back inside a save that fails (the builder keeps the finished workout)",
+    from: "    removeItem('active_session');\n    removeItem('workout_builder');",
+    to: "    try {\n      await Promise.reject(new Error('legacy save failed'));\n      removeItem('active_session');\n      removeItem('workout_builder');\n    } catch { /* swallowed, exactly as the old code did */ }",
+  },
+  {
+    name: "M58 the summary is opened with the LEGACY session id (404s → 'Failed to load summary')",
+    from: "    setTimeout(() => navigate(`/workout/summary/${syncIdentity.workoutId}`), 2000);",
+    to: "    setTimeout(() => navigate(`/workout/summary/${sessionData.sessionId}`), 2000);",
+  },
+  {
+    name: "M59 the workout is saved NOWHERE — the sync write is neutered",
+    from: "import { queueWorkoutSync } from '../sync/syncClient';",
+    to: "import { queueWorkoutSync as _q } from '../sync/syncClient';\nconst queueWorkoutSync = () => {};",
+  },
+  {
+    name: "M60 PreWorkout asks the old backend for permission to start again (THE OFFLINE DEFECT)",
+    file: PRE,
+    prelude: "import { workoutService } from '../api/workoutApi';\n",
+    // RE-ANCHORED 2026-08-16, in the T3 fix round that broke it. The old anchor
+    // ran from the signature through `try {` to the write, and the C/H-1 fix
+    // inserted `removeItem('active_session');` into exactly that span — so the
+    // mutant guarding THIS CARD'S HEADLINE FIX silently stopped applying, in the
+    // round meant to make the card safer. Caught only because the sweep treats
+    // NOT APPLIED as a failure rather than a shorter table (:5199's class,
+    // incurred by me, one round after the entry naming it).
+    //
+    // The anchor now spans the SIGNATURE and the first line of the body only —
+    // nothing inside the `try`, which is where fixes land. It must still reach
+    // the signature because the defect IS an `await`, and an await needs the
+    // `async` that only the signature can carry. Re-MEASURED red, not assumed
+    // (:4718 F2 — a mutant re-aimed until it applies is not a mutant re-proved).
+    from: "  const handleStart = () => {\n    if (!allChecked) {",
+    to: "  const handleStart = async () => {\n    await workoutService.createSession({ exercises: builderData });\n    if (!allChecked) {",
+  },
+  {
+    name: "M61 PreWorkout writes a legacy session id nothing consumes",
+    file: PRE,
+    from: "        exercises:      builderData,\n        name:           'My Workout',",
+    to: "        sessionId:      's1',\n        exercises:      builderData,\n        name:           'My Workout',",
+  },
+  {
+    name: "M62 the retired pair is put back on the old client",
+    file: API,
+    from: "  // OLD BACKEND (see header note) — do not repoint without a new-API surface.\n  saveTemplate:",
+    to: "  // OLD BACKEND (see header note) — do not repoint without a new-API surface.\n  createSession: (data) => mlApi.post('/workouts', data),\n  completeSession: (id, data) => mlApi.patch(`/workouts/${id}/complete`, data),\n  saveTemplate:",
+  },
+
+  // ── T3 ROUND 1 OF THE DUAL-WRITE CARD ─────────────────────────────────────
+  //
+  // The card's own removal created a silent failure and voided an assertion,
+  // and NEITHER was caught by anything in the table above — the first because
+  // no mutant reached the start path's error branch, the second because the
+  // assertion was satisfied by an earlier click. Both now have one.
+  {
+    name: "M63 THE C/H-1 BUG PUT BACK — a start that cannot be saved fails in silence",
+    file: PRE,
+    // A RESTORATION of the shipped state: the `catch` alone, which cannot fire
+    // because `setItem` swallows. Deleting the read-back check is exactly the
+    // code this card was reviewed on.
+    from: "      if (getItem('active_session', null) === null) {\n        toast.error('Failed to start workout');\n        setStarting(false);\n        return;\n      }\n",
+    to: "",
+  },
+  {
+    name: "M64 the stale session is not cleared first — a failed start opens the PREVIOUS workout",
+    file: PRE,
+    from: "      removeItem('active_session');\n      setItem('active_session', {",
+    to: "      setItem('active_session', {",
+  },
+  {
+    name: "M65 the camera is left running into a hand-counted workout (the L-3 assertion, now real)",
+    file: PRE,
+    from: "      stopCamera();\n      triggerTransition(() => navigate('/workout/active'));",
+    to: "      triggerTransition(() => navigate('/workout/active'));",
+  },
+  {
+    name: "M66 removeItem throws at its callers again — a finished workout never reaches its summary",
+    file: STORAGE,
+    from: "  try {\n    localStorage.removeItem(userKey(key));\n  } catch (err) {\n    console.error('Storage error:', err);\n  }",
+    to: "  localStorage.removeItem(userKey(key));",
   },
 ];
 

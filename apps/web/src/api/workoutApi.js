@@ -10,22 +10,24 @@
 // have run (grep: `WorkoutCalendar.jsx:182` was the only call site, and it
 // passed month+year). One `getHistory` now, on the new API.
 //
+// RETIRED 2026-08-16 — `createSession` + `completeSession` are GONE, together,
+// which is the only way they could go: the legacy save needed the session id the
+// legacy start handed out. This was NOT a cleanup and it is not licence for the
+// next one. It ran only because every surface the legacy copy fed had been
+// repointed first — the post-workout summary (DECISIONS 2026-08-06), the
+// calendar (:4622) and the Dashboard's stats (:8267/:8340/:8405, OWED ticked
+// 2026-08-16). That is Kd's replacement-before-removal ruling (:3424) satisfied
+// in full, not waived. Dropping the save before those three would have printed
+// duration, calories and form as 0 and a plausible "+50 XP" nobody was awarded,
+// because the OLD handler recomputed that number
+// (`backend-ml/app/routers/workouts.py:591`). Today the XP on that screen is
+// computed by the NEW API (`modules/workouts/service.ts:322`).
+//
 // STILL ON THE OLD BACKEND (interim; Bearer-null-broken on this branch —
 // DECISIONS 2026-07-15 web Card 1: "the planned multi-card consequence, not a
 // defect"). Owed per the NO-REMOVAL rule (CLAUDE.md MIGRATION STANCE) and
 // RUNBOOK/cutover.md; do NOT repoint without a new-API surface, and do NOT
 // delete one to "finish" the repoint:
-//   createSession   — PreWorkout opens a session server-side; the new model is
-//   completeSession   client-side capture + `POST /v1/workouts/sync`, which the
-//                     ActiveWorkout/PreWorkout repoint card owns. NOTE the two
-//                     are COUPLED and cannot be dropped separately: the legacy
-//                     save needs the session id the legacy start hands out.
-//                     :3424's condition for retiring them — "until the
-//                     Dashboard's stats have a new-API home too" — is MET as of
-//                     this card (`api/dashboardStats.js`), so the two are now
-//                     unblocked and retire together in their own card. They are
-//                     NOT dropped here: this card changes what the Dashboard
-//                     READS, and nothing about what a finished workout WRITES.
 //   templates ×4    — WorkoutBuilder. CORRECTED 2026-08-01: an earlier version
 //                     of this comment said "no templates table or endpoint
 //                     exists on the new API at all". The TABLE exists —
@@ -76,8 +78,6 @@ export const workoutService = {
   getSummary: (id) => authApi.get(`/v1/workouts/${id}/summary`),
 
   // OLD BACKEND (see header note) — do not repoint without a new-API surface.
-  createSession: (data) => mlApi.post('/workouts', data),
-  completeSession: (id, data) => mlApi.patch(`/workouts/${id}/complete`, data),
   saveTemplate: (name, exercises) => mlApi.post('/workouts/templates', { name, exercises }),
   getTemplates: () => mlApi.get('/workouts/templates'),
   deleteTemplate: (id) => mlApi.delete(`/workouts/templates/${id}`),

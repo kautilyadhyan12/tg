@@ -220,6 +220,91 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:8707** — 2026-08-16 — **DUAL-WRITE, T3 ROUND 2 (diff-only): ZERO
+  Critical/High — THE CARD CLOSES and BOTH `OWED.md` lines TICK.** **Read before
+  writing a CORRECTION, before quoting a retry count, and before carrying a
+  measured number into a second file.** Four Low, none user-visible. **Low-1 is
+  the one that outlives the card: round 1's correction of the summary-id symptom
+  was ITSELF false.** "Waits for ever" became "after five retries (~4 s)", and the
+  retry is gated on the same `isAwaitingSync` a legacy id fails — it is the FIRST
+  failed read, and `xpDisplay.render.test.jsx` asserted "one attempt, no retry",
+  green, throughout. Both versions came from reading the retry CONSTANTS instead
+  of the BRANCH reaching them, the second shipped into FIVE places inside the fix
+  round created to correct the first. **STANDING LESSON: a correction is a claim
+  and takes the same evidence as the thing it corrects — V1 does not relax
+  because you are fixing something.** Low-2 a fifth copy in M58's own NAME (what
+  a future chat reads to judge a red row) · **Low-3 V1 on my own work in the
+  session that cited V1 — 631/631 recorded where the suite is 634/634**, carried
+  into three files unre-measured · Low-4 `OWED.md` still saying smoke UNRUN /
+  sweep KILLED, while L37 had updated the SIBLING line in the same round.
+  **Rule 3 measured, not asserted: M63 RED (2), M64 RED (1) — caught by the
+  clear-first test ALONE — M65 RED, M66 RED, M60 RED (8).** Reviewer settled the
+  open question too: **the smoke pass STANDS, no re-run.** web 634/634 · sweep 64
+  · 55 RED · 4 alive · 5 not applied (the pre-existing camera rows).
+  `BACKLOG.md` L38–L41.
+- **:8610** — 2026-08-16 — **DUAL-WRITE, T3 ROUND 1: one Critical/High — the
+  Start button's only error message was DELETED and a comment left behind saying
+  it still worked.** **Read before deleting a call that can REJECT, before
+  trusting a `catch` to report a storage failure, and before editing inside a
+  function a mutation anchor spans.** Removing `createSession` removed the only
+  thing in `handleStart`'s `try` that could reject — `setItem` SWALLOWS — so the
+  catch went dead in the same commit that documented it as "reachable solely if
+  `setItem` throws", naming the one helper that cannot. **Fixed by READING THE
+  WRITE BACK, and by CLEARING THE KEY FIRST** — without that half a stale
+  `active_session` answers the check and drops the user into the PREVIOUS
+  workout, which the reviewer's own proposed one-liner would have done. **L-2 is
+  the same class twice in one card: I invented a symptom ("the screen waits for
+  ever") and copied it into FOUR places** — `PostWorkout` gates that wording on
+  `isAwaitingSync`, keyed by the SYNC id, so a legacy id complains and redirects.
+  Corrected at all four sites, struck in place. **L-4's second half outgrew the
+  finding: `syncClient`'s refuse-the-whole-workout guard INVERTED** — it kept the
+  workout safe in the legacy save, which no longer exists, so refusing now saves
+  it NOWHERE; behaviour untouched (R1.1), own 🟡 line, Kd's ruling.
+  **THE INSTRUMENT FINDING IS ABOUT THE FIX ROUND ITSELF: the C/H-1 fix inserted
+  one line inside a `try` that M60's anchor spanned, so the mutant guarding this
+  card's HEADLINE fix silently stopped applying** — :5199's class, one round
+  after the entry naming it, caught ONLY because the sweep treats NOT APPLIED as
+  a failure. Re-anchored on the signature, re-MEASURED red by a probe that reads
+  the mutant out of the committed harness (:4718 F2, :6959). Harness gains a
+  seventh target (`utils/storage.js`) and M63–M66. web 634/634; `BACKLOG.md`
+  L33–L37. **Card does NOT close — the diff-only re-review is the last gate.**
+- **:8452** — 2026-08-16 — **THE LEGACY DUAL-WRITE IS RETIRED — a finished
+  workout is written ONCE, and starting one asks no server at all.** **Read
+  before deleting anything the no-removal rule has protected, before touching
+  `handleStart`/`handleWorkoutComplete`, and before using a network call as a
+  test's waiting point.** `createSession` + `completeSession` went TOGETHER (the
+  save's only argument was the id the start returned); web only, no migration, no
+  endpoint. **:3424's replacement-before-removal ruling DISCHARGED, not waived** —
+  all three surfaces re-verified in code first, and the "+50 XP that was never
+  awarded" it warns of is unreachable because the NEW server computes `xpEarned`
+  (`service.ts:322`). **THE FINDING THAT OUTLIVES IT: the write had not been
+  LANDING** — nothing has written `localStorage.accessToken` since Card 1, and the
+  old backend takes nothing else (`security.py:16`), so badges, challenges, the
+  leaderboard and predictions were ALREADY frozen and cannot have been degraded.
+  **THREE THINGS A USER SEES, all improvements:** a workout starts with the old
+  backend absent (it did not), it starts OFFLINE (half of Part 6 §3.6's promise —
+  the pose model's CDN download is the other half and is still open), and the
+  builder is empty afterwards (both `removeItem`s sat inside the legacy save's
+  `try`). **THE TEST LESSON: seven tests used the deleted call as their WAITING
+  POINT**, four then asserting an EMPTY queue — deleting it would have left them
+  passing for the wrong reason in the same commit. :6150's shape from the deletion
+  side: **a removal can void an assertion without touching a line of the test.**
+  Re-anchored on the now-unconditional `active_session` clear. Also closed a gap
+  the card found: **nothing asserted WHICH id opens the summary** (the wrong one
+  404s; T3 round 1 L-2 struck this line's original "waits for ever" — it
+  complains and redirects). 15 assertions
+  measured RED against the pre-card source, sources restored sha256-verified;
+  harness gains a sixth target (`api/workoutApi.js`). Two write-only accumulators
+  deferred with their own ⚪ line. **WILL tick TWO `OWED.md` lines — the
+  dual-write and the offline-start — but NEITHER TICKS YET: smoke and T3 are
+  both UNRUN** (an earlier draft of this index line said "Ticks TWO", which the
+  entry itself contradicts in its own last sentence; the ORIGINAL wins and the
+  index is what gets fixed — CLAUDE.md's 2026-07-30 amendment).
+  **THE SWEEP RE-RAN TO COMPLETION 2026-08-16 after being killed part-way: 60
+  mutants · 47 RED · 4 ALIVE · 5 NOT APPLIED**, this card's own seven (M56–M62)
+  all RED. **The nine bad rows are camera-stall guards this card never touched,
+  and "pre-existing" was MEASURED** — the whole pre-card tree restored to HEAD,
+  green at 157, all four ALIVE there too. Own 🟡 `OWED.md` line.
 - **:8405** — 2026-08-15 — **DASHBOARD STATS, T3 ROUND 3: ZERO Critical/High in
   the code; the redesign holds and the escape hatch did not fire a third time.**
   The only Critical/High is a GATE item — the three new sentences had never been

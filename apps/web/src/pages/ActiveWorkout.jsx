@@ -12,12 +12,10 @@ import TraceRecorderWidget from '../dev/TraceRecorderWidget';
 import usePoseDetection from '../hooks/usePoseDetection';
 import PoseOverlay from '../components/workout/PoseOverlay';
 import ReferenceAnimation from '../components/workout/ReferenceAnimation';
-import { workoutService } from '../api/workoutApi';
 import { getItem, removeItem } from '../utils/storage';
 import { queueWorkoutSync } from '../sync/syncClient';
 import {
   accumulateSummary,
-  averageFormScore,
   createSummaryLog,
   newWorkoutId,
   reconcileSets,
@@ -1032,15 +1030,15 @@ export default function ActiveWorkout() {
     // render where state was still its initial value (see the currentSetRef
     // comment above). The refs are always current.
     const finalElapsedSecs = elapsedSecsRef.current;
-    const finalActiveSecondsByExercise = activeSecondsByExerciseRef.current;
-    const finalActiveEffortSecs = activeEffortSecsRef.current;
     const finalRestSeconds = restSecondsTotalRef.current;
 
     // Queue the workout for POST /v1/workouts/sync (offline-safe localStorage
-    // queue; flush is fire-and-forget). Independent of the legacy
-    // completeSession below — neither one's failure drops or duplicates the
-    // other, and both run for every workout while the old backend is still the
-    // home of the summary screen, the dashboard stats and the calendar.
+    // queue; flush is fire-and-forget). THIS IS NOW THE ONLY PLACE A FINISHED
+    // WORKOUT IS WRITTEN. Until 2026-08-16 a second, legacy save ran here too
+    // (`workoutService.completeSession`) because the old backend was the home of
+    // the summary screen, the dashboard stats and the calendar. All three read
+    // the new API now, so the legacy save was retired — with its partner, the
+    // legacy start, which is where its session id came from.
     //
     // Hand-counted sets now travel here too (2026-08-02), which is the whole
     // point of this write path: 55 of the 58 exercises have no definition, so
@@ -1052,15 +1050,7 @@ export default function ActiveWorkout() {
     // user counted was recorded as they went; every set the engine measured was
     // accumulated as it filed. Sets the engine measured win; the rest are the
     // user's own count. A set that neither side has is a set nobody performed.
-    const { summaries, unresolved, repScores } = reconcileSets(setSummariesRef.current);
-
-    // AFTER the reconcile, and from ITS scores — round 4 F3. Computed before it,
-    // this counted the per-rep grades of sets that the reconcile then removed, so
-    // the legacy save (and therefore the summary screen, the dashboard and the
-    // calendar, which all still read it) reported a form score for a workout the
-    // new API holds as entirely ungraded. Log-only sets contribute nothing;
-    // all-log-only workouts send 0, exactly as the old screen did.
-    const avgForm = averageFormScore({ repScores }) ?? 0;
+    const { summaries, unresolved } = reconcileSets(setSummariesRef.current);
 
     queueWorkoutSync({
       workoutId: syncIdentity.workoutId,
@@ -1069,46 +1059,40 @@ export default function ActiveWorkout() {
       unresolved,
       // Kd-ruled payload addition (2026-08-07): the on-screen timer (workout-
       // phase only; PAUSE STOPS IT — the property the server's kcal pause-cap
-      // relies on) and the rest-break counter. Same refs the legacy save
-      // below has always read; the two writes cannot disagree about time.
+      // relies on) and the rest-break counter.
       durationSeconds: finalElapsedSecs,
       restSeconds: finalRestSeconds,
     });
 
-    try {
-      await workoutService.completeSession(sessionData.sessionId, {
-        // Total session time (all workout-phase wall-clock, including standing
-        // between reps) — this is the headline "Duration".
-        duration_minutes: Math.round(finalElapsedSecs / 60),
-        // Movement-gated active-effort time (only seconds the person was
-        // actually mid-rep) — shown separately so the user can see real
-        // working time vs total time on screen.
-        active_seconds:   finalActiveEffortSecs,
-        // calories_burned sent here is only a client-side fallback display
-        // value (e.g. if the request below fails partway and we still want
-        // something locally) — the backend recomputes the real, MET-based
-        // figure server-side using the user's stored body weight and the
-        // active/rest breakdown below, and that server value is what's
-        // actually persisted and shown on the summary page. Note the
-        // per-exercise active seconds are now movement-gated too, so the
-        // calorie estimate no longer counts idle standing time as exercise.
-        calories_burned:             Math.round((finalElapsedSecs / 60) * 6),
-        active_seconds_by_exercise:  finalActiveSecondsByExercise,
-        rest_seconds:                finalRestSeconds,
-        form_accuracy:    avgForm,
-        exercises,
-      });
-      removeItem('active_session');
-      removeItem('workout_builder');
-    } catch (err) {
-      console.error('Failed to save workout:', err);
-    }
-    // THE SUMMARY SCREEN IS NOW KEYED BY THE SYNC ID, not the legacy session id
-    // (repointed 2026-08-06). `syncIdentity.workoutId` is what went to
-    // `POST /v1/workouts/sync` a few lines above, so it is the id the new API
-    // knows this workout by. `sessionData.sessionId` is still live and still
-    // used — the legacy save above needs it and STAYS (Kd, DECISIONS :3424) —
-    // it is simply no longer what the next screen reads.
+    // UNCONDITIONAL SINCE 2026-08-16, and that is a change a user can see. Both
+    // lines sat INSIDE the legacy save's `try`, so they ran only when that save
+    // succeeded — and on this branch it has not succeeded since Card 1 stopped
+    // writing the Bearer token the old backend requires. The visible
+    // consequence was that finishing a workout left the builder holding it, so
+    // the next visit to the builder was pre-loaded with the workout you had
+    // just done. With nothing left that can fail, the clean-up is simply done.
+    removeItem('active_session');
+    removeItem('workout_builder');
+
+    // THE SUMMARY SCREEN IS KEYED BY THE SYNC ID (repointed 2026-08-06).
+    // `syncIdentity.workoutId` is what went to `POST /v1/workouts/sync` a few
+    // lines above, so it is the id the new API knows this workout by, and since
+    // 2026-08-16 it is the only workout id that exists at all — the legacy
+    // session id retired with the save that needed it. Passing anything else
+    // here 404s the summary endpoint, and THE FIRST FAILED READ sends the user
+    // to the Dashboard with "Failed to load summary" — their workout is saved
+    // and they are told the opposite about being able to see it. A test pins
+    // the id.
+    //   CORRECTED TWICE, AND THE SECOND CORRECTION IS THE INTERESTING ONE.
+    //   Round 1 struck "the screen waits for ever"; round 2 struck its
+    //   replacement, "after five retries (~4 s)". BOTH were reasoned from the
+    //   retry constants rather than read from the branch: `PostWorkout` gates
+    //   BOTH the retry AND the reassuring wording on `isAwaitingSync(workoutId)`,
+    //   and the outbox is keyed by the SYNC id — so a legacy id never enters the
+    //   retry branch at all. `xpDisplay.render.test.jsx` has asserted exactly
+    //   that (one call, no retry) all along, green, while two of my sentences
+    //   said otherwise. The defect was always real; the symptom was invented,
+    //   twice, in the same place.
     setTimeout(() => navigate(`/workout/summary/${syncIdentity.workoutId}`), 2000);
   };
 

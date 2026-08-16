@@ -35,17 +35,32 @@ vi.mock('../hooks/useCamera', () => ({
   }),
 }));
 
-const createSession = vi.fn(async () => ({ data: { session: { id: 's1' } } }));
+// THE OLD BACKEND, RIGGED TO FAIL — and that is the point of this fixture.
+//
+// Until 2026-08-16 this screen `await`ed `workoutService.createSession` against
+// the old backend before it would start anything, purely to obtain a session id
+// for the legacy save at the END of the workout. Both retired together. So this
+// mock rejects: on the old code every test below that starts a workout would
+// take the catch branch, toast "Failed to start workout" and write no session at
+// all; on the new code the module is never even imported and starting costs
+// nothing. A resolving mock could not tell those two worlds apart, which is why
+// it does not resolve.
+const createSession = vi.fn(async () => { throw new Error('the old backend is gone'); });
 vi.mock('../api/workoutApi', () => ({
   workoutService: { createSession: (...a) => createSession(...a) },
 }));
 
+// Spied rather than anonymous: `triggerTransition(() => navigate(...))` is the
+// last step of starting, so asserting it ran is how these tests know the screen
+// got all the way to the navigation and did not bail out earlier.
+const triggerTransition = vi.fn((fn) => fn());
 vi.mock('../context/TransitionContext', () => ({
-  useTransition: () => ({ triggerTransition: (fn) => fn() }),
+  useTransition: () => ({ triggerTransition: (...a) => triggerTransition(...a) }),
 }));
 
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
 
+import toast from 'react-hot-toast';
 import PreWorkout from './PreWorkout';
 import { getItem, setItem } from '../utils/storage';
 
@@ -89,7 +104,11 @@ describe('a workout can be started without a camera', () => {
     expect(startButton().disabled).toBe(false);
     fireEvent.click(startButton());
 
-    await waitFor(() => expect(createSession).toHaveBeenCalled());
+    // Anchored on the WRITE, not on a network call. This used to wait for
+    // `createSession`; with the legacy start retired there is no request to wait
+    // for, and an anchor that no longer exists leaves the assertion below racing
+    // the click — passing whether or not the screen did anything at all.
+    await waitFor(() => expect(getItem('active_session', null)).not.toBeNull());
     expect(getItem('active_session', null).mode).toBe('manual');
   });
 
@@ -107,7 +126,7 @@ describe('a workout can be started without a camera', () => {
     fireEvent.click(screen.getByText("I'll count my own reps"));
     fireEvent.click(startButton());
 
-    await waitFor(() => expect(createSession).toHaveBeenCalled());
+    await waitFor(() => expect(getItem('active_session', null)).not.toBeNull());
     expect(getItem('active_session', null).cameraDeviceId).toBeNull();
   });
 
@@ -161,5 +180,118 @@ describe('a workout can be started without a camera', () => {
     fireEvent.click(startButton());
 
     await waitFor(() => expect(getItem('active_session')?.mode).toBe('camera'));
+  });
+});
+
+// ── Starting a workout asks NOTHING of any server (2026-08-16) ───────────────
+//
+// The legacy start (`createSession`) and the legacy save (`completeSession`)
+// retired together — they had to, since the save's only argument was the id the
+// start returned. Removing the start is what makes these two tests possible;
+// every one of them is RED on the previous commit.
+describe('starting a workout needs no server at all', () => {
+  it('reaches the workout without asking the old backend for anything', () => {
+    renderScreen();
+    fireEvent.click(screen.getByText("I'll count my own reps"));
+    fireEvent.click(startButton());
+
+    // No await anywhere in this test, deliberately: starting is now synchronous,
+    // and if a request crept back in the session would not exist yet here.
+    expect(createSession).not.toHaveBeenCalled();
+    expect(triggerTransition).toHaveBeenCalled();
+    expect(getItem('active_session', null)).not.toBeNull();
+  });
+
+  it('carries no legacy session id, because there is no longer one to carry', () => {
+    // The seam with ActiveWorkout. `sessionData.sessionId` was read at exactly
+    // one place — the legacy save — and both ends went in the same commit. If a
+    // future edit reinstates the field here, nothing consumes it and it becomes
+    // a lie in storage that reads like state.
+    renderScreen();
+    fireEvent.click(screen.getByText("I'll count my own reps"));
+    fireEvent.click(startButton());
+
+    const stored = getItem('active_session', null);
+    expect(stored).not.toBeNull();
+    expect('sessionId' in stored).toBe(false);
+  });
+
+  it('THE FIX: a dead old backend can no longer stop a workout', () => {
+    // The defect in its own words, from OWED.md's offline-start line: with the
+    // old backend unreachable this screen said "Failed to start workout" and
+    // nothing began — on a product whose Part 6 §3.6 copy promises "your workout
+    // still counts". The mock at the top of this file rejects EVERY call, which
+    // is that world exactly; the workout starts regardless.
+    renderScreen();
+    fireEvent.click(screen.getByText("I'll count my own reps"));
+    // CLEARED BEFORE THE START CLICK, and that is the whole point of the line:
+    // `handleModeChange` already calls `stopCamera()` when the user picks "I'll
+    // count my own reps" (PreWorkout.jsx), so without this the assertion below
+    // is satisfied by the PREVIOUS click and would stay green with the call
+    // deleted from `handleStart` entirely — measured in T3 round 1, L-3.
+    stopCamera.mockClear();
+    fireEvent.click(startButton());
+
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(stopCamera).toHaveBeenCalled();
+    expect(triggerTransition).toHaveBeenCalled();
+  });
+
+  it('a start that CANNOT BE SAVED says so, and leaves the button usable', () => {
+    // T3 round 1, C/H-1. Removing `createSession` removed the only thing in
+    // this function that could REJECT, and `setItem` swallows its own errors
+    // (`utils/storage.js`) — so the `catch` that used to produce this toast
+    // became unreachable in the same commit, and the comment above it said the
+    // opposite. A user whose storage is full then tapped Start, watched the
+    // spinner, and landed back on the builder with NOTHING said, every time.
+    //
+    // The assertion is on the OUTCOME, not on the mechanism: the write is
+    // verified to have LANDED rather than awaited for a throw, because a
+    // swallowing helper cannot be caught.
+    renderScreen();
+    fireEvent.click(screen.getByText("I'll count my own reps"));
+
+    // Installed AFTER renderScreen, whose own setItem must succeed.
+    const quota = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(() => { throw new DOMException('full', 'QuotaExceededError'); });
+    try {
+      fireEvent.click(startButton());
+
+      expect(toast.error).toHaveBeenCalledWith('Failed to start workout');
+      // The workout must NOT begin: ActiveWorkout would find no session and
+      // bounce the user to the builder, which is the silent failure itself.
+      expect(triggerTransition).not.toHaveBeenCalled();
+      expect(getItem('active_session', null)).toBeNull();
+      // …and the button is live again, so a retry after freeing space works.
+      // Plain DOM property, not `toBeDisabled` — jest-dom is not installed here.
+      expect(startButton().disabled).toBe(false);
+    } finally {
+      quota.mockRestore();
+    }
+  });
+
+  it('a failed start does not resurrect the PREVIOUS workout', () => {
+    // The read-back check is `getItem(...) === null`, so a stale `active_session`
+    // left by an earlier workout would satisfy it while the NEW write failed —
+    // and ActiveWorkout would open the OLD workout, which is worse than the
+    // silence this fix removes. The key is cleared BEFORE the write for exactly
+    // this reason; without that line this test reads back the stale session.
+    setItem('active_session', { exercises: [{ id: 'OLD', name: 'Old workout' }], name: 'Stale' });
+    renderScreen();
+    fireEvent.click(screen.getByText("I'll count my own reps"));
+
+    const quota = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(() => { throw new DOMException('full', 'QuotaExceededError'); });
+    try {
+      fireEvent.click(startButton());
+
+      expect(getItem('active_session', null)).toBeNull();
+      expect(toast.error).toHaveBeenCalledWith('Failed to start workout');
+      expect(triggerTransition).not.toHaveBeenCalled();
+    } finally {
+      quota.mockRestore();
+    }
   });
 });

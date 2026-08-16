@@ -126,7 +126,17 @@ vi.mock('../hooks/usePoseDetection', async () => {
   return { default: useMockPoseDetection };
 });
 
-const completeSession = vi.fn(async () => ({ data: {} }));
+// THE LEGACY SAVE, RETIRED 2026-08-16 — kept here as a TRIPWIRE, not as a stub.
+//
+// Every workout used to be written twice: once to the new API through the sync
+// queue, and once to the old backend through `workoutService.completeSession`.
+// The old copy went when the last screen reading it (the Dashboard's stats) was
+// repointed, and it went together with the legacy START, whose session id was
+// its only argument. The mock stays so that a reinstated call is LOUD instead of
+// silently resolving: several tests below assert it was never made.
+const completeSession = vi.fn(async () => {
+  throw new Error('the legacy save was retired — nothing may call it');
+});
 vi.mock('../api/workoutApi', () => ({
   workoutService: { completeSession: (...a) => completeSession(...a) },
 }));
@@ -146,6 +156,16 @@ vi.mock('./activeWorkoutEngine', async (importOriginal) => {
   };
 });
 
+// `useNavigate` only — MemoryRouter and everything else stay REAL, because the
+// pages under test render routes. Added 2026-08-16 so the summary screen's id
+// can be asserted; the page navigates on a 2 s timer, which is why the one test
+// that waits for it says so explicitly rather than inheriting a default.
+const navigate = vi.fn();
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, useNavigate: () => navigate };
+});
+
 // Speech synthesis does not exist in jsdom and is not what is under test.
 vi.mock('../utils/voice', () => ({
   speakExercise: vi.fn(),
@@ -158,8 +178,24 @@ vi.mock('../utils/voice', () => ({
 }));
 
 import ActiveWorkout from './ActiveWorkout';
-import { setItem } from '../utils/storage';
+import { getItem, setItem } from '../utils/storage';
 import { peekQueue } from '../sync/syncQueue';
+
+/** THE END-OF-WORKOUT ANCHOR, and it needs saying why it exists.
+ *
+ *  Several tests below assert that the sync queue is EMPTY after a workout —
+ *  which is what an empty queue looks like before the workout has finished too.
+ *  They used to wait on `completeSession` having been called; with the legacy
+ *  save retired that anchor is gone, and an assertion with no anchor is one that
+ *  races the click and passes for the wrong reason (:5348 rule 4 — a test that
+ *  cannot fail is a liar).
+ *
+ *  `active_session` is cleared as the LAST thing `handleWorkoutComplete` does,
+ *  after the queue write, and it is now cleared unconditionally — so its absence
+ *  means "the finish routine ran to the end", which is exactly the claim these
+ *  assertions need underneath them. */
+const workoutFinished = async () =>
+  waitFor(() => expect(getItem('active_session', null)).toBeNull());
 
 const exercise = (over = {}) => ({
   id: 'e1',
@@ -342,7 +378,7 @@ describe('a hand-counted workout reaches the new API', () => {
     startWorkout([exercise({ reps: 5 })]);
     fireEvent.click(screen.getByText('Complete Set ✓'));
 
-    await waitFor(() => expect(completeSession).toHaveBeenCalled());
+    await workoutFinished();
     expect(peekQueue()).toEqual([]);
   });
 
@@ -359,25 +395,89 @@ describe('a hand-counted workout reaches the new API', () => {
     expect(queued().sets[0].reps).toBe(1);
   });
 
-  it('still saves to the old backend — the new write path is in ADDITION', async () => {
-    // The legacy save is what the summary screen, the dashboard stats and the
-    // calendar still read. Dropping it would print a "+50 XP" that was never
-    // awarded. Replacement before removal.
+  it('writes the workout ONCE, to the new API only', async () => {
+    // THE INVERSE OF THE TEST THAT STOOD HERE, and the record of why it flipped.
+    // It read: "still saves to the old backend — the new write path is in
+    // ADDITION", because dropping the legacy save while the summary screen still
+    // read the old backend would have printed duration, calories and form as 0
+    // and a plausible "+50 XP" nobody was awarded (DECISIONS :3424). That
+    // condition is discharged: the summary (2026-08-06), the calendar (:4622)
+    // and the Dashboard (:8267/:8340/:8405) all read the new API, and the XP on
+    // that screen is computed by the new server. So the second write went.
     startWorkout([exercise({ reps: 1 })]);
     tapRep();
 
-    await waitFor(() => expect(completeSession).toHaveBeenCalledTimes(1));
-    expect(completeSession.mock.calls[0][0]).toBe('s1');
+    await workoutFinished();
+    expect(completeSession).not.toHaveBeenCalled();
+    // …and the one remaining write really did happen. Without this line the
+    // assertion above is satisfied by a page that saves NOWHERE, which is the
+    // failure this whole card had to avoid.
+    expect(queued()).toBeDefined();
+    expect(queued().sets).toHaveLength(1);
   });
 
-  it('does not sync — but still saves and still finishes — when an exercise is not in the catalog', async () => {
+  it('clears the finished workout even though nothing is saved to the old backend', async () => {
+    // THE ONE CHANGE ON THIS CARD A USER CAN SEE, so it gets a test rather than
+    // a comment. Both `removeItem` calls sat INSIDE the legacy save's `try`, so
+    // they ran only when that save succeeded — and it has not succeeded on this
+    // branch since Card 1 stopped writing the Bearer token the old backend
+    // requires. The visible consequence: finishing a workout left the builder
+    // holding it, so the next visit to the builder was pre-loaded with the
+    // workout you had just done. Nothing can fail here now, so the clean-up is
+    // unconditional.
+    setItem('workout_builder', [exercise({ reps: 1 })]);
+    startWorkout([exercise({ reps: 1 })]);
+    tapRep();
+
+    await workoutFinished();
+    expect(getItem('workout_builder', null)).toBeNull();
+  });
+
+  it('opens the summary with the id the workout was SYNCED under', async () => {
+    // Nothing asserted this before — grep-verified while planning this card.
+    // Two ids existed during a workout and only one of them the new API has ever
+    // heard of; the legacy session id was the other. Handing the wrong one to
+    // `/workout/summary/:id` 404s the summary endpoint, and PostWorkout sends
+    // the user to the Dashboard saying "Failed to load summary" ON THE FIRST
+    // FAILED READ — about a workout that saved perfectly well. The legacy id is
+    // gone now, which is precisely when a test pinning this becomes cheap to
+    // write and easy to lose.
+    //   CORRECTED TWICE (T3 rounds 1 and 2): first this said the screen would
+    //   sit on "saving your workout…" indefinitely, then that it retried five
+    //   times. Neither is true — `PostWorkout` gates the retry AND the
+    //   reassuring wording on `isAwaitingSync(workoutId)`, keyed by the SYNC id,
+    //   so a legacy id skips the retry branch entirely; `xpDisplay.render.test
+    //   .jsx` asserts one call and no retry, and has been green throughout. The
+    //   assertion below was right both times; the reason written over it was
+    //   not.
+    startWorkout([exercise({ reps: 1 })]);
+    tapRep();
+
+    await workoutFinished();
+    // 3 s, stated rather than defaulted: the page navigates on a 2 s delay so
+    // the "workout complete" screen can be seen. waitFor's own default is 1 s,
+    // under which this would fail for a reason that has nothing to do with ids.
+    await waitFor(
+      () => expect(navigate).toHaveBeenCalledWith(`/workout/summary/${queued().workoutId}`),
+      { timeout: 3000 },
+    );
+    expect(queued().workoutId).not.toBe('s1'); // never the legacy session id
+  });
+
+  it('does not sync — but still FINISHES cleanly — when an exercise is not in the catalog', async () => {
     // The server discards a set whose slug it does not know while keeping the
     // parent workout, so a partial sync writes a workout with sets missing.
-    // Refusing keeps the legacy save as one intact record.
+    // Refusing avoids that.
+    //   RENAMED, T3 round 1 L-4: this said "still saves", which was true only
+    //   while the legacy save existed to hold it. Since 2026-08-16 nothing else
+    //   saves this workout at all — refusing means it is stored NOWHERE, which
+    //   is a live trade-off with an `OWED.md` line, not a settled one. The
+    //   assertions were and are correct; the NAME promised something they never
+    //   checked.
     startWorkout([exercise({ name: 'Arnold Shoulder Press', reps: 1 })]);
     tapRep();
 
-    await waitFor(() => expect(completeSession).toHaveBeenCalled());
+    await workoutFinished();
     expect(peekQueue()).toEqual([]);
   });
 
@@ -399,7 +499,7 @@ describe('a hand-counted workout reaches the new API', () => {
     await waitFor(() => expect(screen.queryByText('Skip Rest →')).toBeNull());
     tapRep(); // the uncatalogued one → workout done
 
-    await waitFor(() => expect(completeSession).toHaveBeenCalled());
+    await workoutFinished();
     expect(peekQueue()).toEqual([]);
   });
 
@@ -1220,12 +1320,18 @@ describe('a hand-counted workout reaches the new API', () => {
     // finishing their workout. The capture sits on the set-end path, which is
     // the path that starts the rest timer and ends the session — so an
     // exception there would strand the user mid-workout. Here it throws and
-    // the workout still completes and still saves the old way.
+    // the workout still completes and still tidies up after itself.
+    //
+    // THE ANCHOR CHANGED WITH THE LEGACY SAVE (2026-08-16) AND IT MATTERS MOST
+    // HERE: this test asserts the queue is EMPTY, which is also what it looks
+    // like before the workout has finished. Waiting on the clean-up is what
+    // makes the emptiness mean "nothing was recorded" rather than "nothing has
+    // happened yet".
     recordThrows = true;
     startWorkout([exercise({ reps: 1 })]);
     tapRep();
 
-    await waitFor(() => expect(completeSession).toHaveBeenCalledTimes(1));
+    await workoutFinished();
     expect(peekQueue()).toEqual([]); // nothing recorded, nothing invented
   });
 });
@@ -1265,7 +1371,7 @@ describe('counting your own reps is a choice, not only a fallback', () => {
   it('never asks for the camera when the user said they did not want one', async () => {
     startWorkout([exercise({ reps: 1 })], { mode: 'manual', cameraDeviceId: 'cam-1' });
     tapRep();
-    await waitFor(() => expect(completeSession).toHaveBeenCalled());
+    await workoutFinished();
     expect(startCamera).not.toHaveBeenCalled();
   });
 

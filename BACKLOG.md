@@ -604,3 +604,71 @@ it like any other.)*
       deleted; the append-only record still reads in order.
       Found by T3 round 3.
 
+- [x] **L33 · `removeItem` was the one storage helper that could throw.** Its
+      siblings `getItem`/`setItem` each swallow and log; `removeItem` did not.
+      The dual-write retirement moved `ActiveWorkout`'s two calls OUT of the
+      `try` that used to contain them, and neither caller awaits or catches
+      `handleWorkoutComplete` — so a throw became an unhandled rejection that
+      skipped the navigation to the summary and left the user on "workout
+      complete" indefinitely. Rated Low because no browser state was found where
+      it throws while the same workout's earlier `getItem`/`setItem` succeeded.
+      **Fixed:** same `try {} catch {}` as `setItem`, with the reason recorded.
+      Found by T3 round 1.
+- [x] **L34 · the "waits for ever" symptom was invented and copied into four
+      places.** The summary-id defect is real; the failure it was said to
+      produce is not. `PostWorkout` gates "not synced yet" on
+      `isAwaitingSync(workoutId)` and the outbox is keyed by the SYNC id, so a
+      legacy id answers false and takes the immediate failure path — "Failed to
+      load summary" and a redirect, **on the first failed read** (this clause
+      first read "five retries (~4 s)", which round 2's Low-1 struck: the retry
+      is gated on the same `awaitingSync`). **Fixed:** corrected at all four
+      sites (`ActiveWorkout.jsx`, the test's own comment, `DECISIONS.md` struck
+      in place, `DECISIONS-INDEX.md`) rather than only where it was noticed —
+      :8405's lesson. Found by T3 round 1; **its own replacement text was wrong
+      and was fixed by L38 below.**
+- [x] **L35 · a `stopCamera` assertion satisfied before the button was
+      pressed.** `handleModeChange` calls `stopCamera()` when the user picks
+      "I'll count my own reps", which the test does first — so the assertion was
+      green with the call deleted from `handleStart` entirely, and the reviewer
+      measured exactly that (all 10 tests in the file stayed green under the
+      mutation). **Fixed:** `stopCamera.mockClear()` between the two clicks,
+      with the reason written above it. Found by T3 round 1.
+- [x] **L36 · a test name promising a save that no longer happens.** "does not
+      sync — but still saves and still finishes" was true while the legacy save
+      existed. **Fixed:** renamed to "still FINISHES cleanly"; the assertions
+      were correct throughout and are untouched. The stale RATIONALE it came
+      from (`syncClient.js` justifying the refusal by the legacy save) is the
+      more serious half and is corrected there, with its own `OWED.md` line
+      because the trade-off itself inverted. Found by T3 round 1.
+- [x] **L37 · malformed markdown in `OWED.md`'s offline-start line** — an
+      unmatched `**` and a sentence broken across an edit seam. **Fixed**, and
+      the same line's smoke status updated: step 9 has since passed.
+      Found by T3 round 1.
+- [x] **L38 · the CORRECTION to the summary-id symptom was itself wrong, in five
+      places.** Round 1 struck "the screen waits for ever" and wrote "after five
+      retries (~4 s)". Also false: `PostWorkout` gates the RETRY on the same
+      `isAwaitingSync(workoutId)` as the reassuring wording, so a legacy id never
+      enters the retry branch — it is "Failed to load summary" and a redirect on
+      the FIRST failed read. **`xpDisplay.render.test.jsx` has asserted exactly
+      that (one call, no retry) all along, green, while two of my sentences said
+      otherwise.** Both wrong versions came from reading the retry CONSTANTS
+      instead of the BRANCH that reaches them. **Fixed** at all five sites.
+      **Standing lesson: a correction is a claim and takes the same evidence as
+      the thing it corrects.** Found by T3 round 2.
+- [x] **L39 · a fifth copy of the retired symptom survived in the harness** —
+      M58's own name still read "404s, screen never resolves". A mutant's NAME is
+      what a future chat reads to decide what the mutant proves, so a false one
+      mis-teaches at exactly the moment someone is deciding whether a red row
+      matters. **Fixed:** renamed to the real outcome. Found by T3 round 2.
+- [x] **L40 · the recorded test count was stale in three files** — 631/631 where
+      the suite is 634/634. Measured before `storage.test.js`'s three new cases
+      were added, then carried into `HANDOFF.md`, `DECISIONS.md` and the review
+      prompt without re-measuring. V1, on my own work, in the same session that
+      cited V1 against someone else's number. **Fixed:** re-run and corrected
+      everywhere. Found by T3 round 2.
+- [x] **L41 · `OWED.md`'s dual-write line still said the smoke was UNRUN and the
+      sweep KILLED.** Both had since become false — smoke 9/9, sweep completed —
+      and L37 had updated the SIBLING line's status while leaving this one. **The
+      shape is L37's own lesson recurring inside its own fix: a status written in
+      two places is a status that goes stale in one of them.** **Fixed**, and the
+      line now ticks. Found by T3 round 2.

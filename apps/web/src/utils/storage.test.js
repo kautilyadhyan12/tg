@@ -71,3 +71,32 @@ describe('per-user storage keying', () => {
     expect(userKey(QUEUE_KEY)).not.toBe(aQueue);
   });
 });
+
+describe('storage helpers never throw at their callers', () => {
+  // T3 round 1, L-1. `removeItem` was the only one of the three without a
+  // guard, and the dual-write retirement moved `ActiveWorkout`'s two calls out
+  // of the try that used to contain them — neither caller awaits or catches
+  // `handleWorkoutComplete`, so a throw here becomes an unhandled rejection
+  // that skips the navigation to the summary. Storage being unavailable must
+  // not be able to strand a finished workout.
+  const cases = [
+    ['removeItem', () => removeItem('active_session')],
+    ['setItem', () => setItem('active_session', { a: 1 })],
+    ['getItem', () => getItem('active_session', null)],
+  ];
+
+  for (const [name, call] of cases) {
+    it(`${name} survives a storage backend that throws`, () => {
+      setCurrentUserId('user-a');
+      // This suite runs in the NODE environment (vitest.config.js), so there is
+      // no `Storage.prototype` to spy on — the global is the fake above. A
+      // throwing fake IS the browser case: Safari private mode and a blocked
+      // cookie/storage policy both make every method throw, not just setItem.
+      const thrower = () => { throw new Error('storage denied'); };
+      vi.stubGlobal('localStorage', {
+        getItem: thrower, setItem: thrower, removeItem: thrower,
+      });
+      expect(call).not.toThrow();
+    });
+  }
+});

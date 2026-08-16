@@ -76,27 +76,26 @@ describe('the repoint itself', () => {
     // in `api/dashboardStats.js`, so there is no single function to name here
     // any more. Its absence from this list is the repoint.)
     //
-    // `createSession` and `completeSession` stay and are COUPLED: the legacy
-    // save needs the session id the legacy start hands out. DECISIONS :3424's
-    // condition — "until the Dashboard's stats have a new-API home too" — is
-    // now MET, so the pair is unblocked and retires in its OWN card. They are
-    // still here because this card changed what the Dashboard READS and nothing
-    // about what a finished workout WRITES; deleting them on the strength of
-    // the condition lapsing would be exactly the "finished the repoint by
-    // deleting a feature" move this test exists to catch.
+    // `createSession` and `completeSession` LEFT this list on 2026-08-16, and
+    // they left the RIGHT way — not by being deleted to finish a repoint, but
+    // because every surface the legacy copy fed had been given a new-API home
+    // first (summary 2026-08-06, calendar :4622, Dashboard :8267/:8340/:8405).
+    // That is :3424's replacement-before-removal ruling discharged. They also
+    // left TOGETHER, which is the only way they could: the legacy save's
+    // argument was the session id the legacy start returned.
     vi.stubGlobal('localStorage', { getItem: () => null });
     const oldSeen = recordRequests(mlApi);
     const newSeen = recordRequests(authApi);
-    await workoutService.createSession({});
     await workoutService.getTemplates();
     expect(oldSeen.map((s) => s.url)).toEqual([
-      '/workouts',
       '/workouts/templates',
     ]);
     expect(newSeen).toEqual([]);
-    // …and the retired one is GONE, not merely unused: leaving a live
+    // …and the retired ones are GONE, not merely unused: leaving a live
     // `getStats` on the old client is how a future edit quietly reinstates it.
     expect(workoutService.getStats).toBeUndefined();
+    expect(workoutService.createSession).toBeUndefined();
+    expect(workoutService.completeSession).toBeUndefined();
   });
 });
 

@@ -8,8 +8,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useCamera from '../hooks/useCamera';
-import { workoutService } from '../api/workoutApi';
-import { getItem, setItem } from '../utils/storage';
+import { getItem, removeItem, setItem } from '../utils/storage';
 
 const CHECKLIST_ITEMS = [
   { key: 'camera',   icon: Camera,       label: 'Camera is working', desc: 'Camera feed is live',    auto: true,  color: '#FF8A1F' },
@@ -121,30 +120,70 @@ export default function PreWorkout() {
   const allChecked  = checkValues.every(Boolean);
   const doneCount   = checkValues.filter(Boolean).length;
 
-  const handleStart = async () => {
+  /** STARTING A WORKOUT ASKS NOTHING OF ANY SERVER (2026-08-16).
+   *
+   *  This used to `await workoutService.createSession(...)` against the OLD
+   *  backend purely to obtain a session id for the legacy save at the end of the
+   *  workout. Both retired together (they had to — the save needed the id the
+   *  start handed out), so there is no id to fetch and nothing to wait for.
+   *
+   *  THAT IS THE FIX, NOT A SIDE EFFECT. With the old backend absent — its
+   *  ordinary state on this branch, and the state of the whole world once P2.8
+   *  switches it off — this screen answered "Failed to start workout" and the
+   *  user got no workout at all. Offline was the same: OWED.md's offline-start
+   *  line names this card as what discharges it, and Part 6 §3.6 promises "your
+   *  workout still counts". The id the new API knows this workout by is minted
+   *  in the browser by `ActiveWorkout` (`newWorkoutId`), not here, so nothing
+   *  about the SYNC path moves.
+   *
+   *  `starting` is no longer released on the happy path, deliberately. With the
+   *  await gone a `finally` would fire synchronously, i.e. before
+   *  `triggerTransition` has finished animating, re-arming the button under the
+   *  user's finger. It is released only on the failure paths below.
+   *
+   *  THE FAILURE IS DETECTED BY READING THE WRITE BACK, NOT BY CATCHING —
+   *  T3 round 1, C/H-1, and the correction of what this comment used to claim.
+   *  It said the catch was "reachable solely if `setItem` throws", which was
+   *  false: `setItem` SWALLOWS its own errors (`utils/storage.js`), and
+   *  `createSession` — the one call here that could ever reject — is what this
+   *  card deleted. So the catch became unreachable in the same commit that
+   *  documented it, and a user whose storage is full got the spinner, then
+   *  `ActiveWorkout` finding no session, then the builder again, in silence.
+   *  A swallowing helper cannot be caught, so the write is VERIFIED instead.
+   *
+   *  THE KEY IS CLEARED FIRST, and that line is load-bearing rather than tidy:
+   *  the check is "did anything land?", so a stale `active_session` from an
+   *  earlier workout would answer YES while this write failed — and the user
+   *  would be dropped into the PREVIOUS workout, which is worse than the
+   *  silence. A test pins it.
+   *
+   *  The `try` stays as a backstop for `stopCamera`/`triggerTransition` — DOM
+   *  and media calls, which genuinely can throw — and claims nothing about
+   *  storage. */
+  const handleStart = () => {
     if (!allChecked) {
       toast.error('Complete all checklist items first');
       return;
     }
     setStarting(true);
     try {
-      const res = await workoutService.createSession({
-        exercises: builderData,
-        name:      'My Workout',
-      });
+      removeItem('active_session');
       setItem('active_session', {
-        sessionId:      res.data.session.id,
         exercises:      builderData,
         name:           'My Workout',
         mode,
         cameraDeviceId: manualMode ? null : selectedCam,
       });
+      if (getItem('active_session', null) === null) {
+        toast.error('Failed to start workout');
+        setStarting(false);
+        return;
+      }
       stopCamera();
       triggerTransition(() => navigate('/workout/active'));
     } catch (err) {
       toast.error('Failed to start workout');
       console.error(err);
-    } finally {
       setStarting(false);
     }
   };

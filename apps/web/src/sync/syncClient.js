@@ -138,10 +138,19 @@ export function flushSyncQueue() {
  *  `unresolved` carries display names with no catalog row. The server DISCARDS
  *  a set whose slug it does not know while still inserting the parent workout —
  *  so syncing one anyway writes a workout with fewer sets than the user did, or
- *  none at all. Refusing the whole workout keeps the legacy save as its single
- *  intact record instead of splitting it across two systems, neither complete.
- *  It cannot happen today (all 58 library names resolve — asserted in
- *  activeWorkoutEngine.test.js); it is the guard for the 59th. */
+ *  none at all. Refusing the whole workout is the older of two bad options.
+ *
+ *  ITS TRADE-OFF INVERTED ON 2026-08-16 AND THE REASON WRITTEN HERE WENT WITH
+ *  IT (T3 round 1, L-4). This paragraph used to end "refusing keeps the legacy
+ *  save as its single intact record instead of splitting it across two systems"
+ *  — true while a second, legacy save existed. **It does not any more**, so
+ *  refusing no longer preserves the workout somewhere else: it saves it
+ *  NOWHERE. Left as-is deliberately rather than flipped in this card (R1.1):
+ *  choosing between a partial record and no record is a Kd ruling, not a
+ *  comment edit, and it has its own `OWED.md` line.
+ *  Still unreachable today (all 58 library names resolve — asserted in
+ *  activeWorkoutEngine.test.js); it is the guard for the 59th, and whoever adds
+ *  the 59th must read the line above before trusting this branch. */
 export function queueWorkoutSync({
   workoutId, startedAt, summaries, unresolved = [], durationSeconds, restSeconds,
 }) {
