@@ -8843,11 +8843,25 @@ re-derive it. Kd explicitly said he is **not** asking to build it now.
 - (**THE PRODUCT POINT THAT MATTERS MORE THAN THE TECHNICAL ONE**) Recommended
   ordering when it does land: **write OUT before reading IN.** Pushing our
   finished workout into the user's health app closes their rings and costs far
-  less work than ingesting their data. And a caution about audience: the pilot is
-  Jorhat gyms, where Apple Watch and Garmin are rare and cheap bands that expose
-  no open API dominate — so a wearable card could serve very few of the first
-  users while costing a great deal. That is an argument about SEQUENCE, not about
-  worth.
+  less work than ingesting their data. ~~And a caution about audience: the pilot
+  is Jorhat gyms, where Apple Watch and Garmin are rare and cheap bands that
+  expose no open API dominate — so a wearable card could serve very few of the
+  first users while costing a great deal.~~
+  **STRUCK THE SAME DAY BY KD, AND THE CORRECTION IS WORTH MORE THAN THE CLAIM:
+  "my target is all over world including assam that is jorhat".** Jorhat is the
+  PILOT, not the market. The audience argument above was therefore built on a
+  premise he had never stated and I had never checked — and **the spec was
+  already against me**: Part 3 §6.3 is titled *Worldwide* and localises console
+  currency, drives every time boundary from the org's own timezone, and makes
+  all console strings message keys from day one, while "Jorhat-tier" in §1's
+  persona table qualifies a gym SIZE (60–300 members), not a location.
+  **What survives is only this: the value of wearable support varies by market,
+  so it is not uniformly high — and on a worldwide target it is far higher than
+  I said**, because Apple Watch and Garmin are common in exactly the markets a
+  worldwide launch reaches. **Standing lesson, and it is the one this project
+  keeps re-learning: a fact about the PILOT is not a fact about the USERS**
+  (:4355 records the same shape — "the operator's account cannot reach it" is a
+  fact about a smoke test, never about users).
 - (**A HAZARD RECORDED NOW SO IT IS NOT DISCOVERED LATE**) The app already has
   its own GPS running feature. Once watch runs are imported, **the same run can
   arrive twice** — once from our tracker, once from the watch — and a naive

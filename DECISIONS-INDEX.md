@@ -57,8 +57,12 @@ mid-file: re-derive them with
   cannot precede P5. Recommended AGAINST the paid per-user aggregators.
   **Two things worth more than the technical answer: write OUT before reading IN**
   (closing the user's rings is cheaper and more loved than ingesting their data),
-  and **the pilot audience is Jorhat, where the dominant cheap bands expose no API
-  at all** — a sequencing argument, not a worth argument. **Hazard recorded early:
+  and ~~the pilot audience is Jorhat…~~ **STRUCK by Kd the same day — "my target
+  is all over world including assam that is jorhat". JORHAT IS THE PILOT, NOT THE
+  MARKET**, and Part 3 §6.3 (*Worldwide*) already said so; on a worldwide target
+  the value is HIGHER than the struck claim, not lower. **Standing lesson: a fact
+  about the PILOT is not a fact about the USERS** (:4355's shape). **Hazard
+  recorded early:
   we already have GPS running, so an imported watch run can DOUBLE the same run
   unless dedupe is in that card's definition.** Health data lands inside the open
   privacy question at :592. Tracked NOWHERE before today (grep-verified); now has

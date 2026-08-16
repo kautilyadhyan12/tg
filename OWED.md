@@ -3618,10 +3618,17 @@ each definition carries its own `upAt`, `downAt`, `countOn`, `minRepMs`,
       matters for the long tail; (3) **dedupe is part of the card, not an
       afterthought** — the app already records runs by GPS, so an imported watch
       run can land the SAME run twice and double a user's distance and calories.
-      **Audience caveat, recorded because it decides SEQUENCE:** the pilot is
+      ~~**Audience caveat, recorded because it decides SEQUENCE:** the pilot is
       Jorhat gyms, where Apple Watch and Garmin are rare and the dominant cheap
       bands expose no open API at all. A wearable card may serve very few of the
-      first hundred users.
+      first hundred users.~~ **STRUCK BY KD THE SAME DAY: "my target is all over
+      world including assam that is jorhat".** Jorhat is the PILOT, not the
+      market, and Part 3 §6.3 (*Worldwide*) already says so — localised console
+      currency, org-timezone boundaries, message keys from day one. **On a
+      worldwide target the value of this is HIGHER than the struck sentence
+      claimed**, since Apple Watch and Garmin are common in the markets a
+      worldwide launch reaches. It still varies by market, so it is not a
+      uniform win — but it is no longer an argument for deferring.
       **Health data is sensitive personal data** and lands inside the open
       privacy-scope question below (:592), still unruled.
       **Platform specifics in the DECISIONS entry are marked UNVERIFIED** —
@@ -3629,6 +3636,45 @@ each definition carries its own `upAt`, `downAt`, `countOn`, `minRepMs`,
       Re-check every one at planning time (V5).
 
 ## Open questions awaiting a Kd ruling (nothing built on these)
+
+- [ ] ❓ **DOES "GYM MANAGEMENT" MEAN RETENTION, OR RUNNING THE BUSINESS?**
+      Raised by Kd 2026-08-16, in his words: *"is this gym management section
+      really good will it allow owners to automate things? i want that so less
+      work and more efficient for gym owners and easy way to manage their
+      business"*. **Write the answer down before promising anything to a gym**,
+      because the two readings sell differently and build differently.
+      **WHAT PART 3 ACTUALLY SPECIFIES — verified by reading it, not assumed.**
+      It automates real work, and the valuable part is what happens with the
+      owner doing nothing: a monthly PDF report **generated and emailed** on the
+      1st at 06:00 org time (§4.5) · a **weekly digest** Monday 09:00 org time
+      with the at-risk count and a deep link (§5.3) · **at-risk members detected
+      automatically** with one-tap Nudge (§4.3, §4.5) · **seat-pressure, trial
+      D-5/D-1 and payment alerts** firing on their own (§5.3) · a **30-second
+      walk-in join** by code/QR/WhatsApp/poster with no staff data entry (§4.3).
+      Its design law is explicit and good: *"the console is a retention
+      instrument the org uses on its members, not an analytics toy. Every screen
+      ends in an action … data that doesn't lead to an action is decoration and
+      gets cut"* (§1).
+      **WHAT IT DOES NOT DO, AND THIS IS THE QUESTION.** Nothing in Part 3
+      collects the gym's OWN membership fees, tracks attendance or door access,
+      schedules classes, runs a point of sale, or handles staff pay. Those are
+      gym-OPERATIONS software — a different, much larger product with
+      established competitors in every market, and it would change what a sales
+      conversation promises.
+      **THE RULING NEEDED:** does v1's console stay a retention instrument
+      (recommended — it is what the spec is built for, what the engine makes
+      uniquely defensible, and what one person can ship), or does the roadmap
+      commit to gym operations as a later phase? **A third answer exists and may
+      be the best one: integrate rather than build** — let the gym keep whatever
+      it already uses for fees and attendance, and be the thing that makes
+      members actually train. Nothing is blocked on this today; it blocks the
+      moment a pitch deck or a pricing page describes the console.
+      **Related and already corrected: the market is WORLDWIDE, not Jorhat**
+      (Kd, same day; Part 3 §6.3 *Worldwide* already localises currency, drives
+      boundaries from each org's timezone, and makes every console string a
+      message key). Jorhat is the pilot. Any argument that reasons from Indian
+      market conditions alone is suspect — see the struck clause on the wearables
+      line above for one that was.
 
 - [ ] ❓ **Privacy-law scope beyond DPDP** (raised by Kd 2026-07-21). Should the
       product satisfy EU/UK GDPR, US state laws (CCPA/CPRA), Brazil's LGPD —
