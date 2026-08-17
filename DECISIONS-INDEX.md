@@ -259,6 +259,23 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:8879** — 2026-08-17 — **THE CAMERA'S TWO DOWNLOADS SHIP INSIDE THE APP —
+  smoke PASS, T3 round 1's four Critical/High all fixed.** **Read before running
+  any smoke that "cuts off" a source, before quoting the camera's start-up
+  saving, and before trusting a `startsWith` assertion.** The sheet's own
+  instrument — DevTools request blocking — **did nothing**, and the control
+  printed the pass string; replaced by moving files off disk and switching the
+  **Wi-Fi adapter** off (loopback is unaffected, which the Offline throttle is
+  not). **The saving is ~240 ms (643 vs 884), NOT the ~1.4 s `OWED.md` carried
+  since 2026-08-03, and the old "corrupt or LFS-pointer model" cause was false —
+  there was no file at all.** **First-ever delivered-throughput reading: 9.2–12.2
+  fps against a target of 15.** C/H-1 and C/H-2 are one lesson twice: an
+  assertion that cannot fail (`startsWith`) and an invocation nothing reads
+  (`package.json` scripts) each left 36 / 674 tests green against a broken app.
+  **C/H-3 stays OPEN as 🔴 — no path reaching a real user has ever run the fetch
+  script; the Vercel build command is unrecorded.** Bundled WASM is **0.10.21**
+  against `package.json`'s 0.10.35 DELIBERATELY — do not tidy it; it moves with
+  the model swap.
 - **:8707** — 2026-08-16 — **DUAL-WRITE, T3 ROUND 2 (diff-only): ZERO
   Critical/High — THE CARD CLOSES and BOTH `OWED.md` lines TICK.** **Read before
   writing a CORRECTION, before quoting a retry count, and before carrying a

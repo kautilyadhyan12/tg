@@ -67,6 +67,14 @@ backend-ml/models/
 backend-ml/*.png
 backend-ml/*.mp4
 
+# The camera's bundled assets (~25 MB): MediaPipe's WebAssembly runtime and the
+# pose model. Fetched and sha256-verified by `apps/web/tools/fetch-pose-assets.mjs`,
+# which `dev` and `build` both run, so they are always present when it matters.
+# Out of git because this repo has no LFS and the §3.6 ladder will add a second
+# model — a BUILD has internet, a WORKOUT does not, and that is the line.
+apps/web/public/mediapipe/
+apps/web/public/models/*.task
+
 # infra: the production env file lives on the deploy host, never in the repo
 # (R3.6, Part 8 §1 escrow). .gitignore's `.env` rule does not cover this name.
 infra/api.env

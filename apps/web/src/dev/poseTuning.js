@@ -62,10 +62,21 @@ const MODEL_FILES = Object.freeze({
 
 export const MODEL_NAMES = Object.freeze(Object.keys(MODEL_FILES));
 
-/** Where a model variant is fetched from. `local` is tried first and is
- *  ordinarily absent (`apps/web/public/models/` ships no `.task` file), so in
- *  practice every variant comes from Google's CDN and switching costs a URL,
- *  not a vendored binary. */
+/** Where a model variant is fetched from. `local` is tried first.
+ *
+ *  ── THIS COMMENT USED TO SAY THE OPPOSITE, AND IT WAS RIGHT AT THE TIME ────
+ *  It read: *"`local` … is ordinarily absent (`apps/web/public/models/` ships no
+ *  `.task` file), so in practice every variant comes from Google's CDN."* That
+ *  was TRUE and it was the defect — an accurate description of a camera that
+ *  needed the internet, sitting in the codebase being read as a design note.
+ *  `apps/web/tools/fetch-pose-assets.mjs` now puts the shipped variant on disk
+ *  before `dev` and `build`, sha256-verified, and `usePoseDetection` reports
+ *  which source it used on every run so the two can never quietly diverge again.
+ *
+ *  STILL TRUE, and it is what the §3.6 ladder will have to deal with: only the
+ *  variant in `POSE_DEFAULTS` is fetched. Asking for another one in dev
+ *  (`?model=full`) still comes off Google's CDN, because nothing has chosen a
+ *  second model to ship — that choice is the open 🔴 OWED line. */
 export function modelUrls(model) {
   const file = MODEL_FILES[model] ?? MODEL_FILES[POSE_DEFAULTS.model];
   return {

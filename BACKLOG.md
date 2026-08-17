@@ -672,3 +672,55 @@ it like any other.)*
       shape is L37's own lesson recurring inside its own fix: a status written in
       two places is a status that goes stale in one of them.** **Fixed**, and the
       line now ticks. Found by T3 round 2.
+- [x] **L42 · the loud new warning printed `Cause: undefined`** — found by Kd's
+      smoke, not by a test: with the bundled files removed, the bundling card's
+      new warning named the consequence correctly ("this workout will need an
+      internet connection") and the reason not at all. `bundledErr.message` is
+      the wrong reach — MediaPipe rejects with values that are not `Error`s. The
+      same flaw pre-existed at the GPU→CPU line and, worse, at the init-failure
+      line, which puts its text ON SCREEN as "Pose detection unavailable —
+      undefined". **Fixed** at all three sites with one `describeError` helper
+      that never throws. Half the point of that warning was the reason; it had
+      been shipping without it. Found by fresh-chat T3 round 1 (L1).
+- [x] **L43 · the smoke sheet still told the next person to use an instrument
+      the run proved inert** — steps 1–2 specified DevTools "Network request
+      blocking", which did nothing: the control round printed `THE APP BUNDLE`
+      with both patterns listed and enabled. Only the RESULT block at the top
+      had been corrected, so the body still read as instructions. **The shape is
+      L41's lesson again — a status written in two places goes stale in one of
+      them — this time between a file's header and its own steps.** **Fixed:**
+      steps 1–2 replaced with the two instruments that worked (files moved off
+      disk; the machine's Wi-Fi switched off), step 4 marked superseded with its
+      reasoning kept, and the reason DevTools' Offline throttle is NOT the
+      substitute written down so it is not reinvented. Found by T3 round 1 (L2).
+- [x] **L44 · turbo replayed a cached PASS for a contract test whose subject was
+      broken** — the `test` task hashed 136 files, none of them under `tools/`,
+      so editing `tools/fetch-pose-assets.mjs` left the task hash byte-identical
+      and `turbo run test` served a stale green. A direct `vitest` run went RED
+      correctly, and CI is unaffected today because every runner is fresh with no
+      remote cache — **this becomes Critical the day remote caching is enabled**,
+      which is exactly the kind of latent trap that is cheap now and expensive
+      later. `build` had the same gap. **Fixed:** `tools/**` added to both tasks'
+      inputs. Found by T3 round 1 (L3).
+- [x] **L45 · the throughput meter opened every set with a line that reported
+      nothing** — `lastHzLogRef` was seeded at `0` while `now` is
+      `performance.now()`, so `now - 0 >= 10_000` was true on the very first
+      frame and every set began `delivered not measurable yet … 1 frames in
+      window`. It appeared four times in Kd's smoke. **Fixed:** the ref starts
+      `null`, meaning "no window has started", and the first frame opens one
+      instead of closing one; the three places that reset the throughput now
+      reset the log window with it. Found by T3 round 1 (L5).
+- [x] **L46 · this card's own assets broke `pnpm --filter web lint` — 578 errors,
+      found in the FIX round, not by the review** — the five fetched files land
+      in `public/`, and `eslint .` happily lints the two minified emscripten
+      loaders among them. 653 problems total, of which **578 were vendor code
+      nobody wrote**. It had been missed because every check so far — the
+      packet's, the T3's and mine — linted the CHANGED FILES, which are all
+      genuinely clean; only `eslint .` sees it. **The coupling is the part worth
+      keeping: lint passes in CI today ONLY because CI never runs the fetch
+      script, which is C/H-3. Closing C/H-3 without this would have turned a
+      silent gap into a red CI gate and looked like the deploy fix broke lint.**
+      **Fixed:** `public/mediapipe` ignored alongside `dist` in
+      `eslint.config.js`, with that coupling written into the comment. Residual
+      75 are pre-existing app lint, untouched (R1.1). Found while running the
+      universal DoD checklist rather than by any review.

@@ -18,6 +18,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { SessionController } from '../engine/sessionController.js';
+import { PoseThroughput } from '../engine/poseThroughput.js';
 // DEV-ONLY (P1.3): raw-frame recorder tee. No-op unless VITE_TRACE_RECORD=1.
 import { TRACE_RECORD_ENABLED, recordFrame } from '../dev/traceRecorder';
 // DEV-ONLY: MediaPipe settings from the URL. Returns the frozen shipped
@@ -29,6 +30,56 @@ import { modelUrls, readPoseTuning } from '../dev/poseTuning';
 const DETECT_INTERVAL_MS = 33;    // ~30fps pose inference
 const PUBLISH_INTERVAL_MS = 33;   // ~30fps overlay publish (one re-render each)
 const FEED_INTERVAL_MS = 67;      // ~15fps engine feed (§2.1 target analysis rate)
+const HZ_LOG_INTERVAL_MS = 10_000; // dev-only throughput line; §3.6's own 10 s
+
+/** Where MediaPipe's WebAssembly runtime comes from.
+ *
+ *  ── THE HALF NOBODY HAD WRITTEN DOWN ──────────────────────────────────────
+ *  `OWED.md` records that the pose MODEL falls back to a CDN and calls that the
+ *  reason camera workouts need internet. It is only half the reason: this
+ *  runtime is ~9.6 MB fetched from jsdelivr on every workout, and bundling the
+ *  model without it would have left the camera exactly as online-only as before
+ *  while looking fixed.
+ *
+ *  ── LOCAL FIRST, NETWORK AS A LAST RESORT, AND IT SAYS WHICH ──────────────
+ *  The remote URL stays, because a build that somehow shipped without the
+ *  assets should degrade to today's behaviour rather than to no camera at all.
+ *  But a silent fallback is how the model's absence hid for months, so the
+ *  choice is REPORTED every time (`poseAssets` below) instead of being
+ *  discoverable only by reading a console at the right moment — :6856's rule
+ *  that a check must compare two visible things, never spot a missing one.
+ *
+ *  The version is pinned to the WASM the app has been running all along; the
+ *  reasoning, and the fact that `package.json` says 0.10.35, is in
+ *  `tools/fetch-pose-assets.mjs`. Both files' paths are pinned against each
+ *  other by `poseAssets.contract.test.js`. */
+export const LOCAL_WASM_BASE = '/mediapipe/wasm';
+export const REMOTE_WASM_BASE =
+  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm';
+
+/** What was actually thrown, in words, for a value that need not be an Error.
+ *
+ *  MEASURED IN KD'S SMOKE, NOT SUPPOSED: with the bundled files removed, the
+ *  loud new warning printed `Cause: undefined`. It named the consequence
+ *  correctly and the reason not at all — and the reason was half of why the
+ *  warning was added, the other half of `local model unavailable` having read
+ *  as routine for months. MediaPipe rejects with values that are not Errors
+ *  (an emscripten abort surfaces as a bare string, and a failed asset fetch as
+ *  a value with no `message` at all), so `err.message` is the wrong reach.
+ *
+ *  Never throws, because every caller is already on a failure path and a
+ *  diagnostic that can fail is worse than none. */
+function describeError(err) {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === 'string' && err) return err;
+  if (err === null || err === undefined) return `(threw ${String(err)} — no error object)`;
+  try {
+    const asText = String(err);
+    return asText === '[object Object]' ? JSON.stringify(err) : asText;
+  } catch {
+    return '(threw a value that cannot be described)';
+  }
+}
 
 /** `analysisEnabled: false` is the user having CHOSEN to count their own reps
  *  (2026-08-03). It is deliberately stronger than `enabled`, which only pauses
@@ -69,6 +120,14 @@ export default function usePoseDetection({
   // Single-exercise workouts never hit it, which is every test in the suite.
   const [settledFor, setSettledFor] = useState(null);
   const [error, setError] = useState(null);
+  // WHERE THE CAMERA'S TWO BIG FILES CAME FROM, and how long they took. Null
+  // until MediaPipe is ready. Nothing user-facing reads this: it is the smoke's
+  // evidence and the answer to "is this workout actually offline-capable?",
+  // which was previously knowable only by watching a network panel at the right
+  // second. The duration is here because the fix's headline claim — the camera
+  // starts sooner — has to be re-measured rather than quoted from the console
+  // line that found the defect.
+  const [poseAssets, setPoseAssets] = useState(null);
 
   const controllerRef   = useRef(null);
   if (controllerRef.current === null) controllerRef.current = new SessionController();
@@ -85,6 +144,21 @@ export default function usePoseDetection({
   const mpReadyRef      = useRef(false);
   const loopRunningRef  = useRef(false);
   const onSetCompleteRef = useRef(onSetComplete);
+  // Delivered frames per second, measured at the ENGINE FEED — the rate Part 6
+  // §3.6's ladder steps down on, and the rate every figure already recorded in
+  // this project was measured at. Nothing acts on it yet; the ladder is its own
+  // card. It exists now because the model choice that card has to make is
+  // currently a guess (OWED: inference time has never been measured on any
+  // device), and this is the number that ends the guessing.
+  const throughputRef   = useRef(null);
+  if (throughputRef.current === null) throughputRef.current = new PoseThroughput();
+  // NULL, not 0, and it matters for the only thing this meter is for. Seeded at
+  // 0 the first frame always satisfied `now - 0 >= 10_000` — `now` is
+  // `performance.now()` — so every set opened with `delivered not measurable
+  // yet … 1 frames in window`, a line that reports nothing and appeared in
+  // Kd's smoke four times. Null means "no window has started"; the first frame
+  // starts one instead of closing one.
+  const lastHzLogRef    = useRef(null);
 
   // A RESUMED SET IS NOT A CONTINUATION. `enabled` false is a pause or a rest —
   // the feed below stops, the SET does not end, and frames start arriving again
@@ -101,7 +175,14 @@ export default function usePoseDetection({
   useEffect(() => {
     const wasEnabled = enabledRef.current;
     enabledRef.current = enabled;
-    if (enabled && !wasEnabled) controllerRef.current.framesResumed();
+    if (enabled && !wasEnabled) {
+      controllerRef.current.framesResumed();
+      // Same rule, third consumer: the gap across a pause is not a slow camera.
+      // Left in, the meter would report the rest period as a collapse in
+      // throughput — and the ladder this feeds steps DOWN on exactly that.
+      throughputRef.current.reset();
+      lastHzLogRef.current = null;   // and the log window with it — see the ref
+    }
   }, [enabled]);
   useEffect(() => { onSetCompleteRef.current = onSetComplete; }, [onSetComplete]);
 
@@ -115,13 +196,12 @@ export default function usePoseDetection({
     let cancelled = false;
 
     async function initML() {
+      // Started before the dynamic import, because "how long until the camera
+      // can count" includes loading the library itself.
+      const startedAt = performance.now();
       try {
         const { PoseLandmarker, FilesetResolver } =
           await import('@mediapipe/tasks-vision');
-
-        const filesetResolver = await FilesetResolver.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm'
-        );
 
         // In a production build these ARE the previous hard-wired values —
         // `readPoseTuning` returns the frozen defaults and never reads the URL
@@ -131,8 +211,8 @@ export default function usePoseDetection({
         const tuning = readPoseTuning();
         const { local: LOCAL_MODEL, remote: REMOTE_MODEL } = modelUrls(tuning.model);
 
-        async function createLandmarker(delegate, modelAssetPath) {
-          return PoseLandmarker.createFromOptions(filesetResolver, {
+        async function createLandmarker(fileset, delegate, modelAssetPath) {
+          return PoseLandmarker.createFromOptions(fileset, {
             baseOptions: { modelAssetPath, delegate },
             runningMode:  'VIDEO',
             numPoses:     tuning.numPoses,
@@ -142,33 +222,64 @@ export default function usePoseDetection({
           });
         }
 
-        async function createWithFallback(modelAssetPath) {
+        async function createWithFallback(fileset, modelAssetPath) {
           try {
-            return await createLandmarker('GPU', modelAssetPath);
+            return await createLandmarker(fileset, 'GPU', modelAssetPath);
           } catch (gpuErr) {
-            console.warn('[usePoseDetection] GPU delegate failed, trying CPU:', gpuErr.message);
-            return await createLandmarker('CPU', modelAssetPath);
+            console.warn('[usePoseDetection] GPU delegate failed, trying CPU:', describeError(gpuErr));
+            return await createLandmarker(fileset, 'CPU', modelAssetPath);
           }
         }
 
+        /** Runtime and model TOGETHER, because they are one decision.
+         *
+         *  The previous code paired a hard-wired CDN runtime with a local-then-
+         *  CDN model, so the only reachable outcome was "half the camera comes
+         *  off the internet" — and it read as a working local-first path. Both
+         *  halves have to be bundled for a workout to survive losing the
+         *  network, so both are attempted, and either failing means falling all
+         *  the way back rather than landing in a mixture nobody designed. */
+        async function attempt(wasmBase, modelAssetPath) {
+          const fileset = await FilesetResolver.forVisionTasks(wasmBase);
+          return createWithFallback(fileset, modelAssetPath);
+        }
+
         let landmarker;
+        let source;
         try {
-          landmarker = await createWithFallback(LOCAL_MODEL);
-          console.log('[usePoseDetection] pose model loaded from', LOCAL_MODEL);
-        } catch (localErr) {
-          console.warn('[usePoseDetection] local model unavailable, trying remote CDN:', localErr.message);
-          landmarker = await createWithFallback(REMOTE_MODEL);
+          landmarker = await attempt(LOCAL_WASM_BASE, LOCAL_MODEL);
+          source = 'bundled';
+        } catch (bundledErr) {
+          // Loud, and it names the consequence rather than the symptom. The old
+          // wording ("local model unavailable, trying remote CDN") was in Kd's
+          // console for months and read as routine.
+          console.warn(
+            '[usePoseDetection] bundled pose assets unusable — this workout will ' +
+            'need an internet connection. Run `pnpm --filter web pose:assets`. Cause: ',
+            describeError(bundledErr),
+          );
+          landmarker = await attempt(REMOTE_WASM_BASE, REMOTE_MODEL);
+          source = 'network';
         }
 
         if (cancelled) { landmarker.close(); return; }
 
         landmarkerRef.current = landmarker;
         mpReadyRef.current    = true;
-        console.log('[usePoseDetection] MediaPipe ready');
+        const ms = Math.round(performance.now() - startedAt);
+        setPoseAssets({ source, ms });
+        console.info(
+          `[usePoseDetection] MediaPipe ready in ${ms} ms — runtime and model from ` +
+          (source === 'bundled'
+            ? 'THE APP BUNDLE (this workout survives losing the network)'
+            : 'THE INTERNET (this workout needs a connection)'),
+        );
       } catch (err) {
         if (!cancelled) {
-          console.warn('[usePoseDetection] MediaPipe init failed:', err.message);
-          setError('Pose detection unavailable — ' + err.message);
+          // This one reaches a SCREEN, so an `undefined` here is a user reading
+          // "Pose detection unavailable — undefined".
+          console.warn('[usePoseDetection] MediaPipe init failed:', describeError(err));
+          setError('Pose detection unavailable — ' + describeError(err));
         }
       }
     }
@@ -203,6 +314,8 @@ export default function usePoseDetection({
     if (!analysisEnabled) return undefined;
     const controller = controllerRef.current;
     controller.startSet(exercise, setIndex);
+    throughputRef.current.reset();   // a new set is not a continuation of the last
+    lastHzLogRef.current = null;   // and the log window with it — see the ref
     setAnalysisAvailable(controller.analysisAvailable);
     setSettledFor(exercise);    // the answer exists, and it is about THIS exercise
     setError(null);
@@ -252,10 +365,30 @@ export default function usePoseDetection({
     //    feeding, NOT end the set). The controller maps to the display shape.
     if (enabledRef.current && now - lastFeedRef.current >= FEED_INTERVAL_MS) {
       lastFeedRef.current = now;
+      // Counted here and nowhere else: a frame the engine was actually given.
+      // Counting at the DETECT throttle instead would report ~30 Hz on a
+      // machine feeding the engine 8, which is the reading the ladder must not
+      // be given.
+      throughputRef.current.push(now);
       const display = controllerRef.current.feed(landmarks, now, landmarks.length > 0);
       setPoseData(display);
       if (TRACE_RECORD_ENABLED) {
         recordFrame(landmarks.map((lm) => [lm.x, lm.y, lm.z, lm.visibility ?? 1.0]), now);
+      }
+      // DEV-ONLY, and the only way the meter is READABLE by a person. An
+      // instrument nobody can read is one whose numbers cannot be reproduced by
+      // the next chat, which is the fault :6532 was written to fix. Vite strips
+      // this whole branch from a production build.
+      if (import.meta.env.DEV && lastHzLogRef.current === null) {
+        lastHzLogRef.current = now;            // open the first window, print nothing
+      } else if (import.meta.env.DEV && now - lastHzLogRef.current >= HZ_LOG_INTERVAL_MS) {
+        lastHzLogRef.current = now;
+        const hz = throughputRef.current.hz();
+        console.info(
+          `[pose] delivered ${hz === null ? 'not measurable yet' : `${hz.toFixed(1)} fps`}` +
+          ` to the engine (target ${Math.round(1000 / FEED_INTERVAL_MS)}, ` +
+          `${throughputRef.current.frames} frames in window)`,
+        );
       }
     }
   }, []);
@@ -299,6 +432,8 @@ export default function usePoseDetection({
       }
       if (videoRef.current && !loopRunningRef.current) {
         controllerRef.current.framesResumed();
+        throughputRef.current.reset();
+        lastHzLogRef.current = null;   // and the log window with it — see the ref
         startStreaming(videoRef.current);
       }
     };
@@ -313,6 +448,9 @@ export default function usePoseDetection({
     loopRunningRef.current = false;
     videoRef.current = null;
   }, []);
+
+  /** Delivered frames per second right now, or null when not yet measurable. */
+  const readPoseHz = useCallback(() => throughputRef.current.hz(), []);
 
   useEffect(() => () => stop(), [stop]);
 
@@ -329,6 +467,17 @@ export default function usePoseDetection({
     // so an exercise change reopens the question instead of carrying a stale yes.
     analysisSettled: !analysisEnabled || settledFor === exercise,
     error,
+    // `{ source: 'bundled' | 'network', ms }`, or null until MediaPipe is ready.
+    // Read by no screen. It is here so that "did this workout's camera come off
+    // the internet?" is an ANSWERABLE question in a test and in the smoke,
+    // rather than something only visible in a network panel at the right
+    // second — which is how the CDN fallback stayed unnoticed for months.
+    poseAssets,
+    // The live delivered rate, or null while it is not yet measurable. A getter
+    // rather than state on purpose: it is read on demand, and turning a
+    // ~15-per-second number into React state would re-render the workout screen
+    // fifteen times a second to display nothing.
+    readPoseHz,
     startStreaming,
     stop,
   };

@@ -4,8 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "pose:assets": "node tools/fetch-pose-assets.mjs",
+    "dev": "node tools/fetch-pose-assets.mjs && vite",
+    "build": "node tools/fetch-pose-assets.mjs && vite build",
     "lint": "eslint .",
     "test": "vitest run",
     "preview": "vite preview"

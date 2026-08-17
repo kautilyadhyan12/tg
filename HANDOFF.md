@@ -1,6 +1,232 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE CAMERA'S TWO DOWNLOADS SHIP INSIDE THE APP. **SMOKE PASS · T3 ROUND 1
+      DONE (4 Critical/High, ALL FIXED) · NOTHING BLOCKING.** On `web-repoint`,
+      working tree only. DECISIONS :8879 · index line added in the same edit.
+
+C/H-3 IS DEFERRED BY KD RULING, NOT OUTSTANDING — DO NOT RE-ASK HIM
+  · **No path that reaches a real user has ever run the fetch script.**
+    MEASURED: `.github/workflows/ci.yml` has NO web build job (gate ·
+    engine-purity · gitleaks · migrations · db-tests), and there is no
+    `vercel.json`, no deploy workflow, no recorded build command anywhere.
+    The smoke proved the fix under `pnpm --filter web run dev` on localhost,
+    which is NOT the path users get.
+  · **Kd was asked for the Vercel Build Command and ruled 2026-08-17: he is not
+    deploying now.** That is a COMPLETE answer — with nothing live, nothing is
+    currently broken for a user. It stays 🔴 in `OWED.md` as **the gate that
+    must close BEFORE the first deploy**, and a chat that re-opens it as a
+    question to him has failed to read this. Everything else on the card is done.
+
+SMOKE — PASS, and ITS OWN INSTRUMENT WAS THE FIRST THING THAT FAILED
+  · DevTools "Network request blocking" did NOTHING: with both localhost
+    patterns listed and enabled, the CONTROL round printed `THE APP BUNDLE`.
+    A control that cannot fail is not a control.
+  · Replaced, and the sheet now carries the replacements: **control = move the
+    five files off disk** (Vite answers a missing `public/` file with
+    index.html at 200 — the original defect's exact shape); **real test =
+    switch the Wi-Fi ADAPTER off** (loopback is unaffected, which is exactly
+    why DevTools' Offline throttle was rightly rejected and why the adapter is
+    not the same thing).
+  · **643 ms bundled vs 884 ms from the internet — the saving is ~240 ms, NOT
+    the ~1.4 s that had been in `OWED.md` since 2026-08-03.** The 2738 ms third
+    reading is Vite cold start, not comparable. `OWED.md`'s line also said the
+    cause was "likely a corrupt or LFS-pointer model file" — **false, there was
+    no file at all.** Both corrected in place on the ticked line.
+  · **9.2–12.2 fps delivered against a target of 15**, first reading ever.
+
+T3 ROUND 1 — 4 CRITICAL/HIGH. C/H-1 AND C/H-2 ARE ONE LESSON TWICE
+  · **C/H-1** the anti-drift test used `startsWith`, so shortening
+    `LOCAL_WASM_BASE` to `/mediapipe` left **36 tests green** against an app
+    that would silently use the CDN. Fixed to directory equality; **verified
+    RED under that exact mutation.**
+  · **C/H-2** nothing read `package.json`'s scripts, so deleting the fetch call
+    from `build` left **674/674 green, 17/17 mutants RED, typecheck and lint
+    clean** while production re-downloaded 25 MB. This is the fetch script's own
+    `predev` warning — "would have looked wired and silently never run" — one
+    level up. Fixed with a contract test reading the file off disk; **verified
+    RED under the deletion.**
+  · **C/H-4** nothing was written down. Now: `OWED.md` (1 ticked with its two
+    false statements corrected, 5 new lines incl. the 🔴 above), `BACKLOG.md`
+    L42–L46, DECISIONS + index.
+
+A SIXTH DEFECT THE FIX ROUND FOUND AND NO REVIEW HAD — READ THIS ONE
+  · **`eslint .` lints the fetched assets: 578 of 653 problems were the two
+    minified emscripten loaders.** `pnpm --filter web lint` fails for anyone who
+    has run `dev` or `build`. Missed because every check so far — packet, T3,
+    and this round — linted the CHANGED FILES, which are all genuinely clean.
+  · **IT IS COUPLED TO C/H-3: lint passes in CI today ONLY because CI never runs
+    the fetch script.** Closing C/H-3 alone would have turned a silent gap into
+    a red CI gate looking like "the deploy fix broke lint". Fixed by ignoring
+    `public/mediapipe` alongside `dist`.
+  · **Standing lesson: a packet that adds FILES to a linted tree is not
+    lint-checked until the WHOLE-TREE command has run.**
+
+GATES, ALL RE-RUN AFTER THE LAST EDIT
+  · web **677/677** (31 files; +3 from the new scripts contract) · api/shared/
+    engine typecheck clean · engine purity grep SILENT · `eslint .` on web
+    **653 → 75**, and all 75 are pre-existing app lint — **every one of this
+    card's files is clean**, except `poseTuning.js`'s single
+    `no-useless-assignment`, which HANDOFF's previous block measured identical
+    at HEAD.
+  · **Mutation sweep RE-RUN END TO END after my edits: 17 runs · 17 RED · 0
+    ALIVE · restores sha256-verified · baseline green.** No anchor broke.
+  · Both C/H fixes carry a test that FAILS without the fix, each proven by
+    applying the mutation, seeing RED, restoring, and re-verifying sha256.
+
+TRAPS FOR THE NEXT CHAT
+  · **"Offline" means ONLY-ONCE-THE-PAGE-IS-OPEN.** No service worker, no cache
+    layer, zero grep hits. Cold start with no internet still fails. Kd asked for
+    this precision explicitly — do not overclaim it.
+  · **The golden traces prove nothing here** and were run as a control only —
+    `packages/engine` has zero MediaPipe references.
+  · **The bundled WASM is 0.10.21 while `package.json` says 0.10.35, on
+    purpose.** The WASM is where inference happens, so 21 produced every
+    landmark this project has measured, including the 13 clips behind the
+    `bone_stretch > 0.923` ruling. **Do not tidy it** — it moves WITH the model
+    swap, never alone. Own 🟡 line.
+  · **The model-swap card is BLOCKED ON A FRESH RECORDING.** The recorder saves
+    LANDMARKS, not video, and the model is what PRODUCES landmarks — so the
+    clips on Kd's machine cannot be replayed under a different model (:6386).
+  · Two defects found in the smoke are NOT this card's and have their own 🟡
+    lines: `Maximum update depth exceeded` every camera workout (measured: this
+    card changed ZERO lines touching that setter or the frame loop), and the
+    workout summary being requested 1.8 s into a 34.7 s save — 404, then a
+    retry that succeeds.
+
+NEXT: Kd answers the Vercel build-command question → record it → commit the 15
+      files (9 card + eslint.config.js + turbo.json + 4 records + the smoke
+      sheet). The 🔴 model/ladder line STAYS OPEN either way.
+```
+
+```
+TASK: THE CAMERA'S TWO DOWNLOADS ARE NOW BUNDLED. Code + PROVE + AUDIT are
+      DONE. **SMOKE AND T3 ARE BOTH UNRUN, SO NOTHING IS COMMITTED AND NO
+      `OWED.md` LINE TICKS.** On `web-repoint`, working tree only.
+      Kd approved the SPLIT: bundle the files now, leave the `lite`→`full`
+      model swap and the §3.6 ladder to their own card.
+
+THE TWO FINDINGS THAT SHAPED THE CARD (both measured, both correct the record)
+  · **The local pose model was never BROKEN — it was never THERE.**
+    `apps/web/public/models/` held one unrelated `.onnx` and no `.task` at all,
+    so MediaPipe was handed a 404 body where it expected a zip. The 🟡 OWED
+    line's guess ("likely corrupt or an LFS pointer — check the file's real
+    size first") is FALSE: there was no file to have a size. Correct that line
+    in place when it ticks.
+  · **THE HALF NO OWED LINE NAMED: ~9.6 MB of MediaPipe WebAssembly came from
+    jsdelivr on every workout.** Bundling only the model would have left camera
+    workouts online-only WHILE LOOKING FIXED. Both halves are bundled now.
+
+WHAT SHIPPED
+  · `tools/fetch-pose-assets.mjs` — fetches 4 wasm files + the lite model,
+    sha256-pinned, skips work already done, FAILS LOUDLY. Called by name from
+    `dev` and `build` (NOT a `predev` hook — pnpm does not run implicit pre/post
+    scripts, so the hook would have looked wired and never run).
+  · `usePoseDetection.js` — bundle first, internet as a last resort, and it
+    REPORTS which via a new `poseAssets: {source, ms}`. Runtime+model are one
+    decision now, so a half-bundled camera cannot happen.
+  · `poseThroughput.js` (new) — delivered fps at the ENGINE FEED. Acts on
+    nothing; it is the instrument the ladder card and the model choice need.
+  · Assets are GITIGNORED (~25 MB, no LFS in this repo). A build has internet;
+    a workout does not.
+
+**THE VERSION DECISION A LATER CHAT MUST NOT "TIDY"**
+  · The bundled wasm is **0.10.21**, deliberately, while `package.json` says
+    **0.10.35**. The app has been running 35's JavaScript against 21's
+    WebAssembly all along, and the WASM is where inference happens — so 21 is
+    what produced every landmark this project has measured, including the 13
+    clips behind Kd's `bone_stretch > 0.923` ruling. Copying node_modules' 35
+    would have been tidier and would have quietly changed what the camera sees.
+    **The mismatch is real and gets its own OWED line, to be fixed WITH the
+    model swap, because both change the frames.**
+
+GATES (all re-run after the last edit)
+  · web **674/674** (+40), three consecutive runs · engine **213/213** incl.
+    golden traces · shared/api/engine tsc clean · engine purity grep SILENT ·
+    `vite build` ✓ with all five assets present in `dist/`.
+  · **17 mutants, 17 RED, 0 ALIVE**, restores sha256-verified —
+    `tools/mutate-pose-assets.mjs`.
+  · Lint: every new/changed file clean. `poseTuning.js` keeps ONE
+    `no-useless-assignment` error — MEASURED identical at HEAD by stashing, so
+    pre-existing and not this card's (R1.1).
+
+THREE INSTRUMENT FINDINGS, ALL MINE, ALL FOUND BY RUNNING THINGS
+  · **A FLAKY TEST I WROTE, and the cause outlives it:** `vitest.config.js` sets
+    neither `globals` nor a setup file, so **@testing-library's auto-cleanup is
+    NEVER REGISTERED** — every `renderHook` in a file stays mounted. A previous
+    test's frame loop rescheduled itself into my spied `requestAnimationFrame`,
+    so stepping popped a FOREIGN callback and fed a foreign meter. Symptom was a
+    bare `null` rate that moved between two tests run to run. Fixed with an
+    explicit `cleanup()`; 10/10 then 3/3 full runs green. **Any future test in
+    this repo that drives rAF or timers must unmount first.**
+  · **`vitest -t` takes a REGEX, not a substring**, so a test named `reset() …`
+    selects NOTHING. Caught only because a run with no tally ABORTS. Escaping is
+    worse (`JSON.stringify` re-escapes the backslashes); the harness now REFUSES
+    a metacharacter in `expect`, before any file is touched.
+  · **A mutant must be valid JavaScript** — PA15 first spliced in a syntax error,
+    the module could not be imported, and the abort message guessed the wrong
+    cause. The message now names both causes and prints the runner tail.
+
+TRAPS FOR THE NEXT CHAT
+  · **"Offline" here means ONLY-ONCE-THE-PAGE-IS-OPEN.** Verified: there is no
+    service worker and no cache layer of any kind (zero grep hits). Cold start
+    with no internet still does not work and this card does not change that.
+    **Kd asked for this precision explicitly — do not overclaim it.**
+  · **The smoke must force a cache-disabled hard reload**, or the browser serves
+    the OLD CDN downloads from disk cache and "offline" appears to work by
+    accident.
+  · **Re-measure the ~1.4 s start-up saving. Do NOT quote the old figure** — it
+    came off a months-old console. `poseAssets.ms` is there to be read.
+  · The person gate's ruled numbers are UNTOUCHED, by construction: the bundled
+    model is sha256 `59929e1d…`, byte-identical to the one the old Python
+    backend has used since July, and the wasm version is unchanged.
+  · **The golden traces CANNOT detect any of this** — `packages/engine` has zero
+    MediaPipe references and the traces replay recorded JSONL. They were run as
+    a control and prove nothing here. Said plainly rather than counted as
+    coverage.
+  · One person-gate anchor (`controllerRef.current.resetScene()`) is STALE — but
+    it was ALREADY stale at HEAD, MEASURED (`resetScene` appears zero times
+    there; renamed to `framesResumed` at :7863). Part of the known 🟡
+    nine-dead-camera-mutants item, out of scope (R1.1).
+
+FOR KD'S CORRECTION #4 — THE NEXT CARD *IS* BLOCKED ON A RECORDING
+  · He believed the clips on his machine (`Desktop\traces`, `traces2`) let the
+    model swap re-measure the person/chair number. **They do not.** The recorder
+    saves LANDMARKS, not video (`traceRecorder.js` stores `{t, kp}`), and the
+    model is what PRODUCES landmarks — so they cannot be replayed under a
+    different model. :6386 says the same in as many words. **That card needs a
+    fresh recording session, with video captured alongside.** Put this in the
+    🔴 OWED line so nobody discovers it halfway through.
+
+WHAT IS LEFT ON THIS CARD
+  1. SMOKE (Kd, browser): one real camera workout with the network cut.
+  2. Fresh-chat T3 on the diff.
+  3. Then commit, tick the 🟡 CDN line (correcting its false cause), add the
+     new 🟡 version-mismatch line, and write the DECISIONS entry.
+     The 🔴 model/ladder line STAYS OPEN.
+
+BOTH ARTIFACTS FOR 1 AND 2 ARE NOW WRITTEN — DO NOT RE-AUTHOR THEM (2026-08-16,
+later session; no source file touched, so the diff above is unchanged)
+  · `RUNBOOK/smoke-pose-assets.md` — 6 steps, UNRUN. Step 1 is a CONTROL that
+    blocks the app's OWN copies and requires the console to say it fell back to
+    the internet; without it "THE APP BUNDLE" could be printed unconditionally
+    and step 2 would prove nothing (:6856 — a check compares two visible things).
+    Blocking is by DevTools patterns `localhost:5173/mediapipe/` and
+    `localhost:5173/models/`, NOT by the Offline throttle — offline would also
+    cut the Vite dev server that SERVES the bundled files in dev, so the test
+    could not distinguish the two sources. The sheet states in its own words
+    that a pass does NOT mean cold-start-offline works.
+  · `t3-pose-assets-PROMPT.md` + `t3-pose-assets.diff` (1,620 lines, built with
+    `git add -N` so the five new files appear as additions). The prompt tells the
+    reviewer the model swap and the §3.6 ladder are OUT of scope by Kd's split,
+    so their absence is not a finding.
+  · RE-VERIFIED THIS SESSION rather than inherited (S5): web **674/674** green,
+    which is also the evidence no mutant was left live in the uncommitted tree
+    (:8452's killed-sweep trap), and all five assets present —
+    `pose:assets` reports "all 5 camera assets already present and verified".
+```
+
+```
 TASK: THE LEGACY DUAL-WRITE IS RETIRED. **DONE — smoke 9/9, two T3 rounds, the
       second ZERO Critical/High. BOTH `OWED.md` LINES TICK** (the 🔴 dual-write
       and the 🟡 offline-start). On `web-repoint`.

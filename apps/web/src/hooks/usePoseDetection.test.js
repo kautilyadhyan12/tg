@@ -18,13 +18,18 @@
  *  The two collaborators are stubbed at the module boundary, which is the point:
  *  the assertions are about whether the hook CALLS them, not about what they do.
  */
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const createFromOptions = vi.fn(async () => ({ close: vi.fn(), detectForVideo: vi.fn() }));
+const createFromOptions = vi.fn();
+// Hoisted into a controllable mock (it used to be an inline `vi.fn`) because the
+// bundled-assets tests below need this to FAIL for one source and succeed for
+// the other — which is the whole difference between a camera that survives
+// losing the network and one that does not.
+const forVisionTasks = vi.fn();
 vi.mock('@mediapipe/tasks-vision', () => ({
   PoseLandmarker: { createFromOptions: (...a) => createFromOptions(...a) },
-  FilesetResolver: { forVisionTasks: vi.fn(async () => ({})) },
+  FilesetResolver: { forVisionTasks: (...a) => forVisionTasks(...a) },
 }));
 
 const startSet = vi.fn();
@@ -40,19 +45,145 @@ vi.mock('../engine/sessionController.js', () => ({
   },
 }));
 
-const { default: usePoseDetection } = await import('./usePoseDetection.js');
+const { default: usePoseDetection, LOCAL_WASM_BASE, REMOTE_WASM_BASE } =
+  await import('./usePoseDetection.js');
+const { modelUrls, POSE_DEFAULTS } = await import('../dev/poseTuning.js');
+const SHIPPED_MODEL = modelUrls(POSE_DEFAULTS.model);
 
 beforeEach(() => {
-  createFromOptions.mockClear();
+  // RESET, then re-establish the happy path. `mockClear` alone would let a
+  // rejection installed by one of the fallback tests leak into every test after
+  // it, and they would fail for a reason that has nothing to do with what they
+  // assert.
+  createFromOptions.mockReset();
+  createFromOptions.mockImplementation(async () => ({ close: vi.fn(), detectForVideo: vi.fn() }));
+  forVisionTasks.mockReset();
+  forVisionTasks.mockImplementation(async () => ({}));
   startSet.mockClear();
   endSet.mockClear();
   framesResumed.mockClear();
 });
 
+/** The `modelAssetPath` of every landmarker the hook tried to build, in order. */
+const modelPathsTried = () =>
+  createFromOptions.mock.calls.map(([, opts]) => opts.baseOptions.modelAssetPath);
+
 const render = (props) =>
   renderHook((p) => usePoseDetection(p), {
     initialProps: { exercise: 'squat', setIndex: 1, enabled: true, ...props },
   });
+
+describe('usePoseDetection — where the camera gets its two big files', () => {
+  // THE DEFECT THESE PIN. `apps/web/public/models/` never contained a `.task`
+  // file, so the "local first" path could not succeed and every camera workout
+  // silently downloaded the model from Google — while the WebAssembly runtime
+  // came off jsdelivr unconditionally, which no owed line even mentioned. A
+  // camera workout therefore required an internet connection, in an app whose
+  // engine was built specifically so it would not (Part 2 I1).
+  //
+  // Nothing here asserts the FILES exist — that is the build script's job and
+  // its own contract test's. These assert the app asks the bundle first, copes
+  // when it is not there, and SAYS which happened.
+
+  it('asks for the bundled runtime and the bundled model FIRST', async () => {
+    await act(async () => { render({ analysisEnabled: true }); });
+    expect(forVisionTasks).toHaveBeenNthCalledWith(1, LOCAL_WASM_BASE);
+    expect(modelPathsTried()[0]).toBe(SHIPPED_MODEL.local);
+  });
+
+  it('reports that it came off the bundle, so "is this offline-capable?" is answerable', async () => {
+    let out;
+    await act(async () => { out = render({ analysisEnabled: true }); });
+    expect(out.result.current.poseAssets.source).toBe('bundled');
+  });
+
+  it('NEVER TOUCHES THE NETWORK when the bundle works', async () => {
+    // The assertion with the most teeth in this file. Everything else here
+    // passes just as well on a hook that tries the bundle, ignores the result,
+    // and downloads anyway — which is very close to what the old code did.
+    await act(async () => { render({ analysisEnabled: true }); });
+    expect(forVisionTasks).not.toHaveBeenCalledWith(REMOTE_WASM_BASE);
+    expect(modelPathsTried()).not.toContain(SHIPPED_MODEL.remote);
+  });
+
+  it('falls back to the internet when the bundled MODEL is missing — the real defect', async () => {
+    // Exactly what Kd's console showed: the runtime loads, then MediaPipe is
+    // handed a 404 body where it expected a zip ("Unable to open zip archive",
+    // MediaPipeTasksStatus=104) and both delegates fail.
+    createFromOptions.mockImplementation(async (_fileset, opts) => {
+      if (opts.baseOptions.modelAssetPath === SHIPPED_MODEL.local) {
+        throw new Error('Unable to open zip archive. (MediaPipeTasksStatus=104)');
+      }
+      return { close: vi.fn(), detectForVideo: vi.fn() };
+    });
+
+    let out;
+    await act(async () => { out = render({ analysisEnabled: true }); });
+
+    expect(modelPathsTried()).toContain(SHIPPED_MODEL.remote);
+    expect(out.result.current.poseAssets.source).toBe('network');
+  });
+
+  it('falls back when the bundled RUNTIME is missing, not just the model', async () => {
+    // The half no owed line named. A build that shipped the model but not the
+    // WebAssembly is still an online-only camera, and must be reported as one.
+    forVisionTasks.mockImplementation(async (base) => {
+      if (base === LOCAL_WASM_BASE) throw new Error('failed to fetch');
+      return {};
+    });
+
+    let out;
+    await act(async () => { out = render({ analysisEnabled: true }); });
+
+    expect(forVisionTasks).toHaveBeenCalledWith(REMOTE_WASM_BASE);
+    expect(out.result.current.poseAssets.source).toBe('network');
+  });
+
+  it('does not mix sources — a bundled runtime is never paired with a CDN model', async () => {
+    // If the model is unusable, the runtime it was paired with is suspect too,
+    // and a half-bundled camera is offline-capable in neither direction while
+    // looking like it might be. The retry starts over from the top.
+    createFromOptions.mockImplementation(async (_fileset, opts) => {
+      if (opts.baseOptions.modelAssetPath === SHIPPED_MODEL.local) throw new Error('nope');
+      return { close: vi.fn(), detectForVideo: vi.fn() };
+    });
+
+    await act(async () => { render({ analysisEnabled: true }); });
+
+    // The remote model was fetched, and the remote RUNTIME was resolved for it.
+    expect(modelPathsTried()).toContain(SHIPPED_MODEL.remote);
+    expect(forVisionTasks).toHaveBeenCalledWith(REMOTE_WASM_BASE);
+  });
+
+  it('reports how long the camera took to become ready', async () => {
+    // The card's headline claim is that the camera starts sooner. The old
+    // figure (~1.4 s of wasted retries) came off a console months ago; this is
+    // what lets it be re-measured rather than re-quoted.
+    let out;
+    await act(async () => { out = render({ analysisEnabled: true }); });
+    expect(Number.isFinite(out.result.current.poseAssets.ms)).toBe(true);
+    expect(out.result.current.poseAssets.ms).toBeGreaterThanOrEqual(0);
+  });
+
+  it('reports NOTHING until MediaPipe is actually ready', async () => {
+    // `poseAssets` is evidence. Evidence that appears before the thing it
+    // describes has happened is the "absent is not zero" trap (:6749) wearing a
+    // different hat — a smoke would read "bundled" off a camera that had not
+    // loaded yet.
+    const seen = [];
+    renderHook(
+      (p) => { const r = usePoseDetection(p); seen.push(r.poseAssets); return r; },
+      { initialProps: { exercise: 'squat', setIndex: 1, enabled: true, analysisEnabled: true } },
+    );
+    expect(seen[0]).toBe(null);
+  });
+
+  it('downloads NOTHING AT ALL, bundled or remote, for a hand-counted workout', async () => {
+    await act(async () => { render({ analysisEnabled: false }); });
+    expect(forVisionTasks).not.toHaveBeenCalled();
+    expect(createFromOptions).not.toHaveBeenCalled();
+  });
+});
 
 describe('usePoseDetection — the user counting their own reps', () => {
   it('downloads NO pose model when analysis is switched off', async () => {
@@ -200,5 +331,118 @@ describe('usePoseDetection — the user counting their own reps', () => {
     await act(async () => { out = render({ analysisEnabled: true, onSetComplete }); });
     await act(async () => { out.rerender({ exercise: 'squat', setIndex: 2, enabled: true, analysisEnabled: true, onSetComplete }); });
     expect(onSetComplete).toHaveBeenCalledWith({ setIndex: 1, reps: 3 });
+  });
+});
+
+describe('usePoseDetection — the delivered-frames meter is actually fed', () => {
+  // WHY THIS IS DRIVEN THROUGH THE REAL FRAME LOOP RATHER THAN SPIED ON.
+  // `poseThroughput.test.js` proves the meter computes a rate correctly. That
+  // says nothing about whether the hook ever hands it a frame — delete the one
+  // `push` in the feed branch and every one of those tests stays green, which
+  // is :5104 F1's shape exactly ("the gate was protected by nothing, because
+  // every test injected a stub one layer below it"). So the loop is stepped by
+  // hand with a controlled clock, and the assertion is on the rate that comes
+  // back out through the hook's own reader.
+
+  /** Drive `n` engine feeds `dtMs` apart and return the hook's rate. */
+  async function measure({ n, dtMs }) {
+    // UNMOUNT EVERY HOOK THIS FILE HAS ALREADY RENDERED, and this line is the
+    // whole reason these tests were flaky rather than a nicety.
+    //
+    // `vitest.config.js` sets neither `globals` nor a setup file, so
+    // @testing-library's automatic cleanup is NEVER REGISTERED and every
+    // earlier `renderHook` in this file is still mounted with a live frame
+    // loop. Those loops call `requestAnimationFrame`, which is spied below —
+    // so a previous test's loop reschedules itself into THIS test's captured
+    // array, and stepping pops a foreign callback that feeds a foreign meter.
+    // The symptom was a bare `null` rate, moving between the two tests below
+    // from run to run. Unmounting first makes each measurement the only thing
+    // running.
+    cleanup();
+
+    let clock = 1000;
+    const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    // Captured, never auto-run: jsdom's rAF fires on its own schedule, and the
+    // frames would then arrive at wall-clock intervals rather than the ones
+    // under test.
+    const frames = [];
+    const rafSpy = vi
+      .spyOn(globalThis, 'requestAnimationFrame')
+      .mockImplementation((cb) => { frames.push(cb); return frames.length; });
+    vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {});
+
+    try {
+      const video = document.createElement('video');
+      Object.defineProperty(video, 'readyState', { configurable: true, get: () => 2 });
+
+      let out;
+      await act(async () => {
+        out = renderHook((p) => usePoseDetection(p), {
+          initialProps: { exercise: 'squat', setIndex: 1, enabled: true, analysisEnabled: true },
+        });
+      });
+
+      // WAIT FOR MEDIAPIPE, DETERMINISTICALLY — and this was a real flake, not a
+      // precaution. `processFrame` returns at its first guard until the async
+      // init resolves, so stepping frames too early feeds the meter NOTHING and
+      // `hz()` correctly answers null; one run in five failed that way while the
+      // code was right. A fixed number of microtask flushes is not a wait, so
+      // this polls the hook's own readiness signal instead.
+      for (let i = 0; i < 50 && out.result.current.poseAssets === null; i += 1) {
+        await act(async () => { await Promise.resolve(); });
+      }
+      expect(out.result.current.poseAssets, 'MediaPipe never became ready').not.toBe(null);
+
+      // The mocked landmarker returns a real (if empty) result shape, or
+      // `processFrame` throws on `results.landmarks` and returns before feeding.
+      frames.length = 0;   // nothing captured during setup counts as a frame
+      await act(async () => { out.result.current.startStreaming(video); });
+
+      for (let i = 0; i < n; i += 1) {
+        const cb = frames.pop();
+        // A frame loop that stopped rescheduling would otherwise surface as a
+        // bare `null` rate, sending the next reader to the meter's arithmetic
+        // to look for a fault that is not there.
+        expect(cb, `frame loop stopped rescheduling after ${i} frames`).toBeTypeOf('function');
+        await act(async () => { cb(); });
+        clock += dtMs;
+      }
+      return out.result.current.readPoseHz();
+    } finally {
+      nowSpy.mockRestore();
+      rafSpy.mockRestore();
+      vi.mocked(globalThis.cancelAnimationFrame).mockRestore?.();
+    }
+  }
+
+  beforeEach(() => {
+    createFromOptions.mockImplementation(async () => ({
+      close: vi.fn(),
+      detectForVideo: vi.fn(() => ({ landmarks: [] })),
+    }));
+  });
+
+  it('says NULL before any frame has been delivered', async () => {
+    let out;
+    await act(async () => { out = render({ analysisEnabled: true }); });
+    expect(out.result.current.readPoseHz()).toBe(null);
+  });
+
+  it('reads back the rate the frames actually arrived at', async () => {
+    // 67 ms apart is the app's own FEED_INTERVAL_MS, so this is a machine
+    // keeping up: just under 15.
+    const hz = await measure({ n: 60, dtMs: 67 });
+    expect(hz).not.toBe(null);
+    expect(hz).toBeCloseTo(1000 / 67, 1);
+  });
+
+  it('reads back a SLOW machine as slow, which is the whole point of having it', async () => {
+    // ~11 fps is where Kd's own clips landed (:6386). A meter that could not
+    // tell this from the case above would be useless for the model decision it
+    // exists to inform.
+    const hz = await measure({ n: 60, dtMs: 90 });
+    expect(hz).not.toBe(null);
+    expect(hz).toBeCloseTo(1000 / 90, 1);
+    expect(hz).toBeLessThan(15);
   });
 });

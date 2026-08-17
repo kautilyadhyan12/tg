@@ -8875,3 +8875,127 @@ re-derive it. Kd explicitly said he is **not** asking to build it now.
   rate/Apple Health/Garmin. It now has a ⚪ line. The spec's roadmap paragraph
   was the only record, and a roadmap paragraph is not a to-do list — this is the
   exact gap the 2026-07-21 audit created `OWED.md` for.
+
+## 2026-08-17 — THE CAMERA'S TWO DOWNLOADS SHIP INSIDE THE APP. Smoke PASS, T3 round 1 found 4 Critical/High, all fixed — and the smoke's own instrument was the thing that failed first
+
+**Read before running any smoke that "cuts off" a source, before quoting the
+camera's start-up saving, and before trusting a `startsWith` assertion.**
+
+A camera workout used to fetch ~25 MB from two public CDNs before it could count
+a rep. Both halves — the pose model AND MediaPipe's WebAssembly runtime — are now
+fetched at build time, sha256-pinned, and loaded from the app bundle, with the
+source REPORTED at runtime rather than discoverable only by watching a network
+panel at the right second. `OWED.md`'s 🟡 line ticks, with **two of its own
+sentences corrected as measured-false** (see below).
+
+### The smoke passed, and its designed instrument did not work at all
+The sheet's steps 1–2 used DevTools "Network request blocking" with the patterns
+`localhost:5173/mediapipe/` and `localhost:5173/models/`. **With both listed and
+enabled, the control round printed `THE APP BUNDLE`** — the app served its own
+files straight through the block. A control that cannot fail is not a control,
+and this one would have certified the card on no evidence.
+
+Two replacements, both crude, both worked first time, both now IN the sheet:
+- **Control:** move the five files off disk. Vite answers a missing file under
+  `public/` with **index.html at 200**, so MediaPipe gets a web page where it
+  expects a model — *the original defect's exact shape*, which makes this the
+  right control rather than a lucky one. Then: orange warning, `THE INTERNET`.
+- **The real test:** switch the machine's **Wi-Fi adapter** off. The sheet had
+  explicitly rejected DevTools' Offline throttle for a correct reason — it
+  intercepts localhost too, and would cut the Vite dev server that SERVES the
+  bundled files. **The adapter does not carry loopback traffic**, so it removes
+  the internet and leaves localhost alone. That is the distinction the sheet was
+  reaching for and could not express.
+
+### The numbers, and the one that was wrong for months
+| | |
+|---|---|
+| bundled, Wi-Fi off | **643 ms** |
+| from the internet | **884 ms** |
+| session's FIRST bundled load | 2738 ms — Vite cold start, **not comparable** |
+
+**The saving is ~240 ms, not the "~1.4 s" `OWED.md` had carried since
+2026-08-03.** Even 240 ms flatters the network path, whose files almost certainly
+came from the browser's own disk cache. Measured on one desktop; do not
+generalise it to a phone.
+
+**Delivered throughput, first reading in this project's life: 9.2–12.2 fps
+against a target of 15**, on a desktop. The §3.6 ladder card and the `lite`→`full`
+model swap were both going to be decided on a guess; they no longer have to be.
+
+### T3 round 1 — 4 Critical/High, and two of them were the same defect
+Fresh chat, per Part I §7c. It re-ran the 17-mutant sweep from scratch and
+independently verified every asset digest rather than trusting the packet.
+
+1. **C/H-1 — the anti-drift test could not fail.** `poseAssets.contract.test.js`
+   asserted `startsWith(LOCAL_WASM_BASE + '/')` instead of directory equality.
+   Shortening the base from `/mediapipe/wasm` to `/mediapipe` left **36 tests
+   green** against an app that would request a path Vite answers with index.html
+   at 200 and then use jsdelivr on every workout. **Fixed to directory equality;
+   the corrected assertion is itself the failing-without-the-fix test — verified
+   RED under that exact mutation, having been green before.**
+2. **C/H-2 — the whole card rested on two literal strings nothing read.**
+   Deleting `node tools/fetch-pose-assets.mjs && ` from `build` left the suite at
+   674/674, all 17 mutants RED, typecheck and lint clean — while production
+   silently downloaded 25 MB again. **This is the fetch script's own header
+   warning about `predev` hooks — "would have looked wired and silently never
+   run" — reproduced one level up: the script was right, its INVOCATION was
+   unguarded.** Fixed with a contract test on `scripts.dev` / `scripts.build`,
+   read off disk so it asserts what the package manager will execute. Verified
+   RED under the deletion.
+3. **C/H-3 — no path that reaches a real user has ever run the fetch script.**
+   CI has no web build job at all; there is no `vercel.json`, no deploy workflow,
+   and no recorded build command anywhere in the repo. **The smoke proved the fix
+   under `pnpm --filter web run dev` on localhost, which is not the path users
+   get.** Cannot be closed from inside the repo — it needs the Vercel Build
+   Command read and recorded. **OWED 🔴.** C/H-2 closes the "someone edits
+   package.json" half; this is the "something else runs instead" half.
+   **KD RULING, same day: he is not deploying now, so this is DEFERRED rather
+   than unanswered.** Asked for the Build Command, he answered that he does not
+   want to deploy yet — and that is a complete answer, not an evasion: with
+   nothing live, no user is currently affected, and the finding's whole content
+   is about what happens at deploy time. It stays 🔴 as **the gate that must
+   close before the first deploy**. A later chat re-asking him this as an open
+   question has not read the ruling.
+4. **C/H-4 — nothing was written down.** `OWED.md`, `BACKLOG.md`, `DECISIONS.md`
+   and the index were all unmodified at review time. Tagged Critical not on the
+   security/money axis but because CLAUDE.md makes the `OWED.md` line a
+   same-commit gate, and because a **measured-false number** (the ~1.4 s, and
+   the "likely a corrupt or LFS-pointer file" cause) was sitting in the record
+   the next chat would plan against. Fixed here, corrections stated in place.
+
+Five Low, all fixed and logged in `BACKLOG.md` (L42–L45 plus L4's OWED line), none
+buying an extra round per Part I §2.5 rule 1.
+
+### A sixth defect the fix round found, which no review had — and it is coupled to C/H-3
+`eslint .` lints the fetched assets. The two minified emscripten loaders in
+`public/mediapipe/wasm/` produced **578 of 653 lint problems**, so
+`pnpm --filter web lint` fails for anyone who has run `dev` or `build`. Every
+check up to that point — the packet's, the T3's, and this round's — had linted
+the **changed files**, which are all genuinely clean; only `eslint .` sees it.
+**The coupling matters more than the fix: lint passes in CI today ONLY because CI
+never runs the fetch script, i.e. because C/H-3 is unfixed.** Closing C/H-3 alone
+would have turned a silent gap into a red CI gate, presenting as "the deploy fix
+broke lint". Fixed by ignoring `public/mediapipe` alongside `dist`. **Standing
+lesson: a packet that adds FILES to a linted tree has not been lint-checked until
+the whole-tree command has been run — changed-file lint is structurally blind to
+what the build puts on disk.**
+
+### What this card did NOT prove, said plainly
+- **"Offline" here means once the page is already open.** There is no service
+  worker and no cache layer — zero grep hits. A cold start with no internet still
+  does not work, and this card does not change that.
+- **The golden traces prove nothing here.** `packages/engine` has zero MediaPipe
+  references and the traces replay recorded JSONL. They were run as a control.
+- **The person gate's ruled numbers are untouched by construction**, not by
+  testing: the bundled model is sha256 `59929e1d…`, byte-identical to the one the
+  retired Python backend used since July, and the WASM version is unchanged.
+
+### The version mismatch that a later chat must not "tidy"
+The bundled WASM is **0.10.21** while `package.json` says **^0.10.35**, and that
+is deliberate. The app has been running 35's JavaScript against 21's WebAssembly
+all along, and **the WASM is where inference happens** — so 21 produced every
+landmark this project has measured, including the 13 clips behind Kd's
+`bone_stretch > 0.923` ruling. Copying node_modules' 35 would have been tidier
+and would have quietly changed what the camera sees. Its own 🟡 line; it moves
+WITH the model swap, never alone, because both change the frames.

@@ -9,11 +9,11 @@
       "inputs": ["src/**", "test/**", "eslint.config.js", "tsconfig.json", "package.json"]
     },
     "test": {
-      "inputs": ["src/**", "test/**", "vitest.config.{ts,js}", "tsconfig.json", "package.json"],
+      "inputs": ["src/**", "test/**", "tools/**", "vitest.config.{ts,js}", "tsconfig.json", "package.json"],
       "dependsOn": ["^typecheck"]
     },
     "build": {
-      "inputs": ["src/**", "tsconfig.json", "package.json"],
+      "inputs": ["src/**", "tools/**", "tsconfig.json", "package.json"],
       "outputs": ["dist/**"],
       "dependsOn": ["^build"]
     }

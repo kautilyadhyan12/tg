@@ -2040,19 +2040,93 @@ then; none may be hidden or reduced to close the gap.
       to a set they cannot finish, and removing it would restore the exact defect
       this card exists to kill. Camera → hand on failure: yes. Hand → camera
       ever: no.
-- [ ] 🟡 **The LOCAL pose model is broken — every camera workout silently
-      downloads it from a CDN instead.** Found 2026-08-03 in Kd's smoke console,
-      NOT caused by this card and not fixed by it (R1.1 — reported, not touched).
-      MediaPipe fails to open the bundled model with `Unable to open zip
-      archive` (`MediaPipeTasksStatus=104`), retries GPU→CPU, fails both, logs
-      `local model unavailable, trying remote CDN`, and only then succeeds:
-      "MediaPipe ready" arrives ~1.4 s later than it should. Consequences:
-      camera workouts need INTERNET even though the whole engine was built to
-      run offline (Part 2 I1 / the P1.10 Done gate's "full workout with the API
-      server off"), and the first-set delay is exactly what the untested
-      5-second stall threshold trades against (its own line above). Likely a
-      corrupt or LFS-pointer model file in the web assets rather than a code
-      fault — check the file's real size first.
+- [x] 🟡 **DONE 2026-08-17 — the camera's downloads are bundled; a workout now
+      survives losing the network.** Smoke PASS on Kd's desktop, fresh-chat T3
+      round 1 (4 Critical/High, all fixed here), `RUNBOOK/smoke-pose-assets.md`
+      carries the run. Originally raised 2026-08-03 from Kd's smoke console.
+      **TWO THINGS THIS LINE SAID WERE MEASURED FALSE — corrected in place
+      rather than quietly ticked, because the next chat plans against them:**
+      (1) *"Likely a corrupt or LFS-pointer model file — check the file's real
+      size first"* — **there was no file at all.** `public/models/` held one
+      unrelated `.onnx` and no `.task`, so MediaPipe was handed Vite's SPA
+      fallback (index.html at 200) where it expected a zip; `Unable to open zip
+      archive` was the symptom of ABSENCE, not corruption.
+      (2) *"~1.4 s later than it should"* — **the real saving is ~240 ms**
+      (643 ms bundled vs 884 ms from the internet, both measured 2026-08-17;
+      the 1.4 s came off a months-old console). The 2738 ms first-load figure in
+      the same session is Vite cold start and is not comparable.
+      **AND THE HALF THIS LINE NEVER NAMED:** the model was only half the
+      download. ~9.6 MB of MediaPipe WebAssembly came from jsdelivr on every
+      workout too, so bundling the model alone would have left camera workouts
+      online-only WHILE LOOKING FIXED. Both halves ship now, fetched at build
+      time and sha256-pinned, and the app REPORTS which source it used.
+      Scope honestly stated: this is offline ONCE THE PAGE IS OPEN. There is no
+      service worker, so a cold start with no internet still does not work — the
+      🟡 line for that is separate.
+- [ ] 🔴 **NOBODY HAS PROVED THE PRODUCTION BUILD RUNS THE ASSET FETCH.**
+      **KD RULING 2026-08-17: not deploying now, so this is DEFERRED, not
+      unanswered.** He was asked for the Vercel Build Command and answered that
+      he does not want to deploy yet — which is a complete answer: with nothing
+      live, nothing is currently broken for a user. **This line is the gate that
+      must close BEFORE the first deploy, and it must not be re-asked as an open
+      question in the meantime.** Raised by the fresh-chat T3 of the bundling
+      card, 2026-08-17 (C/H-3), and it is the one finding that can make that
+      whole card worthless to users. MEASURED:
+      `.github/workflows/ci.yml` has no build job for `apps/web` at all (jobs are
+      gate · engine-purity · gitleaks · migrations · db-tests), so
+      `tools/fetch-pose-assets.mjs` never executes in CI; and there is no
+      `vercel.json`, no deploy workflow, and no recorded build command anywhere
+      in the repo. The deployable build is Vercel's, configured in a dashboard
+      this repo cannot see. If that project overrides its Build Command — routine
+      in a monorepo — `dist/` ships without the five files and every user's
+      camera still needs the internet, with the smoke and the ticked line above
+      both saying otherwise. The smoke proved the fix under `pnpm --filter web
+      run dev` on localhost, which is NOT the path users get. Fix: read the
+      Vercel Build Command, confirm it reaches `apps/web`'s `build` script, and
+      RECORD it in the repo the way `infra/Caddyfile` records TLS termination as
+      load-bearing. A contract test now pins the script's CONTENTS
+      (`poseAssets.contract.test.js`), which closes the "someone edits
+      package.json" half; this line is the "something else runs instead" half.
+- [ ] 🟡 **The camera runs 0.10.35's JavaScript against 0.10.21's WebAssembly,
+      deliberately, and it must be fixed WITH the model swap and not before.**
+      Recorded 2026-08-17 with the bundling card, which pinned the bundled WASM
+      to **0.10.21** while `package.json` says **^0.10.35**. This is not an
+      oversight to tidy: the WASM is where inference happens, so 21 produced
+      every landmark this project has ever measured, including the 13 clips
+      behind Kd's `bone_stretch > 0.923` person-gate ruling. Copying
+      node_modules' 35 would have been tidier and would have quietly changed
+      what the camera sees. Both changes move the frames, so both land together,
+      re-measured against a fresh recording — never one alone.
+- [ ] 🟡 **`Maximum update depth exceeded`, repeatedly, throughout every camera
+      workout.** Found 2026-08-17 in Kd's smoke console. React is warning that
+      `setKeypointsData` — the ~30 fps overlay publish in `usePoseDetection` —
+      is driven from a `requestAnimationFrame` chain it counts as nested
+      updates. NOT caused by the bundling card and not fixed by it (R1.1):
+      MEASURED, that card changed **zero** lines touching that setter or the
+      frame loop (`git diff` count = 0) and adds no per-frame state update.
+      Recorded nowhere in the repo before today, which is why it gets a line
+      rather than a shrug. No user-visible symptom was observed — reps counted
+      and the summary was normal — but it is per-frame React work on the exact
+      path whose delivered rate is already 9–12 fps against a target of 15, so
+      it belongs with the throughput ladder rather than on its own.
+- [ ] 🟡 **Finishing a workout asks for its summary before the save has
+      finished, gets a 404, and is rescued only by a retry.** Found 2026-08-17
+      in the bundling card's smoke, in the API log rather than on screen. MEASURED
+      on Kd's machine: `POST /v1/workouts/sync` took **34.7 s**; `GET
+      /v1/workouts/{id}/summary` was issued **1.8 s** after it started, returned
+      **404** at 10.1 s, and a retry returned **200**. Self-healing there, and
+      Kd saw a normal summary — but the ordering is a race, not a slow path, so
+      on a slow link a user can be shown the broken state first. NOT the bundling
+      card's (R1.1 — it touched no save path). Two things to weigh together when
+      this is picked up: the read should be sequenced after the write rather
+      than raced against it, and a 34-second save is its own question.
+- [ ] 🟡 **Every web build ships a 17 MB model file from the retired Python
+      backend.** `dist/models/ctr_gcn_clean_ensemble_quant.onnx`, flagged by the
+      T3 of the bundling card 2026-08-17 (L4) and left untouched under R1.1. It
+      is the only other thing in `public/models/`, it belongs to the ML service
+      the migration decommissioned, and nothing in the web app references it.
+      Deleting it is almost certainly right and is deliberately NOT being done on
+      a card about a different file — confirm nothing reads it, then remove.
 - [ ] 🟡 **Replace the "who is counting this set?" if-ladder with one explicit
       state machine.** Raised 2026-08-04 after FOUR T3 rounds found ELEVEN
       blocking defects, and the same one kept returning in a new disguise: the
