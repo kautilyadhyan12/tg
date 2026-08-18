@@ -259,7 +259,25 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
-- **:9809** — 2026-08-18 — **KD RULING: MEMBER MIGRATION IS A SYSTEM, NOT A
+- **:9870** — 2026-08-18 — **MEMBER MIGRATION DESIGN SETTLED (same-day
+  continuation of :9809): verified-email-only auto-attach, front-desk confirm
+  queue for everything else, and Kd's three amendments.** **Read WITH :9809
+  before planning the import card.** Governing principle: **a duplicate is
+  fixable, a wrong match is not** — the machine attaches only when certain
+  (verified email, exactly ONE candidate row in that gym; phone is NOT an auto
+  key, users carry no verified phone), everything else joins immediately and
+  lands in a console "who is this?" queue the front desk confirms; names never
+  auto-match; a member never self-claims a row (a row is a paid membership).
+  Merge = plan/renewal onto the account, imported row soft-kept as `merged`.
+  Roster fields chosen because screens read them; name is the only required
+  field; the entire original uploaded line is kept as a document. **Kd's
+  amendments: (1) XLSX alongside CSV — the reader library is an R1.4 new-dep
+  approval at the card; my CSV-only call is OVERRULED; (2) the preview is the
+  owner's correction surface — auto-read in seconds, nothing saved until
+  CONFIRM, fix-in-place/re-map/skip/cancel, rows editable forever after,
+  re-upload updates not duplicates; (3) phone AND laptop — satisfied by the
+  one responsive console (:9604 §4), preview owed PHONE-FIRST.** Seat and
+  consent questions still reserved.
   FAVOUR TO THE FIRST CUSTOMER.** *"i obvisoulsy can not wait untill someone
   joins i need to make the system."* **Read before planning the Stage-1 gym
   slice or anything touching the roster.** SUPERSEDES half of :9604 §8's parked

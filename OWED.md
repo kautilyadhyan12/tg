@@ -4073,6 +4073,16 @@ file and is stated so nobody reads these as lower priority than they are.
       is wrong forever. **A match rule looser than exact needs a Kd ruling — a
       wrong attach hands one person's history to another (ownership,
       Critical/High by :5807).**
+      **DESIGN SETTLED SAME DAY (DECISIONS :9870) — the card builds THIS:**
+      auto-attach on verified email only, exactly one candidate row (phone is
+      not an auto key — no verified phone exists); everyone else joins
+      immediately and lands in a front-desk "who is this?" confirm queue; names
+      never auto-match; a member never self-claims a row. **Kd's amendments:
+      CSV AND XLSX (reader lib = R1.4 new-dep approval); the preview is the
+      owner's correction surface (nothing saves until CONFIRM; fix in place,
+      re-map, skip, or cancel-and-reupload; rows editable forever after;
+      re-upload updates, never duplicates); works on phone and laptop via the
+      one responsive console, preview built PHONE-FIRST.**
 - [ ] ❓ **MIGRATION SEAT POLICY — RESERVED FOR KD, blocks the import card's
       plan gate:** do 1000 imported-but-not-yet-joined members consume 1000 paid
       seats? Pricing policy; decides what an owner is told at upload time.

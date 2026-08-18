@@ -9866,3 +9866,77 @@ not that it can be coded before a gym can exist.
 looser than exact phone/email without a ruling (a wrong attach hands one
 person's history to another — that is an ownership defect, Critical/High by
 :5807); or tick the OWED parked line — it is REWRITTEN, not done.
+
+## 2026-08-18 — MEMBER MIGRATION DESIGN SETTLED IN SESSION: verified-email-only auto-attach, a front-desk confirm queue for everything else, and Kd's three amendments — XLSX alongside CSV, an owner-correctable preview, works on phone and laptop
+
+Continues :9809 in the same day's conversation. Kd asked the design questions
+himself — *"how would a matching be done and ensure there is no duplicate (users
+name can be same, some user maynot give mobile some may not give email)"* and
+*"when owner uploads csv or whatever file how do backend reads them"* — the
+design below was put to him in plain words, and he responded with three
+amendments rather than an objection. Recorded as settled-with-amendments; the
+card's plan gate still ratifies it against the tree when it is cut.
+
+### THE GOVERNING PRINCIPLE, from which every rule below follows
+**A duplicate is fixable; a wrong match is not.** A missed match makes two rows
+the front desk merges in seconds. A wrong attach shows one person another's plan
+and writes workouts into another's history — an ownership defect (:5807
+Critical/High) with no clean undo. So the MACHINE attaches only when certain,
+and a HUMAN decides everything else.
+
+### THE MATCHING LADDER (tightens :9809's "exact phone/email", never loosens it)
+1. **Auto-attach on VERIFIED EMAIL, exactly ONE candidate.** Accounts sign in by
+   email and verification-by-link already exists (P2.1); the joiner provably owns
+   the address. Requires exactly one not-yet-joined roster row in THAT gym
+   bearing it — two rows sharing an email (families do this) is ambiguous and
+   drops to the queue.
+2. **Phone is NOT an auto key today** — users carry no verified phone; the
+   number in a CSV was typed by the gym. Phone match = a ranking signal in the
+   queue; it may become an auto key only if verified phone sign-in ever exists.
+3. **Everything else: the member joins IMMEDIATELY anyway** (never blocked), and
+   the console gets a "who is this?" confirm queue — new joiner beside likely
+   roster rows, one tap: same person / different person. Joining mostly happens
+   standing in the gym; the front desk is the confirmer.
+4. **Names NEVER auto-match** (Kd's own case: same names) — name similarity only
+   ranks queue suggestions. **A member NEVER self-claims a roster row** — a row
+   is a paid membership; self-claim is a stranger claiming someone's paid plan.
+5. **Merge semantics:** confirming moves plan/renewal onto the joined account;
+   the imported row goes to state `merged`, soft-kept for audit (R4.3), never
+   hard-deleted.
+
+### THE ROSTER ROW — fields chosen because a screen reads them, not because a
+file contains them (R4.2's discipline, stated to Kd as "the database stores what
+the product's screens read")
+name (the ONLY required field) · phone · email · plan name · renewal/expiry ·
+status · gym (tenancy on every query, R3.2) · state
+(imported → joined → merged / removed) · nullable link to the user account ·
+import batch · **the entire original uploaded line kept as a document** — nothing
+the owner uploaded is discarded; unmapped columns live there, shown on the
+member detail view, promoted to real columns only when a feature filters on
+them.
+
+### KD'S THREE AMENDMENTS, verbatim intent
+1. **"noo not only csv xlsx is also needed"** — the upload accepts BOTH. CSV
+   parses as text; XLSX needs one reading library — a NEW DEPENDENCY requiring
+   R1.4 approval at the card, named here so the plan budgets it. (My CSV-only-v1
+   call is OVERRULED — recorded, not resurrected.)
+2. **The preview is the owner's correction surface.** Server reads the file
+   automatically in seconds but SAVES NOTHING; problems come back grouped in
+   plain words (unreadable dates · in-file duplicates · rows with no
+   phone/email). Owner can fix a value in place, re-map a column, skip rows, or
+   cancel-and-reupload; only CONFIRM writes to the database. Post-save, rows
+   stay editable in the console forever, and a re-upload UPDATES matched rows
+   rather than duplicating (in-file dedupe by identifier; identifier-less rows
+   by whole-line equality — plan-time detail).
+3. **Phone AND laptop.** Satisfied by construction — the console is the ONE
+   responsive web surface opened from inside the app (:9604 §4). Design
+   consequence owed to the card: the preview is PHONE-FIRST — a tappable
+   problem list, never a thousand-row grid on a phone screen.
+
+### STANDING SAFETY LINES (restatements binding the card, not new rules)
+The uploaded file is external input (R2.3): size-capped, content checked by
+looking inside it never by extension (R3.9's discipline), parsed defensively —
+a garbage file degrades to a polite error, never a crash, never half-saved
+rows. Match rules looser than the ladder above need a fresh Kd ruling (:9809).
+The two reserved questions STAND untouched: seat consumption by
+imported-not-yet-joined members, and upload consent (inside :592).
