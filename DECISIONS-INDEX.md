@@ -315,6 +315,29 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   so two `app.inject` calls are serialised by the CLIENT and would pass with the
   lock deleted** — a test that cannot fail. Seven `OWED.md` lines added; the
   console line is UPDATED, not ticked.
+- **:10596** — 2026-08-18 — **KD RULING: the login page asks which door you came
+  for — TWO DOORS, ONE ACCOUNT.** **Read before touching `Login.jsx`,
+  `Register.jsx`, `ProtectedRoute`, the console's entry point, or anything that
+  decides where a user lands after signing in.** Raised by Kd unprompted mid-smoke
+  on seeing a **My Gym** item in the member app's sidebar — *"why would a gym
+  owner enter a users profile to create their gym … you either loggen in as user
+  or a gym administrator"*. **He is right and the OWED line already existed**; the
+  sidebar item was a TEMPORARY door and **the defect is that it shipped without
+  being labelled temporary**, found by him using the product. **THE RULING: the
+  login page offers "I'm a member" or "I run a gym", the email and password are
+  IDENTICAL either way, and the choice decides only which screen you land on.**
+  **THE FACT THAT DECIDED IT, which a later chat must not undo by tidying: the
+  same person is deliberately BOTH** — §4.0 step 6 makes the owner member #1 of
+  their own gym, complimentary and not seat-counted, so the demo works on their
+  own phone. **Separate ACCOUNTS would mean a gym owner cannot use their own app
+  without logging out**, contradicting :9604 §4. So this is a ROUTING decision,
+  not an identity one: no "user type" enters the schema, and `gym_staff` already
+  answers "does this person run a gym". **NOT DECIDED: whether the My Gym sidebar
+  entry survives beside the new door** — an owner already inside the app still
+  needs a way across, and the no-removal rule keeps it until a ruling says
+  otherwise. **Nothing built on it in that session**, deliberately: the console
+  packet's own T3 was still unrun and stacking a second card under an unreviewed
+  first is what the loop prevents.
 - **:10402** — 2026-08-18 — **THE CONSOLE SCREEN: a gym owner can see their gym,
   their join code and their members, from a phone — and THE CARD'S OWN PREMISE
   ABOUT THE API WAS FALSE.** **Read before touching

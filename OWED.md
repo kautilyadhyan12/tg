@@ -4284,6 +4284,24 @@ file and is stated so nobody reads these as lower priority than they are.
       on this list**, and the thing gyms actually pay competitors for.
 - [ ] 🟡 **SEPARATE GYM LOGIN AND USER LOGIN on the entry screen.** Small — Part 3
       already puts the console in its own route group (`/console/:orgSlug/...`).
+      **RULED BY KD 2026-08-18, raised by him mid-smoke: *"why the hell there is
+      my gym … why would a gym owner enter a users profile to create their gym …
+      there should be like this in the register or login page you either logged
+      in as user or a gym administrator"*.** He answered **yes** to the shape put
+      to him: **two DOORS, ONE ACCOUNT** — the login page offers "I'm a member"
+      or "I run a gym", the email and password are the SAME either way, and the
+      choice decides only which screen you land on.
+      **THE FACT THAT DECIDED IT, and it must not be lost by a later chat: the
+      same person is deliberately BOTH.** Part 3 §4.0 step 6 makes the owner
+      member #1 of their own gym, complimentary and not seat-counted, precisely
+      so they can demo the app on their own phone. **Separate ACCOUNTS would mean
+      a gym owner cannot use their own app without logging out** — which is the
+      opposite of the convenience ruling at :9604 §4.
+      **What this replaces:** the **My Gym** sidebar entry added with the console
+      screens, which was a TEMPORARY door built so the screen was reachable at
+      all and should have been labelled temporary when it shipped. Whether it
+      SURVIVES beside the new door is part of that card, not decided here — an
+      owner already inside the member app still needs a way across.
 - [ ] 🟡 **MEMBER MIGRATION FROM A COMPETITOR APP — Kd ruling 2026-08-18
       (DECISIONS :9809): a SYSTEM, built now, not a favour to the first
       customer.** The spec has member EXPORT only (`03-part3-org-console.md:105`,

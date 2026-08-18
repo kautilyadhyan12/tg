@@ -10592,3 +10592,45 @@ on their own phone — **so the split is two DOORS into one account, not two kin
 of account.** Recommended: two doors, one account, since separate accounts mean a
 gym owner cannot use their own app without logging out. **NOT RULED — his call,
 and it is the next card either way.**
+
+## 2026-08-18 — KD RULING: the login page asks which door you came for — TWO DOORS, ONE ACCOUNT
+
+**Read before touching `Login.jsx`, `Register.jsx`, `ProtectedRoute`, the
+console's entry point, or anything that decides where a user lands after
+signing in.** Raised by Kd unprompted, in the middle of the console smoke, on
+seeing a **My Gym** item inside the member app's sidebar.
+
+**His words:** *"why the hell there is my gym, i mean if it is for user then all
+right but if it is for gym owner what is this why would a gym owner enter a users
+profile to create their gym, ther eshould be like this in the registaer or login
+page you either loggen in as user or a gym administrator"*.
+
+**HE IS RIGHT, AND THE LINE ALREADY EXISTED.** `OWED.md` has carried *"SEPARATE
+GYM LOGIN AND USER LOGIN on the entry screen"* since before the console card.
+The sidebar item was a TEMPORARY door, built so the screen was reachable at all,
+and **the defect is that it shipped without being labelled temporary** — Kd found
+it by using the product, which is the only instrument that was ever going to.
+
+**THE RULING: two DOORS, one ACCOUNT.** The login page offers "I'm a member" or
+"I run a gym"; the email and password are identical either way; the choice
+decides only which screen you land on. He was given the alternative and the fact
+that separates them before answering, and answered yes.
+
+**THE FACT THAT DECIDED IT, and a later chat must not undo it by tidying:** the
+same person is deliberately BOTH. Part 3 §4.0 step 6 makes the owner member #1 of
+their own gym — complimentary, not seat-counted — *"so the demo works on their
+own phone in the parking lot"*. **Separate ACCOUNTS would mean a gym owner cannot
+use their own app without logging out**, which contradicts the convenience Kd
+ruled for at :9604 §4 and breaks step 6's whole purpose. So this is a routing
+decision, not an identity one: nothing in the schema gains a "user type", and
+`gym_staff` already answers "does this person run a gym".
+
+**NOT DECIDED HERE, and it belongs to that card:** whether the **My Gym** sidebar
+entry survives beside the new door. An owner already inside the member app still
+needs a way across, so removing it is not automatic — and the no-removal rule
+means it stays until a ruling says otherwise.
+
+**Nothing was built on this ruling in this session.** It is recorded first
+because a ruling is recorded before it is implemented, and because the console
+packet's own T3 is still UNRUN — stacking a second card's code under an
+unreviewed first is what the loop exists to prevent.
