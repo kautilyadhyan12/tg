@@ -4032,6 +4032,105 @@ file and is stated so nobody reads these as lower priority than they are.
       both gets the better one (`modules/entitlements/service.ts`,
       `mergeEntitlements`). Its own comment names the gap — *"P3/gyms add the
       rest"*. What is missing is the gym side that FEEDS it.
+      **UPDATE 2026-08-18 — THE API HALF IS BUILT (DECISIONS :10010). THIS LINE
+      DOES NOT TICK: it names the CONSOLE, and no console screen exists.** What
+      now exists: `apps/api/src/modules/orgs` with `POST /v1/orgs` (org + first
+      "Front Desk" code + owner staff row + the owner's complimentary seat, one
+      transaction), `GET /v1/orgs/mine`, `POST /v1/orgs/join` (Part 4 §4.2's
+      seat-safe join, `FOR UPDATE` on the org row, idempotent repeat) and
+      `GET /v1/orgs/:gymId/members`. **The resolver's gap above is CLOSED** —
+      joining busts the §4.1 cache and a member of a subscribed gym is upgraded
+      on the next read, proven end-to-end by test rather than by reading the
+      code. No migration: the §3.2 tables were already there. What is still
+      owed sits in the lines added below plus the console screens themselves.
+- [ ] 🟡 **A GYM WITH NO SUBSCRIPTION HAS NO SEAT LIMIT — deferred with the org
+      slice, 2026-08-18 (DECISIONS :10010).** The seat check itself is BUILT and
+      correct: it reads the cap off the gym's live subscription's plan
+      (`trialing|active|past_due`, §4.1's own status set), counts live
+      non-complimentary members, and refuses the join at the cap — proven by a
+      one-seat test plan and by a two-connection concurrency test. **What is
+      deferred is the case where there is NO subscription at all, which today is
+      EVERY gym**, because billing does not exist: the cap resolves to null and
+      nothing limits the roster. Harmless while nobody is paying and nothing is
+      live; a revenue hole the moment a gym is on a tier. **Closes by itself
+      when the billing card writes a subscription row — no change to this code
+      is expected, and if one turns out to be needed that is the billing card's
+      to make.** Do NOT paper over it with a hard-coded default cap: the tier
+      sizes are part of the unratified US pricing (:9944).
+- [x] 🟡 **~~`gyms.currency_display` STILL DEFAULTS TO `INR`~~ — DONE 2026-08-18
+      BY KD RULING, in the same session that raised it (DECISIONS :10010).**
+      Raised as a deferral; Kd overruled the deferral within the hour: *"no inr
+      defalut wil update according to location for now usa india candan and
+      europe later"*. **The currency now follows the gym's COUNTRY and the
+      SERVER derives it** — `country` is a required field on org create,
+      `currencyForCountry` maps it, and a client-sent `currencyDisplay` is
+      rejected by the strict body schema (tested). Supported today: **US → USD ·
+      IN → INR · CA → CAD · GB → GBP · the 20 euro-area countries → EUR**.
+      **The UK is on the pound, not the euro** — a K4 call put to Kd in one line
+      and not overruled; "Europe" is not one currency and a UK gym quoted in
+      euros is a false number in front of a paying customer.
+- [ ] 🟡 **WE ARE NOT OPEN IN MOST OF THE WORLD, AND SAY SO — Kd's "later"
+      (DECISIONS :10010).** A country outside the supported map is refused at
+      org create with `country_unsupported` and a plain sentence, **never given
+      a fallback currency** — a fallback is how a gym in Sydney gets quoted in
+      rupees. Concretely refused today and each a real market: **Australia,
+      Poland, Switzerland, Sweden, Norway, Denmark, Czechia, Hungary, Romania,
+      Brazil** and everywhere else. **Adding a country is one row in
+      `COUNTRY_CURRENCY`, but a new currency also needs PRICES that exist**, so
+      it belongs with the pricing ratification (:9944) and not with a chat's
+      guess. The console's country picker must be built from
+      `SUPPORTED_COUNTRIES` — a picker sourced from anywhere else offers a
+      country the server then refuses.
+- [ ] ⚪ **THE `gyms.currency_display` COLUMN DEFAULT IS STILL `INR` IN THE DDL.**
+      Harmless today and measured so: every insert writes the derived value
+      explicitly, and a test asserts the value that LANDS IN THE DATABASE rather
+      than only the one in the reply. Left alone because changing it is a
+      migration (R4.4, reviewed as SQL) for no behavioural gain. **It is a trap
+      for a future insert path that forgets the column** — whoever adds one owes
+      the check, and the migration that touches `gyms` next should drop the
+      default while it is there.
+- [ ] 🟡 **TRAINERS CANNOT BE SCOPED TO A GROUP, SO STUDIO AND CLINIC TRAINERS
+      ARE HELD OUT OF THE ROSTER ENTIRELY (DECISIONS :10010).** Part 3 §2.2
+      grants a trainer the member list "assigned/group only (gym: all)" and
+      §2.3 makes group scoping CORE for studios and clinics — but nothing
+      assigns a trainer to a group: `gym_staff` has `gym_id`, `user_id`, `role`
+      and no group column at all. An unscoped list is the only thing buildable,
+      and handing a clinic trainer every caseload is the wrong direction to
+      guess in, so a trainer gets the full list on a `gym` (which the matrix
+      already grants) and a 403 on a `studio`/`clinic`. **Closed by the card
+      that adds trainer→code/group assignment**, which is also what Part 3's
+      Groups filter needs.
+- [ ] 🟡 **THE REST OF THE §2.2 MATRIX HAS NO ROUTES: remove/restore a member,
+      create/rotate/expire codes, staff management, CSV export, nudges.** The
+      org slice built create/join/roster only. Part 3 §4.3's remove flow (soft
+      `removed_at`, seat freed instantly, 30-day restore) and §2.1's multiple
+      named codes are both specced and both unbuilt. **Consequence worth
+      knowing: `removed_at` is written by nothing today**, so the roster's
+      `removed_at IS NULL` filter is correct but untested against a real removal
+      — the card that builds removal owes that test.
+- [ ] 🟡 **THE MEMBERS SCREEN'S REAL CONTENTS ARE NOT SERVED: seat meter, last
+      active, workouts 30d, avg form 30d, streak, search, group filter.** Part 3
+      §4.3 specifies all of them and §3.2 says they come from `org_member_stats`
+      — a view that does not exist. The roster route serves identity, join date,
+      group label and the complimentary flag, which is what Part 3 §2.4's
+      boundary allows without touching workout tables. **A field added to that
+      response without re-reading §2.4 is how the org-visibility promise gets
+      broken**, so the next card on it starts there.
+- [ ] 🟡 **`POST /v1/orgs/join` HAS NO PER-ROUTE RATE LIMIT — only the global
+      one.** Codes are 6 characters over a 32-symbol alphabet (~1.07 billion),
+      so guessing one is not a practical attack and this is not urgent. It is
+      recorded because the join route is the one place an unauthenticated-ish
+      guess turns into membership of somebody else's gym, and because the
+      per-route limiter pattern already exists in the auth module (dual-keyed
+      per-IP and per-identifier). Owed before a real gym is live.
+- [ ] ⚪ **THE CONSOLE'S ANALYTICS EVENTS ARE NOT EMITTED.** Part 3 §4.0 names
+      `org_created{type}`, `org_trial_started`, `org_logo_added`,
+      `org_poster_downloaded` and the TTFMJ timer; `gym_code_redeemed` is
+      already in the `analytics.ts` taxonomy and unused. **Consistent with the
+      rest of the API — no module emits a single event today** (grep-verified),
+      which is itself the thing to fix, one card, rather than one module
+      quietly starting. TTFMJ is the metric Part 3 says predicts everything
+      downstream, so this is worth more than it looks.
 - [ ] 🟡 **THE CONSOLE IS BUILT ONCE — responsive, opened from inside the phone
       app.** Kd demanded phone management (*"main idea is convenience"*); Part 3
       §3.1 already chose responsive web for the same reason (*"owners live on

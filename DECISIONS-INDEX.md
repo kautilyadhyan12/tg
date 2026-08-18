@@ -259,6 +259,62 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:10010** — 2026-08-18 — **A GYM CAN EXIST AND PEOPLE CAN JOIN IT: the first
+  org slice is built (API half only), and the entitlement resolver's
+  "P3/gyms add the rest" gap is CLOSED.** **Read before touching
+  `apps/api/src/modules/orgs`, before adding a field to the roster response,
+  before quoting a seat cap, and before building the console's screens.** First
+  card after Kd's product re-aim (:9604); he was offered the three missing rep
+  counters or this and chose this, on `OWED.md`'s own ground that nothing else
+  on the gym list works until a gym exists. Four routes — create · mine · join ·
+  members. **NO MIGRATION** (Part 4 §3.2's four tables have existed since
+  `0001_init` and no route had ever touched one) and **NO CONSOLE SCREEN**, so
+  there is no smoke sheet and nothing for Kd to click; the screen is its own
+  card and carries the SMOKE gate. **Create is ONE transaction doing §4.0 steps
+  1/4/6 together** — org, owner staff row, first `Front Desk` code, owner's
+  complimentary seat — all four or none. **The resolver gap is closed and
+  PROVEN END TO END: the test reads `/v1/entitlements/me` BEFORE joining so the
+  cache is genuinely populated with the free answer; without that first read the
+  assertion passes on a cold cache and proves nothing** (:5543's fixture lesson,
+  applied before the defect). **THE SEAT CHECK IS BUILT** — §4.2's `FOR UPDATE`
+  on the ORG ROW not on a count, cap read off the gym's live subscription's plan
+  over live NON-complimentary members — **and the deferral is narrower than
+  "seats": a gym with NO subscription, which today is every gym, is uncapped.
+  Own `OWED.md` line; do NOT close it with a default cap, the tier sizes are
+  part of the unratified US pricing (:9944).** Five decisions not to re-derive:
+  **a non-staff caller gets 404 not 403** (403 turns a uuid into an enumeration
+  oracle — and a MEMBER asking for the roster gets 404 too, because membership
+  is not staffing); **§4.2's "on unique_violation → idempotent success" is done
+  with `ON CONFLICT` on the same partial index**, since a raised 23505 aborts
+  the transaction, **and a repeat join deliberately does not increment `uses`**;
+  **a trainer gets the full roster on a `gym` and 403 on a `studio`/`clinic`**
+  because `gym_staff` has no group column and handing a clinic trainer every
+  caseload is the wrong way to guess; **`currency_display` is not collected**
+  (§4.0's wizard never asks, so the field would be invented — the `INR` default
+  stands and is owed against the US market); **codes are normalised but
+  look-alikes are NOT substituted**, since `0`/`O`/`1`/`I` are outside the
+  alphabet and a wrong guess joins somebody to the wrong gym. **KD OVERRULED
+  ONE OF THIS CARD'S OWN DEFERRALS WITHIN THE HOUR (:10099, same entry): the
+  currency follows the gym's LOCATION and there is no default** — *"no inr
+  defalut wil update according to location for now usa india candan and europe
+  later"*. `country` is now REQUIRED on create, the SERVER derives the currency
+  (a client-sent `currencyDisplay` is refused by the strict schema, tested),
+  supported set is **US/IN/CA/GB + the 20 euro-area countries**, and an
+  unsupported country is REFUSED rather than given a fallback — a fallback is
+  how a gym in Sydney gets quoted in rupees. **The UK is on the POUND**: Europe
+  is not one currency, and Poland/Sweden/Denmark/Switzerland/Norway are
+  unsupported today for the same reason. Location is an explicit COUNTRY field,
+  NOT derived from the timezone — that would be a guess, and the failure mode is
+  a wrong currency in front of a paying customer. **The lesson worth carrying:
+  the deferral this card wrote was defensible and still left every US gym set up
+  in rupees; "tracked" is not the same as "harmless".** **The roster's
+  shape IS §2.4** — identity, join date, group label, complimentary flag, and a
+  test asserts the KEY SET exactly so a later field fails the suite instead of
+  quietly widening what a gym can see. **Both concurrency tests drive TWO
+  SEPARATE postgres clients on purpose: `buildApp` opens its pool at `max: 1`,
+  so two `app.inject` calls are serialised by the CLIENT and would pass with the
+  lock deleted** — a test that cannot fail. Seven `OWED.md` lines added; the
+  console line is UPDATED, not ticked.
 - **:9944** — 2026-08-18 — **KD'S US PRICE TIERS, MEASURED AGAINST API COST —
   covered in the normal case (~3-5× headroom), underwater only in the
   runaway-success case; PRICING NOT YET RATIFIED.** **Read before any billing

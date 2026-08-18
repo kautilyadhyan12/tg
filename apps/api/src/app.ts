@@ -30,6 +30,8 @@ import { registerNutritionRoutes, type NutritionRouteOverrides } from "./modules
 import { NutritionError } from "./modules/nutrition/service.js";
 import { registerGeoRoutes, type GeoRouteOverrides } from "./modules/geo/routes.js";
 import { GeoError } from "./modules/geo/errors.js";
+import { registerOrgRoutes, type OrgRouteOverrides } from "./modules/orgs/routes.js";
+import { OrgsError } from "./modules/orgs/service.js";
 import { ExportError } from "./modules/privacy/export.js";
 
 /** Test-only seams (GAP-5 DECISIONS 2026-07-11): production callers pass
@@ -51,6 +53,9 @@ export interface BuildAppOverrides {
   /** google-login: tests inject a fake GoogleVerifier to drive the OAuth flow
    *  without calling Google; unset in prod builds the real one from config. */
   googleVerifier?: GoogleVerifier;
+  /** orgs: tests inject a deterministic byte source to drive the join-code and
+   *  slug collision retries; unset uses node:crypto. */
+  orgs?: OrgRouteOverrides;
 }
 
 declare module "fastify" {
@@ -142,6 +147,7 @@ export async function buildApp(
       err instanceof CoachError ||
       err instanceof NutritionError ||
       err instanceof GeoError ||
+      err instanceof OrgsError ||
       err instanceof ExportError ||
       (typeof err.code === "string" && err.code.startsWith("FST_"));
     if (clientSafe) {
@@ -219,6 +225,7 @@ export async function buildApp(
   registerEntitlementRoutes(app, { sql, redis });
   registerNutritionRoutes(app, { sql, redis, config }, overrides.nutrition ?? {});
   registerGeoRoutes(app, { sql, redis, config }, overrides.geo ?? {});
+  registerOrgRoutes(app, { sql, redis }, overrides.orgs ?? {});
 
   return app;
 }

@@ -18,3 +18,4 @@ export * from "./coach.js";
 export * from "./nutrition.js";
 export * from "./geo.js";
 export * from "./privacy.js";
+export * from "./orgs.js";

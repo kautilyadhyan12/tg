@@ -10006,3 +10006,175 @@ both channels) become the entitlements config at that card.
   question given its concrete content; it does not close here.
   (Legal specifics above are UNVERIFIED model knowledge (V5) — the lawyer step
   exists precisely because a chat cannot rule on law.)
+
+## 2026-08-18 — A GYM CAN EXIST AND PEOPLE CAN JOIN IT: the first org slice is built, and the entitlement resolver's four-week-old gap is closed
+
+**Read before touching anything under `apps/api/src/modules/orgs`, before adding
+a field to the roster response, before quoting a seat cap, and before writing
+the console's screens.** First card since Kd's product re-aim (:9604). He was
+offered two starts — the three missing rep counters, or this — and chose this
+one; the reason it was recommended is `OWED.md`'s own: *"nothing else on this
+list works until a gym can exist and people can join it"*.
+
+### WHAT EXISTS NOW, AND WHAT DOES NOT
+
+`POST /v1/orgs` · `GET /v1/orgs/mine` · `POST /v1/orgs/join` ·
+`GET /v1/orgs/:gymId/members`. **No console screen — this card is the API half
+alone**, so there is nothing for Kd to click and no smoke sheet; the screen is
+its own card and the SMOKE requirement attaches there. **No migration:** Part 4
+§3.2's `gyms` / `gym_codes` / `gym_members` / `gym_staff` have existed since
+`0001_init` and, measured on 2026-08-18, no route had ever read or written one.
+
+**Creating an org is ONE transaction doing Part 3 §4.0's steps 1, 4 and 6
+together** — the org, the owner's `gym_staff` row, the first `Front Desk` code,
+and the owner's own complimentary membership. All four or none, deliberately: a
+gym with no code is a gym nobody can join, and an owner who is not a member
+cannot demo the app on their own phone, which is the entire point of step 6.
+
+### THE RESOLVER GAP IS CLOSED, AND IT IS THE PART WORTH KNOWING
+
+`mergeEntitlements` has treated `gym_membership` as a grant source since P2.4,
+with its own comment naming what was missing — *"P3/gyms add the rest"*. That is
+now wired: joining busts the §4.1 cache for the joining user, so a member of a
+subscribed gym is upgraded on their very next read rather than up to 60 seconds
+later. **Proven end to end rather than by reading the code**: the test reads
+`/v1/entitlements/me` BEFORE joining (source `free`, `history_days` 90),
+joins, and reads again (source `gym_membership`, `history_days` -1). **The first
+read is load-bearing — without it the cache is cold and the assertion is
+satisfied by nothing at all**, which is :5543's fixture lesson applied before the
+defect rather than after it.
+
+### THE SEAT CHECK IS BUILT. WHAT IS DEFERRED IS NARROWER THAN "SEATS"
+
+Part 4 §4.2's join is implemented in its stated order, and **the `FOR UPDATE` is
+on the ORG ROW, not on a count** — locking a count does not serialise anything,
+because the second transaction reads the same pre-insert number. The cap is read
+off the gym's live subscription's plan (`trialing|active|past_due`, §4.1's own
+status set, so v1 §10's grace still grants), counted over live
+**non-complimentary** members, and refuses at the cap.
+
+**THE DEFERRAL IS "NO SUBSCRIPTION AT ALL", WHICH TODAY IS EVERY GYM** because
+billing does not exist: the cap resolves to null and nothing limits the roster.
+Own `OWED.md` line. It was NOT closed with a default cap, and must not be later
+— the tier sizes are part of the US pricing Kd has not ratified (:9944), so a
+number here would be invented (R0.2). It closes by itself when a subscription
+row exists.
+
+### FIVE DECISIONS A LATER CHAT SHOULD NOT RE-DERIVE
+
+1. **A non-staff caller gets 404, not 403.** 403 confirms the gym exists, which
+   turns a uuid into an enumeration oracle. Insufficient ROLE inside an org the
+   caller does belong to IS a 403 — they already know it exists. Both are pinned
+   by tests, including the case that reads oddly and is deliberate: **a MEMBER of
+   the gym asking for the roster gets 404**, because membership is not staffing.
+2. **§4.2's "on unique_violation → idempotent success" is done with `ON CONFLICT`
+   on the same partial index, not by catching 23505.** A raised 23505 aborts the
+   surrounding transaction, so catching it would mean re-running the whole join
+   to answer "you were already a member". Same outcome, and **a repeat join
+   deliberately does not increment the code's `uses`** — double-counting it would
+   retire a `max_uses` code early and stop a gym's poster working.
+3. **A trainer gets the full roster on a `gym` and a 403 on a `studio`/`clinic`.**
+   §2.2 grants trainers "assigned/group only (gym: all)" and §2.3 makes group
+   scoping CORE for the other two — but `gym_staff` has no group column, so
+   scoped is unbuildable and handing a clinic trainer every caseload is the wrong
+   direction to guess in. Own `OWED.md` line.
+4. **The create request does not collect `currency_display`.** Part 3 §4.0's
+   wizard never asks for it, so the field would be invented; the DDL default
+   (`INR`) stands and is owed against the US market, not silently patched here.
+5. **Codes are normalised (case, spaces, dashes) and look-alikes are NOT
+   substituted.** `0`/`O`/`1`/`I` are outside the alphabet by §4.0's own rule, so
+   "correcting" one would be guessing at an intent the code cannot confirm — and
+   a wrong guess joins somebody to the wrong gym. An unrecognised code gets an
+   honest "no such code".
+
+### THE ROSTER'S SHAPE IS PART 3 §2.4, NOT A CONVENIENCE
+
+Identity, join date, group label, complimentary flag. No email, no stats,
+nothing from the never-see list. A test asserts the response's KEY SET exactly,
+not just the values, so a field added later fails the suite rather than quietly
+widening what a gym can see. §4.3's real Members table (seat meter, last active,
+workouts 30d, avg form) needs `org_member_stats`, which does not exist — own
+`OWED.md` line.
+
+### KD RULING, same session — THE CURRENCY FOLLOWS THE GYM'S LOCATION, AND THERE IS NO DEFAULT
+
+His words, given after being shown the deferral this card had just written:
+*"no inr defalut wil update according to location for now usa india candan and
+europe later"*. **He overruled the deferral within the hour, and he was right
+to** — the card had recorded "the `INR` column default stands, owed against the
+US market" as a tracked deferral, which is a defensible thing to write and still
+leaves every US gym set up in rupees the day one signs.
+
+**WHAT IT MEANS IN CODE.** `country` (ISO 3166-1 alpha-2) is now a REQUIRED
+field on org create, and `currencyForCountry` maps it in `packages/shared`. The
+**server** derives the currency: a client-sent `currencyDisplay` is rejected by
+the strict body schema, and there is a test for that, because a gym that can
+declare its own currency is a gym that can be billed in the wrong money (R3.1).
+Supported today: **US → USD · IN → INR · CA → CAD · GB → GBP · the twenty
+euro-area countries → EUR**.
+
+**THREE CALLS INSIDE THE RULING, EACH PUT TO KD IN ONE LINE AND NOT OVERRULED.**
+
+1. **The UK is on the POUND, not the euro.** "Europe" is not one currency, and
+   this is the single most likely way the ruling could have been implemented
+   into a falsehood — a British gym quoted in euros is :5807 on its face.
+   Several EU states also run their own money (Poland, Sweden, Denmark,
+   Czechia, Hungary, Romania) and Switzerland and Norway are not in the EU at
+   all; **every one of those is an UNSUPPORTED country today, deliberately**,
+   because giving them euros is the exact error this ruling exists to remove.
+2. **Location comes from an explicit COUNTRY field, not from the timezone.**
+   The wizard already prefills a timezone and it would have mapped to a country
+   most of the time — but "most of the time" is a guess, and the failure mode is
+   a wrong currency in front of a paying customer. `city` is free text and
+   cannot be mapped at all. Part 3 §4.0's step 1 does not list a country field,
+   so this is an ADDITION to the wizard, authorised by the ruling rather than
+   invented (R0.2).
+3. **An unsupported country is REFUSED, never given a fallback.** A fallback
+   currency is how a gym in Sydney gets quoted in rupees. The refusal is a
+   sentence an owner can act on, which is also why `country` is validated for
+   SHAPE in the schema and for SUPPORT in the service — an enum would have
+   answered "invalid_enum_value" to a real person.
+
+**WHAT THIS DOES NOT DO.** It does not price anything. Adding a country is one
+row in `COUNTRY_CURRENCY`, but a new currency needs prices that exist, so the
+rest of Kd's "later" lands with the pricing ratification (:9944). And the
+`gyms.currency_display` column default is STILL `INR` in the DDL — left alone
+because changing it is a migration for no behavioural gain, and harmless because
+**every insert writes the derived value explicitly, asserted against the DATABASE
+row rather than against the reply**. Its own ⚪ `OWED.md` line, since it is a
+trap for the next insert path that forgets the column.
+
+### PROVE — measured, not asserted
+
+`api` **486/486** across 43 files against real Postgres (the `db.migration.test.ts`
+timeout flake did NOT fire this run) · `web` **695/695** · `engine` **213/213** ·
+`shared` **48/48** · orgs' own share of that: **21** pure unit + **18**
+database-backed · `tsc --noEmit` clean · lint clean on all four gated packages.
+
+**THE MUTATION AUDIT: 16 mutants, 16 RED, 0 ALIVE, 0 never ran, restores
+sha256-verified after every one.** Run TWICE — 14 mutants before Kd's currency
+ruling, then all 16 again against the changed source, because a sweep proves
+things about the bytes it ran on and those bytes had moved. Harness committed at
+`apps/api/tools/mutate-orgs.mjs` (:5199's class — "I measured it RED" and "the
+committed harness measures it RED" are different claims).
+
+**THE CONTROL IS PART OF THE INSTRUMENT (:9509).** Before any mutation, every
+`-t` filter the sweep uses is run UNMUTATED and must come back GREEN *and* must
+produce a test tally. A filter matching no test would otherwise make its mutant
+look ALIVE, and a suite that cannot start would make every mutant look RED. The
+harness also ABORTS on: a target outside `TARGETS`, an anchor matching nothing
+(checked for the WHOLE table before the first byte is written), a run with no
+tally, a runner fault (which is not a RED), and a restore that does not
+reproduce the original bytes.
+
+**ONE FINDING FROM RUNNING THE GATES, mine:** the new `.mjs` harness broke
+`api`'s lint script, which lints `src test tools` while the base config's typed
+rules cannot parse a file the TypeScript project does not own. Every existing
+harness lives in `apps/web/tools/`, and web is excluded from the lint gate
+entirely (`--filter=!web`, DECISIONS 2026-07-09) — so this class had never been
+hit. Closed with a four-line ignore scoped to `tools/**/*.mjs` in `apps/api`'s
+own eslint config; nothing in `src` or `test` is exempted.
+
+**NOT DONE, and not claimed:** no console screen exists, so there is no SMOKE —
+the browser gate attaches to the card that builds the screen. **T3 is UNRUN.**
+No `OWED.md` line ticks except the currency one Kd ruled on.
