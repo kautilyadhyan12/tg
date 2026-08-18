@@ -117,6 +117,15 @@ const drawAt = (path, element, pattern) =>
     </MemoryRouter>,
   );
 
+/** Pick a country in the wizard. Needed by every test that submits the form,
+ *  because there is deliberately NO default (T3 C/H-1) — and the two tests that
+ *  broke when that default was removed had been leaning on it, which is the
+ *  clearest evidence the fix reaches real behaviour. */
+const chooseCountry = async (name) => {
+  fireEvent.click(screen.getByLabelText('Country'));
+  fireEvent.click(await screen.findByText(name));
+};
+
 const drawOverview = () => drawAt('/console/iron-house', <Overview />, '/console/:orgSlug');
 const drawMembers = () => drawAt('/console/iron-house/members', <Members />, '/console/:orgSlug/members');
 
@@ -196,11 +205,39 @@ describe('Create a gym', () => {
     expect(screen.queryByText('Clinic')).toBeNull();
   });
 
-  it('prefills the timezone with the device’s own zone', () => {
+  it('prefills the timezone with the device’s own zone', async () => {
+    const { detectTimezone } = await import('./consoleView');
     drawNew();
-    // The suite pins TZ=Asia/Kolkata; whichever alias this runtime reports must
-    // be the selected value, not the first zone in the list.
-    expect(screen.getByLabelText('Timezone').value).toMatch(/^Asia\//);
+    // T3 rule-4: this asserted only `/^Asia\//`, which `timezoneOptions` puts at
+    // index 0 anyway — so a prefill that took `zones[0]` instead of the detected
+    // zone would have passed. Pinned to the detected value EXACTLY.
+    expect(screen.getByLabelText('Timezone').value).toBe(detectTimezone());
+  });
+
+  it('does NOT preselect a country — the currency is permanent and must be chosen', async () => {
+    // T3 C/H-1's regression test. It used to default to 'US', so an owner in
+    // India who typed a name and pressed Create got a gym billed in USD with no
+    // screen anywhere to change it. Two assertions, because either alone is
+    // satisfiable by the wrong fix: the control shows a PROMPT rather than a
+    // country, and pressing Create with only a name sends NOTHING.
+    drawNew();
+    expect(screen.getByLabelText('Country').textContent).toContain('Choose a country');
+    expect(screen.queryByText('United States')).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
+    fireEvent.click(screen.getByText('Create gym'));
+    await waitFor(() => expect(orgService.createOrg).not.toHaveBeenCalled());
+
+    // And it submits once a country IS chosen — a fix that simply broke the
+    // form would pass everything above.
+    fireEvent.click(screen.getByLabelText('Country'));
+    fireEvent.click(await screen.findByText('India'));
+    orgService.createOrg.mockResolvedValue({
+      data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } },
+    });
+    fireEvent.click(screen.getByText('Create gym'));
+    await waitFor(() => expect(orgService.createOrg).toHaveBeenCalledTimes(1));
+    expect(orgService.createOrg.mock.calls[0][0].country).toBe('IN');
   });
 
   it('shows the gym’s code and its currency once it exists', async () => {
@@ -209,6 +246,7 @@ describe('Create a gym', () => {
     });
     drawNew();
     fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
+    await chooseCountry('United States');
     fireEvent.click(screen.getByText('Create gym'));
 
     expect(await screen.findByText('K7QM2X')).toBeTruthy();
@@ -226,14 +264,24 @@ describe('Create a gym', () => {
     );
     drawNew();
     fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Sydney Iron' } });
+    await chooseCountry('India');
     fireEvent.click(screen.getByText('Create gym'));
     expect(await screen.findByText(/not open in that country yet/i)).toBeTruthy();
   });
 
-  it('does not submit without a name', () => {
+  it('does not submit without a name', async () => {
+    // T3 rule-4: this only ever exercised the button's `disabled` attribute —
+    // deleting the `if (!canSubmit) return` guard left it GREEN (measured by the
+    // reviewer). The guard is what holds when the form is submitted by any route
+    // that is not a click on that button (Enter in a text field), so it is
+    // submitted DIRECTLY here as well as clicked.
     drawNew();
     fireEvent.click(screen.getByText('Create gym'));
     expect(orgService.createOrg).not.toHaveBeenCalled();
+
+    const form = screen.getByText('Create gym').closest('form');
+    fireEvent.submit(form);
+    await waitFor(() => expect(orgService.createOrg).not.toHaveBeenCalled());
   });
 });
 
@@ -249,7 +297,10 @@ describe('The gym', () => {
 
   it('says nobody has joined when only the owner’s own seat exists', async () => {
     drawOverview();
-    expect(await screen.findByText('1 member')).toBeTruthy();
+    // "1 member (you)" since T3 L-5 — the count and the "nobody has joined"
+    // line were both true and read as a contradiction, so the count says whose
+    // the one membership is rather than either number changing.
+    expect(await screen.findByText('1 member (you)')).toBeTruthy();
     expect(screen.getByText(/Nobody has joined yet/i)).toBeTruthy();
   });
 
@@ -283,6 +334,74 @@ describe('The gym', () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [MEMBER_ONLY_ORG] } });
     drawOverview();
     expect(await screen.findByText(/couldn't find a gym you run/i)).toBeTruthy();
+  });
+
+  it('keeps the half that works when only ONE of the two reads is refused (L-3)', async () => {
+    // §2.2 grants a trainer Invite while the roster is held back, and the API is
+    // deliberately built that way (one trainer, 200 on codes, 403 on members).
+    // Collapsed into one Promise.all, that trainer lost the whole screen.
+    orgService.getMembers.mockRejectedValue(
+      apiError(403, 'trainer_scope_unavailable', "Trainer access to this list isn't available yet."),
+    );
+    drawOverview();
+
+    expect(await screen.findByText('K7QM2X')).toBeTruthy();
+    expect(screen.getByText(/Give this code to your members/i)).toBeTruthy();
+    expect(screen.getByText(/Trainer access to this list isn't available yet/i)).toBeTruthy();
+  });
+
+  it('shows the first LIVE code, not merely the oldest one (L-4)', async () => {
+    // Oldest-first ordering makes `codes[0]` right today and wrong the moment
+    // rotate lands — a rotated gym would keep handing out the retired code.
+    orgService.getCodes.mockResolvedValue({
+      data: {
+        codes: [
+          { ...LIVE_CODE, code: 'OLDPAU', paused: true },
+          { ...LIVE_CODE, code: 'NEWLIV' },
+        ],
+      },
+    });
+    drawOverview();
+    expect(await screen.findByText('NEWLIV')).toBeTruthy();
+    expect(screen.queryByText('OLDPAU')).toBeNull();
+  });
+
+  it('still shows a gym its ONLY code when that code is dead (L-4 fallback)', async () => {
+    orgService.getCodes.mockResolvedValue({
+      data: { codes: [{ ...LIVE_CODE, code: 'DEADXX', paused: true }] },
+    });
+    drawOverview();
+    // Shown, with its state — "this gym has no join code" would be false.
+    expect(await screen.findByText('DEADXX')).toBeTruthy();
+    expect(screen.getByText(/This code is paused/i)).toBeTruthy();
+    expect(screen.queryByText(/has no join code/i)).toBeNull();
+  });
+
+  it('says whose the one membership is, so two true lines stop contradicting (L-5)', async () => {
+    drawOverview();
+    expect(await screen.findByText('1 member (you)')).toBeTruthy();
+    expect(screen.getByText(/Nobody has joined yet/i)).toBeTruthy();
+  });
+
+  it('prints proper words, not the database’s own (L-6)', async () => {
+    drawOverview();
+    expect(await screen.findByText(/Austin · Gym/)).toBeTruthy();
+    expect(screen.getByText('Owner')).toBeTruthy();
+    expect(screen.queryByText('owner')).toBeNull();
+  });
+
+  it('a reply this screen cannot read is a FAILURE, never "not your gym" (L-7)', async () => {
+    // A 200 whose body is missing `orgs` used to become an empty list, then
+    // `notFound`, then "we couldn't find a gym you run at this address" — a
+    // confident false statement built out of a malformed success.
+    const contract = Object.assign(new Error('bad shape'), { isContractError: true });
+    orgService.getMine.mockRejectedValue(contract);
+    drawOverview();
+    expect(await screen.findByText(/couldn't read/i)).toBeTruthy();
+    expect(screen.getByText('Try again')).toBeTruthy();
+    expect(screen.queryByText(/couldn't find a gym you run/i)).toBeNull();
+    // And it must not be reported as a network problem — the server answered.
+    expect(screen.queryByText(/Check your connection/i)).toBeNull();
   });
 });
 

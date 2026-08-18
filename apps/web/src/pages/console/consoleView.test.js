@@ -6,6 +6,7 @@ import { SUPPORTED_COUNTRIES } from '@app/shared';
 import {
   ORG_TYPE_CHOICES,
   codeState,
+  codeToShow,
   countryOptions,
   detectTimezone,
   findOrgBySlug,
@@ -14,6 +15,9 @@ import {
   joinedCount,
   manageableOrgs,
   memberCountLabel,
+  memberCountLine,
+  orgTypeLabel,
+  roleLabel,
   timezoneOptions,
 } from './consoleView';
 
@@ -198,6 +202,71 @@ describe('member row text', () => {
     expect(groupLabelText({ groupLabel: 'Morning Batch' })).toBe('Morning Batch');
     expect(groupLabelText({ groupLabel: null })).toBe('—');
     expect(groupLabelText({})).toBe('—');
+  });
+});
+
+describe('which code the console offers (T3 L-4)', () => {
+  const code = (c, over = {}) => ({
+    code: c, label: 'Front Desk', paused: false, expiresAt: null, maxUses: null, uses: 0, ...over,
+  });
+
+  it('picks the first LIVE one, not merely the first', () => {
+    const list = [code('OLDPAU', { paused: true }), code('NEWLIV')];
+    expect(codeToShow(list)?.code).toBe('NEWLIV');
+  });
+
+  it('falls back to the oldest when none is live, so a gym still sees its code', () => {
+    const list = [code('DEADXX', { paused: true })];
+    expect(codeToShow(list)?.code).toBe('DEADXX');
+  });
+
+  it('answers null for no codes at all, rather than undefined', () => {
+    expect(codeToShow([])).toBeNull();
+    expect(codeToShow(undefined)).toBeNull();
+  });
+});
+
+describe('the member-count line stops contradicting itself (T3 L-5)', () => {
+  const member = (id, complimentary = false) => ({
+    userId: id, displayName: id, joinedAt: '2026-08-18T09:00:00.000Z',
+    groupLabel: 'Front Desk', complimentary,
+  });
+
+  it('names the one membership as yours on a brand-new gym', () => {
+    // "1 member" directly above "nobody has joined yet" is two TRUE sentences
+    // that read as a contradiction. Neither number changes; the line says whose.
+    expect(memberCountLine({ items: [member('owner', true)], nextCursor: null })).toBe(
+      '1 member (you)',
+    );
+  });
+
+  it('leaves every other case exactly as it was', () => {
+    expect(memberCountLine({ items: [member('a')], nextCursor: null })).toBe('1 member');
+    expect(memberCountLine({ items: [member('owner', true), member('b')], nextCursor: null })).toBe(
+      '2 members',
+    );
+    expect(memberCountLine({ items: [member('owner', true)], nextCursor: 'x|y' })).toBe(
+      '1+ members',
+    );
+    expect(memberCountLine(null)).toBeNull();
+  });
+});
+
+describe('the database’s words are not the screen’s words (T3 L-6)', () => {
+  it('labels org types and roles', () => {
+    expect(orgTypeLabel('gym')).toBe('Gym');
+    expect(orgTypeLabel('studio')).toBe('Studio');
+    expect(roleLabel('owner')).toBe('Owner');
+    expect(roleLabel('manager')).toBe('Manager');
+    expect(roleLabel('trainer')).toBe('Trainer');
+  });
+
+  it('shows an unknown value as itself rather than relabelling it', () => {
+    expect(orgTypeLabel('franchise')).toBe('franchise');
+    expect(roleLabel(null)).toBe('');
+    // `in` walks the prototype chain — a role of `toString` must not resolve to
+    // Object.prototype's method (the shape that bit the badge tier lookup).
+    expect(roleLabel('toString')).toBe('toString');
   });
 });
 

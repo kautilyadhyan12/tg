@@ -509,6 +509,13 @@ export async function listMembers(
  *  module has no read-a-code-by-id anywhere, so a code can only ever be reached
  *  through a gym the caller was authorised against first. The join path's own
  *  lookup is by `code` and returns nothing but the ids it needs to lock. */
+/** T3 L-1: a bound, for the same reason `MY_ORGS_LIMIT` has one — every other
+ *  list in this module is bounded and this one was not. Unreachable today (a gym
+ *  has exactly one code, minted with it), but `POST /codes` is already owed and
+ *  a gym running a code per class could pass this. Whoever first has a caller
+ *  near it owes the cursor; the roster reader is the worked pattern. */
+export const ORG_CODES_LIMIT = 100;
+
 export async function listCodes(sql: Sql, gymId: string): Promise<CodeRow[]> {
   const rows = await sql<
     {
@@ -523,7 +530,8 @@ export async function listCodes(sql: Sql, gymId: string): Promise<CodeRow[]> {
     SELECT code, label, paused, expires_at, max_uses, uses
     FROM gym_codes
     WHERE gym_id = ${gymId}
-    ORDER BY created_at ASC, code ASC`;
+    ORDER BY created_at ASC, code ASC
+    LIMIT ${ORG_CODES_LIMIT}`;
   return rows.map((r) => ({
     code: r.code,
     label: r.label,

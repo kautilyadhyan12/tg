@@ -54,6 +54,8 @@ const TARGETS = {
   api: { file: resolve(ROOT, 'apps/web/src/api/orgsApi.js') },
   home: { file: resolve(ROOT, 'apps/web/src/pages/console/ConsoleHome.jsx') },
   members: { file: resolve(ROOT, 'apps/web/src/pages/console/Members.jsx') },
+  newgym: { file: resolve(ROOT, 'apps/web/src/pages/console/NewGym.jsx') },
+  overview: { file: resolve(ROOT, 'apps/web/src/pages/console/Overview.jsx') },
 };
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
@@ -157,6 +159,63 @@ const MUTANTS = [
     expect: 'injects a detected zone the runtime does not list',
     from: "  if (typeof detected === 'string' && detected !== '' && !zones.includes(detected)) {",
     to: "  if (typeof detected === 'string' && detected !== '' && zones.includes(detected)) {",
+  },
+
+  // ── T3 round 1's fixes, each restored so its regression test is MEASURED red
+  //    rather than asserted to be (:5348 rule 3) ───────────────────────────
+  {
+    id: 'C12',
+    target: 'newgym',
+    suite: RENDER_SUITE,
+    why: 'C/H-1 RESTORED: the wizard preselects the United States again, so an owner in India who types a name and presses Create gets a gym billed in USD — permanently, since no settings route exists',
+    expect: 'does NOT preselect a country',
+    from: "  const [country, setCountry] = useState('');",
+    to: "  const [country, setCountry] = useState('US');",
+  },
+  {
+    id: 'C13',
+    target: 'view',
+    suite: VIEW_SUITE,
+    why: 'L-4 RESTORED: the console shows the OLDEST code rather than the first live one, so a rotated gym keeps handing out the retired code',
+    expect: 'picks the first LIVE one',
+    from: "  return list.find((c) => codeState(c, now).live) ?? list[0] ?? null;",
+    to: "  return list[0] ?? null;",
+  },
+  {
+    id: 'C14',
+    target: 'view',
+    suite: VIEW_SUITE,
+    why: 'L-5 RESTORED: a brand-new gym reads "1 member" directly above "nobody has joined yet" — two true sentences that contradict each other on screen',
+    expect: 'names the one membership as yours',
+    from: "  return joined === 0 && total === 1 ? '1 member (you)' : label;",
+    to: "  return label;",
+  },
+  {
+    id: 'C15',
+    target: 'view',
+    suite: VIEW_SUITE,
+    why: "L-6 RESTORED: the database's own vocabulary is printed on a page a gym owner reads (`owner`, `gym`)",
+    expect: 'labels org types and roles',
+    from: "  return Object.hasOwn(ROLE_WORDS, role ?? '') ? ROLE_WORDS[role] : (role ?? '');",
+    to: "  return role ?? '';",
+  },
+  {
+    id: 'C16',
+    target: 'api',
+    suite: API_SUITE,
+    why: 'L-7 RESTORED: a 200 whose body does not match the contract is accepted, so a malformed success becomes an empty list and then a confident false sentence on screen',
+    expect: 'rejects a mine response with no orgs',
+    from: "  if (!parsed.success) throw contractError(what);",
+    to: "  if (!parsed.success && false) throw contractError(what);",
+  },
+  {
+    id: 'C17',
+    target: 'overview',
+    suite: RENDER_SUITE,
+    why: "L-3 RESTORED: the two independently-authorised reads share one fate again, so a trainer the API deliberately grants the code to loses the whole screen to the roster's 403",
+    expect: 'keeps the half that works when only ONE of the two reads is refused',
+    from: "        codesOutcome.status === 'fulfilled'",
+    to: "        codesOutcome.status === 'fulfilled' && membersOutcome.status === 'fulfilled'",
   },
 ];
 

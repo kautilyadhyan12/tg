@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Building2, Plus, ChevronRight } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
-import { manageableOrgs } from './consoleView';
+import { manageableOrgs, roleLabel } from './consoleView';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 
 // "Your gyms" — the console's front door.
@@ -100,9 +100,12 @@ export default function ConsoleHome() {
                 <div className="font-semibold truncate" style={{ color: '#fff' }}>
                   {org.name}
                 </div>
+                {/* T3 L-6 named `Overview.jsx`; the same raw enum was printed
+                    here too, so it is fixed as a class (:1239) rather than at
+                    the one site the review happened to open. */}
                 <div className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>
                   {org.city ? `${org.city} · ` : ''}
-                  {org.staffRole}
+                  {roleLabel(org.staffRole)}
                 </div>
               </div>
               <ChevronRight className="w-5 h-5 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }} />

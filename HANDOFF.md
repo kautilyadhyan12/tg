@@ -7506,6 +7506,47 @@ fact he was given before ruling: the same person is deliberately BOTH (§4.0
 step 6 makes the owner member #1), so the split is two DOORS into one account,
 not two account types.** Recommended two-doors-one-account; his call.
 
-NEXT: **T3 in a FRESH chat on the diff** (`73c733f` plus the smoke commit).
-      Nothing ticks until a round returns zero Critical/High (:5348 rule 1).
+T3 ROUND 1 — **one Critical/High, seven Low, ALL FIXED. The packet does NOT ship
+this round** (:5348 rule 1 needs a round finding zero C/H).
+  · **C/H-1: the wizard PRESELECTED the United States.** `currency_display` is
+    written once at creation and there is NO settings route to change it, so an
+    owner in Jorhat who typed a name and pressed Create got a gym billed in USD
+    and was told so. **A hardcoded `US` is a guess with a worse hit rate than
+    deriving the country from the TIMEZONE — which the currency ruling had
+    already rejected for being a guess.** Fixed to empty.
+    **THE FIX'S OWN EVIDENCE: it broke TWO EXISTING TESTS that had been leaning
+    on the default to submit the form.**
+  · Seven Low, all fixed, in `BACKLOG.md`. The two with reach: **L-2 a gym named
+    "New" slugs to `new`, which the console's router already spends** on the
+    create form — unrepairable, a slug is minted once (`RESERVED_SLUGS`); and
+    **L-7 no console response was parsed against its `@app/shared` schema**, so a
+    200 missing `orgs` drew "we couldn't find a gym you run" and one missing
+    `items` drew "nobody has joined yet" — **the empty-vs-failed defect arriving
+    through the PARSER rather than the network.** Fixed across all four reads.
+
+THE TWO INSTRUMENT FINDINGS ARE BOTH MINE, AND BOTH ARE RECORDED CLASSES
+  · **My own L-1 fix added `LIMIT` and DRIFTED O21's anchor** — the mutant proving
+    one gym cannot read another gym's join codes — so it matched NOTHING, whose
+    honest reading is "this ownership guarantee has no test". The whole-table
+    anchor check ABORTED the sweep before a byte was written (:5199, :8610).
+  · **I masked the harness's own exit code with a `| tail` pipe**, so the
+    aborting run reported exit 0 — :5906's exact shape, recurring. Re-run
+    redirecting to a file with `$?` printed: HARNESS EXIT CODE 0, genuinely.
+  · **And the fix round's own fixture: the L-2 test would have passed EXACTLY
+    ONCE** — its gym slugs to `new-gym`, which `cleanup` matched with nothing, so
+    run two would have lost the slug race and failed for an unrelated reason.
+    Cleanup now identifies this suite's gyms by OWNER too; verified by running
+    the suite TWICE back to back and querying the database empty after.
+
+PROVE, fix round — api **493/493** real Postgres · web **767/767** · shared
+**48/48** · tsc + api lint clean · `vite build` ok · web lint **67, unchanged,
+every one pre-existing**. **MUTATION AUDIT 43 · 43 RED · 0 ALIVE** (26 api + 17
+web); harness gains per-mutant SUITE support so a unit-suite mutant is possible.
+**Rule 3 MEASURED, not asserted: C12 restores the `'US'` default and the new
+country test goes RED.**
+
+NEXT: **a RE-SMOKE of the changed screens (short — the country box is the only
+      thing a user sees differently), then the DIFF-ONLY re-review** (:5348
+      rule 2 — the fixes and the surfaces they touch, never a fresh full pass).
+      Nothing ticks until a round returns zero Critical/High.
 ```

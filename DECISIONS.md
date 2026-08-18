@@ -10593,6 +10593,105 @@ of account.** Recommended: two doors, one account, since separate accounts mean 
 gym owner cannot use their own app without logging out. **NOT RULED — his call,
 and it is the next card either way.**
 
+### T3 ROUND 1 — one Critical/High, seven Low. All fixed; the packet does NOT ship this round
+
+**Read before defaulting ANY field that decides money, before adding a list read
+without a bound, before collapsing two independently-authorised reads into one
+`Promise.all`, and before trusting a mutation sweep run through a pipe.** Fresh
+chat, on `73c733f` + `77ff36b`. Escape hatch NOT armed (round 1). Kd approved the
+fix round against the listed findings before any file was touched (:5348).
+
+**C/H-1 — THE WIZARD PRESELECTED THE UNITED STATES, AND THAT IS PERMANENT.**
+`useState('US')`. The field decides `currency_display`, the server writes it once
+at creation, and **there is no settings route to change it** (grep: no PATCH
+anywhere in the orgs module). So an owner in Jorhat who typed a name and pressed
+Create got a gym billed in USD and was then told *"Your gym is set up in USD"*.
+**It contradicts the ruling the field exists to serve**: Kd's currency ruling
+REFUSES an unsupported country rather than giving it a fallback, and it rejected
+deriving the country from the TIMEZONE because *"most of the time"* is a guess
+whose failure mode is a wrong currency in front of a paying customer — **a
+hardcoded `US` is a guess with a WORSE hit rate than the one already rejected**,
+and the screen was detecting `Asia/Calcutta` and displaying it beside a country
+of "United States". Fixed to `''`; `canSubmit` already held the button.
+**THE FIX'S OWN EVIDENCE IS THAT IT BROKE TWO EXISTING TESTS**: both "shows the
+code once it exists" and "shows the server's refusal" filled only the NAME and
+submitted — they had been leaning on the default. A fix that reaches real
+behaviour breaks the tests that depended on the defect.
+
+**THE SEVEN LOW, all fixed (:5348 rule 1 — a Low buys no round and is still
+fixed), logged in `BACKLOG.md`:** L-1 the codes list had no bound, the only list
+in the module without one · **L-2 a gym named "New" slugs to `new`, which the
+console's router already spends on the create form** — its owner clicks their own
+gym and lands on a blank wizard, unrepairable because a slug is minted once
+(`RESERVED_SLUGS`, suffixed not rejected) · L-3 `Promise.all` collapsed two
+INDEPENDENTLY-AUTHORISED reads, so a trainer the API deliberately grants the code
+to lost the whole screen to the roster's 403 (`allSettled`, one outcome per pane)
+· L-4 the console showed the OLDEST code, which is right today and wrong the
+moment rotate lands · L-5 "1 member" above "Nobody has joined yet" — two TRUE
+sentences reading as a contradiction, fixed by saying whose ("1 member (you)")
+rather than changing either number · L-6 raw enums on screen (`gym`, `owner`) ·
+**L-7 no console response was parsed against the `@app/shared` schemas that
+define it** — a 200 missing `orgs` became `[]` then "we couldn't find a gym you
+run", and a 200 missing `items` became "nobody has joined yet": **the
+empty-vs-failed defect arriving through the PARSER instead of the network.**
+Fixed as a CLASS across all four reads, not at the one site named, with a
+distinct message because a contract failure is not a network failure — telling
+somebody to check their connection over a bug of ours sends them to fix the
+wrong thing.
+
+**RULE 4 — three tests that stayed green when their subject broke**, two found by
+the reviewer and all three fixed: `does not submit without a name` exercised the
+button's `disabled` attribute and stayed GREEN with the `canSubmit` guard deleted
+(now also submits the form directly); the timezone prefill asserted only
+`/^Asia\//`, which `timezoneOptions` puts at index 0 anyway, so a prefill reading
+`zones[0]` would have passed (now pinned to `detectTimezone()` exactly); and
+**nothing pinned the wizard's default country at all**, which is why C/H-1 shipped.
+
+### THE INSTRUMENT FINDINGS ARE BOTH MINE, AND BOTH ARE THE CLASS THIS FILE KEEPS RECORDING
+
+**1. MY OWN FIX DRIFTED AN EXISTING MUTANT'S ANCHOR.** L-1 added `LIMIT` to the
+codes query, moving the closing backtick — so **O21, the mutant proving one gym
+cannot read another gym's join codes, matched nothing.** The honest reading of a
+no-op mutation is *"this ownership guarantee has no test"*, which would have sent
+the next chat hunting a hole that was never there. **The whole-table anchor check
+caught it before a byte was written** and the sweep ABORTED with zero mutants
+run. Same shape as :8610 (a fix inserting a line inside a mutant's span), caught
+by :5199's class fix. Re-anchored, with the reason written beside it.
+
+**2. I MASKED THE HARNESS'S OWN EXIT CODE WITH A PIPE.** The aborting run was
+invoked as `node harness | tail -45`, so `abort()`'s exit 2 was replaced by
+`tail`'s 0 and the run **reported success while refusing to run**. :5906 recorded
+this exact shape ("a sweep that never ran reporting exit 0 through a `| tail`
+pipe") and it recurred here. Re-run redirected to a file with `$?` printed:
+**HARNESS EXIT CODE: 0**, genuinely.
+
+### PROVE, fix round
+
+`api` **493/493** across 43 files against real Postgres (490 before; +3) · `web`
+**767/767** (747 before; +20) · `@app/shared` **48/48** · `tsc --noEmit` clean ·
+`api` lint clean · `vite build` ok · **`apps/web` lint 67, unchanged and every one
+pre-existing** — no error line names a file this round touched.
+
+**MUTATION AUDIT: 43 mutants, 43 RED, 0 ALIVE, 0 never ran**, restores
+sha256-verified after every one. `mutate-orgs.mjs` **26** against real Postgres
+(gains O25/O26 for L-2 and L-1, and per-mutant SUITE support so a unit-suite
+mutant is possible at all); `mutate-console.mjs` **17** (gains C12–C17, one per
+fix). **Rule 3 is MEASURED here rather than asserted: C12 restores the `'US'`
+default and the new country test goes RED.**
+
+**THE FIX ROUND'S OWN FIXTURE DEFECT, found by me and worth the line: the L-2
+regression test would have passed EXACTLY ONCE.** It creates a gym named "New",
+whose slug is `new-gym` — which the suite's `cleanup` matched with neither
+`orgs-test%` nor anything else, so the row survived, and the second run would
+have lost the slug race, got `new-gym-24kq`, and failed for a reason with nothing
+to do with its subject. **Cleanup now identifies this suite's gyms by OWNER as
+well as by slug**, and the property was verified the only way it can be: the
+suite run TWICE back to back, both 46/46, with the database queried empty after.
+A test that passes once is :4855's fixture lesson in a new place.
+
+**STILL NOT DONE: the diff-only re-review (:5348 rule 2) is UNRUN, and a
+re-smoke of the changed screens is UNRUN.** Nothing ticks.
+
 ## 2026-08-18 — KD RULING: the login page asks which door you came for — TWO DOORS, ONE ACCOUNT
 
 **Read before touching `Login.jsx`, `Register.jsx`, `ProtectedRoute`, the

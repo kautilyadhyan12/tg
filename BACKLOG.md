@@ -845,3 +845,65 @@ principle let one join skip the seat cap — it needs the user to delete their o
 account between two statements of their own join. The only writer of
 `removed_at` today is `users/repo.ts:281`. Unreachable in practice, no cap exists
 yet anyway, and the fix would cost more than the hazard.
+
+## Console screen — T3 round 1 (2026-08-18, DECISIONS :10596)
+
+Seven Low, all FIXED in the same round (:5348 rule 1 — a Low buys no further
+review round and is still fixed). Commit: the fix round on `web-repoint`.
+
+- [x] **L-1 (R7.3) — the join-code list had no bound**, the only list in the orgs
+      module without one while `/mine` is capped and the roster is keyset-paged.
+      Unreachable today (a gym has exactly one code) and `POST /codes` is already
+      owed. `ORG_CODES_LIMIT = 100`, with its own OWED line for the cursor.
+- [x] **L-2 — a gym named "New" slugged to `new`, which the console's own router
+      already spends.** `/console/new` is declared ahead of `/console/:orgSlug`,
+      so that gym appeared in its owner's list and clicking it landed them on the
+      blank create form — with no way in, and no later repair, because a slug is
+      minted once. `RESERVED_SLUGS` suffixes rather than rejects (the owner named
+      their gym something reasonable and should not be told the name is taken).
+      Only words the router SPENDS TODAY are reserved; reserving `settings` or
+      `billing` for routes that do not exist would be inventing them.
+- [x] **L-3 — `Promise.all` collapsed two INDEPENDENTLY-AUTHORISED reads.** §2.2
+      grants a trainer Invite while the roster is held back, and the API is built
+      that way with a test proving one trainer gets 200 on codes and 403 on
+      members — collapsed, that trainer lost the WHOLE gym screen to the roster's
+      refusal, under a Try again that could never succeed. `allSettled`, one
+      outcome per pane. Unreachable today (no route creates a trainer row), fixed
+      anyway: a screen that cannot express a guarantee the API really makes is
+      the client half of the same defect.
+- [x] **L-4 — the console showed the OLDEST join code.** Right today (there is
+      one) and wrong the moment rotate/expire lands, when a rotated gym would
+      keep handing out the retired code. `codeToShow` picks the first LIVE one
+      and falls back to the oldest, so a gym whose only code is paused still SEES
+      it with its state rather than being told it has no code.
+- [x] **L-5 — "1 member" directly above "Nobody has joined yet".** Both sentences
+      TRUE (the one membership is the owner's own complimentary seat, §4.0 step
+      6) and together they read as a contradiction. Fixed by saying whose it is —
+      "1 member (you)" — rather than changing either number.
+- [x] **L-6 — raw database vocabulary on screen** (`gym`, `owner`). Mapped to
+      display words, and fixed at BOTH sites: the review named `Overview.jsx`,
+      and `ConsoleHome.jsx` printed the same raw role (:1239, the class not the
+      case). Unknown values render as themselves rather than being relabelled,
+      and the lookup is `Object.hasOwn` so a role of `toString` cannot resolve to
+      `Object.prototype`.
+- [x] **L-7 — no console response was parsed against the `@app/shared` schemas
+      that define it.** This is the one with reach: a 200 missing `orgs` became
+      `[]`, then `notFound`, then "we couldn't find a gym you run at this
+      address"; a 200 missing `items` became an empty roster and "nobody has
+      joined yet". **Both are the empty-vs-failed defect arriving through the
+      PARSER rather than the network** — the same class two of this card's own
+      mutants already guard on the network side. Fixed across ALL FOUR reads
+      (the review named one), with its own message, because a contract failure is
+      not a network failure and "check your connection" would send a person to
+      fix the wrong thing.
+
+**Rule-4 tests that stayed green when their subject broke, all three fixed:**
+`does not submit without a name` exercised the button's `disabled` attribute and
+survived deleting the `canSubmit` guard; the timezone prefill asserted only
+`/^Asia\//`, which `timezoneOptions` puts at index 0 anyway, so a prefill reading
+`zones[0]` would have passed; and nothing pinned the wizard's default country at
+all — which is why the Critical/High shipped.
+
+**Recorded, NOT scored as a finding:** the reviewer noted `manager` appears in
+zero API tests (grep-verified). No route creates a manager row, so it rides the
+staff-route owed line — but the TEST gap itself had no line, and now has one.

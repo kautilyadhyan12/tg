@@ -413,9 +413,40 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   OWED line for a separate gym login predates this card; **the fact he was given
   before ruling is that the same person is deliberately BOTH (§4.0 step 6), so
   the split is two DOORS into one account, not two account types.**
-  **T3 UNRUN · NOTHING TICKS** — including the console line, whose headline
-  ("does not exist") is now false and was corrected in place, but whose own title
-  still names "seats", which needs a cap no gym has.
+  **T3 ROUND 1 (:10596) — ONE Critical/High, seven Low, all fixed; the packet
+  does NOT ship this round.** **C/H-1: the wizard PRESELECTED the United States**,
+  and `currency_display` is written once at creation with **no settings route to
+  change it** (grep: no PATCH in the module) — so an owner in Jorhat who typed a
+  name and pressed Create got a gym billed in USD and was told so. **It is a
+  guess with a WORSE hit rate than deriving the country from the timezone, which
+  the currency ruling had already rejected as a guess.** Fixed to empty; **its own
+  evidence is that it BROKE TWO EXISTING TESTS that had been leaning on the
+  default.** Seven Low all fixed (rule 1) and in `BACKLOG.md`, the two with reach
+  being **L-2 — a gym named "New" slugs to `new`, which the console's router
+  already spends on the create form**, unrepairable because a slug is minted once
+  (`RESERVED_SLUGS`) — and **L-7 — no console response was parsed against the
+  `@app/shared` schemas that define it**, so a 200 missing `orgs` became "we
+  couldn't find a gym you run" and a 200 missing `items` became "nobody has
+  joined yet": **the empty-vs-failed defect arriving through the PARSER instead
+  of the network**, fixed as a class across all four reads. **THE TWO INSTRUMENT
+  FINDINGS ARE BOTH MINE: my own L-1 fix added `LIMIT` and DRIFTED O21's anchor**
+  — the mutant proving one gym cannot read another's join codes — so it matched
+  nothing, whose honest reading is "this ownership guarantee has no test"; the
+  whole-table anchor check ABORTED the sweep before a byte was written (:5199's
+  class fix, :8610's shape). **And I masked the harness's own exit code with a
+  `| tail` pipe**, so the aborting run reported exit 0 — :5906's exact recorded
+  shape, recurring. Re-run with `$?` printed. **The fix round's OWN fixture defect
+  is worth the line: the L-2 test would have passed EXACTLY ONCE**, because its
+  gym slugs to `new-gym`, which `cleanup` matched with nothing — verified fixed by
+  running the suite TWICE back to back and querying the database empty after.
+  PROVE: api **493/493** real Postgres · web **767/767** · shared **48/48** · tsc
+  + api lint clean · build ok · web lint 67 unchanged, all pre-existing.
+  **MUTATION AUDIT 43 mutants · 43 RED · 0 ALIVE** (26 api + 17 web), with rule 3
+  MEASURED: C12 restores the `'US'` default and the new test goes RED.
+  **THE DIFF-ONLY RE-REVIEW AND A RE-SMOKE ARE BOTH UNRUN · NOTHING TICKS** —
+  including the console line, whose headline ("does not exist") is now false and
+  was corrected in place, but whose own title still names "seats", which needs a
+  cap no gym has.
 - **:10329** — 2026-08-18 — **ORG SLICE, T3 ROUND 2 (diff-only): ZERO
   Critical/High — THE PACKET SHIPS.** **Read before citing this card, before
   moving the clinic consent gate, and before assuming a `FOR UPDATE`

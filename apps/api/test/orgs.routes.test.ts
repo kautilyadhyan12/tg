@@ -74,11 +74,22 @@ d("orgs routes (real Postgres)", () => {
     return app;
   };
 
+  // Gyms this suite made are identified by SLUG **or by OWNER**, and the owner
+  // half is load-bearing since T3 L-2: the reserved-slug test has to create a
+  // gym literally named "New", whose slug is `new-gym` and matches no
+  // `orgs-test%` pattern. Cleaning by slug alone left that row in the shared
+  // database, so the SECOND run lost the slug race, got `new-gym-24kq`, and the
+  // test would have failed for a reason that had nothing to do with its
+  // subject — a test that passes exactly once.
   const cleanup = async () => {
-    await sql`DELETE FROM gym_members WHERE gym_id IN (SELECT id FROM gyms WHERE slug LIKE 'orgs-test%')`;
-    await sql`DELETE FROM audit_log WHERE gym_id IN (SELECT id FROM gyms WHERE slug LIKE 'orgs-test%')`;
-    await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (SELECT id FROM gyms WHERE slug LIKE 'orgs-test%')`;
-    await sql`DELETE FROM gyms WHERE slug LIKE 'orgs-test%'`;
+    const mine = sql`
+      SELECT id FROM gyms
+      WHERE slug LIKE 'orgs-test%'
+         OR owner_user_id IN (SELECT id FROM users WHERE email LIKE 'orgs-t-%@example.com')`;
+    await sql`DELETE FROM gym_members WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM audit_log WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
+    await sql`DELETE FROM gyms WHERE id IN (${mine})`;
     await sql`DELETE FROM users WHERE email LIKE 'orgs-t-%@example.com'`;
     await sql`DELETE FROM plans WHERE code = ${CAP1_PLAN}`;
   };
@@ -644,6 +655,41 @@ d("orgs routes (real Postgres)", () => {
       { cookies: joiner.cookies },
     );
     expect(attempt.statusCode).toBe(409);
+  });
+
+  it("never mints a slug the console's own router has already spent (T3 L-2)", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("jc-reserved");
+    // `/console/new` is declared ahead of `/console/:orgSlug`, so a gym slugged
+    // `new` shows in its owner's list and lands them on the CREATE FORM when
+    // they click it. End-to-end here rather than only on the pure helper,
+    // because the slug is what the ROW carries and nothing later can repair it.
+    const created = await makeOrg(owner.cookies, "New");
+    expect(created.org.slug).not.toBe("new");
+    // Prefix rather than equality: a leftover `new-gym` from an aborted run
+    // makes the create path retry with a short suffix, which is correct
+    // behaviour and must not read as this test failing.
+    expect(created.org.slug).toMatch(/^new-gym/);
+  });
+
+  it("bounds the codes list like every other list in this module (T3 L-1)", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("jc-limit");
+    const org = await makeOrg(owner.cookies, "Orgs Test Joincodes Limit");
+    // One over the cap, so the bound is exercised rather than merely present.
+    const extra = orgRepo.ORG_CODES_LIMIT; // + the gym's own Front Desk code
+    const values = Array.from({ length: extra }, (_, i) => ({
+      gym_id: org.org.id,
+      code: `ZZ${String(i).padStart(4, "0")}`,
+      label: `Bulk ${String(i)}`,
+    }));
+    await sql`INSERT INTO gym_codes ${sql(values, "gym_id", "code", "label")}`;
+
+    const res = await get(`/v1/orgs/${org.org.id}/codes`, { cookies: owner.cookies });
+    expect(res.statusCode).toBe(200);
+    const { codes } = JSON.parse(res.body) as { codes: { code: string }[] };
+    expect(codes).toHaveLength(orgRepo.ORG_CODES_LIMIT);
+    // Oldest-first is the declared order, so the gym's own first code survives
+    // the truncation — the one the console actually needs.
+    expect(codes[0]?.code).toBe(org.joinCode.code);
   });
 
   it("gives a studio TRAINER the join codes even though it holds them off the roster (§2.2)", { timeout: 30_000 }, async () => {

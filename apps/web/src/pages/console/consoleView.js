@@ -154,6 +154,50 @@ export function joinedCount(page) {
   return page.items.filter((m) => m?.complimentary !== true).length;
 }
 
+/** T3 L-4: WHICH code the console puts on screen under "Join code".
+ *
+ *  The list is oldest-first, so `codes[0]` is the gym's original "Front Desk"
+ *  code. That is right today — it is the only one — and becomes wrong the moment
+ *  rotate/expire lands, because a rotated gym would keep showing the RETIRED
+ *  code to hand out. The first LIVE code is the honest answer.
+ *
+ *  Falls back to the oldest when none is live, deliberately: a gym whose only
+ *  code is paused must still SEE it, with the paused state on it, rather than
+ *  being told it has no code at all. */
+export function codeToShow(codes, now = Date.now()) {
+  const list = Array.isArray(codes) ? codes : [];
+  return list.find((c) => codeState(c, now).live) ?? list[0] ?? null;
+}
+
+/** T3 L-5: "1 member" sitting directly above "Nobody has joined yet" is two true
+ *  sentences that read as a contradiction. Both are right — the one membership
+ *  is the owner's own complimentary seat (§4.0 step 6) — so the fix is to say
+ *  WHOSE it is, not to change either number. */
+export function memberCountLine(page) {
+  const label = memberCountLabel(page);
+  if (label === null) return null;
+  const joined = joinedCount(page);
+  const total = Array.isArray(page?.items) ? page.items.length : 0;
+  return joined === 0 && total === 1 ? '1 member (you)' : label;
+}
+
+/** T3 L-6: the database's own words are not the screen's words. `org_type` and
+ *  `role` are stored vocabularies (Part 3 §2.1/§2.2); printing `gym` or `owner`
+ *  raw is the schema leaking onto a page a gym owner reads.
+ *
+ *  Unknown values fall back to the raw string rather than to a guess — a role
+ *  this app does not know about is better shown as itself than relabelled. */
+const ORG_TYPE_WORDS = { gym: 'Gym', studio: 'Studio', clinic: 'Clinic' };
+const ROLE_WORDS = { owner: 'Owner', manager: 'Manager', trainer: 'Trainer' };
+
+export function orgTypeLabel(orgType) {
+  return Object.hasOwn(ORG_TYPE_WORDS, orgType ?? '') ? ORG_TYPE_WORDS[orgType] : (orgType ?? '');
+}
+
+export function roleLabel(role) {
+  return Object.hasOwn(ROLE_WORDS, role ?? '') ? ROLE_WORDS[role] : (role ?? '');
+}
+
 /** A join date, in the VIEWER's own locale.
  *
  *  The locale argument is deliberately left `undefined`. Four sites in this app

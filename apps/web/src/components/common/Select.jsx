@@ -14,7 +14,14 @@ import { ChevronDown } from 'lucide-react';
  * Values may be strings OR numbers (compared with ===), so a numeric field can
  * pass numbers and get numbers back.
  */
-export default function Select({ value, onChange, options, className = '', style, ariaLabel }) {
+export default function Select({
+  value, onChange, options, className = '', style, ariaLabel,
+  // Shown when NOTHING is selected. Defaults to '' so every existing caller
+  // behaves exactly as before; the console's country picker is the first field
+  // here that deliberately starts empty, and a blank box with no words in it is
+  // not a control a person can use.
+  placeholder = '',
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const current = options.find((o) => o.value === value);
@@ -44,7 +51,12 @@ export default function Select({ value, onChange, options, className = '', style
         className="w-full rounded-xl px-4 py-3 text-sm flex items-center justify-between gap-2 text-left"
         style={style}
       >
-        <span className="truncate">{current?.label ?? ''}</span>
+        <span
+          className="truncate"
+          style={current === undefined ? { color: 'rgba(255,255,255,0.40)' } : undefined}
+        >
+          {current?.label ?? placeholder}
+        </span>
         <ChevronDown className="w-4 h-4 flex-shrink-0"
                      style={{ color: 'rgba(255,255,255,0.45)' }} />
       </button>

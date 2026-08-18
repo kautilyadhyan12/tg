@@ -226,8 +226,15 @@ const MUTANTS = [
     target: 'repo',
     why: "OWNERSHIP: the code list loses its gym scoping, so one gym's console shows — and invites people with — another gym's join codes",
     expect: "join codes to staff",
-    from: '    WHERE gym_id = ${gymId}\n    ORDER BY created_at ASC, code ASC`;',
-    to: '    ORDER BY created_at ASC, code ASC`;',
+    // RE-ANCHORED after the T3 L-1 fix added `LIMIT` to this query. The old
+    // anchor ended at the closing backtick, so inserting a line before it made
+    // this mutant match NOTHING — and the honest reading of a no-op mutation is
+    // "this guarantee has no test", which would have sent the next chat hunting
+    // a hole in the gym scoping that was never there. The whole-table anchor
+    // check caught it before a byte was written (:5199's class fix, :8610's
+    // fix-drifts-a-mutant-span shape).
+    from: '    WHERE gym_id = ${gymId}\n    ORDER BY created_at ASC, code ASC\n    LIMIT ${ORG_CODES_LIMIT}`;',
+    to: '    ORDER BY created_at ASC, code ASC\n    LIMIT ${ORG_CODES_LIMIT}`;',
   },
   {
     id: 'O22',
@@ -252,6 +259,26 @@ const MUTANTS = [
     expect: 'gives a studio TRAINER the join codes',
     from: '): Promise<OrgCodesResponse> {\n  await requireStaff(deps, gymId, userId, ["owner", "manager", "trainer"]);',
     to: '): Promise<OrgCodesResponse> {\n  await requireStaff(deps, gymId, userId, ["owner", "manager"]);',
+  },
+
+  // ── T3 round 1's API-side fixes, each restored so its regression test is
+  //    MEASURED red rather than asserted to be (:5348 rule 3) ─────────────
+  {
+    id: 'O25',
+    target: 'codes',
+    suite: 'test/orgs.unit.test.ts',
+    why: "L-2 RESTORED: a gym named \"New\" slugs to `new`, which the console's router already spends on the create form — its owner clicks their gym in the list and lands on a blank wizard, with no way in and no later repair, because the slug is minted once",
+    expect: "never mints a slug the console's own router has already spent",
+    from: '  return RESERVED_SLUGS.has(base) ? `${base}-gym` : base;',
+    to: '  return base;',
+  },
+  {
+    id: 'O26',
+    target: 'repo',
+    why: 'L-1 RESTORED: the codes list loses its bound, the one list in this module that had none while every sibling is capped',
+    expect: 'bounds the codes list',
+    from: '    ORDER BY created_at ASC, code ASC\n    LIMIT ${ORG_CODES_LIMIT}`;',
+    to: '    ORDER BY created_at ASC, code ASC`;',
   },
 ];
 
@@ -290,11 +317,11 @@ const tallied = (out) => {
   return /Tests\s+(?:\d+ failed \| )?\d+ (?:passed|failed)/.test(clean) && !/No test files found/.test(clean);
 };
 
-const run = (nameFilter) => {
+const run = (nameFilter, suite = SUITE) => {
   let out = '';
   try {
     out = execSync(
-      `corepack pnpm --filter api exec vitest run ${SUITE} -t ${JSON.stringify(nameFilter)}`,
+      `corepack pnpm --filter api exec vitest run ${suite} -t ${JSON.stringify(nameFilter)}`,
       { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 },
     );
     return { out, failed: false, fault: null };
@@ -311,8 +338,21 @@ const run = (nameFilter) => {
 // filter that matches no test would otherwise make its mutant look ALIVE, and
 // a suite that cannot start would make every mutant look RED.
 console.log('control (unmutated) — every filter must be GREEN and must tally ...');
-for (const filter of [...new Set(MUTANTS.map((m) => m.expect))]) {
-  const { out, failed, fault } = run(filter);
+// Deduped as OBJECTS, not by joining a string and splitting it: every filter
+// here contains spaces, so a split would run the control on the first WORD of
+// each -- a broader filter than the mutants use, i.e. the control quietly
+// checking something else. (Caught in the web harness before it ever ran.)
+const controlPairs = [];
+const seenControl = new Set();
+for (const m of MUTANTS) {
+  const suite = m.suite ?? SUITE;
+  const key = `${suite} :: ${m.expect}`;
+  if (seenControl.has(key)) continue;
+  seenControl.add(key);
+  controlPairs.push({ suite, filter: m.expect });
+}
+for (const { suite, filter } of controlPairs) {
+  const { out, failed, fault } = run(filter, suite);
   if (fault !== null) abort(`control for ${JSON.stringify(filter)}: the RUNNER failed — ${fault}`);
   if (!tallied(out)) abort(`control for ${JSON.stringify(filter)}: no test tally. That filter matches no test, so its mutants would prove nothing.`);
   if (failed) abort(`control for ${JSON.stringify(filter)}: RED before any mutation. Every verdict below would be meaningless.`);
@@ -330,7 +370,7 @@ for (const m of MUTANTS) {
   }
   writeFileSync(target.file, mutated);
 
-  const { out, failed, fault } = run(m.expect);
+  const { out, failed, fault } = run(m.expect, m.suite ?? SUITE);
 
   // Restore FIRST, always (:5199).
   writeFileSync(target.file, original.text);

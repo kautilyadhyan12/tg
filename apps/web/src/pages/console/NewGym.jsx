@@ -57,7 +57,18 @@ export default function NewGym() {
   const [name, setName] = useState('');
   const [city, setCity] = useState('');
   const [orgType, setOrgType] = useState('gym');
-  const [country, setCountry] = useState('US');
+  // T3 C/H-1 — NO PRESELECTED COUNTRY, and this is the whole ruling in one line.
+  // It used to default to `'US'`. The field decides `currency_display`, the
+  // server writes it once at creation, and there is no settings route to change
+  // it — so an owner in Jorhat who typed a name and pressed Create got a gym
+  // billed in US dollars, permanently, and was then told "set up in USD".
+  // Kd's currency ruling refuses an unsupported country rather than giving it a
+  // fallback (*"a fallback currency is how a gym in Sydney gets quoted in
+  // rupees"*), and it rejected deriving the country from the TIMEZONE because
+  // "most of the time" is a guess. A hardcoded `US` is a guess with a worse hit
+  // rate than the one that was already rejected. Empty, and `canSubmit` below
+  // holds the button until a person chooses.
+  const [country, setCountry] = useState('');
   // Prefilled from the device (§4.0 step 1) — and `timezoneOptions` guarantees
   // whatever it detected is in the list, so the prefill cannot be silently
   // replaced by the first alphabetical zone.
@@ -213,6 +224,7 @@ export default function NewGym() {
               onChange={setCountry}
               options={countries}
               ariaLabel="Country"
+              placeholder="Choose a country"
               style={inputStyle}
             />
           </Field>

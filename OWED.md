@@ -4190,6 +4190,23 @@ file and is stated so nobody reads these as lower priority than they are.
       console screen: it is staff-only and takes a uuid, so it is not a guessing
       surface, but it is now the endpoint that hands out the key to a gym's
       roster and it has no per-route limit either.
+- [ ] ⚪ **`GET /v1/orgs/:gymId/codes` IS CAPPED AT 100 AND HAS NO CURSOR**
+      (T3 round 1 L-1, 2026-08-18). Added as a BOUND, not as pagination — it was
+      the only list in the orgs module without one while `/mine` is capped and
+      the roster is keyset-paged. Unreachable today, since a gym has exactly one
+      code and it is minted with the gym; **`POST /codes` is already owed and a
+      gym running one code per class could pass 100.** Whoever builds that owes
+      the cursor, and the roster reader next door is the worked pattern.
+- [ ] 🟡 **THE `manager` ROLE IS ENFORCED BY CODE NO TEST HAS EVER RUN AS A
+      MANAGER** (T3 round 1, reviewer's Done-gate note, 2026-08-18).
+      Grep-verified: `manager` appears in ZERO api tests. Part 3 §8's slice-A
+      gate asks that every §2.2 permission be enforced by an API test rather
+      than by hidden UI, and owner and trainer both have one — manager has
+      none, on the shared `requireStaff` path both of the others exercise.
+      **No route creates a manager row**, so the fixture cannot be built without
+      the staff routes, which is why this rides the §2.2-matrix line above — but
+      the TEST gap itself had no line anywhere and now has one, so the card that
+      builds staff management cannot close without noticing it.
 - [ ] ⚪ **THE CONSOLE'S ANALYTICS EVENTS ARE NOT EMITTED.** Part 3 §4.0 names
       `org_created{type}`, `org_trial_started`, `org_logo_added`,
       `org_poster_downloaded` and the TTFMJ timer; `gym_code_redeemed` is

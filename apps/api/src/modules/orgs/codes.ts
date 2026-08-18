@@ -52,6 +52,20 @@ const SLUG_MAX = 48;
  *  emoji — yields an EMPTY string, which would be a broken URL rather than an
  *  ugly one. Part 3 §6.3 targets worldwide, so that case is ordinary, not
  *  exotic: it falls back to `org` and the uniqueness suffix does the rest. */
+/** Slugs the CONSOLE's own router already spends, so no gym may claim one.
+ *
+ *  T3 L-2: the console routes `/console/new` ahead of `/console/:orgSlug`, so a
+ *  gym named "New" slugs to `new`, appears in its owner's list, and clicking it
+ *  lands on the create form — a gym with no way in. Reserving the word here is
+ *  the only place that can fix it for good, because the slug is minted once and
+ *  is what every later URL is built from.
+ *
+ *  **Only words the router SPENDS TODAY are in this set.** Reserving `settings`
+ *  or `billing` for routes that do not exist would be inventing them (R0.2), and
+ *  the honest cost of adding a console route later is one line here — which is
+ *  why this set is named and exported rather than inlined. */
+export const RESERVED_SLUGS: ReadonlySet<string> = new Set(["new"]);
+
 export function slugifyName(name: string): string {
   const base = name
     .normalize("NFKD")
@@ -60,7 +74,12 @@ export function slugifyName(name: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, SLUG_MAX)
     .replace(/-+$/g, "");
-  return base === "" ? "org" : base;
+  if (base === "") return "org";
+  // Suffixed rather than rejected: the owner named their gym something
+  // reasonable and should not be told the name is unavailable. A collision
+  // between this and a real "New Gym" is a lost slug race, which the create
+  // path already retries.
+  return RESERVED_SLUGS.has(base) ? `${base}-gym` : base;
 }
 
 /** Candidate slugs in the order they should be tried: the bare name first,

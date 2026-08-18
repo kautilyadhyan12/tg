@@ -9,7 +9,13 @@ import {
   SUPPORTED_COUNTRIES,
   currencyForCountry,
 } from "@app/shared";
-import { codeFromBytes, normaliseCode, slugCandidate, slugifyName } from "../src/modules/orgs/codes.js";
+import {
+  RESERVED_SLUGS,
+  codeFromBytes,
+  normaliseCode,
+  slugCandidate,
+  slugifyName,
+} from "../src/modules/orgs/codes.js";
 
 describe("join code alphabet (Part 3 §4.0 step 4)", () => {
   it("excludes every look-alike character the spec names", () => {
@@ -128,6 +134,22 @@ describe("slugifyName", () => {
   it("never ends in a separator", () => {
     expect(slugifyName("Gym!!!")).toBe("gym");
     expect(slugifyName("A".repeat(60))).not.toMatch(/-$/);
+  });
+
+  it("never mints a slug the console's own router has already spent (T3 L-2)", () => {
+    // `/console/new` is declared ahead of `/console/:orgSlug`, so a gym slugged
+    // `new` appears in its owner's list and lands them on the CREATE FORM when
+    // they click it — a gym with no way in, and the slug is minted once so
+    // nothing later can repair it.
+    expect(slugifyName("New")).toBe("new-gym");
+    expect(slugifyName("  new!  ")).toBe("new-gym");
+    for (const reserved of RESERVED_SLUGS) {
+      expect(slugifyName(reserved)).not.toBe(reserved);
+    }
+    // And a name that merely CONTAINS the word is untouched — over-reserving
+    // would rename real gyms for nothing.
+    expect(slugifyName("New Wave Fitness")).toBe("new-wave-fitness");
+    expect(slugifyName("Renew")).toBe("renew");
   });
 });
 

@@ -9,13 +9,37 @@ import { afterEach, describe, expect, it } from 'vitest';
 import authApi from './authApi';
 import { orgService, errorText, errorCode, errorStatus } from './orgsApi';
 
+/** Bodies that SATISFY each contract, so the endpoint assertions below are not
+ *  quietly measuring the parser instead of the URL. */
+const okBody = (url) => {
+  if (url === '/v1/orgs/mine') return { orgs: [] };
+  if (url.endsWith('/members')) return { items: [], nextCursor: null };
+  if (url.endsWith('/codes')) return { codes: [] };
+  return {
+    org: {
+      id: '11111111-1111-1111-1111-111111111111', slug: 's', name: 'n', city: null,
+      orgType: 'gym', timezone: 'UTC', locale: 'en', currencyDisplay: 'USD', status: 'active',
+    },
+    joinCode: { code: 'K7QM2X', label: 'Front Desk' },
+  };
+};
+
 function recordRequests(api) {
   const seen = [];
   api.defaults.adapter = async (config) => {
     seen.push({ url: config.url, method: config.method, params: config.params, data: config.data });
-    return { data: {}, status: 200, statusText: '', headers: {}, config, request: {} };
+    return {
+      data: okBody(config.url), status: 200, statusText: '', headers: {}, config, request: {},
+    };
   };
   return seen;
+}
+
+/** An adapter that answers 200 with a body that does NOT match the contract. */
+function answerWith(api, body) {
+  api.defaults.adapter = async (config) => ({
+    data: body, status: 200, statusText: '', headers: {}, config, request: {},
+  });
 }
 
 /** An axios-shaped rejection: what a catch block on these screens actually
@@ -77,6 +101,50 @@ describe('orgService endpoints', () => {
     const seen = recordRequests(authApi);
     await orgService.getMembers('gym-1', { limit: 50, cursor: '2026-08-18T00:00:00.000Z|abc' });
     expect(seen[0].params).toEqual({ limit: 50, cursor: '2026-08-18T00:00:00.000Z|abc' });
+  });
+});
+
+describe('a 200 that does not match its contract is a FAILURE, not empty data (T3 L-7)', () => {
+  // The defect this closes is not hypothetical shape-policing: a body missing
+  // `orgs` became `[]` and drew "we couldn't find a gym you run at this
+  // address", and a body missing `items` became an empty roster and drew
+  // "nobody has joined yet". Both are confident false statements built out of a
+  // malformed success — the empty-vs-failed defect arriving through the parser.
+  it('rejects a mine response with no orgs', async () => {
+    answerWith(authApi, { notTheContract: true });
+    await expect(orgService.getMine()).rejects.toMatchObject({ isContractError: true });
+  });
+
+  it('rejects a roster response with no items', async () => {
+    answerWith(authApi, { nextCursor: null });
+    await expect(orgService.getMembers('gym-1', {})).rejects.toMatchObject({
+      isContractError: true,
+    });
+  });
+
+  it('rejects a codes response whose code is the wrong shape', async () => {
+    answerWith(authApi, { codes: [{ code: 'K7QM2X' }] }); // missing label/paused/uses
+    await expect(orgService.getCodes('gym-1')).rejects.toMatchObject({ isContractError: true });
+  });
+
+  it('rejects a create response with no join code', async () => {
+    answerWith(authApi, { org: okBody('/v1/orgs').org });
+    await expect(orgService.createOrg({})).rejects.toMatchObject({ isContractError: true });
+  });
+
+  it('lets a WELL-FORMED reply through untouched — the control', async () => {
+    answerWith(authApi, { orgs: [] });
+    await expect(orgService.getMine()).resolves.toMatchObject({ data: { orgs: [] } });
+  });
+
+  it('never reports a contract failure as a network problem', async () => {
+    // The server ANSWERED. Telling somebody to check their connection over a
+    // bug of ours sends them to fix the wrong thing.
+    const err = Object.assign(new Error('bad shape'), { isContractError: true });
+    const text = errorText(err, 'fallback');
+    expect(text).toContain("couldn't read");
+    expect(text).not.toContain('connection');
+    expect(text).not.toBe('fallback');
   });
 });
 
