@@ -4052,11 +4052,20 @@ file and is stated so nobody reads these as lower priority than they are.
       deferred is the case where there is NO subscription at all, which today is
       EVERY gym**, because billing does not exist: the cap resolves to null and
       nothing limits the roster. Harmless while nobody is paying and nothing is
-      live; a revenue hole the moment a gym is on a tier. **Closes by itself
-      when the billing card writes a subscription row — no change to this code
-      is expected, and if one turns out to be needed that is the billing card's
-      to make.** Do NOT paper over it with a hard-coded default cap: the tier
-      sizes are part of the unratified US pricing (:9944).
+      live; a revenue hole the moment a gym is on a tier. Do NOT paper over it
+      with a hard-coded default cap: the tier sizes are part of the unratified
+      US pricing (:9944).
+      ~~**Closes by itself when the billing card writes a subscription row — no
+      change to this code is expected.**~~ **STRUCK 2026-08-18 BY T3 ROUND 1
+      C/H-1 — that sentence was FALSE, and it was the kind of false that hides
+      a defect behind a reassurance.** The seat check refused a member who
+      ALREADY held a seat: they sit inside the count the cap is compared
+      against, so at the cap their second tap on Join answered "this gym has no
+      free places" to somebody standing in the gym. A change to this code WAS
+      needed and has been made (the check is skipped for a caller with a live
+      membership, read under the org lock). **The lesson is the shape: a
+      deferral that also predicts its own future is making two claims, and the
+      prediction gets no evidence while the deferral gets all the attention.**
 - [x] 🟡 **~~`gyms.currency_display` STILL DEFAULTS TO `INR`~~ — DONE 2026-08-18
       BY KD RULING, in the same session that raised it (DECISIONS :10010).**
       Raised as a deferral; Kd overruled the deferral within the hour: *"no inr
@@ -4116,13 +4125,18 @@ file and is stated so nobody reads these as lower priority than they are.
       boundary allows without touching workout tables. **A field added to that
       response without re-reading §2.4 is how the org-visibility promise gets
       broken**, so the next card on it starts there.
-- [ ] 🟡 **`POST /v1/orgs/join` HAS NO PER-ROUTE RATE LIMIT — only the global
-      one.** Codes are 6 characters over a 32-symbol alphabet (~1.07 billion),
-      so guessing one is not a practical attack and this is not urgent. It is
-      recorded because the join route is the one place an unauthenticated-ish
-      guess turns into membership of somebody else's gym, and because the
-      per-route limiter pattern already exists in the auth module (dual-keyed
-      per-IP and per-identifier). Owed before a real gym is live.
+- [ ] 🟡 **NEITHER `POST /v1/orgs/join` NOR `POST /v1/orgs` HAS A PER-ROUTE RATE
+      LIMIT — only the global one.** **JOIN:** codes are 6 characters over a
+      32-symbol alphabet (~1.07 billion), so guessing one is not a practical
+      attack and this is not urgent; it is recorded because the join route is
+      the one place a guess turns into membership of somebody else's gym.
+      **CREATE (added 2026-08-18 by T3 round 1 L-5, tracked nowhere before):**
+      one account can mint gyms at the global 300/min, which costs us rows and
+      lets somebody squat every readable slug — `iron-house` is first-come, and
+      a real gym arriving later gets `iron-house-24kq`. The per-route limiter
+      pattern already exists in the auth module (dual-keyed per-IP and
+      per-identifier). Owed before a real gym is live; deliberately NOT built
+      inside the fix round that found it (:5348 rule 6, minimal diffs).
 - [ ] ⚪ **THE CONSOLE'S ANALYTICS EVENTS ARE NOT EMITTED.** Part 3 §4.0 names
       `org_created{type}`, `org_trial_started`, `org_logo_added`,
       `org_poster_downloaded` and the TTFMJ timer; `gym_code_redeemed` is
@@ -4202,6 +4216,34 @@ file and is stated so nobody reads these as lower priority than they are.
       names and phone numbers before any of them has agreed to anything. Sits
       inside the open privacy-law question (:592), already on the critical path
       to a signed gym per :9604 §2.
+
+- [ ] ⚪ **CLINICS ARE OUT OF THE PRODUCT — Kd ruling 2026-08-18 (DECISIONS
+      :10010, T3 round 1). What PARKS with them, so nobody builds it and nobody
+      ticks it.** His words: *"no click will be there only gyms and fitness
+      centers"*, ruled when he was asked whether a clinic owner should be
+      auto-enrolled in their own clinic and stamped with a consent record
+      nobody collected. **This is the no-removal rule's AUTHORISED path** — an
+      explicit ruling against a cited option — and it is recorded here because
+      a ruling that deletes work still has to say WHICH work.
+      **NARROWED AT THE DOOR, NOT DELETED:** `createOrgTypeSchema` accepts
+      `gym|studio`; the §3.2 CHECK, the `clinic` value and the join-path
+      consent gate are all untouched, so an existing row still reads and is
+      still protected (pinned by a test that inserts one directly). No
+      migration. Reopening is one value.
+      **PARKED, NOT DONE:** Part 3 §2.3's clinic feature matrix (leaderboard
+      off by default, "Inactive clients", caseloads), §2.2's clinic vocabulary
+      overrides and the clinic copy LINTER that makes "rehab"/"treatment"/
+      "therapy"/"diagnosis" build failures, and Part 2B §7's clinic
+      positioning. **`studio` STAYS** — a boutique or PT studio is a fitness
+      business, not a medical one; that call was stated to Kd in one line and
+      not overruled, and it is why the trainer-scoping hold-back still has a
+      live org type to apply to.
+- [ ] ⚪ **`GET /v1/orgs/mine` IS CAPPED AT 100 AND HAS NO CURSOR** (T3 round 1
+      L-4). A person belongs to one or two gyms and a multi-site owner to a
+      dozen, so the cap exists to give the response a ceiling at all rather
+      than because anyone is near it. Whoever first has a caller that could
+      approach 100 owes the cursor — the roster reader next door is the
+      worked pattern.
 
 ### Member-side gym surface
 

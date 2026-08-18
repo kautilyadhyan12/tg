@@ -762,3 +762,57 @@ it like any other.)*
       which is the number that matters — it widens the gap by a fraction and is
       recorded so the next reader of L47 is not surprised by the arithmetic.
       **TRUE, not false, therefore Low (:5807), and the format stays Kd's (:9003).**
+
+## Org slice — T3 round 1 Lows (2026-08-18, all FIXED in the same round)
+
+Six Low findings from the first review of `apps/api/src/modules/orgs`. None is
+user-visible, none bought another review round (:5348 rule 1), and all six were
+fixed — the rule governs the SCHEDULE, never the quality bar.
+
+- [x] **L-1 — a comment of mine that was false about the code three lines away.**
+      `groupLabel` was documented as "null when the membership predates any code
+      (owner seat)", and the owner's seat is given the first code's id at
+      creation, so that null is unreachable. Corrected to say what actually makes
+      it nullable (the column is, and the roster IMPORT will be the first writer
+      with no code). :7974 L19's class — a comment asserting an invariant the
+      code does not have.
+- [x] **L-2 — two `as` casts outside an adapter file (R2.2).** `Object.keys(...)
+      as SupportedCountry[]` was unguarded. Removed BOTH by making the country
+      list a Zod enum: `SUPPORTED_COUNTRIES` is now `schema.options` (typed, no
+      cast) and `currencyForCountry` uses `safeParse`, which narrows without a
+      cast **and** closes the inherited-key hole for free — a bare `in` check
+      matches `constructor` and `toString`. The test that pinned that hole was
+      already there and still passes.
+- [x] **L-3 — `timezone` and `locale` were shape-only (R2.3).** Length-bounded
+      strings written straight into a permanent row, while the column's own
+      comment says every org-day boundary comes from it and nowhere else.
+      Nothing reads `gyms.timezone` yet, so no user could see a wrong day — but
+      a junk zone written today is permanent, and the rollup that eventually
+      reads it cannot tell "Mars/Olympus" from a zone it merely does not know.
+      Both now validated at the parse boundary by asking `Intl` (a try/catch
+      around its `RangeError`), deliberately not a regular expression: the IANA
+      zone list changes, so a pattern would be wrong by next year.
+- [x] **L-4 — four response schemas re-exported and parsed nowhere**, while
+      three sibling modules do parse theirs. All four responses now go out
+      through their schema. Not ceremony: it is what would have caught a
+      response missing `currencyDisplay` when the schema gained the field, and
+      on the roster it is the §2.4 visibility boundary — a field added to the
+      row but not the schema is now dropped rather than served. `/mine` was also
+      unbounded; it takes a documented `LIMIT` rather than a cursor, since a
+      person belongs to one or two gyms and the point was to have a ceiling at
+      all.
+- [x] **L-5 — `POST /v1/orgs` has no per-route rate limit**, so one account can
+      mint gyms at the global 300/min and squat readable slugs. `OWED.md`
+      recorded this gap for `/join` only; create was tracked nowhere. Fixed as
+      the reviewer's own first option — an `OWED.md` line, now covering BOTH
+      routes rather than adding a limiter mid-fix-round (:5348 rule 6).
+- [x] **L-6 — I over-claimed about my own tests, in two places.** The test-file
+      header and the commit message both said BOTH concurrency tests would fail
+      if the `FOR UPDATE` were deleted. Measured by the reviewer: the seat-cap
+      race goes RED, the same-person race stays GREEN — it is carried by the
+      partial unique index and `ON CONFLICT`, not by the lock. Corrected IN
+      PLACE in the header (a commit message cannot be edited, so the correction
+      lives where the next reader will be). The test is kept for what it does
+      prove: the idempotent path holds when two transactions genuinely overlap.
+      **:8707's standing lesson, incurred again — a claim about the artifact is
+      verified against the artifact, not against intent.**

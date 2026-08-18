@@ -7,6 +7,12 @@ import { bustEntitlements } from "../entitlements/service.js";
 import type { RedisLike } from "../../redis.js";
 import { codeFromBytes, normaliseCode, slugCandidate, slugifyName } from "./codes.js";
 import * as repo from "./repo.js";
+import {
+  createOrgResponseSchema,
+  joinOrgResponseSchema,
+  myOrgsResponseSchema,
+  orgMemberPageSchema,
+} from "./schemas.js";
 import type {
   CreateOrgRequest,
   CreateOrgResponse,
@@ -106,7 +112,13 @@ export async function createOrg(
       // change like any other — §4.1's cache would otherwise answer from a
       // snapshot taken before the org existed.
       await bustEntitlements(deps.redis, ownerUserId);
-      return { org: toOrgSummary(created.org), joinCode: created.code };
+      // Parsed on the way OUT, like the catalog reader next door. It is not
+      // ceremony: it is what would have caught a response missing
+      // `currencyDisplay` after the schema gained the field (T3 round 1 L-4).
+      return createOrgResponseSchema.parse({
+        org: toOrgSummary(created.org),
+        joinCode: created.code,
+      });
     } catch (err) {
       if (err instanceof repo.OrgNameTakenError) continue;
       throw err;
@@ -121,14 +133,14 @@ export async function createOrg(
 
 export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgsResponse> {
   const rows = await repo.listOrgsForUser(deps.sql, userId);
-  return {
+  return myOrgsResponseSchema.parse({
     orgs: rows.map((r) => ({
       ...toOrgSummary(r),
       staffRole: r.staffRole,
       isMember: r.isMember,
       joinedAt: r.joinedAt === null ? null : r.joinedAt.toISOString(),
     })),
-  };
+  });
 }
 
 export async function joinOrg(
@@ -153,7 +165,7 @@ export async function joinOrg(
       // branch too, because a stale cache is exactly what a second attempt is
       // often trying to shake loose.
       await bustEntitlements(deps.redis, userId);
-      return {
+      return joinOrgResponseSchema.parse({
         org: toOrgSummary(outcome.org),
         membership: {
           id: outcome.membership.id,
@@ -161,7 +173,7 @@ export async function joinOrg(
           groupLabel: outcome.membership.groupLabel,
         },
         alreadyMember: outcome.kind === "already_member",
-      };
+      });
     }
     case "no_such_code":
       throw new OrgsError(404, "code_not_found", "That code doesn't match any gym.");
@@ -248,7 +260,10 @@ export async function listOrgMembers(
     limit: query.limit,
     cursor: parseCursor(query.cursor),
   });
-  return {
+  // Parsed on the way out, and this one carries the most weight: the roster
+  // shape IS Part 3 §2.4's visibility boundary, so a field added to the row
+  // without being added to the schema is dropped here rather than served.
+  return orgMemberPageSchema.parse({
     items: page.items.map((m) => ({
       userId: m.userId,
       displayName: m.displayName,
@@ -260,7 +275,7 @@ export async function listOrgMembers(
       page.nextCursor === null
         ? null
         : `${page.nextCursor.joinedAt.toISOString()}|${page.nextCursor.id}`,
-  };
+  });
 }
 
 /** `<joinedAt ISO>|<uuid>`. Malformed → null (first page), never a 500 from a

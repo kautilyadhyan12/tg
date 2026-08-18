@@ -10178,3 +10178,150 @@ own eslint config; nothing in `src` or `test` is exempted.
 **NOT DONE, and not claimed:** no console screen exists, so there is no SMOKE —
 the browser gate attaches to the card that builds the screen. **T3 is UNRUN.**
 No `OWED.md` line ticks except the currency one Kd ruled on.
+
+### T3 ROUND 1 — three Critical/High, six Low. The packet does NOT ship this round, and one finding is a claim I made in this very entry
+
+**Read before quoting a seat cap, before writing `consent_at`, before trusting a
+cross-tenant test that builds ONE tenant, and before writing a deferral that
+predicts its own future.** Fresh chat, on `0658ed5`. Escape hatch NOT armed
+(round 1). All three Critical/High were re-verified in the code by me before any
+fix was planned; all three are real.
+
+**C/H-1 — A FULL GYM REFUSED SOMEBODY WHO WAS ALREADY IN IT.** The seat check
+ran before the `ON CONFLICT`, and an existing member is inside `used` — so at
+the cap, their second tap on Join answered *"This gym has no free places"* to a
+person standing in the gym. §4.2's idempotent success, inverted. Latent today
+(no gym has a subscription, so the cap is null). **The finding with the longer
+reach is what it does to THIS ENTRY'S OWN `OWED.md` LINE**, which said the seat
+deferral *"closes by itself when the billing card writes a subscription row — no
+change to this code is expected"*. That was false, and it is the dangerous
+shape: **a deferral that also predicts its own future is making two claims, and
+the prediction gets no evidence while the deferral gets all the attention.**
+Struck in place. Fixed by reading the caller's live membership under the org
+lock and skipping the cap for somebody who already holds a seat; the regression
+test also asserts the cap still bites a genuinely new person, because a fix that
+opens the gate for everyone would pass a narrower test.
+
+**C/H-2 — THE APP STAMPED A CONSENT RECORD NOBODY COLLECTED.** The owner's
+silent §4.0-step-6 membership wrote `consent_at = now()`. For a clinic that
+column IS the DPDP/GDPR consent record (§2.4 and the DDL's own comment), and
+nobody asked the owner anything. My reasoning — creating the org is itself the
+owner's choice — is fine for a gym and indefensible for a clinic. **My own test
+asserted `.not.toBeNull()` on it, pinning the fabricated record as correct
+behaviour** (:5906's "a test asserting the defect"), which is why nothing caught
+it. **KD'S ANSWER WAS LARGER THAN THE QUESTION** — see the ruling below. The
+`NULL` stays regardless of org type: a consent record nobody collected is wrong
+on a gym too, merely harmless there.
+
+**C/H-3 — THE CROSS-TENANT TEST WAS PASSING BY ACCIDENT, AND THIS IS THE ONE TO
+REMEMBER.** The roster's gym-scoping mutant (`WHERE gym_id = $1 OR true`) came
+back RED — but the reviewer measured WHY: the fixture built exactly ONE org, so
+the redness came from **48 unrelated rows that happened to be in the shared test
+database** (193 memberships across 98 gyms, none of them the test's). On a clean
+local Postgres — which :5857 rule 4a explicitly recommends moving to — the same
+mutant returns the identical two rows and SURVIVES. **The shipped code was
+correct throughout; the protection was an accident of history, and the very
+change the audit doctrine recommends would have silently removed it.**
+Fixed by building a SECOND gym with its own owner and member inside the fixture.
+**And the assertion ORDER is part of the fix:** the two `not.toContain` checks
+naming those people run BEFORE the set equality, so the failure now reads
+`expected [ …(50) ] to not include '05352a3a-…'` — a person this test itself put
+in another gym — instead of `expected 50 to equal 2`, which is a fact about the
+database rather than about the subject. Measured both ways.
+
+**THE FOUR TESTS THAT STAYED GREEN WHEN THEIR SUBJECT WAS BROKEN** (rule 4, and
+the reviewer measured each): the whole file green with `consent_at` forced to
+`now()` — nothing anywhere asserted a NULL, on the one column §2.4 makes a legal
+record; the roster test on a clean database; the same-person concurrency test
+with `FOR UPDATE` deleted; and the `.not.toBeNull()` assertion that pinned C/H-2
+outright. All four now bite.
+
+**L-6 IS MINE AND IT IS THE HONEST ONE TO RECORD: I over-claimed about my own
+tests.** The test-file header and `0658ed5`'s commit message both credited BOTH
+concurrency tests with catching a deleted `FOR UPDATE`. Measured: the seat-cap
+race goes RED, the same-person race stays GREEN — it is carried by the partial
+unique index and `ON CONFLICT`, not by the lock. Corrected in place in the
+header, since a commit message cannot be edited and the correction belongs where
+the next reader will be (:8405's lesson). The test is kept for what it does
+prove. Five other Lows in `BACKLOG.md`; every one fixed, none bought a round.
+
+### KD RULING 2026-08-18 — CLINICS ARE OUT: *"no click will be there only gyms and fitness centers"*
+
+Asked to choose how a clinic owner's consent should be handled, **Kd removed
+clinics from the product instead** — which is the better answer, because a
+problem that cannot arise beats a problem handled carefully. **This is the
+no-removal rule's AUTHORISED path** (CLAUDE.md MIGRATION STANCE): an explicit
+ruling made in response to a cited option, and this line is the citation.
+
+**NARROWED AT THE DOOR, NOT DELETED FROM THE DATABASE.** `createOrgTypeSchema`
+accepts `gym|studio`; `orgTypeSchema`, the Part 4 §3.2 CHECK, the `clinic` value
+and the join path's consent gate are all untouched. So an existing clinic row
+still reads back rather than throwing, and is still protected — **pinned by a
+test that inserts one directly and proves the gate did not quietly disarm when
+the door was narrowed.** No migration. Reopening is one value in one enum.
+
+**`studio` STAYS.** A boutique or personal-training studio is a fitness
+business, not a medical one, so it sits inside "gyms and fitness centres". Stated
+to Kd in one line and not overruled — and it is why the studio/clinic trainer
+hold-back still has a live org type to apply to, so that branch is tested
+against a `studio` now rather than being quietly stranded.
+
+**WHAT PARKS WITH THE FEATURE AND MUST NOT BE TICKED** (the coach precedent,
+:9604 §5): Part 3 §2.3's clinic feature matrix, §2.2's clinic vocabulary
+overrides and the clinic copy linter that makes "rehab"/"treatment"/"therapy"
+build failures, and Part 2B §7's clinic positioning. Own `OWED.md` line.
+
+### PROVE, fix round — and the harness refused to run before it would have lied
+
+`api` **487/487** across 43 files against real Postgres · `web` **695/695** ·
+`shared` **48/48** · orgs' own share: **21** unit + **19** database-backed ·
+`tsc --noEmit` clean · lint clean on `api` and `@app/shared`.
+
+**MUTATION AUDIT: 20 mutants, 20 RED, 0 ALIVE, 0 never ran, restores
+sha256-verified after every one.** The four new rows are the round's own
+regressions — **O17** restores C/H-1's seat check, **O18** restores the
+fabricated consent stamp, **O19** lets clinics be created again against Kd's
+ruling, **O20** removes the timezone validation — so rule 3's "every
+Critical/High fix ships with a test that fails without it" is MEASURED here
+rather than asserted.
+
+**THE INSTRUMENT FINDING, AND IT IS THE GOOD KIND: the harness ABORTED before
+writing a single mutant.** The fix round renamed two tests — the clinic consent
+test became a legacy-row test, and the trainer test moved from a clinic to a
+studio — so two `expect` filters pointed at names that no longer existed. The
+control phase caught both:
+
+```
+ABORT — control for "a clinic join consent": no test tally. That filter
+matches no test, so its mutants would prove nothing.
+```
+
+**Without that control, O9 and O10 would have reported ALIVE and the honest
+reading of ALIVE is "this guarantee has no test".** Two hours would then have
+gone into hunting a hole that was never there. This is the fifth-plus recorded
+instance of the class this project keeps meeting — a harness reporting on a run
+that did not happen (:2614 F3, :2736 F1, :4855, :5199 F1, :9509) — and the
+first where the guard added AFTER those incidents fired on its own author.
+**A control is not paperwork; it is the only thing standing between a renamed
+test and a fabricated verdict.**
+
+**ONE CAVEAT RECORDED RATHER THAN GLOSSED (the reviewer's, and it is fair):
+O1's RED is timing-dependent in a way the other nineteen are not.** It removes
+the `FOR UPDATE` and relies on two real transactions genuinely overlapping, so
+in principle a slow enough machine could serialise them and the mutant would
+survive. It has gone RED on every run here. It is not fixable without
+serialising the very thing the test exists to exercise, so it is written down
+instead.
+
+**C/H-3'S FIX WAS MEASURED IN BOTH DIRECTIONS, not just left green.** With the
+scoping mutant applied, the roster test now fails
+`expected [ …(50) ] to not include '05352a3a-…'` — the uuid of a person THIS
+TEST placed in a second gym — where before the fix the same mutant failed
+`expected 50 to equal 2`, a fact about the shared database rather than about the
+subject. The assertion ORDER carries that: the two `not.toContain` checks run
+ahead of the set equality deliberately.
+
+**STILL NOT DONE, and not claimed:** no console screen, therefore no SMOKE.
+**The diff-only re-review (round 2) is UNRUN** — :5348 rule 2 — and until it
+returns zero Critical/High the packet does not ship and no `OWED.md` line ticks
+beyond the currency one Kd ruled on.

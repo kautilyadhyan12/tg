@@ -164,9 +164,23 @@ export async function createOrgAttempt(
       const includeRows = await tx<{ owner_included_as_member: boolean }[]>`
         SELECT owner_included_as_member FROM gyms WHERE id = ${org.id}`;
       if (includeRows[0]?.owner_included_as_member === true) {
+        // T3 ROUND 1 C/H-2: `consent_at` stays NULL, and that is the honest
+        // value — this membership is created silently by §4.0 step 6 and
+        // NOBODY ASKED THE OWNER anything. The first version wrote `now()`,
+        // reasoning that creating the org is itself the owner's choice. That
+        // reasoning is fine for a gym and indefensible for a clinic, where
+        // §2.4 makes this exact column the DPDP/GDPR consent record: a
+        // timestamp there is the app asserting that a person agreed to
+        // something they were never shown.
+        //
+        // Kd's answer to the question was larger than the question (2026-08-18,
+        // "no click will be there only gyms and fitness centers"): clinics are
+        // out of the product, so no NEW row here can be a clinic's. The NULL
+        // stays regardless — a consent record nobody collected is wrong on a
+        // gym too, it is merely harmless there.
         await tx`
           INSERT INTO gym_members (gym_id, user_id, code_id, consent_at, complimentary)
-          VALUES (${org.id}, ${input.ownerUserId}, ${codeRow.id}, now(), true)`;
+          VALUES (${org.id}, ${input.ownerUserId}, ${codeRow.id}, NULL, true)`;
       }
 
       await insertAudit(tx, {
@@ -193,6 +207,13 @@ export async function createOrgAttempt(
   }
 }
 
+/** How many orgs `/mine` will return. A person belongs to one or two gyms; a
+ *  multi-site owner might reach a dozen. The bound exists so the response has a
+ *  ceiling at all (T3 round 1 L-4) — an unbounded list is a shape that works
+ *  until the day it does not. Its own `OWED.md` line covers paginating this
+ *  properly if anyone ever approaches it. */
+export const MY_ORGS_LIMIT = 100;
+
 /** Every org the caller has ANY relationship with. One row per org even when
  *  they are both staff and member (the default for an owner), so a caller can
  *  never render the same gym twice. */
@@ -210,7 +231,8 @@ export async function listOrgsForUser(sql: Sql, userId: string): Promise<MyOrgRo
     LEFT JOIN gym_members m ON m.gym_id = g.id AND m.user_id = ${userId}
                            AND m.removed_at IS NULL
     WHERE s.user_id IS NOT NULL OR m.id IS NOT NULL
-    ORDER BY g.created_at DESC, g.id DESC`;
+    ORDER BY g.created_at DESC, g.id DESC
+    LIMIT ${MY_ORGS_LIMIT}`;
   return rows.map((r) => ({
     ...toOrgRow(r),
     staffRole: r.staff_role === null ? null : toOrgRole(r.staff_role),
@@ -320,13 +342,26 @@ export async function joinByCode(
     // without the other.
     if (org.orgType === "clinic" && !input.consent) return { kind: "consent_required" };
 
-    const cap = await seatCapFor(tx, org.id);
-    if (cap !== null) {
-      const countRows = await tx<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM gym_members
-        WHERE gym_id = ${org.id} AND removed_at IS NULL AND complimentary = false`;
-      const used = countRows[0]?.n ?? 0;
-      if (used >= cap) return { kind: "seat_cap", cap };
+    // T3 ROUND 1 C/H-1: the seat check must not run for somebody who ALREADY
+    // holds a seat. They are inside `used` themselves, so at the cap their
+    // second tap on Join came back "this gym has no free places" to a person
+    // standing in the gym — §4.2's idempotent success turned into a 409, and
+    // the only reason no user hit it is that no gym has a subscription yet.
+    // Read under the org lock, so it cannot race with the insert below.
+    const heldRows = await tx<{ id: string }[]>`
+      SELECT id FROM gym_members
+      WHERE gym_id = ${org.id} AND user_id = ${input.userId} AND removed_at IS NULL`;
+    const alreadyHolds = heldRows[0] !== undefined;
+
+    if (!alreadyHolds) {
+      const cap = await seatCapFor(tx, org.id);
+      if (cap !== null) {
+        const countRows = await tx<{ n: number }[]>`
+          SELECT count(*)::int AS n FROM gym_members
+          WHERE gym_id = ${org.id} AND removed_at IS NULL AND complimentary = false`;
+        const used = countRows[0]?.n ?? 0;
+        if (used >= cap) return { kind: "seat_cap", cap };
+      }
     }
 
     const consentAt = input.consent ? new Date() : null;

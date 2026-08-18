@@ -5,8 +5,33 @@
 // Part 4 §3.2 (DDL), §4.2 (seat-safe join).
 import { z } from "zod";
 
+/** The DB vocabulary (Part 4 §3.2's CHECK), used to PARSE rows on the way out.
+ *  It still contains `clinic` on purpose — see `createOrgTypeSchema`. */
 export const orgTypeSchema = z.enum(["gym", "studio", "clinic"]);
 export type OrgType = z.infer<typeof orgTypeSchema>;
+
+/** KD RULING 2026-08-18: *"no click will be there only gyms and fitness
+ *  centers"* — clinics are OUT of the product.
+ *
+ *  **This is the no-removal rule's authorised path** (CLAUDE.md MIGRATION
+ *  STANCE): an explicit Kd ruling, made in response to a cited option. He was
+ *  asked whether a clinic OWNER should be auto-enrolled in their own clinic
+ *  and stamped with a consent record nobody collected; he answered by removing
+ *  clinics altogether, which is the better answer — a problem that cannot
+ *  arise beats a problem handled carefully.
+ *
+ *  **NARROWED AT THE DOOR, NOT DELETED FROM THE DATABASE.** `orgTypeSchema`
+ *  above keeps all three values and the §3.2 CHECK is untouched, so any row
+ *  that already exists still reads back rather than throwing, and the clinic
+ *  consent gate in the join path stays live for it. What changes is that no
+ *  NEW clinic can be created. No migration, and the door reopens by adding one
+ *  value here if Kd ever reverses it.
+ *
+ *  `studio` stays: a boutique or personal-training studio is a fitness
+ *  business, not a medical one, so it sits inside "gyms and fitness centres".
+ *  That call was stated to Kd in one line and not overruled. */
+export const createOrgTypeSchema = z.enum(["gym", "studio"]);
+export type CreateOrgType = z.infer<typeof createOrgTypeSchema>;
 
 /** Part 3 §2.2. `admin` is deliberately absent — Kd's internal panel is a
  *  separate surface (Part 3 §1), never a role inside an org. */
@@ -43,30 +68,63 @@ export const JOIN_CODE_LENGTH = 6;
  *  Czechia, Hungary, Romania) — each of those is an unsupported country today,
  *  deliberately, because guessing euros for them would be the exact falsehood
  *  this ruling removes. */
-export const COUNTRY_CURRENCY = {
+export const supportedCountrySchema = z.enum([
+  "US", "IN", "CA", "GB",
+  // Euro area.
+  "AT", "BE", "HR", "CY", "EE", "FI", "FR", "DE", "GR", "IE",
+  "IT", "LV", "LT", "LU", "MT", "NL", "PT", "SK", "SI", "ES",
+]);
+export type SupportedCountry = z.infer<typeof supportedCountrySchema>;
+
+/** The picker's own source of truth — a console that builds its country list
+ *  from anything else will offer a country the server then refuses. Typed
+ *  straight off the schema rather than through `Object.keys`, which returns
+ *  `string[]` and would need a cast (R2.2). */
+export const SUPPORTED_COUNTRIES = supportedCountrySchema.options;
+
+/** Typed as a total Record, so TypeScript refuses to compile a country added
+ *  to the schema above without a currency here. */
+export const COUNTRY_CURRENCY: Readonly<Record<SupportedCountry, string>> = {
   US: "USD",
   IN: "INR",
   CA: "CAD",
   GB: "GBP",
-  // Euro area.
   AT: "EUR", BE: "EUR", HR: "EUR", CY: "EUR", EE: "EUR", FI: "EUR", FR: "EUR",
   DE: "EUR", GR: "EUR", IE: "EUR", IT: "EUR", LV: "EUR", LT: "EUR", LU: "EUR",
   MT: "EUR", NL: "EUR", PT: "EUR", SK: "EUR", SI: "EUR", ES: "EUR",
-} as const satisfies Readonly<Record<string, string>>;
-
-export type SupportedCountry = keyof typeof COUNTRY_CURRENCY;
-
-/** The picker's own source of truth — a console that builds its country list
- *  from anything else will offer a country the server then refuses. */
-export const SUPPORTED_COUNTRIES = Object.keys(COUNTRY_CURRENCY) as SupportedCountry[];
+};
 
 /** null = we are not open in that country yet. Never a fallback currency:
- *  a fallback here is how a Canadian gym ends up quoted in rupees. */
+ *  a fallback here is how a Canadian gym ends up quoted in rupees.
+ *
+ *  Parsed rather than looked up (R2.3): `safeParse` both narrows the type
+ *  without a cast and closes the inherited-key hole for free — a bare
+ *  `key in COUNTRY_CURRENCY` matches `constructor` and `toString`. */
 export function currencyForCountry(country: string): string | null {
-  const key = country.trim().toUpperCase();
-  return Object.hasOwn(COUNTRY_CURRENCY, key)
-    ? COUNTRY_CURRENCY[key as SupportedCountry]
-    : null;
+  const parsed = supportedCountrySchema.safeParse(country.trim().toUpperCase());
+  return parsed.success ? COUNTRY_CURRENCY[parsed.data] : null;
+}
+
+/** Both of these ask the platform's own database rather than pattern-matching:
+ *  the IANA zone list changes (zones are added, renamed and merged), so any
+ *  regular expression here would be wrong by next year. `Intl` throws
+ *  `RangeError` on an unknown zone or a malformed locale tag, which is the
+ *  check — a try/catch around a throw, not a guess. */
+function isValidTimeZone(zone: string): boolean {
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: zone });
+    return true;
+  } catch {
+    return false; // RangeError: unknown zone
+  }
+}
+
+function isValidLocale(tag: string): boolean {
+  try {
+    return Intl.getCanonicalLocales(tag).length > 0;
+  } catch {
+    return false; // RangeError: malformed tag
+  }
 }
 
 /** Part 3 §4.0 step 1's fields, plus `country`.
@@ -86,11 +144,24 @@ export const createOrgRequestSchema = z
      *  service's answer, so the refusal can be a sentence a gym owner
      *  understands rather than an enum error. */
     country: z.string().trim().length(2),
-    orgType: orgTypeSchema.default("gym"),
+    orgType: createOrgTypeSchema.default("gym"),
     /** IANA zone; Part 3 §4.0 prefills it from the browser. Every org-day
-     *  boundary is computed from this and nowhere else (playbook trap #8). */
-    timezone: z.string().trim().min(1).max(64),
-    locale: z.string().trim().min(1).max(16).default("en"),
+     *  boundary is computed from this and nowhere else (playbook trap #8),
+     *  which is exactly why the string is PROVEN to name a real zone here
+     *  rather than merely bounded in length. Nothing reads the column yet, so
+     *  no user can see a wrong day today — but a junk zone written now is a
+     *  permanent row, and the rollup that eventually reads it has no way to
+     *  tell "Mars/Olympus" from a zone it simply does not know. */
+    timezone: z.string().trim().min(1).max(64).refine(isValidTimeZone, {
+      message: "not a known IANA time zone",
+    }),
+    locale: z
+      .string()
+      .trim()
+      .min(1)
+      .max(16)
+      .refine(isValidLocale, { message: "not a well-formed locale" })
+      .default("en"),
   })
   .strict();
 export type CreateOrgRequest = z.infer<typeof createOrgRequestSchema>;
@@ -158,7 +229,15 @@ export const membershipSchema = z.object({
   id: z.string().uuid(),
   joinedAt: z.string(),
   /** The label of the code used, e.g. "Front Desk" — Part 3 §2.1's group
-   *  mechanism. Null when the membership predates any code (owner seat). */
+   *  mechanism.
+   *
+   *  Nullable because `gym_members.code_id` is (Part 4 §3.2), not because any
+   *  path produces a null today: the owner's own seat is given the first
+   *  code's id at creation, and every join goes through a code by definition.
+   *  A membership written by the roster IMPORT, which has no code at all, is
+   *  the case that will first make this real. (T3 round 1 L-1 — the original
+   *  comment claimed the owner seat was the null case, which was false of the
+   *  code three lines away.) */
   groupLabel: z.string().nullable(),
 });
 export type Membership = z.infer<typeof membershipSchema>;

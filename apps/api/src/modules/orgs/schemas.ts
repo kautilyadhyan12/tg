@@ -6,6 +6,7 @@ import { z } from "zod";
 export {
   createOrgRequestSchema,
   createOrgResponseSchema,
+  createOrgTypeSchema,
   joinOrgRequestSchema,
   joinOrgResponseSchema,
   myOrgsResponseSchema,

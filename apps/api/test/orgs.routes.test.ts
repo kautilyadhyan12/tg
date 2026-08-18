@@ -11,6 +11,14 @@
 //      clients. `buildApp` opens its pool with `max: 1`, so two `app.inject`
 //      calls would be serialised by the CLIENT and would pass even with the
 //      FOR UPDATE lock deleted — a test that cannot fail.
+//      **CORRECTED (T3 round 1 L-6): that is true of the SEAT-CAP race and
+//      false of the same-person race.** Measured with the lock deleted: the
+//      seat-cap test goes RED (`['joined','joined']`), the same-person test
+//      stays GREEN, because it is carried by the partial unique index and
+//      ON CONFLICT rather than by the lock. This header and the commit message
+//      both credited BOTH tests with catching a deleted lock; only one does.
+//      The same-person test is kept for what it actually proves — that the
+//      idempotent path holds when two transactions genuinely overlap.
 //   2. The entitlement-cache proof reads /v1/entitlements/me BEFORE joining, so
 //      the cache is genuinely populated with the free answer first. Without
 //      that first read there is nothing to bust and the assertion is satisfied
@@ -186,7 +194,10 @@ d("orgs routes (real Postgres)", () => {
       SELECT complimentary, consent_at FROM gym_members
       WHERE gym_id = ${created.org.id} AND user_id = ${owner.userId} AND removed_at IS NULL`;
     expect(seat[0]?.complimentary).toBe(true);
-    expect(seat[0]?.consent_at).not.toBeNull();
+    // T3 round 1 C/H-2: NULL, because nobody asked. The previous assertion here
+    // was `.not.toBeNull()`, which pinned a fabricated consent record as
+    // correct behaviour — :5906's "a test asserting the defect".
+    expect(seat[0]?.consent_at).toBeNull();
 
     // Part 3 §3.3 — every mutating call writes audit_log.
     const audit = await sql<{ action: string }[]>`
@@ -217,6 +228,22 @@ d("orgs routes (real Postgres)", () => {
     // follow, and a default is exactly what Kd ruled out.
     expect(
       (await post("/v1/orgs", { name: "Orgs Test Bad", timezone: "UTC" }, { cookies })).statusCode,
+    ).toBe(400);
+    // T3 round 1 L-3: the timezone is the ONLY source of an org's day
+    // boundaries, so a string that names no real zone is refused at the door
+    // rather than written permanently into a row nothing can later interpret.
+    for (const timezone of ["Mars/Olympus", "Asia/Kolkatta", "not a zone", "UTC+5"]) {
+      expect(
+        (await post("/v1/orgs", { name: "Orgs Test Bad", country: "IN", timezone }, { cookies }))
+          .statusCode,
+      ).toBe(400);
+    }
+    expect(
+      (await post(
+        "/v1/orgs",
+        { name: "Orgs Test Bad", country: "IN", timezone: "Asia/Kolkata", locale: "en_US!!" },
+        { cookies },
+      )).statusCode,
     ).toBe(400);
   });
 
@@ -330,15 +357,40 @@ d("orgs routes (real Postgres)", () => {
     }
   });
 
-  it("a clinic join needs consent, and records the timestamp (Part 3 §2.4)", { timeout: 30_000 }, async () => {
+  it("refuses to create a clinic — Kd ruling 2026-08-18, gyms and fitness centres only", { timeout: 30_000 }, async () => {
+    const { cookies } = await makeUser("no-clinic");
+    const res = await post(
+      "/v1/orgs",
+      { name: "Orgs Test No Clinic", country: "US", timezone: "America/New_York", orgType: "clinic" },
+      { cookies },
+    );
+    expect(res.statusCode).toBe(400);
+    // A studio is still a fitness business and stays available.
+    const studio = await makeOrg(cookies, "Orgs Test Studio", { orgType: "studio" });
+    expect(studio.org.orgType).toBe("studio");
+  });
+
+  it("a legacy clinic row still demands consent on join, and records it (Part 3 §2.4)", { timeout: 30_000 }, async () => {
+    // The API can no longer CREATE a clinic, but the org type was never
+    // deleted from the database and the consent gate must still protect a row
+    // that already exists. Inserted directly, which is the only way such a row
+    // can now come about — and the point of the test is that narrowing the
+    // door did not quietly disarm the guard behind it.
     const owner = await makeUser("clinic-owner");
     const patient = await makeUser("clinic-patient");
-    const org = await makeOrg(owner.cookies, "Orgs Test Clinic", { orgType: "clinic" });
-    expect(org.org.orgType).toBe("clinic");
+    const inserted = await sql<{ id: string }[]>`
+      INSERT INTO gyms (slug, name, org_type, timezone, locale, currency_display, owner_user_id)
+      VALUES ('orgs-test-legacy-clinic', 'Orgs Test Legacy Clinic', 'clinic',
+              'Asia/Kolkata', 'en', 'INR', ${owner.userId})
+      RETURNING id`;
+    const gymId = inserted[0]?.id;
+    if (gymId === undefined) throw new Error("clinic fixture insert returned no row");
+    await sql`
+      INSERT INTO gym_codes (gym_id, code, label) VALUES (${gymId}, 'CLINIC', 'Front Desk')`;
 
     const refused = await post(
       "/v1/orgs/join",
-      { code: org.joinCode.code },
+      { code: "CLINIC" },
       { cookies: patient.cookies },
     );
     expect(refused.statusCode).toBe(400);
@@ -346,13 +398,13 @@ d("orgs routes (real Postgres)", () => {
 
     const accepted = await post(
       "/v1/orgs/join",
-      { code: org.joinCode.code, consent: true },
+      { code: "CLINIC", consent: true },
       { cookies: patient.cookies },
     );
     expect(accepted.statusCode).toBe(200);
     const row = await sql<{ consent_at: Date | null }[]>`
       SELECT consent_at FROM gym_members
-      WHERE gym_id = ${org.org.id} AND user_id = ${patient.userId} AND removed_at IS NULL`;
+      WHERE gym_id = ${gymId} AND user_id = ${patient.userId} AND removed_at IS NULL`;
     expect(row[0]?.consent_at).not.toBeNull();
   });
 
@@ -378,6 +430,27 @@ d("orgs routes (real Postgres)", () => {
     expect(body.error).toBe("seat_cap_reached");
     // The cap is the gym's commercial business — the joiner is not told it.
     expect(body.message).not.toMatch(/\d/);
+
+    // T3 ROUND 1 C/H-1 — the regression. A member who is ALREADY in the gym
+    // re-submits the code while the gym is full. They are not asking for a
+    // seat; they hold one, and they are inside the count the cap is compared
+    // against. Before the fix this answered 409 "no free places" to somebody
+    // standing in the gym, which is §4.2's idempotent success inverted.
+    const rejoin = await post(
+      "/v1/orgs/join",
+      { code: org.joinCode.code },
+      { cookies: first.cookies },
+    );
+    expect(rejoin.statusCode).toBe(200);
+    expect((JSON.parse(rejoin.body) as { alreadyMember: boolean }).alreadyMember).toBe(true);
+
+    // And the cap still bites for a genuinely new person — the fix must not
+    // have opened the gate for everyone.
+    const third = await makeUser("cap-third");
+    expect(
+      (await post("/v1/orgs/join", { code: org.joinCode.code }, { cookies: third.cookies }))
+        .statusCode,
+    ).toBe(409);
   });
 
   it("joining a subscribed gym upgrades entitlements immediately (the §4.1 cache bust)", { timeout: 30_000 }, async () => {
@@ -423,13 +496,42 @@ d("orgs routes (real Postgres)", () => {
         .statusCode,
     ).toBe(200);
 
+    // T3 ROUND 1 C/H-3 — THE FIXTURE IS THE ASSERTION. A SECOND gym with its
+    // own owner and its own member must exist, or "this roster is scoped to
+    // one gym" is proven by nothing: with a single org in the fixture, the
+    // mutation `WHERE gym_id = $1 OR true` was caught only by 48 unrelated rows
+    // that happened to be lying around in the shared test database. On a clean
+    // database the same mutant returns the identical two rows and survives —
+    // the code was right and the protection was an accident.
+    const otherOwner = await makeUser("roster-other-owner");
+    const otherMember = await makeUser("roster-other-member");
+    const otherOrg = await makeOrg(otherOwner.cookies, "Orgs Test Roster Other");
+    expect(
+      (await post(
+        "/v1/orgs/join",
+        { code: otherOrg.joinCode.code },
+        { cookies: otherMember.cookies },
+      )).statusCode,
+    ).toBe(200);
+
     const mine = await get(`/v1/orgs/${org.org.id}/members`, { cookies: owner.cookies });
     expect(mine.statusCode).toBe(200);
     const page = JSON.parse(mine.body) as {
       items: { userId: string; displayName: string; complimentary: boolean; groupLabel: string | null }[];
       nextCursor: string | null;
     };
-    expect(page.items.map((i) => i.userId).sort()).toEqual([owner.userId, member.userId].sort());
+    // THE SCOPING ASSERTION COMES FIRST, ON PURPOSE. It names the two people
+    // this test itself put in ANOTHER gym, so when it fails it says whose row
+    // leaked — and it fails on the fixture's OWN rows rather than on whatever
+    // else happens to be in a shared database. Ordered ahead of the set
+    // equality below because that one is satisfied by an accident of history
+    // on a shared database and reports "expected 50 to equal 2", which is not
+    // evidence about this test's subject at all.
+    const rosterIds = page.items.map((i) => i.userId);
+    expect(rosterIds).not.toContain(otherOwner.userId);
+    expect(rosterIds).not.toContain(otherMember.userId);
+
+    expect(rosterIds.slice().sort()).toEqual([owner.userId, member.userId].sort());
     expect(page.items.find((i) => i.userId === owner.userId)?.complimentary).toBe(true);
     expect(page.items.find((i) => i.userId === member.userId)?.groupLabel).toBe("Front Desk");
     // Part 3 §2.4: nothing outside the boundary is even in the shape.
@@ -489,23 +591,26 @@ d("orgs routes (real Postgres)", () => {
     expect(seen).toEqual(all.items.map((i) => i.userId));
   });
 
-  it("gives a gym trainer the roster and holds a clinic trainer back (§2.2/§2.3)", { timeout: 30_000 }, async () => {
+  it("gives a gym trainer the roster and holds a studio trainer back (§2.2/§2.3)", { timeout: 30_000 }, async () => {
     const owner = await makeUser("trainer-owner");
     const trainer = await makeUser("trainer-user");
     const gym = await makeOrg(owner.cookies, "Orgs Test Trainer Gym");
-    const clinicOwner = await makeUser("trainer-clinic-owner");
-    const clinic = await makeOrg(clinicOwner.cookies, "Orgs Test Trainer Clinic", {
-      orgType: "clinic",
+    const studioOwner = await makeUser("trainer-studio-owner");
+    // Was a clinic before Kd's 2026-08-18 ruling. A studio exercises the same
+    // branch — §2.3 makes group scoping core for studios too — and is a type
+    // the product still has.
+    const studio = await makeOrg(studioOwner.cookies, "Orgs Test Trainer Studio", {
+      orgType: "studio",
     });
     await sql`
       INSERT INTO gym_staff (gym_id, user_id, role) VALUES
         (${gym.org.id}, ${trainer.userId}, 'trainer'),
-        (${clinic.org.id}, ${trainer.userId}, 'trainer')`;
+        (${studio.org.id}, ${trainer.userId}, 'trainer')`;
 
     expect(
       (await get(`/v1/orgs/${gym.org.id}/members`, { cookies: trainer.cookies })).statusCode,
     ).toBe(200);
-    const held = await get(`/v1/orgs/${clinic.org.id}/members`, { cookies: trainer.cookies });
+    const held = await get(`/v1/orgs/${studio.org.id}/members`, { cookies: trainer.cookies });
     expect(held.statusCode).toBe(403);
     expect((JSON.parse(held.body) as { error: string }).error).toBe("trainer_scope_unavailable");
   });

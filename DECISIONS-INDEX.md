@@ -315,6 +315,48 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   so two `app.inject` calls are serialised by the CLIENT and would pass with the
   lock deleted** — a test that cannot fail. Seven `OWED.md` lines added; the
   console line is UPDATED, not ticked.
+- **:10182** — 2026-08-18 — **ORG SLICE, T3 ROUND 1: three Critical/High, six
+  Low — the packet does NOT ship this round, and one finding is a claim the card
+  made in its own entry.** **Read before quoting a seat cap, before writing
+  `consent_at`, before trusting a cross-tenant test that builds ONE tenant, and
+  before writing a deferral that predicts its own future.** Escape hatch NOT
+  armed. **C/H-1: a full gym refused somebody already in it** — the seat check
+  ran before the `ON CONFLICT` and an existing member is inside `used`, so §4.2's
+  idempotent success became "this gym has no free places" to a person standing in
+  it; latent (no gym has a subscription). **It also FALSIFIED the card's own
+  `OWED.md` line**, which promised the seat deferral "closes by itself … no
+  change to this code is expected" — struck in place, with the shape named: **a
+  deferral that also predicts its own future makes two claims, and the prediction
+  gets no evidence while the deferral gets all the attention.** **C/H-2: the app
+  stamped a consent record nobody collected** — the owner's silent §4.0-step-6
+  membership wrote `consent_at = now()`, which for a clinic IS §2.4's DPDP/GDPR
+  record; **the card's own test asserted `.not.toBeNull()`, pinning the
+  fabrication as correct** (:5906's class). **C/H-3 IS THE ONE TO REMEMBER: the
+  cross-tenant test was passing by ACCIDENT.** The roster-scoping mutant was RED
+  only because of **48 unrelated rows in the shared test database** (193
+  memberships / 98 gyms); on a clean local Postgres — *which :5857 rule 4a
+  recommends moving to* — the same mutant SURVIVES. **The shipped code was
+  correct throughout and the protection was an accident of history, which the
+  audit doctrine's own recommendation would have silently removed.** Fixed with a
+  SECOND gym in the fixture, **and the assertion ORDER is part of the fix** so the
+  failure names a person the test itself placed elsewhere rather than reporting
+  "expected 50 to equal 2". **Four tests measured GREEN against their own broken
+  subject** (rule 4). **L-6 is the author's own over-claim**: the header and
+  commit message credited BOTH concurrency tests with catching a deleted
+  `FOR UPDATE`; only the seat-cap race does — the same-person race is carried by
+  the partial unique index and `ON CONFLICT`. Corrected in place (:8405).
+  **KD RULING IN THE SAME ROUND — CLINICS ARE OUT** (*"no click will be there
+  only gyms and fitness centers"*): asked how a clinic owner's consent should be
+  handled, he removed clinics instead. **The no-removal rule's AUTHORISED path,
+  and this is the citation.** **Narrowed at the DOOR, not deleted** —
+  `createOrgTypeSchema` is `gym|studio` while the CHECK, the `clinic` value and
+  the consent gate are untouched, pinned by a test that inserts a legacy clinic
+  directly and proves the gate did not disarm when the door narrowed; no
+  migration, reopening is one enum value. **`studio` STAYS** (a PT/boutique
+  studio is a fitness business, not a medical one) and is why the trainer
+  hold-back still has a live type to apply to. Part 3 §2.3's clinic matrix,
+  §2.2's clinic linter and Part 2B §7 PARK with the feature and must not be
+  ticked.
 - **:9944** — 2026-08-18 — **KD'S US PRICE TIERS, MEASURED AGAINST API COST —
   covered in the normal case (~3-5× headroom), underwater only in the
   runaway-success case; PRICING NOT YET RATIFIED.** **Read before any billing
