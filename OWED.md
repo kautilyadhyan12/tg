@@ -4218,8 +4218,8 @@ file and is stated so nobody reads these as lower priority than they are.
       to a signed gym per :9604 §2.
 
 - [ ] ⚪ **CLINICS ARE OUT OF THE PRODUCT — Kd ruling 2026-08-18 (DECISIONS
-      :10010, T3 round 1). What PARKS with them, so nobody builds it and nobody
-      ticks it.** His words: *"no click will be there only gyms and fitness
+      :10248; the parent card is :10010). What PARKS with them, so nobody
+      builds it and nobody ticks it.** His words: *"no click will be there only gyms and fitness
       centers"*, ruled when he was asked whether a clinic owner should be
       auto-enrolled in their own clinic and stamped with a consent record
       nobody collected. **This is the no-removal rule's AUTHORISED path** — an

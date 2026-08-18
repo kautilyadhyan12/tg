@@ -70,7 +70,12 @@ export const gymMembers = pgTable(
     codeId: uuid("code_id").references(() => gymCodes.id), // group attribution at join
     joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
     removedAt: timestamp("removed_at", { withTimezone: true }), // membership = [joined_at, removed_at)
-    consentAt: timestamp("consent_at", { withTimezone: true }), // clinic join consent (Part 3 §2.4); NOT NULL enforced in service for clinics
+    // Clinic join consent (Part 3 §2.4). Enforced in the ORGS REPO, inside the
+    // join transaction (`joinByCode`) — this comment said "in service" from
+    // 0001_init and that was always where it was expected to live rather than
+    // where it landed (T3 round 2 L-2). NULL is a real value and means nobody
+    // was asked: the owner's silent seat (§4.0 step 6) carries it.
+    consentAt: timestamp("consent_at", { withTimezone: true }),
     hiddenFromBoards: boolean("hidden_from_boards").notNull().default(false),
     complimentary: boolean("complimentary").notNull().default(false), // owner seat (Part 3 §4.0); excluded from seat counts
     createdAt: createdAt(),

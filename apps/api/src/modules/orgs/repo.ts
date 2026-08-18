@@ -336,10 +336,13 @@ export async function joinByCode(
       return { kind: "code_unusable", reason: "exhausted" };
     }
 
-    // Part 3 §2.4: joining a CLINIC code IS the consent record. Enforced in
-    // the service layer per the DDL's own comment, and the timestamp is
-    // written in the same statement as the membership so one cannot exist
-    // without the other.
+    // Part 3 §2.4: joining a CLINIC code IS the consent record. Enforced HERE,
+    // in the repo, inside the join transaction — the DDL's comment says "in
+    // service", which is where it was expected to live rather than where it
+    // ended up (T3 round 2 L-2, corrected in both places). This is the better
+    // home anyway: the refusal and the timestamp are then decided in the same
+    // transaction as the membership row, so a consented row and its timestamp
+    // cannot come apart.
     if (org.orgType === "clinic" && !input.consent) return { kind: "consent_required" };
 
     // T3 ROUND 1 C/H-1: the seat check must not run for somebody who ALREADY

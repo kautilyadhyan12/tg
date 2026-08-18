@@ -315,6 +315,37 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   so two `app.inject` calls are serialised by the CLIENT and would pass with the
   lock deleted** — a test that cannot fail. Seven `OWED.md` lines added; the
   console line is UPDATED, not ticked.
+- **:10329** — 2026-08-18 — **ORG SLICE, T3 ROUND 2 (diff-only): ZERO
+  Critical/High — THE PACKET SHIPS.** **Read before citing this card, before
+  moving the clinic consent gate, and before assuming a `FOR UPDATE`
+  transaction's later reads are stale.** Escape hatch NOT armed. All three
+  round-1 fixes CLOSE rather than move: **C/H-1's `alreadyHolds` is read inside
+  the transaction already holding the org lock and no path sets a non-default
+  isolation level (grep: none), so under READ COMMITTED it sees a join that
+  committed while this one waited** — seat maths for a new joiner byte-identical.
+  **C/H-2 verified by ENUMERATING the writers** — exactly two production writers
+  of `gym_members`, everything else a fixture, column nullable with no CHECK;
+  "fix the class not the case" (:1239) discharged by counting sites, which is
+  the only way that instruction is ever satisfied. **C/H-3 confirmed to fail on
+  its OWN rows** (`to not include 'd292e8b2-…'`, a user the test created in the
+  second gym), so it holds on a clean database. **NO FIX CREATED A NEW DEFECT** —
+  asked specifically because round 1's C/H-2 was created by an earlier fix
+  (:6277). Two edge cases correctly NOT scored: a complimentary owner re-tapping
+  now gets idempotent success (an improvement nobody designed), and an existing
+  member re-tapping a dead code still gets the code refusal — **TRUE, therefore
+  not :5807's class.** **Hazard recorded, not scored: `alreadyHolds` + a
+  concurrent account SELF-DELETION could skip the cap** — needs a user to delete
+  their own account between two statements of their own join; in `BACKLOG.md` so
+  it is not rediscovered as new. **Two Low, both mine, both "a record is a
+  claim": the clinic-parking OWED line cited :10010 where the ruling is :10248
+  — the commit message and index line had it RIGHT, so the OWED copy was the one
+  that drifted** — and two comments placed the clinic consent gate "in the
+  service layer" when it lives in the repo, **one of them in `tenancy.ts` since
+  `0001_init`**; corrected in BOTH places (:5748). **NOTHING TICKS BEYOND THE
+  CURRENCY LINE: the console OWED line names the CONSOLE and no screen exists,
+  which is also why there is no SMOKE** — stated at the card rather than
+  skipped. Full 487-test suite deliberately NOT re-run (diff-only), stated
+  rather than implied.
 - **:10182** — 2026-08-18 — **ORG SLICE, T3 ROUND 1: three Critical/High, six
   Low — the packet does NOT ship this round, and one finding is a claim the card
   made in its own entry.** **Read before quoting a seat cap, before writing

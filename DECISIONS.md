@@ -10325,3 +10325,76 @@ ahead of the set equality deliberately.
 **The diff-only re-review (round 2) is UNRUN** — :5348 rule 2 — and until it
 returns zero Critical/High the packet does not ship and no `OWED.md` line ticks
 beyond the currency one Kd ruled on.
+
+### T3 ROUND 2 (diff-only) — ZERO Critical/High. THE PACKET SHIPS
+
+**Read before citing this card, before moving the clinic consent gate, and
+before assuming a `FOR UPDATE` transaction's later reads are stale.** Fresh
+chat, on `fcffe59`, scoped to the fix round alone per :5348 rule 2. Escape hatch
+NOT armed — round 2 found no Criticals, so there is no same-subsystem repeat.
+
+**All three round-1 fixes CLOSE their findings rather than moving them, and the
+reviewer re-measured each rather than reading them.**
+
+**C/H-1 closed, with the race question answered properly:** `alreadyHolds` is
+read inside the transaction that already holds `SELECT … FROM gyms … FOR
+UPDATE`, and no code path sets a non-default isolation level (grep: none), so
+under READ COMMITTED it sees any join that committed while this one waited on
+the lock. Seat maths for a genuinely new joiner is byte-identical to before —
+`alreadyHolds` is false and the old code runs. **Two edge cases the reviewer
+checked and correctly did not score:** a complimentary OWNER re-tapping now gets
+idempotent success instead of a false 409 (an improvement nobody designed), and
+an existing member re-tapping a paused/expired/exhausted code still gets the
+code refusal, because the code checks run first — **that message is TRUE, so it
+is not :5807's class.**
+
+**C/H-2 closed on EVERY path, verified by enumeration rather than by reading the
+diff:** there are exactly two production writers of `gym_members`
+(`repo.ts:182`, `repo.ts:369`); everything else is a test fixture. The owner's
+silent seat writes NULL, the join path writes a timestamp only when the caller
+sent consent, and the column is nullable with no CHECK, so NULL cannot violate
+anything. **This is "fix the class, not the case" (:1239) discharged by
+counting the sites**, which is the only way that instruction is ever actually
+satisfied.
+
+**C/H-3 closed, and the reviewer confirmed it fails on its OWN rows:** with the
+scoping mutant applied the roster test dies at
+`expected [ …(50) ] to not include 'd292e8b2-…'`, a user this test created in
+the second gym, so the assertion holds whatever else is in the database — on a
+clean one the page is 4 rows and still contains it. The old
+`expected 50 to equal 2` failure mode is gone.
+
+**NO FIX CREATED A NEW DEFECT** — the specific question asked, because round 1's
+own C/H-2 was created by an earlier fix (:6277's class). Three things checked:
+outbound response parsing cannot 500 a list, since every column it reads is
+NOT NULL with a CHECK matching the schema and the two nullable ones are nullable
+in both; `MY_ORGS_LIMIT` truncates rather than paginating, which is the
+documented trade with its own OWED line; and `alreadyHolds` plus a concurrent
+**account self-deletion** could in principle let one join skip the cap — it
+needs a user to delete their own account between two statements of their own
+join, the only writer of `removed_at` is `users/repo.ts:281`, and no cap exists
+yet. Recorded in `BACKLOG.md` so the next chat does not rediscover it as new.
+
+**TWO LOW, both mine, both the class this file records most: a record is a
+claim.** L-1 — the clinic-parking `OWED.md` line cited :10010 (the parent card)
+where the ruling is at :10248; **the commit message and the index line both had
+it right, so the OWED line was the single copy that drifted.** L-2 — two
+comments placed the clinic consent gate "in the service layer" when it is
+enforced in the repo; one is mine, **one has been in `tenancy.ts` since
+`0001_init`** and described where the gate was expected to live rather than
+where it landed. Corrected in BOTH places (:5748: a correction applied to one
+copy is half a correction). Kept despite a diff-only round's scope because
+C/H-2's whole argument rests on that gate still biting.
+
+**THE PACKET SHIPS (:5348 rule 1).** Round 2 evidence: `orgs.routes` 19/19 and
+`orgs.unit` 21/21 green unmutated after all restores · O17–O20 re-run by the
+reviewer with anchors verified and sha256-checked restores, each RED for the
+cause it names · `tsc` and `eslint` clean on `api` and `@app/shared` ·
+`git status` clean. The full 487-test suite was **not** re-run this round, which
+is correct for a diff-only pass and is stated rather than implied.
+
+**WHAT STILL DOES NOT TICK, and why that is not a contradiction:** the console
+`OWED.md` line names the CONSOLE, and no console screen exists — so the API half
+shipping does not tick it. There is no SMOKE for the same reason, stated at the
+card rather than skipped. The next card builds the screen and carries the
+browser gate.

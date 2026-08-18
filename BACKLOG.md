@@ -816,3 +816,32 @@ fixed — the rule governs the SCHEDULE, never the quality bar.
       prove: the idempotent path holds when two transactions genuinely overlap.
       **:8707's standing lesson, incurred again — a claim about the artifact is
       verified against the artifact, not against intent.**
+
+## Org slice — T3 round 2 Lows (2026-08-18, diff-only round; ZERO Critical/High, the packet SHIPS)
+
+Both are paperwork, both are mine, and both are the same class the round-1 entry
+above already records: **a record is a claim.** Fixed in the round that found
+them; neither bought another round.
+
+- [x] **L-1 (V2) — the clinic-parking line cited the wrong entry.** It pointed at
+      DECISIONS :10010, the parent card, when the ruling itself is at :10248 —
+      which the commit message and the index line both had right, so the OWED
+      line was the one copy that drifted. Citation corrected. The rule it breaks
+      is V2's own point: an index or a parent heading is a POINTER, and a
+      citation has to land on the ruling.
+- [x] **L-2 (R7.1) — two comments said the clinic consent gate lives "in the
+      service layer"; it lives in the repo.** One is mine (`repo.ts`), one has
+      been in `tenancy.ts` since `0001_init` and simply described where the gate
+      was EXPECTED to live rather than where it landed. Corrected in BOTH
+      places, because a correction applied to one copy is half a correction
+      (:5748's lesson). Kept despite being borderline out of scope for a
+      diff-only round: the C/H-2 argument rests entirely on that gate still
+      biting, and the new legacy-clinic test is what pins it — a next reader
+      sent to the wrong file would conclude the guard was gone.
+
+**Recorded, NOT scored as a finding** (the reviewer's, and worth not
+rediscovering): `alreadyHolds` plus a concurrent account self-deletion could in
+principle let one join skip the seat cap — it needs the user to delete their own
+account between two statements of their own join. The only writer of
+`removed_at` today is `users/repo.ts:281`. Unreachable in practice, no cap exists
+yet anyway, and the fix would cost more than the hazard.
