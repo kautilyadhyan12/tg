@@ -7340,3 +7340,70 @@ NEXT: **T3 — a FRESH chat, on this diff. Nothing ticks until it returns zero
       the join-code sheet), which is the first thing in this whole gym
       direction Kd can click.
 ```
+
+```
+TASK: THE FIRST ORG SLICE — **CLOSED. T3 round 2 returned ZERO Critical/High,
+      so the packet SHIPS (:5348 rule 1).** Commits `0658ed5` (card) ·
+      `fcffe59` (round-1 fixes) · `b53f412` (round-2 corrections), on
+      `web-repoint`. DECISIONS :10010 · :10099 · :10182 · :10248 · :10329,
+      each with its index line.
+
+WHAT IS BUILT, AND WHAT DELIBERATELY IS NOT
+  · `POST /v1/orgs` · `GET /v1/orgs/mine` · `POST /v1/orgs/join` ·
+    `GET /v1/orgs/:gymId/members`. NO MIGRATION — Part 4 §3.2's four tables
+    have existed since `0001_init` and no route had ever touched one.
+  · **NO CONSOLE SCREEN, THEREFORE NO SMOKE.** Stated at the card, not skipped.
+    **The console `OWED.md` line does NOT tick** — it names the console, and
+    the API half shipping does not build a screen. Only the CURRENCY line
+    ticked, and that was a Kd ruling.
+
+TWO KD RULINGS LANDED MID-CARD — BOTH OVERRULED SOMETHING I HAD WRITTEN
+  · **CURRENCY FOLLOWS LOCATION, NO DEFAULT** (:10099). He overruled this
+    card's OWN deferral within the hour. `country` is REQUIRED on create, the
+    SERVER derives the currency, US/IN/CA/GB + the 20 euro-area countries, an
+    unsupported country is REFUSED not given a fallback. **The UK is on the
+    POUND** — Europe is not one currency. Build the console's country picker
+    from `SUPPORTED_COUNTRIES` or it will offer a country the server refuses.
+  · **CLINICS ARE OUT** (:10248) — *"no click will be there only gyms and
+    fitness centers"*, ruled when he was asked how a clinic owner's consent
+    should be handled. **The no-removal rule's AUTHORISED path.** Narrowed at
+    the DOOR only: `createOrgTypeSchema` is `gym|studio` while the CHECK, the
+    `clinic` value and the consent gate are untouched — a test inserts a legacy
+    clinic directly and proves the gate still bites. `studio` STAYS.
+
+THE THREE THINGS A NEXT CHAT WOULD OTHERWISE GET WRONG
+  · **The seat check IS built and correct. A gym with NO subscription — today
+    every gym — is uncapped.** Do NOT close that with a default cap; the tier
+    sizes are unratified US pricing (:9944). **And do not re-add the claim that
+    it "closes by itself when billing lands"** — T3 C/H-1 falsified exactly that
+    sentence, which is why it is struck in `OWED.md` rather than deleted.
+  · **`buildApp` opens its pool at `max: 1`.** The seat-cap race test drives TWO
+    separate postgres clients for that reason. Do not "simplify" it onto
+    `app.inject`. **The same-person race test does NOT catch a deleted
+    `FOR UPDATE`** — it is carried by the partial unique index and `ON CONFLICT`.
+    Round 1's L-6 was me claiming otherwise in two places.
+  · **The clinic consent gate lives in the REPO, not the service**, whatever
+    older comments said. Round 2's L-2 corrected both copies, `tenancy.ts`'s
+    having been wrong since `0001_init`.
+
+THE FINDING WORTH CARRYING TO EVERY FUTURE TENANCY TEST (round 1 C/H-3)
+  · The cross-tenant roster mutant was RED **only because of 48 unrelated rows
+    in the shared test database**; on a clean one it SURVIVED. The code was
+    right the whole time and the protection was an accident of history — and
+    :5857 rule 4a's own advice to move to a local Postgres would have silently
+    removed it. **A tenancy test must build the SECOND tenant itself**, and the
+    assertion naming that tenant's rows must run BEFORE any set-equality check,
+    or the failure message is a fact about the database rather than the subject.
+
+PROVE — api **487/487** (43 files, real Postgres) · web **695/695** · engine
+**213/213** · shared **48/48** · tsc + lint clean · **mutation audit 20/20 RED,
+0 ALIVE**, restores sha256-verified. Harness: `apps/api/tools/mutate-orgs.mjs`.
+**The harness ABORTED before its first write on one run** because the fix round
+renamed two tests its filters named — the control caught what would otherwise
+have been two fabricated ALIVE verdicts.
+
+NEXT: **the console screen** — Overview + Members + the join-code sheet, opened
+      from the phone, built ONCE and responsive (:9604 §4). It is the first
+      thing in the whole gym direction Kd can click, and it carries the SMOKE
+      gate this card could not.
+```
