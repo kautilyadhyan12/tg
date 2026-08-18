@@ -315,7 +315,7 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   so two `app.inject` calls are serialised by the CLIENT and would pass with the
   lock deleted** — a test that cannot fail. Seven `OWED.md` lines added; the
   console line is UPDATED, not ticked.
-- **:10596** — 2026-08-18 — **KD RULING: the login page asks which door you came
+- **:10824** — 2026-08-18 — **KD RULING: the login page asks which door you came
   for — TWO DOORS, ONE ACCOUNT.** **Read before touching `Login.jsx`,
   `Register.jsx`, `ProtectedRoute`, the console's entry point, or anything that
   decides where a user lands after signing in.** Raised by Kd unprompted mid-smoke
@@ -443,10 +443,47 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   + api lint clean · build ok · web lint 67 unchanged, all pre-existing.
   **MUTATION AUDIT 43 mutants · 43 RED · 0 ALIVE** (26 api + 17 web), with rule 3
   MEASURED: C12 restores the `'US'` default and the new test goes RED.
-  **THE DIFF-ONLY RE-REVIEW AND A RE-SMOKE ARE BOTH UNRUN · NOTHING TICKS** —
-  including the console line, whose headline ("does not exist") is now false and
-  was corrected in place, but whose own title still names "seats", which needs a
-  cap no gym has.
+  **RE-SMOKE PASSED 4/4** (Kd, on `5f924b4`, API restarted for it since `tsx` has
+  no `--watch`): the country box reads "Choose a country", Create stays disabled
+  on a name alone, and **a gym created with India comes back in INR** — the C/H
+  inverted. His question there, answered not deferred: **yes, one account can run
+  several gyms, deliberately** (`/mine` is a list; a chain with two branches is a
+  real customer), **and the gap was named to him unprompted — nothing limits how
+  many and create has no per-route rate limit**, so one account can squat every
+  readable slug. Its own OWED line; left alone because a cap depends on unratified
+  pricing (:9944).
+  **T3 ROUND 2 (:10726, diff-only) — ZERO Critical/High. THE PACKET SHIPS**
+  (:5348 rule 1). Escape hatch NOT armed. All eight round-1 fixes re-measured RED
+  under a restored defect rather than read. Four Low, all fixed. **Low-1: a line
+  citation in THIS index went stale inside the commit that moved it** — the
+  fix-round insert pushed the two-doors ruling off `:10596`, which is now round
+  1's own sub-heading, so the pointer **failed silently by landing on a real
+  heading**; it then moved TWICE MORE the same day (:10695 → :10715 → :10824),
+  which is why this file's header says to re-derive line numbers with `grep -n
+  "^## "` rather than trust them. **Low-2: round 1's recorded CAUSE of its
+  fixture defect was wrong** — the shipped assertion tolerates a slug suffix, so
+  the real breakage is `gyms.owner_user_id` having no `onDelete`, making cleanup's
+  user DELETE raise 23503 and fail all 46 tests; struck in place, because a later
+  chat would otherwise have deleted the OWNER half of cleanup, the half that
+  works. **Low-3: "(you)" was INFERRED from the seat being complimentary**, true
+  only while the sole `INSERT INTO gym_staff` writes `owner` — a manager would
+  have been told the owner's seat was theirs; the viewer is now passed and
+  compared. **Low-4: the L-3 fix closed half its own finding**, leaving a Try
+  again over a permanent 403, and stacking two identical error cards when both
+  reads fail. **THE ROUND'S OWN ENTRY: the Low-3 rewrite DROPPED A TRUNCATION
+  GUARD and would have printed "1 member (you)" on a page-of-one out of hundreds
+  — a wrong number — caught by a round-1 test, :6277's class for the second time
+  in this card.** **And a fix of mine drifted a mutant's anchor for the THIRD
+  time**, so it stopped being patched: `mutate-console.mjs` gains
+  `mutate-orgs.mjs`'s whole-table pre-check (:5348 rule 5) — the cost was never
+  the wasted run, it is that **a no-op mutation reports ALIVE, whose honest
+  reading is "this guarantee has no test".** web **771/771** · **21 web mutants,
+  21 RED, 0 ALIVE, harness exit code read from `$?` not through a pipe**; the api
+  sweep was NOT re-run because this round changed no api source, stated rather
+  than implied.
+  **STILL DOES NOT TICK: the console `OWED.md` line's own title names "seats",
+  which needs a cap no gym has** — its headline ("does not exist") was false and
+  was corrected in place instead.
 - **:10329** — 2026-08-18 — **ORG SLICE, T3 ROUND 2 (diff-only): ZERO
   Critical/High — THE PACKET SHIPS.** **Read before citing this card, before
   moving the clinic consent gate, and before assuming a `FOR UPDATE`

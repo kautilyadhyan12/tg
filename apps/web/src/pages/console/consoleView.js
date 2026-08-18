@@ -172,13 +172,40 @@ export function codeToShow(codes, now = Date.now()) {
 /** T3 L-5: "1 member" sitting directly above "Nobody has joined yet" is two true
  *  sentences that read as a contradiction. Both are right — the one membership
  *  is the owner's own complimentary seat (§4.0 step 6) — so the fix is to say
- *  WHOSE it is, not to change either number. */
-export function memberCountLine(page) {
+ *  WHOSE it is, not to change either number.
+ *
+ *  ROUND 2 Low-3: "(you)" USED TO BE INFERRED, and an inference on screen is a
+ *  claim. The first version printed it whenever the single membership was
+ *  complimentary, which is true today only because the sole `INSERT INTO
+ *  gym_staff` in the tree writes `owner` (`repo.ts:160`, grep-verified) — so the
+ *  only person who can reach this screen IS the person that seat belongs to.
+ *  **The day a staff-invite route lands, a manager opening a new gym would read
+ *  "1 member (you)" about somebody else's seat.** Same latent shape as the L-3
+ *  finding this round already fixed on the argument that a screen unable to
+ *  express an API guarantee is the client half of the same defect.
+ *
+ *  So the viewer is now PASSED IN and compared, and the claim is checked rather
+ *  than deduced. An unknown viewer falls back to the plain count: "1 member" is
+ *  true for everybody, and saying less is the only safe direction here. */
+export function memberCountLine(page, viewerUserId = null) {
   const label = memberCountLabel(page);
   if (label === null) return null;
-  const joined = joinedCount(page);
-  const total = Array.isArray(page?.items) ? page.items.length : 0;
-  return joined === 0 && total === 1 ? '1 member (you)' : label;
+  const items = Array.isArray(page?.items) ? page.items : [];
+  // TRUNCATION GUARD, and it is here because REMOVING IT SHIPPED A DEFECT.
+  // The first version of this fix keyed on `joinedCount(page) === 0`, which is
+  // null on a truncated page and so fell through; the round-2 rewrite dropped
+  // that and would have printed "1 member (you)" on a page-of-one out of a
+  // roster of hundreds — a wrong number, which is the thing this whole file
+  // exists to prevent. The existing "leaves every other case exactly as it was"
+  // test caught it (:6277's class: a fix creating a defect).
+  const whole = page?.nextCursor == null;
+  const only = whole && items.length === 1 ? items[0] : null;
+  const isViewersOwnSeat =
+    only != null &&
+    only.complimentary === true &&
+    typeof viewerUserId === 'string' &&
+    only.userId === viewerUserId;
+  return isViewersOwnSeat ? '1 member (you)' : label;
 }
 
 /** T3 L-6: the database's own words are not the screen's words. `org_type` and

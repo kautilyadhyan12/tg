@@ -10682,12 +10682,23 @@ default and the new country test goes RED.**
 **THE FIX ROUND'S OWN FIXTURE DEFECT, found by me and worth the line: the L-2
 regression test would have passed EXACTLY ONCE.** It creates a gym named "New",
 whose slug is `new-gym` — which the suite's `cleanup` matched with neither
-`orgs-test%` nor anything else, so the row survived, and the second run would
-have lost the slug race, got `new-gym-24kq`, and failed for a reason with nothing
-to do with its subject. **Cleanup now identifies this suite's gyms by OWNER as
-well as by slug**, and the property was verified the only way it can be: the
-suite run TWICE back to back, both 46/46, with the database queried empty after.
-A test that passes once is :4855's fixture lesson in a new place.
+`orgs-test%` nor anything else, so the row survived into the next run.
+~~and the second run would have lost the slug race, got `new-gym-24kq`, and
+failed for a reason with nothing to do with its subject.~~ **THAT REASON IS
+WRONG — STRUCK BY ROUND 2's Low-2, and the correction matters more than the
+error.** The shipped assertion is `toMatch(/^new-gym/)`, which TOLERATES a
+suffix and says so in its own comment, so a lost slug race would have PASSED.
+**The real breakage is one layer down and harder:** `gyms.owner_user_id`
+references `users.id` with no `onDelete` (`tenancy.ts:31-33`), so a surviving gym
+makes `cleanup`'s `DELETE FROM users WHERE email LIKE 'orgs-t-%'` raise 23503 —
+`beforeAll` throws and **all 46 tests fail**, not one. **Why the correction is
+load-bearing rather than pedantic: a later chat reading the struck version would
+take the prefix tolerance for the protection and drop the OWNER half of cleanup,
+which is the half that actually works.** **Cleanup now identifies this suite's
+gyms by OWNER as well as by slug**, and the property was verified the only way it
+can be: the suite run TWICE back to back, both 46/46, with the database queried
+empty after. A test that passes once is :4855's fixture lesson in a new place;
+a REASON that passes once is this file's most repeated one.
 
 **RE-SMOKE — PASSED 4/4** (Kd, in his own browser, on `5f924b4`, against an API
 restarted for it since `tsx` has no `--watch` and a stale server is a recorded
@@ -10711,6 +10722,104 @@ ratified (:9944). He did not overrule.
 
 **STILL NOT DONE: the diff-only re-review (:5348 rule 2) is UNRUN.** Nothing
 ticks.
+
+### T3 ROUND 2 (diff-only) — ZERO Critical/High. THE PACKET SHIPS
+
+**Read before citing a DECISIONS line number written in an earlier commit, before
+printing "(you)" or any other claim about WHO is reading, and before adding a
+mutant whose anchor a later fix might move.** Fresh chat, scoped to `5f924b4` per
+:5348 rule 2. Escape hatch NOT armed — round 2 found no Criticals, so there is no
+same-subsystem repeat. **All eight round-1 fixes were re-measured RED under a
+restored defect rather than read.** Four Low, all fixed here.
+
+**Low-1 — A LINE CITATION IN THE INDEX WENT STALE INSIDE THE COMMIT THAT MOVED
+IT.** The fix-round commit inserted 99 lines into DECISIONS.md, pushing the
+two-doors ruling off `:10596` — and `:10596` is now this round's own `### T3
+ROUND 1` sub-heading, so the pointer **fails silently by landing on a real
+heading**. The index bullet's own instruction is *"read before touching
+Login.jsx … the console's entry point"*, i.e. the NEXT card, so the first chat to
+follow it would have been sent to the wrong ruling. **The reviewer measured
+:10695 at `5f924b4`; by the time it was fixed the re-smoke commit had moved it
+again to :10715** — the finding demonstrating itself twice inside one day, and
+the reason the index says in its own header to re-derive line numbers with
+`grep -n "^## "` rather than trust them.
+
+**Low-2 — THE RECORDED CAUSE OF ROUND 1's FIXTURE DEFECT WAS WRONG, and the
+correction is worth more than the error.** Round 1 wrote that a second run
+"would have lost the slug race, got `new-gym-24kq`, and failed". **The shipped
+assertion is `toMatch(/^new-gym/)`, which TOLERATES a suffix and says so in its
+own comment — so that run would have PASSED.** The real breakage is one layer
+down: `gyms.owner_user_id` references `users.id` with no `onDelete`
+(`tenancy.ts:31-33`), so a surviving gym makes `cleanup`'s `DELETE FROM users`
+raise 23503, `beforeAll` throws, and **all 46 tests fail rather than one**.
+**Why it is load-bearing: a later chat reading the wrong version would take the
+prefix tolerance for the protection and delete the OWNER half of cleanup — the
+half that actually works.** Struck in place (:5748).
+
+**Low-3 — "(you)" WAS INFERRED, AND AN INFERENCE ON SCREEN IS A CLAIM.** The
+L-5 fix printed it whenever the single membership was complimentary. True today
+only because the sole `INSERT INTO gym_staff` in the tree writes `owner`
+(`repo.ts:160`, grep-verified), so the only person who can reach the screen IS
+the owner. **The day a staff-invite route lands, a manager opening a new gym
+reads "1 member (you)" about somebody else's seat.** The viewer is now passed in
+and compared; an unknown viewer falls back to the plain count, because "1 member"
+is true for everybody and saying less is the only safe direction.
+
+**Low-4 — the L-3 fix closed one half of its own finding and left the other.**
+Its comment named two harms; `allSettled` fixed the first and left the refused
+pane offering a **Try again over a permanent 403**. Only 403 is treated as
+permanent, and the reasoning is written beside it: 401 rotates and retries
+itself, 404 re-resolves the whole screen, 5xx and offline are what a retry is
+FOR, and a contract failure may be a deploy mid-flight — so Part 3 §4's "every
+error state has a retry" still holds everywhere it should. **Second half, the
+reviewer's own catch: when BOTH reads fail — the ordinary offline case — the
+split turned one error card into two identical ones with two buttons.** Two true
+sentences, and still a worse screen than the one it replaced. The duplicate is
+suppressed; the panes stay independent, which is the part that mattered.
+
+### THE FIX ROUND CREATED A DEFECT, AN EXISTING TEST CAUGHT IT, AND THAT IS THE ENTRY
+
+**The Low-3 rewrite dropped a truncation guard.** The original keyed on
+`joinedCount(page) === 0`, which returns null on a truncated page and so fell
+through; the rewrite compared `items.length === 1` directly — so **a page-of-one
+out of a roster of hundreds would have read "1 member (you)"**, a wrong number,
+which is precisely the class this whole card exists to prevent. It never reached
+a commit: `leaves every other case exactly as it was`, written in round 1, went
+RED. **:6277's class — a fix aimed at a Low creating a defect — for the second
+time in this card**, and both times the thing that caught it was a test written
+earlier rather than the author re-reading their own work. Guard restored, its
+reason written beside it, and **C19 now re-breaks it deliberately**.
+
+### THE INSTRUMENT FINDING IS THE THIRD OF ITS KIND IN TWO ROUNDS, SO IT STOPPED BEING PATCHED
+
+**A fix of mine drifted a mutant's anchor for the THIRD time** (O21 in round 1;
+C14 here, where the Low-3 rewrite deleted the line C14 named). The web harness
+aborted **at APPLY time, thirteen mutants into a run**, because — unlike
+`mutate-orgs.mjs` — it checked anchors as it went rather than up front.
+**Fixed as a CLASS, not as an instance (:5348 rule 5): the whole-table
+pre-check is ported into `mutate-console.mjs`.** The cost was never the thirteen
+wasted minutes — **a no-op mutation reports ALIVE, whose honest reading is "this
+guarantee has no test", which sends the next chat hunting a hole that was never
+there.** Both aborts this round were fail-safe: refused to score, restored
+byte-exact, exited non-zero — and **both were VISIBLE only because the harness
+was no longer piped**, which is round 1's own instrument lesson doing its job on
+the very next run.
+
+### PROVE, round 2
+
+`web` **771/771** (767 before; +4) · `api` **493/493** and `@app/shared`
+**48/48**, both unchanged by this round and not re-run beyond the console suites
+· `tsc` + `api` lint clean · **`apps/web` lint 67, unchanged, every one
+pre-existing.**
+**MUTATION AUDIT: 21 web mutants, 21 RED, 0 ALIVE, 0 never ran**, restores
+sha256-verified, **HARNESS EXIT CODE 0 read from `$?` rather than through a
+pipe.** C18–C21 are this round's four fixes; **C19 is the near-miss above**, so
+the defect the fix round shipped is now pinned by a mutant of its own. The api
+sweep was NOT re-run — this round changed no api source, which is stated rather
+than implied.
+
+**THE PACKET SHIPS (:5348 rule 1).** Round 2 found zero Critical/High; the four
+Low are fixed here and logged in `BACKLOG.md`, and a Low buys no further round.
 
 ## 2026-08-18 — KD RULING: the login page asks which door you came for — TWO DOORS, ONE ACCOUNT
 

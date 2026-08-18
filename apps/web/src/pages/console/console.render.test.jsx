@@ -27,6 +27,13 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
   };
 });
 
+// The Overview asks who is reading, since round 2's Low-3: "(you)" is a claim
+// about the viewer and must not be inferred from the seat. `u1` is `ownerSeat`'s
+// own id, so the default here IS the owner.
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'u1' } }),
+}));
+
 const { orgService } = await import('../../api/orgsApi');
 const ConsoleHome = (await import('./ConsoleHome')).default;
 const NewGym = (await import('./NewGym')).default;
@@ -334,6 +341,49 @@ describe('The gym', () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [MEMBER_ONLY_ORG] } });
     drawOverview();
     expect(await screen.findByText(/couldn't find a gym you run/i)).toBeTruthy();
+  });
+
+  it('offers no retry on a refusal that retrying can never fix (round 2 Low-4)', async () => {
+    // The L-3 fix stopped one refused read taking the whole screen but left the
+    // refused pane promising a retry. A trainer held off the roster is a
+    // permanent 403 until group scoping is built; a button saying otherwise is
+    // a small false thing on screen.
+    orgService.getMembers.mockRejectedValue(
+      apiError(403, 'trainer_scope_unavailable', "Trainer access to this list isn't available yet."),
+    );
+    drawOverview();
+    expect(await screen.findByText(/Trainer access to this list isn't available yet/i)).toBeTruthy();
+    expect(screen.queryAllByText('Try again')).toHaveLength(0);
+    // The half that works is still there — this must not become "hide it all".
+    expect(screen.getByText('K7QM2X')).toBeTruthy();
+  });
+
+  it('shows ONE error, not two, when both reads fail the same way (round 2 Low-4)', async () => {
+    // The ordinary offline case. Splitting the reads turned one error card into
+    // two identical ones with two Try again buttons — both true, still a worse
+    // screen than the one it replaced.
+    orgService.getCodes.mockRejectedValue(offline());
+    orgService.getMembers.mockRejectedValue(offline());
+    drawOverview();
+    await screen.findByText(/Couldn't reach the server/i);
+    expect(screen.getAllByText(/Couldn't reach the server/i)).toHaveLength(1);
+    expect(screen.getAllByText('Try again')).toHaveLength(1);
+  });
+
+  it('does not tell a manager that the owner’s seat is theirs (round 2 Low-3)', async () => {
+    // Reachable the day a staff-invite route lands. Verified through the SCREEN
+    // rather than only the helper, because the screen is what passes the viewer.
+    vi.resetModules();
+    vi.doMock('../../context/AuthContext', () => ({
+      useAuth: () => ({ user: { id: 'a-manager-not-the-owner' } }),
+    }));
+    const AsManager = (await import('./Overview')).default;
+    drawAt('/console/iron-house', <AsManager />, '/console/:orgSlug');
+
+    expect(await screen.findByText('1 member')).toBeTruthy();
+    expect(screen.queryByText('1 member (you)')).toBeNull();
+    vi.doUnmock('../../context/AuthContext');
+    vi.resetModules();
   });
 
   it('keeps the half that works when only ONE of the two reads is refused (L-3)', async () => {

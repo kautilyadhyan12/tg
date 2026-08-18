@@ -907,3 +907,49 @@ all — which is why the Critical/High shipped.
 **Recorded, NOT scored as a finding:** the reviewer noted `manager` appears in
 zero API tests (grep-verified). No route creates a manager row, so it rides the
 staff-route owed line — but the TEST gap itself had no line, and now has one.
+
+## Console screen — T3 round 2, diff-only (2026-08-19, DECISIONS :10726)
+
+Four Low, all FIXED in the round that found them. Zero Critical/High, so the
+packet ships (:5348 rule 1).
+
+- [x] **Low-1 — a line citation in `DECISIONS-INDEX.md` went stale inside the
+      commit that moved it.** The fix-round insert pushed the two-doors ruling
+      off `:10596`, and `:10596` is now round 1's own sub-heading — so the
+      pointer **failed silently by landing on a real heading** rather than on
+      nothing. It then moved twice more the same day (:10695 → :10715 →
+      :10824) as further sections were inserted above it. The index's own header
+      already says to re-derive line numbers with `grep -n "^## "`; this is what
+      it is warning about.
+- [x] **Low-2 — round 1 recorded the WRONG CAUSE for its own fixture defect.**
+      It said run 2 would lose the slug race and fail; the shipped assertion
+      tolerates a suffix and says so, so run 2 would have passed. The real
+      breakage is `gyms.owner_user_id` having no `onDelete`, so a surviving gym
+      makes cleanup's user DELETE raise 23503 and **all 46 tests** fail. Struck
+      in place. Load-bearing: a later chat reading the wrong version would take
+      the prefix tolerance for the protection and drop the owner half of cleanup.
+- [x] **Low-3 — "(you)" was inferred rather than checked.** True only while the
+      sole `INSERT INTO gym_staff` in the tree writes `owner`. A manager opening
+      a new gym would have been told the owner's seat was theirs. The viewer is
+      now passed in and compared; an unknown viewer gets the plain count.
+- [x] **Low-4 — the L-3 fix closed one half of its own finding.** It stopped one
+      refused read taking the whole screen and left the refused pane offering a
+      **Try again over a permanent 403**. Only 403 is treated as permanent, with
+      the reasoning written beside it. Second half: when both reads fail — the
+      ordinary offline case — the split stacked two identical error cards with
+      two buttons; the duplicate is suppressed and the panes stay independent.
+
+**The round's own near-miss, worth more than any of the four:** the Low-3 rewrite
+**dropped a truncation guard**, so a page-of-one out of a roster of hundreds
+would have read "1 member (you)" — a wrong number on screen. Caught by
+`leaves every other case exactly as it was`, a round-1 test. :6277's class (a fix
+creating a defect) for the SECOND time in this card, and both times the catch was
+a test written earlier rather than the author re-reading their own work. `C19`
+now re-breaks it deliberately.
+
+**Instrument, recorded not scored:** `corepack pnpm exec vitest` intermittently
+prints `ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL Command "vitest" not found` inside an
+otherwise successful run — seen by the reviewer and in this chat's own runs. It
+is fail-safe (the harness refuses to score a run with no tally) and pre-existing.
+It is a datapoint for the local-Postgres line in `OWED.md`, whose saving remains
+UNMEASURED — no number is quoted for it here.

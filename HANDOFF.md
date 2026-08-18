@@ -7557,7 +7557,51 @@ Four steps, not eleven: only what a user can SEE differently.
     readable slug — its own OWED line already. Left alone; a cap depends on
     unratified pricing (:9944).
 
-NEXT: **the DIFF-ONLY re-review** (:5348 rule 2 — commit `5f924b4` and the
-      surfaces it touches, never a fresh full pass). Prompt already handed to Kd.
-      Nothing ticks until a round returns zero Critical/High.
+T3 ROUND 2 (diff-only) — **ZERO Critical/High. THE PACKET SHIPS** (:5348 rule 1).
+Escape hatch NOT armed. All eight round-1 fixes re-measured RED under a restored
+defect rather than read. Four Low, all fixed in the same round.
+  · **Low-1: a line citation in `DECISIONS-INDEX.md` went stale INSIDE the commit
+    that moved it**, and **failed silently by landing on a real heading** —
+    `:10596` is now round 1's own sub-heading. It moved twice more the same day
+    (:10695 → :10715 → :10824). **Re-derive line numbers with
+    `grep -n "^## " DECISIONS.md`; the index's own header says so.**
+  · **Low-2: round 1's recorded CAUSE for its own fixture defect was wrong.** The
+    shipped assertion tolerates a slug suffix, so the failure is really
+    `gyms.owner_user_id` having no `onDelete` — cleanup's user DELETE raises
+    23503 and ALL 46 tests fail. Struck in place, because the wrong version
+    invites deleting the OWNER half of cleanup, the half that works.
+  · **Low-3: "(you)" was INFERRED** from the seat being complimentary. The viewer
+    is now passed in and compared.
+  · **Low-4: the L-3 fix closed half its own finding** — a Try again over a
+    permanent 403, and two identical error cards when both reads fail.
+
+THE TWO THINGS TO CARRY OUT OF THIS ROUND
+  · **THE FIX ROUND SHIPPED A DEFECT AND A ROUND-1 TEST CAUGHT IT.** The Low-3
+    rewrite dropped a truncation guard, so a page-of-one out of a roster of
+    hundreds would have read **"1 member (you)"** — a wrong number. :6277's class
+    for the SECOND time in this card, and both times the catch was a test written
+    earlier rather than the author re-reading their own work. `C19` pins it now.
+  · **A FIX OF MINE DRIFTED A MUTANT'S ANCHOR FOR THE THIRD TIME** (O21, then
+    C14), so it stopped being patched: `mutate-console.mjs` gains
+    `mutate-orgs.mjs`'s **whole-table anchor pre-check** (:5348 rule 5). The cost
+    was never the wasted run — **a no-op mutation reports ALIVE, whose honest
+    reading is "this guarantee has no test".** Both aborts were visible only
+    because the harness is no longer piped, which is round 1's own lesson working
+    on the very next run.
+
+PROVE, round 2 — web **771/771** · api **493/493** and shared **48/48**, both
+unchanged by this round and not re-run beyond the console suites · tsc + api lint
+clean · web lint **67, unchanged, all pre-existing**. **21 web mutants · 21 RED ·
+0 ALIVE**, restores sha256-verified, **exit code read from `$?`, not a pipe**.
+**The api sweep was NOT re-run: this round changed no api source** — stated
+rather than implied.
+
+NEXT: **the console packet is DONE. Kd's next card is the LOGIN DOOR** — he ruled
+      it on 2026-08-18 (:10824): the login page offers "I'm a member" or "I run a
+      gym", **same email and password either way**, because §4.0 step 6 makes the
+      owner member #1 of their own gym and separate ACCOUNTS would stop a gym
+      owner using their own app. **Whether the My Gym sidebar entry survives
+      beside the new door is NOT decided** and belongs to that card.
+      **`OWED.md` still does not tick the console line: its own title names
+      "seats", which needs a cap no gym has.**
 ```

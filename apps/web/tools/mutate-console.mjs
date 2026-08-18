@@ -187,7 +187,12 @@ const MUTANTS = [
     suite: VIEW_SUITE,
     why: 'L-5 RESTORED: a brand-new gym reads "1 member" directly above "nobody has joined yet" — two true sentences that contradict each other on screen',
     expect: 'names the one membership as yours',
-    from: "  return joined === 0 && total === 1 ? '1 member (you)' : label;",
+    // RE-ANCHORED after round 2's Low-3 rewrote this function. The old anchor
+    // named a line that no longer exists, and the harness aborted at APPLY time
+    // — 13 mutants into a run. Second anchor drift caused by my own fix in two
+    // rounds (O21 was the first), which is what moved the whole-table pre-check
+    // below from the api harness into this one.
+    from: "  return isViewersOwnSeat ? '1 member (you)' : label;",
     to: "  return label;",
   },
   {
@@ -217,6 +222,44 @@ const MUTANTS = [
     from: "        codesOutcome.status === 'fulfilled'",
     to: "        codesOutcome.status === 'fulfilled' && membersOutcome.status === 'fulfilled'",
   },
+
+  // ── T3 round 2's fixes ─────────────────────────────────────────────────
+  {
+    id: 'C18',
+    target: 'view',
+    suite: VIEW_SUITE,
+    why: 'ROUND 2 Low-3 RESTORED: "(you)" is INFERRED from the seat being complimentary rather than checked against the viewer, so the day a manager can open this screen it tells them the owner\'s seat is theirs',
+    expect: 'only about the person actually reading it',
+    from: "    typeof viewerUserId === 'string' &&\n    only.userId === viewerUserId;",
+    to: "    true;",
+  },
+  {
+    id: 'C19',
+    target: 'view',
+    suite: VIEW_SUITE,
+    why: "ROUND 2's OWN NEAR-MISS RESTORED: the truncation guard goes, so a page-of-one out of a roster of hundreds reads \"1 member (you)\" — a wrong number, and the defect this round's rewrite actually shipped before an existing test caught it",
+    expect: 'leaves every other case exactly as it was',
+    from: "  const whole = page?.nextCursor == null;",
+    to: "  const whole = true;",
+  },
+  {
+    id: 'C20',
+    target: 'overview',
+    suite: RENDER_SUITE,
+    why: 'ROUND 2 Low-4 RESTORED: a permanent 403 is offered a Try again that can never succeed',
+    expect: 'no retry on a refusal that retrying can never fix',
+    from: "  return errorStatus(err) !== 403;",
+    to: "  return true;",
+  },
+  {
+    id: 'C21',
+    target: 'overview',
+    suite: RENDER_SUITE,
+    why: 'ROUND 2 Low-4 RESTORED, second half: both reads failing the same way stack two identical error cards with two Try again buttons',
+    expect: 'shows ONE error, not two, when both reads fail the same way',
+    from: "      {!members.loading && members.error !== null && members.error !== codes.error ? (",
+    to: "      {!members.loading && members.error !== null ? (",
+  },
 ];
 
 const abort = (msg) => {
@@ -237,6 +280,27 @@ for (const m of MUTANTS) {
 const originals = new Map(
   Object.entries(TARGETS).map(([k, t]) => [k, { sha: sha(t.file), text: readFileSync(t.file, 'utf8') }]),
 );
+
+// EVERY ANCHOR IS CHECKED FOR THE WHOLE TABLE BEFORE A BYTE IS WRITTEN, ported
+// here from `mutate-orgs.mjs` after this harness aborted at APPLY time, 13
+// mutants into a run, on an anchor a fix in the SAME round had drifted.
+//
+// It is not about saving the 13 minutes. A no-op mutation reports as ALIVE, and
+// the honest reading of ALIVE is "this guarantee has no test" — so an anchor
+// that silently stops matching sends the next chat hunting a hole that was never
+// there. This is the second time in two rounds that one of my own fixes moved a
+// line an existing mutant named (O21 was the first), which is exactly the
+// recurring CLASS that :5348 rule 5 says gets a permanent guard rather than
+// another careful fix.
+for (const m of MUTANTS) {
+  const original = originals.get(m.target);
+  if (!original.text.includes(m.from)) {
+    abort(
+      `${m.id}: its anchor matches nothing in '${m.target}'. Nothing has been written yet. ` +
+      `Re-anchor it against the current file — a no-op mutation reports as ALIVE, which reads as "this guarantee has no test".`,
+    );
+  }
+}
 
 const STRIP_ANSI = new RegExp(String.fromCharCode(27) + String.raw`\[[0-9;]*m`, 'g');
 const tallied = (out) => {

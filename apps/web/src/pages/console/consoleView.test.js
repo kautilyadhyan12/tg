@@ -235,20 +235,32 @@ describe('the member-count line stops contradicting itself (T3 L-5)', () => {
   it('names the one membership as yours on a brand-new gym', () => {
     // "1 member" directly above "nobody has joined yet" is two TRUE sentences
     // that read as a contradiction. Neither number changes; the line says whose.
-    expect(memberCountLine({ items: [member('owner', true)], nextCursor: null })).toBe(
+    expect(memberCountLine({ items: [member('owner', true)], nextCursor: null }, 'owner')).toBe(
       '1 member (you)',
     );
   });
 
+  it('says "(you)" only about the person actually reading it (round 2 Low-3)', () => {
+    // The first version INFERRED it from "the single seat is complimentary",
+    // which is true today only because nothing can create a non-owner staff
+    // member. The day a manager can open this screen, that inference tells them
+    // somebody else's seat is theirs.
+    const page = { items: [member('owner', true)], nextCursor: null };
+    expect(memberCountLine(page, 'a-manager-who-is-not-the-owner')).toBe('1 member');
+    // An unknown viewer says LESS, never more — "1 member" is true for everyone.
+    expect(memberCountLine(page, null)).toBe('1 member');
+    expect(memberCountLine(page)).toBe('1 member');
+  });
+
   it('leaves every other case exactly as it was', () => {
-    expect(memberCountLine({ items: [member('a')], nextCursor: null })).toBe('1 member');
-    expect(memberCountLine({ items: [member('owner', true), member('b')], nextCursor: null })).toBe(
-      '2 members',
-    );
-    expect(memberCountLine({ items: [member('owner', true)], nextCursor: 'x|y' })).toBe(
+    expect(memberCountLine({ items: [member('a')], nextCursor: null }, 'a')).toBe('1 member');
+    expect(
+      memberCountLine({ items: [member('owner', true), member('b')], nextCursor: null }, 'owner'),
+    ).toBe('2 members');
+    expect(memberCountLine({ items: [member('owner', true)], nextCursor: 'x|y' }, 'owner')).toBe(
       '1+ members',
     );
-    expect(memberCountLine(null)).toBeNull();
+    expect(memberCountLine(null, 'owner')).toBeNull();
   });
 });
 

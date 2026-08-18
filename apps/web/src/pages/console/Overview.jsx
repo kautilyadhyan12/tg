@@ -3,7 +3,8 @@ import { Link, useParams } from 'react-router-dom';
 import { Users, ChevronRight } from 'lucide-react';
 import JoinCodeCard from '../../components/console/JoinCodeCard';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
-import { orgService, errorText } from '../../api/orgsApi';
+import { orgService, errorText, errorStatus } from '../../api/orgsApi';
+import { useAuth } from '../../context/AuthContext';
 import { useConsoleOrg } from './useConsoleOrg';
 import { codeToShow, joinedCount, memberCountLine, orgTypeLabel, roleLabel } from './consoleView';
 
@@ -22,6 +23,23 @@ import { codeToShow, joinedCount, memberCountLine, orgTypeLabel, roleLabel } fro
 // The §4.2 banner slot is absent for the same reason — its states are read off
 // `subscriptions`, and billing does not exist.
 
+/** ROUND 2 Low-4: WOULD PRESSING "Try again" CHANGE ANYTHING?
+ *
+ *  The L-3 fix closed half its own finding: it stopped one refused read taking
+ *  the whole screen, but left the refused pane offering a retry that can never
+ *  succeed. A trainer held off the roster (§2.2, a permanent 403 until group
+ *  scoping is built) is not going to be let in by pressing a button, and a
+ *  button that promises otherwise is a small false thing on screen.
+ *
+ *  Only 403 is treated as permanent, deliberately: 401 rotates and retries by
+ *  itself, 404 here means the gym vanished (the whole screen re-resolves), 5xx
+ *  and offline are exactly what a retry is FOR, and a contract failure may well
+ *  be a deploy mid-flight. Part 3 §4's "every error state has a retry" still
+ *  holds for every one of those. */
+function isRetryable(err) {
+  return errorStatus(err) !== 403;
+}
+
 /** One label/value line. Deliberately plain: every value on this screen is a
  *  fact the server stated, not a figure this page derived. */
 function Fact({ label, value }) {
@@ -39,6 +57,7 @@ function Fact({ label, value }) {
 
 export default function Overview() {
   const { orgSlug } = useParams();
+  const { user } = useAuth();
   const { loading: orgLoading, error: orgError, org, notFound, reload } = useConsoleOrg(orgSlug);
 
   // T3 L-3: TWO INDEPENDENTLY-AUTHORISED READS, TWO OUTCOMES.
@@ -54,8 +73,8 @@ export default function Overview() {
   // Unreachable today (no route creates a trainer row), and fixed anyway: the
   // API's guarantee is real and tested, and a screen that cannot express it is
   // the client half of the same defect.
-  const [codes, setCodes] = useState({ loading: true, error: null, list: null });
-  const [members, setMembers] = useState({ loading: true, error: null, page: null });
+  const [codes, setCodes] = useState({ loading: true, error: null, retryable: true, list: null });
+  const [members, setMembers] = useState({ loading: true, error: null, retryable: true, page: null });
   const [attempt, setAttempt] = useState(0);
   const gymId = org?.id ?? null;
 
@@ -71,19 +90,21 @@ export default function Overview() {
       if (cancelled) return;
       setCodes(
         codesOutcome.status === 'fulfilled'
-          ? { loading: false, error: null, list: codesOutcome.value.data?.codes ?? [] }
+          ? { loading: false, error: null, retryable: true, list: codesOutcome.value.data?.codes ?? [] }
           : {
               loading: false,
               error: errorText(codesOutcome.reason, "We couldn't load this gym's join code."),
+              retryable: isRetryable(codesOutcome.reason),
               list: null,
             },
       );
       setMembers(
         membersOutcome.status === 'fulfilled'
-          ? { loading: false, error: null, page: membersOutcome.value.data ?? null }
+          ? { loading: false, error: null, retryable: true, page: membersOutcome.value.data ?? null }
           : {
               loading: false,
               error: errorText(membersOutcome.reason, "We couldn't load this gym's members."),
+              retryable: isRetryable(membersOutcome.reason),
               page: null,
             },
       );
@@ -94,8 +115,8 @@ export default function Overview() {
   }, [gymId, attempt]);
 
   const retry = () => {
-    setCodes({ loading: true, error: null, list: null });
-    setMembers({ loading: true, error: null, page: null });
+    setCodes({ loading: true, error: null, retryable: true, list: null });
+    setMembers({ loading: true, error: null, retryable: true, page: null });
     setAttempt((n) => n + 1);
   };
 
@@ -131,7 +152,9 @@ export default function Overview() {
   }
 
   const joined = joinedCount(members.page);
-  const countLine = memberCountLine(members.page);
+  // The viewer is PASSED, not assumed (round 2 Low-3): "(you)" is a claim about
+  // who is reading, and this screen will one day be reachable by a manager.
+  const countLine = memberCountLine(members.page, user?.id ?? null);
   const shownCode = codeToShow(codes.list);
 
   return (
@@ -149,7 +172,7 @@ export default function Overview() {
       {/* ── The join code pane, on its own outcome ─────────────────────── */}
       {codes.loading ? <ConsoleLoading label="Loading…" /> : null}
       {!codes.loading && codes.error !== null ? (
-        <ConsoleFailed message={codes.error} onRetry={retry} />
+        <ConsoleFailed message={codes.error} onRetry={codes.retryable ? retry : undefined} />
       ) : null}
       {!codes.loading && codes.error === null ? (
         shownCode !== null ? (
@@ -164,8 +187,14 @@ export default function Overview() {
       ) : null}
 
       {/* ── The members pane, on ITS own outcome ───────────────────────── */}
-      {!members.loading && members.error !== null ? (
-        <ConsoleFailed message={members.error} onRetry={retry} />
+      {/* ROUND 2 Low-4, second half: when BOTH reads fail the same way — which
+          is the ordinary offline case — the L-3 split turned one error card into
+          two identical ones with two Try again buttons. Two true sentences, and
+          still a worse screen than the one it replaced. The duplicate is
+          suppressed; the panes stay independent, which is the part that
+          mattered. */}
+      {!members.loading && members.error !== null && members.error !== codes.error ? (
+        <ConsoleFailed message={members.error} onRetry={members.retryable ? retry : undefined} />
       ) : null}
       {!members.loading && members.error === null ? (
         <Link
