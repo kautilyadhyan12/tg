@@ -3973,6 +3973,19 @@ file and is stated so nobody reads these as lower priority than they are.
       market is US gyms (:9604 §2). US gyms pay multiples of the Indian tiers.
       This is not "un-ratified pricing" any more — the numbers in the spec are for
       the wrong country. Blocks any billing card and any gym pitch.
+      **UPDATE 2026-08-18 (DECISIONS :9944): a Kd proposal now EXISTS and the
+      math is done** — gym tiers $20/$30/$40/$50 by member count, consumers
+      $5/mo, 8 meal scans + 2 route plans per day in both channels. Measured
+      against the live cost ledger: covered in the normal case (~3-5× headroom),
+      underwater only under full-roster daily use; three boundary/cap fixes put
+      with the math. **AWAITING KD'S RATIFICATION — do not seed or quote these
+      numbers until he confirms.**
+- [ ] 🟡 **IN-APP CONSENT SCREEN FOR HEALTH DATA AND THE CAMERA — needed before
+      a US gym signs (DECISIONS :9944).** Whatever the gym's contract says
+      about the roster upload, health-type data (meals, weight, workouts) and
+      the camera sit under US state laws that reach the app directly — so the
+      app asks the MEMBER at first use, not the gym. Small build; its wording
+      is part of the pre-signing lawyer review (:592).
 - [ ] 🟡 **THE PRIVACY-LAW QUESTION (:592) IS NO LONGER THEORETICAL.** US workout
       and body data is health data and several states legislate it specifically.
       Still unruled; now on the critical path to a signed gym rather than behind

@@ -9940,3 +9940,69 @@ a garbage file degrades to a polite error, never a crash, never half-saved
 rows. Match rules looser than the ladder above need a fresh Kd ruling (:9809).
 The two reserved questions STAND untouched: seat consumption by
 imported-not-yet-joined members, and upload consent (inside :592).
+
+## 2026-08-18 — KD PROPOSED THE US PRICE TIERS AND ASKED WHETHER THEY COVER THE API COST. MEASURED: yes in the normal case with ~3-5× headroom, no in the runaway-success case — and the ledger already built is the tripwire. PRICING AWAITS HIS RATIFICATION
+
+Kd's proposal, verbatim intent: gym tiers **<500 members $20 · 500-1000 $30 ·
+1000-1500 $40 · >1500 $50** per month, every member of a paying gym eligible;
+**direct consumers $5/month**; allowances in BOTH channels: **8 meal-photo
+scans/day (resets daily) and 2 route plans/day**. The chat bot being dropped
+(:9604 §5), meal vision is the dominant metered cost. He asked: *"calculate
+whether this will cover my api cost"*.
+
+### THE MEASUREMENT (V1 — every number from a command or a cited constant)
+Queried `api_cost_events` in the dev DB this session (postgres.js one-liner;
+output in the transcript): the LIVE vision model `groq:qwen/qwen3.6-27b` has
+**18 recorded real scans, avg 1,763 micro-USD, max 2,120 micro-USD per scan**
+(constants: $0.60/1M in, $3.00/1M out, `nutrition/service.ts:21-25`, groq list
+quoted 2026-07-16). Route planning is **cost_micro = 0** by construction
+(`geo/cost.ts:8` — ORS free daily allowance, billed as call count).
+**Caveats stated to Kd:** 18 scans is a small sample; Groq list prices can move;
+qwen3.6-27b is the ONLY vision model left on Groq (:346), so no cheaper same-
+provider swap exists today — image downscaling is the cost lever if ever needed.
+
+### THE ARITHMETIC (worst-case uses the MAX scan ever recorded, never the avg)
+- One scan $0.00212 → a member maxing 8/day for 30 days = **$0.51/month**;
+  a 2-scan/day member = $0.13/month.
+- Tier fee ÷ $0.51 = members each tier absorbs at FULL daily use:
+  **$20→~39 · $30→~59 · $40→~78 · $50→~98.**
+- Defensible-adoption scenario (10% of roster scanning ~2/day): a 500-member
+  gym costs ~$6.35/month against $30 — **covered, ~3-5× headroom across
+  tiers.** Full-roster daily use: ~$250/month against $20 — **underwater.**
+- **VERDICT AS PUT TO KD: covered in the normal case; the failure mode is the
+  success case, and `api_cost_events` (already live) shows the real usage from
+  week one, so repricing happens on evidence.** The flat-fee-with-per-member-
+  variable-cost shape is the structural exposure; the daily cap bounds each
+  member, nothing bounds the roster.
+- Direct $5 user: worst case $0.51 ≈ 10% of revenue — **safe**; Stripe's
+  ~2.9%+$0.30 leaves ~$4.55 net (UNVERIFIED: current Stripe US card rate from
+  model memory; confirm at the billing card).
+- ORS: free allowance is SHARED app-wide (size UNVERIFIED); at scale routes
+  become a paid plan or self-hosted — a scale item, not a pricing threat.
+
+### THREE FIXES PROPOSED TO KD WITH THE MATH (awaiting his yes with the prices)
+1. **Boundary gaps:** exactly 500 / exactly 1000 fall in no tier as stated;
+   cleaned form 1-499 / 500-999 / 1000-1499 / 1500+.
+2. **"1500+" is unbounded** — a 5,000-member gym at $50 is the worst exposure
+   on the table; above ~2,500 make it contact-us.
+3. Consumer margin stated net of card fees so the picture is real.
+
+**STATUS: NOT RATIFIED.** These tiers supersede nothing until Kd confirms —
+Part 5 §1's India books remain UNRESOLVED (:9604 §2) and the seeded quota
+shapes (`db/seed.ts:29,43` — route_gen day-5/month-2) are re-seeded per the
+ruling when the billing card lands. His allowances (8 scans/day, 2 routes/day,
+both channels) become the entitlements config at that card.
+
+### CONSENT — THE SPLIT PUT TO KD (US market only, his question answered)
+- **Roster upload = the GYM's responsibility by contract**: the gym warrants it
+  has the right to hand over member details — the standard pattern for a
+  business loading its customer list into software it uses. No per-member
+  permission chase.
+- **Two categories stay OURS whatever the gym signs:** health-type data (meals,
+  weight, workouts — state-regulated) and the CAMERA (state biometric laws with
+  famously large penalties). The app asks the member DIRECTLY at first use — an
+  in-app consent screen, cheap to build, now an owed item.
+- **One US lawyer reviews before the first gym signs** — this is :592's open
+  question given its concrete content; it does not close here.
+  (Legal specifics above are UNVERIFIED model knowledge (V5) — the lawyer step
+  exists precisely because a chat cannot rule on law.)

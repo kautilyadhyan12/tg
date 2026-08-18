@@ -259,6 +259,26 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:9944** — 2026-08-18 — **KD'S US PRICE TIERS, MEASURED AGAINST API COST —
+  covered in the normal case (~3-5× headroom), underwater only in the
+  runaway-success case; PRICING NOT YET RATIFIED.** **Read before any billing
+  or entitlements card, and before quoting a price to anyone.** His proposal:
+  gym tiers $20/$30/$40/$50 by member count, direct consumers $5/mo, both
+  channels get 8 meal scans/day + 2 route plans/day. MEASURED from
+  `api_cost_events` this session: live vision model max **$0.00212/scan** (18
+  real scans) → a max-use member costs $0.51/mo; each tier absorbs ~39/59/78/98
+  full-use members; routes cost $0 (ORS free allowance, shared, size
+  UNVERIFIED). **The structural exposure: flat fee + per-member variable cost —
+  the daily cap bounds a member, nothing bounds a roster; the already-live
+  ledger is the tripwire and repricing happens on evidence.** Three fixes put
+  with the math: tier boundary gaps (exactly 500/1000 fall nowhere → 1-499 /
+  500-999 / 1000-1499 / 1500+), "1500+" unbounded (above ~2,500 = contact-us),
+  consumer margin net of card fees (~$4.55 of $5, UNVERIFIED rate). Current
+  quota seeds are re-seeded per the ruling at the billing card. **CONSENT SPLIT
+  (his question, US-only): roster upload = the gym's responsibility by
+  contract; health data and the CAMERA = the app asks the member directly at
+  first use (in-app consent screen, now owed); one US lawyer reviews before
+  the first gym signs — :592 given concrete content, not closed.**
 - **:9870** — 2026-08-18 — **MEMBER MIGRATION DESIGN SETTLED (same-day
   continuation of :9809): verified-email-only auto-attach, front-desk confirm
   queue for everything else, and Kd's three amendments.** **Read WITH :9809
