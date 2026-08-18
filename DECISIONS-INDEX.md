@@ -315,6 +315,63 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   so two `app.inject` calls are serialised by the CLIENT and would pass with the
   lock deleted** — a test that cannot fail. Seven `OWED.md` lines added; the
   console line is UPDATED, not ticked.
+- **:10402** — 2026-08-18 — **THE CONSOLE SCREEN: a gym owner can see their gym,
+  their join code and their members, from a phone — and THE CARD'S OWN PREMISE
+  ABOUT THE API WAS FALSE.** **Read before touching
+  `apps/web/src/pages/console`, before adding a widget to the console's
+  Overview, before adding a field to a member row, and before assuming a join
+  code can be read back from `GET /v1/orgs/mine`.** Web half of :10010. Four
+  screens in Part 3 §3.1's own route group — `/console` · `/console/new` ·
+  `/console/:orgSlug` · `/console/:orgSlug/members` — reached from a **My Gym**
+  sidebar entry, under `ConsoleLayout` and **NOT `AppLayout`, which pins
+  `marginLeft: 256` with NO breakpoint anywhere in it**, so on a phone its
+  content starts off the left edge. **THE PREMISE CORRECTION IS THE MOST USEFUL
+  PART: the card said the API was unchanged, and a join code left the server
+  exactly ONCE, in the create response** (`listOrgsForUser` selects no code
+  column; `grep gym_codes` finds no other read outside the join transaction) —
+  so an owner saw their code the day they made the gym and never again.
+  **KD RULED THE READ ENDPOINT IN**: `GET /v1/orgs/:gymId/codes`, Part 3 §3.3's
+  own read half, staff-only through the SAME `requireStaff` the roster uses.
+  **The rejected alternative, which a later chat will reach for: caching the
+  code client-side at creation** — it works until a code is rotated, paused or
+  expired, and then the console prints a dead code under "share this with your
+  members" (:5807). Hence the response carries `paused`/`expiresAt`/`maxUses`/
+  `uses` and the screen WITHHOLDS the invitation rather than rewording it, with
+  a test proving the join path agrees with what the screen is about to draw.
+  **§2.2 grants Invite to ALL THREE roles, so codes allow all three** — the
+  studio/clinic trainer hold-back is about the MEMBER LIST, and a test has one
+  trainer getting 403 on the roster and 200 on the codes. **THE OVERVIEW HAS NO
+  NUMBERS ON IT, DELIBERATELY: §4.1's tiles, 8-week chart and at-risk list all
+  read `org_daily_stats` / `org_live_counters` / `org_member_stats` and not one
+  of the three EXISTS** — no table, no view, no worker, no route — so a tile
+  there would print a number nobody computed. Five decisions not to re-derive:
+  **the slug resolves against `mine`** (no by-slug route; and `mine` truncates
+  at 100, so past the cap a gym you DO staff reads back as "we could not find
+  a gym you run" — its ⚪ line raised in consequence); **`/console` lists only
+  `staffRole !== null`**; **no auto-redirect on a single gym**; **a member count
+  is EXACT or a BOUND, never one page's length**, and `joinedCount` excludes the
+  owner's §4.0-step-6 complimentary seat; **`locale` is not collected** because
+  nothing reads the column. **THE TIMEZONE ALIAS PROBLEM WAS MEASURED, NOT
+  ANTICIPATED: `Intl.supportedValuesOf('timeZone')` here returns 418 zones
+  containing `Asia/Calcutta` and NOT `Asia/Kolkata`**, while Chrome reports
+  `Asia/Calcutta` from `resolvedOptions()` on this machine (:618) — a picker
+  missing the user's own zone silently sets the gym up in somebody else's day
+  boundaries, permanently, so the detected zone is always injected and the test
+  derives the missing alias from the runtime instead of hard-coding it.
+  PROVE: api **490/490** real Postgres · web **747/747** · shared **48/48** ·
+  tsc + api lint clean · `vite build` ok · **web lint 67 errors, every one
+  PRE-EXISTING** (the four this card introduced were fixed, not added to the
+  pile). **MUTATION AUDIT 35 mutants · 35 RED · 0 ALIVE**, split by cost per
+  :5857 rule 4a — O21–O24 added to `mutate-orgs.mjs` (24 against real Postgres)
+  and a new `apps/web/tools/mutate-console.mjs` (11, no DB mutants at all).
+  **THE WEB HARNESS CAUGHT A DEFECT IN ITSELF BEFORE IT RAN, and it is the
+  control again: its pair-dedupe joined `(suite, filter)` into a string and
+  split it, and EVERY filter contains spaces — so the control would have run on
+  the first WORD of each and passed while checking something else.** It also
+  ABORTS on a non-ASCII `-t` filter, since two of these test names carry a curly
+  apostrophe. **SMOKE UNRUN · T3 UNRUN · NOTHING TICKS** — including the console
+  line, whose headline ("does not exist") is now false and was corrected in
+  place, but whose own title still names "seats", which needs a cap no gym has.
 - **:10329** — 2026-08-18 — **ORG SLICE, T3 ROUND 2 (diff-only): ZERO
   Critical/High — THE PACKET SHIPS.** **Read before citing this card, before
   moving the clinic consent gate, and before assuming a `FOR UPDATE`

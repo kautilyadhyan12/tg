@@ -41,6 +41,15 @@ export interface MemberRow {
   complimentary: boolean;
 }
 
+export interface CodeRow {
+  code: string;
+  label: string;
+  paused: boolean;
+  expiresAt: Date | null;
+  maxUses: number | null;
+  uses: number;
+}
+
 interface RawOrg {
   id: string;
   slug: string;
@@ -490,6 +499,39 @@ export async function listMembers(
     })),
     nextCursor,
   };
+}
+
+/** Every join code belonging to ONE org, oldest first — so Part 3 §4.0 step 4's
+ *  "Front Desk" code, the one created with the gym, is the one at the top of an
+ *  owner's screen.
+ *
+ *  Tenancy IS the WHERE (R3.2), and note what is deliberately absent: this
+ *  module has no read-a-code-by-id anywhere, so a code can only ever be reached
+ *  through a gym the caller was authorised against first. The join path's own
+ *  lookup is by `code` and returns nothing but the ids it needs to lock. */
+export async function listCodes(sql: Sql, gymId: string): Promise<CodeRow[]> {
+  const rows = await sql<
+    {
+      code: string;
+      label: string;
+      paused: boolean;
+      expires_at: Date | null;
+      max_uses: number | null;
+      uses: number;
+    }[]
+  >`
+    SELECT code, label, paused, expires_at, max_uses, uses
+    FROM gym_codes
+    WHERE gym_id = ${gymId}
+    ORDER BY created_at ASC, code ASC`;
+  return rows.map((r) => ({
+    code: r.code,
+    label: r.label,
+    paused: r.paused,
+    expiresAt: r.expires_at,
+    maxUses: r.max_uses,
+    uses: r.uses,
+  }));
 }
 
 /** Part 3 §3.3: "every mutating call writes `audit_log`". Written inside the

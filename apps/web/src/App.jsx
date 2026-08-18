@@ -29,6 +29,16 @@ import RunPlanner      from './pages/RunPlanner';
 import ActiveRun       from './pages/ActiveRun';
 import RunSummary      from './pages/RunSummary';
 
+// Gym console — its own route group (Part 3 §3.1: `/console/:orgSlug/...`, and
+// v1 §4's separate `apps/dashboard` folded into `apps/web` as a route group —
+// one deploy, shared auth). It uses ConsoleLayout, NOT AppLayout: the console
+// is the surface that has to work on a phone, and AppLayout has no breakpoint.
+import ConsoleLayout   from './components/console/ConsoleLayout';
+import ConsoleHome     from './pages/console/ConsoleHome';
+import NewGym          from './pages/console/NewGym';
+import ConsoleOverview from './pages/console/Overview';
+import ConsoleMembers  from './pages/console/Members';
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -144,6 +154,30 @@ export default function App() {
             } />
             <Route path="/running/active" element={
               <ProtectedRoute><ActiveRun /></ProtectedRoute>
+            } />
+
+            {/* ── Gym console ───────────────────────────────────────────── */}
+            {/* `/console/new` is declared BEFORE `/console/:orgSlug` so "new"
+                is read as the create screen and not as a gym slug. */}
+            <Route path="/console" element={
+              <ProtectedRoute>
+                <ConsoleLayout><ConsoleHome /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/console/new" element={
+              <ProtectedRoute>
+                <ConsoleLayout><NewGym /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/console/:orgSlug" element={
+              <ProtectedRoute>
+                <ConsoleLayout><ConsoleOverview /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/console/:orgSlug/members" element={
+              <ProtectedRoute>
+                <ConsoleLayout><ConsoleMembers /></ConsoleLayout>
+              </ProtectedRoute>
             } />
 
             {/* ── Fallback ──────────────────────────────────────────────── */}

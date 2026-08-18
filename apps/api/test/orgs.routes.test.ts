@@ -173,6 +173,9 @@ d("orgs routes (real Postgres)", () => {
     expect(
       (await get("/v1/orgs/11111111-1111-1111-1111-111111111111/members")).statusCode,
     ).toBe(401);
+    expect(
+      (await get("/v1/orgs/11111111-1111-1111-1111-111111111111/codes")).statusCode,
+    ).toBe(401);
   });
 
   it("creates the org, its first code, the owner staff row and the owner's seat", { timeout: 30_000 }, async () => {
@@ -553,6 +556,117 @@ d("orgs routes (real Postgres)", () => {
   it("rejects a non-uuid :gymId as a 400, not a 500", { timeout: 30_000 }, async () => {
     const { cookies } = await makeUser("badid");
     expect((await get("/v1/orgs/not-a-uuid/members", { cookies })).statusCode).toBe(400);
+    expect((await get("/v1/orgs/not-a-uuid/codes", { cookies })).statusCode).toBe(400);
+  });
+
+  it("serves the gym's join codes to staff and hides them from everyone else (R3.2)", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("jc-owner");
+    const member = await makeUser("jc-member");
+    const stranger = await makeUser("jc-stranger");
+    const org = await makeOrg(owner.cookies, "Orgs Test Joincodes");
+    expect(
+      (await post("/v1/orgs/join", { code: org.joinCode.code }, { cookies: member.cookies }))
+        .statusCode,
+    ).toBe(200);
+
+    // THE FIXTURE IS THE ASSERTION (T3 round 1 C/H-3, applied before the
+    // defect rather than after it). A SECOND gym with its own code has to
+    // exist, or "codes are scoped to one gym" is proven by nothing — the
+    // mutation `WHERE gym_id = $1 OR true` would return this gym's single code
+    // and survive on a clean database.
+    const otherOwner = await makeUser("jc-other-owner");
+    const otherOrg = await makeOrg(otherOwner.cookies, "Orgs Test Joincodes Other");
+
+    const mine = await get(`/v1/orgs/${org.org.id}/codes`, { cookies: owner.cookies });
+    expect(mine.statusCode).toBe(200);
+    const body = JSON.parse(mine.body) as {
+      codes: {
+        code: string;
+        label: string;
+        paused: boolean;
+        expiresAt: string | null;
+        maxUses: number | null;
+        uses: number;
+      }[];
+    };
+    const codes = body.codes.map((c) => c.code);
+    // Scoping first, naming the code this test itself put in ANOTHER gym, so a
+    // failure says which gym's code leaked instead of "expected 2 to equal 1".
+    expect(codes).not.toContain(otherOrg.joinCode.code);
+    expect(codes).toEqual([org.joinCode.code]);
+
+    const only = body.codes[0];
+    expect(only?.label).toBe("Front Desk");
+    expect(only?.paused).toBe(false);
+    expect(only?.expiresAt).toBeNull();
+    expect(only?.maxUses).toBeNull();
+    // The member joined through it, so the counter moved — proof the console is
+    // reading the live row rather than an echo of the create response.
+    expect(only?.uses).toBe(1);
+    // The shape is closed: a field added here reaches an org-facing screen.
+    for (const c of body.codes) {
+      expect(Object.keys(c).sort()).toEqual(
+        ["code", "expiresAt", "label", "maxUses", "paused", "uses"].sort(),
+      );
+    }
+
+    // A stranger with the org's uuid must not learn it exists; a MEMBER is not
+    // staff and gets the same answer — both for the roster's reasons.
+    expect(
+      (await get(`/v1/orgs/${org.org.id}/codes`, { cookies: stranger.cookies })).statusCode,
+    ).toBe(404);
+    expect(
+      (await get(`/v1/orgs/${org.org.id}/codes`, { cookies: member.cookies })).statusCode,
+    ).toBe(404);
+  });
+
+  it("reports a code's live state honestly, so the console cannot print a dead one", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("jc-state");
+    const org = await makeOrg(owner.cookies, "Orgs Test Joincodes State");
+    const past = new Date(Date.now() - 60_000);
+    await sql`
+      UPDATE gym_codes SET paused = true, expires_at = ${past}, max_uses = 5, uses = 5
+      WHERE gym_id = ${org.org.id}`;
+
+    const res = await get(`/v1/orgs/${org.org.id}/codes`, { cookies: owner.cookies });
+    expect(res.statusCode).toBe(200);
+    const c = (JSON.parse(res.body) as { codes: { paused: boolean; expiresAt: string | null; maxUses: number | null; uses: number }[] }).codes[0];
+    expect(c?.paused).toBe(true);
+    expect(c?.expiresAt).toBe(past.toISOString());
+    expect(c?.maxUses).toBe(5);
+    expect(c?.uses).toBe(5);
+    // And the join path agrees with what the console is about to draw — the
+    // two must not be able to disagree about whether a code works.
+    const joiner = await makeUser("jc-state-joiner");
+    const attempt = await post(
+      "/v1/orgs/join",
+      { code: org.joinCode.code },
+      { cookies: joiner.cookies },
+    );
+    expect(attempt.statusCode).toBe(409);
+  });
+
+  it("gives a studio TRAINER the join codes even though it holds them off the roster (§2.2)", { timeout: 30_000 }, async () => {
+    const studioOwner = await makeUser("jc-trainer-owner");
+    const trainer = await makeUser("jc-trainer");
+    const studio = await makeOrg(studioOwner.cookies, "Orgs Test Joincodes Trainer", {
+      orgType: "studio",
+    });
+    await sql`
+      INSERT INTO gym_staff (gym_id, user_id, role)
+      VALUES (${studio.org.id}, ${trainer.userId}, 'trainer')`;
+
+    // §2.2 grants Invite to all three roles; the group-scoping hold-back is
+    // about the MEMBER LIST only. A trainer who cannot read the roster can
+    // still hand a walk-in the poster code.
+    expect(
+      (await get(`/v1/orgs/${studio.org.id}/members`, { cookies: trainer.cookies })).statusCode,
+    ).toBe(403);
+    const codes = await get(`/v1/orgs/${studio.org.id}/codes`, { cookies: trainer.cookies });
+    expect(codes.statusCode).toBe(200);
+    expect((JSON.parse(codes.body) as { codes: { code: string }[] }).codes[0]?.code).toBe(
+      studio.joinCode.code,
+    );
   });
 
   it("walks the roster by cursor without dupes or gaps (R7.3)", { timeout: 30_000 }, async () => {

@@ -196,6 +196,40 @@ export const createOrgResponseSchema = z.object({
 });
 export type CreateOrgResponse = z.infer<typeof createOrgResponseSchema>;
 
+/** One join code as the CONSOLE reads it back — Part 3 §3.3's `GET /codes`,
+ *  the read half of its `GET/POST/PATCH /codes` surface.
+ *
+ *  **Why this exists at all:** `createOrgResponse.joinCode` was, until this
+ *  card, the ONLY exit a code had from the server. So an owner saw their code
+ *  once, at creation, and the console had no way to show it again after a
+ *  reload — measured, not assumed (`listOrgsForUser` selects no code column and
+ *  no other route reads `gym_codes` outside the join transaction). Kd ruled the
+ *  read endpoint in rather than let the console print a code from its own
+ *  memory of one.
+ *
+ *  **`paused`/`expiresAt`/`maxUses`/`uses` are not decoration.** The join path
+ *  refuses a paused, expired or exhausted code, so a console that printed one
+ *  under "share this with your members" would be promising something the server
+ *  will not honour — a false thing on screen (:5807). The console decides
+ *  live-vs-dead from these four fields and says so.
+ *
+ *  No `id`: nothing in this slice addresses a single code, and `code` is
+ *  globally unique, so a list key needs nothing else. */
+export const orgCodeSchema = z.object({
+  code: z.string(),
+  label: z.string(),
+  paused: z.boolean(),
+  /** ISO instant, or null for "never expires". */
+  expiresAt: z.string().nullable(),
+  /** null = unlimited uses. */
+  maxUses: z.number().int().nullable(),
+  uses: z.number().int(),
+});
+export type OrgCode = z.infer<typeof orgCodeSchema>;
+
+export const orgCodesResponseSchema = z.object({ codes: z.array(orgCodeSchema) });
+export type OrgCodesResponse = z.infer<typeof orgCodesResponseSchema>;
+
 /** One row of "my orgs". A single row carries BOTH relationships because the
  *  default owner IS a member (Part 3 §4.0 step 6) — two lists would show the
  *  same gym twice and invite a screen that double-counts it. */

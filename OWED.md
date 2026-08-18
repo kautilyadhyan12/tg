@@ -4043,6 +4043,25 @@ file and is stated so nobody reads these as lower priority than they are.
       on the next read, proven end-to-end by test rather than by reading the
       code. No migration: the §3.2 tables were already there. What is still
       owed sits in the lines added below plus the console screens themselves.
+      **UPDATE 2026-08-18 — THE CONSOLE SCREENS NOW EXIST, so this line's own
+      headline ("does not exist") is no longer true and is corrected here rather
+      than left standing.** `/console` (the gyms you staff) · `/console/new`
+      (Part 3 §4.0 step 1 + step 4's code reveal) · `/console/:orgSlug` (the
+      gym, its live join code, its member count) · `/console/:orgSlug/members`
+      (§2.4's roster, cursor-walked), all under a responsive shell with a left
+      rail at `md`+ and bottom tabs below it (§3.1, and Kd's phone ruling at
+      :9604 §4). Reached from a **My Gym** entry in the app's own sidebar. One
+      API route was added with them — `GET /v1/orgs/:gymId/codes`, Part 3
+      §3.3's read half — because **a join code left the server exactly once,
+      in the create response, so the console could not show an owner their own
+      code after a reload.** Kd ruled the endpoint in rather than let the screen
+      print a code from its own memory of one.
+      **STILL DOES NOT TICK, and the remaining third is named rather than
+      implied:** "seats" in this line's own title is unbuilt — there is no seat
+      meter, because a meter needs a cap and no gym has a subscription (the
+      line below). §4.1's Overview tiles, §4.3's real Members contents and the
+      other four console sections have their own lines. **And smoke and T3 are
+      both UNRUN as this is written.**
 - [ ] 🟡 **A GYM WITH NO SUBSCRIPTION HAS NO SEAT LIMIT — deferred with the org
       slice, 2026-08-18 (DECISIONS :10010).** The seat check itself is BUILT and
       correct: it reads the cap off the gym's live subscription's plan
@@ -4137,6 +4156,10 @@ file and is stated so nobody reads these as lower priority than they are.
       pattern already exists in the auth module (dual-keyed per-IP and
       per-identifier). Owed before a real gym is live; deliberately NOT built
       inside the fix round that found it (:5348 rule 6, minimal diffs).
+      **WIDENED 2026-08-18 to `GET /v1/orgs/:gymId/codes`**, added with the
+      console screen: it is staff-only and takes a uuid, so it is not a guessing
+      surface, but it is now the endpoint that hands out the key to a gym's
+      roster and it has no per-route limit either.
 - [ ] ⚪ **THE CONSOLE'S ANALYTICS EVENTS ARE NOT EMITTED.** Part 3 §4.0 names
       `org_created{type}`, `org_trial_started`, `org_logo_added`,
       `org_poster_downloaded` and the TTFMJ timer; `gym_code_redeemed` is
@@ -4145,12 +4168,62 @@ file and is stated so nobody reads these as lower priority than they are.
       which is itself the thing to fix, one card, rather than one module
       quietly starting. TTFMJ is the metric Part 3 says predicts everything
       downstream, so this is worth more than it looks.
+- [ ] 🟡 **THE OVERVIEW HAS NO NUMBERS: Part 3 §4.1's KPI tiles, the 8-week
+      trend chart and the at-risk list are all UNBUILT (deferred with the console
+      screen, 2026-08-18).** §4.1 specifies active members (30d) with a 7d
+      sub-stat, workouts this week, adoption %, average form score, a
+      bars-plus-line eight-week chart, and the top-5 at-risk list with a one-tap
+      nudge. **§3.2 says every one of them reads `org_daily_stats`,
+      `org_live_counters` or `org_member_stats` — and not one of those three
+      exists**: no table, no Redis key, no view, no worker building them, no
+      route serving them. A tile drawn over that would print a number nobody
+      computed, which is :5807 on its face, so the screen shows what is true
+      instead (the gym's identity, its live join code, its member count) and
+      says nothing about activity. **Closed by the rollup card**, which owes the
+      nightly worker keyed on `gyms.timezone` (§3.2) before any of these tiles
+      can be honest. The at-risk nudge also needs push, which does not exist.
+- [ ] 🟡 **THE §4.0 WIZARD IS ONE STEP OF SIX: size/plan/trial, logo upload,
+      team invites and the QR poster PDF are all UNBUILT (deferred with the
+      console screen, 2026-08-18).** Built: step 1 (name · city · org type ·
+      country · timezone) and step 4's code reveal, which the server does in the
+      same transaction. **Not built, each because it has no endpoint at all:**
+      step 2's member-count slider → seat tier → 7-day trial (billing does not
+      exist, and the tier sizes are unratified US pricing, :9944) · step 3's
+      logo upload (no R2 bucket configured, and R3.9's five upload guarantees
+      would have to be built) · step 5's invite-your-team (no staff route —
+      see the §2.2 matrix line above) · step 4's QR poster PDF and WhatsApp
+      share (a worker job with no worker). **§4.0's own metric, TTFMJ, is
+      instrumented nowhere** — see the analytics line below.
+- [ ] ⚪ **THE ORG'S `locale` IS NOT COLLECTED BY THE WIZARD (deferred with the
+      console screen, 2026-08-18).** Part 3 §4.0 step 1 lists it; the create
+      schema accepts it and defaults it to `"en"`. It is omitted from the form
+      because **nothing reads the column**: §2.2's vocabulary overrides and the
+      bilingual poster are the two consumers and neither is built, and the
+      market is now US gyms (:9604 §2), so a picker offering en/hi/as today
+      would be a control with no effect. **Closed by whichever card first makes
+      the org's language change something a user sees.**
+- [ ] 🟡 **FOUR OF THE CONSOLE'S SIX SECTIONS HAVE NO SCREEN: Leaderboard,
+      Reports, Billing, Settings (+ Staff) (deferred with the console screen,
+      2026-08-18).** §3.1's nav lists six; the shell renders the two that exist
+      and the other four are ABSENT rather than greyed out — a disabled tab that
+      answers nothing is still a promise on screen. Their server sides are owed
+      elsewhere: leaderboards at P4.x, `org_daily_stats` for reports (the line
+      above), billing at P3, and the §2.2 matrix line for staff and settings.
+      **§4.2's banner slot is unbuilt for the same reason** — every one of its
+      states (trial, trial-urgent, grace, past-due, seat pressure) is read off
+      `subscriptions`, so today the banner would have nothing to say and no way
+      to know it.
 - [ ] 🟡 **THE CONSOLE IS BUILT ONCE — responsive, opened from inside the phone
       app.** Kd demanded phone management (*"main idea is convenience"*); Part 3
       §3.1 already chose responsive web for the same reason (*"owners live on
       phones; no native console app"*). Mechanism called under K4 and not
       overruled (:9604 §4). **A later chat wanting native console screens is
       proposing to build the console TWICE and owes that cost explicitly.**
+      **UPDATE 2026-08-18: the first three screens are built this way** — one
+      responsive shell, left rail at `md`+ and bottom tabs below, `ConsoleLayout`
+      rather than `AppLayout` (which pins a 256px left margin with no breakpoint
+      anywhere in it, so on a phone its content starts off the left edge). The
+      line stays open because it governs every console screen still to come.
 - [ ] 🟡 **STRIPE CONNECT — GYMS COLLECT THEIR OWN MEMBER FEES, GYM AS MERCHANT.**
       Kd's diagram: `Payment interface → Stripe Connect → Gym's Stripe account →
       Gym bank`, and *"as for money gym customer and user its between them"*
@@ -4244,6 +4317,14 @@ file and is stated so nobody reads these as lower priority than they are.
       than because anyone is near it. Whoever first has a caller that could
       approach 100 owes the cursor — the roster reader next door is the
       worked pattern.
+      **RAISED FROM ⚪ IN CONSEQUENCE, 2026-08-18: the console now DEPENDS on
+      this list being complete.** `/console/:orgSlug` is resolved by matching
+      the slug against `mine`, because the API is keyed by uuid and there is no
+      by-slug route. So for anyone past the cap, a gym they really do staff
+      reads back as "we couldn't find a gym you run at this address" — the
+      truncation stops being a shape issue and becomes a door that will not
+      open. Still nobody near it; still ⚪. **The fix is the cursor, or a
+      `GET /v1/orgs/by-slug/:slug`, and whoever picks one owes this line.**
 
 ### Member-side gym surface
 

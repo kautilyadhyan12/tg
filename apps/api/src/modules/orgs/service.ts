@@ -11,6 +11,7 @@ import {
   createOrgResponseSchema,
   joinOrgResponseSchema,
   myOrgsResponseSchema,
+  orgCodesResponseSchema,
   orgMemberPageSchema,
 } from "./schemas.js";
 import type {
@@ -19,6 +20,7 @@ import type {
   JoinOrgRequest,
   JoinOrgResponse,
   MyOrgsResponse,
+  OrgCodesResponse,
   OrgMemberListQuery,
   OrgMemberPage,
   OrgRole,
@@ -275,6 +277,36 @@ export async function listOrgMembers(
       page.nextCursor === null
         ? null
         : `${page.nextCursor.joinedAt.toISOString()}|${page.nextCursor.id}`,
+  });
+}
+
+/** Part 3 §3.3's `GET /codes`, read half.
+ *
+ *  ALL THREE ROLES, and that is not an oversight: §2.2's matrix grants "Invite
+ *  (share code / print poster)" to owner, manager AND trainer alike. The
+ *  studio/clinic trainer hold-back a few lines up belongs to the MEMBER LIST —
+ *  §2.2 scopes a trainer's roster to their own group and nothing assigns groups
+ *  yet — and has nothing to say about handing somebody a poster code. A trainer
+ *  who may not read the roster may still invite. */
+export async function listOrgCodes(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+): Promise<OrgCodesResponse> {
+  await requireStaff(deps, gymId, userId, ["owner", "manager", "trainer"]);
+  const rows = await repo.listCodes(deps.sql, gymId);
+  // Parsed on the way out like its siblings: the console decides live-vs-dead
+  // from these fields, so a row that silently lost `paused` would become a
+  // screen telling an owner to share a code the join path refuses.
+  return orgCodesResponseSchema.parse({
+    codes: rows.map((c) => ({
+      code: c.code,
+      label: c.label,
+      paused: c.paused,
+      expiresAt: c.expiresAt === null ? null : c.expiresAt.toISOString(),
+      maxUses: c.maxUses,
+      uses: c.uses,
+    })),
   });
 }
 

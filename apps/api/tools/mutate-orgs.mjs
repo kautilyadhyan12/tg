@@ -216,6 +216,43 @@ const MUTANTS = [
     from: '    timezone: z.string().trim().min(1).max(64).refine(isValidTimeZone, {\n      message: "not a known IANA time zone",\n    }),',
     to: '    timezone: z.string().trim().min(1).max(64),',
   },
+
+  // ── The console card's read endpoint, GET /v1/orgs/:gymId/codes ──────────
+  // A join code IS the key to a gym's roster: anybody holding one can join and
+  // become a member. So every row here is OWNERSHIP or "on screen AND false",
+  // which is what buys them a database mutant under :5857 rule 4a.
+  {
+    id: 'O21',
+    target: 'repo',
+    why: "OWNERSHIP: the code list loses its gym scoping, so one gym's console shows — and invites people with — another gym's join codes",
+    expect: "join codes to staff",
+    from: '    WHERE gym_id = ${gymId}\n    ORDER BY created_at ASC, code ASC`;',
+    to: '    ORDER BY created_at ASC, code ASC`;',
+  },
+  {
+    id: 'O22',
+    target: 'service',
+    why: 'OWNERSHIP: the staff check disappears, so a stranger holding the gym uuid — or a plain member — reads the code that lets anyone in',
+    expect: "join codes to staff",
+    from: '): Promise<OrgCodesResponse> {\n  await requireStaff(deps, gymId, userId, ["owner", "manager", "trainer"]);\n  const rows = await repo.listCodes(deps.sql, gymId);',
+    to: '): Promise<OrgCodesResponse> {\n  const rows = await repo.listCodes(deps.sql, gymId);',
+  },
+  {
+    id: 'O23',
+    target: 'repo',
+    why: 'ON SCREEN AND FALSE: a paused code reads back as live, so the console tells an owner to share a code the join path will refuse',
+    expect: "reports a code's live state honestly",
+    from: '    paused: r.paused,',
+    to: '    paused: false,',
+  },
+  {
+    id: 'O24',
+    target: 'service',
+    why: '§2.2 MATRIX: a trainer loses Invite, which the matrix grants all three roles — the roster hold-back is about the member list, not the poster code',
+    expect: 'gives a studio TRAINER the join codes',
+    from: '): Promise<OrgCodesResponse> {\n  await requireStaff(deps, gymId, userId, ["owner", "manager", "trainer"]);',
+    to: '): Promise<OrgCodesResponse> {\n  await requireStaff(deps, gymId, userId, ["owner", "manager"]);',
+  },
 ];
 
 const abort = (msg) => {

@@ -10398,3 +10398,146 @@ is correct for a diff-only pass and is stated rather than implied.
 shipping does not tick it. There is no SMOKE for the same reason, stated at the
 card rather than skipped. The next card builds the screen and carries the
 browser gate.
+
+## 2026-08-18 — THE CONSOLE SCREEN: a gym owner can see their gym, their join code and their members, from a phone — and the card's own premise about the API was false
+
+**Read before touching anything under `apps/web/src/pages/console`, before adding
+a widget to the console's Overview, before adding a field to a member row, and
+before assuming a join code can be read back from `GET /v1/orgs/mine`.** The web
+half of the org slice (:10010), and the first thing in the whole gym direction
+Kd can click. Branch `web-repoint`.
+
+### WHAT EXISTS NOW
+
+Four screens under Part 3 §3.1's own route group — `/console` (the gyms you
+staff) · `/console/new` (§4.0 step 1 plus step 4's code reveal) ·
+`/console/:orgSlug` (the gym, its live code, its member count) ·
+`/console/:orgSlug/members` (§2.4's roster, cursor-walked). Reached from a **My
+Gym** entry in the app's sidebar, which is the console's only entry point and is
+there because Kd ruled the console is opened from inside the app (:9604 §4).
+
+**`ConsoleLayout`, NOT `AppLayout`, and this is not a style choice.** `AppLayout`
+positions its main column with a hard `marginLeft: collapsed ? 64 : 256` and its
+sidebar is `fixed` at a fixed width — **there is no breakpoint anywhere in it**,
+so on a phone its content starts 256px off the left edge. The console is the ONE
+surface Kd asked to work from a phone, so it has a shell that actually collapses:
+left rail at `md`+, bottom tab bar below.
+
+### THE CARD'S PREMISE WAS FALSE, AND FINDING IT IS THE MOST USEFUL THING HERE
+
+The card said in as many words: *"The API is BUILT and unchanged by this card."*
+**Measured, before any code: a join code left the server exactly ONCE, in the
+`POST /v1/orgs` response.** `listOrgsForUser` selects no code column
+(`repo.ts:224-235`), and `grep gym_codes` over `apps/api/src` showed the only
+other reads are inside the join transaction. So an owner saw their code on the
+day they created the gym and never again — and "sees its join code" is a third of
+the card's own headline.
+
+**KD RULED THE ENDPOINT IN** (asked in one line, with the alternative stated: the
+code shows once at creation and never after). `GET /v1/orgs/:gymId/codes`, Part 3
+§3.3's read half of `GET/POST/PATCH /codes` — so it is spec-authorised, not
+invented (R0.2). Staff-only through the SAME `requireStaff` the roster uses, so a
+stranger and a plain member both get 404 for the reasons :10010 decision 1
+records.
+
+**THE ALTERNATIVE THAT WAS REJECTED, because a later chat will reach for it:**
+caching the code client-side at creation. It works until a code is rotated,
+paused or expired, at which point the console prints a dead code under "share
+this with your members" — a promise the server will not honour, i.e. :5807 on its
+face. **The response therefore carries `paused`, `expiresAt`, `maxUses` and
+`uses`, and the console decides live-vs-dead from them**, withholding the
+invitation sentence rather than rewording it. A test drives a paused, expired and
+exhausted code and asserts the join path agrees with what the screen is about to
+draw — the two must not be able to disagree about whether a code works.
+
+**§2.2 GRANTS INVITE TO ALL THREE ROLES, so the codes route allows all three.**
+The studio/clinic trainer hold-back is about the MEMBER LIST (§2.2's
+"assigned/group only", with no group column to scope by) and says nothing about
+handing somebody a poster code. Pinned by a test where the same trainer gets 403
+on the roster and 200 on the codes.
+
+### THE OVERVIEW HAS NO NUMBERS ON IT, DELIBERATELY
+
+Part 3 §4.1 specifies KPI tiles, an 8-week chart and an at-risk list. **§3.2 says
+every one of them reads `org_daily_stats`, `org_live_counters` or
+`org_member_stats`, and not one of those three exists** — no table, no Redis key,
+no view, no worker, no route. A tile drawn over that prints a number nobody
+computed. The screen shows what is TRUE instead: the gym's identity, its live
+code, its member count. Own `OWED.md` line, and §4.0's steps 2/3/5, §4.2's
+banner, the org `locale` field and the other four console sections each got one
+too, in this commit (the deferral rule).
+
+### FIVE DECISIONS NOT TO RE-DERIVE
+
+1. **The slug is resolved against `GET /v1/orgs/mine`.** §3.1 fixes the URL as
+   `/console/:orgSlug` and every API route takes a uuid; there is no by-slug
+   endpoint. Useful consequence: an unknown slug and a gym the caller does not
+   staff are indistinguishable, exactly as the server's 404-not-403 stance
+   intends. **Consequence that is NOT useful and now has a line: `mine` truncates
+   at 100**, so past the cap a gym you really do staff reads back as "we could not
+   find a gym you run at this address".
+2. **`/console` lists only orgs where `staffRole !== null`.** Every console read
+   404s for a plain member, so listing one is a door onto an error. The
+   member-facing "gyms I belong to" view is a different screen and is out of this
+   card's fence — stated at the card, not discovered late.
+3. **No auto-redirect when the caller staffs exactly one gym.** It would save a
+   tap and make "create a second gym" reachable only by typing a URL. Reversible;
+   the smoke is what should decide it.
+4. **A member count is EXACT or a BOUND, never the length of one page.** The
+   roster is cursor-paginated, so `items.length` with `nextCursor` set is not the
+   member count — `memberCountLabel` prints `N+` there. And `joinedCount` excludes
+   the owner's complimentary seat, because §4.0 step 6 makes a brand-new gym one
+   membership that nobody joined.
+5. **The org `locale` field is not collected**, though §4.0 step 1 lists it.
+   Nothing reads the column — §2.2's vocabulary overrides and the bilingual
+   poster are its two consumers and neither is built — so a picker offering
+   en/hi/as on a US-gym product would be a control with no effect. Own line.
+
+### THE TIMEZONE ALIAS PROBLEM IS REAL AND WAS MEASURED, NOT ANTICIPATED
+
+`Intl.supportedValuesOf('timeZone')` on this repo's Node returns **418 zones,
+containing `Asia/Calcutta` and NOT `Asia/Kolkata`** — while Chrome has been
+recorded reporting `Asia/Calcutta` from `resolvedOptions()` on this machine
+(:618's own note). Which member of an alias pair a runtime calls canonical is not
+predictable from here, and **a picker silently missing the user's own zone
+selects somebody else's** — written once into the org row and deciding that
+gym's day boundaries forever (playbook trap #8). `timezoneOptions` therefore
+injects the detected zone whenever the list lacks it, and the test derives the
+missing alias from the runtime rather than hard-coding which one it is, so it
+keeps biting when ICU changes its mind.
+
+### PROVE — measured, not asserted
+
+`api` **490/490** across 43 files against real Postgres (487 before; +3 route
+tests) · `web` **747/747** (695 before; +52) · `@app/shared` **48/48** ·
+`tsc --noEmit` clean on `api` and `@app/shared` · `api` lint clean ·
+`vite build` ok.
+**`apps/web` lint: 67 errors, and every one is PRE-EXISTING** — the four this
+card first introduced (three `set-state-in-effect`, one `no-useless-assignment`)
+were fixed rather than added to the pile, and no error line names a file this
+card created or modified. Sidebar's single hit is an unused `Zap` import that
+predates the card and is left alone (R1.1).
+
+**MUTATION AUDIT — 35 mutants, 35 RED, 0 ALIVE, 0 never ran, restores
+sha256-verified after every one.** Two sweeps, because the halves have different
+costs (:5857 rule 4a): `apps/api/tools/mutate-orgs.mjs` gains **O21–O24** for the
+codes route (gym scoping · the staff check · a paused code reading live · the
+trainer's Invite right) and ran all **24** against real Postgres; the new
+`apps/web/tools/mutate-console.mjs` runs **11** in minutes, with no database
+mutants at all because the web half changes no server behaviour.
+
+**THE WEB HARNESS CAUGHT A DEFECT IN ITSELF BEFORE IT RAN, and it is the control
+again.** Its control phase deduped `(suite, filter)` pairs by joining them into
+one string and splitting on a separator — **every filter here contains spaces**,
+so the first draft would have run the control on the first WORD of each filter, a
+broader filter than the mutants use. The control would have passed while checking
+something else. Rewritten to dedupe objects. The same file also ABORTS on a
+non-ASCII `-t` filter, because two of these test names carry a curly apostrophe
+and a filter matching no test is how an ALIVE verdict gets fabricated (:9509).
+
+### WHAT DOES NOT TICK, AND IT IS EVERYTHING
+
+**SMOKE IS UNRUN and T3 IS UNRUN.** No `OWED.md` line ticks. The console line's
+own headline ("THE GYM CONSOLE DOES NOT EXIST") is now false and was corrected in
+place rather than left standing, but it does not tick either: "seats" in its own
+title is unbuilt, because a seat meter needs a cap and no gym has a subscription.

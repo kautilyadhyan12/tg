@@ -6,7 +6,7 @@ import { formatLevel } from '../../api/gamificationApi';
 import {
   LayoutDashboard, Dumbbell, Activity, Brain,
   Apple, Trophy, Settings, LogOut, Zap, Play,
-  ChevronLeft, ChevronRight, Flame, Footprints,
+  ChevronLeft, ChevronRight, Flame, Footprints, Building2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -19,6 +19,11 @@ const navItems = [
   { to: '/coach',           icon: Brain,           label: 'AI Coach'   },
   { to: '/nutrition',       icon: Apple,           label: 'Nutrition'  },
   { to: '/achievements',    icon: Trophy,          label: 'Achievements' },
+  // The console's entry point. Kd ruled the console is reached from inside the
+  // app rather than being a separate product (:9604 §4), so it lives here, for
+  // every account — a gym owner is an ordinary user until they create a gym,
+  // and there is no other way to find the screen that lets them.
+  { to: '/console',         icon: Building2,       label: 'My Gym'     },
   { to: '/settings',        icon: Settings,        label: 'Settings'   },
 ];
 

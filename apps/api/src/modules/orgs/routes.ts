@@ -80,6 +80,15 @@ export function registerOrgRoutes(
     return reply.status(200).send(joined);
   });
 
+  // Part 3 §3.3's `GET /codes`, read half — the console's only way to show an
+  // owner their own join code after the day they created the gym.
+  app.get("/v1/orgs/:gymId/codes", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const codes = await service.listOrgCodes(orgDeps, requireUserId(req), params.gymId);
+    return reply.status(200).send(codes);
+  });
+
   app.get("/v1/orgs/:gymId/members", { preHandler: [app.authenticate] }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;

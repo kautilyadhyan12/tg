@@ -7407,3 +7407,83 @@ NEXT: **the console screen** — Overview + Members + the join-code sheet, opene
       thing in the whole gym direction Kd can click, and it carries the SMOKE
       gate this card could not.
 ```
+
+```
+TASK: THE CONSOLE SCREEN — an owner creates a gym, sees its join code, sees its
+      members, from a phone. Built and committed on `web-repoint`.
+      **SMOKE UNRUN · T3 UNRUN · NOTHING TICKS.** DECISIONS :10402 + its index
+      line in the same commit.
+
+THE CARD'S OWN PREMISE WAS FALSE — READ THIS BEFORE BELIEVING ANY KICKOFF PROMPT
+  · The card stated "The API is BUILT and unchanged by this card." **Measured
+    before writing anything: a join code left the server exactly ONCE, in the
+    `POST /v1/orgs` response.** `listOrgsForUser` selects no code column and no
+    other route reads `gym_codes` outside the join transaction. So "sees its
+    join code" — a third of the card's own headline — was not buildable.
+  · **Kd ruled the read endpoint IN**: `GET /v1/orgs/:gymId/codes`, which is
+    Part 3 §3.3's own read half, staff-only through the SAME `requireStaff` the
+    roster uses. Not invented (R0.2) — the spec names it.
+  · **A kickoff prompt is hearsay (S1/V4), and this is the worked example.**
+
+THE THREE THINGS A NEXT CHAT WOULD OTHERWISE GET WRONG
+  · **DO NOT CACHE THE JOIN CODE CLIENT-SIDE.** It is the obvious shortcut and it
+    was rejected on the record: it works until a code is rotated, paused or
+    expired, and then the console prints a dead code under "share this with your
+    members". The response carries `paused`/`expiresAt`/`maxUses`/`uses` and the
+    screen WITHHOLDS the invitation sentence rather than rewording it, with a
+    test proving the join path agrees with what the screen is about to draw.
+  · **THE OVERVIEW HAS NO NUMBERS ON IT AND THAT IS DELIBERATE.** §4.1's KPI
+    tiles, 8-week chart and at-risk list all read `org_daily_stats` /
+    `org_live_counters` / `org_member_stats`, and **not one of the three
+    exists** — no table, no view, no worker, no route. Adding a tile means
+    building the rollup first, not reading a workout table ad hoc (§3.2 forbids
+    that outright). Own OWED line.
+  · **`ConsoleLayout` IS NOT `AppLayout`, and swapping it breaks the phone.**
+    `AppLayout` pins `marginLeft: collapsed ? 64 : 256` with **no breakpoint
+    anywhere in it**, so on a phone its content starts 256px off the left edge.
+    The console is the one surface Kd required to work from a phone (:9604 §4).
+
+WHAT IS BUILT
+  · `/console` (gyms you STAFF — `staffRole !== null`; a gym you merely belong to
+    404s on every console read, so listing it is a door onto an error) ·
+    `/console/new` (§4.0 step 1 + step 4's code reveal) · `/console/:orgSlug` ·
+    `/console/:orgSlug/members` (§2.4's roster, cursor-walked). Entry point is a
+    **My Gym** item in the app's sidebar.
+  · Slug → uuid is resolved against `GET /v1/orgs/mine`; there is no by-slug
+    route. **`mine` truncates at 100**, so past the cap a gym you DO staff reads
+    back as "we could not find a gym you run at this address" — its ⚪ OWED line
+    was raised in consequence rather than left as a shape note.
+
+WHAT IS NOT BUILT, EACH WITH ITS OWN NEW OWED LINE (the deferral rule)
+  · §4.1's Overview numbers · §4.0 steps 2/3/5 and the QR poster PDF · the org
+    `locale` field · the four other console sections and §4.2's banner. **Seven
+    OWED lines added or widened; NONE ticked.**
+
+THE MEASUREMENT WORTH CARRYING FORWARD
+  · **`Intl.supportedValuesOf('timeZone')` here returns 418 zones containing
+    `Asia/Calcutta` and NOT `Asia/Kolkata`**, while Chrome reports
+    `Asia/Calcutta` from `resolvedOptions()` on this machine (:618). A picker
+    missing the user's own zone silently sets a gym up in somebody else's day
+    boundaries — written once, permanent. The detected zone is always injected,
+    and **the test derives the missing alias from the runtime** rather than
+    hard-coding which one it is, so it keeps biting when ICU changes its mind.
+
+PROVE — api **490/490** real Postgres (43 files) · web **747/747** · shared
+**48/48** · tsc + api lint clean · `vite build` ok · **web lint 67 errors, every
+one PRE-EXISTING** (the four this card introduced were fixed, not added to the
+pile; Sidebar's unused `Zap` predates the card, R1.1).
+**MUTATION AUDIT 35 mutants · 35 RED · 0 ALIVE · 0 never ran**, restores
+sha256-verified — `mutate-orgs.mjs` gains O21–O24 and ran 24 against real
+Postgres; new `apps/web/tools/mutate-console.mjs` runs 11 with no DB mutants
+(:5857 rule 4a — the web half changes no server behaviour).
+**THE WEB HARNESS CAUGHT A DEFECT IN ITSELF BEFORE IT RAN:** its pair-dedupe
+joined `(suite, filter)` into one string and split it, and every filter contains
+spaces — the control would have run on the first WORD of each and passed while
+checking something else. It also ABORTS on a non-ASCII `-t` filter, because two
+of these test names carry a curly apostrophe.
+
+NEXT: **the SMOKE (sheet handed to Kd, 11 steps, includes a step where the chat
+      joins a second account by code from the terminal so the roster genuinely
+      grows), then T3 in a FRESH chat on the diff.** Nothing ticks until a round
+      returns zero Critical/High (:5348 rule 1).
+```
