@@ -8999,3 +8999,809 @@ landmark this project has measured, including the 13 clips behind Kd's
 `bone_stretch > 0.923` ruling. Copying node_modules' 35 would have been tidier
 and would have quietly changed what the camera sees. Its own 🟡 line; it moves
 WITH the model swap, never alone, because both change the frames.
+
+## 2026-08-17 — THE §3.6 LADDER CANNOT BE BUILT: the app caps itself at 12 frames a second and the spec's trigger is 15. Kd ruled a readout, never a warning
+
+**Read before quoting any frames-per-second figure from this project, before
+building anything on Part 6 §3.6's `delivered Hz < 15`, and before touching
+`FEED_INTERVAL_MS`.**
+
+The card was the LADDER half of the pose-model card — make the app notice a slow
+camera and step itself down. It ends with **no ladder**, and the reason is a
+measurement that also retires an explanation this project has carried since
+2026-08-08.
+
+### Kd's question is what found it
+Handed a plan whose premise was "9.2–12.2 fps against a target of 15", he asked:
+*"wait but it was working with thise 9 12 pictures"*. He was right, the premise
+was overstated, and checking it properly produced the finding. **Every camera
+number in this project was measured on that machine at that rate** — the person
+check's ruled `nominalDtMs: 82` (`sceneGate.js`) IS 12.2 a second, his own pooled
+median. "Below target" had never been shown to cost a single rep.
+
+### The measurement
+`FEED_INTERVAL_MS = 67` is a THROTTLE: a frame is fed when `now - lastFeed >= 67`.
+
+| | |
+|---|---|
+| arithmetic ceiling, any hardware | **14.93 /s** — 67 ms between feeds |
+| ceiling on a 60 Hz display | **12.0 /s** |
+| what the console line printed | **"target 15"** — `Math.round(1000 / 67)` |
+| Kd's measured desktop (:8879) | 9.2–12.2 /s |
+
+The 60 Hz figure is the one that matters and it is not a rounding: `rAF` fires at
+16.67 ms, ticks land at 0 · 16.67 · 33.3 · 50 · 66.67 · 83.3, and **66.67 is not
+>= 67**, so the feed slips a whole tick. Both figures are now ASSERTED by tests
+driving the real frame loop with a controlled clock — "the ceiling is ~12" and
+"even an infinitely fast loop cannot reach 15" — rather than reasoned in a
+comment, so a later change to the throttle reports itself.
+
+**Consequence, and it is the whole card: §3.6's *"delivered Hz < 15"*
+(`06-part6-mobile.md:187`) is TRUE ON EVERY DEVICE BY ARITHMETIC.** A ladder
+keyed to it steps every user down in their first ten seconds; a warning keyed to
+it is on screen for everyone, always. **And `9.2–12.2` was never evidence about
+Kd's laptop — 12.0 is the ceiling and he was sitting on it.**
+
+### What shipped instead — Kd's ruling, in his words a choice between two options
+Offered (A) the honest part only — the app reports, changes nothing by itself —
+or (B) the whole ladder, knowing it would fire on his own working desktop, he
+chose **A**. So: **the delivered rate is printed in the camera screen's `debug`
+panel, BESIDE the ceiling** — `12.0 of 14.9/s`, never `12.0` alone, because a
+bare figure next to a remembered "15" is exactly how the wrong conclusion was
+reached the first time. Nothing on the main screen, nothing automatic, no
+resolution change, no switch to hand counting.
+
+**The bottom rung would have collided with a standing ruling anyway.** §3.6 ends
+in *"log-only mode"* — an automatic switch to manual counting — which
+**:6008 forbids outright**: *"if someone chooses camera no matter what happen
+there should not be any switch to hand counting"*. The escape hatch that ruling
+approved (the user presses "Count this set myself"; the app never presses it)
+already exists and is untouched here.
+
+### Two things deliberately NOT done, both with OWED lines
+- **The throttle is not changed (R1.1, R5.4).** Feeding the engine more often is
+  plausibly the largest single win available for camera accuracy — more frames
+  per rep is more evidence per rep — but the person check's cut-off and the
+  cadence it was measured at are ONE ruling (:7037, :7298), so raising the rate
+  without re-measuring silently ships a different gate than the one Kd approved.
+  His decision, with a re-measurement attached.
+- **§3.6's PostHog telemetry.** `apps/web` has no PostHog client at all,
+  grep-verified, zero hits — P0.5 wired it server-side only.
+
+### A module was written, tested green, and then deleted
+`poseSlowness.js` implemented §3.6's condition exactly (under 15, held for ten
+unbroken seconds; a null reading resets the run rather than extending it) with
+16 passing tests. It was removed once the ceiling was measured, because **its
+verdict is true on every device forever** — an instrument that cannot answer "no"
+is the "test that cannot fail" this project has recorded five times, and shipping
+it would have put a permanent amber row and a per-set console warning in front of
+every user for a fault that is not occurring. Recorded here rather than silently
+dropped: the next chat to build the ladder needs the module, and needs to know it
+is worth writing only once the trigger means something.
+
+### What a user can see
+One new row in the camera screen's `debug` panel (which any user can open — it is
+not dev-only, T3 round 2 at :6277): **`camera rate  12.0 of 14.9/s`**, drawn as a
+dash while unmeasurable rather than a fabricated `0.0` (`Number(null) === 0`,
+:6749). No colour on it: "how far below the ceiling is too far" is a number
+nobody has measured, and tinting a row would be inventing it (R0.2). The dev
+console line stops printing "target 15" and prints the real ceiling.
+
+### Gates
+web **682/682** (31 files, +5) · `vite build` ✓ · whole-tree `eslint .` **75
+problems, all pre-existing** — the three new/edited test files and the hook are
+CLEAN, and `ActiveWorkout.jsx` measured **13 at HEAD and 13 now** by
+checkout-and-compare with a sha256-verified restore · engine purity grep SILENT ·
+`apps/api`, `packages/*` untouched.
+**Mutation sweep: `mutate-pose-assets.mjs` gains a fourth target
+(`ActiveWorkout.jsx`) and five mutants — 22 runs · 22 RED · 0 ALIVE · 0 never
+ran, restores sha256-verified after every one.** The seventeen inherited rows
+were re-run first and none of this card's edits broke an anchor (:8610's class).
+PA18/PA19 pin the ceiling to the throttle's own arithmetic; PA20 pins the rate
+being shown BESIDE it; PA21 the dash; **PA22 pins the readout to the debug
+toggle — Kd's ruling, mutation-tested, so a later edit cannot quietly put it on
+the workout screen.**
+
+**NOT DONE: smoke and T3 are both UNRUN, so nothing is committed and no `OWED.md`
+line ticks.** The 🔴 model/ladder line stays open; the ladder half is now BLOCKED
+rather than merely unbuilt. **Kd's declared NEXT CARD is the strong model** ("ok
+build that next strong model"), which needs a fresh recording WITH VIDEO — the
+recorder saves landmarks, and the model is what produces them.
+
+## 2026-08-17 — THE STRONG MODEL IS THE DEFAULT, which the spec always said. Kd ruled it; nobody had ever chosen the weak one
+
+**Read before touching `POSE_DEFAULTS`, before adding a model variant, before
+trusting `bone_stretch > 0.923` again, and before telling Kd that a camera change
+is "blocked on a recording".**
+
+Part 6 §3.3 has always read *"BlazePose **full** as default, **lite** as the
+automatic step-down"* (`06-part6-mobile.md:164`). The app shipped `lite`. **Not
+as a decision — as an inheritance**: the previous version hard-wired it, the port
+carried it, and the comment defending it described itself as "MediaPipe's own
+defaults". A default nobody picked is not a decision, and this one was backwards.
+
+**Why it matters is accuracy, not tidiness. A weaker model is a more credulous
+one.** It was `lite` that reported a chair's chest and hips at 0.99 (:6386) and
+`lite` that counted 6, 2, 0 and 2 reps off four clips of an empty room (:6856).
+Whether `full` improves that is now a measurement rather than an argument.
+
+### The objection that had blocked it for nine days, and how it fell
+`poseTuning.js` carried *"do not switch it blind — Kd's clips landed at 7.2–12.5
+fps against a 15 fps target, so he is already under budget on the LIGHT model."*
+**That premise was measured false the same morning** (the entry above): the feed
+throttle caps the app at **14.93/s on any hardware and 12.0/s on a 60 Hz
+display**, so 7.2–12.5 was never evidence about his machine's capacity — it was
+the app's own ceiling. There is headroom between what inference costs and what
+the throttle allows, and that card's `MAX_FEED_HZ` row is the instrument that
+measures whether `full` eats it. **One card's finding unblocked the next card's
+decision; that is why they ran in this order.**
+
+### What shipped
+- `POSE_DEFAULTS.model` = `'full'`.
+- `fetch-pose-assets.mjs` bundles **both** models: `full`
+  (**9,398,198 bytes, sha256 `5134a3aad27a58b9…`** — both MEASURED by
+  downloading it in this session, and re-verified by the script's own digest
+  check when it wrote the file) and `lite`, kept for three reasons in order of
+  weight: it is §3.3's own step-down, and a ladder that needs the internet to
+  degrade a struggling phone is not a ladder; **it is what every measurement in
+  this project was taken with**, so `?model=lite` must keep working offline or
+  the old numbers stop being reproducible on the day they are most needed; and a
+  comparison where one side comes off a CDN compares two different things.
+- **The contract test's centre of gravity moved.** It used to assert "the one
+  bundled model is the default"; with two models a `find` would have answered
+  with whichever was listed first. It now asserts **THE SHIPPED DEFAULT IS ONE OF
+  THE MODELS THE BUILD WRITES** — the assertion with the most teeth in the file,
+  because pointing the default at an unfetched variant is silent: Vite answers a
+  missing `public/` file with index.html at 200, MediaPipe fails on a web page
+  where it expected a zip, and every camera workout quietly downloads 9.4 MB.
+  That is the original defect, and a model swap is exactly the edit that
+  reintroduces it.
+
+### What was deliberately NOT done
+- **`bone_stretch > 0.923` IS NOT TOUCHED** (R5.4, R5.7, and it is a Kd ruling).
+  It was derived from thirteen clips recorded through `lite`, and `full` is a
+  different estimator producing different jitter — which is exactly what that
+  signal measures. **Whether it still does what he approved is UNKNOWN, and
+  nothing has been observed going wrong.** Own 🔴 `OWED.md` line; the fix is a
+  fresh recording replayed through `measure-pose.ts` printing the table he ruled
+  on, never a retune.
+- **The WASM stays at 0.10.21** though its own OWED line said it moves *with* the
+  model swap. That clause's purpose was "do not change the frames for a tidy-up",
+  not simultaneity — and two frame-changing edits at once make the result
+  unattributable. **Sequenced, each measured. Intent honoured, not waived.**
+
+### A correction of mine, and it is the useful part of this entry
+**I told Kd the model swap was blocked on him recording video. It was not.** The
+swap is a default, two digests and a fetch. What needs a recording is *checking
+the person gate afterwards* — a verification, not a prerequisite. The effect of
+the error was to price a five-minute change as a session of his time, and he
+over-ruled it in four words: *"just do the things of making the strong model
+default."* **STANDING LESSON: a verification you cannot run yet blocks the
+CONFIDENCE, not the WORK — say which, because calling it a blocker hands the
+operator a cost he does not owe.** :4355's shape from the other side.
+
+**He also corrected a claim of mine about provenance.** I wrote that the squat
+numbers came out of the old code with no recorded origin. **His answer: those
+rules were extracted from expert video in the first place.** Recorded because a
+later chat will otherwise repeat my error. His accompanying rule, in his words:
+form-correction and rep-counting rules come from **expert video**, and must then
+work for whoever uses the app; **the chair/person check is not a form rule**, so
+deriving it from his own clips was legitimate. That distinction is his, and it is
+correct.
+
+### THE TEST AUDIT FOUND THE HARNESS ITSELF, AND THIS IS THE FINDING WITH TEETH
+`mutate-pose-tuning.mjs` **aborted at P2 and had therefore never completed a
+single run on this machine.** Cause, measured rather than reasoned:
+`poseTuning.js` is checked out **CRLF** on Windows, every anchor in the file is
+authored with a bare newline, and a MULTI-LINE anchor consequently matched
+nothing. **Measured as PRE-EXISTING by checkout-and-compare with a
+sha256-verified restore: the anchor does not match HEAD's working-tree copy
+either** (266 CRLF, anchor absent). `mutate-pose-assets.mjs` escaped the same
+defect only because its targets happen to have been written LF-only — **luck, not
+a property**. This is :4267's class ("do not trust any N-mutants-0-alive table
+produced on Windows") arriving from the AUTHORING side rather than the `sed -i`
+side.
+**Class fix in BOTH harnesses**: anchors and target text are normalised to LF for
+matching, the mutant is written back in the file's own convention, and the
+restore is unaffected (it replays the original bytes, which the sha256 check
+proves). Characters are built with `String.fromCharCode` — the first attempt
+wrote real CR/LF bytes into the source, because **a backslash escape in a
+tool-written file has to survive every layer that touches it**, and it did not.
+Two further anchors were re-pointed at test names this card renamed, which the
+"matched nothing" guard caught rather than reporting as missing tests.
+
+### Two tests were rewritten because the default moved, and one was RIGHT to break
+`traceRecorder.test.js` asserted the recorded header equalled five literal
+values, went red on `lite` → `full`, and **the recorder was working perfectly** —
+it faithfully recorded the new default. Re-pointed at `POSE_DEFAULTS` so a future
+dial change stops looking like a recorder defect (:4556 F1's shape). Four
+`poseTuning.test.js` cases had gone **vacuous in the other direction**: they
+requested `?model=full`, which is now the default, so they would have passed with
+the model parsing deleted outright. Switched to `?model=lite` — a dial test must
+request something the default is not (rule 4).
+
+### Gates
+web **685/685** (31 files, +3 on the rate card's 682) · `vite build` ✓ ·
+whole-tree `eslint .` **75 problems, unchanged, all pre-existing** — the four
+files touched here are clean except `poseTuning.js`'s single pre-existing
+`no-useless-assignment`, which HANDOFF measured identical at HEAD ·
+`apps/api` and `packages/*` untouched · the fetch script **ran and verified**:
+`1 of 6 fetched; all verified`, both `.task` files on disk at their pinned sizes.
+**Sweeps: `mutate-pose-assets.mjs` 25 runs · 25 RED · 0 ALIVE · 0 never ran**
+(it gains a `tuning` target audited against the CONTRACT suite, because the
+failure mode is poseTuning and the build script DISAGREEING, which neither
+file's own suite can see) · **`mutate-pose-tuning.mjs` 13 runs · 13 RED · 0
+ALIVE — its first complete run ever.** Restores sha256-verified after every
+mutant in both.
+
+**NOT DONE: smoke and T3 are both UNRUN, nothing is committed, and NO `OWED.md`
+line ticks — including the model half, which is built.** The smoke is the only
+thing that can answer the two questions this card opens: does `full` still count
+Kd's reps, and does the camera-rate row still read ~12 or has inference eaten the
+headroom.
+
+## 2026-08-17 — T3 ROUND 1 ON THE STRONG-MODEL/RATE CARD: one Critical/High, and it is an instrument that never expires. The camera-rate row reported a live feed over a dead camera
+
+**Read before adding ANY on-screen readout of a live measurement, before reading
+`PoseThroughput.hz()`, and before assuming a green suite says anything about a
+value's FRESHNESS.**
+
+The fresh-chat review (`t3-camera-rate-and-model-PROMPT.md`) returned **1
+Critical/High, 1 Low**, re-ran both mutation sweeps independently (13 RED / 25
+RED, matching this card's own numbers), and verified the model file on disk
+against its pinned size and sha256. The card **did not ship that round**.
+
+### C/H-1 — the rate row kept its last reading for ever
+`PoseThroughput` trimmed its window **only inside `push()`**. With no frames
+arriving nothing ever left the window, so `hz()` answered the last rate it ever
+computed, indefinitely. Measured by the reviewer at **5½ minutes after the final
+frame, still `14.9 of 14.9/s`**, and re-measured here before any fix: 60 frames
+at 67 ms give `14.925373134328359`, and every later read returns **the identical
+double**, because `hz()` had no notion of *when* it was being asked.
+
+**Two states put it in front of a user, and neither is exotic.** A camera that
+dies never announces it. And **pause is on every workout**: `enabled:
+!paused && …` stops the feed, while `restartRateMeasurement()` fires only on the
+`false → true` edge — **the reset arrives with the resume that ENDS the gap, so
+it cannot cover the gap**. `setElapsedSecs` re-renders the page every second, so
+the frozen figure was being actively redrawn, not left behind as a stale paint.
+Severity is :5807 exactly — on screen AND false — and the same class as :6150's
+green "AI form check" badge over a dead camera. Its own comment says the row is
+"the beginning of an answer to *why did it miss my squat?*"; in the two moments
+that question gets asked it answered "the feed is at maximum".
+
+**Fix: the reading EXPIRES, and the clock is an argument.** `hz(now)` applies
+`push`'s own cutoff rule at read time, so a reading never depends on whether a
+frame happened to arrive to trigger the trim; the row blanks to `—` about two
+seconds after frames stop (the surviving samples fall under `MIN_SPAN_MS` before
+the window itself empties). **A missing or non-finite `now` is `null`, never a
+fallback to the newest frame's own time** — that fallback IS the old behaviour,
+and it would return silently at any caller that forgot the argument. The clock
+stays passed-in for the reason at the top of the file (the engine's I1 shape),
+and `readPoseHz` supplies `performance.now()` — the same clock the frames carry.
+**The page and the display format are UNCHANGED** (:9003 is Kd's ruling on both).
+
+### Why 685 green tests could not see it
+**Every existing test read the meter at the instant the last frame arrived.**
+The unit suite called `hz()` immediately after `feed()`; the hook suite returned
+`readPoseHz()` on the same tick as the final loop step; the render suite stubs
+`readPoseHz` as a **constant** (`activeWorkout.render.test.jsx:133`), so no
+render test can observe staleness at all — :7487's lesson again, the fixture's
+shape was the hole. PA20/PA21/PA22 pin *where* the number is drawn, *what*
+replaces it when null, and *that* it stays behind the debug toggle. **Nothing
+anywhere asserted the value's LIFETIME.** That is the reusable lesson: a suite
+that only ever reads an instrument at its most-recently-updated moment tests the
+arithmetic and nothing about the instrument.
+
+### The fix carries tests that fail without it (rule 3), proven by mutation
+Three mutants, backup/restore by file copy + sha256 — **never `git checkout`,
+which cost the reviewer an uncommitted edit this same round**:
+
+| mutant | result |
+|---|---|
+| meter: delete the expiry (the exact defect) | **RED** — 2 failed / 41 passed |
+| meter: missing clock falls back to the last frame | **RED** — 1 failed / 42 passed |
+| hook: reader stops passing the clock | **RED** — 5 failed / 38 passed |
+
+All three restored, sha256-verified. New tests: the meter goes blank at one
+window and at 5½ minutes of silence, **with a positive control that it still
+answers in the ordinary 67 ms gap between two frames** (a blanket `null` must not
+satisfy the claim), a no-clock case, and the same pair driven through the REAL
+frame loop in the hook suite via `measure({ idleMs })` — time advancing with no
+tick, no pause, no reset, which is the real failure's exact shape.
+
+### Low-1 → BACKLOG L47, not a round (rule 1)
+The ceiling shown is `MAX_FEED_HZ` = 14.9, and a 60 Hz display cannot exceed
+**12.0** (:9003, asserted by test), so a user sitting exactly at the practical
+maximum reads as 20 % short. **TRUE, not false, therefore Low under :5807** — and
+the format is Kd's ruling verbatim (:9003), so this is a note in `BACKLOG.md`,
+not a display change.
+
+### Gates after the fix
+web **690/690** (31 files, +5) · `vite build` ✓ · the four changed files lint
+clean · `apps/api` and `packages/*` untouched. **The card still does not close:
+SMOKE is 1 of 5 steps, and step 3 — the empty chair under `full` — is the only
+check on whether `bone_stretch > 0.923` survives a model it was never measured
+against.** Whoever runs it: **read the camera-rate line while squatting**, never
+after stopping or pausing.
+
+## 2026-08-17 — THE SMOKE PASSED 5/5: the strong pose model costs 37 ms and no frames, and the empty chair still invents nothing. The card does NOT tick
+
+**Read before quoting any frames-per-second figure measured under `full`, before
+citing the person gate as "unverified under the strong model", and before
+designing a smoke around a number only the operator can see.**
+
+Second sitting of `RUNBOOK/smoke-strong-model-and-rate.md`, whose first sitting
+answered 1 of 5 steps. All five are now answered. Servers were started by the
+chat, not handed to Kd as commands — the thing that worked last time (:9243's
+process note) and the thing that worked this time.
+
+### The measurement the card exists for
+| | delivered | ceiling |
+|---|---|---|
+| `full` (now the default) | **10–12 /s** | 14.9 |
+| `lite` (`?model=lite`, same machine, same session) | **11–12 /s** | 14.9 |
+| `lite`, measured 2026-08-09 (:8879) | 9.2–12.2 | — |
+
+**The strong model has NOT eaten the throttle's headroom** — the objection the
+whole rate readout was built to test (:9003, :9111). Kd's reading is corroborated
+independently by the DEV console line, which printed **10.0, 11.4 and 7.6 fps**
+during his set; and 12.0 is the practical cap on a 60 Hz display (:9003), so
+10–12 is the TOP of the range and not a shortfall. Start-up cost is **680 ms
+against 643** (:8879) — **+37 ms**, and the console said **THE APP BUNDLE**, so
+it came off disk rather than Google's CDN.
+
+### The step that kept the card open, and the one that could not be skipped
+**Step 3 — an empty room and a chair for one minute under `full` invented ZERO
+reps.** He was asked twice whether he ran it *in this session, with the widget
+reading `full`*, because a pass from the `lite` era (:7222) is not evidence about
+a different estimator — the second ask is the only reason this line can be
+written at all. **`bone_stretch > 0.923` is untouched and its own 🔴 line does
+NOT tick**: one room, one chair, one minute is a smoke, and that line is
+unblocked by a fresh RECORDING replayed through `measure-pose.ts --gate
+"bone_stretch>0.923" --window 15 --nominal-dt 82`. What changed is the hazard's
+temperature, not its status — nothing has been observed going wrong under `full`.
+
+### The stored rows, which the first sitting did not have
+`grep -c 'workouts/sync'` over the API log = **8** (it was **0**). **Five sets
+across three workouts, EVERY ONE `mode = 'engine'`**, form scores 100/100/75/50/100,
+`engine_version 1.0.0`, `kcal_calc_version 3`; the first camera workout counted
+**4 reps in each of two sets** against the 5 he did (the sheet's own latitude is
+"4 or 6"). **Three sets carry a `duration_ms` far above their `watched_ms`**
+— 150,075 / 30,572 · 134,626 / 25,157 · 93,308 / 18,139 — which is what stepping
+out of shot looks like from the database, and is the closest thing to
+corroboration step 3 has.
+
+**WHAT THE ROWS CANNOT SAY, said rather than glossed (:7222).** A row holds the
+FINAL count, not the count over time, so it cannot separate "2 reps before he
+walked away" from "2 reps invented by the chair" — **step 3's headline rests on
+Kd's report** (:4829). And **no payload field records which pose model produced a
+set**, so steps 2 and 4 are told apart by his reading and the console line, never
+by the database. That is a gap in the instrument, not in this run: the same
+absence is why :9111's landmark clips can never be replayed under a new model.
+
+### What ticks: NOTHING
+The SMOKE gate is discharged; the packet still needs a review round finding zero
+Critical/High (:5348 rule 1), and **the T3 fix round's diff-only re-review is
+unrun** — `t3-camera-rate-expiry-r2-PROMPT.md`, ready at the repo root, must run
+in a FRESH chat. Ticking here would be the :5034 / :4718 F4 precedent exactly: a
+line ticked in a commit whose own notes say a gate has not run.
+
+## 2026-08-17 — KD RULING: the crowded-room answer is a FOLLOW-THE-DEMO mode the USER chooses, and the app must SAY SO UNPROMPTED. His reason: silence reads as a broken app
+
+**Read before building anything that decides which person the camera follows,
+before adding any automatic switch away from camera grading, and before writing
+the copy that offers this mode.**
+
+Kd asked, unprompted, while this card's re-review was running: *"if a user uses
+it in gym there will be multiple people beside them then how would the camera
+detect only that target person?"* The answer measured from the code is that
+**nothing does** — `poseTuning.js:82` ships `numPoses: 1` and
+`usePoseDetection.js:388-389` takes `results.landmarks[0]`, so MediaPipe crowns
+one winner and the app takes it, with no rule of ours for nearest, largest,
+central or same-as-last-frame. The person gate cannot help: `bone_stretch >
+0.923` asks whether a skeleton is physically plausible, and a real bystander is.
+Its own 🟡 `OWED.md` line, tracked nowhere before today (grep-verified).
+
+### His proposal, and why it is the cheap way out
+*"if a user is using in a environment where there are more people then it should
+switch to a mode where instead of the camera there will be a big reference of the
+exercise they want to do and follow the reference"*. **Both halves already
+exist**, verified rather than assumed: **112 GIFs covering 63 exercise names in
+`apps/web/public/exercise-gifs/`**, so no media is produced; and the
+not-camera-graded path is the existing log-only set, which still SAVES and still
+earns XP (:3085), carrying no form score. It is screen work over two built
+things — against multi-person tracking, which needs extra landmark passes
+against Part 6 §3.4's budget on an app already at 10–12 of a 14.9 ceiling.
+
+### THE RULING — the USER flips the switch, and it is his own earlier ruling that decides it
+Offered the choice between the app detecting a crowd and switching, or the app
+offering a mode the user picks, **Kd chose the user-chosen version**: *"i will
+follow your recommendation"*. **:6008 is why the recommendation was that way
+round** — if the user chose the CAMERA, the app NEVER switches them off it; the
+approved escape hatch is a button *"the user presses, the app has no path to
+it"*. An automatic crowd-switch is that forbidden handover in new clothes, and
+**no chat may build it without Kd amending :6008 expressly.**
+**THE ARGUMENT THAT SETTLED IT, and it is the part to carry forward: the
+AUTOMATIC version needs exactly the thing the idea was invented to avoid.** The
+app cannot know a room is crowded without asking the model for more than one
+body — the multi-person work itself. **User-chosen costs nothing extra;
+automatic costs the hard thing first.**
+
+### KD'S SECOND RULING, added in the same breath and larger than the first
+*"this thing need to be explicitly told to the user that if there are multiple
+person then you need to switch otherwise they will think the app does not
+work"*. **A mode nobody is told about is a mode nobody uses, and the failure it
+prevents looks exactly like a broken app** — a user in a gym whose reps stop
+counting has no way to guess that the camera locked onto somebody else. This is
+:6662's standing shape (converting *"silently counts wrong"* into something the
+app SAYS) and :6856's (*asking a person to notice a MISSING thing is not a
+check*) applied before the defect instead of after it.
+**THE DESIGN CONSEQUENCE, which follows from the first ruling and must not be
+lost: the message CANNOT be conditional on a crowd**, because the app cannot
+detect one — that is the whole point of the ruling above. So it is **unconditional
+and always present**, which forces the wording: it must read as an INSTRUCTION
+next to the switch (*"training in a busy room? use Follow along"*), never as a
+warning about the camera, or the app tells every solo user at home that it may
+not work — the precise impression Kd is trying to prevent. **Copy is NOT written
+here** (R0.2); it is written in that card and shown to him.
+
+**Nothing built, no code touched, no `OWED.md` line ticked.** The camera-rate
+card's re-review was running while this was discussed and is untouched by it.
+
+## 2026-08-17 — KD RULING: FOLLOW-ALONG SETS RUN ON A TIMER, NOT ON REPS COUNTED FROM THE VIDEO. The app may only save numbers it actually knows
+
+**Read before adding any rep count the camera did not produce, before designing
+a timed set, and before worrying that a timer breaks the calorie method.**
+
+Continues :9390 the same day. Kd first specified the mode with the VIDEO driving
+the count — *"the reference will start doing exercise and with each rep the
+reference completes the rep counting will happen"* — then asked, unprompted:
+*"instead of automatic rep counting how about making it time based then it will
+become less complex what do you think"*, and after being given the case both ways
+ruled for the timer.
+
+### The reason is honesty, and it is bigger than the simplicity he asked about
+**The app can only ever know how many reps the VIDEO did, never how many the USER
+did.** A user who manages three of the demo's twelve gets twelve written into
+their history, their calories and their personal bests — a number the app
+invented, which is :5807's class arriving BEFORE the defect instead of after it.
+**A timer only ever records something true: the set ran for N seconds.** The
+simplicity Kd noticed is real and secondary — no loop-completion detection, no
+per-exercise rep-length data, and above all **no dependency on a perfect one-rep
+reference clip**, which is exactly where he was stuck (Gemini kept emitting double
+squats, and every generator he tried wanted a subscription).
+**It is NOT a one-way door**, and he was told so before ruling: rep counting can
+be added on top later if one-rep references ever exist.
+
+### KD'S QUESTION THAT VERIFIED IT — "how will calorie burn calculation happen then?"
+**Calories never used reps.** `apps/api/src/modules/workouts/calories.ts`
+computes `MET × weight_kg × hours` (2B §2.2, ported from `calories.py:14-19`);
+**reps appear nowhere in the formula.** They entered the v2/v3 tiers only as a
+way to ESTIMATE working time (`reps × tempoMsAvg`) back when the camera knew a
+count but not a duration — and v3 already replaced that estimate with
+`watchedMs`, a real measured time (:7730). **A log-only set is billed as its
+whole span at the exercise MET** (the `logOnly` branch), so **a timed set hands
+the calculation the cleanest input it has ever had** and needs no new code.
+Residual, unchanged from today's hand-counted sets: the whole span is billed, so
+a user who stops early is credited generously (:6277's tooltip finding is the
+same branch — whatever copy this card writes must not claim otherwise).
+
+### What else he specified, and the one thing left open
+Three-second countdown → the big reference replaces the camera → it loops → the
+timer ends the set → a restart returns to the countdown → the right-hand column
+otherwise unchanged. **Taken by recommendation and to be confirmed at the plan
+gate:** the set length is a per-exercise default the user nudges with the SAME
++/− buttons that adjust reps today (**the number itself is Kd's — R0.2**); the
+set saves down the log-only path; restart clears that set's progress; and the
+camera is recommended to be stopped outright in this mode.
+**Open and NOT chosen: where the reference footage comes from.** Free stock
+(Pixabay/Pexels allow commercial use without attribution — checked, not recalled)
+· filmed on his phone · or rendered from the landmark traces already on his
+Desktop. **The 112 GIFs the app already ships cannot serve**: measured at 600×600
+at best and 220×119 for jump squat, they are thumbnails blown up. **The artwork
+is its own track and must NOT block the card** — one placeholder reference proves
+the mode.
+
+**Card written as `NEXT-CARD-follow-along-PROMPT.md`. Nothing built, no code
+touched, and it does not start until the strong-model card closes.**
+
+## 2026-08-17 — T3 ROUND 2 ON THE STRONG-MODEL/RATE CARD: the same instrument lied again, two seconds instead of five minutes. KD RULED PATCH ON THE ESCAPE HATCH, and the patch is the shape correction
+
+**Read before putting any live measurement on screen, before dividing a count by
+a span, and before believing a mutation sweep that reports no summary line.**
+
+The fresh-chat re-review (`t3-camera-rate-expiry-r2-PROMPT.md`) returned **1
+Critical/High, 1 Low**, reproduced all three of round 1's mutants independently,
+and — correctly — **stopped rather than proposing another patch**, because two
+consecutive rounds had found Criticals in the same function. That is :5348's
+escape hatch, and it is Kd's call. **He ruled PATCH** (precedent :6277, where he
+ruled the same way on a comparable pair).
+
+### C/H-1 — round 1 fixed WHICH frames count; it did not fix WHAT THEY ARE DIVIDED BY
+`hz(now)` applied the window cutoff at read time (round 1's fix) but still
+divided by `t[last] - t[first]` — **the span between the surviving FRAMES**. A
+gap at the END of the window is therefore invisible, and the frames needed to
+know better were already in hand and discarded by the formula. Reviewer measured
+it through the real module; **re-derived here by arithmetic before accepting it,
+and the test's own failure message printed the defect**: at 500 ms of silence
+the row reads `14.9 of 14.9/s` when **12.67** had really arrived, and at 1,990 ms
+it still reads 14.9 against a truth of **5.3**. Severity is :5807 on its face —
+on screen AND false, on a panel any user can open (:6277). **Mitigated only by
+duration**: the panel repaints about once a second, so a reader sees roughly one
+false repaint rather than five minutes of them, which is what puts it at the
+bottom of Critical/High rather than the top.
+
+**THE FIX IS ONE LINE — `const span = now - t[first]` — AND IT IS THE DESIGN
+CORRECTION, NOT A THIRD PATCH.** Both rounds found the same mistake: a reading
+describing a stretch of time it had no evidence about. `now` now governs BOTH
+ends of the measurement, which is the only way an answer about "right now" can be
+honest. Measured after: the row reads 12.4 / 9.9 / 7.4 / 5.0 against truths of
+12.7 / 10.0 / 7.7 / 5.3, decaying smoothly into the blank instead of holding and
+then vanishing. The startup guard is unharmed and slightly better — `MIN_SPAN_MS`
+now measures elapsed time rather than frame spread, so two frames 1 ms apart are
+still `null`.
+
+**WHAT A USER SEES CHANGE, stated because it is a visible number.** A perfect
+machine now reads about **14.6** where the ceiling beside it says 14.9 (measured
+14.67 infinitely-fast, 14.59 at one 67 ms gap), and the row falls away to near
+zero before blanking instead of freezing at its last value. **The lower figure is
+the honest one** — the old one flattered itself by measuring only up to the
+moment a frame arrived. `BACKLOG.md` carries it against L47, whose 12.0-on-60 Hz
+finding is unchanged and is the number that actually matters.
+
+### The five assertions that moved, and why NONE of them was widened to pass
+Four hook assertions and one meter assertion were pinned at ±0.05 on the IDEAL
+cadence, which a read-time measurement can never return. **Loosening a tolerance
+to turn a red green is forbidden (Part 0 rule 3), so each was replaced by the
+property it was really claiming**: the mid-gap reads now assert *"a full-speed
+camera still reads as full-speed AND a gap since the last frame costs something"*
+(`toBeLessThan` the ideal — **which the defect fails, because under it the two
+numbers were IDENTICAL**, so the replacement is itself a regression pin at two
+levels); the ceiling test gains *"the reading can never EXCEED the ceiling it is
+displayed against"*, which is what makes `12.0 of 14.9/s` a coherent sentence;
+and the slow-machine test states its discriminating claim outright rather than
+leaving it to a tolerance.
+
+### Low-1 → BACKLOG, and it is the finding with the longest reach
+**The reviewer wrote round 1's defect one layer up — a component ref holding the
+last non-null reading — and all 690 tests stayed GREEN.** Every rate test renders
+once against a CONSTANT stub, so nothing asserted that the page ASKS the meter
+rather than remembering it. An expiry inside the meter is worth nothing if the
+page holds the old number in front of it. Closed by a render test that changes
+the meter's answer and advances the page's own once-a-second repaint. Rule 5's
+question is answered by the same test: the class now has a guard, not a comment.
+
+### PROOF, and the SIXTH unearned-harness-pass in this project — caught by its own control
+Five mutants, backup and restore **by file copy with sha256**, never
+`git checkout` (:9243):
+
+| mutant | result |
+|---|---|
+| M1 — the exact defect: span ends at the last frame | **RED** — 4 failed / 41 |
+| M2 — round 1's defect: the expiry deleted | **RED** — 4 failed / 41 |
+| M3 — missing clock falls back to the newest frame | **RED** — 1 failed / 18 |
+| M4 — the hook's reader stops passing the clock | **RED** — 5 failed / 21 |
+| M5 — the PAGE caches the last reading (Low-1) | **RED** — 1 failed / 43 |
+
+**The first run of that sweep reported all five `*** ALIVE ***` on an EMPTY
+summary line** — it grepped for the summary BEFORE stripping ANSI colour, matched
+nothing, and read "no failures found" as survival. :4855's shape exactly (a table
+produced by a run where nothing executed), and the sixth time this project has
+had a harness hand back a verdict it did not earn. **Two class fixes, not one
+instance fix: a missing summary is now a FATAL rather than a verdict, and an
+unmutated CONTROL run must report green through the same code path before any
+mutant is believed.** All three files verified byte-exact afterwards, and the
+four touched files are uniformly CRLF (no mixed endings introduced — :4267).
+
+### Gates
+web **693/693** (31 files, +3) · `vite build` ✓ · the four changed files `eslint`
+clean · `apps/api` and `packages/*` untouched. **The card does NOT close: under
+:5348 rule 1 a packet ships on a round finding ZERO Critical/High, and this round
+found one — so a third, diff-only re-review is owed on this fix alone.** The
+smoke stays passed at 5/5 (:9328); no `OWED.md` line ticks.
+
+## 2026-08-18 — KD PRODUCT RULINGS: THE TARGET IS US GYMS AND THE MOBILE APP IS THE PRODUCT. Web becomes the test rig, the AI chat is switched OFF, gyms collect their own money, and the console is built ONCE
+
+**READ THIS BEFORE PLANNING ANY CARD FROM HERE ON.** These rulings change who the
+product is for, which surfaces get built, and what "done" means. Several
+CONTRADICT the spec set as written; where they do the ruling wins, and the spec §
+is named below so the conflict is visible rather than silent. Nothing here was
+derived by a chat — every line is Kd's, given in one session on 2026-08-18, each
+in response to a costed option. Repo claims carry the command that produced them.
+
+### 0. WHY THIS IS ONE ENTRY AND NOT FIFTEEN
+Fifteen rulings arrived across five consecutive messages while Kd was thinking
+aloud about the product. Splitting them would hide the only thing that matters:
+**they are one shift, not fifteen features.** The project was a consumer
+camera-coach app piloting in Jorhat with a gym console bolted on. It is now a
+**GYM PLATFORM SOLD TO US GYMS**, whose consumer app is one surface of it. A chat
+that reads one of these lines without the others will mis-size everything it
+plans.
+
+### 1. THE MOBILE APP IS THE PRODUCT. THE WEB APP IS NOT.
+His words: *"my whole aim is mobile app, the web is just side not main"* and
+*"our end goal itself is mobile app which will be our main product"*.
+
+**CONSEQUENCE, AND IT INVERTS THE CURRENT QUEUE:** web member screens are built
+TWICE — React and React Native do not share screen code — so building more of them
+buys the product nothing. **Web's remaining job is the TEST RIG**: it is already
+how fixtures get filmed and how a new exercise's counting is checked without
+waiting for a phone build, and that job is worth keeping. Web member screens
+beyond that are OWED-only from here.
+
+**WHAT TRANSFERS TO MOBILE UNCHANGED — measured this session, not assumed:**
+`packages/engine` (20 `.ts` files; `dependencies: {}`, read from its
+package.json), `packages/shared` (20 files), the whole of `apps/api` (one server
+serves both clients), and every exercise definition (data files). **WHAT DOES
+NOT:** all 24 files under `apps/web/src/pages` (`ls | wc -l` = 24), the camera
+path, offline storage, and payments. **Therefore finishing the remaining WEB work
+saves almost nothing on mobile — that saving was already banked by the P0 package
+layout, and a chat proposing "finish web first, it will speed up mobile" is wrong
+on measured grounds.**
+
+### 2. THE MARKET IS US GYMS. JORHAT IS NO LONGER EVEN THE PILOT FRAME.
+His words: *"i will approach gyms in usa not in india also i will use stripe"*.
+This moves the FIRST customer out of India, going further than :8808's already-
+struck caveat (which had been corrected to "Jorhat is the PILOT, not the market").
+
+**THREE THINGS THIS INVALIDATES, each of which a chat would otherwise carry
+forward as settled:**
+- **Part 5 §1's price books are built for India.** US gyms pay multiples of the
+  Indian tiers. The price book is now UNRESOLVED, not merely un-ratified.
+- **MY OWN REGULATORY OBJECTION TO GYM-COLLECTED PAYMENTS WAS ANCHORED ON INDIA
+  AND IS WITHDRAWN.** I raised RBI / payment-aggregator licensing against Stripe
+  Connect; that reasoning does not apply to a US platform onboarding US gyms.
+  Recorded because the objection sits in this session's transcript and a later
+  chat must not resurrect it as a live risk. Kd's correction was blunt and
+  correct.
+- **The privacy-law question at :592 stops being theoretical.** Workout and body
+  data is health data in the US and several states legislate it specifically.
+  Still unruled — but now on the critical path to a signed gym rather than behind
+  it.
+
+### 3. GYMS COLLECT THEIR OWN MONEY — STRIPE CONNECT, GYM AS MERCHANT
+His diagram: `Payment interface → Stripe Connect → Gym's Stripe account → Gym
+bank`, and *"as for money gym customer and user its between them"*.
+
+**THIS IS A BUSINESS-MODEL ADDITION, NOT A FEATURE.** The spec has exactly one
+money direction: members and gyms pay US (Part 5 throughout). **`grep -ci` for
+`connect|payout|marketplace|on behalf|platform fee|split` over
+`05-part5-billing.md` returns ZERO** — nothing in the spec set contemplates money
+reaching a third party.
+
+**WHAT THE RULING FIXES:** the gym is the merchant. Disputes, refunds and the
+member payment relationship are the GYM's, not ours. We build the interface.
+**WHAT IT DOES NOT FIX AND MUST NOT BE GUESSED:** which Connect account type
+actually delivers that (types differ materially in who carries liability),
+the onboarding and identity-check flow, what a gym can see before verification
+completes, and how a half-onboarded gym behaves.
+**UNVERIFIED (V5): every Stripe Connect specific in this session came from model
+memory, not a source read. Pull current Stripe documentation at planning time —
+build against nothing asserted here.**
+
+### 4. THE GYM CONSOLE IS REACHED FROM THE PHONE — AND IS BUILT ONCE
+Kd rejected the spec framing hard: *"then that is wrong main idea is convenience
+if owner can manage the gym from mobile itself"*.
+
+**HE AND THE SPEC AGREE ON THE GOAL.** Part 3 §3.1 reads *"Responsive web app
+(owners live on phones; **no native console app**)"* — the spec's REASON for
+choosing responsive is the same convenience Kd is demanding. The only open
+question was mechanism, and **I made that call rather than put it to him a third
+time (K4): ONE responsive console, opened from inside the phone app.** Built
+once; fixable the same day instead of waiting on app-store review, which matters
+for a B2B tool gym owners will constantly ask to change; and it still works on a
+laptop, which owners will use for reports and billing. **Kd did not overrule it.**
+A later chat wanting native console screens is proposing to build the console
+TWICE and owes that cost explicitly.
+
+### 5. THE AI CHAT COACH IS SWITCHED OFF — OFF, NOT DELETED
+His words: *"i have decided to drop the chat bot from both web and mobile"*.
+
+**THIS IS THE AUTHORISED PATH, NOT A BREACH OF THE NO-REMOVAL RULE.** CLAUDE.md's
+MIGRATION STANCE forbids removing a feature *"without an explicit KD RULING made
+in response to a cited option"* — this is exactly such a ruling, made after being
+shown what goes and what it costs. The rule is satisfied, and this line is the
+citation a future chat needs.
+
+**OFF, NOT DELETED, AND THE DISTINCTION IS THE WHOLE POINT.** Measured:
+`apps/api/src/modules/coach` is **1,617 lines** across 13 files including a full
+retrieval pipeline (chunk, embedder, ingest, retrieve, prompt) plus an ingested
+knowledge base; `apps/web/src/pages/Coach.jsx` is **772 lines**. `grep -rln coach`
+outside the module returns **15 files** — analytics, app wiring, config, two db
+schema files, seed, entitlements, gamification badges and XP, geo, and five
+privacy files (export and delete must still account for stored conversations).
+**Deleting is a day of work across six subsystems with real risk to data-export
+and account-delete; unwiring the route is an hour and is reversible.**
+
+**KD'S DEPLOY-SIZE QUESTION, ANSWERED PRECISELY** (*"if chat bot is hidden when i
+deploy wont it increase size unnecessarily?"*): the 1,617 server lines are never
+downloaded by anyone and cost app size nothing. The 772-line screen IS in the web
+bundle today; **removing its ROUTE drops it and its exclusive dependencies
+automatically, while hiding only the BUTTON ships it anyway.** Done correctly the
+download gets smaller. Whoever executes this must remove the route/import, not
+the nav entry.
+
+**WHAT RETIRES WITH IT:** the per-question Groq bill, and roughly seven open
+`OWED.md` coach items (empty conversation on failure, question spent on provider
+failure, raw HTML in answers, over-long message recovery, streaming, read-path
+tiebreaker, secure-context message id). Those lines are NOT ticked — they are
+parked with the feature, and return if it does.
+
+### 6. SHARING IS OPT-IN AND SCOPED; MEAL PHOTOS SELF-DESTRUCT AT SEVEN DAYS
+His words: *"will have option to share gym global or private"* and *"a meal photo
+wil be deletd after a week automatically"*.
+
+**THIS IS ALSO HIS ANSWER TO THE §2.4 PRIVACY QUESTION I PUT TO HIM.** I offered
+three routes for coach-written diet plans colliding with the org-visibility
+promise and recommended per-coach opt-in; his sharing ruling generalises it —
+**the member chooses what is exposed, and the default is exposed to nobody.**
+Part 3 §2.4's promise therefore STANDS UNCHANGED: gyms still never see meal logs,
+body weight, coach conversations or run routes **except what the member
+deliberately shares**. That boundary is enforced in the repo layer, not by UI, and
+must stay that way.
+
+**PHOTO STORAGE DOES NOT EXIST TODAY — measured.**
+`apps/api/src/modules/nutrition/routes.ts:3` states photos are *"request-only"*: a
+meal image goes to the vision provider and is discarded. `grep` for
+bucket/storage/upload config in `apps/api/src/config.ts` returns **nothing**.
+Sharing pictures therefore requires building image storage for the first time:
+upload, magic-byte validation, size cap, server-generated keys, signed URLs (R3.9
+already specifies all five), a seven-day sweep for meal photos, and the
+DPDP/account-delete cascade. **Gym-global sharing additionally requires
+report-and-remove — not optional once real people post pictures of their bodies
+to a shared feed.**
+
+### 7. THE NEW PRODUCT SURFACE, AND WHAT OF IT THE SPEC ALREADY COVERS
+Measured by `grep -ci` across `docs/spec/*.md` this session. **Zero hits means the
+spec set does not contemplate it at all** — these are additions, and a chat must
+not go looking for a § that governs them.
+
+| Surface | Spec status |
+|---|---|
+| Members, gym leaderboard, reports, staff roles, seats, join codes | Part 3 — specced |
+| Workout programs | Part 7 — specced (27 hits) |
+| Gym branding / logo on member home | Part 3 — logo already in console settings (9 hits) |
+| Attendance / check-in | **0 hits — new** |
+| Classes / scheduling / booking slots | **0 hits — new** |
+| Member-to-coach messaging | **0 hits — new** |
+| Gym announcements to members | **0 hits — new** (staff notifications are not this) |
+| Gym sets its own pricing, offers, free promos | **0 hits — new** |
+| Coach-authored workout + diet plans for a member | **0 hits — new** |
+| Recipes + grocery list | recipe 2 hits (Part 4 table only), grocery **0 — new** |
+| Import from a competitor gym app | **0 hits — new** |
+| Nearby gyms + paid day pass | nearby **0**, day pass **0** — new |
+| Paid friend/family invite, training together | together 1 hit — effectively new |
+| Nearby-runner connection | **0 hits — new** |
+
+### 8. WHAT WAS DROPPED, AND WHAT WAS PARKED WITHOUT BEING DECIDED
+- **DROPPED by Kd:** coach-uploaded instruction videos (*"ok will not upload
+  video"*). Video storage and streaming leave the plan with it.
+- **PARKED, on my recommendation and not contradicted:** gym payments beyond the
+  Connect interface until a real gym asks; the competitor-app importer, on the
+  ground that an importer is written against a real export file from a real first
+  customer and never against an imagined format.
+- **NOT DECIDED AT ALL — do not treat as approved:** day passes, paid
+  friend/family invites, training together live, and nearby-runner connection.
+  Each was stated by Kd as wanted; none has been sized, sequenced or ruled.
+  **The nearby-runner one additionally carries a SAFETY question distinct from
+  privacy**, put to Kd and not yet answered: privacy is "do not share my data",
+  safety is "do not help a stranger learn where someone runs alone on a
+  schedule". Consent settings do not answer the second.
+
+### 9. WHAT A CHAT MUST NOT CONCLUDE FROM THIS ENTRY
+- **Not a licence to delete anything.** Only the AI chat is switched off, only by
+  unwiring, and only because Kd ruled it after seeing the cost. Everything else
+  in `OWED.md` stands.
+- **Not a re-plan.** No card was written, no sequence approved, no estimate
+  ratified. The next planning chat still owes Kd a costed slice.
+- **Not a spec amendment.** `docs/spec/` is unedited. Where a ruling above
+  contradicts a spec §, the ruling wins per CLAUDE.md Part I §5, and the conflict
+  is named here rather than resolved by editing law.
+- **The size of what remains was stated to Kd honestly and must not be softened
+  later:** 120 open `OWED.md` items (19 🔴 / 50 🟡 / 48 ⚪ / 7 ❓, counted this
+  session), 3 of 58 exercises, no mobile app, no billing or org routes, and 51
+  cards shipped in the 42 days since 2026-07-06 at a *declining* weekly commit
+  rate (85 → 97 → 76 → 48 → 41 → 27). **He asked whether 10 days would finish it
+  and was told no, with those numbers.** The rulings above make the remaining
+  surface LARGER, not smaller.

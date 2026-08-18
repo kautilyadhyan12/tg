@@ -33,26 +33,71 @@ import { modelUrls, POSE_DEFAULTS } from '../dev/poseTuning.js';
  *  the URL the browser asks for is exactly `/` + dest. */
 const urlFor = (asset) => `/${asset.dest}`;
 
-const modelAsset = POSE_ASSETS.find((a) => a.dest.endsWith('.task'));
+const modelAssets = POSE_ASSETS.filter((a) => a.dest.endsWith('.task'));
 const wasmAssets = POSE_ASSETS.filter((a) => a.dest.startsWith(`${WASM_DIR}/`));
 
+/** The bundled asset for a variant, or undefined — `find` on ONE model was the
+ *  original shape and it stopped being safe the moment a second was bundled:
+ *  it would have answered with whichever happened to be listed first, so
+ *  switching the default to a model nobody fetches would have passed. */
+const bundledFor = (variant) =>
+  modelAssets.find((a) => urlFor(a) === modelUrls(variant).local);
+
 describe('the bundled model is the one the app actually asks for', () => {
-  it('is fetched to the exact path the shipped default resolves to', () => {
-    // If these drift, the app asks for a file the build never wrote, falls back
-    // to the CDN, and every camera workout needs internet again — silently.
-    expect(urlFor(modelAsset)).toBe(modelUrls(POSE_DEFAULTS.model).local);
+  it('THE SHIPPED DEFAULT IS ONE OF THE MODELS THE BUILD WRITES', () => {
+    // The assertion with the most teeth in this file, and the one the
+    // 2026-08-17 model swap turned load-bearing. Point `POSE_DEFAULTS.model` at
+    // a variant `fetch-pose-assets.mjs` does not fetch and NOTHING ELSE
+    // COMPLAINS: the app asks for a `.task` that was never written, Vite answers
+    // a missing `public/` file with index.html at 200, MediaPipe fails on a web
+    // page where it expected a zip, and every camera workout silently downloads
+    // 9.4 MB from Google instead — the exact defect, and the exact silence, that
+    // hid for months the first time.
+    expect(
+      bundledFor(POSE_DEFAULTS.model),
+      `the shipped default is '${POSE_DEFAULTS.model}' and the build fetches ` +
+        `${modelAssets.map((a) => a.dest).join(', ')}`,
+    ).toBeDefined();
   });
 
-  it('is fetched FROM the same URL the app would fall back to', () => {
+  it('fetches EVERY bundled model from the same URL the app would fall back to', () => {
     // So the bundled bytes and the fallback bytes cannot be different models.
-    expect(modelAsset.url).toBe(modelUrls(POSE_DEFAULTS.model).remote);
+    // Every model, not just the default: `lite` is bundled precisely so it can
+    // be compared against `full`, and a comparison against different bytes than
+    // the fallback would serve is not a comparison.
+    for (const asset of modelAssets) {
+      const variant = asset.dest.match(/pose_landmarker_(\w+)\.task$/)?.[1];
+      expect(variant, asset.dest).toBeDefined();
+      expect(asset.url).toBe(modelUrls(variant).remote);
+      expect(urlFor(asset)).toBe(modelUrls(variant).local);
+    }
   });
 
-  it('pins a digest and a length, not just a length', () => {
+  it('keeps LITE bundled as well, so the old measurements stay reproducible offline', () => {
+    // §3.3's own step-down, and more immediately: every number this project has
+    // ever measured — the thirteen clips behind `bone_stretch > 0.923`, both
+    // throughput sessions, the golden traces — was taken under `lite`. The day
+    // the default moved is the day those become impossible to re-run if `lite`
+    // has to come off a CDN.
+    expect(bundledFor('lite'), 'lite must stay bundled').toBeDefined();
+  });
+
+  it('pins a digest and a length for every model, not just a length', () => {
     // A truncated download is the failure mode being fixed; any 5,777,746 bytes
     // would satisfy a length check.
-    expect(modelAsset.sha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(modelAsset.bytes).toBeGreaterThan(0);
+    expect(modelAssets.length).toBeGreaterThan(0);
+    for (const asset of modelAssets) {
+      expect(asset.sha256, asset.dest).toMatch(/^[0-9a-f]{64}$/);
+      expect(asset.bytes, asset.dest).toBeGreaterThan(0);
+    }
+  });
+
+  it('gives each model its OWN digest — two entries cannot describe one file', () => {
+    // A copy-paste that left `full` carrying `lite`'s hash would fail the build
+    // rather than ship the wrong model, but it would fail confusingly. This says
+    // which mistake it was.
+    const digests = new Set(modelAssets.map((a) => a.sha256));
+    expect(digests.size).toBe(modelAssets.length);
   });
 });
 

@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import useCamera from '../hooks/useCamera';
 import TraceRecorderWidget from '../dev/TraceRecorderWidget';
-import usePoseDetection from '../hooks/usePoseDetection';
+import usePoseDetection, { MAX_FEED_HZ } from '../hooks/usePoseDetection';
 import PoseOverlay from '../components/workout/PoseOverlay';
 import ReferenceAnimation from '../components/workout/ReferenceAnimation';
 import { getItem, removeItem } from '../utils/storage';
@@ -258,7 +258,7 @@ export default function ActiveWorkout() {
 
   const {
     poseData, keypointsData, analysisAvailable, analysisSettled,
-    startStreaming, stop,
+    readPoseHz, startStreaming, stop,
   } = usePoseDetection({
     exercise: engineExerciseKey,
     setIndex: engineSetKey,
@@ -1324,6 +1324,28 @@ export default function ActiveWorkout() {
             const visible = kps.filter((k) => (k && k[3] != null ? k[3] : 0) > 0.5).length;
             const view = poseData?.view;
             const viewColor = view === 'front' || view === 'side' ? '#4ade80' : '#fbbf24';
+            // HOW FAST THE CAMERA IS ACTUALLY FEEDING THE COUNTER, against the
+            // fastest this app can go. Until 2026-08-17 nobody in this project
+            // had ever seen the real figure, and when the first reading arrived
+            // (9.2–12.2 on Kd's desktop, :8879) it came from a console line
+            // that Vite strips out of production builds. This is the same
+            // number where a user can reach it — the beginning of an answer to
+            // "why did it miss my squat?" that previously needed a terminal.
+            //
+            // SHOWN AGAINST `MAX_FEED_HZ`, NEVER AGAINST 15, and that is the
+            // point of the row rather than a detail of it: the feed throttle
+            // caps this app at 14.9 a second and a 60 Hz display drops it to
+            // 12.0, so a figure printed beside "15" reads as a shortfall on
+            // every machine ever built. Beside the ceiling it reads as what it
+            // is. Full reasoning at the constant.
+            //
+            // A READOUT, NOT A WARNING (Kd's ruling, 2026-08-17): counting
+            // works at these rates — his own machine has been sitting on the
+            // ceiling all along — so nothing on the main screen is keyed to it.
+            // Read during render deliberately: this panel already re-renders
+            // ~12 times a second off `poseData`, so the figure is live without
+            // a single extra render.
+            const hz = readPoseHz();
             const Row = ({ label, value, color }) => (
               <div className="flex justify-between gap-3">
                 <span style={{ color: 'rgba(255,255,255,0.45)' }}>{label}</span>
@@ -1342,6 +1364,14 @@ export default function ActiveWorkout() {
                 <Row label="state" value={poseData?.state ?? '—'} />
                 <Row label="reps(engine)" value={poseData?.rep_count ?? '—'} />
                 <Row label="joints seen" value={`${visible}/33`} color={visible >= 28 ? '#4ade80' : '#fbbf24'} />
+                {/* No conditional colour, deliberately: "how far below the
+                    ceiling is too far" is a number nobody has measured, and
+                    inventing one to tint a row is inventing it (R0.2). Both
+                    figures are on screen; the reader compares them. */}
+                <Row
+                  label="camera rate"
+                  value={hz == null ? '—' : `${hz.toFixed(1)} of ${MAX_FEED_HZ.toFixed(1)}/s`}
+                />
                 <Row label="mode" value={graded ? 'engine' : countingReason} color={graded ? '#4ade80' : '#fbbf24'} />
               </div>
             );

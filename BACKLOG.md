@@ -724,3 +724,41 @@ it like any other.)*
       `eslint.config.js`, with that coupling written into the comment. Residual
       75 are pre-existing app lint, untouched (R1.1). Found while running the
       universal DoD checklist rather than by any review.
+- [ ] **L47 · the camera-rate row names a ceiling the app essentially cannot
+      reach** — the row prints `<rate> of 14.9/s`, and 14.9 is `MAX_FEED_HZ`, the
+      throttle's arithmetic cap. On an ordinary 60 Hz display the real cap is
+      **12.0** (:9003, asserted by a test driving the frame loop), so a user
+      sitting **exactly at the practical maximum reads as 20 % short** —
+      structurally the misreading :9003 exists to remove, at a different pair of
+      numbers. **TRUE, not false, therefore Low under :5807**, and the format is
+      Kd's ruling verbatim (:9003) — this is NOT a licence to change the display.
+      Note for whoever picks it up: the ceiling is **display-dependent**, so any
+      fix has to decide what to show on a 120 Hz screen, where 14.9 IS reachable.
+      Found by fresh-chat T3 round 1 (Low-1) on the strong-model/rate card.
+
+- [x] **The page's read of the rate meter was protected by nothing, so the
+      expiry could have been undone one layer up without a single test noticing.**
+      FIXED 2026-08-17 in the round-2 fix round. Found by fresh-chat T3 round 2
+      (Low-1), and found the only way it could be: the reviewer WROTE the defect
+      — a component-level ref holding the last non-null reading, which is round
+      1's "14.9 over a dead camera" restored at the consumer — and **all 690
+      tests stayed green**. Every rate test rendered once against a CONSTANT stub
+      (`activeWorkout.render.test.jsx`), so nothing anywhere asserted that the
+      page ASKS the meter rather than remembering what it last said. :2912's
+      standing lesson ("a repoint nothing asserts is one the next edit undoes")
+      and :5104 F5, in a third file. Closed by a render test that changes what the
+      meter answers and advances the page's own once-a-second repaint: the row
+      must follow the new figure, the old one must be GONE, and a later null must
+      reach the screen as the dash. **Mutation-proven: the reviewer's exact
+      mutant is now RED (1 failed / 43).**
+- [ ] **The ceiling's figure moved, so L47's arithmetic is now slightly wider than
+      it records.** Opened 2026-08-17 by the round-2 fix. A reading is now measured
+      up to the moment it is READ rather than up to the last frame, so a reader —
+      never exactly on a frame's arrival — always has part of a trailing gap
+      inside the measurement, and a perfect machine reads about **14.6** where the
+      row's ceiling says 14.9 (measured: 14.67 with an infinitely fast loop, 14.59
+      at one 67 ms gap). **This does not change L47's finding or its severity** —
+      the ceiling was already unreachable in practice at 12.0 on a 60 Hz display,
+      which is the number that matters — it widens the gap by a fraction and is
+      recorded so the next reader of L47 is not surprised by the arithmetic.
+      **TRUE, not false, therefore Low (:5807), and the format stays Kd's (:9003).**

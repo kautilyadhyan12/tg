@@ -83,14 +83,17 @@ const MUTANTS = [
     target: 'tuning',
     why: 'the shipped default model changes — every user downloads a different model with no ruling',
     expect: 'returns exactly the shipped defaults when the URL says nothing',
-    from: "  model: 'lite',",
-    to: "  model: 'full',",
+    // Reversed on 2026-08-17 when Kd ruled `full` the default (Part 6 §3.3).
+    // The mutant is unchanged in MEANING — it silently swaps the model every
+    // user downloads — only in direction.
+    from: "  model: 'full',",
+    to: "  model: 'lite',",
   },
   {
     id: 'P6',
     target: 'tuning',
     why: 'the model URL is built from the raw request rather than the frozen map',
-    expect: 'falls back to lite for an unknown variant rather than fetching a bad path',
+    expect: 'falls back to the SHIPPED DEFAULT for an unknown variant, never to a bad path',
     from: '  const file = MODEL_FILES[model] ?? MODEL_FILES[POSE_DEFAULTS.model];',
     to: '  const file = MODEL_FILES[model] ?? `pose_landmarker_${model}`;',
   },
@@ -190,8 +193,35 @@ const results = [];
 for (const m of MUTANTS) {
   const target = TARGETS[m.target];
   const original = originals.get(m.target);
-  const mutated = original.text.replace(m.from, m.to);
-  if (mutated === original.text) {
+  // -- ANCHORS ARE MATCHED IN LF, WHATEVER THE FILE ON DISK USES ------------
+  //
+  // MEASURED 2026-08-17, and it had already cost this harness a completed run:
+  // `poseTuning.js` is checked out CRLF on Windows, every anchor here is
+  // authored with a bare newline, and a multi-line anchor therefore matched
+  // NOTHING. P2's did exactly that, and only the `matched nothing` guard turned
+  // it into an ABORT rather than a confident missing-test verdict -- so this
+  // harness had never run end to end on this machine. `mutate-pose-assets.mjs`
+  // escaped it only because its targets happen to have been written LF-only,
+  // which is luck rather than a property, so both files carry this.
+  //
+  // :4267's class (`read before trusting any N-mutants-0-alive table produced
+  // on Windows`) from the AUTHORING side rather than the `sed -i` side.
+  //
+  // Characters are built with String.fromCharCode for the same reason the ANSI
+  // strip below is: a backslash escape in this file has to survive being
+  // written by a tool, and the first attempt at these four lines did not.
+  //
+  // The mutant is written back in the file's own convention so nothing else
+  // shifts, and the RESTORE is unaffected either way -- it replays
+  // `original.text` byte for byte, which is what the sha256 check proves.
+  const CR = String.fromCharCode(13);
+  const LF = String.fromCharCode(10);
+  const toLf = (s) => s.split(CR + LF).join(LF);
+  const isCrlf = original.text.includes(CR + LF);
+  const lfText = toLf(original.text);
+  const lfMutated = lfText.replace(toLf(m.from), toLf(m.to));
+  const mutated = isCrlf ? lfMutated.split(LF).join(CR + LF) : lfMutated;
+  if (lfMutated === lfText) {
     abort(`${m.id}: its anchor matched nothing. The mutation would have been a no-op, which reports as a missing test. Re-anchor it against the current file.`);
   }
   writeFileSync(target.file, mutated);

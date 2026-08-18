@@ -40,12 +40,45 @@
 /** True only in a dev build. The one gate that matters. */
 export const POSE_TUNING_ENABLED = import.meta.env.DEV;
 
-/** MediaPipe's own defaults — today's shipped behaviour, byte for byte
- *  (usePoseDetection.js before this file existed). An absent or malformed URL
+/** Today's shipped behaviour, byte for byte. An absent or malformed URL
  *  parameter lands here, so the app is unchanged unless someone deliberately
- *  asks for something else. */
+ *  asks for something else.
+ *
+ *  ── `model` CHANGED FROM `lite` TO `full` ON 2026-08-17, BY KD'S RULING ────
+ *  Part 6 §3.3 has said so all along — *"BlazePose **full** as default,
+ *  **lite** as the automatic step-down"* (`06-part6-mobile.md:164`) — and the
+ *  app shipped the opposite for months. **Nobody had ever chosen `lite`:** it
+ *  was inherited from the previous version of this app and never revisited,
+ *  which is why this line used to describe itself as "MediaPipe's own
+ *  defaults". A default nobody picked is not a decision, and it was the wrong
+ *  way round.
+ *
+ *  **The reason it matters is accuracy, not tidiness. A weaker model is a more
+ *  credulous one** — it was `lite` that reported a chair's chest and hips at
+ *  0.99 confidence (:6386) and `lite` that counted 6, 2, 0 and 2 reps off four
+ *  clips of an empty room (:6856). Whether `full` fixes that is now a
+ *  measurement rather than an argument.
+ *
+ *  **The objection this used to carry, and why it fell.** The old comment said
+ *  *"do not switch it blind — Kd's clips landed at 7.2–12.5 fps against a 15 fps
+ *  target, so he is already under budget on the LIGHT model."* That premise was
+ *  measured false on 2026-08-17: `FEED_INTERVAL_MS = 67` caps the engine feed at
+ *  **14.93/s on any hardware and 12.0/s on a 60 Hz display**, so 7.2–12.5 was
+ *  never evidence about his machine's capacity — he was sitting on the app's own
+ *  ceiling. There is headroom between what inference costs and what the throttle
+ *  allows, and `MAX_FEED_HZ` plus the camera-rate row in the workout screen's
+ *  `debug` panel are what measure whether `full` eats it.
+ *
+ *  **WHAT THIS DOES NOT DO, deliberately (R5.4, R5.7).** Changing the model
+ *  changes the landmarks, and the person check's Kd-ruled `bone_stretch > 0.923`
+ *  was derived from thirteen clips recorded under `lite` (`sceneGate.js`,
+ *  DECISIONS :7037). **That number is NOT touched here and must not be retuned
+ *  to fit the new model** — whether it still holds is a question for a fresh
+ *  recording, and it has its own OWED line. The bundled MediaPipe WASM stays at
+ *  0.10.21 for the same reason: two frame-changing edits at once make the result
+ *  unattributable. */
 export const POSE_DEFAULTS = Object.freeze({
-  model: 'lite',
+  model: 'full',
   numPoses: 1,
   minPoseDetectionConfidence: 0.5,
   minPosePresenceConfidence: 0.5,
@@ -73,10 +106,11 @@ export const MODEL_NAMES = Object.freeze(Object.keys(MODEL_FILES));
  *  before `dev` and `build`, sha256-verified, and `usePoseDetection` reports
  *  which source it used on every run so the two can never quietly diverge again.
  *
- *  STILL TRUE, and it is what the §3.6 ladder will have to deal with: only the
- *  variant in `POSE_DEFAULTS` is fetched. Asking for another one in dev
- *  (`?model=full`) still comes off Google's CDN, because nothing has chosen a
- *  second model to ship — that choice is the open 🔴 OWED line. */
+ *  NO LONGER TRUE EITHER, as of 2026-08-17: **`full` AND `lite` are both
+ *  bundled**, so switching between them in dev (`?model=lite`) stays offline and
+ *  the two are comparable on equal terms. `heavy` is the one variant still
+ *  reachable only from Google's CDN — it is in the map so a URL cannot smuggle
+ *  in an arbitrary path, not because anything ships it. */
 export function modelUrls(model) {
   const file = MODEL_FILES[model] ?? MODEL_FILES[POSE_DEFAULTS.model];
   return {

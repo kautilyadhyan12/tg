@@ -77,6 +77,12 @@ const availableFor = (exercise) =>
     : poseState.analysisAvailable);
 vi.mock('../hooks/usePoseDetection', async () => {
   const { useEffect, useState } = await import('react');
+  // THE HOOK IS STUBBED; ITS CONSTANTS ARE NOT. `MAX_FEED_HZ` is the ceiling the
+  // debug readout prints and the tests assert, and a hand-typed 14.9 in either
+  // place would keep passing after `FEED_INTERVAL_MS` moved — which is the one
+  // event that row exists to survive. Taking it from the real module means the
+  // page and the test can only ever be reading the same number.
+  const actual = await vi.importActual('../hooks/usePoseDetection');
   // Named `use…` so the hook rules apply to it — this IS a hook, and an
   // anonymous arrow assigned to `default` is one ESLint cannot check.
   const useMockPoseDetection = ({ exercise, setIndex, onSetComplete, analysisEnabled }) => {
@@ -119,11 +125,17 @@ vi.mock('../hooks/usePoseDetection', async () => {
       // must not read "not yet known" as "no definition exists".
       analysisSettled: analysisEnabled === false ? true : settled,
       error: null,
+      // The delivered rate the debug readout prints. Configurable rather than
+      // pinned so the "no reading yet" arm and a real figure are both
+      // renderable — a row that can only ever draw one of its two shapes is a
+      // row half of which no test has seen (:4355 F1/F3/F5, three states with
+      // no render assertion at all).
+      readPoseHz: () => poseState.hz ?? null,
       startStreaming: vi.fn(),
       stop: vi.fn(),
     };
   };
-  return { default: useMockPoseDetection };
+  return { ...actual, default: useMockPoseDetection };
 });
 
 // THE LEGACY SAVE, RETIRED 2026-08-16 — kept here as a TRIPWIRE, not as a stub.
@@ -178,6 +190,9 @@ vi.mock('../utils/voice', () => ({
 }));
 
 import ActiveWorkout from './ActiveWorkout';
+// The REAL ceiling constant, not a copy of it — see the rate tests at the foot
+// of this file for why a retyped 14.9 would be worse than useless.
+import { MAX_FEED_HZ } from '../hooks/usePoseDetection';
 import { getItem, setItem } from '../utils/storage';
 import { peekQueue } from '../sync/syncQueue';
 
@@ -1389,5 +1404,100 @@ describe('counting your own reps is a choice, not only a fallback', () => {
     startWorkout([exercise({ name: 'Squats', reps: 1 })]);
     await waitFor(() => expect(startCamera).toHaveBeenCalled());
     expect(analysisEnabledSeen).toBe(true);
+  });
+});
+
+describe('the camera rate is readable without a terminal', () => {
+  // WHY THIS ROW EXISTS AT ALL. The delivered frame rate is what Part 6 §3.6
+  // degrades a device on, and until 2026-08-17 the only way to see it was a
+  // console line that Vite strips out of production builds. Kd's first reading
+  // of it (9.2–12.2 on his own desktop) was taken that way and read as his
+  // machine falling short — when 12.0 is in fact the ceiling this app imposes on
+  // every machine. Putting the figure NEXT TO THAT CEILING is the whole point:
+  // "12.0" alone invites the wrong conclusion, "12.0 of 14.9" does not.
+
+  // THE PANEL STARTS OPEN HERE AND SHUT FOR A USER, and the tests have to know
+  // the difference. `showDebug` is initialised to `import.meta.env.DEV`, which
+  // vitest sets true — so the readout is already on screen when a test renders,
+  // while a real user has to press the button. The visibility claim below is
+  // therefore made by CLOSING it, not by opening it.
+  const hideDebug = () => fireEvent.click(screen.getByText('hide debug'));
+
+  it('shows the delivered rate against the ceiling the app imposes', async () => {
+    poseState = { poseData: null, analysisAvailable: true, emitSummary: null, hz: 12.03 };
+    startWorkout([exercise({ name: 'Squats', reps: 5 })], { mode: 'camera' });
+    // 14.9 is MAX_FEED_HZ, imported from the hook rather than retyped: a
+    // duplicated constant here would keep passing after the throttle changed,
+    // and the throttle changing is exactly the event this row must survive.
+    expect(
+      screen.getByText(`12.0 of ${MAX_FEED_HZ.toFixed(1)}/s`),
+      'the rate must be shown BESIDE the ceiling, never alone',
+    ).toBeTruthy();
+  });
+
+  it('draws a dash, not a zero, before there is a rate to show', async () => {
+    // `Number(null) === 0` is how this app once silently reconfigured its pose
+    // model (:6749). A fabricated 0.0 here would read as a camera delivering
+    // nothing, on a workout that has simply not started yet.
+    poseState = { poseData: null, analysisAvailable: true, emitSummary: null, hz: null };
+    startWorkout([exercise({ name: 'Squats', reps: 5 })], { mode: 'camera' });
+    // Read off the row itself rather than by scanning the page: "of 1" appears
+    // in "Exercise 1 of 1" three inches away, and a loose regex here passed
+    // against that instead of against this row.
+    const value = screen.getByText('camera rate').nextSibling;
+    expect(value.textContent).toBe('—');
+  });
+
+  it('RE-READS the meter on every repaint, so a stale figure cannot survive one', async () => {
+    // T3 ROUND 2 Low-1, and it is the hole that would have let round 1's defect
+    // back in from above. The reviewer put a component-level cache of the last
+    // non-null reading into this page — the same lie, one layer up — and all 690
+    // tests stayed GREEN, because every one of them renders once and reads a
+    // CONSTANT stub. Nothing asserted that the page ASKS the meter rather than
+    // remembering what it last said. An expiry inside the meter is worth nothing
+    // if the page holds the old number in front of it.
+    //
+    // Only the interval timer is faked, matching the rest of this file: the
+    // page's own once-a-second repaint is the real path a reader sees, and it is
+    // what redrew the frozen figure in the original defect.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval'] });
+    try {
+      poseState = { poseData: null, analysisAvailable: true, emitSummary: null, hz: 12.03 };
+      startWorkout([exercise({ name: 'Squats', reps: 5 })], { mode: 'camera' });
+      expect(screen.getByText(`12.0 of ${MAX_FEED_HZ.toFixed(1)}/s`)).toBeTruthy();
+
+      // The camera slows. NOTHING tells the page — no event, no prop, no reset;
+      // the only thing that changes is what the meter answers when it is asked,
+      // which is exactly how the real thing degrades.
+      poseState.hz = 5.0;
+      await act(async () => { vi.advanceTimersByTime(1000); });
+      expect(screen.getByText(`5.0 of ${MAX_FEED_HZ.toFixed(1)}/s`)).toBeTruthy();
+      expect(
+        screen.queryByText(`12.0 of ${MAX_FEED_HZ.toFixed(1)}/s`),
+        'the previous reading must be GONE, not merely joined by a newer one',
+      ).toBeNull();
+
+      // And the blank propagates too: the meter expiring is only useful if the
+      // dash reaches the screen.
+      poseState.hz = null;
+      await act(async () => { vi.advanceTimersByTime(1000); });
+      expect(screen.getByText('camera rate').nextSibling.textContent).toBe('—');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('lives behind the debug toggle, never on the workout screen itself', async () => {
+    // KD'S RULING, 2026-08-17: a readout, never a warning. Under 15 is the
+    // normal case on every device — the ceiling is 12.0 — and counting works
+    // there, so a sentence on the main screen would explain a fault that is not
+    // occurring, on every workout, for every user. Closing the panel is what
+    // shows the figure is not bolted to the page anywhere else.
+    poseState = { poseData: null, analysisAvailable: true, emitSummary: null, hz: 9.2 };
+    startWorkout([exercise({ name: 'Squats', reps: 5 })], { mode: 'camera' });
+    expect(screen.getByText(`9.2 of ${MAX_FEED_HZ.toFixed(1)}/s`)).toBeTruthy();
+    hideDebug();
+    expect(screen.queryByText('camera rate')).toBeNull();
+    expect(screen.queryByText(/9\.2/)).toBeNull();
   });
 });

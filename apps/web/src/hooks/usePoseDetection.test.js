@@ -45,7 +45,7 @@ vi.mock('../engine/sessionController.js', () => ({
   },
 }));
 
-const { default: usePoseDetection, LOCAL_WASM_BASE, REMOTE_WASM_BASE } =
+const { default: usePoseDetection, LOCAL_WASM_BASE, REMOTE_WASM_BASE, MAX_FEED_HZ } =
   await import('./usePoseDetection.js');
 const { modelUrls, POSE_DEFAULTS } = await import('../dev/poseTuning.js');
 const SHIPPED_MODEL = modelUrls(POSE_DEFAULTS.model);
@@ -344,8 +344,18 @@ describe('usePoseDetection — the delivered-frames meter is actually fed', () =
   // hand with a controlled clock, and the assertion is on the rate that comes
   // back out through the hook's own reader.
 
-  /** Drive `n` engine feeds `dtMs` apart and return the hook's rate. */
-  async function measure({ n, dtMs }) {
+  /** Drive `n` frame-loop ticks `dtMs` apart and return the hook's rate reading.
+   *
+   *  NOTE WHAT `n` COUNTS: loop TICKS, not engine feeds. At a `dtMs` at or above
+   *  `FEED_INTERVAL_MS` the two are the same, which is what every test here did
+   *  originally. Below it they are NOT, and that gap is where the ceiling test
+   *  at the bottom of this file lives.
+   *
+   *  `idleMs` advances the clock AFTER the last tick without running any, which
+   *  is the only way to observe the thing every reading here used to assume away:
+   *  a reader looking at the meter at some other moment than the arrival of a
+   *  frame. */
+  async function measure({ n, dtMs, idleMs = 0 }) {
     // UNMOUNT EVERY HOOK THIS FILE HAS ALREADY RENDERED, and this line is the
     // whole reason these tests were flaky rather than a nicety.
     //
@@ -407,6 +417,9 @@ describe('usePoseDetection — the delivered-frames meter is actually fed', () =
         await act(async () => { cb(); });
         clock += dtMs;
       }
+      // Time passes and NOTHING ELSE HAPPENS: no frame, no pause, no reset. The
+      // camera has simply stopped, and nothing in the app knows.
+      clock += idleMs;
       return out.result.current.readPoseHz();
     } finally {
       nowSpy.mockRestore();
@@ -429,11 +442,17 @@ describe('usePoseDetection — the delivered-frames meter is actually fed', () =
   });
 
   it('reads back the rate the frames actually arrived at', async () => {
-    // 67 ms apart is the app's own FEED_INTERVAL_MS, so this is a machine
-    // keeping up: just under 15.
+    // 67 ms apart is the app's own FEED_INTERVAL_MS — one tick, one feed, no
+    // slippage. This is the app running as fast as it is capable of running.
     const hz = await measure({ n: 60, dtMs: 67 });
     expect(hz).not.toBe(null);
-    expect(hz).toBeCloseTo(1000 / 67, 1);
+    // WITHIN HALF A FRAME A SECOND, NOT PINNED AT THE IDEAL FIGURE, and the
+    // slack is a real property rather than a loosened tolerance (T3 round 2
+    // C/H-1): a rate is now measured up to the moment it is READ, and a reader
+    // is never exactly on a frame's arrival, so part of the trailing gap is
+    // always inside the measurement. It reads a hair low and it is honest —
+    // the old figure flattered itself by measuring only up to the last frame.
+    expect(hz).toBeCloseTo(1000 / 67, 0);
   });
 
   it('reads back a SLOW machine as slow, which is the whole point of having it', async () => {
@@ -442,7 +461,90 @@ describe('usePoseDetection — the delivered-frames meter is actually fed', () =
     // exists to inform.
     const hz = await measure({ n: 60, dtMs: 90 });
     expect(hz).not.toBe(null);
-    expect(hz).toBeCloseTo(1000 / 90, 1);
+    expect(hz).toBeCloseTo(1000 / 90, 0);
+    // The discriminating claim, stated rather than left implicit: this must not
+    // be confusable with the full-speed case above, whatever the tolerance.
+    expect(hz, 'a slow machine must not read like a fast one').toBeLessThan(12);
+  });
+
+  // ── THE READING HAS A LIFETIME (T3 round 1 C/H-1, 2026-08-17) ─────────────
+  //
+  // Every measurement above reads the meter at the exact instant the last frame
+  // arrived, and that is why 685 green tests could not see the defect: the
+  // window was trimmed only by an incoming frame, so with the camera stopped the
+  // hook answered its last rate for ever. On screen that was "14.9 of 14.9/s"
+  // held over a dead camera and over every pause — and the debug panel
+  // re-renders every second off the workout timer, so the frozen figure was
+  // being actively redrawn, not left behind as a stale paint.
+  it('goes blank once frames stop arriving, rather than holding the last rate', async () => {
+    // Nothing is told to the hook here. No pause, no reset, no teardown — which
+    // is the real failure exactly: a camera that dies never announces it, and a
+    // pause is cleared only by the resume that ends it.
+    expect(await measure({ n: 60, dtMs: 67, idleMs: 3001 })).toBe(null);
+    expect(await measure({ n: 60, dtMs: 67, idleMs: 330_000 })).toBe(null);
+  });
+
+  it('still answers in the ordinary gap between two frames', async () => {
+    // The control for the test above — it must not be satisfiable by a hook that
+    // answers null whenever it is read away from a frame, which is every read
+    // the screen makes.
+    const hz = await measure({ n: 60, dtMs: 67, idleMs: 67 });
+    expect(hz).not.toBe(null);
+    expect(hz, 'a full-speed camera still reads as a full-speed camera')
+      .toBeGreaterThan(14);
+    // AND IT COSTS SOMETHING, which is round 2's C/H-1 at this level: with the
+    // span ending at the last FRAME rather than at the read, this returned the
+    // ideal figure exactly — the meter reporting a rate for 67 ms in which
+    // nothing arrived.
+    expect(hz, 'a gap since the last frame must be inside the measurement')
+      .toBeLessThan(1000 / 67);
+  });
+
+  // ── THE CEILING, AND IT IS NOT THE DEVICE ─────────────────────────────────
+  //
+  // Every test above hands the loop a tick interval at or above
+  // FEED_INTERVAL_MS, so one tick is one engine feed and the delivered rate is
+  // whatever the test asked for. That is not how a browser behaves, and the
+  // difference is the finding this card was built on.
+  //
+  // The loop is `requestAnimationFrame`, which fires on the DISPLAY's cadence —
+  // 16.67 ms on an ordinary 60 Hz screen — while the feed is throttled by
+  // `now - lastFeed >= 67`. Ticks land at 0, 16.67, 33.3, 50, 66.67, 83.3 …
+  // and **66.67 is not >= 67**, so the feed slips a whole tick to 83.3 ms.
+  //
+  // That is 12 frames a second on a machine doing nothing wrong, and no
+  // hardware can beat it: the next opportunity does not exist until the display
+  // says so. It is also almost exactly the top of the 9.2–12.2 range Kd
+  // measured on his own desktop (:8879) — a range read at the time as his
+  // machine falling short.
+  //
+  // WHY IT IS ASSERTED HERE RATHER THAN WRITTEN DOWN. Part 6 §3.6 degrades a
+  // device when *"delivered Hz < 15"*, and this proves that condition is TRUE
+  // ON EVERY DEVICE BY ARITHMETIC — the throttle alone caps the app at 14.93
+  // before a display is even involved. A ladder or a warning built on it would
+  // fire for every user on their first ten seconds. If someone later changes
+  // FEED_INTERVAL_MS, this test is what tells them the ceiling moved, which is
+  // the whole reason the number belongs in an assertion and not a comment.
+  it('60 Hz display + a 67 ms throttle CANNOT reach 15 — the ceiling is ~12', async () => {
+    const hz = await measure({ n: 900, dtMs: 1000 / 60 });   // 15 s of 60 Hz
+    expect(hz).not.toBe(null);
+    expect(hz).toBeCloseTo(12, 0);
+    expect(hz).toBeLessThan(15);
+  });
+
+  it('even an infinitely fast loop cannot reach 15 — the throttle is the cap', async () => {
+    // 1 ms ticks: the display is no longer the limit, only FEED_INTERVAL_MS is.
+    // Without this the test above reads as a 60 Hz problem that a better screen
+    // would solve. It is not.
+    const hz = await measure({ n: 3000, dtMs: 1 });
+    expect(hz).not.toBe(null);
+    expect(hz).toBeCloseTo(MAX_FEED_HZ, 0);
+    // THE READING CAN NEVER EXCEED THE CEILING IT IS DISPLAYED AGAINST, which is
+    // what makes "12.0 of 14.9/s" a coherent sentence (:9003 is Kd's ruling on
+    // that format). Worth pinning here rather than assuming: the throttle bounds
+    // what can arrive, and measuring up to the read can only ever lower it.
+    expect(hz, 'the delivered rate cannot beat the throttle it is measured against')
+      .toBeLessThanOrEqual(MAX_FEED_HZ);
     expect(hz).toBeLessThan(15);
   });
 });

@@ -681,9 +681,232 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       a shared value with two declarations is where a correction gets lost
       (:4556 F1), which is exactly what happened here.
       Mutation-audited: T1 restores the original defect and the test goes RED.
+- [ ] 🔴 **§3.6'S TRIGGER IS UNREACHABLE: THE APP CAPS ITSELF AT 12 FRAMES A
+      SECOND AND THE SPEC WANTS 15.** Found and MEASURED 2026-08-17 while
+      building the ladder half of the card below, which is why that half is not
+      built. Nobody had noticed because the console line rounded it away.
+      `usePoseDetection.js`'s `FEED_INTERVAL_MS = 67` is a THROTTLE — a frame is
+      fed when `now - lastFeed >= 67` — so **14.93 a second is the arithmetic
+      ceiling before any hardware is involved**, and `Math.round(1000 / 67)`
+      printed that as "target 15" in every reading ever taken. In a real browser
+      it is worse: the loop is `requestAnimationFrame`, which fires every
+      16.67 ms on a 60 Hz screen, and 66.67 is not >= 67, so the feed slips a
+      whole tick to 83.3 ms — **12.0 a second, on a machine doing nothing
+      wrong.** Both figures are asserted by tests driving the real frame loop
+      (`usePoseDetection.test.js`, "the ceiling is ~12" and "the throttle is the
+      cap"), not reasoned.
+      **WHAT IT COSTS US TODAY:** Part 6 §3.6 degrades a device when *"delivered
+      Hz < 15"* — a condition **TRUE ON EVERY DEVICE BY ARITHMETIC**, so a ladder
+      or a warning built on it fires for every user in their first ten seconds.
+      It also **retires an explanation this project has been carrying since
+      2026-08-08**: Kd's 9.2–12.2 fps (:8879) and his earlier 7.2–12.5 (:6386)
+      were read as his laptop being under-powered. **12.0 is the ceiling and he
+      was sitting on it.** Nothing has ever shown counting fails at these rates.
+      **WHY IT IS NOT FIXED HERE (R1.1, R5.4):** raising the feed rate changes how
+      often the engine is fed, and the person check's Kd-ruled
+      `bone_stretch > 0.923` is normalised to `nominalDtMs: 82` — 12.2 a second,
+      i.e. this exact ceiling (`sceneGate.js`, DECISIONS :7037/:7298, where the
+      cut-off and the cadence are ONE ruling). Changing the throttle without
+      re-measuring silently changes the shipped gate. **Needs Kd's decision plus a
+      re-measurement, and it is plausibly the largest single win available for
+      camera accuracy — more frames per rep is more evidence per rep.**
+      **BLOCKS:** the §3.6 ladder in every form, and any use of "15 fps" as a
+      device signal anywhere in this app.
+- [ ] 🟡 **§3.6's degradation telemetry is not sent anywhere.** Deferred
+      2026-08-17 with the card above. The spec asks for *"Degradation events →
+      PostHog with device model, so the support floor is data, not guesswork"*
+      (`06-part6-mobile.md:190-192`). **`apps/web` has no PostHog client at all
+      — grep-verified across `src/` and `package.json`, zero hits** (P0.5 wired
+      PostHog server-side only). The delivered rate is now readable by a user in
+      the camera screen's `debug` panel, which is the local half; nothing is
+      reported centrally, so the support floor stays guesswork until a real
+      device fleet exists. **Unblocked by:** a web analytics client, which is its
+      own decision (consent, DPDP scope — the open question at :592).
+- [ ] 🔴 **THE PERSON CHECK'S RULED CUT-OFF WAS DERIVED UNDER A DIFFERENT MODEL
+      FROM THE ONE WE NOW SHIP.** Opened 2026-08-17 by the model swap, and it is
+      the swap's one real hazard. Kd ruled `bone_stretch > 0.923` on thirteen
+      clips (DECISIONS :7037) — **every one of them recorded through
+      `pose_landmarker_lite`**, because that is all the app had. `full` is a
+      different estimator, so it produces different landmark jitter, and jitter
+      is precisely what `bone_stretch` measures. **The number is NOT touched and
+      must NOT be retuned to fit the new model** (R5.4, R5.7 — a threshold is
+      never re-derived, and this one is a Kd ruling on top). What is unknown is
+      whether it still does what he approved: it could silence a real person
+      more often, or let the chair back in. **Neither has been observed — this is
+      a hazard, not a symptom.** **Unblocked by:** a fresh recording under `full`,
+      replayed through `measure-pose.ts --gate "bone_stretch>0.923" --window 15
+      --nominal-dt 82`, printing the same table Kd ruled on. **Blocks:** nothing
+      today; it is the first thing to check the moment anyone reports the chair
+      counting again or reps going missing.
+      **STATUS 2026-08-17 — SOMEONE LOOKED, AND SAW NOTHING WRONG; THE LINE DOES
+      NOT TICK (DECISIONS :9328).** Step 3 of
+      `RUNBOOK/smoke-strong-model-and-rate.md` ran under `full` for the first
+      time: an empty room and a chair for one minute **invented ZERO reps**,
+      while Kd's own reps counted normally in the same session. **That is one
+      room, one chair, one minute, reported by the operator (:4829) — it is not
+      the table he ruled on**, and a stored row cannot separate "reps before he
+      stepped away" from "reps invented by the chair" (:7222). What moved is the
+      hazard's TEMPERATURE, not its status: the failure this line was opened for
+      has now been looked for once, under the shipped model, and was not there.
+      The recording above is still the only thing that closes it.
+- [ ] 🟡 **NOTHING IN THE APP DECIDES WHICH PERSON IS THE USER — in a gym, the
+      camera counts whoever the model happens to crown.** **KD'S QUESTION,
+      2026-08-17**, asked unprompted while the strong-model card's review was
+      running: *"if a user uses it in gym there will be multiple people beside
+      them then how would the camera detect only that target person?"* **Tracked
+      NOWHERE before today — grep-verified across `OWED.md` and `BACKLOG.md`,
+      zero hits** for multi-person/bystander/`numPoses`; the furniture half of
+      the same question is well recorded (DECISIONS :6386, :7037), the PEOPLE
+      half was not.
+      **WHAT THE CODE DOES, read this session, not recalled:**
+      `poseTuning.js:82` ships `numPoses: 1`, and `usePoseDetection.js:388-389`
+      takes `results.landmarks[0]` — **MediaPipe crowns one winner and the app
+      takes it.** There is no selection rule of our own: not the nearest body,
+      not the largest, not the one in the middle, not the one that was there on
+      the previous frame. **The person gate cannot help here and was never meant
+      to**: `bone_stretch > 0.923` (`sceneGate.js`) asks *"is this a physically
+      plausible human skeleton?"*, and a real bystander is one.
+      **THE FAILURE, and it is UNVERIFIED — never tested with two people in
+      shot:** the winner can change mid-set to somebody walking behind the user,
+      after which their reps stop counting or another body's movement is counted
+      as theirs, **and the app says nothing**, because as far as it knows it
+      found a person. Same shape as :6386's chair — the model crowns a winner
+      and nothing checks it is the RIGHT one — but with a subject that passes
+      every plausibility test we have.
+      **WHY IT MATTERS MORE THAN IT LOOKS:** the gym IS the pilot environment
+      (P6: 2–3 Jorhat gyms on pilot codes), so the first room full of real users
+      is also the first room where this can happen. A home user is unaffected.
+      **Unblocked by:** a decision on how the user is chosen. The lever already
+      on the record is DECISIONS :6810 — **`numPoses: 2+` returns CANDIDATES
+      instead of a winner, and a rule then picks between them** (that entry pairs
+      it with `motion_incoherence`); each extra pose costs another landmark pass
+      against Part 6 §3.4's inference budget, so it is a measurement, not a
+      default. **No rule is chosen here and none may be invented** (R0.2) — and
+      note the recording gap above applies in full: clips of one person can never
+      answer a two-person question, so this needs its own session in a room with
+      two people in it. **Blocks:** nothing today; it blocks the GYM PILOT, not
+      the cutover.
+- [ ] 🟡 **KD RULED IT, 2026-08-17 — BUILD A FOLLOW-THE-DEMO MODE THE USER
+      CHOOSES, AND TELL THE USER IT EXISTS (DECISIONS :9390).** His words:
+      *"if a user is using in a environment where there are more people then it
+      should switch to a mode where instead of the camera there will be a big
+      reference of the exercise they want to do and follow the reference"*.
+      Raised immediately after the multi-person line above, as a way AROUND that
+      problem rather than through it.
+      **WHY IT IS CHEAPER THAN IT SOUNDS — both halves already exist, verified
+      this session, not recalled.** The moving demonstrations are already
+      shipped: **112 GIFs in `apps/web/public/exercise-gifs/`, covering 63
+      distinct exercise names** (`ls | wc -l`), so no media has to be produced.
+      And the not-camera-graded path is the existing log-only set — the user
+      counts, the workout still SAVES and still earns XP (DECISIONS :3085, Kd
+      ruled), it simply carries no form score. So this is mostly screen work over
+      two things already built.
+      **RULING 1 — THE USER FLIPS THE SWITCH, NEVER THE APP.** Offered the
+      choice, Kd said *"i will follow your recommendation"*, and the
+      recommendation was that way round because of his own **:6008**: if the user
+      chose the CAMERA, the app NEVER switches them off it — the approved hatch
+      is a BUTTON *"the user presses, the app has no path to it"*. An app that
+      DETECTS a crowd and switches is that forbidden handover wearing a new coat.
+      **A later chat may NOT build the automatic version on the strength of this
+      line — that needs Kd to amend :6008 expressly.**
+      **RULING 2, in the same breath and larger — THE APP MUST TELL THE USER
+      THE MODE EXISTS.** His words: *"this thing need to be explicitly told to
+      the user that if there are multiple person then you need to switch
+      otherwise they will think the app does not work"*. **A mode nobody is told
+      about is a mode nobody uses, and the failure it prevents looks exactly like
+      a broken app** — a user in a gym whose reps stop counting cannot guess the
+      camera locked onto somebody else. :6662's "say it out loud" shape and
+      :6856's "asking a person to notice a MISSING thing is not a check", applied
+      BEFORE the defect rather than after it.
+      **THE DESIGN CONSEQUENCE OF RULING 1 ON RULING 2, which must not be lost:
+      the message CANNOT be conditional on a crowd**, because the app cannot
+      detect one — that is the whole point of ruling 1. So it is unconditional
+      and always present, which forces the wording: an **INSTRUCTION beside the
+      switch** (*"training in a busy room? use Follow along"*), never a warning
+      about the camera — otherwise every solo user at home is told the app may
+      not work, the exact impression Kd is trying to prevent. **Copy is NOT
+      written here (R0.2); it is written in the card and shown to him.**
+      **AND THE TRAP WORTH THE WHOLE ENTRY: the AUTOMATIC version needs exactly
+      the thing this idea was meant to avoid.** The app cannot know a room is
+      crowded without asking the model for more than one body — the multi-person
+      work in the line above. **User-chosen costs nothing extra; automatic costs
+      the hard thing first.**
+      **RULING 3, same day (DECISIONS :9452) — THE SET RUNS ON A TIMER, NOT ON
+      REPS COUNTED FROM THE VIDEO.** Kd specified the video driving the count,
+      then asked for the time-based version himself and ruled for it. **The
+      reason is honesty: the app can only know how many reps the VIDEO did,
+      never how many the USER did**, and writing the video's count into a
+      person's history, calories and personal bests is a number the app invented.
+      Secondary but real — **it removes the dependency on a perfect one-rep clip**,
+      which is where the artwork was stuck. **Not a one-way door: rep counting can
+      be added later.** **CALORIES NEED NO NEW WORK — verified, not recalled:**
+      `calories.ts` is `MET × weight_kg × hours` and a log-only set is billed as
+      its whole span at the exercise MET, so a timed set is the cleanest input
+      that formula has had (:9452, :7730).
+      **THE CARD IS WRITTEN: `NEXT-CARD-follow-along-PROMPT.md`.** It carries the
+      three rulings, the traps, and what is deliberately out of scope.
+      **Unblocked by:** nothing — it is ruled and buildable. **Sequenced after**
+      the strong-model / camera-rate card closes. **Still owed inside the card and
+      Kd's to give (R0.2):** the default set length, the on-screen wording, and
+      where the reference footage comes from — the artwork is its own track and
+      must not block the build (one placeholder reference proves the mode).
+      **Blocks:** nothing today; it is what makes the GYM PILOT honest, alongside
+      the multi-person line above.
+- [ ] 🟡 **A model that changes the frames cannot be checked against any clip we
+      hold, because the recorder saves landmarks and not video.** Restated
+      2026-08-17 as its own line, having been a sentence inside two other
+      entries. **Landmarks are the OUTPUT of the model, so a recording made under
+      `lite` can never be replayed under `full`** — the thirteen clips behind
+      `0.923`, the throughput sessions and the golden traces are all unusable for
+      any question about a different model, a different MediaPipe build, or a
+      different feed rate. **One fix serves all three:** something that can play a
+      VIDEO through the camera pipeline. Nothing in the repo can — grep-verified
+      2026-08-17, zero hits for `MediaRecorder`, `mp4`, `ffmpeg` or `VideoDecoder`
+      across `apps/web/src`, `apps/web/tools` and `packages/engine`. Until then
+      every camera experiment costs Kd a separate session in his own room, and
+      the results cannot be re-derived by anyone else afterwards.
 - [ ] 🔴 **WE SHIP THE FALLBACK POSE MODEL AS THE DEFAULT, AND THE DEGRADATION
       LADDER DOES NOT EXIST.** Found 2026-08-08 (DECISIONS :6386).
-      `usePoseDetection.js` hard-wires `pose_landmarker_lite` on every device.
+      **2026-08-17 — KD RULED THE SPLIT AND CHOSE THE ORDER. The LADDER half is
+      now BLOCKED on the throttle line above, not merely unbuilt:** its trigger
+      is unreachable, so there is nothing honest to build a step-down on. What
+      that half's card delivered instead is the delivered rate shown beside the
+      real ceiling in the camera screen's `debug` panel — *"a readout, never a
+      warning"*, because under 15 is the normal case on every machine and
+      counting works there. **Nobody ever chose `lite`** — it was inherited from
+      the old code and never revisited; §3.3 makes `full` the default.
+      ~~The MODEL half is blocked on a RECORDING.~~ **STRUCK the same day, by
+      me, and the correction matters more than the claim.** Kd was told the swap
+      was blocked on him recording video. It was not: the swap is a default, two
+      digests and a fetch, and it is DONE below. What needs the recording is
+      **CHECKING THE PERSON GATE AFTERWARDS** (its own 🔴 line above) — a
+      verification, not a prerequisite. Saying "blocked" made a five-minute
+      change look like a session of his time, and he over-ruled it with "just do
+      the things of making the strong model default". **A verification you cannot
+      run yet is not a blocker on the work; it is a blocker on the confidence.**
+      **THE MODEL HALF IS BUILT, 2026-08-17 — NOT TICKED, because smoke and T3
+      are unrun (the :5034 / :4718 F4 precedent: a line ticked in the same
+      commit whose own notes say the gate has not run gets reverted).**
+      **SMOKE UPDATE, same day (DECISIONS :9328): the sheet now PASSES 5 of 5.**
+      `full` loads off disk (console: THE APP BUNDLE) for **+37 ms**, delivers
+      **10–12 of the 14.9 ceiling** where `lite` delivers 11–12 on the same
+      machine in the same session, and the empty chair invented ZERO reps. **Still
+      NOT TICKED, and the reason is now a single one: the diff-only re-review of
+      the rate-expiry fix (`t3-camera-rate-expiry-r2-PROMPT.md`) has not run, and
+      a packet ships on a review round finding zero Critical/High (:5348 rule 1).**
+      The LADDER half below is untouched by any of this and stays blocked.
+      `POSE_DEFAULTS.model` is `'full'`; `fetch-pose-assets.mjs` bundles **both**
+      `full` (9,398,198 bytes, sha256 `5134a3aa…`, both MEASURED by downloading
+      it) and `lite`, so §3.3's step-down stays offline-capable and every past
+      measurement stays reproducible. A contract test asserts **the shipped
+      default is one of the models the build writes** — point it at an unfetched
+      variant and nothing else complains, because Vite answers a missing
+      `public/` file with index.html at 200. **The LADDER half stays open and
+      stays BLOCKED on the throttle line above.**
+      ~~`usePoseDetection.js` hard-wires `pose_landmarker_lite` on every
+      device.~~ **No longer true as of the swap above** — kept struck rather than
+      deleted, because it is what the line was opened for. The original finding,
+      for the record:
       Part 6 §3.3 says the opposite — *"BlazePose **full** as default, **lite**
       as the automatic step-down (§3.6)"* — and §3.6's ladder (full → lite below
       15 Hz for 10 s → 640p → **log-only mode with honest copy**) is not
@@ -2095,8 +2318,16 @@ then; none may be hidden or reduced to close the gap.
       every landmark this project has ever measured, including the 13 clips
       behind Kd's `bone_stretch > 0.923` person-gate ruling. Copying
       node_modules' 35 would have been tidier and would have quietly changed
-      what the camera sees. Both changes move the frames, so both land together,
-      re-measured against a fresh recording — never one alone.
+      what the camera sees.
+      **2026-08-17, SAME DAY — THE MODEL SWAP HAPPENED AND THIS DID NOT MOVE
+      WITH IT, deliberately.** The line above said "both land together"; the
+      reason for that clause was *never* simultaneity, it was "do not change the
+      frames for a tidy-up". Doing both in one edit would have made the outcome
+      unattributable — if counting gets worse nobody could say whether it was
+      the model or the runtime — so they are SEQUENCED instead, each measured.
+      That is the intent honoured, not waived. **This is now the second of two
+      frame-changing edits and it lands after the model swap has been smoked**,
+      re-measured against a fresh recording, never blind.
 - [ ] 🟡 **`Maximum update depth exceeded`, repeatedly, throughout every camera
       workout.** Found 2026-08-17 in Kd's smoke console. React is warning that
       `setKeypointsData` — the ~30 fps overlay publish in `usePoseDetection` —
@@ -3709,9 +3940,248 @@ each definition carries its own `upAt`, `downAt`, `countOn`, `minRepMs`,
       model knowledge, not a source read, and these companies change their terms.
       Re-check every one at planning time (V5).
 
+## Gym platform — Kd's 2026-08-18 product rulings (DECISIONS :9604)
+
+**Read the ruling before working any line here.** On 2026-08-18 Kd moved the
+project from *a consumer camera-coach app with a gym console bolted on* to *a gym
+platform sold to US gyms, whose consumer app is one surface*. Fifteen rulings in
+one session. Everything below is new work created by that shift, or existing work
+whose priority it changed.
+
+**HOW TO READ THE MARKERS IN THIS SECTION.** The file legend is anchored to the
+P2.8 cutover, and **nothing here blocks the cutover** — switching off the old
+backend does not need any of it. So there are no 🔴 lines below. 🟡 here means
+*"needed before a US gym signs"*, which is a different bar from the rest of the
+file and is stated so nobody reads these as lower priority than they are.
+
+**NOT A PLAN.** No card is written, no sequence approved, no estimate ratified.
+
+### Direction changes that re-price existing work
+
+- [ ] 🟡 **WEB MEMBER SCREENS ARE NOW OWED-ONLY — building more of them buys the
+      product nothing.** Kd ruled the mobile app is the product and web is "just
+      side" (:9604 §1). Measured that session: `packages/engine` (20 files,
+      `dependencies: {}`), `packages/shared` (20 files), all of `apps/api` and
+      every exercise definition transfer to mobile UNCHANGED — but all **24**
+      files under `apps/web/src/pages` do not, because React and React Native
+      share no screen code. **Web keeps ONE job and it is worth keeping: the TEST
+      RIG** — filming fixtures and checking a new exercise counts correctly
+      without waiting for a phone build. A chat proposing "finish web first, it
+      will speed up mobile" is wrong on measured grounds and this line is the
+      refutation.
+- [ ] 🟡 **PART 5 §1'S PRICE BOOKS ARE INDIA-ONLY AND ARE NOW UNRESOLVED.** The
+      market is US gyms (:9604 §2). US gyms pay multiples of the Indian tiers.
+      This is not "un-ratified pricing" any more — the numbers in the spec are for
+      the wrong country. Blocks any billing card and any gym pitch.
+- [ ] 🟡 **THE PRIVACY-LAW QUESTION (:592) IS NO LONGER THEORETICAL.** US workout
+      and body data is health data and several states legislate it specifically.
+      Still unruled; now on the critical path to a signed gym rather than behind
+      it. Its own ❓ line remains below in the open-questions section — this line
+      exists so the priority change is visible from here.
+
+### The AI chat coach — switched OFF by Kd ruling
+
+- [ ] 🟡 **UNWIRE THE AI CHAT COACH FROM WEB (and never wire it on mobile).**
+      Kd: *"i have decided to drop the chat bot from both web and mobile"*
+      (:9604 §5). **THIS IS THE NO-REMOVAL RULE'S AUTHORISED PATH — an explicit Kd
+      ruling made against a cited cost — not a breach of it.**
+      **OFF, NOT DELETED, and the distinction is the point.** Measured:
+      `apps/api/src/modules/coach` is 1,617 lines over 13 files including a full
+      retrieval pipeline and an ingested knowledge base; `Coach.jsx` is 772 lines;
+      `grep -rln coach` outside the module returns 15 files, five of them privacy
+      (export and account-delete must still account for stored conversations).
+      Deleting is a day across six subsystems with real risk to export/delete.
+      Unwiring the route is an hour and is reversible.
+      **EXECUTION DETAIL THAT DECIDES WHETHER IT WORKS: remove the ROUTE/import,
+      not the nav button.** Hiding the button leaves the 772-line screen in the
+      download; removing the route drops it and its exclusive dependencies
+      automatically. The 1,617 server lines are never downloaded by anyone and
+      cost app size nothing — this was Kd's own question and it has a precise
+      answer.
+- [ ] ⚪ **~SEVEN COACH ITEMS IN THIS FILE ARE PARKED, NOT DONE — DO NOT TICK
+      THEM.** Empty conversation on a failed message · a question spent when the
+      provider never answers · raw HTML in answers · over-long message recovery ·
+      streaming · read-path ordering tiebreaker · the secure-context message id.
+      They park with the feature and return if it does. Ticking them would record
+      work that never happened.
+
+### Gym platform — the console and the gym's own money
+
+- [ ] 🟡 **THE GYM CONSOLE DOES NOT EXIST: gyms, join codes, seats.** Measured
+      2026-08-18 — `apps/api/src/modules/` has no `org`, `billing`, `webhook` or
+      `console` directory; the DB tables (`tenancy.ts`, `orgAnalytics.ts`,
+      `money.ts`) exist and nothing reads or writes them through a route.
+      **Nothing else on this list works until a gym can exist and people can join
+      it**, so this is the first slice whenever a slice is cut.
+      **THE HALF THAT IS ALREADY BUILT AND TESTED, so nobody rebuilds it:** the
+      entitlement resolver already treats `gym_membership` as a grant source
+      alongside `own_subscription` and `free`, and merges them so a member with
+      both gets the better one (`modules/entitlements/service.ts`,
+      `mergeEntitlements`). Its own comment names the gap — *"P3/gyms add the
+      rest"*. What is missing is the gym side that FEEDS it.
+- [ ] 🟡 **THE CONSOLE IS BUILT ONCE — responsive, opened from inside the phone
+      app.** Kd demanded phone management (*"main idea is convenience"*); Part 3
+      §3.1 already chose responsive web for the same reason (*"owners live on
+      phones; no native console app"*). Mechanism called under K4 and not
+      overruled (:9604 §4). **A later chat wanting native console screens is
+      proposing to build the console TWICE and owes that cost explicitly.**
+- [ ] 🟡 **STRIPE CONNECT — GYMS COLLECT THEIR OWN MEMBER FEES, GYM AS MERCHANT.**
+      Kd's diagram: `Payment interface → Stripe Connect → Gym's Stripe account →
+      Gym bank`, and *"as for money gym customer and user its between them"*
+      (:9604 §3). **A BUSINESS-MODEL ADDITION, NOT A FEATURE** — the spec has one
+      money direction only (members and gyms pay us); `grep -ci` for
+      `connect|payout|marketplace|on behalf|platform fee|split` over
+      `05-part5-billing.md` returns **ZERO**.
+      **RULED:** the gym is the merchant; disputes, refunds and the member payment
+      relationship are theirs. **NOT RULED, and must not be guessed:** which
+      Connect account type actually delivers that (they differ materially in who
+      carries liability), onboarding and identity-check flow, what a gym sees
+      before verification completes, how a half-onboarded gym behaves.
+      **UNVERIFIED (V5): every Stripe Connect specific stated in that session came
+      from model memory, not a source read. Pull current Stripe documentation at
+      planning time and build against nothing asserted there.**
+      **The India regulatory objection raised against this is WITHDRAWN** — it was
+      anchored on RBI rules that do not apply to a US platform onboarding US gyms.
+      Do not resurrect it.
+- [ ] 🟡 **GYM SETS ITS OWN PRICING, OFFERS AND FREE PROMOTIONS.** Zero spec hits.
+      Rides along with the Connect work — same build, same card family.
+- [ ] 🟡 **ATTENDANCE / QR CHECK-IN.** Kd: a QR printed and stuck on the door;
+      registered members scan it to mark attendance. **Zero spec hits for
+      `attendance` or `check-in`** — but the mechanism is half-designed already:
+      Part 6 §2 has QR posters and an `aihg://org/join?code=` deep link for
+      JOINING. Attendance is the same scan with a different action.
+- [ ] 🟡 **CLASSES, SCHEDULES AND COACH INSTRUCTION SLOTS (booking).** Zero spec
+      hits for `booking`, `schedule` or `check-in`. **The largest single new piece
+      on this list**, and the thing gyms actually pay competitors for.
+- [ ] 🟡 **SEPARATE GYM LOGIN AND USER LOGIN on the entry screen.** Small — Part 3
+      already puts the console in its own route group (`/console/:orgSlug/...`).
+
+### Member-side gym surface
+
+- [ ] 🟡 **GYM BRANDING ON THE MEMBER'S HOME — "Welcome to {gym}" plus their
+      logo.** Nearly free: the gym logo is already part of console settings
+      (9 spec hits in Part 3). High perceived value for the cost.
+- [ ] 🟡 **GYM ANNOUNCEMENTS / UPDATES FEED TO MEMBERS.** Zero spec hits. Part 3
+      §5.3's staff notifications are a different thing and must not be mistaken
+      for it.
+- [ ] 🟡 **MEMBER-TO-COACH / GYM-STAFF MESSAGING.** Zero spec hits.
+      **Must not become a back door through Part 3 §2.4's visibility promise** —
+      see the sharing line below.
+- [ ] ⚪ **MEMBERSHIP CARD — plan, renewal date, gym contact.** Small, and it is
+      the first thing members look for.
+- [ ] ⚪ **CHECK-IN STREAK ("you have come 12 days this month").** Nearly free once
+      QR attendance exists, and it is the strongest retention hook a gym has.
+      Proposed by me and not contradicted; not a Kd ruling.
+
+### Plans, food and content
+
+- [ ] 🟡 **PERSONALISED WORKOUT AND DIET PLANS FROM THE USER'S OWN INFORMATION.**
+      Part 7 covers workout **programs** in depth (27 hits) so this is not
+      greenfield; diet-plan generation is.
+- [ ] 🟡 **A GYM COACH CAN AUTHOR A WORKOUT AND DIET PLAN FOR A NAMED MEMBER.**
+      Zero spec hits. **Collides with Part 3 §2.4 unless routed through the
+      member's own sharing consent** — a coach writing a diet will want to see
+      what the member eats, and nutrition is on the never-see list. Kd's opt-in
+      sharing ruling is the resolution; the implementation must actually use it
+      rather than widening the boundary.
+- [ ] 🟡 **THE USER CAN HAND-EDIT ANY PLAN THE APP GIVES THEM AND FOLLOW THEIRS.**
+      Small, and it is what makes a generated plan tolerable when it is wrong.
+- [ ] ⚪ **HEALTHY RECIPE SUGGESTIONS AND A GROCERY LIST FOR THEM.** `recipe`
+      appears twice in Part 4 (a table only); `grocery`/`shopping list` return
+      **zero** across the whole spec set.
+
+### Photos and sharing
+
+- [ ] 🟡 **IMAGE STORAGE DOES NOT EXIST AND MUST BE BUILT FROM SCRATCH.** Measured:
+      `modules/nutrition/routes.ts:3` states photos are *"request-only"* — a meal
+      image goes to the vision provider and is discarded — and `apps/api/src/
+      config.ts` has no bucket or storage configuration at all. Kd wants meal,
+      running and workout-completion pictures shared. R3.9 already specifies the
+      five guarantees this needs: magic-byte content-type validation, size cap,
+      server-generated keys, signed URLs, and no user-supplied filename ever
+      reflected into a path or header. Add the DPDP/account-delete cascade.
+- [ ] 🟡 **MEAL PHOTOS SELF-DELETE AFTER SEVEN DAYS — Kd ruling.** A timed sweep,
+      not a manual cleanup. The repo already has TTL-sweep patterns to follow.
+- [ ] 🟡 **GYM-GLOBAL SHARING NEEDS REPORT-AND-REMOVE.** Kd ruled sharing is the
+      member's choice, scoped gym-global or private (:9604 §6). **The moment a
+      picture is visible to other members, a way to report and remove one stops
+      being optional** — people post pictures of their bodies. Not a Kd ruling;
+      raised here because shipping the feed without it is the defect.
+- [ ] 🟡 **PART 3 §2.4'S PROMISE STANDS AND EVERY NEW SURFACE MUST RESPECT IT.**
+      Gyms still never see meal logs, body weight, coach conversations, run routes
+      or anything outside the membership interval — **except what the member
+      deliberately shares.** The boundary is enforced in the repo layer (those
+      queries physically cannot join those tables for org callers), not in the UI,
+      and it must stay that way as messaging, coach plans and photo feeds land.
+
+### Dropped and parked
+
+- [ ] ⚪ **~~COACH-UPLOADED INSTRUCTION VIDEOS.~~ DROPPED BY KD 2026-08-18** —
+      *"ok will not upload video"*, after being offered it as part of the coach
+      surface. Video storage and streaming leave the plan with it. Struck rather
+      than deleted, per this file's rules, so the decision is visible.
+- [ ] ⚪ **IMPORT A GYM'S DATA FROM A COMPETITOR MANAGEMENT APP — PARKED, and the
+      reason is not priority.** An importer is written against a REAL export file
+      from a REAL first customer. Written against an imagined format it is wasted
+      work twice over. Build it for the first gym that asks, from their file.
+      Parked on my recommendation and not contradicted by Kd.
+- [ ] ⚪ **GYM PAYMENT FEATURES BEYOND THE CONNECT INTERFACE — PARKED** until a
+      real gym asks for them.
+
 ## Open questions awaiting a Kd ruling (nothing built on these)
 
-- [ ] ❓ **DOES "GYM MANAGEMENT" MEAN RETENTION, OR RUNNING THE BUSINESS?**
+- [ ] ❓ **NEARBY GYMS AND PAID DAY PASSES — WANTED, NEVER SIZED OR SEQUENCED.**
+      Kd 2026-08-18: a user with no gym, or away from their own, searches gyms
+      near their location and *"tempriraily join the nearest gym by paying fees"*,
+      with joined gyms able to offer the service. **Zero spec hits for `nearby` or
+      `day pass`.** Recorded as WANTED, not APPROVED (DECISIONS :9604 §8).
+      **Two things make this last in any sequence, not first:** it needs the
+      Stripe Connect money path live, and it is **worthless until many gyms have
+      already signed up** — a day-pass search across three gyms finds nothing.
+      Nothing is blocked on the ruling today.
+- [ ] ❓ **PAID FRIEND/FAMILY INVITES AND TRAINING TOGETHER — WANTED, NEVER
+      SIZED.** Kd 2026-08-18: users invite friends and family *"(not free of cost
+      obviously)"* and *"do exercise together"*. `together` returns 1 spec hit;
+      effectively new. **The paid-invite half is ordinary work. The "together"
+      half is not** — two people in one live session is a different class of
+      problem from anything built so far, and it needs its own ruling on what
+      "together" means (same room · same time remotely · same plan, compared
+      afterwards). Each of those three is a different product.
+- [ ] ❓ **NEARBY-RUNNER CONNECTION — AND A SAFETY QUESTION THAT CONSENT SETTINGS
+      DO NOT ANSWER.** Kd 2026-08-18: runners connect with nearby runners, *"but
+      user privacy will be very imoortant and if user does nit want there will be
+      no sharing"*. **His privacy instinct is right and is not the whole
+      problem.** Privacy is *"do not share my data"* and an opt-in switch answers
+      it. Safety is *"do not help a stranger learn where someone runs alone, on a
+      schedule, every week"* — and a user who opts in has answered the first
+      question without being asked the second. Put to Kd on 2026-08-18 and not yet
+      answered. **Nothing may be built here until it is** — this is the one item
+      on the 2026-08-18 list where shipping the obvious implementation is worse
+      than shipping nothing. Zero spec hits.
+- [x] ❓ **ANSWERED BY KD 2026-08-18 — IT MEANS RUNNING THE BUSINESS
+      (DECISIONS :9604).** He answered the third bullet of "THE RULING NEEDED"
+      below by simply listing what the console must do: *"Gym management ├──
+      Members ├── Attendance ├── Classes ├── Workouts └── Payment interface"*,
+      with fees flowing `Stripe Connect → Gym's Stripe account → Gym bank`. That
+      is **gym OPERATIONS**, the reading this entry itself called *"a different,
+      much larger product with established competitors in every market"*.
+      **THE ENTRY'S WARNING WAS CORRECT AND IS NOT WITHDRAWN — it was overruled
+      with the cost stated.** Kd was shown, before ruling, that attendance,
+      classes, coach messaging, gym-set pricing, coach-authored plans, grocery
+      lists, day passes and the competitor importer return **ZERO hits across the
+      entire spec set**, and that gym-collected payments are a business-model
+      addition rather than a feature. He proceeded. The "integrate rather than
+      build" third option was NOT taken.
+      **CONSEQUENTLY the retention framing in §1 is no longer the whole product,
+      and no chat may cite it to refuse operations work.** The new surface has its
+      own section above (*Gym platform — Kd's 2026-08-18 product rulings*).
+      **Kept, not deleted:** everything below is the analysis that sized the
+      decision correctly, and it is the reference for what Part 3 already
+      automates versus what is now owed.
+
+      **THE ORIGINAL QUESTION, KEPT VERBATIM AS THE ANALYSIS (no longer an open
+      item — it is answered above):**
+      **DOES "GYM MANAGEMENT" MEAN RETENTION, OR RUNNING THE BUSINESS?**
       Raised by Kd 2026-08-16, in his words: *"is this gym management section
       really good will it allow owners to automate things? i want that so less
       work and more efficient for gym owners and easy way to manage their

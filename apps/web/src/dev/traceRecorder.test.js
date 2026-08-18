@@ -208,13 +208,19 @@ describe('traceRecorder', () => {
     const header = JSON.parse(linesOf(fileNamed('-settings.jsonl').text)[0]);
     // Card 3 records one scene several times under different settings. A clip
     // that cannot name its own settings makes the comparison rest on filenames.
-    expect(header.provider).toEqual({
-      model: 'lite',
-      numPoses: 1,
-      minPoseDetectionConfidence: 0.5,
-      minPosePresenceConfidence: 0.5,
-      minTrackingConfidence: 0.5,
-    });
+    //
+    // ASSERTED AGAINST `POSE_DEFAULTS`, NOT A COPY OF IT. This block listed the
+    // five values literally and went RED on 2026-08-17 when the shipped model
+    // changed `lite` → `full` — which is the wrong kind of red: the recorder was
+    // working perfectly and faithfully recording the new default. The claim
+    // here is "the header names the settings in force", never "the settings are
+    // these particular five", and a literal copy makes every future dial change
+    // look like a recorder defect. Precisely the shape :4556 F1 warns about.
+    const { POSE_DEFAULTS } = await import('./poseTuning.js');
+    expect(header.provider).toEqual({ ...POSE_DEFAULTS });
+    // Non-vacuous: a recorder that wrote an empty object, or omitted the block,
+    // would satisfy a loose check. The model must actually be named.
+    expect(header.provider.model).toBe(POSE_DEFAULTS.model);
   });
 
   it('captures the settings at START, so a mid-clip change cannot relabel it', async () => {

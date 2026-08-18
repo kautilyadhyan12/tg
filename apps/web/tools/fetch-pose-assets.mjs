@@ -114,10 +114,34 @@ export const POSE_ASSETS = [
     sha256: a.sha256,
   })),
   {
-    // The `lite` model, which is what ships today and what this card leaves
-    // alone. Verified byte-identical (sha256 59929e1d…) to the copy the old
-    // Python backend has been analysing with since July, so bundling it changes
-    // no landmark anywhere.
+    // ── THE SHIPPED MODEL SINCE 2026-08-17 ─────────────────────────────────
+    // Part 6 §3.3: *"BlazePose **full** as default, **lite** as the automatic
+    // step-down"* (`06-part6-mobile.md:164`). The app shipped `lite` for
+    // months anyway — not as a decision but as an inheritance from the
+    // previous version, which nobody revisited. Kd ruled the swap.
+    // Both figures below were MEASURED by downloading this asset in the
+    // session that changed the default, not copied from anywhere.
+    dest: 'models/pose_landmarker_full.task',
+    url:
+      'https://storage.googleapis.com/mediapipe-models/' +
+      'pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task',
+    bytes: 9398198,
+    sha256: '5134a3aad27a58b93da0088d431f366da362b44e3ccfbe3462b3827a839011b1',
+  },
+  {
+    // ── LITE STAYS BUNDLED, AND NOT OUT OF CAUTION ─────────────────────────
+    // Three reasons, in order of weight:
+    //  1. It is §3.3's own step-down. A ladder that has to reach the internet
+    //     to degrade a phone that is already struggling is not a ladder.
+    //  2. **It is what every measurement in this project was taken with** —
+    //     the thirteen clips behind `bone_stretch > 0.923`, both throughput
+    //     sessions, every golden trace. `?model=lite` must keep working
+    //     OFFLINE or the old numbers stop being reproducible the day the
+    //     default moved, which is the one day they are most needed.
+    //  3. Comparing the two is the whole point of the swap, and a comparison
+    //     where one side comes off a CDN is comparing two different things.
+    // Verified byte-identical (sha256 59929e1d…) to the copy the old Python
+    // backend analysed with since July.
     dest: 'models/pose_landmarker_lite.task',
     url:
       'https://storage.googleapis.com/mediapipe-models/' +

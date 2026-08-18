@@ -32,6 +32,39 @@ const PUBLISH_INTERVAL_MS = 33;   // ~30fps overlay publish (one re-render each)
 const FEED_INTERVAL_MS = 67;      // ~15fps engine feed (§2.1 target analysis rate)
 const HZ_LOG_INTERVAL_MS = 10_000; // dev-only throughput line; §3.6's own 10 s
 
+/** THE FASTEST THIS APP CAN EVER FEED THE ENGINE — and it is below the target.
+ *
+ *  ── THE FINDING, AND IT ANSWERS A QUESTION KD ASKED ────────────────────────
+ *  The line above is a THROTTLE: a frame is fed when `now - lastFeed >= 67`.
+ *  Sixty-seven milliseconds between feeds is **14.93 a second**, so "15 fps" is
+ *  a rate this code cannot reach on any hardware, ever. `Math.round` in the
+ *  console line below turns 14.93 into a printed "target 15", which is how the
+ *  gap stayed invisible.
+ *
+ *  IT IS WORSE THAN THE ARITHMETIC IN A REAL BROWSER, and this is the part that
+ *  matters. The loop is `requestAnimationFrame`, which fires on the display's
+ *  cadence — 16.67 ms on an ordinary 60 Hz screen. Ticks land at 0, 16.67,
+ *  33.3, 50, 66.67, 83.3 … and **66.67 is not >= 67**, so the feed slips a whole
+ *  tick to 83.3 ms: **12.0 frames a second, on a machine doing nothing wrong.**
+ *  Proved by a test that drives the real loop at 60 Hz
+ *  (`usePoseDetection.test.js`, "the ceiling is ~12").
+ *
+ *  ── WHAT IT MEANS FOR THE §3.6 LADDER, WHICH IS WHY IT IS WRITTEN HERE ─────
+ *  Part 6 §3.6 steps a device down when *"delivered Hz < 15"*
+ *  (`06-part6-mobile.md:187`). That condition is **TRUE ON EVERY DEVICE, BY
+ *  ARITHMETIC** — a ladder built on it would step every user down on their first
+ *  ten seconds, and a warning keyed to it would be on screen for everyone. It is
+ *  also the explanation for the 9.2–12.2 fps measured on Kd's desktop (:8879)
+ *  and read at the time as his machine being under-powered: **12.0 is the
+ *  ceiling, and he was sitting on it.**
+ *
+ *  **NOT FIXED HERE, DELIBERATELY (R1.1, R5.4).** Changing the throttle changes
+ *  how often the engine is fed, which changes the cadence the person check's
+ *  ruled `bone_stretch > 0.923` was measured at (`sceneGate.js`, `nominalDtMs:
+ *  82` — itself 12.2 a second, i.e. this ceiling). That is a Kd decision with a
+ *  re-measurement attached, and it has its own `OWED.md` line. */
+export const MAX_FEED_HZ = 1000 / FEED_INTERVAL_MS;
+
 /** Where MediaPipe's WebAssembly runtime comes from.
  *
  *  ── THE HALF NOBODY HAD WRITTEN DOWN ──────────────────────────────────────
@@ -146,8 +179,7 @@ export default function usePoseDetection({
   const onSetCompleteRef = useRef(onSetComplete);
   // Delivered frames per second, measured at the ENGINE FEED — the rate Part 6
   // §3.6's ladder steps down on, and the rate every figure already recorded in
-  // this project was measured at. Nothing acts on it yet; the ladder is its own
-  // card. It exists now because the model choice that card has to make is
+  // this project was measured at. It exists because the model choice is
   // currently a guess (OWED: inference time has never been measured on any
   // device), and this is the number that ends the guessing.
   const throughputRef   = useRef(null);
@@ -159,6 +191,19 @@ export default function usePoseDetection({
   // Kd's smoke four times. Null means "no window has started"; the first frame
   // starts one instead of closing one.
   const lastHzLogRef    = useRef(null);
+
+  /** EVERYTHING THAT MEASURES THE DELIVERED RATE STARTS AGAIN.
+   *
+   *  One function because there are two things to restart and THREE places that
+   *  have to restart them — a new set, an unpause, and a tab coming back — and
+   *  every one of those sites carried both of them side by side. That is the
+   *  arrangement where a fourth caller remembers half (:4556 F1, and
+   *  `framesResumed()` upstream exists for exactly this reason). Anything added
+   *  to the rate measurement goes in here, not at the call sites. */
+  const restartRateMeasurement = useCallback(() => {
+    throughputRef.current.reset();
+    lastHzLogRef.current = null;
+  }, []);
 
   // A RESUMED SET IS NOT A CONTINUATION. `enabled` false is a pause or a rest —
   // the feed below stops, the SET does not end, and frames start arriving again
@@ -179,11 +224,10 @@ export default function usePoseDetection({
       controllerRef.current.framesResumed();
       // Same rule, third consumer: the gap across a pause is not a slow camera.
       // Left in, the meter would report the rest period as a collapse in
-      // throughput — and the ladder this feeds steps DOWN on exactly that.
-      throughputRef.current.reset();
-      lastHzLogRef.current = null;   // and the log window with it — see the ref
+      // throughput — and §3.6's condition is keyed to exactly that.
+      restartRateMeasurement();
     }
-  }, [enabled]);
+  }, [enabled, restartRateMeasurement]);
   useEffect(() => { onSetCompleteRef.current = onSetComplete; }, [onSetComplete]);
 
   // ── Initialise MediaPipe on mount (unchanged from the WS version) ───────────
@@ -314,8 +358,7 @@ export default function usePoseDetection({
     if (!analysisEnabled) return undefined;
     const controller = controllerRef.current;
     controller.startSet(exercise, setIndex);
-    throughputRef.current.reset();   // a new set is not a continuation of the last
-    lastHzLogRef.current = null;   // and the log window with it — see the ref
+    restartRateMeasurement();   // a new set is not a continuation of the last
     setAnalysisAvailable(controller.analysisAvailable);
     setSettledFor(exercise);    // the answer exists, and it is about THIS exercise
     setError(null);
@@ -324,7 +367,7 @@ export default function usePoseDetection({
       const summary = controller.endSet();
       if (summary && onSetCompleteRef.current) onSetCompleteRef.current(summary);
     };
-  }, [exercise, setIndex, analysisEnabled]);
+  }, [exercise, setIndex, analysisEnabled, restartRateMeasurement]);
 
   // ── Frame processing loop ───────────────────────────────────────────────────
   const processFrame = useCallback((videoElement) => {
@@ -383,11 +426,15 @@ export default function usePoseDetection({
         lastHzLogRef.current = now;            // open the first window, print nothing
       } else if (import.meta.env.DEV && now - lastHzLogRef.current >= HZ_LOG_INTERVAL_MS) {
         lastHzLogRef.current = now;
-        const hz = throughputRef.current.hz();
+        const hz = throughputRef.current.hz(now);
+        // "target 15" IS WHAT THIS LINE USED TO SAY, and the rounding was the
+        // problem: `Math.round(1000 / 67)` prints 15 for a throttle that caps at
+        // 14.93, so every reading looked like a machine falling short of a
+        // reachable number. It prints the real ceiling now — see MAX_FEED_HZ.
         console.info(
           `[pose] delivered ${hz === null ? 'not measurable yet' : `${hz.toFixed(1)} fps`}` +
-          ` to the engine (target ${Math.round(1000 / FEED_INTERVAL_MS)}, ` +
-          `${throughputRef.current.frames} frames in window)`,
+          ` to the engine (ceiling ${MAX_FEED_HZ.toFixed(1)} at a ${FEED_INTERVAL_MS} ms ` +
+          `throttle, ${throughputRef.current.frames} frames in window)`,
         );
       }
     }
@@ -432,14 +479,13 @@ export default function usePoseDetection({
       }
       if (videoRef.current && !loopRunningRef.current) {
         controllerRef.current.framesResumed();
-        throughputRef.current.reset();
-        lastHzLogRef.current = null;   // and the log window with it — see the ref
+        restartRateMeasurement();
         startStreaming(videoRef.current);
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, [startStreaming]);
+  }, [startStreaming, restartRateMeasurement]);
 
   // ── Stop the loop (camera teardown). Set-end summary is emitted by the
   //    per-set effect's cleanup, not here. ─────────────────────────────────────
@@ -449,8 +495,15 @@ export default function usePoseDetection({
     videoRef.current = null;
   }, []);
 
-  /** Delivered frames per second right now, or null when not yet measurable. */
-  const readPoseHz = useCallback(() => throughputRef.current.hz(), []);
+  /** Delivered frames per second right now, or null when not yet measurable —
+   *  which INCLUDES "frames have stopped arriving", not only "none have arrived
+   *  yet". The clock is passed in on every read for that reason: the meter can
+   *  only expire a reading if it is told what time it is, and a reader that
+   *  keeps re-rendering (the debug panel re-renders every second off the
+   *  workout timer) would otherwise redraw a dead camera's last rate for as long
+   *  as the screen is open. See `hz()`.
+   *  Compare it against `MAX_FEED_HZ`, never against 15 — see that constant. */
+  const readPoseHz = useCallback(() => throughputRef.current.hz(performance.now()), []);
 
   useEffect(() => () => stop(), [stop]);
 
@@ -475,8 +528,8 @@ export default function usePoseDetection({
     poseAssets,
     // The live delivered rate, or null while it is not yet measurable. A getter
     // rather than state on purpose: it is read on demand, and turning a
-    // ~15-per-second number into React state would re-render the workout screen
-    // fifteen times a second to display nothing.
+    // ~12-per-second number into React state would re-render the workout screen
+    // twelve times a second to display nothing.
     readPoseHz,
     startStreaming,
     stop,

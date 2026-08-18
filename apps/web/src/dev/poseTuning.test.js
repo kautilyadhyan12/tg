@@ -36,8 +36,14 @@ describe('parsePoseTuning', () => {
     // These four numbers ARE what usePoseDetection hard-wired before this
     // module existed. If this test ever has to change, shipped behaviour
     // changed with it — which is a decision, not a refactor.
+    //
+    // AND IT DID CHANGE, ONCE, ON 2026-08-17: `model` went `lite` → `full` by
+    // Kd's ruling, because Part 6 §3.3 always said `full` was the default and
+    // the app had it backwards by inheritance. The four confidences are
+    // untouched. This edit is the "decision, not a refactor" the sentence above
+    // was written to catch, and it is recorded at DECISIONS 2026-08-17.
     expect(parsePoseTuning('')).toEqual({
-      model: 'lite',
+      model: 'full',
       numPoses: 1,
       minPoseDetectionConfidence: 0.5,
       minPosePresenceConfidence: 0.5,
@@ -46,11 +52,16 @@ describe('parsePoseTuning', () => {
   });
 
   it('reads every dial the recording session needs', () => {
+    // `?model=lite`, NOT `?model=full`, and the swap is deliberate: `full`
+    // became the shipped default on 2026-08-17, so asking for it here would
+    // pass with the model parsing deleted outright. A dial test has to request
+    // something the default is not (rule 4 — a test that cannot fail is a
+    // liar), and `lite` is now the only bundled variant that qualifies.
     const t = parsePoseTuning(
-      '?model=full&numPoses=2&detectConf=0.9&presenceConf=0.7&trackConf=0.95',
+      '?model=lite&numPoses=2&detectConf=0.9&presenceConf=0.7&trackConf=0.95',
     );
     expect(t).toEqual({
-      model: 'full',
+      model: 'lite',
       numPoses: 2,
       minPoseDetectionConfidence: 0.9,
       minPosePresenceConfidence: 0.7,
@@ -78,8 +89,14 @@ describe('parsePoseTuning', () => {
     for (const name of MODEL_NAMES) {
       expect(parsePoseTuning(`?model=${name}`).model).toBe(name);
     }
-    expect(parsePoseTuning('?model=turbo').model).toBe('lite');
-    expect(parsePoseTuning('?model=../../etc/passwd').model).toBe('lite');
+    // Falls back to THE SHIPPED DEFAULT, written as `POSE_DEFAULTS.model` and
+    // not as a literal — this pair said `'lite'` until 2026-08-17 and had to be
+    // hand-edited when the default moved, which is how a rejected value quietly
+    // becomes a different one nobody chose.
+    expect(parsePoseTuning('?model=turbo').model).toBe(POSE_DEFAULTS.model);
+    expect(parsePoseTuning('?model=../../etc/passwd').model).toBe(POSE_DEFAULTS.model);
+    // And the rejection is real, not a coincidence of naming.
+    expect(MODEL_NAMES).not.toContain('turbo');
   });
 
   it('accepts 0 and 1, which are real settings and not "missing"', () => {
@@ -98,8 +115,26 @@ describe('modelUrls', () => {
     expect(full.remote).toContain('pose_landmarker_full/float16/1/pose_landmarker_full.task');
   });
 
-  it('falls back to lite for an unknown variant rather than fetching a bad path', () => {
-    expect(modelUrls('turbo').local).toBe(modelUrls('lite').local);
+  it('falls back to the SHIPPED DEFAULT for an unknown variant, never to a bad path', () => {
+    // Was `toBe(modelUrls('lite').local)` and broke when the default moved —
+    // correctly, because it was asserting the identity of the fallback rather
+    // than the rule. The rule is "an unrecognised variant resolves to whatever
+    // the app ships", and it must not resolve to a path nobody fetches.
+    expect(modelUrls('turbo').local).toBe(modelUrls(POSE_DEFAULTS.model).local);
+    expect(modelUrls('turbo').local).not.toContain('turbo');
+  });
+
+  it('resolves the SHIPPED DEFAULT to the full model, which is what §3.3 asks for', () => {
+    // Part 6 §3.3: "BlazePose full as default, lite as the automatic step-down"
+    // (06-part6-mobile.md:164). The app shipped the opposite until 2026-08-17.
+    // Pinned here as well as in the defaults object because this is the
+    // function that turns the choice into the URL a user's browser fetches.
+    expect(modelUrls(POSE_DEFAULTS.model)).toEqual({
+      local: '/models/pose_landmarker_full.task',
+      remote:
+        'https://storage.googleapis.com/mediapipe-models/' +
+        'pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task',
+    });
   });
 
   it('keeps the lite URLs byte-identical to what the app shipped', () => {
@@ -120,14 +155,16 @@ describe('isTuned / describeTuning', () => {
   });
 
   it('is true when ANY single dial has moved', () => {
-    for (const q of ['?model=full', '?numPoses=2', '?detectConf=0.9', '?presenceConf=0.9', '?trackConf=0.9']) {
+    // `?model=lite` since 2026-08-17 — `full` is the default now, so asking
+    // for it is not a tuned run and this loop would have asserted the opposite.
+    for (const q of ['?model=lite', '?numPoses=2', '?detectConf=0.9', '?presenceConf=0.9', '?trackConf=0.9']) {
       expect(isTuned(parsePoseTuning(q)), q).toBe(true);
     }
   });
 
   it('names every dial, so a screenshot of the widget is a complete record', () => {
-    const text = describeTuning(parsePoseTuning('?model=full&numPoses=2&detectConf=0.9'));
-    expect(text).toContain('full');
+    const text = describeTuning(parsePoseTuning('?model=lite&numPoses=2&detectConf=0.9'));
+    expect(text).toContain('lite');
     expect(text).toContain('n=2');
     expect(text).toContain('det=0.9');
     expect(text).toContain('pres=0.5');
@@ -154,10 +191,12 @@ describe('capturePoseTuning / readPoseTuning — surviving the router', () => {
 
   it('a later page load naming NOTHING does not wipe what was captured', () => {
     // This is the whole point: every navigation after the first names nothing.
-    capturePoseTuning('?model=full');
+    // `lite`, because it is no longer the default: with `full` here the
+    // assertion would hold even if capture stored nothing at all.
+    capturePoseTuning('?model=lite');
     capturePoseTuning('');
     capturePoseTuning('?someUnrelatedParam=1');
-    expect(readPoseTuning().model).toBe('full');
+    expect(readPoseTuning().model).toBe('lite');
   });
 
   it('an explicit request REPLACES what was captured, so defaults are reachable', () => {

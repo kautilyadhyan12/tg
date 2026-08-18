@@ -84,22 +84,87 @@ export class PoseThroughput {
   }
 
   /**
-   * Delivered frames per second over the trailing window, or `null` when there
-   * is not yet enough evidence to say.
+   * Delivered frames per second over the trailing window ENDING AT `now`, or
+   * `null` when there is not enough evidence to say.
    *
-   * Computed from the SPAN BETWEEN the first and last frame, not from a count
-   * divided by the window: over a 3 s window holding 1.2 s of frames, dividing
-   * by 3 reports a third of the true rate and would step down a phone that is
-   * keeping up perfectly.
+   * Computed as the frames received SINCE the oldest surviving one, divided by
+   * the time from that frame TO `now` — never by the fixed window, and never up
+   * to the last frame that happened to arrive.
+   *
+   * Both halves of that are load-bearing, and each was learned from a defect.
+   * Dividing by the WINDOW is wrong at the start of a set: over a 3 s window
+   * holding 1.2 s of frames it reports a third of the true rate and would step
+   * down a phone that is keeping up perfectly. Ending the span at the LAST FRAME
+   * is wrong whenever frames are slowing or have stopped, because the gap at the
+   * end — the only part of the window that says so — is then invisible: measured
+   * 2026-08-17, sixty frames at 67 ms and then silence still read "14.9 of
+   * 14.9/s" at 1,990 ms of quiet, when 5.3 was what had really arrived. Ending
+   * it at `now` makes the trailing silence part of the measurement, so the
+   * reading falls away smoothly instead of holding and then vanishing.
+   *
+   * WHY THE READING HAS TO BE TOLD WHAT TIME IT IS. Until 2026-08-17 it was not,
+   * and the consequence was the worst thing an instrument can do: the window was
+   * trimmed only by `push`, so with no frames arriving nothing ever left it and
+   * this answered THE LAST RATE IT EVER SAW, for ever. A camera that died — or
+   * simply a paused set — left "14.9 of 14.9/s" on screen, measured at 5½
+   * minutes after the final frame, in exactly the two moments where a reader
+   * asks "why did it miss my squat?". Resetting on a stall cannot close it: the
+   * gap IS the thing being misreported, and the reset only arrives with the
+   * resume that ends it. So the reading expires by itself — frames older than
+   * the window are not evidence about `now`, whether or not a new one has come
+   * in to say so.
+   *
+   * NO CLOCK, NO ANSWER. `now` is required and a missing or non-finite one is
+   * `null` rather than a fallback to "the last frame's own time", which would
+   * silently restore the stale-for-ever behaviour at any caller that forgot it.
+   * The clock stays an ARGUMENT, for the reason at the top of this file.
+   *
+   * TWO ROUNDS FOUND THE SAME MISTAKE HERE, and that is worth stating plainly
+   * because it is what makes the shape correct rather than merely patched: both
+   * were the reading describing a stretch of time it had no evidence about.
+   * Round 1 fixed WHICH frames count (the cutoff is applied at read time, not
+   * only when a frame arrives); round 2 fixed WHAT THEY ARE DIVIDED BY. `now`
+   * now governs both ends of the measurement, which is the only way an answer
+   * about "right now" can be honest.
    */
-  hz() {
-    if (this._t.length < 2) return null;
-    const span = this._t[this._t.length - 1] - this._t[0];
+  hz(now) {
+    if (!Number.isFinite(now)) return null;
+    const t = this._t;
+    if (t.length < 2) return null;
+    // A CLOCK THAT RAN BACKWARDS is not evidence about `now` either, and it is
+    // the one reading shape that would make the row incoherent: more frames than
+    // the span can hold, i.e. a rate ABOVE the ceiling printed beside it
+    // (measured before this guard: 22.59 against a 14.93 ceiling). Unreachable
+    // from today's only caller — `readPoseHz` passes `performance.now()`, which
+    // is monotonic and always at or after the newest pushed frame — so this is
+    // belt-and-braces, not a fix for an observed defect. It exists because
+    // `push` guards its own mirror of this case explicitly and says why, and a
+    // meter that refuses out-of-order INPUT while accepting an out-of-order
+    // READ is only half-guarded. T3 round 3, L-3.
+    if (now < t[t.length - 1]) return null;
+    const cutoff = now - this._windowMs;
+    // Same cutoff rule as `push`, so a reading does not depend on whether a
+    // frame happened to arrive to trigger the trim.
+    let first = 0;
+    while (first < t.length && t[first] < cutoff) first += 1;
+    const count = t.length - first;
+    if (count < 2) return null;
+    const span = now - t[first];
     if (span < this._minSpanMs) return null;
-    return ((this._t.length - 1) * 1000) / span;
+    return ((count - 1) * 1000) / span;
   }
 
-  /** Frames currently inside the window. Exposed for the log line, so a rate can
+  /** Frames retained SINCE THE LAST ONE ARRIVED — which is NOT "frames inside
+   *  the window right now", the guarantee this comment used to assert (T3 round
+   *  3, L-3). `push` trims against the newest frame's own time; `hz` applies its
+   *  cutoff against `now`. So between frames this counts samples a reading has
+   *  already discarded: measured on this module, at 330,000 ms of silence it
+   *  answers 45 while `hz` answers `null`.
+   *
+   *  Harmless where it is read, and the reason is worth stating rather than
+   *  assuming — its only caller is the DEV log line, which runs immediately
+   *  after a `push`, where the two agree exactly. Anything reading it at an
+   *  arbitrary moment wants `hz`'s own cutoff, not this. Exposed so a rate can
    *  be read together with how much evidence produced it. */
   get frames() {
     return this._t.length;

@@ -259,6 +259,268 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:9604** — 2026-08-18 — **KD PRODUCT RULINGS: THE TARGET IS US GYMS, THE
+  MOBILE APP IS THE PRODUCT, AND THE PROJECT IS NOW A GYM PLATFORM RATHER THAN A
+  CONSUMER APP WITH A CONSOLE BOLTED ON.** **Read this BEFORE planning,
+  sequencing or estimating ANY card — it changes who the product is for, which
+  surfaces get built, and what "done" means.** Fifteen rulings from one session,
+  recorded as ONE entry because they are one shift; a chat reading any of them
+  alone will mis-size its work. **(1) MOBILE IS THE PRODUCT, WEB IS THE TEST
+  RIG** — web member screens are built TWICE (RN shares no screen code), so
+  finishing web buys mobile almost nothing; measured, `packages/engine` (20 files,
+  `dependencies: {}`), `packages/shared` (20), all of `apps/api` and every
+  definition transfer unchanged, while all **24** files in `apps/web/src/pages`,
+  the camera path, offline storage and payments do not. **(2) MARKET IS US GYMS,
+  NOT INDIA** — Part 5 §1's price books are now UNRESOLVED, and **my India-anchored
+  RBI objection to gym-collected payments is WITHDRAWN** (do not resurrect it);
+  :592's privacy-law question moves onto the critical path because US workout/body
+  data is health data. **(3) GYMS COLLECT THEIR OWN MONEY via Stripe Connect, gym
+  as merchant** — a BUSINESS-MODEL addition, not a feature: `grep -ci
+  'connect|payout|marketplace|platform fee|split'` over Part 5 returns **ZERO**.
+  **Every Stripe specific in that session is UNVERIFIED model memory (V5) — pull
+  current docs before building.** **(4) CONSOLE REACHED FROM THE PHONE BUT BUILT
+  ONCE** (responsive, opened from the app) — Kd and Part 3 §3.1 agree on the goal;
+  I made the mechanism call under K4 and he did not overrule; wanting it native
+  means building it TWICE and owing that cost. **(5) THE AI CHAT IS SWITCHED OFF,
+  NOT DELETED — this IS the no-removal rule's authorised path** (explicit Kd
+  ruling against a cited cost), and the citation lives here: coach is **1,617**
+  API lines + **772** web lines with **15** files referencing it outside the
+  module (privacy export/delete among them), so unwiring the ROUTE is an hour and
+  reversible while deleting is a day across six subsystems. **Kd's deploy-size
+  question answered: server lines never download; removing the ROUTE shrinks the
+  bundle, hiding only the BUTTON ships it anyway.** ~7 coach `OWED.md` items park
+  with it and are NOT ticked. **(6) SHARING IS OPT-IN AND SCOPED (gym-global or
+  private) AND MEAL PHOTOS SELF-DELETE AT 7 DAYS — this is also his answer to the
+  §2.4 privacy question**, so §2.4's promise STANDS: gyms still never see meal
+  logs, weight, coach chats or routes except what a member deliberately shares.
+  **Photo storage does not exist at all today** (nutrition photos are
+  "request-only", no bucket config) — sharing means building R3.9's five upload
+  guarantees plus a 7-day sweep plus report-and-remove for the gym feed.
+  **(7) NEW SURFACE, spec-checked: attendance, classes/booking, member↔coach
+  messaging, gym announcements, gym-set pricing/offers, coach-authored plans,
+  grocery lists, competitor import, nearby gyms/day passes and nearby runners ALL
+  return ZERO spec hits** — additions, with no § governing them; programs (Part 7)
+  and gym branding (Part 3) DO exist. **(8) DROPPED: coach video upload. PARKED:
+  gym payments beyond the interface, the importer. NOT DECIDED — do not treat as
+  approved: day passes, paid friend invites, training together, nearby runners**,
+  the last carrying an unanswered SAFETY question that consent settings do not
+  answer. **(9) This entry is NOT a licence to delete, NOT a plan, NOT a spec
+  amendment**, and the honest size stated to Kd — 120 open items, 3/58 exercises,
+  no mobile app, no billing/org routes, 51 cards in 42 days at a *declining* rate
+  — must not be softened later. **He asked if 10 days would finish it; he was told
+  no.**
+- **:9509** — 2026-08-17 — **T3 ROUND 2 ON THE STRONG-MODEL/RATE CARD: the same
+  instrument lied again — two seconds instead of five minutes — and KD RULED
+  PATCH on the escape hatch.** **Read before putting any live measurement on
+  screen, before dividing a count by a span, and before believing a mutation
+  sweep that reports no summary line.** 1 Critical/High, 1 Low; the reviewer
+  reproduced round 1's three mutants and correctly STOPPED rather than proposing
+  a patch, because two rounds had found Criticals in the same function (:5348's
+  hatch). **Kd ruled PATCH** (:6277 precedent). **C/H-1: round 1 fixed WHICH
+  frames count, not WHAT THEY ARE DIVIDED BY** — the span still ran to the last
+  FRAME, so a gap at the END was invisible and the frames that knew better were
+  discarded by the formula; **re-derived by arithmetic here before accepting it,
+  and the new test's own failure printed it: 14.9 shown at 500 ms of silence when
+  12.67 arrived, still 14.9 at 1,990 ms against 5.3.** :5807 on its face, bounded
+  only by the panel's ~1/s repaint. **FIX IS ONE LINE (`span = now - t[first]`)
+  AND IS THE SHAPE CORRECTION, NOT A THIRD PATCH: `now` now governs BOTH ends of
+  the measurement.** **VISIBLE CHANGE: a perfect machine reads ~14.6 against a
+  ceiling that says 14.9, and the row decays to near zero before blanking — the
+  lower figure is the honest one** (BACKLOG, beside L47, whose 12.0-on-60 Hz
+  finding is unchanged). **FIVE ASSERTIONS MOVED AND NONE WAS WIDENED TO PASS
+  (Part 0 r3)** — each was replaced by the property it really claimed, and the
+  mid-gap pair now go RED under the defect because under it the two numbers were
+  IDENTICAL. **Low-1 has the longest reach: the reviewer wrote round 1's defect
+  ONE LAYER UP (a page-level cache) and all 690 tests stayed GREEN**, because
+  every rate test renders once against a CONSTANT stub — closed by a render test
+  that changes the meter's answer and advances the page's own repaint. **5 mutants
+  all RED** (including the reviewer's ALIVE one), backup by file copy + sha256.
+  **THE SIXTH UNEARNED HARNESS PASS, caught by its own control: the sweep's first
+  run reported all five ALIVE on an EMPTY summary — it grepped before stripping
+  ANSI. Class-fixed twice over: a missing summary is a FATAL, and an unmutated
+  CONTROL must report green through the same path first.** web 693/693 · build ✓.
+  **CARD DOES NOT CLOSE — a third, diff-only re-review is owed on the fix alone
+  (:5348 r1); smoke stays passed 5/5 (:9328); nothing ticks.**
+- **:9452** — 2026-08-17 — **KD RULING: FOLLOW-ALONG SETS RUN ON A TIMER, not on
+  reps counted from the video — the app may only save numbers it actually
+  knows.** **Read before adding any rep count the camera did not produce, before
+  designing a timed set, and before worrying that a timer breaks the calorie
+  method.** Continues :9390. Kd first specified the VIDEO driving the count, then
+  asked *"how about making it time based"* and ruled for the timer after being
+  given both cases. **THE REASON IS HONESTY, not the simplicity he asked about:
+  the app can only know how many reps the VIDEO did, never how many the USER
+  did** — three of the demo's twelve still writes twelve into history, calories
+  and personal bests, which is :5807's class arriving BEFORE the defect. A timer
+  only records something true. Secondary but real: no loop-detection, no
+  per-exercise rep lengths, and **no dependency on a perfect one-rep clip** —
+  exactly where he was stuck (generators emitted double squats and all wanted
+  subscriptions). **NOT a one-way door; he was told so before ruling.**
+  **HIS QUESTION VERIFIED IT — "how will calorie burn calculation happen then?"
+  CALORIES NEVER USED REPS**: `calories.ts` is `MET × weight_kg × hours`, and
+  reps entered v2/v3 only to ESTIMATE working time, which v3 already replaced
+  with the measured `watchedMs` (:7730). **A log-only set is billed as its whole
+  span at the exercise MET, so a timed set is the cleanest input that formula has
+  ever had and needs no new code** — residual unchanged from hand-counted sets
+  today: stop early and you are credited generously (:6277's branch; the new copy
+  must not claim otherwise). **Open and NOT chosen: where the footage comes from**
+  (free stock / filmed / rendered from the traces on his Desktop) — **the app's
+  112 shipped GIFs cannot serve, measured at 600×600 at best and 220×119 for jump
+  squat**; the artwork is its own track and must not block the card. Card written
+  as `NEXT-CARD-follow-along-PROMPT.md`; nothing built.
+- **:9390** — 2026-08-17 — **KD RULING: the crowded-room answer is a
+  FOLLOW-THE-DEMO mode the USER chooses, and the app must SAY SO UNPROMPTED —
+  silence reads as a broken app.** **Read before building anything that decides
+  WHICH person the camera follows, before adding any automatic switch away from
+  camera grading, and before writing the copy that offers this mode.** Kd asked,
+  unprompted, how the camera picks the right person in a gym. **Measured answer:
+  NOTHING does** — `numPoses: 1` (`poseTuning.js:82`) and
+  `results.landmarks[0]` (`usePoseDetection.js:388-389`), so MediaPipe crowns a
+  winner and the app takes it; no nearest/largest/central/same-as-last-frame rule
+  exists, and `bone_stretch > 0.923` cannot help because **a real bystander IS a
+  plausible skeleton**. Own 🟡 OWED line, tracked nowhere before (grep-verified).
+  **His proposal — a big moving reference instead of the camera — is the cheap
+  way out because BOTH halves already exist: 112 GIFs over 63 exercise names in
+  `public/exercise-gifs/`, and the log-only set that still SAVES and still earns
+  XP (:3085) without a form score.** **RULING 1: the USER flips the switch**
+  ("i will follow your recommendation") — **:6008 is what decides it** (the app
+  never switches a camera user off the camera; the hatch is a button the user
+  presses), so **an automatic crowd-switch may NOT be built without Kd amending
+  :6008 expressly.** **THE ARGUMENT TO CARRY FORWARD: the automatic version needs
+  exactly the thing the idea was invented to avoid** — you cannot know a room is
+  crowded without asking for more than one body. **RULING 2, added in the same
+  breath and larger: the app must TELL the user to switch** — *"otherwise they
+  will think the app does not work"*; a user whose reps stop counting cannot
+  guess the camera locked onto somebody else (:6662's "say it" shape, :6856's
+  "noticing a MISSING thing is not a check", applied BEFORE the defect).
+  **DESIGN CONSEQUENCE that follows from ruling 1 and must not be lost: the
+  message cannot be conditional on a crowd** (the app cannot detect one), so it
+  is unconditional — which forces it to read as an INSTRUCTION beside the switch,
+  never a warning about the camera, or every solo user at home is told the app
+  may not work. Copy NOT written (R0.2). **Nothing built, nothing ticked.**
+- **:9328** — 2026-08-17 — **THE SMOKE PASSED 5/5: the strong pose model costs
+  37 ms and no frames, and the empty chair still invents nothing. NOTHING
+  TICKS.** **Read before quoting any fps figure measured under `full`, before
+  calling the person gate "unverified under the strong model", and before
+  designing a smoke around a number only the operator can see.** Second sitting
+  of the sheet that answered 1 of 5; servers started BY THE CHAT again (:9243's
+  process note). **`full` delivers 10–12 /s against the 14.9 ceiling; `lite` on
+  the same machine in the same session, 11–12; `lite` on 2026-08-09, 9.2–12.2
+  (:8879) — so the strong model has NOT eaten the throttle's headroom**, which
+  is the objection the whole readout was built to test (:9003, :9111).
+  Corroborated by the DEV console printing 10.0 / 11.4 / 7.6 fps during his set,
+  and 12.0 is the 60 Hz cap (:9003), so 10–12 is the TOP of the range. Start-up
+  **680 ms vs 643 = +37 ms**, console said **THE APP BUNDLE**. **Step 3 — empty
+  room, one minute, ZERO invented reps under `full` — and he was asked TWICE
+  whether he ran it in THIS session on `full`, because a pass from the `lite`
+  era (:7222) is not evidence about a different estimator; the second ask is why
+  the line can be written.** `bone_stretch > 0.923` untouched, its 🔴 line does
+  NOT tick (a smoke is one room and one chair; that line needs a RECORDING
+  replayed through `measure-pose.ts`) — the hazard's temperature changed, not its
+  status. **THE STORED ROWS THE FIRST SITTING LACKED: sync count 8 (was 0), five
+  sets, EVERY ONE `mode='engine'`**, scores 100/100/75/50/100, 4 reps counted in
+  each of two sets against 5 done; **three sets show `duration_ms` far above
+  `watched_ms` (150,075/30,572 · 134,626/25,157 · 93,308/18,139), which is what
+  stepping out of shot looks like from the database.** **SAID RATHER THAN
+  GLOSSED (:7222): a row holds the FINAL count, not the count over time, so
+  step 3's headline rests on Kd's REPORT (:4829); and no payload field records
+  WHICH pose model produced a set, so steps 2 and 4 are separated by his reading
+  alone — the same instrument gap that makes :9111's clips unreplayable under a
+  new model.** **NOTHING TICKS: the packet still needs a round finding zero
+  Critical/High (:5348 r1) and the diff-only re-review of the expiry fix is
+  UNRUN.**
+- **:9243** — 2026-08-17 — **T3 ROUND 1 ON THE STRONG-MODEL/RATE CARD: 1
+  Critical/High — the camera-rate row reported a live feed over a DEAD CAMERA.**
+  **Read before putting any live measurement on screen, before reading
+  `PoseThroughput.hz()`, and before believing a green suite says anything about a
+  value's FRESHNESS.** The window was trimmed **only by `push`**, so with no
+  frames nothing ever left it and the reading froze — **measured at 5½ minutes
+  after the last frame, still `14.9 of 14.9/s`**. Two everyday states show it: a
+  camera that dies never announces it, and **pause is on every workout**
+  (`restartRateMeasurement` fires on the resume that ENDS the gap, so it cannot
+  cover the gap), while the 1-second workout timer actively redraws the frozen
+  figure. Severity is :5807 (on screen AND false), same class as :6150's green
+  badge over a dead camera. **Fix: `hz(now)` applies `push`'s cutoff at READ
+  time; blanks to `—` ~2 s after frames stop; a missing clock is `null`, never a
+  fallback to the newest frame's own time** (that fallback IS the old bug).
+  Page and display format unchanged (:9003 is Kd's). **WHY 685 GREEN TESTS
+  MISSED IT — every one read the meter at the instant the last frame arrived,
+  and the render suite stubs `readPoseHz` as a CONSTANT (:7487's fixture-shape
+  lesson); nothing asserted the value's LIFETIME.** 3 mutants **RED**
+  (expiry deleted · clock-fallback restored · hook stops passing the clock),
+  restores sha256-verified, **backup-by-copy — `git checkout` cost the reviewer
+  an uncommitted edit this round**. Low-1 → BACKLOG L47 (14.9 ceiling is
+  unreachable on a 60 Hz display, where 12.0 is the real cap — TRUE so Low, and
+  the format is Kd's). web **690/690** · build ✓. **CARD STILL OPEN: smoke is 1
+  of 5, and step 3 — the empty chair under `full` — is the only check on
+  `bone_stretch > 0.923` against a model it was never measured on.**
+- **:9111** — 2026-08-17 — **THE STRONG POSE MODEL IS THE DEFAULT — Kd ruled it,
+  and nobody had ever chosen the weak one.** **Read before touching
+  `POSE_DEFAULTS`, before adding a model variant, before trusting
+  `bone_stretch > 0.923` again, and before telling Kd a camera change is "blocked
+  on a recording".** Part 6 §3.3 (`06-part6-mobile.md:164`) always made `full`
+  the default and `lite` the step-down; the app shipped `lite` **by inheritance
+  from the previous version, never by decision** — and a weaker model is a more
+  credulous one (`lite` is what read a chair's chest at 0.99, :6386, and invented
+  ten reps from an empty room, :6856). **The nine-day objection fell to the same
+  morning's measurement** (:9003): "he is already under budget at 7.2–12.5 fps"
+  was never about his machine — 12.0 is the app's own ceiling — so there IS
+  headroom, and the new `MAX_FEED_HZ` row is what measures whether `full` eats
+  it. **BOTH models are bundled** (`full` 9,398,198 B / sha256 `5134a3aa…`, both
+  MEASURED): `lite` is §3.3's step-down, is what EVERY past measurement used, and
+  a comparison with one side on a CDN is not a comparison. **The contract test's
+  centre of gravity moved to "THE SHIPPED DEFAULT IS ONE OF THE MODELS THE BUILD
+  WRITES"** — point it at an unfetched variant and nothing else complains,
+  because Vite answers a missing `public/` file with index.html at 200.
+  **`0.923` is NOT touched (R5.4/R5.7) and its thirteen clips were all recorded
+  under `lite`** — whether it still holds is UNKNOWN, nothing observed wrong, own
+  🔴 line, fixed by a recording and never by a retune. **WASM stays at 0.10.21**:
+  its line said "moves WITH the model swap", but that clause meant "not for a
+  tidy-up", not simultaneity — two frame-changing edits at once are
+  unattributable, so they are SEQUENCED. **MY CORRECTION, and the standing lesson:
+  I told Kd this was blocked on him recording video. It was not** — the recording
+  verifies the person gate AFTERWARDS. **A verification you cannot run yet blocks
+  the CONFIDENCE, not the WORK; calling it a blocker hands the operator a cost he
+  does not owe.** He also corrected me on provenance — **the squat rules WERE
+  extracted from expert video** — and ruled that form/rep rules come from expert
+  video while the person check, not being a form rule, may come from his own
+  clips. **THE AUDIT FOUND THE HARNESS: `mutate-pose-tuning.mjs` had NEVER
+  completed a run here** — CRLF file, `\n` anchors, multi-line anchor matched
+  nothing; measured PRE-EXISTING against HEAD. Class-fixed in BOTH harnesses (LF
+  normalisation, chars via `String.fromCharCode` after the first attempt wrote
+  real CR/LF into the source). web 685/685 · assets sweep **25 RED 0 ALIVE** ·
+  tuning sweep **13 RED 0 ALIVE, first complete run ever**. **Smoke and T3 UNRUN;
+  nothing ticks, including the built model half.**
+- **:9003** — 2026-08-17 — **THE §3.6 LADDER CANNOT BE BUILT: the app caps
+  itself at 12 frames a second and the spec's trigger is 15.** **Read before
+  quoting ANY frames-per-second figure from this project, before building
+  anything on `delivered Hz < 15`, and before touching `FEED_INTERVAL_MS`.**
+  **KD'S QUESTION FOUND IT** — handed a plan premised on "9.2–12.2 against a
+  target of 15" he asked *"wait but it was working with thise 9 12 pictures"*,
+  and he was right. `FEED_INTERVAL_MS = 67` is a THROTTLE, so **14.93/s is the
+  arithmetic ceiling before any hardware is involved**, and on a 60 Hz display
+  `rAF` ticks at 16.67 ms — **66.67 is not >= 67**, so the feed slips a whole
+  tick to **12.0/s on a machine doing nothing wrong**. `Math.round(1000/67)`
+  printed all of that as "target 15" for months. Both figures are now ASSERTED
+  by tests driving the real frame loop, not reasoned. **Consequence: §3.6's
+  condition is TRUE ON EVERY DEVICE BY ARITHMETIC**, so a ladder keyed to it
+  degrades every user in ten seconds — **and 9.2–12.2 (:8879) / 7.2–12.5
+  (:6386) were never evidence about Kd's laptop; 12.0 is the ceiling and he was
+  sitting on it.** **KD RULED A over B: report, change nothing** — the rate is
+  printed in the camera screen's `debug` panel **BESIDE the ceiling**
+  (`12.0 of 14.9/s`, never bare), dash not `0.0` while unmeasurable, no colour
+  (that number is unmeasured — R0.2), nothing on the main screen. The bottom
+  rung would have hit **:6008** regardless (no automatic switch to hand
+  counting, ever). **A module was written, green at 16 tests, and DELETED**:
+  §3.6's condition implemented exactly is true on every device forever, i.e. an
+  instrument that cannot answer "no". Two OWED lines — **the throttle is NOT
+  changed (R1.1/R5.4: the person gate's cut-off and its `nominalDtMs: 82` are
+  ONE ruling, :7037/:7298, and 82 ms IS this ceiling), and it is plausibly the
+  largest single win available for camera accuracy** — plus §3.6's PostHog
+  telemetry (no web client at all, grep-verified). web 682/682 · sweep gains a
+  fourth target and five mutants, **22 RED 0 ALIVE**, PA22 pinning the readout
+  behind the debug toggle so a later edit cannot put it on screen. **Smoke and
+  T3 UNRUN, nothing ticks. Kd's declared NEXT CARD is the strong model**, still
+  blocked on a recording WITH VIDEO.
 - **:8879** — 2026-08-17 — **THE CAMERA'S TWO DOWNLOADS SHIP INSIDE THE APP —
   smoke PASS, T3 round 1's four Critical/High all fixed.** **Read before running
   any smoke that "cuts off" a source, before quoting the camera's start-up
