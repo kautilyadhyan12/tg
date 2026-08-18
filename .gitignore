@@ -84,3 +84,14 @@ infra/api.env
 
 # pnpm content-addressable store, if configured locally
 .pnpm-store/
+
+# Review scratch at the repo root: T3 prompts and the diffs they were run on,
+# plus NEXT-CARD kickoff prompts. Working notes for a chat, never a source —
+# DECISIONS.md, OWED.md, BACKLOG.md and RUNBOOK/ are where anything durable
+# goes. Ten of these had been committed by accident and 89 more sat untracked,
+# which is how `git status` stopped being readable and how `git add -A` became
+# dangerous here. The archive of the consumed ones is `.scratch/`, on disk and
+# out of git; the ones still in play stay at the root.
+.scratch/
+t3-*
+NEXT-*
