@@ -259,6 +259,23 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   same-shaped defect; enumerate every path carrying a guarantee.**
 - **:731, :741** — Groq COACH_MODEL migration → `openai/gpt-oss-20b`
 - **:747, :754** — Coach markdown tables; "Try again" + honest 429 copy
+- **:9809** — 2026-08-18 — **KD RULING: MEMBER MIGRATION IS A SYSTEM, NOT A
+  FAVOUR TO THE FIRST CUSTOMER.** *"i obvisoulsy can not wait untill someone
+  joins i need to make the system."* **Read before planning the Stage-1 gym
+  slice or anything touching the roster.** SUPERSEDES half of :9604 §8's parked
+  importer: the UNIVERSAL spreadsheet import is IN-PLAN NOW (per-competitor
+  one-click importers stay parked). Spec has member EXPORT only
+  (`03-part3-org-console.md:105`, `:212`); this is an ADDITION with no governing
+  §. Shape (K4 call, not overruled): (1) roster rows that exist WITHOUT a user
+  account — the owner sees all 1000 members on day one; (2) ONE upload screen
+  with COLUMN MAPPING at upload time, preview-before-save, which is what makes
+  one system fit every competitor format; (3) **ATTACH-ON-JOIN — a member who
+  installs later matches (phone/email exact) to their EXISTING row; without this
+  every person becomes two records and the owner's count is wrong forever.**
+  Joins the Stage-1 card family by construction (writes gym/roster tables).
+  **RESERVED FOR KD at plan time: do imported-not-yet-joined members consume
+  paid seats, and the consent question (inside :592).** A looser-than-exact
+  match rule without a ruling is an ownership defect (:5807).
 - **:9604** — 2026-08-18 — **KD PRODUCT RULINGS: THE TARGET IS US GYMS, THE
   MOBILE APP IS THE PRODUCT, AND THE PROJECT IS NOW A GYM PLATFORM RATHER THAN A
   CONSUMER APP WITH A CONSOLE BOLTED ON.** **Read this BEFORE planning,

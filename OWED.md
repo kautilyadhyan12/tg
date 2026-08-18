@@ -4055,6 +4055,31 @@ file and is stated so nobody reads these as lower priority than they are.
       on this list**, and the thing gyms actually pay competitors for.
 - [ ] 🟡 **SEPARATE GYM LOGIN AND USER LOGIN on the entry screen.** Small — Part 3
       already puts the console in its own route group (`/console/:orgSlug/...`).
+- [ ] 🟡 **MEMBER MIGRATION FROM A COMPETITOR APP — Kd ruling 2026-08-18
+      (DECISIONS :9809): a SYSTEM, built now, not a favour to the first
+      customer.** The spec has member EXPORT only (`03-part3-org-console.md:105`,
+      `:212`) and its only inbound path is self-join by code — this is an
+      addition with no governing §. Three parts, in the Stage-1 card family by
+      construction (it writes the gym/roster tables):
+      **(a) roster rows WITHOUT a user account** — an "imported, not yet joined"
+      member state, so a 1000-member gym sees its whole roster on day one;
+      **(b) ONE upload screen with column mapping** — the owner points at their
+      own spreadsheet's columns, preview shows duplicates/missing/unparseable
+      BEFORE anything saves; mapping-at-upload is what makes one system fit
+      every competitor with no format known in advance;
+      **(c) ATTACH-ON-JOIN — the load-bearing part:** a member who installs and
+      enters the gym code matches by exact phone/email to their EXISTING row.
+      Without it import+join makes two records per person and the owner's count
+      is wrong forever. **A match rule looser than exact needs a Kd ruling — a
+      wrong attach hands one person's history to another (ownership,
+      Critical/High by :5807).**
+- [ ] ❓ **MIGRATION SEAT POLICY — RESERVED FOR KD, blocks the import card's
+      plan gate:** do 1000 imported-but-not-yet-joined members consume 1000 paid
+      seats? Pricing policy; decides what an owner is told at upload time.
+- [ ] ❓ **MIGRATION CONSENT — RESERVED FOR KD:** an owner uploads 1000 people's
+      names and phone numbers before any of them has agreed to anything. Sits
+      inside the open privacy-law question (:592), already on the critical path
+      to a signed gym per :9604 §2.
 
 ### Member-side gym surface
 
@@ -4120,11 +4145,14 @@ file and is stated so nobody reads these as lower priority than they are.
       *"ok will not upload video"*, after being offered it as part of the coach
       surface. Video storage and streaming leave the plan with it. Struck rather
       than deleted, per this file's rules, so the decision is visible.
-- [ ] ⚪ **IMPORT A GYM'S DATA FROM A COMPETITOR MANAGEMENT APP — PARKED, and the
-      reason is not priority.** An importer is written against a REAL export file
-      from a REAL first customer. Written against an imagined format it is wasted
-      work twice over. Build it for the first gym that asks, from their file.
-      Parked on my recommendation and not contradicted by Kd.
+- [ ] ⚪ **~~IMPORT A GYM'S DATA FROM A COMPETITOR MANAGEMENT APP — PARKED.~~
+      SUPERSEDED IN PART by Kd's ruling 2026-08-18 (DECISIONS :9809):** *"i
+      obvisoulsy can not wait untill someone joins i need to make the system"*.
+      The UNIVERSAL spreadsheet import moved into the plan — its 🟡 lines live in
+      the console section above. **What STAYS parked, and only this:**
+      per-competitor one-click importers ("connect your Glofox account"-style),
+      which genuinely are written against a real customer's real export file.
+      Not ticked — rewritten.
 - [ ] ⚪ **GYM PAYMENT FEATURES BEYOND THE CONNECT INTERFACE — PARKED** until a
       real gym asks for them.
 

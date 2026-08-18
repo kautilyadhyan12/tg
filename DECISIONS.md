@@ -9805,3 +9805,64 @@ not go looking for a § that governs them.
   rate (85 → 97 → 76 → 48 → 41 → 27). **He asked whether 10 days would finish it
   and was told no, with those numbers.** The rulings above make the remaining
   surface LARGER, not smaller.
+
+## 2026-08-18 — KD RULING: MEMBER MIGRATION IS A SYSTEM, NOT A FAVOUR TO THE FIRST CUSTOMER. One spreadsheet import for every competitor app; joining members ATTACH to their imported row
+
+His words, asked as a doubt about the roadmap and then ruled in the same breath:
+*"a gym may be using other managaement application so how can they migrate to
+mine, saya gym has 1000 members"* — and, when the parked stance was explained:
+*"i need this problem solved, i obvisoulsy can not wait untill someone joins i
+need to make the system, what is the solution"*.
+
+**WHAT THIS SUPERSEDES, PRECISELY.** :9604 §8 parked "import a gym's data from a
+competitor management app" until a real first customer supplied a real export
+file — my recommendation, then uncontradicted. **Kd has now contradicted the
+half of it that mattered.** The split that survives:
+- **IN-PLAN NOW: the UNIVERSAL import.** It needs no competitor file to build,
+  because the format problem is absorbed at upload time (below).
+- **STILL PARKED: per-competitor one-click importers** ("connect your Glofox
+  account"-style). Those genuinely are written against a real customer's real
+  export, and nothing Kd said requires them — a spreadsheet path serves the same
+  gym on day one.
+
+**SPEC STATUS, MEASURED THIS SESSION:** Part 3 has member EXPORT only —
+`03-part3-org-console.md:105` ("CSV export (members, activity)") and `:212`
+(`GET /export/members.csv`); `grep -rniE 'import'` over the file returns zero
+member-import hits. The spec's only inbound path is self-join by code
+(v1 §573-574). **This is an ADDITION with no governing §**, same class as
+:9604 §7's table.
+
+**THE SHAPE — my K4 call, stated to Kd in the same reply, not overruled.
+Three parts, and the third is the one that decides whether it works:**
+1. **Roster rows that exist WITHOUT a user account.** A member state for
+   "imported, has not installed the app yet". The owner sees all 1000 members on
+   day one; the not-yet-joined simply carry no workout data.
+2. **One upload screen with COLUMN MAPPING.** Every management app can produce a
+   spreadsheet; none share a format. The owner points at their own columns —
+   "this is names, this is phones, this is renewal dates" — with a preview that
+   shows problems (duplicates, missing phones, unparseable dates) BEFORE
+   anything saves. Mapping-at-upload is what makes ONE system fit EVERY
+   competitor without knowing any format in advance.
+3. **ATTACH-ON-JOIN.** A member who later installs and enters the gym code is
+   matched (phone/email) against the roster and attached to their EXISTING row.
+   Without this the import and the join create two records per person and the
+   owner's member count is wrong forever — the defect the whole design exists to
+   prevent.
+
+**SEQUENCING, BY CONSTRUCTION NOT PREFERENCE:** this writes into the gym/roster
+tables, so it cannot precede the Stage-1 slice (gyms, join codes, seats) and
+joins that card family. "Build the system now" means it enters the PLAN now —
+not that it can be coded before a gym can exist.
+
+**TWO QUESTIONS RESERVED FOR KD AT PLAN TIME — genuinely his, not mine:**
+- **Seats:** do 1000 imported-but-not-yet-joined members consume 1000 paid
+  seats? This is pricing policy and it decides what an owner is told at upload.
+- **Consent:** an owner uploads 1000 people's names and phone numbers before
+  any of them has agreed to anything. Sits inside the open privacy-law question
+  (:592), which :9604 §2 already moved onto the critical path.
+
+**WHAT A CHAT MUST NOT DO WITH THIS:** treat the shape as ratified beyond K4
+(the plan gate still applies when the card is cut); build any matching rule
+looser than exact phone/email without a ruling (a wrong attach hands one
+person's history to another — that is an ownership defect, Critical/High by
+:5807); or tick the OWED parked line — it is REWRITTEN, not done.
