@@ -10689,8 +10689,28 @@ well as by slug**, and the property was verified the only way it can be: the
 suite run TWICE back to back, both 46/46, with the database queried empty after.
 A test that passes once is :4855's fixture lesson in a new place.
 
-**STILL NOT DONE: the diff-only re-review (:5348 rule 2) is UNRUN, and a
-re-smoke of the changed screens is UNRUN.** Nothing ticks.
+**RE-SMOKE — PASSED 4/4** (Kd, in his own browser, on `5f924b4`, against an API
+restarted for it since `tsx` has no `--watch` and a stale server is a recorded
+way to smoke the wrong bytes). The country box reads "Choose a country" and not
+United States · Create stays disabled with only a name filled in · **a gym
+created with India comes back set up in INR**, which is the Critical/High
+inverted and the only step that matters · the gym screen reads "1 member (you)"
+with "Gym" and "Owner" capitalised. Deliberately short: four steps, covering only
+what a user can SEE differently, rather than re-running the eleven that already
+passed.
+
+**KD'S QUESTION FROM THE RE-SMOKE, answered not deferred:** *"two or more gyms
+can be created?"* — **yes, deliberately.** `/mine` is a LIST, `MY_ORGS_LIMIT`'s
+own comment contemplates "a multi-site owner … a dozen", and a chain with two
+branches is a real customer. **The related gap was named to him in the same
+breath rather than left for him to find: nothing limits how many, and there is no
+per-route rate limit on create** — one account can mint gyms at the global
+300/min and squat every readable slug, which already has its own `OWED.md` line.
+Recommended leaving it, since a sensible cap depends on pricing Kd has not
+ratified (:9944). He did not overrule.
+
+**STILL NOT DONE: the diff-only re-review (:5348 rule 2) is UNRUN.** Nothing
+ticks.
 
 ## 2026-08-18 — KD RULING: the login page asks which door you came for — TWO DOORS, ONE ACCOUNT
 

@@ -7545,8 +7545,19 @@ web); harness gains per-mutant SUITE support so a unit-suite mutant is possible.
 **Rule 3 MEASURED, not asserted: C12 restores the `'US'` default and the new
 country test goes RED.**
 
-NEXT: **a RE-SMOKE of the changed screens (short — the country box is the only
-      thing a user sees differently), then the DIFF-ONLY re-review** (:5348
-      rule 2 — the fixes and the surfaces they touch, never a fresh full pass).
+RE-SMOKE — **PASSED 4/4** (Kd, on `5f924b4`, API restarted for it because `tsx`
+has no `--watch`). Country box reads "Choose a country" · Create stays disabled
+on a name alone · **a gym created with India comes back in INR** — the C/H
+inverted, and the only step that matters · "1 member (you)", "Gym", "Owner".
+Four steps, not eleven: only what a user can SEE differently.
+  · **HIS QUESTION, answered: "two or more gyms can be created?" — YES,
+    deliberately.** `/mine` is a list and `MY_ORGS_LIMIT` contemplates a
+    multi-site owner. **The gap was named to him unprompted: nothing limits how
+    many and create has no per-route rate limit**, so one account can squat every
+    readable slug — its own OWED line already. Left alone; a cap depends on
+    unratified pricing (:9944).
+
+NEXT: **the DIFF-ONLY re-review** (:5348 rule 2 — commit `5f924b4` and the
+      surfaces it touches, never a fresh full pass). Prompt already handed to Kd.
       Nothing ticks until a round returns zero Critical/High.
 ```
