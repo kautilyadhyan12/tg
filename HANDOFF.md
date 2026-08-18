@@ -7294,3 +7294,49 @@ RULED THIS SESSION, NOT BUILT — the follow-along card
     hours`, reps are not in the formula. Card at
     `NEXT-CARD-follow-along-PROMPT.md`; it does not start until this one closes.
 ```
+
+```
+TASK: THE FIRST ORG SLICE — a gym can exist and people can join it. API HALF
+      ONLY. Committed on `web-repoint` as `0658ed5`. DECISIONS :10010 (+ the
+      currency ruling at :10099) · index line in the same commit · 7 OWED lines
+      added, 1 ticked.
+
+WHAT IS BUILT
+  · `POST /v1/orgs` · `GET /v1/orgs/mine` · `POST /v1/orgs/join` ·
+    `GET /v1/orgs/:gymId/members`. NO MIGRATION — Part 4 §3.2's four tables have
+    existed since `0001_init` and no route had ever read or written one.
+  · **NO CONSOLE SCREEN, so NO SMOKE.** The browser gate attaches to the card
+    that builds the screen, and that is the next card.
+
+THE THREE THINGS A NEXT CHAT WOULD OTHERWISE GET WRONG
+  · **Both concurrency tests use TWO SEPARATE postgres clients on purpose.**
+    `buildApp` opens its pool at `max: 1`, so two `app.inject` calls are
+    serialised by the CLIENT and would pass with the `FOR UPDATE` deleted. Do
+    not "simplify" them onto the app.
+  · **The seat check IS built and correct.** What is deferred is narrower: a gym
+    with NO subscription — today every gym — is uncapped, because billing does
+    not exist. Do NOT close it with a default cap; the tier sizes are part of
+    the unratified US pricing (:9944).
+  · **KD OVERRULED THIS CARD'S OWN CURRENCY DEFERRAL WITHIN THE HOUR.** No INR
+    default; currency follows the gym's COUNTRY, derived SERVER-side. US/IN/CA/
+    GB + the 20 euro-area countries; UK on the pound; unsupported country is
+    REFUSED, never given a fallback. The console's country picker must be built
+    from `SUPPORTED_COUNTRIES` or it will offer a country the server refuses.
+
+PROVE — api 486/486 (43 files, real Postgres) · web 695/695 · engine 213/213 ·
+shared 48/48 · tsc clean · lint clean on all four gated packages ·
+**mutation audit 16/16 RED, 0 ALIVE, restores sha256-verified, RUN TWICE**
+because Kd's ruling moved the bytes the first sweep had measured.
+Harness committed: `apps/api/tools/mutate-orgs.mjs`.
+
+ONE SELF-INFLICTED FINDING: the new `.mjs` harness broke `api`'s lint script
+(typed rules cannot parse a file the TS project does not own). Every existing
+harness lives in `apps/web/tools/`, and web is excluded from the lint gate, so
+the class had never been hit. Fixed with a 4-line ignore scoped to
+`tools/**/*.mjs` in `apps/api`'s own eslint config.
+
+NEXT: **T3 — a FRESH chat, on this diff. Nothing ticks until it returns zero
+      Critical/High.** After that, the console screen (Overview + Members +
+      the join-code sheet), which is the first thing in this whole gym
+      direction Kd can click.
+```
