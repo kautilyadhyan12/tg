@@ -7482,8 +7482,30 @@ spaces — the control would have run on the first WORD of each and passed while
 checking something else. It also ABORTS on a non-ASCII `-t` filter, because two
 of these test names carry a curly apostrophe.
 
-NEXT: **the SMOKE (sheet handed to Kd, 11 steps, includes a step where the chat
-      joins a second account by code from the terminal so the roster genuinely
-      grows), then T3 in a FRESH chat on the diff.** Nothing ticks until a round
-      returns zero Critical/High (:5348 rule 1).
+SMOKE — **PASSED 11/11** in Kd's browser on `73c733f`. The code survived a full
+page reload (the reason the endpoint was ruled in) · the roster held to §2.4 · a
+second account joined by code appeared as a second row · the rail became bottom
+tabs at phone width · a failure showed a retry, not an empty state.
+  · **ITS ONE FINDING IS APP-WIDE AND PRE-EXISTING, NOT THIS CARD'S: a network
+    blip on page load LOGS YOU OUT of the whole app.** `AuthContext` catches
+    `getMe()` and nulls the user; a network failure carries NO response, so it
+    lands in the same branch as a genuine 401. **The identical lesson sits three
+    lines away** in `fetchProfileFacts` (:618 T3 F3). Own OWED line, own card,
+    NOT fixed here (R1.1). Tracked nowhere before — grep-verified.
+  · **THE SHEET'S OWN STEP 10 WAS BADLY DESIGNED and that is the lesson to
+    carry:** stopping the API also stops the session check, so a RELOAD never
+    reaches the console — the step could not observe its own subject. Rewritten
+    to navigate between tabs with the API already down. **The broken version is
+    what found the login bounce; that is LUCK and is recorded as luck.**
+
+OPEN, KD'S, RAISED MID-SMOKE AND NOT RULED: *"why would a gym owner enter a
+user's profile to create their gym"* — he wants the choice at login. He is right
+that the sidebar entry is an odd door; it is TEMPORARY and should have been
+labelled so. The OWED line for a separate gym login predates this card. **The
+fact he was given before ruling: the same person is deliberately BOTH (§4.0
+step 6 makes the owner member #1), so the split is two DOORS into one account,
+not two account types.** Recommended two-doors-one-account; his call.
+
+NEXT: **T3 in a FRESH chat on the diff** (`73c733f` plus the smoke commit).
+      Nothing ticks until a round returns zero Critical/High (:5348 rule 1).
 ```

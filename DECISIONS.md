@@ -10541,3 +10541,54 @@ and a filter matching no test is how an ALIVE verdict gets fabricated (:9509).
 own headline ("THE GYM CONSOLE DOES NOT EXIST") is now false and was corrected in
 place rather than left standing, but it does not tick either: "seats" in its own
 title is unbuilt, because a seat meter needs a cap and no gym has a subscription.
+
+### THE SMOKE PASSED 11/11 — and the one thing it found is not in this card's diff
+
+Kd ran it in his own browser on `73c733f`, servers started by the chat. Every
+step of the gym flow passed: the country list offered the supported set and not
+Australia/Poland/Switzerland · a gym created in the US came back **set up in
+USD** with a 6-character code from the ambiguity-free alphabet · **the code was
+still on screen after a full page reload**, which is the whole reason the read
+endpoint was ruled in · the roster showed the owner's own row with the
+Complimentary tag and nothing outside §2.4 · a second account joined by code
+from the terminal and appeared as a second row with no tag · the rail became
+bottom tabs at phone width with no sideways scroll · a failure showed an error
+with a retry rather than an empty state, and the retry restored the list.
+
+**THE FINDING, and it is app-wide and PRE-EXISTING: a network blip on page load
+logs you out of the entire app.** With the API stopped, a browser RELOAD of a
+protected screen bounced Kd to the login page. `AuthContext`'s mount effect
+catches `getMe()` and sets the user to null, and `ProtectedRoute` redirects on a
+null user — so a network failure, which carries **no response at all**, lands in
+the same branch as a genuine 401. The app cannot tell *"you have no session"*
+from *"I could not ask"*. **The identical lesson is written down three lines
+away**: `fetchProfileFacts` returns `undefined` rather than `null` on a failed
+read for exactly this reason (:618 T3 F3), and `getMe`'s catch never got it.
+Own `OWED.md` line, own card, **deliberately not fixed inside this one** (R1.1).
+Not tracked anywhere before — grep-verified before the line was written.
+
+**AND THE SMOKE SHEET'S OWN STEP 10 WAS BADLY DESIGNED, which is the instrument
+lesson worth keeping.** It said "stop the API, reload the page, expect the
+console's error state" — but stopping the API also stops the session check, so
+the reload never reaches the console at all and the step could not observe its
+own subject. Rewritten to kill the API while ALREADY on the screen and then
+navigate between tabs, which re-reads without re-running the session check. **A
+smoke step that cannot reach the thing it is aimed at is the same class as a
+test that cannot fail** (:5034's "an instruction with no button behind it",
+:7104's "an assertion satisfied by a share"). The corrected step then passed —
+and the badly-designed version is what found the login bounce, which is luck and
+is recorded as luck, not as method.
+
+**KD RAISED A PRODUCT POINT MID-SMOKE AND IT IS NOT SETTLED HERE:** *"why would
+a gym owner enter a user's profile to create their gym — there should be … you
+either logged in as user or a gym administrator"*. He is right that the sidebar
+entry is an odd door, and **`OWED.md` already carried the line** ("SEPARATE GYM
+LOGIN AND USER LOGIN on the entry screen"), written before this card. The
+sidebar item is the temporary door that made the screen reachable at all, and it
+should have been labelled as temporary when it was built. **The fact he needs
+before ruling, given to him in one line: the same person is deliberately BOTH** —
+§4.0 step 6 makes the owner member #1 of their own gym so they can demo the app
+on their own phone — **so the split is two DOORS into one account, not two kinds
+of account.** Recommended: two doors, one account, since separate accounts mean a
+gym owner cannot use their own app without logging out. **NOT RULED — his call,
+and it is the next card either way.**

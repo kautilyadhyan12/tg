@@ -920,6 +920,36 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       owed regardless of which model wins, because the whole point of §3.6 is
       that the choice is made per-device at runtime rather than by us guessing.
 
+### Session handling — found by Kd's smoke 2026-08-18, tracked nowhere before
+
+- [ ] 🟡 **A NETWORK BLIP ON PAGE LOAD LOGS YOU OUT OF THE WHOLE APP.** Found in
+      the console smoke, on a step that was aimed at something else entirely:
+      with the API stopped, a browser RELOAD of any protected screen bounced Kd
+      to the login page instead of showing an error. **This is app-wide and
+      PRE-EXISTING — not the console's, and not in that card's diff** (R1.1:
+      reported, deliberately not fixed there).
+      **THE CAUSE, read rather than guessed:** `AuthContext`'s mount effect does
+      `authService.getMe().catch(() => { adoptSession(null); setUser(null); })`,
+      and `ProtectedRoute` redirects on a null user. A network failure carries
+      **no response at all**, so it lands in the same `catch` as a genuine 401 —
+      the app cannot tell *"you have no session"* from *"I could not ask"*.
+      **The identical lesson is already written down THREE LINES AWAY**:
+      `fetchProfileFacts` returns `undefined` rather than `null` on a failed read
+      precisely because "the read failed" and "the server has none" are different
+      facts (:618's T3 F3). `getMe`'s catch never got the same treatment.
+      **What a user sees:** a valid session, a moment of bad wifi, and a login
+      screen asking them to sign in again — which is false, and on a phone in a
+      gym basement it will not be rare. The cookies are still valid, so logging
+      in again works, which is exactly why nobody has noticed.
+      **What the fix has to be careful about:** failing OPEN here means a
+      genuinely logged-out user could render a protected screen before the first
+      request 401s. The honest shape is a THIRD state — unknown — that shows a
+      retry rather than either the app or the login form, which is the same shape
+      the console's own screens use for their reads.
+      **Its own card. Not a blocker for the console card, whose eleven smoke
+      steps passed** — but this is the sort of thing that is invisible to every
+      test suite in the repo, because every one of them mocks the network.
+
 ### Screens still reading the OLD backend (no new-API home yet)
 Each needs an API surface built BEFORE its screen can be repointed. Per the
 no-removal rule these UIs stay untouched and working on the old backend until

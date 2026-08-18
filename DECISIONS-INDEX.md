@@ -369,9 +369,30 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   split it, and EVERY filter contains spaces — so the control would have run on
   the first WORD of each and passed while checking something else.** It also
   ABORTS on a non-ASCII `-t` filter, since two of these test names carry a curly
-  apostrophe. **SMOKE UNRUN · T3 UNRUN · NOTHING TICKS** — including the console
-  line, whose headline ("does not exist") is now false and was corrected in
-  place, but whose own title still names "seats", which needs a cap no gym has.
+  apostrophe. **SMOKE PASSED 11/11** in Kd's browser on `73c733f` — the code
+  survived a full page reload (the reason the endpoint was ruled in), the roster
+  held to §2.4, a second account joined by code appeared as a second row, the
+  rail became bottom tabs at phone width, and a failure showed a retry rather
+  than an empty state. **THE SMOKE'S ONE FINDING IS APP-WIDE AND PRE-EXISTING: a
+  network blip on page load LOGS YOU OUT of the entire app** — `AuthContext`
+  catches `getMe()` and nulls the user, and a network failure carries NO response
+  at all, so it lands in the same branch as a genuine 401 and the app cannot tell
+  "you have no session" from "I could not ask". **The identical lesson sits three
+  lines away** in `fetchProfileFacts` (:618 T3 F3). Own OWED line, own card, NOT
+  fixed here (R1.1); tracked nowhere before, grep-verified. **The sheet's own
+  step 10 was badly designed and is the instrument lesson**: stopping the API
+  also stops the session check, so the reload could not reach the console at all
+  — a smoke step that cannot observe its own subject is a test that cannot fail
+  (:5034, :7104). Rewritten to navigate between tabs with the API already down;
+  **the broken version is what found the login bounce, recorded as LUCK rather
+  than method.** **KD RAISED THE GYM-LOGIN DOOR MID-SMOKE and it is NOT RULED**:
+  the sidebar entry is a temporary door and should have been labelled so; the
+  OWED line for a separate gym login predates this card; **the fact he was given
+  before ruling is that the same person is deliberately BOTH (§4.0 step 6), so
+  the split is two DOORS into one account, not two account types.**
+  **T3 UNRUN · NOTHING TICKS** — including the console line, whose headline
+  ("does not exist") is now false and was corrected in place, but whose own title
+  still names "seats", which needs a cap no gym has.
 - **:10329** — 2026-08-18 — **ORG SLICE, T3 ROUND 2 (diff-only): ZERO
   Critical/High — THE PACKET SHIPS.** **Read before citing this card, before
   moving the clinic consent gate, and before assuming a `FOR UPDATE`
