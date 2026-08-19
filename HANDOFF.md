@@ -79,9 +79,17 @@ SMOKE STATUS — read this before assuming anything carried over
   · Step 10 (Google) IS runnable — `GOOGLE_CLIENT_ID`/`SECRET` are set in
     `apps/api/.env`, verified this session.
 
-NEXT: Kd runs the rewritten `RUNBOOK/smoke-login-door.md` (11 steps) → fix any
-      failures → T3 in a FRESH chat on the diff → then, and only then, the OWED
-      door line ticks.
+SMOKE RESULT — **PASSED 11/11** on `9aae571`, Kd's own browser, same session
+(DECISIONS :11706). Both removed shortcuts confirmed gone; both new Sign outs
+confirmed to really END THE SESSION via the browser BACK button; Google still
+lands in the console. **Three limits stated in the entry rather than glossed:
+the "phone" was a narrowed desktop window (D14 guards the real bar), the
+BACK-button checks rest entirely on his report because nothing is stored, and no
+step observed a SECOND person on the shared browser.**
+
+NEXT: **T3 in a FRESH chat on the diff `174fd71..HEAD`** — the ONLY gate left.
+      Zero Critical/High ships the packet (:5348 rule 1) and the OWED door line
+      ticks then, not before.
 ```
 
 ```

@@ -335,6 +335,31 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   so two `app.inject` calls are serialised by the CLIENT and would pass with the
   lock deleted** — a test that cannot fail. Seven `OWED.md` lines added; the
   console line is UPDATED, not ticked.
+- **:11706** — 2026-08-19 — **THE LOGIN-DOOR SMOKE PASSED 11/11 on `9aae571` —
+  both removed shortcuts confirmed GONE in a real browser, and neither removal
+  stranded anybody. NOTHING TICKS: T3 UNRUN.** **Read before citing the login
+  door as verified, before quoting this pass as covering a PHONE, and before
+  designing a smoke step around a browser control.** Kd's **REPORT**, not a
+  measurement (:4829). Evidence for exactly one thing: **:11616's ruling holds in
+  a browser** — the console offers Sign out at both widths and no way into the
+  member app, the sidebar has no `My Gym` and is otherwise intact, and the
+  questionnaire's new Sign out works; the "did it really end the session" half of
+  steps 6 and 7 is checked with the browser BACK button, because landing on
+  `/login` is satisfied by a plain link that leaves the session alive.
+  **Steps 1–4 were CARRIED from `174fd71`, not re-typed** — their judgement is
+  untouched, the screens they land ON are what changed, and steps 5–11 re-observe
+  every one of those surfaces (the sheet carries the mapping table). Only
+  REGISTERING an account is genuinely un-re-run, because account B survived
+  un-onboarded, which is what step 7 needed. **An earlier draft of the sheet
+  claimed a re-run it was never going to get and was corrected BEFORE he ran it
+  (`9aae571`)**, rather than left to read as more coverage than it was.
+  **THREE THINGS THIS SITTING DID NOT ESTABLISH, stated rather than glossed: the
+  "phone" was a NARROWED DESKTOP WINDOW** (D14 is what actually guards the phone
+  bar, and :9604 §4's surface is a real handset); **the BACK-button checks rest
+  entirely on his report**, since nothing is stored and there are no rows to
+  corroborate them as at :9328/:7929; and **no step observed a SECOND person on
+  the shared browser** — step 11 proves the door is forgotten, not that the
+  previous account's data is unreachable (older ground: :10866, :618 T3 F1).
 - **:11616** — 2026-08-19 — **KD RULES THE CROSSING SHUT IN BOTH DIRECTIONS: the
   login page's two doors are the ONLY way between the member app and the gym
   console — and the ruling exposed TWO screens with no way out at all.**

@@ -4465,8 +4465,13 @@ file and is stated so nobody reads these as lower priority than they are.
       no exit but finishing it. **Kd hit it on his FIRST step of this very
       smoke**, which is how it was found at all. Fixed in the same packet; it is
       NOT a skip (the onboarding gate is untouched, pinned by a test).
-      **THIS LINE STILL DOES NOT TICK: the rewritten smoke is UNRUN on these
-      bytes and the T3 is UNRUN.**
+      **UPDATE — THE REWRITTEN SMOKE PASSED 11/11 on `9aae571` (DECISIONS
+      :11706), Kd's own browser.** Both removed shortcuts confirmed gone, both
+      new Sign outs confirmed to really end the session (browser BACK button),
+      Google still landing in the console. **THIS LINE STILL DOES NOT TICK — the
+      T3 on this diff is UNRUN** (:4718 F4: a line ticked in the same commit
+      whose message said otherwise had to be reverted, on this branch). The
+      packet needs a review round finding ZERO Critical/High (:5348 rule 1).
       **THE FOURTH LANDING SITE IS WHAT THIS CARD ALMOST MISSED, and it is worth
       carrying:** `Onboarding.jsx` ended `navigate('/dashboard')`, hard-coded,
       and every brand-new account is sent through that wizard — so a NEW gym

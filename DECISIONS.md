@@ -11702,3 +11702,54 @@ the session really ended. **Steps 1–4 passed on `174fd71` and are re-run rathe
 than carried**, because the screens they LAND on (the Dashboard's sidebar, the
 console's shell) are exactly what changed even though the judgement they make did
 not. Smoke unrun on these bytes; T3 unrun.
+
+## 2026-08-19 — THE LOGIN-DOOR SMOKE PASSED 11/11 on `9aae571`, and the two removed shortcuts are confirmed GONE in a real browser. NOTHING TICKS — T3 is unrun
+
+**Read before citing the login door as verified, before quoting this pass as
+covering a phone, and before designing a smoke step around a browser control.**
+Recorded as **Kd's REPORT, not a measurement** (:4829) — the browser is his
+instrument and no value here was read out of it by me.
+
+**THE PASS.** Eleven steps, one sitting, in a private window, servers started by
+this chat. Both doors on the page · member door to the app · gym door to the
+console on the SAME account · a brand-new owner straight to the console with no
+questionnaire · **the console offering Sign out and no way into the member app,
+at both widths** · Sign out really ending the session, checked with the browser
+BACK button · **the questionnaire's new Sign out, also BACK-checked** · **the
+member sidebar with no `My Gym` and everything else intact** · the door surviving
+a reload · **Google coming back into the console** · the door forgotten at
+sign-out.
+
+**WHAT THIS PASS IS EVIDENCE FOR, precisely: :11616's ruling holds in a browser.**
+The two shortcuts are gone, and neither removal stranded anybody — which was the
+whole risk, since the console had no sign-out of its own before this packet.
+
+**STEPS 1–4 WERE CARRIED FROM `174fd71`, NOT RE-TYPED, AND THE SHEET SHOWS ITS
+WORKING.** The judgement each makes (which screen you land on) is untouched by
+this change; the screens they LAND on are exactly what changed. Steps 5–11
+re-observe every one of those surfaces on the new bytes — the sheet carries the
+table mapping which later step covers which carried one. **The one thing
+genuinely not re-run is REGISTERING an account**, because account B survived from
+the earlier sitting still un-onboarded, which is what step 7 needed. A first
+sitting with no account B runs from step 1. **An earlier draft of the sheet
+claimed steps 1–4 would be re-run and that was corrected before he ran it
+(`9aae571`) rather than left to be read as more coverage than it was.**
+
+**SAID RATHER THAN GLOSSED — three things this sitting did NOT establish.**
+- **The phone was a NARROWED DESKTOP WINDOW, not a phone.** Step 5's second half
+  proves the breakpoint swaps the rail for the top bar and that the bar says Sign
+  out; it says nothing about a real handset, and the console is the surface
+  :9604 §4 aims at. The mutant D14 is what actually guards the phone bar.
+- **The BACK-button checks in steps 6 and 7 rest entirely on his report.** Nothing
+  is stored, so unlike :9328 or :7929 there are no rows to corroborate a claim —
+  the design deliberately put the load-bearing check on a control he can see,
+  because the alternative (landing on `/login`) is satisfied by a plain link that
+  leaves the session alive.
+- **No step observed a SECOND person on the shared browser.** Step 11 proves the
+  door is forgotten; it does not prove the previous account's data is
+  unreachable, which is `logout()`'s job and older ground (:10866, :618 T3 F1).
+
+**NOTHING TICKS.** The OWED door line stays open: **the T3 on this diff is UNRUN**
+(:4718 F4 — a line ticked in the same commit whose message said otherwise had to
+be reverted, and this branch has done that once already). The packet needs a
+review round finding ZERO Critical/High (:5348 rule 1) before anything closes.
