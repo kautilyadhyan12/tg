@@ -335,6 +335,50 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   so two `app.inject` calls are serialised by the CLIENT and would pass with the
   lock deleted** — a test that cannot fail. Seven `OWED.md` lines added; the
   console line is UPDATED, not ticked.
+- **:11616** — 2026-08-19 — **KD RULES THE CROSSING SHUT IN BOTH DIRECTIONS: the
+  login page's two doors are the ONLY way between the member app and the gym
+  console — and the ruling exposed TWO screens with no way out at all.**
+  **Read before adding ANY link between the member app and the console, before
+  touching `ConsoleLayout`, the member `Sidebar`'s nav list, or the onboarding
+  wizard's header, and before restoring a shortcut a later chat finds missing.**
+  The console's **"Back to the app"** and the sidebar's **`My Gym`** are both
+  REMOVED; **Sign out** replaces the first. **SUPERSEDES :10866's "the `My Gym`
+  sidebar entry STAYS and this is the citation"**; everything else in :10866 and
+  :10959 stands. The no-removal rule's AUTHORISED path — explicit Kd ruling
+  against a cited cost (:10182's clinics precedent, second use). **The record
+  already agreed with him: :10824 called that item "a TEMPORARY door" whose
+  defect was "that it shipped without being labelled temporary"**, and :10866's
+  contrary reasoning (an owner inside the app needs a way across without signing
+  out) is what he overruled. **THE COST HE WAS GIVEN BEFORE RULING CHANGED THE
+  SHAPE OF THE FIX: `ConsoleLayout` had NO sign-out at all** — its own comment
+  said the removed link was "the only way back out of the console on a phone" —
+  so the removal alone would have LOCKED an owner in; the recommendation put to
+  him was the OPPOSITE of his ruling and he reaffirmed. **THE THIRD SCREEN IS THE
+  FINDING AND KD FOUND IT BY USING THE PRODUCT, on his FIRST smoke step: the
+  onboarding questionnaire has no sidebar, no skip and had no sign-out**, so
+  anyone who signs up or picks the wrong door was stuck on a five-step form with
+  no exit but finishing it — untracked until a beginner hit it in a browser
+  (:5543/:6062's shape). Sign out added there too, and it matters MORE now that
+  `My Gym` is gone; **it is NOT a skip** — the onboarding gate is untouched,
+  pinned by a test. Three decisions not to re-derive: **restoring EITHER shortcut
+  alone is worse than restoring neither** (a one-way crossing is the "works
+  sometimes" door `landingRoute` exists to prevent — hence one test file for both
+  halves); **the console draws TWO exits and the COUNT is the assertion** (rail +
+  phone bar, one CSS-hidden at any width, and the phone is the surface :9604 §4
+  asked for); **`logout()` already clears the door choice**, so the console's
+  Sign out inherits the shared-browser guarantee rather than re-implementing it.
+  **D15 restores `My Gym` with a still-imported icon on purpose** — naming the
+  removed `Building2` would go RED on a `ReferenceError` rather than on the
+  guarantee (:4718 F2 designed around, not incurred). PROVE: web **806/806**
+  (+9) · build ✓ · **lint = HEAD baseline, MEASURED** (`Zap`/`Ruler` already
+  unused at HEAD; the newly-unused `Building2` import removed rather than left) ·
+  **16 mutants · 16 RED · 0 ALIVE · 0 never ran** (D12–D16, three new targets),
+  control GREEN on all sixteen filters first, restores sha256-verified, exit code
+  read directly (:9509), tree clean after. **NOTHING TICKS — the smoke sheet is
+  REWRITTEN A SECOND TIME** (old steps 5 and 9 tested the removed links; new
+  steps 5–8 assert their ABSENCE plus both new Sign outs and a browser-BACK check
+  that the session really ended), **steps 1–4 re-run rather than carried** because
+  the screens they land on are exactly what changed; **T3 unrun.**
 - **:11534** — 2026-08-19 — **THE FOLLOW-ALONG FOOTAGE QUESTION ANSWERED:
   MOCAP ONTO A RIGGED MODEL IS POSSIBLE — and Kd's own correction is the line
   to carry.** **Read before sourcing exercise footage, before proposing
@@ -593,9 +637,13 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   throwing and taking its store as an argument, which keeps the unit tests in
   node instead of dragging the module into jsdom (:6856 went the other way);
   **a stored value that is not exactly one of the two doors is NO door.**
-  **THE `My Gym` SIDEBAR ENTRY STAYS AND THIS IS THE CITATION** — :10824 left it
+  ~~**THE `My Gym` SIDEBAR ENTRY STAYS AND THIS IS THE CITATION** — :10824 left it
   open and assigned it here; an owner inside the app still needs a way across
-  without signing out, and nothing about it is temporary any more.
+  without signing out, and nothing about it is temporary any more.~~
+  **⚠️ SUPERSEDED THE SAME DAY by :11616 (Kd ruling): `My Gym` is REMOVED, the
+  console's "Back to the app" with it, and the two doors are the only way across.
+  The reasoning struck above — "needs a way across without signing out" — is
+  exactly what he overruled. Everything else in :10866 stands.**
   **INSTRUMENT FINDING, caught BEFORE a byte was written: the new sweep ABORTED
   on run 1 because `Login.jsx` is CRLF and a two-line anchor matched nothing** —
   :4267's class in a FOURTH harness. Class-fixed by converting the ANCHOR to the

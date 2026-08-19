@@ -1,6 +1,90 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE CROSSING IS CLOSED — Kd ruled mid-smoke (DECISIONS :11616) that the
+      login page's two doors are the ONLY way between the member app and the gym
+      console. **CODE DONE AND PROVEN. SMOKE UNRUN ON THESE BYTES. T3 UNRUN.
+      NOTHING TICKS.** Web only; no API change, no migration, no `@app/shared`
+      change.
+
+WHAT KD RULED, AND WHAT A LATER CHAT MUST NOT "FIX" BACK
+  · The console's **"Back to the app"** is GONE, replaced by **Sign out**.
+  · The member sidebar's **`My Gym`** is GONE.
+  · **This SUPERSEDES :10866's "the `My Gym` sidebar entry STAYS and this is the
+    citation".** Everything else in :10866 and :10959 stands. Struck in place in
+    BOTH the index line and the OWED line, not deleted.
+  · **RESTORING EITHER SHORTCUT ALONE IS WORSE THAN RESTORING NEITHER** — it
+    makes the crossing work one way only, which is the "works sometimes" door
+    `landingRoute` exists to prevent. Both halves live in ONE test file for that
+    reason.
+
+THE COST HE WAS GIVEN BEFORE RULING — it changed the shape of the fix
+  · `ConsoleLayout` had **NO sign-out of its own**; its own comment said the
+    removed link was "the only way back out of the console on a phone". Removing
+    it as asked and nothing else would have LOCKED an owner inside the console.
+  · The recommendation put to him was the OPPOSITE of his ruling (keep the
+    cross-link, add sign-out). **He reaffirmed. Implemented as given.**
+
+THE THIRD SCREEN IS THE FINDING, AND KD FOUND IT BY USING THE PRODUCT
+  · **The onboarding questionnaire had no sign-out** — no sidebar, no skip
+    (removed at Card 6 for good reason). Anyone who signed up, or picked the
+    wrong door, was stuck on a five-step form with no exit but finishing it.
+  · He hit it on **step 1 of this very smoke** and could not reach the login page
+    at all. Tracked nowhere before; :5543/:6062's shape.
+  · **The added Sign out is NOT a skip** — it ends the session and returns to
+    `/login`, so the onboarding gate is untouched and an un-onboarded account
+    still cannot reach the member app. Pinned by a test.
+
+FILES
+  · `apps/web/src/components/console/ConsoleLayout.jsx` (both exits)
+  · `apps/web/src/components/common/Sidebar.jsx` (nav entry + now-unused import)
+  · `apps/web/src/pages/Onboarding.jsx` (header Sign out)
+  · `apps/web/src/pages/loginDoorCrossing.render.test.jsx` (NEW, 9 tests)
+  · `apps/web/tools/mutate-login-door.mjs` (D12–D16, three new targets)
+  · `RUNBOOK/smoke-login-door.md` (rewritten a SECOND time)
+
+SAID RATHER THAN GLOSSED
+  · **The console draws TWO exits and the COUNT is the assertion.** Rail and
+    phone bar, one CSS-hidden at any width — jsdom applies no CSS, so both are in
+    the tree and the test pins `toHaveLength(2)`. An edit fixing one and not the
+    other is invisible to whichever surface the author was looking at, and the
+    phone is the one :9604 §4 asked for.
+  · **D15 restores `My Gym` with a STILL-IMPORTED icon on purpose.** Naming the
+    removed `Building2` would blow the module up on evaluation and go RED on a
+    `ReferenceError` rather than on the guarantee — :4718 F2 designed around
+    rather than incurred.
+  · **Two of the new tests assert a click really ENDS THE SESSION**, not merely
+    that it lands on `/login` — a plain link would do the latter while leaving
+    the person signed in. The smoke checks the same thing with the browser BACK
+    button.
+
+GATES
+  · web **806/806** (+9) · `vite build` ✓
+  · **lint = HEAD baseline, MEASURED**: the only two errors on touched files are
+    `Zap` (Sidebar) and `Ruler` (Onboarding), both proven already unused at HEAD
+    via `git show HEAD:`. The newly-unused `Building2` import was REMOVED rather
+    than left to become a new one.
+  · **16 mutants · 16 RED · 0 ALIVE · 0 never ran**, control GREEN on all sixteen
+    filters first, restores sha256-verified, exit code read directly not through
+    a pipe (:9509), `git status` clean after the sweep.
+
+SMOKE STATUS — read this before assuming anything carried over
+  · Steps **1–4 PASSED** in Kd's browser on `174fd71`, BEFORE this change.
+  · They are **re-run, not carried**: the judgement each makes (which screen you
+    land on) is unaffected, but the screens they LAND on — the Dashboard's
+    sidebar, the console's shell — are exactly what changed.
+  · Old step 5 (crossing via "Back to the app") and old step 9 (the `My Gym`
+    entry) tested the two removed links and are GONE, replaced by new steps 5–8
+    asserting their ABSENCE plus both new Sign outs.
+  · Step 10 (Google) IS runnable — `GOOGLE_CLIENT_ID`/`SECRET` are set in
+    `apps/api/.env`, verified this session.
+
+NEXT: Kd runs the rewritten `RUNBOOK/smoke-login-door.md` (11 steps) → fix any
+      failures → T3 in a FRESH chat on the diff → then, and only then, the OWED
+      door line ticks.
+```
+
+```
 TASK: NO TASK — a RULINGS-ONLY session (2026-08-19, continuing the same day as
       the block below). **NO CODE WAS TOUCHED. The ACTIVE CARD IS THE ONE IN
       THE NEXT BLOCK — the login door, still mid-smoke and T3-unrun.** This

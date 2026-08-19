@@ -1,5 +1,6 @@
-import { NavLink, Link, useParams } from 'react-router-dom';
-import { Building2, Users, ChevronLeft } from 'lucide-react';
+import { NavLink, Link, useParams, useNavigate } from 'react-router-dom';
+import { Building2, Users, ChevronLeft, LogOut } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 // The console's own shell — Part 3 §3.1: "Responsive web app (owners live on
 // phones; no native console app). Left rail (desktop) / bottom tabs (mobile)."
@@ -15,6 +16,18 @@ import { Building2, Users, ChevronLeft } from 'lucide-react';
 // Leaderboard · Reports · Billing · Settings); the other four have no server
 // side at all and each has its own owed line. A greyed-out tab that answers
 // nothing is a promise on screen, so they are absent rather than disabled.
+//
+// THE WAY OUT IS SIGN OUT, NOT A LINK INTO THE MEMBER APP (Kd ruling
+// 2026-08-19, mid-smoke on the login door). This shell used to end in "Back to
+// the app" pointing at /dashboard; the mirror shortcut, `My Gym` in the member
+// sidebar, went in the same ruling. The login page's two doors are now the ONLY
+// way across in either direction: a person who wants the member app signs out
+// and returns through "I'm a member". Re-adding a cross-link here re-opens it.
+//
+// It is also the console's ONLY exit — there was no sign-out on this shell at
+// all, so removing the old link without adding this one would have locked an
+// owner inside the console. `logout()` clears the door choice as well as the
+// session, which is what keeps a gym's shared front-desk browser honest.
 
 const railBase = 'flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors';
 
@@ -27,6 +40,13 @@ function navStyle(active) {
 
 export default function ConsoleLayout({ children }) {
   const { orgSlug } = useParams();
+  const { logout }  = useAuth();
+  const navigate    = useNavigate();
+
+  const handleSignOut = async () => {
+    await logout();
+    navigate('/login');
+  };
 
   // Nav only exists inside a gym. On "your gyms" and the create form there is
   // nothing to navigate between, so the rail carries the brand and the way back
@@ -66,17 +86,17 @@ export default function ConsoleLayout({ children }) {
           ) : null}
         </nav>
 
-        <Link to="/dashboard" className={railBase} style={navStyle(false)}>
-          <ChevronLeft className="w-4 h-4 flex-shrink-0" />
-          <span>Back to the app</span>
-        </Link>
+        <button type="button" onClick={handleSignOut} className={`${railBase} w-full text-left`} style={navStyle(false)}>
+          <LogOut className="w-4 h-4 flex-shrink-0" />
+          <span>Sign out</span>
+        </button>
       </aside>
 
       {/* ── Content. `pb-24` on mobile keeps the last row clear of the tab bar,
              which is fixed and would otherwise sit on top of it. ──────────── */}
       <main className="md:ml-56 min-h-screen pb-24 md:pb-0">
         {/* Mobile-only top bar: the rail is hidden here, so this is the only
-            way back out of the console on a phone. */}
+            way out of the console on a phone. */}
         <div
           className="md:hidden flex items-center justify-between px-4 h-14"
           style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
@@ -84,9 +104,9 @@ export default function ConsoleLayout({ children }) {
           <span className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
             Gym console
           </span>
-          <Link to="/dashboard" className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            Back to the app
-          </Link>
+          <button type="button" onClick={handleSignOut} className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
+            Sign out
+          </button>
         </div>
         {children}
       </main>

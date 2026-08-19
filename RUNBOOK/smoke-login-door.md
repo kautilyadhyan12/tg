@@ -1,19 +1,21 @@
 # SMOKE — the login door: "I'm a member" or "I run a gym"
 
-**Rewritten 2026-08-19 after Kd's amendment (DECISIONS :10959): a gym owner no
-longer gets the fitness questionnaire at sign-in.** Step 4's expectation changed
-and step 5 is new; earlier passes were on the old bytes and do not carry over.
+**Rewritten 2026-08-19, second time, after Kd's ruling that the two doors are
+the ONLY way across.** The gym console's "Back to the app" link and the member
+sidebar's **My Gym** link are both gone; the console and the setup questionnaire
+each gained a **Sign out**. Old steps 5 and 9 tested the two removed links and
+have been replaced. Earlier passes on those two steps do not carry over.
 
-**Why this sheet exists.** 797 green tests run with every network call mocked.
+**Why this sheet exists.** 806 green tests run with every network call mocked.
 They cannot see a real cookie, a real redirect, or a real session surviving a
 trip to Google and back — and this card's whole point is what happens BETWEEN
 pages. The Card-4 smoke caught a browser-wide bug that 250+ green tests were
 structurally incapable of seeing; that is what these steps are for.
 
-**What changed, in one line:** the login page now asks which door you came for.
-Same email, same password, same account — the choice only decides whether you
-land in the normal app or in your gym console, and the fitness questionnaire
-belongs to the member side only.
+**What changed, in one line:** the login page asks which door you came for, and
+that choice is now the *only* way between the member app and the gym console —
+no shortcut links in either direction, and a **Sign out** on every screen that
+previously had none.
 
 ---
 
@@ -31,19 +33,21 @@ Wait for it to say it is listening on port 3000.
 ```
 cd apps/web && npx vite
 ```
-Open the URL it prints (usually http://localhost:5173) and press **F5** once so
-the browser has the current code.
+Open **http://localhost:5173/login** and press **F5** once so the browser has
+the current code.
 
 **You do NOT need the third server** (`mock-ml-backend.mjs`) for any step here.
 
-**Two accounts make this sheet work, and step 4 needs a brand-new one:**
-- **Account A** — any existing account you already use. Steps 1–3, 6–9.
-- **Account B** — a **brand-new** account you register during step 4 and have
-  never signed in with before. It must not have seen the setup questionnaire.
-  Register it at step 4, not now.
+**Use a PRIVATE / INCOGNITO window** (Ctrl+Shift+N; Firefox Ctrl+Shift+P). A
+private window has no session, so the login page actually appears. This is not
+fussiness — it is how the 2026-08-19 sitting started, because an already
+signed-in account with an unfinished questionnaire never reaches the login page
+at all.
 
-**If you are already signed in, sign out first** (sidebar → Sign Out). Several
-steps below start from the login page and being signed in skips it.
+**Two accounts make this sheet work:**
+- **Account A** — any existing account you already use, questionnaire finished.
+- **Account B** — a **brand-new** account you register during step 4 and have
+  never signed in with before. It must not have seen the questionnaire.
 
 ---
 
@@ -90,36 +94,88 @@ questionnaire** — no Basic Info, no goals, no equipment screens.
 ❌ **If the questionnaire appears before the console:** that is the defect this
 step exists for — say so.
 
-### 5 — crossing into the member app brings the questionnaire, then
-Still signed in as **Account B**, press **Back to the app** (bottom of the
-console's left rail; on a narrow window it is in the top bar).
+### 5 — the console's way out is SIGN OUT, and there is no way into the app
+Still on the console as **Account B**. Look at the bottom of the left rail (on a
+narrow window, the top bar).
 
-✅ **Expect:** NOW the setup questionnaire appears (Basic Info → Fitness Level
-→ Goals → Equipment → Preferences). Fill in all five steps and finish.
+✅ **Expect:** it says **Sign out**.
 
-✅ **Expect after the last screen:** you land on the **Dashboard** — the member
-app, which is where you were headed.
+✅ **Expect:** there is **no "Back to the app"** anywhere on the console, and
+nothing else that leads into the normal app.
 
-**This is Kd's own design:** the questionnaire belongs to the member side, and
-it arrives exactly when someone chooses to use it — not before.
+**Then make the window narrow** (drag its edge in until the left rail turns into
+tabs along the bottom).
 
-### 6 — the choice survives a reload
+✅ **Expect:** the top bar still says **Sign out** — not "Back to the app".
+
+**Why both widths:** a gym owner runs the console from a phone. A change that
+holds on a laptop and not on a phone would be undone on the surface that matters.
+
+### 6 — pressing Sign out really ends the session
+Press **Sign out** in the console.
+
+✅ **Expect:** you land on the login page.
+
+✅ **Now press the browser's BACK button.**
+
+✅ **Expect:** you do **not** get back into the console. You stay on, or bounce
+back to, the login page.
+
+**Why the back button:** landing on the login page proves nothing on its own — a
+plain link would do that while leaving you signed in. This is the check that the
+session actually ended.
+
+### 7 — the questionnaire can be escaped
+At the login page, press **I'm a member**, then sign in as **Account B** (the
+new account, which has never done the questionnaire).
+
+✅ **Expect:** the setup questionnaire appears — Basic Info first.
+
+✅ **Expect:** a small **Sign out** in the top-right of that screen.
+
+Press it.
+
+✅ **Expect:** you land on the login page, signed out.
+
+✅ **Press the browser's BACK button.** You should **not** land inside the app —
+you stay on the login page.
+
+**This is the dead end you found on your first attempt at this sheet:** someone
+who signs up, or picks the wrong door, used to be stuck on that questionnaire
+with no way out at all.
+
+### 8 — the member sidebar has no shortcut into the console
+Sign in as **Account A** through the **member** door. Look at the sidebar.
+
+✅ **Expect:** there is **no My Gym** item.
+
+✅ **Expect:** everything else is still there — Dashboard, Workouts, Nutrition,
+Achievements, Settings, Sign out.
+
+❌ **If the whole sidebar is missing or broken:** that is a fail, not a pass —
+say so.
+
+**Why:** the gym door on the login page is now the only way to the console.
+Wanting the console means signing out and coming back through **I run a gym**.
+
+### 9 — the choice survives a reload
 Sign out. Press **I run a gym**, then press **F5** (reload the page) *without*
 signing in.
 
 ✅ **Expect:** after the reload, **I run a gym** is still the orange one.
 
-### 7 — Google sign-in honours the door too
+### 10 — Google sign-in honours the door too
 Sign out. Press **I run a gym**, then press **Continue with Google** and
 complete the Google sign-in.
 
 ✅ **Expect:** you come back into **Your gyms**, not the Dashboard.
 
 ❌ **If Google sign-in is not configured on your local API:** skip this step and
-say you skipped it. Do not guess at the result.
+say you skipped it. Do not guess at the result. *(As of 2026-08-19 it IS
+configured locally — this step should run.)*
 
-### 8 — the next person on this browser starts fresh
-Still signed in from step 7 (or sign in again through the gym door). Now **sign
+### 11 — the next person on this browser starts fresh
+Still signed in from step 10 (or sign in again through the gym door). Now **sign
 out**, and look at the login page.
 
 ✅ **Expect:** **I'm a member** is highlighted again — the door has been
@@ -127,14 +183,6 @@ forgotten.
 
 **Why this matters:** a gym's front-desk laptop is shared. The next person to
 use it must not be sent to somebody else's console.
-
-### 9 — the old way across still works
-Sign in as **Account A** through the **member** door. Look at the sidebar.
-
-✅ **Expect:** the **My Gym** item is still there and still opens the console.
-
-**This is deliberate.** Nothing was removed. An owner already inside the app
-still needs a way across without signing out.
 
 ---
 
@@ -144,5 +192,21 @@ For each step, one line: **pass** or **fail**. On a fail, say what you saw
 instead — the screen you landed on, and anything red in the browser console
 (F12 → Console).
 
-If a step cannot be run at all (step 7 without Google configured), say
-**skipped** and why. A skipped step is a fine answer; a guessed one is not.
+If a step cannot be run at all, say **skipped** and why. A skipped step is a
+fine answer; a guessed one is not.
+
+---
+
+## What carries over from the 2026-08-19 sitting, and what does not
+
+Steps **1–4 PASSED** in Kd's browser on `174fd71`, before this change.
+
+They are re-run here rather than carried over, and the reason is worth stating:
+the *judgement* each of those steps makes — which screen you land on — is not
+affected by this change, but the screens they land ON (the Dashboard's sidebar,
+the console's shell) are exactly what changed. Steps 5–8 re-observe those same
+surfaces, so nothing rests on a pass taken against older bytes.
+
+Old step 5 (crossing into the member app via "Back to the app") and old step 9
+(the **My Gym** sidebar entry) tested the two links this ruling removed. They are
+gone, replaced by steps 5–8, which assert their **absence** instead.

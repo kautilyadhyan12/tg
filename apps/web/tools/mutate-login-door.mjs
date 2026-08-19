@@ -24,6 +24,19 @@
  *                onboarding opt-out puts the questionnaire back in front of a
  *                gym owner on that route alone)
  *
+ * D12-D16 cover Kd's ruling of 2026-08-19 that the doors are the ONLY way
+ * across, and they sit in this card's second severity column:
+ *
+ *   · BLOCKED FROM FINISHING (:5807's other half) — the console had no
+ *     sign-out of its own, and the questionnaire still has no sidebar, so a
+ *     person on either screen could have no way out at all.
+ *
+ *   D12/D13/D14  the console shell    (ConsoleLayout — the crossing re-opening,
+ *                a sign-out that does not end the session, and the phone bar
+ *                losing what the desktop rail keeps)
+ *   D15          the member sidebar   (Sidebar — `My Gym` restored)
+ *   D16          the questionnaire    (Onboarding — the dead end returning)
+ *
  * Deliberately NOT mutated, per the same rule: the button colours, the heading
  * copy, the order of the two doors, comments. The onboarding wizard's exit is
  * no longer a target at all: under the amendment its hard-coded '/dashboard'
@@ -59,6 +72,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const UNIT_SUITE = 'src/pages/landingRoute.test.js';
 const RENDER_SUITE = 'src/pages/login.render.test.jsx';
 const GOOGLE_SUITE = 'src/pages/googleAuth.test.js';
+const CROSSING_SUITE = 'src/pages/loginDoorCrossing.render.test.jsx';
 
 const TARGETS = {
   route: { file: resolve(ROOT, 'apps/web/src/pages/landingRoute.js') },
@@ -67,6 +81,9 @@ const TARGETS = {
   guard: { file: resolve(ROOT, 'apps/web/src/components/common/ProtectedRoute.jsx') },
   auth: { file: resolve(ROOT, 'apps/web/src/context/AuthContext.jsx') },
   google: { file: resolve(ROOT, 'apps/web/src/pages/googleSuccessRoute.js') },
+  consoleShell: { file: resolve(ROOT, 'apps/web/src/components/console/ConsoleLayout.jsx') },
+  sidebar: { file: resolve(ROOT, 'apps/web/src/components/common/Sidebar.jsx') },
+  wizard: { file: resolve(ROOT, 'apps/web/src/pages/Onboarding.jsx') },
 };
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
@@ -188,6 +205,69 @@ const MUTANTS = [
     expect: 'opts every console route out of the onboarding requirement',
     from: '            <Route path="/console" element={\n              <ProtectedRoute requireOnboarding={false}>',
     to: '            <Route path="/console" element={\n              <ProtectedRoute>',
+  },
+
+  // D12-D16 — KD'S 2026-08-19 RULING: THE CROSSING IS CLOSED IN BOTH
+  // DIRECTIONS, AND THE TWO SCREENS THAT HAD NO EXIT NOW HAVE ONE.
+  //
+  // These land in a column the first eleven do not: BLOCKED FROM FINISHING
+  // (:5807's second half). D12/D14/D16's real cost is not a wrong screen, it is
+  // a person with no way out of the one they are on — and the console had NO
+  // sign-out at all before this card, so removing its old cross-link without
+  // adding one would have locked an owner in.
+  //
+  // D12 and D14 are the same guarantee on two surfaces ON PURPOSE. CSS shows the
+  // rail on a desktop and the bar on a phone, so an edit that fixes one and not
+  // the other is invisible to whichever one the author was looking at — and the
+  // phone is the surface Kd asked the console to work from (:9604 §4).
+  {
+    id: 'D12',
+    target: 'consoleShell',
+    suite: CROSSING_SUITE,
+    why: "THE CROSSING RE-OPENS, one direction only: the desktop rail's exit goes back to being a link into the member app, so the doors stop being the only way across and the console loses its only sign-out",
+    expect: 'offers NO way into the member app',
+    from: '        <button type="button" onClick={handleSignOut} className={`${railBase} w-full text-left`} style={navStyle(false)}>\n          <LogOut className="w-4 h-4 flex-shrink-0" />\n          <span>Sign out</span>\n        </button>',
+    to: '        <Link to="/dashboard" className={railBase} style={navStyle(false)}>\n          <ChevronLeft className="w-4 h-4 flex-shrink-0" />\n          <span>Back to the app</span>\n        </Link>',
+  },
+  {
+    id: 'D13',
+    target: 'consoleShell',
+    suite: CROSSING_SUITE,
+    why: 'SIGNED OUT IN NAME ONLY: the console returns to the login page WITHOUT ending the session, so a gym\'s shared front-desk browser hands the next person the last one\'s account — and the door choice is never cleared either, since logout() is what clears it',
+    expect: 'from the desktop rail',
+    from: '  const handleSignOut = async () => {\n    await logout();\n    navigate(\'/login\');\n  };',
+    to: '  const handleSignOut = async () => {\n    navigate(\'/login\');\n  };',
+  },
+  {
+    id: 'D14',
+    target: 'consoleShell',
+    suite: CROSSING_SUITE,
+    why: 'THE PHONE LOSES THE HALF THE DESKTOP KEEPS: the phone top bar reverts to the cross-link, which on a phone is the ONLY control there is — so the ruling holds on a laptop and is undone on the surface the console exists for',
+    expect: 'offers Sign out on BOTH',
+    from: '          <button type="button" onClick={handleSignOut} className="text-sm" style={{ color: \'rgba(255,255,255,0.55)\' }}>\n            Sign out\n          </button>',
+    to: '          <Link to="/dashboard" className="text-sm" style={{ color: \'rgba(255,255,255,0.55)\' }}>\n            Back to the app\n          </Link>',
+  },
+  {
+    id: 'D15',
+    target: 'sidebar',
+    suite: CROSSING_SUITE,
+    why: "THE OTHER HALF OF THE RULING, RESTORED: `My Gym` comes back to the member sidebar — the shortcut Kd removed by name, and the one :10824 had already called a temporary door that shipped without being labelled temporary",
+    expect: 'offers NO way into the gym console',
+    from: "  { to: '/settings',        icon: Settings,        label: 'Settings'   },",
+    // Deliberately re-uses an icon that is STILL imported. Naming the removed
+    // `Building2` would blow the module up on evaluation, and the suite would go
+    // RED on a ReferenceError rather than on the guarantee — a mutant red for
+    // the wrong reason certifies the wrong assertion (:4718 F2).
+    to: "  { to: '/console',         icon: Settings,        label: 'My Gym'     },\n  { to: '/settings',        icon: Settings,        label: 'Settings'   },",
+  },
+  {
+    id: 'D16',
+    target: 'wizard',
+    suite: CROSSING_SUITE,
+    why: 'THE DEAD END COMES BACK, quietly: the questionnaire returns to the login page without ending the session, so ProtectedRoute sends the person straight back into the questionnaire — which is exactly how Kd found this screen, stuck on it with no way out on his first smoke step',
+    expect: 'when Sign out is pressed',
+    from: '  const handleSignOut = async () => {\n    await logout();\n    navigate(\'/login\');\n  };',
+    to: '  const handleSignOut = async () => {\n    navigate(\'/login\');\n  };',
   },
 ];
 

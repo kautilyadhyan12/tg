@@ -4442,11 +4442,31 @@ file and is stated so nobody reads these as lower priority than they are.
       lands, the choice remembered for the tab and cleared on sign-out, console
       routes opted out of the onboarding requirement, and
       `RUNBOOK/smoke-login-door.md` (rewritten for the amendment).
-      **THE `My Gym` SIDEBAR ENTRY STAYS — the open question above is CLOSED and
+      ~~**THE `My Gym` SIDEBAR ENTRY STAYS — the open question above is CLOSED and
       the answer is "it survives"**: an owner already inside the app still needs
       a way across without signing out, and the no-removal rule keeps it absent a
       ruling to drop it. It is no longer a temporary door; the door it stood in
-      for now exists.
+      for now exists.~~
+      **STRUCK 2026-08-19 THE SAME DAY — KD RULED THE OPPOSITE (DECISIONS
+      :11616): `My Gym` is REMOVED, and the console's "Back to the app" with it.
+      The two doors are the ONLY way across, in both directions.** His words:
+      *"no back to the app in gym dashboard sign out instead"* and *"why my gym
+      in the user side profile if they want to create gym they will sing in as
+      gym"*. The no-removal rule's AUTHORISED path — an explicit ruling against a
+      cited cost; the recommendation put to him was the OPPOSITE (keep the
+      cross-link, add a sign-out) and he reaffirmed. **The cost he was given
+      first, and it changed the fix: `ConsoleLayout` had NO sign-out at all, so
+      removing the cross-link alone would have locked an owner inside the
+      console.** **Sign out** now replaces it on BOTH the desktop rail and the
+      phone bar.
+      **AND THE SCREEN NOBODY WAS LOOKING FOR: the onboarding questionnaire had
+      no sign-out either** — no sidebar, no skip (removed at Card 6), so anyone
+      who signed up or picked the wrong door was stuck on a five-step form with
+      no exit but finishing it. **Kd hit it on his FIRST step of this very
+      smoke**, which is how it was found at all. Fixed in the same packet; it is
+      NOT a skip (the onboarding gate is untouched, pinned by a test).
+      **THIS LINE STILL DOES NOT TICK: the rewritten smoke is UNRUN on these
+      bytes and the T3 is UNRUN.**
       **THE FOURTH LANDING SITE IS WHAT THIS CARD ALMOST MISSED, and it is worth
       carrying:** `Onboarding.jsx` ended `navigate('/dashboard')`, hard-coded,
       and every brand-new account is sent through that wizard — so a NEW gym

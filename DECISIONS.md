@@ -11612,3 +11612,93 @@ whether any pack covers these 58** — not checked).
 **NOTHING IS RULED AND NOTHING IS BUILT. :9452's rule stands untouched — the
 artwork is its own track and MUST NOT block the follow-along card: one
 placeholder proves the mode, and 112 GIFs ship today.**
+
+## 2026-08-19 — KD RULES THE CROSSING SHUT IN BOTH DIRECTIONS: the two doors are the ONLY way between the member app and the gym console — and the ruling exposed TWO screens with no way out at all
+
+**Read before adding ANY link between the member app and the console, before
+touching `ConsoleLayout`, the member `Sidebar`'s nav list, or the onboarding
+wizard's header — and before "helpfully" restoring a shortcut a later chat finds
+missing.** Ruled by Kd mid-smoke on the login door, in the same sitting that
+produced :10959.
+
+**THE RULING, in his words:** *"no back to the app in gym dashboard sign out
+instead"* and *"why my gym in the user side profile if they want to create gym
+they will sing in as gym"*. So:
+
+- the gym console's **"Back to the app"** is REMOVED and replaced by **Sign out**
+- the member sidebar's **`My Gym`** is REMOVED
+- the login page's two doors (:10824) are now the ONLY way across, both ways
+
+**THIS SUPERSEDES :10866's "THE `My Gym` SIDEBAR ENTRY STAYS AND THIS IS THE
+CITATION".** Everything else in :10866 and :10959 stands. It is the no-removal
+rule's AUTHORISED path — an explicit Kd ruling made against a cited cost
+(:10182's clinics precedent, second use).
+
+**HE IS RIGHT AND THE RECORD ALREADY SAID SO.** :10824 called the sidebar item
+*"a TEMPORARY door"* and recorded that *"the defect is that it shipped without
+being labelled temporary"*, leaving its survival open. :10866 then answered
+"it survives" and declared it no longer temporary — on the reasoning that an
+owner inside the app needs a way across without signing out. **Kd has now
+overruled that reasoning directly**: signing out and using the other door IS the
+way across, and he would rather have one way in than two.
+
+**THE COST HE WAS GIVEN BEFORE RULING, and it changed the shape of the fix:**
+`ConsoleLayout` had **NO sign-out of its own** — "Back to the app" was the
+console's ONLY exit, and its own comment said so ("the rail is hidden here, so
+this is the only way back out of the console on a phone"). Removing it as asked,
+and nothing else, would have LOCKED an owner inside the console. He was told
+this, and the recommendation put to him was the opposite of his ruling (keep the
+cross-link, add sign-out). **He reaffirmed. Ruling implemented as given, with the
+sign-out added so the removal does not strand anyone.**
+
+**THE THIRD SCREEN IS THE ONE NOBODY WAS LOOKING FOR, and Kd found it by using
+the product on his FIRST smoke step.** He could not reach the login page at all:
+he was signed in on an account that had never finished the questionnaire, so
+`ProtectedRoute` sent him to `/onboarding` — **which has no sidebar, no skip
+(removed at Card 6 for good reason) and no sign-out.** A person who signs up and
+wants to stop, or who picks the wrong door, was stuck on a five-step form with no
+exit but finishing it. **Untracked and unnoticed until a beginner ran into it in
+a browser** — the same shape as :5543 and :6062, and this project's most
+reliable finding mechanism. A **Sign out** was added there in the same packet;
+it matters MORE now, because with `My Gym` gone, picking the member door by
+mistake used to be recoverable from inside the app and no longer is.
+**It is NOT a skip:** it ends the session and returns to `/login`, so the
+onboarding gate is untouched and an un-onboarded account still cannot reach the
+member app (pinned by a test).
+
+**DECISIONS NOT TO RE-DERIVE**
+- **Restoring EITHER shortcut alone is worse than restoring neither** — it makes
+  the crossing work in one direction only, which is precisely the "works
+  sometimes" door `landingRoute` exists to prevent. Both halves are asserted in
+  ONE test file for that reason.
+- **The console draws TWO exits, and the COUNT is the assertion** — a desktop
+  rail and a phone top bar, one hidden by CSS at any given width. An edit fixing
+  one and not the other is invisible to whichever the author was looking at, and
+  the phone is the surface Kd asked the console to work from (:9604 §4).
+- **`logout()` already clears the door choice** (:10866, beside
+  `resetTimezoneSync()`), so the console's Sign out inherits the shared
+  front-desk-browser guarantee rather than re-implementing it. A sign-out that
+  only navigates is D13's mutant, not a simplification.
+- **D15 restores `My Gym` with an icon that is still imported.** Naming the
+  removed `Building2` would blow the module up on evaluation and turn the mutant
+  RED on a `ReferenceError` rather than on the guarantee — :4718 F2's "red for
+  the wrong reason certifies the wrong assertion", designed around rather than
+  incurred.
+
+**PROVE** — web **806/806** (+9, `src/pages/loginDoorCrossing.render.test.jsx`)
+· `vite build` ✓ · **lint = HEAD baseline, MEASURED not reasoned**: the only two
+errors on the touched files are `Zap` (Sidebar) and `Ruler` (Onboarding), and
+`git show HEAD:` proves both were already unused before this change; the
+now-unused `Building2` import was removed rather than left to become a new one.
+**16 mutants · 16 RED · 0 ALIVE · 0 never ran** (D12–D16 added to
+`apps/web/tools/mutate-login-door.mjs`, three new targets), control GREEN on all
+sixteen filters first, restores sha256-verified, exit code read directly (:9509),
+`git status` clean after the sweep.
+
+**NOTHING TICKS.** `RUNBOOK/smoke-login-door.md` is REWRITTEN a second time —
+old steps 5 and 9 tested the two removed links and are replaced by new steps 5–8
+asserting their ABSENCE, plus the two new Sign outs and a browser-BACK check that
+the session really ended. **Steps 1–4 passed on `174fd71` and are re-run rather
+than carried**, because the screens they LAND on (the Dashboard's sidebar, the
+console's shell) are exactly what changed even though the judgement they make did
+not. Smoke unrun on these bytes; T3 unrun.

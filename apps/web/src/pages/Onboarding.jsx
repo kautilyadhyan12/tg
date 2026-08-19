@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import {
   User, Ruler, Target, Dumbbell,
   Clock, ChevronRight, ChevronLeft,
-  Check, Zap,
+  Check, Zap, LogOut,
 } from 'lucide-react';
 
 const STEPS = [
@@ -141,8 +141,25 @@ function NumberInput({ label, value, onChange, min, max, unit, placeholder }) {
 }
 
 export default function Onboarding() {
-  const navigate       = useNavigate();
-  const { updateUser } = useAuth();
+  const navigate               = useNavigate();
+  const { updateUser, logout } = useAuth();
+
+  // THE ONLY WAY OUT OF THIS SCREEN WITHOUT FINISHING IT (added 2026-08-19).
+  // `ProtectedRoute` sends every un-onboarded account here and this wizard has
+  // no other exit — no sidebar, and "Skip for now" was deliberately removed
+  // below because it just bounced off the gate. So a person who signed up and
+  // wants to stop, or who picked the wrong door and wants the other one, was
+  // stuck with no way even to sign out; found by Kd in his own browser on the
+  // login-door smoke, on his very first step.
+  //
+  // It is NOT a skip: it ends the session and returns to the login page, so the
+  // gate is untouched and an un-onboarded member still cannot reach the member
+  // app. It matters more now that `My Gym` is gone from the sidebar — picking
+  // the member door by mistake used to be recoverable from inside the app.
+  const handleSignOut = async () => {
+    await logout();
+    navigate('/login');
+  };
 
   const [step,    setStep]    = useState(1);
   const [loading, setLoading] = useState(false);
@@ -615,6 +632,16 @@ export default function Onboarding() {
           }}
         >
           <div className="max-w-lg mx-auto">
+            <div className="flex justify-end mb-2">
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                Sign out
+              </button>
+            </div>
             <div className="flex items-center gap-3 mb-3">
               <span className="text-gray-500 text-xs whitespace-nowrap">
                 Step {step} of {STEPS.length}

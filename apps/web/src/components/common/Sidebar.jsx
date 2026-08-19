@@ -6,7 +6,7 @@ import { formatLevel } from '../../api/gamificationApi';
 import {
   LayoutDashboard, Dumbbell, Activity, Brain,
   Apple, Trophy, Settings, LogOut, Zap, Play,
-  ChevronLeft, ChevronRight, Flame, Footprints, Building2,
+  ChevronLeft, ChevronRight, Flame, Footprints,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -19,11 +19,20 @@ const navItems = [
   { to: '/coach',           icon: Brain,           label: 'AI Coach'   },
   { to: '/nutrition',       icon: Apple,           label: 'Nutrition'  },
   { to: '/achievements',    icon: Trophy,          label: 'Achievements' },
-  // The console's entry point. Kd ruled the console is reached from inside the
-  // app rather than being a separate product (:9604 §4), so it lives here, for
-  // every account — a gym owner is an ordinary user until they create a gym,
-  // and there is no other way to find the screen that lets them.
-  { to: '/console',         icon: Building2,       label: 'My Gym'     },
+  // `My Gym` USED TO LIVE HERE and was REMOVED by Kd's ruling of 2026-08-19,
+  // mid-smoke on the login door. Do not put it back.
+  //
+  // It predates the two doors: when the console had no other entrance, a
+  // sidebar link was the only way to find it. The login page now asks "I'm a
+  // member" or "I run a gym", so the door IS the entrance — and :10824 had
+  // already called this item a temporary door that shipped without being
+  // labelled temporary. Kd's words: "why my gym in the user side profile, if
+  // they want to create gym they will sign in as gym".
+  //
+  // The console's own "Back to the app" went in the same ruling, so the
+  // crossing is closed in BOTH directions and the doors are the only way
+  // between the member app and the console. Restoring either half alone is
+  // worse than restoring neither: it makes the crossing work one way only.
   { to: '/settings',        icon: Settings,        label: 'Settings'   },
 ];
 
