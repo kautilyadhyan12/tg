@@ -335,6 +335,45 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   so two `app.inject` calls are serialised by the CLIENT and would pass with the
   lock deleted** — a test that cannot fail. Seven `OWED.md` lines added; the
   console line is UPDATED, not ticked.
+- **:12227** — 2026-08-19 — **THE JOIN DOOR STEP 1, T3 ROUND 1: ZERO
+  Critical/High — THE PACKET SHIPS, and the finding with the longest reach is a
+  guard that was testing a COPY of the thing it guards.** **Read before adding a
+  route to the orgs module, before writing a cursor that compares against a
+  subquery, before assuming a "requires authentication" test covers routes added
+  after it, and before putting an explanation inside a `sql` template literal.**
+  Reviews :11846. **Escape hatch NOT armed** (:10329 also found zero, so no
+  two-round streak). Four Low, **ALL FIXED this round** (:5348 rule 1), plus one
+  unnumbered security-pass item fixed with them; **rule 3 owes nothing — no
+  Critical/High, so no fix owes a failing-first test.** **L-1: "every route
+  requires authentication" named FIVE of NINE routes and none of the four this
+  card added** — proven by deleting `app.authenticate` from confirm and watching
+  it stay GREEN; **Low only because every handler calls `requireUserId`, so a
+  missing guard is a 500 and not an open door.** **L-2: a well-formed cursor
+  naming an unknown row BLANKED the queue while `pendingCount` reported the true
+  total** — the scalar subquery yields no row, so the comparison is NULL not
+  false; fixed with `NOT EXISTS`, semantics verified against the live database by
+  both parties. **L-3: reject was not idempotent while confirm was** — TRUE
+  message so not :5807's class, but an asymmetry nobody designed; fixed, and
+  **every other terminal state keeps its 409** (`confirmed` must not be silently
+  reversible). **L-4: the DPDP cascade is a THIRD writer and took the locks
+  BACKWARDS** — `softDeleteUser` closed `gym_members` before cancelling
+  applications while confirm goes application→gym, so the two could cycle into a
+  40P01; **the cycle stays UNREPRODUCED and the PREMISE is what was verified**,
+  fixed by swapping two statements. **THE UNNUMBERED ONE WITH THE LONGEST REACH:
+  the permanent guard's check 5 asserted a HAND-WRITTEN COPY of the
+  spend-attribution query instead of the real `getLiveGymId` in
+  coach/geo/nutrition** — a guard that cannot see what it guards, **third
+  occurrence of that class in two cards** (O14, :5104 F5); now calls all three
+  REAL functions, **named individually** because R7.1 keeps them module-local,
+  **with a positive control** so three null-returning functions cannot satisfy
+  it. **THE REVIEWER WROTE THREE MUTANTS OF HIS OWN** rather than only re-running
+  mine, which is what surfaced L-1 — **a reviewer who only re-runs the author's
+  harness inherits the author's blind spots.** My own slip: a backtick inside a
+  `sql` template literal ENDS it, turning a documented query into six parse
+  errors. PROVE: orgs **59/59** · tsc + eslint clean · **O39/O40/O41 added to pin
+  each fix, 8 mutants 8 RED** (subset, and the harness prints that it is one; the
+  last COMPLETE run stands at :11846). **NOTHING TICKS — the owed line names a
+  SCREEN; step 2 carries it with its smoke.**
 - **:12111** — 2026-08-19 — **KD'S REVISED US TIERS RE-MEASURED: the money is
   comfortable and the ROUTING ALLOWANCE is the real ceiling.** **Read before
   ratifying any price, before quoting an API cost, before raising the route-plan

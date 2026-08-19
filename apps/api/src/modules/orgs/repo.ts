@@ -760,6 +760,21 @@ export async function listApplications(
   input: { gymId: string; limit: number; cursor: string | null },
 ): Promise<{ items: ApplicantRow[]; nextCursor: string | null; pendingCount: number }> {
   const cursorId = input.cursor;
+  // T3 L-2 — WHY THE `NOT EXISTS` ARM BELOW EXISTS. A well-formed cursor
+  // naming a row this gym does not have must fall back to the FIRST page, not
+  // blank the queue. The scalar subquery yields no row, so
+  // `(a.applied_at, a.id) > NULL` evaluates to NULL rather than false, and NULL
+  // filters every row out: the page came back empty while `pendingCount` still
+  // reported the true total — a console showing "3 people waiting" over an
+  // empty list. Verified against the live database rather than reasoned:
+  // `((now(), gen_random_uuid()) > (SELECT ... WHERE false)) IS NULL` → true.
+  // It also restores the convention the service states out loud, since a
+  // MALFORMED cursor already restarted and a stale one must behave the same.
+  //
+  // (Written here and not as a SQL comment inside the query on purpose: this
+  // paragraph names identifiers in backticks, and a backtick inside the
+  // template literal ENDS it — which is exactly how the first attempt turned
+  // into six parse errors.)
   const rows = await sql<
     {
       id: string;
@@ -779,6 +794,11 @@ export async function listApplications(
       AND a.status = 'pending'
       AND (
         ${cursorId}::uuid IS NULL
+        -- T3 L-2, explained above this query: an unknown cursor restarts.
+        OR NOT EXISTS (
+          SELECT 1 FROM gym_join_applications c
+          WHERE c.id = ${cursorId}::uuid AND c.gym_id = ${input.gymId}
+        )
         OR (a.applied_at, a.id) > (
           SELECT c.applied_at, c.id FROM gym_join_applications c
           WHERE c.id = ${cursorId}::uuid AND c.gym_id = ${input.gymId}

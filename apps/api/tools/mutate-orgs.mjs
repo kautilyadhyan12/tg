@@ -434,6 +434,34 @@ const MUTANTS = [
     from: '    pendingCount: countRows[0]?.n ?? 0,',
     to: '    pendingCount: page.length,',
   },
+
+  // ── T3 ROUND 1's Low fixes, each pinned (rule 3's discipline applied to
+  // Lows: no Critical/High was found, so nothing OWED a failing-first test —
+  // these exist so the fixes cannot be undone silently) ───────────────────
+  {
+    id: 'O39',
+    target: 'repo',
+    why: 'T3 L-2 RESTORED: a stale cursor blanks the confirm queue while the count still reports the true total — a console showing "3 people waiting" over an empty list',
+    expect: 'walks the confirm queue by cursor',
+    from: '        OR NOT EXISTS (\n          SELECT 1 FROM gym_join_applications c\n          WHERE c.id = ${cursorId}::uuid AND c.gym_id = ${input.gymId}\n        )\n',
+    to: '',
+  },
+  {
+    id: 'O40',
+    target: 'service',
+    why: 'T3 L-3 RESTORED: a second tap on "not this person" 409s where the first succeeded, while confirm stays idempotent — the asymmetry nobody designed',
+    expect: 'not this person',
+    from: '      if (outcome.status === "rejected") {\n        return rejectApplicationResponseSchema.parse({ status: "rejected" });\n      }\n',
+    to: '',
+  },
+  {
+    id: 'O41',
+    target: 'users',
+    why: 'T3 L-4 RESTORED: the DPDP cascade goes back to taking gym_members before the applications, putting a third writer on the opposite lock order to confirm',
+    expect: 'deleted account',
+    from: "    await tx`\n      UPDATE gym_join_applications\n      SET status = 'cancelled', decided_at = now()\n      WHERE user_id = ${userId} AND status = 'pending'`;",
+    to: "    await tx`SELECT 1`;",
+  },
 ];
 
 /** ANCHORS ARE CONVERTED TO THE FILE'S OWN LINE ENDINGS, and the file is never

@@ -97,6 +97,29 @@ THE INSTRUMENT FINDINGS, THREE OF FOUR MINE
   · **I masked the harness exit code with a `| tail` pipe** — :5906's recorded
     shape, in the session that cites it. Re-run writing the code to the log.
 
+T3 ROUND 1 (:12227) — **ZERO Critical/High. THE PACKET SHIPS.** Escape hatch NOT
+armed. Four Low, **ALL FIXED**, logged in `BACKLOG.md`, each pinned by a new
+mutant (O39/O40/O41).
+  · **L-1: "every route requires authentication" named FIVE of NINE routes** and
+    none of the four this card added — proven by deleting `app.authenticate`
+    from confirm and watching it stay GREEN. Low only because every handler
+    calls `requireUserId`, so a missing guard is a 500, not an open door.
+  · **L-2: an unknown-but-well-formed cursor BLANKED the queue** while
+    `pendingCount` still reported the true total (a comparison against an empty
+    scalar subquery is NULL, not false). Fixed with `NOT EXISTS`.
+  · **L-3: reject was not idempotent while confirm was.** Fixed; every OTHER
+    terminal state keeps its 409 — `confirmed` must not be silently reversible.
+  · **L-4: the DPDP cascade is a THIRD writer and took the locks BACKWARDS.**
+    Cycle UNREPRODUCED; the PREMISE was verified and two statements swapped.
+  · **UNNUMBERED, LONGEST REACH: the permanent guard tested a hand-written COPY
+    of the spend-attribution query**, not the real `getLiveGymId` — third
+    occurrence of that class in two cards. Now calls all three REAL functions,
+    named individually, with a positive control.
+  · **The reviewer wrote three mutants of his OWN** rather than only re-running
+    mine, which is what surfaced L-1.
+  · PROVE after fixes: orgs **59/59** · tsc + eslint clean · **8 mutants 8 RED**
+    (subset; the last COMPLETE run, 38/38, stands at :11846).
+
 NEXT: STEP 2 — the two screens, and it carries the SMOKE.
   · Member: Settings gains a **My gym** tab (v1 §8's "at registration or in
     Settings", verbatim) + a `/join?code=` route so the poster/QR and Part 6's

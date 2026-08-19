@@ -1017,3 +1017,65 @@ correctly under his mutation.
 **Instrument note, not scored:** the reviewer independently re-derived the
 `ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL` flake already recorded on the previous
 round — it recurred in this chat's runs too, and remains fail-safe.
+
+## 2026-08-19 — the join door, step 1 (server half), T3 round 1 (DECISIONS :11846)
+
+**ZERO Critical/High — the packet SHIPS** (Part I §2.5 rule 1). Four Low, **all
+FIXED in this round**, plus one item the reviewer raised inside his security
+pass rather than as a numbered finding and which is fixed with them. A Low buys
+no further round; it does not buy a pass either.
+
+**L-1 · a test that stays green (rule 4) · `orgs.routes.test.ts`.** "every route
+requires authentication" named FIVE of the module's NINE routes and **none of
+the four this card added** — measured, not argued: the reviewer deleted
+`app.authenticate` from the confirm route and the test stayed GREEN. Low rather
+than Critical because every handler calls `requireUserId`, which throws when the
+preHandler did not run, so a missing guard is a 500 and not an open door.
+**Fixed:** four 401 assertions added, plus the trainer-403 case on REJECT, which
+runs through the same `requirePrivilege` call as confirm and had none.
+
+**L-2 · R7.3 · `orgs/repo.ts`, the confirm queue's cursor.** A well-formed
+cursor naming a row the gym does not have returned an **empty page while
+`pendingCount` still reported the true total** — a console showing "3 people
+waiting" over an empty list. Cause: the scalar subquery yields no row, so the
+row comparison is NULL rather than false and NULL filters everything out.
+Reachable today only by a gym's own staff hand-editing a cursor (nothing
+hard-deletes applications — `grep 'DELETE FROM gym'` returns no hits), hence
+Low. **Fixed** with a `NOT EXISTS` arm so an unknown cursor restarts at page
+one, matching the convention the service already states out loud for a
+MALFORMED cursor. Semantics verified against the live database, not reasoned.
+
+**L-3 · R3.5 · `orgs/service.ts`, reject.** Confirm was idempotent by design
+("a person pressing a button twice") and reject was not — a second tap 409'd.
+The message was TRUE, so not :5807's class, but the asymmetry was never
+designed and two front-desk staff working one queue is the case this card cites
+everywhere else. **Fixed:** a second reject returns the same `{status:
+"rejected"}`. Every other terminal state keeps its 409 — `confirmed` must not be
+silently reversible, and `cancelled`/`expired` are facts the front desk should
+be told rather than shown a success for something they did not do.
+
+**L-4 · lock order · `users/repo.ts` vs `orgs/repo.ts`.** The card decides lock
+order once — application, then gym — but the DPDP Day-0 cascade is a **third
+writer of the same two rows and took them the other way**, so for a person
+holding both a live membership and a pending application the two transactions
+could form a cycle and Postgres would abort one with 40P01 (a 500 for the
+loser; no data loss, both are all-or-nothing). **The reviewer marked the cycle
+UNREPRODUCED and it stays unreproduced** — reproducing it needs two
+transactions interleaved at one statement. What IS verified is the premise: the
+two orders differed. **Fixed** by swapping the two statements so every writer
+takes them in one order. The comment that described the moved statement moved
+with it, rather than being left to describe its new neighbour.
+
+**Security-pass note, not numbered, fixed here.** The permanent guard's check 5
+asserted a **hand-written copy** of the spend-attribution query instead of the
+real `getLiveGymId` in coach/geo/nutrition — a guard that cannot see the thing
+it guards, so drift in any of those three would not have tripped it. Now calls
+all three REAL functions (named individually, because R7.1 keeps them
+module-local and "they are the same query" is the assumption that would hide
+the drift), **with a positive control**: a CONFIRMED member must resolve to the
+gym, or three null-returning functions would satisfy the whole check.
+
+**Instrument note, not scored:** writing an explanation as a SQL comment INSIDE
+the query turned six lines into parse errors — a backtick inside a JS template
+literal ends the literal. The paragraph now lives above the query, which is
+where it should have been.

@@ -526,6 +526,18 @@ export async function rejectOrgApplication(
     case "not_found":
       throw new OrgsError(404, "application_not_found", "That request is no longer waiting.");
     case "not_pending":
+      // T3 L-3: a SECOND tap on "not this person" now answers the same as the
+      // first, because confirm's own justification applies word for word — it
+      // is a person pressing a button twice, and two front-desk staff working
+      // one queue is the case this card cites everywhere else. The asymmetry
+      // was not designed; confirm got `already_confirmed` and reject was left
+      // to 409. Every OTHER terminal state keeps the 409: `confirmed` must not
+      // be silently reversible, and `cancelled`/`expired` are facts about the
+      // applicant that the front desk should be told rather than shown a
+      // success for something they did not do.
+      if (outcome.status === "rejected") {
+        return rejectApplicationResponseSchema.parse({ status: "rejected" });
+      }
       throw new OrgsError(
         409,
         `application_${outcome.status}`,

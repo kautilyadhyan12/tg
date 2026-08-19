@@ -29,6 +29,12 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { JOIN_CODE_ALPHABET } from "@app/shared";
 import * as orgRepo from "../src/modules/orgs/repo.js";
+// The REAL spend-attribution readers, called by the permanent guard rather
+// than re-typed into it (T3 security-pass note). Three imports because R7.1
+// keeps them module-local — that duplication is the reason to name all three.
+import * as coachRepo from "../src/modules/coach/repo.js";
+import * as geoRepo from "../src/modules/geo/repo.js";
+import * as nutritionRepo from "../src/modules/nutrition/repo.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -230,6 +236,23 @@ d("orgs routes (real Postgres)", () => {
     ).toBe(401);
     expect(
       (await get("/v1/orgs/11111111-1111-1111-1111-111111111111/codes")).statusCode,
+    ).toBe(401);
+    // T3 L-1: this test named FIVE of the module's NINE routes and none of the
+    // four the waiting-room card added — proven by deleting `app.authenticate`
+    // from the confirm route and watching it stay GREEN. It was Low rather than
+    // Critical only because every handler calls `requireUserId`, which throws
+    // when the preHandler did not run, so a missing guard is a 500 and not an
+    // open door. A guard whose absence nothing notices is still a guard nobody
+    // is checking.
+    const someGym = "11111111-1111-1111-1111-111111111111";
+    const someApplication = "22222222-2222-2222-2222-222222222222";
+    expect((await get("/v1/orgs/applications/mine")).statusCode).toBe(401);
+    expect((await get(`/v1/orgs/${someGym}/applications`)).statusCode).toBe(401);
+    expect(
+      (await post(`/v1/orgs/${someGym}/applications/${someApplication}/confirm`, {})).statusCode,
+    ).toBe(401);
+    expect(
+      (await post(`/v1/orgs/${someGym}/applications/${someApplication}/reject`, {})).statusCode,
     ).toBe(401);
   });
 
@@ -493,6 +516,20 @@ d("orgs routes (real Postgres)", () => {
     expect(late.statusCode).toBe(409);
     expect((JSON.parse(late.body) as { error: string }).error).toBe("application_rejected");
 
+    // T3 L-3: a SECOND tap on "not this person" answers the same as the first.
+    // Confirm has been idempotent since it was written ("a person pressing a
+    // button twice"); reject 409'd, and the asymmetry was not designed. Two
+    // front-desk staff working one queue is the case this card cites
+    // everywhere else. Asserted BEFORE the re-apply below, because that one
+    // opens a new pending row and would make this unreachable.
+    const rejectedTwice = await post(
+      `/v1/orgs/${org.org.id}/applications/${applicationId}/reject`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(rejectedTwice.statusCode).toBe(200);
+    expect((JSON.parse(rejectedTwice.body) as { status: string }).status).toBe("rejected");
+
     // :11385 — re-applying is FREE. A real member mis-tapped as a stranger is
     // not locked out; the per-route rate limit is what bounds a stranger's
     // retries, never a permanent block.
@@ -694,6 +731,20 @@ d("orgs routes (real Postgres)", () => {
       SELECT count(*)::int AS n FROM gym_members
       WHERE gym_id = ${org.org.id} AND user_id = ${applicant.userId} AND removed_at IS NULL`;
     expect(live[0]?.n).toBe(0);
+
+    // T3 L-1, second half: REJECT runs through the same `requirePrivilege`
+    // call and had no case of its own. Asserted before the confirm below,
+    // because once the application is confirmed this is unreachable.
+    const rejectRefused = await post(
+      `/v1/orgs/${org.org.id}/applications/${applicationId}/reject`,
+      {},
+      { cookies: trainer.cookies },
+    );
+    expect(rejectRefused.statusCode).toBe(403);
+    expect((JSON.parse(rejectRefused.body) as { error: string }).error).toBe("forbidden");
+    const stillPending = await sql<{ status: string }[]>`
+      SELECT status FROM gym_join_applications WHERE id = ${applicationId}`;
+    expect(stillPending[0]?.status).toBe("pending");
 
     // A manager may — Kd's "only owner and manager", 2026-08-19.
     const allowed = await post(
@@ -960,18 +1011,29 @@ d("orgs routes (real Postgres)", () => {
       WHERE gym_id = ${org.org.id} AND removed_at IS NULL AND complimentary = false`;
     expect(seats[0]?.n).toBe(0);
 
-    // 5. The three per-module spend-attribution lookups (coach / geo /
-    //    nutrition `getLiveGymId`). They are the same query three times, so
-    //    the query itself is asserted here rather than reaching for three
-    //    modules' internals — a pending applicant must not cause a gym to be
-    //    BILLED for their API calls.
-    const spendGym = await sql<{ gym_id: string }[]>`
-      SELECT m.gym_id FROM gym_members m
-      JOIN subscriptions s ON s.owner_type = 'gym' AND s.owner_id = m.gym_id
-                           AND s.status IN ('trialing','active','past_due')
-      WHERE m.user_id = ${waiting.userId} AND m.removed_at IS NULL
-      LIMIT 1`;
-    expect(spendGym).toHaveLength(0);
+    // 5. The three per-module spend-attribution lookups — a pending applicant
+    //    must not cause a gym to be BILLED for their API calls.
+    //
+    //    T3 SECURITY-PASS NOTE, fixed here: this check used to assert a
+    //    HAND-WRITTEN COPY of the query, which is a guard that cannot see the
+    //    thing it guards — if any of the three modules changed, the copy would
+    //    keep passing while the real reader drifted. The REAL functions are
+    //    called instead. They are three separate implementations by R7.1
+    //    (module-local), so all three are named individually rather than
+    //    trusting that "they are the same query": the day one of them changes
+    //    is exactly the day this check has to notice.
+    expect(await coachRepo.getLiveGymId(sql, waiting.userId)).toBeNull();
+    expect(await geoRepo.getLiveGymId(sql, waiting.userId)).toBeNull();
+    expect(await nutritionRepo.getLiveGymId(sql, waiting.userId)).toBeNull();
+
+    // Positive control: the same three must find the gym for a CONFIRMED
+    // member, or all three assertions above are satisfied by a function that
+    // returns null for everybody.
+    const confirmed = await makeUser("guard-confirmed");
+    await joinAsMember(confirmed.cookies, org, owner.cookies);
+    expect(await coachRepo.getLiveGymId(sql, confirmed.userId)).toBe(org.org.id);
+    expect(await geoRepo.getLiveGymId(sql, confirmed.userId)).toBe(org.org.id);
+    expect(await nutritionRepo.getLiveGymId(sql, confirmed.userId)).toBe(org.org.id);
   });
 
   it("confirms somebody who ALREADY holds a seat without charging a seat or a code use", { timeout: 90_000 }, async () => {
@@ -1061,6 +1123,26 @@ d("orgs routes (real Postgres)", () => {
     }
     // Oldest first, all three, each exactly once.
     expect(seen).toEqual(applied);
+
+    // T3 L-2: a well-formed cursor naming a row THIS GYM does not have falls
+    // back to the first page instead of blanking the queue. The scalar
+    // subquery returns nothing, `(applied_at, id) > NULL` is NULL rather than
+    // false, and NULL filters every row out — so the console showed an empty
+    // list under a count still reporting three people waiting. A malformed
+    // cursor already restarted; a stale one must too.
+    const stale = await get(
+      `/v1/orgs/${org.org.id}/applications?limit=2&cursor=33333333-3333-3333-3333-333333333333`,
+      { cookies: owner.cookies },
+    );
+    expect(stale.statusCode).toBe(200);
+    const stalePage = JSON.parse(stale.body) as {
+      items: { id: string }[];
+      pendingCount: number;
+    };
+    expect(stalePage.pendingCount).toBe(3);
+    // The page and the count agree — which is the whole defect, stated as an
+    // assertion rather than as "not empty".
+    expect(stalePage.items.map((i) => i.id)).toEqual(applied.slice(0, 2));
   });
 
   it("busts a stale cache when an existing member re-types the code", { timeout: 90_000 }, async () => {

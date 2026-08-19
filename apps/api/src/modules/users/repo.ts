@@ -277,28 +277,39 @@ export async function softDeleteUser(sql: Sql, userId: string): Promise<DeletedU
       RETURNING email, display_name`;
     const row = rows[0];
     if (row === undefined) return null;
-    await tx`
-      UPDATE gym_members SET removed_at = now()
-      WHERE user_id = ${userId} AND removed_at IS NULL`;
-    // The sibling of the statement above (Kd ruling :11072 added the waiting
-    // room). Without it a deleted person's NAME sits in a gym's confirm queue
-    // for two weeks, and a front-desk tap could make them a member of a gym
-    // they left the product to get away from. Same transaction, same Part 4
-    // §5.2 Day-0 sentence — not a widening of the delete list, but the
-    // membership close §5.2 already mandates, applied to the row that stands
-    // in for a membership.
+    // T3 L-4 — THE ORDER OF THESE TWO STATEMENTS IS LOAD-BEARING AND WAS
+    // BACKWARDS. The join card decides lock order ONCE — application, then
+    // gym_members — because `confirmApplication` locks the application row and
+    // then inserts a membership whose `ON CONFLICT` waits on any uncommitted
+    // conflicting tuple. This transaction is a THIRD writer of the same two
+    // rows and took them the other way round, so for a person holding both a
+    // live membership and a pending application in one gym the two could form
+    // a cycle and Postgres would abort one with 40P01 — a 500 for whoever
+    // lost. Cancelling applications FIRST puts every writer on one order.
+    // **The cycle itself is UNREPRODUCED** (it needs two transactions
+    // interleaved at one statement); what IS verified is the premise — the two
+    // orders differed, and now they do not. Two lines, strictly safer.
     //
-    // WRITTEN HERE RATHER THAN CALLED FROM THE ORGS REPO on purpose: R7.1
-    // forbids reaching into another module's repo, and the DPDP cascade is
-    // cross-cutting by nature — which is why the `gym_members` close one line
-    // up has always been inline too. The orgs repo's own header claim to be
-    // "the ONLY file that touches" these tables was already false because of
-    // that line; it is corrected there in the same commit rather than left to
-    // read as a rule this statement breaks.
+    // Kd ruling :11072 added the waiting room, and this is its Day-0 half:
+    // without it a deleted person's NAME sits in a gym's confirm queue for two
+    // weeks, and a front-desk tap could make them a member of a gym they left
+    // the product to get away from. Not a widening of §5.2's delete list — it
+    // is the membership close §5.2 already mandates, applied to the row that
+    // stands in for a membership.
     await tx`
       UPDATE gym_join_applications
       SET status = 'cancelled', decided_at = now()
       WHERE user_id = ${userId} AND status = 'pending'`;
+    // Part 4 §5.2's Day-0 membership close, and the reason BOTH of these are
+    // written inline rather than called from the orgs repo: R7.1 forbids
+    // reaching into another module's repo, and the DPDP cascade is
+    // cross-cutting by nature — which is why this statement has always been
+    // inline. The orgs repo's own header claim to be "the ONLY file that
+    // touches" these tables was already false because of it; that sentence is
+    // corrected there rather than left to read as a rule these two break.
+    await tx`
+      UPDATE gym_members SET removed_at = now()
+      WHERE user_id = ${userId} AND removed_at IS NULL`;
     await tx`DELETE FROM push_tokens WHERE user_id = ${userId}`;
     return { email: row.email, displayName: row.display_name };
   });

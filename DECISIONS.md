@@ -12223,3 +12223,119 @@ Sources read 2026-08-19 (UNVERIFIED beyond what these pages state):
 `openrouteservice.org/restrictions/` · `gymdesk.com/blog/gym-management-software-cost`
 · `makocrm.so/blog/gym-software-pricing` ·
 `gymroute.com/blog/top-us-based-gym-management-software-solutions/`
+
+## 2026-08-19 — THE JOIN DOOR, STEP 1, T3 ROUND 1: ZERO Critical/High — THE PACKET SHIPS, and the finding with the longest reach is a guard that was testing a COPY of the thing it guards
+
+**Read before adding a route to the orgs module, before writing a cursor that
+compares against a subquery, before assuming a "requires authentication" test
+covers the routes added after it, and before putting an explanation inside a
+`sql` template literal.** Reviews the packet at :11846. **Escape hatch NOT
+armed** — the previous round in this subsystem (:10329) found zero Critical/High
+too, so there is no two-round Critical streak. Four Low, **ALL FIXED in this
+round** (:5348 rule 1 — a Low buys no further round and does not buy a pass
+either), plus one item the reviewer raised inside his security pass rather than
+as a numbered finding, fixed with them. **Rule 3 owes nothing this round: no
+Critical/High was found, so no fix owes a failing-first test.**
+
+### THE FOUR, AND WHAT EACH ONE ACTUALLY COST
+
+**L-1 — a test that stays green (rule 4).** "every route requires
+authentication" named **FIVE of the module's NINE routes and none of the four
+this card added.** Measured rather than argued: the reviewer deleted
+`app.authenticate` from the confirm route and the test stayed GREEN. **Low and
+not Critical because every handler calls `requireUserId`, which throws when the
+preHandler did not run — a missing guard is a 500, not an open door.** That is
+the whole distance between this and a Critical. Fixed with four 401 assertions
+and the trainer-403 case on REJECT, which runs through the same
+`requirePrivilege` call as confirm and had none of its own.
+
+**L-2 — the confirm queue's cursor (R7.3).** A well-formed cursor naming a row
+the gym does not have returned an **empty page while `pendingCount` still
+reported the true total** — a console showing "3 people waiting" over an empty
+list. Cause: the scalar subquery yields no row, the row comparison is therefore
+NULL rather than false, and NULL filters everything out. **Reachable today only
+by a gym's own staff hand-editing a cursor** — nothing hard-deletes applications
+(`grep 'DELETE FROM gym'` returns no hits) — which is what keeps it Low. Fixed
+with a `NOT EXISTS` arm so an unknown cursor restarts at page one, which is also
+what the service already promises out loud for a MALFORMED cursor. **Semantics
+verified against the live database, not reasoned**, by both the reviewer and me.
+
+**L-3 — reject was not idempotent while confirm was (R3.5).** A second tap on
+"not this person" 409'd where the first succeeded. **The message was TRUE, so
+this is not :5807's class** — and the asymmetry was still never designed:
+confirm's own justification ("a person pressing a button twice") applies word
+for word, and two front-desk staff working one queue is the case this card cites
+everywhere else. Fixed. **Every OTHER terminal state keeps its 409, and that is
+the part worth not flattening:** `confirmed` must not be silently reversible,
+and `cancelled`/`expired` are facts about the applicant the front desk should be
+TOLD rather than shown a success for something they did not do.
+
+**L-4 — the DPDP cascade is a THIRD writer, and it took the locks backwards.**
+The card decides lock order once — application, then gym — but `softDeleteUser`
+closed `gym_members` first and cancelled applications second, while
+`confirmApplication` locks the application and then inserts a membership whose
+`ON CONFLICT` waits on any uncommitted conflicting tuple. For a person holding
+both a live membership and a pending application in one gym — **the exact state
+the new already-holds test constructs, and what the roster import will make
+ordinary** — the two transactions can form a cycle and Postgres aborts one with
+40P01. **The reviewer marked the cycle UNREPRODUCED and it STAYS unreproduced**;
+reproducing it needs two transactions interleaved at one statement. **What is
+verified is the premise — the two orders differed, and now they do not.** Two
+statements swapped; no data was ever at risk, both transactions being
+all-or-nothing.
+
+### THE ONE THAT WAS NOT NUMBERED AND HAS THE LONGEST REACH
+
+The reviewer's security pass noted, without scoring it, that **the permanent
+guard's check 5 asserted a HAND-WRITTEN COPY of the spend-attribution query
+instead of the real `getLiveGymId`** in coach/geo/nutrition. **A guard that
+cannot see the thing it guards**: any of those three could drift and the copy
+would keep passing. It is the same shape as this card's own O14 (a mutant
+reporting on a surface its name disowned) and as :5104 F5 (a fix whose
+protection cannot fail) — **third occurrence of that class in two cards.**
+
+Fixed by calling all three REAL functions, **named individually rather than
+looped**, because R7.1 keeps them module-local and "they are the same query
+three times" is precisely the assumption that would hide the day one of them
+stops being. **With a positive control**: a CONFIRMED member must resolve to the
+gym through all three, or three functions returning null for everybody would
+satisfy the whole check — :7298's vacuous-test lesson applied before the defect.
+
+### THE REVIEWER'S OWN MEASUREMENTS, KEPT BECAUSE THEY ARE EVIDENCE
+
+He wrote **three ad-hoc mutants of his own** (two `OR true` scoping mutants
+against `listApplications` and `listApplicationsForUser`, both RED) rather than
+only re-running mine — which is what turned up L-1's ALIVE. He also confirmed
+the separate-table decision holds by counting the eleven `removed_at IS NULL`
+readers himself, and verified the `ipMax` addition left auth literally unchanged
+via the auth suite's own per-IP and per-identifier tests (37/37). **A reviewer
+who only re-runs the author's harness inherits the author's blind spots**; this
+round is the argument for that being the standard.
+
+**His instrument note, recorded rather than dropped:** a Windows file-lock crash
+aborted one of his sweeps mid-write; `git status` showed nothing had been
+written and the affected mutants were re-run. Fail-safe, and the harness's own
+restore verification is what made "nothing was written" checkable rather than
+hopeful.
+
+### MY OWN INSTRUMENT SLIP THIS ROUND
+
+Writing L-2's explanation as a SQL comment INSIDE the query produced six parse
+errors: **a backtick inside a JS template literal ENDS the literal**, and the
+paragraph named identifiers in backticks. Moved above the query, where it should
+have been. Trivial, caught by `tsc` in seconds, recorded because the next person
+tempted to document a query from the inside will hit it identically.
+
+### PROVE
+
+- api orgs suites **59/59** against real Postgres · `tsc` clean · eslint clean.
+- **Mutants for the fixes: O39 (L-2), O40 (L-3), O41 (L-4) added and RED**,
+  re-run alongside O32/O33/O34/O37/O38 — the surfaces the fixes touch. Rule 3
+  does not require these (no Critical/High), but a fix nothing pins is a fix the
+  next edit undoes silently.
+- **Subset runs, explicitly not a full sweep** — the harness prints that line
+  itself, and the last COMPLETE run of the table (38 · 38 RED · 0 ALIVE) stands
+  at :11846.
+
+**STILL NOTHING TICKS.** The `OWED.md` join-door line names a SCREEN and there
+is none; step 2 carries it, with its smoke.
