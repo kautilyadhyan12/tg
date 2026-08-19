@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { userService, toFitnessProfilePayload, heightToCm, weightToKg, convertHeight, convertWeight } from '../api/userApi';
 import toast from 'react-hot-toast';
 import {
-  User, Ruler, Target, Dumbbell,
+  User, Target, Dumbbell,
   Clock, ChevronRight, ChevronLeft,
   Check, Zap, LogOut,
 } from 'lucide-react';
@@ -156,7 +156,13 @@ export default function Onboarding() {
   // gate is untouched and an un-onboarded member still cannot reach the member
   // app. It matters more now that `My Gym` is gone from the sidebar — picking
   // the member door by mistake used to be recoverable from inside the app.
+  // Feedback, not a guard (T3 round 1, L8) — and it is a SEPARATE flag from the
+  // form's own `loading`, because these two waits mean opposite things: one is
+  // saving your answers, the other is throwing them away.
+  const [signingOut, setSigningOut] = useState(false);
+
   const handleSignOut = async () => {
+    setSigningOut(true);
     await logout();
     navigate('/login');
   };
@@ -278,10 +284,14 @@ export default function Onboarding() {
       toast.success('Profile set up! Let\'s get started 💪');
       // '/dashboard' unconditionally, and since Kd's 2026-08-19 amendment that
       // is CORRECT for both login doors: a gym-door sign-in goes straight to
-      // the console and reaches this wizard only by pressing "Back to the app"
-      // — i.e. everyone finishing here was heading INTO the member app.
-      // (This card's first draft routed the exit through the door instead,
-      // which was needed only while the wizard stood in front of the console.)
+      // the console and never reaches this wizard at all, so everyone finishing
+      // here came through the MEMBER door and was heading into the member app.
+      // (The reason used to be phrased as "reaches this wizard only by pressing
+      // Back to the app"; that link was removed later the same day — :11616 —
+      // and the conclusion is now MORE true, not less: the member door is the
+      // only way in. This card's first draft routed the exit through the door
+      // instead, which was needed only while the wizard stood in front of the
+      // console.)
       navigate('/dashboard');
     } catch (err) {
       // Log the MESSAGE only, never `err` — the axios error carries config.data,
@@ -636,10 +646,11 @@ export default function Onboarding() {
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                disabled={signingOut}
+                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-50"
               >
                 <LogOut className="w-3.5 h-3.5" />
-                Sign out
+                {signingOut ? 'Signing out…' : 'Sign out'}
               </button>
             </div>
             <div className="flex items-center gap-3 mb-3">

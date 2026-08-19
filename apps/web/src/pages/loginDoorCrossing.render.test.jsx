@@ -110,12 +110,26 @@ describe('the gym console', () => {
 
   // Each control is driven separately. One test clicking "the first one" would
   // leave the phone bar — the only exit at phone width — unexercised.
+  //
+  // THE CONTROLS ARE FOUND BY WHERE THEY LIVE, NOT BY INDEX (T3 round 1, L2).
+  // With `[0]`/`[1]`, the D12 mutant — which turns the RAIL into a link — made
+  // the case named "from the desktop rail" silently drive the phone bar and
+  // PASS, while `[1]` came back undefined and the OTHER case caught it. Nothing
+  // was hidden, but a case that does not drive what its name says is a case that
+  // will mislead the next person to read a red run.
+  const signOutIn = (where) => {
+    const buttons = screen.getAllByRole('button', { name: /sign out/i });
+    const found = buttons.find((b) => (where === 'rail' ? b.closest('aside') !== null : b.closest('aside') === null));
+    if (!found) throw new Error(`no Sign out control in the ${where} — it is not a button any more`);
+    return found;
+  };
+
   it.each([
-    ['desktop rail', 0],
-    ['phone bar', 1],
-  ])('ends the session and returns to the login page from the %s', async (_label, index) => {
+    ['desktop rail', 'rail'],
+    ['phone bar', 'bar'],
+  ])('ends the session and returns to the login page from the %s', async (_label, where) => {
     drawConsole();
-    fireEvent.click(screen.getAllByRole('button', { name: /sign out/i })[index]);
+    fireEvent.click(signOutIn(where));
     await waitFor(() => expect(screen.getByText('THE LOGIN PAGE')).toBeTruthy());
     // Landing on /login is not enough on its own — a link would do that while
     // leaving the person signed in. The session must actually end.
@@ -155,13 +169,25 @@ describe('the setup questionnaire', () => {
     expect(authState.logout).toHaveBeenCalledTimes(1);
   });
 
-  it('is still the questionnaire — signing out is not a skip', () => {
-    // The gate is untouched: this button ends the session, it does not walk
-    // an un-onboarded account into the member app. If a later edit turns it
-    // into a skip, the first step's own heading is what disappears.
+  it('signing out is NOT a skip — it never lands in the member app', async () => {
+    // T3 round 1, L1: THIS TEST USED TO ASSERT ITS CLAIM WITHOUT EVER CLICKING.
+    // It rendered the wizard, checked "Basic Info" was on screen and that
+    // "MEMBER APP" was not — both true of a page nobody had touched — so the
+    // reviewer turned `handleSignOut` into `navigate('/dashboard')`, an actual
+    // skip, and it stayed GREEN while only its sibling went red. Its own comment
+    // claimed it caught exactly that. A test whose subject is a click has to do
+    // the click.
     drawOnboarding();
-    // "Basic Info" is both the step chip and the heading, hence getAllByText.
+    // Non-vacuity first: the wizard really is what is on screen before the
+    // press. ("Basic Info" is both the step chip and the heading, hence All.)
     expect(screen.getAllByText('Basic Info').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /sign out/i }));
+
+    // The distinct claim of THIS test, and the one the sibling does not make:
+    // an un-onboarded account is never walked INTO the member app. Under the
+    // skip mutant both of these fail.
+    await waitFor(() => expect(screen.getByText('THE LOGIN PAGE')).toBeTruthy());
     expect(screen.queryByText('MEMBER APP')).toBeNull();
   });
 });

@@ -226,7 +226,7 @@ const MUTANTS = [
     suite: CROSSING_SUITE,
     why: "THE CROSSING RE-OPENS, one direction only: the desktop rail's exit goes back to being a link into the member app, so the doors stop being the only way across and the console loses its only sign-out",
     expect: 'offers NO way into the member app',
-    from: '        <button type="button" onClick={handleSignOut} className={`${railBase} w-full text-left`} style={navStyle(false)}>\n          <LogOut className="w-4 h-4 flex-shrink-0" />\n          <span>Sign out</span>\n        </button>',
+    from: '        <button\n          type="button"\n          onClick={handleSignOut}\n          disabled={signingOut}\n          className={`${railBase} w-full text-left disabled:opacity-50`}\n          style={navStyle(false)}\n        >\n          <LogOut className="w-4 h-4 flex-shrink-0" />\n          <span>{signingOut ? \'Signing out…\' : \'Sign out\'}</span>\n        </button>',
     to: '        <Link to="/dashboard" className={railBase} style={navStyle(false)}>\n          <ChevronLeft className="w-4 h-4 flex-shrink-0" />\n          <span>Back to the app</span>\n        </Link>',
   },
   {
@@ -235,8 +235,8 @@ const MUTANTS = [
     suite: CROSSING_SUITE,
     why: 'SIGNED OUT IN NAME ONLY: the console returns to the login page WITHOUT ending the session, so a gym\'s shared front-desk browser hands the next person the last one\'s account — and the door choice is never cleared either, since logout() is what clears it',
     expect: 'from the desktop rail',
-    from: '  const handleSignOut = async () => {\n    await logout();\n    navigate(\'/login\');\n  };',
-    to: '  const handleSignOut = async () => {\n    navigate(\'/login\');\n  };',
+    from: '  const handleSignOut = async () => {\n    setSigningOut(true);\n    await logout();\n    navigate(\'/login\');\n  };',
+    to: '  const handleSignOut = async () => {\n    setSigningOut(true);\n    navigate(\'/login\');\n  };',
   },
   {
     id: 'D14',
@@ -244,7 +244,7 @@ const MUTANTS = [
     suite: CROSSING_SUITE,
     why: 'THE PHONE LOSES THE HALF THE DESKTOP KEEPS: the phone top bar reverts to the cross-link, which on a phone is the ONLY control there is — so the ruling holds on a laptop and is undone on the surface the console exists for',
     expect: 'offers Sign out on BOTH',
-    from: '          <button type="button" onClick={handleSignOut} className="text-sm" style={{ color: \'rgba(255,255,255,0.55)\' }}>\n            Sign out\n          </button>',
+    from: '          <button\n            type="button"\n            onClick={handleSignOut}\n            disabled={signingOut}\n            className="text-sm disabled:opacity-50"\n            style={{ color: \'rgba(255,255,255,0.55)\' }}\n          >\n            {signingOut ? \'Signing out…\' : \'Sign out\'}\n          </button>',
     to: '          <Link to="/dashboard" className="text-sm" style={{ color: \'rgba(255,255,255,0.55)\' }}>\n            Back to the app\n          </Link>',
   },
   {
@@ -266,8 +266,29 @@ const MUTANTS = [
     suite: CROSSING_SUITE,
     why: 'THE DEAD END COMES BACK, quietly: the questionnaire returns to the login page without ending the session, so ProtectedRoute sends the person straight back into the questionnaire — which is exactly how Kd found this screen, stuck on it with no way out on his first smoke step',
     expect: 'when Sign out is pressed',
-    from: '  const handleSignOut = async () => {\n    await logout();\n    navigate(\'/login\');\n  };',
-    to: '  const handleSignOut = async () => {\n    navigate(\'/login\');\n  };',
+    from: '  const handleSignOut = async () => {\n    setSigningOut(true);\n    await logout();\n    navigate(\'/login\');\n  };',
+    to: '  const handleSignOut = async () => {\n    setSigningOut(true);\n    navigate(\'/login\');\n  };',
+  },
+
+  // D17 — THE REVIEWER'S OWN MUTANT, KEPT (T3 round 1, L1).
+  //
+  // He turned the wizard's sign-out into an actual SKIP and the test named
+  // "signing out is not a skip" stayed GREEN, because it never clicked
+  // anything — it rendered the page and asserted two things that were true of a
+  // page nobody had touched. Only its sibling went red, and on a claim it does
+  // not make.
+  //
+  // The fix is in the test; THIS is what proves the fix. A Low finding that was
+  // found by mutation and closed without one would be the same hole with a
+  // comment on it (:5104 F5).
+  {
+    id: 'D17',
+    target: 'wizard',
+    suite: CROSSING_SUITE,
+    why: 'THE QUESTIONNAIRE\'S SIGN OUT BECOMES A SKIP: an un-onboarded account is walked straight into the member app it has not been set up for, and the gate is silently bypassed by the one control on the screen',
+    expect: 'signing out is NOT a skip',
+    from: '  const handleSignOut = async () => {\n    setSigningOut(true);\n    await logout();\n    navigate(\'/login\');\n  };',
+    to: '  const handleSignOut = async () => {\n    setSigningOut(true);\n    navigate(\'/dashboard\');\n  };',
   },
 ];
 

@@ -11753,3 +11753,92 @@ claimed steps 1–4 would be re-run and that was corrected before he ran it
 (:4718 F4 — a line ticked in the same commit whose message said otherwise had to
 be reverted, and this branch has done that once already). The packet needs a
 review round finding ZERO Critical/High (:5348 rule 1) before anything closes.
+
+## 2026-08-19 — THE CROSSING PACKET, T3 ROUND 1: ZERO Critical/High — THE PACKET SHIPS. Eight Low, all fixed, and the two with teeth are BOTH MY OWN TESTS
+
+**Read before writing a render test whose subject is a CLICK, before selecting
+one of several identical controls by INDEX, and before quoting a "lint = HEAD
+baseline" line as if it discharged the DoD.** Reviewed by a fresh chat on
+`t3-login-door-crossing-r1.diff` (`174fd71..f989b9b`, 6 files). **Escape hatch
+NOT armed** — no Criticals, let alone two rounds in one subsystem.
+
+**THE VERDICT: zero Critical/High ⇒ the packet ships (:5348 rule 1). Eight Low,
+ALL FIXED and logged in `BACKLOG.md`** — the gate changes the SCHEDULE, never the
+quality bar, and Kd corrected a draft of :5348 that had said otherwise.
+
+**L1 IS THE ONE THAT MATTERS AND IT IS MINE: a test whose subject was a click,
+that never clicked.** `signing out is not a skip` rendered the wizard and
+asserted "Basic Info" present and "MEMBER APP" absent — **both true of a page
+nobody had touched.** The reviewer did not reason about it, he MUTATED it: he
+turned `handleSignOut` into `navigate('/dashboard')`, an actual skip, and the
+test **stayed GREEN** while only its sibling went red, on a claim the sibling
+does not make. **Its own comment claimed it caught exactly that.** This is the
+project's most-recorded shape (:5104 F5, :7298, :6150) arriving in a file written
+the same day by a chat that had just read all of them. **The fix is in the test,
+and D17 — the reviewer's own mutant, kept — is what proves the fix**: a
+mutation-found hole closed without a mutant is the same hole with a comment on
+it.
+
+**L2 IS THE SAME LESSON ONE LEVEL DOWN: an `it.each` case that did not drive what
+its name said.** Selecting the two sign-out controls by `[0]`/`[1]` meant that
+under D12 — which turns the RAIL into a link — the case named *"from the desktop
+rail"* silently drove the PHONE BAR and passed, while `[1]` came back undefined
+and the OTHER case caught it. **Nothing was hidden and no defect escaped**; what
+would have escaped is a future red run naming the wrong surface. Now selected by
+`closest('aside')`, with a missing control throwing by name.
+
+**L8 IS THE ONLY FINDING WITH A LIVE FAILURE MODE, and the reviewer found it by
+reading past the diff.** `authApi` sets **no global timeout** — verified here,
+and `nutritionApi`'s `TARGETS_TIMEOUT_MS` exists for precisely this gap — so a
+server that ACCEPTS `POST /v1/auth/logout` and never answers leaves
+`await logout()` pending, its `finally` unreached and the navigation never fired.
+**On the console and the wizard, Sign out is the ONLY control on the screen**, so
+that is the dead end this packet exists to remove, arriving by a different route.
+Fixed both ways — a `signingOut` state that disables and relabels, and
+`LOGOUT_TIMEOUT_MS` on the logout request, **following the existing per-request
+precedent rather than inventing a second mechanism or changing global config
+(R1.1)**. On timeout the request REJECTS, which is the good case: `logout()`'s
+`finally` clears client state regardless, so it degrades to a client-side
+sign-out rather than a frozen screen.
+
+**L7 IS THE DEFERRAL RULE CATCHING ME IN THE ACT.** :11706 states plainly that
+the packet's "phone" check was **a narrowed desktop window, not a phone**, and
+:9604 §4 is Kd's ruling that the console is reached FROM a phone — **and that
+fact was tracked nowhere but DECISIONS prose**, which CLAUDE.md names by name as
+how work gets silently lost. Own 🟡 `OWED.md` line now. Pre-existing gap made
+VISIBLE by this packet, not created by it.
+
+**L3/L4/L5 are three comments describing a control this packet deleted** — the
+"first tap on Back to the app" rule in `landingRoute.js` (read by four call
+sites), the same mechanism justifying the wizard's exit, and `ConsoleLayout`'s
+own header still promising "the way back into the app". **A record is a claim**
+(:1173, :8707): all three corrected in place with the supersession dated, rather
+than quietly rewritten.
+
+**L6 — the DoD's lint box could not honestly be ticked.** `Zap` and `Ruler` were
+unused. **The "lint = HEAD baseline, MEASURED" claim was true and the reviewer
+verified it independently** — but a true baseline is not a clean gate, and the
+packet had already removed `Building2` from that same Sidebar import line while
+leaving `Zap` beside it. Both deleted; `eslint` on all six touched files now
+exits 0 with no output.
+
+**WHAT THE REVIEWER CHECKED THAT I HAD NOT, and it is the useful half of the
+security pass:** he enumerated that **all four console routes wrap in
+`ConsoleLayout`** and that the phone top bar renders even with no `orgSlug`, so
+`/console` and `/console/new` keep an exit at phone width — i.e. **nothing is
+stranded, proven by counting sites rather than by inspection** (:1239's only
+satisfying form). He also confirmed `logout()` cannot reject, so no unhandled
+rejection strands the click, and that grep finds zero `/dashboard` links left in
+console pages and zero `/console` links in member surfaces.
+
+**PROVE (re-run after every fix)** — web **806/806** · `vite build` ✓ · **eslint
+on all six touched files exits 0 with NO output** (not "baseline", clean) ·
+**17 mutants · 17 RED · 0 ALIVE · 0 never ran**, control GREEN on all seventeen
+filters first, restores sha256-verified, exit code read directly (:9509), tree
+clean after. **D12/D13/D14/D16 were RE-ANCHORED**, because the L8 fix inserted a
+line inside two of the functions their anchors span — :5199/:8610's class, caught
+by the whole-table pre-check ABORTING before a byte was written rather than by
+care.
+
+**THE OWED DOOR LINE NOW TICKS ON THE NEXT COMMIT** — smoke 11/11 (:11706) and a
+review round with zero Critical/High, which is the full gate.

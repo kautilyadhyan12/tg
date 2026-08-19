@@ -22,9 +22,13 @@
 // data — age, height, weight, goals, a medical question — and the console uses
 // none of it, so a gym owner goes STRAIGHT to their console and meets the
 // wizard only when they cross into the member app. This does not weaken the
-// gate: `ProtectedRoute` still guards every member screen, so the first tap on
-// "Back to the app" lands an un-onboarded owner in the wizard exactly then —
-// the gate moved to where the data it collects is used. It is also the better
+// gate: `ProtectedRoute` still guards every member screen, so an un-onboarded
+// owner lands in the wizard the moment they enter the member app through the
+// MEMBER DOOR — the gate moved to where the data it collects is used. (Until
+// 2026-08-19 the crossing was a "Back to the app" link inside the console; Kd
+// removed it that day — :11616 — so signing out and choosing the other door is
+// now the only way in, and the gate sits on the same screens either way.) It is
+// also the better
 // privacy shape: health questions are not put to someone running a business
 // until they choose to train.
 

@@ -4410,7 +4410,18 @@ file and is stated so nobody reads these as lower priority than they are.
 - [ ] 🟡 **CLASSES, SCHEDULES AND COACH INSTRUCTION SLOTS (booking).** Zero spec
       hits for `booking`, `schedule` or `check-in`. **The largest single new piece
       on this list**, and the thing gyms actually pay competitors for.
-- [ ] 🟡 **SEPARATE GYM LOGIN AND USER LOGIN on the entry screen.** Small — Part 3
+- [x] 🟡 **SEPARATE GYM LOGIN AND USER LOGIN on the entry screen. — DONE
+      2026-08-19, commits `80ee871` (the crossing) on top of `a18a15b` (the
+      doors), gates closed at DECISIONS :11757.** Full gate met and not waived:
+      smoke **11/11** in Kd's browser (:11706) AND a T3 round finding **ZERO
+      Critical/High** (:5348 rule 1), its eight Low all fixed and logged in
+      `BACKLOG.md`. What ships: two doors on the login page, one `landingRoute`
+      consulted by all four places that decide where a person lands, the choice
+      remembered for the tab and cleared on sign-out, the gym door skipping the
+      questionnaire (:10959), and — :11616 — **the doors as the ONLY way across
+      in either direction**, with a Sign out on the console and the wizard so the
+      removals strand nobody. **The real-handset check is NOT part of this tick**
+      and has its own line below. Small — Part 3
       already puts the console in its own route group (`/console/:orgSlug/...`).
       **RULED BY KD 2026-08-18, raised by him mid-smoke: *"why the hell there is
       my gym … why would a gym owner enter a users profile to create their gym …
@@ -4478,6 +4489,26 @@ file and is stated so nobody reads these as lower priority than they are.
       owner would have finished five setup screens in the member app and never
       found their console. The door would have worked for everybody except the
       account it was built for.
+- [ ] 🟡 **THE CONSOLE HAS NEVER BEEN OPENED ON A REAL PHONE — every "phone"
+      check so far has been a NARROWED DESKTOP WINDOW.** Raised by the T3 on the
+      crossing packet (L7, 2026-08-19) against the deferral rule itself: the fact
+      was stated plainly in DECISIONS prose (:11706 — *"the phone was a NARROWED
+      DESKTOP WINDOW, not a phone"*) and tracked NOWHERE, which is the exact
+      shape CLAUDE.md names as how work gets silently lost.
+      **Why it matters and is not pedantry:** :9604 §4 is Kd's ruling that the
+      console is REACHED FROM THE PHONE, and `ConsoleLayout` exists as its own
+      shell precisely because `AppLayout` pins `marginLeft: 256` with no
+      breakpoint (:10402). A desktop window dragged narrow proves the CSS
+      breakpoint fires; it does not exercise a real viewport, touch targets, the
+      on-screen keyboard over the create-gym form, or Safari/Chrome mobile.
+      **What is already covered, so this is narrower than it sounds:** the
+      breakpoint swap and the phone bar's Sign out are pinned by tests and by
+      mutant D14, and the console smoke passed 11/11 at both widths on a desktop.
+      **What is owed is one sitting on an actual handset**, against the existing
+      `RUNBOOK/smoke-login-door.md` steps 5–6 plus the console sheet.
+      **Not a blocker for the crossing packet** — it is a pre-existing gap the
+      packet made visible rather than one it created.
+
 - [ ] 🟡 **MEMBER MIGRATION FROM A COMPETITOR APP — Kd ruling 2026-08-18
       (DECISIONS :9809): a SYSTEM, built now, not a favour to the first
       customer.** The spec has member EXPORT only (`03-part3-org-console.md:105`,

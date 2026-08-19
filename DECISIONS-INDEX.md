@@ -335,6 +335,45 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   so two `app.inject` calls are serialised by the CLIENT and would pass with the
   lock deleted** — a test that cannot fail. Seven `OWED.md` lines added; the
   console line is UPDATED, not ticked.
+- **:11757** — 2026-08-19 — **THE CROSSING PACKET, T3 ROUND 1: ZERO
+  Critical/High — THE PACKET SHIPS, and the two findings with teeth are BOTH the
+  author's own tests.** **Read before writing a render test whose subject is a
+  CLICK, before selecting one of several identical controls by INDEX, and before
+  quoting a "lint = HEAD baseline" line as if it discharged the DoD.** Escape
+  hatch NOT armed. Eight Low, **all fixed** and in `BACKLOG.md` (:5348 rule 1 —
+  the gate changes the SCHEDULE, never the quality bar). **L1: a test whose
+  subject was a click, that never clicked** — it asserted two things true of a
+  page nobody had touched, and the reviewer PROVED it by turning the wizard's
+  sign-out into a real skip and watching it stay GREEN while only its sibling
+  went red, on a claim the sibling does not make; **its own comment claimed it
+  caught exactly that.** :5104 F5's shape, in a file written the same day by a
+  chat that had just read :5104. **D17 — the reviewer's own mutant — is KEPT**,
+  because a mutation-found hole closed without a mutant is the same hole with a
+  comment on it. **L2: an `it.each` case that did not drive what its name said**
+  (index selection meant D12 made "from the desktop rail" silently drive the
+  PHONE BAR and pass) — no defect escaped, but a future red run would have named
+  the wrong surface. **L8 is the only live failure mode and came from reading
+  PAST the diff: `authApi` sets no global timeout** (verified;
+  `nutritionApi`'s `TARGETS_TIMEOUT_MS` exists for this gap), so a server that
+  ACCEPTS the logout and never answers leaves `await logout()` pending, its
+  `finally` unreached — **on two screens where Sign out is the only control**.
+  Fixed with a pending state AND `LOGOUT_TIMEOUT_MS`, following the per-request
+  precedent rather than changing global config (R1.1). **L7 is the deferral rule
+  catching the author in the act** — the "phone was a narrowed desktop window"
+  fact lived in DECISIONS prose alone; own 🟡 `OWED.md` line. **L3/L4/L5 are
+  three comments describing the deleted link**, corrected in place with the
+  supersession dated. **L6: a true "HEAD baseline" is not a clean gate** — `Zap`
+  and `Ruler` deleted, eslint now exits 0 with no output. **The useful half of
+  his security pass: he ENUMERATED that all four console routes wrap in
+  `ConsoleLayout` and that the phone bar renders with no `orgSlug`**, so nothing
+  is stranded — proven by counting sites (:1239's only satisfying form). PROVE:
+  web **806/806** · build ✓ · eslint clean on all six touched files ·
+  **17 mutants · 17 RED · 0 ALIVE · 0 never ran**, control GREEN first, restores
+  sha256-verified, exit read directly. **D12/D13/D14/D16 RE-ANCHORED** because
+  the L8 fix inserted a line inside two functions their anchors span —
+  :5199/:8610's class, caught by the whole-table pre-check ABORTING rather than
+  by care. **THE OWED DOOR LINE TICKS HERE: smoke 11/11 (:11706) + a round with
+  zero Critical/High is the full gate.**
 - **:11706** — 2026-08-19 — **THE LOGIN-DOOR SMOKE PASSED 11/11 on `9aae571` —
   both removed shortcuts confirmed GONE in a real browser, and neither removal
   stranded anybody. NOTHING TICKS: T3 UNRUN.** **Read before citing the login

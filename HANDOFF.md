@@ -87,9 +87,36 @@ the "phone" was a narrowed desktop window (D14 guards the real bar), the
 BACK-button checks rest entirely on his report because nothing is stored, and no
 step observed a SECOND person on the shared browser.**
 
-NEXT: **T3 in a FRESH chat on the diff `174fd71..HEAD`** — the ONLY gate left.
-      Zero Critical/High ships the packet (:5348 rule 1) and the OWED door line
-      ticks then, not before.
+T3 ROUND 1 (:11757) — **ZERO Critical/High. THE PACKET SHIPS. Escape hatch NOT
+armed. Eight Low, ALL FIXED**, logged in `BACKLOG.md`.
+  · **L1 and L2 are BOTH MY OWN TESTS and L1 is the one to carry: a test whose
+    subject was a click, that never clicked.** The reviewer mutated the wizard's
+    sign-out into a real SKIP and it stayed GREEN, while only its sibling went
+    red on a claim the sibling does not make. Its own comment claimed it caught
+    exactly that. **D17 is his mutant, KEPT** — a mutation-found hole closed
+    without a mutant is the same hole with a comment on it (:5104 F5).
+  · **L8 is the only live failure mode and came from reading PAST the diff:
+    `authApi` has NO global timeout**, so a server that accepts the logout and
+    never answers leaves `await logout()` pending — on two screens where Sign out
+    is the only control. Fixed with a pending state AND `LOGOUT_TIMEOUT_MS`,
+    following `nutritionApi`'s per-request precedent, NOT a global config change.
+  · **L7: the "phone" check was a narrowed desktop window and that fact lived in
+    DECISIONS prose alone** — now its own 🟡 `OWED.md` line.
+  · **D12/D13/D14/D16 RE-ANCHORED** — the L8 fix inserted a line inside two
+    functions their anchors span (:5199/:8610's class), caught by the whole-table
+    pre-check ABORTING before a byte was written, not by care.
+
+FINAL GATES — web **806/806** · `vite build` ✓ · **eslint on all six touched
+files exits 0 with NO output** (clean, not "baseline" — L6) · **17 mutants · 17
+RED · 0 ALIVE · 0 never ran**, control GREEN on all seventeen filters first,
+restores sha256-verified, exit code read directly, tree clean after.
+
+**THE OWED DOOR LINE IS TICKED** — smoke 11/11 (:11706) + a round with zero
+Critical/High is the full gate, and both are recorded.
+
+NEXT: **no gate outstanding on this card.** The nearest live items are the
+      🟡 real-handset console check (new, this round's L7) and the member-side
+      join-code screen (`POST /v1/orgs/join` has had no caller since :10010).
 ```
 
 ```

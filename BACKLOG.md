@@ -953,3 +953,67 @@ otherwise successful run — seen by the reviewer and in this chat's own runs. I
 is fail-safe (the harness refuses to score a run with no tally) and pre-existing.
 It is a datapoint for the local-Postgres line in `OWED.md`, whose saving remains
 UNMEASURED — no number is quoted for it here.
+
+## 2026-08-19 — the crossing packet, T3 round 1 (DECISIONS :11616 / :11706)
+
+**ZERO Critical/High — the packet SHIPS (:5348 rule 1). Eight Low, ALL FIXED**
+(rule 1: the severity gate changes the SCHEDULE, never the quality bar).
+
+- [x] **L1 — a liar test, and its own comment claimed otherwise.** `signing out
+      is not a skip` never clicked anything: it rendered the wizard and asserted
+      "Basic Info" present and "MEMBER APP" absent, both true of a page nobody
+      had touched. **The reviewer PROVED it** — he turned `handleSignOut` into
+      `navigate('/dashboard')`, a real skip, and it stayed GREEN while only its
+      sibling went red, on a claim the sibling does not make. Fixed by clicking,
+      and by moving the distinct assertion (never lands in the member app) after
+      the press. **Its own mutant is now KEPT as D17** — a mutation-found hole
+      closed without a mutant is the same hole with a comment on it (:5104 F5).
+- [x] **L2 — an `it.each` case that did not drive what its name said.** Picking
+      the two sign-out controls by `[0]`/`[1]` meant that under D12 (the rail
+      becomes a link) the case named "from the desktop rail" silently drove the
+      PHONE BAR and passed, while `[1]` came back undefined and the other case
+      caught it. No defect hidden; a red run would have named the wrong surface.
+      Now found by `closest('aside')`, and a missing control throws by name.
+- [x] **L3 — `landingRoute.js` still described the deleted link.** Its comment
+      said an un-onboarded owner meets the wizard on "the first tap on 'Back to
+      the app'". Four call sites read that block for their rule. Now names the
+      member DOOR, with the supersession dated.
+- [x] **L4 — the same dead mechanism justifying `Onboarding`'s exit.** The
+      conclusion (`/dashboard` unconditionally) became MORE true when the link
+      went, and the stated reason evaporated. Corrected in place, both halves.
+- [x] **L5 — `ConsoleLayout`'s own header contradicted its own diff**: "the rail
+      carries the brand and the way back into the app" is precisely what was
+      removed. Now "the way OUT".
+- [x] **L6 — the DoD's lint box could not be ticked.** `Zap` (Sidebar) and
+      `Ruler` (Onboarding) were unused. **The "HEAD baseline" claim was honest
+      and the reviewer verified it independently**, but a true baseline is not a
+      clean gate — and the packet had already removed `Building2` from that same
+      Sidebar import line while leaving `Zap` beside it. Both deleted; `eslint`
+      on all six touched files now exits 0 with no output.
+- [x] **L7 — a deferral living in DECISIONS prose alone**, which is the shape
+      CLAUDE.md names as how work gets silently lost. :11706 states outright that
+      the "phone" check was a narrowed desktop window, and :9604 §4 is Kd's
+      ruling that the console is reached from a phone. **Now its own 🟡
+      `OWED.md` line** — pre-existing gap, made visible by this packet rather
+      than created by it.
+- [x] **L8 — three Sign outs with no pending feedback, and one real hang.** The
+      member sidebar wraps its own in `triggerTransition`; these two shells have
+      no overlay, so a slow press looked like a dead button. Worse, **`authApi`
+      sets no global timeout** (verified — `nutritionApi`'s `TARGETS_TIMEOUT_MS`
+      exists for exactly this gap), so a server that ACCEPTS the request and
+      never answers leaves `await logout()` pending, its `finally` unreached and
+      the navigation never fired — **on two screens where Sign out is the only
+      control**. Fixed both ways: a `signingOut` state that disables and relabels
+      the button, and `LOGOUT_TIMEOUT_MS` on the logout request following the
+      existing per-request precedent rather than a new mechanism. On timeout the
+      request rejects, which is the good case — `logout()`'s `finally` still
+      clears the client state, so it degrades to a client-side sign-out rather
+      than a frozen screen.
+
+**Rule 4 list, from the reviewer:** L1 and L2 were the only liars in the new
+file; the two absence assertions and the sidebar non-vacuity pair all failed
+correctly under his mutation.
+
+**Instrument note, not scored:** the reviewer independently re-derived the
+`ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL` flake already recorded on the previous
+round — it recurred in this chat's runs too, and remains fail-safe.

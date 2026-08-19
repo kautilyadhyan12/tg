@@ -5,7 +5,7 @@ import { useXp } from '../../hooks/useXp';
 import { formatLevel } from '../../api/gamificationApi';
 import {
   LayoutDashboard, Dumbbell, Activity, Brain,
-  Apple, Trophy, Settings, LogOut, Zap, Play,
+  Apple, Trophy, Settings, LogOut, Play,
   ChevronLeft, ChevronRight, Flame, Footprints,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';

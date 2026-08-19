@@ -71,10 +71,28 @@ authApi.interceptors.response.use(
   },
 );
 
+/** Sign-out is the one auth call with NOWHERE TO FALL BACK TO, so it is bounded.
+ *
+ *  `authApi` sets no global timeout (T3 round 1, L8 — the same gap
+ *  `nutritionApi`'s TARGETS_TIMEOUT_MS was created for, and this follows that
+ *  precedent rather than inventing a second mechanism). A server that ACCEPTS
+ *  the request and never answers leaves `await authService.logout()` pending for
+ *  ever, so `logout()`'s `finally` — which clears the user, the storage bucket,
+ *  the timezone sync and the door — never runs and the caller never navigates.
+ *  On the console and the onboarding wizard, Sign out is the ONLY control on the
+ *  screen, so that is a person with no way out at all: exactly the dead end this
+ *  packet exists to remove, arriving by a different route.
+ *
+ *  On timeout the request REJECTS, which is the good case: `logout()` catches it
+ *  and its `finally` clears the client state regardless. The server-side cookie
+ *  may survive, so this is a degraded sign-out, not a silent one — but a
+ *  degraded sign-out beats a frozen screen. */
+const LOGOUT_TIMEOUT_MS = 10_000;
+
 export const authService = {
   register:        (data)             => authApi.post('/v1/auth/register', data),
   login:           (data)             => authApi.post('/v1/auth/login', data),
-  logout:          ()                 => authApi.post('/v1/auth/logout'),
+  logout:          ()                 => authApi.post('/v1/auth/logout', null, { timeout: LOGOUT_TIMEOUT_MS }),
   verifyEmail:     (token)            => authApi.post('/v1/auth/verify-email', { token }),
   forgotPassword:  (email)            => authApi.post('/v1/auth/forgot-password', { email }),
   resetPassword:   (token, password)  => authApi.post('/v1/auth/reset-password', { token, password }),

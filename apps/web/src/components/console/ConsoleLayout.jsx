@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink, Link, useParams, useNavigate } from 'react-router-dom';
 import { Building2, Users, ChevronLeft, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -43,14 +44,22 @@ export default function ConsoleLayout({ children }) {
   const { logout }  = useAuth();
   const navigate    = useNavigate();
 
+  // `signingOut` is feedback, not a guard (T3 round 1, L8). The member sidebar
+  // wraps its sign-out in `triggerTransition`, which covers the wait with an
+  // overlay; this shell has no overlay, so without a pending state a press on a
+  // slow connection looks like a dead button and invites a second press.
+  const [signingOut, setSigningOut] = useState(false);
+
   const handleSignOut = async () => {
+    setSigningOut(true);
     await logout();
     navigate('/login');
   };
 
   // Nav only exists inside a gym. On "your gyms" and the create form there is
-  // nothing to navigate between, so the rail carries the brand and the way back
-  // into the app and nothing else.
+  // nothing to navigate between, so the rail carries the brand and the way OUT
+  // — sign out — and nothing else. (It said "the way back into the app" until
+  // 2026-08-19; that is the link this packet removed.)
   const tabs = orgSlug
     ? [
         { to: `/console/${orgSlug}`, end: true, icon: Building2, label: 'Gym' },
@@ -86,9 +95,15 @@ export default function ConsoleLayout({ children }) {
           ) : null}
         </nav>
 
-        <button type="button" onClick={handleSignOut} className={`${railBase} w-full text-left`} style={navStyle(false)}>
+        <button
+          type="button"
+          onClick={handleSignOut}
+          disabled={signingOut}
+          className={`${railBase} w-full text-left disabled:opacity-50`}
+          style={navStyle(false)}
+        >
           <LogOut className="w-4 h-4 flex-shrink-0" />
-          <span>Sign out</span>
+          <span>{signingOut ? 'Signing out…' : 'Sign out'}</span>
         </button>
       </aside>
 
@@ -104,8 +119,14 @@ export default function ConsoleLayout({ children }) {
           <span className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
             Gym console
           </span>
-          <button type="button" onClick={handleSignOut} className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            Sign out
+          <button
+            type="button"
+            onClick={handleSignOut}
+            disabled={signingOut}
+            className="text-sm disabled:opacity-50"
+            style={{ color: 'rgba(255,255,255,0.55)' }}
+          >
+            {signingOut ? 'Signing out…' : 'Sign out'}
           </button>
         </div>
         {children}
