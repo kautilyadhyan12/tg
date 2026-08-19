@@ -4,11 +4,11 @@
 TASK: NO TASK — a RULINGS-ONLY session (2026-08-19, continuing the same day as
       the block below). **NO CODE WAS TOUCHED. The ACTIVE CARD IS THE ONE IN
       THE NEXT BLOCK — the login door, still mid-smoke and T3-unrun.** This
-      block exists so a fresh chat does not mistake five new DECISIONS entries
+      block exists so a fresh chat does not mistake six new DECISIONS entries
       for finished work.
 
-WHAT WAS RECORDED (DECISIONS :11181 · :11283 · :11309 · :11385 · :11429, index
-lines and OWED lines in the same commit)
+WHAT WAS RECORDED (DECISIONS :11181 · :11283 · :11309 · :11385 · :11429 ·
+:11534, index lines and OWED lines in the same commit)
   · **:11181 — Kd restated the product in three audiences** (normal user / gym
     owner / member) and **the member dashboard is the NORMAL dashboard plus a
     gym header — one screen, not a members' app.** Staff and coaches sign in
@@ -35,8 +35,15 @@ lines and OWED lines in the same commit)
     Rule 2 closes a hole the ruling opens: §4.7 blocks last-owner REMOVAL, and
     ticking away the last owner's billing/staff-management is the same lockout
     by another door. A tick is NOT a scope.
+  · **:11534 — the follow-along FOOTAGE question ANSWERED, not ruled.** Mocap
+    onto a rigged model IS possible; **Kd's own correction is the line to
+    carry — AI video GENERATION invents motion (a NO for demos, a YES for
+    marketing), MOCAP copies a real body, so the wrong-form objection largely
+    dissolves.** Three options live (film · mocap · buy a pack); recommended is
+    to prove mocap on ONE exercise first. **Blocks nothing — :9452 stands, one
+    placeholder proves the mode.**
 
-THE ONE THING LEFT OPEN, AND IT IS THE ONE A CHAT WILL TRIP ON
+TWO THINGS LEFT OPEN — BOTH ASKED AND ANSWERED, NEITHER RULED
   · **A 5-DAY CONSUMER FREE TRIAL is in Kd's plan and the spec forbids one by
     name** (`05-part5-billing.md:292-293`). He asked how to stop email-farming
     of it, was told the attack exists only because the trial does, and **moved
@@ -44,6 +51,10 @@ THE ONE THING LEFT OPEN, AND IT IS THE ONE A CHAT WILL TRIP ON
     or design a trial; do not re-derive the answer; do not put it to him again
     as if it were new.** Moving badges/progress behind it would be a REMOVAL
     (free forever today, v1 §9.1:611 and ungated in code).
+  · **WHERE THE FOLLOW-ALONG FOOTAGE COMES FROM (:11534).** Three options
+    priced, mocap proved possible, one-exercise trial recommended — he did not
+    choose. Index §2 + its own ❓ OWED line. **This BLOCKS NOTHING**: :9452's
+    rule is that artwork is its own track and one placeholder proves the mode.
 
 FOUND WHILE RECORDING (own OWED lines, tracked nowhere before, grep-verified)
   · **No email is ever actually sent** — `EmailSender` logs and returns (P2.1

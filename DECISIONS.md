@@ -11530,3 +11530,85 @@ product sales make a standard receptionist bundle worth naming.
 
 **Nothing built. This is the staff-management card's design; that card does not
 exist yet, and the login-door card is still mid-smoke.**
+
+## 2026-08-19 — THE FOLLOW-ALONG FOOTAGE QUESTION, ANSWERED: motion capture onto a rigged model IS possible, and KD'S OWN CORRECTION is the most useful line in this entry — three sources priced, a one-exercise trial recommended, NOTHING RULED
+
+**Read before sourcing any exercise footage, before proposing AI-generated
+demonstrations, and before letting artwork block the follow-along card.**
+:9452 left this open in its own words — *"Open and NOT chosen: where the
+footage comes from (free stock / filmed / rendered from the traces on his
+Desktop)"* — and the `OWED.md` follow-along line names it as **Kd's to give
+(R0.2)**. This entry is the ANSWER he was owed. **It is not a ruling he made.**
+
+**HIS PROPOSAL, AND THE CORRECTION HE MADE TO MY ANSWER — which a later chat
+must inherit, because reading only the AI-video paragraph would carry away the
+wrong conclusion.** He asked whether a free humanoid model could be rigged in
+Blender, driven from a reference video of an expert, and exported as MP4. Given
+a warning about AI VIDEO GENERATION's failure mode, he pushed back: *"i mena if
+you can extract the movement from an expert video and apply that on the rig
+body cant it be done ?"* — **and he is right that the two differ in exactly the
+way that matters here. Generation INVENTS motion; motion capture COPIES a real
+body's.** The objection "a demo that is subtly wrong teaches wrong form"
+(:5807's class, aimed at the one thing this app claims expertise in) applies
+with full force to generated video and **largely dissolves for mocap, because
+the angles come from the expert's real body.**
+
+**THE PIPELINE, NAMED SO IT IS NOT RE-DERIVED:** source clip → motion
+extraction (**Rokoko Vision · DeepMotion · the BlendCap Blender add-on**, free
+tiers, web-searched 2026-08-19) → free rigged humanoid (**Mixamo**; its terms
+UNVERIFIED today) → retarget in Blender → smoothing and foot-lock cleanup →
+render MP4. **The Blender half is scriptable and headless, so a chat can batch
+it across exercises. The first half is KD'S: those tools are browser uploads, a
+chat cannot watch a video, and a chat cannot judge whether the result looks
+right.** That split is the honest division of labour and should be stated to
+him again at the card rather than discovered.
+
+**WHAT SURVIVES AS COST AFTER THE CORRECTION, stated honestly rather than
+defended:** one camera cannot see depth, so movement toward and away from the
+lens is inferred — **side-on squats are the FAVOURABLE case, twisting
+movements the bad one**; feet slide and joints jitter, which is what the
+cleanup step is; and **58 exercises is 58 clips to source, process and check.**
+**Copyright: extracting motion from someone else's video is unsettled ground —
+filming his own removes the question entirely, and his own clips already exist
+on this machine** (`Desktop\traces`, `traces2`, :6959).
+
+**THE ADVANTAGE THE FIRST ANSWER UNDER-SOLD, AND IT IS THE REAL ARGUMENT FOR
+THE 3D ROUTE: one capture renders the SAME rep from the FRONT and the SIDE, at
+any resolution.** Film does not give that cheaply. It also **permanently fixes
+the artwork's measured size problem** (the 112 shipped GIFs are 600×600 at best
+and 220×119 for jump squat — :9452), needs no model release, and never has to
+be re-shot when a trainer leaves. **Recorded because it is the fact that would
+justify choosing the harder path.**
+
+**AI VIDEO GENERATION IS SEPARATELY ANSWERED AND IS A NO FOR DEMONSTRATIONS.**
+Surveyed 2026-08-19 (Seedance 2.0 · Luma Dream Machine · Hailuo · Kling 3.0 ·
+open-source Wan 2.2 · Veo 3, the last effectively paid): **they generate
+plausible motion rather than real motion**, clips run ~5–10 s, the same
+character cannot be held across 58 exercises, nothing loops cleanly, and most
+free tiers watermark or bar commercial use (Luma and Wireflow were the noted
+exceptions). **Where they ARE worth using, recorded as a positive so the tool
+is not banned outright: MARKETING** — landing page, store promo, social.
+Sources: `wireflow.ai/blog/best-free-ai-video-generator-onlines-in-2026` ·
+`felloai.com/best-free-ai-video-generators` ·
+`morphed.app/blog/best-free-ai-video-generators` ·
+`rokoko.com/integrations/blender` · `deepmotion.com/companion-tools/blender` ·
+`superhivemarket.com/products/blendcap`. **UNVERIFIED beyond what those pages
+state; free tiers and licences move monthly and must be re-read before anything
+ships commercially.**
+
+**RECOMMENDED, NOT RULED: prove it on ONE exercise before committing to 58.**
+Squat, because his own clips already exist. Run the pipeline end to end and
+LOOK at it — if it holds, the other 57 are a production line; if it does not,
+the cost was an evening rather than a month. **Measured obstacle, not assumed:
+Blender is NOT installed on this machine** (`/c/Program Files/Blender
+Foundation` absent, nothing named `blender` on PATH) — a free ~1 GB download.
+
+**THE OTHER TWO OPTIONS STAY ON THE TABLE and were put to him: FILM A REAL
+PERSON** (cheapest per exercise, unambiguously correct form, no pipeline, no
+legal question — and what the large fitness apps ship) **and BUY a ready-made
+exercise mocap pack** (someone else already did the cleanup; **UNVERIFIED
+whether any pack covers these 58** — not checked).
+
+**NOTHING IS RULED AND NOTHING IS BUILT. :9452's rule stands untouched — the
+artwork is its own track and MUST NOT block the follow-along card: one
+placeholder proves the mode, and 112 GIFs ship today.**

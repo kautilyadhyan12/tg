@@ -234,6 +234,15 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   progress move behind that trial** — they are free forever today (v1 §9.1:611,
   and ungated in code), so moving them is a REMOVAL needing an explicit ruling.
   Check before proposing any paywall, trial, entitlements or seed change.
+- **:11534** — 2026-08-19 — **OPEN: WHERE THE FOLLOW-ALONG REFERENCE FOOTAGE
+  COMES FROM.** Three options priced and put to Kd — film a real person ·
+  motion-capture an expert clip onto a rigged 3D model (**possible; his
+  proposal, and the correction that generation ≠ mocap is his**) · buy a
+  ready-made mocap pack. **Recommended: prove the mocap route on ONE exercise
+  (squat) before committing to 58.** He asked and did not choose.
+  **AI-generated video is answered NO for demonstrations, YES for marketing.**
+  Detail at the §4 line. **The card must NOT be blocked on this** (:9452 — one
+  placeholder proves the mode, 112 GIFs ship today).
 
 ## 3 · PHASE 2 — migration and backend (P2.x)
 
@@ -326,6 +335,34 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   so two `app.inject` calls are serialised by the CLIENT and would pass with the
   lock deleted** — a test that cannot fail. Seven `OWED.md` lines added; the
   console line is UPDATED, not ticked.
+- **:11534** — 2026-08-19 — **THE FOLLOW-ALONG FOOTAGE QUESTION ANSWERED:
+  MOCAP ONTO A RIGGED MODEL IS POSSIBLE — and Kd's own correction is the line
+  to carry.** **Read before sourcing exercise footage, before proposing
+  AI-generated demonstrations, and before letting artwork block the
+  follow-along card.** Answers what :9452 left open and `OWED.md` names as
+  **Kd's to give (R0.2) — an ANSWER, not a ruling; nothing is chosen.**
+  **THE CORRECTION: generation INVENTS motion, mocap COPIES a real body's**, so
+  ":5807 — a demo that is subtly wrong teaches wrong form" kills AI video and
+  **largely dissolves for mocap**; a chat reading only the AI-video paragraph
+  inherits the wrong conclusion. **Pipeline:** clip → extraction (Rokoko Vision
+  · DeepMotion · BlendCap add-on) → rigged humanoid (Mixamo, terms UNVERIFIED)
+  → Blender retarget → smoothing/foot-lock → render. **The Blender half is
+  scriptable and headless; the first half is KD'S — browser uploads, and a chat
+  can neither watch a video nor judge the result.** **Cost that survives:**
+  single-camera depth is inferred (**side-on squats favourable, twisting
+  movements bad**), feet slide and joints jitter, 58 exercises is 58 clips, and
+  motion taken from someone else's video is unsettled ground — **his own clips
+  already exist** (`Desktop\traces`, :6959). **THE ARGUMENT FOR THE 3D ROUTE,
+  under-sold at first: ONE capture renders the same rep FRONT and SIDE at any
+  resolution**, permanently fixing the GIFs' measured size problem (600×600 at
+  best, 220×119 jump squat), with no model release and no re-shoot.
+  **AI video generation is a NO for demos** (plausible-not-real motion, ~5–10 s,
+  no character consistency, no clean loop, free tiers watermark or bar
+  commercial use) **and a YES for MARKETING** — recorded so the tool is not
+  banned outright. **Recommended not ruled: prove it on ONE exercise (squat)
+  before committing to 58.** Measured: **Blender is NOT installed here.** Film-a-
+  real-person and buy-a-mocap-pack stay on the table. **:9452's rule stands —
+  artwork must not block the card; one placeholder proves the mode.**
 - **:11429** — 2026-08-19 — **KD RULES THE STAFF PERMISSION MODEL: the three
   roles STAY and per-staff PRIVILEGE TICKS go on top — "AND", not "OR".**
   **Read before building staff management, before adding ANY route that checks

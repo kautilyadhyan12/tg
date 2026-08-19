@@ -4709,6 +4709,32 @@ file and is stated so nobody reads these as lower priority than they are.
       REMOVAL of a live free feature and needs an explicit ruling against the
       cited option, not a plan sentence.**
       **Blocks nothing today. Blocks the billing card and any seed change.**
+- [ ] ❓ **WHERE THE FOLLOW-ALONG REFERENCE FOOTAGE COMES FROM — ANSWERED FOR
+      HIM 2026-08-19 (DECISIONS :11534), STILL NOT CHOSEN.** Elaborates the
+      clause the follow-along line above already carries ("still owed inside
+      the card and Kd's to give"); it is repeated here because that line sits
+      far from this section and the answer is now long enough to lose.
+      **Three options, all live:** film a real person (cheapest per exercise,
+      unambiguously correct form, no pipeline, no legal question — what the big
+      fitness apps ship) · **motion-capture an expert clip onto a rigged 3D
+      model** (his own proposal — free extraction tools, Mixamo rig, Blender
+      retarget; **the Blender half is scriptable and headless, the clip and the
+      judging are his**) · buy a ready-made exercise mocap pack (**UNVERIFIED
+      whether one covers these 58**).
+      **THE DISTINCTION HE DREW AND A LATER CHAT MUST NOT FLATTEN: AI video
+      GENERATION invents motion and is a NO for demonstrations** (:5807 — a
+      demo subtly wrong teaches wrong form, in the one area this app claims
+      expertise), **but MOTION CAPTURE copies a real body, so that objection
+      largely dissolves.** AI generation is a YES for MARKETING.
+      **The argument for the 3D route: ONE capture renders the same rep from
+      the FRONT and the SIDE at any resolution** — which also permanently fixes
+      the shipped GIFs' measured size problem (600×600 at best, 220×119 for
+      jump squat), needs no model release and never needs re-shooting.
+      **RECOMMENDED: prove it on ONE exercise (squat — his clips already exist
+      at `Desktop\traces`) before committing to 58.** Measured, not assumed:
+      **Blender is not installed on the dev machine.**
+      **THIS BLOCKS NOTHING.** :9452's rule stands: artwork is its own track and
+      must not hold up the follow-along card — one placeholder proves the mode.
 - [x] ❓ **ANSWERED BY KD 2026-08-18 — IT MEANS RUNNING THE BUSINESS
       (DECISIONS :9604).** He answered the third bullet of "THE RULING NEEDED"
       below by simply listing what the console must do: *"Gym management ├──
