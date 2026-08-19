@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../api/authApi';
 import { resetTimezoneSync, syncTimezone, userService } from '../api/userApi';
+import { forgetDoor } from '../pages/landingRoute';
 import { setCurrentUserId } from '../utils/storage';
 import { flushSyncQueue } from '../sync/syncClient';
 
@@ -146,6 +147,10 @@ export function AuthProvider({ children }) {
       // (T3 F1): without this the second user of a shared laptop stays
       // UTC-bucketed for the rest of the page load.
       resetTimezoneSync();
+      // Same shape, same reason: the door is a choice about ONE sign-in. Left
+      // behind, it would send the next person at a gym's front-desk browser to
+      // whichever screen the last person picked.
+      forgetDoor();
     }
   };
 

@@ -259,6 +259,12 @@ export default function Onboarding() {
       });
       updateUser({ onboardingCompleted: true });
       toast.success('Profile set up! Let\'s get started 💪');
+      // '/dashboard' unconditionally, and since Kd's 2026-08-19 amendment that
+      // is CORRECT for both login doors: a gym-door sign-in goes straight to
+      // the console and reaches this wizard only by pressing "Back to the app"
+      // — i.e. everyone finishing here was heading INTO the member app.
+      // (This card's first draft routed the exit through the door instead,
+      // which was needed only while the wizard stood in front of the console.)
       navigate('/dashboard');
     } catch (err) {
       // Log the MESSAGE only, never `err` — the axios error carries config.data,

@@ -158,24 +158,29 @@ export default function App() {
 
             {/* ── Gym console ───────────────────────────────────────────── */}
             {/* `/console/new` is declared BEFORE `/console/:orgSlug` so "new"
-                is read as the create screen and not as a gym slug. */}
+                is read as the create screen and not as a gym slug.
+                Every console route opts OUT of the onboarding requirement (Kd
+                amendment, 2026-08-19): the questionnaire collects fitness data
+                the console never uses, so a gym owner reaches their business
+                screens without it and meets the wizard only on crossing into
+                the member app — which ProtectedRoute's default still walls. */}
             <Route path="/console" element={
-              <ProtectedRoute>
+              <ProtectedRoute requireOnboarding={false}>
                 <ConsoleLayout><ConsoleHome /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/new" element={
-              <ProtectedRoute>
+              <ProtectedRoute requireOnboarding={false}>
                 <ConsoleLayout><NewGym /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/:orgSlug" element={
-              <ProtectedRoute>
+              <ProtectedRoute requireOnboarding={false}>
                 <ConsoleLayout><ConsoleOverview /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/:orgSlug/members" element={
-              <ProtectedRoute>
+              <ProtectedRoute requireOnboarding={false}>
                 <ConsoleLayout><ConsoleMembers /></ConsoleLayout>
               </ProtectedRoute>
             } />

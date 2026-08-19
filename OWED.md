@@ -4174,6 +4174,72 @@ file and is stated so nobody reads these as lower priority than they are.
       boundary allows without touching workout tables. **A field added to that
       response without re-reading §2.4 is how the org-visibility promise gets
       broken**, so the next card on it starts there.
+- [ ] 🟡 **NO SCREEN ANYWHERE LETS A MEMBER TYPE A GYM'S JOIN CODE.** Found
+      2026-08-19 while building the login door (DECISIONS :10866); **tracked
+      nowhere before, grep-verified.** `POST /v1/orgs/join` has existed since
+      :10010 — seat-safe, `FOR UPDATE` on the org row, idempotent on a repeat —
+      and **no client calls it**: a grep for `orgs/join` over `apps/web/src`
+      returns only the console's own `joinCode` display, which is the OWNER
+      seeing the code, not a member redeeming it.
+      **What this means in plain words:** a gym owner can create a gym, print the
+      code and hand it out, and there is no place in the app for the person
+      holding it to enter it. The console prints an invitation nobody can accept.
+      **It is the member half of the door built today** — "I'm a member" now
+      leads somewhere honest, and what is missing is the one screen that connects
+      a member to the gym that invited them.
+      **Not fixed in the door card (R1.1):** it is a new screen and a new API
+      call, not a routing change. **Part 6 §2's QR poster and the
+      `aihg://org/join?code=` deep link are the mobile half of the same thing**,
+      so whoever builds this should read that first rather than inventing a
+      second entry path. The attach-on-join rule from the member-migration ruling
+      (:9870) lands on this same screen and must not be designed twice.
+      **UPDATE 2026-08-19 — KD RULED THE DOOR'S SHAPE (DECISIONS :11072) and it
+      is bigger than a screen: typing a code creates an APPLICATION.** An
+      unknown person is PENDING — no seat, no member features — until the front
+      desk confirms; a roster match auto-confirms by :9870's rule verbatim
+      (verified email, exactly one candidate). This card therefore also needs:
+      a pending state (`gym_members` has none — VERIFIED, so a migration), the
+      entitlement resolver and §4.2 seat check both excluding pending, the
+      console's confirm queue (ONE mechanism shared with the import card), and
+      the join route reworked from instant to apply. Read :11072 before
+      planning it.
+      **TWO BINDING CLARIFICATIONS + ONE OPTION (DECISIONS :11132, Kd's
+      convenience challenge):** a pending person keeps the WHOLE FREE APP — a
+      build that parks them on a locked or waiting screen is wrong ("no member
+      features" = the gym-paid perks only); the import stays OPTIONAL, so this
+      door must work with zero files uploaded; and **auto-confirm via the
+      imported gym MEMBER NUMBER is an OPTION to evaluate at this card, not
+      ruled** — sequential numbers are guessable, so pair with name/phone if
+      adopted, under :9870's wrong-match-is-not-fixable rule.
+      **THE WAITING ROOM IS RULED TOO (DECISIONS :11385, same day) — three more
+      mechanics this card owes:** a pending application **EXPIRES** if nobody
+      acts on it and **re-applying is free**, so a leaked code's pile clears
+      itself while a missed real member loses seconds (**this RETIRES the
+      "stranger waits forever" line above — the stranger still never gets in,
+      but the ROW dies**); the **GYM IS REMINDED** — a count in the console from
+      day one plus a nudge if applications sit, and **nothing may expire before
+      the gym has been told at least once**, or the feature quietly throws
+      members away; and the **WAITING MEMBER CAN NUDGE** the gym, rate-limited,
+      from a card that sits ON TOP of the whole free app (never a locked or
+      waiting screen). **Defaults put to Kd and not objected to, but RATIFIED AT
+      THIS CARD, not already decided: 14-day expiry · gym reminded at 2 days
+      then weekly · member nudge once a day.** **Ship the IN-APP half first —
+      email does not exist (its own line below).**
+- [ ] 🟡 **NO EMAIL IS EVER ACTUALLY SENT — `EmailSender` LOGS AND RETURNS.**
+      Found 2026-08-19 while ruling the join-application reminders (DECISIONS
+      :11385); **tracked nowhere in this file before, grep-verified** (`grep -ni
+      "notification"` returned two hits, neither of them this). The default
+      implementation logs event names only — deliberately, at P2.1 GAP-5 on
+      2026-07-11, with real delivery deferred to "the notifications module"
+      **that no line has ever owed.** **What is silently affected TODAY, not
+      later:** password reset and email verification both mint a one-time token
+      and then send nothing, so the only way anybody has ever completed either
+      flow is a developer reading it out of the database. **What is blocked
+      tomorrow:** every reminder, nudge and D-5 trial email in the gym plan.
+      **Not urgent-in-itself and genuinely load-bearing — it is the difference
+      between "we told the gym" and "we believe we told the gym".** Whoever
+      builds it owes the provider choice (an R1.4 approval) and the rule that a
+      send failure is logged and retried, never swallowed.
 - [ ] 🟡 **NEITHER `POST /v1/orgs/join` NOR `POST /v1/orgs` HAS A PER-ROUTE RATE
       LIMIT — only the global one.** **JOIN:** codes are 6 characters over a
       32-symbol alphabet (~1.07 billion), so guessing one is not a practical
@@ -4190,6 +4256,19 @@ file and is stated so nobody reads these as lower priority than they are.
       console screen: it is staff-only and takes a uuid, so it is not a guessing
       surface, but it is now the endpoint that hands out the key to a gym's
       roster and it has no per-route limit either.
+- [ ] 🟡 **GYM PLAN/TRIAL ACTIVATION SITS BEHIND KD'S APPROVAL — ruled
+      2026-08-19 (DECISIONS :11072), binds the BILLING card.** The hazard pair
+      this answers was raised by Kd the same day (:11023, tracked nowhere
+      before): friends pooling a cheap gym tier undercut the $5 consumer
+      price, and card-less gym trials (P3.6) invite a fresh-gym-per-month free
+      ride — the resolver already honours `trialing`. **THE RULING: no
+      self-serve path mints a live gym subscription or trial; activation
+      requires Kd approving the gym (real business name and address).** One
+      gate closes both holes — the pool needs a plan that is never approved,
+      the chain needs a trial that never activates. The part of the instinct
+      that does NOT work stays settled at :10959 (an unpaid gym grants its
+      members nothing). **The approval gate is an addition with no governing §
+      — the billing card's plan presents it as such (R0.2).**
 - [ ] ⚪ **`GET /v1/orgs/:gymId/codes` IS CAPPED AT 100 AND HAS NO CURSOR**
       (T3 round 1 L-1, 2026-08-18). Added as a BOUND, not as pagination — it was
       the only list in the orgs module without one while `/mine` is capped and
@@ -4207,6 +4286,38 @@ file and is stated so nobody reads these as lower priority than they are.
       the staff routes, which is why this rides the §2.2-matrix line above — but
       the TEST gap itself had no line anywhere and now has one, so the card that
       builds staff management cannot close without noticing it.
+- [ ] 🟡 **PER-STAFF PRIVILEGE TICKS ON TOP OF THE THREE ROLES — Kd ruling
+      2026-08-19 (DECISIONS :11429), an ADDITION to §2.2's fixed matrix.** His
+      words: *"Owner · Manager · Trainer staff , and the privileges ticked per
+      staff member also needed"*. The role picks the STARTING ticks; **the ticks
+      are what the server enforces.** Roles and their CHECK constraint are
+      untouched.
+      **THE SEAM IS CHEAP NOW AND EXPENSIVE LATER, measured: ONE function and
+      TWO call sites** — `orgs/service.ts:219 requireStaff(..., allowedRoles[])`
+      at `:244` and `:296`. **Any new route that checks a role NAME re-opens
+      this**; the check to write is "holds privilege X".
+      **Catalogue** = §2.2's rows (with **privacy as its own tick** — a manager
+      gets settings but not privacy) + **confirm a join application**
+      (:11072/:11385) + **roster import** (:9809/:9870).
+      **RULE THAT CLOSES A HOLE THIS RULING OPENS: the last owner cannot be
+      ticked out of billing or staff management.** §4.7 blocks last-owner
+      REMOVAL and says nothing about ticks, which achieve the same lockout by
+      another door — without this a gym locks itself out and only we can let it
+      back in. Also binding: only an OWNER changes ticks · ticks may widen as
+      well as narrow · **UI hides, the SERVER enforces** (a greyed control over
+      a live route is the defect, R3.3) · every change audit-logged ·
+      **a tick is not a SCOPE** — trainer *assigned/group only* is the group
+      axis and is still blocked on the missing group column (line above);
+      conflating them hands a trainer the whole roster.
+      **Needs a MIGRATION** (`gym_staff` stores no privileges) and the plan must
+      flag it (R0.2). **K4 calls to ratify, not re-derive:** store the EFFECTIVE
+      set as a snapshot rather than a diff against the role template (a template
+      edit must never silently widen ten people's access; the cost is that
+      default changes do not retro-apply), and decide table-vs-JSONB against
+      R4.2 at the card. **A fourth FRONT-DESK role was recommended against and
+      not taken** — it guards a till we do not have, and ticks make it
+      unnecessary; revisit only if attendance and product sales make a standard
+      receptionist bundle worth naming.
 - [ ] ⚪ **THE CONSOLE'S ANALYTICS EVENTS ARE NOT EMITTED.** Part 3 §4.0 names
       `org_created{type}`, `org_trial_started`, `org_logo_added`,
       `org_poster_downloaded` and the TTFMJ timer; `gym_code_redeemed` is
@@ -4319,6 +4430,29 @@ file and is stated so nobody reads these as lower priority than they are.
       all and should have been labelled temporary when it shipped. Whether it
       SURVIVES beside the new door is part of that card, not decided here — an
       owner already inside the member app still needs a way across.
+      **UPDATE 2026-08-19 — BUILT (DECISIONS :10866), then AMENDED BY KD the
+      same day mid-smoke (:10959): the gym door skips the fitness questionnaire
+      entirely — a gym owner lands straight on the console and meets the wizard
+      only when crossing into the member app ("Back to the app"), where every
+      member screen still requires it. THIS LINE DOES NOT TICK: the smoke
+      restarts on the amended bytes and the T3 is UNRUN** (:4718 F4 — a line
+      ticked in the same commit whose message said otherwise had to be
+      reverted). What now exists: two doors on the login page, one
+      `landingRoute` consulted by all FOUR places that decide where a person
+      lands, the choice remembered for the tab and cleared on sign-out, console
+      routes opted out of the onboarding requirement, and
+      `RUNBOOK/smoke-login-door.md` (rewritten for the amendment).
+      **THE `My Gym` SIDEBAR ENTRY STAYS — the open question above is CLOSED and
+      the answer is "it survives"**: an owner already inside the app still needs
+      a way across without signing out, and the no-removal rule keeps it absent a
+      ruling to drop it. It is no longer a temporary door; the door it stood in
+      for now exists.
+      **THE FOURTH LANDING SITE IS WHAT THIS CARD ALMOST MISSED, and it is worth
+      carrying:** `Onboarding.jsx` ended `navigate('/dashboard')`, hard-coded,
+      and every brand-new account is sent through that wizard — so a NEW gym
+      owner would have finished five setup screens in the member app and never
+      found their console. The door would have worked for everybody except the
+      account it was built for.
 - [ ] 🟡 **MEMBER MIGRATION FROM A COMPETITOR APP — Kd ruling 2026-08-18
       (DECISIONS :9809): a SYSTEM, built now, not a favour to the first
       customer.** The spec has member EXPORT only (`03-part3-org-console.md:105`,
@@ -4347,6 +4481,40 @@ file and is stated so nobody reads these as lower priority than they are.
       re-map, skip, or cancel-and-reupload; rows editable forever after;
       re-upload updates, never duplicates); works on phone and laptop via the
       one responsive console, preview built PHONE-FIRST.**
+      **FORMATS RULED 2026-08-19 (DECISIONS :11309): `.csv`, `.xlsx` and legacy
+      `.xls` — nothing else**, and an unsupported file gets a refusal NAMING the
+      two rather than a silent failure. Kd: *"gym submits csv xl or other most
+      used files fprmat and the backedn handles the things onward"*. The reader
+      library must cover the legacy `.xls` case, and is still an R1.4 approval.
+      **The pipeline is now a stated commitment:** gate by looking INSIDE the
+      file never at its extension (R3.9/R2.3) → parse both formats into one row
+      shape → infer columns → preview saving NOTHING → CONFIRM is the ONLY human
+      step → write rows (name-only required, whole original line kept) →
+      in-file dedupe and re-upload-updates → attach-on-join.
+      **THE SENTENCE THAT CHANGES HOW THIS IS PITCHED: the human step is
+      per-COLUMN, not per-ROW** — ~8 decisions whether the file holds 50 rows or
+      5,000, with row-level attention spent only on rows the machine flags. It
+      is the answer to Kd's *"3000 5000 members ... manully check all those
+      numbers that a lot of work"*, and it needs to be true in the BUILD: a
+      preview that asks the owner to scroll 5,000 rows has failed this line.
+      **AND THE PART NO CODE DELIVERS: for a big gym, WE run the migration.**
+      Verified by web search 2026-08-19 — GymMaster staffs a data-transfer team
+      (*"particularly helpful"* above 150+ memberships), Gym Insight sells the
+      same service, and even incumbents exclude financial history and bookings.
+      **Kd already approves every gym by hand (:11072), so "email me your export"
+      rides a call he is making anyway.** Operating answer only — **the app must
+      promise no done-for-you migration.**
+- [ ] ⚪ **PDF ROSTER IMPORT — NOT BUILT, and the condition to revisit is
+      written down.** Kd 2026-08-19: *"ok pdf not needed"* (DECISIONS :11309),
+      after being given the reasoning: nearly every gym PDF was printed BY
+      software that also exports a spreadsheet, so the fix is one export click
+      in THEIR system during onboarding; a scanned paper register needs text
+      recognition whose misreads write wrong facts about other people (:5807's
+      class, where the person harmed cannot see the error to correct it); and
+      demand is unproven. **NOT struck — the trigger is a real PDF-only gym.**
+      If one appears it re-enters BEHIND the same preview screen and changes
+      nothing else in the design. Recorded so the ruling is not mistaken for
+      "nobody thought of it".
 - [ ] ❓ **MIGRATION SEAT POLICY — RESERVED FOR KD, blocks the import card's
       plan gate:** do 1000 imported-but-not-yet-joined members consume 1000 paid
       seats? Pricing policy; decides what an owner is told at upload time.
@@ -4407,6 +4575,27 @@ file and is stated so nobody reads these as lower priority than they are.
 - [ ] ⚪ **CHECK-IN STREAK ("you have come 12 days this month").** Nearly free once
       QR attendance exists, and it is the strongest retention hook a gym has.
       Proposed by me and not contradicted; not a Kd ruling.
+- [ ] 🟡 **THE MEMBER DASHBOARD IS THE NORMAL DASHBOARD PLUS A GYM HEADER — ONE
+      SCREEN, NOT A MEMBERS' APP (Kd 2026-08-19, DECISIONS :11181).** He
+      described it directly: same dashboard as a solo user, plus a welcome
+      message with the gym's name, its logo if uploaded, the gym's updates,
+      notifications, coach instructions, booking, products and messaging.
+      **This is a CONSTRAINT, not a feature — it is recorded so nobody builds a
+      second dashboard for gym members**, which is the expensive mistake
+      available here. The pieces above are the pieces; this line is how they sit.
+- [ ] 🟡 **CLASS AND SEAT BOOKING FOR MEMBERS — named by Kd twice and tracked
+      NOWHERE until 2026-08-19** (grep-verified; :9604 §7 recorded it as an
+      addition with ZERO spec hits, and no `OWED.md` line was ever written).
+      Members *"book clasess"* / seats; the gym runs the schedule from the
+      console. **Zero spec hits means every rule is invented at the card** —
+      capacity, waitlists, cancellation windows and no-shows are each a decision
+      nobody has made. Depends on nothing built today; it is a real subsystem,
+      not a screen, and must not be sized as one.
+- [ ] ⚪ **GYMS SELL THEIR PRODUCTS TO MEMBERS — named by Kd 2026-08-19, tracked
+      nowhere before** (grep-verified). *"sell thier products"*. **This is money
+      moving between a gym and its member, so it lands on the Stripe Connect
+      path (:9604 §3) and cannot precede it** — a catalogue with no payment rail
+      is a picture of a shop. ⚪ because nothing else waits on it.
 
 ### Plans, food and content
 
@@ -4496,6 +4685,30 @@ file and is stated so nobody reads these as lower priority than they are.
       answered. **Nothing may be built here until it is** — this is the one item
       on the 2026-08-18 list where shipping the obvious implementation is worse
       than shipping nothing. Zero spec hits.
+- [ ] ❓ **THE 5-DAY CONSUMER FREE TRIAL — KD'S PLAN WANTS ONE, THE SPEC FORBIDS
+      ONE BY NAME, AND HE HAS NOT RULED (2026-08-19, DECISIONS :11181).**
+      His plan: exercises free always, but personalised plans, recommendations,
+      8 meal scans/day, progress tracking and badges free for FIVE DAYS only.
+      **`05-part5-billing.md:292-293` says: "Consumer trials: none — permanent
+      free tier is the funnel (v1 §9.1; unchanged, restated so nobody
+      'helpfully' adds one later)"**, and v1 §9.1:626-629 gives the reason (a
+      permanent free tier converts better than a time trial for an unknown solo
+      app).
+      **HE ASKED THE RIGHT QUESTION ABOUT HIS OWN IDEA:** what stops someone
+      registering a second email for another five days? **The answer put to him:
+      nothing cheap does — the attack exists only because the trial does.**
+      Recommendation on record is to DROP the trial; if it stays, **only a CARD
+      before the trial starts holds**, which costs real signups on a $3.99–$5
+      product. Priced rather than argued: $0.00212/scan (:9944) ⇒ **$0.085** per
+      farmed five days, against a farmer losing their history, streak and badges
+      every time. **He moved to the next topic; nothing is built either way.**
+      **RULED WITH IT, IF HE RULES FOR THE TRIAL: do badges and progress move
+      behind it?** They are free forever today — `00-architecture-v1.md:611`
+      (logging, streaks, badges ✅ unlimited on Free) and ungated in code (only
+      coach, geo and nutrition consult entitlements) — **so moving them is a
+      REMOVAL of a live free feature and needs an explicit ruling against the
+      cited option, not a plan sentence.**
+      **Blocks nothing today. Blocks the billing card and any seed change.**
 - [x] ❓ **ANSWERED BY KD 2026-08-18 — IT MEANS RUNNING THE BUSINESS
       (DECISIONS :9604).** He answered the third bullet of "THE RULING NEEDED"
       below by simply listing what the console must do: *"Gym management ├──

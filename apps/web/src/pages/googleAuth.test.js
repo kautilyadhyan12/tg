@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import { googleSuccessRoute } from './googleSuccessRoute';
+import { GYM_DOOR, MEMBER_DOOR } from './landingRoute';
 
 const read = (name) => readFileSync(fileURLToPath(new URL(name, import.meta.url)), 'utf8');
 
@@ -55,5 +56,23 @@ describe('googleSuccessRoute (OAuth landing routing)', () => {
 
   it('onboarding flag absent → dashboard (fails open, like ProtectedRoute)', () => {
     expect(googleSuccessRoute({}, false)).toBe('/dashboard');
+  });
+
+  // Kd's two doors. This is the path that most needed the door REMEMBERED
+  // rather than held in React state — signing in with Google leaves the site
+  // and comes back, so the page that reads the answer is not the page that
+  // asked the question.
+  it('honours the gym door on the way back from Google', () => {
+    expect(googleSuccessRoute({ onboardingCompleted: true }, false, GYM_DOOR)).toBe('/console');
+    expect(googleSuccessRoute({ onboardingCompleted: true }, false, MEMBER_DOOR)).toBe('/dashboard');
+  });
+
+  it('gates the member door on the questionnaire and NOT the gym door (Kd amendment)', () => {
+    expect(googleSuccessRoute({ onboardingCompleted: false }, false, MEMBER_DOOR)).toBe('/onboarding');
+    expect(googleSuccessRoute({ onboardingCompleted: false }, false, GYM_DOOR)).toBe('/console');
+  });
+
+  it('sends a failed restore to the login page whatever door was chosen', () => {
+    expect(googleSuccessRoute(null, false, GYM_DOOR)).toBe('/login?error=google_failed');
   });
 });

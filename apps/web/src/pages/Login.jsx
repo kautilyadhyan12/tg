@@ -5,6 +5,14 @@ import { useAuth } from '../context/AuthContext';
 import { useTransition } from '../context/TransitionContext';
 import { Eye, EyeOff, Dumbbell, ArrowRight, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { GYM_DOOR, MEMBER_DOOR, landingRoute, readDoor, rememberDoor } from './landingRoute';
+
+// Kd's two doors (DECISIONS 2026-08-18). Same email, same password, same
+// account — the choice decides only which screen you land on.
+const DOORS = [
+  { value: MEMBER_DOOR, label: "I'm a member" },
+  { value: GYM_DOOR,    label: 'I run a gym' },
+];
 
 // Google OAuth on the NEW API (v1 §6.1). A full-page navigation to
 // /v1/auth/google — it redirects to Google, and the callback sets the same
@@ -33,6 +41,18 @@ export default function Login() {
   const [form,    setForm]    = useState({ email: '', password: '' });
   const [show,    setShow]    = useState(false);
   const [loading, setLoading] = useState(false);
+  // Seeded from the stored door so the choice survives coming BACK here — a
+  // failed Google attempt lands on /login?error=…, and re-drawing the member
+  // door there would silently undo what the person picked a moment ago.
+  const [door,    setDoor]    = useState(() => readDoor() ?? MEMBER_DOOR);
+
+  const chooseDoor = (next) => {
+    setDoor(next);
+    // Written the moment it is PRESSED, not at submit. "Continue with Google"
+    // leaves the site immediately, so a choice recorded only on submit would be
+    // lost for exactly the people who never press Sign In.
+    rememberDoor(next);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -43,13 +63,10 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await login(form.email, form.password);
-      triggerTransition(() => {
-        if (res.user?.onboardingCompleted === false) {
-          navigate('/onboarding');
-        } else {
-          navigate('/dashboard');
-        }
-      });
+      // The door comes from THIS component's state, not from storage: a browser
+      // that refuses sessionStorage must still honour the button just pressed.
+      const dest = landingRoute(res.user, door);
+      triggerTransition(() => navigate(dest));
     } catch (err) {
       toast.error(err.response?.data?.message || 'Invalid credentials');
     } finally {
@@ -111,8 +128,43 @@ export default function Login() {
               Welcome back.
             </h1>
             <p className="text-sm" style={{ color: 'rgba(255,255,255,0.40)' }}>
-              Sign in to continue your training
+              {door === GYM_DOOR
+                ? 'Sign in to manage your gym'
+                : 'Sign in to continue your training'}
             </p>
+          </div>
+
+          {/* ── The two doors ───────────────────────────────────────────────
+              ONE ACCOUNT. The email and password below are the same either
+              way; this only decides where you land. A gym owner is member #1
+              of their own gym (Part 3 §4.0 step 6), so making them separate
+              accounts would mean logging out to use their own app. */}
+          <div
+            role="group"
+            aria-label="How are you signing in?"
+            className="grid grid-cols-2 gap-2 mb-6"
+          >
+            {DOORS.map(({ value, label }) => {
+              const active = door === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => chooseDoor(value)}
+                  className="py-3 rounded-2xl text-sm font-semibold transition-all duration-200"
+                  style={{
+                    background: active ? 'rgba(255,138,31,0.14)' : 'rgba(255,255,255,0.04)',
+                    border:     active
+                      ? '1px solid rgba(255,138,31,0.55)'
+                      : '1px solid rgba(255,255,255,0.07)',
+                    color:      active ? '#FF8A1F' : 'rgba(255,255,255,0.55)',
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
 
           {/* Form */}

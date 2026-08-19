@@ -1,6 +1,181 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: NO TASK — a RULINGS-ONLY session (2026-08-19, continuing the same day as
+      the block below). **NO CODE WAS TOUCHED. The ACTIVE CARD IS THE ONE IN
+      THE NEXT BLOCK — the login door, still mid-smoke and T3-unrun.** This
+      block exists so a fresh chat does not mistake five new DECISIONS entries
+      for finished work.
+
+WHAT WAS RECORDED (DECISIONS :11181 · :11283 · :11309 · :11385 · :11429, index
+lines and OWED lines in the same commit)
+  · **:11181 — Kd restated the product in three audiences** (normal user / gym
+    owner / member) and **the member dashboard is the NORMAL dashboard plus a
+    gym header — one screen, not a members' app.** Staff and coaches sign in
+    through the SAME one-account model (:10824), invited by email from the
+    console — my K4 call, not overruled.
+  · **:11283 — the chatbot will not ship, restated.** NOT a new ruling (:9604
+    §5). **The finding is that it is still WIRED today** (`App.jsx:23`/`:120`,
+    Sidebar) — the ruling describes an intention, not the shipped app.
+  · **:11309 — the import door: `.csv`/`.xlsx`/`.xls` only, PDF ruled OUT**
+    (revisit trigger recorded), the upload pipeline written out as a
+    commitment, and **the human step is per-COLUMN not per-ROW** — which is the
+    answer to "5,000 members is a lot of manual work". Industry checked by web
+    search: column-mapping import IS the standard, and big-gym migrations are
+    run BY THE VENDOR — which costs Kd nothing because he approves every gym by
+    hand anyway (:11072).
+  · **:11385 — the waiting room: applications EXPIRE, the gym is REMINDED, the
+    member can NUDGE.** **This AMENDS :11132 — "the stranger waits forever" is
+    RETIRED.** Nothing may expire before the gym has been told once.
+
+  · **:11429 — the STAFF PERMISSION MODEL: three roles AND per-staff privilege
+    ticks.** Roles unchanged; the ticks are what the server enforces. **The
+    seam is ONE function and TWO call sites today** (`orgs/service.ts:219`, at
+    `:244`/`:296`) — **a new route that checks a role NAME re-opens this.**
+    Rule 2 closes a hole the ruling opens: §4.7 blocks last-owner REMOVAL, and
+    ticking away the last owner's billing/staff-management is the same lockout
+    by another door. A tick is NOT a scope.
+
+THE ONE THING LEFT OPEN, AND IT IS THE ONE A CHAT WILL TRIP ON
+  · **A 5-DAY CONSUMER FREE TRIAL is in Kd's plan and the spec forbids one by
+    name** (`05-part5-billing.md:292-293`). He asked how to stop email-farming
+    of it, was told the attack exists only because the trial does, and **moved
+    on WITHOUT RULING.** Index §2 + its own ❓ OWED line. **Do not build, seed
+    or design a trial; do not re-derive the answer; do not put it to him again
+    as if it were new.** Moving badges/progress behind it would be a REMOVAL
+    (free forever today, v1 §9.1:611 and ungated in code).
+
+FOUND WHILE RECORDING (own OWED lines, tracked nowhere before, grep-verified)
+  · **No email is ever actually sent** — `EmailSender` logs and returns (P2.1
+    GAP-5, 2026-07-11). Password reset and email verification are affected
+    TODAY; every reminder in the gym plan is blocked tomorrow.
+  · **Class/seat booking and gym product sales had no OWED line at all**,
+    though :9604 §7 named both.
+
+GATE: nothing ticks, nothing is built, no test was run because no code changed.
+```
+
+```
+TASK: THE LOGIN DOOR — two doors, one account (Kd's ruling :10824, implemented;
+      **AMENDED BY KD MID-SMOKE, :10959: the gym door skips the fitness
+      questionnaire — it is the MEMBER app's gate, met on crossing "Back to the
+      app", not at sign-in**). **CODE DONE AND PROVEN ON THE AMENDED BYTES.
+      SMOKE RESTARTED-NOT-DONE. T3 UNRUN. NOTHING TICKS. NOT COMMITTED** —
+      working tree only, on `web-repoint`.
+      DECISIONS :10866 + :10959 + index lines (+ ⚠️ supersession note on
+      :10866's index line) + OWED.md edits, all in the tree.
+
+THE AMENDMENT, AND THE REVERSAL A LATER CHAT MUST NOT "FIX"
+  · `landingRoute` answers the GYM door FIRST; the member door is still gated
+    on the questionnaire. The four console routes opt out of ProtectedRoute's
+    onboarding requirement; every member screen keeps the default.
+  · **The wizard's exit is a plain '/dashboard' again and that is now CORRECT**
+    — :10866's D5 defect existed only while the wizard stood in front of the
+    console; now the only way into the wizard is heading INTO the member app.
+    Restoring a door-aware exit there would be re-fixing a fixed thing.
+  · Kd's security question is ANSWERED IN :10959 from the code — the
+    make-a-gym-ride-free trick merges to `free` (INNER join on a LIVE gym
+    subscription in getCandidates), nothing is stealable today (no checkout
+    exists), and the leaked-code gaps were ALREADY tracked (pause/rotate ·
+    remove-member :4161 · rate limits :4177). Do not re-raise it to him.
+
+TWO KD RULINGS LANDED MID-SESSION (:11072) — THEY BIND FUTURE CARDS, NOT THIS ONE
+  · **No gym plan or trial without Kd's approval** — no self-serve path mints a
+    live gym subscription. Kills friend-pooling and trial chaining. Binds the
+    BILLING card; the approval gate has no governing § and must be presented
+    as an addition there.
+  · **A join code is an APPLICATION** — unknown joiner = PENDING, no seat, no
+    features, until front-desk confirm; roster match auto-confirms by :9870's
+    rule VERBATIM. Amends :9870's "joins immediately" half; ONE confirm-queue
+    mechanism shared with the import card. `gym_members` has NO pending state
+    (verified) → that card carries a migration; resolver + seat check must
+    exclude pending.
+  · **The lesson that produced them, binding on how records get used: a hazard
+    put to Kd comes WITH solution options and a recommendation — "recorded for
+    later" alone is what he exploded at** ("i need solution not
+    acknowledgement").
+  · **Kd then pressure-tested both on convenience and they STAND (:11132),
+    with two clarifications that BIND the builds:** a PENDING person keeps the
+    WHOLE FREE APP (a locked/waiting screen is a wrong build — "no member
+    features" means the gym-paid perks only), and Kd's approval gates ONLY
+    paid plan/trial activation (create/code/join/console un-gated). The import
+    is OPTIONAL — the apply door must work with zero files. Member-number
+    auto-confirm is a recorded OPTION for the join card, not ruled.
+
+WHAT WAS BUILT
+  · The login page offers **"I'm a member"** / **"I run a gym"**. Same email,
+    same password, same account — the choice decides only the landing screen.
+  · **`apps/web/src/pages/landingRoute.js` is the whole card**: the decision,
+    plus a tab-scoped memory of the choice (`sessionStorage`, cleared on
+    sign-out beside `resetTimezoneSync()`).
+  · Web only. **No API change, no migration, no `@app/shared` change.**
+    `gym_staff` already answers "does this person run a gym".
+
+THE TRAP THE NEXT CHAT MUST NOT REOPEN — FOUR LANDING SITES, NOT ONE
+  · The ruling names the login page; the login page was the easy half. **FOUR
+    places decided where a person lands** — Login's submit, `googleSuccessRoute`,
+    `PublicRoute`'s already-signed-in redirect, and **`Onboarding.jsx`'s last
+    line, which was a hard-coded `navigate('/dashboard')`.**
+  · **That fourth one is the finding.** Every brand-new account goes through the
+    wizard first, so without it the person who pressed "I run a gym" finishes
+    five setup screens in the member app and never finds their console — the
+    door working for everyone EXCEPT the account it exists for.
+  · All four now call `landingRoute`. **Adding a fifth landing site without
+    calling it re-opens this.**
+
+DECISIONS NOT TO RE-DERIVE (full text at :10866)
+  · **The door does NOT check whether you run a gym.** `/console` is the
+    create-a-gym front door and already says "You don't run a gym yet". Gating on
+    `gym_staff` strands the brand-new owner pressing the button.
+  · **The password path never reads storage** — Login passes its own state — so a
+    browser refusing `sessionStorage` still honours the button just pressed.
+  · **A stored value that is not exactly one of the two doors is NO door.**
+  · **The `My Gym` sidebar entry STAYS.** :10824 left this open and assigned it
+    here; it is now answered "it survives" and is no longer temporary.
+
+INSTRUMENT FINDING — THE HARNESS ABORTED BEFORE WRITING A BYTE
+  · `Login.jsx` is **CRLF on disk** and D9's anchor spans two lines, so it
+    matched nothing — :4267's class, now a FOURTH harness. Class-fixed by
+    converting the ANCHOR to the file's line endings, NOT by normalising the
+    file (that rewrites every line, and a mutant is only evidence about the one
+    it changed). The whole-table pre-check ported at :10726 is what made this an
+    abort rather than a false ALIVE.
+
+SAID RATHER THAN GLOSSED
+  · **Two of the ten mutants (D5 the wizard's exit, D7 sign-out clearing) are
+    caught by SOURCE assertions, which are the weaker kind** — the wizard is a
+    five-step form with no render harness and `AuthContext` has had zero coverage
+    since :618 T3 F5. They exist because the alternative is no guard at all; the
+    smoke checks both in a browser.
+
+GATES, ALL RE-RUN AFTER THE AMENDMENT'S LAST SOURCE EDIT
+  · web **797/797** (+26; the unfinished-account render test split into member
+    and gym arms) · `vite build` ✓
+  · **web lint = HEAD baseline, MEASURED** — App.jsx clean, Onboarding's single
+    pre-existing `Ruler` error unchanged; the earlier `git show HEAD:` baseline
+    comparison covered the rest.
+  · **11 mutants · 11 RED · 0 ALIVE · 0 never ran** (D1/D2/D5 re-anchored to
+    the amended decision order, D11 added for the console routes' opt-out, the
+    wizard target RETIRED WITH ITS REASON), control GREEN on all eleven filters
+    first, restores sha256-verified, **exit code read directly, not through a
+    pipe** (:9509). Harness: `apps/web/tools/mutate-login-door.mjs`.
+
+FOUND OUTSIDE THE CARD, NOT FIXED (R1.1), NOW TRACKED
+  · **No screen anywhere lets a member type a gym's join code.**
+    `POST /v1/orgs/join` has existed since :10010 and no client calls it
+    (grep-verified). The console prints an invitation nobody can accept. Own
+    🟡 `OWED.md` line; Part 6 §2's QR/deep-link and :9870's attach-on-join land
+    on that same screen and must not be designed twice.
+
+NEXT: Kd runs `RUNBOOK/smoke-login-door.md` — REWRITTEN, 9 steps, on the
+      AMENDED bytes (step 4 now expects the console immediately with NO
+      questionnaire; step 5 is the crossing that brings it; step 4 needs a
+      BRAND-NEW account, step 7 needs Google configured or is skipped) → fix any
+      failures → T3 in a FRESH chat on the diff → then, and only then, the OWED
+      door line ticks and the packet commits.
+```
+
+```
 TASK: NOT A CARD — A PRODUCT-DIRECTION SESSION. Kd re-aimed the project and the
       rulings are now recorded. **NO CODE WAS WRITTEN. NO CARD WAS PLANNED. NO
       ESTIMATE WAS RATIFIED.** DECISIONS :9604 + its index line + a new OWED.md

@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { landingRoute, readDoor } from '../../pages/landingRoute';
 
 const Spinner = () => (
   <div
@@ -47,10 +48,15 @@ export const ProtectedRoute = ({ children, requireOnboarding = true }) => {
   return children;
 };
 
+// A signed-in person who lands back on /login (a bookmark, the browser's back
+// button) is sent on rather than shown the form again — and it goes through the
+// SAME decision the login button does, so the door they chose this session is
+// still honoured. Sending them to the dashboard here while the button sends them
+// to the console is exactly the "works sometimes" door `landingRoute` exists to
+// prevent.
 export const PublicRoute = ({ children }) => {
   const { user, loading } = useAuth();
   if (loading) return <Spinner />;
   if (!user) return children;
-  if (user.onboardingCompleted === false) return <Navigate to="/onboarding" replace />;
-  return <Navigate to="/dashboard" replace />;
+  return <Navigate to={landingRoute(user, readDoor())} replace />;
 };
