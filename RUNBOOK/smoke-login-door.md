@@ -201,11 +201,24 @@ fine answer; a guessed one is not.
 
 Steps **1–4 PASSED** in Kd's browser on `174fd71`, before this change.
 
-They are re-run here rather than carried over, and the reason is worth stating:
-the *judgement* each of those steps makes — which screen you land on — is not
-affected by this change, but the screens they land ON (the Dashboard's sidebar,
-the console's shell) are exactly what changed. Steps 5–8 re-observe those same
-surfaces, so nothing rests on a pass taken against older bytes.
+**They are not re-typed, and here is the exact reason — it is a coverage
+argument, not a convenience one.** The *judgement* each of steps 1–4 makes is
+which screen you land on, and this change touches none of that. What it does
+touch is the screens they land ON — the Dashboard's sidebar and the console's
+shell — so a pass taken against older bytes must not be the last word on them.
+**Steps 5–11 re-observe every one of those surfaces on the new bytes:**
+
+| carried from | re-observed by |
+|---|---|
+| 2 — member door lands in the app | **8** — member door as A, sidebar inspected |
+| 3 — gym door lands in the console | **5** and **10** — the console's shell, and the gym door via Google |
+| 4 — new owner skips the questionnaire | **7** — the same account B meeting the questionnaire through the *member* door |
+| 1 — both doors on the page | **9** and **11** — the doors, their memory, and its reset |
+
+The one thing genuinely not re-run is **registering** a new account (step 4's
+first half), because account B already exists from the earlier sitting and is
+still un-onboarded, which is exactly what step 7 needs. **A fresh sitting with no
+account B runs the sheet from step 1.**
 
 Old step 5 (crossing into the member app via "Back to the app") and old step 9
 (the **My Gym** sidebar entry) tested the two links this ruling removed. They are
