@@ -15,6 +15,16 @@ export interface DualRateLimitOptions {
   name: string;
   /** Max requests per window, counted independently per IP and per identifier. */
   max: number;
+  /** Optional separate ceiling for the IP dimension; defaults to `max`, which
+   *  is what every auth route uses and what this limiter did before the option
+   *  existed.
+   *
+   *  It exists because one caller has legitimately asymmetric dimensions: the
+   *  gym join door, where a single ACCOUNT applying twice is already odd but
+   *  thirty accounts applying from one gym's wi-fi on induction day is the
+   *  normal case. Adding the option is strictly additive — an options object
+   *  without it behaves exactly as before, which the auth suite proves. */
+  ipMax?: number;
   windowMs: number;
   /** Extracts the identifier (normalized email) from the request; return null
    *  to count only the IP dimension. */
@@ -26,12 +36,14 @@ export function createDualRateLimit(
   opts: DualRateLimitOptions,
 ): (req: FastifyRequest, reply: FastifyReply) => Promise<void> {
   const windowSeconds = Math.max(1, Math.ceil(opts.windowMs / 1000));
+  const ipMax = opts.ipMax ?? opts.max;
 
   const hit = async (
     req: FastifyRequest,
     dimension: "ip" | "id",
     value: string,
   ): Promise<boolean> => {
+    const max = dimension === "ip" ? ipMax : opts.max;
     const count = await opts.redis.incrWithTtl(`rl:${opts.name}:${dimension}:${value}`, windowSeconds);
     if (count === null) {
       // Redis down → fail open, but NEVER silently (T3 P2.4): a silent
@@ -43,7 +55,7 @@ export function createDualRateLimit(
       );
       return true;
     }
-    return count <= opts.max;
+    return count <= max;
   };
 
   return async (req, reply) => {

@@ -11842,3 +11842,268 @@ care.
 
 **THE OWED DOOR LINE NOW TICKS ON THE NEXT COMMIT** — smoke 11/11 (:11706) and a
 review round with zero Critical/High, which is the full gate.
+
+## 2026-08-19 — THE JOIN DOOR OPENS ON THE SERVER: typing a code now APPLIES, the front desk confirms, and a pending person is invisible to every reader of live membership
+
+**Read before touching `apps/api/src/modules/orgs`, before adding any route that
+checks a staff ROLE NAME, before adding a reader of `gym_members`, and before
+building the join screen or the console's confirm queue.** Step 1 of 3 —
+**Kd approved the split in two words ("3 steps") and step 1 in one ("approve")**,
+after being shown that one card would be roughly four times the diff that has
+caused review spirals here before (:2158's recorded lesson, applied in advance
+rather than after eleven rounds). Implements :11072 ruling 2. **NO SCREEN, SO NO
+SMOKE — the :10010/:10402 precedent, stated at the card rather than skipped;
+`OWED.md`'s door line names a SCREEN and does NOT tick.**
+
+### THE ONE DECISION THAT SHAPED EVERYTHING ELSE: A SEPARATE TABLE
+
+`gym_join_applications`, **not** a `status` column on `gym_members`. Measured
+this session: **eleven places across six server files** read
+`removed_at IS NULL` as "this person is a live member" — the §4.1 resolver's
+canonical SQL, the three per-module `getLiveGymId` spend-attribution lookups,
+the roster, `/mine`, the §4.2 seat count and the DPDP Day-0 close. A status
+column makes every one of them OPT-OUT, and the one that gets missed hands a
+stranger the gym's paid entitlements with nothing on any screen to show for it.
+**The separate table leaves Part 4 §4.1's and §4.2's canonical SQL VERBATIM
+(R4.5) and correct by construction — no edit, therefore no missed edit.** This
+is :1239's "fix the class, not the case" applied from the side where the class
+is CREATED rather than discovered.
+
+Migration `0011_gym_join_applications` — expand-only, forward-only, no backfill,
+no rewrite, no lock risk (a new table). Status is `text` + `CHECK`, never a PG
+enum (R4.2); `gym_join_applications_pending_uq` is deliberately the same
+partial-index shape as `gym_members_live_uq`, so a double tap is idempotent AT
+THE DATABASE rather than by a service remembering to check.
+
+### WHAT MOVED, AND WHAT DELIBERATELY DID NOT
+
+**Part 4 §4.2's seat-safe join was MOVED INTACT into `claimSeat` and is now
+reached by the front desk's CONFIRM.** The statements and their order are the
+ones reviewed against §4.2; what changed is who triggers them. `applyByCode`
+takes **no org lock at all** — §4.2's lock exists to serialise SEAT consumption
+and applying consumes nothing, so taking it would serialise every applicant
+gym-wide for no guarantee; the partial unique index settles the double tap
+instead. **Lock order is decided in ONE place and is always application → gym**,
+because two front-desk staff working the queue at once is the deadlock this
+would otherwise invite.
+
+**Six decisions a later chat should not re-derive:**
+1. **`uses` is NOT incremented at apply.** A code's `uses` counts memberships it
+   created. If applying burned one, a stranger with a leaked code could exhaust
+   a `max_uses` code and shut a real gym's poster down without ever getting in.
+2. **Confirm does NOT re-apply the code's automatic refusals** (paused /
+   expired / max_uses). Those gate the APPLY door. At confirm a human has looked
+   at a named person and said yes; refusing because the gym paused the code
+   afterwards would be the app overruling the gym about its own member. **The
+   SEAT cap is different and IS enforced** — that one is money and is not the
+   front desk's to waive.
+3. **A full gym does NOT destroy the application.** `seat_cap` returns with the
+   row still `pending`, so the owner adds a seat and taps again rather than
+   hunting for somebody the app threw away — §4.2's idempotent success applied
+   to the failure side. **And this reader IS the gym, so the number IS named**
+   ("your plan covers 1 member…"), the exact opposite of the pre-ruling join
+   where the reader was the joiner and the cap was none of their business.
+4. **Consent is captured on the APPLICATION and copied to the membership**, so a
+   clinic's DPDP record dates the moment the person agreed and not the moment
+   the paperwork was done. Asserted by comparing the two timestamps, not by
+   checking that both are non-null.
+5. **The join response is a DISCRIMINATED UNION** (`pending` /
+   `already_pending` / `already_member`), so the server cannot serve "you are
+   waiting" alongside a membership. **There is deliberately NO `joined` arm** —
+   only :9870's auto-attach produces one, and it has no input (below).
+6. **A rejected person is TOLD and may re-apply.** Leaving "waiting for Iron
+   House" on screen after the gym said no is the app stating something false
+   (:5807); silently vanishing the card leaves a mis-tapped real member with no
+   idea what happened. The per-route rate limit bounds a stranger's retries —
+   never a permanent block on somebody the front desk got wrong.
+
+### THE PERMISSION SEAM IS IN, AND KD WIDENED IT IN THE SAME BREATH
+
+:11429 warned that a new route checking a ROLE NAME re-opens the seam while it
+is still one function and two call sites. **This card adds four routes, so the
+conversion happened here**: `requirePrivilege`, a finite named privilege set,
+and role DEFAULTS. `members.confirm` starts at **owner + manager**, aligned with
+§2.2's "Remove / restore member" row — confirming and removing are the same
+power pointed in opposite directions. Kd was given that cost before approving
+and answered *"ok only owner and manager but if owner gives permission others
+can also add"*, which is :11429's ruling restated; **the ticks themselves have
+no storage and are the staff card's** (own `OWED.md` line). A trainer gets
+**403, not 404** — they already know the gym exists, and the seam returning both
+is the whole reason it hands back `{org, role}`.
+
+### THREE THINGS THIS DOES NOT DO, STATED RATHER THAN DISCOVERED LATER
+
+- **AUTO-CONFIRM IS NOT BUILT AND COULD NOT BE.** :11072 rules that a roster
+  match auto-confirms by :9870's key verbatim; **measured — no roster/import
+  table exists at all**, so the candidate set is empty by construction. NOT
+  stubbed (R1.3), and the outcome union has no `joined` arm precisely so the
+  import card adds the arm WITH the code that produces it. **Cost today, and Kd
+  was told: every applicant waits for a tap, including a gym's own existing
+  members.** Acceptable only because :11132 keeps them on the whole free app.
+- **NOTHING EXPIRES.** Every row carries a 14-day `expires_at` and no code reads
+  it, which contradicts :11385 as written — a deferral, not a disagreement, with
+  its own 🔴 line. Step 3 owes the sweep, the reminder, the nudge, and :11385's
+  load-bearing ordering rule (nothing expires before the gym has been told once).
+- **The leaderboard opt-out Part 6 §2 lists beside the join screen** is not
+  built; ⚪, because `hidden_from_boards` already exists and there are no boards.
+
+### TWO CORRECTIONS TO THE RECORD, BOTH MINE TO MAKE
+
+- **The orgs repo's header claimed to be "the ONLY file that touches" the gym
+  tables AND THAT WAS ALREADY FALSE** when it was written: the DPDP Day-0 flow
+  closes `gym_members` inline in `users/repo.ts`, because R7.1 forbids the
+  deletion cascade calling into another module's repo. This card adds a second
+  statement beside it (cancelling pending applications, so a deleted person's
+  NAME does not sit in a gym's queue for a fortnight and one tap cannot make
+  them a member of a gym they left the product to escape). **The sentence was
+  corrected rather than a second breach added under a rule the file claimed to
+  keep** (:8707 — a record is a claim).
+- **The new table joins the ALREADY-OPEN Kd gap in `privacy/tables.ts`** beside
+  `gym_members`, on identical footing: user-linked, unnamed by §5.2, a person's
+  own record of their relationship with a gym. **Its Day-0 half IS handled; only
+  Day-14 is open, and the two must be ruled TOGETHER** — a ruling that purges
+  membership history but leaves the applications that produced it is a partial
+  answer, and symmetry between deletion and export is what makes either list
+  auditable at all.
+
+### RATE LIMIT: THE OWED LINE'S JOIN HALF CLOSES, AND THE ASYMMETRY IS THE POINT
+
+`POST /v1/orgs/join` gains a per-route dual-bucket limiter: **10/hour per
+ACCOUNT, 120/hour per IP**. A real person applies to their gym once; but the
+normal case for the IP dimension is **thirty members on the same gym wi-fi on
+induction day**, so a tight per-IP number would lock out the exact scenario the
+feature exists for. Neither figure has a governing § — both are recorded as
+chosen (R0.2). Needed a small ADDITIVE `ipMax` option on the shared limiter;
+every auth route is unchanged and its own suite proves it. `POST /v1/orgs` and
+`GET /codes` are still uncovered, so that line does not tick.
+
+### THE INSTRUMENT FINDINGS — FOUR, AND THREE ARE MINE
+
+- **CRLF vs LF, the FIFTH occurrence of :4267's class in this repo and the first
+  in an api harness.** `modules/users/repo.ts` is CRLF while every orgs file is
+  LF, so the DPDP mutant matched nothing and would have ABORTED a sweep it
+  should have passed. **The recorded class fix was ported, not re-invented**
+  (:10866): convert the ANCHOR to the file's line endings, never normalise the
+  FILE — normalising rewrites every line, and a mutant is only evidence about
+  the one line it changed.
+- **My own anchor checker lied toward a false alarm**, reporting seven anchors
+  BROKEN that matched perfectly: it treated `\n` inside a single-quoted JS
+  literal as two characters. Caught and fixed before any conclusion was drawn
+  from it — but the shape is the one this repo keeps recording, an instrument
+  believed before it was checked.
+- **Ten of the twenty-six existing mutants had genuinely drifted** and were
+  re-anchored; three more named a test that had been renamed. **The whole-table
+  pre-check caught every one before a byte was written** (:5199's class fix,
+  :8610's shape) — the cost was seconds rather than twenty minutes.
+- **And I masked the harness's own exit code with a `| tail` pipe on the first
+  run** — :5906/:10402's exact recorded shape, recurring in the session that
+  cites it. Re-run writing the exit code into the log directly.
+
+**One abort was TRANSIENT and is recorded as such rather than as a defect:** the
+first sweep aborted on a control filter that produced no test tally; the same
+filter, run three times afterwards by hand and by the harness, tallies and
+passes. Read as a database blip, not as evidence about the code — and the guard
+firing on it is the guard working.
+
+### THE AUDIT IS THE PART WORTH READING: FOUR MUTANTS SURVIVED, AND ONE OF THE TESTS WRITTEN TO CLOSE THEM FOUND A REAL BUG IN THIS CARD'S OWN CODE
+
+First full sweep: **35 mutants · 31 RED · 4 ALIVE · 0 never ran**, exit code 1.
+The honest reading of ALIVE is not "a mutant is wrong", it is **"this guarantee
+has no test"** (:5199, :5104 F5) — and all four said the same thing in three
+different ways, every one of them created by this card MOVING the door rather
+than by anything being written badly.
+
+- **O8 and O17 are one finding.** `claimSeat`'s already-holds branch carries the
+  T3 round 1 C/H-1 regression fix AND "a repeat does not burn a code use", and
+  **both lost their coverage the moment the idempotent path started
+  short-circuiting at APPLY** — nothing reaching `claimSeat` is ever already a
+  member through the public API today. A fix whose protection cannot fail is the
+  same defect with a comment on it, so the state is now built directly in a
+  test. It is not contrived for long: the roster IMPORT creates memberships with
+  no code and no application, which is exactly this shape.
+- **O14 had silently drifted onto the wrong query.** `LIMIT ${input.limit + 1}`
+  now appears TWICE in the repo and a string replace takes the FIRST match —
+  the confirm queue — so a mutant named "the roster page stops over-reading by
+  one" was reporting on a surface its own name disowns. **:11757 L2's shape,
+  one card later, in a file written by the chat that recorded it.** Re-anchored
+  on the `ORDER BY` above it; the queue got its own mutant and its own test.
+- **O6 was still aimed at the pre-ruling join.** Its anchor is the APPLY path's
+  `already_member` bust while its filter named the test that now exercises
+  CONFIRM, so it proved nothing about either. Split: O6 keeps the apply arm with
+  a test written for it, **O36 covers the confirm arm** — the one that matters,
+  since that is where a membership is actually created.
+
+**AND THE TEST WRITTEN FOR O14 FOUND A LIVE BUG IN MY OWN PAGER.** The confirm
+queue **repeated the last row of every page as the first row of the next**.
+Cause, measured rather than reasoned: Postgres stores `timestamptz` to the
+MICROSECOND (`now()` came back `…467902`) and a JS `Date` — so `toISOString()` —
+carries MILLISECONDS (`…467`), so a cursor built from the serialized timestamp
+names an instant slightly EARLIER than the row it came from, and an ASC `>`
+comparison lets that row straight back in. **Fixed by carrying the row's ID and
+letting SQL read the true value back**, which removes the round trip through a
+lossy format instead of papering over it.
+
+**THE SAME DEFECT IS LATENT IN THE ROSTER AND IS NOT FIXED HERE (R1.1), WITH ITS
+OWN 🟡 LINE.** DESC + `<` against a too-small cursor EXCLUDES rather than
+repeats, so instead of a duplicate the roster can silently SKIP a member whose
+`joined_at` falls inside that sub-millisecond window. **A duplicate is visible on
+page two; a gap is invisible for ever** — which is the only reason this was found
+from the queue's side and not the roster's. It needs two rows inside one
+millisecond to bite, and the roster IMPORT writing many rows in a single
+transaction is the thing most likely to produce them.
+
+**The harness also gained `MUTATE_ONLY`**, which the web harness has had since
+:4855 F6 and this one did not — every fix round here was costing a full
+35-mutant sweep against a database in another country. **An unknown label is
+FATAL and a subset run PRINTS that it is a subset**, so a partial figure cannot
+be quoted as a complete one.
+
+**AND THE FIX ROUND REPRODUCED THE VERY DEFECT IT WAS CLOSING, WHICH IS THE
+LESSON WORTH KEEPING.** O8 and O17 came back ALIVE a SECOND time: the new test
+existed and passed, but both rows still named the OLD test in their `expect`
+filter, so the sweep ran them against a suite that never reaches the branch.
+**The same shape as the finding itself — a mutant aimed at the wrong place — and
+committed while fixing it.** Re-pointed to `ALREADY holds a seat`; both RED on
+the re-run. **A mutant has TWO halves and a fix has to move both**: the anchor
+says what breaks, the filter says what should notice, and this repo has now
+recorded the anchor half four times (:5199, :8610, :10402, :10726) without ever
+naming the filter half.
+
+**AND THE SECOND FULL SWEEP FOUND A FIFTH SURVIVOR THE FIRST ONE HAD PASSED —
+O7, WITH ITS ANCHOR, ITS MUTATION AND ITS NAMED TEST ALL UNCHANGED BETWEEN THE
+TWO RUNS.** It guards §4.2's `ON CONFLICT` (a confirm for somebody who already
+holds a seat must be idempotent, not a 23505 that aborts the transaction). **The
+named test cannot reach that line** — a second Confirm is answered
+`already_confirmed` from the application's own status before `claimSeat` is
+called — **so the first run's RED cannot have been caused by the guarantee.**
+The remaining explanation is a leftover live membership in the SHARED test
+database making the first insert conflict: **:10182's C/H-3 exactly, one card
+later, in a MUTANT instead of in a test.** Re-pointed at the test built to reach
+the branch; RED on the re-run.
+
+**The standing lesson, and it is the one this card is really about: a verdict
+nobody can name a cause for is not evidence.** Four of the five survivors here
+were mutants aimed at the wrong place, and the fifth was a mutant that had been
+passing for a reason that was never true. **A green sweep is a claim about the
+TESTS, and it is only worth what the aiming is worth.**
+
+### PROVE — every figure from a command run this session, none recalled
+
+- api **506/506 across all 43 files** against real Postgres. The WHOLE suite,
+  not just this module, because the DPDP Day-0 flow and the shared dual-bucket
+  rate limiter were both touched — the `ipMax` option is additive and the auth
+  suite proves it changed nothing.
+- shared **48/48** · web **806/806** (untouched by this card, re-run because
+  `@app/shared` moved under it) · `tsc` clean · eslint clean on api and shared ·
+  migration applied to the real database and reviewed as SQL.
+- **MUTATION SWEEP, one completed run of the whole table after every fix:
+  38 mutants · 38 RED · 0 ALIVE · 0 never ran**, exit code 0, all 24 controls
+  GREEN first, restores sha256-verified after every mutant, working tree clean
+  afterwards, **exit code written to the log directly rather than read through a
+  pipe.**
+- The interim figures (35 · 31 RED · 4 ALIVE, then 38 · 37 RED · 1 ALIVE, then
+  three subset runs) are deliberately NOT added together into a composite: **a
+  stitched number is not a run**, and only a completed sweep is quotable
+  (:5199's "the full sweep run to completion for the first time").
+
+**NOTHING TICKS. There is no screen, so there is no smoke — and T3 is UNRUN.**

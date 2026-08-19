@@ -9,9 +9,12 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
 import type { RedisLike } from "../../redis.js";
+import { createDualRateLimit } from "../auth/rateLimit.js";
 import {
+  applicationParamsSchema,
   createOrgRequestSchema,
   joinOrgRequestSchema,
+  orgApplicationListQuerySchema,
   orgMemberListQuerySchema,
   orgParamsSchema,
 } from "./schemas.js";
@@ -73,12 +76,96 @@ export function registerOrgRoutes(
     return reply.status(200).send(orgs);
   });
 
-  app.post("/v1/orgs/join", { preHandler: [app.authenticate] }, async (req, reply) => {
-    const body = parseOr400(joinOrgRequestSchema, req.body, req, reply);
-    if (body === null) return;
-    const joined = await service.joinOrg(orgDeps, requireUserId(req), body);
-    return reply.status(200).send(joined);
+  // OWED (2026-08-18): `/v1/orgs/join` had no per-route limit, only the global
+  // 300/min floor. It is closed here because this card rewrites the route
+  // anyway, and it is now the door a stranger with a leaked code knocks on.
+  //
+  // THE TWO NUMBERS ARE DIFFERENT ON PURPOSE, and the IP one is the one worth
+  // reading twice. A real person applies to their gym ONCE, so 10/hour per
+  // ACCOUNT is already absurdly generous. But the normal case for the IP
+  // dimension is thirty members standing in the same gym on the same wi-fi
+  // signing up on induction day — a tight per-IP number would lock out the
+  // exact scenario the feature exists for. 120/hour per IP still bounds a
+  // script pointed at the 32^6 code space (~1.07 billion) to nothing.
+  // No § governs either figure; both are recorded in DECISIONS as chosen.
+  const applyLimit = createDualRateLimit({
+    name: "orgs_apply",
+    max: 10,
+    ipMax: 120,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
   });
+
+  app.post(
+    "/v1/orgs/join",
+    { preHandler: [app.authenticate, applyLimit] },
+    async (req, reply) => {
+      const body = parseOr400(joinOrgRequestSchema, req.body, req, reply);
+      if (body === null) return;
+      const applied = await service.applyToOrg(orgDeps, requireUserId(req), body);
+      return reply.status(200).send(applied);
+    },
+  );
+
+  /** The applicant's own waiting list. Declared BEFORE `/v1/orgs/:gymId/...`
+   *  would matter if these shared a prefix — they do not, but the ordering
+   *  convention in this file is deliberate and `applications` is a literal
+   *  segment that must never be read as a gym id. */
+  app.get("/v1/orgs/applications/mine", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const applications = await service.listMyApplications(orgDeps, requireUserId(req));
+    return reply.status(200).send(applications);
+  });
+
+  app.get(
+    "/v1/orgs/:gymId/applications",
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const params = parseOr400(orgParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const query = parseOr400(orgApplicationListQuerySchema, req.query, req, reply);
+      if (query === null) return;
+      const page = await service.listOrgApplications(
+        orgDeps,
+        requireUserId(req),
+        params.gymId,
+        query,
+      );
+      return reply.status(200).send(page);
+    },
+  );
+
+  app.post(
+    "/v1/orgs/:gymId/applications/:applicationId/confirm",
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const params = parseOr400(applicationParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const result = await service.confirmOrgApplication(
+        orgDeps,
+        requireUserId(req),
+        params.gymId,
+        params.applicationId,
+      );
+      return reply.status(200).send(result);
+    },
+  );
+
+  app.post(
+    "/v1/orgs/:gymId/applications/:applicationId/reject",
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const params = parseOr400(applicationParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const result = await service.rejectOrgApplication(
+        orgDeps,
+        requireUserId(req),
+        params.gymId,
+        params.applicationId,
+      );
+      return reply.status(200).send(result);
+    },
+  );
 
   // Part 3 §3.3's `GET /codes`, read half — the console's only way to show an
   // owner their own join code after the day they created the gym.

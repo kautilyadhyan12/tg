@@ -18,6 +18,14 @@
  *                 clinic joined without consent, an audit trail that lost an
  *                 event (O6, O9, O11, O13)
  *
+ * O27–O35 are THE WAITING ROOM (Kd ruling 2026-08-19, DECISIONS :11072), and
+ * they sit in the same four columns: the ruling itself inverted so typing a
+ * code admits somebody (O27) · the seat cap and the code's uses, which now
+ * move at CONFIRM rather than at the door (O28, O30, O35) · one gym's staff
+ * deciding another gym's application, and a stranger reading the queue (O29,
+ * O33) · a refusal that can be undone, and a deleted account still waiting
+ * (O31, O32) · Kd's own owner-and-manager line (O34).
+ *
  * Deliberately NOT mutated, per the same rule: wording of the refusal
  * messages, comments, the ported plan seed, and the slug's cosmetics.
  *
@@ -48,6 +56,13 @@ const TARGETS = {
   // picker, so it lives in @app/shared and is mutated there. The api suite
   // imports the workspace source directly, so no build step sits in between.
   shared: { file: resolve(ROOT, 'packages/shared/src/orgs.ts') },
+  // The DPDP Day-0 flow closes a leaving member's gym rows, and since the
+  // waiting-room card it cancels their pending applications in the same
+  // transaction. It lives in the USERS repo — R7.1 forbids the deletion
+  // cascade calling into the orgs repo — so the guarantee is mutated where the
+  // statement actually is. A target outside this map ABORTS the run (:5199),
+  // which is exactly how a mutant pointed at the wrong file gets caught.
+  users: { file: resolve(ROOT, 'apps/api/src/modules/users/repo.ts') },
 };
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
@@ -58,8 +73,8 @@ const MUTANTS = [
     target: 'repo',
     why: 'MONEY: the org row is no longer locked, so two people scanning the same poster at the same instant both read the pre-insert seat count and both get the last seat',
     expect: 'sells the last seat exactly once',
-    from: '      FROM gyms WHERE id = ${found.gym_id} FOR UPDATE`;',
-    to: '      FROM gyms WHERE id = ${found.gym_id}`;',
+    from: '      FROM gyms WHERE id = ${input.gymId} FOR UPDATE`;',
+    to: '      FROM gyms WHERE id = ${input.gymId}`;',
   },
   {
     id: 'O2',
@@ -74,8 +89,8 @@ const MUTANTS = [
     target: 'repo',
     why: "MONEY: the owner's complimentary seat starts consuming a paid one, so every gym is one seat short of what it bought",
     expect: 'enforces the plan',
-    from: "        WHERE gym_id = ${org.id} AND removed_at IS NULL AND complimentary = false`;",
-    to: '        WHERE gym_id = ${org.id} AND removed_at IS NULL`;',
+    from: "        WHERE gym_id = ${input.org.id} AND removed_at IS NULL AND complimentary = false`;",
+    to: '        WHERE gym_id = ${input.org.id} AND removed_at IS NULL`;',
   },
   {
     id: 'O4',
@@ -96,26 +111,46 @@ const MUTANTS = [
   {
     id: 'O6',
     target: 'service',
-    why: 'FALSE ON SCREEN: the entitlement cache is not busted on join, so a member whose gym pays for Pro keeps seeing the free plan limits for up to a minute',
-    expect: 'upgrades entitlements immediately',
+    why: "FALSE ON SCREEN: an existing member re-typing the code stops shaking loose a stale cache, so somebody whose gym started paying keeps seeing the free plan's limits for up to a minute",
+    // RE-AIMED: this anchor is the APPLY path's already_member arm, and its old
+    // filter named the test that now exercises the CONFIRM path instead — so it
+    // came back ALIVE, correctly reporting that neither arm was covered by it.
+    // O36 is the confirm arm; this row keeps the apply arm and points at the
+    // test written for it.
+    expect: 'busts a stale cache',
     from: '      await bustEntitlements(deps.redis, userId);',
     to: '      await Promise.resolve();',
   },
   {
     id: 'O7',
     target: 'repo',
-    why: 'SAVES: the idempotent conflict handling goes, so a second tap on Join raises a constraint violation and the member sees a server error',
-    expect: 'tolerates poster typing',
-    from: '      ON CONFLICT (gym_id, user_id) WHERE removed_at IS NULL DO NOTHING\n      RETURNING id, joined_at`;',
-    to: '      RETURNING id, joined_at`;',
+    why: 'SAVES: the idempotent conflict handling goes, so a confirm for somebody who already holds a seat raises 23505, aborts the transaction and shows a server error instead of §4.2\'s idempotent success',
+    // RE-POINTED, and this row is the one to read twice: it was **RED in the
+    // first full sweep of this card and ALIVE in the second, with its anchor,
+    // its mutation and the named test all UNCHANGED between them.** The named
+    // test never reaches this line — a second Confirm is answered
+    // `already_confirmed` from the application's own status before `claimSeat`
+    // is called — so the earlier RED cannot have been caused by the guarantee.
+    // The remaining explanation is a leftover live membership in the SHARED
+    // test database making the FIRST insert conflict: :10182's C/H-3 exactly,
+    // one card later, in a MUTANT rather than in a test. **A verdict nobody can
+    // name a cause for is not evidence**, so it now points at the test that
+    // genuinely drives the conflict — the one built to reach this branch.
+    expect: 'ALREADY holds a seat',
+    from: '    ON CONFLICT (gym_id, user_id) WHERE removed_at IS NULL DO NOTHING\n    RETURNING id, joined_at`;',
+    to: '    RETURNING id, joined_at`;',
   },
   {
     id: 'O8',
     target: 'repo',
     why: "SAVES: a repeat join burns another of the code's uses, so a max_uses code retires early and the gym's poster stops working",
-    expect: 'tolerates poster typing',
-    from: '      const existing = existingRows[0];',
-    to: '      await tx`UPDATE gym_codes SET uses = uses + 1 WHERE id = ${code.id}`;\n      const existing = existingRows[0];',
+    // RE-POINTED TWICE, and the second time is the lesson: the double-CONFIRM
+    // race never reaches `claimSeat`'s already-member branch at all — the loser
+    // reads an application that is already `confirmed` and returns before it.
+    // Only the test built to construct that state exercises this line.
+    expect: 'ALREADY holds a seat',
+    from: '    const existing = held ?? (await liveMembership(tx, input.org.id, input.userId));',
+    to: '    await tx`UPDATE gym_codes SET uses = uses + 1 WHERE id = ${input.codeId}`;\n    const existing = held ?? (await liveMembership(tx, input.org.id, input.userId));',
   },
   {
     id: 'O9',
@@ -137,7 +172,7 @@ const MUTANTS = [
     id: 'O11',
     target: 'codes',
     why: 'FALSE ON SCREEN: codes stop being normalised, so a code typed off a poster in lower case is answered "that code does not match any gym"',
-    expect: 'tolerates poster typing',
+    expect: 'typing a code APPLIES',
     from: '  return raw.trim().toUpperCase().replace(/[\\s-]/g, "");',
     to: '  return raw;',
   },
@@ -162,8 +197,15 @@ const MUTANTS = [
     target: 'repo',
     why: 'SAVES: the roster page stops over-reading by one, so nextCursor is always null and a gym with more than one page shows only its first',
     expect: 'walks the roster by cursor',
-    from: '    LIMIT ${input.limit + 1}`;',
-    to: '    LIMIT ${input.limit}`;',
+    // ANCHORED ON THE ORDER BY TOO, and that is the finding rather than a
+    // tidy-up: `LIMIT ${input.limit + 1}` now appears TWICE in this file (the
+    // roster and the confirm queue), a string replace takes the FIRST match,
+    // and the first match is the queue. So this mutant silently began driving
+    // a surface its own name disowns — :11757 L2's shape, where index
+    // selection made a case report on the wrong thing. It came back ALIVE,
+    // which is the honest reading: neither query was covered by it.
+    from: '    ORDER BY m.joined_at DESC, m.id DESC\n    LIMIT ${input.limit + 1}`;',
+    to: '    ORDER BY m.joined_at DESC, m.id DESC\n    LIMIT ${input.limit}`;',
   },
   {
     id: 'O15',
@@ -188,9 +230,13 @@ const MUTANTS = [
     id: 'O17',
     target: 'repo',
     why: 'T3 C/H-1 RESTORED: the seat check runs for somebody who already holds a seat, so a full gym answers "no free places" to a member standing in it',
-    expect: 'enforces the plan',
-    from: '    if (!alreadyHolds) {',
-    to: '    if (true) {',
+    // RE-POINTED for O8's reason: since the door became an application door the
+    // seat-cap test's "rejoin while full" case is answered at APPLY and never
+    // reaches this branch, so the guard it was written to protect had drifted
+    // out from under it.
+    expect: 'ALREADY holds a seat',
+    from: '  if (held === null) {',
+    to: '  if (true) {',
   },
   {
     id: 'O18',
@@ -241,7 +287,7 @@ const MUTANTS = [
     target: 'service',
     why: 'OWNERSHIP: the staff check disappears, so a stranger holding the gym uuid — or a plain member — reads the code that lets anyone in',
     expect: "join codes to staff",
-    from: '): Promise<OrgCodesResponse> {\n  await requireStaff(deps, gymId, userId, ["owner", "manager", "trainer"]);\n  const rows = await repo.listCodes(deps.sql, gymId);',
+    from: '): Promise<OrgCodesResponse> {\n  await requirePrivilege(deps, gymId, userId, "codes.invite");\n  const rows = await repo.listCodes(deps.sql, gymId);',
     to: '): Promise<OrgCodesResponse> {\n  const rows = await repo.listCodes(deps.sql, gymId);',
   },
   {
@@ -257,8 +303,8 @@ const MUTANTS = [
     target: 'service',
     why: '§2.2 MATRIX: a trainer loses Invite, which the matrix grants all three roles — the roster hold-back is about the member list, not the poster code',
     expect: 'gives a studio TRAINER the join codes',
-    from: '): Promise<OrgCodesResponse> {\n  await requireStaff(deps, gymId, userId, ["owner", "manager", "trainer"]);',
-    to: '): Promise<OrgCodesResponse> {\n  await requireStaff(deps, gymId, userId, ["owner", "manager"]);',
+    from: '): Promise<OrgCodesResponse> {\n  await requirePrivilege(deps, gymId, userId, "codes.invite");',
+    to: '): Promise<OrgCodesResponse> {\n  await requirePrivilege(deps, gymId, userId, "members.confirm");',
   },
 
   // ── T3 round 1's API-side fixes, each restored so its regression test is
@@ -280,7 +326,132 @@ const MUTANTS = [
     from: '    ORDER BY created_at ASC, code ASC\n    LIMIT ${ORG_CODES_LIMIT}`;',
     to: '    ORDER BY created_at ASC, code ASC`;',
   },
+
+
+  // ── THE WAITING ROOM (Kd ruling 2026-08-19, DECISIONS :11072) ────────────
+  // Every row below is Critical/High under :5857 rule 4a — ownership, money,
+  // or something a user would see that would be false. The ruling's whole
+  // content is "a pending person consumes nothing and receives nothing", so
+  // these attack exactly that.
+  {
+    id: 'O27',
+    target: 'repo',
+    why: 'THE RULING ITSELF, INVERTED: typing a code goes back to creating a MEMBERSHIP, so a stranger holding a leaked code is inside the gym before anybody has looked at them',
+    expect: 'typing a code APPLIES',
+    from: '    return { kind: "pending", org, application: toApplicationRow(newRow) };',
+    to: '    await tx`INSERT INTO gym_members (gym_id, user_id, code_id, complimentary) VALUES (${org.id}, ${input.userId}, ${code.id}, false)`;\n    return { kind: "pending", org, application: toApplicationRow(newRow) };',
+  },
+  {
+    id: 'O28',
+    target: 'repo',
+    why: 'MONEY: the seat cap stops being consulted at confirm, so a gym on a one-seat plan can be filled with any number of paying members',
+    expect: 'enforces the plan',
+    from: '    const cap = await seatCapFor(tx, input.org.id);',
+    to: '    const cap = null;\n    void seatCapFor;',
+  },
+  {
+    id: 'O29',
+    target: 'repo',
+    why: "OWNERSHIP, the worst case on this card: an application stops being scoped to its gym, so one gym's staff can confirm a person into ANOTHER gym holding nothing but a uuid",
+    expect: 'decide another gym',
+    from: '      WHERE id = ${input.applicationId} AND gym_id = ${input.gymId}\n      FOR UPDATE`;\n    const app = appRows[0];',
+    to: '      WHERE id = ${input.applicationId}\n      FOR UPDATE`;\n    const app = appRows[0];',
+  },
+  {
+    id: 'O30',
+    target: 'repo',
+    why: 'SAVES: a full gym DESTROYS the application instead of leaving it waiting, so the owner buys a seat and the person they were about to admit has vanished',
+    expect: 'enforces the plan',
+    from: '    if (claim.kind === "seat_cap") return { kind: "seat_cap", cap: claim.cap };',
+    to: "    if (claim.kind === \"seat_cap\") {\n      await tx`UPDATE gym_join_applications SET status = 'rejected' WHERE id = ${app.id}`;\n      return { kind: \"seat_cap\", cap: claim.cap };\n    }",
+  },
+  {
+    id: 'O31',
+    target: 'repo',
+    why: 'SAVES: a REJECTED application can still be confirmed afterwards, so "not this person" is undone by a second tap and the gym cannot actually refuse anybody',
+    expect: 'not this person',
+    from: '    if (status !== "pending") return { kind: "not_pending", status };\n\n    const orgRows = await tx<RawOrg[]>`',
+    to: '    const orgRows = await tx<RawOrg[]>`',
+  },
+  {
+    id: 'O32',
+    target: 'users',
+    why: "PRIVACY: a deleted account keeps waiting in the gym's queue, so their name is shown to a gym for a fortnight and one tap makes them a member of a gym they left the product to escape",
+    expect: 'deleted account',
+    from: "      UPDATE gym_join_applications\n      SET status = 'cancelled', decided_at = now()\n      WHERE user_id = ${userId} AND status = 'pending'`;",
+    to: "      UPDATE gym_join_applications\n      SET decided_at = now()\n      WHERE user_id = ${userId} AND status = 'pending'`;",
+  },
+  {
+    id: 'O33',
+    target: 'service',
+    why: 'OWNERSHIP: the privilege check on the confirm queue disappears, so a stranger holding the gym uuid reads the names of everyone waiting to join it',
+    expect: 'confirm queue to staff',
+    from: '  await requirePrivilege(deps, gymId, userId, "members.confirm");\n\n  // The queue\'s cursor is the application\'s OWN id',
+    to: '  // The queue\'s cursor is the application\'s OWN id',
+  },
+  {
+    id: 'O34',
+    target: 'service',
+    why: "KD'S RULING 2026-08-19: a trainer gains the power to confirm, which he reserved to owner and manager until an owner ticks it on for one named person",
+    expect: 'holds a TRAINER back from confirming',
+    from: '  trainer: ["members.read", "codes.invite"],',
+    to: '  trainer: ["members.read", "codes.invite", "members.confirm"],',
+  },
+  {
+    id: 'O35',
+    target: 'repo',
+    why: 'MONEY: applying burns one of the code\'s uses, so a stranger with a leaked code can exhaust a max_uses code and shut a real gym\'s poster down without ever getting in',
+    expect: 'typing a code APPLIES',
+    from: '    await insertAudit(tx, {\n      actorUserId: input.userId,\n      gymId: org.id,\n      action: "org.join_applied",',
+    to: '    await tx`UPDATE gym_codes SET uses = uses + 1 WHERE id = ${code.id}`;\n    await insertAudit(tx, {\n      actorUserId: input.userId,\n      gymId: org.id,\n      action: "org.join_applied",',
+  },
+
+  // ── ADDED BY THIS CARD'S OWN AUDIT, after four mutants survived ─────────
+  // Each of these three closes a guarantee that had a mutant aimed at the
+  // wrong place, or no mutant at all. They are listed here rather than folded
+  // into the rows above so the reason they exist stays legible.
+  {
+    id: 'O36',
+    target: 'service',
+    why: "FALSE ON SCREEN: the CONFIRM path stops busting the entitlement cache, so somebody just admitted to a gym that pays for Pro keeps seeing the free plan's limits for up to a minute — O6 was still aimed at the apply path and could not see this",
+    expect: 'upgrades entitlements immediately',
+    from: '      await bustEntitlements(deps.redis, outcome.applicantUserId);',
+    to: '      await Promise.resolve();',
+  },
+  {
+    id: 'O37',
+    target: 'repo',
+    why: "SAVES: the confirm queue stops over-reading by one, so nextCursor is always null and a gym with more than a page of people waiting only ever sees the first — the surface O14's anchor had silently drifted onto",
+    expect: 'walks the confirm queue by cursor',
+    from: '    ORDER BY a.applied_at ASC, a.id ASC\n    LIMIT ${input.limit + 1}`;',
+    to: '    ORDER BY a.applied_at ASC, a.id ASC\n    LIMIT ${input.limit}`;',
+  },
+  {
+    id: 'O38',
+    target: 'repo',
+    why: 'FALSE ON SCREEN: the queue count is taken from the PAGE instead of the whole queue, so a console with 90 people waiting prints "3 people waiting" — :10402\'s exact-or-a-bound rule, inverted',
+    expect: 'walks the confirm queue by cursor',
+    from: '    pendingCount: countRows[0]?.n ?? 0,',
+    to: '    pendingCount: page.length,',
+  },
 ];
+
+/** ANCHORS ARE CONVERTED TO THE FILE'S OWN LINE ENDINGS, and the file is never
+ *  normalised (:4267's class fix, as recorded at :10866).
+ *
+ *  Measured 2026-08-19: `modules/users/repo.ts` is CRLF while every orgs file
+ *  is LF, so O32 — the DPDP guarantee — matched nothing and would have aborted
+ *  a sweep it should have passed. That is the FIFTH occurrence of this class in
+ *  this repo and the first in an api harness; porting the fix rather than
+ *  re-learning it is the point of :5348 rule 5.
+ *
+ *  Converting the ANCHOR rather than the FILE is deliberate: normalising the
+ *  file rewrites every line ending in it, so the mutated tree would differ from
+ *  the original everywhere instead of only at the mutation — and a mutant is
+ *  only evidence about the one line it changed. */
+const eolOf = (text) => (text.includes('\r\n') ? '\r\n' : '\n');
+const withEolOf = (snippet, text) =>
+  snippet.replace(/\r\n/g, '\n').replace(/\n/g, eolOf(text));
 
 const abort = (msg) => {
   console.error(`\nABORT — ${msg}`);
@@ -291,7 +462,30 @@ if (!process.env.DATABASE_URL) {
   abort('DATABASE_URL is not set. The suite would SKIP and every mutant would report ALIVE for the wrong reason.');
 }
 
-// Checked for the WHOLE table before a byte is written (:5199).
+/** `MUTATE_ONLY=O6,O14` runs a SUBSET — the web harness has had this since
+ *  :4855 F6 and this one did not, which is why every fix round here cost a
+ *  full 35-mutant sweep against a database in another country.
+ *
+ *  **An unknown label is FATAL, never a silent empty run** (:4855's own
+ *  requirement): a typo would otherwise "pass" by mutating nothing at all,
+ *  which is the fourth-time-lucky shape this repo keeps recording. A subset
+ *  run is NOT a full sweep and says so in its own summary, so a partial figure
+ *  cannot be quoted as a complete one. */
+const onlyRaw = process.env.MUTATE_ONLY;
+const only = onlyRaw === undefined || onlyRaw.trim() === ''
+  ? null
+  : new Set(onlyRaw.split(',').map((s) => s.trim()).filter((s) => s !== ''));
+if (only !== null) {
+  const known = new Set(MUTANTS.map((m) => m.id));
+  const unknown = [...only].filter((id) => !known.has(id));
+  if (unknown.length > 0) {
+    abort(`MUTATE_ONLY names ${unknown.join(', ')}, which are not in the table. Nothing has been run.`);
+  }
+}
+const SELECTED = only === null ? MUTANTS : MUTANTS.filter((m) => only.has(m.id));
+
+// Checked for the WHOLE table before a byte is written (:5199). Runs over
+// MUTANTS, not SELECTED: a subset run still proves the whole table is sane.
 for (const m of MUTANTS) {
   if (!Object.hasOwn(TARGETS, m.target)) {
     abort(`${m.id}: names target '${m.target}', which is not in TARGETS. Nothing has been written yet.`);
@@ -306,7 +500,7 @@ const originals = new Map(
 // costs seconds rather than being discovered twenty minutes in.
 for (const m of MUTANTS) {
   const original = originals.get(m.target);
-  if (!original.text.includes(m.from)) {
+  if (!original.text.includes(withEolOf(m.from, original.text))) {
     abort(`${m.id}: its anchor matched nothing in ${m.target}. A no-op mutation reports as a missing test. Re-anchor it against the current file.`);
   }
 }
@@ -344,7 +538,7 @@ console.log('control (unmutated) — every filter must be GREEN and must tally .
 // checking something else. (Caught in the web harness before it ever ran.)
 const controlPairs = [];
 const seenControl = new Set();
-for (const m of MUTANTS) {
+for (const m of SELECTED) {
   const suite = m.suite ?? SUITE;
   const key = `${suite} :: ${m.expect}`;
   if (seenControl.has(key)) continue;
@@ -361,10 +555,13 @@ for (const { suite, filter } of controlPairs) {
 console.log('control complete\n');
 
 const results = [];
-for (const m of MUTANTS) {
+for (const m of SELECTED) {
   const target = TARGETS[m.target];
   const original = originals.get(m.target);
-  const mutated = original.text.replace(m.from, m.to);
+  const mutated = original.text.replace(
+    withEolOf(m.from, original.text),
+    withEolOf(m.to, original.text),
+  );
   if (mutated === original.text) {
     abort(`${m.id}: its anchor matched nothing at apply time. Re-anchor it against the current file.`);
   }
@@ -390,6 +587,15 @@ for (const m of MUTANTS) {
 
 const bad = results.filter((r) => !r.ok);
 console.log('\n--- summary ---');
+// A SUBSET RUN SAYS SO, IN THE LINE A LATER CHAT WILL COPY INTO A COMMIT
+// MESSAGE. Otherwise "12 mutants · 12 RED" reads as a complete sweep, which is
+// this repo's most-recorded failure shape wearing a new hat.
+if (only !== null) {
+  console.log(
+    `SUBSET RUN (MUTATE_ONLY=${[...only].join(',')}) — ${String(results.length)} of ` +
+    `${String(MUTANTS.length)} mutants. THIS IS NOT A FULL SWEEP; do not quote it as one.`,
+  );
+}
 console.log(
   `${results.length} mutants · ${results.filter((r) => r.verdict === 'RED').length} RED · ` +
   `${results.filter((r) => r.verdict === 'ALIVE').length} ALIVE (0 expected) · 0 never ran`,

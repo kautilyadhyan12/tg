@@ -335,6 +335,100 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   so two `app.inject` calls are serialised by the CLIENT and would pass with the
   lock deleted** — a test that cannot fail. Seven `OWED.md` lines added; the
   console line is UPDATED, not ticked.
+- **:11846** — 2026-08-19 — **THE JOIN DOOR OPENS ON THE SERVER (step 1 of 3):
+  typing a code now APPLIES, the front desk CONFIRMS, and a pending person is
+  invisible to every reader of live membership.** **Read before touching
+  `apps/api/src/modules/orgs`, before adding ANY route that checks a staff ROLE
+  NAME, before adding a reader of `gym_members`, and before building the join
+  screen or the console's confirm queue.** Implements :11072 ruling 2. **Kd
+  approved a THREE-STEP split** (server → the two screens → the waiting room's
+  clock) after being shown one card would be ~4× the diff that caused review
+  spirals here before (:2158 applied in advance), then approved step 1. **NO
+  SCREEN ⇒ NO SMOKE** (:10010/:10402's precedent) and `OWED.md`'s door line names
+  a SCREEN, so it does NOT tick. **THE DECISION THAT SHAPED EVERYTHING: a
+  SEPARATE TABLE, not a `status` column** — eleven places across six server files
+  read `removed_at IS NULL` as "live member" (measured), so a column makes every
+  one OPT-OUT and the missed one hands a stranger the gym's paid entitlements
+  invisibly; the separate table leaves §4.1's and §4.2's canonical SQL **VERBATIM**
+  (R4.5). :1239's class-not-case from the side where the class is CREATED.
+  Migration `0011`, expand-only, `text`+CHECK not an enum, and its partial unique
+  index deliberately mirrors `gym_members_live_uq`. **§4.2's seat-safe join MOVED
+  INTACT into `claimSeat`, now reached by CONFIRM; apply takes NO org lock** (the
+  lock serialises SEAT consumption and applying consumes nothing) and **lock order
+  is decided once: application → gym.** Six decisions not to re-derive: **`uses`
+  is not burned at apply** (else a leaked code shuts a gym's poster down) ·
+  **confirm does NOT re-apply the code's paused/expired/exhausted refusals** (a
+  human said yes; but the SEAT cap IS enforced — that one is money) · **a full gym
+  leaves the application PENDING and names the number** (this reader is the gym) ·
+  **consent is stamped on the application and COPIED to the membership** ·
+  **the response is a discriminated union with NO `joined` arm** · **a rejected
+  person is TOLD and may re-apply.** **THE PERMISSION SEAM IS IN (:11429): no
+  route checks a role NAME any more**; `members.confirm` = owner+manager per
+  §2.2's remove/restore row, and **Kd widened it in the same breath** — *"ok only
+  owner and manager but if owner gives permission others can also add"* — the
+  ticks having no storage yet (staff card, own line). **THREE THINGS IT DOES NOT
+  DO: auto-confirm is unbuildable** (no roster table exists — measured; NOT
+  stubbed per R1.3, which is why there is no `joined` arm), **so every applicant
+  waits for a tap today**; **nothing expires** (14-day `expires_at` written, no
+  reader — contradicts :11385 as written, deferred with a 🔴 line); the
+  leaderboard opt-out is ⚪. **TWO RECORD CORRECTIONS, both mine:** the orgs
+  repo's "ONLY file that touches" header **was already false** (DPDP closes
+  `gym_members` inline in `users/repo.ts`; R7.1 forbids the cascade calling the
+  repo) — corrected rather than breached twice; and the new table joins the
+  **already-open Kd gap** in `privacy/tables.ts` beside `gym_members`, **Day-0
+  handled, Day-14 open, to be ruled TOGETHER**. Join's rate-limit half of the owed
+  line CLOSES at **10/hr per account, 120/hr per IP — the asymmetry is the point**
+  (thirty members on one gym wi-fi on induction day). **FOUR INSTRUMENT FINDINGS,
+  three mine: CRLF vs LF is :4267's class for the FIFTH time** and the first in an
+  api harness (class fix PORTED from :10866 — convert the ANCHOR, never normalise
+  the FILE) · my anchor checker **lied toward a false alarm** on `\n` · **ten of
+  twenty-six mutants had drifted** and the whole-table pre-check caught every one
+  before a byte was written · and **I masked the harness exit code with a `| tail`
+  pipe**, :5906's recorded shape recurring in the session that cites it. One
+  control abort was **transient** (a DB blip) and is recorded as such.
+  **THE AUDIT IS THE PART WORTH READING — first sweep 35 mutants · 31 RED ·
+  4 ALIVE · 0 never ran, and ALL FOUR survivors were coverage this card's own
+  MOVE of the door had quietly stranded.** **O8+O17 are one finding:**
+  `claimSeat`'s already-holds branch carries the T3 C/H-1 fix AND "a repeat does
+  not burn a code use", and both lost coverage the moment the idempotent path
+  began short-circuiting at APPLY — a fix whose protection cannot fail is the
+  same defect with a comment on it (:5104 F5). **O14 had DRIFTED ONTO THE WRONG
+  QUERY** (`LIMIT ${input.limit + 1}` now appears twice; a string replace takes
+  the first) so a mutant named for the roster reported on the queue — **:11757
+  L2's shape, one card later, written by the chat that recorded it.** **O6 was
+  still aimed at the pre-ruling join** and is now split from O36. **AND THE TEST
+  WRITTEN FOR O14 FOUND A LIVE BUG IN THE NEW PAGER: the confirm queue REPEATED
+  the last row of every page.** Measured cause — Postgres stores `timestamptz` to
+  the MICROSECOND (`now()` = `…467902`) and `toISOString()` carries MILLISECONDS
+  (`…467`), so an ASC `>` cursor lets the boundary row back in; **fixed by
+  carrying the row's ID and letting SQL read the true value back.** **The mirror
+  image is LATENT IN THE ROSTER and NOT fixed here (R1.1, own 🟡 line): DESC + `<`
+  EXCLUDES instead of repeating, so it can silently SKIP a member for ever — a
+  duplicate is visible on page two, a gap never is**, which is the only reason
+  this was found from the queue's side. Harness gained **`MUTATE_ONLY`** (:4855
+  F6's flag, absent here until now): unknown label is FATAL and a subset run
+  PRINTS that it is one. **THE FIX ROUND THEN REPRODUCED THE DEFECT IT WAS
+  CLOSING: O8 and O17 came back ALIVE a SECOND time because the new test existed
+  and passed while both rows still named the OLD test in their `expect` filter.**
+  Standing lesson: **a mutant has TWO halves and a fix must move both** — the
+  anchor says what breaks, the FILTER says what should notice — and this repo has
+  recorded the anchor half four times (:5199, :8610, :10402, :10726) without ever
+  naming the filter half. **AND THE SECOND FULL SWEEP FOUND A FIFTH SURVIVOR THE
+  FIRST HAD PASSED — O7, anchor/mutation/named test ALL UNCHANGED between the two
+  runs.** Its named test cannot reach the `ON CONFLICT` it guards, so the first
+  RED cannot have come from the guarantee; the remaining explanation is a
+  leftover membership in the SHARED test database — **:10182's C/H-3 one card
+  later, in a MUTANT instead of a test.** **THE LESSON THIS CARD IS REALLY ABOUT:
+  a verdict nobody can name a cause for is not evidence — four survivors were
+  aimed at the wrong place and the fifth had been passing for a reason that was
+  never true; a green sweep is a claim about the TESTS and is worth exactly what
+  the aiming is worth.** Interim figures are deliberately NOT summed into a
+  composite; only a completed sweep is quotable (:5199). PROVE: api **506/506**
+  across all 43 files on real Postgres · shared **48/48** · web **806/806** ·
+  tsc + eslint clean · migration applied and reviewed as SQL · **38 mutants ·
+  38 RED · 0 ALIVE · 0 never ran**, 24 controls GREEN first, restores
+  sha256-verified, tree clean after. **NOTHING TICKS — no screen, so no smoke;
+  T3 UNRUN.**
 - **:11757** — 2026-08-19 — **THE CROSSING PACKET, T3 ROUND 1: ZERO
   Critical/High — THE PACKET SHIPS, and the two findings with teeth are BOTH the
   author's own tests.** **Read before writing a render test whose subject is a

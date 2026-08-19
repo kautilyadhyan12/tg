@@ -1,10 +1,26 @@
-// Orgs repo — the ONLY file that touches gyms / gym_codes / gym_members /
-// gym_staff (v1 §6.2). Every query that reads or writes a tenant-owned row
-// carries the gym id (and, for "my orgs", the user id) in its WHERE — a
-// fetch-by-id alone would be an IDOR (R3.2).
+// Orgs repo — gyms / gym_codes / gym_members / gym_staff /
+// gym_join_applications (v1 §6.2). Every query that reads or writes a
+// tenant-owned row carries the gym id (and, for "my orgs" and the applicant's
+// own list, the user id) in its WHERE — a fetch-by-id alone would be an IDOR
+// (R3.2).
+//
+// THE HEADER USED TO SAY "the ONLY file that touches" those tables AND THAT
+// WAS ALREADY FALSE when it was written: the DPDP Day-0 flow in
+// `modules/users/repo.ts` closes `gym_members` inline, because the deletion
+// cascade is cross-cutting and R7.1 forbids it calling into this repo. The
+// 2026-08-19 waiting-room card added a second such statement beside it
+// (cancelling pending applications) and corrected this sentence rather than
+// adding a second breach of a rule the file claimed to keep. A record is a
+// claim (:8707): the two DPDP statements are the whole exception, and any
+// THIRD writer of these tables is a defect, not a precedent.
 import type { Sql, TransactionSql } from "postgres";
-import { orgRoleSchema, orgStatusSchema, orgTypeSchema } from "@app/shared";
-import type { OrgRole, OrgStatus, OrgType } from "@app/shared";
+import {
+  orgApplicationStatusSchema,
+  orgRoleSchema,
+  orgStatusSchema,
+  orgTypeSchema,
+} from "@app/shared";
+import type { OrgApplicationStatus, OrgRole, OrgStatus, OrgType } from "@app/shared";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -50,6 +66,25 @@ export interface CodeRow {
   uses: number;
 }
 
+/** A join application as its own applicant sees it (Kd ruling :11072). */
+export interface ApplicationRow {
+  id: string;
+  status: OrgApplicationStatus;
+  appliedAt: Date;
+  expiresAt: Date;
+  decidedAt: Date | null;
+}
+
+/** One row of the console's confirm queue. */
+export interface ApplicantRow {
+  id: string;
+  userId: string;
+  displayName: string;
+  appliedAt: Date;
+  expiresAt: Date;
+  groupLabel: string;
+}
+
 interface RawOrg {
   id: string;
   slug: string;
@@ -60,6 +95,14 @@ interface RawOrg {
   locale: string;
   currency_display: string;
   status: string;
+}
+
+interface RawApplication {
+  id: string;
+  status: string;
+  applied_at: Date;
+  expires_at: Date;
+  decided_at: Date | null;
 }
 
 /** The DB CHECK constraints (Part 4 §3.2) already guarantee these vocabularies.
@@ -74,6 +117,19 @@ function toOrgStatus(value: string): OrgStatus {
 }
 function toOrgRole(value: string): OrgRole {
   return orgRoleSchema.parse(value);
+}
+function toApplicationStatus(value: string): OrgApplicationStatus {
+  return orgApplicationStatusSchema.parse(value);
+}
+
+function toApplicationRow(raw: RawApplication): ApplicationRow {
+  return {
+    id: raw.id,
+    status: toApplicationStatus(raw.status),
+    appliedAt: raw.applied_at,
+    expiresAt: raw.expires_at,
+    decidedAt: raw.decided_at,
+  };
 }
 
 function toOrgRow(raw: RawOrg): OrgRow {
@@ -271,44 +327,52 @@ export async function getStaffRole(
   return row === undefined ? null : toOrgRole(row.role);
 }
 
-export type JoinOutcome =
-  | { kind: "joined"; org: OrgRow; membership: MembershipRow }
+export type ApplyOutcome =
+  | { kind: "pending"; org: OrgRow; application: ApplicationRow }
+  | { kind: "already_pending"; org: OrgRow; application: ApplicationRow }
   | { kind: "already_member"; org: OrgRow; membership: MembershipRow }
   | { kind: "no_such_code" }
   | { kind: "code_unusable"; reason: "paused" | "expired" | "exhausted" }
   | { kind: "org_archived" }
-  | { kind: "consent_required" }
-  | { kind: "seat_cap"; cap: number };
+  | { kind: "consent_required" };
 
-/** Part 4 §4.2, the seat-safe join, implemented in its stated order:
+/** :11385's ratified default: a pending application dies after 14 days if
+ *  nobody acts on it. Stamped at APPLY time rather than computed by the sweep,
+ *  so the row carries its own deadline and the sweep is a reader — a deadline
+ *  the sweep computes is a deadline that changes when the sweep changes. */
+export const APPLICATION_TTL_DAYS = 14;
+
+/** KD RULING 2026-08-19 (:11072) — typing a code creates an APPLICATION.
  *
- *    BEGIN
- *    SELECT 1 FROM gyms WHERE id=$gym FOR UPDATE   -- serialize joins per org
- *    validate the code (exists, not paused/expired, uses < max_uses)
- *    seat check against the plan's cap
- *    INSERT INTO gym_members ...
- *    UPDATE gym_codes SET uses = uses + 1
- *    COMMIT
+ *  **NO SEAT IS TAKEN AND NO MEMBERSHIP ROW IS WRITTEN HERE.** That is the
+ *  whole content of the ruling: a leaked code yields the owner a reject list
+ *  rather than a full roster, and a real member is never locked out by
+ *  strangers because strangers consume nothing while pending. The membership
+ *  is created at CONFIRM, by `claimSeat` below, which is where Part 4 §4.2
+ *  now lives.
  *
- *  THE LOCK IS THE WHOLE POINT and it is on the ORG ROW, not on a count: two
- *  people scanning the same poster at the same instant are serialised here, so
- *  the "last seat" cannot be sold twice. Locking a count would not — the second
- *  transaction would read the same pre-insert number.
+ *  **NO `FOR UPDATE` ON THE ORG ROW, deliberately.** §4.2's lock exists to
+ *  serialise SEAT consumption; applying consumes nothing, so taking it would
+ *  serialise every applicant in a gym gym-wide for no guarantee. Two
+ *  simultaneous applies from one account race on
+ *  `gym_join_applications_pending_uq` instead and `ON CONFLICT DO NOTHING`
+ *  settles it — the same declarative idempotence §4.2 uses, for the same
+ *  reason (a raised 23505 would abort the transaction).
  *
- *  §4.2 finishes "on unique_violation of gym_members_live_uq → idempotent
- *  success". That is done DECLARATIVELY, with ON CONFLICT on the same partial
- *  index, for one reason worth keeping: a raised 23505 aborts the surrounding
- *  transaction, so catching it would mean re-running the whole join to answer
- *  "you were already a member". The outcome §4.2 specifies is identical, and a
- *  repeat join deliberately does NOT increment the code's `uses`. */
-export async function joinByCode(
+ *  **`uses` IS NOT INCREMENTED HERE EITHER** — see `claimSeat`. A code's
+ *  `uses` counts memberships it created; if applying burned a use, a stranger
+ *  with a leaked code could exhaust a `max_uses` code and shut a real gym's
+ *  poster down without ever getting in.
+ *
+ *  Check ORDER is unchanged from the pre-ruling join: the code's own refusals
+ *  come before the membership check, so an existing member re-typing a paused
+ *  code still gets the code refusal. That is TRUE, therefore not :5807's
+ *  class, and it was reviewed as correct at :10329 — do not "improve" it into
+ *  an already_member answer. */
+export async function applyByCode(
   sql: Sql,
   input: { userId: string; code: string; consent: boolean },
-): Promise<JoinOutcome> {
-  // Which org does this code belong to? Read outside the lock because the
-  // gym id is what we have to lock, and re-read INSIDE it below — between
-  // these two reads the code could be paused, expired or exhausted by
-  // somebody else, and only the second read is authoritative.
+): Promise<ApplyOutcome> {
   const codeLookup = await sql<{ id: string; gym_id: string }[]>`
     SELECT id, gym_id FROM gym_codes WHERE code = ${input.code}`;
   const found = codeLookup[0];
@@ -317,7 +381,7 @@ export async function joinByCode(
   return await sql.begin(async (tx) => {
     const orgRows = await tx<RawOrg[]>`
       SELECT id, slug, name, city, org_type, timezone, locale, currency_display, status
-      FROM gyms WHERE id = ${found.gym_id} FOR UPDATE`;
+      FROM gyms WHERE id = ${found.gym_id}`;
     const rawOrg = orgRows[0];
     if (rawOrg === undefined) return { kind: "no_such_code" };
     const org = toOrgRow(rawOrg);
@@ -345,85 +409,164 @@ export async function joinByCode(
       return { kind: "code_unusable", reason: "exhausted" };
     }
 
-    // Part 3 §2.4: joining a CLINIC code IS the consent record. Enforced HERE,
-    // in the repo, inside the join transaction — the DDL's comment says "in
-    // service", which is where it was expected to live rather than where it
-    // ended up (T3 round 2 L-2, corrected in both places). This is the better
-    // home anyway: the refusal and the timestamp are then decided in the same
-    // transaction as the membership row, so a consented row and its timestamp
-    // cannot come apart.
+    // Part 3 §2.4: joining a CLINIC code IS the consent record. The refusal
+    // stays here and the TIMESTAMP is captured on the APPLICATION, then copied
+    // onto the membership at confirm — so the consent record is dated to the
+    // moment the person agreed, not to the moment the front desk got round to
+    // them. (Clinics are out of the product per :10182; this path is reachable
+    // only by a legacy row, and it stays live for exactly that reason.)
     if (org.orgType === "clinic" && !input.consent) return { kind: "consent_required" };
 
-    // T3 ROUND 1 C/H-1: the seat check must not run for somebody who ALREADY
-    // holds a seat. They are inside `used` themselves, so at the cap their
-    // second tap on Join came back "this gym has no free places" to a person
-    // standing in the gym — §4.2's idempotent success turned into a 409, and
-    // the only reason no user hit it is that no gym has a subscription yet.
-    // Read under the org lock, so it cannot race with the insert below.
-    const heldRows = await tx<{ id: string }[]>`
-      SELECT id FROM gym_members
-      WHERE gym_id = ${org.id} AND user_id = ${input.userId} AND removed_at IS NULL`;
-    const alreadyHolds = heldRows[0] !== undefined;
-
-    if (!alreadyHolds) {
-      const cap = await seatCapFor(tx, org.id);
-      if (cap !== null) {
-        const countRows = await tx<{ n: number }[]>`
-          SELECT count(*)::int AS n FROM gym_members
-          WHERE gym_id = ${org.id} AND removed_at IS NULL AND complimentary = false`;
-        const used = countRows[0]?.n ?? 0;
-        if (used >= cap) return { kind: "seat_cap", cap };
-      }
+    const existingMember = await liveMembership(tx, org.id, input.userId);
+    if (existingMember !== null) {
+      return { kind: "already_member", org, membership: existingMember };
     }
 
     const consentAt = input.consent ? new Date() : null;
-    const inserted = await tx<{ id: string; joined_at: Date }[]>`
-      INSERT INTO gym_members (gym_id, user_id, code_id, consent_at, complimentary)
-      VALUES (${org.id}, ${input.userId}, ${code.id}, ${consentAt}, false)
-      ON CONFLICT (gym_id, user_id) WHERE removed_at IS NULL DO NOTHING
-      RETURNING id, joined_at`;
+    const inserted = await tx<RawApplication[]>`
+      INSERT INTO gym_join_applications (gym_id, user_id, code_id, consent_at, expires_at)
+      VALUES (${org.id}, ${input.userId}, ${code.id}, ${consentAt},
+              now() + (${APPLICATION_TTL_DAYS} * INTERVAL '1 day'))
+      ON CONFLICT (gym_id, user_id) WHERE status = 'pending' DO NOTHING
+      RETURNING id, status, applied_at, expires_at, decided_at`;
 
     const newRow = inserted[0];
     if (newRow === undefined) {
-      const existingRows = await tx<{ id: string; joined_at: Date; label: string | null }[]>`
-        SELECT m.id, m.joined_at, c.label
-        FROM gym_members m
-        LEFT JOIN gym_codes c ON c.id = m.code_id
-        WHERE m.gym_id = ${org.id} AND m.user_id = ${input.userId}
-          AND m.removed_at IS NULL`;
+      const existingRows = await tx<RawApplication[]>`
+        SELECT id, status, applied_at, expires_at, decided_at
+        FROM gym_join_applications
+        WHERE gym_id = ${org.id} AND user_id = ${input.userId} AND status = 'pending'`;
       const existing = existingRows[0];
       if (existing === undefined) {
-        // The conflict fired, so a live row existed a moment ago; nothing in
-        // this transaction can remove it. Loud rather than a fabricated reply.
-        throw new Error("gym_members conflict with no live row to return");
+        // The conflict fired, so a pending row existed a moment ago; nothing
+        // in this transaction can have removed it. Loud rather than a
+        // fabricated reply (the `gym_members` branch's own precedent).
+        throw new Error("gym_join_applications conflict with no pending row to return");
       }
-      return {
-        kind: "already_member",
-        org,
-        membership: {
-          id: existing.id,
-          joinedAt: existing.joined_at,
-          groupLabel: existing.label,
-        },
-      };
+      return { kind: "already_pending", org, application: toApplicationRow(existing) };
     }
 
-    await tx`UPDATE gym_codes SET uses = uses + 1 WHERE id = ${code.id}`;
+    // Part 3 §3.3: every mutating call writes `audit_log`. Applying is a
+    // mutation by the MEMBER, and it is the row that answers "when did this
+    // person first ask?" if a gym ever disputes it.
     await insertAudit(tx, {
       actorUserId: input.userId,
       gymId: org.id,
-      action: "org.member_joined",
-      targetType: "gym_member",
+      action: "org.join_applied",
+      targetType: "gym_join_application",
       targetId: newRow.id,
       meta: { codeLabel: code.label },
     });
 
-    return {
-      kind: "joined",
-      org,
-      membership: { id: newRow.id, joinedAt: newRow.joined_at, groupLabel: code.label },
-    };
+    return { kind: "pending", org, application: toApplicationRow(newRow) };
   });
+}
+
+/** The caller's LIVE membership in one org, or null. Extracted because the
+ *  apply path, the seat claim and the confirm path all ask the same question
+ *  and three spellings of it is how two of them drift. */
+async function liveMembership(
+  tx: SqlOrTx,
+  gymId: string,
+  userId: string,
+): Promise<MembershipRow | null> {
+  const rows = await tx<{ id: string; joined_at: Date; label: string | null }[]>`
+    SELECT m.id, m.joined_at, c.label
+    FROM gym_members m
+    LEFT JOIN gym_codes c ON c.id = m.code_id
+    WHERE m.gym_id = ${gymId} AND m.user_id = ${userId} AND m.removed_at IS NULL`;
+  const row = rows[0];
+  return row === undefined
+    ? null
+    : { id: row.id, joinedAt: row.joined_at, groupLabel: row.label };
+}
+
+export type ClaimSeatOutcome =
+  | { kind: "joined"; membership: MembershipRow }
+  | { kind: "already_member"; membership: MembershipRow }
+  | { kind: "seat_cap"; cap: number };
+
+/** PART 4 §4.2, THE SEAT-SAFE JOIN — moved here INTACT when the join door
+ *  became an application door (Kd ruling :11072). The statements and their
+ *  order are the ones that were written and reviewed against §4.2; what
+ *  changed is WHO triggers them (the gym's front desk, at confirm) and not
+ *  WHAT they do.
+ *
+ *    -- caller holds:  SELECT 1 FROM gyms WHERE id=$gym FOR UPDATE
+ *    seat check: (count live, non-complimentary members) < plan.seat_cap
+ *    INSERT INTO gym_members ...
+ *    UPDATE gym_codes SET uses = uses + 1
+ *
+ *  **THE ORG-ROW LOCK IS THE WHOLE POINT and this function does NOT take it —
+ *  its caller does, and must.** It is a precondition rather than something
+ *  taken here because the confirm path locks the APPLICATION row first and
+ *  lock order has to be decided in one place: application → gym, always.
+ *  Locking a COUNT instead of the org row would serialise nothing — the second
+ *  transaction reads the same pre-insert number.
+ *
+ *  §4.2 finishes "on unique_violation of gym_members_live_uq → idempotent
+ *  success". Done DECLARATIVELY with ON CONFLICT on the same partial index: a
+ *  raised 23505 aborts the surrounding transaction, so catching it would mean
+ *  re-running the whole claim to answer "already a member". A repeat
+ *  deliberately does NOT increment the code's `uses`.
+ *
+ *  **THE CODE'S AUTOMATIC REFUSALS (paused / expired / max_uses) ARE NOT
+ *  RE-APPLIED HERE, and that is a decision, not an omission.** They gate the
+ *  APPLY door, where they stop a dead poster admitting strangers. At confirm a
+ *  human being has looked at a named person and said yes; refusing them
+ *  because the gym paused the code afterwards would be the app overruling the
+ *  gym about its own member. The SEAT cap is different and is enforced — that
+ *  one is money, and it is not the front desk's to waive. */
+async function claimSeat(
+  tx: TransactionSql,
+  input: {
+    org: OrgRow;
+    userId: string;
+    codeId: string;
+    codeLabel: string;
+    consentAt: Date | null;
+  },
+): Promise<ClaimSeatOutcome> {
+  // T3 ROUND 1 C/H-1 (carried forward verbatim): the seat check must not run
+  // for somebody who ALREADY holds a seat. They are inside `used` themselves,
+  // so at the cap this returned "this gym has no free places" about a person
+  // already standing in the gym. Read under the caller's org lock, so it
+  // cannot race with the insert below.
+  const held = await liveMembership(tx, input.org.id, input.userId);
+
+  if (held === null) {
+    const cap = await seatCapFor(tx, input.org.id);
+    if (cap !== null) {
+      const countRows = await tx<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_members
+        WHERE gym_id = ${input.org.id} AND removed_at IS NULL AND complimentary = false`;
+      const used = countRows[0]?.n ?? 0;
+      if (used >= cap) return { kind: "seat_cap", cap };
+    }
+  }
+
+  const inserted = await tx<{ id: string; joined_at: Date }[]>`
+    INSERT INTO gym_members (gym_id, user_id, code_id, consent_at, complimentary)
+    VALUES (${input.org.id}, ${input.userId}, ${input.codeId}, ${input.consentAt}, false)
+    ON CONFLICT (gym_id, user_id) WHERE removed_at IS NULL DO NOTHING
+    RETURNING id, joined_at`;
+
+  const newRow = inserted[0];
+  if (newRow === undefined) {
+    const existing = held ?? (await liveMembership(tx, input.org.id, input.userId));
+    if (existing === null) {
+      // The conflict fired, so a live row existed a moment ago; nothing in
+      // this transaction can remove it. Loud rather than a fabricated reply.
+      throw new Error("gym_members conflict with no live row to return");
+    }
+    return { kind: "already_member", membership: existing };
+  }
+
+  await tx`UPDATE gym_codes SET uses = uses + 1 WHERE id = ${input.codeId}`;
+  return {
+    kind: "joined",
+    membership: { id: newRow.id, joinedAt: newRow.joined_at, groupLabel: input.codeLabel },
+  };
 }
 
 /** The org's seat cap, or null when nothing caps it.
@@ -443,6 +586,308 @@ async function seatCapFor(tx: TransactionSql, gymId: string): Promise<number | n
     WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
       AND s.status IN ('trialing','active','past_due')`;
   return rows[0]?.seat_cap ?? null;
+}
+
+export type DecideOutcome =
+  /** `applicantUserId` travels WITH the outcome rather than being re-read by
+   *  the service: the person whose entitlements just changed is the applicant,
+   *  and a second query to find out who they were is a second query that can
+   *  disagree with the row this transaction just wrote. */
+  | { kind: "confirmed"; membership: MembershipRow; applicantUserId: string }
+  | { kind: "already_confirmed"; memberId: string | null }
+  | { kind: "rejected" }
+  | { kind: "not_found" }
+  | { kind: "not_pending"; status: OrgApplicationStatus }
+  | { kind: "org_archived" }
+  | { kind: "seat_cap"; cap: number };
+
+/** THE FRONT DESK'S TAP — the only path in the product that turns a code into
+ *  a membership (Kd ruling :11072).
+ *
+ *  **LOCK ORDER IS application → gym, ALWAYS, and it is decided here** because
+ *  this is the only function that takes both. `claimSeat` takes neither on
+ *  purpose (see its comment): a second lock order anywhere in this module is a
+ *  deadlock waiting for two front-desk staff working the queue at once.
+ *
+ *  **A FULL GYM DOES NOT DESTROY THE APPLICATION.** `seat_cap` returns with
+ *  the row still `pending`, so the owner adds a seat and taps again rather
+ *  than hunting for a person the app threw away — the same instinct behind
+ *  §4.2's idempotent success, applied to the failure side.
+ *
+ *  Tenancy is the WHERE (R3.2): the application is addressed by `id` AND
+ *  `gym_id`, so a staff member of one gym cannot decide another gym's
+ *  application even holding its uuid. */
+export async function confirmApplication(
+  sql: Sql,
+  input: { gymId: string; applicationId: string; actorUserId: string },
+): Promise<DecideOutcome> {
+  return await sql.begin(async (tx) => {
+    const appRows = await tx<
+      (RawApplication & { user_id: string; code_id: string; consent_at: Date | null; member_id: string | null })[]
+    >`
+      SELECT id, status, applied_at, expires_at, decided_at,
+             user_id, code_id, consent_at, member_id
+      FROM gym_join_applications
+      WHERE id = ${input.applicationId} AND gym_id = ${input.gymId}
+      FOR UPDATE`;
+    const app = appRows[0];
+    if (app === undefined) return { kind: "not_found" };
+
+    const status = toApplicationStatus(app.status);
+    // A double tap on Confirm is a person pressing a button twice, not an
+    // error: report the same outcome rather than "that is not pending".
+    if (status === "confirmed") return { kind: "already_confirmed", memberId: app.member_id };
+    if (status !== "pending") return { kind: "not_pending", status };
+
+    const orgRows = await tx<RawOrg[]>`
+      SELECT id, slug, name, city, org_type, timezone, locale, currency_display, status
+      FROM gyms WHERE id = ${input.gymId} FOR UPDATE`;
+    const rawOrg = orgRows[0];
+    if (rawOrg === undefined) return { kind: "not_found" };
+    const org = toOrgRow(rawOrg);
+    if (org.status !== "active") return { kind: "org_archived" };
+
+    const codeRows = await tx<{ label: string }[]>`
+      SELECT label FROM gym_codes WHERE id = ${app.code_id} AND gym_id = ${input.gymId}`;
+    const codeLabel = codeRows[0]?.label ?? null;
+    if (codeLabel === null) {
+      // The FK is NOT NULL and gym-scoped, so this cannot happen without the
+      // code row being deleted out from under a live application. Loud.
+      throw new Error("join application references a code that is not this gym's");
+    }
+
+    const claim = await claimSeat(tx, {
+      org,
+      userId: app.user_id,
+      codeId: app.code_id,
+      codeLabel,
+      consentAt: app.consent_at,
+    });
+    if (claim.kind === "seat_cap") return { kind: "seat_cap", cap: claim.cap };
+
+    await tx`
+      UPDATE gym_join_applications
+      SET status = 'confirmed', decided_at = now(),
+          decided_by_user_id = ${input.actorUserId}, member_id = ${claim.membership.id}
+      WHERE id = ${app.id}`;
+
+    // The actor is the STAFF member who confirmed, not the joiner — that is
+    // the whole point of the record. `applicantUserId` is in `meta` because
+    // `target_id` is the membership the tap produced.
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: org.id,
+      action: "org.member_joined",
+      targetType: "gym_member",
+      targetId: claim.membership.id,
+      meta: {
+        codeLabel,
+        applicationId: app.id,
+        applicantUserId: app.user_id,
+        via: "front_desk_confirm",
+      },
+    });
+
+    return { kind: "confirmed", membership: claim.membership, applicantUserId: app.user_id };
+  });
+}
+
+/** "Not this person." The row is closed, not deleted — a rejection is history
+ *  the gym may need, and :11385's re-apply is free, so the applicant is not
+ *  locked out by it (the per-route rate limit is what bounds a stranger's
+ *  retries, never a permanent block on a real member who was mis-tapped). */
+export async function rejectApplication(
+  sql: Sql,
+  input: { gymId: string; applicationId: string; actorUserId: string },
+): Promise<DecideOutcome> {
+  return await sql.begin(async (tx) => {
+    const appRows = await tx<(RawApplication & { user_id: string })[]>`
+      SELECT id, status, applied_at, expires_at, decided_at, user_id
+      FROM gym_join_applications
+      WHERE id = ${input.applicationId} AND gym_id = ${input.gymId}
+      FOR UPDATE`;
+    const app = appRows[0];
+    if (app === undefined) return { kind: "not_found" };
+
+    const status = toApplicationStatus(app.status);
+    if (status !== "pending") return { kind: "not_pending", status };
+
+    await tx`
+      UPDATE gym_join_applications
+      SET status = 'rejected', decided_at = now(), decided_by_user_id = ${input.actorUserId}
+      WHERE id = ${app.id}`;
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.join_rejected",
+      targetType: "gym_join_application",
+      targetId: app.id,
+      meta: { applicantUserId: app.user_id },
+    });
+
+    return { kind: "rejected" };
+  });
+}
+
+/** The console's confirm queue: pending applications for ONE gym, OLDEST
+ *  FIRST — a queue is answered in the order people asked, and the person who
+ *  has waited longest is the one closest to :11385's expiry.
+ *
+ *  `pendingCount` is an EXACT count over the whole queue, not this page's
+ *  length: :10402's rule, because "3 people waiting" printed off a page of 3
+ *  out of 90 is a wrong number on screen (:5807).
+ *
+ *  **THE CURSOR IS THE ROW'S ID AND THE COMPARISON READS THE ROW'S OWN STORED
+ *  TIMESTAMP, which is NOT how the roster next door does it — and the
+ *  difference is a bug this card's own new test caught.** Postgres stores
+ *  `timestamptz` to the MICROSECOND (measured: `now()` = …467902) while a JS
+ *  `Date` and therefore `toISOString()` carry MILLISECONDS (…467). A cursor
+ *  built from the serialized timestamp is thus slightly SMALLER than the row it
+ *  names, so an ASC `>` comparison lets that row back in and **the last row of
+ *  every page reappears as the first row of the next.** Feeding the id back and
+ *  letting SQL fetch the true value removes the round trip through a lossy
+ *  format entirely.
+ *
+ *  **The roster's cursor has the mirror-image latent defect and is NOT touched
+ *  here (R1.1):** DESC + `<` against a too-small cursor EXCLUDES rather than
+ *  repeats, so instead of a duplicate it can silently SKIP a member whose
+ *  `joined_at` falls between the truncated millisecond and the true value. It
+ *  needs two rows inside the same millisecond to bite, which is why four
+ *  fixtures created seconds apart have never shown it. Own `OWED.md` line. */
+export async function listApplications(
+  sql: Sql,
+  input: { gymId: string; limit: number; cursor: string | null },
+): Promise<{ items: ApplicantRow[]; nextCursor: string | null; pendingCount: number }> {
+  const cursorId = input.cursor;
+  const rows = await sql<
+    {
+      id: string;
+      user_id: string;
+      display_name: string;
+      applied_at: Date;
+      expires_at: Date;
+      group_label: string;
+    }[]
+  >`
+    SELECT a.id, a.user_id, u.display_name, a.applied_at, a.expires_at,
+           c.label AS group_label
+    FROM gym_join_applications a
+    JOIN users u ON u.id = a.user_id
+    JOIN gym_codes c ON c.id = a.code_id
+    WHERE a.gym_id = ${input.gymId}
+      AND a.status = 'pending'
+      AND (
+        ${cursorId}::uuid IS NULL
+        OR (a.applied_at, a.id) > (
+          SELECT c.applied_at, c.id FROM gym_join_applications c
+          WHERE c.id = ${cursorId}::uuid AND c.gym_id = ${input.gymId}
+        )
+      )
+    ORDER BY a.applied_at ASC, a.id ASC
+    LIMIT ${input.limit + 1}`;
+
+  const countRows = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM gym_join_applications
+    WHERE gym_id = ${input.gymId} AND status = 'pending'`;
+
+  const page = rows.slice(0, input.limit);
+  const last = page[page.length - 1];
+  const nextCursor = rows.length > input.limit && last !== undefined ? last.id : null;
+  return {
+    items: page.map((r) => ({
+      id: r.id,
+      userId: r.user_id,
+      displayName: r.display_name,
+      appliedAt: r.applied_at,
+      expiresAt: r.expires_at,
+      groupLabel: r.group_label,
+    })),
+    nextCursor,
+    pendingCount: countRows[0]?.n ?? 0,
+  };
+}
+
+/** How long a DECIDED application stays visible to the person who made it.
+ *
+ *  It exists because a rejected applicant must be TOLD — leaving "waiting for
+ *  Iron House" on screen after the gym said no is the app stating something
+ *  false (:5807), and silently vanishing the card leaves a real member who was
+ *  mis-tapped with no idea what happened. It is a DISPLAY window and not a
+ *  rule about the data; 14 days mirrors the application's own life so a person
+ *  cannot see the outcome for longer than the wait that produced it. */
+export const DECIDED_VISIBLE_DAYS = 14;
+
+/** Bounded like `MY_ORGS_LIMIT` and for the same reason. A person applies to
+ *  one or two gyms; this ceiling exists so the response has one at all. */
+export const MY_APPLICATIONS_LIMIT = 50;
+
+/** The applicant's own applications: everything still pending, plus anything
+ *  recently decided AGAINST them so the screen can say so.
+ *
+ *  `confirmed` rows are deliberately excluded — once a confirm lands the
+ *  person is a member, `/v1/orgs/mine` is where that fact lives, and two
+ *  readers claiming the same thing is two readers that can disagree. */
+export async function listApplicationsForUser(
+  sql: Sql,
+  userId: string,
+): Promise<{ org: OrgRow; application: ApplicationRow }[]> {
+  // Every column is aliased explicitly. The two tables BOTH carry `id` and
+  // `status`, and an unaliased join would hand one of each to the row object —
+  // silently parsing a gym's 'active' as an application status, or worse the
+  // other way round. Naming them is the guard.
+  interface RawMyApplication {
+    app_id: string;
+    app_status: string;
+    applied_at: Date;
+    expires_at: Date;
+    decided_at: Date | null;
+    org_id: string;
+    slug: string;
+    name: string;
+    city: string | null;
+    org_type: string;
+    timezone: string;
+    locale: string;
+    currency_display: string;
+    org_status: string;
+  }
+  const rows = await sql<RawMyApplication[]>`
+    SELECT a.id AS app_id, a.status AS app_status, a.applied_at, a.expires_at,
+           a.decided_at,
+           g.id AS org_id, g.slug, g.name, g.city, g.org_type, g.timezone,
+           g.locale, g.currency_display, g.status AS org_status
+    FROM gym_join_applications a
+    JOIN gyms g ON g.id = a.gym_id
+    WHERE a.user_id = ${userId}
+      AND (
+        a.status = 'pending'
+        OR (a.status IN ('rejected','expired')
+            AND coalesce(a.decided_at, a.expires_at)
+                > now() - (${DECIDED_VISIBLE_DAYS} * INTERVAL '1 day'))
+      )
+    ORDER BY a.applied_at DESC, a.id DESC
+    LIMIT ${MY_APPLICATIONS_LIMIT}`;
+  return rows.map((r) => ({
+    org: toOrgRow({
+      id: r.org_id,
+      slug: r.slug,
+      name: r.name,
+      city: r.city,
+      org_type: r.org_type,
+      timezone: r.timezone,
+      locale: r.locale,
+      currency_display: r.currency_display,
+      status: r.org_status,
+    }),
+    application: toApplicationRow({
+      id: r.app_id,
+      status: r.app_status,
+      applied_at: r.applied_at,
+      expires_at: r.expires_at,
+      decided_at: r.decided_at,
+    }),
+  }));
 }
 
 /** Roster page, keyset-ordered on (joined_at, id) DESC.

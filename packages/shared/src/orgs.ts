@@ -276,15 +276,137 @@ export const membershipSchema = z.object({
 });
 export type Membership = z.infer<typeof membershipSchema>;
 
-export const joinOrgResponseSchema = z.object({
-  org: orgSummarySchema,
-  membership: membershipSchema,
-  /** True when the caller was ALREADY a live member. The join is idempotent
-   *  (Part 4 §4.2), so this is the honest way to say "nothing changed"
-   *  without turning a harmless second tap into an error. */
-  alreadyMember: z.boolean(),
+/** The lifecycle of a join application (Kd ruling 2026-08-19, DECISIONS
+ *  :11072). `cancelled` is written by account deletion, `expired` by the
+ *  sweep :11385 rules (its own card) — both exist in the vocabulary from day
+ *  one so a later card adds a writer, never a column. */
+export const orgApplicationStatusSchema = z.enum([
+  "pending",
+  "confirmed",
+  "rejected",
+  "cancelled",
+  "expired",
+]);
+export type OrgApplicationStatus = z.infer<typeof orgApplicationStatusSchema>;
+
+/** The applicant's own view of their application. */
+export const orgApplicationSchema = z.object({
+  id: z.string().uuid(),
+  status: orgApplicationStatusSchema,
+  appliedAt: z.string(),
+  /** :11385 — a pending application dies if nobody acts on it, and
+   *  re-applying is free. Sent so the screen can say WHEN rather than
+   *  inventing a number of its own. */
+  expiresAt: z.string(),
+  decidedAt: z.string().nullable(),
 });
+export type OrgApplication = z.infer<typeof orgApplicationSchema>;
+
+/** THE JOIN DOOR'S ANSWER, as a discriminated union rather than a flat object
+ *  with nullable halves.
+ *
+ *  Each arm carries exactly what its own screen needs, so the server cannot
+ *  serve "you are waiting" alongside a membership, and the client cannot draw
+ *  a waiting card off an arm that has no application. The flat-with-nullables
+ *  shape compiles just as well and lets both mistakes through.
+ *
+ *  **`joined` is deliberately NOT an arm here.** The only path that produces
+ *  an instant membership is :9870's auto-attach (verified email, exactly ONE
+ *  candidate row in that gym's IMPORTED roster) — and no roster table exists
+ *  yet (measured 2026-08-19), so nothing can emit it. The auto-confirm card
+ *  adds the arm together with the code that produces it; an arm no path emits
+ *  is a branch every client must handle and no test can reach. */
+export const joinOrgResponseSchema = z.discriminatedUnion("outcome", [
+  z.object({
+    outcome: z.literal("pending"),
+    org: orgSummarySchema,
+    application: orgApplicationSchema,
+  }),
+  /** A second tap while already waiting. Idempotent by the partial unique
+   *  index, so it returns the SAME application rather than an error — the
+   *  same reasoning §4.2 applies to a repeat join. */
+  z.object({
+    outcome: z.literal("already_pending"),
+    org: orgSummarySchema,
+    application: orgApplicationSchema,
+  }),
+  /** Someone who is already a live member re-typing the code. Never becomes
+   *  an application: they are in. */
+  z.object({
+    outcome: z.literal("already_member"),
+    org: orgSummarySchema,
+    membership: membershipSchema,
+  }),
+]);
 export type JoinOrgResponse = z.infer<typeof joinOrgResponseSchema>;
+
+/** One row of the console's confirm queue.
+ *
+ *  Part 3 §2.4 governs what a gym may see about its MEMBERS; an applicant is
+ *  not one, and this is deliberately no wider than the roster already serves
+ *  — who they say they are, when they asked, and which code they came in
+ *  through. No email, no stats, nothing from the never-see list. The front
+ *  desk recognises a person standing in front of them; it does not need a
+ *  dossier to do it. */
+export const orgApplicantSchema = z.object({
+  /** The APPLICATION id — what confirm/reject address. */
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  displayName: z.string(),
+  appliedAt: z.string(),
+  expiresAt: z.string(),
+  /** The label of the code they used, e.g. "Front Desk" — Part 3 §2.1's group
+   *  mechanism, and often the only thing that tells a big gym which desk or
+   *  class this person came from. */
+  groupLabel: z.string(),
+});
+export type OrgApplicant = z.infer<typeof orgApplicantSchema>;
+
+export const orgApplicationListQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+    cursor: z.string().max(120).optional(),
+  })
+  .strict();
+export type OrgApplicationListQuery = z.infer<typeof orgApplicationListQuerySchema>;
+
+export const orgApplicationPageSchema = z.object({
+  items: z.array(orgApplicantSchema),
+  nextCursor: z.string().nullable(),
+  /** :11385 wants "a count the owner cannot miss". It is an EXACT count over
+   *  the whole queue, not this page's length — the console printing
+   *  `items.length` would say "3 people waiting" on a page of 3 out of 90
+   *  (:10402's rule: a count is exact or a bound, never one page's length). */
+  pendingCount: z.number().int(),
+});
+export type OrgApplicationPage = z.infer<typeof orgApplicationPageSchema>;
+
+/** The applicant's own list, for the card that sits ON TOP of the whole free
+ *  app (:11132 clarification 1 — never a locked or waiting SCREEN).
+ *
+ *  Carries the org summary because a person who applied needs to be told
+ *  WHICH gym they are waiting on, by name. */
+export const myOrgApplicationSchema = orgApplicationSchema.extend({
+  org: orgSummarySchema,
+});
+export type MyOrgApplication = z.infer<typeof myOrgApplicationSchema>;
+
+export const myOrgApplicationsResponseSchema = z.object({
+  applications: z.array(myOrgApplicationSchema),
+});
+export type MyOrgApplicationsResponse = z.infer<typeof myOrgApplicationsResponseSchema>;
+
+/** The front desk's tap. A union again, because `already_confirmed` carries no
+ *  membership: that branch did not create one, and echoing a row this request
+ *  did not write is how a screen ends up reporting something it never saw. */
+export const confirmApplicationResponseSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("confirmed"), membership: membershipSchema }),
+  z.object({ status: z.literal("already_confirmed") }),
+]);
+export type ConfirmApplicationResponse = z.infer<typeof confirmApplicationResponseSchema>;
+
+export const rejectApplicationResponseSchema = z.object({ status: z.literal("rejected") });
+export type RejectApplicationResponse = z.infer<typeof rejectApplicationResponseSchema>;
 
 /** Cursor pagination per R7.3. Cursor = `<joinedAt ISO>|<membership uuid>`
  *  from the previous page (keyset on the same pair the ordering uses). */

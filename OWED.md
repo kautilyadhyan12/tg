@@ -4225,6 +4225,92 @@ file and is stated so nobody reads these as lower priority than they are.
       THIS CARD, not already decided: 14-day expiry · gym reminded at 2 days
       then weekly · member nudge once a day.** **Ship the IN-APP half first —
       email does not exist (its own line below).**
+      **UPDATE 2026-08-19 — THE SERVER HALF IS BUILT (step 1 of 3; DECISIONS
+      :11891). THIS LINE DOES NOT TICK: it names a SCREEN, and there is still
+      no screen.** Kd approved a three-step split (server → the two screens →
+      the waiting room's clock) after being shown that one card would be four
+      times the diff that has caused review spirals here before. What exists
+      now: `gym_join_applications` (migration `0011`), `POST /v1/orgs/join`
+      REWORKED from instant join to APPLY, the confirm queue, confirm/reject,
+      and the applicant's own list. **The 14-day expiry is STAMPED on every row
+      but nothing acts on it yet** — that is step 3, its own line below.
+      Step 2 (the member's code screen carrying §2.4's "what the gym can see"
+      sheet, the waiting card, and the console's queue screen) is what ticks
+      this line, after its smoke and a review round with zero Critical/High.
+- [ ] 🔴 **NOTHING EXPIRES, REMINDS OR NUDGES YET — the waiting room has no
+      clock (step 3 of the join door; deferred 2026-08-19, DECISIONS :11891).**
+      Every application is stamped with a 14-day `expires_at` when it is
+      written, and **no code reads that column.** So today a pending row waits
+      for ever, which **contradicts :11385 as written** ("a build that keeps
+      pending rows indefinitely now contradicts a ruling") — it is a deferral,
+      not a disagreement, and the gap is named here rather than left to be
+      discovered. What step 3 owes: the expiry sweep · the gym reminder at 2
+      days then weekly · the member's once-a-day nudge · and **:11385's
+      ordering rule, which is the load-bearing one — nothing may expire before
+      the gym has been told at least once**, or the feature quietly throws
+      members away. The three numbers are Kd's ratified defaults and each is one
+      word from him to change. BullMQ's `rollups` queue and the DPDP purge
+      scheduler are the worked pattern (deterministic jobId, idempotent handler,
+      an unknown job THROWS); an injectable clock is required so the timeline is
+      testable without waiting a fortnight. **IN-APP ONLY — email does not
+      exist (next line), so no copy may promise one.**
+- [ ] 🟡 **AUTO-CONFIRM CANNOT BE BUILT YET: there is no imported roster to
+      match against** (deferred 2026-08-19, DECISIONS :11891). :11072 rules that
+      "a person matching the gym's imported roster is confirmed AUTOMATICALLY"
+      by :9870's key verbatim — verified email, exactly ONE candidate row in
+      that gym. **Measured: no roster/import table exists at all**, so the
+      candidate set is empty by construction and the branch has no input. It was
+      NOT stubbed (R1.3 — a stub that returns success is a security bug wearing
+      a disguise); the join response's outcome union deliberately has **no
+      `joined` arm**, so the import card adds the arm together with the code
+      that produces it. **What this costs TODAY, and Kd was told: every single
+      applicant waits for a front-desk tap, including a gym's own existing
+      members.** Acceptable only because :11132 keeps them on the whole free app
+      meanwhile. Closes with the import card, not before.
+- [ ] 🟡 **PER-STAFF PRIVILEGE TICKS HAVE NO STORAGE — the seam is in, the
+      table is not** (deferred 2026-08-19, DECISIONS :11891). Kd ruled the model
+      at :11429 and reaffirmed the widening half on 2026-08-19: *"ok only owner
+      and manager but if owner gives permission others can also add"*. Built
+      now: `requirePrivilege`, a named finite privilege set, and role DEFAULTS —
+      **no route checks a role NAME any more**, which is the hole :11429 says a
+      new route re-opens. **Not built: the ticks themselves.** `gym_staff` holds
+      gym/user/role and nothing else, so an owner cannot yet widen one person's
+      access and a gym whose front desk is a TRAINER cannot confirm joins. The
+      staff card owes: the migration (:11429's K4 call — store the EFFECTIVE set
+      as a SNAPSHOT, table-vs-JSONB decided there against R4.2), an owner-only
+      route, **the last-owner lockout guard (rule 2 — §4.7 blocks last-owner
+      REMOVAL and ticking away billing/staff-management is the same lockout by
+      another door)**, audit logging, and the Staff screen. When it lands it
+      replaces the body of one function and no caller changes.
+- [ ] 🟡 **THE ROSTER'S CURSOR CAN SILENTLY SKIP A MEMBER — a millisecond
+      cursor against a microsecond column** (found 2026-08-19 by the join
+      door's own new test finding the mirror-image bug in ITS pager; DECISIONS
+      :11846). **Measured, not reasoned:** Postgres stores `timestamptz` to the
+      microsecond (`now()` came back `…467902`) while a JS `Date` — and so
+      `toISOString()` — carries milliseconds (`…467`). `GET /v1/orgs/:gymId/
+      members` serialises `joined_at` into its cursor, so the cursor names an
+      instant slightly EARLIER than the row it came from. Ordered DESC with
+      `<`, that **excludes** rather than repeats: any member whose `joined_at`
+      falls between the truncated millisecond and the true value is **dropped
+      from the roster and never appears on any page.** The confirm queue had the
+      same defect pointing the other way (ASC + `>` REPEATED the boundary row),
+      which is how it was found — a duplicate is visible on page two, a gap is
+      invisible for ever. **Not fixed here (R1.1):** the roster is a shipped,
+      reviewed surface and its cursor is a wire format, so changing it is its
+      own card. **The fix is known and already worked:** carry the row's ID and
+      let SQL read the true value back (`(joined_at, id) < (SELECT …)`), exactly
+      as `listApplications` now does. **Needs two rows inside the same
+      millisecond to bite**, which is why four fixtures created seconds apart
+      have never shown it — and why the roster IMPORT, which writes many rows in
+      one transaction, is the thing most likely to trip it.
+- [ ] ⚪ **THE JOIN SCREEN'S LEADERBOARD OPT-OUT IS NOT BUILT** (deferred
+      2026-08-19, DECISIONS :11891). Part 6 §2 lists the org-membership surface
+      as "join-by-code + **'What {org} can see' sheet** + leaderboard opt-out".
+      The sheet is step 2's and is binding (§2.4 requires it at join time); the
+      opt-out is not built and is ⚪ rather than 🟡 because **`hidden_from_boards`
+      already exists as a column and there are no leaderboards to be on** — the
+      board work is P4.x and its dark window is a SCHEDULED state (:1020), not a
+      bug. Build it with the boards, on the same screen.
 - [ ] 🟡 **NO EMAIL IS EVER ACTUALLY SENT — `EmailSender` LOGS AND RETURNS.**
       Found 2026-08-19 while ruling the join-application reminders (DECISIONS
       :11385); **tracked nowhere in this file before, grep-verified** (`grep -ni
@@ -4256,6 +4342,19 @@ file and is stated so nobody reads these as lower priority than they are.
       console screen: it is staff-only and takes a uuid, so it is not a guessing
       surface, but it is now the endpoint that hands out the key to a gym's
       roster and it has no per-route limit either.
+      **HALF DONE 2026-08-19 (DECISIONS :11891): `POST /v1/orgs/join` NOW HAS
+      ONE** — closed inside the waiting-room card because that card rewrote the
+      route anyway and it is now the door a stranger with a leaked code knocks
+      on. **10/hour per ACCOUNT and 120/hour per IP, and the asymmetry is the
+      point:** a real person applies to their gym once, but the normal case for
+      the IP dimension is thirty members on the same gym wi-fi on induction day,
+      so a tight per-IP number would lock out the exact scenario the feature
+      exists for. Neither figure has a governing § — both are recorded as chosen
+      (R0.2). Required a small additive `ipMax` option on the shared dual-bucket
+      limiter; every auth route is unchanged and its suite proves it.
+      **STILL OPEN: `POST /v1/orgs` and `GET /v1/orgs/:gymId/codes`**, which is
+      why this line does not tick — the create surface is the one that lets a
+      single account squat every readable slug.
 - [ ] 🟡 **GYM PLAN/TRIAL ACTIVATION SITS BEHIND KD'S APPROVAL — ruled
       2026-08-19 (DECISIONS :11072), binds the BILLING card.** The hazard pair
       this answers was raised by Kd the same day (:11023, tracked nowhere

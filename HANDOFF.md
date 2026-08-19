@@ -1,6 +1,121 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE JOIN DOOR, STEP 1 OF 3 — THE SERVER HALF. Typing a gym's code now
+      creates an APPLICATION; the front desk confirms; only then is there a
+      member (Kd ruling :11072, entry :11846). **CODE DONE AND PROVEN. NO
+      SCREEN, SO NO SMOKE (the :10010/:10402 precedent). T3 UNRUN. NOTHING
+      TICKS.** API + `@app/shared` + one migration; `apps/web` untouched.
+
+KD APPROVED TWO THINGS, IN HIS OWN WORDS
+  · The SPLIT: "3 steps" — server → the two screens → the waiting room's clock.
+    He was shown that one card would be ~4x the diff that caused review spirals
+    here before (:2158 applied in advance rather than after eleven rounds).
+  · STEP 1: "approve", after being given its one cost — only owner and manager
+    can confirm. He answered: **"ok only owner and manager but if owner gives
+    permission others can also add"**, which is :11429 restated. The ticks
+    themselves are the STAFF card; the seam is built, the storage is not.
+
+THE DECISION A LATER CHAT MUST NOT UNDO: A SEPARATE TABLE
+  · `gym_join_applications`, NOT a `status` column on `gym_members`.
+  · **Eleven places across six server files** read `removed_at IS NULL` as
+    "live member" (measured this session). A column makes every one OPT-OUT and
+    the one that gets missed hands a stranger the gym's paid entitlements with
+    nothing on screen to show for it.
+  · The separate table leaves Part 4 §4.1's and §4.2's canonical SQL **VERBATIM**
+    (R4.5). No edit, therefore no missed edit.
+
+FILES
+  · `apps/api/drizzle/0011_gym_join_applications.sql` (NEW; renamed from the
+    generated tag per DECISIONS 2026-07-06, journal tag updated with it)
+  · `apps/api/src/db/schema/tenancy.ts` (+ the table)
+  · `packages/shared/src/orgs.ts` (application + queue contracts; the join
+    response became a DISCRIMINATED UNION)
+  · `apps/api/src/modules/orgs/{repo,service,routes,schemas}.ts`
+  · `apps/api/src/modules/auth/rateLimit.ts` (+ additive `ipMax`)
+  · `apps/api/src/modules/users/repo.ts` (DPDP Day-0 cancels pending rows)
+  · `apps/api/src/modules/privacy/tables.ts` (the new table joins the OPEN gap)
+  · `apps/api/test/orgs.routes.test.ts` · `apps/api/tools/mutate-orgs.mjs`
+  · `OWED.md` (4 new lines + 2 updated) · `DECISIONS.md` + its index
+
+SAID RATHER THAN GLOSSED
+  · **AUTO-CONFIRM IS NOT BUILT AND COULD NOT BE** — :11072 keys it to the
+    imported roster and **no roster table exists** (measured). Not stubbed
+    (R1.3); the outcome union has **no `joined` arm**, so the import card adds
+    the arm WITH the code that produces it. **Today every applicant waits for a
+    tap, including a gym's own existing members.**
+  · **NOTHING EXPIRES YET.** Every row carries a 14-day `expires_at`; no code
+    reads it. That contradicts :11385 as written — a DEFERRAL, not a
+    disagreement, with its own 🔴 line. Step 3 owes the sweep, the reminder, the
+    nudge, and :11385's ordering rule (nothing expires before the gym has been
+    told once).
+  · **A full gym does NOT destroy the application** — `seat_cap` leaves it
+    pending and the message NAMES the cap, because this reader is the gym.
+  · **Confirm does not re-apply the code's paused/expired/exhausted refusals**
+    (a human said yes); the SEAT cap is enforced, because that one is money.
+
+GATES
+  · api **506/506, all 43 files**, against real Postgres — the whole suite, not
+    just this module, because the DPDP Day-0 flow and the shared rate limiter
+    were touched · shared **48/48** · web **806/806** (unchanged; `@app/shared`
+    moved under it) · `tsc` clean · eslint clean on api and shared.
+  · Migration applied to the real database and reviewed as SQL.
+  · **MUTATION SWEEP: 38 mutants · 38 RED · 0 ALIVE · 0 never ran**, exit 0,
+    all 24 controls GREEN first, restores sha256-verified, tree clean after,
+    exit code written to the log rather than read through a pipe.
+    **The interim figures are NOT summed into a composite — see :11846.**
+
+THE AUDIT IS THE PART TO READ — FOUR MUTANTS SURVIVED THE FIRST SWEEP
+  · All four were coverage this card's own MOVE of the door had stranded, not
+    code written badly. **O8+O17 are one finding** (`claimSeat`'s already-holds
+    branch is unreachable through the API now, so the T3 C/H-1 fix and "a repeat
+    does not burn a code use" both sat untested); **O14 had drifted onto the
+    WRONG QUERY** (`LIMIT ${input.limit + 1}` appears twice; a replace takes the
+    first); **O6 was still aimed at the pre-ruling join.**
+  · **THE TEST WRITTEN FOR O14 FOUND A LIVE BUG IN THE NEW PAGER: the confirm
+    queue REPEATED the last row of every page.** Postgres stores `timestamptz`
+    to the MICROSECOND (`now()` = …467902); `toISOString()` carries MILLISECONDS
+    (…467); an ASC `>` cursor therefore lets the boundary row back in. Fixed by
+    carrying the row's ID and letting SQL read the true value back.
+  · **The mirror image is LATENT IN THE ROSTER and NOT fixed (R1.1, own line):**
+    DESC + `<` EXCLUDES instead of repeating, so it can silently SKIP a member.
+    A duplicate is visible on page two; a gap never is.
+  · **THE FIX ROUND REPRODUCED THE DEFECT IT WAS CLOSING** — O8/O17 survived a
+    SECOND time because the new test passed while both rows still named the OLD
+    test in `expect`. **A mutant has TWO halves and a fix must move both.**
+
+THE INSTRUMENT FINDINGS, THREE OF FOUR MINE
+  · **CRLF vs LF is :4267's class for the FIFTH time** and the first in an api
+    harness: `users/repo.ts` is CRLF, every orgs file is LF, so the DPDP mutant
+    matched nothing. Class fix PORTED from :10866 — convert the ANCHOR to the
+    file's endings, never normalise the FILE.
+  · **My own anchor checker lied toward a false alarm** (treated `\n` in a
+    single-quoted literal as two characters, reporting seven good anchors
+    broken). Fixed before any conclusion was drawn from it.
+  · **Ten of twenty-six existing mutants had drifted**; the whole-table
+    pre-check caught every one before a byte was written (:5199/:8610).
+  · **I masked the harness exit code with a `| tail` pipe** — :5906's recorded
+    shape, in the session that cites it. Re-run writing the code to the log.
+
+NEXT: STEP 2 — the two screens, and it carries the SMOKE.
+  · Member: Settings gains a **My gym** tab (v1 §8's "at registration or in
+    Settings", verbatim) + a `/join?code=` route so the poster/QR and Part 6's
+    `aihg://org/join?code=` deep link share ONE entry path. **§2.4 is binding:
+    the "What {org} can see" sheet appears BEFORE the Apply button.**
+  · A waiting card ON TOP of the whole free app (:11132 — never a locked or
+    waiting SCREEN).
+  · Console: the confirm queue, phone-first (:9870 amendment 3).
+  · **Not in the sidebar** — nothing that reads like the console shortcut Kd
+    removed at :11616.
+  · Three things learned building step 1 that step 2 needs: confirm/reject take
+    **no body** (send `{}`; Fastify rejects a bare empty JSON body) · the queue
+    serves **`pendingCount`**, an exact count — never print `items.length`
+    (:10402) · `applications/mine` returns pending PLUS recently rejected, so
+    the screen needs a "not confirmed" arm as well as a waiting one.
+```
+
+
+```
 TASK: THE CROSSING IS CLOSED — Kd ruled mid-smoke (DECISIONS :11616) that the
       login page's two doors are the ONLY way between the member app and the gym
       console. **CODE DONE AND PROVEN. SMOKE UNRUN ON THESE BYTES. T3 UNRUN.

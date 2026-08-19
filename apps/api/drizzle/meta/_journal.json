@@ -71,6 +71,13 @@
       "when": 1786705224689,
       "tag": "0010_set_watched_ms",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787143198681,
+      "tag": "0011_gym_join_applications",
+      "breakpoints": true
     }
   ]
 }

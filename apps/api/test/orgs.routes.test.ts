@@ -86,6 +86,13 @@ d("orgs routes (real Postgres)", () => {
       SELECT id FROM gyms
       WHERE slug LIKE 'orgs-test%'
          OR owner_user_id IN (SELECT id FROM users WHERE email LIKE 'orgs-t-%@example.com')`;
+    // BEFORE gym_members: an application points at the membership a confirm
+    // created, and the FK has no cascade. Deleted explicitly rather than left
+    // to the gym cascade because the user DELETE at the end of this function
+    // is what a stray row would block — :10726's Low-2, where exactly that
+    // shape (`gyms.owner_user_id` with no onDelete) failed all 46 tests with a
+    // 23503 that named nothing useful.
+    await sql`DELETE FROM gym_join_applications WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM audit_log WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
@@ -150,6 +157,43 @@ d("orgs routes (real Postgres)", () => {
     );
     expect(res.statusCode).toBe(201);
     return JSON.parse(res.body) as CreatedOrg;
+  };
+
+  /** Apply with a code and return the application id.
+   *
+   *  Since Kd's 2026-08-19 ruling this is ALL that typing a code does — no
+   *  seat, no membership, no entitlements. Tests that need a real MEMBER use
+   *  `joinAsMember` below. */
+  const applyWithCode = async (
+    cookies: Record<string, string>,
+    code: string,
+  ): Promise<string> => {
+    const res = await post("/v1/orgs/join", { code }, { cookies });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as { outcome: string; application?: { id: string } };
+    expect(body.outcome).toBe("pending");
+    const id = body.application?.id;
+    if (id === undefined) throw new Error("apply returned no application");
+    return id;
+  };
+
+  /** THE WHOLE DOOR, both halves: the member applies, the gym's front desk
+   *  confirms. Every test that just needs somebody to BE a member goes through
+   *  here, so none of them can accidentally assert the pre-ruling behaviour
+   *  where typing a code was enough. */
+  const joinAsMember = async (
+    memberCookies: Record<string, string>,
+    org: CreatedOrg,
+    staffCookies: Record<string, string>,
+  ): Promise<string> => {
+    const applicationId = await applyWithCode(memberCookies, org.joinCode.code);
+    const confirm = await post(
+      `/v1/orgs/${org.org.id}/applications/${applicationId}/confirm`,
+      {},
+      { cookies: staffCookies },
+    );
+    expect(confirm.statusCode).toBe(200);
+    return applicationId;
   };
 
   /** Give a gym a live subscription on a named plan (P2.4 GAP-5's precedent:
@@ -303,40 +347,361 @@ d("orgs routes (real Postgres)", () => {
     expect(second.org.slug.startsWith("orgs-test-twin-")).toBe(true);
   });
 
-  it("joins by code, tolerates poster typing, and is idempotent on a repeat", { timeout: 30_000 }, async () => {
-    const owner = await makeUser("join-owner");
-    const member = await makeUser("join-member");
-    const org = await makeOrg(owner.cookies, "Orgs Test Join");
+  it("typing a code APPLIES — no seat, no membership, no code use (Kd ruling 2026-08-19)", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("apply-owner");
+    const member = await makeUser("apply-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Apply");
 
     const typed = ` ${org.joinCode.code.toLowerCase().slice(0, 3)}-${org.joinCode.code.toLowerCase().slice(3)} `;
     const first = await post("/v1/orgs/join", { code: typed }, { cookies: member.cookies });
     expect(first.statusCode).toBe(200);
     const firstBody = JSON.parse(first.body) as {
-      alreadyMember: boolean;
+      outcome: string;
       org: { id: string };
-      membership: { groupLabel: string | null };
+      application: { id: string; status: string; expiresAt: string };
     };
-    expect(firstBody.alreadyMember).toBe(false);
+    expect(firstBody.outcome).toBe("pending");
     expect(firstBody.org.id).toBe(org.org.id);
-    expect(firstBody.membership.groupLabel).toBe("Front Desk");
+    expect(firstBody.application.status).toBe("pending");
 
-    const usesAfterFirst = await sql<{ uses: number }[]>`
+    // THE RULING, ASSERTED RATHER THAN DESCRIBED: no membership row exists.
+    // This is the assertion that goes red if a later edit "helpfully" restores
+    // the instant join, and it is why it sits above everything else here.
+    const members = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_members
+      WHERE gym_id = ${org.org.id} AND user_id = ${member.userId} AND removed_at IS NULL`;
+    expect(members[0]?.n).toBe(0);
+
+    // And no code use is burned. If applying spent one, a stranger with a
+    // leaked code could exhaust a max_uses code and shut a real gym's poster
+    // down without ever getting in.
+    const uses = await sql<{ uses: number }[]>`
       SELECT uses FROM gym_codes WHERE code = ${org.joinCode.code}`;
-    expect(usesAfterFirst[0]?.uses).toBe(1);
+    expect(uses[0]?.uses).toBe(0);
 
+    // :11385 — the row carries its own 14-day deadline from the moment it is
+    // written, so the sweep that acts on it is a reader and not a backfill.
+    const days =
+      (new Date(firstBody.application.expiresAt).getTime() - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(13.9);
+    expect(days).toBeLessThan(14.1);
+
+    // A second tap while waiting returns the SAME application, not an error
+    // and not a second row.
     const again = await post(
       "/v1/orgs/join",
       { code: org.joinCode.code },
       { cookies: member.cookies },
     );
     expect(again.statusCode).toBe(200);
-    expect((JSON.parse(again.body) as { alreadyMember: boolean }).alreadyMember).toBe(true);
+    const againBody = JSON.parse(again.body) as {
+      outcome: string;
+      application: { id: string };
+    };
+    expect(againBody.outcome).toBe("already_pending");
+    expect(againBody.application.id).toBe(firstBody.application.id);
+    const rows = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_join_applications
+      WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}`;
+    expect(rows[0]?.n).toBe(1);
+  });
 
-    // A repeat tap must not burn a use — `uses` is what max_uses is checked
-    // against, so double-counting it would retire a code early.
-    const usesAfterRepeat = await sql<{ uses: number }[]>`
+  it("the front desk's confirm is what creates the membership, and it is idempotent", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("confirm-owner");
+    const member = await makeUser("confirm-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Confirm");
+    const applicationId = await applyWithCode(member.cookies, org.joinCode.code);
+
+    const confirm = await post(
+      `/v1/orgs/${org.org.id}/applications/${applicationId}/confirm`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(confirm.statusCode).toBe(200);
+    const body = JSON.parse(confirm.body) as {
+      status: string;
+      membership: { groupLabel: string | null };
+    };
+    expect(body.status).toBe("confirmed");
+    expect(body.membership.groupLabel).toBe("Front Desk");
+
+    const live = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_members
+      WHERE gym_id = ${org.org.id} AND user_id = ${member.userId} AND removed_at IS NULL`;
+    expect(live[0]?.n).toBe(1);
+    // NOW the code use is spent — `uses` counts memberships the code created.
+    const uses = await sql<{ uses: number }[]>`
       SELECT uses FROM gym_codes WHERE code = ${org.joinCode.code}`;
-    expect(usesAfterRepeat[0]?.uses).toBe(1);
+    expect(uses[0]?.uses).toBe(1);
+    // The application records which membership it produced.
+    const app = await sql<{ status: string; member_id: string | null; decided_by_user_id: string | null }[]>`
+      SELECT status, member_id, decided_by_user_id FROM gym_join_applications
+      WHERE id = ${applicationId}`;
+    expect(app[0]?.status).toBe("confirmed");
+    expect(app[0]?.member_id).not.toBeNull();
+    expect(app[0]?.decided_by_user_id).toBe(owner.userId);
+
+    // A second tap is a person pressing a button twice, not an error — and it
+    // must not burn a second code use.
+    const twice = await post(
+      `/v1/orgs/${org.org.id}/applications/${applicationId}/confirm`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(twice.statusCode).toBe(200);
+    expect((JSON.parse(twice.body) as { status: string }).status).toBe("already_confirmed");
+    const usesAfter = await sql<{ uses: number }[]>`
+      SELECT uses FROM gym_codes WHERE code = ${org.joinCode.code}`;
+    expect(usesAfter[0]?.uses).toBe(1);
+
+    // Now a member, re-typing the code says so rather than opening a second
+    // application.
+    const retype = await post(
+      "/v1/orgs/join",
+      { code: org.joinCode.code },
+      { cookies: member.cookies },
+    );
+    expect(retype.statusCode).toBe(200);
+    expect((JSON.parse(retype.body) as { outcome: string }).outcome).toBe("already_member");
+  });
+
+  it("'not this person' closes the request and creates nobody", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("reject-owner");
+    const stranger = await makeUser("reject-stranger");
+    const org = await makeOrg(owner.cookies, "Orgs Test Reject");
+    const applicationId = await applyWithCode(stranger.cookies, org.joinCode.code);
+
+    const rejected = await post(
+      `/v1/orgs/${org.org.id}/applications/${applicationId}/reject`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(rejected.statusCode).toBe(200);
+    expect((JSON.parse(rejected.body) as { status: string }).status).toBe("rejected");
+
+    const live = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_members
+      WHERE gym_id = ${org.org.id} AND user_id = ${stranger.userId} AND removed_at IS NULL`;
+    expect(live[0]?.n).toBe(0);
+
+    // Confirming afterwards must not resurrect it.
+    const late = await post(
+      `/v1/orgs/${org.org.id}/applications/${applicationId}/confirm`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(late.statusCode).toBe(409);
+    expect((JSON.parse(late.body) as { error: string }).error).toBe("application_rejected");
+
+    // :11385 — re-applying is FREE. A real member mis-tapped as a stranger is
+    // not locked out; the per-route rate limit is what bounds a stranger's
+    // retries, never a permanent block.
+    const again = await post(
+      "/v1/orgs/join",
+      { code: org.joinCode.code },
+      { cookies: stranger.cookies },
+    );
+    expect(again.statusCode).toBe(200);
+    expect((JSON.parse(again.body) as { outcome: string }).outcome).toBe("pending");
+  });
+
+  it("shows the applicant their own waiting list, and tells them when it was refused", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("mineapp-owner");
+    const member = await makeUser("mineapp-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Mine Apps");
+    const applicationId = await applyWithCode(member.cookies, org.joinCode.code);
+
+    const waiting = await get("/v1/orgs/applications/mine", { cookies: member.cookies });
+    expect(waiting.statusCode).toBe(200);
+    const body = JSON.parse(waiting.body) as {
+      applications: { id: string; status: string; org: { id: string; name: string } }[];
+    };
+    const row = body.applications.find((a) => a.id === applicationId);
+    expect(row?.status).toBe("pending");
+    // The gym is named: a person waiting has to be told WHICH gym.
+    expect(row?.org.name).toBe("Orgs Test Mine Apps");
+
+    // Somebody else's application is not in my list.
+    const other = await makeUser("mineapp-other");
+    const otherList = await get("/v1/orgs/applications/mine", { cookies: other.cookies });
+    expect(
+      (JSON.parse(otherList.body) as { applications: { id: string }[] }).applications.map(
+        (a) => a.id,
+      ),
+    ).not.toContain(applicationId);
+
+    // Refused, and the applicant can SEE it was refused — leaving "waiting for
+    // Orgs Test Mine Apps" on screen after the gym said no is the app stating
+    // something false (:5807).
+    await post(
+      `/v1/orgs/${org.org.id}/applications/${applicationId}/reject`,
+      {},
+      { cookies: owner.cookies },
+    );
+    const after = await get("/v1/orgs/applications/mine", { cookies: member.cookies });
+    const afterRow = (
+      JSON.parse(after.body) as { applications: { id: string; status: string; decidedAt: string | null }[] }
+    ).applications.find((a) => a.id === applicationId);
+    expect(afterRow?.status).toBe("rejected");
+    expect(afterRow?.decidedAt).not.toBeNull();
+  });
+
+  it("drops a CONFIRMED application from the applicant's list — /mine owns that fact", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("mineapp2-owner");
+    const member = await makeUser("mineapp2-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Mine Apps Two");
+    const applicationId = await joinAsMember(member.cookies, org, owner.cookies);
+
+    const list = await get("/v1/orgs/applications/mine", { cookies: member.cookies });
+    const ids = (JSON.parse(list.body) as { applications: { id: string }[] }).applications.map(
+      (a) => a.id,
+    );
+    // Two readers claiming the same thing is two readers that can disagree:
+    // once confirmed, the membership lives in /v1/orgs/mine and only there.
+    expect(ids).not.toContain(applicationId);
+    const mine = await get("/v1/orgs/mine", { cookies: member.cookies });
+    expect(
+      (JSON.parse(mine.body) as { orgs: { id: string; isMember: boolean }[] }).orgs.find(
+        (o) => o.id === org.org.id,
+      )?.isMember,
+    ).toBe(true);
+  });
+
+  it("serves the confirm queue to staff who may confirm, and to nobody else (R3.2)", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("queue-owner");
+    const waiting = await makeUser("queue-waiting");
+    const stranger = await makeUser("queue-stranger");
+    const org = await makeOrg(owner.cookies, "Orgs Test Queue");
+    const applicationId = await applyWithCode(waiting.cookies, org.joinCode.code);
+
+    // THE FIXTURE IS THE ASSERTION (T3 round 1 C/H-3, applied before the
+    // defect rather than after it): a SECOND gym with its OWN pending
+    // applicant must exist, or "this queue is scoped to one gym" is proven by
+    // nothing — `WHERE gym_id = $1 OR true` returns the same single row on a
+    // clean database and survives.
+    const otherOwner = await makeUser("queue-other-owner");
+    const otherWaiting = await makeUser("queue-other-waiting");
+    const otherOrg = await makeOrg(otherOwner.cookies, "Orgs Test Queue Other");
+    const otherApplicationId = await applyWithCode(
+      otherWaiting.cookies,
+      otherOrg.joinCode.code,
+    );
+
+    const res = await get(`/v1/orgs/${org.org.id}/applications`, { cookies: owner.cookies });
+    expect(res.statusCode).toBe(200);
+    const page = JSON.parse(res.body) as {
+      items: { id: string; userId: string; displayName: string; groupLabel: string }[];
+      nextCursor: string | null;
+      pendingCount: number;
+    };
+
+    // Scoping first, naming the person this test itself put in ANOTHER gym, so
+    // a failure says whose row leaked rather than "expected 7 to equal 1".
+    expect(page.items.map((i) => i.id)).not.toContain(otherApplicationId);
+    expect(page.items.map((i) => i.userId)).not.toContain(otherWaiting.userId);
+
+    expect(page.items.map((i) => i.id)).toEqual([applicationId]);
+    expect(page.items[0]?.displayName).toBe("Orgs queue-waiting");
+    expect(page.items[0]?.groupLabel).toBe("Front Desk");
+    expect(page.pendingCount).toBe(1);
+    // Part 3 §2.4: an applicant is not a member, and the shape is no wider
+    // than the roster's. A field added here reaches a gym-facing screen.
+    for (const item of page.items) {
+      expect(Object.keys(item).sort()).toEqual(
+        ["appliedAt", "displayName", "expiresAt", "groupLabel", "id", "userId"].sort(),
+      );
+    }
+
+    // A stranger with the org's uuid must not learn it exists.
+    expect(
+      (await get(`/v1/orgs/${org.org.id}/applications`, { cookies: stranger.cookies }))
+        .statusCode,
+    ).toBe(404);
+    // Nor may the person WAITING read the queue they are in — membership is
+    // not staffing, and an applicant is not even that.
+    expect(
+      (await get(`/v1/orgs/${org.org.id}/applications`, { cookies: waiting.cookies }))
+        .statusCode,
+    ).toBe(404);
+  });
+
+  it("refuses to let one gym's staff decide another gym's application (R3.2)", { timeout: 30_000 }, async () => {
+    const ownerA = await makeUser("xt-owner-a");
+    const ownerB = await makeUser("xt-owner-b");
+    const applicant = await makeUser("xt-applicant");
+    const gymA = await makeOrg(ownerA.cookies, "Orgs Test Cross A");
+    const gymB = await makeOrg(ownerB.cookies, "Orgs Test Cross B");
+    const applicationId = await applyWithCode(applicant.cookies, gymA.joinCode.code);
+
+    // Gym B's owner holds a real application uuid — from gym A. Addressing it
+    // under their OWN gym must find nothing (the id is scoped by gym_id in the
+    // WHERE), and addressing it under gym A must not tell them gym A exists.
+    for (const verb of ["confirm", "reject"] as const) {
+      const underOwnGym = await post(
+        `/v1/orgs/${gymB.org.id}/applications/${applicationId}/${verb}`,
+        {},
+        { cookies: ownerB.cookies },
+      );
+      expect(underOwnGym.statusCode).toBe(404);
+      expect((JSON.parse(underOwnGym.body) as { error: string }).error).toBe(
+        "application_not_found",
+      );
+
+      const underOtherGym = await post(
+        `/v1/orgs/${gymA.org.id}/applications/${applicationId}/${verb}`,
+        {},
+        { cookies: ownerB.cookies },
+      );
+      // 404, not 403: a 403 would confirm gym A exists (:10010 decision 1).
+      expect(underOtherGym.statusCode).toBe(404);
+      expect((JSON.parse(underOtherGym.body) as { error: string }).error).toBe("org_not_found");
+    }
+
+    // And after all that the person is still waiting, in the right gym.
+    const still = await sql<{ status: string; gym_id: string }[]>`
+      SELECT status, gym_id FROM gym_join_applications WHERE id = ${applicationId}`;
+    expect(still[0]?.status).toBe("pending");
+    expect(still[0]?.gym_id).toBe(gymA.org.id);
+  });
+
+  it("holds a TRAINER back from confirming — §2.2's remove/restore row, and Kd's ruling", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("priv-owner");
+    const trainer = await makeUser("priv-trainer");
+    const manager = await makeUser("priv-manager");
+    const applicant = await makeUser("priv-applicant");
+    const org = await makeOrg(owner.cookies, "Orgs Test Privilege");
+    await sql`
+      INSERT INTO gym_staff (gym_id, user_id, role) VALUES
+        (${org.org.id}, ${trainer.userId}, 'trainer'),
+        (${org.org.id}, ${manager.userId}, 'manager')`;
+    const applicationId = await applyWithCode(applicant.cookies, org.joinCode.code);
+
+    // 403 and NOT 404: the trainer already knows this gym exists — they staff
+    // it. The distinction is the whole reason the seam returns both.
+    const queue = await get(`/v1/orgs/${org.org.id}/applications`, {
+      cookies: trainer.cookies,
+    });
+    expect(queue.statusCode).toBe(403);
+    const refused = await post(
+      `/v1/orgs/${org.org.id}/applications/${applicationId}/confirm`,
+      {},
+      { cookies: trainer.cookies },
+    );
+    expect(refused.statusCode).toBe(403);
+    expect((JSON.parse(refused.body) as { error: string }).error).toBe("forbidden");
+    // The refusal is REAL, not a hidden button: nobody was created.
+    const live = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_members
+      WHERE gym_id = ${org.org.id} AND user_id = ${applicant.userId} AND removed_at IS NULL`;
+    expect(live[0]?.n).toBe(0);
+
+    // A manager may — Kd's "only owner and manager", 2026-08-19.
+    const allowed = await post(
+      `/v1/orgs/${org.org.id}/applications/${applicationId}/confirm`,
+      {},
+      { cookies: manager.cookies },
+    );
+    expect(allowed.statusCode).toBe(200);
   });
 
   it("refuses an unknown code with 404", { timeout: 30_000 }, async () => {
@@ -384,7 +749,7 @@ d("orgs routes (real Postgres)", () => {
     expect(studio.org.orgType).toBe("studio");
   });
 
-  it("a legacy clinic row still demands consent on join, and records it (Part 3 §2.4)", { timeout: 30_000 }, async () => {
+  it("a legacy clinic row still demands consent on join, and records it (Part 3 §2.4)", { timeout: 90_000 }, async () => {
     // The API can no longer CREATE a clinic, but the org type was never
     // deleted from the database and the consent gate must still protect a row
     // that already exists. Inserted directly, which is the only way such a row
@@ -401,6 +766,12 @@ d("orgs routes (real Postgres)", () => {
     if (gymId === undefined) throw new Error("clinic fixture insert returned no row");
     await sql`
       INSERT INTO gym_codes (gym_id, code, label) VALUES (${gymId}, 'CLINIC', 'Front Desk')`;
+    // The staff row that `POST /v1/orgs` would have written. It was not needed
+    // while typing a code was the whole join; now the CONFIRM half needs a
+    // human with the privilege, and without this the owner of this
+    // hand-inserted clinic is not staff of it and gets the stranger's 404.
+    await sql`
+      INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${gymId}, ${owner.userId}, 'owner')`;
 
     const refused = await post(
       "/v1/orgs/join",
@@ -416,13 +787,31 @@ d("orgs routes (real Postgres)", () => {
       { cookies: patient.cookies },
     );
     expect(accepted.statusCode).toBe(200);
+    const applicationId = (JSON.parse(accepted.body) as { application: { id: string } })
+      .application.id;
+    // The consent is stamped on the APPLICATION, at the moment the person
+    // agreed — not at the moment the front desk got round to them.
+    const applied = await sql<{ consent_at: Date | null }[]>`
+      SELECT consent_at FROM gym_join_applications WHERE id = ${applicationId}`;
+    const consentedAt = applied[0]?.consent_at ?? null;
+    expect(consentedAt).not.toBeNull();
+
+    const confirm = await post(
+      `/v1/orgs/${gymId}/applications/${applicationId}/confirm`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(confirm.statusCode).toBe(200);
+    // …and CARRIED ONTO the membership rather than re-stamped, so the DPDP
+    // record dates the agreement and not the paperwork.
     const row = await sql<{ consent_at: Date | null }[]>`
       SELECT consent_at FROM gym_members
       WHERE gym_id = ${gymId} AND user_id = ${patient.userId} AND removed_at IS NULL`;
     expect(row[0]?.consent_at).not.toBeNull();
+    expect(row[0]?.consent_at?.getTime()).toBe(consentedAt?.getTime());
   });
 
-  it("enforces the plan's seat cap, and the owner's complimentary seat does not consume one", { timeout: 30_000 }, async () => {
+  it("enforces the plan's seat cap, and the owner's complimentary seat does not consume one", { timeout: 90_000 }, async () => {
     const owner = await makeUser("cap-owner");
     const first = await makeUser("cap-first");
     const second = await makeUser("cap-second");
@@ -430,40 +819,62 @@ d("orgs routes (real Postgres)", () => {
     await subscribeGym(org.org.id, CAP1_PLAN); // seat_cap = 1
 
     // The owner is already a member. If complimentary seats counted, this
-    // first join would be the one refused.
-    const ok = await post("/v1/orgs/join", { code: org.joinCode.code }, { cookies: first.cookies });
-    expect(ok.statusCode).toBe(200);
+    // first confirm would be the one refused.
+    await joinAsMember(first.cookies, org, owner.cookies);
+
+    // THE CAP NOW BITES AT CONFIRM, and applying is free: a full gym must
+    // still ACCEPT the application, because the ruling's whole content is that
+    // a waiting person consumes nothing. Refusing at the door would put the
+    // seat check back on the joiner, where it was before.
+    const secondApplication = await applyWithCode(second.cookies, org.joinCode.code);
 
     const full = await post(
-      "/v1/orgs/join",
-      { code: org.joinCode.code },
-      { cookies: second.cookies },
+      `/v1/orgs/${org.org.id}/applications/${secondApplication}/confirm`,
+      {},
+      { cookies: owner.cookies },
     );
     expect(full.statusCode).toBe(409);
     const body = JSON.parse(full.body) as { error: string; message: string };
     expect(body.error).toBe("seat_cap_reached");
-    // The cap is the gym's commercial business — the joiner is not told it.
-    expect(body.message).not.toMatch(/\d/);
+    // THIS READER IS THE GYM, so the number IS named — the opposite of the
+    // pre-ruling join, where the reader was the joiner and the cap was none of
+    // their business. The owner cannot act on "no free places" without knowing
+    // how many they bought.
+    expect(body.message).toMatch(/\b1\b/);
 
-    // T3 ROUND 1 C/H-1 — the regression. A member who is ALREADY in the gym
-    // re-submits the code while the gym is full. They are not asking for a
-    // seat; they hold one, and they are inside the count the cap is compared
-    // against. Before the fix this answered 409 "no free places" to somebody
-    // standing in the gym, which is §4.2's idempotent success inverted.
+    // AND THE PERSON IS STILL WAITING. A full gym must not throw the applicant
+    // away — the owner adds a seat and taps again.
+    const stillPending = await sql<{ status: string }[]>`
+      SELECT status FROM gym_join_applications WHERE id = ${secondApplication}`;
+    expect(stillPending[0]?.status).toBe("pending");
+    const queue = await get(`/v1/orgs/${org.org.id}/applications`, { cookies: owner.cookies });
+    expect(
+      (JSON.parse(queue.body) as { items: { id: string }[] }).items.map((i) => i.id),
+    ).toContain(secondApplication);
+
+    // T3 ROUND 1 C/H-1 — the regression, carried across the rewrite. A person
+    // who is ALREADY in the gym re-submits the code while the gym is full.
+    // They are not asking for a seat; they hold one, and they are inside the
+    // count the cap is compared against. Before the fix this answered "no free
+    // places" to somebody standing in the gym.
     const rejoin = await post(
       "/v1/orgs/join",
       { code: org.joinCode.code },
       { cookies: first.cookies },
     );
     expect(rejoin.statusCode).toBe(200);
-    expect((JSON.parse(rejoin.body) as { alreadyMember: boolean }).alreadyMember).toBe(true);
+    expect((JSON.parse(rejoin.body) as { outcome: string }).outcome).toBe("already_member");
 
     // And the cap still bites for a genuinely new person — the fix must not
     // have opened the gate for everyone.
     const third = await makeUser("cap-third");
+    const thirdApplication = await applyWithCode(third.cookies, org.joinCode.code);
     expect(
-      (await post("/v1/orgs/join", { code: org.joinCode.code }, { cookies: third.cookies }))
-        .statusCode,
+      (await post(
+        `/v1/orgs/${org.org.id}/applications/${thirdApplication}/confirm`,
+        {},
+        { cookies: owner.cookies },
+      )).statusCode,
     ).toBe(409);
   });
 
@@ -484,12 +895,26 @@ d("orgs routes (real Postgres)", () => {
     expect(beforeBody.source).toBe("free");
     expect(beforeBody.entitlements.history_days).toBe(90);
 
-    const joined = await post(
-      "/v1/orgs/join",
-      { code: org.joinCode.code },
-      { cookies: member.cookies },
+    // APPLYING GRANTS NOTHING. This is the ruling's entire content on the
+    // entitlements side, and it is asserted BETWEEN the two reads rather than
+    // as a separate test, because the cache is warm here and nowhere else —
+    // the cheap version of this assertion passes on a cold cache and proves
+    // nothing (:10010's own fixture lesson, in the same test).
+    const applicationId = await applyWithCode(member.cookies, org.joinCode.code);
+    const pending = await get("/v1/entitlements/me", { cookies: member.cookies });
+    const pendingBody = JSON.parse(pending.body) as {
+      source: string;
+      entitlements: { history_days: number };
+    };
+    expect(pendingBody.source).toBe("free");
+    expect(pendingBody.entitlements.history_days).toBe(90);
+
+    const confirmed = await post(
+      `/v1/orgs/${org.org.id}/applications/${applicationId}/confirm`,
+      {},
+      { cookies: owner.cookies },
     );
-    expect(joined.statusCode).toBe(200);
+    expect(confirmed.statusCode).toBe(200);
 
     const after = await get("/v1/entitlements/me", { cookies: member.cookies });
     const afterBody = JSON.parse(after.body) as {
@@ -500,15 +925,215 @@ d("orgs routes (real Postgres)", () => {
     expect(afterBody.entitlements.history_days).toBe(-1);
   });
 
-  it("serves the roster to staff and hides it from everyone else (R3.2)", { timeout: 30_000 }, async () => {
+  it("PERMANENT GUARD: a pending applicant is invisible to every reader of live membership", { timeout: 60_000 }, async () => {
+    // :5348 rule 5 — a bug CLASS gets an automated check so it cannot silently
+    // return. The class here is the one the separate table was chosen to
+    // prevent: eleven places across six server files read
+    // `removed_at IS NULL` as "live member", and a pending person must appear
+    // in NONE of them. This test is what makes that a property of the SUITE
+    // rather than a property of the design being remembered.
+    const owner = await makeUser("guard-owner");
+    const waiting = await makeUser("guard-waiting");
+    const org = await makeOrg(owner.cookies, "Orgs Test Guard");
+    await subscribeGym(org.org.id, "org_micro"); // a gym whose plan grants Pro
+    await applyWithCode(waiting.cookies, org.joinCode.code);
+
+    // 1. The §4.1 entitlement resolver — the money one.
+    const ent = await get("/v1/entitlements/me", { cookies: waiting.cookies });
+    expect((JSON.parse(ent.body) as { source: string }).source).toBe("free");
+
+    // 2. The roster: the gym does not see them as a member.
+    const roster = await get(`/v1/orgs/${org.org.id}/members`, { cookies: owner.cookies });
+    expect(
+      (JSON.parse(roster.body) as { items: { userId: string }[] }).items.map((i) => i.userId),
+    ).not.toContain(waiting.userId);
+
+    // 3. `/mine`: the applicant is not shown as belonging to the gym.
+    const mine = await get("/v1/orgs/mine", { cookies: waiting.cookies });
+    expect(
+      (JSON.parse(mine.body) as { orgs: { id: string }[] }).orgs.map((o) => o.id),
+    ).not.toContain(org.org.id);
+
+    // 4. The §4.2 seat count: a pending person occupies nothing.
+    const seats = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_members
+      WHERE gym_id = ${org.org.id} AND removed_at IS NULL AND complimentary = false`;
+    expect(seats[0]?.n).toBe(0);
+
+    // 5. The three per-module spend-attribution lookups (coach / geo /
+    //    nutrition `getLiveGymId`). They are the same query three times, so
+    //    the query itself is asserted here rather than reaching for three
+    //    modules' internals — a pending applicant must not cause a gym to be
+    //    BILLED for their API calls.
+    const spendGym = await sql<{ gym_id: string }[]>`
+      SELECT m.gym_id FROM gym_members m
+      JOIN subscriptions s ON s.owner_type = 'gym' AND s.owner_id = m.gym_id
+                           AND s.status IN ('trialing','active','past_due')
+      WHERE m.user_id = ${waiting.userId} AND m.removed_at IS NULL
+      LIMIT 1`;
+    expect(spendGym).toHaveLength(0);
+  });
+
+  it("confirms somebody who ALREADY holds a seat without charging a seat or a code use", { timeout: 90_000 }, async () => {
+    // WRITTEN BECAUSE TWO MUTANTS SURVIVED (this card's own audit, rule 4).
+    // `claimSeat`'s already-holds branch carries two guarantees — the T3 round
+    // 1 C/H-1 regression fix, and "a repeat does not burn a code use" — and
+    // BOTH lost their coverage when the door became an application door,
+    // because the idempotent path now short-circuits at APPLY and never
+    // reaches `claimSeat` at all. A fix whose protection cannot fail is the
+    // same defect with a comment on it (:5104 F5), so the state is built
+    // directly here.
+    //
+    // It is not a contrived state for long: the roster IMPORT creates
+    // memberships with no code and no application, which is exactly this.
+    const owner = await makeUser("held-owner");
+    const member = await makeUser("held-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Held");
+    await subscribeGym(org.org.id, CAP1_PLAN); // seat_cap = 1
+    const applicationId = await applyWithCode(member.cookies, org.joinCode.code);
+
+    const codeRows = await sql<{ id: string }[]>`
+      SELECT id FROM gym_codes WHERE code = ${org.joinCode.code}`;
+    const codeId = codeRows[0]?.id;
+    if (codeId === undefined) throw new Error("code fixture missing");
+    await sql`
+      INSERT INTO gym_members (gym_id, user_id, code_id, complimentary)
+      VALUES (${org.org.id}, ${member.userId}, ${codeId}, false)`;
+
+    // The gym is now FULL (one non-complimentary member on a one-seat plan)
+    // and the person waiting is that member. Confirming must succeed: they are
+    // not asking for a seat, they are inside the count the cap is compared
+    // against.
+    const confirm = await post(
+      `/v1/orgs/${org.org.id}/applications/${applicationId}/confirm`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(confirm.statusCode).toBe(200);
+    expect((JSON.parse(confirm.body) as { status: string }).status).toBe("confirmed");
+
+    // Exactly one membership, and the code's counter never moved — a repeat
+    // must not retire a max_uses code early.
+    const live = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_members
+      WHERE gym_id = ${org.org.id} AND user_id = ${member.userId} AND removed_at IS NULL`;
+    expect(live[0]?.n).toBe(1);
+    const uses = await sql<{ uses: number }[]>`
+      SELECT uses FROM gym_codes WHERE id = ${codeId}`;
+    expect(uses[0]?.uses).toBe(0);
+  });
+
+  it("walks the confirm queue by cursor without dupes or gaps, oldest first", { timeout: 90_000 }, async () => {
+    // WRITTEN BECAUSE A MUTANT SURVIVED: the roster's over-read-by-one mutant
+    // silently began driving THIS query instead (both read `LIMIT
+    // ${input.limit + 1}`, and a string replace takes the first match), so it
+    // reported on a surface its own name disowned — :11757 L2's shape — and
+    // the queue's paging had no test of its own either way.
+    const owner = await makeUser("qpage-owner");
+    const org = await makeOrg(owner.cookies, "Orgs Test Queue Paging");
+    const applied: string[] = [];
+    for (const n of ["q1", "q2", "q3"]) {
+      const u = await makeUser(`qpage-${n}`);
+      applied.push(await applyWithCode(u.cookies, org.joinCode.code));
+    }
+
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    for (let hop = 0; hop < 10; hop++) {
+      const path: string =
+        cursor === null
+          ? `/v1/orgs/${org.org.id}/applications?limit=2`
+          : `/v1/orgs/${org.org.id}/applications?limit=2&cursor=${encodeURIComponent(cursor)}`;
+      const res = await get(path, { cookies: owner.cookies });
+      expect(res.statusCode).toBe(200);
+      const page = JSON.parse(res.body) as {
+        items: { id: string }[];
+        nextCursor: string | null;
+        pendingCount: number;
+      };
+      expect(page.items.length).toBeLessThanOrEqual(2);
+      // The count is over the WHOLE queue, never this page — a console
+      // printing `items.length` would say "2 people waiting" out of three.
+      expect(page.pendingCount).toBe(3);
+      seen.push(...page.items.map((i) => i.id));
+      cursor = page.nextCursor;
+      if (cursor === null) break;
+    }
+    // Oldest first, all three, each exactly once.
+    expect(seen).toEqual(applied);
+  });
+
+  it("busts a stale cache when an existing member re-types the code", { timeout: 90_000 }, async () => {
+    // WRITTEN BECAUSE A MUTANT SURVIVED. The `already_member` arm's cache bust
+    // was defended by a comment ("a stale free-plan answer is what a second
+    // attempt is often trying to shake loose") and by nothing else. A claim in
+    // a comment is not a test.
+    const owner = await makeUser("stale-owner");
+    const member = await makeUser("stale-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Stale");
+    await joinAsMember(member.cookies, org, owner.cookies);
+
+    // Cache the FREE answer while the gym has no subscription. Without this
+    // read there is nothing stale to shake loose and the assertion below is
+    // satisfied by a cold cache (:10010's own fixture lesson).
+    const before = await get("/v1/entitlements/me", { cookies: member.cookies });
+    expect((JSON.parse(before.body) as { source: string }).source).toBe("free");
+
+    // The gym starts paying by a route that busts nobody's cache — which is
+    // what a subscription webhook looked like before P3 existed.
+    await subscribeGym(org.org.id, "org_micro");
+
+    const retype = await post(
+      "/v1/orgs/join",
+      { code: org.joinCode.code },
+      { cookies: member.cookies },
+    );
+    expect(retype.statusCode).toBe(200);
+    expect((JSON.parse(retype.body) as { outcome: string }).outcome).toBe("already_member");
+
+    const after = await get("/v1/entitlements/me", { cookies: member.cookies });
+    expect((JSON.parse(after.body) as { source: string }).source).toBe("gym_membership");
+  });
+
+  it("stops a deleted account waiting in a gym's queue (DPDP Day 0)", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("del-owner");
+    const leaver = await makeUser("del-leaver");
+    const org = await makeOrg(owner.cookies, "Orgs Test Delete");
+    const applicationId = await applyWithCode(leaver.cookies, org.joinCode.code);
+
+    const deleted = await api().inject({
+      method: "DELETE",
+      url: "/v1/users/me",
+      remoteAddress: nextIp(),
+      cookies: leaver.cookies,
+    });
+    expect(deleted.statusCode).toBe(200);
+
+    // The row is closed, so the front desk is not offered a person who has
+    // left the product — and cannot tap them back into the gym.
+    const row = await sql<{ status: string }[]>`
+      SELECT status FROM gym_join_applications WHERE id = ${applicationId}`;
+    expect(row[0]?.status).toBe("cancelled");
+    const queue = await get(`/v1/orgs/${org.org.id}/applications`, { cookies: owner.cookies });
+    const page = JSON.parse(queue.body) as { items: { id: string }[]; pendingCount: number };
+    expect(page.items.map((i) => i.id)).not.toContain(applicationId);
+    expect(page.pendingCount).toBe(0);
+
+    const late = await post(
+      `/v1/orgs/${org.org.id}/applications/${applicationId}/confirm`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(late.statusCode).toBe(409);
+    expect((JSON.parse(late.body) as { error: string }).error).toBe("application_cancelled");
+  });
+
+  it("serves the roster to staff and hides it from everyone else (R3.2)", { timeout: 90_000 }, async () => {
     const owner = await makeUser("roster-owner");
     const member = await makeUser("roster-member");
     const stranger = await makeUser("roster-stranger");
     const org = await makeOrg(owner.cookies, "Orgs Test Roster");
-    expect(
-      (await post("/v1/orgs/join", { code: org.joinCode.code }, { cookies: member.cookies }))
-        .statusCode,
-    ).toBe(200);
+    await joinAsMember(member.cookies, org, owner.cookies);
 
     // T3 ROUND 1 C/H-3 — THE FIXTURE IS THE ASSERTION. A SECOND gym with its
     // own owner and its own member must exist, or "this roster is scoped to
@@ -520,13 +1145,7 @@ d("orgs routes (real Postgres)", () => {
     const otherOwner = await makeUser("roster-other-owner");
     const otherMember = await makeUser("roster-other-member");
     const otherOrg = await makeOrg(otherOwner.cookies, "Orgs Test Roster Other");
-    expect(
-      (await post(
-        "/v1/orgs/join",
-        { code: otherOrg.joinCode.code },
-        { cookies: otherMember.cookies },
-      )).statusCode,
-    ).toBe(200);
+    await joinAsMember(otherMember.cookies, otherOrg, otherOwner.cookies);
 
     const mine = await get(`/v1/orgs/${org.org.id}/members`, { cookies: owner.cookies });
     expect(mine.statusCode).toBe(200);
@@ -575,10 +1194,7 @@ d("orgs routes (real Postgres)", () => {
     const member = await makeUser("jc-member");
     const stranger = await makeUser("jc-stranger");
     const org = await makeOrg(owner.cookies, "Orgs Test Joincodes");
-    expect(
-      (await post("/v1/orgs/join", { code: org.joinCode.code }, { cookies: member.cookies }))
-        .statusCode,
-    ).toBe(200);
+    await joinAsMember(member.cookies, org, owner.cookies);
 
     // THE FIXTURE IS THE ASSERTION (T3 round 1 C/H-3, applied before the
     // defect rather than after it). A SECOND gym with its own code has to
@@ -715,15 +1331,12 @@ d("orgs routes (real Postgres)", () => {
     );
   });
 
-  it("walks the roster by cursor without dupes or gaps (R7.3)", { timeout: 30_000 }, async () => {
+  it("walks the roster by cursor without dupes or gaps (R7.3)", { timeout: 90_000 }, async () => {
     const owner = await makeUser("page-owner");
     const org = await makeOrg(owner.cookies, "Orgs Test Paging");
     for (const n of ["p1", "p2", "p3"]) {
       const u = await makeUser(`page-${n}`);
-      expect(
-        (await post("/v1/orgs/join", { code: org.joinCode.code }, { cookies: u.cookies }))
-          .statusCode,
-      ).toBe(200);
+      await joinAsMember(u.cookies, org, owner.cookies);
     }
     const all = JSON.parse(
       (await get(`/v1/orgs/${org.org.id}/members?limit=100`, { cookies: owner.cookies })).body,
@@ -805,15 +1418,29 @@ d("orgs routes (real Postgres)", () => {
 
     // Two SEPARATE clients: the app's own pool is max:1 and would serialise
     // these for us, which would make the assertion true with the lock removed.
+    // Both apply first — applying is free and takes no lock, so the race that
+    // matters has moved to the CONFIRM tap. Two front-desk staff working the
+    // queue at the same moment is the real-world version of this.
+    const appA = await applyWithCode(a.cookies, org.joinCode.code);
+    const appB = await applyWithCode(b.cookies, org.joinCode.code);
+
     const c1 = postgres(url ?? "", { prepare: false, max: 1 });
     const c2 = postgres(url ?? "", { prepare: false, max: 1 });
     try {
       const [r1, r2] = await Promise.all([
-        orgRepo.joinByCode(c1, { userId: a.userId, code: org.joinCode.code, consent: false }),
-        orgRepo.joinByCode(c2, { userId: b.userId, code: org.joinCode.code, consent: false }),
+        orgRepo.confirmApplication(c1, {
+          gymId: org.org.id,
+          applicationId: appA,
+          actorUserId: owner.userId,
+        }),
+        orgRepo.confirmApplication(c2, {
+          gymId: org.org.id,
+          applicationId: appB,
+          actorUserId: owner.userId,
+        }),
       ]);
       const kinds = [r1.kind, r2.kind].sort();
-      expect(kinds).toEqual(["joined", "seat_cap"]);
+      expect(kinds).toEqual(["confirmed", "seat_cap"]);
     } finally {
       await c1.end({ timeout: 5 });
       await c2.end({ timeout: 5 });
@@ -825,19 +1452,64 @@ d("orgs routes (real Postgres)", () => {
     expect(live[0]?.n).toBe(1);
   });
 
-  it("collapses two simultaneous joins by the SAME person into one membership", { timeout: 60_000 }, async () => {
+  it("collapses two simultaneous APPLIES by the same person into one application", { timeout: 60_000 }, async () => {
     const owner = await makeUser("dbl-owner");
     const eager = await makeUser("dbl-eager");
     const org = await makeOrg(owner.cookies, "Orgs Test Double");
 
+    // Carried by `gym_join_applications_pending_uq` + ON CONFLICT, NOT by a
+    // lock — the apply path deliberately takes none. That is the same honest
+    // reading T3 round 1 L-6 forced on this test's ancestor: it proves the
+    // idempotent path holds when two transactions genuinely overlap, and it
+    // proves nothing about any FOR UPDATE.
     const c1 = postgres(url ?? "", { prepare: false, max: 1 });
     const c2 = postgres(url ?? "", { prepare: false, max: 1 });
     try {
       const results = await Promise.all([
-        orgRepo.joinByCode(c1, { userId: eager.userId, code: org.joinCode.code, consent: false }),
-        orgRepo.joinByCode(c2, { userId: eager.userId, code: org.joinCode.code, consent: false }),
+        orgRepo.applyByCode(c1, { userId: eager.userId, code: org.joinCode.code, consent: false }),
+        orgRepo.applyByCode(c2, { userId: eager.userId, code: org.joinCode.code, consent: false }),
       ]);
-      expect(results.map((r) => r.kind).sort()).toEqual(["already_member", "joined"]);
+      expect(results.map((r) => r.kind).sort()).toEqual(["already_pending", "pending"]);
+    } finally {
+      await c1.end({ timeout: 5 });
+      await c2.end({ timeout: 5 });
+    }
+
+    const rows = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_join_applications
+      WHERE gym_id = ${org.org.id} AND user_id = ${eager.userId} AND status = 'pending'`;
+    expect(rows[0]?.n).toBe(1);
+    // Still nothing spent and nobody let in.
+    const uses = await sql<{ uses: number }[]>`
+      SELECT uses FROM gym_codes WHERE code = ${org.joinCode.code}`;
+    expect(uses[0]?.uses).toBe(0);
+  });
+
+  it("collapses two simultaneous CONFIRMS of one application into one membership", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("dblc-owner");
+    const applicant = await makeUser("dblc-applicant");
+    const org = await makeOrg(owner.cookies, "Orgs Test Double Confirm");
+    const applicationId = await applyWithCode(applicant.cookies, org.joinCode.code);
+
+    // Two people at the front desk tapping the same row. The application's own
+    // `FOR UPDATE` is what serialises them, so the loser reads a row that is
+    // already `confirmed` rather than writing a second membership.
+    const c1 = postgres(url ?? "", { prepare: false, max: 1 });
+    const c2 = postgres(url ?? "", { prepare: false, max: 1 });
+    try {
+      const results = await Promise.all([
+        orgRepo.confirmApplication(c1, {
+          gymId: org.org.id,
+          applicationId,
+          actorUserId: owner.userId,
+        }),
+        orgRepo.confirmApplication(c2, {
+          gymId: org.org.id,
+          applicationId,
+          actorUserId: owner.userId,
+        }),
+      ]);
+      expect(results.map((r) => r.kind).sort()).toEqual(["already_confirmed", "confirmed"]);
     } finally {
       await c1.end({ timeout: 5 });
       await c2.end({ timeout: 5 });
@@ -845,8 +1517,10 @@ d("orgs routes (real Postgres)", () => {
 
     const rows = await sql<{ n: number }[]>`
       SELECT count(*)::int AS n FROM gym_members
-      WHERE gym_id = ${org.org.id} AND user_id = ${eager.userId} AND removed_at IS NULL`;
+      WHERE gym_id = ${org.org.id} AND user_id = ${applicant.userId} AND removed_at IS NULL`;
     expect(rows[0]?.n).toBe(1);
+    // One membership, ONE use — a double tap must not retire a max_uses code
+    // early.
     const uses = await sql<{ uses: number }[]>`
       SELECT uses FROM gym_codes WHERE code = ${org.joinCode.code}`;
     expect(uses[0]?.uses).toBe(1);

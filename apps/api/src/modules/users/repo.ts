@@ -280,6 +280,25 @@ export async function softDeleteUser(sql: Sql, userId: string): Promise<DeletedU
     await tx`
       UPDATE gym_members SET removed_at = now()
       WHERE user_id = ${userId} AND removed_at IS NULL`;
+    // The sibling of the statement above (Kd ruling :11072 added the waiting
+    // room). Without it a deleted person's NAME sits in a gym's confirm queue
+    // for two weeks, and a front-desk tap could make them a member of a gym
+    // they left the product to get away from. Same transaction, same Part 4
+    // §5.2 Day-0 sentence — not a widening of the delete list, but the
+    // membership close §5.2 already mandates, applied to the row that stands
+    // in for a membership.
+    //
+    // WRITTEN HERE RATHER THAN CALLED FROM THE ORGS REPO on purpose: R7.1
+    // forbids reaching into another module's repo, and the DPDP cascade is
+    // cross-cutting by nature — which is why the `gym_members` close one line
+    // up has always been inline too. The orgs repo's own header claim to be
+    // "the ONLY file that touches" these tables was already false because of
+    // that line; it is corrected there in the same commit rather than left to
+    // read as a rule this statement breaks.
+    await tx`
+      UPDATE gym_join_applications
+      SET status = 'cancelled', decided_at = now()
+      WHERE user_id = ${userId} AND status = 'pending'`;
     await tx`DELETE FROM push_tokens WHERE user_id = ${userId}`;
     return { email: row.email, displayName: row.display_name };
   });

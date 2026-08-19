@@ -177,8 +177,20 @@ export type PiiTable = (typeof PII_TABLES)[number];
 // list Kd is asked to RULE on has to be complete, or the ruling is partial:
 //
 //   one_time_tokens · refresh_tokens · gym_members · gym_staff ·
-//   api_cost_events · usage_daily · trace_samples · gyms.owner_user_id ·
-//   subscriptions.owner_id · exercise_definitions.published_by
+//   gym_join_applications · api_cost_events · usage_daily · trace_samples ·
+//   gyms.owner_user_id · subscriptions.owner_id ·
+//   exercise_definitions.published_by
+//
+// `gym_join_applications` JOINED THIS LIST 2026-08-19 with the waiting-room
+// card (DECISIONS :11072). It belongs on exactly the same footing as
+// `gym_members`, which is why it is filed here rather than ruled on by a chat:
+// it holds a user_id, §5.2's prose names neither, and both are a person's own
+// record of their relationship with a gym. Its Day-0 half IS handled — pending
+// rows are set `cancelled` in `users/repo.ts` beside the membership close — so
+// what is open is only the Day-14 question, identically to its sibling.
+// RULE THEM TOGETHER: a ruling that purges membership history but leaves the
+// applications that produced it is a partial answer, and the property that
+// makes either list auditable is that deletion and export stay symmetrical.
 //
 // THE LAST TWO WERE MISSED at first review and added after T3 F4. The
 // enumeration method is why, and it is worth stating so the next person
