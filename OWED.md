@@ -4355,6 +4355,36 @@ file and is stated so nobody reads these as lower priority than they are.
       **STILL OPEN: `POST /v1/orgs` and `GET /v1/orgs/:gymId/codes`**, which is
       why this line does not tick — the create surface is the one that lets a
       single account squat every readable slug.
+- [ ] 🟡 **THE RUNNING FEATURE HAS A HARD CEILING AT A FEW HUNDRED ACTIVE USERS,
+      AND IT FAILS AS A DEAD FEATURE RATHER THAN A BILL** (found 2026-08-19
+      answering Kd's pricing question; DECISIONS :12111. **Tracked nowhere
+      before — `grep -ni openrouteservice OWED.md` returns 0**; :9944 carried it
+      as one UNVERIFIED clause inside a pricing entry).
+      **Measured in the code:** `generateRoutes` loops `routeSeeds(input.count)`
+      and makes ONE provider call per seed with one `api_cost_events` row each,
+      and `count` is 1-5 **default 3** (`packages/shared/src/geo.ts:14`). So a
+      member's **3 route plans a day is 9 external calls a day, up to 15** — not
+      3. ORS bills a request COUNT against a daily allowance, not per call
+      (`geo/cost.ts`, `ORS_ROUTE_COST_MICRO = 0n`), **and that allowance is
+      shared across the WHOLE APP, not per gym.**
+      **THE SIZE IS STILL UNVERIFIED AND THAT IS THE FIRST THING OWED:**
+      openrouteservice.org's restrictions page lists functional limits only and
+      no rate limits; secondary sources say ~2,000/day (40/min), one says 2,500.
+      **The account dashboard is the only authority and nobody has looked.**
+      **At ~2,000/day, roughly 130-220 members app-wide using their full
+      allowance exhausts routing for EVERY user of EVERY gym that day** — and
+      the path is deliberately fail-closed with no mock fallback
+      (`geo/service.ts` logs `geo.ors_failed` and throws a typed 503), so what
+      they all see is "route generation is temporarily unavailable".
+      **Why this is not a pricing problem:** it arrives regardless of what a gym
+      pays, at hundreds of users rather than thousands, and Kd's proposed
+      2/day → 3/day move brought it 33% closer with nothing recorded.
+      **The options, cheapest first, and the first two are free:** cache and
+      reuse candidates for the same start point and distance · **drop the
+      default `count` from 3 to 1** and generate more only on "show me another"
+      — each cuts the call rate ~3× · a paid ORS plan · self-host.
+      **Not urgent today** (5 route_gen calls have ever been recorded) and it
+      must not be discovered by a gym's members losing the feature at once.
 - [ ] 🟡 **GYM PLAN/TRIAL ACTIVATION SITS BEHIND KD'S APPROVAL — ruled
       2026-08-19 (DECISIONS :11072), binds the BILLING card.** The hazard pair
       this answers was raised by Kd the same day (:11023, tracked nowhere

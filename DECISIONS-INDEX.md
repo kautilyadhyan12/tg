@@ -335,6 +335,41 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   so two `app.inject` calls are serialised by the CLIENT and would pass with the
   lock deleted** — a test that cannot fail. Seven `OWED.md` lines added; the
   console line is UPDATED, not ticked.
+- **:12111** — 2026-08-19 — **KD'S REVISED US TIERS RE-MEASURED: the money is
+  comfortable and the ROUTING ALLOWANCE is the real ceiling.** **Read before
+  ratifying any price, before quoting an API cost, before raising the route-plan
+  allowance, and before promising running to a gym.** Continues :9944 with his
+  amended numbers — **<500 $20 · 500-1000 $30 · 1000-1500 $35 · 1500-2000 $50**,
+  **8 scans/day + 3 route plans/day**; tier 3 dropped $40→$35, the top tier is
+  now BOUNDED (half of :9944's fix 2) **and that opened a NEW hole — nothing
+  above 2000 has a price**, while exactly 1000/1500/2000 still fall in no tier.
+  **MEASURED by re-querying `api_cost_events`, not quoted: identical to :9944 —
+  18 scans, avg 1,763 max 2,120 µUSD; route_gen 0.** Worst scan × 8/day × 30 =
+  **$0.51/member/month**; tiers absorb ~39/58/68/98 full-use members, i.e.
+  **break-even is ~8% of a roster flat out every day**, remarkably flat across
+  tiers. Realistic adoption on a 500-member gym: **~$6 against $30.**
+  **AFFORDABILITY ANSWERED WITH SOURCES (V5): US gym software is $79-$229/mo**
+  (Gymdesk ~$79, PushPress $159/$229, Wodify $179), so he is **3-8× under the
+  category floor** — with the caveat that those products RUN the gym while this
+  is a member perk, so their price is a ceiling to aim at rather than one he has
+  earned. **THE FINDING IS NOT ABOUT MONEY: ONE ROUTE PLAN IS THREE CALLS** —
+  `generateRoutes` loops `routeSeeds(input.count)`, one provider call and one
+  ledger row each, `count` 1-5 **default 3**, so 3 plans/day is **9-15 external
+  calls/day per member**. ORS bills a request COUNT against a daily allowance
+  **shared APP-WIDE** whose size is **still UNVERIFIED** (the official
+  restrictions page lists functional limits only; secondary sources say
+  ~2,000/day, 40/min). **At ~2,000/day, roughly 130-220 active route users
+  app-wide exhaust the whole product's routing — and it fails as a DEAD FEATURE,
+  not a bill** (fail-closed 503, no mock fallback). **A scale ceiling that
+  arrives regardless of price, reached at hundreds not thousands, moved 33%
+  closer by the 2→3/day change, and tracked NOWHERE — `openrouteservice` appears
+  0 times in `OWED.md`, grep-verified. It has a line now.** Recommended, not
+  ruled: leave the prices · fix the bands to `1-499/500-999/1000-1499/1500-2499/
+  2500+ contact us` · treat routing as CAPACITY (cache candidates · drop default
+  `count` 3→1 — **the two free options, each ~3× the call rate** · paid plan ·
+  self-host). **NOT RATIFIED**; :9944's consent split and one-US-lawyer step
+  untouched and still owed; **the seeded PAID quota is `route_gen` 5/day, LOOSER
+  than the 3/day he just proposed.**
 - **:11846** — 2026-08-19 — **THE JOIN DOOR OPENS ON THE SERVER (step 1 of 3):
   typing a code now APPLIES, the front desk CONFIRMS, and a pending person is
   invisible to every reader of live membership.** **Read before touching

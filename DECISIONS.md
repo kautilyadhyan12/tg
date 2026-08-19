@@ -12107,3 +12107,119 @@ TESTS, and it is only worth what the aiming is worth.**
   (:5199's "the full sweep run to completion for the first time").
 
 **NOTHING TICKS. There is no screen, so there is no smoke — and T3 is UNRUN.**
+
+## 2026-08-19 — KD'S REVISED US TIERS RE-MEASURED: the money is comfortable and the ROUTING ALLOWANCE is the real ceiling — one UNVERIFIED clause in :9944 turns out to be the binding constraint on the whole running feature
+
+**Read before ratifying any price, before quoting an API cost, before raising
+the route-plan allowance, and before promising running to a gym.** Continues
+:9944 with Kd's amended numbers. **He asked two questions — "is this affordable
+for US gym owners" and "how much will my API cost be" — and the second answer
+matters far less than a third thing neither of us asked about.** Nothing is
+ratified; no code changed.
+
+### HIS REVISED PROPOSAL, and what moved since :9944
+
+**<500 $20 · 500-1000 $30 · 1000-1500 $35 · 1500-2000 $50** per month, with
+**8 meal scans/day and 3 route plans/day** per member. Three changes: tier 3
+drops **$40 → $35**; the top tier is now **BOUNDED at 2000**, which adopts half
+of :9944's fix 2; and route plans go **2/day → 3/day**.
+
+**The boundary gaps :9944 flagged are NOT fixed and one is new:** exactly 1000,
+1500 and 2000 fall in no tier as stated, **and nothing above 2000 has a price at
+all** — the old "1500+ is unbounded" hole closed by opening a hole at the top
+instead. Cleaned form put to him: `1-499 / 500-999 / 1000-1499 / 1500-2499 /
+2500+ contact us`. Also noted: per member the $50 tier is DEARER than the $35
+one ($0.025 vs $0.023), which is a pricing curve nobody chose.
+
+### THE MEASUREMENT — RE-QUERIED THIS SESSION, NOT QUOTED FROM :9944 (V1)
+
+`api_cost_events`, grouped by feature and provider:
+
+| feature | provider | calls | avg µUSD | max µUSD |
+|---|---|---|---|---|
+| coach | groq | 83 | 133 | 590 |
+| meal_scan | groq:qwen/qwen3.6-27b | 18 | 1,763 | 2,120 |
+| meal_scan | groq:scout | 13 | 660 | 660 |
+| route_gen | ors | 5 | 0 | 0 |
+
+**Identical to :9944's figures — no new scans have been recorded since**, so the
+18-scan sample caveat stands unchanged and is not re-argued here.
+
+**Arithmetic on the worst scan ever recorded ($0.00212), never the average:**
+- 8 scans/day × 30 days = **$0.51 per member per month** at absolute maximum use.
+- Each tier absorbs, at that maximum: **$20→~39 · $30→~58 · $35→~68 · $50→~98**
+  members.
+- **Stated the useful way round: BREAK-EVEN IS ABOUT 8% OF A ROSTER USING IT
+  FLAT OUT EVERY DAY** (39/500, 58/1000, 68/1500, 98/2000 — remarkably flat
+  across the tiers, which is a point in the pricing's favour).
+- Defensible adoption (10% of a 500-member roster scanning twice a day):
+  **~$6/month against $30.** Covered several times over.
+
+### AFFORDABILITY: ANSWERED WITH SOURCES, NOT MODEL MEMORY (V5)
+
+US gym-management software runs **$79-$229/month** — Gymdesk from ~$79,
+PushPress Pro $159 / Max $229, Wodify $179 (sources listed below, read
+2026-08-19). **Kd's $20-$50 is three to eight times cheaper than the cheapest
+serious tool in the category.** Affordability is not the risk.
+
+**Two honest caveats given with it:** (1) those products RUN the gym — billing,
+check-in, retention — while this is a member-facing perk with a console, so
+their price is a ceiling to aim at, not a price he has earned; (2) very cheap
+reads as "not serious" to a business buyer, which bites harder because
+:11072 has him approving every gym by hand — a $20 customer still costs a
+conversation.
+
+### THE FINDING, AND IT IS NOT ABOUT MONEY: ONE ROUTE PLAN IS THREE CALLS
+
+**Measured in the code, not assumed:** `generateRoutes` loops over
+`routeSeeds(input.count)` and makes ONE provider call per seed, with one
+`api_cost_events` row each; `count` is **1-5, default 3**
+(`packages/shared/src/geo.ts:14`). So a member's **3 route plans a day is 9
+external calls a day, and up to 15** — not 3.
+
+ORS is billed as a request COUNT against a daily allowance, not per call
+(`geo/cost.ts` — `ORS_ROUTE_COST_MICRO = 0n`), and **that allowance is shared
+across the WHOLE APP, not per gym** (:9944 recorded this in one clause and
+marked the size UNVERIFIED). **The size is still UNVERIFIED and now matters:**
+openrouteservice.org's own restrictions page lists functional limits only and no
+rate limits; secondary sources give **~2,000/day (40/minute)** for the free
+plan, one gives 2,500. **The dashboard is the only authority and nobody has
+looked.**
+
+**Taking ~2,000/day: roughly 130-220 members app-wide using their full route
+allowance exhausts the entire product's routing for that day.** And it fails as
+a **DEAD FEATURE, not a bill** — the service is deliberately fail-closed with no
+mock fallback (`geo/service.ts`: an ORS failure logs `geo.ors_failed` and throws
+a typed 503), so every user of every gym sees "route generation is temporarily
+unavailable" at once.
+
+**THIS IS A SCALE CEILING THAT ARRIVES REGARDLESS OF PRICE**, it is reached at a
+few hundred active runners rather than at a few thousand, and raising the
+allowance from 2/day to 3/day moved it 33% closer with nothing recorded. It had
+NO `OWED.md` line — grep-verified, `openrouteservice` appears **0 times** in
+that file — which is exactly the shape the deferral rule exists to catch. It has
+one now.
+
+### RECOMMENDATION PUT TO KD (his call, nothing ratified)
+
+1. **Leave the prices.** They clear the API cost with 3-5× headroom in any
+   realistic adoption and sit far under the market.
+2. **Fix the bands** to the cleaned form above — a gym with exactly 1,000
+   members currently has no price.
+3. **Treat routing as a CAPACITY item, not a cost item.** The options, cheapest
+   first: cache and reuse route candidates for the same start point and
+   distance; drop the default `count` from 3 to 1 and generate more only on
+   "show me another"; move to a paid ORS plan; self-host. **The first two cost
+   nothing and each cuts the call rate by ~3×.**
+
+**STATUS: NOT RATIFIED.** :9944's status is unchanged — Part 5 §1's India books
+stay UNRESOLVED and the seeded quota shapes (`db/seed.ts:28-29` — the PAID tier
+already seeds `meal_scan` 8/day and `route_gen` **5**/day, which is LOOSER than
+the 3/day Kd just proposed) are re-seeded per the ruling when the billing card
+lands. **The consent split and the one-US-lawyer step at :9944 are untouched and
+still owed.**
+
+Sources read 2026-08-19 (UNVERIFIED beyond what these pages state):
+`openrouteservice.org/restrictions/` · `gymdesk.com/blog/gym-management-software-cost`
+· `makocrm.so/blog/gym-software-pricing` ·
+`gymroute.com/blog/top-us-based-gym-management-software-solutions/`
