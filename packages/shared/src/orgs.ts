@@ -408,6 +408,28 @@ export type ConfirmApplicationResponse = z.infer<typeof confirmApplicationRespon
 export const rejectApplicationResponseSchema = z.object({ status: z.literal("rejected") });
 export type RejectApplicationResponse = z.infer<typeof rejectApplicationResponseSchema>;
 
+/** Part 3 §4.3's remove flow — the counterpart to confirm, and the reason
+ *  confirm is no longer a one-way door.
+ *
+ *  **KD RULING 2026-08-19, on being shown that a confirmed member could not be
+ *  removed by anybody:** *"if someone joins once can not be removed what is
+ *  this"*. He is right, and the gap was real — before this, the ONLY thing in
+ *  the product that ever set `removed_at` was a person deleting their entire
+ *  account (`users/repo.ts`, the DPDP Day-0 cascade).
+ *
+ *  **`removed` is a statement about the state, not about this request**, which
+ *  is what makes a second tap idempotent (:12227 L-3's asymmetry, avoided
+ *  rather than repeated): the answer means "this person is not in your gym
+ *  now", true whether this call closed the row or the previous one did.
+ *
+ *  Kd's rule for what it costs the member, ruled in the same breath: *"that
+ *  user losses the parks and need to take personal subscriptions"* — which is
+ *  already how the resolver behaves, since it counts a membership only while
+ *  `removed_at` is null. Their own workouts, streak and history are untouched;
+ *  §4.3's "your workouts are yours forever". */
+export const removeMemberResponseSchema = z.object({ status: z.literal("removed") });
+export type RemoveMemberResponse = z.infer<typeof removeMemberResponseSchema>;
+
 /** Cursor pagination per R7.3. Cursor = `<joinedAt ISO>|<membership uuid>`
  *  from the previous page (keyset on the same pair the ordering uses). */
 export const orgMemberListQuerySchema = z

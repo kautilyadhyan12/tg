@@ -1,6 +1,106 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE JOIN DOOR, STEP 2 OF 3 — THE TWO SCREENS. A member can type their
+      gym's code and see they are waiting; the gym can see who is waiting and
+      confirm or refuse them. **AND A THIRD THING KD ADDED MID-CARD: a member
+      can be REMOVED, which nothing in the product could do.**
+      **CODE DONE AND PROVEN. SMOKE UNRUN. T3 UNRUN. NOTHING TICKS.**
+
+KD'S TWO INTERVENTIONS, BOTH OF WHICH CHANGED THE CARD
+  · Handed a plan whose two buttons each asked "sure?" because a confirmed
+    member could not be removed: *"do you even have some common sense if
+    someone joins once can not be rempved what is this"*. **He was right and
+    it was measured** — the only statement that had ever written `removed_at`
+    was the DPDP Day-0 cascade. So `DELETE /v1/orgs/:gymId/members/:userId` is
+    in this card and the two-step confirmations went with it: Confirm and "Not
+    this person" are single taps now, because both are reversible. §4.3's
+    confirm sheet stays on REMOVE alone.
+  · *"if a gym removes a user that user losses the parks and need to take
+    personal subscriptions"* — already true in the resolver (`removed_at IS
+    NULL`); what the card adds is the CACHE BUST, tested against a WARM cache
+    because that is the only shape in which the assertion can fail.
+  · He also recalled the roster auto-match and amended it: an auto-matched
+    person should show in the queue **with a badge saying they are already on
+    the gym's list, and still get a tap**. Recorded; unbuildable today (no
+    roster table exists — measured again this session), so it belongs to the
+    import card.
+
+FILES
+  NEW  · `apps/web/src/components/gym/OrgVisibilitySheet.jsx` (§2.4's list)
+       · `apps/web/src/components/gym/JoinGymPanel.jsx`
+       · `apps/web/src/components/gym/GymMembershipCard.jsx`
+       · `apps/web/src/components/gym/gymMembershipView.js` (+ `.test.js`)
+       · `apps/web/src/components/gym/joinGym.render.test.jsx`
+       · `apps/web/src/pages/JoinGym.jsx` (`/org/join?code=`)
+       · `apps/web/src/pages/console/ApplicationsQueue.jsx`
+       · `apps/web/tools/mutate-join-door.mjs` · `RUNBOOK/smoke-join-door.md`
+  API  · `packages/shared/src/orgs.ts` (+`removeMemberResponseSchema`)
+       · `apps/api/src/modules/orgs/{repo,service,routes,schemas}.ts`
+         (`removeMember`, `members.remove` privilege, the DELETE route)
+       · `apps/api/test/orgs.routes.test.ts` (+7) · `apps/api/tools/mutate-orgs.mjs` (+O42–O47)
+  WEB  · `apps/web/src/api/orgsApi.js` (+6 calls) + its test
+       · `App.jsx` (+1 route) · `Settings.jsx` (+Gym tab) · `Dashboard.jsx` (+card)
+       · `console/{Members,Overview,consoleView}.jsx|js` + both console tests
+  DOCS · `DECISIONS.md` :12343 + its index line · `OWED.md` (2 new lines, 2 updated)
+
+DECISIONS NOT TO RE-DERIVE (full text at DECISIONS :12343)
+  · Settings → Gym is where v1 §8 puts the code box; `/org/join?code=` mirrors
+    Part 6 §2's deep link so the QR and the web link are ONE path. **NOTHING
+    added to the sidebar** (:11616's crossing stays shut, cited in the code).
+  · The queue is a SECTION on Members, not a seventh tab (§3.1 fixes the nav at
+    six; §4.3 gives Members the walk-in join).
+  · The dashboard card reads BOTH `/applications/mine` and `/orgs/mine`.
+    Confirmed applications are absent from the first BY DESIGN, so without the
+    second the waiting card would vanish on success and the app would never say
+    the person got in. One gym, one row: member > waiting > refused.
+  · STAFF cannot be removed through this door (owner is member #1; no restore
+    exists). No Remove control beside a complimentary seat, and the server
+    refuses regardless — hiding is not enforcement.
+
+SAID RATHER THAN GLOSSED
+  · **No email, no expiry, no auto-confirm in any copy** — none of the three
+    exists, and a render test asserts the words are absent.
+  · **A poster link only works signed IN**: `ProtectedRoute` redirects carrying
+    nothing, so the code is lost through login. Own 🟡 line; not fixed here
+    because it means touching the login door Kd has ruled on twice (R1.1).
+  · **Nobody is told when they are confirmed or removed** — no notifications
+    exist. Own 🟡 line; §4.3 specifies the removal message, so it is spec, not
+    invention.
+  · RESTORE (§4.3's 30 days) is still unbuilt and the §2.2 line does not tick.
+
+GATES
+  · api **512/512 across all 43 files** on real Postgres · orgs **43/43** ·
+    shared **48/48** · web **857/857** · `vite build` ✓ · tsc clean on api and
+    shared · eslint clean on every new file · **`Settings.jsx`/`Dashboard.jsx`/
+    `App.jsx` = HEAD baseline of 4 errors, MEASURED by linting `git show HEAD:`
+    copies**, none of them this card's.
+  · **JOIN-DOOR SWEEP: 24 mutants · 24 RED · 0 ALIVE · 0 never ran**, exit 0,
+    every control GREEN and tallying first, restores sha256-verified, tree clean.
+  · **ORGS SWEEP (server half): 47 mutants · 47 RED · 0 ALIVE · 0 never ran**,
+    exit 0, whole table including O42-O47 for removal.
+
+THE AUDIT FINDING IS MINE, TWICE IN ONE HOUR
+  · **J11 survived, was re-aimed, and SURVIVED AGAIN.** A trainer's 403 was
+    hidden by TWO guards — the catch suppressed the error, the render returned
+    null — and **each was unfalsifiable because the other held**. :5104 F5's
+    shape twice, in code written the same hour by a chat that had read :5104
+    that morning. Fixed in the SOURCE so one line does the work; deleting it now
+    prints "Your role doesn't allow that" at a trainer and the test goes red.
+  · **Standing lesson: when a mutant survives, ask whether the guarantee is
+    OBSERVABLE before assuming the test is missing.** Two redundant guards look
+    like defence in depth and are indistinguishable from dead code.
+
+NEXT
+  1. Kd runs `RUNBOOK/smoke-join-door.md` (17 steps, two accounts, two windows).
+     **Step 14 — Remove — is the one the packet turns on**: DELETE and POST are
+     indistinguishable to every server test in this repo.
+  2. T3 in a FRESH chat on the diff.
+  3. Step 3 of the split: the waiting room's clock (expiry sweep, gym reminder,
+     member nudge) — its own 🔴 line.
+```
+
+```
 TASK: THE JOIN DOOR, STEP 1 OF 3 — THE SERVER HALF. Typing a gym's code now
       creates an APPLICATION; the front desk confirms; only then is there a
       member (Kd ruling :11072, entry :11846). **CODE DONE AND PROVEN. NO

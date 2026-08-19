@@ -19,6 +19,7 @@ import {
   orgTypeLabel,
   roleLabel,
   timezoneOptions,
+  waitingCountLabel,
 } from './consoleView';
 
 describe('the country picker cannot offer a country the server refuses', () => {
@@ -279,6 +280,23 @@ describe('the database’s words are not the screen’s words (T3 L-6)', () => {
     // `in` walks the prototype chain — a role of `toString` must not resolve to
     // Object.prototype's method (the shape that bit the badge tier lookup).
     expect(roleLabel('toString')).toBe('toString');
+  });
+});
+
+describe('how many people are waiting', () => {
+  it('counts people, and gets the singular right', () => {
+    expect(waitingCountLabel(1)).toBe('1 person waiting');
+    expect(waitingCountLabel(4)).toBe('4 people waiting');
+    expect(waitingCountLabel(0)).toBe('0 people waiting');
+  });
+
+  it('refuses to state a number it was not given', () => {
+    // "nobody is waiting" is a claim, and a reader that could not read the
+    // count has no business making it — the caller draws nothing on null.
+    expect(waitingCountLabel(undefined)).toBeNull();
+    expect(waitingCountLabel(null)).toBeNull();
+    expect(waitingCountLabel('3')).toBeNull();
+    expect(waitingCountLabel(Number.NaN)).toBeNull();
   });
 });
 

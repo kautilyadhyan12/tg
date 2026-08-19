@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   User, Dumbbell, Lock, Bell, Trash2, Camera,
   Save, Loader2, Check, AlertTriangle, RefreshCw,
-  Shield, ChevronRight, LogOut,
+  Shield, ChevronRight, LogOut, Building2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
@@ -12,10 +12,21 @@ import { userService, heightToCm, weightToKg, convertHeight, convertWeight, merg
 import { authService } from '../api/authApi';
 import mlApi from '../api/mlApi'; // KEPT: avatar/profile-picture only — no new-API home (owed card)
 import Select from '../components/common/Select';
+import JoinGymPanel from '../components/gym/JoinGymPanel';
+import GymMembershipCard from '../components/gym/GymMembershipCard';
 
+// `gym` is where v1 §8 puts joining a gym — "member enters code at
+// registration or in Settings" — and it is the MEMBER's side of that
+// relationship only: the code box, and what the gym can see about them.
+//
+// IT IS NOT A DOOR INTO THE GYM CONSOLE, and it must never become one. Kd
+// removed the `My Gym` sidebar entry on 2026-08-19 and ruled the login page's
+// two doors the only crossing between the member app and the console, in both
+// directions. A link to `/console` added here re-opens exactly that.
 const TABS = [
   { id: 'profile',       label: 'Profile',       icon: User    },
   { id: 'fitness',       label: 'Fitness',       icon: Dumbbell },
+  { id: 'gym',           label: 'Gym',           icon: Building2 },
   { id: 'account',       label: 'Account',       icon: Shield  },
   { id: 'notifications', label: 'Notifications', icon: Bell    },
 ];
@@ -407,6 +418,27 @@ function FitnessTab({ profile, onSaved }) {
         <SaveBtn loading={loading} saved={saved} />
       </div>
     </form>
+  );
+}
+
+// ── Gym tab ───────────────────────────────────────────────────────────────────
+//
+// v1 §8: "Member enters code at registration or in Settings." This is the
+// Settings half, and until it existed there was no half at all — the join
+// endpoint had shipped and no screen in the app called it, so a gym could hand
+// out a code nobody could redeem.
+//
+// The panel is shared with `/org/join`, the address a poster QR points at, so
+// the two cannot answer differently. `GymMembershipCard` above it is the same
+// component the dashboard draws: a person who is waiting, or was refused, or is
+// already in, is told so HERE too, rather than having to remember what the
+// dashboard said.
+function GymTab() {
+  return (
+    <div className="flex flex-col gap-5">
+      <GymMembershipCard />
+      <JoinGymPanel />
+    </div>
   );
 }
 
@@ -927,6 +959,7 @@ export default function Settings() {
                     />
                   )}
                   {tab === 'fitness'       && <FitnessTab       profile={profile} onSaved={loadProfile} />}
+                  {tab === 'gym'           && <GymTab />}
                   {tab === 'account'       && <AccountTab       profile={profile} onSaved={loadProfile} />}
                   {tab === 'notifications' && <NotificationsTab />}
                 </motion.div>

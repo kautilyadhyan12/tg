@@ -6,7 +6,14 @@ import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/con
 import { orgService, errorText, errorStatus } from '../../api/orgsApi';
 import { useAuth } from '../../context/AuthContext';
 import { useConsoleOrg } from './useConsoleOrg';
-import { codeToShow, joinedCount, memberCountLine, orgTypeLabel, roleLabel } from './consoleView';
+import {
+  codeToShow,
+  joinedCount,
+  memberCountLine,
+  orgTypeLabel,
+  roleLabel,
+  waitingCountLabel,
+} from './consoleView';
 
 // The gym's own screen. Part 3 §4.1 calls this Overview and specifies KPI tiles
 // (active members 30d, workouts this week, adoption %, average form score), an
@@ -75,6 +82,17 @@ export default function Overview() {
   // the client half of the same defect.
   const [codes, setCodes] = useState({ loading: true, error: null, retryable: true, list: null });
   const [members, setMembers] = useState({ loading: true, error: null, retryable: true, page: null });
+  // :11385 — "the gym is reminded… a count the owner cannot miss". This is the
+  // screen an owner lands on, so the number lives here as well as on the list
+  // itself; a queue only visible after you go looking for it is not a reminder.
+  //
+  // A FAILURE HERE IS SILENT, and that is the difference between this pane and
+  // the two above it. Those two are the screen's subject; this is a nudge, and
+  // a person who may not confirm (a trainer, 403) or whose request blipped is
+  // better told nothing than told the gym has nobody waiting — the count is
+  // simply absent, and the Members screen states its own case when they open
+  // it.
+  const [waiting, setWaiting] = useState(null);
   const [attempt, setAttempt] = useState(0);
   const gymId = org?.id ?? null;
 
@@ -86,7 +104,11 @@ export default function Overview() {
     void Promise.allSettled([
       orgService.getCodes(gymId),
       orgService.getMembers(gymId, { limit: 100 }),
-    ]).then(([codesOutcome, membersOutcome]) => {
+      // `limit: 1` because only the COUNT is read here, and `pendingCount` is
+      // an exact figure over the whole queue rather than this page's length —
+      // so one row is enough and ninety would be wasted on a phone.
+      orgService.getApplications(gymId, { limit: 1 }),
+    ]).then(([codesOutcome, membersOutcome, waitingOutcome]) => {
       if (cancelled) return;
       setCodes(
         codesOutcome.status === 'fulfilled'
@@ -108,6 +130,11 @@ export default function Overview() {
               page: null,
             },
       );
+      setWaiting(
+        waitingOutcome.status === 'fulfilled'
+          ? (waitingOutcome.value.data?.pendingCount ?? null)
+          : null,
+      );
     });
     return () => {
       cancelled = true;
@@ -117,6 +144,7 @@ export default function Overview() {
   const retry = () => {
     setCodes({ loading: true, error: null, retryable: true, list: null });
     setMembers({ loading: true, error: null, retryable: true, page: null });
+    setWaiting(null);
     setAttempt((n) => n + 1);
   };
 
@@ -217,7 +245,15 @@ export default function Overview() {
                 roster is plainly not empty and this line does not appear. The
                 count above says "1 member (you)" in this same case, so the two
                 sentences agree instead of reading as a contradiction (L-5). */}
-            {joined === 0 ? (
+            {/* The waiting count outranks the empty-roster nudge: a gym with
+                three people waiting has not got "nobody" to talk about, and
+                telling them to share the code again would be the wrong next
+                step by a mile. */}
+            {typeof waiting === 'number' && waiting > 0 ? (
+              <div className="text-xs mt-0.5 font-medium" style={{ color: '#FF8A1F' }}>
+                {waitingCountLabel(waiting)} — confirm them here
+              </div>
+            ) : joined === 0 ? (
               <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
                 Nobody has joined yet — share your code.
               </div>

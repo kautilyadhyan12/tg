@@ -23,6 +23,10 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getMine: vi.fn(),
       getMembers: vi.fn(),
       getCodes: vi.fn(),
+      getApplications: vi.fn(),
+      confirmApplication: vi.fn(),
+      rejectApplication: vi.fn(),
+      removeMember: vi.fn(),
     },
   };
 });
@@ -91,7 +95,25 @@ const joinedMemberWithForbiddenExtras = {
   avgFormScore: 87.3,
 };
 
+/** Somebody waiting at the door, carrying the same four fields the roster does
+ *  and nothing more — §2.4 governs an applicant exactly as it governs a member.
+ *  The extras here are values a gym must never see, spelled distinctively so a
+ *  whole-document search cannot match them by accident. */
+const waitingApplicant = {
+  id: 'app-1',
+  userId: 'u3',
+  displayName: 'Anil Bora',
+  appliedAt: '2026-08-19T09:00:00.000Z',
+  expiresAt: '2026-09-02T09:00:00.000Z',
+  groupLabel: 'Front Desk',
+  email: 'anil-private@example.com',
+  weightKg: 74.25,
+};
+
 const page = (items, nextCursor = null) => ({ data: { items, nextCursor } });
+const queue = (items, pendingCount = items.length, nextCursor = null) => ({
+  data: { items, nextCursor, pendingCount },
+});
 const apiError = (status, error, message) => ({
   response: { status, data: { error, message, requestId: 'r' } },
 });
@@ -141,6 +163,9 @@ beforeEach(() => {
   orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
   orgService.getCodes.mockResolvedValue({ data: { codes: [LIVE_CODE] } });
   orgService.getMembers.mockResolvedValue(page([ownerSeat]));
+  // Nobody waiting, by default: every test that is not about the queue should
+  // see the screen it saw before the queue existed.
+  orgService.getApplications.mockResolvedValue(queue([]));
 });
 
 afterEach(() => cleanup());
@@ -440,6 +465,31 @@ describe('The gym', () => {
     expect(screen.queryByText('owner')).toBeNull();
   });
 
+  it('puts the number waiting where an owner cannot miss it', async () => {
+    // :11385 — "the gym is reminded… a count the owner cannot miss". This is
+    // the screen they land on; a queue only visible after you go looking is not
+    // a reminder. The figure is the server's exact count over the whole queue.
+    orgService.getApplications.mockResolvedValue(queue([waitingApplicant], 4, 'app-1'));
+    drawOverview();
+    expect(await screen.findByText(/4 people waiting/i)).toBeTruthy();
+    // …and it OUTRANKS the empty-roster nudge: telling a gym with four people
+    // waiting to go and share its code again is the wrong next step by a mile.
+    expect(screen.queryByText(/Nobody has joined yet/i)).toBeNull();
+  });
+
+  it('says nothing about waiting when the count cannot be read', async () => {
+    // A trainer (403) or a blipped request. Absent is honest; "nobody is
+    // waiting" would be a claim nothing supports, and the Members screen makes
+    // its own case when they open it.
+    orgService.getApplications.mockRejectedValue(
+      apiError(403, 'forbidden', "Your role doesn't allow that."),
+    );
+    drawOverview();
+    expect(await screen.findByText('1 member (you)')).toBeTruthy();
+    expect(screen.queryByText(/people waiting/i)).toBeNull();
+    expect(screen.queryByText(/person waiting/i)).toBeNull();
+  });
+
   it('a reply this screen cannot read is a FAILURE, never "not your gym" (L-7)', async () => {
     // A 200 whose body is missing `orgs` used to become an empty list, then
     // `notFound`, then "we couldn't find a gym you run at this address" — a
@@ -528,5 +578,197 @@ describe('Members', () => {
     fireEvent.click(await screen.findByText('Load more'));
     expect(await screen.findByText(/Couldn't reach the server/i)).toBeTruthy();
     expect(screen.getByText('Kd Owner')).toBeTruthy();
+  });
+});
+
+// ── Waiting to join ─────────────────────────────────────────────────────────
+
+describe('Waiting to join', () => {
+  it("shows an applicant's four facts AND NOTHING ELSE (Part 3 §2.4)", async () => {
+    orgService.getApplications.mockResolvedValue(queue([waitingApplicant]));
+    // An empty roster below, so the only "Front Desk" on screen is the
+    // applicant's own — the owner's seat carries the same label.
+    orgService.getMembers.mockResolvedValue(page([]));
+    drawMembers();
+
+    expect(await screen.findByText('Anil Bora')).toBeTruthy();
+    expect(screen.getByText(/Front Desk/)).toBeTruthy();
+
+    // §2.4 governs an applicant exactly as it governs a member — and a person
+    // who is only WAITING is even less the gym's business. The fixture carries
+    // an email and a body weight; rendering the object rather than its allowed
+    // fields is what would put them here.
+    const text = document.body.textContent;
+    expect(text).not.toContain('anil-private@example.com');
+    expect(text).not.toContain('74.25');
+  });
+
+  it('prints the SERVER’S exact count, never this page’s length', async () => {
+    // A page of 3 out of 90 saying "3 people waiting" is a wrong number in
+    // front of a gym owner. `pendingCount` counts the whole queue.
+    orgService.getApplications.mockResolvedValue(
+      queue([waitingApplicant], 90, 'app-1'),
+    );
+    drawMembers();
+    expect(await screen.findByText(/90 people waiting/i)).toBeTruthy();
+    expect(screen.queryByText(/1 person waiting/i)).toBeNull();
+  });
+
+  it('confirms somebody: the row goes, the count drops, and the ROSTER re-reads', async () => {
+    orgService.getApplications
+      .mockResolvedValueOnce(queue([waitingApplicant], 1))
+      .mockResolvedValue(queue([]));
+    orgService.confirmApplication.mockResolvedValue({
+      data: { status: 'confirmed', membership: { id: 'm', joinedAt: '2026-08-19T10:00:00.000Z', groupLabel: 'Front Desk' } },
+    });
+    orgService.getMembers
+      .mockResolvedValueOnce(page([ownerSeat]))
+      .mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
+    drawMembers();
+
+    fireEvent.click(await screen.findByText('Confirm'));
+    await waitFor(() =>
+      expect(orgService.confirmApplication).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111', 'app-1'),
+    );
+    // THE HALF THAT MATTERS: the person is now a member, so they appear in the
+    // list below rather than the owner having to reload to believe it.
+    expect(await screen.findByText('Rita Sen')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText('Anil Bora')).toBeNull());
+  });
+
+  it('refuses somebody with one tap, and does not confirm them by accident', async () => {
+    orgService.getApplications
+      .mockResolvedValueOnce(queue([waitingApplicant], 1))
+      .mockResolvedValue(queue([]));
+    orgService.rejectApplication.mockResolvedValue({ data: { status: 'rejected' } });
+    drawMembers();
+
+    fireEvent.click(await screen.findByText('Not this person'));
+    await waitFor(() => expect(orgService.rejectApplication).toHaveBeenCalled());
+    expect(orgService.confirmApplication).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByText('Anil Bora')).toBeNull());
+    // …and the member list is NOT re-read: refusing somebody adds nobody to it,
+    // so a reload would flash a loading state under a tap that changed nothing
+    // there.
+    expect(orgService.getMembers).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the server’s own words when a full gym refuses the confirm', async () => {
+    // The message names the cap — a number this screen has no way to know,
+    // since no route serves a seat count. Rewording it here would throw the
+    // useful half away.
+    orgService.getApplications.mockResolvedValue(queue([waitingApplicant], 1));
+    orgService.confirmApplication.mockRejectedValue(
+      apiError(
+        409,
+        'seat_cap_reached',
+        'Your plan covers 3 members and they are all taken. Add a seat, then confirm again — this person is still waiting.',
+      ),
+    );
+    drawMembers();
+
+    fireEvent.click(await screen.findByText('Confirm'));
+    expect(await screen.findByText(/Your plan covers 3 members/i)).toBeTruthy();
+  });
+
+  it('DRAWS NO SECTION for a trainer, who the server would refuse anyway', async () => {
+    // §2.2 gives a trainer the roster and not the confirm. A console must not
+    // offer a control the server will refuse — and the roster below is
+    // untouched by that refusal.
+    orgService.getApplications.mockRejectedValue(
+      apiError(403, 'forbidden', "Your role doesn't allow that."),
+    );
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
+    drawMembers();
+
+    expect(await screen.findByText('Rita Sen')).toBeTruthy();
+    expect(screen.queryByText(/waiting to join/i)).toBeNull();
+    expect(screen.queryByText(/Your role doesn't allow that/i)).toBeNull();
+  });
+
+  it('NEVER draws an empty queue over a failed read', async () => {
+    // The shape this project ships most often, on the surface that decides
+    // whether real members get in: "nobody is waiting" over a request that
+    // never answered.
+    orgService.getApplications.mockRejectedValue(offline());
+    drawMembers();
+    // Offline carries no status and no body, so the sentence is the one about
+    // the CONNECTION rather than this screen's fallback — the point is that
+    // SOMETHING is said and the section is not silently drawn as empty.
+    expect(await screen.findByText(/couldn't reach the server/i)).toBeTruthy();
+    expect(screen.getByText('Try again')).toBeTruthy();
+    // …and it does not take the member list down with it.
+    expect(screen.getByText('Kd Owner')).toBeTruthy();
+  });
+
+  it('says nothing at all when nobody is waiting', async () => {
+    orgService.getApplications.mockResolvedValue(queue([]));
+    drawMembers();
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+    expect(screen.queryByText(/waiting to join/i)).toBeNull();
+  });
+});
+
+// ── Removing a member ───────────────────────────────────────────────────────
+
+describe('Removing a member', () => {
+  it('asks before it removes, and Keep really keeps', async () => {
+    // Part 3 §4.3 specifies a confirm sheet, and the button sits where a thumb
+    // reaches for it on a phone.
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
+    drawMembers();
+
+    fireEvent.click(await screen.findByText('Remove'));
+    expect(screen.getByText(/Remove Rita Sen\?/i)).toBeTruthy();
+    fireEvent.click(screen.getByText('Keep'));
+    expect(orgService.removeMember).not.toHaveBeenCalled();
+    expect(screen.getByText('Rita Sen')).toBeTruthy();
+  });
+
+  it('removes on the second tap and re-reads the roster', async () => {
+    orgService.getMembers
+      .mockResolvedValueOnce(page([ownerSeat, joinedMemberWithForbiddenExtras]))
+      .mockResolvedValue(page([ownerSeat]));
+    orgService.removeMember.mockResolvedValue({ data: { status: 'removed' } });
+    drawMembers();
+
+    fireEvent.click(await screen.findByText('Remove'));
+    // The second "Remove" is the one inside the question.
+    fireEvent.click(screen.getAllByText('Remove')[0]);
+    await waitFor(() =>
+      expect(orgService.removeMember).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111', 'u2'),
+    );
+    await waitFor(() => expect(screen.queryByText('Rita Sen')).toBeNull());
+    // `find`, not `get`: the roster re-read passes through its loading state,
+    // so the row is legitimately off screen for a tick.
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+  });
+
+  it('offers NO remove control beside the owner’s own complimentary seat', async () => {
+    // The server refuses to remove staff, and the owner is member #1 of their
+    // own gym — so the button would be a live refusal wearing a working button's
+    // clothes.
+    orgService.getMembers.mockResolvedValue(page([ownerSeat]));
+    drawMembers();
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+    expect(screen.queryByText('Remove')).toBeNull();
+  });
+
+  it('keeps the person on screen when the server refuses, and says why', async () => {
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
+    orgService.removeMember.mockRejectedValue(
+      apiError(
+        409,
+        'member_is_staff',
+        "A staff member can't be removed from the member list. Staff membership is managed with staff.",
+      ),
+    );
+    drawMembers();
+
+    fireEvent.click(await screen.findByText('Remove'));
+    fireEvent.click(screen.getAllByText('Remove')[0]);
+    expect(await screen.findByText(/A staff member can't be removed/i)).toBeTruthy();
+    // Nothing changed, so nothing on the list may look as though it did.
+    expect(screen.getByText('Rita Sen')).toBeTruthy();
   });
 });

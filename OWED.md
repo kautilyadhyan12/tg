@@ -4158,14 +4158,35 @@ file and is stated so nobody reads these as lower priority than they are.
       already grants) and a 403 on a `studio`/`clinic`. **Closed by the card
       that adds trainer→code/group assignment**, which is also what Part 3's
       Groups filter needs.
-- [ ] 🟡 **THE REST OF THE §2.2 MATRIX HAS NO ROUTES: remove/restore a member,
-      create/rotate/expire codes, staff management, CSV export, nudges.** The
-      org slice built create/join/roster only. Part 3 §4.3's remove flow (soft
-      `removed_at`, seat freed instantly, 30-day restore) and §2.1's multiple
-      named codes are both specced and both unbuilt. **Consequence worth
-      knowing: `removed_at` is written by nothing today**, so the roster's
-      `removed_at IS NULL` filter is correct but untested against a real removal
-      — the card that builds removal owes that test.
+- [ ] 🟡 **THE REST OF THE §2.2 MATRIX HAS NO ROUTES: ~~remove~~/RESTORE a
+      member, create/rotate/expire codes, staff management, CSV export,
+      nudges.** The org slice built create/join/roster only. Part 3 §4.3's
+      remove flow (soft `removed_at`, seat freed instantly, 30-day restore) and
+      §2.1's multiple named codes are both specced and both unbuilt.
+      ~~**Consequence worth knowing: `removed_at` is written by nothing
+      today**, so the roster's `removed_at IS NULL` filter is correct but
+      untested against a real removal — the card that builds removal owes that
+      test.~~
+      **UPDATE 2026-08-20 — REMOVE IS BUILT, AND KD IS THE REASON (DECISIONS
+      :12343).** Shown a plan whose buttons asked "sure?" because a confirmed
+      member could not be removed, he answered *"do you even have some common
+      sense if someone joins once can not be rempved what is this"*. Measured
+      before building: the ONLY statement in the product that had ever written
+      `removed_at` was the DPDP Day-0 cascade, i.e. a person deleting their own
+      account. `DELETE /v1/orgs/:gymId/members/:userId` now exists (owner and
+      manager, §2.2's remove/restore row), the row is CLOSED not deleted, the
+      seat is freed by the same statement, the removed person's entitlement
+      cache is busted immediately (Kd's own second ruling), and STAFF are
+      refused — an owner is member #1 of their own gym and there is no restore
+      to undo it with. Tests cover the roster drop, the freed seat, the retained
+      history, the cross-gym scoping, the idempotent second tap, the 404 for a
+      non-member and the re-join. **This line does NOT tick: RESTORE (§4.3's 30
+      days) is still unbuilt, and so is everything else named above.**
+      **What restore costs, so the next card starts informed:** the partial
+      unique index is on LIVE rows only, so a restore is not an UPDATE of the
+      closed row — it is a decision between reopening that row and inserting a
+      new membership, and the two disagree about `joined_at`, which is what
+      every membership-interval reader is scoped by (§2.1).
 - [ ] 🟡 **THE MEMBERS SCREEN'S REAL CONTENTS ARE NOT SERVED: seat meter, last
       active, workouts 30d, avg form 30d, streak, search, group filter.** Part 3
       §4.3 specifies all of them and §3.2 says they come from `org_member_stats`
@@ -4237,6 +4258,50 @@ file and is stated so nobody reads these as lower priority than they are.
       Step 2 (the member's code screen carrying §2.4's "what the gym can see"
       sheet, the waiting card, and the console's queue screen) is what ticks
       this line, after its smoke and a review round with zero Critical/High.
+      **UPDATE 2026-08-20 — STEP 2 IS BUILT (DECISIONS :12343). STILL DOES NOT
+      TICK: the smoke is UNRUN and T3 is UNRUN**, which is the whole gate this
+      line names. What exists now: the code box at **Settings → Gym** and at
+      `/org/join?code=` (Part 6 §2's deep link mirrored, so the mobile QR and
+      the web link are one path), §2.4's visibility sheet on the form and again
+      named in the answer, a waiting/refused/member card on the dashboard, the
+      console's **Waiting to join** section above the roster with the server's
+      exact count on the gym's home screen, and — Kd's addition mid-card —
+      **Remove**. `RUNBOOK/smoke-join-door.md` is the 17-step sheet.
+- [ ] 🟡 **A POSTER LINK ONLY WORKS IF YOU ARE ALREADY SIGNED IN — the code is
+      lost on the way through the login page** (deferred 2026-08-20, DECISIONS
+      :12343). `/org/join?code=ABC123` is the address a gym's QR poster points
+      at, and it is behind `ProtectedRoute`, which redirects a signed-out
+      visitor to `/login` **carrying nothing** — no `state`, no `from`, no
+      query. So the person who scanned the poster signs in and lands on their
+      dashboard with the code gone, and has to find Settings → Gym and type it
+      by hand. **Measured, not assumed:** `ProtectedRoute` is
+      `<Navigate to="/login" replace />` with no location, and `landingRoute`
+      decides the destination from the DOOR they chose, by Kd's two-doors
+      ruling (:10824/:11616).
+      **Why it was not fixed in the card that created it (R1.1):** carrying a
+      destination through sign-in means touching the login door itself, and that
+      is the surface Kd has ruled on twice — a card that quietly adds a third
+      thing deciding where you land after signing in is exactly what :10866's
+      "four places decided the destination" finding was about.
+      **Part 6 §2 says deep links "never dead-end on a login wall"**, so the
+      mobile app owes the same fix and should not invent a second mechanism.
+      **Cost today:** the poster works for anyone already signed in, which at
+      pilot scale is most people standing at a front desk with the app open.
+- [ ] 🟡 **NOBODY IS TOLD WHEN A GYM CONFIRMS OR REMOVES THEM — the app waits
+      to be asked** (deferred 2026-08-20, DECISIONS :12343). A confirmed member
+      finds out by opening the app (their dashboard card changes to "You're a
+      member of {gym}"); a removed member finds out because the card is simply
+      gone. **Both are silent by construction: there are no notifications and no
+      email** — `EmailSender` logs an event name and sends nothing (:11385's own
+      line), and no push exists on web. **Nothing false is on screen** — the
+      card states the truth whenever it is read — but the person who is standing
+      at a front desk waiting to be let in has to keep reloading, and somebody
+      removed gets no explanation at all. Part 3 §4.3 specifies the removal
+      message in as many words ("You've left {org} — your workouts are yours
+      forever" + Pro win-back), so this is a spec item, not an invention.
+      **Closes with the notifications module, which no `OWED.md` line had ever
+      named until :11385 and which password reset and email verification are
+      also waiting on.**
 - [ ] 🔴 **NOTHING EXPIRES, REMINDS OR NUDGES YET — the waiting room has no
       clock (step 3 of the join door; deferred 2026-08-19, DECISIONS :11891).**
       Every application is stamped with a 14-day `expires_at` when it is

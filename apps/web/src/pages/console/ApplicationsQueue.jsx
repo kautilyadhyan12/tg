@@ -1,0 +1,228 @@
+import { useCallback, useEffect, useState } from 'react';
+import { Loader2 } from 'lucide-react';
+import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import { orgService, errorText, errorStatus } from '../../api/orgsApi';
+import { formatJoinedAt, groupLabelText, waitingCountLabel } from './consoleView';
+
+// WHO IS WAITING TO JOIN — the front desk's half of the door (Kd ruling
+// 2026-08-19: typing a code applies, it does not join).
+//
+// IT LIVES ON THE MEMBERS SCREEN AND NOT IN A TAB OF ITS OWN. Part 3 §3.1 fixes
+// the console's nav at six sections and this is none of them; §4.3 gives the
+// Members screen the job of "the 30-second walk-in join", which is exactly this
+// list. The layout shows only sections that are BUILT, so inventing a seventh
+// tab would be the first promise on that rail nothing stands behind.
+//
+// THE COUNT IS THE SERVER'S, NEVER `items.length`. `pendingCount` is an exact
+// count over the whole queue; a page of 3 out of 90 printing "3 people waiting"
+// is a wrong number in front of a gym owner, which is the one thing the
+// severity rule names outright.
+//
+// A TRAINER SEES NOTHING HERE, SILENTLY. Confirming is owner-and-manager
+// (§2.2's remove/restore row, and Kd's "ok only owner and manager"), so the
+// server answers 403 — and a console must not draw a control it will then be
+// refused. Hiding is not the enforcement; the server already refused. Any OTHER
+// failure DOES show, with a retry, because "we couldn't check" and "you may not
+// see this" are different sentences and only one of them is about a connection.
+
+function ApplicantRow({ applicant, busy, onConfirm, onReject }) {
+  return (
+    <div
+      className="rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-3"
+      style={{ background: '#121110', border: '1px solid rgba(255,138,31,0.22)' }}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="font-semibold truncate" style={{ color: '#fff' }}>
+          {applicant.displayName}
+        </div>
+        <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          Asked {formatJoinedAt(applicant.appliedAt)} · {groupLabelText(applicant)}
+        </div>
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={busy}
+          className="rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center gap-2 disabled:opacity-40"
+          style={{ background: '#FF8A1F', color: '#0A0908' }}
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+          Confirm
+        </button>
+        <button
+          type="button"
+          onClick={onReject}
+          disabled={busy}
+          className="rounded-xl px-4 py-2.5 text-sm font-medium disabled:opacity-40"
+          style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)' }}
+        >
+          Not this person
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function ApplicationsQueue({ gymId, onRosterChanged }) {
+  const [state, setState] = useState({
+    loading: true,
+    error: null,
+    forbidden: false,
+    items: [],
+    nextCursor: null,
+    pendingCount: 0,
+  });
+  const [attempt, setAttempt] = useState(0);
+  const [busyId, setBusyId] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [actionError, setActionError] = useState(null);
+
+  useEffect(() => {
+    if (gymId === null) return undefined;
+    let cancelled = false;
+    orgService
+      .getApplications(gymId, { limit: 50 })
+      .then((res) => {
+        if (cancelled) return;
+        setState({
+          loading: false,
+          error: null,
+          forbidden: false,
+          items: res.data?.items ?? [],
+          nextCursor: res.data?.nextCursor ?? null,
+          pendingCount: res.data?.pendingCount ?? 0,
+        });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        // The refusal is RECORDED like any other failure and the `forbidden`
+        // flag is what decides whether it is ever drawn. Suppressing it here as
+        // well was the first draft, and the mutation audit showed the two
+        // guards masking each other: with both in place, deleting either
+        // changed nothing observable, so neither could be caught failing.
+        // One of them does the work now (:5104 F5 — a protection that cannot
+        // fail is the same defect with a comment on it).
+        setState({
+          loading: false,
+          error: errorText(err, "We couldn't check who's waiting to join."),
+          forbidden: errorStatus(err) === 403,
+          items: [],
+          nextCursor: null,
+          pendingCount: 0,
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [gymId, attempt]);
+
+  const refresh = useCallback(() => {
+    setState((prev) => ({ ...prev, loading: true, error: null }));
+    setAttempt((n) => n + 1);
+  }, []);
+
+  // `changesRoster` is only true for CONFIRM. Refusing somebody adds nobody to
+  // the member list, and re-reading it anyway would flash "Loading members…"
+  // underneath a tap that changed nothing there — a screen implying something
+  // moved when it did not.
+  const decide = async (applicationId, call, changesRoster) => {
+    setBusyId(applicationId);
+    setActionError(null);
+    try {
+      await call();
+      // The row leaves the list and the count follows it, so the two cannot
+      // disagree while the page sits there. Both taps are idempotent
+      // server-side, so a double press costs nothing.
+      setState((prev) => ({
+        ...prev,
+        items: prev.items.filter((a) => a.id !== applicationId),
+        pendingCount: Math.max(0, prev.pendingCount - 1),
+      }));
+      if (changesRoster) onRosterChanged();
+    } catch (err) {
+      // The server's own sentence, and some of them carry a number this screen
+      // could not know — "Your plan covers 3 members and they are all taken.
+      // Add a seat, then confirm again — this person is still waiting." The
+      // refresh puts the true state back on screen underneath it.
+      setActionError(errorText(err, "That didn't go through. Please try again."));
+      refresh();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const loadMore = async () => {
+    if (gymId === null || state.nextCursor === null || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await orgService.getApplications(gymId, { limit: 50, cursor: state.nextCursor });
+      setState((prev) => ({
+        ...prev,
+        items: [...prev.items, ...(res.data?.items ?? [])],
+        nextCursor: res.data?.nextCursor ?? null,
+        // The count comes back with every page and is the whole-queue figure,
+        // so taking the newest reading keeps it honest as people are confirmed
+        // elsewhere while this list is open.
+        pendingCount: res.data?.pendingCount ?? prev.pendingCount,
+      }));
+    } catch (err) {
+      setActionError(errorText(err, "We couldn't load any more."));
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  // A trainer, or a gym with nobody waiting: no section at all. Nothing false
+  // is said by its absence, and an empty "nobody is waiting" panel on every
+  // roster would be a permanent reminder of a thing that mostly does not
+  // happen.
+  //
+  // THIS LINE IS THE WHOLE GUARANTEE and it is ORDERED ABOVE the error branch
+  // on purpose: a trainer's 403 is recorded like any other failure, and this is
+  // what stops it being drawn at them. Delete it and the Members screen tells a
+  // trainer "Your role doesn't allow that" over a roster they are perfectly
+  // entitled to read — which is what mutant J11 measures.
+  if (state.forbidden) return null;
+  if (state.loading) return <ConsoleLoading label="Checking who's waiting…" />;
+  if (state.error !== null) return <ConsoleFailed message={state.error} onRetry={refresh} />;
+  if (state.items.length === 0 && state.pendingCount === 0) return null;
+
+  return (
+    <section className="flex flex-col gap-3">
+      <div>
+        <h2 className="text-sm font-semibold" style={{ color: '#fff' }}>
+          Waiting to join
+        </h2>
+        <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          {waitingCountLabel(state.pendingCount)} — confirm the ones you recognise.
+        </p>
+      </div>
+
+      {actionError !== null ? <ConsoleFailed message={actionError} onRetry={refresh} /> : null}
+
+      {state.items.map((a) => (
+        <ApplicantRow
+          key={a.id}
+          applicant={a}
+          busy={busyId === a.id}
+          onConfirm={() => decide(a.id, () => orgService.confirmApplication(gymId, a.id), true)}
+          onReject={() => decide(a.id, () => orgService.rejectApplication(gymId, a.id), false)}
+        />
+      ))}
+
+      {state.nextCursor !== null ? (
+        <button
+          type="button"
+          onClick={loadMore}
+          disabled={loadingMore}
+          className="self-start rounded-xl px-4 py-2.5 text-sm font-medium flex items-center gap-2"
+          style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+        >
+          {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+          {loadingMore ? 'Loading…' : 'Show more'}
+        </button>
+      ) : null}
+    </section>
+  );
+}

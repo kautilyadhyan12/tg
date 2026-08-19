@@ -25,6 +25,7 @@ export {
   orgSummarySchema,
   orgTypeSchema,
   rejectApplicationResponseSchema,
+  removeMemberResponseSchema,
 } from "@app/shared";
 export type {
   ConfirmApplicationResponse,
@@ -51,6 +52,7 @@ export type {
   OrgSummary,
   OrgType,
   RejectApplicationResponse,
+  RemoveMemberResponse,
 } from "@app/shared";
 
 /** A non-uuid :gymId must fail as a 400 at the boundary, never as a 500 from
@@ -66,3 +68,12 @@ export const applicationParamsSchema = z
   .object({ gymId: z.string().uuid(), applicationId: z.string().uuid() })
   .strict();
 export type ApplicationParams = z.infer<typeof applicationParamsSchema>;
+
+/** The remove route addresses a member by the USER's id, not the membership
+ *  row's — the roster the console renders carries `userId` (Part 3 §2.4's
+ *  shape) and nothing else identifying, so keying on anything the screen does
+ *  not hold would force a second lookup the screen cannot make. */
+export const memberParamsSchema = z
+  .object({ gymId: z.string().uuid(), userId: z.string().uuid() })
+  .strict();
+export type MemberParams = z.infer<typeof memberParamsSchema>;

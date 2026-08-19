@@ -462,6 +462,62 @@ const MUTANTS = [
     from: "    await tx`\n      UPDATE gym_join_applications\n      SET status = 'cancelled', decided_at = now()\n      WHERE user_id = ${userId} AND status = 'pending'`;",
     to: "    await tx`SELECT 1`;",
   },
+
+  // ── REMOVING A MEMBER (Kd ruling 2026-08-19, Part 3 §4.3) ───────────────
+  //
+  // Every row here is Critical/High under 4a, which is what buys them a
+  // database mutant each: one is OWNERSHIP (another gym's staff ending your
+  // membership), one is DATA LOSS (history deleted rather than closed), one is
+  // MONEY-adjacent (the gym's paid perks outliving the membership), and two are
+  // the irreversible-tap the whole feature exists to make reversible.
+  {
+    id: 'O42',
+    target: 'repo',
+    why: "OWNERSHIP: the removal stops being scoped to the gym, so one gym's owner removing their own member closes that person's membership of EVERY other gym too — invisible to both of them",
+    expect: 'leaves their membership of another gym alone',
+    from: "      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} AND removed_at IS NULL\n      RETURNING id",
+    to: "      WHERE user_id = ${input.userId} AND removed_at IS NULL\n      RETURNING id",
+  },
+  {
+    id: 'O43',
+    target: 'repo',
+    why: "DATA LOSS: the membership row is DELETED instead of closed, so the gym's own record of who trained there in that period is silently rewritten — and §2.1's membership interval, which every org-side reader is scoped by, loses its end date",
+    expect: 'the row is CLOSED not deleted',
+    from: "      UPDATE gym_members SET removed_at = now()",
+    to: "      DELETE FROM gym_members",
+  },
+  {
+    id: 'O44',
+    target: 'service',
+    why: "KD'S OWN RULE INVERTED: the entitlement cache is not busted on removal, so a removed member keeps the gym's paid limits until the cache ages out — the database says free and the app does not",
+    expect: 'PERKS AWAY IMMEDIATELY',
+    from: "    case \"removed\":\n    case \"already_removed\":\n      await bustEntitlements(deps.redis, targetUserId);",
+    to: "    case \"removed\":\n    case \"already_removed\":",
+  },
+  {
+    id: 'O45',
+    target: 'repo',
+    why: "IRREVERSIBLE TAP: the staff guard goes, so one press beside their own name closes the OWNER'S own §4.0-step-6 seat — with no restore built and no staff screen to undo it from",
+    expect: 'refuses to remove STAFF',
+    from: "    if (staff !== undefined) return { kind: \"is_staff\", role: toOrgRole(staff.role) };",
+    to: "    if (staff !== undefined && false) return { kind: \"is_staff\", role: toOrgRole(staff.role) };",
+  },
+  {
+    id: 'O46',
+    target: 'service',
+    why: "§2.2's remove/restore row widened to trainers, so anybody on staff can end a membership — the same power as confirm, which Kd explicitly held at owner and manager",
+    expect: 'a trainer gets 403, another gym',
+    from: '  trainer: ["members.read", "codes.invite"],',
+    to: '  trainer: ["members.read", "codes.invite", "members.remove"],',
+  },
+  {
+    id: 'O47',
+    target: 'repo',
+    why: 'A REMOVED PERSON CANNOT COME BACK: a closed membership still reads as a live one, so re-applying answers "you are already a member" and the front desk can never put a mis-tap right — the removal becomes a permanent ban',
+    expect: 'can apply again and be confirmed back in',
+    from: "    WHERE m.gym_id = ${gymId} AND m.user_id = ${userId} AND m.removed_at IS NULL`;",
+    to: "    WHERE m.gym_id = ${gymId} AND m.user_id = ${userId}`;",
+  },
 ];
 
 /** ANCHORS ARE CONVERTED TO THE FILE'S OWN LINE ENDINGS, and the file is never

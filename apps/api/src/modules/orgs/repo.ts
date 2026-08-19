@@ -910,6 +910,86 @@ export async function listApplicationsForUser(
   }));
 }
 
+export type RemoveMemberOutcome =
+  | { kind: "removed" }
+  | { kind: "already_removed" }
+  | { kind: "never_member" }
+  | { kind: "is_staff"; role: OrgRole };
+
+/** PART 3 §4.3's REMOVE — "sets `removed_at` (seat freed instantly; history
+ *  retained)".
+ *
+ *  **Why this exists at all, and it is Kd's finding:** shown that a confirmed
+ *  member could not be removed by anyone, he answered *"if someone joins once
+ *  can not be removed what is this"*. Measured before building: the only
+ *  statement in the whole product that had ever written `removed_at` was the
+ *  DPDP Day-0 cascade in `users/repo.ts`, i.e. a person deleting their own
+ *  account. A gym had no way to correct a mis-tap, and Confirm was therefore a
+ *  one-way door.
+ *
+ *  **THE ROW IS CLOSED, NEVER DELETED.** `[joined_at, removed_at)` is the
+ *  membership interval every org-side reader is scoped by (§2.1), so closing
+ *  it ends the relationship without touching a single workout: the member
+ *  keeps their history, and the gym keeps the record that this person was
+ *  theirs for that period. A DELETE would silently rewrite both.
+ *
+ *  **THE SEAT IS FREED BY THE SAME STATEMENT** — `claimSeat` counts live,
+ *  non-complimentary rows, so there is no counter to decrement and no second
+ *  place to get wrong.
+ *
+ *  **STAFF ARE REFUSED HERE, DELIBERATELY.** An owner is member #1 of their own
+ *  gym (§4.0 step 6) and a manager may be too, so this route is one tap away
+ *  from an owner closing their own seat — with no restore built and no staff
+ *  screen to undo it from. §4.7 blocks last-owner removal for the same family
+ *  of reason; this is the narrower, safer version of it while the staff card is
+ *  unbuilt. A gym that genuinely needs to remove a staff member's membership
+ *  waits for that card rather than losing one irreversibly here.
+ *
+ *  Tenancy is the WHERE (R3.2): gym id AND user id, so holding a uuid from
+ *  another gym removes nobody. */
+export async function removeMember(
+  sql: Sql,
+  input: { gymId: string; userId: string; actorUserId: string },
+): Promise<RemoveMemberOutcome> {
+  return await sql.begin(async (tx) => {
+    const staffRows = await tx<{ role: string }[]>`
+      SELECT role FROM gym_staff WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
+    const staff = staffRows[0];
+    if (staff !== undefined) return { kind: "is_staff", role: toOrgRole(staff.role) };
+
+    const closed = await tx<{ id: string }[]>`
+      UPDATE gym_members SET removed_at = now()
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} AND removed_at IS NULL
+      RETURNING id`;
+    const row = closed[0];
+
+    if (row === undefined) {
+      // Two different facts, and they are not merged: a SECOND tap (a row
+      // exists, already closed) is idempotent success, while a request naming
+      // somebody who was never in this gym is a 404 — the console only offers
+      // this button on a roster row, so that case means the screen is stale or
+      // the id came from somewhere it should not have. Answering "removed" to
+      // it would be a true-sounding reply to a request nothing honoured.
+      const everRows = await tx<{ id: string }[]>`
+        SELECT id FROM gym_members
+        WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
+        LIMIT 1`;
+      return everRows[0] === undefined ? { kind: "never_member" } : { kind: "already_removed" };
+    }
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.member_removed",
+      targetType: "gym_member",
+      targetId: row.id,
+      meta: { removedUserId: input.userId },
+    });
+
+    return { kind: "removed" };
+  });
+}
+
 /** Roster page, keyset-ordered on (joined_at, id) DESC.
  *
  *  Part 3 §4.3's default sort is last-active desc; that column comes from

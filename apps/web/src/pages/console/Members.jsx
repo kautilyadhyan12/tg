@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { orgService, errorText, errorCode } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
+import ApplicationsQueue from './ApplicationsQueue';
 import { formatJoinedAt, groupLabelText, memberCountLabel } from './consoleView';
 
 // The roster — Part 3 §4.3's Members screen, holding EXACTLY to §2.4's
@@ -22,7 +23,70 @@ import { formatJoinedAt, groupLabelText, memberCountLabel } from './consoleView'
 // Search, the group filter, remove/restore and CSV export are §4.3 features
 // with no routes behind them yet; each has its own owed line.
 
-function MemberRow({ member }) {
+/** REMOVING A MEMBER — Part 3 §4.3, and it exists because Kd asked what happens
+ *  when a gym confirms the wrong person. Until this shipped, nothing in the
+ *  product could end a membership except the member deleting their account, so
+ *  Confirm was a one-way door.
+ *
+ *  §4.3 specifies a CONFIRM SHEET before it, and that is the two-step below: the
+ *  buttons sit where "Remove" was, so a mis-tap lands on a question rather than
+ *  on the removal. Confirm and "Not this person" in the queue above have no such
+ *  step, deliberately — both of those are reversible now (remove undoes one, a
+ *  fresh application undoes the other), and a question in front of every tap on
+ *  a walk-in queue is the friction the 30-second join is supposed not to have.
+ *
+ *  The consequence is stated where the gym reads it, because it is Kd's own
+ *  rule: the person loses the gym's features immediately and keeps every
+ *  workout they ever did. */
+function RemoveControl({ member, busy, onRemove }) {
+  const [asking, setAsking] = useState(false);
+
+  if (!asking) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAsking(true)}
+        disabled={busy}
+        className="text-xs rounded-lg px-3 py-1.5 flex-shrink-0 disabled:opacity-40"
+        style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
+      >
+        Remove
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+      <span className="text-xs text-right" style={{ color: 'rgba(255,255,255,0.6)' }}>
+        Remove {member.displayName}? They keep their own workouts and lose your gym&apos;s features.
+      </span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setAsking(false);
+            onRemove();
+          }}
+          disabled={busy}
+          className="text-xs rounded-lg px-3 py-1.5 font-semibold disabled:opacity-40"
+          style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
+        >
+          Remove
+        </button>
+        <button
+          type="button"
+          onClick={() => setAsking(false)}
+          className="text-xs rounded-lg px-3 py-1.5"
+          style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
+        >
+          Keep
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MemberRow({ member, busy, onRemove }) {
   return (
     <div
       className="rounded-2xl p-4 flex items-center gap-4"
@@ -37,13 +101,19 @@ function MemberRow({ member }) {
         </div>
       </div>
       {member.complimentary ? (
+        /* The owner's own §4.0-step-6 seat, and the server refuses to remove
+           staff — so no Remove control is drawn beside it. A greyed control over
+           a live refusal is the defect §2.2's own rules warn about; an absent
+           one states nothing. */
         <span
           className="text-xs rounded-lg px-2 py-1 flex-shrink-0"
           style={{ background: 'rgba(255,138,31,0.12)', color: '#FF8A1F' }}
         >
           Complimentary
         </span>
-      ) : null}
+      ) : (
+        <RemoveControl member={member} busy={busy} onRemove={onRemove} />
+      )}
     </div>
   );
 }
@@ -57,6 +127,8 @@ export default function Members() {
   const [state, setState] = useState({ loading: true, error: null, items: [], nextCursor: null });
   const [attempt, setAttempt] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [removingId, setRemovingId] = useState(null);
+  const [removeError, setRemoveError] = useState(null);
   const gymId = org?.id ?? null;
 
   useEffect(() => {
@@ -93,6 +165,33 @@ export default function Members() {
   const retry = () => {
     setState({ loading: true, error: null, items: [], nextCursor: null });
     setAttempt((n) => n + 1);
+  };
+
+  /** A confirm from the queue above puts somebody INTO this list, so the list
+   *  is re-read from page one rather than having a row assembled here out of
+   *  two responses. The person is on screen the moment they are a member,
+   *  which is what makes the tap feel like it did something — and every field
+   *  shown is one the server just stated. */
+  const reloadRoster = () => {
+    setRemoveError(null);
+    retry();
+  };
+
+  const removeMember = async (member) => {
+    if (gymId === null) return;
+    setRemovingId(member.userId);
+    setRemoveError(null);
+    try {
+      await orgService.removeMember(gymId, member.userId);
+      reloadRoster();
+    } catch (err) {
+      // The server's own sentence — a staff member cannot be removed here, and
+      // that refusal explains itself better than anything this screen could
+      // invent. The list is left exactly as it was, because nothing changed.
+      setRemoveError(errorText(err, "We couldn't remove them. Please try again."));
+    } finally {
+      setRemovingId(null);
+    }
   };
 
   const loadMore = async () => {
@@ -162,7 +261,15 @@ export default function Members() {
         ) : null}
       </div>
 
+      {/* WAITING TO JOIN, above the roster. It reads its own endpoint and owns
+          its own failure: a queue that cannot be read must never take the
+          member list down with it, and a trainer — who may read the roster and
+          may not confirm — sees no section rather than a refusal. */}
+      <ApplicationsQueue gymId={gymId} onRosterChanged={reloadRoster} />
+
       {state.loading ? <ConsoleLoading label="Loading members…" /> : null}
+
+      {removeError !== null ? <ConsoleFailed message={removeError} /> : null}
 
       {!state.loading && state.error !== null ? (
         <ConsoleFailed message={state.error} onRetry={retry} />
@@ -182,7 +289,12 @@ export default function Members() {
       {state.items.length > 0 ? (
         <div className="flex flex-col gap-3">
           {state.items.map((m) => (
-            <MemberRow key={m.userId} member={m} />
+            <MemberRow
+              key={m.userId}
+              member={m}
+              busy={removingId === m.userId}
+              onRemove={() => removeMember(m)}
+            />
           ))}
         </div>
       ) : null}

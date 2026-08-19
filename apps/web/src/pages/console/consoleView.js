@@ -142,6 +142,21 @@ export function memberCountLabel(page) {
   return n === 1 ? '1 member' : `${n} members`;
 }
 
+/** "3 people waiting", from the SERVER'S exact count.
+ *
+ *  It takes a number and not a page, deliberately: `pendingCount` is a count
+ *  over the whole queue, and the moment this function could see `items` a later
+ *  edit could reach for `items.length` — which says "3 people waiting" on a
+ *  page of 3 out of 90. The type is the guard.
+ *
+ *  A non-number is null rather than zero: "nobody is waiting" is a claim, and a
+ *  reader that could not read the count has no business making it. */
+export function waitingCountLabel(pendingCount) {
+  if (typeof pendingCount !== 'number' || !Number.isFinite(pendingCount)) return null;
+  const n = Math.max(0, Math.trunc(pendingCount));
+  return n === 1 ? '1 person waiting' : `${n} people waiting`;
+}
+
 /** How many people have JOINED, as opposed to how many memberships exist.
  *
  *  The owner is member #1 by construction (Part 3 §4.0 step 6) and carries the

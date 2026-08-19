@@ -14,6 +14,7 @@ import {
   applicationParamsSchema,
   createOrgRequestSchema,
   joinOrgRequestSchema,
+  memberParamsSchema,
   orgApplicationListQuerySchema,
   orgMemberListQuerySchema,
   orgParamsSchema,
@@ -184,4 +185,30 @@ export function registerOrgRoutes(
     const page = await service.listOrgMembers(orgDeps, requireUserId(req), params.gymId, query);
     return reply.status(200).send(page);
   });
+
+  // Part 3 §4.3's remove flow. DELETE and not POST because it IS a deletion of
+  // the relationship (the row is closed, never dropped) and because the method
+  // makes the retry semantics obvious: the same request twice leaves the same
+  // state and answers the same way.
+  //
+  // The browser reaches this through a CORS PREFLIGHT, which is the one thing
+  // a `fastify.inject` test cannot see — the Card-4 smoke found DELETE/PATCH/PUT
+  // dead app-wide behind 250 green tests. `app.ts` lists DELETE in its allowed
+  // methods (verified before this route was written), and the smoke sheet's
+  // remove step is what proves it in a real browser.
+  app.delete(
+    "/v1/orgs/:gymId/members/:userId",
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const params = parseOr400(memberParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const result = await service.removeOrgMember(
+        orgDeps,
+        requireUserId(req),
+        params.gymId,
+        params.userId,
+      );
+      return reply.status(200).send(result);
+    },
+  );
 }

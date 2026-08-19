@@ -17,6 +17,7 @@ import {
   orgCodesResponseSchema,
   orgMemberPageSchema,
   rejectApplicationResponseSchema,
+  removeMemberResponseSchema,
 } from "./schemas.js";
 import type {
   ConfirmApplicationResponse,
@@ -35,6 +36,7 @@ import type {
   OrgRole,
   OrgSummary,
   RejectApplicationResponse,
+  RemoveMemberResponse,
 } from "./schemas.js";
 
 /** Typed failure for the central error mapper (R8.1); messages are authored
@@ -270,7 +272,12 @@ export async function listMyApplications(
  *  person's. That is the staff-management card (its own `OWED.md` line), and
  *  when it lands it replaces the body of `privilegesFor` with a read of the
  *  stored SNAPSHOT — no caller changes. */
-export const ORG_PRIVILEGES = ["members.read", "codes.invite", "members.confirm"] as const;
+export const ORG_PRIVILEGES = [
+  "members.read",
+  "codes.invite",
+  "members.confirm",
+  "members.remove",
+] as const;
 export type OrgPrivilege = (typeof ORG_PRIVILEGES)[number];
 
 /** Part 3 §2.2's matrix, as the DEFAULT ticks each role starts with.
@@ -288,10 +295,16 @@ export type OrgPrivilege = (typeof ORG_PRIVILEGES)[number];
  *  given that cost before approving: a gym whose front desk is a TRAINER
  *  cannot confirm until the tick storage lands, and widening it then is one
  *  tick rather than a redesign (:11429 rule 3 — ticks may widen, not only
- *  narrow). */
+ *  narrow).
+ *
+ *  `members.remove` is §2.2's "Remove / restore member" row LITERALLY — owner
+ *  and manager, never trainer (the matrix hides Remove from a trainer by name,
+ *  §4.3). It sits beside `members.confirm` because they are the same power in
+ *  two directions, and Kd's ruling of 2026-08-19 is that the second direction
+ *  has to exist at all: confirming somebody was a one-way door until it did. */
 const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>> = {
-  owner: ["members.read", "codes.invite", "members.confirm"],
-  manager: ["members.read", "codes.invite", "members.confirm"],
+  owner: ["members.read", "codes.invite", "members.confirm", "members.remove"],
+  manager: ["members.read", "codes.invite", "members.confirm", "members.remove"],
   trainer: ["members.read", "codes.invite"],
 };
 
@@ -549,6 +562,56 @@ export async function rejectOrgApplication(
     case "seat_cap":
       // Not reachable from reject; the union is shared with confirm.
       throw new OrgsError(409, "application_conflict", "That request has already been dealt with.");
+    default:
+      return assertNever(outcome);
+  }
+}
+
+/** REMOVING A MEMBER — Part 3 §4.3, and the reason Confirm is no longer a
+ *  one-way door (Kd ruling 2026-08-19).
+ *
+ *  **THE ENTITLEMENT BUST IS THE PART THAT MATTERS and it is Kd's own rule:**
+ *  *"if a gym removes a user that user losses the parks and need to take
+ *  personal subscriptions"*. The §4.1 resolver already counts a membership only
+ *  while `removed_at` is null, so the DATABASE says free the instant the row
+ *  closes — but the resolved answer is CACHED, and without this bust the person
+ *  would keep the gym's paid limits for the rest of the cache's life (R6.5
+ *  gives that flip 60 seconds; here it is immediate). Their own consumer
+ *  subscription, if they have one, is a separate candidate and is untouched.
+ *
+ *  It is busted on `already_removed` too, deliberately: a second tap costs one
+ *  Redis delete and closes the case where the first tap's bust was the thing
+ *  that failed. */
+export async function removeOrgMember(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+  targetUserId: string,
+): Promise<RemoveMemberResponse> {
+  await requirePrivilege(deps, gymId, userId, "members.remove");
+
+  const outcome = await repo.removeMember(deps.sql, {
+    gymId,
+    userId: targetUserId,
+    actorUserId: userId,
+  });
+
+  switch (outcome.kind) {
+    case "removed":
+    case "already_removed":
+      await bustEntitlements(deps.redis, targetUserId);
+      return removeMemberResponseSchema.parse({ status: "removed" });
+    case "never_member":
+      // Same 404 reasoning as everywhere else in this module: a person who was
+      // never in THIS gym is indistinguishable from a user id that does not
+      // exist, so holding a uuid tells the caller nothing.
+      throw new OrgsError(404, "member_not_found", "That person isn't a member of this gym.");
+    case "is_staff":
+      throw new OrgsError(
+        409,
+        "member_is_staff",
+        `${outcome.role === "owner" ? "The owner" : "A staff member"} can't be removed from the member list. Staff membership is managed with staff.`,
+      );
     default:
       return assertNever(outcome);
   }

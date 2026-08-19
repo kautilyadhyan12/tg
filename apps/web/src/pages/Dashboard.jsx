@@ -18,6 +18,7 @@ import { formatDuration, formatFormScore, formatKcal, formColor } from '../api/w
 import { totalsWindowLabel } from './progressClamp';
 import { useXp } from '../hooks/useXp';
 import GamificationStrip from '../components/dashboard/GamificationStrip';
+import GymMembershipCard from '../components/gym/GymMembershipCard';
 import { motion } from 'framer-motion';
 import {
   Flame, Dumbbell, Clock, TrendingUp,
@@ -447,6 +448,17 @@ export default function Dashboard() {
             Start Workout
           </motion.button>
         </motion.div>
+
+        {/* ── Gym status ────────────────────────────────────────────────────────
+            :11132's card, ON TOP of the app rather than in front of it. A person
+            waiting for a gym to confirm them keeps the whole free app — a build
+            that parked them on a waiting screen would contradict the ruling — so
+            what they get is this, above the ordinary dashboard, and everything
+            below it works exactly as it did.
+            Renders NOTHING when there is nothing to say, including when its
+            reads fail: silence states nothing, while an error strip here would
+            be noise on the screen a person opens to start training. */}
+        <GymMembershipCard />
 
         {/* ── Hero banner ───────────────────────────────────────────────────── */}
         <motion.div

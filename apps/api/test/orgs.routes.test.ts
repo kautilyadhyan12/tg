@@ -129,6 +129,17 @@ d("orgs routes (real Postgres)", () => {
       cookies: opts.cookies ?? {},
     });
 
+  /** No body and no content-type, deliberately: the remove route takes neither,
+   *  and sending an empty JSON body would be testing a shape the console does
+   *  not send. */
+  const del = (path: string, opts: { cookies?: Record<string, string> } = {}) =>
+    api().inject({
+      method: "DELETE",
+      url: path,
+      remoteAddress: nextIp(),
+      cookies: opts.cookies ?? {},
+    });
+
   const makeUser = async (local: string) => {
     const email = `orgs-t-${local}@example.com`;
     const reg = await api().inject({
@@ -254,6 +265,8 @@ d("orgs routes (real Postgres)", () => {
     expect(
       (await post(`/v1/orgs/${someGym}/applications/${someApplication}/reject`, {})).statusCode,
     ).toBe(401);
+    const someUser = "33333333-3333-3333-3333-333333333333";
+    expect((await del(`/v1/orgs/${someGym}/members/${someUser}`)).statusCode).toBe(401);
   });
 
   it("creates the org, its first code, the owner staff row and the owner's seat", { timeout: 30_000 }, async () => {
@@ -753,6 +766,253 @@ d("orgs routes (real Postgres)", () => {
       { cookies: manager.cookies },
     );
     expect(allowed.statusCode).toBe(200);
+  });
+
+  // ── Removing a member (Part 3 §4.3; Kd ruling 2026-08-19) ────────────────
+  //
+  // These exist because the gap was real and Kd found it by asking the obvious
+  // question: before this route, NOTHING in the product could end a membership
+  // except the member deleting their whole account. Confirm was a one-way door.
+
+  it("removes a member: the roster drops them, the row is CLOSED not deleted, and the seat is freed", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("rm-owner");
+    const member = await makeUser("rm-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Remove");
+    await subscribeGym(org.org.id, CAP1_PLAN); // exactly one non-complimentary seat
+    await joinAsMember(member.cookies, org, owner.cookies);
+
+    const rosterBefore = await get(`/v1/orgs/${org.org.id}/members`, { cookies: owner.cookies });
+    expect(
+      (JSON.parse(rosterBefore.body) as { items: { userId: string }[] }).items.map((i) => i.userId),
+    ).toContain(member.userId);
+
+    const removed = await del(`/v1/orgs/${org.org.id}/members/${member.userId}`, {
+      cookies: owner.cookies,
+    });
+    expect(removed.statusCode).toBe(200);
+    expect(JSON.parse(removed.body)).toEqual({ status: "removed" });
+
+    const rosterAfter = await get(`/v1/orgs/${org.org.id}/members`, { cookies: owner.cookies });
+    expect(
+      (JSON.parse(rosterAfter.body) as { items: { userId: string }[] }).items.map((i) => i.userId),
+    ).not.toContain(member.userId);
+
+    // HISTORY RETAINED (§4.3): the row is still there with an end date on it.
+    // Asserted directly rather than through the roster, because the roster
+    // filters on exactly this column and would look identical if the row had
+    // been DELETED — which would silently rewrite the gym's own record of who
+    // trained there.
+    const row = await sql<{ removed_at: Date | null }[]>`
+      SELECT removed_at FROM gym_members
+      WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}`;
+    expect(row).toHaveLength(1);
+    expect(row[0]?.removed_at).not.toBeNull();
+
+    // THE SEAT IS FREED, and this is the half a comment cannot prove: the plan
+    // caps this gym at one member, so a second person can only be confirmed if
+    // the removal actually released the seat.
+    const next = await makeUser("rm-next");
+    const applicationId = await applyWithCode(next.cookies, org.joinCode.code);
+    const confirmNext = await post(
+      `/v1/orgs/${org.org.id}/applications/${applicationId}/confirm`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(confirmNext.statusCode).toBe(200);
+
+    // §3.3 — every mutating call writes audit_log.
+    const audit = await sql<{ action: string }[]>`
+      SELECT action FROM audit_log
+      WHERE gym_id = ${org.org.id} AND action = 'org.member_removed'`;
+    expect(audit).toHaveLength(1);
+  });
+
+  it("removing somebody from ONE gym leaves their membership of another gym alone", { timeout: 60_000 }, async () => {
+    // A person can belong to two gyms — Part 3 §4.3 names it as an ordinary
+    // case ("member of 2 orgs → appears in both rosters"). The tenancy that
+    // matters here is inside the UPDATE, not only in the authorization above
+    // it: a WHERE that forgot the gym id would close every membership this
+    // person holds, and neither gym would see anything to explain it.
+    const ownerA = await makeUser("rmscope-owner-a");
+    const ownerB = await makeUser("rmscope-owner-b");
+    const member = await makeUser("rmscope-member");
+    const gymA = await makeOrg(ownerA.cookies, "Orgs Test Remove Scope A");
+    const gymB = await makeOrg(ownerB.cookies, "Orgs Test Remove Scope B");
+    await joinAsMember(member.cookies, gymA, ownerA.cookies);
+    await joinAsMember(member.cookies, gymB, ownerB.cookies);
+
+    expect(
+      (await del(`/v1/orgs/${gymA.org.id}/members/${member.userId}`, { cookies: ownerA.cookies }))
+        .statusCode,
+    ).toBe(200);
+
+    const rosterB = await get(`/v1/orgs/${gymB.org.id}/members`, { cookies: ownerB.cookies });
+    expect(
+      (JSON.parse(rosterB.body) as { items: { userId: string }[] }).items.map((i) => i.userId),
+    ).toContain(member.userId);
+    const live = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_members
+      WHERE user_id = ${member.userId} AND removed_at IS NULL`;
+    expect(live[0]?.n).toBe(1);
+  });
+
+  it("REMOVAL TAKES THE GYM'S PERKS AWAY IMMEDIATELY — Kd's own rule, measured against a WARM cache", { timeout: 60_000 }, async () => {
+    // *"if a gym removes a user that user losses the parks and need to take
+    // personal subscriptions"*. The resolver counts a membership only while
+    // `removed_at` is null, so the DATABASE says free the moment the row
+    // closes — but the answer is CACHED, and the bust is what makes it true
+    // now rather than a minute from now.
+    //
+    // The read after confirming is what makes this test able to fail: it
+    // leaves the cache holding the GYM'S answer, so a deleted bust means this
+    // person keeps Pro. Without that read the assertion passes on a cold cache
+    // and proves nothing (:10010's fixture lesson, applied on purpose).
+    const owner = await makeUser("rment-owner");
+    const member = await makeUser("rment-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Remove Ent");
+    await subscribeGym(org.org.id, "org_micro"); // member_entitlements = the Pro doc
+    await joinAsMember(member.cookies, org, owner.cookies);
+
+    const warm = await get("/v1/entitlements/me", { cookies: member.cookies });
+    const warmBody = JSON.parse(warm.body) as {
+      source: string;
+      entitlements: { history_days: number };
+    };
+    expect(warmBody.source).toBe("gym_membership");
+    expect(warmBody.entitlements.history_days).toBe(-1);
+
+    expect(
+      (await del(`/v1/orgs/${org.org.id}/members/${member.userId}`, { cookies: owner.cookies }))
+        .statusCode,
+    ).toBe(200);
+
+    const after = await get("/v1/entitlements/me", { cookies: member.cookies });
+    const afterBody = JSON.parse(after.body) as {
+      source: string;
+      entitlements: { history_days: number };
+    };
+    expect(afterBody.source).toBe("free");
+    expect(afterBody.entitlements.history_days).toBe(90);
+  });
+
+  it("removing twice answers the same, and removing somebody who was never a member is a 404", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("rmidem-owner");
+    const member = await makeUser("rmidem-member");
+    const stranger = await makeUser("rmidem-stranger");
+    const org = await makeOrg(owner.cookies, "Orgs Test Remove Idem");
+    await joinAsMember(member.cookies, org, owner.cookies);
+
+    // Two front-desk staff working one list, or one person pressing twice —
+    // the case :12227 L-3 punished on reject, answered the same way here.
+    const first = await del(`/v1/orgs/${org.org.id}/members/${member.userId}`, {
+      cookies: owner.cookies,
+    });
+    const second = await del(`/v1/orgs/${org.org.id}/members/${member.userId}`, {
+      cookies: owner.cookies,
+    });
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(JSON.parse(second.body)).toEqual({ status: "removed" });
+
+    // …but "removed" is not an answer to a request about somebody who was
+    // never here. One membership row exists in this gym, so the second tap
+    // above cannot have written one.
+    const never = await del(`/v1/orgs/${org.org.id}/members/${stranger.userId}`, {
+      cookies: owner.cookies,
+    });
+    expect(never.statusCode).toBe(404);
+    expect((JSON.parse(never.body) as { error: string }).error).toBe("member_not_found");
+  });
+
+  it("refuses to remove STAFF, including the owner's own §4.0-step-6 seat", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("rmstaff-owner");
+    const manager = await makeUser("rmstaff-manager");
+    const org = await makeOrg(owner.cookies, "Orgs Test Remove Staff");
+    await sql`
+      INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${org.org.id}, ${manager.userId}, 'manager')`;
+
+    // The owner IS a member of their own gym, so without this guard the button
+    // beside their own name would close their own seat — with no restore built
+    // and no staff screen to undo it from.
+    const own = await del(`/v1/orgs/${org.org.id}/members/${owner.userId}`, {
+      cookies: owner.cookies,
+    });
+    expect(own.statusCode).toBe(409);
+    expect((JSON.parse(own.body) as { error: string }).error).toBe("member_is_staff");
+    const stillThere = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_members
+      WHERE gym_id = ${org.org.id} AND user_id = ${owner.userId} AND removed_at IS NULL`;
+    expect(stillThere[0]?.n).toBe(1);
+
+    // And a manager cannot be removed by an owner through this door either —
+    // the refusal is about STAFF, not about the caller.
+    expect(
+      (await del(`/v1/orgs/${org.org.id}/members/${manager.userId}`, { cookies: owner.cookies }))
+        .statusCode,
+    ).toBe(409);
+  });
+
+  it("only owner and manager may remove — a trainer gets 403, another gym's owner gets 404", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("rmpriv-owner");
+    const trainer = await makeUser("rmpriv-trainer");
+    const manager = await makeUser("rmpriv-manager");
+    const member = await makeUser("rmpriv-member");
+    const outsider = await makeUser("rmpriv-outsider");
+    const org = await makeOrg(owner.cookies, "Orgs Test Remove Priv");
+    await sql`
+      INSERT INTO gym_staff (gym_id, user_id, role) VALUES
+        (${org.org.id}, ${trainer.userId}, 'trainer'),
+        (${org.org.id}, ${manager.userId}, 'manager')`;
+    await joinAsMember(member.cookies, org, owner.cookies);
+
+    const refused = await del(`/v1/orgs/${org.org.id}/members/${member.userId}`, {
+      cookies: trainer.cookies,
+    });
+    expect(refused.statusCode).toBe(403);
+    expect((JSON.parse(refused.body) as { error: string }).error).toBe("forbidden");
+
+    // CROSS-TENANT: somebody who runs a DIFFERENT gym, holding both uuids,
+    // gets 404 — membership in a gym they do not staff is not theirs to end,
+    // and 403 would confirm the gym exists (R3.2).
+    await makeOrg(outsider.cookies, "Orgs Test Remove Outsider");
+    const foreign = await del(`/v1/orgs/${org.org.id}/members/${member.userId}`, {
+      cookies: outsider.cookies,
+    });
+    expect(foreign.statusCode).toBe(404);
+
+    // Neither refusal touched the row — a hidden button is not enforcement.
+    const live = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_members
+      WHERE gym_id = ${org.org.id} AND user_id = ${member.userId} AND removed_at IS NULL`;
+    expect(live[0]?.n).toBe(1);
+
+    // A manager may — §2.2's remove/restore row, the same pair as confirm.
+    expect(
+      (await del(`/v1/orgs/${org.org.id}/members/${member.userId}`, { cookies: manager.cookies }))
+        .statusCode,
+    ).toBe(200);
+  });
+
+  it("a removed member can apply again and be confirmed back in", { timeout: 60_000 }, async () => {
+    // The partial unique index is on LIVE rows only, so a second membership
+    // must be insertable after the first is closed. Without this the remove
+    // button would be a permanent ban, which is not what §4.3 describes and
+    // not what a mis-tap needs.
+    const owner = await makeUser("rmback-owner");
+    const member = await makeUser("rmback-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Remove Back");
+    await joinAsMember(member.cookies, org, owner.cookies);
+    await del(`/v1/orgs/${org.org.id}/members/${member.userId}`, { cookies: owner.cookies });
+
+    await joinAsMember(member.cookies, org, owner.cookies);
+    const roster = await get(`/v1/orgs/${org.org.id}/members`, { cookies: owner.cookies });
+    expect(
+      (JSON.parse(roster.body) as { items: { userId: string }[] }).items.map((i) => i.userId),
+    ).toContain(member.userId);
+    const rows = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_members
+      WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}`;
+    expect(rows[0]?.n).toBe(2);
   });
 
   it("refuses an unknown code with 404", { timeout: 30_000 }, async () => {

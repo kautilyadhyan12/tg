@@ -12339,3 +12339,153 @@ tempted to document a query from the inside will hit it identically.
 
 **STILL NOTHING TICKS.** The `OWED.md` join-door line names a SCREEN and there
 is none; step 2 carries it, with its smoke.
+
+## 2026-08-20 — THE JOIN DOOR GETS ITS TWO SCREENS — and KD'S OWN QUESTION ADDED A THIRD THING: a member can now be REMOVED, which nothing in the product could do
+
+**Read before touching `apps/web/src/components/gym`, the console's Members
+screen, `orgsApi.js`, or anything that ends a membership — and before writing
+any copy about a gym request expiring or being emailed.** Step 2 of the
+three-step split Kd approved (server → the two screens → the waiting room's
+clock); step 1 is at :11846 and its review at :12227.
+
+### WHAT A PERSON CAN DO NOW THAT THEY COULD NOT YESTERDAY
+
+Type their gym's code (**Settings → Gym**, or the address a poster points at)
+and press one button. They are told they are waiting, by gym name, on a card
+that sits on top of the ordinary dashboard. The gym's console shows a **Waiting
+to join** list above its roster, with **Confirm** and **Not this person**, and
+the number waiting on the screen an owner lands on. Confirm puts the person in
+the roster within the second, and their own dashboard then says they are in.
+
+**The endpoint had existed since 2026-08-18 with no caller.** `POST
+/v1/orgs/join` shipped at :10010 and was reworked at :11846, and until this card
+no screen in the app called it — a gym could print a poster nobody could act on.
+
+### KD'S QUESTION IS THE REASON THIS CARD GREW A SERVER HALF
+
+Handed a plan that said "both buttons ask *sure?* once, because a confirmed
+member cannot be removed", he answered: *"do you even have some common sense if
+someone joins once can not be rempved what is this"*. **He was right and it was
+measured, not conceded:** the only statement in the entire product that had ever
+written `gym_members.removed_at` was the DPDP Day-0 cascade in
+`users/repo.ts:311` — a person deleting their own account. No route, no button,
+nothing. `OWED.md` had carried it since :10010 as one clause inside a list of
+"the rest of the §2.2 matrix", which is how a hole that big stays quiet.
+
+**So `DELETE /v1/orgs/:gymId/members/:userId` is in this card** (Part 3 §4.3's
+remove flow), and the plan's two-step confirmations were dropped with it —
+Confirm and "Not this person" are now single taps, because both became
+reversible. **§4.3's confirm sheet stays on REMOVE alone**, where the spec puts
+it.
+
+**HIS SECOND RULING, and it was already true:** *"if a gym removes a user that
+user losses the parks and need to take personal subscriptions"*. The §4.1
+resolver counts a membership only while `removed_at` is null (verified in
+`entitlements/repo.ts:26`), so the database says free the instant the row
+closes. What the card had to add is the CACHE BUST — without it the removed
+person keeps the gym's paid limits until the entry ages out. It is measured
+against a WARM cache, which is the only way that assertion can fail: the test
+reads `/v1/entitlements/me` while they are still a member, so the cache holds
+`gym_membership`, and only then removes them.
+
+### THE FOUR DECISIONS A LATER CHAT SHOULD NOT RE-DERIVE
+
+1. **The code box lives in Settings → Gym, and the poster address is
+   `/org/join?code=`.** v1 §8 puts it in Settings in as many words ("member
+   enters code at registration or in Settings"); the address mirrors Part 6 §2's
+   `aihg://org/join?code=` deep link segment for segment, so the mobile QR and
+   the web link are one path rather than two. **NOTHING was added to the
+   sidebar** — :11616 shut the crossing between the member app and the console
+   in both directions, and this is a member joining a gym, not a way into a
+   console. The Settings tab carries that citation in its own comment.
+2. **The queue is a section on the Members screen, not a seventh tab.** §3.1
+   fixes the console's nav at six sections and this is none of them; §4.3 gives
+   the Members screen "the 30-second walk-in join", which is exactly this list.
+   :10402's rule holds — only built sections appear on that rail.
+3. **The dashboard card reads TWO endpoints, and the second one is the point.**
+   `/v1/orgs/applications/mine` deliberately excludes CONFIRMED applications
+   (:11846 — `/mine` owns that fact), so on its own the waiting card would
+   simply VANISH when the gym said yes and the app would never tell the person
+   they got in. `/v1/orgs/mine` is what turns "waiting" into "you're a member of
+   Iron House". One gym gets one row, and the newest fact wins: member beats
+   waiting beats refused — a refusal stays readable for 14 days, so a person
+   refused on Tuesday and let in on Thursday has three true-at-the-time rows and
+   exactly one true now.
+4. **STAFF CANNOT BE REMOVED THROUGH THIS DOOR** (a K4 call, stated rather than
+   slipped in). An owner is member #1 of their own gym (§4.0 step 6), so the
+   button beside their own name would close their own seat — with no restore
+   built and no staff screen to undo it from. §4.7 blocks last-owner removal for
+   the same family of reason. The console draws no Remove beside a complimentary
+   seat, and the server refuses staff regardless, because hiding is not
+   enforcement.
+
+### WHAT THE COPY MAY NOT SAY, AND A TEST HOLDS IT TO THAT
+
+No email (`EmailSender` logs an event name and sends nothing — :11385's
+dependency), no expiry (every application carries a 14-day date and no code
+reads it — step 3's own 🔴 line), and no suggestion that a gym's own regulars
+are let in automatically (auto-confirm has no roster to match against, measured
+again this session: no roster table exists). The render test asserts the pending
+panel contains none of the words *email*, *expire* or *14 days*.
+
+### PART 3 §2.4'S SHEET IS A HARD REQUIREMENT AND IS PINNED AS ONE
+
+"The join screen shows a *What {org} can see* sheet with exactly this list."
+`OrgVisibilitySheet` is that list, in plain words, and it renders on the form
+BEFORE anything is typed — generic ("what a gym can see"), because until the
+server answers the app does not know which gym a code belongs to and a guessed
+name would be false on screen — then again NAMED once the answer arrives. Same
+component, no second copy to drift. Mutants J1 and J2 delete a row and the whole
+sheet: **joining would still work perfectly without it, and nothing else in this
+repo would notice.**
+
+### THE AUDIT FOUND THE SAME DEFECT IN MY OWN CODE TWICE IN ONE HOUR
+
+**J11 survived, was re-aimed, and SURVIVED AGAIN — and both survivals were the
+finding rather than a missing test.** The guarantee is that a trainer, who may
+read a roster and may not confirm, is not shown the queue's 403 as a red error
+card. It was written with TWO guards: the catch suppressed the error for a 403,
+and the render returned null when `forbidden`. **Each was unfalsifiable because
+the other one held** — delete either and nothing observable changed. That is
+:5104 F5's "a protection that cannot fail is the same defect with a comment on
+it", twice, in code written the same hour, by a chat that had read :5104 that
+morning.
+
+**Fixed in the SOURCE, not by hunting a third anchor:** the refusal is now
+recorded like any other failure and one line hides it, so deleting that line
+prints *"Your role doesn't allow that"* at a trainer and the test goes red.
+**The lesson to carry: when a mutant survives, ask whether the guarantee is
+OBSERVABLE at all before assuming the test is missing.** Two redundant guards
+look like defence in depth and are indistinguishable from dead code.
+
+### PROVE — every figure from a command run this session
+
+- api **512/512 across all 43 files** against real Postgres (the whole suite,
+  not just orgs, because the shared contract file moved under it) · orgs suite
+  **43/43** on its own · shared **48/48** · web **857/857** · `vite build` ✓.
+- `tsc` clean on api and shared; eslint clean on every new file and on the
+  console files. **`Settings.jsx` / `Dashboard.jsx` / `App.jsx` carry 4 errors
+  and that is the HEAD BASELINE, MEASURED** by linting `git show HEAD:` copies
+  of the three: the same four (`Lock` unused, two purity, one
+  set-state-in-effect), none of them this card's.
+- **JOIN-DOOR SWEEP: 24 mutants · 24 RED · 0 ALIVE · 0 never ran**, exit 0, all
+  controls GREEN and tallying first, restores sha256-verified after every
+  mutant, tree clean after (`apps/web/tools/mutate-join-door.mjs`, no database
+  mutants — :5857 rule 4a, a web-only harness).
+- **ORGS SWEEP, the server half: 47 mutants · 47 RED · 0 ALIVE · 0 never ran**,
+  exit 0, one completed run of the whole table INCLUDING **O42–O47** for
+  removal (cross-gym scoping inside the UPDATE · the row closed not deleted ·
+  the entitlement bust · the staff refusal · the privilege row · a removed
+  person able to come back).
+- The earlier partial runs (22 · 21 RED · 1 ALIVE, twice) are NOT summed into a
+  composite: only a completed sweep is quotable (:5199). **The final run
+  ABORTED first on a drifted anchor** — my own `changesRoster` edit moved the
+  line J13 and J15 name — and the whole-table pre-check caught it BEFORE a byte
+  was written, which is the difference between a re-anchor and a false "this
+  guarantee has no test" for the next chat to chase (:5199's class fix, earning
+  its keep again).
+
+**NOTHING TICKS YET — the smoke is UNRUN and T3 is UNRUN.**
+`RUNBOOK/smoke-join-door.md` is written: 17 steps, two accounts, two windows,
+and step 14 (Remove) is the one the packet turns on, because DELETE and POST
+are indistinguishable to every server test in the repo.

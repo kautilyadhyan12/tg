@@ -24,6 +24,7 @@ import Coach           from './pages/Coach';
 import Nutrition       from './pages/Nutrition';
 import Achievements    from './pages/Achievements';
 import Settings        from './pages/Settings';
+import JoinGym         from './pages/JoinGym';
 import Running         from './pages/Running';
 import RunPlanner      from './pages/RunPlanner';
 import ActiveRun       from './pages/ActiveRun';
@@ -133,6 +134,19 @@ export default function App() {
             <Route path="/settings" element={
               <ProtectedRoute>
                 <AppLayout><Settings /></AppLayout>
+              </ProtectedRoute>
+            } />
+            {/* The address a gym's poster points at — the web twin of Part 6
+                §2's `aihg://org/join?code=` deep link, so a QR works in a
+                browser and on a phone without two entry paths existing. The
+                same panel is inside Settings → Gym, which is where v1 §8 puts
+                it ("member enters code at registration or in Settings").
+                NOTHING is added to the sidebar: this is a member joining a gym,
+                not a way into the gym console (Kd ruling 2026-08-19 shut that
+                crossing in both directions). */}
+            <Route path="/org/join" element={
+              <ProtectedRoute>
+                <AppLayout><JoinGym /></AppLayout>
               </ProtectedRoute>
             } />
 

@@ -335,6 +335,55 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   so two `app.inject` calls are serialised by the CLIENT and would pass with the
   lock deleted** — a test that cannot fail. Seven `OWED.md` lines added; the
   console line is UPDATED, not ticked.
+- **:12343** — 2026-08-20 — **THE JOIN DOOR GETS ITS TWO SCREENS — and KD'S OWN
+  QUESTION ADDED A THIRD THING: a member can now be REMOVED, which NOTHING in
+  the product could do.** **Read before touching
+  `apps/web/src/components/gym`, the console's Members screen, `orgsApi.js`, or
+  anything that ends a membership — and before writing any copy about a gym
+  request expiring or being emailed.** Step 2 of the approved three-step split
+  (:11846 is step 1, :12227 its review). A member types their code at
+  **Settings → Gym** or at `/org/join?code=` (Part 6 §2's deep link, mirrored
+  segment for segment so the QR and the web link are ONE path); the console
+  grows a **Waiting to join** section above its roster with the count on the
+  screen an owner lands on. **The endpoint had existed since :10010 with NO
+  CALLER** — a gym could print a poster nobody could act on. **KD'S QUESTION IS
+  WHY THE CARD GREW A SERVER HALF:** told that both buttons would ask "sure?"
+  because a confirmed member could not be removed, he answered *"do you even
+  have some common sense if someone joins once can not be rempved"* — and the
+  measurement backed him: **the ONLY statement that had ever written
+  `removed_at` was the DPDP Day-0 cascade** (a person deleting their own
+  account). `DELETE /v1/orgs/:gymId/members/:userId` is in this card, the
+  two-step confirmations went with it (both taps are reversible now), and §4.3's
+  confirm sheet stays on REMOVE alone. **His second ruling — a removed member
+  loses the gym's perks — was already true in the resolver; what this adds is the
+  CACHE BUST, measured against a WARM cache because that is the only way the
+  assertion can fail.** Four decisions not to re-derive: **Settings is where v1
+  §8 puts the code box and NOTHING was added to the sidebar** (:11616's crossing
+  stays shut); **the queue is a SECTION on Members, not a seventh tab** (§3.1
+  fixes the nav at six, §4.3 gives Members the walk-in join); **the dashboard
+  card reads TWO endpoints and the second is the point** — confirmed
+  applications are absent from `/applications/mine` by design, so without
+  `/orgs/mine` the waiting card would VANISH on success and the app would never
+  say they got in, and one gym gets one row with member beating waiting beating
+  refused; **STAFF cannot be removed through this door** (an owner is member #1
+  of their own gym, no restore is built, §4.7's last-owner reasoning). **Part 3
+  §2.4's "What {org} can see" sheet is a HARD requirement and is pinned as one** —
+  generic before the server answers (a guessed gym name would be false), NAMED
+  after; deleting it would break a written promise and nothing else in the repo
+  would notice. **Copy may promise NO email, NO expiry and NO auto-confirm**, and
+  a test asserts the words are absent. **THE AUDIT'S FINDING IS MINE TWICE IN AN
+  HOUR: J11 survived, was re-aimed, and SURVIVED AGAIN — two guards each
+  unfalsifiable because the other held** (:5104 F5's shape, in code written by a
+  chat that had read :5104 that morning); fixed in the SOURCE so one line does
+  the work. **Standing lesson: when a mutant survives, ask whether the guarantee
+  is OBSERVABLE before assuming the test is missing.** PROVE: api **512/512**
+  across 43 files on real Postgres · shared **48/48** · web **857/857** · build ✓
+  · tsc clean · **lint = HEAD baseline, MEASURED** on the three big files ·
+  **24 mutants · 24 RED · 0 ALIVE · 0 never ran** (`mutate-join-door.mjs`, no DB
+  mutants per 4a) **and the server half's whole table re-run to completion, 47 ·
+  47 RED · 0 ALIVE**, including O42–O47 for removal.
+  **NOTHING TICKS — smoke and T3 both UNRUN**; `RUNBOOK/smoke-join-door.md` is
+  17 steps and step 14 (Remove) is the one the packet turns on.
 - **:12227** — 2026-08-19 — **THE JOIN DOOR STEP 1, T3 ROUND 1: ZERO
   Critical/High — THE PACKET SHIPS, and the finding with the longest reach is a
   guard that was testing a COPY of the thing it guards.** **Read before adding a

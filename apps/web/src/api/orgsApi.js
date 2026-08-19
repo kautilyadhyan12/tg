@@ -9,10 +9,16 @@
 // an Idempotency-Key. Creating a gym has no key, so a dropped connection leaves
 // the owner to press the button again — a visible duplicate beats a silent one.
 import {
+  confirmApplicationResponseSchema,
   createOrgResponseSchema,
+  joinOrgResponseSchema,
+  myOrgApplicationsResponseSchema,
   myOrgsResponseSchema,
+  orgApplicationPageSchema,
   orgCodesResponseSchema,
   orgMemberPageSchema,
+  rejectApplicationResponseSchema,
+  removeMemberResponseSchema,
 } from '@app/shared';
 import authApi from './authApi';
 
@@ -74,6 +80,78 @@ export const orgService = {
    *  a reload. */
   getCodes: (gymId) =>
     readThrough(orgCodesResponseSchema, 'the join code', authApi.get(`/v1/orgs/${gymId}/codes`)),
+
+  /** POST /v1/orgs/join — the member's half of the door.
+   *
+   *  Typing a code creates an APPLICATION, never a membership (Kd ruling
+   *  2026-08-19): the answer is a union on `outcome` — `pending`,
+   *  `already_pending`, or `already_member` for somebody who is already in.
+   *  There is no `joined` arm to handle, because nothing can produce one until
+   *  the roster import exists.
+   *
+   *  `consent` is sent ONLY when the person ticked the box the server asked
+   *  for. Sending it unconditionally would stamp a consent record nobody gave,
+   *  which is a defect this module has already shipped once (the owner's own
+   *  seat, T3 round 1). */
+  join: (body) => readThrough(joinOrgResponseSchema, 'your request', authApi.post('/v1/orgs/join', body)),
+
+  /** GET /v1/orgs/applications/mine — the caller's own waiting list: everything
+   *  still pending, plus anything refused in the last 14 days so the screen can
+   *  say so rather than leaving "waiting" on screen after a No.
+   *
+   *  CONFIRMED applications are deliberately absent from this list — once the
+   *  gym says yes the person is a member and `/v1/orgs/mine` is where that fact
+   *  lives. Two readers claiming the same thing is two readers that can
+   *  disagree. */
+  getMyApplications: () =>
+    readThrough(
+      myOrgApplicationsResponseSchema,
+      'your gym requests',
+      authApi.get('/v1/orgs/applications/mine'),
+    ),
+
+  /** GET /v1/orgs/:gymId/applications — the console's confirm queue, oldest
+   *  first. Carries `pendingCount`, an EXACT count over the whole queue: the
+   *  screen must never print `items.length`, which says "3 people waiting" on a
+   *  page of 3 out of 90. */
+  getApplications: (gymId, params) =>
+    readThrough(
+      orgApplicationPageSchema,
+      'who is waiting',
+      authApi.get(`/v1/orgs/${gymId}/applications`, { params }),
+    ),
+
+  /** The front desk's two taps. **Both send `{}`** — they take no body, and
+   *  Fastify refuses a request that declares JSON and carries nothing, so the
+   *  empty object is load-bearing rather than decoration.
+   *
+   *  Both are idempotent server-side (a second tap answers the same), which is
+   *  what makes them safe under the 401-refresh retry `authApi` performs. */
+  confirmApplication: (gymId, applicationId) =>
+    readThrough(
+      confirmApplicationResponseSchema,
+      'that confirmation',
+      authApi.post(`/v1/orgs/${gymId}/applications/${applicationId}/confirm`, {}),
+    ),
+
+  rejectApplication: (gymId, applicationId) =>
+    readThrough(
+      rejectApplicationResponseSchema,
+      'that refusal',
+      authApi.post(`/v1/orgs/${gymId}/applications/${applicationId}/reject`, {}),
+    ),
+
+  /** DELETE /v1/orgs/:gymId/members/:userId — Part 3 §4.3's remove.
+   *
+   *  Built because Kd asked what happens when a gym confirms the wrong person:
+   *  before this, nothing could end a membership. The member keeps every
+   *  workout; what ends is the gym's access and the gym's perks. */
+  removeMember: (gymId, userId) =>
+    readThrough(
+      removeMemberResponseSchema,
+      'that removal',
+      authApi.delete(`/v1/orgs/${gymId}/members/${userId}`),
+    ),
 };
 
 /** The API's error body is `{ error, message, requestId }` and its `message` is
