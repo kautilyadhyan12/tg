@@ -137,5 +137,52 @@ describe('gymStatusRows', () => {
     expect(
       gymStatusRows({ applications: [application('pending', IRON)], orgs: null }),
     ).toHaveLength(1);
+    // The third list behaves like the other two.
+    expect(gymStatusRows({ formerOrgs: null })).toEqual([]);
+    expect(gymStatusRows({ formerOrgs: [IRON] })).toHaveLength(1);
+  });
+
+  // ── being removed (Kd's ruling, 2026-08-20) ──────────────────────────────
+  //
+  // Silence about a gym that removed you was the hole left after the server
+  // stopped calling you a stranger. These pin the words AND the precedence,
+  // because precedence is where a true sentence turns back into a false one.
+  it('SAYS a person was removed rather than saying nothing at all', () => {
+    expect(gymStatusRows({ applications: [], orgs: [], formerOrgs: [IRON] })).toEqual([
+      { kind: 'removed', orgId: 'gym-1', orgName: 'Iron House' },
+    ]);
+  });
+
+  it('a REJOIN outranks the removal that preceded it', () => {
+    // Belt and braces: the server already withholds a removal once a live
+    // membership exists, so this asserts the client cannot re-introduce the
+    // contradiction if that ever regresses.
+    expect(
+      gymStatusRows({ applications: [], orgs: [myOrg(IRON, true)], formerOrgs: [IRON] }),
+    ).toEqual([{ kind: 'member', orgId: 'gym-1', orgName: 'Iron House' }]);
+  });
+
+  it('ASKING AGAIN after a removal outranks the removal', () => {
+    expect(
+      gymStatusRows({
+        applications: [application('pending', IRON)],
+        orgs: [],
+        formerOrgs: [IRON],
+      }),
+    ).toEqual([{ kind: 'waiting', orgId: 'gym-1', orgName: 'Iron House' }]);
+  });
+
+  it('a REFUSAL after a removal outranks it — the refusal is the newer fact', () => {
+    expect(
+      gymStatusRows({
+        applications: [application('rejected', IRON)],
+        orgs: [],
+        formerOrgs: [IRON],
+      }),
+    ).toEqual([{ kind: 'refused', orgId: 'gym-1', orgName: 'Iron House' }]);
+  });
+
+  it('drops a former org it cannot describe truthfully rather than guessing', () => {
+    expect(gymStatusRows({ formerOrgs: [{ id: 'gym-1' }, { name: 'No Id' }, null] })).toEqual([]);
   });
 });

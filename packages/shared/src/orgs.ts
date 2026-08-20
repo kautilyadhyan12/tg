@@ -240,7 +240,50 @@ export const myOrgSchema = orgSummarySchema.extend({
 });
 export type MyOrg = z.infer<typeof myOrgSchema>;
 
-export const myOrgsResponseSchema = z.object({ orgs: z.array(myOrgSchema) });
+/** A gym the caller USED to belong to and was REMOVED from.
+ *
+ *  **Kd ruled that silence here is a hole** (2026-08-20): when a gym removes
+ *  somebody, the app said nothing at all about that gym, and a person who was
+ *  let in and then taken out was left to work it out from the absence of a
+ *  card. The T3 round-1 fix stopped the app calling them a stranger
+ *  ("{gym} didn't confirm your request"); it did not give them the truth.
+ *
+ *  **It is a SEPARATE list and not a row in `orgs`, on purpose.** `orgs` means
+ *  "gyms I have a live relationship with" and the console reads the same
+ *  response — a removed gym appearing there would put a gym in a console list
+ *  whose every read the server then answers 404 to. Additive keeps that
+ *  reader's meaning intact and keeps one fact in one place. */
+export const formerOrgSchema = orgSummarySchema.extend({
+  /** When the gym removed them. The card says nothing about WHO removed them or
+   *  why, because the server does not know a reason and inventing one would be
+   *  the same class of defect this whole entry exists to fix. */
+  removedAt: z.string(),
+});
+export type FormerOrg = z.infer<typeof formerOrgSchema>;
+
+export const myOrgsResponseSchema = z.object({
+  orgs: z.array(myOrgSchema),
+  /** Bounded by the same window as a refused application
+   *  (`DECIDED_VISIBLE_DAYS`): a person must be TOLD they were removed, and
+   *  must not be told forever.
+   *
+   *  **`.default([])` is deliberate and the web client is why.** `orgsApi.js`
+   *  parses this response through THIS schema and treats a mismatch as a hard
+   *  failure, and the card treats a failed read as silence — so a REQUIRED
+   *  field would mean that during any window where the web app is newer than
+   *  the API, the whole gym card vanishes, taking "You're a member of Iron
+   *  House" with it. Degrading one sentence beats degrading the card. It is
+   *  the same expand-then-contract discipline R4.4 imposes on migrations,
+   *  applied to a response contract.
+   *
+   *  It costs something and the cost is named: a server that FORGETS to send
+   *  this is indistinguishable from a server saying nobody was removed. That
+   *  is acceptable only because the field is additive and its absence removes
+   *  a sentence rather than inventing one — the failure mode is silence, which
+   *  is what this field exists to end, so the SERVER-side test asserting a real
+   *  removal appears is the guard that matters, not this default. */
+  formerOrgs: z.array(formerOrgSchema).default([]),
+});
 export type MyOrgsResponse = z.infer<typeof myOrgsResponseSchema>;
 
 export const joinOrgRequestSchema = z

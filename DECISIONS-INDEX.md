@@ -67,6 +67,50 @@ mid-file: re-derive them with
   unless dedupe is in that card's definition.** Health data lands inside the open
   privacy question at :592. Tracked NOWHERE before today (grep-verified); now has
   a ⚪ `OWED.md` line.
+- **:12660** — 2026-08-20 — **KD RULING: A REMOVED MEMBER MUST BE TOLD —
+  silence was the other half of the bug.** **Read before touching
+  `/v1/orgs/mine`, `gymStatusRows`, or any copy about a membership ending.**
+  **CORRECTS a choice Kd made four hours earlier** and that should never have
+  been offered to him: when :12518 C/H-1 found the app calling a removed member a
+  stranger, "say nothing" was put to him as an equal option and he took it —
+  **fixing a false sentence by removing the sentence is a quieter defect, not a
+  fix.** His wording ("should say they were rejected") was CORRECTED before
+  building and he was told why: they were let IN and then taken OUT, so refusal
+  copy would be a second untruth. Built sentence: **"You're no longer a member of
+  {gym}"**, plus the two true things people fear losing (all training data is
+  still theirs; the free app remains). **No Try again link.** The fact lives in a
+  SEPARATE `formerOrgs` list on `/v1/orgs/mine`, never a row in `orgs`, because
+  **the console reads the same response** and a removed gym in `orgs` would enter
+  a console list whose every read the server 404s. 14-day window
+  (`DECIDED_VISIBLE_DAYS`); withheld once the person REJOINS. **`.default([])` in
+  the shared contract is deliberate** — `orgsApi.js` treats a contract mismatch
+  as a hard failure and the card treats a failed read as silence, so a REQUIRED
+  field would destroy the whole gym card during any web-newer-than-API window to
+  add one sentence (R4.4's expand-then-contract, applied to a response). **Rank:
+  `removed` is BOTTOM (0), below `refused`** — recency, not importance, and it
+  holds ONLY while :12518's server fix keeps withholding a superseded refusal.
+  Both server tests watched RED against mutants, restored and verified.
+  **The lesson is mine: round 1 caught the app saying something FALSE and could
+  not catch it saying NOTHING, because no reviewer, test or mutant flags an
+  ABSENT sentence — the USER did.** Second finding on this card that only a human
+  at a screen produced, and the argument for the SMOKE gate existing.
+- **:12600** — 2026-08-20 — **KD RULINGS on an outside architecture review:
+  PER-SEAT PRICING = NO, PHONE OTP = NO, STRIPE = YES.** All three struck or
+  confirmed in one message. **Read before proposing any seat-based price, any
+  phone/SMS verification, or any payment provider substitution.** Per-seat and
+  phone OTP are STRUCK items (:456's precedent) — **no `OWED.md` line, nothing to
+  build, do not re-propose.** The consequence of striking per-seat that a later
+  chat must ACCEPT rather than re-argue: **roster hygiene is ours to enforce
+  technically, not the gym's to enforce commercially.** Stripe merely CONFIRMS
+  Part 5 §4, **but the ruling does not dispose of the factual risk** — the claim
+  that new Stripe signups are closed to India-based founders is **UNVERIFIED**
+  and obliges a CHECK before P3.5, never a chat's silent substitution of another
+  provider; own ⚪ `OWED.md` line. **Standing lesson: an outside answer is
+  GROUNDED before it is relayed** — this one was ~60% already built or already
+  ruled here (computed entitlements, the pending-then-confirm join door, seat
+  accounting, server-side gating, history surviving removal), and relaying it
+  unchecked would have reopened three built things and one Kd ruling as if they
+  were open questions.
 - **:8771** — 2026-08-16 — **KD RULING: users NEVER add their own exercises —
   the catalog is CLOSED, deliberately.** A struck item, not a deferral (:456's
   precedent); no `OWED.md` line, nothing to build. **Read before proposing a

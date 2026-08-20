@@ -183,6 +183,23 @@ an error about the connection, say so.
 
 ---
 
+### 14b — the removed person is TOLD
+In the MEMBER window, reload the **Dashboard**.
+
+✅ **Expect:** a card saying **"You're no longer a member of {your gym}"**, and
+underneath it that everything they did there is still theirs — workouts, form
+scores and streak unchanged — and that they keep the free app.
+
+❌ **Fail if** it says the gym **didn't confirm** them, or **refused** them, or
+offers a **Try again** link. They were let in and then taken out; saying they
+were refused would be a different untruth. (This is the bug the review found
+after the first run of this sheet — it used to say exactly that.)
+
+❌ **Fail if** the card is **missing entirely**. Saying nothing at all was the
+second half of the same bug.
+
+---
+
 ### 15 — you cannot remove yourself by accident
 Look at your own row in the list (marked **Complimentary**).
 

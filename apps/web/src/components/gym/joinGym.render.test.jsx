@@ -367,6 +367,42 @@ describe('the gym card on the dashboard', () => {
     expect(screen.getByRole('link', { name: /try again/i }).getAttribute('href')).toBe('/org/join');
   });
 
+  it('TELLS a removed member they were removed, in words that are TRUE (Kd 2026-08-20)', async () => {
+    orgService.getMyApplications.mockReturnValue(ok({ applications: [] }));
+    orgService.getMine.mockReturnValue(
+      ok({ orgs: [], formerOrgs: [{ ...ORG, removedAt: '2026-08-20T04:41:16.656Z' }] }),
+    );
+    draw(<GymMembershipCard />);
+
+    expect(
+      await screen.findByText(/you're no longer a member of iron house/i),
+    ).toBeTruthy();
+
+    const text = document.body.textContent;
+    // NOT a refusal. They were let in and then taken out, and reusing the
+    // refusal wording would be a second lie in place of the first one — which
+    // is the whole reason this arm exists rather than reusing `refused`.
+    expect(text).not.toMatch(/didn't confirm/i);
+    expect(text).not.toMatch(/refused/i);
+    // No "Try again": re-applying to a gym that just removed you is not an
+    // obvious next step, and the screen has no basis for suggesting it.
+    expect(screen.queryByRole('link', { name: /try again/i })).toBeNull();
+    // The promise that is actually TRUE and is the thing people fear losing.
+    expect(text).toMatch(/still yours/i);
+  });
+
+  it('survives an API that does not send formerOrgs at all — the deploy-gap case', async () => {
+    // `formerOrgs` defaults to [] in the contract ON PURPOSE. If it were
+    // required, then during any window where the web app is newer than the API
+    // the parse would fail, the card treats a failed read as silence, and the
+    // person would lose "You're a member of Iron House" as well — a whole card
+    // destroyed to add one sentence. This is that window, asserted.
+    orgService.getMyApplications.mockReturnValue(ok({ applications: [] }));
+    orgService.getMine.mockReturnValue(ok({ orgs: [{ ...ORG, staffRole: null, isMember: true, joinedAt: null }] }));
+    draw(<GymMembershipCard />);
+    expect(await screen.findByText(/you're a member of iron house/i)).toBeTruthy();
+  });
+
   it('DRAWS NOTHING when both reads fail — silence claims nothing', async () => {
     orgService.getMyApplications.mockReturnValue(Promise.reject(new Error('Network Error')));
     orgService.getMine.mockReturnValue(Promise.reject(new Error('Network Error')));

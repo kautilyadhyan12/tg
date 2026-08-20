@@ -676,6 +676,69 @@ d("orgs routes (real Postgres)", () => {
     expect(rows.find((a) => a.id === confirmedId)).toBeUndefined();
   });
 
+  it("TELLS a removed member they were removed, and keeps saying nothing false (Kd 2026-08-20)", { timeout: 30_000 }, async () => {
+    // Kd's ruling: stopping the app calling a removed member a stranger was
+    // right and was not enough — silence about the gym is its own hole. The
+    // person was let IN and then taken OUT and is entitled to know that.
+    const owner = await makeUser("former-owner");
+    const member = await makeUser("former-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Former");
+
+    await joinAsMember(member.cookies, org, owner.cookies);
+
+    // While they are a MEMBER, nothing is former — or the card would tell a
+    // current member their membership had ended.
+    const during = await get("/v1/orgs/mine", { cookies: member.cookies });
+    const beforeBody = JSON.parse(during.body) as {
+      orgs: { id: string; isMember: boolean }[];
+      formerOrgs: { id: string; removedAt: string }[];
+    };
+    expect(beforeBody.orgs.find((o) => o.id === org.org.id)?.isMember).toBe(true);
+    expect(beforeBody.formerOrgs).toEqual([]);
+
+    await del(`/v1/orgs/${org.org.id}/members/${member.userId}`, { cookies: owner.cookies });
+
+    const after = await get("/v1/orgs/mine", { cookies: member.cookies });
+    const body = JSON.parse(after.body) as {
+      orgs: { id: string }[];
+      formerOrgs: { id: string; name: string; removedAt: string }[];
+    };
+    // `orgs` is UNCHANGED in meaning — it still means a live relationship, which
+    // is what keeps the console's reader honest.
+    expect(body.orgs.find((o) => o.id === org.org.id)).toBeUndefined();
+    const former = body.formerOrgs.find((o) => o.id === org.org.id);
+    expect(former?.name).toBe("Orgs Test Former");
+    expect(former?.removedAt).not.toBeUndefined();
+
+    // Nobody ELSE's removal is in my list.
+    const stranger = await makeUser("former-stranger");
+    expect(
+      (JSON.parse((await get("/v1/orgs/mine", { cookies: stranger.cookies })).body) as {
+        formerOrgs: { id: string }[];
+      }).formerOrgs,
+    ).toEqual([]);
+  });
+
+  it("stops calling them a former member once they REJOIN", { timeout: 30_000 }, async () => {
+    // One gym, one truth. A person removed and then let back in is simply a
+    // member; carrying the old removal alongside would put two contradictory
+    // rows about one gym on the dashboard.
+    const owner = await makeUser("rejoin-owner");
+    const member = await makeUser("rejoin-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Rejoin");
+
+    await joinAsMember(member.cookies, org, owner.cookies);
+    await del(`/v1/orgs/${org.org.id}/members/${member.userId}`, { cookies: owner.cookies });
+    await joinAsMember(member.cookies, org, owner.cookies);
+
+    const body = JSON.parse((await get("/v1/orgs/mine", { cookies: member.cookies })).body) as {
+      orgs: { id: string; isMember: boolean }[];
+      formerOrgs: { id: string }[];
+    };
+    expect(body.orgs.find((o) => o.id === org.org.id)?.isMember).toBe(true);
+    expect(body.formerOrgs.find((o) => o.id === org.org.id)).toBeUndefined();
+  });
+
   it("still shows a refusal that came AFTER a confirmation (the fix must not hide it)", { timeout: 30_000 }, async () => {
     // The mirror image, and the reason the fix compares TIMESTAMPS instead of
     // asking "has this person ever been confirmed here". Confirmed, removed,

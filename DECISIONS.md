@@ -12596,3 +12596,134 @@ copy at **4 errors before and 4 after**, none of them this round's.
 **Escape hatch NOT armed**: step 1's round (:12227) found zero Critical/High, so
 there is no two-round streak in this subsystem. **The diff-only re-review is the
 remaining gate.**
+
+## KD RULINGS on the outside-architecture review: per-seat pricing NO, phone OTP NO, Stripe YES (2026-08-20)
+
+**Context, because a later chat will otherwise re-open all three.** Kd put the
+gym-sponsored-access problem to a SEPARATE Claude that had no access to this
+repo, and brought its answer back. **Most of that answer was already built or
+already ruled here** — entitlement computed rather than stored as a flag (there
+is no `is_premium` column anywhere; grep-verified this session), a member typing
+a code landing in PENDING with a human confirm (:11072/:11846/:12343, built this
+week), seats consumed on join and freed on removal (:10010), server-side checks
+on every gated endpoint (R3.1/R3.3), and training history surviving the end of
+access (§4.3). **Its warning against static shared codes does not bite us for the
+reason Kd's own ruling gives**: a leaked code buys a place in a queue, not
+access, because typing a code APPLIES and a human confirms.
+
+Three of its recommendations were genuinely new and were put to Kd. **He ruled on
+all three in one message.**
+
+**1. PER-SEAT PRICING — RULED NO. "should not be implemented."** A struck item,
+not a deferral (:456's precedent) — **no `OWED.md` line, nothing to build.** The
+argument he was shown and rejected: a flat fee gives a gym no reason to prune
+ex-members from its roster, so every freeloader is the vendor's enforcement
+problem; per-seat makes it the gym's own money and turns them into the
+enforcement partner. **He ruled against it anyway and that ends it.** The banded
+/ flat structure in `05-part5-billing.md` §1 stands unchanged. **Consequence a
+later chat must accept rather than re-argue: roster hygiene is OURS to enforce
+technically, not the gym's to enforce commercially.** Do NOT re-propose per-seat
+pricing when that consequence next shows up as a support cost.
+
+**2. PHONE OTP AT SIGNUP — RULED NO. "phone otp cancel aswell."** Struck, no
+`OWED.md` line. It was never built and is not in the spec; the outside answer
+proposed it as anti-abuse. **Also removes the reason to care about US A2P 10DLC
+registration for signup** — that constraint was the outside answer's argument for
+email over phone, and with no phone verification the question does not arise
+here. (It would return if SMS is ever wanted for NOTIFICATIONS, which is a
+different card and still unbuilt — no email or SMS delivery exists in this repo
+at all today; `EmailSender`'s default impl logs an event name, DECISIONS
+2026-07-11 P2.1 GAP-5, re-verified by grep this session.)
+
+**3. STRIPE — RULED IN. "stripe need to be used for payment men."** This CONFIRMS
+the spec rather than changing it: `05-part5-billing.md` §4 and `CLAUDE.md` P3.4/
+P3.5 already give Razorpay the India consumer + org books and Stripe the
+international book. **THE RULING DOES NOT DISPOSE OF THE FACTUAL RISK, and the
+risk is recorded here rather than argued:** the outside answer claims new Stripe
+signups are effectively closed to India-based founders without a US entity, which
+if true is discovered at P3 and blocks the international book. **UNVERIFIED — a
+claim from a chat with no source read, not a fact this repo has checked.** Kd was
+shown it before ruling. **What this entry obliges is a CHECK, not a re-argument:**
+before P3.5 starts, confirm Stripe account availability for the actual legal
+entity that will hold it, and if it is closed, that is a SPEC GAP for Kd — never a
+chat's silent substitution of another provider. Own `OWED.md` line (⚪).
+
+**The standing lesson about outside advice, since this will happen again.** The
+outside answer was competent and roughly 60% already-done here, because it could
+not read the repo, `DECISIONS.md`, or the spec. **A chat receiving one must
+GROUND it before relaying it** — the grep for `is_premium` and the check for a
+real email sender each took seconds and each converted a recommendation into
+either "already true" or "genuinely new". Relaying such an answer unchecked would
+have put three built things and one Kd ruling back on the table as though they
+were open questions.
+
+## KD RULING: A REMOVED MEMBER MUST BE TOLD — silence was the other half of the bug (2026-08-20)
+
+**Kd's words: "Their dashboard now says nothing about that gym. should say they
+were rejected."** Read before touching `/v1/orgs/mine`, `gymStatusRows`, or any
+copy about a membership ending.
+
+**This CORRECTS a choice he made four hours earlier and I should not have
+offered.** When T3 round 1 found the app telling a removed member *"{gym} didn't
+confirm your request"* (:12518 C/H-1), he was given two options — say nothing, or
+say they were removed — and chose **say nothing**. Fixing a false sentence by
+replacing it with no sentence is not a fix, it is a quieter defect, and offering
+silence as an equal option is what let it through. **He caught it; the option
+should never have been on the table.**
+
+**ONE CORRECTION TO HIS WORDING, made before building and told to him.** They
+were NOT *rejected*. They were let in and then taken out — a refusal is a
+different fact, and reusing the refusal copy would have put a SECOND untruth
+where the first one was. The sentence built is **"You're no longer a member of
+{gym}"**, with the two things a person actually wants to know underneath: every
+workout, form score and streak is still theirs (TRUE — removal writes
+`removed_at` and touches no training data), and they keep the free app while the
+gym-paid features end. **No "Try again" link**: re-applying to a gym that just
+removed you is not an obvious next step and the screen has no basis for
+suggesting it.
+
+**WHERE THE FACT LIVES, and why not in `orgs`.** `/v1/orgs/mine` gains a SEPARATE
+`formerOrgs` list rather than a row in `orgs`. `orgs` means "gyms I have a LIVE
+relationship with" and **the console reads the same response** — a removed gym
+appearing there would put a gym into a console list whose every subsequent read
+the server answers 404 to. Additive keeps that reader's meaning intact.
+Bounded by the same 14-day `DECIDED_VISIBLE_DAYS` window as a refusal: a person
+must be told, and must not be told forever. A person who has since REJOINED is
+simply a member — the query withholds the removal when a live membership exists,
+or one gym would carry two contradictory rows.
+
+**`formerOrgs` is `.default([])` IN THE SHARED CONTRACT, and the reason is a
+deploy gap, not laziness.** `orgsApi.js` parses this response through the shared
+schema and treats a mismatch as a HARD failure; the card treats a failed read as
+silence. A REQUIRED field would therefore mean that in any window where the web
+app is newer than the API, **the entire gym card vanishes — taking "You're a
+member of Iron House" with it — in order to add one sentence.** Expand-then-
+contract (R4.4's discipline, applied to a response contract). **The cost is named
+rather than hidden**: a server that forgets the field is indistinguishable from
+one saying nobody was removed, so the SERVER-side test asserting a real removal
+appears is the guard that matters, not the default. A render test pins the
+deploy-gap case itself.
+
+**RANK: `removed` sits at the BOTTOM (0), below `refused`.** Not a judgement of
+importance — it is the recency order every reachable sequence produces. Removed
+then asked again is `waiting`; removed then refused is `refused`; and the
+opposite sequence (refused → let in → removed) cannot leave a refusal behind to
+beat it, **because :12518's C/H-1 fix already withholds a refusal a later
+confirmation superseded.** Rank is a proxy for recency and holds only while that
+stays true — a later chat weakening the server fix silently breaks this too.
+
+**PROVEN, not asserted.** Four new tests. Both server tests were watched RED
+against deliberate mutants — `formerOrgs: []` in the service kills the "tells a
+removed member" test; deleting the `NOT EXISTS` arm kills the rejoin test — and
+both mutants were restored and verified. Gates: orgs suite on real Postgres ·
+web **874/874** · shared **48/48** · `vite build` ✓ · `tsc --noEmit` clean on api ·
+eslint clean on every changed file. `RUNBOOK/smoke-join-door.md` gains **step
+14b**, which fails explicitly if the screen says "didn't confirm", says "refused",
+offers Try again, or shows nothing at all.
+
+**THE LESSON, and it is mine.** T3 round 1 caught the app saying something FALSE.
+It did not catch the app saying NOTHING, because nothing is not a finding — no
+reviewer, no test and no mutant flags an absent sentence. **The user did.** That
+is the second thing on this card that only a human looking at a screen found
+(the first was in the smoke), and it is the argument for the SMOKE gate existing
+at all.

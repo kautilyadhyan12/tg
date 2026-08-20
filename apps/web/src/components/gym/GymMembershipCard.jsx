@@ -63,6 +63,40 @@ function Row({ row }) {
     );
   }
 
+  // REMOVED IS ITS OWN SENTENCE, and Kd ruled that it has to exist (2026-08-20).
+  // This person was let IN and then taken OUT — they were never refused, so
+  // reusing the refusal wording would be a second lie in place of the first
+  // one. There is no "Try again" link either: re-applying to a gym that just
+  // removed you is not the obvious next step, and offering it as one would be
+  // the screen making a suggestion it has no basis for.
+  if (row.kind === 'removed') {
+    return (
+      <div className="flex items-start gap-3">
+        <div
+          className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{ background: 'rgba(255,255,255,0.06)' }}
+        >
+          <Building2 className="w-4 h-4" style={{ color: 'rgba(255,255,255,0.55)' }} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold" style={{ color: '#fff' }}>
+            You&apos;re no longer a member of {row.orgName}
+          </p>
+          {/* Both halves are load-bearing. The first is the thing people
+              actually fear when access ends, and it is TRUE — removal sets
+              `removed_at` and touches no workout. The second explains the
+              change they will notice without naming a plan or a price, neither
+              of which this screen knows. */}
+          <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.55)' }}>
+            Everything you did there is still yours — your workouts, your form
+            scores and your streak are unchanged. You keep the free app; the
+            features your gym was paying for have ended.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // Refused and expired are DIFFERENT SENTENCES because they are different
   // facts, and only one of them is about a decision somebody made. Expired
   // cannot happen today (nothing writes it — the clock is its own card), and
@@ -113,6 +147,10 @@ export default function GymMembershipCard({ refreshToken = 0 }) {
             applications:
               appsOutcome.status === 'fulfilled' ? appsOutcome.value.data?.applications : null,
             orgs: orgsOutcome.status === 'fulfilled' ? orgsOutcome.value.data?.orgs : null,
+            // Same response, same settled outcome — a gym you were removed
+            // from arrives beside the gyms you are still in.
+            formerOrgs:
+              orgsOutcome.status === 'fulfilled' ? orgsOutcome.value.data?.formerOrgs : null,
           }),
         );
       },

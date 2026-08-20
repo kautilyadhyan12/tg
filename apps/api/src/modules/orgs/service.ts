@@ -146,13 +146,24 @@ export async function createOrg(
 }
 
 export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgsResponse> {
-  const rows = await repo.listOrgsForUser(deps.sql, userId);
+  // Two reads, one response. They answer different questions — what I belong to
+  // now, and what recently ended — and neither can be derived from the other,
+  // which is exactly why the dashboard was silent about a removal before Kd
+  // ruled on it (2026-08-20).
+  const [rows, former] = await Promise.all([
+    repo.listOrgsForUser(deps.sql, userId),
+    repo.listFormerOrgsForUser(deps.sql, userId),
+  ]);
   return myOrgsResponseSchema.parse({
     orgs: rows.map((r) => ({
       ...toOrgSummary(r),
       staffRole: r.staffRole,
       isMember: r.isMember,
       joinedAt: r.joinedAt === null ? null : r.joinedAt.toISOString(),
+    })),
+    formerOrgs: former.map((f) => ({
+      ...toOrgSummary(f.org),
+      removedAt: f.removedAt.toISOString(),
     })),
   });
 }

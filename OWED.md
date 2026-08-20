@@ -472,6 +472,23 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       pass, not a fix. Found by T3 round 1 of the rep-timing card as its Low-3;
       logged as L14 in `BACKLOG.md`; DECISIONS :7487.
 
+- [ ] ⚪ **CONFIRM STRIPE IS ACTUALLY AVAILABLE TO THE ENTITY THAT WILL HOLD THE
+      ACCOUNT, BEFORE P3.5 STARTS.** Created 2026-08-20 (DECISIONS :12600).
+      **Kd RULED Stripe in** — *"stripe need to be used for payment men"* — which
+      confirms `05-part5-billing.md` §4 and `CLAUDE.md` P3.5 rather than changing
+      them. What is owed is not a decision but a FACT CHECK. An outside chat
+      claimed new Stripe signups are effectively closed to India-based founders
+      without a US entity; **that claim is UNVERIFIED — it came from a chat with
+      no source read and this repo has never checked it.** If it is true it is
+      discovered at P3.5, when the international book is being built, which is
+      the worst moment to find it. **The check is cheap and the failure is
+      expensive**, so it happens BEFORE that card opens. **If Stripe turns out to
+      be closed, that is a SPEC GAP for Kd** (Part 5 §4 names the provider) —
+      **never a chat's silent substitution of another provider or a
+      Merchant-of-Record.** Razorpay already covers the India consumer and org
+      books (P3.4) and is unaffected either way. Ticks when the answer is
+      recorded, whichever way it goes.
+
 - [ ] ⚪ **A PAYLOAD THAT REPORTS WATCHED TIME BUT NO REST TIME IS PRICED BY v1,
       WHICH IGNORES WATCHED TIME.** Created 2026-08-15 by T3 round 1 of the
       rep-timing packet (its Low-3; logged as L21 in `BACKLOG.md`).
@@ -4263,8 +4280,13 @@ file and is stated so nobody reads these as lower priority than they are.
       SHIP IT (DECISIONS :12518). STILL DOES NOT TICK.** Two Critical/High were
       found and are FIXED — a removed member being told the gym never confirmed
       them, and a trainer being drawn a Remove button the server refuses — plus
-      six Lows, all fixed in the same round. **The DIFF-ONLY RE-REVIEW is now the
-      only thing holding this line.** What exists now: the code
+      six Lows, all fixed in the same round. **Then Kd caught the OTHER half of
+      the first one: the fix left the app saying NOTHING to a removed member,
+      and he ruled it must TELL them (DECISIONS :12660).** Built:
+      `/v1/orgs/mine` now carries a `formerOrgs` list and the card says "You're
+      no longer a member of {gym}"; `RUNBOOK/smoke-join-door.md` gains **step
+      14b** for it. **The DIFF-ONLY RE-REVIEW and a re-run of step 14b are now
+      the only things holding this line.** What exists now: the code
       box at **Settings → Gym** and at
       `/org/join?code=` (Part 6 §2's deep link mirrored, so the mobile QR and
       the web link are one path), §2.4's visibility sheet on the form and again

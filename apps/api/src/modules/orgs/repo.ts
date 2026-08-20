@@ -306,6 +306,57 @@ export async function listOrgsForUser(sql: Sql, userId: string): Promise<MyOrgRo
   }));
 }
 
+export interface FormerOrgRow {
+  org: OrgRow;
+  removedAt: Date;
+}
+
+/** Gyms the caller was REMOVED from, recently enough to still be worth saying.
+ *
+ *  **Kd's ruling of 2026-08-20**: after a removal the app said nothing at all
+ *  about that gym. The T3 round-1 fix stopped it saying something FALSE
+ *  ("{gym} didn't confirm your request"); this is what makes it say something
+ *  TRUE. A person who was let into a gym and then taken out is entitled to know
+ *  that is what happened.
+ *
+ *  **Deliberately NOT folded into `listOrgsForUser`.** That reader means "gyms
+ *  I have a live relationship with" and the CONSOLE reads the same response; a
+ *  removed gym appearing in `orgs` would put a gym into a console list whose
+ *  every subsequent read the server answers 404 to. Separate list, same
+ *  response, one fact in one place.
+ *
+ *  **`removed_at IS NOT NULL` alone is not enough** — the DPDP Day-0 cascade
+ *  also closes memberships when a person deletes their OWN account, and telling
+ *  a returning user "Iron House removed you" when they left of their own accord
+ *  would be a fresh lie of exactly the kind this fixes. Anyone reaching this
+ *  code path is by definition a live account reading their own dashboard, so
+ *  the self-deletion case cannot be in flight here; if account RESTORE ever
+ *  reopens memberships (:12227's note says it does not today), this needs a
+ *  reason column rather than an inference. */
+export async function listFormerOrgsForUser(
+  sql: Sql,
+  userId: string,
+): Promise<FormerOrgRow[]> {
+  const rows = await sql<(RawOrg & { removed_at: Date })[]>`
+    SELECT g.id, g.slug, g.name, g.city, g.org_type, g.timezone, g.locale,
+           g.currency_display, g.status, m.removed_at
+    FROM gym_members m
+    JOIN gyms g ON g.id = m.gym_id
+    WHERE m.user_id = ${userId}
+      AND m.removed_at IS NOT NULL
+      AND m.removed_at > now() - (${DECIDED_VISIBLE_DAYS} * INTERVAL '1 day')
+      -- Somebody who was removed and has since REJOINED is simply a member
+      -- again; saying both would be one gym with two contradictory rows.
+      AND NOT EXISTS (
+        SELECT 1 FROM gym_members live
+        WHERE live.gym_id = m.gym_id AND live.user_id = m.user_id
+          AND live.removed_at IS NULL
+      )
+    ORDER BY m.removed_at DESC, g.id DESC
+    LIMIT ${MY_ORGS_LIMIT}`;
+  return rows.map((r) => ({ org: toOrgRow(r), removedAt: r.removed_at }));
+}
+
 export async function getOrgById(sql: SqlOrTx, gymId: string): Promise<OrgRow | null> {
   const rows = await sql<RawOrg[]>`
     SELECT id, slug, name, city, org_type, timezone, locale, currency_display, status

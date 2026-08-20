@@ -1,6 +1,75 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE JOIN DOOR, STEP 2 — KD'S CORRECTION AFTER T3 ROUND 1, plus three
+      rulings on an outside architecture review. **NOTHING TICKS. The diff-only
+      re-review and a re-run of smoke step 14b are the gates left.**
+
+KD CAUGHT THE HALF THE REVIEW COULD NOT (DECISIONS :12660)
+  · T3 round 1 stopped the app telling a removed member "{gym} didn't confirm
+    your request". **It replaced a false sentence with NO sentence, and I
+    offered that to Kd as an equal option. It should never have been on the
+    table.** He came back with *"should say they were rejected"*.
+  · **His wording was CORRECTED before building and he was told why**: they were
+    let IN and then taken OUT, so refusal copy would be a SECOND untruth. Built:
+    **"You're no longer a member of {gym}"** + everything they did there is
+    still theirs + they keep the free app. **No Try again link.**
+  · `/v1/orgs/mine` gains a SEPARATE `formerOrgs` list — never a row in `orgs`,
+    because the CONSOLE reads the same response and a removed gym there enters a
+    list whose every read the server 404s. 14-day window; withheld on rejoin.
+  · **`.default([])` in the shared contract is deliberate**: `orgsApi.js` treats
+    a contract mismatch as a hard failure and the card treats a failed read as
+    silence, so a REQUIRED field would destroy the whole gym card during any
+    web-newer-than-API window in order to add one sentence.
+  · **RANK: `removed` is BOTTOM, below `refused`** — recency, not importance,
+    and it holds ONLY while :12518's server fix keeps withholding a superseded
+    refusal. Weaken that fix and this breaks silently too.
+
+THREE KD RULINGS ON AN OUTSIDE REVIEW (DECISIONS :12600)
+  · **PER-SEAT PRICING — NO.** Struck, no OWED line, do not re-propose. The
+    consequence to ACCEPT rather than re-argue: roster hygiene is ours to
+    enforce technically, not the gym's commercially.
+  · **PHONE OTP — NO.** Struck. Also removes the US A2P 10DLC question here.
+  · **STRIPE — IN**, which confirms Part 5 §4 rather than changing it. **The
+    ruling does not dispose of the factual risk**: the claim that Stripe is
+    closed to India-based founders is UNVERIFIED and owes a CHECK before P3.5
+    (⚪ OWED line). If closed, that is a SPEC GAP for Kd — never a silent
+    substitution.
+  · ~60% of that outside answer was already built or already ruled here. **An
+    outside answer is GROUNDED before it is relayed**; two greps converted three
+    "recommendations" into "already true".
+
+FILES
+  API · `orgs/repo.ts` (`listFormerOrgsForUser`) · `orgs/service.ts` ·
+        `test/orgs.routes.test.ts` (+2)
+  PKG · `packages/shared/src/orgs.ts` (`formerOrgSchema`, `formerOrgs`)
+  WEB · `components/gym/{GymMembershipCard.jsx,gymMembershipView.js}` + both
+        their test files (+7)
+  DOCS · `DECISIONS.md` :12600 and :12660 + index lines · `OWED.md` (1 new,
+        1 updated) · `RUNBOOK/smoke-join-door.md` (step 14b)
+
+GATES
+  · web **874/874** · shared **48/48** · `vite build` ✓ · `tsc --noEmit` clean
+    on api · eslint clean on every changed file. Orgs suite on real Postgres
+    re-run after these changes.
+  · Both new server tests watched RED against deliberate mutants
+    (`formerOrgs: []` in the service; deleting the `NOT EXISTS` arm), both
+    restored and verified.
+
+THE LESSON, AND IT IS MINE
+  · Round 1 caught the app saying something FALSE. It could not catch the app
+    saying NOTHING — **no reviewer, test or mutant flags an ABSENT sentence.**
+    The USER did. Second finding on this card that only a human at a screen
+    produced, and the argument for the SMOKE gate existing at all.
+
+NEXT
+  1. Kd re-runs **step 14b** of `RUNBOOK/smoke-join-door.md` (30 seconds).
+  2. **The diff-only re-review in a FRESH chat**, covering round 1's two C/H
+     fixes AND this removal message.
+  3. Then step 3 of the split: the waiting room's clock — its own 🔴 line.
+```
+
+```
 TASK: THE JOIN DOOR, STEP 2 — T3 ROUND 1 FIXES. The review found TWO
       Critical/High and the packet did NOT ship. Both are FIXED, plus all six
       Lows. **SMOKE PASSED. T3 ROUND 1 RUN. THE DIFF-ONLY RE-REVIEW IS THE ONLY
