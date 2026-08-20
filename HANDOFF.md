@@ -1,6 +1,60 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE JOIN DOOR, STEP 2 — **DONE AND TICKED.** Kd ran smoke step 14b and
+      reported passed. `OWED.md`'s "no screen anywhere lets a member type a
+      gym's join code" is ticked against commit `c9435d7`. Entry :12832.
+
+WHAT SHIPPED (25e013d → c9435d7)
+  · A member types their code at Settings → Gym or `/org/join?code=`, sees
+    §2.4's "What {gym} can see" promise before and after, and is told on the
+    dashboard whether they are waiting, refused, in, or removed.
+  · The console grows a **Waiting to join** section above its roster, with the
+    server's exact count on the screen an owner lands on.
+  · **A member can be REMOVED** — Kd's own addition mid-card; nothing in the
+    product could do it before.
+
+**WHAT TICKS IS STEP 2 OF THREE. DO NOT READ IT AS "THE JOIN DOOR IS DONE."**
+  · Step 3 — the waiting room's CLOCK (expiry sweep, gym reminder, member
+    nudge; :11385's three mechanics) — is UNBUILT and keeps its own open line.
+    **The 14-day expiry is stamped on every application row and nothing acts on
+    it**, so today a pile of stale applications never clears itself.
+
+THE GATE HISTORY, because the shape repeats and each instrument was BLIND to
+what the next one caught
+  · Mutation sweep → what the card CHANGED and got wrong (J11, twice).
+  · T3 round 1 → what the card ASSUMED and never wrote: a missing role check no
+    mutant can delete (:12518 C/H-2), plus a false sentence on screen (C/H-1).
+  · **Kd, looking at a screen** → the smoke sheet's own misleading wording, and
+    then that round 1's fix had left the app SAYING NOTHING (:12660). **No
+    reviewer, test or mutant reports an absent sentence.**
+  · T3 round 2 → three tests written to close round 1's findings were LIARS,
+    including the one written to prove a guarantee DECISIONS had argued for at
+    length (:12731).
+  · **Twice on this card the only thing that found the defect was a person
+    looking at the product.** That is the argument for the SMOKE gate.
+
+STILL OPEN, all with `OWED.md` lines — none of this is done
+  · The waiting room's clock (step 3) · a poster link losing its code through
+    the login page · **nobody is notified when they are confirmed or removed**
+    (no email or SMS exists anywhere in this repo) · RESTORE (§4.3's 30 days) ·
+    a removal-REASON column, so a self-deletion is not reported as a gym
+    removing you · naming the real entitlement drop once gyms can pay (Kd's
+    observation: free is 2 meal scans/day vs 8, and 2 running routes/MONTH vs
+    5/day — a 75× drop) · a page-level render harness for `Dashboard`/`Settings`
+    · the `/orgs/mine` snapshot's untested guarantee.
+  · Also open from today: **CHECK STRIPE IS AVAILABLE** to the entity that will
+    hold the account, BEFORE P3.5 — Kd ruled Stripe in (:12600); the claim that
+    it is closed to India-based founders is UNVERIFIED and must not be
+    discovered during the billing card.
+
+NEXT
+  · Step 3 of the split: the waiting room's clock — its own 🔴 line, and the
+    defaults it must RATIFY rather than assume are at :11385 (14-day expiry ·
+    gym reminded at 2 days then weekly · member nudge once a day).
+```
+
+```
 TASK: THE JOIN DOOR, STEP 2 — T3 ROUND 2 (diff-only) AND ITS FIXES.
       **ZERO Critical/High. THE PACKET SHIPS** (DECISIONS :12731). Escape hatch
       NOT armed. **ONE GATE LEFT AND IT IS KD'S: smoke step 14b, 30 seconds.**

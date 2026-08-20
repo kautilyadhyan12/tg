@@ -12828,3 +12828,49 @@ work began) · web **876/876** (857 before) · shared **48/48** · `vite build` 
 `tsc --noEmit` clean on api and shared · eslint **zero problems across the six
 files this round changed** (`Settings.jsx` was not among them). Every new or
 repaired test mutation-proved and every mutant restored and verified against git.
+
+## THE JOIN DOOR, STEP 2 — DONE. Smoke step 14b passed and the line ticks (2026-08-20)
+
+**Kd ran step 14b and reported "passed".** That was the last gate, and
+`OWED.md`'s "no screen anywhere lets a member type a gym's join code" is now
+TICKED against commit `c9435d7`.
+
+**What shipped**, across `25e013d` → `c9435d7`: a member types their gym's code
+at **Settings → Gym** or at `/org/join?code=` (Part 6 §2's deep link mirrored, so
+the QR and the web link are ONE path), sees §2.4's "What {gym} can see" promise
+before and after applying, and is told on the dashboard whether they are waiting,
+were refused, got in, or were removed. The console grows a **Waiting to join**
+section above its roster with the server's exact count on the screen an owner
+lands on, Confirm and "Not this person" are single taps, and — **Kd's own
+addition mid-card** — a member can be REMOVED, which nothing in the product could
+do before.
+
+**WHAT TICKS IS STEP 2 OF THREE.** The waiting room's CLOCK — the expiry sweep,
+the gym reminder, the member nudge (:11385's three mechanics) — is step 3 and
+keeps its own open line. The 14-day expiry is stamped on every application row
+and **nothing acts on it yet**.
+
+**THE RECORD OF HOW IT GOT HERE, because the shape repeats.** Four things found
+defects, and they found DIFFERENT KINDS:
+- The **mutation sweep** found what the card changed and got wrong (J11, twice).
+- **T3 round 1** found what the card ASSUMED and never wrote — a missing role
+  check no mutant could delete (:12518 C/H-2) — and a false sentence on screen
+  (C/H-1).
+- **Kd, looking at a screen**, found the smoke sheet's own misleading wording,
+  then found that round 1's fix had left the app SAYING NOTHING (:12660), which
+  no reviewer, test or mutant reports.
+- **T3 round 2** found that three tests written to close round 1's findings were
+  liars, including the one written to prove a guarantee this file had argued for
+  at length (:12731).
+
+**Each instrument was blind to what the next one caught.** That is the argument
+for having all four, and specifically for the SMOKE gate — twice on this card the
+only thing that found the defect was a person looking at the product.
+
+**Still open and deliberately not closed here** (all with `OWED.md` lines): the
+waiting room's clock · a poster link losing its code through the login page ·
+nobody being notified when they are confirmed or removed · RESTORE (§4.3's 30
+days) · a removal-reason column so a self-deletion is not reported as a gym
+removing you · naming the actual entitlement drop once gyms can pay · a page-level
+render harness for `Dashboard`/`Settings` · the `/orgs/mine` snapshot's untested
+guarantee.

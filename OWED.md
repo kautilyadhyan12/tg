@@ -4267,7 +4267,17 @@ file and is stated so nobody reads these as lower priority than they are.
       boundary allows without touching workout tables. **A field added to that
       response without re-reading §2.4 is how the org-visibility promise gets
       broken**, so the next card on it starts there.
-- [ ] 🟡 **NO SCREEN ANYWHERE LETS A MEMBER TYPE A GYM'S JOIN CODE.** Found
+- [x] 🟡 **NO SCREEN ANYWHERE LETS A MEMBER TYPE A GYM'S JOIN CODE.**
+      **DONE 2026-08-20, commit `c9435d7`** (built across `25e013d` → `c9435d7`).
+      Every gate is met: the two screens exist, **smoke PASSED — all 17 steps
+      plus 14b, run by Kd on real servers with two accounts** — and **T3 round 2
+      found ZERO Critical/High, so the packet shipped** (DECISIONS :12343 built
+      it, :12518 round 1, :12660 Kd's removal-message ruling, :12731 round 2).
+      **What ticks is STEP 2 of the approved three-step split only** — the
+      waiting room's CLOCK (expiry sweep, gym reminder, member nudge) is step 3
+      and keeps its own separate line below; nothing about it is done.
+      Original text kept in full below, because the reasoning in it still binds
+      the step-3 card. Found
       2026-08-19 while building the login door (DECISIONS :10866); **tracked
       nowhere before, grep-verified.** `POST /v1/orgs/join` has existed since
       :10010 — seat-safe, `FOR UPDATE` on the org row, idempotent on a repeat —
@@ -4342,11 +4352,12 @@ file and is stated so nobody reads these as lower priority than they are.
       no longer a member of {gym}"; `RUNBOOK/smoke-join-door.md` gains **step
       14b** for it. **T3 ROUND 2 (diff-only) THEN RAN AND FOUND ZERO
       CRITICAL/HIGH — THE PACKET SHIPS (DECISIONS :12731).** Four Lows and three
-      lying tests, all fixed in that round; escape hatch NOT armed. **The ONLY
-      thing still holding this line is Kd running smoke step 14b** (30 seconds:
-      the removed member's dashboard must say "You're no longer a member of
-      {gym}"), because that copy was built after the smoke passed and no human
-      has yet seen it on a screen. What exists now: the code
+      lying tests, all fixed in that round; escape hatch NOT armed.
+      **UPDATE 2026-08-20 (final) — KD RAN STEP 14b AND IT PASSED. THIS LINE IS
+      TICKED.** The last gate was step 14b — the removed member's dashboard
+      saying "You're no longer a member of {gym}" — held open because that copy
+      was written AFTER the 17-step smoke and no human had yet seen it on a
+      screen. Kd ran it and reported **passed**. What exists now: the code
       box at **Settings → Gym** and at
       `/org/join?code=` (Part 6 §2's deep link mirrored, so the mobile QR and
       the web link are one path), §2.4's visibility sheet on the form and again

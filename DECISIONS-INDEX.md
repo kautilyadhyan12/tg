@@ -67,6 +67,22 @@ mid-file: re-derive them with
   unless dedupe is in that card's definition.** Health data lands inside the open
   privacy question at :592. Tracked NOWHERE before today (grep-verified); now has
   a ⚪ `OWED.md` line.
+- **:12832** — 2026-08-20 — **THE JOIN DOOR STEP 2 IS DONE — smoke step 14b
+  passed and `OWED.md`'s "no screen anywhere lets a member type a gym's join
+  code" is TICKED against commit `c9435d7`.** **What ticks is STEP 2 OF THREE:
+  the waiting room's CLOCK (expiry sweep, gym reminder, member nudge — :11385)
+  is step 3 and keeps its own OPEN line; the 14-day expiry is stamped on every
+  row and NOTHING acts on it.** **Read before claiming any part of the join door
+  is finished, and before starting step 3.** Carries the card's own record of
+  **four instruments each blind to what the next one caught**: the mutation
+  sweep found what the card CHANGED and got wrong; T3 round 1 found what the card
+  ASSUMED and never wrote (a missing role check no mutant can delete) plus a
+  false sentence; **Kd, looking at a screen, found the smoke sheet's misleading
+  wording and then that round 1's fix had left the app SAYING NOTHING** — which
+  no reviewer, test or mutant reports; T3 round 2 found that three tests written
+  to close round 1's findings were liars. **Twice on this card the only thing
+  that found the defect was a person looking at the product** — the argument for
+  the SMOKE gate. Lists what stays open with `OWED.md` lines.
 - **:12731** — 2026-08-20 — **THE JOIN DOOR STEP 2, T3 ROUND 2 (diff-only):
   ZERO Critical/High — THE PACKET SHIPS. Escape hatch NOT armed.** Reviews
   :12518 and :12660. **Read before writing copy about what a gym pays for,
