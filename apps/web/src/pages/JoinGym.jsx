@@ -34,7 +34,14 @@ export default function JoinGym() {
           Enter the code your gym gave you.
         </p>
       </div>
-      <JoinGymPanel initialCode={code} />
+      {/* T3 r1 L-5: `key` is the fix, and it belongs here rather than in the
+          panel. The panel seeds its input from `initialCode` ONCE, at mount —
+          which is right, or every keystroke would fight the prop — and React
+          Router does NOT remount a route when only the search string changes.
+          So scanning a second poster left the FIRST gym's code in the box.
+          Keying on the code remounts the panel exactly when the URL names a
+          different one, and leaves typing alone the rest of the time. */}
+      <JoinGymPanel key={code} initialCode={code} />
     </div>
   );
 }

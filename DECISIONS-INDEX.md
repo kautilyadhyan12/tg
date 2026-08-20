@@ -389,7 +389,42 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   LABEL (`Front Desk`); the whole chain was verified before answering and the
   wording is fixed. **Standing lesson: a smoke sheet describes what a BEGINNER
   SEES, never what a field is for** — Part 0.5's K1–K8 applied to RUNBOOKs, which
-  had never been held to that bar. **T3 STILL UNRUN, so NOTHING TICKS YET.**
+  had never been held to that bar. **T3 ran — see :12518, which did NOT ship the
+  packet.**
+- **:12518** — 2026-08-20 — **THE JOIN DOOR STEP 2, T3 ROUND 1: TWO
+  Critical/High, one of them LIVE on Kd's own account. THE PACKET DID NOT SHIP
+  THIS ROUND.** Reviews :12343. **Read before touching
+  `listApplicationsForUser`, before adding a reader to the dashboard's gym card,
+  before drawing ANY console control a role might be refused, and before
+  assuming a component with tests is one anybody can reach.**
+  **C/H-1: a REMOVED member was told the gym never confirmed them** — after
+  reject → ask again → confirm → remove, the dashboard read "{gym} didn't
+  confirm your request" with a Try again link while the database held a
+  confirmation two minutes before the removal. It is the smoke sheet's own steps
+  8 → 10 → 11 → 14, the documented happy path, and it was measured against the
+  live database before being fixed. **The cause is two CORRECT decisions
+  meeting**: `/applications/mine` excludes confirmed rows by design and
+  `/orgs/mine` drops the gym on `removed_at`, so a stale refusal was the only
+  surviving fact. **Fixed server-side because the client cannot see the
+  confirmation** — a rejected/expired row is withheld when a LATER application
+  for the same gym reached confirmed, **compared by TIMESTAMP and not by
+  existence** (confirmed → removed → re-applied → refused must still show, or a
+  genuinely turned-away person gets a blank screen; both directions carry a
+  test). **C/H-2: a TRAINER was drawn a Remove button the server refuses** —
+  §4.3 says "Trainer role: … Remove hidden" and `Members.jsx` consulted no role
+  at all; **J11's shape, same screen, one component away, an hour after J11 was
+  fixed**. `canRemoveMembers` is an ALLOW-list so a later role is refused by
+  default; the 403 stays the enforcement. **LATENT IS NOT LOW** (:10182's
+  precedent). **The standing lesson is about the CARD, not the code: a mutation
+  sweep cannot find a MISSING guard, only delete an existing one** — the audit
+  was scoped to what the card CHANGED while the defect lived in what it ASSUMED,
+  which is what a fresh reader with the spec open is for. Six Lows, all fixed
+  same round (`BACKLOG.md`); **L-1 is worth knowing — nothing asserted any of
+  this card's components was REACHABLE**, so deleting the route or the dashboard
+  card left 857 tests green while the feature vanished. Gates after the fixes:
+  orgs **46/46**, web **867/867**, build ✓, tsc clean, lint measured at the HEAD
+  baseline. **Escape hatch NOT armed** (:12227 found zero). **Diff-only
+  re-review is the remaining gate.**
 - **:12227** — 2026-08-19 — **THE JOIN DOOR STEP 1, T3 ROUND 1: ZERO
   Critical/High — THE PACKET SHIPS, and the finding with the longest reach is a
   guard that was testing a COPY of the thing it guards.** **Read before adding a

@@ -93,7 +93,14 @@ function Row({ row }) {
   );
 }
 
-export default function GymMembershipCard() {
+/** `refreshToken` — change it and the two reads run again.
+ *
+ *  T3 r1 L-6: on Settings → Gym this card sits directly ABOVE the code box, and
+ *  it read once at mount. So the panel below could answer "You've asked to join
+ *  Iron House" while the card an inch above it stayed blank, and only a page
+ *  reload reconciled them — two views of one fact, disagreeing on screen. The
+ *  dashboard passes nothing and keeps its single read. */
+export default function GymMembershipCard({ refreshToken = 0 }) {
   const [rows, setRows] = useState([]);
 
   useEffect(() => {
@@ -113,7 +120,7 @@ export default function GymMembershipCard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshToken]);
 
   if (rows.length === 0) return null;
 

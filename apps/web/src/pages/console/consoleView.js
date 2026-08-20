@@ -97,6 +97,25 @@ export function manageableOrgs(orgs) {
   return (orgs ?? []).filter((o) => o?.staffRole != null);
 }
 
+/** WHO MAY SEE A REMOVE CONTROL ON THE ROSTER.
+ *
+ *  Part 3 §4.3's member table ends with the rule verbatim: *"Trainer role:
+ *  pre-filtered to their group(s), Remove hidden."* A trainer of a `gym` IS
+ *  served the whole roster (:10010) and may read every row on it — what they
+ *  may not do is end a membership, and the server already refuses them.
+ *
+ *  **Hiding is not the enforcement and is not pretending to be** (R3.3): the
+ *  403 stays exactly where it was. This stops a console DRAWING a control it
+ *  knows will be refused, which is the same defect J11 measures one component
+ *  away on this very screen — a person doing their job, told off by a button
+ *  the screen offered them.
+ *
+ *  Written as a rule rather than `!== 'trainer'` so a role added later is
+ *  refused by DEFAULT rather than silently handed the button. */
+export function canRemoveMembers(staffRole) {
+  return staffRole === 'owner' || staffRole === 'manager';
+}
+
 /** The org with this slug, or null. The console's URLs are `/console/:orgSlug`
  *  (Part 3 §3.1) while the API is keyed by uuid, so the slug is resolved
  *  against the caller's own org list — which means an unknown slug and a gym

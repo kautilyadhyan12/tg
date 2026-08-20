@@ -434,10 +434,15 @@ function FitnessTab({ profile, onSaved }) {
 // already in, is told so HERE too, rather than having to remember what the
 // dashboard said.
 function GymTab() {
+  // T3 r1 L-6: the card and the panel are two views of ONE fact and sat an inch
+  // apart, so the panel could say "You've asked to join Iron House" over a card
+  // that still said nothing until the page was reloaded. The counter re-reads
+  // the card the moment the panel gets an answer.
+  const [applied, setApplied] = useState(0);
   return (
     <div className="flex flex-col gap-5">
-      <GymMembershipCard />
-      <JoinGymPanel />
+      <GymMembershipCard refreshToken={applied} />
+      <JoinGymPanel onApplied={() => setApplied((n) => n + 1)} />
     </div>
   );
 }

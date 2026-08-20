@@ -1,6 +1,65 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE JOIN DOOR, STEP 2 — T3 ROUND 1 FIXES. The review found TWO
+      Critical/High and the packet did NOT ship. Both are FIXED, plus all six
+      Lows. **SMOKE PASSED. T3 ROUND 1 RUN. THE DIFF-ONLY RE-REVIEW IS THE ONLY
+      GATE LEFT. NOTHING TICKS YET.** Full entry at DECISIONS :12518.
+
+THE TWO THAT HELD THE PACKET
+  · **C/H-1 — a REMOVED member was told the gym never confirmed them**, live on
+    Kd's own smoke account. reject → ask again → confirm → remove left a stale
+    refusal as the ONLY surviving fact, so the dashboard read "{gym} didn't
+    confirm your request" with a Try again link. **Measured against the live
+    database before being fixed**, not reasoned about. Two CORRECT decisions
+    caused it: `/applications/mine` excludes confirmed rows by design and
+    `/orgs/mine` drops the gym on `removed_at`. **Fixed server-side** — the
+    client cannot see the confirmation, so it had nothing to outrank the
+    refusal with. Compares TIMESTAMPS, not existence: confirmed → removed →
+    re-applied → refused must STILL show. Both directions carry a test; the
+    fix's test was watched RED first.
+  · **C/H-2 — a TRAINER was drawn a Remove button the server refuses.** §4.3:
+    "Trainer role: … Remove hidden". `Members.jsx` consulted no role at all.
+    **J11's shape, same screen, one component away, an hour after J11 was
+    fixed.** `canRemoveMembers` is an ALLOW-list (owner/manager) so a role added
+    later is refused by default; the 403 stays the enforcement (R3.3).
+    Latent — nothing creates a trainer yet — and tagged C/H on :10182.
+
+FILES
+  API · `src/modules/orgs/repo.ts` (the NOT EXISTS arm + why it is there)
+      · `test/orgs.routes.test.ts` (+2; renamed my own colliding fixture users)
+  WEB · `pages/console/{Members.jsx,consoleView.js}` (+`canRemoveMembers`)
+      · `components/gym/{JoinGymPanel,GymMembershipCard}.jsx` · `pages/JoinGym.jsx`
+      · `pages/Settings.jsx` (GymTab refresh) · both render test files (+10)
+  DOCS · `DECISIONS.md` :12518 + index · `OWED.md` (1 new, 1 updated) · `BACKLOG.md`
+
+GATES
+  · orgs **46/46** on real Postgres (44 at HEAD) · web **867/867** (857 at HEAD)
+    · `vite build` ✓ · `tsc --noEmit` clean on api · eslint clean on every
+    changed file · **`Settings.jsx` measured against its HEAD copy: 4 errors
+    before, 4 after**, none of them this round's.
+  · Every new test was mutation-proved: the C/H tests were watched RED before
+    their fixes; the L-2/L-5 mutants (`params.get('c')`, dropping `key`) go RED;
+    deleting the Dashboard card and renaming the route takes 2 wiring tests RED.
+    All mutants restored and verified against git.
+
+THE LESSON WORTH CARRYING — IT IS ABOUT THE CARD, NOT THE CODE
+  · :12343 recorded "when a mutant survives, ask whether the guarantee is
+    OBSERVABLE". One hour later the same screen shipped the same defect in a
+    component the sweep never aimed at. **A mutation sweep cannot find a MISSING
+    guard — it can only delete an existing one.** The audit was scoped to what
+    the card CHANGED; the defect lived in what the card ASSUMED. That gap is
+    what a fresh reader with the spec open is for, and it is the second time on
+    this card that a review found what the instruments could not.
+
+NEXT
+  1. **The DIFF-ONLY re-review in a FRESH chat** — cover ONLY the two C/H fixes
+     and the surfaces they touch. Prompt is written; Kd has it.
+  2. Then step 3 of the split: the waiting room's clock (expiry sweep, gym
+     reminder, member nudge) — its own 🔴 line.
+```
+
+```
 TASK: THE JOIN DOOR, STEP 2 OF 3 — THE TWO SCREENS. A member can type their
       gym's code and see they are waiting; the gym can see who is waiting and
       confirm or refuse them. **AND A THIRD THING KD ADDED MID-CARD: a member

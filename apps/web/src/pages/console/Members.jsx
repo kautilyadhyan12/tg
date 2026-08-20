@@ -5,7 +5,12 @@ import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/con
 import { orgService, errorText, errorCode } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
 import ApplicationsQueue from './ApplicationsQueue';
-import { formatJoinedAt, groupLabelText, memberCountLabel } from './consoleView';
+import {
+  canRemoveMembers,
+  formatJoinedAt,
+  groupLabelText,
+  memberCountLabel,
+} from './consoleView';
 
 // The roster — Part 3 §4.3's Members screen, holding EXACTLY to §2.4's
 // visibility boundary.
@@ -86,7 +91,7 @@ function RemoveControl({ member, busy, onRemove }) {
   );
 }
 
-function MemberRow({ member, busy, onRemove }) {
+function MemberRow({ member, busy, canRemove, onRemove }) {
   return (
     <div
       className="rounded-2xl p-4 flex items-center gap-4"
@@ -111,9 +116,13 @@ function MemberRow({ member, busy, onRemove }) {
         >
           Complimentary
         </span>
-      ) : (
+      ) : canRemove ? (
+        /* §4.3: "Trainer role: … Remove hidden." A trainer reads this roster in
+           full and is refused the removal itself, so the control is not drawn
+           for them — same reasoning as the complimentary seat above, and the
+           server's 403 remains the enforcement (`canRemoveMembers`). */
         <RemoveControl member={member} busy={busy} onRemove={onRemove} />
-      )}
+      ) : null}
     </div>
   );
 }
@@ -130,6 +139,11 @@ export default function Members() {
   const [removingId, setRemovingId] = useState(null);
   const [removeError, setRemoveError] = useState(null);
   const gymId = org?.id ?? null;
+  // §4.3's "Remove hidden" for a trainer. Read off the SAME org row the screen
+  // already has, so there is no second read to disagree with the first, and it
+  // is false while the org is still loading — the roster cannot be on screen
+  // before then anyway.
+  const canRemove = canRemoveMembers(org?.staffRole ?? null);
 
   useEffect(() => {
     if (gymId === null) return undefined;
@@ -269,7 +283,14 @@ export default function Members() {
 
       {state.loading ? <ConsoleLoading label="Loading members…" /> : null}
 
-      {removeError !== null ? <ConsoleFailed message={removeError} /> : null}
+      {/* T3 r1 L-3: `ConsoleFailed`'s own contract is "a failure ALWAYS offers a
+          way out", and this one dead-ended. The way out of a failed removal is
+          to re-read the roster — the person is still on it, their own Remove
+          control is still there, and the fresh read settles whether the removal
+          landed before the error did. */}
+      {removeError !== null ? (
+        <ConsoleFailed message={removeError} onRetry={reloadRoster} />
+      ) : null}
 
       {!state.loading && state.error !== null ? (
         <ConsoleFailed message={state.error} onRetry={retry} />
@@ -293,6 +314,7 @@ export default function Members() {
               key={m.userId}
               member={m}
               busy={removingId === m.userId}
+              canRemove={canRemove}
               onRemove={() => removeMember(m)}
             />
           ))}

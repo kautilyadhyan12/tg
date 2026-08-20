@@ -1079,3 +1079,55 @@ gym, or three null-returning functions would satisfy the whole check.
 the query turned six lines into parse errors — a backtick inside a JS template
 literal ends the literal. The paragraph now lives above the query, which is
 where it should have been.
+
+## 2026-08-20 — the join door, step 2 (the two screens + REMOVE), T3 round 1
+
+**The round did NOT ship the packet: two Critical/High.** Those are not logged
+here (rule 1 — a Critical/High is fixed or it holds the packet); they are at
+`DECISIONS.md`'s entry for this round. Six Lows, **ALL FIXED in the same round**,
+none of them buying a round.
+
+**L-1 · four wiring points asserted by nothing** — `App.jsx`'s `/org/join`
+route, `pages/JoinGym.jsx`, the `Dashboard` card, and Settings → Gym. Every
+component this card built was tested and **nothing asserted any of them was
+reachable**: deleting any one left all 857 web tests green while the feature
+vanished from the product. The same class the card exists to close, one level
+up from the code it closed it in. **Fixed** with five source assertions in
+`joinGym.render.test.jsx` (the repo's own precedent — `gamificationApi.test.js`
+reads pages the same way), mutation-proved by deleting the Dashboard card and
+renaming the route: 2 RED, both restored. **Their limit is stated in the file**:
+they prove a page still NAMES the component, not that it renders. A page-level
+render harness for `Dashboard`/`Settings` is a card of its own and has an
+`OWED.md` line — this catches DELETION, which is the failure that happened.
+
+**L-2 · the poster prefill was tested at the PROP, never at the URL** —
+`<JoinGymPanel initialCode=…>` proves the panel honours the prop and says
+nothing about where the value comes from. Renaming the query parameter
+(`params.get('code')` → `params.get('c')`) sent every QR in existence to an
+empty box with the suite green. **Fixed** by driving the real address through a
+route: three tests on `/org/join?code=…`. Mutation-proved — the rename now takes
+2 tests RED.
+
+**L-3 · a failed removal dead-ended** — `<ConsoleFailed message={removeError} />`
+passed no `onRetry`, contradicting `ConsoleStates.jsx`'s own stated contract
+("a failure ALWAYS offers a way out", Part 3 §4). **Fixed** by passing
+`reloadRoster`, which already clears the banner before re-reading, so the retry
+both dismisses the error and settles whether the removal landed.
+
+**L-4 · the consent question arrived as an error** — `JoinGymPanel`'s handler
+says in a comment that `consent_required` "is a question, not an error", then
+fell through to `setError`, so it rendered in the red AlertTriangle card sitting
+above the checkbox it had just revealed. **Fixed** with an early return.
+Unreachable today (no new clinic can be created, :10182), which is why it is Low.
+
+**L-5 · a second poster kept the first gym's code** — `initialCode` seeds the
+input at mount, which is correct, and React Router does not remount a route when
+only the SEARCH string changes. So scanning a second QR left the first code in
+the box, and the person asks to join the wrong gym. **Fixed** with `key={code}`
+in `JoinGym.jsx` rather than an effect that would fight typing. Mutation-proved.
+
+**L-6 · the card and the box disagreed an inch apart** — on Settings → Gym,
+`GymMembershipCard` read once at mount, so the panel below could answer "You've
+asked to join Iron House" over a card that still said nothing until a reload.
+**Fixed** with a `refreshToken` prop bumped by the panel's new `onApplied`
+callback. The Dashboard passes neither and keeps its single read.

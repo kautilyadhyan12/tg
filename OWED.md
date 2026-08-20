@@ -4258,9 +4258,13 @@ file and is stated so nobody reads these as lower priority than they are.
       Step 2 (the member's code screen carrying §2.4's "what the gym can see"
       sheet, the waiting card, and the console's queue screen) is what ticks
       this line, after its smoke and a review round with zero Critical/High.
-      **UPDATE 2026-08-20 — STEP 2 IS BUILT (DECISIONS :12343) AND ITS SMOKE HAS
-      PASSED, all 17 steps including Remove. STILL DOES NOT TICK: T3 IS UNRUN**,
-      and it is now the ONLY thing holding this line. What exists now: the code
+      **UPDATE 2026-08-20 — STEP 2 IS BUILT (DECISIONS :12343), ITS SMOKE HAS
+      PASSED (all 17 steps including Remove), AND T3 ROUND 1 HAS RUN AND DID NOT
+      SHIP IT (DECISIONS :12518). STILL DOES NOT TICK.** Two Critical/High were
+      found and are FIXED — a removed member being told the gym never confirmed
+      them, and a trainer being drawn a Remove button the server refuses — plus
+      six Lows, all fixed in the same round. **The DIFF-ONLY RE-REVIEW is now the
+      only thing holding this line.** What exists now: the code
       box at **Settings → Gym** and at
       `/org/join?code=` (Part 6 §2's deep link mirrored, so the mobile QR and
       the web link are one path), §2.4's visibility sheet on the form and again
@@ -4268,6 +4272,25 @@ file and is stated so nobody reads these as lower priority than they are.
       console's **Waiting to join** section above the roster with the server's
       exact count on the gym's home screen, and — Kd's addition mid-card —
       **Remove**. `RUNBOOK/smoke-join-door.md` is the 17-step sheet.
+- [ ] 🟡 **NO TEST ANYWHERE RENDERS `Dashboard.jsx` OR `Settings.jsx`, so their
+      wiring is guarded by SOURCE TEXT rather than by behaviour** (deferred
+      2026-08-20, DECISIONS :12518, T3 round 1 L-1). The finding was that
+      deleting the `/org/join` route, the dashboard's gym card, or either half
+      of Settings → Gym left **all 857 web tests green** while the feature
+      disappeared from the product. It is FIXED for this card — five source
+      assertions in `joinGym.render.test.jsx`, mutation-proved by deleting two
+      of the four wiring points — and the limit is stated in the test file:
+      **they prove a page still NAMES a component, not that it renders.** A page
+      whose own render throws would satisfy them. Closing this properly means a
+      render harness for the two big pages (`Dashboard` needs AuthContext,
+      TransitionContext, three api services, `useXp` and framer-motion;
+      `Settings` is comparable), which is a card of its own and was NOT built
+      inside a fix round (`CLAUDE.md` Part I §2.5 rule 6 — minimal diffs).
+      **Why it matters beyond this card:** these are the two screens every
+      feature lands on, so the same blind spot applies to every future card that
+      wires something into either of them, and the source assertions only cover
+      what somebody thought to write a regex for. **Not tracked anywhere before
+      today** (grep-verified).
 - [ ] 🟡 **A POSTER LINK ONLY WORKS IF YOU ARE ALREADY SIGNED IN — the code is
       lost on the way through the login page** (deferred 2026-08-20, DECISIONS
       :12343). `/org/join?code=ABC123` is the address a gym's QR poster points

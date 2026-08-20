@@ -39,7 +39,11 @@ function forDisplay(raw) {
   return raw.toUpperCase().slice(0, 32);
 }
 
-export default function JoinGymPanel({ initialCode = '' }) {
+/** `onApplied` — fired after the server answers a join, so a screen holding
+ *  BOTH this panel and `GymMembershipCard` can re-read the card rather than
+ *  letting the two disagree until a reload (T3 r1 L-6). Optional: `/org/join`
+ *  draws the panel alone and passes nothing. */
+export default function JoinGymPanel({ initialCode = '', onApplied }) {
   const [code, setCode] = useState(forDisplay(initialCode));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -65,12 +69,20 @@ export default function JoinGymPanel({ initialCode = '' }) {
       const body = consentAsked ? { code: code.trim(), consent: true } : { code: code.trim() };
       const res = await orgService.join(body);
       setResult(res.data);
+      if (onApplied) onApplied();
     } catch (err) {
       if (errorCode(err) === 'consent_required') {
         // Not an error the person can fix by retyping — it is a question. Show
         // the box, keep what they typed, and let them answer it.
+        //
+        // T3 r1 L-4: this said exactly that and then fell through to
+        // `setError`, so the question arrived in the red warning card sitting
+        // above the checkbox it had just revealed — the screen telling somebody
+        // off for a box it had not shown them yet. The early return is the
+        // whole fix; `finally` still clears `submitting`.
         setConsentAsked(true);
         setConsentGiven(false);
+        return;
       }
       setError(errorText(err, "We couldn't send your request. Please try again."));
     } finally {

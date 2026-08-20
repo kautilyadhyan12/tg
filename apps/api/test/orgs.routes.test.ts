@@ -617,6 +617,92 @@ d("orgs routes (real Postgres)", () => {
     ).toBe(true);
   });
 
+  it("never lets a stale REFUSAL outlive the confirmation that followed it (T3 r1 C/H-1)", { timeout: 30_000 }, async () => {
+    // THE BUG THIS PINS, in the words of the screen it broke: a person the gym
+    // confirmed and then removed was told "{gym} didn't confirm your request",
+    // with a Try again link, while `gym_join_applications` held a confirmation
+    // two minutes before the removal. It is the smoke sheet's own steps
+    // 8 → 10 → 11 → 14 — the documented happy path, not an exotic ordering.
+    //
+    // Neither reader could see the truth alone, which is why the fix is here
+    // and not in the client: `/applications/mine` excludes confirmed rows BY
+    // DESIGN, and `/orgs/mine` drops the gym the moment `removed_at` is set. So
+    // the only surviving fact was the refusal, and the client's rank had
+    // nothing to outrank it with.
+    const owner = await makeUser("supersede-owner");
+    const member = await makeUser("supersede-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Stale Refusal");
+
+    // Refused once...
+    const refusedId = await applyWithCode(member.cookies, org.joinCode.code);
+    const reject = await post(
+      `/v1/orgs/${org.org.id}/applications/${refusedId}/reject`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(reject.statusCode).toBe(200);
+    // The refusal IS visible while it is the newest fact — this assertion is
+    // what stops the fix being "hide every rejection", which would break the
+    // thing :5807 put the refused card there for in the first place.
+    const whileTrue = await get("/v1/orgs/applications/mine", { cookies: member.cookies });
+    expect(
+      (
+        JSON.parse(whileTrue.body) as { applications: { id: string; status: string }[] }
+      ).applications.find((a) => a.id === refusedId)?.status,
+    ).toBe("rejected");
+
+    // ...asks again, is let in, and is then removed.
+    const confirmedId = await joinAsMember(member.cookies, org, owner.cookies);
+    const removed = await del(`/v1/orgs/${org.org.id}/members/${member.userId}`, {
+      cookies: owner.cookies,
+    });
+    expect(removed.statusCode).toBe(200);
+
+    // The membership is gone from the other reader, which is correct and is
+    // exactly what leaves the refusal standing alone.
+    const mine = await get("/v1/orgs/mine", { cookies: member.cookies });
+    expect(
+      (JSON.parse(mine.body) as { orgs: { id: string }[] }).orgs.find((o) => o.id === org.org.id),
+    ).toBeUndefined();
+
+    // THE ASSERTION: the superseded refusal is gone, and the confirmed row is
+    // still absent (that exclusion is deliberate and unchanged). The screen is
+    // therefore silent about this gym rather than lying about it.
+    const after = await get("/v1/orgs/applications/mine", { cookies: member.cookies });
+    const rows = (
+      JSON.parse(after.body) as { applications: { id: string; status: string }[] }
+    ).applications;
+    expect(rows.find((a) => a.id === refusedId)).toBeUndefined();
+    expect(rows.find((a) => a.id === confirmedId)).toBeUndefined();
+  });
+
+  it("still shows a refusal that came AFTER a confirmation (the fix must not hide it)", { timeout: 30_000 }, async () => {
+    // The mirror image, and the reason the fix compares TIMESTAMPS instead of
+    // asking "has this person ever been confirmed here". Confirmed, removed,
+    // asks again, refused: the refusal is now the newest fact and MUST show,
+    // or a person who was genuinely turned away sees nothing at all.
+    const owner = await makeUser("order-owner");
+    const member = await makeUser("order-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Refusal Order");
+
+    await joinAsMember(member.cookies, org, owner.cookies);
+    await del(`/v1/orgs/${org.org.id}/members/${member.userId}`, { cookies: owner.cookies });
+
+    const laterId = await applyWithCode(member.cookies, org.joinCode.code);
+    await post(
+      `/v1/orgs/${org.org.id}/applications/${laterId}/reject`,
+      {},
+      { cookies: owner.cookies },
+    );
+
+    const list = await get("/v1/orgs/applications/mine", { cookies: member.cookies });
+    expect(
+      (
+        JSON.parse(list.body) as { applications: { id: string; status: string }[] }
+      ).applications.find((a) => a.id === laterId)?.status,
+    ).toBe("rejected");
+  });
+
   it("serves the confirm queue to staff who may confirm, and to nobody else (R3.2)", { timeout: 30_000 }, async () => {
     const owner = await makeUser("queue-owner");
     const waiting = await makeUser("queue-waiting");

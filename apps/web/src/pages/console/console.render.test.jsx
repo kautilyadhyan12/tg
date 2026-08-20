@@ -754,6 +754,32 @@ describe('Removing a member', () => {
     expect(screen.queryByText('Remove')).toBeNull();
   });
 
+  it('hides Remove from a TRAINER, who may read the roster and may not remove (T3 r1 C/H-2)', async () => {
+    // Part 3 §4.3's member table ends: "Trainer role: pre-filtered to their
+    // group(s), Remove hidden." The screen consulted no role at all, so a
+    // trainer got a working-looking button over a live 403 — the exact shape
+    // J11 was rewritten to prevent one component above, on this same screen.
+    //
+    // The roster itself STAYS: a trainer of a gym is served the full member
+    // list on purpose (:10010), so this must remove the control and nothing
+    // else. Both halves are asserted, or "hide it" could pass by hiding the
+    // screen.
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer' }] } });
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
+    drawMembers();
+
+    expect(await screen.findByText('Rita Sen')).toBeTruthy();
+    expect(screen.getByText(/Morning Batch/)).toBeTruthy();
+    expect(screen.queryByText('Remove')).toBeNull();
+  });
+
+  it('still offers Remove to a MANAGER (the gate must not shut on the people §2.2 allows)', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager' }] } });
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
+    drawMembers();
+    expect(await screen.findByText('Remove')).toBeTruthy();
+  });
+
   it('keeps the person on screen when the server refuses, and says why', async () => {
     orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
     orgService.removeMember.mockRejectedValue(

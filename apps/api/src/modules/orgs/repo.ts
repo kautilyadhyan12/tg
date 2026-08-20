@@ -847,7 +847,27 @@ export const MY_APPLICATIONS_LIMIT = 50;
  *
  *  `confirmed` rows are deliberately excluded — once a confirm lands the
  *  person is a member, `/v1/orgs/mine` is where that fact lives, and two
- *  readers claiming the same thing is two readers that can disagree. */
+ *  readers claiming the same thing is two readers that can disagree.
+ *
+ *  **THE `NOT EXISTS` ARM IS T3 ROUND 1's C/H-1 AND IT IS LOAD-BEARING.** That
+ *  deliberate exclusion had a cost nobody had priced: a person who was refused,
+ *  asked again, was CONFIRMED, and was then REMOVED had exactly one surviving
+ *  row — the refusal — because the confirmation is invisible here by design and
+ *  `/v1/orgs/mine` drops the gym the moment `removed_at` is set. Their
+ *  dashboard read "{gym} didn't confirm your request", with a Try again link,
+ *  which is the app stating something FALSE (:5807) about a decision the gym
+ *  had already made in their favour. Found live on the smoke's own account.
+ *
+ *  **The fix belongs HERE and could not live in the client**: the client cannot
+ *  see the confirmation that supersedes the refusal, so it has nothing to rank
+ *  it against — `gymMembershipView.js`'s member-beats-waiting-beats-refused is
+ *  correct and was simply never handed the winning row.
+ *
+ *  It compares TIMESTAMPS rather than asking "was this person ever confirmed
+ *  here", because the mirror case is real and must still show: confirmed →
+ *  removed → asks again → refused leaves a refusal that is the NEWEST fact, and
+ *  hiding that one would leave a genuinely turned-away person with a blank
+ *  screen. Both directions carry a test. */
 export async function listApplicationsForUser(
   sql: Sql,
   userId: string,
@@ -884,7 +904,14 @@ export async function listApplicationsForUser(
         a.status = 'pending'
         OR (a.status IN ('rejected','expired')
             AND coalesce(a.decided_at, a.expires_at)
-                > now() - (${DECIDED_VISIBLE_DAYS} * INTERVAL '1 day'))
+                > now() - (${DECIDED_VISIBLE_DAYS} * INTERVAL '1 day')
+            AND NOT EXISTS (
+              SELECT 1 FROM gym_join_applications newer
+              WHERE newer.user_id = a.user_id
+                AND newer.gym_id = a.gym_id
+                AND newer.status = 'confirmed'
+                AND (newer.applied_at, newer.id) > (a.applied_at, a.id)
+            ))
       )
     ORDER BY a.applied_at DESC, a.id DESC
     LIMIT ${MY_APPLICATIONS_LIMIT}`;

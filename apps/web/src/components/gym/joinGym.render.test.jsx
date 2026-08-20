@@ -11,9 +11,11 @@
 // as an empty one, a refusal reworded on the way to the person reading it, and
 // copy promising something the app cannot do (an email nobody sends, an expiry
 // nothing enforces).
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -30,6 +32,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
 const { orgService } = await import('../../api/orgsApi');
 const JoinGymPanel = (await import('./JoinGymPanel')).default;
 const GymMembershipCard = (await import('./GymMembershipCard')).default;
+const JoinGym = (await import('../../pages/JoinGym')).default;
 
 const ORG = {
   id: 'gym-1',
@@ -56,6 +59,20 @@ const serverSaid = (status, error, message) =>
   Promise.reject({ response: { status, data: { error, message, requestId: 'r' } } });
 
 const draw = (ui) => render(<MemoryRouter>{ui}</MemoryRouter>);
+
+/** The PAGE at a real address, so `useSearchParams` is what supplies the code
+ *  rather than a prop a test chose (T3 r1 L-2). The link is there so one test
+ *  can navigate to a second poster WITHOUT remounting the route — the exact
+ *  case L-5 was about. */
+const drawRoute = (path) =>
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <Link to="/org/join?code=bbb222">second poster</Link>
+      <Routes>
+        <Route path="/org/join" element={<JoinGym />} />
+      </Routes>
+    </MemoryRouter>,
+  );
 
 beforeEach(() => {
   orgService.join.mockReset();
@@ -217,6 +234,97 @@ describe('the join panel', () => {
     draw(<JoinGymPanel initialCode="k7qm2x" />);
     expect(screen.getByLabelText(/your gym's code/i).value).toBe('K7QM2X');
     expect(orgService.join).not.toHaveBeenCalled();
+  });
+});
+
+// ── the poster address itself ───────────────────────────────────────────────
+//
+// T3 r1 L-2: the test above hands the code in as a PROP, so it proves the panel
+// honours `initialCode` and says nothing about where that value comes from.
+// Renaming the query parameter — `params.get('code')` → `params.get('c')` —
+// sent every QR in existence to an empty box and left the whole suite green.
+// These drive the real ADDRESS instead, which is the only thing a poster has.
+describe('/org/join, the address a poster QR points at', () => {
+  it('reads the code out of the URL and prefills it, unsubmitted (T3 r1 L-2)', () => {
+    drawRoute('/org/join?code=ttusd2');
+    expect(screen.getByLabelText(/your gym's code/i).value).toBe('TTUSD2');
+    // Prefilled, never sent: applying puts your name in front of a gym and is
+    // a deliberate act, so a scanned poster may fill the box and nothing more.
+    expect(orgService.join).not.toHaveBeenCalled();
+  });
+
+  it('opens an empty box when the address carries no code at all', () => {
+    drawRoute('/org/join');
+    expect(screen.getByLabelText(/your gym's code/i).value).toBe('');
+  });
+
+  it('follows the URL to a SECOND poster rather than keeping the first code', () => {
+    // T3 r1 L-5. React Router does not remount a route when only the SEARCH
+    // string changes, so a second poster used to leave the first gym's code
+    // sitting in the box — and the person then asks to join the wrong gym.
+    // The navigation here is a real in-router one (a link press), which is the
+    // case a fresh `render` would quietly step over.
+    drawRoute('/org/join?code=aaa111');
+    expect(screen.getByLabelText(/your gym's code/i).value).toBe('AAA111');
+    fireEvent.click(screen.getByText('second poster'));
+    expect(screen.getByLabelText(/your gym's code/i).value).toBe('BBB222');
+  });
+});
+
+// ── the four wiring points ──────────────────────────────────────────────────
+//
+// T3 r1 L-1: every component in this card was tested, and NOTHING asserted that
+// any of them was actually reachable. Delete the route from `App.jsx`, or the
+// card from `Dashboard.jsx`, or either half of Settings → Gym, and all 857 web
+// tests stayed green while the feature vanished from the product — the exact
+// class this card exists to close, one level up from the code it closed it in.
+//
+// These are SOURCE assertions, and the honest limits are worth stating: they
+// prove a page still names the component, not that it renders — a page whose
+// own render throws would pass them. That instrument is the repo's own
+// precedent (`gamificationApi.test.js` reads pages the same way) and it is what
+// is affordable here; a page-level render harness for `Dashboard`/`Settings`
+// would be its own card and has an `OWED.md` line. It catches deletion, which
+// is the failure that actually happened.
+describe('the join door is reachable at all', () => {
+  const stripComments = (raw) =>
+    raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const codeAt = (rel) =>
+    stripComments(readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8'));
+
+  it('App.jsx routes /org/join to the JoinGym page', () => {
+    const src = codeAt('../../App.jsx');
+    expect(src).toMatch(/path=(["'])\/org\/join\1/);
+    expect(src).toMatch(/<JoinGym\s*\/>/);
+    expect(src).toMatch(/import\s+JoinGym\s+from/);
+  });
+
+  it('the JoinGym page renders the shared panel rather than its own form', () => {
+    const src = codeAt('../../pages/JoinGym.jsx');
+    expect(src).toMatch(/<JoinGymPanel\b/);
+    // The prefill comes from the ADDRESS. Behaviour is pinned by the route
+    // tests above; this pins that the wiring is still here to be exercised.
+    expect(src).toMatch(/useSearchParams\s*\(/);
+  });
+
+  it('the Dashboard still draws the gym card', () => {
+    const src = codeAt('../../pages/Dashboard.jsx');
+    expect(src).toMatch(/<GymMembershipCard\b/);
+    expect(src).toMatch(/import\s+GymMembershipCard\s+from/);
+  });
+
+  it('Settings has a Gym tab carrying BOTH the card and the code box', () => {
+    const src = codeAt('../../pages/Settings.jsx');
+    expect(src).toMatch(/id:\s*(["'])gym\1/);
+    expect(src).toMatch(/<GymMembershipCard\b/);
+    expect(src).toMatch(/<JoinGymPanel\b/);
+  });
+
+  it('Settings does NOT link into the gym console (:11616 stays shut)', () => {
+    // Not a wiring assertion but its neighbour, and it belongs beside them: the
+    // one thing this tab must never grow is a door into the console.
+    const src = codeAt('../../pages/Settings.jsx');
+    expect(src).not.toMatch(/to=(["'])\/console/);
   });
 });
 

@@ -12514,3 +12514,85 @@ message; smoke sheets are written for Kd and had never been held to that bar.
 repo root; the diff was verified this session as commit 25e013d byte-for-byte
 minus the four record files (DECISIONS, its index, HANDOFF, OWED) — 3,683 lines,
 27 files, `diff -q` clean against a regenerated `git show`.
+
+## THE JOIN DOOR, STEP 2 — T3 ROUND 1: TWO Critical/High, and one of them was LIVE on Kd's own account (2026-08-20)
+
+**The packet did NOT ship this round.** Reviews :12343. Read before touching
+`listApplicationsForUser`, before adding a reader to the dashboard's gym card,
+before drawing ANY control on the console that a role might be refused, and
+before assuming a component with tests is a component anyone can reach.
+
+**C/H-1 — A REMOVED MEMBER WAS TOLD THE GYM NEVER CONFIRMED THEM.** After
+reject → ask again → confirm → remove, the person's dashboard read
+*"{gym} didn't confirm your request"* with a **Try again** link, while
+`gym_join_applications` held a confirmation two minutes before the removal.
+**Not theoretical and not exotic**: it was live on the smoke's own account, and
+the sequence is the smoke sheet's own steps 8 → 10 → 11 → 14 — the documented
+happy path. **Measured before being fixed**, both reader queries replayed
+against the live database for the smoke's member: applications → one `rejected`
+row; `/orgs/mine` → empty; so `gymStatusRows` had exactly one row to draw and it
+was the stale refusal.
+
+**THE CAUSE IS TWO CORRECT DECISIONS MEETING.** `/applications/mine` excludes
+`confirmed` rows deliberately (:12343 — two readers claiming one fact is two
+readers that can disagree) and `/orgs/mine` drops a gym the moment `removed_at`
+is set. Each is right on its own. Together they leave a refusal as the ONLY
+surviving fact about a gym the person was let into and then removed from.
+**The client could not have fixed it** — it cannot see the confirmation, so the
+member-beats-waiting-beats-refused rank in `gymMembershipView.js` is correct and
+was simply never handed the winning row. **The fix is server-side**: a
+rejected/expired row is withheld when a LATER application by the same person for
+the same gym reached `confirmed`.
+
+**It compares TIMESTAMPS, not existence**, and that is the part a later chat
+must not simplify away. Confirmed → removed → asks again → refused leaves a
+refusal that IS the newest fact and must still show; "has this person ever been
+confirmed here" would hide it and leave a genuinely turned-away person staring
+at a blank screen. **Both directions carry a test**, and the fix's own test was
+watched RED first.
+
+**C/H-2 — A TRAINER WAS DRAWN A REMOVE BUTTON THE SERVER WOULD REFUSE.**
+`03-part3-org-console.md` §4.3 ends its member table: *"Trainer role:
+pre-filtered to their group(s), Remove hidden."* `Members.jsx` consulted no role
+at all. A trainer reads the roster legitimately (:10010 serves it to them on a
+`gym`), taps Remove, reads the confirm sheet, taps again — and is told
+*"Your role doesn't allow that"*, across a list they were entitled to open.
+**This is J11's shape, on the same screen, one component away** — and J11 was
+rewritten during this very card to stop exactly that sentence reaching a
+trainer. Fixed with `canRemoveMembers` in `consoleView.js`, written as an
+allow-list (`owner`/`manager`) so a role added later is refused by DEFAULT
+rather than silently handed the button. **The server's 403 remains the
+enforcement — hiding is not pretending to be it** (R3.3).
+
+**LATENT IS NOT LOW.** No screen creates a trainer yet, so nobody can reach this
+today; it is tagged Critical/High on :10182's precedent (a finding tagged C/H
+while explicitly latent because no gym had a subscription). It was also tracked
+NOWHERE — not in :12343's four decisions, not in `OWED.md`.
+
+**THE STANDING LESSON, and it is about the CARD and not the code.** :12343
+recorded "when a mutant survives, ask whether the guarantee is OBSERVABLE" after
+J11 survived twice. One hour of review later, the same screen shipped the same
+defect in a component the sweep never aimed at, and the reason is that **the
+audit was scoped to what the card CHANGED while the defect lived in what the
+card ASSUMED** — a role check nobody had written, so no mutant could delete it.
+**A mutation sweep cannot find a missing guard; it can only delete an existing
+one.** That gap is what a fresh reader with the spec open is for, and it is the
+second time on this card that a review found what the instruments could not.
+
+**SIX LOWS, ALL FIXED THIS ROUND** (rule 1 — logged in `BACKLOG.md`, none bought
+a round). The one worth naming here is **L-1: every component this card built was
+tested and nothing asserted that any of them was REACHABLE** — deleting the
+route, the dashboard card, or either half of Settings → Gym left all 857 web
+tests green while the feature disappeared from the product. Closed with source
+assertions on the four wiring points, mutation-proved by deleting two of them;
+their limit (they prove a page NAMES a component, not that it renders) is
+written in the test file, and a page-level render harness has its own `OWED.md`
+line rather than being quietly skipped.
+
+**GATES AFTER THE FIXES:** api orgs **46/46** on real Postgres (44 at HEAD, +2) ·
+web **867/867** (857 at HEAD, +10) · `vite build` ✓ · `tsc --noEmit` clean on api ·
+eslint clean on every changed file · `Settings.jsx` measured against its HEAD
+copy at **4 errors before and 4 after**, none of them this round's.
+**Escape hatch NOT armed**: step 1's round (:12227) found zero Critical/High, so
+there is no two-round streak in this subsystem. **The diff-only re-review is the
+remaining gate.**
