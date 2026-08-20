@@ -115,8 +115,12 @@ In the OWNER window, reload the gym screen.
 Click through to **Members**.
 
 ✅ **Expect:** a **Waiting to join** section above the member list, with the
-member's name, the day they asked, and the name of the code they used. The list
-below still shows only you.
+member's name, the day they asked, and — on the small grey line under the name —
+**the code's LABEL, not the six characters they typed.** With one code that
+label is **Front Desk**, so the line reads `Asked 20 August · Front Desk`. (The
+label is there so a gym running several codes — "Front Desk", "Morning Batch" —
+can see which door each person came through. A gym with one code always sees
+"Front Desk".) The list below still shows only you.
 
 ---
 

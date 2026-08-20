@@ -4258,9 +4258,10 @@ file and is stated so nobody reads these as lower priority than they are.
       Step 2 (the member's code screen carrying §2.4's "what the gym can see"
       sheet, the waiting card, and the console's queue screen) is what ticks
       this line, after its smoke and a review round with zero Critical/High.
-      **UPDATE 2026-08-20 — STEP 2 IS BUILT (DECISIONS :12343). STILL DOES NOT
-      TICK: the smoke is UNRUN and T3 is UNRUN**, which is the whole gate this
-      line names. What exists now: the code box at **Settings → Gym** and at
+      **UPDATE 2026-08-20 — STEP 2 IS BUILT (DECISIONS :12343) AND ITS SMOKE HAS
+      PASSED, all 17 steps including Remove. STILL DOES NOT TICK: T3 IS UNRUN**,
+      and it is now the ONLY thing holding this line. What exists now: the code
+      box at **Settings → Gym** and at
       `/org/join?code=` (Part 6 §2's deep link mirrored, so the mobile QR and
       the web link are one path), §2.4's visibility sheet on the form and again
       named in the answer, a waiting/refused/member card on the dashboard, the

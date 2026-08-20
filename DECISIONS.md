@@ -12485,7 +12485,32 @@ look like defence in depth and are indistinguishable from dead code.
   guarantee has no test" for the next chat to chase (:5199's class fix, earning
   its keep again).
 
-**NOTHING TICKS YET — the smoke is UNRUN and T3 is UNRUN.**
-`RUNBOOK/smoke-join-door.md` is written: 17 steps, two accounts, two windows,
-and step 14 (Remove) is the one the packet turns on, because DELETE and POST
-are indistinguishable to every server test in the repo.
+**SMOKE PASSED 2026-08-20 — all 17 steps, Kd running two accounts in two
+windows.** Step 14 (Remove) — the step the packet turns on, because DELETE and
+POST are indistinguishable to every server test in this repo — LANDED, and is
+attested by data rather than only by what was on screen: `gym_members.removed_at`
+= 2026-08-20T04:41:16Z for the member, the owner's own complimentary row
+untouched, and `gym_join_applications` holding TWO rows for the same person
+(rejected, then confirmed) which is steps 8 → 10 → 11 exactly.
+
+**STEP 7 WAS REPORTED FAILING AND THE FAULT WAS THE SHEET'S, NOT THE CODE'S.**
+The sheet said the queue row shows "the name of the code they used"; Kd looked
+for the six typed characters (`TTUSD2`) and saw `Front Desk` — which IS the
+code's name, Part 3 §2.1's group label, and what `ApplicantRow` has always
+rendered. **The whole chain was verified before answering, not reasoned about:**
+`gym_codes.label` in the live database · `c.label AS group_label` in
+`listApplications` · `groupLabel` in the service's parsed response ·
+`groupLabelText` in `ApplicantRow`. Sheet wording fixed in this commit.
+**Standing lesson for smoke sheets: describe what a BEGINNER will SEE, never
+what the field is for.** "The name of the code" is accurate about the data model
+and reads, to someone who has never seen it, as a promise about a completely
+different value — and the resulting "failure" is indistinguishable from a real
+defect until it is dug out, at the cost of a round trip. The same class as the
+K1–K8 rules in `CLAUDE.md` Part 0.5, applied to a RUNBOOK rather than a chat
+message; smoke sheets are written for Kd and had never been held to that bar.
+
+**T3 IS STILL UNRUN AND THE CARD DOES NOT TICK.**
+`t3-join-door-screens-r1-PROMPT.md` and `t3-join-door-screens-r1.diff` sit at the
+repo root; the diff was verified this session as commit 25e013d byte-for-byte
+minus the four record files (DECISIONS, its index, HANDOFF, OWED) — 3,683 lines,
+27 files, `diff -q` clean against a regenerated `git show`.

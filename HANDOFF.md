@@ -5,7 +5,8 @@ TASK: THE JOIN DOOR, STEP 2 OF 3 — THE TWO SCREENS. A member can type their
       gym's code and see they are waiting; the gym can see who is waiting and
       confirm or refuse them. **AND A THIRD THING KD ADDED MID-CARD: a member
       can be REMOVED, which nothing in the product could do.**
-      **CODE DONE AND PROVEN. SMOKE UNRUN. T3 UNRUN. NOTHING TICKS.**
+      **CODE DONE AND PROVEN. SMOKE PASSED (2026-08-20, all 17 steps).
+      T3 UNRUN — THE ONLY THING LEFT. NOTHING TICKS UNTIL IT RUNS.**
 
 KD'S TWO INTERVENTIONS, BOTH OF WHICH CHANGED THE CARD
   · Handed a plan whose two buttons each asked "sure?" because a confirmed
@@ -92,10 +93,16 @@ THE AUDIT FINDING IS MINE, TWICE IN ONE HOUR
     like defence in depth and are indistinguishable from dead code.
 
 NEXT
-  1. Kd runs `RUNBOOK/smoke-join-door.md` (17 steps, two accounts, two windows).
-     **Step 14 — Remove — is the one the packet turns on**: DELETE and POST are
-     indistinguishable to every server test in this repo.
-  2. T3 in a FRESH chat on the diff.
+  1. ~~Kd runs `RUNBOOK/smoke-join-door.md`~~ **DONE 2026-08-20 — ALL 17 PASSED.**
+     Step 14 (Remove) landed and the database attests it (`removed_at` set on the
+     member, owner's complimentary row untouched). **Step 7 was reported failing
+     and was the SHEET's fault** — it promised "the name of the code" and Kd
+     hunted for `TTUSD2` instead of the code's label `Front Desk`; chain verified
+     end to end before answering, wording fixed. **Lesson now in DECISIONS: a
+     smoke sheet says what a BEGINNER SEES, never what a field is for.**
+  2. **T3 in a FRESH chat on the diff — THE ONLY GATE LEFT.** Prompt + diff are
+     at the repo root; the diff is verified = 25e013d minus the four record
+     files (3,683 lines, 27 files, `diff -q` clean vs a regenerated `git show`).
   3. Step 3 of the split: the waiting room's clock (expiry sweep, gym reminder,
      member nudge) — its own 🔴 line.
 ```

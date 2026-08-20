@@ -382,8 +382,14 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   **24 mutants · 24 RED · 0 ALIVE · 0 never ran** (`mutate-join-door.mjs`, no DB
   mutants per 4a) **and the server half's whole table re-run to completion, 47 ·
   47 RED · 0 ALIVE**, including O42–O47 for removal.
-  **NOTHING TICKS — smoke and T3 both UNRUN**; `RUNBOOK/smoke-join-door.md` is
-  17 steps and step 14 (Remove) is the one the packet turns on.
+  **SMOKE PASSED 2026-08-20, all 17 steps** — step 14 (Remove) landed and is
+  attested by `gym_members.removed_at` in the database, not only by the screen.
+  **STEP 7's reported failure was the SHEET's fault**: it promised "the name of
+  the code" and Kd hunted for the six typed characters instead of the code's
+  LABEL (`Front Desk`); the whole chain was verified before answering and the
+  wording is fixed. **Standing lesson: a smoke sheet describes what a BEGINNER
+  SEES, never what a field is for** — Part 0.5's K1–K8 applied to RUNBOOKs, which
+  had never been held to that bar. **T3 STILL UNRUN, so NOTHING TICKS YET.**
 - **:12227** — 2026-08-19 — **THE JOIN DOOR STEP 1, T3 ROUND 1: ZERO
   Critical/High — THE PACKET SHIPS, and the finding with the longest reach is a
   guard that was testing a COPY of the thing it guards.** **Read before adding a
