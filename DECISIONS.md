@@ -12727,3 +12727,104 @@ reviewer, no test and no mutant flags an absent sentence. **The user did.** That
 is the second thing on this card that only a human looking at a screen found
 (the first was in the smoke), and it is the argument for the SMOKE gate existing
 at all.
+
+## THE JOIN DOOR, STEP 2 — T3 ROUND 2 (diff-only): ZERO Critical/High, THE PACKET SHIPS (2026-08-20)
+
+Reviews the round-1 fixes (:12518) and Kd's follow-up ruling (:12660).
+**Escape hatch NOT armed.** Read before touching `listFormerOrgsForUser`, before
+writing copy about what a gym pays for, and before trusting a source-regex test
+to prove a page renders.
+
+**THE VERDICT: zero Critical/High, so the packet ships** (:5348 rule 1). Round 1's
+two fixes were confirmed correct, the security pass was clean on every axis
+(tenancy, authz, input parsing, SQL safety, leaks, privacy), and the reviewer
+independently verified the claim the removal card makes about training data —
+`removeMember` writes `gym_members` and `audit_log` and nothing else, and neither
+the workouts nor the gamification tables carry a gym at all.
+
+**THE SEVERITY CALL THE REVIEWER REFUSED TO MAKE ALONE, and how it went.** The
+removal card ended "You keep the free app; **the features your gym was paying for
+have ended**". **No gym in this product has ever paid for anything** — nothing in
+`apps/api/src` inserts into `subscriptions` (grep-verified twice, independently),
+and gym-sponsored entitlements require one. Under :5807's "on screen AND wrong"
+that is arguably Critical/High, **and calling it so would have ARMED the escape
+hatch**, round 1 having found two Critical/High in this same subsystem — putting a
+redesign of the orgs module in front of Kd over a marketing clause. It was kept
+**Low** on three grounds: nobody has ever been in the state it misdescribes, no
+number or user action changes, and nothing on the screen contradicts it. **The
+fix is identical under either tag**, which is why it shipped immediately rather
+than waiting for the ruling — the clause is deleted and returns with billing,
+said by a screen that can check it. **The reasoning is recorded because the tag
+was a judgement, and the severity gate's weakest point is a chat under-calling
+its own work** (`CLAUDE.md` Part I §2.5 rule 1a says so in as many words).
+
+**THE FINDING WITH THE LONGEST REACH IS L2-3, and it is a shape to remember: a
+guarantee that holds only because of what one caller happens to do.**
+`formerOrgs` could name the same gym twice — `gym_members_live_uq` is a PARTIAL
+unique index (`WHERE removed_at IS NULL`), so join → remove → join → remove
+leaves two closed rows. It broke `listOrgsForUser`'s own written promise one
+function above ("a caller can never render the same gym twice") **and was
+invisible because the client dedupes by org id.** Fixed with `DISTINCT ON`, and —
+more importantly — **given the test it never had**, whose fixture asserts two
+closed rows genuinely exist before asserting one comes back (:10010's lesson: a
+test whose fixture cannot produce the defect proves nothing). Mutation-proved.
+
+**L2-2 IS A COMMENT FIX AND THAT IS THE POINT.** `listFormerOrgsForUser` claimed a
+self-deleted account "cannot be in flight here … by definition a live account".
+**False**: `restoreUser` reactivates such an account and DELIBERATELY leaves
+memberships closed (P2.2 T3 finding 4 — auto-reopen could exceed seat caps), and
+`DPDP_RETENTION_DAYS` and `DECIDED_VISIBLE_DAYS` are both 14, so the windows
+coincide exactly. Nothing user-visible is false — "You're no longer a member of X"
+is true however the membership ended — so the code stands and **the comment was
+the defect**, because it told the next chat a reachable case was unreachable. The
+sharp edge is recorded rather than fixed: an owner who deletes and restores their
+account is told they are no longer a member of their own gym while the console
+still lists them as its owner. **The durable fix is a reason column on
+`gym_members` and it is NOT invented here** (R0.2); it belongs with whatever card
+revisits restore at P3.10.
+
+**L2-4: the two reads of `/orgs/mine` are now ONE SNAPSHOT.** As `Promise.all` they
+could straddle a commit — a removal landing between them returns a response where
+the gym is in NEITHER list, which is the exact silence :12660 exists to end, or in
+BOTH, drawn as "You're a member" over a membership that just ended. Now inside one
+`sql.begin`, sequential because one connection cannot run two statements at once;
+both repo signatures widened to `SqlOrTx`. **No test, said plainly**: reproducing
+it needs a commit interleaved between two statements and a fake would assert
+nothing.
+
+**THREE OF MY OWN TESTS WERE LYING, AND THE WORST ONE WAS THE ONE I WROTE TO PROVE
+A GUARANTEE THIS FILE CALLS LOAD-BEARING.** The "deploy-gap" test for
+`formerOrgs`' `.default([])` mocked `orgService` wholesale, so `readThrough` and
+the shared schema never ran — **deleting the default left it GREEN**, and the only
+real coverage was incidental, sitting in an `orgsApi.test.js` fixture a later chat
+could have "tidied" out of existence. The real guard now lives in
+`orgsApi.test.js` and pushes a body with no `formerOrgs` through the actual
+parser, with a companion proving a MALFORMED `formerOrgs` is still REJECTED — the
+default tolerates absence, not nonsense. The render test was **renamed to what it
+actually does** rather than deleted. Two more: the Settings wiring test asserted
+three things that all live INSIDE `GymTab()` while the line that renders it
+(`{tab === 'gym' && <GymTab />}`) could be deleted with every assertion passing —
+**the exact deletion failure L-1 was written to catch, in L-1's own fix**; and
+`stripComments` stripped line comments only at the start of a line, so a trailing
+`// <GymMembershipCard />` would have satisfied a wiring regex over deleted
+markup. All three fixed and mutation-proved.
+
+**THE STANDING LESSON, third on this card and the sharpest: A TEST WRITTEN TO
+CLOSE A REVIEW FINDING IS NOT AUDITED BY THE REVIEW THAT ASKED FOR IT.** L-1's fix
+shipped with L-1's own defect inside it, and the `.default([])` guard was argued
+for at length in a DECISIONS entry while its test proved nothing. Rule 4 exists
+for exactly this and it was applied to the round's OWN output by the next
+reviewer, not by the author. **Mutate the test you just wrote, in the round you
+write it.**
+
+**ONE REPORTING CORRECTION, MINE.** Round 1's summary said eslint was "clean on
+every changed file". It was not — `Settings.jsx` carries 4 pre-existing errors.
+The MEASURED claim ("4 before, 4 after, none of them this round's") was accurate;
+the summarised one was not, and the reviewer was right to call it imprecise.
+Figures now name the files linted rather than generalising.
+
+**GATES AFTER THE ROUND-2 FIXES:** orgs **49/49** on real Postgres (44 before this
+work began) · web **876/876** (857 before) · shared **48/48** · `vite build` ✓ ·
+`tsc --noEmit` clean on api and shared · eslint **zero problems across the six
+files this round changed** (`Settings.jsx` was not among them). Every new or
+repaired test mutation-proved and every mutant restored and verified against git.

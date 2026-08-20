@@ -282,7 +282,7 @@ export const MY_ORGS_LIMIT = 100;
 /** Every org the caller has ANY relationship with. One row per org even when
  *  they are both staff and member (the default for an owner), so a caller can
  *  never render the same gym twice. */
-export async function listOrgsForUser(sql: Sql, userId: string): Promise<MyOrgRow[]> {
+export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyOrgRow[]> {
   const rows = await sql<
     (RawOrg & { staff_role: string | null; is_member: boolean; joined_at: Date | null })[]
   >`
@@ -325,34 +325,59 @@ export interface FormerOrgRow {
  *  every subsequent read the server answers 404 to. Separate list, same
  *  response, one fact in one place.
  *
- *  **`removed_at IS NOT NULL` alone is not enough** — the DPDP Day-0 cascade
- *  also closes memberships when a person deletes their OWN account, and telling
- *  a returning user "Iron House removed you" when they left of their own accord
- *  would be a fresh lie of exactly the kind this fixes. Anyone reaching this
- *  code path is by definition a live account reading their own dashboard, so
- *  the self-deletion case cannot be in flight here; if account RESTORE ever
- *  reopens memberships (:12227's note says it does not today), this needs a
- *  reason column rather than an inference. */
+ *  **THIS CANNOT TELL A GYM'S REMOVAL FROM A PERSON'S OWN DELETION, and the
+ *  earlier version of this comment claimed it could. T3 round 2 L2-2.** The
+ *  DPDP Day-0 cascade closes memberships when somebody deletes their OWN
+ *  account, and the claim that such a person can never be reading this — "by
+ *  definition a live account" — is FALSE: `restoreUser` reactivates the account
+ *  and DELIBERATELY leaves memberships closed (DECISIONS 2026-07-11, P2.2 T3
+ *  finding 4 — auto-reopen could exceed seat caps). Both windows are 14 days
+ *  (`DPDP_RETENTION_DAYS` and `DECIDED_VISIBLE_DAYS`), so a restored account
+ *  reads this list carrying a `removed_at` it caused itself.
+ *
+ *  **Nothing user-visible is false today** — "You're no longer a member of X"
+ *  is true however the membership ended — which is why this is a comment fix
+ *  and not a code one. The sharp edge is real but narrow: an owner who deletes
+ *  and restores their account is told they are no longer a member of their own
+ *  gym while the console still lists them as its owner. **The durable fix is a
+ *  reason column on `gym_members`** so the two endings can be told apart and
+ *  worded differently; it is not built and is NOT invented here (R0.2), and it
+ *  belongs with whatever card revisits restore at P3.10. */
 export async function listFormerOrgsForUser(
-  sql: Sql,
+  sql: SqlOrTx,
   userId: string,
 ): Promise<FormerOrgRow[]> {
+  // DISTINCT ON IS LOAD-BEARING (T3 round 2 L2-3). `gym_members_live_uq` is a
+  // PARTIAL unique index — `WHERE removed_at IS NULL` — so one person may hold
+  // many CLOSED rows for one gym: join, removed, join again, removed again is
+  // two. Without this the same gym arrives twice and `listOrgsForUser`'s own
+  // promise one function above ("one row per org … so a caller can never render
+  // the same gym twice") would be false of its neighbour in the same response.
+  // The client happens to dedupe by org id, which is what kept it invisible —
+  // a contract that holds only because of what the one caller does today.
+  //
+  // The inner ORDER BY is what DISTINCT ON picks with: gym first (required),
+  // then the MOST RECENT removal, so the surviving row is the latest ending.
   const rows = await sql<(RawOrg & { removed_at: Date })[]>`
-    SELECT g.id, g.slug, g.name, g.city, g.org_type, g.timezone, g.locale,
-           g.currency_display, g.status, m.removed_at
-    FROM gym_members m
-    JOIN gyms g ON g.id = m.gym_id
-    WHERE m.user_id = ${userId}
-      AND m.removed_at IS NOT NULL
-      AND m.removed_at > now() - (${DECIDED_VISIBLE_DAYS} * INTERVAL '1 day')
-      -- Somebody who was removed and has since REJOINED is simply a member
-      -- again; saying both would be one gym with two contradictory rows.
-      AND NOT EXISTS (
-        SELECT 1 FROM gym_members live
-        WHERE live.gym_id = m.gym_id AND live.user_id = m.user_id
-          AND live.removed_at IS NULL
-      )
-    ORDER BY m.removed_at DESC, g.id DESC
+    SELECT * FROM (
+      SELECT DISTINCT ON (m.gym_id)
+             g.id, g.slug, g.name, g.city, g.org_type, g.timezone, g.locale,
+             g.currency_display, g.status, m.removed_at
+      FROM gym_members m
+      JOIN gyms g ON g.id = m.gym_id
+      WHERE m.user_id = ${userId}
+        AND m.removed_at IS NOT NULL
+        AND m.removed_at > now() - (${DECIDED_VISIBLE_DAYS} * INTERVAL '1 day')
+        -- Somebody who was removed and has since REJOINED is simply a member
+        -- again; saying both would be one gym with two contradictory rows.
+        AND NOT EXISTS (
+          SELECT 1 FROM gym_members live
+          WHERE live.gym_id = m.gym_id AND live.user_id = m.user_id
+            AND live.removed_at IS NULL
+        )
+      ORDER BY m.gym_id, m.removed_at DESC
+    ) latest
+    ORDER BY latest.removed_at DESC, latest.id DESC
     LIMIT ${MY_ORGS_LIMIT}`;
   return rows.map((r) => ({ org: toOrgRow(r), removedAt: r.removed_at }));
 }

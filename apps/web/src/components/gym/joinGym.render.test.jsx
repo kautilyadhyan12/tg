@@ -287,8 +287,12 @@ describe('/org/join, the address a poster QR points at', () => {
 // would be its own card and has an `OWED.md` line. It catches deletion, which
 // is the failure that actually happened.
 describe('the join door is reachable at all', () => {
+  // T3 round 2, rule 4: this stripped line comments only where they STARTED a
+  // line, so a TRAILING `// <GymMembershipCard />` would have satisfied a
+  // wiring regex over deleted markup. `(^|\s)//` catches both and cannot eat a
+  // URL, because `https://` has no whitespace before its slashes.
   const stripComments = (raw) =>
-    raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '$1');
   const codeAt = (rel) =>
     stripComments(readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8'));
 
@@ -318,6 +322,12 @@ describe('the join door is reachable at all', () => {
     expect(src).toMatch(/id:\s*(["'])gym\1/);
     expect(src).toMatch(/<GymMembershipCard\b/);
     expect(src).toMatch(/<JoinGymPanel\b/);
+    // T3 ROUND 2, rule 4: the three above all live INSIDE `GymTab()`, so the
+    // line that actually puts it on screen could be deleted and every one of
+    // them still passed — the Gym tab renders empty and the suite stays green,
+    // which is precisely the deletion failure L-1 was written to catch. This
+    // is that line.
+    expect(src).toMatch(/tab === (["'])gym\1\s*&&\s*<GymTab/);
   });
 
   it('Settings does NOT link into the gym console (:11616 stays shut)', () => {
@@ -391,12 +401,17 @@ describe('the gym card on the dashboard', () => {
     expect(text).toMatch(/still yours/i);
   });
 
-  it('survives an API that does not send formerOrgs at all — the deploy-gap case', async () => {
-    // `formerOrgs` defaults to [] in the contract ON PURPOSE. If it were
-    // required, then during any window where the web app is newer than the API
-    // the parse would fail, the card treats a failed read as silence, and the
-    // person would lose "You're a member of Iron House" as well — a whole card
-    // destroyed to add one sentence. This is that window, asserted.
+  it('draws the member card from a payload carrying no formerOrgs key', async () => {
+    // HONEST TITLE, T3 round 2 rule-4 finding. This USED to claim it tested
+    // the deploy gap and it did not: `orgService` is mocked wholesale at the
+    // top of this file, so `readThrough` and the shared schema never run and
+    // deleting `.default([])` left it GREEN. **The real guard is in
+    // `orgsApi.test.js`** ("ACCEPTS a /orgs/mine with no formerOrgs"), which
+    // pushes the payload through the actual parser.
+    //
+    // What THIS one is still worth: the card must not require the key to
+    // render the rest, which is `gymStatusRows`' tolerance measured through
+    // the component rather than directly.
     orgService.getMyApplications.mockReturnValue(ok({ applications: [] }));
     orgService.getMine.mockReturnValue(ok({ orgs: [{ ...ORG, staffRole: null, isMember: true, joinedAt: null }] }));
     draw(<GymMembershipCard />);

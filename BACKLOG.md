@@ -1131,3 +1131,86 @@ in `JoinGym.jsx` rather than an effect that would fight typing. Mutation-proved.
 asked to join Iron House" over a card that still said nothing until a reload.
 **Fixed** with a `refreshToken` prop bumped by the panel's new `onApplied`
 callback. The Dashboard passes neither and keeps its single read.
+
+## 2026-08-20 — the join door, step 2, T3 round 2 (diff-only): ZERO Critical/High, THE PACKET SHIPS
+
+Four Lows and three lying tests, **all fixed in the same round** (:5348 rule 1;
+none bought a round). The verdict is unchanged by them: zero Critical/High, and
+the escape hatch is **NOT** armed.
+
+**L2-1 · the removal card claimed something no gym has ever done.** "You keep the
+free app; **the features your gym was paying for have ended**." Verified rather
+than argued: **nothing in `apps/api/src` inserts into `subscriptions`** (grep),
+and `entitlements/repo.ts` grants gym-sponsored entitlements ONLY through a gym
+subscription in `('trialing','active','past_due')` — so no gym has ever paid and
+a removed member loses nothing. The clause described a state no reader has ever
+been in. **Fixed** by ending the sentence at "You keep the free app"; the clause
+returns with billing, said by a screen that can check it.
+**Severity note, because the reviewer put it to Kd rather than deciding it:**
+under :5807 ("on screen AND wrong") this is arguably Critical/High, and calling
+it so would have ARMED the redesign hatch, round 1 having found two C/H in this
+same subsystem. It stayed **Low** on the grounds that nobody has ever been in the
+state it misdescribes, no user action or number changes, and the wording predates
+this card. **The fix is identical either way**, which is why it did not wait.
+
+**L2-2 · a doc comment asserted an invariant that is false.** `listFormerOrgsForUser`
+claimed a self-deleted account "cannot be in flight here … by definition a live
+account". `restoreUser` reactivates such an account and **deliberately leaves
+memberships closed** (P2.2 T3 finding 4 — auto-reopen could exceed seat caps),
+and both windows are 14 days, so a restored user reads this list carrying a
+`removed_at` they caused. **Nothing user-visible is false** — "You're no longer a
+member of X" is true however it ended — which is why the fix is the COMMENT.
+The sharp edge is recorded: an owner who deletes and restores is told they are no
+longer a member of their own gym while the console still lists them as owner.
+The durable fix is a reason column on `gym_members`, **not invented here** (R0.2).
+
+**L2-3 · `formerOrgs` could name one gym twice.** `gym_members_live_uq` is
+PARTIAL (`WHERE removed_at IS NULL`), so join → remove → join → remove leaves two
+closed rows and the query had no `DISTINCT`. It broke `listOrgsForUser`'s own
+promise one function above ("a caller can never render the same gym twice") and
+was invisible only because the client dedupes by org id — a contract holding
+because of what today's single caller happens to do. **Fixed** with
+`DISTINCT ON (m.gym_id) … ORDER BY m.gym_id, m.removed_at DESC` in a subquery,
+re-sorted outside. **It now has a test** (there was none), whose fixture asserts
+two closed rows really exist before asserting one row comes back — mutation-
+proved by deleting `DISTINCT ON`.
+
+**L2-4 · the two reads of `/orgs/mine` were not one snapshot.** `Promise.all` over
+two independent statements can straddle a commit: a removal landing between them
+returns a response where the gym is in NEITHER list — the exact silence Kd's
+ruling exists to end — or in BOTH, drawn as "You're a member" over a membership
+that has just ended. **Fixed** by reading both inside one `sql.begin`, sequential
+because one connection cannot run two statements at once. Both repo signatures
+widened to `SqlOrTx`. **No test**: reproducing it needs a commit interleaved
+between two statements, and a fake would assert nothing.
+
+### Rule 4 — three tests that stayed GREEN when their subject broke
+
+**T1 · the deploy-gap test tested nothing.** `joinGym.render.test.jsx`'s
+"survives an API that does not send formerOrgs" mocks `orgService` wholesale, so
+`readThrough` and the shared schema never ran — **deleting `.default([])` left it
+green**, and the only real coverage was incidental, in an `orgsApi.test.js`
+fixture a later chat could have "tidied" by adding `formerOrgs: []`. **Fixed** by
+putting the real guard in `orgsApi.test.js`, pushing a body with no `formerOrgs`
+through the actual parser, **plus a companion asserting a MALFORMED `formerOrgs`
+is still rejected** — the default tolerates absence, not nonsense. The render
+test was **renamed to what it actually does** rather than deleted. Mutation-
+proved: removing the default takes 3 RED.
+
+**T2 · the Settings wiring test missed the line that renders the tab.** It
+asserted `id: 'gym'` and two component names that all live INSIDE `GymTab()`;
+`{tab === 'gym' && <GymTab />}` could be deleted, the tab render empty, and all
+three assertions pass — **the exact deletion failure L-1 was written to catch.**
+**Fixed** with an assertion on that line. Mutation-proved: deleting it goes RED.
+
+**T3 · `stripComments` only stripped line comments at the START of a line**, so a
+trailing `// <GymMembershipCard />` would have satisfied a wiring regex over
+deleted markup. **Fixed** to `(^|\s)//`, which cannot eat a URL because
+`https://` has no whitespace before its slashes.
+
+### One reporting correction, recorded because it was mine
+
+Round 1's summary said eslint was "clean on every changed file". **It was not**
+— `Settings.jsx` carries 4 pre-existing errors. The measured claim ("4 before,
+4 after, none of them this round's") was accurate; the summarised one was not.
+Round 2's figures name the files linted rather than generalising.

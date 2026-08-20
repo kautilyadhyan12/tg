@@ -1,6 +1,75 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE JOIN DOOR, STEP 2 — T3 ROUND 2 (diff-only) AND ITS FIXES.
+      **ZERO Critical/High. THE PACKET SHIPS** (DECISIONS :12731). Escape hatch
+      NOT armed. **ONE GATE LEFT AND IT IS KD'S: smoke step 14b, 30 seconds.**
+      Nothing ticks until he has seen the removal message on a real screen.
+
+WHAT ROUND 2 CONFIRMED
+  · Both round-1 fixes correct. Security pass clean on every axis — tenancy,
+    authz, input parsing, SQL safety, leaks, privacy.
+  · The reviewer independently verified the removal card's claim about training
+    data: `removeMember` writes `gym_members` + `audit_log` and nothing else,
+    and neither the workouts nor gamification tables carry a gym at all.
+
+THE SEVERITY CALL, because a later chat will meet this shape again
+  · The card said "the features your gym was paying for have ended" and **NO GYM
+    HAS EVER PAID** — nothing inserts into `subscriptions` (grep-verified twice,
+    independently). Arguably Critical/High under :5807, **and tagging it so would
+    have ARMED the escape hatch**, putting a redesign of orgs to Kd over a
+    marketing clause. Kept **Low**; **fixed immediately anyway, because the fix
+    is identical either way.** Reasoning recorded at :12731 — the gate's weakest
+    point is a chat under-calling its own work, so the argument is on the record.
+
+FOUR LOWS + THREE LYING TESTS, ALL FIXED THIS ROUND
+  · **L2-1** the paying-gym clause — deleted; returns with billing.
+  · **L2-2** a doc comment asserted an invariant `restoreUser` makes FALSE.
+    Nothing user-visible is wrong, so the COMMENT was the defect. Durable fix is
+    a `reason` column on `gym_members` — NOT invented (R0.2), own OWED line.
+  · **L2-3** `formerOrgs` could name one gym TWICE — `gym_members_live_uq` is
+    PARTIAL on `removed_at IS NULL`. **A guarantee that held only because the
+    one caller dedupes by id.** `DISTINCT ON`, plus the test it never had.
+  · **L2-4** the two `/orgs/mine` reads are now ONE `sql.begin` snapshot.
+    **Untested and said so** — own OWED line rather than a green test that
+    proves nothing.
+  · **Rule 4:** the deploy-gap test mocked `orgService` wholesale so the schema
+    never ran; the Settings wiring test asserted three things all INSIDE
+    `GymTab()` while the line rendering it could be deleted; `stripComments`
+    missed trailing line comments. All three fixed and mutation-proved.
+
+THE STANDING LESSON — third on this card and the sharpest
+  · **A TEST WRITTEN TO CLOSE A REVIEW FINDING IS NOT AUDITED BY THE REVIEW THAT
+    ASKED FOR IT.** L-1's fix shipped with L-1's own defect inside it, and the
+    `.default([])` guard was argued at length in DECISIONS while its test proved
+    nothing. **Mutate the test you just wrote, in the round you write it.**
+
+FILES
+  API · `orgs/repo.ts` (DISTINCT ON; corrected comment; two sigs → `SqlOrTx`)
+      · `orgs/service.ts` (`sql.begin`) · `test/orgs.routes.test.ts` (+1)
+  WEB · `components/gym/GymMembershipCard.jsx` (clause cut)
+      · `components/gym/joinGym.render.test.jsx` (renamed test, +1 assertion,
+        stripComments) · `api/orgsApi.test.js` (+2 — the REAL default guard)
+  DOCS · `DECISIONS.md` :12731 + index · `OWED.md` (2 new, 1 updated) · `BACKLOG.md`
+
+GATES
+  · orgs **49/49** on real Postgres (44 before this work) · web **876/876**
+    (857 before) · shared **48/48** · `vite build` ✓ · `tsc --noEmit` clean on
+    api and shared · eslint **zero problems across the six files this round
+    changed** — stated that way deliberately: round 1 claimed "clean on every
+    changed file" and `Settings.jsx` carries 4 pre-existing errors, which the
+    reviewer rightly called imprecise.
+  · Every new/repaired test mutation-proved, every mutant restored and verified
+    against git: removing `.default([])` → 3 RED · deleting
+    `{tab === 'gym' && <GymTab />}` → 1 RED · deleting `DISTINCT ON` → 1 RED.
+
+NEXT
+  1. **Kd runs smoke step 14b** — the ONE thing left. Then the card ticks.
+  2. Step 3 of the split: the waiting room's clock (expiry sweep, gym reminder,
+     member nudge) — its own 🔴 line.
+```
+
+```
 TASK: THE JOIN DOOR, STEP 2 — KD'S CORRECTION AFTER T3 ROUND 1, plus three
       rulings on an outside architecture review. **NOTHING TICKS. The diff-only
       re-review and a re-run of smoke step 14b are the gates left.**

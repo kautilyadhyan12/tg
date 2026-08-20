@@ -223,6 +223,34 @@ describe('a 200 that does not match its contract is a FAILURE, not empty data (T
     await expect(orgService.getMine()).resolves.toMatchObject({ data: { orgs: [] } });
   });
 
+  it('ACCEPTS a /orgs/mine with no formerOrgs and fills in [] — the deploy gap (T3 r2, rule 4)', async () => {
+    // THIS IS THE ONLY TEST OF `formerOrgs`' `.default([])`, and it exists
+    // because the test that CLAIMED to cover it did not: the render-level
+    // version mocks `orgService` itself, so neither `readThrough` nor the
+    // schema ever ran and deleting the default left it green (T3 round 2's
+    // rule-4 finding).
+    //
+    // What the default buys: the web app and the API deploy separately, so
+    // there is a window where a newer web app asks an older API. A REQUIRED
+    // `formerOrgs` would make that a contract failure, the card treats a failed
+    // read as silence, and the person loses "You're a member of Iron House"
+    // too — a whole card destroyed to add one sentence.
+    //
+    // Delete `.default([])` in `packages/shared/src/orgs.ts` and this goes RED.
+    answerWith(authApi, { orgs: [] });
+    await expect(orgService.getMine()).resolves.toMatchObject({
+      data: { orgs: [], formerOrgs: [] },
+    });
+  });
+
+  it('still REJECTS a formerOrgs that is present and malformed', async () => {
+    // The default tolerates ABSENCE, not nonsense. A gym summary missing its
+    // `removedAt` must fail the contract rather than reach the card, or the
+    // screen renders a removal it cannot date.
+    answerWith(authApi, { orgs: [], formerOrgs: [{ ...ORG_BODY }] });
+    await expect(orgService.getMine()).rejects.toMatchObject({ isContractError: true });
+  });
+
   it('rejects a confirm queue with no pendingCount', async () => {
     // The count is the number the console prints. A body missing it would
     // otherwise become `?? 0` on screen — "nobody is waiting" over a queue with

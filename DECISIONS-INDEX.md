@@ -67,6 +67,34 @@ mid-file: re-derive them with
   unless dedupe is in that card's definition.** Health data lands inside the open
   privacy question at :592. Tracked NOWHERE before today (grep-verified); now has
   a ⚪ `OWED.md` line.
+- **:12731** — 2026-08-20 — **THE JOIN DOOR STEP 2, T3 ROUND 2 (diff-only):
+  ZERO Critical/High — THE PACKET SHIPS. Escape hatch NOT armed.** Reviews
+  :12518 and :12660. **Read before writing copy about what a gym pays for,
+  before trusting a source-regex test to prove a page renders, and before
+  assuming a partial unique index means one row.** Security pass clean on every
+  axis. **The severity call the reviewer refused to make alone:** the removal
+  card said "the features your gym was paying for have ended" and **no gym has
+  ever paid** — nothing inserts into `subscriptions` (grep-verified twice,
+  independently). Arguably Critical/High under :5807, **and tagging it so would
+  have ARMED the escape hatch** and put a redesign of the orgs module to Kd over
+  a marketing clause. Kept **Low** (nobody was ever in the state, no number or
+  action changes, wording predates the card) and **fixed immediately because the
+  fix is identical either way** — clause deleted, returns with billing.
+  **L2-3 is the shape to remember: a guarantee that held only because of what
+  ONE caller happens to do** — `formerOrgs` could name a gym twice because
+  `gym_members_live_uq` is PARTIAL on `removed_at IS NULL`, invisible only
+  because the client dedupes by id; fixed with `DISTINCT ON` and **given the
+  test it never had**. **L2-2 is a COMMENT fix on purpose**: the code claimed a
+  self-deleted account "cannot be in flight here" and `restoreUser` makes that
+  false, but nothing user-visible is wrong — the durable fix is a reason column
+  on `gym_members`, NOT invented (R0.2). **L2-4**: the two `/orgs/mine` reads are
+  now one `sql.begin` snapshot; untested and said so. **THE STANDING LESSON, and
+  the sharpest of the three this card produced: A TEST WRITTEN TO CLOSE A REVIEW
+  FINDING IS NOT AUDITED BY THE REVIEW THAT ASKED FOR IT** — L-1's fix shipped
+  with L-1's own defect inside it and the `.default([])` guard was argued at
+  length while its test proved nothing. **Mutate the test you just wrote, in the
+  round you write it.** Also corrects a reporting claim of mine: round 1 said
+  eslint was "clean on every changed file" and it was not.
 - **:12660** — 2026-08-20 — **KD RULING: A REMOVED MEMBER MUST BE TOLD —
   silence was the other half of the bug.** **Read before touching
   `/v1/orgs/mine`, `gymStatusRows`, or any copy about a membership ending.**

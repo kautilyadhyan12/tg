@@ -82,15 +82,22 @@ function Row({ row }) {
           <p className="text-sm font-semibold" style={{ color: '#fff' }}>
             You&apos;re no longer a member of {row.orgName}
           </p>
-          {/* Both halves are load-bearing. The first is the thing people
-              actually fear when access ends, and it is TRUE — removal sets
-              `removed_at` and touches no workout. The second explains the
-              change they will notice without naming a plan or a price, neither
-              of which this screen knows. */}
+          {/* The sentence is the thing people actually fear when access ends,
+              and it is TRUE — verified, not assumed: `removeMember` writes
+              `gym_members` and `audit_log` and nothing else, and neither the
+              workouts nor the gamification tables carry a gym at all.
+
+              T3 ROUND 2 L2-1 CUT THE CLAUSE THAT USED TO FOLLOW IT — "the
+              features your gym was paying for have ended". Nothing in this
+              product creates a subscription yet (grep-verified: no statement
+              anywhere inserts into `subscriptions`), and gym-sponsored
+              entitlements require one, so NO gym has ever paid and a removed
+              member loses nothing. It described a state no reader has ever
+              been in. The clause comes back with billing, said by a screen
+              that can actually check it. */}
           <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.55)' }}>
             Everything you did there is still yours — your workouts, your form
-            scores and your streak are unchanged. You keep the free app; the
-            features your gym was paying for have ended.
+            scores and your streak are unchanged. You keep the free app.
           </p>
         </div>
       </div>

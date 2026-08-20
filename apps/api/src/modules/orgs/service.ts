@@ -146,14 +146,22 @@ export async function createOrg(
 }
 
 export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgsResponse> {
-  // Two reads, one response. They answer different questions — what I belong to
-  // now, and what recently ended — and neither can be derived from the other,
-  // which is exactly why the dashboard was silent about a removal before Kd
-  // ruled on it (2026-08-20).
-  const [rows, former] = await Promise.all([
-    repo.listOrgsForUser(deps.sql, userId),
-    repo.listFormerOrgsForUser(deps.sql, userId),
-  ]);
+  // Two reads, one response, ONE SNAPSHOT — T3 round 2 L2-4. They answer
+  // different questions (what I belong to now; what recently ended) and neither
+  // can be derived from the other, which is why the dashboard was silent about
+  // a removal before Kd ruled on it. Run as two independent statements they
+  // could straddle a commit: a removal landing between them produces a response
+  // where the gym is in NEITHER list — the exact silence the ruling exists to
+  // end — or in BOTH, drawn as "You're a member" over a membership that has
+  // just ended. One transaction makes the pair consistent by construction
+  // rather than self-healing on the next reload.
+  //
+  // Sequential inside the transaction on purpose: one connection cannot run two
+  // statements at once, so `Promise.all` here would only queue them.
+  const { rows, former } = await deps.sql.begin(async (tx) => ({
+    rows: await repo.listOrgsForUser(tx, userId),
+    former: await repo.listFormerOrgsForUser(tx, userId),
+  }));
   return myOrgsResponseSchema.parse({
     orgs: rows.map((r) => ({
       ...toOrgSummary(r),

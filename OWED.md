@@ -472,6 +472,61 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       pass, not a fix. Found by T3 round 1 of the rep-timing card as its Low-3;
       logged as L14 in `BACKLOG.md`; DECISIONS :7487.
 
+- [ ] 🟡 **WHEN GYMS CAN PAY, THE REMOVAL CARD MUST NAME WHAT ACTUALLY CHANGED —
+      "You keep the free app" will be TRUE and INCOMPLETE.** Created 2026-08-20,
+      **Kd's observation**: *"they keep the free app means there will be
+      constraints on meal scan and running men."* He is right, and the gap is
+      measured rather than estimated (`db/seed.ts`, the two canonical
+      entitlements blocks):
+
+      | | Free | Pro (what a paying gym grants) |
+      |---|---|---|
+      | Meal scans | **2 / day** | 8 / day |
+      | Running routes | **2 / month** | 5 / day |
+      | Coach questions | **5 / month** | 30 / day |
+      | Exercises | Tier 1 only | all |
+      | History | 90 days | unlimited |
+      | Global leaderboards | no | yes |
+      | Share images | watermarked | clean |
+
+      Running is the brutal one: **2 a month against 5 a day is a 75× drop**, and
+      a person who never hit a limit would meet one on their third route.
+      **Why the card does NOT say this TODAY, and why saying it would be a
+      defect:** no gym has ever paid (nothing inserts into `subscriptions`), so a
+      removed member was already on free and **nothing changes for them**.
+      Printing "your scans drop to 2 a day" would be the same class of untruth as
+      the clause T3 round 2 just deleted (:12731 L2-1) — a screen describing a
+      loss that did not happen. **The fix belongs with billing**: the card should
+      name the drop only when the server can see there WAS one, comparing the
+      person's entitlements before and after. **Do not hard-code the numbers into
+      the client** (:1110's shape — the server sends, the client renders).
+      Ties to the same card as the removal-reason column below.
+- [ ] ⚪ **`gym_members` CANNOT SAY WHY A MEMBERSHIP ENDED, so a person who
+      deleted their own account is told a GYM removed them.** Created 2026-08-20
+      (DECISIONS :12731, T3 round 2 L2-2). The DPDP Day-0 cascade closes
+      memberships when somebody deletes their own account, and `restoreUser`
+      brings the account back while **deliberately leaving those memberships
+      closed** (P2.2 T3 finding 4 — auto-reopen could exceed seat caps). Both
+      windows are 14 days (`DPDP_RETENTION_DAYS`, `DECIDED_VISIBLE_DAYS`), so
+      they coincide exactly. **Nothing user-visible is FALSE today** — "You're no
+      longer a member of X" is true however it ended — which is why round 2 fixed
+      the misleading COMMENT and not the code. **The sharp edge, recorded rather
+      than fixed:** an owner who deletes and restores their account reads "You're
+      no longer a member of {their own gym}" while the console still lists them
+      as its owner. **The durable fix is a `reason` column on `gym_members`** so
+      the two endings can be worded differently; **not invented in a fix round**
+      (R0.2), and it needs a migration. Belongs with whatever card revisits
+      account restore at P3.10.
+- [ ] ⚪ **THE `/orgs/mine` SNAPSHOT HAS NO TEST.** Created 2026-08-20 (DECISIONS
+      :12731, T3 round 2 L2-4). The two reads now run inside one `sql.begin`, so
+      a removal committing between them can no longer produce a response where
+      the gym is in neither list (the exact silence :12660 exists to end) or in
+      both. **The fix is in; the guarantee is unproven.** Reproducing it needs a
+      commit interleaved between two statements inside a transaction, and a fake
+      would assert nothing — so no test was written rather than a green one that
+      proves nothing (the class :12731's own standing lesson is about). Worth
+      closing if this repo ever grows a two-connection interleaving harness; the
+      seat-race tests drive two separate clients and are the nearest precedent.
 - [ ] ⚪ **CONFIRM STRIPE IS ACTUALLY AVAILABLE TO THE ENTITY THAT WILL HOLD THE
       ACCOUNT, BEFORE P3.5 STARTS.** Created 2026-08-20 (DECISIONS :12600).
       **Kd RULED Stripe in** — *"stripe need to be used for payment men"* — which
@@ -4285,8 +4340,13 @@ file and is stated so nobody reads these as lower priority than they are.
       and he ruled it must TELL them (DECISIONS :12660).** Built:
       `/v1/orgs/mine` now carries a `formerOrgs` list and the card says "You're
       no longer a member of {gym}"; `RUNBOOK/smoke-join-door.md` gains **step
-      14b** for it. **The DIFF-ONLY RE-REVIEW and a re-run of step 14b are now
-      the only things holding this line.** What exists now: the code
+      14b** for it. **T3 ROUND 2 (diff-only) THEN RAN AND FOUND ZERO
+      CRITICAL/HIGH — THE PACKET SHIPS (DECISIONS :12731).** Four Lows and three
+      lying tests, all fixed in that round; escape hatch NOT armed. **The ONLY
+      thing still holding this line is Kd running smoke step 14b** (30 seconds:
+      the removed member's dashboard must say "You're no longer a member of
+      {gym}"), because that copy was built after the smoke passed and no human
+      has yet seen it on a screen. What exists now: the code
       box at **Settings → Gym** and at
       `/org/join?code=` (Part 6 §2's deep link mirrored, so the mobile QR and
       the web link are one path), §2.4's visibility sheet on the form and again

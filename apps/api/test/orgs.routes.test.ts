@@ -719,6 +719,38 @@ d("orgs routes (real Postgres)", () => {
     ).toEqual([]);
   });
 
+  it("names a gym ONCE however many times the person was removed from it (T3 r2 L2-3)", { timeout: 60_000 }, async () => {
+    // `gym_members_live_uq` is a PARTIAL unique index — `WHERE removed_at IS
+    // NULL` — so joining, being removed, joining again and being removed again
+    // leaves TWO closed rows for one person and one gym. Without DISTINCT ON
+    // the response names the gym twice, breaking the promise `listOrgsForUser`
+    // makes one function above ("a caller can never render the same gym
+    // twice"). It was invisible because the CLIENT happens to dedupe by org id
+    // — a contract holding only because of what today's one caller does.
+    const owner = await makeUser("dupe-owner");
+    const member = await makeUser("dupe-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Dupe");
+
+    await joinAsMember(member.cookies, org, owner.cookies);
+    await del(`/v1/orgs/${org.org.id}/members/${member.userId}`, { cookies: owner.cookies });
+    await joinAsMember(member.cookies, org, owner.cookies);
+    await del(`/v1/orgs/${org.org.id}/members/${member.userId}`, { cookies: owner.cookies });
+
+    // THE FIXTURE IS THE ASSERTION: two closed rows must actually exist, or
+    // this test passes against a database that could never have produced the
+    // defect (:10010's own fixture lesson).
+    const closed = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_members
+      WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}
+        AND removed_at IS NOT NULL`;
+    expect(closed[0]?.n).toBe(2);
+
+    const body = JSON.parse((await get("/v1/orgs/mine", { cookies: member.cookies })).body) as {
+      formerOrgs: { id: string; removedAt: string }[];
+    };
+    expect(body.formerOrgs.filter((o) => o.id === org.org.id)).toHaveLength(1);
+  });
+
   it("stops calling them a former member once they REJOIN", { timeout: 30_000 }, async () => {
     // One gym, one truth. A person removed and then let back in is simply a
     // member; carrying the old removal alongside would put two contradictory
