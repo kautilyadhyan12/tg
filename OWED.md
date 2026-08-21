@@ -4434,7 +4434,7 @@ file and is stated so nobody reads these as lower priority than they are.
       clock (step 3 of the join door; deferred 2026-08-19, DECISIONS :11891).**~~
       **DONE 2026-08-21 — built (DECISIONS :12878), smoked 10/10 (:13174), and
       FIVE T3 rounds closed with round 5 finding ZERO Critical/High (:13552), on
-      the commit this line is ticked in.** The full gate is met: a round with no
+      commit `12383b4`.** The full gate is met: a round with no
       Critical/High (:5348 rule 1) plus the browser smoke. All four owed
       behaviours are live — the expiry sweep, the gym reminder at 2 days then
       weekly, the member's once-a-day nudge, and the countdown on both screens.
