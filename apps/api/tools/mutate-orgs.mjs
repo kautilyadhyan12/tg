@@ -99,9 +99,20 @@ const MUTANTS = [
     id: 'O3',
     target: 'repo',
     why: "MONEY: the owner's complimentary seat starts consuming a paid one, so every gym is one seat short of what it bought",
-    expect: 'enforces the plan',
-    from: "        WHERE gym_id = ${input.org.id} AND removed_at IS NULL AND complimentary = false`;",
-    to: '        WHERE gym_id = ${input.org.id} AND removed_at IS NULL`;',
+    // BOTH HALVES MOVED, and the second half is the interesting one (:11846 —
+    // an anchor says what breaks, a FILTER says what should notice).
+    // RE-ANCHORED 2026-08-22: the C/H-1 fix added the staff exclusion to this
+    // count and aliased the table, so the old one-line anchor matched nothing —
+    // caught by the whole-table pre-check ABORTING rather than by care
+    // (:5199/:8610's class, :10726's guard).
+    // RE-FILTERED the same day, and only because it SURVIVED: with the staff
+    // exclusion in place the owner — the product's only complimentary member —
+    // is excluded twice over, so deleting this clause changed nothing the old
+    // test could see. The guarantee is unchanged and still §4.2's own wording;
+    // what it needed was a case where the two exclusions do not overlap.
+    expect: 'COMPLIMENTARY member who is not staff',
+    from: "          AND m.complimentary = false\n",
+    to: '\n',
   },
   {
     id: 'O4',
@@ -870,13 +881,18 @@ const MUTANTS = [
     to: '      WHERE ${input.gymId} IS NOT NULL\n        AND m.removed_at IS NULL\n        AND u.email = ${input.email}',
     expect: 'refuses an email that is not a member HERE',
   },
+  // O75 AND O80 WERE RE-AIMED BY T3 ROUND 1'S C/H-1 FIX. Both used to anchor on
+  // `setSeatComplimentary`, which no longer exists: Kd's "staff seats free" is
+  // enforced in the seat CAP rather than by flagging a member `complimentary`.
+  // The guarantees they name are unchanged; where they live moved (:11846's
+  // "a mutant has two halves and a fix must move both" — anchor AND filter).
   {
     id: 'O75',
     target: 'repo',
-    why: 'MONEY, against Kd\'s ruling of 2026-08-21 ("yes staff seats free"): the appointment stops freeing the seat, so a gym pays for a member seat per trainer before one real member has walked in',
-    from: '    await setSeatComplimentary(tx, input.gymId, candidate.user_id, true);',
-    to: '    await setSeatComplimentary(tx, input.gymId, candidate.user_id, false);',
-    expect: 'appoints a member as a trainer',
+    why: 'MONEY, against Kd\'s ruling ("yes staff seats free"): the seat cap stops excluding staff, so a gym at its cap cannot admit anybody after appointing a trainer — it is paying a seat per member of its own team',
+    from: '          AND NOT EXISTS (\n            SELECT 1 FROM gym_staff s\n            WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)`;',
+    to: '          `;',
+    expect: 'SEAT CAP',
   },
   {
     id: 'O76',
@@ -913,10 +929,58 @@ const MUTANTS = [
   {
     id: 'O80',
     target: 'repo',
-    why: "MONEY, the other direction: the seat is never put back, so somebody taken off staff keeps a free seat for ever and the gym's cap silently under-counts its own roster",
-    from: '    await setSeatComplimentary(tx, input.gymId, input.userId, false);',
-    to: '    await setSeatComplimentary(tx, input.gymId, input.userId, true);',
-    expect: 'puts their seat back',
+    why: 'T3 ROUND 1 C/H-1, PINNED AS A CLASS: the appointment goes back to flagging the member `complimentary`, so the console prints "Nobody has joined yet" over a gym with two members and a code limited to one person quietly admits another',
+    from: '    // NOTHING IS WRITTEN TO `gym_members` HERE.',
+    to: '    await tx`UPDATE gym_members SET complimentary = true WHERE gym_id = ${input.gymId} AND user_id = ${candidate.user_id} AND removed_at IS NULL`;\n    // NOTHING IS WRITTEN TO `gym_members` HERE.',
+    expect: 'changes NO number',
+  },
+  {
+    id: 'O82',
+    target: 'repo',
+    why: "T3 ROUND 1 C/H-2: appointing drops the org lock, so it interleaves with remove-from-members and commits a staff row over a closed membership — an ex-member holding `members.read` on the whole roster",
+    from: '  return await sql.begin(async (tx) => {\n    await lockOrgRow(tx, input.gymId);\n\n    const candidates = await tx<{ user_id: string }[]>`',
+    to: '  return await sql.begin(async (tx) => {\n    const candidates = await tx<{ user_id: string }[]>`',
+    expect: 'RACE',
+  },
+  {
+    id: 'O83',
+    target: 'repo',
+    why: 'T3 ROUND 1 C/H-2, the OTHER half: remove-from-members drops the org lock. Either side alone re-opens the race, so both need their own mutant — one guard proving the other is the shape :14174 L-1 recorded',
+    from: '    await lockOrgRow(tx, input.gymId);\n\n    const staffRows = await tx<{ role: string }[]>`\n      SELECT role FROM gym_staff WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;',
+    to: '    const staffRows = await tx<{ role: string }[]>`\n      SELECT role FROM gym_staff WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;',
+    expect: 'RACE',
+  },
+  {
+    id: 'O84',
+    target: 'repo',
+    why: "T3 ROUND 1 C/H-3: a staff row stops being checked against the membership it belongs to, so somebody who deleted their account and restored it walks back in holding the keys to a gym they are no longer in",
+    from: '        OR NOT EXISTS (\n          SELECT 1 FROM gym_members m\n          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id\n        )\n      )`;',
+    to: '        OR true\n      )`;',
+    expect: 'GHOST',
+  },
+  {
+    id: 'O85',
+    target: 'repo',
+    why: "LOCKOUT: the owner's exemption goes, so a gym whose owner is not a member of it — `gyms.owner_included_as_member`, which the create path already honours — locks its own owner out with a 404 and nobody inside can let them back in",
+    from: '        g.owner_user_id = s.user_id\n        OR EXISTS (',
+    to: '        false\n        OR EXISTS (',
+    expect: 'GHOST',
+  },
+  {
+    id: 'O86',
+    target: 'repo',
+    why: 'A DELETED ACCOUNT KEEPS ITS KEYS: the account-status check goes, so the window between a DPDP delete and its restore leaves a tombstoned user still authorised over a live gym',
+    from: "      AND u.status = 'active'",
+    to: '      AND true',
+    expect: 'GHOST',
+  },
+  {
+    id: 'O87',
+    target: 'repo',
+    why: "THE REVIEWER'S OWN MUTANT (T3 round 1, rule 4): the last-owner guard counts STAFF instead of OWNERS, so a gym holding one owner and one trainer lets the owner remove themselves. It stayed GREEN against the original test, whose gym had a single staff row and could not tell the two counts apart",
+    from: "        WHERE gym_id = ${input.gymId} AND role = 'owner'`;",
+    to: '        WHERE gym_id = ${input.gymId}`;',
+    expect: 'nobody in charge',
   },
   {
     id: 'O81',

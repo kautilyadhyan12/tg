@@ -401,14 +401,65 @@ export async function getOrgById(sql: SqlOrTx, gymId: string): Promise<OrgRow | 
 }
 
 /** The caller's staff role in ONE org. Null means "not staff here", which the
- *  service turns into a 404 — a stranger must not learn the org exists. */
+ *  service turns into a 404 — a stranger must not learn the org exists.
+ *
+ *  **A STAFF ROW ALONE IS NOT AUTHORITY — it must belong to a live account that
+ *  is still IN the gym.** T3 round 1 (2026-08-22) found two ways to hold a
+ *  `gym_staff` row without being a member, and both hand somebody the whole
+ *  roster of a gym they left:
+ *    · appointing raced against removing them from the member list (fixed with
+ *      a lock, below — this is the second line of defence, not the first);
+ *    · **delete your account and restore it** — the DPDP Day-0 cascade closes
+ *      `gym_members` and leaves `gym_staff` standing, and restore deliberately
+ *      does NOT reopen memberships (2026-07-11 P2.2 T3 finding 4).
+ *
+ *  **THE RULE IS "NOT AN EX-MEMBER", NOT "MUST BE A MEMBER", AND THE DIFFERENCE
+ *  IS THE WHOLE FINDING.** The reviewer's proposed one-liner was "require a live
+ *  membership here", and it is WRONG — measured, not argued: it turned FIVE
+ *  existing tests red, and reading them is what showed why. **Staff who are not
+ *  members is the SPEC'S OWN MODEL** — §4.7 invites staff BY EMAIL, so an
+ *  invited manager need never join — and this card only appoints from the roster
+ *  because `EmailSender` cannot yet deliver an invite. Baking "staff ⇒ member"
+ *  into AUTHORITY would have shipped a rule that breaks the day that deferral
+ *  closes. :13552's standing lesson, earned again: a reviewer's fix is a claim
+ *  and takes the same evidence as the code it replaces.
+ *
+ *  So the denial is precisely the ghost: **they HELD a membership here and it is
+ *  closed.** Never-a-member is allowed (the invite flow, and today's fixtures);
+ *  currently-a-member is allowed; left-the-gym is not.
+ *
+ *  **The owner is exempt on top of that, and it is not a convenience.**
+ *  `gyms.owner_included_as_member` is READ by `createOrgAttempt` and the column
+ *  is the authority, so a gym whose owner opted out of membership is a designed
+ *  state with no route to reach it yet — and their §4.0-step-6 seat, once
+ *  closed, would otherwise read as exactly the ghost this guard denies.
+ *
+ *  `users.status` is checked as well, so the window BEFORE a restore is shut
+ *  too, not only the state after it. */
 export async function getStaffRole(
   sql: Sql,
   gymId: string,
   userId: string,
 ): Promise<OrgRole | null> {
   const rows = await sql<{ role: string }[]>`
-    SELECT role FROM gym_staff WHERE gym_id = ${gymId} AND user_id = ${userId}`;
+    SELECT s.role
+    FROM gym_staff s
+    JOIN users u ON u.id = s.user_id
+    JOIN gyms g ON g.id = s.gym_id
+    WHERE s.gym_id = ${gymId}
+      AND s.user_id = ${userId}
+      AND u.status = 'active'
+      AND (
+        g.owner_user_id = s.user_id
+        OR EXISTS (
+          SELECT 1 FROM gym_members m
+          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id AND m.removed_at IS NULL
+        )
+        OR NOT EXISTS (
+          SELECT 1 FROM gym_members m
+          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id
+        )
+      )`;
   const row = rows[0];
   return row === undefined ? null : toOrgRole(row.role);
 }
@@ -631,9 +682,30 @@ async function claimSeat(
   if (held === null) {
     const cap = await seatCapFor(tx, input.org.id);
     if (cap !== null) {
+      // KD RULING 2026-08-22, "yes staff seats free" — ENFORCED HERE, which is
+      // where seats are counted, rather than by flagging staff `complimentary`.
+      //
+      // **THE FLAG WAS THE FIRST IMPLEMENTATION AND IT WAS WRONG (T3 round 1,
+      // C/H-1).** `complimentary` does not mean "this seat is unpaid", it means
+      // "this person did not JOIN" — the owner's §4.0-step-6 seat — and THREE
+      // readers act on that meaning: the console's `joinedCount`, which printed
+      // "Nobody has joined yet" under a gym with two members; the `max_uses`
+      // gate at the join door, which quietly gave a code limited to one person
+      // another place; and `orgCodeSchema.joined`. Kd's ruling is about MONEY,
+      // so it belongs in the money count and nowhere else.
+      //
+      // **A DEPARTURE FROM §4.2's WORDING, recorded rather than slipped past
+      // (R0.1):** the spec's seat check is the prose "count live,
+      // non-complimentary members", which this narrows with "and not staff".
+      // The RULING is Kd's and predates the fix; what changed is the mechanism,
+      // because the literal reading was satisfied only by corrupting the flag.
       const countRows = await tx<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM gym_members
-        WHERE gym_id = ${input.org.id} AND removed_at IS NULL AND complimentary = false`;
+        SELECT count(*)::int AS n FROM gym_members m
+        WHERE m.gym_id = ${input.org.id} AND m.removed_at IS NULL
+          AND m.complimentary = false
+          AND NOT EXISTS (
+            SELECT 1 FROM gym_staff s
+            WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)`;
       const used = countRows[0]?.n ?? 0;
       if (used >= cap) return { kind: "seat_cap", cap };
     }
@@ -1184,6 +1256,13 @@ export async function removeMember(
   input: { gymId: string; userId: string; actorUserId: string },
 ): Promise<RemoveMemberOutcome> {
   return await sql.begin(async (tx) => {
+    // THE ORG LOCK, added by T3 round 1's C/H-2 (2026-08-22). This function
+    // reads `gym_staff` and `addStaff` reads live membership; without a shared
+    // lock they interleave into a staff row over a closed membership, i.e.
+    // somebody holding `members.read` on a gym they are no longer in. Same
+    // lock, same order, as `addStaff`, `removeStaff` and `claimSeat`.
+    await lockOrgRow(tx, input.gymId);
+
     const staffRows = await tx<{ role: string }[]>`
       SELECT role FROM gym_staff WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
     const staff = staffRows[0];
@@ -1810,34 +1889,6 @@ async function readStaffRow(
       };
 }
 
-/** KD RULING 2026-08-21: **staff seats are free.** *"yes staff seats free"* —
- *  asked whether a gym should pay for a member seat per trainer the way it does
- *  not for the owner's, and given the reason: a gym should not be paying for
- *  five seats before one real member has walked in.
- *
- *  The mechanism already existed — `gym_members.complimentary` is what keeps the
- *  owner's §4.0-step-6 seat out of `claimSeat`'s count — so this ruling is one
- *  column write and no new concept. **It does NOT touch entitlements:** the §4.1
- *  resolver counts a live membership and never reads `complimentary`, so a staff
- *  member keeps the gym's perks exactly like any other member, and nothing needs
- *  busting when this flips.
- *
- *  **ONE VISIBLE CONSEQUENCE, said rather than discovered later:** the number a
- *  console prints beside a join code is live non-complimentary memberships
- *  (:14013), so promoting a member to staff makes that number fall by one. It is
- *  TRUE both before and after — the definition is the seat count, and their seat
- *  genuinely stopped being paid for. */
-async function setSeatComplimentary(
-  tx: TransactionSql,
-  gymId: string,
-  userId: string,
-  complimentary: boolean,
-): Promise<void> {
-  await tx`
-    UPDATE gym_members SET complimentary = ${complimentary}
-    WHERE gym_id = ${gymId} AND user_id = ${userId} AND removed_at IS NULL`;
-}
-
 export type AddStaffOutcome =
   | { kind: "added"; staff: StaffRow }
   | { kind: "not_a_member" }
@@ -1854,17 +1905,25 @@ export type AddStaffOutcome =
  *  `email` is `citext` (Part 4 §3.1), so the equality is case-insensitive in the
  *  DATABASE rather than by a `lower()` this file would have to remember.
  *
- *  **No org lock, and :14174's rule is why: a lock is warranted by the
- *  CONSEQUENCE, not by the race.** Two owners appointing the same person
- *  concurrently both target one primary key `(gym_id, user_id)`; `ON CONFLICT DO
- *  NOTHING` makes the loser read the winner's row and answer `already_staff`,
- *  which is the correct answer either way. Nothing here is a check-then-act
- *  against a cap. */
+ *  **IT TAKES THE ORG LOCK, and the first version of this function did not —
+ *  that was T3 round 1's C/H-2 (2026-08-22).** The race that matters is not two
+ *  people appointing at once (one primary key, `ON CONFLICT DO NOTHING`, the
+ *  loser reads the winner's row and `already_staff` is right either way). It is
+ *  **appointing racing REMOVE-FROM-MEMBERS**: this function reads live
+ *  membership and `removeMember` reads `gym_staff`, so interleaved they commit a
+ *  staff row and a closed membership — somebody running a gym they are not in,
+ *  holding `members.read` over the whole roster. Reproduced 12 times out of 12.
+ *  :14174's rule is unchanged and is what selects the fix: a lock is warranted
+ *  by the CONSEQUENCE, and the consequence here is an authorisation hole rather
+ *  than a retryable collision. `removeMember` takes the same lock in the same
+ *  order. */
 export async function addStaff(
   sql: Sql,
   input: { gymId: string; email: string; role: OrgRole; actorUserId: string },
 ): Promise<AddStaffOutcome> {
   return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+
     const candidates = await tx<{ user_id: string }[]>`
       SELECT m.user_id
       FROM gym_members m
@@ -1890,7 +1949,9 @@ export async function addStaff(
     // screen still offered "add as trainer". Changing a role is the PATCH.
     if (inserted[0] === undefined) return { kind: "already_staff", staff };
 
-    await setSeatComplimentary(tx, input.gymId, candidate.user_id, true);
+    // NOTHING IS WRITTEN TO `gym_members` HERE. Kd's "staff seats free" is
+    // enforced in `claimSeat`'s count (see the note there); the first version
+    // wrote `complimentary = true` and three other readers acted on it.
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
@@ -2021,7 +2082,9 @@ export async function removeStaff(
       throw new Error("DELETE FROM gym_staff removed no row under the org lock");
     }
 
-    await setSeatComplimentary(tx, input.gymId, input.userId, false);
+    // Nothing to undo on `gym_members`: their seat starts counting again the
+    // moment the staff row is gone, because `claimSeat` asks `gym_staff` rather
+    // than reading a flag somebody has to remember to clear.
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,

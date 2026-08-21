@@ -14397,3 +14397,95 @@ card lands, which is the card that owes it.
 
 **NOTHING TICKS — THERE IS NO SCREEN** (:11846/:13803's shape: an endpoint with
 no caller). The web half is the next card and carries the SMOKE; **T3 is UNRUN**.
+
+## T3 ROUND 1 ON THE STAFF CARD — THREE CRITICAL/HIGH, ALL FIXED, AND THE REVIEWER'S OWN ONE-LINER WAS WRONG (2026-08-22)
+
+**Read before writing `gym_members.complimentary`, before adding a reader of
+`gym_staff`, before requiring a membership anywhere authority is decided, and
+before trusting that a staff row means what it says.** Reviews :14262. **The
+packet did NOT ship this round.** Escape hatch NOT armed — the previous orgs
+round (:14174) found zero Critical/High, so this is the first in the subsystem.
+
+**C/H-1 — I OVERLOADED A FLAG AND CHECKED ONE OF ITS THREE READERS.** Kd's
+"staff seats free" was implemented by setting `gym_members.complimentary` on an
+appointment. That column does not mean "unpaid seat", it means **"this person
+did not JOIN"** — the owner's §4.0-step-6 seat — and three things read it that
+way: the console's `joinedCount`, which then prints **"Nobody has joined yet —
+share your code" above a gym showing 2 members**; the join door's `max_uses`
+gate, which **gave a code limited to one person another place**; and
+`orgCodeSchema.joined`. **My own entry anticipated the third and called the
+change "TRUE before and after" — which was true of the one reader I looked at.**
+Fixed by putting the ruling where seats are counted: `claimSeat` excludes staff
+from the cap, and nothing writes the flag. **A departure from §4.2's prose
+("count live, non-complimentary members") recorded rather than slipped past
+(R0.1) — the RULING is Kd's and predates the fix; only the mechanism moved.**
+
+**C/H-2 — APPOINTING RACED REMOVE-FROM-MEMBERS, 12 times out of 12.** `addStaff`
+read live membership; `removeMember` read `gym_staff`; neither locked. Interleaved
+they commit **a staff row over a closed membership — somebody holding
+`members.read` over the whole roster of a gym they are not in.** Both now take
+`lockOrgRow` first, the same guard in the same order as `removeStaff` and
+`claimSeat`. :14174's rule is unchanged and is what selects it: the consequence
+is an authorisation hole, not a retryable collision. **Its own entry's comment
+applied that rule only to two concurrent appointments and never considered this
+pair** — the rule was cited correctly and the enumeration was short.
+
+**C/H-3 — DELETE YOUR ACCOUNT, RESTORE IT, KEEP THE KEYS.** The DPDP Day-0
+cascade closes `gym_members` and leaves `gym_staff` standing, and restore
+deliberately does not reopen a membership (2026-07-11 P2.2 T3 finding 4). :14262
+recorded this as "appears on this list as a tombstone" and deferred it under
+R1.1; **that under-called it — it is live authority, not a cosmetic row — and
+this card is what made a non-owner staff row reachable at all.**
+
+**THE REVIEWER'S PROPOSED FIX FOR IT WAS WRONG, AND THE TESTS ARE WHAT SHOWED
+IT.** "Require a live membership in `getStaffRole`" turned **five existing tests
+red**, and reading them is the finding: **staff who are NOT members is the
+spec's own model** — §4.7 invites staff BY EMAIL, so an invited manager need
+never join — and this card appoints from the roster only because `EmailSender`
+cannot deliver. That rule would have shipped an authorisation model that breaks
+the day its own deferral closes. **:13552's standing lesson earned again: a
+reviewer's fix is a claim and takes the same evidence as the code it replaces.**
+The rule is therefore **"not an EX-member", not "must be a member"**: denied only
+when a CLOSED membership exists here and no live one, plus a `users.status`
+check, plus an owner exemption for the `owner_included_as_member` state the
+create path already honours.
+
+**THE AUDIT FOUND TWO MORE THINGS AND BOTH WERE MINE.**
+**O86 SURVIVED: the account-status check had no subject.** Every arm of my ghost
+test denies on the closed membership, so deleting the status check changed
+nothing the test could see — :5104 F5 again, in the test written for the fix.
+Closed with the case that isolates it: a staff row with **no membership at all**
+(§4.7's invite state), whose account is then deleted.
+**O3 SURVIVED, and it is a fact about the fix rather than a hole.** Deleting
+`complimentary = false` from the seat count changed nothing, because the only
+complimentary member in the product is the owner — who is also staff and is now
+excluded twice. The clause stays (it is §4.2's wording and the column's meaning);
+**both halves of the mutant moved** (:11846 — anchor AND filter), and it is now
+pinned by a comped member who is NOT staff, the case where the two exclusions do
+not overlap.
+
+**RULE 4, THE REVIEWER'S FINDING AGAINST MY TEST:** "a gym cannot be left with
+nobody in charge" had ONE staff row, so it could not tell "count the OWNERS" from
+"count the staff" — he deleted `AND role = 'owner'` and the suite stayed green.
+The gym now holds a trainer too, and that mutant is **O87**, kept permanently.
+
+**PROVE** — `orgs.routes.test.ts` alone: **88/88, exit 0** (76 before this
+round's fixes; +12). tsc clean on `api` and `@app/shared`; eslint clean on
+`api`'s `src test` at `--max-warnings=0`.
+**MUTATION AUDIT: 17 mutants · 17 RED · 0 ALIVE · 0 never ran**, controls GREEN
+on all seventeen filters first, restores sha256-verified, `node --check` before
+the run, exit read into a variable. **The whole-table pre-check ABORTED the first
+attempt** because the C/H-1 fix moved O3's anchor — the guard working, and the
+third time this card has been saved by it.
+**THE FULL api SUITE IS NOT QUOTED AS GREEN, deliberately: two consecutive full
+runs failed the three global-count assertions in `catalog.seed.test.ts`**, which
+passes **1/1 alone**. That is the pre-existing shared-database race on its own
+`OWED.md` line (nine files call `seed()`, two assert global counts). **Said
+rather than waved away: three full runs earlier the same day were 100% green, and
+this round lengthens `orgs.routes.test.ts` by twelve tests, which changes the
+interleaving. I did not cause the race; I have plausibly made it fire more
+often**, and that belongs on its line rather than in a shrug.
+**Also measured, and the HANDOFF instruction is subtly wrong: through corepack,
+`test:local -- <file>` does NOT scope — pnpm eats the `--` and all 44 files run.
+The form that works is `test:local <file>`.** Every "scoped" figure in this
+session before that discovery was a full-suite run.

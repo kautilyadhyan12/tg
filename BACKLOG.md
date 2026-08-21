@@ -1594,3 +1594,18 @@ would look ALIVE. **Neither guard was written for this card.**
 **Also learned and worth carrying: the web harness has NO scoping flag** — no
 `MUTATE_ONLY`, no `--only`. It always runs all 35. The api harness reads
 `MUTATE_ONLY` from the environment (`--only=` is silently ignored there too).
+
+## Staff card, T3 round 1 (2026-08-22) — DECISIONS :14401
+
+Three Critical/High, all fixed in the round (they hold the packet; they are not
+logged as Low). **One Low, fixed here:**
+
+| # | Finding | Fix |
+|---|---|---|
+| L-1 | `orgStaffSchema.email` serves the address as it is TODAY, not the one the owner typed to appoint somebody — so a later address change is disclosed without the owner ever asking. §2.4's never-see list does not cover contact details either way, and the list is owner-only, so nothing is wrong on screen. | Named on the join screen's "What {org} can see" sheet when the Staff screen lands — carried on that card rather than fixed in the server half, since the sheet is a web surface. |
+
+**The two audit survivors are NOT Low findings and are recorded in the DECISIONS
+entry instead**, because both are facts about the fixes rather than defects:
+**O86** had no subject until a staff row with no membership existed to give it
+one, and **O3** is double-covered now that the owner is excluded as staff as well
+as complimentary.

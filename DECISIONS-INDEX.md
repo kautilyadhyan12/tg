@@ -809,6 +809,54 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:14401** — 2026-08-22 — **T3 ROUND 1 ON THE STAFF CARD: THREE Critical/High,
+  all fixed — and the reviewer's own one-liner was WRONG, measured.** Reviews
+  :14262; **the packet did NOT ship this round.** Escape hatch NOT armed (:14174
+  found zero, so this is the first in the subsystem). **Read before writing
+  `gym_members.complimentary`, before adding a reader of `gym_staff`, before
+  requiring a membership anywhere AUTHORITY is decided, and before trusting that
+  a staff row means what it says.** **C/H-1: I overloaded a flag and checked ONE
+  of its THREE readers** — `complimentary` means "did not JOIN", not "unpaid
+  seat", so an appointment made the console print "Nobody has joined yet" over a
+  gym with 2 members, gave a `max_uses:1` code another place, and moved
+  `orgCodeSchema.joined`; :14262 anticipated the third and called it "TRUE before
+  and after", which was true of the reader it looked at. Fixed by excluding staff
+  in `claimSeat`'s COUNT and writing the flag nowhere — **a departure from §4.2's
+  prose recorded rather than slipped past (R0.1); the RULING is Kd's, only the
+  mechanism moved.** **C/H-2: appointing raced remove-from-members 12/12** —
+  `addStaff` read membership, `removeMember` read `gym_staff`, neither locked, and
+  the pair commits a staff row over a CLOSED membership (`members.read` over a gym
+  you are not in); both now take `lockOrgRow` first. :14174's rule was cited
+  correctly in the original and **the ENUMERATION was short** — it considered only
+  two concurrent appointments. **C/H-3: delete your account, restore it, keep the
+  keys** (Day-0 closes `gym_members`, leaves `gym_staff`, and restore does not
+  reopen a membership — 2026-07-11 P2.2 T3 F4); :14262 filed it as a "tombstone"
+  under R1.1 and **that under-called live authority as cosmetic.** **THE
+  REVIEWER'S FIX FOR IT — "require a live membership in `getStaffRole`" — TURNED
+  FIVE EXISTING TESTS RED, and reading them is the finding: STAFF WHO ARE NOT
+  MEMBERS IS THE SPEC'S OWN MODEL** (§4.7 invites by email), so that rule would
+  break the day this card's own deferral closes. **The rule shipped is "not an
+  EX-member", not "must be a member"** — denied only on a CLOSED membership with
+  no live one, plus `users.status`, plus an owner exemption for
+  `owner_included_as_member`. :13552 earned again: **a reviewer's fix is a claim.**
+  **The audit found two more, both mine: O86 SURVIVED** (every arm of my ghost
+  test denied on the closed membership, so the status check had no subject —
+  :5104 F5 inside the fix's own test), closed with a staff row that never had a
+  membership; **and O3 SURVIVED as a FACT about the fix** — the owner is now
+  excluded twice, so both halves of that mutant moved (:11846) and it is pinned by
+  a comped member who is not staff. **Rule 4, his finding against me:** the
+  last-owner test had ONE staff row and could not tell "count owners" from "count
+  staff" — now two rows, and **O87** keeps it. **PROVE: `orgs.routes.test.ts`
+  88/88 alone, exit 0** (+12) · tsc + eslint clean · **17 mutants · 17 RED · 0
+  ALIVE**, controls green first, `node --check` first, **the whole-table pre-check
+  ABORTED attempt 1** on O3's drifted anchor. **The full api suite is NOT quoted
+  green:** two consecutive full runs failed `catalog.seed.test.ts`'s global-count
+  assertions (1/1 alone) — the pre-existing shared-`seed()` race, **and this round
+  plausibly makes it fire MORE often by lengthening the orgs file, which is said
+  rather than shrugged off.** **Also measured: through corepack,
+  `test:local -- <file>` does NOT scope — pnpm eats the `--`. Use
+  `test:local <file>`.**
+
 - **:14262** — 2026-08-22 — **A GYM CAN FINALLY HAVE MORE THAN ONE PERSON
   RUNNING IT (server half), and KD RULED STAFF SEATS FREE.** **Read before
   touching the staff surface, before adding a role to

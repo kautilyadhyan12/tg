@@ -9193,3 +9193,50 @@ NEXT
      section (§3.1 names Settings; §4.7 puts Staff under it), which is what
      carries the SMOKE. Not started, not approved.
 ```
+
+```
+TASK: STAFF CARD, T3 ROUND 1 — THREE Critical/High, ALL FIXED. The packet did
+      NOT ship this round. DECISIONS :14401. Escape hatch NOT armed (:14174
+      found zero, so this is the FIRST Critical round in orgs).
+      **A diff-only re-review of the fixes is the remaining gate.**
+
+WHAT THE THREE WERE
+  · C/H-1 `complimentary` was overloaded to mean "unpaid seat". It means "did
+    not JOIN". Three readers acted on it — the console printed "Nobody has
+    joined yet" over a 2-member gym, and a maxUses:1 code admitted another
+    person. Kd's "staff seats free" now lives in `claimSeat`'s COUNT.
+  · C/H-2 appointing raced remove-from-members, 12/12. Both take `lockOrgRow`.
+  · C/H-3 delete + restore left a staff row over a closed membership.
+
+THE ONE THING A NEXT CHAT MUST NOT UNDO
+  · **`getStaffRole`'s rule is "NOT AN EX-MEMBER", not "must be a member".**
+    The reviewer proposed the latter; it turned FIVE existing tests red.
+    **Staff who are not members is the SPEC's model** — §4.7 invites by email —
+    and this card only appoints from the roster because email cannot be sent.
+    Denied only on a CLOSED membership with no live one. Plus `users.status`,
+    plus an owner exemption for `owner_included_as_member`.
+
+INSTRUMENT NOTES
+  · **`test:local -- <file>` DOES NOT SCOPE through corepack** — pnpm eats the
+    `--` and all 44 files run. Use `test:local <file>`. The HANDOFF block above
+    is wrong on this and its own line in OWED now says so.
+  · O3 and O86 both SURVIVED first and both were mine: O86's guarantee had no
+    subject, O3's is now double-covered. Neither was faked green.
+  · The whole-table pre-check ABORTED attempt 1 on O3's drifted anchor.
+
+GATES
+  · `orgs.routes.test.ts` **88/88 alone, exit 0** (+12) · tsc clean (api +
+    shared) · eslint clean on api `src test`.
+  · **17 mutants · 17 RED · 0 ALIVE · 0 never ran**, controls green first,
+    restores sha256-verified, `node --check` first, exit read into a variable.
+  · **THE FULL api SUITE IS NOT GREEN AND IS NOT QUOTED AS SUCH**:
+    `catalog.seed.test.ts`'s three global-count assertions fail in a full run
+    and pass 1/1 alone. Pre-existing (own OWED line) — **but this round
+    lengthened the orgs file and made it fire more often**, which is on that
+    line now rather than glossed.
+
+NEXT
+  1. **DIFF-ONLY re-review, fresh chat, on the fix commit only.**
+  2. Then the WEB half (a console Settings screen with a Staff section), which
+     carries the SMOKE. Not started.
+```

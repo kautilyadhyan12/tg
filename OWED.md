@@ -2156,6 +2156,23 @@ then; none may be hidden or reduced to close the gap.
       a schema or database per worker, or the two seed-asserting files run
       alone. **Not blocking anything** — a test-infrastructure defect, not a
       product one, and invisible until this week.
+      **WORSE AS OF 2026-08-22 (DECISIONS :14401), and said rather than
+      shrugged off.** The staff card's T3 round added twelve tests to
+      `orgs.routes.test.ts`, which lengthens that file and changes the
+      interleaving: **three full runs earlier that day were 100% green, and the
+      two full runs after the fix round both failed the SAME three global-count
+      assertions in `catalog.seed.test.ts`** (which passes **1/1 alone**). Nobody
+      caused the race and nobody fixed it; what changed is how often it fires,
+      and it will keep drifting that way as suites grow. **The practical cost is
+      now real rather than theoretical: a card can no longer end on a clean
+      full-suite figure**, so cards are quoting scoped runs, which is exactly the
+      erosion this line predicted.
+      **ALSO MEASURED 2026-08-22, because the HANDOFF instruction is subtly
+      wrong: through corepack, `pnpm --filter api test:local -- <file>` does NOT
+      scope** — pnpm consumes the `--` and all 44 files run, so several "scoped"
+      figures quoted before this was noticed were whole-suite runs wearing a
+      scoped label. **The form that works is `test:local <file>`** (no `--`).
+      `-t` filters are unaffected, which is why the mutation sweep never hit it.
 - [x] ~~🟡 **THE NEW API DOES NOT STORE A WORKOUT'S WALL-CLOCK DURATION.**~~
       **DONE 2026-08-07** (DECISIONS :5906) — Kd RULED the contract change this
       line said was needed. `durationSeconds` (the on-screen workout timer) and
