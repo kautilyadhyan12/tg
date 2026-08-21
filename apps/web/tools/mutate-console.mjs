@@ -303,10 +303,10 @@ const MUTANTS = [
     id: 'C25',
     target: 'codesview',
     suite: CODES_VIEW_SUITE,
-    why: 'A NUMBER A USER SEES: a code whose count could not be read prints "Nobody has joined with this code yet" — a claim about other people built out of a missing field',
+    why: 'A NUMBER A USER SEES: a code whose count could not be read prints "Nobody is using this code yet" — a claim about other people built out of a missing field',
     expect: 'says nothing about a count it does not have',
-    from: '? code.uses : null;',
-    to: '? code.uses : 0;',
+    from: '? code.joined : null;',
+    to: '? code.joined : 0;',
   },
   {
     id: 'C26',
@@ -325,6 +325,57 @@ const MUTANTS = [
     expect: 're-reads the codes after a change',
     from: '      await onChanged();',
     to: '      void 0;',
+  },
+
+  // ── C28–C32: THE COUNT'S MEANING, TAPS INSTEAD OF TYPING, AND REMOVAL ────
+  //
+  // From Kd's smoke of 2026-08-21. Each row is 4a's "a number a user sees and is
+  // FALSE" or a control that would be drawn where the server refuses it; the
+  // wording of the confirmation sentences is Low and is not mutated.
+  {
+    id: 'C28',
+    target: 'codesview',
+    suite: CODES_VIEW_SUITE,
+    why: 'A NUMBER A USER SEES (:5807): the summary reads the server\'s lifetime CLAIM tally instead of the people who are in, which is exactly the "2 people have joined with it" Kd was shown over a code one person had used',
+    expect: 'says IS IN rather than HAS JOINED',
+    from: '    typeof code.joined === \'number\' && Number.isFinite(code.joined) ? code.joined : null;',
+    to: '    typeof code.uses === \'number\' && Number.isFinite(code.uses) ? code.uses : null;',
+  },
+  {
+    id: 'C29',
+    target: 'view',
+    suite: VIEW_SUITE,
+    why: 'FALSE ON SCREEN: the "Fully used" chip is decided on a count the server no longer enforces against, so a code with places free reads as full — and the owner replaces a code that was working',
+    expect: 'calls a used-up code dead at the cap',
+    from: '  if (code.maxUses != null && code.joined >= code.maxUses) {',
+    to: '  if (code.maxUses != null && code.uses >= code.maxUses) {',
+  },
+  {
+    id: 'C30',
+    target: 'codesview',
+    suite: CODES_VIEW_SUITE,
+    why: "A VALUE THE SERVER WOULD REFUSE: stepping below the smallest limit yields 0 instead of clearing it, so a tap sends a limit the server answers 400 to — the fat-fingered value taking typing away was meant to make impossible",
+    expect: 'never produces a value parseLimit would refuse',
+    from: '  if (next < 1) return \'\';',
+    to: '  if (next < 0) return \'\';',
+  },
+  {
+    id: 'C31',
+    target: 'codesview',
+    suite: CODES_VIEW_SUITE,
+    why: 'A CONTROL THE SERVER REFUSES: Remove is offered on a code that still WORKS, so an owner taps it and reads a 409 — and, if the server ever agreed, a live door would vanish from the only list that watches it',
+    expect: 'refuses a WORKING code',
+    from: "  return state.reason === 'paused' || state.reason === 'expired';",
+    to: '  return true;',
+  },
+  {
+    id: 'C32',
+    target: 'codespanel',
+    suite: RENDER_SUITE,
+    why: 'DATA LOSS BY MISTAKE: removal stops asking first, so one tap on a row takes a code off the list with no chance to say no — the confirmation Replace has for the same reason',
+    expect: 'asks before removing a code',
+    from: '              onClick={() => setConfirmingRemove(true)}',
+    to: '              onClick={() => onRemove()}',
   },
 ];
 

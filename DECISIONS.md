@@ -14009,3 +14009,137 @@ job on the file it was added for.
 (`RUNBOOK/smoke-join-codes.md`, written) and a T3 round finding zero
 Critical/High. **The `OWED.md` "Front Desk" line DOES tick** — that one is a Kd
 ruling carried out, not a build awaiting proof.
+
+## KD'S SMOKE FINDS A NUMBER THAT LIES, AND THE PILE-UP HE PREDICTED (2026-08-21)
+
+**He ran `RUNBOOK/smoke-join-codes.md` and every step passed except what he
+noticed on his own.** Four findings, all his, none produced by a test, a reviewer
+or a mutant — the third time on this project that the only instrument which found
+a defect was a person at a screen (:12518's absent sentence, :5618's fabricated
+rest time, this).
+
+**His words, in order:** *"2 people have joined with it , the owner and 1 memeber
+but i think owner and stuff should not be counted they are complimentory"* ·
+*"whether it is setting date or maximum use hand typing should not be there"* ·
+*"i typed 19 07 2026 it was automatically set to 19 09 2026"* · *"codes will pile
+up should have a option to delete"* · *"owner himself does not need to set limits
+each code the owner generates limit will be set automatically based on gyms
+subscriptiom"*.
+
+### 1 · THE COUNT WAS NOT THE ONE HE THOUGHT, AND IT WAS STILL WRONG
+
+**MEASURED IN HIS OWN DATABASE BEFORE ANYTHING WAS CHANGED** (V1 — the fix would
+otherwise have been aimed at the wrong defect). Gym `owner`, code `TTUSD2`:
+`uses = 2`, live members through it 2, of which **1 complimentary**. Gym `iron
+man`, code `WE6RGX`: `uses = 1`, live members 2, of which 1 complimentary.
+
+**So the owner was NOT in the number — `createOrgAttempt` never bumped `uses` —
+and the "2" was ONE PERSON COUNTED TWICE:** `user@example.com` joined on 08-20,
+was removed the same day, and joined again on 08-21. `claimSeat` increments
+`uses` per CLAIM, and the screen printed that under a sentence about PEOPLE.
+**His diagnosis was wrong and his instinct was right**, which is worth recording:
+a chat that had "corrected" him without querying would have closed a real defect.
+
+**Two consequences, both Critical/High under :5807:** the sentence on screen was
+false, and `max_uses` was gated on the same counter — so a member who left took
+their place in the limit with them and a code limited to twenty died for ever
+after twenty people had ever passed through it.
+
+**THE FIX IS A COMPUTED COUNT, NOT A REPAIRED COUNTER.** `joined` = live
+memberships this code created, complimentary excluded, read from `gym_members`
+itself. One source of truth that cannot drift, rather than a column two paths
+must remember to move in opposite directions. **The `uses` COLUMN STAYS and is
+still written** — it answers a different and still-honest question (how many times
+has this code ever admitted somebody) that no other row records — and it is now
+displayed nowhere and enforces nothing. Do not wire it back.
+
+**The subquery is written out at six sites and that is deliberate** (`toCodeRow`
+carries the definition and the list): `sql.raw`/interpolated fragments are
+forbidden (R3.8), and drift between the DOOR's copy and the SCREEN's copy is
+exactly the defect this card fixes, so the anchor against it is a test that drives
+both sides, not a shared string.
+
+### 2 · TYPING IS GONE FROM BOTH BOXES, AND THE 19-07 → 19-09 CAUSE
+
+A native `<input type="date">` consumes keystrokes **segment by segment in the
+browser's own order** (`dd/mm` here, `mm/dd` in the US), so digits meant for one
+segment land in another and the field ends up holding a **valid** date nobody
+chose — which is why nothing downstream could catch it. `onKeyDown` now swallows
+everything except Tab/Escape/Enter/arrows (a field the keyboard cannot leave is an
+accessibility defect, not a safety feature), clicking anywhere opens the picker,
+and the people-limit is a `−`/`+` stepper over a `readOnly` box. `stepLimit` is
+proved by property — no sequence of taps produces a value `parseLimit` refuses.
+
+**`parseLimit` is KEPT even though no tap can now break it.** A restored form can
+hand a browser's remembered value back; a validator deleted because "the UI cannot
+produce that any more" is how a 400 reaches a screen with no sentence for it.
+
+### 3 · REMOVE, NOT DELETE — and the ruling the OWED line was waiting for
+
+`gym_members.code_id` and `gym_join_applications.code_id` reference the row under
+the schema's default `ON DELETE RESTRICT` (R4.3), so a true `DELETE` is **refused
+by Postgres for exactly the codes a gym most wants gone** — the ones people used —
+or, with the constraint relaxed, erases how today's members got in. Migration
+`0012` adds `gym_codes.removed_at`, the same soft-state shape
+`gym_members.removed_at` already uses.
+
+**Only a code that cannot admit anybody may be removed (paused, or past its end
+date), and the UPDATE pauses it in the same statement.** That pairing is the
+whole safety argument: a code missing from the console can never be a code still
+opening a door. **A merely FULL code is NOT removable** — one member leaving
+revives it, and hiding it would strand a code about to work again. Removing twice
+is a success, not a 404 (the `DELETE /members/:userId` precedent). The 100-code
+cap now counts VISIBLE codes, which makes its own refusal ("remove one from the
+list") a thing an owner can carry out; it previously named a button that did not
+exist.
+
+### 4 · HIS SUBSCRIPTION WORRY WAS ALREADY ANSWERED, TWICE
+
+Told to him in plain words rather than re-litigated: the seat cap has counted
+**live NON-complimentary members** since the org slice was built (:10010), so an
+owner and their staff can never push their own gym into a bigger bill — and
+**per-seat pricing is a STRUCK item** he ruled on 2026-08-20 (:12600), so more
+members never costs more per head. **Nothing was built for finding 1 or 5**, and
+his "limit set automatically from the subscription" is not deferred work: the
+gym-wide cap already does it the moment a subscription exists, and the per-code
+box stays optional and empty for the one-off cases (a trial camp). Re-asking him
+to rule on either would have been the protocol failure CLAUDE.md's grounding rule
+names.
+
+**PROVE:** api **554 tests across 44 files** on LOCAL Postgres — the orgs suite
+**67/67** including five new tests — web **976/976 across 41 files** · tsc clean ·
+eslint clean · `vite build` ✓. The full api run's 3 reds are `catalog.seed`'s
+GLOBAL count assertions under parallel seeding, the documented pre-existing flake:
+both files pass scoped, run alone, and this change touches no catalog code.
+
+**THE SWEEP FOUND ONE REAL HOLE, AND IT WAS IN MY TESTS.** api **70 mutants ·
+69 RED · 1 ALIVE** on the first pass: **O69** — removal ceasing to PAUSE the row
+it hides — survived, because every removal test took away a code that was
+**already paused**, so nothing in the suite could notice. The pairing ("off the
+list" and "cannot admit anybody" are ONE statement, not two facts that agree
+today) was argued in a comment and proven nowhere. Fixed in the TEST, not the
+code: the EXPIRED-code path is the only one that removes a code while `paused`
+is still false, and it now reads the row back. **O69 re-measured RED against that
+assertion alone**, and the mutant is re-pointed at the test that can actually see
+it. **This is the fourth recorded time a mutation sweep, not a review, found the
+thing nobody had thought to check** — and the first on this card where the defect
+was the instrument's own blind spot rather than the product's.
+
+**Also worth carrying: `--only=` IS NOT THE FLAG.** The harness reads
+`MUTATE_ONLY` from the environment, so `--only=O64,O65` silently ran all 70 (~29
+minutes rather than ~6). No verdict was harmed — a full sweep is strictly more
+than was asked for — but a chat budgeting a scoped run will be wrong by 5×.
+Scoped runs print `SUBSET RUN … THIS IS NOT A FULL SWEEP` and must not be quoted
+as one.
+
+**Instrument note, mine:** THREE existing mutant anchors (O21, O26, O60) broke
+because the count subquery aliased their queries' table (`gym_codes AS c`), and
+the harness aborted on each in turn rather than reporting a false ALIVE — the
+:5199 class fix earning its keep for the third recorded time. A whole-file anchor
+checker was written to find all of them in one pass instead of one abort per run;
+it also surfaced that **O17 and O29 each match their target TWICE** (pre-existing,
+verified against `HEAD` — `String.replace` takes the first, which is the intended
+site in both cases). Logged in `BACKLOG.md`, not fixed here (R1.1).
+
+**NOTHING TICKS except the delete/pile-up line.** The SMOKE (13 steps now, two
+new) and a T3 round finding zero Critical/High are both UNRUN.

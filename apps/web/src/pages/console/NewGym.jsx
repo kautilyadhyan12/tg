@@ -131,7 +131,7 @@ export default function NewGym() {
             paused: false,
             expiresAt: null,
             maxUses: null,
-            uses: 0,
+            joined: 0,
           }}
         />
 

@@ -4296,7 +4296,7 @@ file and is stated so nobody reads these as lower priority than they are.
       SMOKE (`RUNBOOK/smoke-join-codes.md`, written, UNRUN) and a T3 round
       finding zero Critical/High (UNRUN). Also still unbuilt on this line:
       RESTORE, staff management, CSV export, nudges.
-      **AND A DEFERRAL THIS CARD MAKES, recorded here rather than in prose: a
+      ~~**AND A DEFERRAL THIS CARD MAKES, recorded here rather than in prose: a
       code can be turned OFF but never DELETED.** `ORG_CODES_MAX` is 100, derived
       from the `listCodes` ceiling so the list is provably whole rather than
       provably truncated, and retired codes count toward it. A gym rotating
@@ -4304,7 +4304,21 @@ file and is stated so nobody reads these as lower priority than they are.
       says to delete one, which is a thing nothing can do yet. Deliberate — a
       delete has to decide what happens to `gym_members.code_id`, which is the
       group attribution every membership carries, and that is a ruling (R0.2),
-      not a chat's guess.
+      not a chat's guess.~~
+      **CLOSED 2026-08-21 BY KD'S OWN SMOKE (DECISIONS :14061, commit named
+      there): *"codes will pile up should have a option to delete"*.** Built as
+      REMOVE, not DELETE, and the ruling the line was waiting for is the one it
+      predicted: `gym_members.code_id` (and `gym_join_applications.code_id`)
+      reference the row under `ON DELETE RESTRICT`, so a real delete is either
+      refused by Postgres for exactly the codes a gym most wants gone — the ones
+      people used — or erases how today's members got in. `gym_codes.removed_at`
+      (migration `0012`) is the same soft-state shape `gym_members.removed_at`
+      already uses. **Only a code that cannot admit anybody may go (paused or
+      past its end date), and the UPDATE pauses it in the same statement**, so
+      "off the list" and "still opens the door" can never disagree; a merely FULL
+      code stays, because a member leaving revives it. The cap now counts VISIBLE
+      codes, which makes the refusal's "remove one from the list" a thing an owner
+      can actually do — it was pointing at a button that did not exist.
       ~~**Consequence worth knowing: `removed_at` is written by nothing
       today**, so the roster's `removed_at IS NULL` filter is correct but
       untested against a real removal — the card that builds removal owes that

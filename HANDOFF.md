@@ -8994,3 +8994,57 @@ NEXT
   2. **T3 — a fresh chat, on the diff of BOTH halves** (:13803 server, :13920
      web). Neither has been reviewed.
 ```
+
+```
+TASK: KD'S SMOKE FINDINGS — the count, the typing, and the pile-up.
+      DECISIONS :14013. **The OWED delete/pile-up line TICKS. SMOKE (13 steps
+      now) and T3 are UNRUN.** Migration `0012` — one nullable column, one index.
+
+WHAT CHANGED
+  · A code's number on screen and at the door is `joined` — LIVE memberships it
+    created, COMPLIMENTARY EXCLUDED. `uses` (the claims column) is written and
+    read by NOTHING. Do not wire it back to a screen or a limit.
+  · No hand typing on the end date or the people-limit. Date = calendar only,
+    limit = −/+ stepper over a readOnly box.
+  · DELETE /v1/orgs/:gymId/codes/:code — REMOVE, not delete. `gym_codes.removed_at`.
+
+THINGS A LATER CHAT WILL OTHERWISE GET WRONG
+  · **KD'S DIAGNOSIS WAS WRONG AND HIS INSTINCT WAS RIGHT.** He said the owner
+    was in the "2"; the database said one person joined, was removed, and joined
+    again. **Query before you agree OR disagree with a user's theory** — a chat
+    that corrected him would have closed a real defect.
+  · **THE COUNT SUBQUERY IS WRITTEN OUT AT SIX SITES ON PURPOSE** (`toCodeRow`
+    holds the definition and the list). Drift between the DOOR's copy and the
+    SCREEN's is the defect; a shared `sql` fragment is R3.8's forbidden shape.
+  · **ONLY A CODE THAT CANNOT ADMIT ANYBODY MAY BE REMOVED**, and removal PAUSES
+    it in the same statement. A merely FULL code is NOT removable — a member
+    leaving revives it. The cap counts VISIBLE codes, which is what makes its own
+    "remove one from the list" a thing an owner can do.
+  · **HIS SUBSCRIPTION WORRY NEEDED NO CODE AND MUST NOT BE RE-RULED**: seat caps
+    have excluded complimentary members since :10010, and per-seat pricing is
+    STRUCK at :12600. His "limit from the subscription" is the gym-wide cap,
+    which already works the moment a subscription exists.
+  · **`--only=` IS NOT THE HARNESS FLAG — it is `MUTATE_ONLY` in the env.** A
+    `--only=` run silently sweeps all 70 (~29 min, not ~6).
+
+GATES
+  · api **554 tests / 44 files** local; **orgs 67/67**; tsc + eslint clean.
+    The 3 reds in a full run are `catalog.seed`'s global-count flake (green
+    scoped, twice) — pre-existing, own OWED line, untouched by this card.
+  · web **976/976 / 41 files** · `vite build` ✓ · eslint clean.
+  · **SWEEPS: web 32 mutants 32 RED 0 ALIVE. api 70 mutants — 69 RED, ONE
+    ALIVE (O69), and the hole was in MY TESTS**: every removal test removed an
+    already-paused code, so nothing could see removal ceasing to pause. Fixed by
+    asserting the row back on the EXPIRED path; O69 re-measured RED alone.
+  · Three existing anchors (O21, O26, O60) broke on the new table alias and were
+    re-anchored; the harness aborted rather than reporting a false ALIVE.
+  · Migration applied to BOTH databases: local Postgres and the Neon dev branch
+    (Kd smokes against Neon). Verified: column + index present; his gym's code
+    `TTUSD2` reads `uses=2` / **JOINED=1**.
+
+NEXT
+  1. **Kd runs `RUNBOOK/smoke-join-codes.md`** — 13 steps; 6, 8, 9, 12, 13 are
+     the new/changed ones.
+  2. **T3 — a fresh chat, on the diff of ALL THREE commits** (:13803 server,
+     :13920 web, :14013 these fixes). None has been reviewed.
+```

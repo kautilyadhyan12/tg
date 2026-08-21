@@ -143,7 +143,10 @@ export function codeState(code, now = Date.now()) {
   if (expiresAt !== null && !Number.isNaN(expiresAt) && expiresAt <= now) {
     return { live: false, reason: 'expired', label: 'Expired' };
   }
-  if (code.maxUses != null && code.uses >= code.maxUses) {
+  // `joined` is people who are IN through this code, which is what the server
+  // measures the limit against (Kd's smoke, 2026-08-21) — the old `uses` counter
+  // kept a code "fully used" after the people it let in had left.
+  if (code.maxUses != null && code.joined >= code.maxUses) {
     return { live: false, reason: 'exhausted', label: 'Fully used' };
   }
   return { live: true, reason: null, label: 'Active' };

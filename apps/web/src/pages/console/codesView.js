@@ -93,33 +93,42 @@ export function whyNotUsable(code, now = Date.now()) {
   }
 }
 
-/** The one-line summary under a code: how many people joined with it, and what
- *  limits it carries.
+/** The one-line summary under a code: how many people are in through it, and
+ *  what limits it carries.
  *
- *  **The join count comes from the SERVER's `uses` and is never derived here.**
- *  `uses` counts MEMBERSHIPS, not applications — somebody waiting at the front
- *  desk has not spent one — and a screen that counted anything of its own would
- *  disagree with the number the server enforces the limit against.
+ *  **The count comes from the SERVER's `joined` and is never derived here.** It
+ *  is PEOPLE WHO ARE IN THE GYM NOW through this code — not applications (a
+ *  person waiting at the front desk has not taken a place), not times the code
+ *  was used, and not the owner (their own seat is complimentary). A screen that
+ *  counted anything of its own would disagree with the number the server enforces
+ *  the limit against.
  *
- *  Ordinary codes (no limits) get the join count alone, which is why the
- *  restriction clauses are appended rather than always present: a gym with one
- *  plain code should not read a sentence about rules it never set. */
+ *  **THE SENTENCE SAYS "IS IN", NOT "HAS JOINED", AND THE WORDS ARE THE POINT.**
+ *  It read "2 people have joined with it" over a code ONE person had ever used —
+ *  they joined, were removed, and joined again — in Kd's smoke of 2026-08-21. A
+ *  count of people who are still here, described as a count of arrivals, goes
+ *  wrong the moment anybody leaves.
+ *
+ *  Ordinary codes (no limits) get the count alone, which is why the restriction
+ *  clauses are appended rather than always present: a gym with one plain code
+ *  should not read a sentence about rules it never set. */
 export function codeSummary(code, formatDate) {
   if (!code) return '';
-  const uses = typeof code.uses === 'number' && Number.isFinite(code.uses) ? code.uses : null;
+  const joined =
+    typeof code.joined === 'number' && Number.isFinite(code.joined) ? code.joined : null;
   const parts = [];
 
-  if (uses === null) {
+  if (joined === null) {
     // Nothing rather than "0 people": a reader that could not get the count has
-    // no business saying nobody has joined.
-  } else if (uses === 0) {
-    parts.push('Nobody has joined with this code yet');
+    // no business saying nobody is in.
+  } else if (joined === 0) {
+    parts.push('Nobody is using this code yet');
   } else {
-    parts.push(`${String(uses)} ${uses === 1 ? 'person has' : 'people have'} joined with it`);
+    parts.push(`${String(joined)} ${joined === 1 ? 'person is' : 'people are'} in through it`);
   }
 
   if (typeof code.maxUses === 'number' && Number.isFinite(code.maxUses)) {
-    const left = uses === null ? null : Math.max(0, code.maxUses - uses);
+    const left = joined === null ? null : Math.max(0, code.maxUses - joined);
     parts.push(
       left === null
         ? `Limit ${String(code.maxUses)}`
@@ -177,17 +186,63 @@ export function todayInputValue(now = new Date()) {
   return `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
-/** What the owner typed in the "limit" box → what the API takes.
+/** What the limit box holds → what the API takes.
  *
  *  Empty means "no limit" (null). Anything that is not a whole number of at
  *  least 1 returns `invalid`, so the screen can say so rather than sending a
  *  value the server answers 400 to — the server's `.min(1)` is the enforcement
  *  and this is the explanation. A limit of zero is pause wearing a number, and
- *  the pause switch is one tap away. */
+ *  the pause switch is one tap away.
+ *
+ *  **IT IS STILL A PARSER even though the box can no longer be typed into**
+ *  (`stepLimit` is the only thing that writes it, and a browser can still hand a
+ *  restored form a value from its own memory). A validator deleted because "the
+ *  UI can't produce that any more" is how a 400 reaches a screen that has no
+ *  sentence for it. */
 export function parseLimit(value) {
   if (typeof value !== 'string' || value.trim() === '') return { ok: true, value: null };
   if (!/^\d+$/.test(value.trim())) return { ok: false };
   const n = Number(value.trim());
   if (!Number.isSafeInteger(n) || n < 1) return { ok: false };
   return { ok: true, value: n };
+}
+
+/** THE ONLY WAY THE LIMIT BOX CHANGES — Kd, 2026-08-21: *"whether it is setting
+ *  date or maximum use hand typing should not be there"*.
+ *
+ *  He typed `19 07 2026` into the date box and the browser showed him
+ *  `19 09 2026`: a native date input reads keystrokes segment by segment in the
+ *  browser's OWN order (`dd/mm` here, `mm/dd` in the US), so digits meant for one
+ *  segment land in another and the field silently holds a date nobody chose. The
+ *  same class of accident is a fat-fingered `500` in a limit box. Both controls
+ *  are now driven by taps only.
+ *
+ *  Steps between "no limit" and 1: from empty, `+1` gives 1 (the smallest limit
+ *  that means anything) and `−1` on 1 goes back to empty, which is how an owner
+ *  takes a limit OFF without a "clear" button that means nothing to them. There
+ *  is no ceiling here — the server's is `2147483647` and a gym typing its way to
+ *  that with taps is not a case worth a second rule. */
+export function stepLimit(value, delta) {
+  const parsed = parseLimit(value);
+  const current = parsed.ok && parsed.value !== null ? parsed.value : 0;
+  const next = current + delta;
+  if (next < 1) return '';
+  if (!Number.isSafeInteger(next)) return value;
+  return String(next);
+}
+
+/** May this code be taken off the gym's list?
+ *
+ *  MIRRORS THE SERVER (`repo.removeCode`) and does not decide anything: only a
+ *  code that can no longer admit anybody may go, so the list and the door can
+ *  never disagree about which codes are working. A code that is merely FULL stays
+ *  — one member leaving revives it, so hiding it would strand a code that is
+ *  about to work again, and the server refuses that with a sentence saying so.
+ *
+ *  A row the reader cannot classify (`unknown`) answers FALSE: an unreadable code
+ *  is not a code to offer a delete button for. */
+export function canRemoveCode(code, now = Date.now()) {
+  if (!code) return false;
+  const state = codeState(code, now);
+  return state.reason === 'paused' || state.reason === 'expired';
 }

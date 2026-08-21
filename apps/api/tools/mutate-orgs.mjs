@@ -290,8 +290,12 @@ const MUTANTS = [
     // a hole in the gym scoping that was never there. The whole-table anchor
     // check caught it before a byte was written (:5199's class fix, :8610's
     // fix-drifts-a-mutant-span shape).
-    from: '    WHERE gym_id = ${gymId}\n    ORDER BY created_at ASC, code ASC\n    LIMIT ${ORG_CODES_LIMIT}`;',
-    to: '    ORDER BY created_at ASC, code ASC\n    LIMIT ${ORG_CODES_LIMIT}`;',
+    // RE-ANCHORED AGAIN 2026-08-21: the count of people in through a code turned
+    // this query into an aliased one (`FROM gym_codes c`), so both the table
+    // alias and the new `removed_at` clause moved the span. Same class of drift,
+    // caught by the same whole-table check before a byte was written.
+    from: '    WHERE c.gym_id = ${gymId} AND c.removed_at IS NULL\n    ORDER BY c.created_at ASC, c.code ASC',
+    to: '    WHERE c.removed_at IS NULL\n    ORDER BY c.created_at ASC, c.code ASC',
   },
   {
     id: 'O22',
@@ -344,8 +348,10 @@ const MUTANTS = [
     target: 'repo',
     why: 'L-1 RESTORED: the codes list loses its bound, the one list in this module that had none while every sibling is capped',
     expect: 'bounds the codes list',
-    from: '    ORDER BY created_at ASC, code ASC\n    LIMIT ${ORG_CODES_LIMIT}`;',
-    to: '    ORDER BY created_at ASC, code ASC`;',
+    // RE-ANCHORED 2026-08-21 with O21, for the same reason: the count subquery
+    // aliased this query's table, so `created_at` became `c.created_at`.
+    from: '    ORDER BY c.created_at ASC, c.code ASC\n    LIMIT ${ORG_CODES_LIMIT}`;',
+    to: '    ORDER BY c.created_at ASC, c.code ASC`;',
   },
 
 
@@ -708,8 +714,10 @@ const MUTANTS = [
     id: 'O60',
     target: 'repo',
     why: 'DATA LOSS: rotate stops retiring the old code, so a leaked poster stays live for ever while the screen reports it replaced — the half-done rotate the single transaction exists to make impossible',
-    from: '      const retiredRows = await tx<RawCode[]>`\n        UPDATE gym_codes SET paused = true',
-    to: '      const retiredRows = await tx<RawCode[]>`\n        UPDATE gym_codes SET paused = paused',
+    // RE-ANCHORED 2026-08-21: the retired row now carries the count of people in
+    // through it, which aliased the UPDATE's table (`gym_codes AS c`).
+    from: '      const retiredRows = await tx<RawCode[]>`\n        UPDATE gym_codes AS c SET paused = true',
+    to: '      const retiredRows = await tx<RawCode[]>`\n        UPDATE gym_codes AS c SET paused = paused',
     expect: 'the old one stops',
   },
   {
@@ -724,7 +732,7 @@ const MUTANTS = [
     id: 'O62',
     target: 'repo',
     why: 'A NUMBER A USER SEES (:5807): the join limit may be set below the number who already joined, so an owner who types 1 to "let one more in" instantly reads Fully used over a code they just widened',
-    from: '    if (nextMaxUses !== null && nextMaxUses < before.uses) {',
+    from: '    if (nextMaxUses !== null && nextMaxUses < before.joined) {',
     to: '    if (false) {',
     expect: 'refuses a limit BELOW the number who already joined',
   },
@@ -735,6 +743,79 @@ const MUTANTS = [
     from: '  if (at.getTime() <= Date.now()) {',
     to: '  if (false) {',
     expect: 'refuses an end date in the past',
+  },
+
+  // ── O64–O70: WHAT THE COUNT MEANS, AND TIDYING A CODE AWAY ───────────────
+  //
+  // Kd's smoke of 2026-08-21 read "2 people have joined with it" off a code ONE
+  // person had ever used, and the same counter gated the code's limit. Every row
+  // below is 4a's "a number a user sees and is FALSE" or its OWNERSHIP column;
+  // the wording of the new refusals is Low and is not mutated.
+  //
+  // THE SUBQUERY APPEARS SIX TIMES BY DESIGN (see `toCodeRow`), so each anchor
+  // below carries the lines AFTER it that make it unique — `String.replace` with
+  // a string takes the FIRST match, and an anchor that is merely present would
+  // mutate a site this row is not about.
+  {
+    id: 'O64',
+    target: 'repo',
+    why: 'A NUMBER A USER SEES (:5807): the console counts members who have LEFT, so a code one person joined and left reads "1 person is in through it" — the exact sentence Kd was shown, restored',
+    from: '             WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)\n             AS joined\n    FROM gym_codes c\n    WHERE c.gym_id = ${gymId}',
+    to: '             WHERE m.code_id = c.id AND m.complimentary = false)\n             AS joined\n    FROM gym_codes c\n    WHERE c.gym_id = ${gymId}',
+    expect: 'counts PEOPLE who are in',
+  },
+  {
+    id: 'O65',
+    target: 'repo',
+    why: "A NUMBER A USER SEES: the owner's own complimentary seat is counted as a join, so every gym is told one more person came through its code than ever did — and Kd's reason for asking was that an owner is never counted against their own gym",
+    from: '             WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)\n             AS joined\n    FROM gym_codes c',
+    to: '             WHERE m.code_id = c.id AND m.removed_at IS NULL)\n             AS joined\n    FROM gym_codes c',
+    expect: 'counts PEOPLE who are in',
+  },
+  {
+    id: 'O66',
+    target: 'repo',
+    why: "DATA LOSS / A FALSE REFUSAL: the DOOR counts members who have left, so a code limited to twenty is dead for ever once twenty people have passed through it — a gym's poster shut by people who are no longer members",
+    from: '               WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)\n               AS joined\n      FROM gym_codes c WHERE c.id = ${found.id}',
+    to: '               WHERE m.code_id = c.id AND m.complimentary = false)\n               AS joined\n      FROM gym_codes c WHERE c.id = ${found.id}',
+    expect: "frees a place in a code's limit when a member leaves",
+  },
+  {
+    id: 'O67',
+    target: 'repo',
+    why: "OWNERSHIP: removal stops scoping by gym, so any gym's manager can take ANOTHER gym's poster off that gym's screen by typing its six characters — the same IDOR as O58, wearing a third method",
+    from: '      SELECT code, paused, expires_at, removed_at\n      FROM gym_codes\n      WHERE gym_id = ${input.gymId} AND code = ${input.code}',
+    to: '      SELECT code, paused, expires_at, removed_at\n      FROM gym_codes\n      WHERE code = ${input.code}',
+    expect: 'scopes every write to the OWNING gym',
+  },
+  {
+    id: 'O68',
+    target: 'repo',
+    why: 'A FALSE SCREEN: a code that still WORKS may be tidied away, so a gym removes a poster from the only list that watches it while the door it opens stays open — the pairing the removal rule exists to guarantee',
+    from: '    if (!before.paused && !expired) return { kind: "still_usable" };',
+    to: '    if (false) return { kind: "still_usable" };',
+    expect: 'takes a switched-off code off the list',
+  },
+  {
+    id: 'O69',
+    target: 'repo',
+    why: 'A FALSE SCREEN: removal stops pausing the row, so an EXPIRED code taken off the list could be woken by a later change nobody can see — "not on the list" and "cannot let anyone in" part company',
+    from: '      UPDATE gym_codes SET removed_at = now(), paused = true',
+    to: '      UPDATE gym_codes SET removed_at = now(), paused = paused',
+    // SURVIVED ITS FIRST SWEEP, and the hole was in the TEST: every removal test
+    // took away a code that was ALREADY paused, so nothing could notice removal
+    // ceasing to pause. Re-pointed at the EXPIRED-code test, which is the only
+    // path where a code is removed while `paused` is still false, and that test
+    // now reads the row back.
+    expect: 'removes an EXPIRED code',
+  },
+  {
+    id: 'O70',
+    target: 'service',
+    why: "PRIVILEGE: tidying a code away drops to the INVITE tick, which §2.2 grants all three roles — so a trainer can make a gym's codes disappear from the owner's screen",
+    from: '  await requirePrivilege(deps, gymId, userId, "codes.manage");\n\n  const outcome = await repo.removeCode(deps.sql, {',
+    to: '  await requirePrivilege(deps, gymId, userId, "codes.invite");\n\n  const outcome = await repo.removeCode(deps.sql, {',
+    expect: 'refuses a TRAINER',
   },
 ];
 

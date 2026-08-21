@@ -130,6 +130,20 @@ export const orgService = {
       authApi.post(`/v1/orgs/${gymId}/codes/${encodeURIComponent(code)}/rotate`, {}),
     ),
 
+  /** DELETE /v1/orgs/:gymId/codes/:code — take a finished code off the list.
+   *
+   *  NOT parsed through a schema, because there is nothing to read: the answer
+   *  carries no row (the code is gone from the list, so there is no state to
+   *  show), and the panel re-reads the list afterwards like every other
+   *  mutation here. A 409 comes back when the code still works, and the panel
+   *  shows the server's own sentence.
+   *
+   *  Only a code that can no longer admit anybody may go — the server decides
+   *  that, and `canRemoveCode` mirrors it so the button is not drawn where the
+   *  answer would be no. */
+  removeCode: (gymId, code) =>
+    authApi.delete(`/v1/orgs/${gymId}/codes/${encodeURIComponent(code)}`),
+
   /** POST /v1/orgs/join — the member's half of the door.
    *
    *  Typing a code creates an APPLICATION, never a membership (Kd ruling

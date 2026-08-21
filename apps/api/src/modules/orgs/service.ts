@@ -487,16 +487,7 @@ export async function listOrgCodes(
   // Parsed on the way out like its siblings: the console decides live-vs-dead
   // from these fields, so a row that silently lost `paused` would become a
   // screen telling an owner to share a code the join path refuses.
-  return orgCodesResponseSchema.parse({
-    codes: rows.map((c) => ({
-      code: c.code,
-      label: c.label,
-      paused: c.paused,
-      expiresAt: c.expiresAt === null ? null : c.expiresAt.toISOString(),
-      maxUses: c.maxUses,
-      uses: c.uses,
-    })),
-  });
+  return orgCodesResponseSchema.parse({ codes: rows.map(toOrgCode) });
 }
 
 function toOrgCode(row: repo.CodeRow): OrgCode {
@@ -506,7 +497,7 @@ function toOrgCode(row: repo.CodeRow): OrgCode {
     paused: row.paused,
     expiresAt: row.expiresAt === null ? null : row.expiresAt.toISOString(),
     maxUses: row.maxUses,
-    uses: row.uses,
+    joined: row.joined,
   };
 }
 
@@ -603,7 +594,7 @@ export async function createOrgCode(
       throw new OrgsError(
         409,
         "too_many_codes",
-        `This gym already has ${String(outcome.cap)} codes, which is the most it can hold. Delete one before making another.`,
+        `This gym already has ${String(outcome.cap)} codes, which is the most it can hold. Remove one from the list before making another.`,
       );
     default:
       return assertNever(outcome);
@@ -650,7 +641,7 @@ export async function updateOrgCode(
       throw new OrgsError(
         409,
         "max_uses_below_uses",
-        `${String(outcome.uses)} ${outcome.uses === 1 ? "person has" : "people have"} already joined with this code, so the limit can't be lower than that. Pause the code to stop new people joining.`,
+        `${String(outcome.joined)} ${outcome.joined === 1 ? "person is" : "people are"} in through this code, so the limit can't be lower than that. Pause the code to stop new people joining.`,
       );
     default:
       return assertNever(outcome);
@@ -687,7 +678,47 @@ export async function rotateOrgCode(
       throw new OrgsError(
         409,
         "too_many_codes",
-        `This gym already has ${String(outcome.cap)} codes, which is the most it can hold. Delete one before rotating.`,
+        `This gym already has ${String(outcome.cap)} codes, which is the most it can hold. Remove one from the list before replacing this one.`,
+      );
+    default:
+      return assertNever(outcome);
+  }
+}
+
+/** TIDY A FINISHED CODE OFF THE LIST — Kd, 2026-08-21.
+ *
+ *  `codes.manage`, the same tick as create/pause/replace: §2.2's row is "Create /
+ *  rotate / expire codes" and taking a dead one off the screen is the last step
+ *  of expiring one, not a new power. A trainer reads the list and cannot touch it.
+ *
+ *  The REFUSAL an owner can actually hit is a code that still works. It is a 409
+ *  with a sentence naming the fix, rather than the screen hiding the button:
+ *  hiding is never the enforcement (R3.3), and a stale list is exactly how a
+ *  console offers a control the server will refuse. */
+export async function removeOrgCode(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+  code: string,
+): Promise<{ removed: true }> {
+  await requirePrivilege(deps, gymId, userId, "codes.manage");
+
+  const outcome = await repo.removeCode(deps.sql, {
+    gymId,
+    code: normaliseCode(code),
+    actorUserId: userId,
+  });
+
+  switch (outcome.kind) {
+    case "removed":
+      return { removed: true };
+    case "not_found":
+      throw new OrgsError(404, "code_not_found", "That code isn't one of this gym's.");
+    case "still_usable":
+      throw new OrgsError(
+        409,
+        "code_still_usable",
+        "This code still works, so it can't be taken off the list. Switch it off first — then remove it.",
       );
     default:
       return assertNever(outcome);

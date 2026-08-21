@@ -160,7 +160,8 @@ d("orgs routes (real Postgres)", () => {
     paused: boolean;
     expiresAt: string | null;
     maxUses: number | null;
-    uses: number;
+    /** People in the gym NOW through this code — see `orgCodeSchema`. */
+    joined: number;
   }
 
   const readCodes = async (gymId: string, cookies: Record<string, string>) => {
@@ -1276,9 +1277,17 @@ d("orgs routes (real Postgres)", () => {
     await sql`
       INSERT INTO gym_codes (gym_id, code, label, expires_at) VALUES
         (${org.org.id}, 'EXPIRD', 'Expired', now() - interval '1 day')`;
+    // FULL means "the people it let in are still in" — the fixture has to put a
+    // real member behind the code, because a `uses` counter is no longer what the
+    // door measures (Kd's smoke, 2026-08-21). Setting `uses = 3` here would have
+    // been a fixture that proves nothing while staying green (:5104 F5).
+    const usedUp = await sql<{ id: string }[]>`
+      INSERT INTO gym_codes (gym_id, code, label, max_uses) VALUES
+        (${org.org.id}, 'USEDUP', 'Used up', 1) RETURNING id`;
+    const filler = await makeUser("codes-filler");
     await sql`
-      INSERT INTO gym_codes (gym_id, code, label, uses, max_uses) VALUES
-        (${org.org.id}, 'USEDUP', 'Used up', 3, 3)`;
+      INSERT INTO gym_members (gym_id, user_id, code_id, complimentary)
+      VALUES (${org.org.id}, ${filler.userId}, ${usedUp[0]?.id ?? null}, false)`;
 
     for (const [code, expected] of [
       ["PAUSED", "code_paused"],
@@ -1800,7 +1809,7 @@ d("orgs routes (real Postgres)", () => {
         paused: boolean;
         expiresAt: string | null;
         maxUses: number | null;
-        uses: number;
+        joined: number;
       }[];
     };
     const codes = body.codes.map((c) => c.code);
@@ -1814,13 +1823,14 @@ d("orgs routes (real Postgres)", () => {
     expect(only?.paused).toBe(false);
     expect(only?.expiresAt).toBeNull();
     expect(only?.maxUses).toBeNull();
-    // The member joined through it, so the counter moved — proof the console is
-    // reading the live row rather than an echo of the create response.
-    expect(only?.uses).toBe(1);
+    // The member joined through it, so the count moved — proof the console is
+    // reading the live row rather than an echo of the create response. ONE and
+    // not two: the owner's own seat carries this code and is complimentary.
+    expect(only?.joined).toBe(1);
     // The shape is closed: a field added here reaches an org-facing screen.
     for (const c of body.codes) {
       expect(Object.keys(c).sort()).toEqual(
-        ["code", "expiresAt", "label", "maxUses", "paused", "uses"].sort(),
+        ["code", "expiresAt", "joined", "label", "maxUses", "paused"].sort(),
       );
     }
 
@@ -1834,21 +1844,27 @@ d("orgs routes (real Postgres)", () => {
     ).toBe(404);
   });
 
-  it("reports a code's live state honestly, so the console cannot print a dead one", { timeout: 30_000 }, async () => {
+  it("reports a code's live state honestly, so the console cannot print a dead one", { timeout: 60_000 }, async () => {
     const owner = await makeUser("jc-state");
+    const member = await makeUser("jc-state-member");
     const org = await makeOrg(owner.cookies, "Orgs Test Joincodes State");
+    // A REAL member behind the code, so `joined` is a number this test can be
+    // wrong about. The owner's own §4.0-step-6 seat carries this same code and
+    // is complimentary, so the answer below is 1 and not 2 — which is the whole
+    // defect Kd's smoke found.
+    await joinAsMember(member.cookies, org, owner.cookies);
     const past = new Date(Date.now() - 60_000);
     await sql`
-      UPDATE gym_codes SET paused = true, expires_at = ${past}, max_uses = 5, uses = 5
+      UPDATE gym_codes SET paused = true, expires_at = ${past}, max_uses = 5
       WHERE gym_id = ${org.org.id}`;
 
     const res = await get(`/v1/orgs/${org.org.id}/codes`, { cookies: owner.cookies });
     expect(res.statusCode).toBe(200);
-    const c = (JSON.parse(res.body) as { codes: { paused: boolean; expiresAt: string | null; maxUses: number | null; uses: number }[] }).codes[0];
+    const c = (JSON.parse(res.body) as { codes: CodeBody[] }).codes[0];
     expect(c?.paused).toBe(true);
     expect(c?.expiresAt).toBe(past.toISOString());
     expect(c?.maxUses).toBe(5);
-    expect(c?.uses).toBe(5);
+    expect(c?.joined).toBe(1);
     // And the join path agrees with what the console is about to draw — the
     // two must not be able to disagree about whether a code works.
     const joiner = await makeUser("jc-state-joiner");
@@ -1950,7 +1966,7 @@ d("orgs routes (real Postgres)", () => {
     }
     expect(code.expiresAt).toBeNull();
     expect(code.maxUses).toBeNull();
-    expect(code.uses).toBe(0);
+    expect(code.joined).toBe(0);
 
     // THE HALF THAT MATTERS: the join door honours it. A create that returns a
     // plausible six characters nobody can join with would pass every assertion
@@ -2013,11 +2029,11 @@ d("orgs routes (real Postgres)", () => {
     expect(limited.statusCode).toBe(200);
     expect((JSON.parse(limited.body) as { code: CodeBody }).code.maxUses).toBe(1);
 
-    // `uses` counts MEMBERSHIPS, not applications — burning a use at apply time
-    // would let a stranger with a leaked code exhaust a gym's poster without
+    // `joined` counts MEMBERSHIPS, not applications — burning a place at apply
+    // time would let a stranger with a leaked code exhaust a gym's poster without
     // ever getting in. So the limit is only spent once the front desk confirms.
     await joinAsMember(first.cookies, org, owner.cookies);
-    expect((await readCodes(org.org.id, owner.cookies))[0]?.uses).toBe(1);
+    expect((await readCodes(org.org.id, owner.cookies))[0]?.joined).toBe(1);
 
     const refused = await post("/v1/orgs/join", { code: target }, { cookies: second.cookies });
     expect(refused.statusCode).toBe(409);
@@ -2261,6 +2277,24 @@ d("orgs routes (real Postgres)", () => {
     );
     expect(crossRotate.statusCode).toBe(404);
 
+    // Removal is the same IDOR wearing a third method: `WHERE code = $1` would
+    // find B's row and take B's poster off B's screen.
+    await patch(
+      `/v1/orgs/${orgB.org.id}/codes/${orgB.joinCode.code}`,
+      { paused: true },
+      { cookies: ownerB.cookies },
+    );
+    const crossDelete = await del(`/v1/orgs/${orgA.org.id}/codes/${orgB.joinCode.code}`, {
+      cookies: ownerA.cookies,
+    });
+    expect(crossDelete.statusCode).toBe(404);
+    expect(await readCodes(orgB.org.id, ownerB.cookies)).toHaveLength(1);
+    await patch(
+      `/v1/orgs/${orgB.org.id}/codes/${orgB.joinCode.code}`,
+      { paused: false },
+      { cookies: ownerB.cookies },
+    );
+
     // B's code is untouched and still opens B's door — the assertion that
     // proves the refusals above were refusals and not silent no-ops.
     const bCodes = await readCodes(orgB.org.id, ownerB.cookies);
@@ -2284,9 +2318,9 @@ d("orgs routes (real Postgres)", () => {
         (${org.org.id}, ${manager.userId}, 'manager'),
         (${org.org.id}, ${trainer.userId}, 'trainer')`;
 
-    expect(
-      (await post(`/v1/orgs/${org.org.id}/codes`, {}, { cookies: manager.cookies })).statusCode,
-    ).toBe(201);
+    const managerMade = await post(`/v1/orgs/${org.org.id}/codes`, {}, { cookies: manager.cookies });
+    expect(managerMade.statusCode).toBe(201);
+    const spare = (JSON.parse(managerMade.body) as { code: CodeBody }).code.code;
 
     // THE SPLIT THAT MATTERS AND IS EASY TO GET WRONG: §2.2 grants Invite to
     // all three roles and "Create / rotate / expire codes" to two. So the same
@@ -2316,6 +2350,17 @@ d("orgs routes (real Postgres)", () => {
         )
       ).statusCode,
     ).toBe(403);
+    // Tidying a code away is the last step of expiring one, so it sits on the
+    // same tick — a trainer who cannot pause a code cannot make one vanish.
+    // Done on the SPARE code the manager just minted: the gym's own Front Desk
+    // code has to keep working for the member join below.
+    await patch(`/v1/orgs/${org.org.id}/codes/${spare}`, { paused: true }, { cookies: owner.cookies });
+    expect(
+      (await del(`/v1/orgs/${org.org.id}/codes/${spare}`, { cookies: trainer.cookies })).statusCode,
+    ).toBe(403);
+    expect(
+      (await del(`/v1/orgs/${org.org.id}/codes/${spare}`, { cookies: manager.cookies })).statusCode,
+    ).toBe(200);
 
     // A plain MEMBER — not staff at all — gets the module's standing 404 on
     // every one of them.
@@ -2324,6 +2369,212 @@ d("orgs routes (real Postgres)", () => {
     expect(
       (await post(`/v1/orgs/${org.org.id}/codes`, {}, { cookies: member.cookies })).statusCode,
     ).toBe(404);
+  });
+
+  // ── WHAT THE NUMBER MEANS (Kd's smoke, 2026-08-21) ──────────────────────
+  //
+  // He read "2 people have joined with it" off a code ONE person had ever used
+  // — they joined, were removed, and joined again — and the same counter gated
+  // the code's limit, so a member who left took their place with them. These
+  // four tests pin the replacement: PEOPLE WHO ARE IN NOW, owner excluded.
+
+  it("counts PEOPLE who are in, not times a code was used", { timeout: 90_000 }, async () => {
+    const owner = await makeUser("count-owner");
+    const member = await makeUser("count-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Code Count");
+
+    // THE OWNER IS NOT A JOINER. Their §4.0-step-6 seat is complimentary and
+    // carries this very code, so a count that forgot to exclude it says 1 here.
+    expect((await readCodes(org.org.id, owner.cookies))[0]?.joined).toBe(0);
+
+    await joinAsMember(member.cookies, org, owner.cookies);
+    expect((await readCodes(org.org.id, owner.cookies))[0]?.joined).toBe(1);
+
+    // OUT: the number falls. The membership row stays in the table with
+    // `removed_at` set, which is exactly what the old counter could not see.
+    const removed = await del(`/v1/orgs/${org.org.id}/members/${member.userId}`, {
+      cookies: owner.cookies,
+    });
+    expect(removed.statusCode).toBe(200);
+    expect((await readCodes(org.org.id, owner.cookies))[0]?.joined).toBe(0);
+
+    // BACK IN: one person, counted once. Under the old `uses` column this said
+    // TWO, which is the sentence Kd was shown.
+    await joinAsMember(member.cookies, org, owner.cookies);
+    expect((await readCodes(org.org.id, owner.cookies))[0]?.joined).toBe(1);
+
+    // And the claims column is untouched underneath — it really did admit
+    // somebody twice, and that is the question it answers.
+    const claims = await sql<{ uses: number }[]>`
+      SELECT uses FROM gym_codes WHERE code = ${org.joinCode.code}`;
+    expect(claims[0]?.uses).toBe(2);
+  });
+
+  it("frees a place in a code's limit when a member leaves", { timeout: 90_000 }, async () => {
+    const owner = await makeUser("freeup-owner");
+    const first = await makeUser("freeup-first");
+    const second = await makeUser("freeup-second");
+    const org = await makeOrg(owner.cookies, "Orgs Test Limit Frees");
+    const target = org.joinCode.code;
+
+    expect(
+      (
+        await patch(
+          `/v1/orgs/${org.org.id}/codes/${target}`,
+          { maxUses: 1 },
+          { cookies: owner.cookies },
+        )
+      ).statusCode,
+    ).toBe(200);
+
+    await joinAsMember(first.cookies, org, owner.cookies);
+    const shut = await post("/v1/orgs/join", { code: target }, { cookies: second.cookies });
+    expect(shut.statusCode).toBe(409);
+    expect((JSON.parse(shut.body) as { error: string }).error).toBe("code_exhausted");
+
+    // The first member leaves. A gym that limits a code to one person means one
+    // person AT A TIME; under the old counter this door stayed shut forever.
+    expect(
+      (await del(`/v1/orgs/${org.org.id}/members/${first.userId}`, { cookies: owner.cookies }))
+        .statusCode,
+    ).toBe(200);
+
+    const open = await post("/v1/orgs/join", { code: target }, { cookies: second.cookies });
+    expect(open.statusCode).toBe(200);
+    expect((JSON.parse(open.body) as { outcome: string }).outcome).toBe("pending");
+  });
+
+  // ── TIDYING A CODE OFF THE LIST (Kd 2026-08-21: "codes will pile up") ────
+
+  it("takes a switched-off code off the list and leaves the members it made", { timeout: 90_000 }, async () => {
+    const owner = await makeUser("tidy-owner");
+    const member = await makeUser("tidy-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Code Tidy");
+    await joinAsMember(member.cookies, org, owner.cookies);
+
+    // A LIVE code cannot be tidied away — that would take a working door off
+    // the only screen that watches it.
+    const early = await del(`/v1/orgs/${org.org.id}/codes/${org.joinCode.code}`, {
+      cookies: owner.cookies,
+    });
+    expect(early.statusCode).toBe(409);
+    expect((JSON.parse(early.body) as { error: string }).error).toBe("code_still_usable");
+    expect(await readCodes(org.org.id, owner.cookies)).toHaveLength(1);
+
+    await patch(
+      `/v1/orgs/${org.org.id}/codes/${org.joinCode.code}`,
+      { paused: true },
+      { cookies: owner.cookies },
+    );
+    const gone = await del(`/v1/orgs/${org.org.id}/codes/${org.joinCode.code}`, {
+      cookies: owner.cookies,
+    });
+    expect(gone.statusCode).toBe(200);
+    expect(await readCodes(org.org.id, owner.cookies)).toHaveLength(0);
+
+    // THE MEMBER IS STILL A MEMBER, and the row that records HOW they joined is
+    // still there. This is the whole reason removal is not a DELETE.
+    const roster = await get(`/v1/orgs/${org.org.id}/members`, { cookies: owner.cookies });
+    expect(
+      (JSON.parse(roster.body) as { items: { userId: string }[] }).items.map((i) => i.userId),
+    ).toContain(member.userId);
+    const link = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_members m
+      JOIN gym_codes c ON c.id = m.code_id
+      WHERE m.user_id = ${member.userId} AND c.code = ${org.joinCode.code}`;
+    expect(link[0]?.n).toBe(1);
+
+    // A tidied code is DEAD AT THE DOOR TOO — removal pauses it in the same
+    // statement, so "not on the list" and "still lets people in" cannot part.
+    const stranger = await makeUser("tidy-stranger");
+    const knock = await post(
+      "/v1/orgs/join",
+      { code: org.joinCode.code },
+      { cookies: stranger.cookies },
+    );
+    expect(knock.statusCode).toBe(409);
+    expect((JSON.parse(knock.body) as { error: string }).error).toBe("code_paused");
+
+    // Removing twice answers the same way — the second tap of a slow button.
+    expect(
+      (await del(`/v1/orgs/${org.org.id}/codes/${org.joinCode.code}`, { cookies: owner.cookies }))
+        .statusCode,
+    ).toBe(200);
+
+    // And a tidied code can no longer be changed or replaced: it is on no
+    // screen, so nothing legitimate is asking.
+    expect(
+      (
+        await patch(
+          `/v1/orgs/${org.org.id}/codes/${org.joinCode.code}`,
+          { paused: false },
+          { cookies: owner.cookies },
+        )
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await post(
+          `/v1/orgs/${org.org.id}/codes/${org.joinCode.code}/rotate`,
+          {},
+          { cookies: owner.cookies },
+        )
+      ).statusCode,
+    ).toBe(404);
+  });
+
+  it("removes an EXPIRED code without asking the owner to pause it first", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("tidy-exp-owner");
+    const org = await makeOrg(owner.cookies, "Orgs Test Code Tidy Expired");
+    // Past the end date and never paused — dead at the door already, so making
+    // the owner switch off something that is off would be theatre.
+    await sql`
+      UPDATE gym_codes SET expires_at = now() - interval '1 day'
+      WHERE gym_id = ${org.org.id}`;
+
+    expect(
+      (await del(`/v1/orgs/${org.org.id}/codes/${org.joinCode.code}`, { cookies: owner.cookies }))
+        .statusCode,
+    ).toBe(200);
+    expect(await readCodes(org.org.id, owner.cookies)).toHaveLength(0);
+
+    // AND IT WAS SWITCHED OFF ON THE WAY OUT. This assertion is the whole
+    // safety argument, and it was MISSING until mutant O69 survived a sweep:
+    // every other test removed a code that was ALREADY paused, so nothing
+    // noticed when removal stopped pausing. Without it, "off the list" and
+    // "cannot let anybody in" are two separate facts that happen to agree today
+    // — this makes them one statement.
+    const row = await sql<{ paused: boolean; removed_at: Date | null }[]>`
+      SELECT paused, removed_at FROM gym_codes WHERE code = ${org.joinCode.code}`;
+    expect(row[0]?.paused).toBe(true);
+    expect(row[0]?.removed_at).not.toBeNull();
+  });
+
+  it("frees a place under the code cap when one is removed", { timeout: 90_000 }, async () => {
+    const owner = await makeUser("tidy-cap-owner");
+    const org = await makeOrg(owner.cookies, "Orgs Test Code Tidy Cap");
+    // Fill the gym to its cap: the Front Desk code plus one short of it.
+    const bulk = Array.from({ length: orgRepo.ORG_CODES_MAX - 1 }, (_, i) => ({
+      gym_id: org.org.id,
+      code: `YY${String(i).padStart(4, "0")}`,
+      label: `Bulk ${String(i)}`,
+      paused: true,
+    }));
+    await sql`INSERT INTO gym_codes ${sql(bulk, "gym_id", "code", "label", "paused")}`;
+
+    const full = await post(`/v1/orgs/${org.org.id}/codes`, {}, { cookies: owner.cookies });
+    expect(full.statusCode).toBe(409);
+    expect((JSON.parse(full.body) as { error: string }).error).toBe("too_many_codes");
+    // The refusal names the fix, and the fix has to be one the owner can carry
+    // out — "remove one from the list" is a button that exists.
+    expect((JSON.parse(full.body) as { message: string }).message).toContain("Remove one");
+
+    expect(
+      (await del(`/v1/orgs/${org.org.id}/codes/YY0000`, { cookies: owner.cookies })).statusCode,
+    ).toBe(200);
+    expect((await post(`/v1/orgs/${org.org.id}/codes`, {}, { cookies: owner.cookies })).statusCode).toBe(
+      201,
+    );
   });
 
   it("writes an audit row for every code change (Part 3 §3.3)", { timeout: 60_000 }, async () => {
@@ -2337,8 +2588,11 @@ d("orgs routes (real Postgres)", () => {
       { cookies: owner.cookies },
     );
     await post(`/v1/orgs/${org.org.id}/codes/${org.joinCode.code}/rotate`, {}, { cookies: owner.cookies });
+    // The rotate paused the old code, so it can be tidied away — and that write
+    // has to leave a row too, or "where did that code go" has no answer.
+    await del(`/v1/orgs/${org.org.id}/codes/${org.joinCode.code}`, { cookies: owner.cookies });
 
-    // Ordered by the identity column, not by the timestamp: three writes inside
+    // Ordered by the identity column, not by the timestamp: four writes inside
     // one test can share a `at` value to the microsecond, and an order this
     // test asserts must not depend on a tie-break Postgres never promised.
     const rows = await sql<{ action: string; actor_user_id: string | null }[]>`
@@ -2349,6 +2603,7 @@ d("orgs routes (real Postgres)", () => {
       "org.code_created",
       "org.code_updated",
       "org.code_rotated",
+      "org.code_removed",
     ]);
     // A HUMAN did each of these, so every row names one — unlike the expiry
     // sweep, which writes `actor_user_id = NULL` because nobody decided.

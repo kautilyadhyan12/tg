@@ -26,6 +26,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       createCode: vi.fn(),
       updateCode: vi.fn(),
       rotateCode: vi.fn(),
+      removeCode: vi.fn(),
       getApplications: vi.fn(),
       confirmApplication: vi.fn(),
       rejectApplication: vi.fn(),
@@ -72,7 +73,7 @@ const LIVE_CODE = {
   paused: false,
   expiresAt: null,
   maxUses: null,
-  uses: 0,
+  joined: 0,
 };
 
 const ownerSeat = {
@@ -180,6 +181,7 @@ beforeEach(() => {
   orgService.createCode.mockResolvedValue({ data: { code: LIVE_CODE } });
   orgService.updateCode.mockResolvedValue({ data: { code: LIVE_CODE } });
   orgService.rotateCode.mockResolvedValue({ data: { code: LIVE_CODE, replaced: LIVE_CODE } });
+  orgService.removeCode.mockResolvedValue({ data: { removed: true } });
 });
 
 afterEach(() => {
@@ -614,6 +616,59 @@ describe('The gym', () => {
     });
   });
 
+  it('offers Remove only on a code that cannot let anybody in', async () => {
+    drawOverview();
+    // A WORKING code has no Remove button — the server refuses that with a 409
+    // and the console must not draw a control it knows will be refused (R3.3).
+    await screen.findByText('Switch off');
+    expect(screen.queryByText('Remove')).toBeNull();
+  });
+
+  it('asks before removing a code, and says what survives', async () => {
+    orgService.getCodes.mockResolvedValue({
+      data: { codes: [{ ...LIVE_CODE, paused: true }] },
+    });
+    drawOverview();
+    fireEvent.click(await screen.findByText('Remove'));
+    // The first tap opens a question, like Replace — the row vanishing is not
+    // undone by tapping again.
+    expect(orgService.removeCode).not.toHaveBeenCalled();
+    // And the question answers the fear: an owner tidying a list must not
+    // wonder whether they have just deleted their members.
+    expect(screen.getByText(/stays a member/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Keep it'));
+    expect(orgService.removeCode).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText('Remove'));
+    fireEvent.click(screen.getByText('Remove it'));
+    await waitFor(() => {
+      expect(orgService.removeCode).toHaveBeenCalledWith(ORG.id, 'K7QM2X');
+    });
+    // The list is re-read rather than patched locally — same rule as every
+    // other change in this panel.
+    await waitFor(() => {
+      expect(orgService.getCodes).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('shows the server’s own words when a removal is refused', async () => {
+    orgService.getCodes.mockResolvedValue({
+      data: { codes: [{ ...LIVE_CODE, paused: true }] },
+    });
+    orgService.removeCode.mockRejectedValue(
+      apiError(
+        409,
+        'code_still_usable',
+        'This code still works, so it can’t be taken off the list. Switch it off first.',
+      ),
+    );
+    drawOverview();
+    fireEvent.click(await screen.findByText('Remove'));
+    fireEvent.click(screen.getByText('Remove it'));
+    expect(await screen.findByText(/still works, so it can’t be taken off/i)).toBeTruthy();
+  });
+
   it('makes a new code with no restrictions when neither box is filled', async () => {
     drawOverview();
     fireEvent.click(await screen.findByText('New code'));
@@ -645,15 +700,47 @@ describe('The gym', () => {
     expect(at.getHours()).toBe(23);
   });
 
-  it('explains a bad limit instead of sending it and getting a 400', async () => {
+  it('sets the limit with taps only — no hand typing (Kd, 2026-08-21)', async () => {
     drawOverview();
     fireEvent.click(await screen.findByText('New code'));
-    fireEvent.change(screen.getByLabelText(/Maximum people/i), { target: { value: '0' } });
+    const box = screen.getByLabelText(/Maximum people/i);
+    // It starts at "no limit" and cannot be typed into: the browser will not
+    // send keystrokes to a readonly field, which is what makes a fat-fingered
+    // 500 impossible rather than merely unlikely.
+    expect(box.value).toBe('');
+    expect(box.readOnly).toBe(true);
+
+    fireEvent.click(screen.getByLabelText('One more'));
+    expect(box.value).toBe('1');
+    fireEvent.click(screen.getByLabelText('One more'));
+    expect(box.value).toBe('2');
+    fireEvent.click(screen.getByLabelText('One fewer'));
+    expect(box.value).toBe('1');
+    // …and stepping below 1 is how the limit comes OFF again.
+    fireEvent.click(screen.getByLabelText('One fewer'));
+    expect(box.value).toBe('');
+
+    fireEvent.click(screen.getByLabelText('One more'));
     fireEvent.click(screen.getByText('Make the code'));
-    expect(await screen.findByText(/whole number, 1 or more/i)).toBeTruthy();
-    // NOTHING was sent. A screen that posts a value it knows is invalid turns
-    // its own explanation into a server round trip.
-    expect(orgService.createCode).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(orgService.createCode).toHaveBeenCalled();
+    });
+    expect(orgService.createCode.mock.calls[0][1].maxUses).toBe(1);
+  });
+
+  it('swallows typing in the date box, which is how 19-07 became 19-09', async () => {
+    drawOverview();
+    fireEvent.click(await screen.findByText('New code'));
+    const date = screen.getByLabelText(/Stop working after/i);
+    // A native date input consumes digits SEGMENT BY SEGMENT in the browser's
+    // own order, so typed digits can land in the wrong one and leave a valid
+    // date nobody chose. Every digit is refused; Tab and Escape are not, or the
+    // field becomes a keyboard trap.
+    expect(fireEvent.keyDown(date, { key: '1' })).toBe(false);
+    expect(fireEvent.keyDown(date, { key: '9' })).toBe(false);
+    expect(fireEvent.keyDown(date, { key: 'Backspace' })).toBe(false);
+    expect(fireEvent.keyDown(date, { key: 'Tab' })).toBe(true);
+    expect(fireEvent.keyDown(date, { key: 'Escape' })).toBe(true);
   });
 
   it('shows the server’s own words when a change is refused', async () => {

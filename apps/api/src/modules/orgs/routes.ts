@@ -284,6 +284,30 @@ export function registerOrgRoutes(
     },
   );
 
+  // TIDYING, not deleting (Kd 2026-08-21). DELETE is the honest method — the
+  // code leaves the gym's list and the same request twice leaves the same state —
+  // and the row survives because members point at it (`repo.removeCode`).
+  //
+  // Like PATCH above, a browser reaches this only through a CORS PREFLIGHT, the
+  // failure mode `fastify.inject` cannot see. `app.ts` lists DELETE among its
+  // allowed methods (the members route below already depends on that); the smoke
+  // sheet's remove step is what proves it in a real browser.
+  app.delete(
+    "/v1/orgs/:gymId/codes/:code",
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const params = parseOr400(codeParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const result = await service.removeOrgCode(
+        orgDeps,
+        requireUserId(req),
+        params.gymId,
+        params.code,
+      );
+      return reply.status(200).send(result);
+    },
+  );
+
   app.get("/v1/orgs/:gymId/members", { preHandler: [app.authenticate] }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;

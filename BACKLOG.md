@@ -1528,3 +1528,32 @@ the local times.
 figures here are floored day counts"; only the waiting figure still is, and the
 countdown's boundary is now local midnight, nowhere near 09:30Z. The pin stays
 justified — by half the stated reason. **Fixed** by narrowing the sentence.
+
+---
+
+## 2026-08-21 · Kd's join-code smoke — instrument findings (DECISIONS :14013)
+
+Not review findings: nobody had run a T3 on this packet yet. These came out of
+the mutation audit :5348 rule 4 makes mandatory, and they are about the AUDIT'S
+OWN INSTRUMENT rather than the product.
+
+**L1 · three mutant anchors were broken by the change under test, and the
+harness aborted on ONE PER RUN.** O21, O26 and O60 all anchored on text the
+count subquery re-wrote (`gym_codes` became `gym_codes AS c`). The abort is
+correct and is :5199's class fix — a no-op mutation must never be read as a
+missing test — but discovering them one at a time cost three full harness
+startups. **Fixed for this card by writing a whole-file anchor checker** that
+reports every `from` matching its target other than exactly once, in one pass.
+It lives in the scratchpad, not the repo: promoting it is a real change to two
+harnesses and belongs to a card that is about them, not to this one (R1.1).
+**Worth promoting** — `node --check` (:13336) proves a harness PARSES, and
+nothing yet proves its anchors still POINT anywhere.
+
+**L2 · O17 and O29 each match their target file TWICE (pre-existing).**
+Verified against `HEAD`, so neither was introduced here. `String.replace` with a
+string pattern takes the FIRST occurrence, which in both cases is the intended
+site — O17's `if (held === null) {` in `claimSeat` (the second is a deeper-indented
+line that merely contains it), O29's application lookup in the confirm path
+(reject holds the second). **So both mutants still test what they claim**, and
+the risk is drift: an edit above either site would silently re-point the mutant
+rather than abort. Not fixed here (R1.1 — this card changed neither site).

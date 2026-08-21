@@ -51,9 +51,33 @@ export const gymCodes = pgTable("gym_codes", {
   code: text("code").unique().notNull(), // 6-char, ambiguity-free alphabet
   label: text("label").notNull().default("Front Desk"), // the group mechanism (Part 3 §2.1)
   maxUses: integer("max_uses"),
+  /** LIFETIME TALLY OF SEAT CLAIMS — kept, written, and DISPLAYED NOWHERE.
+   *
+   *  Kd's smoke of 2026-08-21 read "2 people have joined with it" off this
+   *  column for a code ONE person had used: they joined, were removed, and
+   *  joined again, and each claim bumped it. A count of EVENTS was being printed
+   *  under a sentence about PEOPLE, and it gated `max_uses` too — so a member who
+   *  left took their place in the limit with them.
+   *
+   *  What a screen shows and what the door enforces now come from the
+   *  memberships themselves (`repo.ts`'s `joined` subquery: live, complimentary
+   *  excluded), which has ONE source of truth and cannot drift. This column
+   *  stays because it answers a different and still-honest question — how many
+   *  times has this code ever admitted somebody — which no other row records.
+   *  Do NOT wire it back to a screen or a limit. */
   uses: integer("uses").notNull().default(0),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   paused: boolean("paused").notNull().default(false),
+  /** TIDIED AWAY, NOT DELETED (Kd 2026-08-21: "codes will pile up should have a
+   *  option to delete").
+   *
+   *  A finished code leaves the console's list and the ROW stays, because
+   *  `gym_members.code_id` and `gym_join_applications.code_id` point at it: a
+   *  real `DELETE` would either be refused by those foreign keys or erase how
+   *  today's members got in. Only a code that can no longer admit anybody is
+   *  removable, and removal pauses it in the same statement, so "not in the
+   *  list" and "cannot let anyone in" can never disagree. */
+  removedAt: timestamp("removed_at", { withTimezone: true }),
   createdAt: createdAt(),
 });
 
@@ -86,6 +110,10 @@ export const gymMembers = pgTable(
       .on(t.gymId, t.userId)
       .where(sql`${t.removedAt} IS NULL`),
     index("gym_members_gym_removed_idx").on(t.gymId, t.removedAt), // roster & seat count
+    // "how many people are in through THIS code" — the number the console prints
+    // and the number `max_uses` is measured against, read once per code on every
+    // console load and once per join at the door.
+    index("gym_members_code_live_idx").on(t.codeId).where(sql`${t.removedAt} IS NULL`),
     index("gym_members_user_removed_idx").on(t.userId, t.removedAt), // entitlement resolver
     index("gym_members_gym_joined_idx").on(t.gymId, t.joinedAt), // interval joins (rollups)
   ],

@@ -208,7 +208,7 @@ export type CreateOrgResponse = z.infer<typeof createOrgResponseSchema>;
  *  read endpoint in rather than let the console print a code from its own
  *  memory of one.
  *
- *  **`paused`/`expiresAt`/`maxUses`/`uses` are not decoration.** The join path
+ *  **`paused`/`expiresAt`/`maxUses`/`joined` are not decoration.** The join path
  *  refuses a paused, expired or exhausted code, so a console that printed one
  *  under "share this with your members" would be promising something the server
  *  will not honour — a false thing on screen (:5807). The console decides
@@ -222,9 +222,22 @@ export const orgCodeSchema = z.object({
   paused: z.boolean(),
   /** ISO instant, or null for "never expires". */
   expiresAt: z.string().nullable(),
-  /** null = unlimited uses. */
+  /** null = no limit on how many people may be in through this code. */
   maxUses: z.number().int().nullable(),
-  uses: z.number().int(),
+  /** PEOPLE IN THE GYM NOW WHO CAME THROUGH THIS CODE — not times it was used.
+   *
+   *  It was `uses` until Kd's smoke of 2026-08-21 read "2 people have joined with
+   *  it" off a code ONE person had ever used: they joined, were removed, and
+   *  joined again, and the old field counted both claims. A sentence about PEOPLE
+   *  over a count of EVENTS is a false thing on screen (:5807), and the same
+   *  number gates `maxUses` at the door — so a member who left used to take their
+   *  place in the limit with them.
+   *
+   *  The owner is NOT in it. Their §4.0-step-6 seat is `complimentary` and carries
+   *  the first code's id, so counting it would tell every gym that one more person
+   *  had joined than ever did — and Kd's own reason for asking is that an owner
+   *  should never be counted against their own gym. */
+  joined: z.number().int(),
 });
 export type OrgCode = z.infer<typeof orgCodeSchema>;
 
@@ -291,7 +304,7 @@ export const updateOrgCodeRequestSchema = z
 export type UpdateOrgCodeRequest = z.infer<typeof updateOrgCodeRequestSchema>;
 
 /** One code, after it was created or changed. The row as it NOW STANDS rather
- *  than an echo of the request: `uses` and `label` were never in the request,
+ *  than an echo of the request: `joined` and `label` were never in the request,
  *  and a screen that re-derived the new state from what it sent is a screen that
  *  disagrees with the next `GET /codes`. */
 export const orgCodeMutationResponseSchema = z.object({ code: orgCodeSchema });

@@ -106,6 +106,36 @@ mid-file: re-derive them with
   sweep ran — :13336's permanent guard working on the file it was added for.
   **NOTHING ELSE TICKS: the SMOKE (`RUNBOOK/smoke-join-codes.md`, written) and
   T3 are both UNRUN.**
+- **:14013** — 2026-08-21 — **KD'S SMOKE FINDS A NUMBER THAT LIES, AND THE
+  PILE-UP HE PREDICTED.** Fixes on top of :13803/:13920. **Read before touching a
+  code's count, `gym_codes.uses`, the limits editor, or anything that deletes a
+  code.** **A code's `uses` COLUMN IS DISPLAYED NOWHERE AND ENFORCES NOTHING** —
+  it counts seat CLAIMS, and the screen printed it under a sentence about PEOPLE,
+  so a member who left and rejoined read as "2 people". What a screen shows and
+  the door enforces is now `joined`: **live memberships that code created,
+  complimentary EXCLUDED**, computed from `gym_members` at six written-out sites
+  (`toCodeRow` holds the definition and the list; drift between the door's copy
+  and the screen's is the defect, so they are anchored by a test that drives
+  both). **MEASURED IN HIS DATABASE FIRST: his diagnosis ("the owner is counted")
+  was WRONG and his instinct was RIGHT** — do not close a user's finding by
+  correcting their theory. **A limit now frees when a member leaves.** **NO HAND
+  TYPING on the date or the limit** (a native date input eats keystrokes segment
+  by segment in the browser's own order, which is how `19 07 2026` became
+  `19 09 2026` — a VALID date nobody chose, invisible to everything downstream);
+  `parseLimit` is KEPT anyway. **REMOVE ≠ DELETE**: migration `0012` adds
+  `gym_codes.removed_at`; the FKs are `ON DELETE RESTRICT`, so a real delete
+  fails for exactly the codes a gym most wants gone. **Only a code that cannot
+  admit anybody may go, and removal pauses it in the same statement**; a merely
+  FULL code stays; the cap counts VISIBLE codes. **HIS SUBSCRIPTION WORRY NEEDED
+  NO CODE: the seat cap has excluded complimentary members since :10010 and
+  per-seat pricing is STRUCK at :12600** — answered, not re-ruled. **PROVE: api
+  554 tests (orgs 67/67) local · web 976/976 · build ✓; the 3 reds in a full api
+  run are `catalog.seed`'s global-count flake, green scoped. SWEEPS: web 32/32
+  RED; api 70 mutants, 69 RED and ONE ALIVE — O69, a hole in MY TESTS (every
+  removal test removed an already-paused code, so nothing could see removal
+  ceasing to pause), fixed by asserting the row back on the EXPIRED path and
+  re-measured RED. `--only=` is NOT the flag: the harness reads `MUTATE_ONLY`.** **The OWED
+  delete/pile-up line TICKS; SMOKE (13 steps) and T3 are UNRUN.**
 - **:13803** — 2026-08-21 — **A GYM CAN FINALLY CHANGE ITS OWN JOIN CODE (server
   half): make one · pause/wake · set an end date or a join limit · rotate. NO
   MIGRATION, and the refusals it reaches were built long ago.** **Read before

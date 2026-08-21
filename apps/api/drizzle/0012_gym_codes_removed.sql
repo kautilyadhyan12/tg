@@ -1,0 +1,2 @@
+ALTER TABLE "gym_codes" ADD COLUMN "removed_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "gym_members_code_live_idx" ON "gym_members" USING btree ("code_id") WHERE "gym_members"."removed_at" IS NULL;

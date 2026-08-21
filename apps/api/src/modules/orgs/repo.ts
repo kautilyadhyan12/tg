@@ -63,7 +63,8 @@ export interface CodeRow {
   paused: boolean;
   expiresAt: Date | null;
   maxUses: number | null;
-  uses: number;
+  /** People in the gym NOW who came through this code — see `toCodeRow`. */
+  joined: number;
 }
 
 /** A join application as its own applicant sees it (Kd ruling :11072). */
@@ -478,19 +479,27 @@ export async function applyByCode(
         label: string;
         paused: boolean;
         expires_at: Date | null;
-        uses: number;
+        joined: number;
         max_uses: number | null;
       }[]
     >`
-      SELECT id, label, paused, expires_at, uses, max_uses
-      FROM gym_codes WHERE id = ${found.id} AND gym_id = ${found.gym_id}`;
+      SELECT c.id, c.label, c.paused, c.expires_at, c.max_uses,
+             (SELECT count(*)::int FROM gym_members m
+               WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)
+               AS joined
+      FROM gym_codes c WHERE c.id = ${found.id} AND c.gym_id = ${found.gym_id}`;
     const code = codeRows[0];
     if (code === undefined) return { kind: "no_such_code" };
     if (code.paused) return { kind: "code_unusable", reason: "paused" };
     if (code.expires_at !== null && code.expires_at.getTime() <= Date.now()) {
       return { kind: "code_unusable", reason: "expired" };
     }
-    if (code.max_uses !== null && code.uses >= code.max_uses) {
+    // MEASURED AGAINST PEOPLE WHO ARE STILL IN, not against claims ever made
+    // (Kd's smoke, 2026-08-21). A gym that limits a code to 20 means twenty
+    // people at once; under the old `uses` counter a member who left took their
+    // place with them and the code died one short, which no screen explained.
+    // `toCodeRow`'s comment carries the definition and the list of sites.
+    if (code.max_uses !== null && code.joined >= code.max_uses) {
       return { kind: "code_unusable", reason: "exhausted" };
     }
 
@@ -1286,10 +1295,13 @@ export const ORG_CODES_LIMIT = 100;
 
 export async function listCodes(sql: Sql, gymId: string): Promise<CodeRow[]> {
   const rows = await sql<RawCode[]>`
-    SELECT code, label, paused, expires_at, max_uses, uses
-    FROM gym_codes
-    WHERE gym_id = ${gymId}
-    ORDER BY created_at ASC, code ASC
+    SELECT c.code, c.label, c.paused, c.expires_at, c.max_uses,
+           (SELECT count(*)::int FROM gym_members m
+             WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)
+             AS joined
+    FROM gym_codes c
+    WHERE c.gym_id = ${gymId} AND c.removed_at IS NULL
+    ORDER BY c.created_at ASC, c.code ASC
     LIMIT ${ORG_CODES_LIMIT}`;
   return rows.map(toCodeRow);
 }
@@ -1308,9 +1320,25 @@ interface RawCode {
   paused: boolean;
   expires_at: Date | null;
   max_uses: number | null;
-  uses: number;
+  joined: number;
 }
 
+/** THE NUMBER, DEFINED ONCE IN PROSE BECAUSE SQL CANNOT SHARE IT SAFELY.
+ *
+ *  `joined` is **live memberships this code created, complimentary excluded** —
+ *  people who are in the gym RIGHT NOW and came through this code. Not seat
+ *  claims (that is the `uses` column, displayed nowhere) and not the owner, whose
+ *  §4.0-step-6 seat carries the first code's id and who never "joined" anything.
+ *
+ *  It is written out as the same correlated subquery at every site rather than
+ *  built from a shared string, for the reason the column lists are (R3.8): a
+ *  fragment that is safe today is one somebody parameterises tomorrow. **The
+ *  sites are: `listCodes`, `applyByCode`, `updateCode`, `rotateCode`'s retired
+ *  row — plus `createCode` and `rotateCode`'s minted row, which select the
+ *  literal `0` because a code minted in this transaction cannot have a member.**
+ *  A change to the definition is a change to all six, and `orgs.routes.test.ts`
+ *  holds a test that the door and the screen agree on it — drift between the two
+ *  is the defect this shape exists to prevent, not a style question. */
 function toCodeRow(raw: RawCode): CodeRow {
   return {
     code: raw.code,
@@ -1318,7 +1346,7 @@ function toCodeRow(raw: RawCode): CodeRow {
     paused: raw.paused,
     expiresAt: raw.expires_at,
     maxUses: raw.max_uses,
-    uses: raw.uses,
+    joined: raw.joined,
   };
 }
 
@@ -1368,7 +1396,8 @@ export async function createCode(
   try {
     return await sql.begin(async (tx) => {
       const counted = await tx<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM gym_codes WHERE gym_id = ${input.gymId}`;
+        SELECT count(*)::int AS n FROM gym_codes
+        WHERE gym_id = ${input.gymId} AND removed_at IS NULL`;
       if ((counted[0]?.n ?? 0) >= ORG_CODES_MAX) {
         return { kind: "too_many", cap: ORG_CODES_MAX };
       }
@@ -1377,7 +1406,7 @@ export async function createCode(
         INSERT INTO gym_codes (gym_id, code, label, expires_at, max_uses)
         VALUES (${input.gymId}, ${input.code}, ${input.label},
                 ${input.expiresAt}, ${input.maxUses})
-        RETURNING code, label, paused, expires_at, max_uses, uses`;
+        RETURNING code, label, paused, expires_at, max_uses, 0::int AS joined`;
       const raw = rows[0];
       if (raw === undefined) throw new Error("INSERT INTO gym_codes returned no row");
 
@@ -1412,7 +1441,7 @@ export async function createCode(
 export type UpdateCodeOutcome =
   | { kind: "updated"; code: CodeRow }
   | { kind: "not_found" }
-  | { kind: "max_uses_below_uses"; uses: number };
+  | { kind: "max_uses_below_uses"; joined: number };
 
 export interface CodePatch {
   paused?: boolean;
@@ -1440,13 +1469,21 @@ export async function updateCode(
   input: { gymId: string; code: string; patch: CodePatch; actorUserId: string },
 ): Promise<UpdateCodeOutcome> {
   return await sql.begin(async (tx) => {
-    const existing = await tx<RawCode[]>`
-      SELECT code, label, paused, expires_at, max_uses, uses
-      FROM gym_codes
-      WHERE gym_id = ${input.gymId} AND code = ${input.code}
-      FOR UPDATE`;
+    const existing = await tx<(RawCode & { removed_at: Date | null })[]>`
+      SELECT c.code, c.label, c.paused, c.expires_at, c.max_uses, c.removed_at,
+             (SELECT count(*)::int FROM gym_members m
+               WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)
+               AS joined
+      FROM gym_codes c
+      WHERE c.gym_id = ${input.gymId} AND c.code = ${input.code}
+      FOR UPDATE OF c`;
     const before = existing[0];
     if (before === undefined) return { kind: "not_found" };
+    // A code the gym has TIDIED AWAY is not on any screen, so nothing legitimate
+    // can be asking to change it — and answering 404 keeps "removed" and "never
+    // existed" indistinguishable, which is the same standing 404 this module
+    // gives another gym's code.
+    if (before.removed_at !== null) return { kind: "not_found" };
 
     const nextPaused = input.patch.paused ?? before.paused;
     const nextExpiresAt =
@@ -1458,15 +1495,18 @@ export async function updateCode(
     // change they read as "let 10 more people in". Pause already means "off
     // now", so refusing here takes nothing away and removes the surprise. The
     // live count travels back so the refusal can name it.
-    if (nextMaxUses !== null && nextMaxUses < before.uses) {
-      return { kind: "max_uses_below_uses", uses: before.uses };
+    if (nextMaxUses !== null && nextMaxUses < before.joined) {
+      return { kind: "max_uses_below_uses", joined: before.joined };
     }
 
     const rows = await tx<RawCode[]>`
-      UPDATE gym_codes
+      UPDATE gym_codes AS c
       SET paused = ${nextPaused}, expires_at = ${nextExpiresAt}, max_uses = ${nextMaxUses}
-      WHERE gym_id = ${input.gymId} AND code = ${input.code}
-      RETURNING code, label, paused, expires_at, max_uses, uses`;
+      WHERE c.gym_id = ${input.gymId} AND c.code = ${input.code}
+      RETURNING c.code, c.label, c.paused, c.expires_at, c.max_uses,
+                (SELECT count(*)::int FROM gym_members m
+                  WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)
+                  AS joined`;
     const raw = rows[0];
     if (raw === undefined) throw new Error("UPDATE gym_codes returned no row under FOR UPDATE");
 
@@ -1517,16 +1557,23 @@ export async function rotateCode(
 ): Promise<RotateCodeOutcome> {
   try {
     return await sql.begin(async (tx) => {
-      const existing = await tx<RawCode[]>`
-        SELECT code, label, paused, expires_at, max_uses, uses
-        FROM gym_codes
-        WHERE gym_id = ${input.gymId} AND code = ${input.code}
-        FOR UPDATE`;
+      const existing = await tx<(RawCode & { removed_at: Date | null })[]>`
+        SELECT c.code, c.label, c.paused, c.expires_at, c.max_uses, c.removed_at,
+               (SELECT count(*)::int FROM gym_members m
+                 WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)
+                 AS joined
+        FROM gym_codes c
+        WHERE c.gym_id = ${input.gymId} AND c.code = ${input.code}
+        FOR UPDATE OF c`;
       const before = existing[0];
       if (before === undefined) return { kind: "not_found" };
+      // Same 404 as `updateCode`: a tidied-away code is on no screen, so nothing
+      // legitimate is asking to replace it.
+      if (before.removed_at !== null) return { kind: "not_found" };
 
       const counted = await tx<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM gym_codes WHERE gym_id = ${input.gymId}`;
+        SELECT count(*)::int AS n FROM gym_codes
+        WHERE gym_id = ${input.gymId} AND removed_at IS NULL`;
       if ((counted[0]?.n ?? 0) >= ORG_CODES_MAX) {
         return { kind: "too_many", cap: ORG_CODES_MAX };
       }
@@ -1534,14 +1581,17 @@ export async function rotateCode(
       const mintedRows = await tx<RawCode[]>`
         INSERT INTO gym_codes (gym_id, code, label)
         VALUES (${input.gymId}, ${input.newCode}, ${before.label})
-        RETURNING code, label, paused, expires_at, max_uses, uses`;
+        RETURNING code, label, paused, expires_at, max_uses, 0::int AS joined`;
       const minted = mintedRows[0];
       if (minted === undefined) throw new Error("INSERT INTO gym_codes returned no row");
 
       const retiredRows = await tx<RawCode[]>`
-        UPDATE gym_codes SET paused = true
-        WHERE gym_id = ${input.gymId} AND code = ${input.code}
-        RETURNING code, label, paused, expires_at, max_uses, uses`;
+        UPDATE gym_codes AS c SET paused = true
+        WHERE c.gym_id = ${input.gymId} AND c.code = ${input.code}
+        RETURNING c.code, c.label, c.paused, c.expires_at, c.max_uses,
+                  (SELECT count(*)::int FROM gym_members m
+                    WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)
+                    AS joined`;
       const retired = retiredRows[0];
       if (retired === undefined) throw new Error("UPDATE gym_codes returned no row under FOR UPDATE");
 
@@ -1567,6 +1617,79 @@ export async function rotateCode(
     if (isUniqueViolation(err)) throw new OrgNameTakenError("code");
     throw err;
   }
+}
+
+export type RemoveCodeOutcome =
+  | { kind: "removed" }
+  | { kind: "not_found" }
+  | { kind: "still_usable" };
+
+/** TAKE A FINISHED CODE OFF THE GYM'S LIST — Kd, 2026-08-21: *"codes will pile
+ *  up should have a option to delete"*.
+ *
+ *  **IT IS NOT A `DELETE`, and the reason is the members.** `gym_members.code_id`
+ *  and `gym_join_applications.code_id` reference this row, both `ON DELETE
+ *  RESTRICT` by the schema's default (R4.3). A real delete would therefore either
+ *  be refused by Postgres for exactly the codes a gym most wants gone — the ones
+ *  people used — or, if the constraint were relaxed, erase the record of how
+ *  today's members got in. `removed_at` is the same soft-state shape
+ *  `gym_members.removed_at` already uses for the same reason.
+ *
+ *  **ONLY A CODE THAT CANNOT ADMIT ANYBODY MAY BE REMOVED** (paused, or past its
+ *  end date), and the UPDATE pauses it in the same statement. That pairing is the
+ *  whole safety argument: a code missing from the console can never be a code
+ *  still opening the door, so an owner tidying their screen cannot accidentally
+ *  leave a live one running unwatched. A code that is merely FULL is not
+ *  removable — a member leaving revives it, and hiding it would strand a code
+ *  that is about to work again.
+ *
+ *  Removing twice is a SUCCESS, not a 404: the second tap of a slow button must
+ *  leave the same state and say the same thing (the `DELETE /members/:userId`
+ *  precedent). */
+export async function removeCode(
+  sql: Sql,
+  input: { gymId: string; code: string; actorUserId: string },
+): Promise<RemoveCodeOutcome> {
+  return await sql.begin(async (tx) => {
+    // TENANCY IS THE PAIR (gym, code), never the code alone (R3.2). Codes are
+    // globally unique, so `WHERE code = $1` would compile, work, and let one
+    // gym's manager tidy away another gym's poster.
+    const rows = await tx<
+      { code: string; paused: boolean; expires_at: Date | null; removed_at: Date | null }[]
+    >`
+      SELECT code, paused, expires_at, removed_at
+      FROM gym_codes
+      WHERE gym_id = ${input.gymId} AND code = ${input.code}
+      FOR UPDATE`;
+    const before = rows[0];
+    if (before === undefined) return { kind: "not_found" };
+    if (before.removed_at !== null) return { kind: "removed" };
+
+    const expired = before.expires_at !== null && before.expires_at.getTime() <= Date.now();
+    if (!before.paused && !expired) return { kind: "still_usable" };
+
+    const updated = await tx<{ code: string }[]>`
+      UPDATE gym_codes SET removed_at = now(), paused = true
+      WHERE gym_id = ${input.gymId} AND code = ${input.code}
+      RETURNING code`;
+    if (updated[0] === undefined) {
+      throw new Error("UPDATE gym_codes returned no row under FOR UPDATE");
+    }
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.code_removed",
+      targetType: "gym_code",
+      targetId: before.code,
+      // The row is still in the table and this is how a human finds out why it
+      // stopped being on screen. "was it already off" answers the only question
+      // a later reader has: whether the removal itself took a code out of service.
+      meta: { pausedBefore: String(before.paused) },
+    });
+
+    return { kind: "removed" };
+  });
 }
 
 /** Part 3 §3.3: "every mutating call writes `audit_log`". Written inside the

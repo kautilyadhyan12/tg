@@ -1,14 +1,16 @@
-import { useState } from 'react';
-import { Loader2, Plus, RefreshCw } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Loader2, Minus, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { ConsoleCard, ConsoleFailed } from './ConsoleStates';
 import { codeState, formatJoinedAt } from '../../pages/console/consoleView';
 import {
   atCodeLimit,
   canManageCodes,
+  canRemoveCode,
   codeSummary,
   endOfDayIso,
   parseLimit,
   sortedCodes,
+  stepLimit,
   todayInputValue,
   whyNotUsable,
 } from '../../pages/console/codesView';
@@ -41,16 +43,55 @@ import { orgService, errorText } from '../../api/orgsApi';
  *  and no limit, and pre-filling either would push every gym toward rules it
  *  never asked for. */
 function RestrictionFields({ endDate, setEndDate, limit, setLimit, disabled, idPrefix }) {
+  const dateRef = useRef(null);
+
+  // NO TYPING, ON EITHER FIELD — Kd, 2026-08-21: *"whether it is setting date or
+  // maximum use hand typing should not be there"*.
+  //
+  // He typed `19 07 2026` and the box showed `19 09 2026`. A native date input
+  // takes keystrokes SEGMENT BY SEGMENT in the browser's own order, so a digit
+  // meant for the month can land in the day and the field ends up holding a date
+  // nobody chose — silently, because it is a perfectly valid date. Swallowing
+  // the keystrokes leaves the calendar as the only way in, where every value is
+  // one the owner can see before choosing it.
+  //
+  // Tab, Escape and the arrow keys are LET THROUGH: they move focus, close the
+  // picker and step the segments, none of which can produce a value the owner did
+  // not look at. A field nobody can leave with the keyboard is an accessibility
+  // defect, not a safety feature.
+  const swallowTyping = (e) => {
+    const allowed = ['Tab', 'Escape', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+    if (!allowed.includes(e.key)) e.preventDefault();
+  };
+
+  // Clicking anywhere in the field opens the calendar rather than only the small
+  // icon, since the keyboard is no longer a way in. `showPicker` is guarded: it
+  // is absent on older engines and throws when a browser decides the click was
+  // not a user gesture, and a picker that failed to open must not take the screen
+  // down with it.
+  const openPicker = () => {
+    const el = dateRef.current;
+    if (el === null || typeof el.showPicker !== 'function') return;
+    try {
+      el.showPicker();
+    } catch {
+      // The field is still focused and the native icon still works.
+    }
+  };
+
   return (
     <div className="flex flex-col sm:flex-row gap-3">
       <label className="flex-1 text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
         Stop working after (optional)
         <input
           id={`${idPrefix}-end`}
+          ref={dateRef}
           type="date"
           value={endDate}
           min={todayInputValue()}
           disabled={disabled}
+          onKeyDown={swallowTyping}
+          onClick={openPicker}
           onChange={(e) => setEndDate(e.target.value)}
           className="w-full mt-1 rounded-xl px-3 py-2 text-sm disabled:opacity-40"
           style={{
@@ -59,39 +100,83 @@ function RestrictionFields({ endDate, setEndDate, limit, setLimit, disabled, idP
             color: '#fff',
           }}
         />
+        {endDate !== '' ? (
+          <button
+            type="button"
+            onClick={() => setEndDate('')}
+            disabled={disabled}
+            className="mt-1 text-[11px] underline disabled:opacity-40"
+            style={{ color: 'rgba(255,255,255,0.45)' }}
+          >
+            Clear the end date
+          </button>
+        ) : null}
       </label>
-      <label className="flex-1 text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-        Maximum people (optional)
-        <input
-          id={`${idPrefix}-limit`}
-          type="text"
-          inputMode="numeric"
-          placeholder="No limit"
-          value={limit}
-          disabled={disabled}
-          onChange={(e) => setLimit(e.target.value)}
-          className="w-full mt-1 rounded-xl px-3 py-2 text-sm disabled:opacity-40"
-          style={{
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            color: '#fff',
-          }}
-        />
-      </label>
+      <div className="flex-1 text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
+        <span id={`${idPrefix}-limit-label`}>Maximum people (optional)</span>
+        <div className="flex items-center gap-2 mt-1">
+          <button
+            type="button"
+            aria-label="One fewer"
+            onClick={() => setLimit(stepLimit(limit, -1))}
+            disabled={disabled || limit === ''}
+            className="rounded-xl p-2 disabled:opacity-30"
+            style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.7)' }}
+          >
+            <Minus className="w-3 h-3" />
+          </button>
+          {/* READ-ONLY AND STILL AN INPUT: the value is what gets sent, so it
+              belongs in the form rather than in a paragraph beside it, and a
+              screen reader should announce it as the field it is. `readOnly`
+              rather than `disabled` — a disabled field is skipped by the reader
+              and greyed out, which would say "you cannot set a limit". */}
+          <input
+            id={`${idPrefix}-limit`}
+            aria-labelledby={`${idPrefix}-limit-label`}
+            type="text"
+            inputMode="none"
+            readOnly
+            placeholder="No limit"
+            value={limit}
+            disabled={disabled}
+            className="w-24 rounded-xl px-3 py-2 text-sm text-center disabled:opacity-40"
+            style={{
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              color: '#fff',
+            }}
+          />
+          <button
+            type="button"
+            aria-label="One more"
+            onClick={() => setLimit(stepLimit(limit, 1))}
+            disabled={disabled}
+            className="rounded-xl p-2 disabled:opacity-30"
+            style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.7)' }}
+          >
+            <Plus className="w-3 h-3" />
+          </button>
+          <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+            {limit === '' ? 'No limit' : 'people'}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
 
 /** One code's row: what it is, whether it works, and what can be done to it. */
-function CodeRow({ code, busy, onPause, onWake, onRotate, onSaveLimits }) {
+function CodeRow({ code, busy, onPause, onWake, onRotate, onSaveLimits, onRemove }) {
   const [editing, setEditing] = useState(false);
   const [confirmingRotate, setConfirmingRotate] = useState(false);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [endDate, setEndDate] = useState('');
   const [limit, setLimit] = useState('');
   const [fieldError, setFieldError] = useState(null);
 
   const state = codeState(code);
   const why = whyNotUsable(code);
+  const removable = canRemoveCode(code);
 
   const openEditor = () => {
     // Seeded from the row's CURRENT values so the owner edits what is there
@@ -239,6 +324,39 @@ function CodeRow({ code, busy, onPause, onWake, onRotate, onSaveLimits }) {
             </button>
           </div>
         </div>
+      ) : confirmingRemove ? (
+        // A QUESTION BEFORE REMOVING, for the same reason Replace gets one: the
+        // row disappears and tapping again cannot bring it back. The sentence
+        // says what SURVIVES, because that is the fear — an owner tidying their
+        // screen must not wonder whether they have just deleted their members.
+        <div className="flex flex-col gap-2">
+          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.7)' }}>
+            Take {code.code} off this list? It is already switched off, so nobody can join with it.
+            Everyone who joined with it stays a member, and their history is kept.
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmingRemove(false);
+                onRemove();
+              }}
+              disabled={busy}
+              className="text-xs rounded-lg px-3 py-1.5 font-semibold disabled:opacity-40"
+              style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
+            >
+              Remove it
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingRemove(false)}
+              className="text-xs rounded-lg px-3 py-1.5"
+              style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
+            >
+              Keep it
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="flex items-center gap-2 flex-wrap">
           {code.paused ? (
@@ -281,6 +399,22 @@ function CodeRow({ code, busy, onPause, onWake, onRotate, onSaveLimits }) {
             <RefreshCw className="w-3 h-3" />
             Replace
           </button>
+          {/* ONLY ON A CODE THAT CANNOT LET ANYBODY IN. The server refuses the
+              rest with a sentence (R3.3 — hiding is not the enforcement), and
+              `canRemoveCode` is the same rule so the console does not draw a
+              button it knows will be refused. */}
+          {removable ? (
+            <button
+              type="button"
+              onClick={() => setConfirmingRemove(true)}
+              disabled={busy}
+              className="text-xs rounded-lg px-3 py-1.5 flex items-center gap-1.5 disabled:opacity-40"
+              style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
+            >
+              <Trash2 className="w-3 h-3" />
+              Remove
+            </button>
+          ) : null}
         </div>
       )}
     </div>
@@ -365,6 +499,7 @@ export default function JoinCodesPanel({ gymId, codes, staffRole, onChanged }) {
             onWake={() => run(() => orgService.updateCode(gymId, code.code, { paused: false }))}
             onRotate={() => run(() => orgService.rotateCode(gymId, code.code))}
             onSaveLimits={(patch) => run(() => orgService.updateCode(gymId, code.code, patch))}
+            onRemove={() => run(() => orgService.removeCode(gymId, code.code))}
           />
         ))}
       </div>
@@ -425,7 +560,7 @@ export default function JoinCodesPanel({ gymId, codes, staffRole, onChanged }) {
 
       {full === true ? (
         <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          This gym is holding the most codes it can. Switched-off codes still count.
+          This gym is holding the most codes it can. Switch one off and remove it to make room.
         </p>
       ) : null}
     </ConsoleCard>

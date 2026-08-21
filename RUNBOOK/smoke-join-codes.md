@@ -4,7 +4,12 @@
 and back on, put an end date or a people-limit on one, and swap a leaked code for
 a fresh one.
 
-**11 steps, about 15 minutes.**
+**13 steps, about 20 minutes.**
+
+**Updated 2026-08-21 after Kd's first run.** Three things he found are fixed and
+are now checked here: the count under a code says how many people are IN (steps
+6), neither the date nor the people-limit can be typed into by hand (steps 8–9),
+and a finished code can be taken off the list (steps 12–13).
 
 **Why this matters.** Until now a gym got one code when it was created and could
 never change it. If it leaked, there was nothing anybody could do.
@@ -119,14 +124,18 @@ nothing.
 
 ---
 
-## Step 6 — the code now says somebody used it
+## Step 6 — the code now says somebody is using it
 
 Go back to your gym's page (**/console**, then your gym).
 
 ✅ **Expect:** under the code in the **Join codes** list, it now says *"1 person
-has joined with it"*.
+is in through it"*.
 
-❌ **Failure:** it still says nobody has joined.
+✅ **And the number is ONE, not two.** You are a member of your own gym and you
+came in through this same code — but you are the owner, so you are never counted
+against your own gym. Two here is a failure.
+
+❌ **Failure:** it still says nobody is using it, or it says 2.
 
 ---
 
@@ -141,38 +150,53 @@ the first. Both show the green **Working** tag.
 
 ---
 
-## Step 8 — put a limit on the new code
+## Step 8 — put a limit on the new code (no typing)
 
-On the **new** code's row, click **Limits**. Type **1** in **Maximum people** and
-click **Save**.
+On the **new** code's row, click **Limits**.
 
-✅ **Expect:** the row now says something like *"Nobody has joined with this code
-yet · 1 of 1 left"*.
+Beside **Maximum people** there is a **−**, a box, and a **+**. The box says
+*No limit*.
 
-Now type a deliberately silly value: click **Limits** again, clear the box, type
-**0**, and click **Save**.
+**Try to type in the box first.** Click it and press some digits.
 
-✅ **Expect:** it refuses with *"The maximum has to be a whole number, 1 or more."*
-and nothing changes.
+✅ **Expect:** nothing happens. The box cannot be typed into at all.
 
-❌ **Failure:** it accepts the 0, or it shows an error mentioning a server or a
-number like 400.
+Now click **+** once, then click **Save**.
+
+✅ **Expect:** the row says something like *"Nobody is using this code yet · 1 of
+1 left"*.
+
+Click **Limits** again and click **−** once.
+
+✅ **Expect:** the box goes back to saying *No limit* — that is how you take a
+limit off. Click **Save**.
+
+❌ **Failure:** you can type a number in by hand, or **−** produces a 0, or an
+error mentions a server or a number like 400.
 
 ---
 
-## Step 9 — give a code an end date
+## Step 9 — give a code an end date (no typing either)
 
-On the **new** code's row, click **Limits**, pick **tomorrow's date** in **Stop
-working after**, and click **Save**.
+On the **new** code's row, click **Limits**.
+
+**Try to type the date first.** Click the **Stop working after** box and type
+`19 07 2026` — the exact thing that went wrong before.
+
+✅ **Expect:** nothing is entered. The box ignores the keys completely, and does
+**not** end up holding some other date like 19 09 2026.
+
+Now click the box and pick **tomorrow** from the calendar that opens. Click
+**Save**.
 
 ✅ **Expect:** the row now says *"Ends"* followed by tomorrow's date.
 
-Now click **Limits** once more, try to pick a date in the **past**.
+Click **Limits** once more and try to pick a date in the **past**.
 
-✅ **Expect:** the date box will not let you pick one — dates before today are
-greyed out.
+✅ **Expect:** the calendar will not let you — dates before today are greyed out.
 
-❌ **Failure:** you can pick and save a date that has already gone.
+❌ **Failure:** typing changes the date, or you can pick and save a date that has
+already gone.
 
 ---
 
@@ -213,6 +237,43 @@ somebody new in.
 
 ❌ **Failure:** a brand-new person gets onto the waiting list using the replaced
 code.
+
+---
+
+## Step 12 — take the dead code off the list
+
+You now have a switched-off code sitting in the list: the one you replaced in
+step 10. This is the pile-up problem — a gym that changes its code every month
+would collect twelve of these a year.
+
+On that switched-off code's row, click **Remove**.
+
+✅ **Expect:** it asks first, and the question says that everyone who joined with
+it **stays a member**.
+
+Click **Remove it**.
+
+✅ **Expect:** the row disappears from the list.
+
+✅ **Now the part that matters:** click **Members**. The person you confirmed in
+step 5 is **still there**.
+
+❌ **Failure:** the member is gone, or the row is still on the list after the
+page settles.
+
+---
+
+## Step 13 — a working code cannot be removed
+
+Look at your **working** code — the green one.
+
+✅ **Expect:** it has **no Remove button at all**. Only **Switch off**, **Limits**
+and **Replace**.
+
+That is deliberate: a code that still lets people in should never vanish from the
+only screen where you can see it. Switch it off first, and then Remove appears.
+
+❌ **Failure:** a working code offers Remove.
 
 ---
 

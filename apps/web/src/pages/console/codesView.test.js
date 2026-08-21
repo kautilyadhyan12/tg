@@ -3,10 +3,12 @@ import {
   CODES_MAX,
   atCodeLimit,
   canManageCodes,
+  canRemoveCode,
   codeSummary,
   endOfDayIso,
   parseLimit,
   sortedCodes,
+  stepLimit,
   todayInputValue,
   whyNotUsable,
 } from './codesView';
@@ -22,7 +24,7 @@ const code = (over = {}) => ({
   paused: false,
   expiresAt: null,
   maxUses: null,
-  uses: 0,
+  joined: 0,
   ...over,
 });
 
@@ -86,7 +88,7 @@ describe('whyNotUsable', () => {
   it('gives each refusal its OWN sentence, because each needs a different action', () => {
     const paused = whyNotUsable(code({ paused: true }), NOW);
     const expired = whyNotUsable(code({ expiresAt: '2026-08-20T00:00:00.000Z' }), NOW);
-    const used = whyNotUsable(code({ maxUses: 2, uses: 2 }), NOW);
+    const used = whyNotUsable(code({ maxUses: 2, joined: 2 }), NOW);
 
     expect(paused).toMatch(/switch it back on/i);
     expect(expired).toMatch(/end date/i);
@@ -103,24 +105,33 @@ describe('whyNotUsable', () => {
 });
 
 describe('codeSummary', () => {
-  it('counts JOINS from the server field and pluralises honestly', () => {
-    expect(codeSummary(code({ uses: 0 }), formatJoinedAt)).toBe(
-      'Nobody has joined with this code yet',
+  it('counts PEOPLE WHO ARE IN from the server field, and pluralises honestly', () => {
+    expect(codeSummary(code({ joined: 0 }), formatJoinedAt)).toBe('Nobody is using this code yet');
+    expect(codeSummary(code({ joined: 1 }), formatJoinedAt)).toBe('1 person is in through it');
+    expect(codeSummary(code({ joined: 4 }), formatJoinedAt)).toBe('4 people are in through it');
+  });
+
+  it('says IS IN rather than HAS JOINED — the sentence Kd was shown wrongly', () => {
+    // The count falls when somebody leaves, so an arrivals sentence over it goes
+    // false the first time anybody does. Reading `uses` here (the server's
+    // lifetime tally, still on the row) must produce NOTHING, or the rename
+    // would have left both fields live and either could win.
+    expect(codeSummary({ ...code(), joined: 2, uses: 9 }, formatJoinedAt)).toBe(
+      '2 people are in through it',
     );
-    expect(codeSummary(code({ uses: 1 }), formatJoinedAt)).toBe('1 person has joined with it');
-    expect(codeSummary(code({ uses: 4 }), formatJoinedAt)).toBe('4 people have joined with it');
+    expect(codeSummary({ ...code(), joined: undefined, uses: 9 }, formatJoinedAt)).toBe('');
   });
 
   it('says nothing about a count it does not have', () => {
-    // A reader that could not get `uses` must not print "Nobody has joined".
-    expect(codeSummary(code({ uses: null }), formatJoinedAt)).toBe('');
-    expect(codeSummary(code({ uses: 'many' }), formatJoinedAt)).toBe('');
+    // A reader that could not get `joined` must not print "Nobody is using it".
+    expect(codeSummary(code({ joined: null }), formatJoinedAt)).toBe('');
+    expect(codeSummary(code({ joined: 'many' }), formatJoinedAt)).toBe('');
   });
 
-  it('reports how many joins are LEFT, not just the limit', () => {
-    expect(codeSummary(code({ uses: 3, maxUses: 10 }), formatJoinedAt)).toContain('7 of 10 left');
-    // Never negative, even if the server ever reports uses past the limit.
-    expect(codeSummary(code({ uses: 12, maxUses: 10 }), formatJoinedAt)).toContain('0 of 10 left');
+  it('reports how many places are LEFT, not just the limit', () => {
+    expect(codeSummary(code({ joined: 3, maxUses: 10 }), formatJoinedAt)).toContain('7 of 10 left');
+    // Never negative, even if the server ever reports a count past the limit.
+    expect(codeSummary(code({ joined: 12, maxUses: 10 }), formatJoinedAt)).toContain('0 of 10 left');
   });
 
   it('mentions an end date only when there is one, and never an unreadable one', () => {
@@ -209,5 +220,57 @@ describe('parseLimit', () => {
     expect(parseLimit('2.5').ok).toBe(false);
     expect(parseLimit('lots').ok).toBe(false);
     expect(parseLimit('1e3').ok).toBe(false);
+  });
+});
+
+describe('stepLimit', () => {
+  it('goes up and down one person at a time', () => {
+    expect(stepLimit('4', 1)).toBe('5');
+    expect(stepLimit('4', -1)).toBe('3');
+  });
+
+  it('crosses between "no limit" and 1 in both directions', () => {
+    // The two ends of the control, and the reason there is no separate clear
+    // button: an owner takes the limit OFF by stepping below the smallest one.
+    expect(stepLimit('', 1)).toBe('1');
+    expect(stepLimit('1', -1)).toBe('');
+    expect(stepLimit('', -1)).toBe('');
+  });
+
+  it('never produces a value parseLimit would refuse', () => {
+    // The property that matters: taps cannot make a number the server 400s on,
+    // which is the whole argument for taking typing away.
+    let value = '';
+    for (const delta of [1, 1, 1, -1, -1, -1, -1, 1, 1]) {
+      value = stepLimit(value, delta);
+      expect(parseLimit(value).ok).toBe(true);
+    }
+  });
+
+  it('leaves a value it cannot read alone rather than inventing one', () => {
+    expect(stepLimit('lots', 1)).toBe('1');
+    expect(stepLimit('lots', -1)).toBe('');
+  });
+});
+
+describe('canRemoveCode', () => {
+  it('offers removal only for a code that cannot let anybody in', () => {
+    expect(canRemoveCode(code({ paused: true }), NOW)).toBe(true);
+    expect(canRemoveCode(code({ expiresAt: '2026-08-20T00:00:00.000Z' }), NOW)).toBe(true);
+  });
+
+  it('refuses a WORKING code — the server does too, with a sentence', () => {
+    expect(canRemoveCode(code(), NOW)).toBe(false);
+  });
+
+  it('refuses a merely FULL code, which a member leaving would revive', () => {
+    // Mirrors `repo.removeCode`: hiding this one would strand a code that is
+    // about to work again. Drift here draws a button the server refuses.
+    expect(canRemoveCode(code({ maxUses: 2, joined: 2 }), NOW)).toBe(false);
+  });
+
+  it('refuses a row it cannot read', () => {
+    expect(canRemoveCode(null, NOW)).toBe(false);
+    expect(canRemoveCode(undefined, NOW)).toBe(false);
   });
 });

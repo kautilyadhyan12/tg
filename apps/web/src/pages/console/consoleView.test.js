@@ -98,7 +98,7 @@ describe('the timezone picker always contains the user’s own zone', () => {
 });
 
 describe('codeState mirrors what the join path will actually do', () => {
-  const live = { code: 'AB12CD', label: 'Front Desk', paused: false, expiresAt: null, maxUses: null, uses: 3 };
+  const live = { code: 'AB12CD', label: 'Front Desk', paused: false, expiresAt: null, maxUses: null, joined: 3 };
 
   it('calls a usable code live', () => {
     expect(codeState(live)).toMatchObject({ live: true, reason: null });
@@ -121,9 +121,9 @@ describe('codeState mirrors what the join path will actually do', () => {
   });
 
   it('calls a used-up code dead at the cap, not past it', () => {
-    expect(codeState({ ...live, maxUses: 5, uses: 4 }).live).toBe(true);
-    expect(codeState({ ...live, maxUses: 5, uses: 5 })).toMatchObject({ reason: 'exhausted' });
-    expect(codeState({ ...live, maxUses: 5, uses: 6 })).toMatchObject({ reason: 'exhausted' });
+    expect(codeState({ ...live, maxUses: 5, joined: 4 }).live).toBe(true);
+    expect(codeState({ ...live, maxUses: 5, joined: 5 })).toMatchObject({ reason: 'exhausted' });
+    expect(codeState({ ...live, maxUses: 5, joined: 6 })).toMatchObject({ reason: 'exhausted' });
   });
 
   it('leaves a code live when its expiry is unreadable', () => {
@@ -211,7 +211,7 @@ describe('member row text', () => {
 
 describe('which code the console offers (T3 L-4)', () => {
   const code = (c, over = {}) => ({
-    code: c, label: 'Front Desk', paused: false, expiresAt: null, maxUses: null, uses: 0, ...over,
+    code: c, label: 'Front Desk', paused: false, expiresAt: null, maxUses: null, joined: 0, ...over,
   });
 
   it('picks the first LIVE one, not merely the first', () => {
