@@ -14,14 +14,24 @@
  * test is dozens of round trips and the runner's parallelism was CAPPED to stop
  * them contending on one pooler. Same two org suites, same machine, same day:
  *
- *   | orgs.routes + orgs.sweep (67 tests) | result |
+ *   | orgs.sweep.test.ts (18 tests) | result |
  *   |---|---|
- *   | Singapore                           | **did not finish in 10 minutes** |
- *   | local, cap as-is (4 workers)        | 138 s, 67/67 |
- *   | local, cap lifted (8 workers)       | **77 s, 67/67** |
+ *   | Singapore                     | 158.2 s |
+ *   | local                         | **10.8 s — 14.7×** |
  *
- * The Singapore figure is a LOWER BOUND from one run that was killed at the cap,
- * not a measured total — quote it as "did not finish", never as a ratio.
+ * A two-suite Neon run (`orgs.routes` + `orgs.sweep`, 67 tests) **did not finish
+ * in 10 minutes** against 77 s local. That is a LOWER BOUND from a run killed at
+ * a cap, not a measured total — quote it as "did not finish", never as a ratio.
+ *
+ * **KNOWN, AND NOT HIDDEN BY THIS SCRIPT: the FULL suite flakes on a fast
+ * database.** Five full local runs went 536/536, 535/536, 532/536, 535/536,
+ * 536/536, with failures in `catalog.seed.test.ts` and `db.migration.test.ts`.
+ * **Nine test files call `seed()` against the one shared database while two of
+ * them assert exact GLOBAL counts** — a PRE-EXISTING race that Neon's latency
+ * was hiding, since slow queries spread the suites out and rarely opened the
+ * collision window. **Made visible by this switch, not caused by it**, and a
+ * visible race beats a hidden one. Own `OWED.md` line. A SCOPED run — one file,
+ * or a `-t` filter, which is what a mutation sweep does — is unaffected.
  *
  * This matters most to the MUTATION SWEEP, which runs the suite once per mutant:
  * the clock card's audit paid the Singapore latency across six database mutants
@@ -67,21 +77,51 @@ const LOCAL_HOST = new URL(LOCAL_URL).host;
 const require = createRequire(resolve(API_DIR, "package.json"));
 const postgres = require("postgres");
 
+/** **RETRIES BEFORE GIVING UP, because "not started" and "still starting" look
+ *  identical from here and only one of them is your fault.** Caught in the act:
+ *  running this a second after `docker compose up` returned printed "cannot
+ *  reach the database — start it with docker compose up", about a container
+ *  that was up and mid-boot. An instruction that sends you to do the thing you
+ *  just did is worse than no instruction (:5034's shape). Postgres takes a
+ *  couple of seconds to accept connections after the container starts; twenty
+ *  is generous and still fails fast enough to be honest about a real outage. */
+const CONNECT_ATTEMPT_SECONDS = 20;
+
+async function connectWithRetry() {
+  const deadline = Date.now() + CONNECT_ATTEMPT_SECONDS * 1000;
+  let lastError = "";
+  let announced = false;
+  for (;;) {
+    const sql = postgres(LOCAL_URL, { max: 1, connect_timeout: 5, idle_timeout: 2 });
+    try {
+      await sql`select 1`;
+      return sql;
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      await sql.end({ timeout: 1 }).catch(() => {});
+      if (Date.now() >= deadline) return { failed: lastError };
+      if (!announced) {
+        console.log(`test-local: ${LOCAL_HOST} is not answering yet — waiting up to ${String(CONNECT_ATTEMPT_SECONDS)}s…`);
+        announced = true;
+      }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+}
+
 async function preflight() {
-  let sql;
-  try {
-    sql = postgres(LOCAL_URL, { max: 1, connect_timeout: 5, idle_timeout: 2 });
-    await sql`select 1`;
-  } catch (err) {
-    const why = err instanceof Error ? err.message : String(err);
+  const connected = await connectWithRetry();
+  if ("failed" in connected) {
     console.error(
-      `\ntest-local: cannot reach the local database at ${LOCAL_HOST}.\n` +
-        `  ${why}\n\n` +
+      `\ntest-local: cannot reach the local database at ${LOCAL_HOST} ` +
+        `after ${String(CONNECT_ATTEMPT_SECONDS)}s.\n` +
+        `  ${connected.failed}\n\n` +
         `Start it with:\n  ${COMPOSE_UP}\n` +
         `(Docker Desktop has to be running first.)\n`,
     );
     process.exit(1);
   }
+  const sql = connected;
 
   // Reachable is not the same as READY. A database with no tables, or with
   // tables and no seed, runs the suite to a wall of failures that look like

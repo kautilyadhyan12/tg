@@ -13742,3 +13742,60 @@ refusal 2 was dropped.
 **STILL OPEN, and not smuggled into "done":** the severity class per mutant
 (:5857 rule 4a item 1) is untouched, so the rule that slow mutants are spent only
 on Critical/High surfaces is still followed by hand. Its `OWED.md` line stays.
+
+## 2026-08-21 — ADDENDUM to :13659, same day: I raised the worker cap on a guess, the measurement killed it, and what it uncovered is worth more than what it was aiming at
+
+**Read with :13659 — it CORRECTS two claims that entry made.** Nothing about the
+local-database switch itself changes; the 14.7×-per-mutant saving stands and was
+re-measured. What changes is a config edit I made alongside it and a gate figure
+I quoted.
+
+**CORRECTION 1 — THE CONDITIONAL WORKER CAP IS REVERTED.** :13659 lifted
+`vitest.config.ts`'s 4-worker cap to 8 when the database is local, reasoning that
+the cap's whole justification is contention on the REMOTE pooler. **That
+reasoning was wrong and the way it was wrong is the useful part: the full suite
+flakes on a local database at 4 workers TOO**, so the cap was never what stood
+between this suite and a green run. Measured over five full local runs —
+**536/536, 535/536, 532/536, 535/536, 536/536**. Reverted to unconditional 4,
+with the measurement written into the file so the lift is not re-tried on the
+same guess.
+
+**CORRECTION 2 — "api 536/536 in 51 s" WAS TRUE OF A RUN, NOT OF THE SUITE.**
+:13659 quoted it as a gate. It was the first of five runs and the other four
+disagree. **This is :13247's own Low-3, recurring — in the session that fixed
+it, quoted by the chat that wrote the fix.** The gate figure is withdrawn: the
+suite has no clean-run claim until the race below is closed, and scoped runs are
+what this card's work actually rests on.
+
+**WHAT THE FAILED ATTEMPT FOUND, which is the reason this addendum is not just an
+apology: NINE TEST FILES CALL `seed()` AGAINST THE ONE SHARED DATABASE, AND TWO
+OF THEM ASSERT EXACT GLOBAL COUNTS.** `catalog.seed.test.ts` ("seeds all 58 and
+nothing else") and `db.migration.test.ts` ("seed is idempotent") are re-seeded
+underneath by the other seven while they count. **Pinned rather than guessed:
+those two run TOGETHER 3/3 green and ALONE 2/2 green each, and fail only inside
+the full run** — which is what puts the blame on a third file rather than on
+either of them.
+
+**IT IS PRE-EXISTING, AND NEON'S LATENCY WAS HIDING IT.** Slow queries spread the
+suites out, so the collision window was rarely open; a database answering in
+2.7 ms opens it often. **The switch did not create this defect, it made it
+visible** — and that is the better outcome, not a cost of the change. A hidden
+race in the suite that gates every card is worth more to find than the minutes
+the switch saves.
+
+**WHAT IT DOES NOT UNDERMINE, stated because the opposite reading is available:**
+a SCOPED run — one file, or a `-t` filter — is unaffected, and **that is exactly
+what a mutation sweep runs**. So the audit instrument this card exists to speed
+up is not touched by the flake. The two suites in question were also re-run to
+completion green after the revert.
+
+**HOW IT WAS CAUGHT, because it very nearly was not:** the first full local run
+was green and was written into three documents and a commit message as a gate.
+It surfaced only because Kd asked whether testing locally could harm production
+quality — a question about RISK, not about a defect — and answering it honestly
+meant running the suite more than once. **A number quoted from one run is a
+coin toss with a citation.**
+
+**OWED:** a line for the seed race. The fix is isolating the seed-asserting
+suites (a schema or database per worker, or running those two files alone),
+**never a worker count** — that was already tried here and disproven.

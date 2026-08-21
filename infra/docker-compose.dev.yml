@@ -55,7 +55,16 @@ services:
     ports:
       # 5433 on the host, so a Postgres already installed locally on 5432 is
       # untouched.
-      - "5433:5432"
+      #
+      # **BOUND TO 127.0.0.1, NOT EVERY INTERFACE (2026-08-21).** A bare
+      # "5433:5432" publishes on 0.0.0.0 — measured, `docker compose ps` read
+      # `0.0.0.0:5433->5432/tcp` — so this database was reachable by anyone on
+      # the same network, with the password three lines above. Harmless on a
+      # home network holding only fixtures; not something to carry to a café or
+      # a gym's wifi. Nothing that needs this port is on another machine: the
+      # api and worker containers reach Postgres over the compose network on
+      # 5432, and the only host clients are drizzle-kit and vitest.
+      - "127.0.0.1:5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -71,7 +80,12 @@ services:
       # 6380 on the host: the repo-root docker-compose.yml (the LEGACY mongo
       # stack, still serving the old backend until P2.8) already binds 6379, and
       # both must be able to run at once during the cutover.
-      - "6380:6379"
+      #
+      # Loopback-only for the same reason as Postgres above, and it matters
+      # slightly MORE here: this Redis has no password at all, which is normal
+      # for a container on a private compose network and is not something to
+      # publish to a shared wifi.
+      - "127.0.0.1:6380:6379"
     volumes:
       - redisdata:/data
 

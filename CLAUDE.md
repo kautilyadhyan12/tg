@@ -712,12 +712,23 @@ pnpm --filter api test:local
 there and his browser smokes read them. So the local database is OPT-IN and this
 command is the opt-in. **Measured, same machine same day: a round-trip `select 1`
 is 202.9 ms to Singapore and 2.7 ms locally; `orgs.sweep.test.ts` is 158.2 s
-against Neon and 10.8 s locally (14.7×); the whole api suite is 536 tests in
-51 s locally.** A mutation sweep re-runs a suite ONCE PER MUTANT, so that 14.7×
-is the per-mutant saving — six DB mutants was ~16 minutes and is now ~1.
-`mutate-orgs.mjs` prints which database it is about to use and says so when it is
-remote. First run on a fresh database needs `drizzle-kit migrate` then the seed;
-`test:local` refuses and names the command rather than failing forty tests.
+against Neon and 10.8 s locally (14.7×).** A mutation sweep re-runs a suite ONCE
+PER MUTANT, so that 14.7× is the per-mutant saving — six DB mutants was ~16
+minutes and is now ~1. `mutate-orgs.mjs` prints which database it is about to use
+and says so when it is remote. First run on a fresh database needs `drizzle-kit
+migrate` then the seed; `test:local` refuses and names the command rather than
+failing forty tests.
+
+**THE FULL api SUITE FLAKES ON A FAST DATABASE, AND IT IS PRE-EXISTING — do not
+quote a single green run as the suite's state.** Five full local runs measured
+536/536, 535/536, 532/536, 535/536, 536/536; the failures land in
+`catalog.seed.test.ts` and `db.migration.test.ts`. **Nine test files call
+`seed()` against the one shared database while two of them assert exact GLOBAL
+counts.** Neon's latency was hiding it by spreading the suites out. A SCOPED run
+— one file, or a `-t` filter, which is what a mutation sweep does — is
+unaffected, so this does not undermine an audit. It has its own `OWED.md` line;
+the fix is isolating the seed-asserting suites, never a worker count (a lift to
+8 was tried and disproven: it flakes at 4 as well).
 
 ```bash
 # Standard gate (every task)

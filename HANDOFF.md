@@ -18,7 +18,8 @@ explicitly UNVERIFIED and forbade quoting a number until it existed)
   · round-trip `select 1`: **202.9 ms** Singapore → **2.7 ms** local
   · `orgs.sweep.test.ts` (18 tests): **158.2 s** → **10.8 s**, i.e. **14.7×**
   · `orgs.routes` + `orgs.sweep` (67): **did not finish in 10 min** → 77 s
-  · whole api suite (536 tests, 44 files): **51 s** local
+  · whole api suite: **51 s** local — but see the FLAKE note below; that was
+    ONE RUN and is not the suite's state
   · **The did-not-finish row is a LOWER BOUND, not a ratio, and NO full-suite
     Neon figure exists — do not quote one.** The governing row is the second: a
     sweep re-runs a suite ONCE PER MUTANT, so six DB mutants was ~16 min.
@@ -32,15 +33,28 @@ THINGS A LATER CHAT WILL OTHERWISE GET WRONG
   · **The native PostgreSQL 18 on the dev machine is NOT usable** — the schema
     needs the `vector` extension, a third-party build on Windows. The compose
     image bundles it, and its port 5433 never collides with 5432.
+  · **THE FULL SUITE FLAKES ON A FAST DATABASE AND IT IS PRE-EXISTING.** Five
+    full local runs: 536/536, 535/536, 532/536, 535/536, 536/536, failing in
+    `catalog.seed.test.ts` and `db.migration.test.ts`. **Nine test files call
+    `seed()` against one shared database while two assert exact GLOBAL counts.**
+    Neon's latency was HIDING it. **A SCOPED run — one file or a `-t` filter,
+    which is what a sweep does — is unaffected.** Own OWED line.
+  · **I RAISED THE 4-WORKER CAP TO 8 AND THE MEASUREMENT KILLED IT** — it flakes
+    at 4 as well, so the cap was never what stood between this suite and green.
+    Reverted. Do not re-try the lift.
   · **STILL OPEN: the severity class per mutant** (:5857 rule 4a item 1). The
     rule that slow mutants are spent only on Critical/High surfaces is still
     followed by hand. Its `OWED.md` line stays.
 
 GATES
-  · api **536/536 across 44 files, exit 0, 51 s** against the local database ·
-    tsc clean · eslint clean on `src test tools` · harness parse check clean at
-    23 scripts · both `test:local` refusals proven by CAUSING them, source
-    sha256-verified restored · the throwaway database was dropped.
+  · api tsc clean · eslint clean on `src test tools` · harness parse check
+    clean at 23 scripts · all three `test:local` paths (ready / still-starting /
+    absent) proven by CAUSING them, source sha256-verified restored · the
+    throwaway database was dropped.
+  · **The api suite is NOT quoted as a clean gate here, deliberately.** Best
+    observed 536/536 in 51 s; worst 532/536. See the flake note above — that is
+    a claim about a RUN, not about the SUITE (:13247's Low-3, recurring in the
+    session that fixed it).
 
 NEXT
   1. Kd's go-ahead on the join-code card (create / rotate / pause / expire) —

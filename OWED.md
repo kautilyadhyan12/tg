@@ -2133,6 +2133,29 @@ then; none may be hidden or reduced to close the gap.
       control aborts at :13336 — contention on a database in another country.
       **STILL OPEN: item 1, the severity class per mutant.** The rule still
       cannot be followed by the tool, only by hand.
+- [ ] 🟡 **THE FULL api SUITE FLAKES: NINE TEST FILES RUN `seed()` AGAINST ONE
+      SHARED DATABASE WHILE TWO ASSERT EXACT GLOBAL COUNTS.** Found 2026-08-21
+      (DECISIONS :13746) by the local-Postgres switch — **PRE-EXISTING, and
+      Neon's latency was HIDING it**: slow queries spread the suites out so the
+      collision window rarely opened, and a database answering in 2.7 ms opens
+      it often. **Measured over five full local runs: 536/536, 535/536,
+      532/536, 535/536, 536/536**, with failures always in
+      `catalog.seed.test.ts` ("seeds all 58 and nothing else") and
+      `db.migration.test.ts` ("seed is idempotent"). **Pinned rather than
+      guessed: those two pass TOGETHER 3/3 and ALONE 2/2 each, and fail only
+      inside the full run** — so the mutation comes from a third file, not from
+      either of them.
+      **WHAT IT DOES AND DOES NOT COST.** A SCOPED run — one file, or a `-t`
+      filter — is unaffected, **which is exactly what a mutation sweep runs**,
+      so the audit instrument is untouched. What IS affected is any claim that
+      the whole api suite is green: **there is no clean-run claim available
+      until this closes**, and a single green run must not be quoted as one
+      (:13247's Low-3, which recurred here in the session that fixed it).
+      **THE FIX IS ISOLATION, NEVER A WORKER COUNT.** Raising the cap from 4 to
+      8 was tried on 2026-08-21 and disproven — it flakes at 4 as well. Wanted:
+      a schema or database per worker, or the two seed-asserting files run
+      alone. **Not blocking anything** — a test-infrastructure defect, not a
+      product one, and invisible until this week.
 - [x] ~~🟡 **THE NEW API DOES NOT STORE A WORKOUT'S WALL-CLOCK DURATION.**~~
       **DONE 2026-08-07** (DECISIONS :5906) — Kd RULED the contract change this
       line said was needed. `durationSeconds` (the on-screen workout timer) and

@@ -67,6 +67,25 @@ mid-file: re-derive them with
   unless dedupe is in that card's definition.** Health data lands inside the open
   privacy question at :592. Tracked NOWHERE before today (grep-verified); now has
   a ⚪ `OWED.md` line.
+- **:13746** — 2026-08-21 — **ADDENDUM to :13659: I raised the worker cap on a
+  guess, the measurement killed it, and what it uncovered is worth more than what
+  it was aiming at.** **Read WITH :13659 — it CORRECTS two of that entry's
+  claims.** (1) **The conditional worker cap is REVERTED**: the full suite flakes
+  on a local database at 4 workers TOO, so the cap was never what stood between
+  this suite and green. (2) **"api 536/536 in 51 s" was true of a RUN, not the
+  SUITE** — five full local runs went 536, 535, 532, 535, 536, and the gate
+  figure is withdrawn. **:13247's own Low-3 recurring, in the session that fixed
+  it, quoted by the chat that wrote the fix.** **What the failed attempt FOUND is
+  the point: NINE test files call `seed()` against one shared database while two
+  assert exact GLOBAL counts** — pinned, not guessed (those two pass together 3/3
+  and alone 2/2, failing only inside the full run). **PRE-EXISTING; Neon's latency
+  was HIDING it** by spreading the suites out, so the fast database made it
+  visible rather than causing it. **A SCOPED run — one file or a `-t` filter,
+  i.e. what a mutation sweep runs — is unaffected**, so the audit instrument is
+  untouched. Caught only because Kd asked whether local testing could harm
+  quality, which meant running the suite more than once: **a number quoted from
+  one run is a coin toss with a citation.** OWED line added; the fix is isolating
+  the seed-asserting suites, never a worker count.
 - **:13659** — 2026-08-21 — **THE TESTS STOP TRAVELLING TO SINGAPORE: a local
   Postgres for the suite and the mutation sweep, and :5857's UNVERIFIED saving is
   now MEASURED.** **Read before running a mutation sweep, before quoting a
@@ -87,10 +106,14 @@ mid-file: re-derive them with
   needs `vector`, a third-party build on Windows; the compose image bundles it,
   and port 5433 means they never collide). Three small pieces: a `test:local`
   script that **refuses** a missing/empty/unseeded database with the fixing
-  command — **both refusals proven by causing them** · **the 4-worker cap is now
-  conditional**, since its whole justification was the REMOTE pooler (138 s → 77 s
-  local), host PARSED not string-matched, unparseable treated as remote, **CI
-  unaffected by construction** · the sweep harness now **prints its database, host
+  command — **both refusals proven by causing them** · ~~the 4-worker cap is now conditional~~ **— TRIED AT 8 AND
+  DISPROVEN THE SAME DAY: the full suite flakes at 4 TOO, so the cap was never
+  the thing standing between this suite and green. Reverted; do not re-try.
+  What the attempt uncovered is better than what it was aiming at — NINE test
+  files call `seed()` against one shared database while two assert exact GLOBAL
+  counts, a PRE-EXISTING race Neon's latency was HIDING (five full local runs:
+  536, 535, 532, 535, 536). A scoped run — one file or a `-t` filter, i.e. what
+  a sweep does — is unaffected. Own OWED line** · the sweep harness now **prints its database, host
   only never the url** (R3.10). **The guard built that same morning paid for
   itself**: the new script landed in `apps/api/scripts`, the directory round 5's
   Low-5 added to the walk, so it was parse-checked with no edit to the guard —
