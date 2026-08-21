@@ -106,6 +106,11 @@ const waitingApplicant = {
   appliedAt: '2026-08-19T09:00:00.000Z',
   expiresAt: '2026-09-02T09:00:00.000Z',
   groupLabel: 'Front Desk',
+  // The waiting room's clock (:11385). Both null here, i.e. a fresh applicant
+  // nobody has been chased about and who has not asked again — the ordinary
+  // row. The tests that need either state set it explicitly.
+  gymNotifiedAt: null,
+  nudgedAt: null,
   email: 'anil-private@example.com',
   weightKg: 74.25,
 };
@@ -168,7 +173,26 @@ beforeEach(() => {
   orgService.getApplications.mockResolvedValue(queue([]));
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  // **RESTORED HERE AND NOT AT THE END OF EACH TEST BODY — T3 round 3, Low-4.**
+  // Three tests in this file pin a clock, and each called `vi.useRealTimers()`
+  // as its LAST statement — which a failing assertion never reaches. One red
+  // test would then leave every later test in the file frozen at 2026-08-22: a
+  // flake generator inside the fix for a flake. Unconditional teardown is the
+  // only placement that survives a failure.
+  //
+  // **WHAT ROUND 4 CORRECTED, because the round-3 note overclaimed twice.** It
+  // said "not at the end of each test body" while the three in-body calls were
+  // still there — added, not moved; they are deleted now. And it cited
+  // `1 failed | 52 passed` as proof, which the reviewer reproduced and then
+  // reproduced AGAIN with this teardown removed: identical, because no later
+  // test in this file is date-sensitive today. **The measurement was real and
+  // proved nothing** (V1). This teardown is kept on its own merits — it is
+  // insurance against the day a date-sensitive test is added below — and the
+  // honest statement of its evidence is that there is none yet.
+  vi.useRealTimers();
+});
 
 // ── Your gyms ───────────────────────────────────────────────────────────────
 
@@ -706,6 +730,94 @@ describe('Waiting to join', () => {
     drawMembers();
     expect(await screen.findByText('Kd Owner')).toBeTruthy();
     expect(screen.queryByText(/waiting to join/i)).toBeNull();
+  });
+
+  // ── the clock on the queue (:11385, step 3) ──────────────────────────────
+  //
+  // The clock is PINNED in these: a countdown asserted against the real
+  // calendar changes its own expected value every day.
+
+  it('says how long each person has waited and when their request runs out', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // **PINNED AT 09:30, NOT 09:00 — T3 round 2, Low-3.** The WAITING figure is
+    // a floored count of elapsed days, so a clock sitting EXACTLY on its
+    // boundary flips as soon as it moves: `shouldAdvanceTime` lets real
+    // milliseconds tick between `setSystemTime` and the render, and one
+    // millisecond took "11 days" to "10 days". Measured — the full suite failed
+    // 905/906 on one run of three and passed alone every time, which is the
+    // shape of a boundary flake. Half an hour of slack changes nothing the test
+    // is about.
+    // **Only the waiting figure still needs that slack — round 5, Low-9.** Since
+    // round 4 the countdown counts LOCAL CALENDAR days, whose boundary is local
+    // midnight (18:30Z here), and 09:30Z is nowhere near it; the round-2 note
+    // said "both figures" and that stopped being true when the countdown moved
+    // to the calendar.
+    vi.setSystemTime(new Date('2026-08-22T09:30:00.000Z'));
+    orgService.getApplications.mockResolvedValue(queue([waitingApplicant]));
+    orgService.getMembers.mockResolvedValue(page([]));
+    drawMembers();
+
+    // Asked 19 Aug 09:00Z, standing at 22 Aug 09:30Z, expiring 2 Sep 09:00Z.
+    // **THE COUNTDOWN IS 11, NOT 10, AND THE CHANGE IS THE ROUND-4 FIX.** The
+    // old reading floored elapsed milliseconds (10.98 days → "10"); the screen
+    // now counts LOCAL CALENDAR days, and 22 Aug → 2 Sep is eleven of them. The
+    // waiting figure stays 3 because it is a DURATION and duration still counts
+    // elapsed time — the two halves of the same rule, visible in one row.
+    expect(await screen.findByText(/waiting 3 days/i)).toBeTruthy();
+    expect(screen.getByText(/expires in 11 days/i)).toBeTruthy();
+  });
+
+  it('marks a row NEEDS A DECISION off the server column, not off the dates', async () => {
+    // `gymNotifiedAt` is the same fact the expiry statement consults before it
+    // may delete anything. A mark computed here from the dates instead would be
+    // a second opinion about whether the gym was warned — and the two would
+    // disagree on exactly the rows where it matters.
+    orgService.getApplications.mockResolvedValue(
+      queue([{ ...waitingApplicant, gymNotifiedAt: '2026-08-21T03:30:00.000Z' }]),
+    );
+    orgService.getMembers.mockResolvedValue(page([]));
+    drawMembers();
+    expect(await screen.findByText(/needs a decision/i)).toBeTruthy();
+  });
+
+  it('does NOT mark a row the sweep has not flagged, however old it looks', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // Far past every threshold, and still unflagged — which is precisely the
+    // state a stopped worker produces. The screen must report the column, not
+    // guess from the age.
+    vi.setSystemTime(new Date('2026-09-10T09:00:00.000Z'));
+    orgService.getApplications.mockResolvedValue(queue([waitingApplicant]));
+    orgService.getMembers.mockResolvedValue(page([]));
+    drawMembers();
+
+    expect(await screen.findByText('Anil Bora')).toBeTruthy();
+    expect(screen.queryByText(/needs a decision/i)).toBeNull();
+    // And past its date it reads "due to expire" rather than "expired": the
+    // sweep runs nightly, so this row is still pending and still confirmable.
+    expect(screen.getByText(/due to expire/i)).toBeTruthy();
+  });
+
+  it('shows that a member asked again — the only place a nudge ARRIVES', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-08-22T09:00:00.000Z'));
+    orgService.getApplications.mockResolvedValue(
+      queue([{ ...waitingApplicant, nudgedAt: '2026-08-22T07:00:00.000Z' }]),
+    );
+    orgService.getMembers.mockResolvedValue(page([]));
+    drawMembers();
+
+    expect(await screen.findByText(/they asked again 2 hours ago/i)).toBeTruthy();
+    // Worded as what the PERSON did. There is no email and no push, so any
+    // claim that a message was delivered would be false.
+    expect(document.body.textContent).not.toMatch(/email|notification/i);
+  });
+
+  it('says nothing about a nudge nobody sent', async () => {
+    orgService.getApplications.mockResolvedValue(queue([waitingApplicant]));
+    orgService.getMembers.mockResolvedValue(page([]));
+    drawMembers();
+    expect(await screen.findByText('Anil Bora')).toBeTruthy();
+    expect(screen.queryByText(/asked again/i)).toBeNull();
   });
 });
 

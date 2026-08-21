@@ -15,6 +15,7 @@ import {
   createOrgRequestSchema,
   joinOrgRequestSchema,
   memberParamsSchema,
+  myApplicationParamsSchema,
   orgApplicationListQuerySchema,
   orgMemberListQuerySchema,
   orgParamsSchema,
@@ -117,6 +118,43 @@ export function registerOrgRoutes(
     const applications = await service.listMyApplications(orgDeps, requireUserId(req));
     return reply.status(200).send(applications);
   });
+
+  // "REMIND THEM" (:11385 mechanic 3). The PRODUCT rule — once a day — lives in
+  // the database, where a restart cannot drop it; this is the REQUEST floor on
+  // top, and the two are different jobs. Without it, a stranger holding a
+  // leaked code can hammer a refusal loop that still costs a locked row read
+  // per attempt, and :11385 names rate-limiting as what stops exactly that
+  // person "pestering an owner".
+  //
+  // Numbers deliberately generous, because the durable rule is what actually
+  // bounds the feature: 60/hour per account is ~sixty refusals for a person
+  // whose real allowance is one, and the per-IP figure follows the apply
+  // route's own reasoning (a gym's whole induction class shares one wi-fi, so a
+  // tight IP number punishes the crowd this exists for). Chosen, not spec'd —
+  // recorded in DECISIONS with the apply route's pair.
+  const nudgeLimit = createDualRateLimit({
+    name: "orgs_nudge",
+    max: 60,
+    ipMax: 600,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+
+  app.post(
+    "/v1/orgs/applications/:applicationId/nudge",
+    { preHandler: [app.authenticate, nudgeLimit] },
+    async (req, reply) => {
+      const params = parseOr400(myApplicationParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const result = await service.nudgeMyApplication(
+        orgDeps,
+        requireUserId(req),
+        params.applicationId,
+      );
+      return reply.status(200).send(result);
+    },
+  );
 
   app.get(
     "/v1/orgs/:gymId/applications",

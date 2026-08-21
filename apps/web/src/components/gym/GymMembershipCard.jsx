@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, Clock, XCircle } from 'lucide-react';
-import { orgService } from '../../api/orgsApi';
-import { gymStatusRows } from './gymMembershipView';
+import { Building2, Clock, Loader2, XCircle } from 'lucide-react';
+import { orgService, errorText } from '../../api/orgsApi';
+import { expiresInLabel, nextNudgeAfter, nextNudgeText } from '../../utils/joinClock';
+import { gymStatusRows, nudgeState } from './gymMembershipView';
 
 // THE CARD THAT SITS ON TOP OF THE APP, and the words are the ruling's own:
 // a person waiting for a gym keeps the WHOLE free app, so what they get is a
@@ -19,8 +20,125 @@ import { gymStatusRows } from './gymMembershipView';
 // they answer different questions and one failing must not silence the other,
 // which is the same lesson the console's Overview learned in review.
 //
-// It promises nothing the app cannot do. No "we'll email you", because email
-// does not exist; no countdown, because nothing expires yet.
+// IT PROMISES NOTHING THE APP CANNOT DO. Still no "we'll email you", because
+// email still does not exist. **The countdown, however, is now REAL** — the
+// waiting room's clock shipped (:11385, step 3), so `expiresAt` is a date
+// something actually acts on, and the `expired` arm below is finally reachable.
+// Before this card that arm existed and no path in the product could produce
+// it.
+
+// THE WAITING ROW, and it is the only one with a control on it (:11385).
+//
+// THREE THINGS IT SAYS AND ONE IT MUST NOT. It names the gym, says when the
+// request runs out, and offers "Remind them" — and it NEVER claims a message
+// was sent anywhere, because none is. There is no email in this product and no
+// web push, so the reminder arrives as a mark on the front desk's own queue,
+// and the confirmation sentence says exactly that.
+//
+// THE ONCE-A-DAY RULE IS THE SERVER'S. `nudgeState` decides whether the button
+// looks available, and a wrong answer here costs a refused tap and a truthful
+// sentence — never a second reminder. R3.3 from the client's side: hiding is
+// not the enforcement, and the enforcement is a database column.
+function WaitingRow({ row }) {
+  const [state, setState] = useState({ busy: false, sent: null, error: null });
+  const expiring = expiresInLabel(row.expiresAt);
+  const { ready } = nudgeState(row);
+  // A tap is refused while one is in flight, while today's is already spent,
+  // and once this one lands. The sent state does not clear: re-offering the
+  // button under "we've let them know" would invite a tap the server refuses.
+  const canTap = ready && !state.busy && state.sent === null;
+
+  const remind = async () => {
+    setState({ busy: true, sent: null, error: null });
+    try {
+      const res = await orgService.nudgeApplication(row.applicationId);
+      // BOTH ARMS ARE A SUCCESS. `already_sent` means today's reminder was
+      // spent before this tap — the gym has been told either way, which is what
+      // the person wanted to know, and treating it as a failure would send them
+      // to try again over something that already worked.
+      setState({ busy: false, sent: res.data, error: null });
+    } catch (err) {
+      setState({
+        busy: false,
+        sent: null,
+        error: errorText(err, "We couldn't send that just now. Please try again."),
+      });
+    }
+  };
+
+  return (
+    <div className="flex items-start gap-3">
+      <div
+        className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+        style={{ background: 'rgba(255,138,31,0.15)' }}
+      >
+        <Clock className="w-4 h-4" style={{ color: '#FF8A1F' }} />
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm font-semibold" style={{ color: '#fff' }}>
+          Waiting for {row.orgName} to confirm you
+        </p>
+        <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.55)' }}>
+          Someone at the gym confirms new members from their side — one tap at the front desk.
+          Everything in the app keeps working meanwhile.
+        </p>
+        {/* The deadline comes off the server's own `expiresAt`, read through
+            the SAME helper the gym's queue uses, so the two screens cannot
+            quote different dates for one request. Absent rather than guessed
+            when the field is missing or unreadable. */}
+        {expiring !== null ? (
+          <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
+            {expiring} — if that happens, just enter the code again.
+          </p>
+        ) : null}
+
+        {/* T3 round 1, Low-2: this used to say "again tomorrow" from a constant
+            while `nextNudgeAt` — the field added SO THE CLIENT WOULD NOT INVENT
+            A TIME — sat unread. Often it is not tomorrow: a nudge at 13:00
+            yesterday and a tap at 09:00 today makes the next slot 13:00 TODAY.
+            The server's own time is what the sentence uses now. */}
+        {state.sent !== null ? (
+          <p className="text-sm mt-2" style={{ color: '#FF8A1F' }}>
+            The gym can see you&apos;re still waiting. You can do this again{' '}
+            {nextNudgeText(state.sent.nextNudgeAt)}.
+          </p>
+        ) : null}
+        {state.error !== null ? (
+          <p className="text-sm mt-2" style={{ color: '#ef4444' }}>
+            {state.error}
+          </p>
+        ) : null}
+        {state.sent === null && row.applicationId !== null ? (
+          <button
+            type="button"
+            onClick={remind}
+            disabled={!canTap}
+            className="mt-2 rounded-xl px-3.5 py-2 text-sm font-semibold inline-flex items-center gap-2 disabled:opacity-40"
+            style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+          >
+            {state.busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            Remind them
+          </button>
+        ) : null}
+        {/* Said, rather than left to be guessed from a greyed-out button — a
+            control that refuses without explaining is the "greyed out with no
+            reason" defect this project has named before.
+
+            T3 round 1, Low-1: this used to say "you reminded them TODAY", which
+            is a claim about the calendar that `ready` does not make. `ready` is
+            "24 hours since the last one" — so a nudge at 23:00 on Monday and an
+            app opened at 09:00 on Tuesday printed a sentence that was simply
+            false. The wording now matches the rule that produced it. */}
+        {!ready && state.sent === null && row.applicationId !== null ? (
+          <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
+            You&apos;ve reminded them in the last day — you can do it again{' '}
+            {nextNudgeText(nextNudgeAfter(row.nudgedAt))}.
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 function Row({ row }) {
   if (row.kind === 'member') {
@@ -42,25 +160,7 @@ function Row({ row }) {
   }
 
   if (row.kind === 'waiting') {
-    return (
-      <div className="flex items-start gap-3">
-        <div
-          className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-          style={{ background: 'rgba(255,138,31,0.15)' }}
-        >
-          <Clock className="w-4 h-4" style={{ color: '#FF8A1F' }} />
-        </div>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold" style={{ color: '#fff' }}>
-            Waiting for {row.orgName} to confirm you
-          </p>
-          <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            Someone at the gym confirms new members from their side — one tap at the front desk.
-            Everything in the app keeps working meanwhile.
-          </p>
-        </div>
-      </div>
-    );
+    return <WaitingRow row={row} />;
   }
 
   // REMOVED IS ITS OWN SENTENCE, and Kd ruled that it has to exist (2026-08-20).
@@ -105,10 +205,12 @@ function Row({ row }) {
   }
 
   // Refused and expired are DIFFERENT SENTENCES because they are different
-  // facts, and only one of them is about a decision somebody made. Expired
-  // cannot happen today (nothing writes it — the clock is its own card), and
-  // the arm exists because the status is part of the contract this screen
-  // parses, not because a path produces it.
+  // facts, and only one of them is about a decision somebody made. **Expired is
+  // REACHABLE as of 2026-08-20** — the sweep writes it — where before that this
+  // arm existed only because the status was in the contract this screen parses.
+  // Its "ask again — it takes seconds" is now load-bearing rather than polite:
+  // :11385 made re-applying free precisely so an expiry costs a real member
+  // seconds instead of their place.
   return (
     <div className="flex items-start gap-3">
       <div

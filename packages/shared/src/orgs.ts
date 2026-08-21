@@ -342,6 +342,18 @@ export const orgApplicationSchema = z.object({
    *  inventing a number of its own. */
   expiresAt: z.string(),
   decidedAt: z.string().nullable(),
+  /** When this person last tapped "Remind them" (:11385 mechanic 3), or null
+   *  if they never have. The screen needs it to say "you can do this again
+   *  tomorrow" instead of offering a button that will be refused.
+   *
+   *  **`.default(null)` for the `formerOrgs` reason, not for tidiness.**
+   *  `orgsApi.js` parses this response through this schema and treats a
+   *  mismatch as a hard failure, and the gym card treats a failed read as
+   *  SILENCE — so a REQUIRED field would make the whole card vanish during any
+   *  window where the web bundle is newer than the API. A missing field costs
+   *  one button; a required one costs the sentence that says which gym you are
+   *  waiting on. R4.4's expand-then-contract, applied to a response. */
+  nudgedAt: z.string().nullable().default(null),
 });
 export type OrgApplication = z.infer<typeof orgApplicationSchema>;
 
@@ -402,6 +414,20 @@ export const orgApplicantSchema = z.object({
    *  mechanism, and often the only thing that tells a big gym which desk or
    *  class this person came from. */
   groupLabel: z.string(),
+  /** :11385's ordering rule made visible. `gymNotifiedAt` is stamped by the
+   *  reminder sweep and is the SAME fact the expiry statement reads before it
+   *  is allowed to touch a row — so what the owner sees marked "needs a
+   *  decision" and what the machine may expire cannot drift apart. Null means
+   *  nobody has been chased about this one yet.
+   *
+   *  It is NOT the word "reminded" on screen, deliberately: no email and no
+   *  push exist, so nothing was DELIVERED anywhere. What is true is that the
+   *  app is now flagging it, and the copy says that. */
+  gymNotifiedAt: z.string().nullable().default(null),
+  /** When the applicant last tapped "Remind them". The front desk seeing "they
+   *  asked again" is the whole in-app content of the member's nudge — there is
+   *  nowhere else for it to arrive. */
+  nudgedAt: z.string().nullable().default(null),
 });
 export type OrgApplicant = z.infer<typeof orgApplicantSchema>;
 
@@ -450,6 +476,32 @@ export type ConfirmApplicationResponse = z.infer<typeof confirmApplicationRespon
 
 export const rejectApplicationResponseSchema = z.object({ status: z.literal("rejected") });
 export type RejectApplicationResponse = z.infer<typeof rejectApplicationResponseSchema>;
+
+/** THE WAITING MEMBER'S NUDGE (:11385 mechanic 3, ratified 2026-08-20 at one a
+ *  day). A union rather than a 200/429 split, and the reasoning is the module's
+ *  own: `already_confirmed` taught it. Once a day is a PRODUCT RULE the screen
+ *  has to explain in words, not a transport failure — a 429 would arrive at the
+ *  client indistinguishable from the request floor above it, and the screen
+ *  would have to guess which one it was looking at.
+ *
+ *  **Both arms carry the same two fields on purpose.** The sentence the screen
+ *  needs is "you can do this again tomorrow", and it is equally true whether
+ *  this tap sent one or found today's already sent — so both arms can say it
+ *  without the client computing a date of its own (R3.1's habit, applied to a
+ *  time rather than a price). */
+export const nudgeApplicationResponseSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("sent"),
+    nudgedAt: z.string(),
+    nextNudgeAt: z.string(),
+  }),
+  z.object({
+    status: z.literal("already_sent"),
+    nudgedAt: z.string(),
+    nextNudgeAt: z.string(),
+  }),
+]);
+export type NudgeApplicationResponse = z.infer<typeof nudgeApplicationResponseSchema>;
 
 /** Part 3 §4.3's remove flow — the counterpart to confirm, and the reason
  *  confirm is no longer a one-way door.

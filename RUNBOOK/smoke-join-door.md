@@ -234,7 +234,12 @@ edge of the screen.
   is proven by tests and by the server refusing them, not here.
 - **A full gym.** No gym has a paid plan yet, so the "your plan covers N
   members" refusal cannot be reached.
-- **Anything expiring.** Nothing expires yet — that is the next card.
+- **Anything expiring.** ~~Nothing expires yet — that is the next card.~~
+  **BUILT 2026-08-20** (the waiting room's clock): requests now expire, the gym
+  gets chased, and the waiting member can send a reminder. That has its own
+  sheet — `RUNBOOK/smoke-clock.md` — because every threshold in it is measured
+  in days and it needs a command that stands the clock in the future. **This
+  sheet is unchanged and still valid**; it simply stops before the clock starts.
 
 ---
 

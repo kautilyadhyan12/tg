@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gymStatusRows } from './gymMembershipView';
+import { gymStatusRows, nudgeState } from './gymMembershipView';
 
 // The rules that stop the app saying two things about one gym.
 //
@@ -32,6 +32,23 @@ const application = (status, o) => ({
 
 const myOrg = (o, isMember) => ({ ...o, staffRole: null, isMember, joinedAt: null });
 
+/** What a row derived from an APPLICATION looks like.
+ *
+ *  The three clock fields ride along because "Remind them" addresses the
+ *  application, not the gym — and the assertions below stay EXACT rather than
+ *  switching to `objectContaining`, which is what caught this widening in the
+ *  first place. A field added here without being thought about should break a
+ *  test, not slip through. */
+const appRow = (kind, o, extra = {}) => ({
+  kind,
+  orgId: o.id,
+  orgName: o.name,
+  applicationId: `app-${o.id}-${kind === 'waiting' ? 'pending' : 'rejected'}`,
+  expiresAt: '2026-09-02T09:00:00.000Z',
+  nudgedAt: null,
+  ...extra,
+});
+
 const IRON = org('gym-1', 'Iron House');
 const FORGE = org('gym-2', 'The Forge');
 
@@ -44,7 +61,7 @@ describe('gymStatusRows', () => {
 
   it('reports a pending application as waiting, naming the gym', () => {
     expect(gymStatusRows({ applications: [application('pending', IRON)], orgs: [] })).toEqual([
-      { kind: 'waiting', orgId: 'gym-1', orgName: 'Iron House' },
+      appRow('waiting', IRON),
     ]);
   });
 
@@ -74,7 +91,7 @@ describe('gymStatusRows', () => {
       applications: [application('rejected', IRON), application('pending', IRON)],
       orgs: [],
     });
-    expect(rows).toEqual([{ kind: 'waiting', orgId: 'gym-1', orgName: 'Iron House' }]);
+    expect(rows).toEqual([appRow('waiting', IRON)]);
   });
 
   it('keeps one row per gym whichever order the server sent them in', () => {
@@ -169,7 +186,7 @@ describe('gymStatusRows', () => {
         orgs: [],
         formerOrgs: [IRON],
       }),
-    ).toEqual([{ kind: 'waiting', orgId: 'gym-1', orgName: 'Iron House' }]);
+    ).toEqual([appRow('waiting', IRON)]);
   });
 
   it('a REFUSAL after a removal outranks it — the refusal is the newer fact', () => {
@@ -179,10 +196,65 @@ describe('gymStatusRows', () => {
         orgs: [],
         formerOrgs: [IRON],
       }),
-    ).toEqual([{ kind: 'refused', orgId: 'gym-1', orgName: 'Iron House' }]);
+    ).toEqual([appRow('refused', IRON)]);
   });
 
   it('drops a former org it cannot describe truthfully rather than guessing', () => {
     expect(gymStatusRows({ formerOrgs: [{ id: 'gym-1' }, { name: 'No Id' }, null] })).toEqual([]);
+  });
+
+  // ── the clock rides along on the waiting row (:11385, step 3) ────────────
+  it('carries the APPLICATION id and its clock, so the button knows what to nudge', () => {
+    const [row] = gymStatusRows({ applications: [application('pending', IRON)], orgs: [] });
+    // The button addresses the application, not the gym — a row carrying only
+    // `orgId` could not call the endpoint at all.
+    expect(row.applicationId).toBe('app-gym-1-pending');
+    expect(row.expiresAt).toBe('2026-09-02T09:00:00.000Z');
+  });
+});
+
+// WHETHER THE BUTTON LOOKS AVAILABLE — never whether the reminder is allowed.
+// The rule is a database column compared inside the writing statement, so every
+// wrong answer here costs a refused tap and a truthful sentence. These tests
+// pin the DIRECTION of each failure, which is the part that matters.
+describe('nudgeState', () => {
+  const DAY = 86400000;
+  const now = Date.parse('2026-08-22T09:00:00.000Z');
+  const waiting = (nudgedAt) => ({
+    kind: 'waiting',
+    orgId: 'gym-1',
+    orgName: 'Iron House',
+    applicationId: 'app-1',
+    expiresAt: '2026-09-02T09:00:00.000Z',
+    nudgedAt,
+  });
+
+  it('is ready when nobody has ever nudged', () => {
+    expect(nudgeState(waiting(null), now)).toEqual({ ready: true, reason: 'never' });
+  });
+
+  it('is not ready inside the ratified day, and is on it', () => {
+    const justUnder = new Date(now - DAY + 1000).toISOString();
+    const exactly = new Date(now - DAY).toISOString();
+    expect(nudgeState(waiting(justUnder), now).ready).toBe(false);
+    expect(nudgeState(waiting(exactly), now).ready).toBe(true);
+  });
+
+  it('offers nothing on a row with no application to nudge', () => {
+    // A member, a removed person and a refused row have no pending application
+    // — the button would address nothing. `applicationId: null` is the same
+    // case arriving through a body this client could not fully read.
+    expect(nudgeState({ kind: 'member', orgId: 'gym-1' }, now).ready).toBe(false);
+    expect(nudgeState({ kind: 'removed', orgId: 'gym-1' }, now).ready).toBe(false);
+    expect(nudgeState({ ...waiting(null), applicationId: null }, now).ready).toBe(false);
+    expect(nudgeState(undefined, now).ready).toBe(false);
+  });
+
+  it('OFFERS the button when it cannot read the timestamp, rather than hiding it', () => {
+    // The safe direction, and it is deliberate: the server refuses a nudge that
+    // is not due, so a wrong `true` costs one tap and an honest message —
+    // whereas a wrong `false` strands a waiting person with no way to ask, over
+    // a value this code merely failed to parse.
+    expect(nudgeState(waiting('whenever'), now).ready).toBe(true);
   });
 });

@@ -73,6 +73,8 @@ export interface ApplicationRow {
   appliedAt: Date;
   expiresAt: Date;
   decidedAt: Date | null;
+  /** Last time this person tapped "Remind them" (:11385 mechanic 3). */
+  nudgedAt: Date | null;
 }
 
 /** One row of the console's confirm queue. */
@@ -83,6 +85,11 @@ export interface ApplicantRow {
   appliedAt: Date;
   expiresAt: Date;
   groupLabel: string;
+  /** Stamped by the reminder sweep, and read by the expiry statement before it
+   *  is allowed to touch this row — one fact, so the mark the owner sees and
+   *  the gate the machine obeys cannot disagree (:11385's ordering rule). */
+  gymNotifiedAt: Date | null;
+  nudgedAt: Date | null;
 }
 
 interface RawOrg {
@@ -103,6 +110,7 @@ interface RawApplication {
   applied_at: Date;
   expires_at: Date;
   decided_at: Date | null;
+  member_nudged_at: Date | null;
 }
 
 /** The DB CHECK constraints (Part 4 §3.2) already guarantee these vocabularies.
@@ -129,6 +137,7 @@ function toApplicationRow(raw: RawApplication): ApplicationRow {
     appliedAt: raw.applied_at,
     expiresAt: raw.expires_at,
     decidedAt: raw.decided_at,
+    nudgedAt: raw.member_nudged_at,
   };
 }
 
@@ -504,12 +513,12 @@ export async function applyByCode(
       VALUES (${org.id}, ${input.userId}, ${code.id}, ${consentAt},
               now() + (${APPLICATION_TTL_DAYS} * INTERVAL '1 day'))
       ON CONFLICT (gym_id, user_id) WHERE status = 'pending' DO NOTHING
-      RETURNING id, status, applied_at, expires_at, decided_at`;
+      RETURNING id, status, applied_at, expires_at, decided_at, member_nudged_at`;
 
     const newRow = inserted[0];
     if (newRow === undefined) {
       const existingRows = await tx<RawApplication[]>`
-        SELECT id, status, applied_at, expires_at, decided_at
+        SELECT id, status, applied_at, expires_at, decided_at, member_nudged_at
         FROM gym_join_applications
         WHERE gym_id = ${org.id} AND user_id = ${input.userId} AND status = 'pending'`;
       const existing = existingRows[0];
@@ -701,7 +710,7 @@ export async function confirmApplication(
     const appRows = await tx<
       (RawApplication & { user_id: string; code_id: string; consent_at: Date | null; member_id: string | null })[]
     >`
-      SELECT id, status, applied_at, expires_at, decided_at,
+      SELECT id, status, applied_at, expires_at, decided_at, member_nudged_at,
              user_id, code_id, consent_at, member_id
       FROM gym_join_applications
       WHERE id = ${input.applicationId} AND gym_id = ${input.gymId}
@@ -778,7 +787,7 @@ export async function rejectApplication(
 ): Promise<DecideOutcome> {
   return await sql.begin(async (tx) => {
     const appRows = await tx<(RawApplication & { user_id: string })[]>`
-      SELECT id, status, applied_at, expires_at, decided_at, user_id
+      SELECT id, status, applied_at, expires_at, decided_at, member_nudged_at, user_id
       FROM gym_join_applications
       WHERE id = ${input.applicationId} AND gym_id = ${input.gymId}
       FOR UPDATE`;
@@ -859,9 +868,12 @@ export async function listApplications(
       applied_at: Date;
       expires_at: Date;
       group_label: string;
+      gym_notified_at: Date | null;
+      member_nudged_at: Date | null;
     }[]
   >`
     SELECT a.id, a.user_id, u.display_name, a.applied_at, a.expires_at,
+           a.gym_notified_at, a.member_nudged_at,
            c.label AS group_label
     FROM gym_join_applications a
     JOIN users u ON u.id = a.user_id
@@ -898,6 +910,8 @@ export async function listApplications(
       appliedAt: r.applied_at,
       expiresAt: r.expires_at,
       groupLabel: r.group_label,
+      gymNotifiedAt: r.gym_notified_at,
+      nudgedAt: r.member_nudged_at,
     })),
     nextCursor,
     pendingCount: countRows[0]?.n ?? 0,
@@ -958,6 +972,7 @@ export async function listApplicationsForUser(
     applied_at: Date;
     expires_at: Date;
     decided_at: Date | null;
+    member_nudged_at: Date | null;
     org_id: string;
     slug: string;
     name: string;
@@ -970,7 +985,7 @@ export async function listApplicationsForUser(
   }
   const rows = await sql<RawMyApplication[]>`
     SELECT a.id AS app_id, a.status AS app_status, a.applied_at, a.expires_at,
-           a.decided_at,
+           a.decided_at, a.member_nudged_at,
            g.id AS org_id, g.slug, g.name, g.city, g.org_type, g.timezone,
            g.locale, g.currency_display, g.status AS org_status
     FROM gym_join_applications a
@@ -1009,8 +1024,113 @@ export async function listApplicationsForUser(
       applied_at: r.applied_at,
       expires_at: r.expires_at,
       decided_at: r.decided_at,
+      member_nudged_at: r.member_nudged_at,
     }),
   }));
+}
+
+/** :11385 mechanic 3, ratified by Kd 2026-08-20: the waiting member may remind
+ *  the gym at most ONCE A DAY. */
+export const NUDGE_INTERVAL_HOURS = 24;
+
+export type NudgeOutcome =
+  | { kind: "sent"; nudgedAt: Date; nextNudgeAt: Date }
+  | { kind: "too_soon"; nudgedAt: Date; nextNudgeAt: Date }
+  | { kind: "not_found" }
+  | { kind: "not_pending"; status: OrgApplicationStatus };
+
+/** THE WAITING MEMBER'S NUDGE — :11385's third mechanic, and the only one of
+ *  the three the person waiting can set off themselves.
+ *
+ *  **THE ONCE-A-DAY LIMIT IS IN THE DATABASE, NOT IN REDIS, and that is the
+ *  decision worth not re-deriving.** Every other limit in this module is a
+ *  request-rate floor living in a counter that a restart or an eviction may
+ *  drop — which is correct for "how hard may you hammer this endpoint" and
+ *  wrong for "how often may this happen at all". A dropped counter here would
+ *  hand somebody a second reminder the ruling says they do not get, and the
+ *  front desk would see a person asking twice in an hour. The column IS the
+ *  rule, `now()` is the database's own clock, and the comparison happens inside
+ *  the same transaction that writes it, so two taps racing cannot both win.
+ *
+ *  **Tenancy is the WHERE (R3.2) and carries NO gym id**, because the caller is
+ *  addressing their OWN application: `id` AND `user_id`. Holding somebody
+ *  else's application uuid nudges nobody and — like every other 404 in this
+ *  module — is indistinguishable from an id that never existed.
+ *
+ *  **Nothing is DELIVERED anywhere and the name is honest about it.** There is
+ *  no email in this product and no push on web; what this writes is a mark the
+ *  console renders beside that person's row. The copy on both screens says
+ *  exactly that and promises no message. */
+export async function nudgeApplication(
+  sql: Sql,
+  input: { applicationId: string; userId: string },
+): Promise<NudgeOutcome> {
+  return await sql.begin(async (tx) => {
+    const rows = await tx<
+      { id: string; status: string; gym_id: string; member_nudged_at: Date | null }[]
+    >`
+      SELECT id, status, gym_id, member_nudged_at
+      FROM gym_join_applications
+      WHERE id = ${input.applicationId} AND user_id = ${input.userId}
+      FOR UPDATE`;
+    const app = rows[0];
+    if (app === undefined) return { kind: "not_found" };
+
+    const status = toApplicationStatus(app.status);
+    // Only a WAITING person has anything to remind anybody about. A confirmed
+    // application would nudge a gym about somebody already inside it, and a
+    // rejected or expired one would ask them to reconsider a decision this
+    // endpoint has no business reopening — re-applying is the door for that,
+    // and :11385 made it free precisely so this one does not have to be.
+    if (status !== "pending") return { kind: "not_pending", status };
+
+    // One statement decides AND writes. Splitting it into "is it due?" then
+    // "write it" is the shape that lets two taps a millisecond apart both read
+    // yesterday's timestamp and both write today's; the row lock above already
+    // serialises them, and this keeps the rule true even if the lock is ever
+    // relaxed.
+    const updated = await tx<{ member_nudged_at: Date; next_nudge_at: Date }[]>`
+      UPDATE gym_join_applications
+      SET member_nudged_at = now()
+      WHERE id = ${app.id}
+        AND (member_nudged_at IS NULL
+             OR member_nudged_at <= now() - (${NUDGE_INTERVAL_HOURS} * INTERVAL '1 hour'))
+      RETURNING member_nudged_at,
+                member_nudged_at + (${NUDGE_INTERVAL_HOURS} * INTERVAL '1 hour') AS next_nudge_at`;
+
+    const sent = updated[0];
+    if (sent === undefined) {
+      // Not an error: a person tapped a button twice, or came back the same
+      // afternoon. The screen needs the two times so it can say WHEN they can
+      // ask again rather than computing a date of its own.
+      const held = app.member_nudged_at;
+      if (held === null) {
+        // The UPDATE's own WHERE admits a null, so a null here means the row
+        // changed under a lock we hold — impossible, and loud rather than a
+        // fabricated time (the `already_pending` branch's precedent).
+        throw new Error("nudge refused a never-nudged application");
+      }
+      return {
+        kind: "too_soon",
+        nudgedAt: held,
+        nextNudgeAt: new Date(held.getTime() + NUDGE_INTERVAL_HOURS * 60 * 60 * 1000),
+      };
+    }
+
+    // Part 3 §3.3: every mutating call writes `audit_log`. This is the row that
+    // answers "we never heard from them" if a gym and a member ever disagree
+    // about who was waiting on whom.
+    await insertAudit(tx, {
+      actorUserId: input.userId,
+      gymId: app.gym_id,
+      action: "org.join_nudged",
+      targetType: "gym_join_application",
+      targetId: app.id,
+      meta: {},
+    });
+
+    return { kind: "sent", nudgedAt: sent.member_nudged_at, nextNudgeAt: sent.next_nudge_at };
+  });
 }
 
 export type RemoveMemberOutcome =
@@ -1196,7 +1316,12 @@ export async function listCodes(sql: Sql, gymId: string): Promise<CodeRow[]> {
 export async function insertAudit(
   tx: TransactionSql,
   entry: {
-    actorUserId: string;
+    /** NULL means NOBODY DID THIS — the expiry sweep is the only writer that
+     *  passes one, and it passes null because no human decided. The column has
+     *  always been nullable (Part 4 §3.6); what changed on 2026-08-20 is that
+     *  something finally acts without an actor. Recording a system action under
+     *  some stand-in user id would be the more convenient lie. */
+    actorUserId: string | null;
     gymId: string;
     action: string;
     targetType: string;

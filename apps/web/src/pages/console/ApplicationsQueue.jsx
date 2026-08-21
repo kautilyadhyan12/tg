@@ -2,7 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { orgService, errorText, errorStatus } from '../../api/orgsApi';
-import { formatJoinedAt, groupLabelText, waitingCountLabel } from './consoleView';
+import {
+  expiresInLabel,
+  groupLabelText,
+  nudgedLabel,
+  waitingCountLabel,
+  waitingForLabel,
+} from './consoleView';
 
 // WHO IS WAITING TO JOIN — the front desk's half of the door (Kd ruling
 // 2026-08-19: typing a code applies, it does not join).
@@ -18,6 +24,18 @@ import { formatJoinedAt, groupLabelText, waitingCountLabel } from './consoleView
 // is a wrong number in front of a gym owner, which is the one thing the
 // severity rule names outright.
 //
+// THE CLOCK IS THE SERVER'S AND THE SCREEN ONLY READS IT (:11385, step 3).
+// Every row says how long somebody has waited, when their request runs out, and
+// whether they have asked again — and "Needs a decision" is the `gymNotifiedAt`
+// column verbatim, i.e. the SAME fact the expiry statement consults before it
+// may delete anything. Deriving that mark from the dates here instead would put
+// a second opinion on screen about whether the gym was warned.
+//
+// NOTHING ON THIS SCREEN CLAIMS A MESSAGE WAS SENT. No email exists in this
+// product and there is no web push, so a member's nudge ARRIVES HERE and
+// nowhere else, and the wording says what they did rather than what we
+// delivered.
+//
 // A TRAINER SEES NOTHING HERE, SILENTLY. Confirming is owner-and-manager
 // (§2.2's remove/restore row, and Kd's "ok only owner and manager"), so the
 // server answers 403 — and a console must not draw a control it will then be
@@ -26,18 +44,44 @@ import { formatJoinedAt, groupLabelText, waitingCountLabel } from './consoleView
 // see this" are different sentences and only one of them is about a connection.
 
 function ApplicantRow({ applicant, busy, onConfirm, onReject }) {
+  // THE CLOCK, ON THE ROW. Every piece of it is derived from a field the SERVER
+  // sent; the screen works nothing out for itself, so it cannot quote a
+  // deadline the sweep disagrees with.
+  const waiting = waitingForLabel(applicant.appliedAt);
+  const expiring = expiresInLabel(applicant.expiresAt);
+  const nudged = nudgedLabel(applicant.nudgedAt);
+  // "NEEDS A DECISION" IS THE `gymNotifiedAt` COLUMN AND NOTHING ELSE — the
+  // same fact the expiry statement reads before it may touch this row. A mark
+  // computed here from the dates instead would be a second opinion about
+  // whether the gym was warned, and the two could disagree on exactly the rows
+  // where it matters.
+  const flagged = typeof applicant.gymNotifiedAt === 'string';
+
   return (
     <div
       className="rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-3"
       style={{ background: '#121110', border: '1px solid rgba(255,138,31,0.22)' }}
     >
       <div className="flex-1 min-w-0">
-        <div className="font-semibold truncate" style={{ color: '#fff' }}>
-          {applicant.displayName}
+        <div className="font-semibold truncate flex items-center gap-2" style={{ color: '#fff' }}>
+          <span className="truncate">{applicant.displayName}</span>
+          {flagged ? (
+            <span
+              className="text-[10px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0"
+              style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+            >
+              Needs a decision
+            </span>
+          ) : null}
         </div>
         <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          Asked {formatJoinedAt(applicant.appliedAt)} · {groupLabelText(applicant)}
+          {[waiting, expiring, groupLabelText(applicant)].filter(Boolean).join(' · ')}
         </div>
+        {nudged !== null ? (
+          <div className="text-xs mt-0.5" style={{ color: '#FF8A1F' }}>
+            {nudged}
+          </div>
+        ) : null}
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
         <button

@@ -12,6 +12,7 @@ export {
   joinOrgResponseSchema,
   myOrgApplicationsResponseSchema,
   myOrgsResponseSchema,
+  nudgeApplicationResponseSchema,
   orgApplicantSchema,
   orgApplicationListQuerySchema,
   orgApplicationPageSchema,
@@ -38,6 +39,7 @@ export type {
   MyOrgApplicationsResponse,
   MyOrgsResponse,
   Membership,
+  NudgeApplicationResponse,
   OrgApplicant,
   OrgApplication,
   OrgApplicationListQuery,
@@ -77,3 +79,15 @@ export const memberParamsSchema = z
   .object({ gymId: z.string().uuid(), userId: z.string().uuid() })
   .strict();
 export type MemberParams = z.infer<typeof memberParamsSchema>;
+
+/** The nudge route carries NO gym id, and that is the tenancy decision rather
+ *  than an omission: the caller is nudging THEIR OWN application, so the pair
+ *  that scopes it is (application id, caller's user id) — exactly what
+ *  `/v1/orgs/applications/mine` is scoped by. Threading a gym id through would
+ *  add a value the client would have to get right for a check the server does
+ *  not need, and a route that accepts a redundant identifier is a route where
+ *  somebody eventually trusts the wrong one. */
+export const myApplicationParamsSchema = z
+  .object({ applicationId: z.string().uuid() })
+  .strict();
+export type MyApplicationParams = z.infer<typeof myApplicationParamsSchema>;

@@ -9,10 +9,12 @@ import {
   codeToShow,
   countryOptions,
   detectTimezone,
+  expiresInLabel,
   findOrgBySlug,
   formatJoinedAt,
   groupLabelText,
   joinedCount,
+  nudgedLabel,
   manageableOrgs,
   memberCountLabel,
   memberCountLine,
@@ -20,6 +22,7 @@ import {
   roleLabel,
   timezoneOptions,
   waitingCountLabel,
+  waitingForLabel,
 } from './consoleView';
 
 describe('the country picker cannot offer a country the server refuses', () => {
@@ -297,6 +300,113 @@ describe('how many people are waiting', () => {
     expect(waitingCountLabel(null)).toBeNull();
     expect(waitingCountLabel('3')).toBeNull();
     expect(waitingCountLabel(Number.NaN)).toBeNull();
+  });
+});
+
+// THE WAITING ROOM'S CLOCK, on the screen side (:11385 step 3).
+//
+// Every test here pins a boundary or a refusal, because the failure mode is a
+// screen quoting a number nobody measured — the class the severity rule names
+// outright. The clock is passed in rather than taken from the machine, so none
+// of these can pass or fail depending on when they run.
+describe('how long somebody has been waiting', () => {
+  const applied = Date.parse('2026-08-20T09:00:00.000Z');
+  const at = (ms) => applied + ms;
+  const HOUR = 3600000;
+  const DAY = 86400000;
+
+  it('says "today" only on the SAME LOCAL DAY — T3 round 4, Low-1', () => {
+    // **THIS TEST USED TO ASSERT THE DEFECT**, and the reasoning under it used
+    // to be written in UTC while the suite runs in Asia/Kolkata (round 5,
+    // Low-8) — so the times below are the ones a reader of this screen would
+    // actually see. Applied 20 Aug 14:30 local; its second case was 23 hours
+    // later, 13:30 the NEXT afternoon, and it demanded "Asked today". That is
+    // the round-4 Low-1 finding written down as an expectation, which is how a
+    // wrong rule survives four reviews. The rule now: a day WORD asks the
+    // calendar; a DURATION counts elapsed time.
+    expect(waitingForLabel('2026-08-20T09:00:00.000Z', at(0))).toBe('Asked today');
+    // 22:30 the same local evening — still the same day, so still today.
+    expect(waitingForLabel('2026-08-20T09:00:00.000Z', at(8 * HOUR))).toBe('Asked today');
+    // 13:30 the next local afternoon: one calendar day on, whatever the elapsed
+    // hours say — and a day word, not a count (round 5, Low-1).
+    expect(waitingForLabel('2026-08-20T09:00:00.000Z', at(23 * HOUR))).toBe('Asked yesterday');
+  });
+
+  it('counts elapsed days once the day words run out, and gets the singular right', () => {
+    // One calendar day is a WORD; the count starts at two, and counts ELAPSED
+    // days from there.
+    expect(waitingForLabel('2026-08-20T09:00:00.000Z', at(DAY))).toBe('Asked yesterday');
+    expect(waitingForLabel('2026-08-20T09:00:00.000Z', at(2 * DAY))).toBe('Waiting 2 days');
+    // Counting ELAPSED time and not midnights, on purpose: the server's rule is
+    // "has this sat for two days", so a screen counting calendar days could say
+    // "2 days" about a row the sweep still considers one — the same question
+    // answered two ways. 22 Aug 14:29:59.999 local is two calendar days on and
+    // one elapsed day long, and the singular is what it prints.
+    expect(waitingForLabel('2026-08-20T09:00:00.000Z', at(2 * DAY - 1))).toBe('Waiting 1 day');
+  });
+
+  it('states nothing when it cannot read the date', () => {
+    expect(waitingForLabel(undefined, at(DAY))).toBeNull();
+    expect(waitingForLabel('not a date', at(DAY))).toBeNull();
+    expect(waitingForLabel('2026-08-20T09:00:00.000Z', at(-DAY))).toBeNull();
+  });
+});
+
+describe('when a request runs out', () => {
+  const expires = '2026-09-03T09:00:00.000Z';
+  const at = (ms) => Date.parse(expires) + ms;
+  const DAY = 86400000;
+
+  it('counts down and never says "in 0 days"', () => {
+    expect(expiresInLabel(expires, at(-11 * DAY))).toBe('Expires in 11 days');
+    expect(expiresInLabel(expires, at(-2 * DAY))).toBe('Expires in 2 days');
+    expect(expiresInLabel(expires, at(-DAY))).toBe('Expires tomorrow');
+    expect(expiresInLabel(expires, at(-1))).toBe('Expires today');
+  });
+
+  it('says "due to expire" past the deadline, NOT "expired"', () => {
+    // The sweep runs nightly, so a request past its date is still PENDING until
+    // the job reaches it — and the gym can still confirm it. "Expired" here
+    // would be the screen contradicting the Confirm button beside it.
+    expect(expiresInLabel(expires, at(1))).toBe('Due to expire');
+    expect(expiresInLabel(expires, at(3 * DAY))).toBe('Due to expire');
+  });
+
+  it('states nothing when it cannot read the date', () => {
+    expect(expiresInLabel(null, at(-DAY))).toBeNull();
+    expect(expiresInLabel('soon', at(-DAY))).toBeNull();
+  });
+});
+
+describe('the mark that says a member asked again', () => {
+  const nudged = '2026-08-22T09:00:00.000Z';
+  const at = (ms) => Date.parse(nudged) + ms;
+  const HOUR = 3600000;
+
+  it('describes what the PERSON did, never a message we sent', () => {
+    // There is no email and no push: the nudge ARRIVES as this mark, so the
+    // wording may not imply a delivery.
+    expect(nudgedLabel(nudged, at(0))).toBe('They asked again in the last hour');
+    expect(nudgedLabel(nudged, at(HOUR))).toBe('They asked again 1 hour ago');
+    expect(nudgedLabel(nudged, at(5 * HOUR))).toBe('They asked again 5 hours ago');
+    expect(nudgedLabel(nudged, at(72 * HOUR))).toBe('They asked again 3 days ago');
+  });
+
+  it('measures ELAPSED time and never claims a calendar day — T3 r1 Low-3', () => {
+    // 25 hours before Tuesday 00:30 is SUNDAY, so "yesterday" — which this
+    // printed — was simply false there. Elapsed wording is true whatever the
+    // clock says, and matches how the server measures the same rule.
+    expect(nudgedLabel(nudged, at(25 * HOUR))).toBe('They asked again 1 day ago');
+    expect(nudgedLabel(nudged, at(47 * HOUR))).toBe('They asked again 1 day ago');
+    expect(nudgedLabel(nudged, at(48 * HOUR))).toBe('They asked again 2 days ago');
+    // And the bottom bucket makes no claim about "now" either.
+    expect(nudgedLabel(nudged, at(59 * 60 * 1000))).toBe('They asked again in the last hour');
+  });
+
+  it('states nothing when nobody nudged, or the value is unreadable', () => {
+    expect(nudgedLabel(null, at(HOUR))).toBeNull();
+    expect(nudgedLabel(undefined, at(HOUR))).toBeNull();
+    expect(nudgedLabel('whenever', at(HOUR))).toBeNull();
   });
 });
 

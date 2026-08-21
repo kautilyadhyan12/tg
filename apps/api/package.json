@@ -9,6 +9,7 @@
     "dpdp:purge": "tsx tools/dpdp-purge.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src test tools",
+    "_lint:harness_why": "T3 round 3 C/H-1 put `node scripts/check-harnesses.mjs` on the END OF THIS LINE: a raw newline inside a mutant string had made mutate-orgs.mjs a SyntaxError, so none of its 57 mutants could run and nothing saw it (eslint ignores tools/**/*.mjs, tsc never reads it). ROUND 5, Low-6 MOVED THE CALL TO THE ROOT lint SCRIPT and it is not duplicated here: as a step in THIS task it was cached on this package's inputs, none of which reach the 16 harnesses outside apps/api, so a warm run replayed a pass without running it. The guard is unchanged and stronger; only the place it is invoked from moved. Do not re-add it here — that is what made a repo-wide check look like an apps/api one.",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",

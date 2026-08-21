@@ -63,7 +63,18 @@ const TARGETS = {
   // statement actually is. A target outside this map ABORTS the run (:5199),
   // which is exactly how a mutant pointed at the wrong file gets caught.
   users: { file: resolve(ROOT, 'apps/api/src/modules/users/repo.ts') },
+  // THE WAITING ROOM'S CLOCK (:11385, step 3). Its own file and its own suite
+  // — `test/orgs.sweep.test.ts` — because the guarantees are about TIME and
+  // every one of them needs the injected clock the routes suite never touches.
+  // Rows aimed here carry `suite: SWEEP_SUITE`.
+  sweep: { file: resolve(ROOT, 'apps/api/src/modules/orgs/sweep.ts') },
 };
+
+/** The clock's guarantees live in their own suite. Every row that names the
+ *  `sweep` target must also name this, or it runs the routes suite, finds
+ *  nothing to break, and reports a RED that has nothing to do with the mutation
+ *  — the "red for the wrong reason" shape recorded at :4718 F2. */
+const SWEEP_SUITE = 'test/orgs.sweep.test.ts';
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
 
@@ -517,6 +528,147 @@ const MUTANTS = [
     expect: 'can apply again and be confirmed back in',
     from: "    WHERE m.gym_id = ${gymId} AND m.user_id = ${userId} AND m.removed_at IS NULL`;",
     to: "    WHERE m.gym_id = ${gymId} AND m.user_id = ${userId}`;",
+  },
+
+  // ── O48–O55: THE WAITING ROOM'S CLOCK (:11385, step 3) ───────────────────
+  //
+  // Every row sits in 4a's columns. **DATA LOSS is the dominant one here and it
+  // is new to this module**: this is the first code in the product that ENDS
+  // somebody's join request without a person deciding to, so the guarantees
+  // worth a slow database mutant are the ones that stop it ending the wrong
+  // request, or ending one nobody was warned about. The nudge rows are
+  // OWNERSHIP (whose application can you touch) and A NUMBER A USER SEES
+  // (how often the front desk is told somebody asked again).
+  {
+    id: 'O48',
+    target: 'sweep',
+    suite: SWEEP_SUITE,
+    why: "DATA LOSS + KD'S ORDERING RULE: the expiry stops asking whether the gym was ever flagged, so an application nobody was warned about is deleted — the exact 'we quietly threw your members away' outcome :11385 exists to forbid",
+    // **RE-AIMED TWICE. The first re-anchor pointed at `IS NOT NULL` ALONE and
+    // came back ALIVE — correctly.** Round 2's Low-1 left the notice comparison
+    // as the only surviving condition, and `gym_notified_at <= now - notice` is
+    // NULL for an unflagged row, which filters it out by itself. So deleting the
+    // IS NOT NULL guard is a NO-OP, and a no-op that reports ALIVE says nothing
+    // about coverage (:12878's own lesson — ask whether the guarantee is
+    // OBSERVABLE before assuming a test is missing).
+    // Aimed at BOTH conditions now, which is what actually carries "the gym must
+    // have been told at least once": with the pair gone, an unflagged row past
+    // its deadline is deleted having been warned about by nobody.
+    from: "        AND gym_notified_at IS NOT NULL\n        AND gym_notified_at <= ${now}::timestamptz - (${EXPIRY_NOTICE_DAYS} * INTERVAL '1 day')",
+    to: '        AND true',
+    expect: 'does NOT expire an unchased application',
+  },
+  {
+    id: 'O49',
+    target: 'sweep',
+    suite: SWEEP_SUITE,
+    why: 'DATA LOSS: the notice test collapses to "flagged at all", so a worker that was down for the fortnight flags every request and deletes it in the same run — the gym told and given zero seconds to act',
+    from: "        AND gym_notified_at <= ${now}::timestamptz - (${EXPIRY_NOTICE_DAYS} * INTERVAL '1 day')",
+    to: "        AND gym_notified_at >= ${now}::timestamptz - (${EXPIRY_NOTICE_DAYS} * INTERVAL '1 day')",
+    expect: 'does NOT expire in the same run that first chases the gym',
+  },
+  {
+    id: 'O50',
+    target: 'sweep',
+    suite: SWEEP_SUITE,
+    why: 'DATA LOSS: the deadline comparison flips, so requests are deleted BEFORE their fourteen days rather than after — a real member who applied yesterday loses their place',
+    from: '        AND expires_at <= ${now}\n        AND gym_notified_at IS NOT NULL',
+    to: '        AND expires_at > ${now}\n        AND gym_notified_at IS NOT NULL',
+    expect: 'expires a chased application past its deadline',
+  },
+  {
+    id: 'O51',
+    target: 'sweep',
+    suite: SWEEP_SUITE,
+    why: "DATA LOSS: the expiry stops filtering on 'pending', so a CONFIRMED membership's application row is overwritten as expired — the audit trail says a member who is standing in the gym was thrown out by a machine",
+    from: '      SET status = \'expired\'\n      WHERE status = \'pending\'',
+    to: '      SET status = \'expired\'\n      WHERE status IS NOT NULL',
+    // **THIS FILTER MATCHES BOTH `leaves a REJECTED…` AND `leaves a
+    // CONFIRMED…`, deliberately.** O51 SURVIVED its first run against a single
+    // test that rejected a FRESH application: a never-chased row is excluded by
+    // `gym_notified_at IS NOT NULL` whatever its status, so the guarantee was
+    // carried by a different guard and this filter proved nothing. Both tests
+    // now chase the gym FIRST, which strips that shelter, and naming both means
+    // the mutant is caught by the decided state that matters most (a confirmed
+    // member) AND by the one a gym meets far more often (a refusal).
+    // :11846's standing lesson — a mutant has two halves, the anchor and the
+    // filter, and a fix must move both.
+    expect: 'application alone',
+  },
+  {
+    id: 'O52',
+    target: 'sweep',
+    suite: SWEEP_SUITE,
+    why: "THE GYM IS NEVER TOLD: the first chase never fires, so nothing is ever flagged for the front desk and — because the expiry depends on that flag — nothing ever expires either. The whole feature silently does nothing.",
+    from: '      AND gym_notified_at IS NULL\n      AND applied_at <=',
+    to: '      AND gym_notified_at IS NULL\n      AND false AND applied_at <=',
+    expect: 'does not chase the gym before the ratified two days',
+  },
+  {
+    id: 'O53',
+    target: 'sweep',
+    suite: SWEEP_SUITE,
+    why: "A NUMBER NOBODY MEASURED: the weekly repeat fires on any flagged row, so a gym is re-flagged every single night — and the mark that means 'needs a decision' stops distinguishing a request that has sat for a week from one flagged this morning",
+    from: '      AND gym_notified_at <= ${now}::timestamptz - (${GYM_REMINDER_REPEAT_DAYS} * INTERVAL \'1 day\')',
+    to: '      AND gym_notified_at IS NOT NULL',
+    expect: 'chases again a week later and not sooner',
+  },
+  {
+    id: 'O54',
+    target: 'repo',
+    suite: SWEEP_SUITE,
+    why: "OWNERSHIP: the nudge stops scoping by the caller, so anybody holding an application uuid can nudge on somebody else's behalf — and the front desk is shown 'they asked again' about a person who did not",
+    from: '      WHERE id = ${input.applicationId} AND user_id = ${input.userId}\n      FOR UPDATE`;',
+    to: '      WHERE id = ${input.applicationId}\n      FOR UPDATE`;',
+    expect: "does not let a stranger nudge somebody else's application",
+  },
+  {
+    id: 'O55',
+    target: 'repo',
+    suite: SWEEP_SUITE,
+    why: "KD'S RATIFIED ONCE-A-DAY LIMIT: the interval check goes, so every tap sends a reminder and a stranger with a leaked code can fill an owner's queue with 'they asked again' — the pestering :11385 named the rate limit to prevent",
+    from: "        AND (member_nudged_at IS NULL\n             OR member_nudged_at <= now() - (${NUDGE_INTERVAL_HOURS} * INTERVAL '1 hour'))",
+    to: '        AND true',
+    expect: 'refuses a second nudge the same day',
+  },
+
+  // ── O56–O57: THE TWO T3 ROUND 1 CRITICAL/HIGH FIXES ──────────────────────
+  //
+  // Rule 3 says a Critical/High fix ships with a test that fails without it.
+  // These are that requirement made permanent: the fix cannot be quietly undone
+  // by a later edit without a mutant going red. Both sit in 4a's DATA LOSS
+  // column, which is where this whole subsystem lives.
+  {
+    id: 'O56',
+    target: 'sweep',
+    suite: SWEEP_SUITE,
+    // **RE-AIMED IN ROUND 2, because round 1's fix left the arm this pointed at
+    // as DEAD CODE (Low-1).** The guarantee never lived there: it lives in the
+    // notice subtraction. Mutating that away is the true regression — the guard
+    // goes back to "was the gym warned at all", which is the yes/no C/H-1 was
+    // about, and a flag raised a minute before the deadline licences deletion on
+    // the very next run.
+    why: "C/H-1 REGRESSION: the notice subtraction goes, so the guard asks only WHETHER the gym was warned instead of HOW LONG AGO — measured at 31 minutes' notice against a promise of two days",
+    from: "        AND gym_notified_at <= ${now}::timestamptz - (${EXPIRY_NOTICE_DAYS} * INTERVAL '1 day')\n      RETURNING id, gym_id",
+    to: '        AND gym_notified_at <= ${now}\n      RETURNING id, gym_id',
+    expect: "gives the ratified TWO DAYS' notice",
+  },
+  {
+    id: 'O57',
+    target: 'sweep',
+    suite: SWEEP_SUITE,
+    // **WHAT THIS MUTANT REPRESENTS, said precisely rather than implied.** The
+    // original defect was the audit living in a SEPARATE `begin` after the
+    // UPDATE had already committed. That is a structural change, not a substring
+    // swap — and a mutation that does not COMPILE goes red for the wrong reason,
+    // which certifies the wrong assertion (:4718 F2). Dropping the `await`
+    // reproduces the property the test actually distinguishes: **the expiry no
+    // longer depends on the audit succeeding**, so the rows commit as `expired`
+    // with the audit lost. Same observable failure, same test catches it.
+    why: "C/H-2 REGRESSION: the expiry stops depending on its audit write succeeding, so a failed audit leaves rows expired that the retry can never match ('status = pending' is gone) and no audit row is ever written — the trail unrecoverable",
+    from: '      await writeAudit(tx, {',
+    to: '      void writeAudit(tx, {',
+    expect: 'a failed audit write takes the expiry down with it',
   },
 ];
 

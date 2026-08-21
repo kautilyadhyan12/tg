@@ -23,6 +23,7 @@ import { Redis } from "ioredis";
 import pino from "pino";
 import postgres from "postgres";
 import { loadConfig } from "./config.js";
+import { sweepJoinApplications } from "./modules/orgs/sweep.js";
 import { purgeDueUsers } from "./modules/privacy/purge.js";
 
 const config = loadConfig(process.env);
@@ -50,6 +51,7 @@ if (redisUrl === undefined) {
 
 export const ROLLUPS_QUEUE = "rollups";
 export const DPDP_PURGE_JOB = "dpdp.purge";
+export const ORGS_SWEEP_JOB = "orgs.join_sweep";
 
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const sql = postgres(config.DATABASE_URL, { prepare: false, max: 2 });
@@ -83,6 +85,38 @@ try {
   process.exit(1);
 }
 
+// The waiting room's clock (:11385). 03:30 UTC — deliberately NOT 03:00: one
+// worker process runs both, and stacking two schedules on the same minute makes
+// a slow purge look like a late sweep in the logs. The half hour is
+// operational, not a correctness choice: the thresholds are measured in DAYS,
+// and — unlike streaks — none of this needs org-local day maths (trap #8),
+// because "has this sat for two days" is the same question in every timezone.
+//
+// A DAILY CADENCE AGAINST DAY-GRAINED RULES, said out loud: an application can
+// therefore die up to 24 hours after its 14-day mark and a chase can land up to
+// 24 hours late. That is inside the tolerance of every number Kd ratified, and
+// running it hourly would buy precision nobody asked for on a fortnight.
+try {
+  await queue.upsertJobScheduler(
+    ORGS_SWEEP_JOB,
+    { pattern: "30 3 * * *" },
+    {
+      name: ORGS_SWEEP_JOB,
+      opts: {
+        // R3.5: every statement in the sweep is set-based and its WHERE
+        // excludes the state it produces, so a retry is a no-op.
+        attempts: 3,
+        backoff: { type: "exponential", delay: 60_000 },
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 200 },
+      },
+    },
+  );
+} catch (err) {
+  log.fatal({ err }, "failed to register the join-application sweep schedule");
+  process.exit(1);
+}
+
 const worker = new Worker(
   ROLLUPS_QUEUE,
   async (job) => {
@@ -93,12 +127,28 @@ const worker = new Worker(
     // puts it on the failed set instead, where the DLQ tail and the
     // `worker.on("failed")` handler can see it — silent job death is
     // exactly what R8.3 forbids.
-    if (job.name !== DPDP_PURGE_JOB) {
+    if (job.name !== DPDP_PURGE_JOB && job.name !== ORGS_SWEEP_JOB) {
       throw new Error(`unknown job on ${ROLLUPS_QUEUE}: ${job.name}`);
     }
     // R8.3: every background job logs start/finish/duration.
     const startedAt = Date.now();
     log.info({ event: "job.started", jobId: job.id, job: job.name }, "job started");
+
+    // The waiting-room sweep returns and finishes here rather than falling
+    // through: it has no partial-success condition of its own. Every statement
+    // in it either applied or raised, and a raise is already an unhandled
+    // rejection that lands this job on the failed set — so there is no
+    // "succeeded but not really" state for the purge's certification check
+    // below to have an opinion about.
+    if (job.name === ORGS_SWEEP_JOB) {
+      const swept = await sweepJoinApplications({ sql, log });
+      log.info(
+        { ...swept, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
+        "job finished",
+      );
+      return;
+    }
+
     const result = await purgeDueUsers({ sql, log });
     log.info(
       { ...result, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },

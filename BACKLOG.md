@@ -1214,3 +1214,317 @@ Round 1's summary said eslint was "clean on every changed file". **It was not**
 — `Settings.jsx` carries 4 pre-existing errors. The measured claim ("4 before,
 4 after, none of them this round's") was accurate; the summarised one was not.
 Round 2's figures name the files linted rather than generalising.
+
+---
+
+## The waiting room's clock — T3 round 1 Lows (2026-08-20, DECISIONS :12878)
+
+Seven Low findings, **all fixed in the round that found them** (`CLAUDE.md`
+Part I §2.5 rule 1 — the gate changes the SCHEDULE, never the quality bar).
+The two Critical/High are not here: they were fixed and hold the packet.
+
+**L1 · "You reminded them today" could be false.** `nudgeState`'s `ready` means
+"24 hours since the last nudge", not "since midnight" — so a nudge at 23:00
+Monday, read at 09:00 Tuesday, printed a sentence about today that was simply
+untrue. **Fixed** to "You've reminded them in the last day", which is the rule
+that actually produced the state.
+
+**L2 · `nextNudgeAt` was added so the client would never invent a time, and then
+went unread.** Both arms hardcoded "again tomorrow" while the server's own
+instant sat in the response. On `already_sent` the next slot is often LATER
+TODAY (nudged 13:00 yesterday, tapped 09:00 today). **Fixed**: both sentences
+read the field. The render test's fixture was rewritten to the four-hours-out
+case on purpose, so the assertion is one the old constant would fail.
+
+**L3 · `nudgedLabel` claimed calendar days off elapsed arithmetic** — "yesterday"
+at 25 hours, which is Sunday if you read it at 00:30 on Tuesday. Same class as
+L1. **Fixed** to elapsed wording throughout ("1 day ago", "in the last hour"),
+which matches how the server measures the same rule.
+
+**L4 · the suite's header claimed an isolation it does not have.** The FIXTURES
+are namespaced; the SWEEP is table-wide, and `vitest.config.ts` runs four suites
+at once against one database — so `sweep(TTL * 3)` could expire the applications
+`orgs.routes.test.ts` was midway through confirming. **A flake generator this
+card introduced, and the two suites had only ever been run separately.** **Fixed**
+by giving the sweep an optional `gymIds` scope, which `waitingGym()` now binds;
+the header says what is true. **It also made every count assertion EXACT**, which
+closes the same round's finding that a table-wide `toBeGreaterThanOrEqual(1)` is
+satisfiable by a row the test never created.
+
+**L5 · a comment described the wrong rows.** It said the three clock fields are
+"undefined on every other kind by construction"; they are set on refused and
+expired rows too — the suite's own `appRow('refused', …)` asserts it. What stops
+a button appearing there is `nudgeState`'s `kind !== 'waiting'` test. Corrected
+in place (:5748's rule — a correction goes where the false claim is).
+
+**L6 · the smoke sheet told Kd to expect exact counts from a table-wide
+command.** On a dev database with other leftover rows those numbers are higher,
+and step 6 would expire unrelated requests. **Fixed before he ran it**: "at least
+1", plus a warning naming which database the command touches.
+
+**L7 · a dashboard component imported from a console PAGE module.** One helper
+for both screens is right — it is what stops the two quoting different deadlines
+— but `pages/console/consoleView.js` is not its home. **Fixed** by moving the
+clock's words to `utils/joinClock.js`, with a re-export so the console's own
+consumers and tests keep one name.
+
+### Two weak instruments, both fixed
+
+**`expect(afterRow).toBeDefined()` was missing.** `find` returns undefined when
+a row has left the queue, and `expect(undefined).not.toBeNull()` PASSES — so the
+assertions caught a dropped FIELD and would have said nothing about the row
+vanishing, which is the larger failure.
+
+**And one of my own fixtures failed the whole suite while reporting it green.**
+`mockReturnValue(Promise.reject(…))` builds the rejected promise at setup time,
+and nothing handles it until the click several lines later — so vitest printed
+`906/906 passed` with `Errors 1` and **exited 1**. Caught by reading the exit
+code rather than the summary; :5906's shape, and the reason that habit exists.
+Fixed with `mockImplementation`, which builds it at call time.
+
+## The waiting room's clock — T3 round 2 Lows (2026-08-21, DECISIONS :13247)
+
+Five Low findings, **all fixed in the round that found them**. The one
+Critical/High is not here: it was fixed and held the packet.
+
+**L1 · round 1's own fix left DEAD CODE, and four documents called it
+load-bearing.** The expiry guard's first arm
+(`gym_notified_at <= expires_at - notice`) is implied by its second
+(`<= now - notice`) whenever `expires_at <= now`, which the statement always
+requires — so it could never decide anything. **Proven twice**: the reviewer
+deleted it and the suite stayed 18/18 green, and an exhaustive check over the
+three dates finds no case where the first holds and the second does not. The
+sentence "arm 1 must not simply be deleted — two tests go red" was TRUE of the
+arm before round 1's fix and FALSE of the arm that fix produced, and it was
+copied into `sweep.ts`, `DECISIONS.md`, `HANDOFF.md` and the index **inside the
+same commit that made it false**. **Fixed**: arm deleted, guard is one
+condition, claim struck in all four places, and mutant O56 re-aimed at the
+notice subtraction — where the guarantee actually lives.
+
+**L2 + L4 · `joinClock.js` had no unit test, and that is what hid the
+Critical.** Its two new functions were reached only through render tests at two
+convenient values, leaving every bucket boundary unpinned: a mutant widening
+`hours <= 12` to `hours <= 20` left 150 tests green — **precisely the window the
+Critical lived in**. **Fixed** with `joinClock.test.js`, every test aimed at a
+boundary or a refusal, including local midnight one minute either side.
+**My first draft of it failed for the finding's own reason**: I wrote the case in
+UTC and this suite pins `Asia/Kolkata`, where those instants are the same local
+day. The corrected case is cross-day in the VIEWER's zone, which is the only
+thing "today" and "tomorrow" can mean.
+
+**L3 · the gate I quoted was true of a RUN, not of the SUITE.**
+`console.render.test.jsx` pinned its clock exactly on a day boundary while
+`shouldAdvanceTime` lets real milliseconds elapse before the render — measured,
+one millisecond turned "Expires in 11 days" into 10. The reviewer ran the web
+suite three times and got **905/906 exit 1** on one of them. **Fixed** by pinning
+half an hour inside the day; re-proved with three consecutive clean runs
+(919/919, exit 0 each). **Second instrument finding on this card about believing
+a number without the run behind it.**
+
+**L5 · recorded, not actioned.** The C/H-2 transaction now holds row locks across
+N sequential audit inserts. Correctness is strictly better than before; the cost
+is lock duration on a table the console writes to, and it belongs with the
+existing no-batch-limit `OWED.md` line rather than a second one.
+
+## The waiting room's clock — T3 round 3 Lows (2026-08-21, DECISIONS :13336)
+
+Five Low findings, **all fixed in the round that found them**. The two
+Critical/High are not here: they were in the mutation harness, and they held the
+packet.
+
+**L1 · round 2's own correction landed in three documents and missed the
+fourth — the one with the code in it.** `sweep.ts` still laid the expiry guard
+out as TWO live bullets, still said "both arms" in four places, and said round 2
+"DELETED THE SECOND ARM" when the survivor IS the second arm — contradicting its
+own next sentence and the code three lines below. `HANDOFF.md` and the index had
+been corrected properly. **Fixed** in place. :5748's rule with a sharper edge:
+the place a correction gets missed is the file you were not editing at the time.
+
+**L2 · a second un-struck copy in `HANDOFF.md`, and it was backwards.** "Dropping
+arm 1 → a late-flagged row can never die at all" — dropping arm TWO is what would
+strand such a row, and arm one turned out to be dead code. **Fixed**, struck with
+both errors named.
+
+**L3 · the tomorrow / in-a-couple-of-days boundary was unpinned.** The reviewer's
+mutant `days === 1` → `days <= 2 && days >= 1` — a slot two local days out
+announced as "tomorrow" — left all 163 tests green. **Same shape as the gap that
+hid round 2's Critical, in the file written to close it.** **Fixed** with a case
+either side of the boundary, verified RED under that exact mutant, source
+restored and hashed. **My first draft of the fix failed for the finding's own
+reason**: I wrote the instants in UTC while the suite pins `Asia/Kolkata`.
+
+**L4 · fake timers leaked on failure.** Three tests called `vi.useRealTimers()`
+as their last statement, which a failing assertion never reaches — one red test
+would freeze the clock for every later test in the file. A flake generator inside
+the fix for a flake. **Fixed** by moving it into `afterEach`, and **proven** by
+injecting a failure into the first clock-pinning test: `1 failed | 52 passed`,
+no cascade.
+
+**L5 · `joinClock.js`'s header stated an absolute the file deliberately breaks.**
+"ELAPSED TIME, NEVER CALENDAR DAYS", with `nextNudgeText` reading the calendar on
+purpose forty lines below. The function's own docblock carved it out; the header
+did not — and the absolute version of that rule is what produced round 2's
+Critical. **Fixed**: the exception is declared where the rule is stated.
+
+### And one the sweep found rather than the reviewer
+
+**O48 came back ALIVE after its re-anchor, and the survival was correct.** The
+mutant deleted `AND gym_notified_at IS NOT NULL` alone — which round 2's Low-1
+had made redundant, since the surviving notice comparison is itself NULL for an
+unflagged row and filters it out anyway. **A no-op mutation reporting ALIVE says
+nothing about coverage** (:12878's own lesson: ask whether the guarantee is
+OBSERVABLE before assuming a test is missing). Re-aimed at BOTH conditions
+together — which is what actually carries "the gym must have been told" —
+and re-run **RED**.
+
+## The waiting room's clock — T3 round 4 Lows (2026-08-21, DECISIONS :13421)
+
+Five Lows, **all fixed in the round that found them**. The Critical/High is not
+here: it held the packet.
+
+**L1 · "Asked today" about somebody who applied last night.** Same cause as the
+Critical, past tense — a calendar word computed from floored elapsed
+milliseconds. Low by :13281's line (a wrong WORD about the past, no number and
+no action changes) and fixed by the same rule: `waitingForLabel` now asks the
+calendar for its day word and counts elapsed time for its duration.
+
+**L2 · the header declared ONE exception to a rule that three functions broke.**
+Round 3's fix was right about `nextNudgeText` and stopped there. **Fixed** by
+replacing the exception with one rule the whole file obeys.
+
+**L3 · `sweep.ts`'s prose named a DEAD condition as the guard — third round
+running.** The reviewer measured it: delete `gym_notified_at IS NOT NULL` and
+the sweep suite still passes 18/18, because an unflagged row's notice comparison
+is NULL and filters it out anyway. **The correction reached the harness, BACKLOG
+and HANDOFF in round 3 and missed `sweep.ts` again** — :5748 for the third time,
+always in the file nobody was editing. **Fixed** with the measurement written in;
+the condition stays as an explicit restatement, but is no longer called the
+enforcement.
+
+**L4 · two overclaims of mine from round 3, both checked.** The comment said
+`useRealTimers` was moved out of the test bodies — it was ADDED to `afterEach`
+and the three in-body calls were still there. And the "1 failed | 52 passed"
+proof **reproduces identically with the teardown removed**, because no later test
+in that file is date-sensitive: a real measurement that proved nothing (V1).
+**Fixed** — calls deleted, claim reworded to what was actually shown.
+
+**L5 · the permanent guard was a case fix, and the reviewer said so when asked to
+judge it.** `node --check` named ONE file; ~~the repo has **18** mutation
+harnesses~~ **— STRUCK by round 5's Low-4: 18 is the count of `.mjs` files in
+those directories, FOUR of which are not harnesses at all, and it omits the three
+`.sh` harnesses entirely. Counted by command: 14 `.mjs` + 3 `.sh` = 17 mutation
+harnesses** — and the ones outside `apps/web` were parsed by nothing.
+`turbo.json` also omitted `tools/**` from the lint inputs, so a harness-only fix
+round left the cache valid and skipped the check locally. **Fixed** with
+`apps/api/scripts/check-harnesses.mjs`, which WALKS the directories (a harness
+added tomorrow is covered), treats an empty walk as a failure (:4855's shape),
+and is proven by breaking a web harness the old guard could not see — 1 of 18
+broken, exit 1; restored, 18 parse, exit 0. **The `turbo.json` half was only half
+a fix and round 5's Low-6 finished it.**
+
+### And two tests that were asserting the defect
+
+`consoleView.test.js` demanded `waitingForLabel(..., +23h) === 'Asked today'` —
+08:00 the next morning — and the console render test's countdown expected the
+floored value. **That is the round-4 finding written down as an expectation, and
+it is how a wrong rule survives four reviews.** Both corrected to the rule.
+
+## The waiting room's clock — T3 round 5 Lows (2026-08-21, DECISIONS :13552)
+
+**Nine Lows, ZERO Critical/High — the round that shipped the packet.** All nine
+fixed in the round that found them (:5348 rule 1: the gate changes the SCHEDULE,
+never the quality bar). Four of the nine are prose that round 4's own fix
+falsified, which is the shape to expect after a STRUCTURAL fix: the code moves
+and the sentences about it do not.
+
+**L1 · "Waiting 1 day" about a request two minutes old.** The rule at the top of
+`joinClock.js` names THREE day words and `waitingForLabel` implemented two — with
+no "yesterday", a midnight crossing fell through to the duration and the floor
+rounded it up. Measured in the pinned zone: applied 23:59, read 00:01 →
+"Waiting 1 day"; at 1 h and 13 h the same. **Reachable by every evening applicant
+on the morning after they applied.** **Kept Low and the call is recorded, not
+buried:** it is a wrong NUMBER on screen, which :5807 names Critical/High, and
+the reviewer said so before choosing Low on :13281's own line (a wrong word about
+the past; nothing acts on it) — the identical judgement round 4 made about the
+identical function. Kd was shown the alternative and its cost (a C/H tag arms the
+escape hatch and demands a redesign of the file round 4 had just redesigned) and
+chose Low. **Fixed** with the third day word.
+
+**L1a · the review's proposed one-line fix was MEASURED AND REJECTED, and this is
+the part worth keeping.** It was "add the yesterday branch, then drop
+`Math.max`", on the premise that two calendar days apart implies a whole day
+elapsed. **False across a spring-forward day:** in `America/New_York`, 7 Mar 2026
+23:59 → 9 Mar 00:01 is **23h02m**, which floors to ZERO — the fix would have
+printed "Waiting 0 days" twice a year in every DST zone, in the round that
+existed to stop the screen saying false numbers. The floor STAYS and now fires
+only in that corner, where "1 day" is the honest reading of 23 hours. Pinned by a
+test that switches zone (restored in `afterEach`, and the restore is asserted),
+with a positive control proving the assertion is about the transition and not
+about any zone at all.
+
+**L2 · the rule's own DURATION example was wrong about this file.** It named
+"in 11 days", which `expiresInLabel` computes from a COUNT OF CALENDAR DAYS —
+correctly, since it is the tail of the same sentence as "today" and "tomorrow".
+**Fixed**: the example is now one the file really treats as elapsed, with the
+reason recorded so nobody re-classifies the countdown.
+
+**L3 · "the two screens cannot quote different deadlines" stopped being true.**
+Once the countdown moved to the reader's calendar, one `expiresAt` at one instant
+reads "Expires tomorrow" in Kolkata and "Expires today" in London and New York —
+**measured across three zones**. Each is true where it is read; the absolute claim
+was not. **Fixed** in both places it appeared (the file header and
+`expiresInLabel`'s own doc), qualified to what the shared helper does guarantee:
+one reader never sees two answers.
+
+**L4 · the harness guard skipped three harnesses and the count was wrong in five
+documents.** Its first line says EVERY mutation harness; it looked only at
+`.mjs`, so `mutate-exercise-library.sh`, `mutate-postworkout-summary.sh` and
+`mutate-workout-calendar.sh` were parsed by nothing. And **"18 mutation
+harnesses" was never true** — 18 is the `.mjs` count in those directories, four of
+which are tools rather than harnesses. **Counted by command: 14 `.mjs` + 3 `.sh`
+= 17.** **Fixed**: `.sh` checked with `bash -n`, the label corrected everywhere it
+was quoted, and the guard now reports what it CHECKED (22 scripts) rather than a
+name for it.
+
+**L5 · the walk missed the directory the guard lives in, and did not recurse.**
+**Fixed**: `apps/api/scripts` added and the walk made recursive. **Said rather
+than glossed — the recursion has no observable subject today**: no harness lives
+in a subdirectory (the only nested one, `apps/api/tools/migrate-mongo`, holds
+`.ts`), so the mutant that stops it recursing is **ALIVE** and reports the same 22
+files. It is future-proofing, not a guarded guarantee, and this line is the
+honest record of that (:12343's lesson — ask whether the guarantee is OBSERVABLE
+before assuming the test is missing).
+
+**L6 · round 4's cache fix was half a fix.** The check ran only from `api#lint`,
+whose cache inputs are **172 files with not one outside `apps/api`** — measured
+with turbo's own `--dry=json`. So breaking any of the 16 harnesses that live in
+`apps/web`, `packages/` or root `tools/` left a warm `turbo run lint` free to
+replay a cached pass without ever running the guard: exactly the harness-only fix
+round that rounds 2 and 3 were. **Fixed** by invoking it from the ROOT `lint`
+script, before turbo, where no cache decides whether it happened — **proven by
+breaking a web harness and watching root lint exit 1 at the guard with turbo
+never reached.** Not duplicated in `api#lint`, and its `package.json` says why.
+
+**L6a · the narrowing guard's first draft could not fail, and its own audit
+caught it.** It asked "for each entry in `CHECKERS`, did the walk find one?" —
+so deleting the `.sh` checker deleted the expectation with it: measured, "19
+scripts parse", exit 0, three harnesses silently unguarded. **:5104 F5's shape,
+inside the fix written for exactly that class.** Fixed by declaring
+`REQUIRED_KINDS` separately from the checkers; the same mutant is now RED.
+
+**L7 · the expiry boundary instant was unpinned, and the reviewer's mutant
+survived because of it.** Both neighbours of `expiresAt` were tested and the
+instant itself was not, so loosening `<=` to `<` left all five clock suites
+green while the exact deadline flipped to "Expires today". Code was right, the
+test was missing. **Fixed** — the mutant now dies on the new test alone.
+
+**L8 · a comment reasoning in UTC in a suite pinned to Asia/Kolkata.** The
+explanation said "23 hours after 09:00 — 08:00 the NEXT morning"; locally those
+instants are 14:30 and 13:30. Assertion right, explanation wrong — the same
+UTC/local slip that broke two earlier drafts on this card. **Fixed** by stating
+the local times.
+
+**L9 · a pinning note that outlived half its reason.** The 09:30 pin says "both
+figures here are floored day counts"; only the waiting figure still is, and the
+countdown's boundary is now local midnight, nowhere near 09:30Z. The pin stays
+justified — by half the stated reason. **Fixed** by narrowing the sentence.

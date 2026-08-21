@@ -14,6 +14,7 @@ import {
   joinOrgResponseSchema,
   myOrgApplicationsResponseSchema,
   myOrgsResponseSchema,
+  nudgeApplicationResponseSchema,
   orgApplicationPageSchema,
   orgCodesResponseSchema,
   orgMemberPageSchema,
@@ -108,6 +109,24 @@ export const orgService = {
       myOrgApplicationsResponseSchema,
       'your gym requests',
       authApi.get('/v1/orgs/applications/mine'),
+    ),
+
+  /** POST /v1/orgs/applications/:applicationId/nudge — "Remind them".
+   *
+   *  **No gym id, deliberately**: the caller is nudging their OWN application,
+   *  so the server scopes it by (application, caller) exactly as it scopes the
+   *  waiting list above.
+   *
+   *  **`already_sent` is a SUCCESS, not an error**, which is why it comes back
+   *  as a 200 with its own arm rather than a 429: once a day is a product rule
+   *  the screen explains in words, and a 429 would arrive indistinguishable
+   *  from the request floor sitting above this route. Both arms carry
+   *  `nextNudgeAt`, so the screen never works out a date of its own. */
+  nudgeApplication: (applicationId) =>
+    readThrough(
+      nudgeApplicationResponseSchema,
+      'that reminder',
+      authApi.post(`/v1/orgs/applications/${applicationId}/nudge`, {}),
     ),
 
   /** GET /v1/orgs/:gymId/applications — the console's confirm queue, oldest

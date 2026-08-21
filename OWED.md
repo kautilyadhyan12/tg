@@ -4419,8 +4419,67 @@ file and is stated so nobody reads these as lower priority than they are.
       **Closes with the notifications module, which no `OWED.md` line had ever
       named until :11385 and which password reset and email verification are
       also waiting on.**
-- [ ] 🔴 **NOTHING EXPIRES, REMINDS OR NUDGES YET — the waiting room has no
-      clock (step 3 of the join door; deferred 2026-08-19, DECISIONS :11891).**
+      **WIDENED 2026-08-20 (DECISIONS :12878) — THERE IS NOW A THIRD SILENT
+      EVENT, and this one is the machine's:** a join request that runs out is
+      changed by a background job at 03:30, and **the person who was waiting
+      finds out only by opening the app.** The card is honest about it — the
+      dashboard says "Your request to {gym} expired before anyone confirmed it"
+      whenever it is read, and the copy promises no message — so nothing false
+      is on screen. But somebody who applied and then waited is exactly the
+      person least likely to open the app again, and they get no prompt to.
+      **It is the strongest case of the three for the notifications module**,
+      because the other two follow a human's tap while this one follows nothing
+      at all. Same fix, same module, no separate line.
+- [x] ~~🔴 **NOTHING EXPIRES, REMINDS OR NUDGES YET — the waiting room has no
+      clock (step 3 of the join door; deferred 2026-08-19, DECISIONS :11891).**~~
+      **DONE 2026-08-21 — built (DECISIONS :12878), smoked 10/10 (:13174), and
+      FIVE T3 rounds closed with round 5 finding ZERO Critical/High (:13552), on
+      the commit this line is ticked in.** The full gate is met: a round with no
+      Critical/High (:5348 rule 1) plus the browser smoke. All four owed
+      behaviours are live — the expiry sweep, the gym reminder at 2 days then
+      weekly, the member's once-a-day nudge, and the countdown on both screens.
+      **What the five rounds cost is the record worth keeping: every Critical on
+      this card was a calendar word computed from elapsed arithmetic, or a
+      document calling a dead condition load-bearing** — the same two shapes in
+      the same two files, four rounds running, closed only when round 4 stopped
+      patching functions and wrote ONE rule the whole file obeys.
+      **BUILT 2026-08-20 (DECISIONS :12878). T3 ROUND 1 HAS RUN AND DID NOT SHIP
+      IT (DECISIONS :13075). STILL DOES NOT TICK.** Two Critical/High, both
+      FIXED: **the ordering rule was a YES/NO where the promise is a DURATION**
+      (a gym measured at 31 minutes' notice against a promise of two days — the
+      second time on this card that :11385's own wording produced the outcome it
+      forbids), and **the expiry's audit rows lived outside its transaction**, so
+      one dead worker made the trail unrecoverable. Seven Lows, all fixed the
+      same round (`BACKLOG.md`), including a hazard the card itself introduced:
+      an unscoped test sweep could expire the applications the sibling suite was
+      confirming.
+      **UPDATE 2026-08-21 — THE SMOKE PASSED 10/10 (DECISIONS :13174). The
+      DIFF-ONLY RE-REVIEW IS THE ONLY GATE LEFT.** The `expired` arm was seen by
+      a human for the first time, and the final run caught the C/H-1 fix
+      refusing to delete a real request in a browser. Two sheet defects were
+      found and fixed mid-run, both the sheet's.
+- [ ] ⚪ **THE CONSOLE'S WAITING QUEUE PRINTS THE JOIN CODE'S LABEL ("Front
+      Desk") AND IT IS NOISE WHILE A GYM HAS ONE CODE** (raised by Kd during the
+      clock smoke, 2026-08-21, DECISIONS :13174). It is Part 3 §2.1's group
+      mechanism — the thing that tells a big gym which desk, class or campaign a
+      person came through — and it is genuinely useful the moment a gym runs
+      several codes. **Today no gym can have a second code**: nothing in the
+      product creates, rotates or expires one (the pause/rotate line above is
+      the gap), so the label is the same six words on every row.
+      **Kd asked whether it is needed and was told the above; he did not rule.**
+      Not a defect and not acted on (R1.1). The fix, if he wants it, is to hide
+      the label while a gym has exactly one live code — one line, and it
+      un-hides itself when the code-management card lands. **His call.** All four owed items
+      are in: the expiry sweep · the gym reminder at 2 days then weekly · the
+      member's once-a-day nudge · and **:11385's ordering rule, enforced TWICE**
+      — in the sweep's sequence and in the expiry statement's own WHERE, so if
+      the worker never runs, nothing expires. **The three numbers are now
+      RATIFIED rather than defaults**: Kd was asked at this card, as :11385
+      required, and chose to keep all three. **No migration was needed** — the
+      step-1 card wrote all three columns for this one. The daily job is on the
+      existing `rollups` queue at 03:30 UTC, and `tools/orgs-sweep.ts --now`
+      stands the clock in the future so the smoke takes minutes rather than a
+      fortnight. Original text kept below.
       Every application is stamped with a 14-day `expires_at` when it is
       written, and **no code reads that column.** So today a pending row waits
       for ever, which **contradicts :11385 as written** ("a build that keeps
@@ -4436,6 +4495,26 @@ file and is stated so nobody reads these as lower priority than they are.
       an unknown job THROWS); an injectable clock is required so the timeline is
       testable without waiting a fortnight. **IN-APP ONLY — email does not
       exist (next line), so no copy may promise one.**
+- [ ] ⚪ **THE JOIN-APPLICATION SWEEP HAS NO BATCH LIMIT — every overdue row in
+      the whole database moves in one statement** (deferred 2026-08-20,
+      DECISIONS :12878). `purgeDueUsers` next door takes a `limit` and this does
+      not, deliberately: the DPDP purge walks each user through a transaction
+      doing real work, while this is three set-based UPDATEs against a PARTIAL
+      INDEX (`gym_join_applications_expiry_idx`, on `expires_at` where status is
+      pending), and batching a set-based statement adds a cursor and a
+      resume-point for no gain at the size the product is.
+      **The honest cost, stated rather than discovered later:** at a scale where
+      tens of thousands of applications go overdue on one night, that UPDATE
+      holds a lot of row locks at once — and the rows it locks are exactly the
+      ones a front desk might be confirming at that moment, so a confirm could
+      block behind the sweep. **03:30 UTC is not the middle of the night
+      everywhere** (it is 09:00 in Jorhat), which is what makes that reachable
+      rather than theoretical.
+      **Not fixed now (R1.1) and no number invented:** the fix is a `LIMIT` plus
+      a loop, or moving the schedule per-region, and choosing between them needs
+      a real roster size nobody has yet. **The trigger to revisit is the first
+      gym with thousands of members**, i.e. the same trigger the roster-import
+      work has. Tracked nowhere before today.
 - [ ] 🟡 **AUTO-CONFIRM CANNOT BE BUILT YET: there is no imported roster to
       match against** (deferred 2026-08-19, DECISIONS :11891). :11072 rules that
       "a person matching the gym's imported roster is confirmed AUTOMATICALLY"

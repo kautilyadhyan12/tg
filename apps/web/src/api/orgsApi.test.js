@@ -43,6 +43,13 @@ const okBody = (url) => {
     return { outcome: 'pending', org: ORG_BODY, application: APPLICATION_BODY };
   }
   if (url === '/v1/orgs/applications/mine') return { applications: [] };
+  if (url.endsWith('/nudge')) {
+    return {
+      status: 'sent',
+      nudgedAt: '2026-08-20T09:00:00.000Z',
+      nextNudgeAt: '2026-08-21T09:00:00.000Z',
+    };
+  }
   if (url.endsWith('/applications')) return { items: [], nextCursor: null, pendingCount: 0 };
   if (url.endsWith('/confirm')) return { status: 'confirmed', membership: MEMBERSHIP_BODY };
   if (url.endsWith('/reject')) return { status: 'rejected' };
@@ -167,6 +174,24 @@ describe('orgService endpoints', () => {
     expect(seen[5]).toMatchObject({ url: '/v1/orgs/gym-1/members/user-9', method: 'delete' });
   });
 
+  it('nudges at an address carrying NO gym id — the tenancy pair is (application, caller)', async () => {
+    const seen = recordRequests(authApi);
+    await orgService.nudgeApplication('app-1');
+    // The absence of a gym id is the assertion. The caller is nudging their OWN
+    // application, so the server scopes it by application AND user exactly as
+    // it scopes the waiting list; threading a gym id through would add a value
+    // the client has to get right for a check the server does not make — and a
+    // route that takes a redundant identifier is one where somebody eventually
+    // trusts the wrong one.
+    expect(seen[0]).toMatchObject({
+      url: '/v1/orgs/applications/app-1/nudge',
+      method: 'post',
+    });
+    // `{}` for the same reason confirm and reject send it: Fastify refuses a
+    // request that declares JSON and carries nothing.
+    expect(seen[0].data).toBe('{}');
+  });
+
   it('sends `{}` on confirm and reject — Fastify refuses a bare empty JSON body', async () => {
     const seen = recordRequests(authApi);
     await orgService.confirmApplication('gym-1', 'app-1');
@@ -249,6 +274,60 @@ describe('a 200 that does not match its contract is a FAILURE, not empty data (T
     // screen renders a removal it cannot date.
     answerWith(authApi, { orgs: [], formerOrgs: [{ ...ORG_BODY }] });
     await expect(orgService.getMine()).rejects.toMatchObject({ isContractError: true });
+  });
+
+  // ── the waiting room's clock, through the REAL parser (:11385, step 3) ───
+  //
+  // These are the counterpart of the `formerOrgs` guard above: the render tests
+  // mock `orgService` wholesale, so neither `readThrough` nor the shared schema
+  // runs there and a deleted default would leave them green.
+
+  it('ACCEPTS a waiting list from an API that does not send nudgedAt yet', async () => {
+    // The same deploy-gap reasoning as `formerOrgs`, and the same cost if it
+    // were required: the card treats a contract failure as silence, so a newer
+    // web app against an older API would lose "Waiting for Iron House to
+    // confirm you" entirely — a whole card destroyed to add one button.
+    //
+    // Delete `.default(null)` on `nudgedAt` in `packages/shared/src/orgs.ts`
+    // and this goes RED.
+    answerWith(authApi, {
+      applications: [{ ...APPLICATION_BODY, org: ORG_BODY }],
+    });
+    const res = await orgService.getMyApplications();
+    expect(res.data.applications[0].nudgedAt).toBeNull();
+  });
+
+  it('ACCEPTS a confirm queue from an API that sends neither clock field', async () => {
+    answerWith(authApi, {
+      items: [
+        {
+          id: '44444444-4444-4444-4444-444444444444',
+          userId: '77777777-7777-7777-7777-777777777777',
+          displayName: 'Anil Bora',
+          appliedAt: '2026-08-19T09:00:00.000Z',
+          expiresAt: '2026-09-02T09:00:00.000Z',
+          groupLabel: 'Front Desk',
+        },
+      ],
+      nextCursor: null,
+      pendingCount: 1,
+    });
+    const res = await orgService.getApplications('gym-1', {});
+    // Absent reads as "nothing to say", which is what the row draws on: no
+    // "Needs a decision" mark and no "they asked again" line.
+    expect(res.data.items[0].gymNotifiedAt).toBeNull();
+    expect(res.data.items[0].nudgedAt).toBeNull();
+  });
+
+  it('rejects a nudge answer that is not one of its two arms', async () => {
+    // Both arms are a SUCCESS and both carry the two times, so the screen never
+    // works out a date of its own. A body outside the union would otherwise
+    // reach the card as `undefined` and print "You can do this again" beside
+    // nothing.
+    answerWith(authApi, { status: 'queued', nudgedAt: '2026-08-20T09:00:00.000Z' });
+    await expect(orgService.nudgeApplication('app-1')).rejects.toMatchObject({
+      isContractError: true,
+    });
   });
 
   it('rejects a confirm queue with no pendingCount', async () => {

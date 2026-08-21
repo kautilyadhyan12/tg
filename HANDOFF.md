@@ -1,6 +1,453 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE CLOCK — T3 ROUND 5 AND ITS FIXES. **ZERO Critical/High. THE PACKET
+      SHIPS and `OWED.md`'s clock line TICKS.** Nine Lows, all fixed.
+      DECISIONS :13552. **NO ROUND 6 — a Low buys no round (:5348 r1).**
+
+THE TWO THINGS A NEXT CHAT SHOULD ACTUALLY CARRY
+  · **THE REVIEW'S PROPOSED ONE-LINE FIX WAS WRONG AND WAS MEASURED BEFORE IT
+    WAS APPLIED.** "Add the yesterday branch, then drop `Math.max`" rests on
+    "two calendar days apart implies a day elapsed" — **false across a
+    spring-forward day: `America/New_York`, 7 Mar 2026 23:59 → 9 Mar 00:01 is
+    23h02m, which floors to ZERO** and would have printed "Waiting 0 days" in
+    every DST zone twice a year. **Invisible in our pinned zone**, because
+    `Asia/Kolkata` has no DST. A reviewer's fix is a claim and takes V1's
+    evidence like any other.
+  · **THE NARROWING GUARD I WROTE COULD NOT FAIL, and my own audit caught it.**
+    It looped the checker table asking "did the walk find one of each kind?", so
+    deleting the `.sh` checker deleted the expectation with it — 19 scripts
+    parse, exit 0, three harnesses unguarded. :5104 F5's shape INSIDE the fix
+    written for that class. `REQUIRED_KINDS` is now declared separately.
+
+THE SEVERITY CALL, BECAUSE IT WAS KD'S AND IS PRECEDENT
+  · Low-1 — **"Waiting 1 day" about a two-minute-old request** — is a wrong
+    NUMBER on screen (:5807 ⇒ Critical/High), tagged **Low** on :13281's line,
+    the same call round 4 made on the same function. **The reviewer disclosed
+    that he had made it; Kd was shown both sides and chose Low.** A C/H tag
+    would have armed the escape hatch and demanded a redesign of the file round
+    4 had just redesigned.
+
+WHAT ELSE CHANGED
+  · **The harness guard now checks `.sh` too** (`bash -n`), recurses, covers
+    `apps/api/scripts`, and **runs from the ROOT lint script** — `api#lint`'s 172
+    cache inputs reach nothing outside `apps/api`, so a warm run used to replay a
+    pass while any of the 16 harnesses elsewhere was broken. Do NOT re-add the
+    call to `api`'s lint script.
+  · **"18 mutation harnesses" was never true** and is struck in five documents.
+    14 `.mjs` + 3 `.sh` = **17**; the guard checks 22 scripts because 4 `.mjs` in
+    those directories are tools, and it now reports what it CHECKED.
+  · Four Lows were prose round 4's own structural fix falsified. Expect that
+    after any structural fix: the code moves, the sentences do not.
+
+GATES
+  · web **928/928, exit 0** (924 + 4 new) · api tsc clean · api eslint clean ·
+    web eslint clean on all four changed files · guard clean at 22 scripts
+    (19 `.mjs` + 3 `.sh`), proven exit 1 on a broken file of EACH kind.
+  · **6 mutants, 5 RED, 1 ALIVE with its reason** (recursion has no observable
+    subject — no harness lives in a subdirectory). Each RED verified killed by
+    the test that names its guarantee, not merely red (:4718 F2).
+  · **`turbo run lint` cannot run on this machine and it is PRE-EXISTING** —
+    turbo spawns global pnpm 11.18.0 against a repo pinned to 9.15.4, failing
+    identically in three packages this round never touched.
+
+NEXT
+  1. Nothing on this card. It is closed.
+  2. The join door's remaining ⚪ line (the "Front Desk" label on the queue) is
+     Kd's call and untouched.
+```
+
+```
+TASK: THE CLOCK — T3 ROUND 4 AND ITS FIXES. **ONE Critical/High, five Lows, all
+      fixed. ESCAPE HATCH NOT ARMED** (round 3 was the harness, round 4 is
+      `joinClock.js`). DECISIONS :13432. **ONE GATE LEFT: round 5, diff-only.**
+
+THE CRITICAL, AND THE REASON IT IS THE LAST ONE OF ITS KIND
+  · **"Expires today" printed the day BEFORE a request expires.** Measured: 21
+    hours out across a local midnight. **Reachable EVERY DAY** — `expires_at` is
+    `applied_at + 14 days`, so a deadline sits at whatever time somebody
+    applied, and every evening applicant hit it on every day they waited, on
+    both screens.
+  · **THE SAME DEFECT CLASS HAS NOW BEEN FOUND IN FOUR FUNCTIONS ACROSS FOUR
+    ROUNDS.** Round 1 found it three times and called it Low; round 2 called it
+    Critical; round 3 pinned one boundary; round 4 found it in the two functions
+    nobody had looked at.
+  · **So the fix is the reviewer's STRUCTURAL one, not a fourth patch. One rule
+    for the whole file:** a function printing a DAY WORD compares LOCAL CALENDAR
+    DAYS; a function printing a DURATION measures ELAPSED TIME; nothing does one
+    and says the other. `calendarDaysBetween` is the ONLY place a day comparison
+    happens — **the rule is enforced by there being nowhere else to do it.**
+  · **Two old tests were ASSERTING the defect** (one demanded "Asked today" at
+    +23h, i.e. 08:00 the next morning). That is how a wrong rule survives four
+    reviews.
+
+THREE FINDINGS THAT ARE ABOUT MY RECORD-KEEPING, NOT THE CODE
+  · **Low-3: `sweep.ts`'s prose named a DEAD condition as the guard — THIRD
+    round running.** He measured it: delete `gym_notified_at IS NOT NULL` and
+    the suite still passes 18/18. The round-3 correction reached the harness,
+    BACKLOG and HANDOFF and **missed `sweep.ts` again** — :5748, always in the
+    file nobody was editing at the time.
+  · **Low-4: I overclaimed twice in round 3 and he checked both.** The in-body
+    `useRealTimers` calls were never moved (added to `afterEach`, originals left
+    behind), and my "1 failed | 52 passed" proof **reproduces IDENTICALLY with
+    the fix removed** — a real measurement that proved nothing (V1).
+  · **Low-5: the permanent guard was a case fix.** `node --check` on ONE file
+    against ~~**18**~~ **17** harnesses in the repo (**struck by round 5's
+    Low-4: 18 counted `.mjs` files, four of them not harnesses, and missed three
+    `.sh` ones — 14 `.mjs` + 3 `.sh`**), and `turbo.json` omitted `tools/**`
+    from lint inputs — so a harness-only fix round (rounds 2 and 3) skipped the
+    check on a warm cache. Now a WALK over the harness directories, empty walk =
+    failure (:4855), proven by breaking a WEB harness the old guard could not
+    see. **Round 5's Low-6 finished the cache half — the check now runs from the
+    ROOT lint script, outside every per-package cache.**
+
+WHAT HE VERIFIED FOR ME, WHICH CLOSES ROUND 3
+  · Ran the harness himself: **10 mutants · 10 RED · 0 ALIVE**, one run, no
+    aborts, preflight clean on all 57 anchors. Confirmed the re-aimed O48
+    mutates something OBSERVABLE (expired 0 → 1), and read O57's failure text to
+    confirm it fails on its guarantee rather than a compile error.
+  · **Zero control aborts on his pass**, which supports the contention reading
+    of round 3's two rather than an intermittent failure.
+
+GATES
+  · web **924/924, exit 0** · sweep **18/18** · api tsc clean · api lint clean
+    **including the widened harness check (18 `.mjs` files parse — see the
+    round-5 strike above on calling all 18 "harnesses")** · web lint
+    clean on every changed file.
+  · Both new boundary tests measured RED against the restored defect, source
+    sha256-verified restored.
+
+NEXT
+  1. Round 5, diff-only, on this round's fixes.
+  2. Then the card ticks and `OWED.md`'s clock line closes.
+```
+
+```
+TASK: THE CLOCK — T3 ROUND 3 AND ITS FIXES. **ONE Critical/High (two findings),
+      five Lows, all fixed. ESCAPE HATCH NOT ARMED** — round 1 in `sweep.ts`,
+      round 2 in `joinClock.js`, round 3 in `tools/mutate-orgs.mjs`: three
+      subsystems, no two rounds running, and **zero Critical/High in the file
+      round 2 had just fixed**. DECISIONS :13336.
+
+THE CRITICAL IS NOT IN THE APP — I BROKE THE INSTRUMENT THAT PROVES IT
+  · **A raw newline inside a mutant string made the harness a SyntaxError, so
+    NONE of its 57 mutants could run** — including O56 and O57, which exist
+    solely as the permanent guards on round 1's two Criticals. My re-aim in
+    round 2 wrote it.
+  · **Four anchors (O48–O51) were stale**, and since the preflight loops the
+    FULL table, even a one-mutant run would abort. **I had "re-anchored" these
+    in round 2 and the edit silently matched nothing** — same class, same
+    session.
+  · **NOTHING IN THE GATE COULD SEE EITHER**: `eslint.config.js` ignores
+    `tools/**/*.mjs` and tsc never reads the file. The card looked green with
+    its safety net dead.
+  · **Permanent guard (:5348 rule 5):** `lint` now ends with
+    `node --check tools/mutate-orgs.mjs`. **Proven both ways** — inject a syntax
+    error and lint exits 1; restore and it exits 0.
+
+THE HARNESS EARNED ITS KEEP THE MOMENT IT RAN AGAIN
+  · **O48 came back ALIVE and the survival was CORRECT.** It deleted
+    `AND gym_notified_at IS NOT NULL` alone — redundant since round 2's Low-1,
+    because the surviving notice comparison is NULL for an unflagged row and
+    filters it out anyway. **A no-op mutation reporting ALIVE says nothing about
+    coverage** (:12878's own lesson). Re-aimed at BOTH conditions together and
+    re-run **RED**.
+
+FIVE LOWS (BACKLOG.md), and L1 is the one to carry
+  · **Round 2's correction landed in three documents and missed the fourth — the
+    one with the code in it.** `sweep.ts` still described a TWO-ARM guard and
+    named the wrong arm as deleted, contradicting its own next sentence.
+    :5748 with a sharper edge: **the place a correction gets missed is the file
+    you were not editing at the time.**
+  · L3 left the tomorrow/couple-of-days boundary unpinned — **the same shape as
+    the gap that hid round 2's Critical, in the file written to close it.**
+    Verified RED under the reviewer's own mutant.
+  · L4: fake timers leaked on failure. Moved to `afterEach` and **proven** by
+    injecting a failure: `1 failed | 52 passed`, no cascade.
+
+MY OWN TWO SLIPS, BOTH THE SAME ONE
+  · The first re-anchor attempt **broke the file's syntax a SECOND time** (shell
+    escaping mangled a quoted string) — after which I switched to file-based
+    edit scripts.
+  · My first draft of the L3 boundary test **FAILED because I wrote the instants
+    in UTC while the suite pins `Asia/Kolkata`** — round 2's Critical restated,
+    by me, in the test written to pin it. Both caught by RUNNING, not reading.
+
+A NOTE ON THE HARNESS AND THIS DATABASE
+  · Two control aborts this round, both on tests that pass cleanly alone. The
+    database is in Singapore (`ap-southeast-1`) and the control is contending
+    with everything else; **the harness refusing to report verdicts it cannot
+    back is it working**, not failing (:11846's precedent). :5857 rule 4a's
+    local-Postgres switch is the real fix and is still owed.
+
+GATES
+  · sweep suite **18/18** · web suites green after every fix · tsc clean ·
+    **lint now includes the harness syntax check and passes** · harness
+    preflight clean on all 57 anchors.
+
+NEXT
+  1. Round 4, diff-only, on the harness repair and the five Lows.
+  2. Then the card ticks and `OWED.md`'s clock line closes.
+```
+
+```
+TASK: THE CLOCK — T3 ROUND 2 (diff-only) AND ITS FIXES. **ONE Critical/High,
+      five Lows, all fixed. ESCAPE HATCH NOT ARMED** — round 1's two Criticals
+      were both in `sweep.ts` and round 2 found NONE there, so there is no
+      redesign question for Kd. **ONE MORE DIFF-ONLY ROUND on these fixes alone
+      is the last gate.** DECISIONS :13247.
+
+THE CRITICAL IS THE ROUND'S OWN FIX REINTRODUCING WHAT THE ROUND WAS FIXING
+  · Round 1 found three Lows of ONE class — the screen claiming CALENDAR facts
+    off ELAPSED arithmetic. **The fix for L2 wired in the server's
+    `nextNudgeAt` through a new helper that bucketed by elapsed HOURS and
+    printed a calendar word**, in a file whose own header says ELAPSED TIME,
+    NEVER CALENDAR DAYS. Measured: nudged 08:00, read 21:00, next slot 08:00
+    TOMORROW, screen said "later today" — the member returns that night to a
+    faded button. Fixed by comparing LOCAL CALENDAR DAYS.
+  · **The reviewer tagged it Critical/High where round 1 tagged the same class
+    Low, and said openly he would not soften it to buy a ship.** Kd's "fix all"
+    takes the fix and leaves the tag. The distinction is real and worth keeping:
+    L1/L3 were a wrong WORD about the past; this is a wrong PROMISE about the
+    future (:5807).
+
+LOW-1 IS THE MOST INSTRUCTIVE FINDING IN EITHER ROUND
+  · **Round 1's fix left DEAD CODE and four documents called it load-bearing.**
+    Given the always-present `expires_at <= now`, arm 1 implies arm 2 and can
+    never decide anything. Proven twice — deleted it, suite stayed 18/18 green;
+    exhaustive check finds no case where arm 1 holds and arm 2 does not.
+  · The claim "arm 1 must not be deleted — two tests go red" was true of the arm
+    BEFORE the fix and false of the arm the fix wrote, and it was carried into
+    `sweep.ts`, DECISIONS, HANDOFF and the index **inside the commit that made it
+    false**. Struck in all four; arm deleted; **mutant O56 re-aimed at the notice
+    subtraction, where the guarantee actually lives.**
+
+THE OTHER THREE
+  · **L2+L4 are one hole and it is what hid the Critical**: `joinClock.js` had no
+    unit test, so every bucket boundary was unpinned — a mutant widening
+    `hours <= 12` to `<= 20` left 150 tests green. `joinClock.test.js` now aims
+    every test at a boundary or a refusal. **My first draft of it FAILED for the
+    finding's own reason: I wrote the case in UTC and this suite pins
+    `Asia/Kolkata`.**
+  · **L3: "906/906, exit 0" was true of a RUN, not the SUITE.** A clock pinned
+    exactly on a day boundary plus `shouldAdvanceTime` flipped 11 days to 10 one
+    millisecond later; the reviewer saw 905/906 on one run of three. Pinned half
+    an hour inside the day. Second instrument finding on this card about
+    believing a number.
+  · L5 recorded not actioned: the C/H-2 transaction holds locks across N audit
+    inserts — belongs with the existing no-batch-limit OWED line.
+
+GATES
+  · web **919/919 across THREE consecutive runs, exit 0 each** (count rises
+    because `joinClock.test.js` is new) · sweep suite re-run against the
+    simplified guard · tsc clean · eslint clean.
+  · Security pass clean; **`gymIds` verified unreachable from HTTP by GREP, not
+    inference** — only `worker.ts` and the tool call the sweep, both without it.
+
+NEXT
+  1. One diff-only round on THESE fixes alone.
+  2. Then the card ticks and `OWED.md`'s clock line closes.
+```
+
+```
+TASK: THE WAITING ROOM'S CLOCK — T3 ROUND 1, ITS FIXES, AND THE SMOKE.
+      **TWO Critical/High; the packet did not ship that round** (DECISIONS
+      :13075). Both fixed, seven Lows with them. **SMOKE THEN PASSED 10/10**
+      (:13174). **ONE GATE LEFT: the DIFF-ONLY re-review** —
+      `t3-waiting-room-clock-r2-PROMPT.md` + `t3-waiting-room-clock-r2.diff`
+      (16 files, the fixes ALONE, not the whole card).
+
+THE TWO CRITICALS, and both are about a promise being tested as a yes/no
+  · **C/H-1: `gym_notified_at <= expires_at` asks whether the gym was warned,
+    where :11385 promises HOW LONG.** A flag one minute before the deadline
+    satisfied it, so the next run deleted the request — measured on real
+    Postgres at **31 minutes' notice**, with a BullMQ retry as the second run
+    (`attempts: 3, backoff: 60_000` is this job's own config). **Second time on
+    this card that the ruling's own wording produced the outcome it forbids** —
+    :12878 closed the "flag lands AFTER the deadline" half and left "just
+    BEFORE it" open. Fixed by measuring the same `EXPIRY_NOTICE_DAYS` from both
+    ends. **Cost accepted: a late-chased row dies up to two days AFTER its
+    14-day mark.** ~~Do NOT "simplify" by deleting arm 1 — mutated out, two
+    tests go red correctly.~~ **STRUCK by round 2 Low-1: that was true of the
+    OLD arm 1 and false of the one the fix wrote — it implies arm 2 given
+    `expires_at <= now`, so it decided nothing. Deleted; one condition now.**
+  · **C/H-2: the expiry and its audit rows were two transactions** — the lone
+    exception among six mutations in the module. A timeout or a dead worker
+    left rows `expired` the retry can never match, with **no audit row ever
+    written**. One `sql.begin` now; the test injects a writer that throws on the
+    SECOND row (`purge.ts`'s `purgeOne` precedent).
+
+WHAT THE REVIEWER DID THAT I SHOULD HAVE
+  · **He wrote his own mutant instead of only re-running mine** (:12227).
+    Deleting arm 1 went RED — proving it covered IN THE DIRECTION MY SUITE
+    TESTED — while the uncovered direction was C/H-1, live in shipped code under
+    a green suite. **A guard can be well-covered and still be the wrong
+    question.** That is the sentence to carry to the next card.
+
+SEVEN LOWS, all fixed this round (`BACKLOG.md`)
+  · Three are ONE class: **the screen claiming CALENDAR facts off ELAPSED
+    arithmetic** ("you reminded them today" at 23:00 last night; "yesterday" at
+    25 hours). **L2 is the sharpest — `nextNudgeAt` was added so the client
+    would never invent a time, and both sentences hardcoded "tomorrow" while the
+    field went unread.**
+  · **L4 is a hazard this card introduced and nothing could have shown it**: the
+    fixtures are namespaced, the SWEEP is table-wide, and vitest runs four
+    suites at once on one database — so a test sweep could expire the
+    applications `orgs.routes.test.ts` was confirming. The two suites had only
+    ever been run separately. Closed with a `gymIds` scope, which **also made
+    every count assertion EXACT**.
+  · L7 moved the clock's words to `utils/joinClock.js` — a dashboard component
+    was importing from a console PAGE module.
+
+THE INSTRUMENT FINDING IS MINE, AGAIN
+  · A fixture's `mockReturnValue(Promise.reject(…))` builds the rejected promise
+    at SETUP time and nothing handles it until the click — so vitest printed
+    **`906/906 passed`, `Errors 1`, and exited 1**. Caught by reading the EXIT
+    CODE rather than the summary (:5906). Fixed with `mockImplementation`.
+    **Second time in two days on this card that a number was believed and the run
+    behind it had not happened or had not passed.**
+
+SMOKE PASSED 10/10 (2026-08-21, DECISIONS :13174) — ONLY THE DIFF-ONLY
+RE-REVIEW IS LEFT
+  · **The `expired` arm was seen by a human for the first time.** It has existed
+    since :12343 and nothing in the product could reach it.
+  · **The last step is the one to keep and nobody designed it.** A re-apply
+    between the two runs meant the repeat met a NEW application already past its
+    deadline at the pretend date — and the sweep **flagged the gym and refused
+    to delete it in the same run** (`remindedFirst:1, expired:0,
+    heldForNotice:1`). **T3 C/H-1 in a browser, on a real row.** Luck, not
+    method (:10402).
+  · **Two sheet defects, both the SHEET's, fixed mid-run**: step 3 expected
+    wording the same round's Low-3 fix had replaced, and **step 8 described a
+    screen this card never built** (the button is FADED with the reason beside
+    it — a control that vanishes leaves a person hunting for it).
+  · **NOT established:** the nightly worker never ran. 03:30 is proven by
+    reading `worker.ts` and by nothing in that sitting.
+  · Kd asked whether the queue's "Front Desk" label is needed — his call, own
+    ⚪ line, not acted on (R1.1).
+
+GATES after the fixes
+  · sweep **18/18** real Postgres (16 before) · **all three orgs suites TOGETHER
+    89/89, exit 0** — which is what proves the L4 fix, and it took three
+    attempts: the first timed out, the second hit the join route's own 10/hour
+    rate limit because I had collapsed the fixture to ONE shared member, and the
+    third pools and rotates members under that cap. **The rate limit is
+    production behaviour and the test bends to it.**
+  · web **906/906, exit 0, no error line** · shared 48/48 · build ✓ · tsc clean ·
+    eslint clean on every changed file.
+  · Security pass clean on every axis; the reviewer independently agreed with the
+    §2.4 key-set widening. `tools/orgs-sweep.ts --now` gained a production
+    refusal, folded in rather than deferred.
+```
+
+```
+TASK: THE WAITING ROOM'S CLOCK — step 3 of 3, the join door's last piece.
+      **BUILT. NOTHING TICKS: smoke (`RUNBOOK/smoke-clock.md`) and T3 are both
+      UNRUN.** DECISIONS :12878 + index line. Implements :11385.
+
+KD RATIFIED THE THREE NUMBERS, which is the one thing this card owed him
+  · 14-day expiry · gym chased at 2 days then weekly · one nudge a day.
+  :11385 recorded them as defaults "RATIFIED AT THE CARD, not here". He was
+  asked, recommended "keep all three", and chose it. **They are RATIFIED now —
+  a later card moving one needs a fresh ruling, not a preference.**
+
+WHAT SHIPPED
+  · `modules/orgs/sweep.ts` — chase, then expire, injectable clock. On the
+    existing `rollups` queue at 03:30 UTC (the purge is 03:00).
+  · `POST /v1/orgs/applications/:id/nudge` — no gym id; the tenancy pair is
+    (application, caller).
+  · Member's card: "Expires in 13 days" + a **Remind them** button.
+    Console queue row: waiting/expiring line, a **Needs a decision** tag, and
+    "They asked again 2 hours ago".
+  · **NO MIGRATION** — step 1 wrote all three columns for this card and
+    nothing had ever read them.
+
+THE TWO THINGS A REVIEWER SHOULD LOOK AT FIRST
+  · **The ordering rule is enforced TWICE** (sequence + the expiry's own
+    WHERE). If the worker never runs, nothing expires — the safe direction.
+  · **"Was it ever chased" is NOT enough, and the tests found it, not me.**
+    A worker down for the fortnight would flag every overdue row and delete it
+    in the same run — the gym told and given zero seconds, i.e. the forbidden
+    outcome reached through the rule's own wording. The expiry asks whether the
+    flag went up IN TIME. ~~two arms, and dropping either breaks something
+    real. Dropping arm 1 → a late-flagged row can never die at all.~~ **STRUCK —
+    and it was BACKWARDS as well as false: dropping arm TWO is what would strand
+    a late-flagged row, and arm ONE was dead code. See round 2 Low-1 and round 3
+    Low-2.**
+  · Related and non-obvious: the FIRST chase fires on overdue rows and the
+    WEEKLY one deliberately does not. Re-flagging a row due to die tonight
+    moves its stamp past the deadline and pushes the deletion back — a reminder
+    extending the wait it reminds about.
+
+DECISIONS NOT TO RE-DERIVE
+  · The once-a-day limit is a DATABASE COLUMN compared inside the writing
+    statement, not a Redis counter. A dropped counter elsewhere is a retry;
+    here it is a second reminder the ruling says nobody gets.
+  · `decided_at` stays NULL on an expiry (nobody decided;
+    `coalesce(decided_at, expires_at)` already reads this row).
+  · The expiry's audit row has `actor_user_id = NULL` — first mutation in the
+    product with no human. `insertAudit` widened to `string | null`.
+  · Both new contract fields are `.default(null)` for :12660's reason, each
+    with a test through the REAL parser (:12731 rule 4 — the render tests mock
+    `orgService` wholesale and never reach the schema).
+  · **The §2.4 key-set guard FIRED and was widened with its argument written
+    into the test**, not waved through. The list stays exact.
+
+THE AUDIT FOUND MY OWN TEST, and it is the part to read
+  · **8 mutants · 7 RED · 1 ALIVE.** O51 — the expiry dropping its
+    `status = 'pending'` filter — changed nothing observable. **The shipped code
+    was right; the test could not see it.** `leaves decided applications alone`
+    rejected a FRESH application, and a never-chased row is excluded by
+    `gym_notified_at IS NOT NULL` whatever its status — so the guarantee was
+    carried by a DIFFERENT guard and the filter could have been deleted with the
+    suite green. :5104 F5's shape, in a test instead of a fix.
+  · Closed with TWO tests that chase the gym FIRST. **The CONFIRMED one is the
+    sharp one:** a confirmed application keeps its own `expires_at`, so without
+    the filter a training member's row becomes `expired` — which RE-OPENS
+    :12518 C/H-1, because `listApplicationsForUser` withholds a stale refusal
+    only while a later application reached `confirmed`. O51's FILTER moved with
+    the fix (:11846). Re-run RED.
+  · **Two instrument findings, both from not trusting a number.** The first
+    sweep ABORTED on a control filter that matches a real green test — transient
+    DB blip, identical filter GREEN on re-run (:11846's precedent, not a defect).
+    And **the O51 re-run reported `HARNESS_EXIT=1` having never executed** (a
+    `cd apps/api` in a shell already there; the log held only the exit code),
+    caught by reading the OUTPUT — :5906/:5199 again.
+
+GATES
+  · sweep **16/16** real Postgres (15 before the audit's fix) · orgs.routes +
+    orgs.unit **71/71** · web **905/905** (876 before) · shared **48/48** ·
+    `vite build` ✓ · tsc clean on api and shared · eslint **zero problems across
+    all fourteen changed files** (no file this card touches carries a
+    pre-existing error — said precisely, per :12343 r1's imprecision).
+  · Mutation **O48–O55 added** (own `sweep` target and `SWEEP_SUITE`): 7 RED
+    first pass, O51 fixed and re-run RED, **0 ALIVE · 0 never ran**, restores
+    sha256-verified, source verified free of any leftover mutant. A SUBSET run
+    and the harness prints that it is one.
+
+STILL OPEN, all with `OWED.md` lines
+  · **Nobody is TOLD when a request expires** — the existing notifications line
+    is widened; this is its strongest case, because the other two silent events
+    follow a human's tap and this one follows nothing.
+  · **The sweep has no batch limit** — new ⚪ line, with the honest cost: at
+    scale the UPDATE locks the rows a front desk may be confirming, and 03:30
+    UTC is 09:00 in Jorhat.
+  · Unchanged: the poster link losing its code through login · RESTORE · a
+    removal-reason column · the page-level render harness · the `/orgs/mine`
+    snapshot's untested guarantee · CHECK STRIPE before P3.5.
+
+NEXT
+  1. **Kd runs `RUNBOOK/smoke-clock.md`** (9 steps; needs a third terminal for
+     the `--now` command, which is what makes a fortnight take ten seconds).
+  2. T3 in a FRESH chat — `t3-waiting-room-clock-r1-PROMPT.md` +
+     `t3-waiting-room-clock-r1.diff` (27 files). The prompt aims the reviewer at
+     the expiry guard's two arms and asks them to write mutants of their own
+     (:12227 — a reviewer who only re-runs the author's harness inherits the
+     author's blind spots, which is precisely how O51 got through my first pass).
+```
+
+
+```
 TASK: THE JOIN DOOR, STEP 2 — **DONE AND TICKED.** Kd ran smoke step 14b and
       reported passed. `OWED.md`'s "no screen anywhere lets a member type a
       gym's join code" is ticked against commit `c9435d7`. Entry :12832.

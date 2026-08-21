@@ -837,9 +837,34 @@ d("orgs routes (real Postgres)", () => {
     expect(page.pendingCount).toBe(1);
     // Part 3 §2.4: an applicant is not a member, and the shape is no wider
     // than the roster's. A field added here reaches a gym-facing screen.
+    //
+    // **WIDENED 2026-08-20 BY THE WAITING ROOM'S CLOCK, DELIBERATELY — and the
+    // fact that this list had to be edited is the guard WORKING.** It exists to
+    // make a widening a decision somebody wrote down rather than something that
+    // happens, so the §2.4 reasoning for the two new keys is here:
+    //   · `gymNotifiedAt` is a fact about what THIS APP did toward this gym
+    //     (whether the row has been flagged for their attention). It reveals
+    //     nothing whatever about the person.
+    //   · `nudgedAt` is a fact about an action the applicant took TOWARD THIS
+    //     GYM — the equivalent of them ringing the front desk. §2.4's boundary
+    //     is about a person's TRAINING AND HEALTH data (meals, weight, coach
+    //     chats, routes, anything before joining or after leaving); when they
+    //     last asked this gym to look at their own request is none of that.
+    // Neither is on the never-see list, and both are already known to the gym
+    // in substance. The list stays EXACT so the next addition gets the same
+    // argument rather than a free pass.
     for (const item of page.items) {
       expect(Object.keys(item).sort()).toEqual(
-        ["appliedAt", "displayName", "expiresAt", "groupLabel", "id", "userId"].sort(),
+        [
+          "appliedAt",
+          "displayName",
+          "expiresAt",
+          "groupLabel",
+          "gymNotifiedAt",
+          "id",
+          "nudgedAt",
+          "userId",
+        ].sort(),
       );
     }
 

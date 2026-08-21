@@ -25,6 +25,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       join: vi.fn(),
       getMyApplications: vi.fn(),
       getMine: vi.fn(),
+      nudgeApplication: vi.fn(),
     },
   };
 });
@@ -52,6 +53,22 @@ const APPLICATION = {
   appliedAt: '2026-08-19T09:00:00.000Z',
   expiresAt: '2026-09-02T09:00:00.000Z',
   decidedAt: null,
+  nudgedAt: null,
+};
+
+/** Stand the clock at a fixed instant, so "Expires in 13 days" is a fact rather
+ *  than something that drifts as the calendar moves. A test whose expected
+ *  string depends on the day it runs is one that will fail some morning for a
+ *  reason nobody can find.
+ *
+ *  `shouldAdvanceTime` is load-bearing, not decoration: `findBy*` and `waitFor`
+ *  poll on real timers, so a frozen clock hangs them until the suite's own
+ *  timeout — which is what the first draft of these two tests did. Time still
+ *  moves; it just starts here. */
+const NOW = new Date('2026-08-20T09:00:00.000Z');
+const standAt = (when) => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(when);
 };
 
 const ok = (data) => Promise.resolve({ data });
@@ -78,8 +95,12 @@ beforeEach(() => {
   orgService.join.mockReset();
   orgService.getMyApplications.mockReset();
   orgService.getMine.mockReset();
+  orgService.nudgeApplication.mockReset();
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe('the join panel', () => {
   it('SHOWS THE §2.4 SHEET BEFORE ANYTHING IS TYPED — every line of it', () => {
@@ -111,11 +132,18 @@ describe('the join panel', () => {
     expect(screen.getByText(/what iron house can see/i)).toBeTruthy();
   });
 
-  it('PROMISES NOTHING THE APP CANNOT DO: no email, no expiry, no countdown', async () => {
-    // Email does not exist — `EmailSender` logs an event name and sends
-    // nothing. Nothing expires either: every application carries a 14-day date
-    // and no code reads it yet. Both would be reassuring and both would be
-    // false, which is the class this project treats as Critical.
+  it('PROMISES NO EMAIL, and leaves the countdown to the card that owns it', async () => {
+    // EMAIL STILL DOES NOT EXIST — `EmailSender` logs an event name and sends
+    // nothing — so a "we'll email you" here would be false, which is the class
+    // this project treats as Critical.
+    //
+    // **THE EXPIRY HALF OF THIS TEST CHANGED MEANING ON 2026-08-20 and the old
+    // comment is corrected rather than left standing.** It used to read "no
+    // code reads that date yet", which is no longer true: the sweep reads it,
+    // and the member's own card now shows the countdown. What this assertion
+    // pins TODAY is that the countdown lives in ONE place — the card, off the
+    // server's `expiresAt` — instead of being re-derived by a second screen
+    // that could quote a different date.
     orgService.join.mockReturnValue(ok({ outcome: 'pending', org: ORG, application: APPLICATION }));
     draw(<JoinGymPanel />);
     fireEvent.change(screen.getByLabelText(/your gym's code/i), { target: { value: 'K7QM2X' } });
@@ -441,5 +469,172 @@ describe('the gym card on the dashboard', () => {
     const { container } = draw(<GymMembershipCard />);
     await waitFor(() => expect(orgService.getMine).toHaveBeenCalled());
     expect(container.textContent).toBe('');
+  });
+
+  // ── the waiting room's clock, on the member's side (:11385, step 3) ──────
+  //
+  // The clock is PINNED in these, because a countdown asserted against the real
+  // calendar is a test that changes its own expected value every day.
+
+  it('says WHEN the request runs out, and that asking again is free', async () => {
+    standAt(NOW);
+    orgService.getMyApplications.mockReturnValue(
+      ok({ applications: [{ ...APPLICATION, org: ORG }] }),
+    );
+    orgService.getMine.mockReturnValue(ok({ orgs: [] }));
+    draw(<GymMembershipCard />);
+
+    // 20 Aug → 2 Sep is thirteen days. The number is the SERVER'S `expiresAt`
+    // read through the same helper the gym's own queue uses, so the two screens
+    // cannot quote different deadlines for one request.
+    expect(await screen.findByText(/expires in 13 days/i)).toBeTruthy();
+    // The reassurance that makes an expiry cost seconds rather than a place —
+    // :11385 made re-applying free for exactly this reason.
+    expect(screen.getByText(/enter the code again/i)).toBeTruthy();
+  });
+
+  it('sends the reminder and says the gym can SEE it — never that a message was sent', async () => {
+    orgService.getMyApplications.mockReturnValue(
+      ok({ applications: [{ ...APPLICATION, org: ORG }] }),
+    );
+    orgService.getMine.mockReturnValue(ok({ orgs: [] }));
+    orgService.nudgeApplication.mockReturnValue(
+      ok({
+        status: 'sent',
+        nudgedAt: '2026-08-20T09:00:00.000Z',
+        nextNudgeAt: '2026-08-21T09:00:00.000Z',
+      }),
+    );
+    standAt(NOW);
+    draw(<GymMembershipCard />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /remind them/i }));
+    await waitFor(() => expect(screen.getByText(/still waiting/i)).toBeTruthy());
+    // It addresses the APPLICATION, not the gym.
+    expect(orgService.nudgeApplication).toHaveBeenCalledWith('app-1');
+    // T3 r1 Low-2: the sentence reads the server's own `nextNudgeAt` rather
+    // than the constant it used to print. Here they agree — 24 hours out is
+    // "tomorrow" — and the test below is the one where they do NOT.
+    expect(screen.getByText(/again tomorrow/i)).toBeTruthy();
+
+    // THE PROMISE IT MUST NOT MAKE. There is no email and no push, so the
+    // reminder arrives as a mark on the front desk's queue and nowhere else.
+    const text = document.body.textContent ?? '';
+    expect(text).not.toMatch(/email/i);
+    expect(text).not.toMatch(/notified|notification/i);
+    expect(text).not.toMatch(/we've sent|message sent/i);
+  });
+
+  it('treats "already sent today" as a SUCCESS, not something to retry', async () => {
+    // The gym has been told either way, which is what the person wanted to
+    // know. Reporting it as a failure would send them to try again over
+    // something that already worked.
+    orgService.getMyApplications.mockReturnValue(
+      ok({ applications: [{ ...APPLICATION, org: ORG }] }),
+    );
+    orgService.getMine.mockReturnValue(ok({ orgs: [] }));
+    orgService.nudgeApplication.mockReturnValue(
+      ok({
+        status: 'already_sent',
+        // Yesterday at 13:00, so the next slot is 13:00 TODAY — four hours
+        // from the pinned clock.
+        nudgedAt: '2026-08-19T13:00:00.000Z',
+        nextNudgeAt: '2026-08-20T13:00:00.000Z',
+      }),
+    );
+    standAt(NOW);
+    draw(<GymMembershipCard />);
+    fireEvent.click(await screen.findByRole('button', { name: /remind them/i }));
+
+    await waitFor(() => expect(screen.getByText(/still waiting/i)).toBeTruthy());
+    expect(document.body.textContent).not.toMatch(/couldn't|try again/i);
+    // **THIS IS THE ASSERTION T3 r1 Low-2 IS ABOUT.** The screen used to print
+    // "again tomorrow" from a constant while `nextNudgeAt` — the field added so
+    // the client would never invent a time — went unread. On this arm the true
+    // answer is LATER TODAY, and the old wording was simply wrong.
+    expect(screen.getByText(/again later today/i)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/again tomorrow/i);
+  });
+
+  it('SAYS why the button is unavailable rather than greying it out in silence', async () => {
+    standAt(NOW);
+    orgService.getMyApplications.mockReturnValue(
+      ok({
+        applications: [
+          // Reminded YESTERDAY at 13:00 — twenty hours ago, so still inside the
+          // ratified day, and the next slot is 13:00 TODAY rather than
+          // tomorrow. Chosen that way on purpose: it exercises the disabled
+          // branch AND the case where "tomorrow" would have been wrong.
+          { ...APPLICATION, nudgedAt: '2026-08-19T13:00:00.000Z', org: ORG },
+        ],
+      }),
+    );
+    orgService.getMine.mockReturnValue(ok({ orgs: [] }));
+    draw(<GymMembershipCard />);
+
+    // T3 r1 Low-1: this used to read "you reminded them TODAY", a claim about
+    // the calendar the 24-hour rule does not make — a nudge at 23:00 Monday
+    // seen at 09:00 Tuesday printed something simply false.
+    expect(await screen.findByText(/reminded them in the last day/i)).toBeTruthy();
+    // And the next slot comes off the SERVER's interval, not a constant:
+    // 08:00 + 24 h against a 09:00 clock is later TODAY, never "tomorrow".
+    expect(screen.getByText(/again later today/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /remind them/i }).disabled).toBe(true);
+  });
+
+  it('offers no reminder on a row with nothing to remind about', async () => {
+    // A member and a removed person have no pending application, so the button
+    // would address nothing at all.
+    orgService.getMyApplications.mockReturnValue(ok({ applications: [] }));
+    orgService.getMine.mockReturnValue(
+      ok({ orgs: [{ ...ORG, staffRole: null, isMember: true, joinedAt: null }] }),
+    );
+    draw(<GymMembershipCard />);
+    await screen.findByText(/you're a member of iron house/i);
+    expect(screen.queryByRole('button', { name: /remind them/i })).toBeNull();
+  });
+
+  it('reports a failed reminder honestly, and keeps the button', async () => {
+    orgService.getMyApplications.mockReturnValue(
+      ok({ applications: [{ ...APPLICATION, org: ORG }] }),
+    );
+    orgService.getMine.mockReturnValue(ok({ orgs: [] }));
+    // **`mockImplementation`, NOT `mockReturnValue` — and the difference made
+    // the whole suite exit non-zero while reporting 906/906 GREEN.**
+    // `mockReturnValue(Promise.reject(…))` builds the rejected promise HERE, at
+    // setup time, and nothing attaches a handler until the click several lines
+    // below — so Node reports an unhandled rejection and vitest exits 1 with an
+    // "Errors 1" line under a passing summary. The sibling fixtures get away
+    // with `mockReturnValue` because the card consumes those on mount, in the
+    // same tick. Built at CALL time, there is no gap.
+    orgService.nudgeApplication.mockImplementation(() =>
+      Promise.reject(new Error('Network Error')),
+    );
+    draw(<GymMembershipCard />);
+    fireEvent.click(await screen.findByRole('button', { name: /remind them/i }));
+
+    await waitFor(() => expect(screen.getByText(/couldn't reach the server/i)).toBeTruthy());
+    // A dropped request reminded nobody, so the way back must stay on screen.
+    expect(screen.getByRole('button', { name: /remind them/i })).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/still waiting/i);
+  });
+
+  it('TELLS somebody their request ran out — the arm nothing could reach before this card', async () => {
+    // `expired` has been in the contract since step 2 and no path in the
+    // product could produce it: the column was stamped and never read. The
+    // sweep is what makes this reachable, and the wording is deliberately NOT
+    // the refusal's — nobody turned this person away.
+    orgService.getMyApplications.mockReturnValue(
+      ok({ applications: [{ ...APPLICATION, status: 'expired', org: ORG }] }),
+    );
+    orgService.getMine.mockReturnValue(ok({ orgs: [] }));
+    draw(<GymMembershipCard />);
+
+    expect(
+      await screen.findByText(/your request to iron house expired before anyone confirmed it/i),
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/didn't confirm/i);
+    // Asking again is the whole point of a free re-apply.
+    expect(screen.getByRole('link', { name: /try again/i }).getAttribute('href')).toBe('/org/join');
   });
 });

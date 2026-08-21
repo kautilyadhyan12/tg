@@ -7,7 +7,8 @@
   },
   "scripts": {
     "typecheck": "turbo run typecheck",
-    "lint": "turbo run lint --filter=!web",
+    "lint": "node apps/api/scripts/check-harnesses.mjs && turbo run lint --filter=!web",
+    "_lint:harness_why": "T3 round 5, Low-6. The harness parse check used to be a step inside api's own lint script, where it inherited that task's turbo cache — 172 inputs, NONE outside apps/api (measured with `turbo run lint --dry=json`). So breaking any of the 16 harnesses that live in apps/web, packages/ or root tools/ left the cache valid and a warm `turbo run lint` replayed a pass without ever running the check. Rounds 2 and 3 were harness-only fix rounds, i.e. exactly the case it misses. It runs HERE, before turbo, so no cache can decide whether it happened. The check itself explains what it guards (apps/api/scripts/check-harnesses.mjs).",
     "test": "turbo run test",
     "build": "turbo run build"
   },

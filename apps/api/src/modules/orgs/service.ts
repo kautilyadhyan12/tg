@@ -13,6 +13,7 @@ import {
   joinOrgResponseSchema,
   myOrgApplicationsResponseSchema,
   myOrgsResponseSchema,
+  nudgeApplicationResponseSchema,
   orgApplicationPageSchema,
   orgCodesResponseSchema,
   orgMemberPageSchema,
@@ -27,6 +28,7 @@ import type {
   JoinOrgResponse,
   MyOrgApplicationsResponse,
   MyOrgsResponse,
+  NudgeApplicationResponse,
   OrgApplication,
   OrgApplicationListQuery,
   OrgApplicationPage,
@@ -183,6 +185,7 @@ function toApplication(app: repo.ApplicationRow): OrgApplication {
     appliedAt: app.appliedAt.toISOString(),
     expiresAt: app.expiresAt.toISOString(),
     decidedAt: app.decidedAt === null ? null : app.decidedAt.toISOString(),
+    nudgedAt: app.nudgedAt === null ? null : app.nudgedAt.toISOString(),
   };
 }
 
@@ -267,6 +270,54 @@ export async function listMyApplications(
       org: toOrgSummary(r.org),
     })),
   });
+}
+
+/** "REMIND THEM" — :11385's third mechanic, the only one the waiting person
+ *  sets off themselves, and the one that stops the door being a place you shout
+ *  into.
+ *
+ *  **No org authorization, for the same reason `listMyApplications` has none:**
+ *  this is the caller's own row, scoped by `user_id` in the repo's WHERE. It
+ *  asks nothing about a gym, so it does not go through `requirePrivilege` —
+ *  the applicant is not staff of the gym they are trying to get into.
+ *
+ *  **No entitlement bust either.** Reminding a gym grants nobody anything;
+ *  that is the point of the whole waiting room (:11072). */
+export async function nudgeMyApplication(
+  deps: OrgsDeps,
+  userId: string,
+  applicationId: string,
+): Promise<NudgeApplicationResponse> {
+  const outcome = await repo.nudgeApplication(deps.sql, { applicationId, userId });
+
+  switch (outcome.kind) {
+    case "sent":
+    case "too_soon":
+      // ONE SHAPE FOR BOTH, and the arm name is the only difference. The
+      // screen's sentence — "we've let them know, you can do this again
+      // tomorrow" — is true either way, and giving the client the times means
+      // it never computes a date of its own (:1110's habit: the server sends,
+      // the client renders).
+      return nudgeApplicationResponseSchema.parse({
+        status: outcome.kind === "sent" ? "sent" : "already_sent",
+        nudgedAt: outcome.nudgedAt.toISOString(),
+        nextNudgeAt: outcome.nextNudgeAt.toISOString(),
+      });
+    case "not_found":
+      // The module's standing 404: somebody else's application must not be
+      // distinguishable from one that never existed.
+      throw new OrgsError(404, "application_not_found", "That request is no longer waiting.");
+    case "not_pending":
+      throw new OrgsError(
+        409,
+        `application_${outcome.status}`,
+        outcome.status === "confirmed"
+          ? "You're already a member of this gym."
+          : "That request has already been dealt with. You can ask again whenever you like.",
+      );
+    default:
+      return assertNever(outcome);
+  }
 }
 
 /** THE PERMISSION SEAM (Kd ruling 2026-08-19, :11429).
@@ -462,6 +513,8 @@ export async function listOrgApplications(
       appliedAt: a.appliedAt.toISOString(),
       expiresAt: a.expiresAt.toISOString(),
       groupLabel: a.groupLabel,
+      gymNotifiedAt: a.gymNotifiedAt === null ? null : a.gymNotifiedAt.toISOString(),
+      nudgedAt: a.nudgedAt === null ? null : a.nudgedAt.toISOString(),
     })),
     nextCursor: page.nextCursor,
     pendingCount: page.pendingCount,

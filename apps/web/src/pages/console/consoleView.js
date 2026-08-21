@@ -287,3 +287,13 @@ export const ORG_TYPE_CHOICES = [
   { value: 'gym', label: 'Gym', hint: 'A gym or fitness centre with members' },
   { value: 'studio', label: 'Studio', hint: 'A boutique or personal-training studio' },
 ];
+
+/** THE CLOCK'S WORDS LIVE IN `utils/joinClock.js` and are re-exported here.
+ *
+ *  T3 round 1, Low-7: they were written in this file and the member's DASHBOARD
+ *  card imported them from it, which says the wrong thing about what depends on
+ *  what. Moved rather than duplicated — one function for both screens is what
+ *  stops the gym's queue and the member's card quoting different deadlines for
+ *  one request. The re-export keeps this module's own consumers (and its tests)
+ *  pointing at one name. */
+export { expiresInLabel, nudgedLabel, waitingForLabel } from '../../utils/joinClock';
