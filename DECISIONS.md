@@ -13799,3 +13799,120 @@ coin toss with a citation.**
 **OWED:** a line for the seed race. The fix is isolating the seed-asserting
 suites (a schema or database per worker, or running those two files alone),
 **never a worker count** — that was already tried here and disproven.
+
+## A GYM CAN FINALLY CHANGE ITS OWN JOIN CODE (server half) — and the refusals it reaches were built long ago (2026-08-21)
+
+**Read before touching `modules/orgs/codes`-anything, before adding a route that
+checks a code, before adding a second reader of `gym_codes`, and before putting
+a name box on a join code.**
+
+**KD RULING — NO NAMES ON CODES.** Shown a plan whose create form asked for a
+label ("Morning Batch") he answered *"this kind of names not needed men"*, and
+confirmed after being given the cost in one line: a label is Part 3 §2.1's GROUP
+mechanism, so without it a gym cannot tell its cohorts apart later and §2.3's
+trainer-scoping-to-group has nothing to scope to. **The COLUMN is untouched and
+keeps its `'Front Desk'` default** — narrowed at the door, never deleted from the
+database, the same shape as the clinic narrowing at `createOrgTypeSchema`.
+Re-opening it is one optional field in the request schema and no migration.
+
+**WHAT WAS ACTUALLY MISSING IS NARROWER THAN IT LOOKS, and this is the finding
+worth carrying.** `applyByCode` has refused **paused**, **expired** and
+**exhausted** codes since the join door was built, with all four columns present
+since `0001_init`. So none of the enforcement is new. What did not exist was any
+way for a gym to REACH those states: a gym got one code at creation, minted
+unlimited and eternal, with no route to change it (:11023 recorded exactly this
+and called it "today's first code is minted unlimited and eternal with no route
+to change it"). **Three routes, no migration, and the state machine untouched.**
+
+Routes: `POST /v1/orgs/:gymId/codes` · `PATCH /v1/orgs/:gymId/codes/:code` ·
+`POST /v1/orgs/:gymId/codes/:code/rotate`.
+
+**Decisions not to re-derive.**
+- **`codes.manage` is a NEW privilege and is deliberately NOT `codes.invite`.**
+  §2.2 has two rows one line apart meaning opposite things — "Invite (share code
+  / print poster)" for all three roles, "Create / rotate / expire codes" for
+  owner and manager. Merging them would widen a trainer's power under cover of a
+  read they already had. A trainer reads 200 and writes 403, asserted.
+- **TENANCY IS THE PAIR (gym, code), never the code alone.** A code is globally
+  unique, so `WHERE code = $1` would have worked and would have let one gym's
+  manager pause another gym's poster — the textbook IDOR hiding behind a column
+  that happens to be unique. Mutant **O58** is that exact deletion.
+- **ROTATE IS ONE ROUTE AND ONE TRANSACTION** because the halves fail
+  independently: pause the old code, drop the connection, and the gym has NO
+  working code — the state `createOrgAttempt` opens a transaction to prevent. It
+  is a POST to a sub-path and not a flag on the PATCH because it CREATES a row
+  and is not idempotent; burying that in a patch is how a retry doubles a gym's
+  codes.
+- **The rotated-in code carries the old one's LABEL and NONE of its
+  restrictions.** Copying the expiry forward hands back a code that is already
+  dead; copying `max_uses` forward one that is already exhausted — from the call
+  whose entire purpose is producing something usable.
+- **A limit BELOW the live `uses` is REFUSED, and the refusal names the count.**
+  Storing it would print "Fully used" over a change the owner read as "let ten
+  more in". `maxUses: 0` is a 400 from the schema (`.min(1)`) — a limit of zero
+  is pause wearing a number.
+- **An end date in the PAST is refused rather than stored**, compared against the
+  SERVER's clock. Storing it "works" and produces a code that has never once been
+  joinable, under a screen that just said it was created. Pause is the control
+  that means off NOW.
+- **`expiresAt: null` on a PATCH means "never expires" and must NOT be run past
+  the future check** — refusing it would leave an owner unable to undo a date
+  they had just set. Only a value the caller actually SENT is validated, which is
+  what makes this a PATCH rather than a PUT.
+- **An empty PATCH body is a 400.** A 200 that changed nothing reads — on screen
+  and in the audit row it would write — exactly like a change that landed.
+- **Collision retry reuses `OrgNameTakenError`**, the typed error
+  `createOrgAttempt` already throws, rather than a second `code_taken` outcome
+  arm. The first draft used the arm and needed an `as T` cast in the retry
+  helper — R2.2 forbids it, and the existing precedent was better than the thing
+  written to avoid it.
+- **NO PER-ROUTE RATE LIMIT, stated rather than skipped.** The two limited routes
+  in this module (apply, nudge) are reachable by any signed-in stranger holding
+  six characters; every route here first proves the caller is STAFF of this gym,
+  which a script cannot pass. What an abusive owner can do to their own gym is
+  bounded by the code cap.
+
+**THE AUDIT'S SURVIVOR IS THE PART TO READ, and it was mine. 6 mutants · 5 RED ·
+1 ALIVE on the first run.** **O61** — rotate copying the old code's expiry
+forward — survived a test that *looked* like it covered exactly that: it asserted
+the new code's `expiresAt` was null, but the fixture rotated the gym's ORIGINAL
+code, which has no expiry, so the mutant copied `null` to `null` and changed
+nothing observable. **The FIXTURE was the hole, not the assertion** (:5104 F5,
+:7487's shape). Closed by giving the old code both restrictions before rotating;
+re-run RED, and `replaced` is now asserted to genuinely carry them so neither
+half can go vacuous again.
+
+**AND THE HARNESS CAUGHT MY OWN DRIFT BEFORE A BYTE WAS WRITTEN.** Folding
+`listCodes`' inline mapper into a shared `toCodeRow` moved the line **O23** was
+anchored to, so the whole-table pre-check ABORTED the sweep rather than reporting
+a false ALIVE — the guard from :11846/:10726 working, sixth occurrence of that
+class. Re-anchored, re-measured RED. **Its REACH widened and the entry says so:**
+it used to be evidence about the READ alone; `toCodeRow` now serves the read and
+all three writers, so one line carries the guarantee for four callers — broader,
+and truer, because there is no second spelling left to drift.
+
+**Two defects of mine in the tests, both found by running them.** Three fixture
+users collided by name with the existing SEAT-cap test's (`cap-owner` /
+`cap-first` / `cap-second`), so `register` answered 400 and the failure named
+`makeUser` rather than its subject; renamed to `codelimit-*`. And the audit test
+ordered by `created_at`, a column `audit_log` does not have — it is `at`, and the
+test now orders by the identity `id` anyway, because three writes inside one test
+can share a timestamp to the microsecond.
+
+**PROVE:** api **549/549 across 44 files** on real Postgres (local, per :13659) ·
+tsc clean · eslint clean on `src test tools` · harness parse-check clean ·
+**6 new mutants (O58–O63) all RED after the O61 fix, plus O23 re-anchored and
+re-measured RED**, control GREEN on every filter first, restores sha256-verified,
+tree clean after (only the seven intended files modified).
+
+**NOTHING TICKS — THERE IS NO SCREEN.** No console page calls any of the three
+routes, so a gym owner still cannot do any of this: the same shape as :11846,
+where the join endpoint existed for a day with no caller. **The web half is the
+next card and carries the SMOKE gate; T3 is UNRUN.**
+
+**OWED:** a code can be turned OFF but never DELETED. `ORG_CODES_MAX` is 100,
+derived from the `listCodes` ceiling so the list is provably whole rather than
+truncated, and retired codes count toward it. The refusal tells an owner to
+delete one, which nothing can do. Deliberate: a delete has to decide what happens
+to `gym_members.code_id` — the group attribution every membership carries — and
+that is a ruling, not a chat's guess.

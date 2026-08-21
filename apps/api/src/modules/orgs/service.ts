@@ -2,7 +2,7 @@
 // code, list mine, read the roster. Authorization decisions live here (R3.3
 // step 3); the repo enforces tenancy in every WHERE and the routes stay thin.
 import type { Sql } from "postgres";
-import { currencyForCountry } from "@app/shared";
+import { JOIN_CODE_LENGTH, currencyForCountry } from "@app/shared";
 import { bustEntitlements } from "../entitlements/service.js";
 import type { RedisLike } from "../../redis.js";
 import { codeFromBytes, normaliseCode, slugCandidate, slugifyName } from "./codes.js";
@@ -15,13 +15,16 @@ import {
   myOrgsResponseSchema,
   nudgeApplicationResponseSchema,
   orgApplicationPageSchema,
+  orgCodeMutationResponseSchema,
   orgCodesResponseSchema,
   orgMemberPageSchema,
   rejectApplicationResponseSchema,
   removeMemberResponseSchema,
+  rotateOrgCodeResponseSchema,
 } from "./schemas.js";
 import type {
   ConfirmApplicationResponse,
+  CreateOrgCodeRequest,
   CreateOrgRequest,
   CreateOrgResponse,
   JoinOrgRequest,
@@ -32,6 +35,8 @@ import type {
   OrgApplication,
   OrgApplicationListQuery,
   OrgApplicationPage,
+  OrgCode,
+  OrgCodeMutationResponse,
   OrgCodesResponse,
   OrgMemberListQuery,
   OrgMemberPage,
@@ -39,6 +44,8 @@ import type {
   OrgSummary,
   RejectApplicationResponse,
   RemoveMemberResponse,
+  RotateOrgCodeResponse,
+  UpdateOrgCodeRequest,
 } from "./schemas.js";
 
 /** Typed failure for the central error mapper (R8.1); messages are authored
@@ -345,6 +352,7 @@ export async function nudgeMyApplication(
 export const ORG_PRIVILEGES = [
   "members.read",
   "codes.invite",
+  "codes.manage",
   "members.confirm",
   "members.remove",
 ] as const;
@@ -371,10 +379,18 @@ export type OrgPrivilege = (typeof ORG_PRIVILEGES)[number];
  *  and manager, never trainer (the matrix hides Remove from a trainer by name,
  *  §4.3). It sits beside `members.confirm` because they are the same power in
  *  two directions, and Kd's ruling of 2026-08-19 is that the second direction
- *  has to exist at all: confirming somebody was a one-way door until it did. */
+ *  has to exist at all: confirming somebody was a one-way door until it did.
+ *
+ *  `codes.manage` is §2.2's "Create / rotate / expire codes" row LITERALLY —
+ *  owner and manager, never trainer — and it is DELIBERATELY NOT the same tick
+ *  as `codes.invite`, which the same matrix grants to all three. The two rows
+ *  are one line apart in §2.2 and mean opposite things: a trainer handing a
+ *  member the poster is inviting; a trainer switching the gym's door off is not
+ *  something the matrix ever granted. Merging them would silently widen a
+ *  trainer's power under cover of a read they already had. */
 const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>> = {
-  owner: ["members.read", "codes.invite", "members.confirm", "members.remove"],
-  manager: ["members.read", "codes.invite", "members.confirm", "members.remove"],
+  owner: ["members.read", "codes.invite", "codes.manage", "members.confirm", "members.remove"],
+  manager: ["members.read", "codes.invite", "codes.manage", "members.confirm", "members.remove"],
   trainer: ["members.read", "codes.invite"],
 };
 
@@ -481,6 +497,201 @@ export async function listOrgCodes(
       uses: c.uses,
     })),
   });
+}
+
+function toOrgCode(row: repo.CodeRow): OrgCode {
+  return {
+    code: row.code,
+    label: row.label,
+    paused: row.paused,
+    expiresAt: row.expiresAt === null ? null : row.expiresAt.toISOString(),
+    maxUses: row.maxUses,
+    uses: row.uses,
+  };
+}
+
+/** An expiry in the PAST is refused rather than stored.
+ *
+ *  Storing it would "work" — the join path compares `expires_at` to now and
+ *  would refuse everybody — but the owner who mistyped a year would be handed a
+ *  code that has never once been usable, under a screen that just told them it
+ *  was created. Pause is the control that means OFF NOW, and it is one tap away.
+ *
+ *  Compared against the SERVER's clock, deliberately: the client's is a value a
+ *  caller controls, and an expiry is what decides whether a stranger with a
+ *  leaked code still gets in. */
+function assertFutureExpiry(expiresAt: string | null): Date | null {
+  if (expiresAt === null) return null;
+  const at = new Date(expiresAt);
+  if (at.getTime() <= Date.now()) {
+    throw new OrgsError(
+      400,
+      "expiry_in_past",
+      "That end date has already passed. Pick a later one, or pause the code to switch it off now.",
+    );
+  }
+  return at;
+}
+
+/** Mint a code the database will accept, retrying a collision.
+ *
+ *  Codes are globally unique (`gym_codes_code_unique`, `0001_init`), so a clash
+ *  with ANY gym's code is possible — vanishingly rare across 32^6 ≈ 1.07 billion
+ *  values, and handled rather than trusted. `createOrgAttempt`'s own retry is
+ *  the precedent; five attempts turns a genuinely broken constraint into a 503
+ *  instead of a spin. */
+async function mintCode<T>(deps: OrgsDeps, attempt: (code: string) => Promise<T>): Promise<T> {
+  for (let i = 0; i < CREATE_ATTEMPTS; i++) {
+    try {
+      return await attempt(codeFromBytes(deps.randomBytes(JOIN_CODE_LENGTH)));
+    } catch (err) {
+      // The SAME typed error `createOrg` retries on, thrown by the same repo for
+      // the same constraint. Anything else is a real failure and travels on
+      // untouched — a bare `catch { continue }` here would swallow a broken
+      // database into a 503 five attempts later.
+      if (err instanceof repo.OrgNameTakenError) continue;
+      throw err;
+    }
+  }
+  throw new OrgsError(
+    503,
+    "code_create_unavailable",
+    "Could not make a new code just now. Please try again.",
+  );
+}
+
+/** WHO MAY CHANGE A CODE — and it is NOT who may share one.
+ *
+ *  §2.2 has two separate rows and this card keeps them separate: "Invite (share
+ *  code / print poster)" is granted to owner, manager AND trainer, which is what
+ *  `codes.invite` guards on the READ. "Create / rotate / expire codes" is owner
+ *  and manager only — a trainer may hand somebody the poster and may not switch
+ *  the gym's door off.
+ *
+ *  Added to `ORG_PRIVILEGES` rather than checked as a role name, per :11429: no
+ *  route in this module asks "is this person a manager", so the staff card can
+ *  later widen this to one trainer with a tick instead of a migration of
+ *  call sites. */
+export async function createOrgCode(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+  req: CreateOrgCodeRequest,
+): Promise<OrgCodeMutationResponse> {
+  await requirePrivilege(deps, gymId, userId, "codes.manage");
+  const expiresAt = assertFutureExpiry(req.expiresAt);
+
+  const outcome = await mintCode(deps, (code) =>
+    repo.createCode(deps.sql, {
+      gymId,
+      code,
+      // KD RULING 2026-08-21: no name box. The COLUMN keeps its default rather
+      // than being dropped (no-removal: narrowed at the door), so every code
+      // this route mints is labelled like the gym's first one and nothing reads
+      // the label as meaningful until Kd asks for names back.
+      label: FIRST_CODE_LABEL,
+      expiresAt,
+      maxUses: req.maxUses,
+      actorUserId: userId,
+    }),
+  );
+
+  switch (outcome.kind) {
+    case "created":
+      return orgCodeMutationResponseSchema.parse({ code: toOrgCode(outcome.code) });
+    case "too_many":
+      throw new OrgsError(
+        409,
+        "too_many_codes",
+        `This gym already has ${String(outcome.cap)} codes, which is the most it can hold. Delete one before making another.`,
+      );
+    default:
+      return assertNever(outcome);
+  }
+}
+
+export async function updateOrgCode(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+  code: string,
+  req: UpdateOrgCodeRequest,
+): Promise<OrgCodeMutationResponse> {
+  await requirePrivilege(deps, gymId, userId, "codes.manage");
+
+  // Only an expiry the caller actually SENT is checked. `expiresAt: null`
+  // ("never expires") is a legitimate change and must not be run past the
+  // future test, and an absent key must not be either — a PATCH that validates
+  // a field it was not given is a PATCH that refuses a pause because of a date
+  // somebody set last year.
+  const patch: repo.CodePatch = {};
+  if (req.paused !== undefined) patch.paused = req.paused;
+  if (req.expiresAt !== undefined) patch.expiresAt = assertFutureExpiry(req.expiresAt);
+  if (req.maxUses !== undefined) patch.maxUses = req.maxUses;
+
+  const outcome = await repo.updateCode(deps.sql, {
+    gymId,
+    // Normalised for the same reason the join door normalises: an owner
+    // pasting "k7qm-2x" out of a message must reach the row stored as "K7QM2X".
+    code: normaliseCode(code),
+    patch,
+    actorUserId: userId,
+  });
+
+  switch (outcome.kind) {
+    case "updated":
+      return orgCodeMutationResponseSchema.parse({ code: toOrgCode(outcome.code) });
+    case "not_found":
+      // The module's standing 404: another gym's code must not be
+      // distinguishable from one that never existed. Codes are globally unique,
+      // so a 403 here would confirm a stranger's code exists.
+      throw new OrgsError(404, "code_not_found", "That code isn't one of this gym's.");
+    case "max_uses_below_uses":
+      throw new OrgsError(
+        409,
+        "max_uses_below_uses",
+        `${String(outcome.uses)} ${outcome.uses === 1 ? "person has" : "people have"} already joined with this code, so the limit can't be lower than that. Pause the code to stop new people joining.`,
+      );
+    default:
+      return assertNever(outcome);
+  }
+}
+
+/** ROTATE — new code on, old code off, in ONE transaction (Part 3 §7). */
+export async function rotateOrgCode(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+  code: string,
+): Promise<RotateOrgCodeResponse> {
+  await requirePrivilege(deps, gymId, userId, "codes.manage");
+
+  const outcome = await mintCode(deps, (newCode) =>
+    repo.rotateCode(deps.sql, {
+      gymId,
+      code: normaliseCode(code),
+      newCode,
+      actorUserId: userId,
+    }),
+  );
+
+  switch (outcome.kind) {
+    case "rotated":
+      return rotateOrgCodeResponseSchema.parse({
+        code: toOrgCode(outcome.code),
+        replaced: toOrgCode(outcome.replaced),
+      });
+    case "not_found":
+      throw new OrgsError(404, "code_not_found", "That code isn't one of this gym's.");
+    case "too_many":
+      throw new OrgsError(
+        409,
+        "too_many_codes",
+        `This gym already has ${String(outcome.cap)} codes, which is the most it can hold. Delete one before rotating.`,
+      );
+    default:
+      return assertNever(outcome);
+  }
 }
 
 /** The console's confirm queue — Part 3 §2.4's boundary applies here exactly

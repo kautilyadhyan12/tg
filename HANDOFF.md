@@ -8914,3 +8914,42 @@ NEXT: **the console packet is DONE. Kd's next card is the LOGIN DOOR** — he ru
       **`OWED.md` still does not tick the console line: its own title names
       "seats", which needs a cap no gym has.**
 ```
+
+```
+TASK: JOIN-CODE MANAGEMENT, SERVER HALF. Three routes, NO MIGRATION.
+      DECISIONS :13803. **NOTHING TICKS — there is no screen yet.**
+
+WHAT EXISTS NOW
+  · POST   /v1/orgs/:gymId/codes              — make one
+  · PATCH  /v1/orgs/:gymId/codes/:code        — pause/wake · end date · join limit
+  · POST   /v1/orgs/:gymId/codes/:code/rotate — new on + old off, ONE transaction
+
+THINGS A LATER CHAT WILL OTHERWISE GET WRONG
+  · **KD RULED: NO NAME BOX on a code** ("this kind of names not needed men").
+    The COLUMN stays with its 'Front Desk' default — narrowed at the door, not
+    deleted. Do NOT add a label field back without a fresh ruling.
+  · **The refusals were ALREADY BUILT.** `applyByCode` has turned away paused /
+    expired / exhausted codes since the join door existed, and all four columns
+    date from `0001_init`. This card added no enforcement — only the way to
+    reach those states. Do not "fix" the join path; it is correct.
+  · **`codes.manage` is NOT `codes.invite`.** §2.2 grants Invite to all three
+    roles and code MANAGEMENT to owner+manager. A trainer reads 200 and writes
+    403, and there is a test. Merging the two ticks widens a trainer silently.
+  · **Tenancy is the pair (gym, code).** Codes are globally unique so
+    `WHERE code = $1` compiles, works, and is an IDOR. O58 is that mutant.
+  · **A code can be turned OFF but never DELETED** — cap is 100 and retired
+    codes count. Own OWED line; a delete needs a ruling on `gym_members.code_id`.
+
+GATES
+  · api **549/549 across 44 files** on LOCAL Postgres · tsc clean · eslint clean
+    on `src test tools` · harness parse-check clean.
+  · **6 new mutants O58–O63 all RED**, plus **O23 re-anchored and re-measured
+    RED**. O61 survived first (fixture had no expiry to copy — :5104 F5) and the
+    FIXTURE was fixed, not the assertion.
+
+NEXT
+  1. **The WEB half** — a Join codes section on the console. It carries the SMOKE
+     gate. Kd also asked for "Front Desk" to come OFF the waiting queue, which is
+     that card's one-liner (OWED's ⚪ line, :13174).
+  2. T3 on this server half (diff, fresh chat) — UNRUN.
+```

@@ -4267,10 +4267,38 @@ file and is stated so nobody reads these as lower priority than they are.
       that adds trainer→code/group assignment**, which is also what Part 3's
       Groups filter needs.
 - [ ] 🟡 **THE REST OF THE §2.2 MATRIX HAS NO ROUTES: ~~remove~~/RESTORE a
-      member, create/rotate/expire codes, staff management, CSV export,
+      member, ~~create/rotate/expire codes~~, staff management, CSV export,
       nudges.** The org slice built create/join/roster only. Part 3 §4.3's
       remove flow (soft `removed_at`, seat freed instantly, 30-day restore) and
       §2.1's multiple named codes are both specced and both unbuilt.
+      **UPDATE 2026-08-21 — CODE MANAGEMENT IS BUILT ON THE SERVER, and the
+      line does NOT tick.** `POST /v1/orgs/:gymId/codes` (make one) ·
+      `PATCH /v1/orgs/:gymId/codes/:code` (pause/wake, set or clear an end date,
+      set or clear a join limit) · `POST /v1/orgs/:gymId/codes/:code/rotate`
+      (new code on and old code off in ONE transaction, Part 3 §7's leaked-code
+      answer). **The refusal machinery was ALREADY built and already enforced** —
+      `applyByCode` has turned away paused, expired and exhausted codes since the
+      door was built — so what this adds is the only thing missing: a way for a
+      gym to REACH those states. No migration; all four columns have existed
+      since `0001_init`. **`codes.manage` is a NEW privilege, deliberately not
+      merged with `codes.invite`**: §2.2 grants Invite to all three roles and
+      "Create / rotate / expire codes" to owner and manager only, so a trainer
+      reads 200 and writes 403.
+      **WHAT STILL DOES NOT TICK, and it is the reason: THERE IS NO SCREEN.**
+      Nothing in the console calls any of the three, so an owner still cannot do
+      any of it — the same shape as :11846, where the join endpoint existed for a
+      day with no caller. The web half is the next card and carries the SMOKE.
+      Also still unbuilt on this line: RESTORE, staff management, CSV export,
+      nudges.
+      **AND A DEFERRAL THIS CARD MAKES, recorded here rather than in prose: a
+      code can be turned OFF but never DELETED.** `ORG_CODES_MAX` is 100, derived
+      from the `listCodes` ceiling so the list is provably whole rather than
+      provably truncated, and retired codes count toward it. A gym rotating
+      monthly reaches the cap in eight years; the refusal names the number and
+      says to delete one, which is a thing nothing can do yet. Deliberate — a
+      delete has to decide what happens to `gym_members.code_id`, which is the
+      group attribution every membership carries, and that is a ruling (R0.2),
+      not a chat's guess.
       ~~**Consequence worth knowing: `removed_at` is written by nothing
       today**, so the roster's `removed_at IS NULL` filter is correct but
       untested against a real removal — the card that builds removal owes that

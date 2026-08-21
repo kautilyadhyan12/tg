@@ -140,6 +140,35 @@ d("orgs routes (real Postgres)", () => {
       cookies: opts.cookies ?? {},
     });
 
+  const patch = (
+    path: string,
+    payload: unknown,
+    opts: { cookies?: Record<string, string> } = {},
+  ) =>
+    api().inject({
+      method: "PATCH",
+      url: path,
+      remoteAddress: nextIp(),
+      headers: { "content-type": "application/json" },
+      cookies: opts.cookies ?? {},
+      payload: JSON.stringify(payload),
+    });
+
+  interface CodeBody {
+    code: string;
+    label: string;
+    paused: boolean;
+    expiresAt: string | null;
+    maxUses: number | null;
+    uses: number;
+  }
+
+  const readCodes = async (gymId: string, cookies: Record<string, string>) => {
+    const res = await get(`/v1/orgs/${gymId}/codes`, { cookies });
+    expect(res.statusCode).toBe(200);
+    return (JSON.parse(res.body) as { codes: CodeBody[] }).codes;
+  };
+
   const makeUser = async (local: string) => {
     const email = `orgs-t-${local}@example.com`;
     const reg = await api().inject({
@@ -267,6 +296,16 @@ d("orgs routes (real Postgres)", () => {
     ).toBe(401);
     const someUser = "33333333-3333-3333-3333-333333333333";
     expect((await del(`/v1/orgs/${someGym}/members/${someUser}`)).statusCode).toBe(401);
+    // The code-management card's three, added HERE rather than in its own
+    // block, because L-1's finding was precisely that a card can add routes and
+    // leave this list naming the old ones. The list is the claim; it has to
+    // grow with the module.
+    const someCode = "K7QM2X";
+    expect((await post(`/v1/orgs/${someGym}/codes`, {})).statusCode).toBe(401);
+    expect((await patch(`/v1/orgs/${someGym}/codes/${someCode}`, { paused: true })).statusCode).toBe(
+      401,
+    );
+    expect((await post(`/v1/orgs/${someGym}/codes/${someCode}/rotate`, {})).statusCode).toBe(401);
   });
 
   it("creates the org, its first code, the owner staff row and the owner's seat", { timeout: 30_000 }, async () => {
@@ -1877,6 +1916,443 @@ d("orgs routes (real Postgres)", () => {
     expect((JSON.parse(codes.body) as { codes: { code: string }[] }).codes[0]?.code).toBe(
       studio.joinCode.code,
     );
+  });
+
+  // ── CODE MANAGEMENT (Part 3 §2.2 "Create / rotate / expire codes", §3.3's
+  //    write half, §7's leaked-code answer) ────────────────────────────────
+  //
+  // The state machine these tests pin was ALREADY BUILT AND ALREADY ENFORCED —
+  // `applyByCode` has refused paused, expired and exhausted codes since the
+  // door was built. What was missing was any way for a gym to REACH those
+  // states, so every assertion below that ends in a join attempt is checking
+  // the two halves agree, which is the whole risk in this card: a console that
+  // says "paused" over a code the join path still honours is the false-on-screen
+  // defect (:5807), and the only way to catch it is to drive both sides.
+
+  it("makes a new code that a member can actually join with", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("mkcode-owner");
+    const joiner = await makeUser("mkcode-joiner");
+    const org = await makeOrg(owner.cookies, "Orgs Test Make Code");
+
+    const res = await post(`/v1/orgs/${org.org.id}/codes`, {}, { cookies: owner.cookies });
+    expect(res.statusCode).toBe(201);
+    const { code } = JSON.parse(res.body) as { code: CodeBody };
+
+    // A DIFFERENT code from the gym's first, on the alphabet, with the two
+    // restrictions genuinely absent rather than defaulted to something.
+    expect(code.code).not.toBe(org.joinCode.code);
+    expect(code.code).toHaveLength(6);
+    // Indexed rather than spread: the alphabet is ASCII by construction, but a
+    // spread over a string is UTF-16-naive in general and the linter is right
+    // to say so. `charAt` cannot mishandle what this alphabet contains.
+    for (let i = 0; i < code.code.length; i++) {
+      expect(JOIN_CODE_ALPHABET).toContain(code.code.charAt(i));
+    }
+    expect(code.expiresAt).toBeNull();
+    expect(code.maxUses).toBeNull();
+    expect(code.uses).toBe(0);
+
+    // THE HALF THAT MATTERS: the join door honours it. A create that returns a
+    // plausible six characters nobody can join with would pass every assertion
+    // above.
+    const applied = await post("/v1/orgs/join", { code: code.code }, { cookies: joiner.cookies });
+    expect(applied.statusCode).toBe(200);
+    expect((JSON.parse(applied.body) as { outcome: string }).outcome).toBe("pending");
+
+    // BOTH codes are live at once, and that is the design: making a code does
+    // not retire the old one — rotate is the call that does both.
+    const codes = await readCodes(org.org.id, owner.cookies);
+    expect(codes).toHaveLength(2);
+    expect(codes.every((c) => !c.paused)).toBe(true);
+  });
+
+  it("pauses a code — the join door refuses it — then wakes it up again", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("pause-owner");
+    const joiner = await makeUser("pause-joiner");
+    const org = await makeOrg(owner.cookies, "Orgs Test Pause Code");
+    const target = org.joinCode.code;
+
+    const paused = await patch(
+      `/v1/orgs/${org.org.id}/codes/${target}`,
+      { paused: true },
+      { cookies: owner.cookies },
+    );
+    expect(paused.statusCode).toBe(200);
+    expect((JSON.parse(paused.body) as { code: CodeBody }).code.paused).toBe(true);
+
+    const refused = await post("/v1/orgs/join", { code: target }, { cookies: joiner.cookies });
+    expect(refused.statusCode).toBe(409);
+    expect((JSON.parse(refused.body) as { error: string }).error).toBe("code_paused");
+
+    // REVERSIBLE, which is the whole difference between pause and expiry. A
+    // pause that could not be undone is a delete with a friendlier word on it.
+    const woken = await patch(
+      `/v1/orgs/${org.org.id}/codes/${target}`,
+      { paused: false },
+      { cookies: owner.cookies },
+    );
+    expect(woken.statusCode).toBe(200);
+    expect((JSON.parse(woken.body) as { code: CodeBody }).code.paused).toBe(false);
+
+    const allowed = await post("/v1/orgs/join", { code: target }, { cookies: joiner.cookies });
+    expect(allowed.statusCode).toBe(200);
+  });
+
+  it("sets a join limit, and the door refuses the person who would exceed it", { timeout: 90_000 }, async () => {
+    const owner = await makeUser("codelimit-owner");
+    const first = await makeUser("codelimit-first");
+    const second = await makeUser("codelimit-second");
+    const org = await makeOrg(owner.cookies, "Orgs Test Code Limit");
+    const target = org.joinCode.code;
+
+    const limited = await patch(
+      `/v1/orgs/${org.org.id}/codes/${target}`,
+      { maxUses: 1 },
+      { cookies: owner.cookies },
+    );
+    expect(limited.statusCode).toBe(200);
+    expect((JSON.parse(limited.body) as { code: CodeBody }).code.maxUses).toBe(1);
+
+    // `uses` counts MEMBERSHIPS, not applications — burning a use at apply time
+    // would let a stranger with a leaked code exhaust a gym's poster without
+    // ever getting in. So the limit is only spent once the front desk confirms.
+    await joinAsMember(first.cookies, org, owner.cookies);
+    expect((await readCodes(org.org.id, owner.cookies))[0]?.uses).toBe(1);
+
+    const refused = await post("/v1/orgs/join", { code: target }, { cookies: second.cookies });
+    expect(refused.statusCode).toBe(409);
+    expect((JSON.parse(refused.body) as { error: string }).error).toBe("code_exhausted");
+  });
+
+  it("refuses a limit BELOW the number who already joined, and names the count", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("below-owner");
+    const member = await makeUser("below-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Limit Below");
+    await joinAsMember(member.cookies, org, owner.cookies);
+
+    const res = await patch(
+      `/v1/orgs/${org.org.id}/codes/${org.joinCode.code}`,
+      { maxUses: 0 },
+      { cookies: owner.cookies },
+    );
+    // 400 from the SCHEMA — `maxUses` is `.min(1)`, because "a limit of zero"
+    // is pause wearing a number.
+    expect(res.statusCode).toBe(400);
+
+    // 1 is a legal number and still below this code's live `uses`, which is the
+    // case the repo has to catch rather than the parser.
+    const memberTwo = await makeUser("below-member-2");
+    await joinAsMember(memberTwo.cookies, org, owner.cookies);
+    const below = await patch(
+      `/v1/orgs/${org.org.id}/codes/${org.joinCode.code}`,
+      { maxUses: 1 },
+      { cookies: owner.cookies },
+    );
+    expect(below.statusCode).toBe(409);
+    const body = JSON.parse(below.body) as { error: string; message: string };
+    expect(body.error).toBe("max_uses_below_uses");
+    // The COUNT is in the sentence: an owner told "that's too low" without
+    // being told what it is too low FOR has to go and count the roster.
+    expect(body.message).toContain("2");
+
+    // AND THE ROW IS UNCHANGED. A refusal that half-applied would be worse than
+    // one that never ran.
+    expect((await readCodes(org.org.id, owner.cookies))[0]?.maxUses).toBeNull();
+  });
+
+  it("refuses an end date in the past rather than storing a dead code", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("expast-owner");
+    const org = await makeOrg(owner.cookies, "Orgs Test Expiry Past");
+
+    const past = new Date(Date.now() - 60_000).toISOString();
+    const created = await post(
+      `/v1/orgs/${org.org.id}/codes`,
+      { expiresAt: past },
+      { cookies: owner.cookies },
+    );
+    expect(created.statusCode).toBe(400);
+    expect((JSON.parse(created.body) as { error: string }).error).toBe("expiry_in_past");
+
+    const patched = await patch(
+      `/v1/orgs/${org.org.id}/codes/${org.joinCode.code}`,
+      { expiresAt: past },
+      { cookies: owner.cookies },
+    );
+    expect(patched.statusCode).toBe(400);
+    expect((JSON.parse(patched.body) as { error: string }).error).toBe("expiry_in_past");
+
+    // Nothing was created and nothing was changed — the gym still has exactly
+    // its original code, unexpiring.
+    const codes = await readCodes(org.org.id, owner.cookies);
+    expect(codes).toHaveLength(1);
+    expect(codes[0]?.expiresAt).toBeNull();
+  });
+
+  it("stores a FUTURE end date, and clearing it back to null is allowed", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("exfut-owner");
+    const org = await makeOrg(owner.cookies, "Orgs Test Expiry Future");
+    const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const set = await patch(
+      `/v1/orgs/${org.org.id}/codes/${org.joinCode.code}`,
+      { expiresAt: future },
+      { cookies: owner.cookies },
+    );
+    expect(set.statusCode).toBe(200);
+    expect((JSON.parse(set.body) as { code: CodeBody }).code.expiresAt).not.toBeNull();
+
+    // `expiresAt: null` means "never expires" and MUST NOT be run past the
+    // future check — a PATCH that refused it would leave an owner unable to
+    // undo a date they had just set.
+    const cleared = await patch(
+      `/v1/orgs/${org.org.id}/codes/${org.joinCode.code}`,
+      { expiresAt: null },
+      { cookies: owner.cookies },
+    );
+    expect(cleared.statusCode).toBe(200);
+    expect((JSON.parse(cleared.body) as { code: CodeBody }).code.expiresAt).toBeNull();
+  });
+
+  it("leaves fields the caller did not send ALONE (PATCH, not PUT)", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("patchonly-owner");
+    const org = await makeOrg(owner.cookies, "Orgs Test Patch Only");
+    const target = org.joinCode.code;
+    const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    await patch(
+      `/v1/orgs/${org.org.id}/codes/${target}`,
+      { expiresAt: future, maxUses: 25 },
+      { cookies: owner.cookies },
+    );
+    // A screen that only knows about the pause switch sends only `paused` — and
+    // must not silently wipe an expiry and a limit it never displayed.
+    const res = await patch(
+      `/v1/orgs/${org.org.id}/codes/${target}`,
+      { paused: true },
+      { cookies: owner.cookies },
+    );
+    expect(res.statusCode).toBe(200);
+    const { code } = JSON.parse(res.body) as { code: CodeBody };
+    expect(code.paused).toBe(true);
+    expect(code.expiresAt).not.toBeNull();
+    expect(code.maxUses).toBe(25);
+  });
+
+  it("refuses an empty change rather than reporting a success that did nothing", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("empty-owner");
+    const org = await makeOrg(owner.cookies, "Orgs Test Empty Patch");
+    const res = await patch(
+      `/v1/orgs/${org.org.id}/codes/${org.joinCode.code}`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(res.statusCode).toBe(400);
+    // An unknown key is a 400 too (`.strict()`), so a client typo cannot be
+    // read as a field this route quietly ignores.
+    expect(
+      (
+        await patch(
+          `/v1/orgs/${org.org.id}/codes/${org.joinCode.code}`,
+          { label: "Morning Batch" },
+          { cookies: owner.cookies },
+        )
+      ).statusCode,
+    ).toBe(400);
+  });
+
+  it("rotates: the new code works, the old one stops, and BOTH land together", { timeout: 90_000 }, async () => {
+    const owner = await makeUser("rot-owner");
+    const oldJoiner = await makeUser("rot-old");
+    const newJoiner = await makeUser("rot-new");
+    const org = await makeOrg(owner.cookies, "Orgs Test Rotate");
+    const leaked = org.joinCode.code;
+
+    // THE OLD CODE IS GIVEN BOTH RESTRICTIONS FIRST, and that is what makes the
+    // "carries none of them forward" assertions below able to fail at all.
+    // The first draft rotated the gym's ORIGINAL code, which has no expiry and
+    // no limit — so a rotate that copied them forward copied `null` and `null`,
+    // and mutant O61 SURVIVED against a test that looked like it covered this.
+    // The fixture was the hole, not the assertion (:5104 F5's shape).
+    await patch(
+      `/v1/orgs/${org.org.id}/codes/${leaked}`,
+      { expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), maxUses: 5 },
+      { cookies: owner.cookies },
+    );
+
+    const res = await post(
+      `/v1/orgs/${org.org.id}/codes/${leaked}/rotate`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(res.statusCode).toBe(201);
+    const { code, replaced } = JSON.parse(res.body) as { code: CodeBody; replaced: CodeBody };
+
+    expect(replaced.code).toBe(leaked);
+    expect(replaced.paused).toBe(true);
+    expect(code.code).not.toBe(leaked);
+    expect(code.paused).toBe(false);
+    // The new code carries the old one's LABEL and none of its restrictions —
+    // copying an expiry forward would hand back a code that is already dead,
+    // and copying the limit forward one that is already exhausted. Both are
+    // asserted against an old code that genuinely HAS them (see the patch
+    // above), so each assertion can fail.
+    expect(code.label).toBe(replaced.label);
+    expect(replaced.expiresAt).not.toBeNull();
+    expect(replaced.maxUses).toBe(5);
+    expect(code.expiresAt).toBeNull();
+    expect(code.maxUses).toBeNull();
+
+    // BOTH DIRECTIONS AGAINST THE REAL DOOR: the leaked one is shut, the
+    // replacement is open. Either assertion alone would pass under a rotate
+    // that did only half its job — which is exactly the failure the single
+    // transaction exists to prevent.
+    const onOld = await post("/v1/orgs/join", { code: leaked }, { cookies: oldJoiner.cookies });
+    expect(onOld.statusCode).toBe(409);
+    expect((JSON.parse(onOld.body) as { error: string }).error).toBe("code_paused");
+
+    const onNew = await post("/v1/orgs/join", { code: code.code }, { cookies: newJoiner.cookies });
+    expect(onNew.statusCode).toBe(200);
+  });
+
+  it("rotating does not touch anybody who already joined with the old code", { timeout: 90_000 }, async () => {
+    const owner = await makeUser("rotkeep-owner");
+    const member = await makeUser("rotkeep-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Rotate Keeps");
+    await joinAsMember(member.cookies, org, owner.cookies);
+
+    const before = await get(`/v1/orgs/${org.org.id}/members?limit=100`, { cookies: owner.cookies });
+    const beforeIds = (JSON.parse(before.body) as { items: { userId: string }[] }).items.map(
+      (m) => m.userId,
+    );
+    expect(beforeIds).toContain(member.userId);
+
+    await post(`/v1/orgs/${org.org.id}/codes/${org.joinCode.code}/rotate`, {}, { cookies: owner.cookies });
+
+    // THE PROMISE MADE TO KD IN PLAIN WORDS: "anyone who already joined stays a
+    // member". Turning a door off is not the same as evicting the people who
+    // came through it.
+    const after = await get(`/v1/orgs/${org.org.id}/members?limit=100`, { cookies: owner.cookies });
+    const afterIds = (JSON.parse(after.body) as { items: { userId: string }[] }).items.map(
+      (m) => m.userId,
+    );
+    expect(afterIds.sort()).toEqual(beforeIds.sort());
+  });
+
+  it("scopes every write to the OWNING gym — another gym's code is a 404, not a 403", { timeout: 90_000 }, async () => {
+    const ownerA = await makeUser("xt-a-owner");
+    const ownerB = await makeUser("xt-b-owner");
+    const orgA = await makeOrg(ownerA.cookies, "Orgs Test XTenant A");
+    const orgB = await makeOrg(ownerB.cookies, "Orgs Test XTenant B");
+
+    // THE IDOR THIS TEST EXISTS FOR: a code is globally unique, so
+    // `WHERE code = $1` alone would have found B's row and let A pause it.
+    // Addressing B's code THROUGH A's gym must find nothing.
+    const crossPatch = await patch(
+      `/v1/orgs/${orgA.org.id}/codes/${orgB.joinCode.code}`,
+      { paused: true },
+      { cookies: ownerA.cookies },
+    );
+    expect(crossPatch.statusCode).toBe(404);
+
+    const crossRotate = await post(
+      `/v1/orgs/${orgA.org.id}/codes/${orgB.joinCode.code}/rotate`,
+      {},
+      { cookies: ownerA.cookies },
+    );
+    expect(crossRotate.statusCode).toBe(404);
+
+    // B's code is untouched and still opens B's door — the assertion that
+    // proves the refusals above were refusals and not silent no-ops.
+    const bCodes = await readCodes(orgB.org.id, ownerB.cookies);
+    expect(bCodes).toHaveLength(1);
+    expect(bCodes[0]?.paused).toBe(false);
+
+    // And A cannot reach B's gym at all: 404 rather than 403, so a uuid is not
+    // an oracle for which gyms exist.
+    expect(
+      (await post(`/v1/orgs/${orgB.org.id}/codes`, {}, { cookies: ownerA.cookies })).statusCode,
+    ).toBe(404);
+  });
+
+  it("lets a MANAGER manage codes and refuses a TRAINER (§2.2's two separate rows)", { timeout: 90_000 }, async () => {
+    const owner = await makeUser("cmpriv-owner");
+    const manager = await makeUser("cmpriv-manager");
+    const trainer = await makeUser("cmpriv-trainer");
+    const org = await makeOrg(owner.cookies, "Orgs Test Code Privileges");
+    await sql`
+      INSERT INTO gym_staff (gym_id, user_id, role) VALUES
+        (${org.org.id}, ${manager.userId}, 'manager'),
+        (${org.org.id}, ${trainer.userId}, 'trainer')`;
+
+    expect(
+      (await post(`/v1/orgs/${org.org.id}/codes`, {}, { cookies: manager.cookies })).statusCode,
+    ).toBe(201);
+
+    // THE SPLIT THAT MATTERS AND IS EASY TO GET WRONG: §2.2 grants Invite to
+    // all three roles and "Create / rotate / expire codes" to two. So the same
+    // trainer READS 200 and WRITES 403 — merging the two ticks would hand them
+    // the gym's door under cover of a read they already had.
+    expect(
+      (await get(`/v1/orgs/${org.org.id}/codes`, { cookies: trainer.cookies })).statusCode,
+    ).toBe(200);
+    expect(
+      (await post(`/v1/orgs/${org.org.id}/codes`, {}, { cookies: trainer.cookies })).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await patch(
+          `/v1/orgs/${org.org.id}/codes/${org.joinCode.code}`,
+          { paused: true },
+          { cookies: trainer.cookies },
+        )
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await post(
+          `/v1/orgs/${org.org.id}/codes/${org.joinCode.code}/rotate`,
+          {},
+          { cookies: trainer.cookies },
+        )
+      ).statusCode,
+    ).toBe(403);
+
+    // A plain MEMBER — not staff at all — gets the module's standing 404 on
+    // every one of them.
+    const member = await makeUser("cmpriv-member");
+    await joinAsMember(member.cookies, org, owner.cookies);
+    expect(
+      (await post(`/v1/orgs/${org.org.id}/codes`, {}, { cookies: member.cookies })).statusCode,
+    ).toBe(404);
+  });
+
+  it("writes an audit row for every code change (Part 3 §3.3)", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("audit-owner");
+    const org = await makeOrg(owner.cookies, "Orgs Test Code Audit");
+
+    await post(`/v1/orgs/${org.org.id}/codes`, {}, { cookies: owner.cookies });
+    await patch(
+      `/v1/orgs/${org.org.id}/codes/${org.joinCode.code}`,
+      { paused: true },
+      { cookies: owner.cookies },
+    );
+    await post(`/v1/orgs/${org.org.id}/codes/${org.joinCode.code}/rotate`, {}, { cookies: owner.cookies });
+
+    // Ordered by the identity column, not by the timestamp: three writes inside
+    // one test can share a `at` value to the microsecond, and an order this
+    // test asserts must not depend on a tie-break Postgres never promised.
+    const rows = await sql<{ action: string; actor_user_id: string | null }[]>`
+      SELECT action, actor_user_id FROM audit_log
+      WHERE gym_id = ${org.org.id} AND action LIKE 'org.code_%'
+      ORDER BY id ASC`;
+    expect(rows.map((r) => r.action)).toEqual([
+      "org.code_created",
+      "org.code_updated",
+      "org.code_rotated",
+    ]);
+    // A HUMAN did each of these, so every row names one — unlike the expiry
+    // sweep, which writes `actor_user_id = NULL` because nobody decided.
+    expect(rows.every((r) => r.actor_user_id === owner.userId)).toBe(true);
   });
 
   it("walks the roster by cursor without dupes or gaps (R7.3)", { timeout: 90_000 }, async () => {

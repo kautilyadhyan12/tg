@@ -304,9 +304,19 @@ const MUTANTS = [
   {
     id: 'O23',
     target: 'repo',
+    // RE-ANCHORED 2026-08-21 by the code-management card, and the whole-table
+    // pre-check ABORTED the sweep rather than reporting a false ALIVE — which
+    // is the guard working (:11846's class, caught for the sixth time).
+    //
+    // **ITS REACH WIDENED AND THAT IS SAID RATHER THAN GLOSSED.** It used to
+    // mutate `listCodes`'s own inline mapper, so it was evidence about the READ
+    // alone. `listCodes` and the three new writers now share `toCodeRow`, so
+    // this one line carries the guarantee for all four — a broader mutant, and
+    // a truer one, because there is no longer a second spelling of it that
+    // could drift.
     why: 'ON SCREEN AND FALSE: a paused code reads back as live, so the console tells an owner to share a code the join path will refuse',
     expect: "reports a code's live state honestly",
-    from: '    paused: r.paused,',
+    from: '    paused: raw.paused,',
     to: '    paused: false,',
   },
   {
@@ -669,6 +679,62 @@ const MUTANTS = [
     from: '      await writeAudit(tx, {',
     to: '      void writeAudit(tx, {',
     expect: 'a failed audit write takes the expiry down with it',
+  },
+
+  // ── O58–O63: CODE MANAGEMENT (create / pause / limit / expire / rotate) ──
+  //
+  // SCOPED BY :5857 RULE 4a, and the scoping is the point: these six sit in the
+  // OWNERSHIP and DATA-LOSS columns, which is where a slow database-backed
+  // mutant is worth its three minutes. The card's other guarantees — the copy
+  // in a refusal, the audit meta's wording — are Low and are deliberately NOT
+  // mutated here.
+  {
+    id: 'O58',
+    target: 'repo',
+    why: "OWNERSHIP: the PATCH stops scoping by gym, so any gym's manager can pause ANOTHER gym's poster by typing its six characters — codes are globally unique, so the lookup succeeds and the IDOR hides behind a column that happens to be unique",
+    from: '      WHERE gym_id = ${input.gymId} AND code = ${input.code}\n      FOR UPDATE`;',
+    to: '      WHERE code = ${input.code}\n      FOR UPDATE`;',
+    expect: 'scopes every write to the OWNING gym',
+  },
+  {
+    id: 'O59',
+    target: 'service',
+    why: "PRIVILEGE: code management drops to the INVITE tick, which §2.2 grants all three roles — so a trainer, who may hand out a poster, can switch the gym's door off instead",
+    from: '  await requirePrivilege(deps, gymId, userId, "codes.manage");\n  const expiresAt = assertFutureExpiry(req.expiresAt);',
+    to: '  await requirePrivilege(deps, gymId, userId, "codes.invite");\n  const expiresAt = assertFutureExpiry(req.expiresAt);',
+    expect: 'refuses a TRAINER',
+  },
+  {
+    id: 'O60',
+    target: 'repo',
+    why: 'DATA LOSS: rotate stops retiring the old code, so a leaked poster stays live for ever while the screen reports it replaced — the half-done rotate the single transaction exists to make impossible',
+    from: '      const retiredRows = await tx<RawCode[]>`\n        UPDATE gym_codes SET paused = true',
+    to: '      const retiredRows = await tx<RawCode[]>`\n        UPDATE gym_codes SET paused = paused',
+    expect: 'the old one stops',
+  },
+  {
+    id: 'O61',
+    target: 'repo',
+    why: "DATA LOSS: rotate copies the old code's expiry forward, so the replacement a gym is told to hand out can already be dead on arrival",
+    from: '        INSERT INTO gym_codes (gym_id, code, label)\n        VALUES (${input.gymId}, ${input.newCode}, ${before.label})',
+    to: '        INSERT INTO gym_codes (gym_id, code, label, expires_at)\n        VALUES (${input.gymId}, ${input.newCode}, ${before.label}, ${before.expires_at})',
+    expect: 'BOTH land together',
+  },
+  {
+    id: 'O62',
+    target: 'repo',
+    why: 'A NUMBER A USER SEES (:5807): the join limit may be set below the number who already joined, so an owner who types 1 to "let one more in" instantly reads Fully used over a code they just widened',
+    from: '    if (nextMaxUses !== null && nextMaxUses < before.uses) {',
+    to: '    if (false) {',
+    expect: 'refuses a limit BELOW the number who already joined',
+  },
+  {
+    id: 'O63',
+    target: 'service',
+    why: 'A NUMBER A USER SEES: a past end date is stored instead of refused, so the code the screen has just confirmed as created can never be joined with by anybody',
+    from: '  if (at.getTime() <= Date.now()) {',
+    to: '  if (false) {',
+    expect: 'refuses an end date in the past',
   },
 ];
 

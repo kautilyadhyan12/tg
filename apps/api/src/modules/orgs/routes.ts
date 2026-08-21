@@ -12,6 +12,8 @@ import type { RedisLike } from "../../redis.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
 import {
   applicationParamsSchema,
+  codeParamsSchema,
+  createOrgCodeRequestSchema,
   createOrgRequestSchema,
   joinOrgRequestSchema,
   memberParamsSchema,
@@ -19,6 +21,7 @@ import {
   orgApplicationListQuerySchema,
   orgMemberListQuerySchema,
   orgParamsSchema,
+  updateOrgCodeRequestSchema,
 } from "./schemas.js";
 import * as service from "./service.js";
 
@@ -214,6 +217,72 @@ export function registerOrgRoutes(
     const codes = await service.listOrgCodes(orgDeps, requireUserId(req), params.gymId);
     return reply.status(200).send(codes);
   });
+
+  // Part 3 §3.3's `POST/PATCH /codes` — §2.2's "Create / rotate / expire codes"
+  // row, which is owner and manager only. The READ above stays open to trainers
+  // (§2.2 grants all three roles Invite); these three do not, and the service
+  // enforces it with its own privilege rather than a role name (:11429).
+  //
+  // NO RATE LIMIT BEYOND THE GLOBAL FLOOR, and that is a decision rather than an
+  // omission: the two limited routes in this file (apply, nudge) are reachable by
+  // ANY signed-in stranger holding six characters, whereas every route here first
+  // proves the caller is staff of this gym — a check a script cannot pass. What
+  // an abusive owner can do to their own gym is bounded by the code cap. The
+  // apply-side floor is what protects the join door and it is untouched.
+  app.post("/v1/orgs/:gymId/codes", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(createOrgCodeRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const created = await service.createOrgCode(orgDeps, requireUserId(req), params.gymId, body);
+    return reply.status(201).send(created);
+  });
+
+  // PATCH and not PUT: a screen that knows only about the pause switch must be
+  // able to flip it without restating an expiry it never showed the owner.
+  //
+  // Like DELETE next door, PATCH reaches a browser only through a CORS
+  // PREFLIGHT — the failure mode 250 green tests could not see (`app.ts` lists
+  // it; the smoke sheet is what proves it in a real browser).
+  app.patch(
+    "/v1/orgs/:gymId/codes/:code",
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const params = parseOr400(codeParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const body = parseOr400(updateOrgCodeRequestSchema, req.body, req, reply);
+      if (body === null) return;
+      const updated = await service.updateOrgCode(
+        orgDeps,
+        requireUserId(req),
+        params.gymId,
+        params.code,
+        body,
+      );
+      return reply.status(200).send(updated);
+    },
+  );
+
+  // ROTATE — one call because the two halves must not fail apart (Part 3 §7).
+  // It is a POST to a sub-path rather than a flavour of the PATCH above: it
+  // CREATES a row, it is not idempotent (a second tap mints a second code), and
+  // burying that behind a field on a patch is how a retry quietly doubles a
+  // gym's codes.
+  app.post(
+    "/v1/orgs/:gymId/codes/:code/rotate",
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const params = parseOr400(codeParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const rotated = await service.rotateOrgCode(
+        orgDeps,
+        requireUserId(req),
+        params.gymId,
+        params.code,
+      );
+      return reply.status(201).send(rotated);
+    },
+  );
 
   app.get("/v1/orgs/:gymId/members", { preHandler: [app.authenticate] }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);

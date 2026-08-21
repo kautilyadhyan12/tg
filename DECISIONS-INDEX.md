@@ -67,6 +67,50 @@ mid-file: re-derive them with
   unless dedupe is in that card's definition.** Health data lands inside the open
   privacy question at :592. Tracked NOWHERE before today (grep-verified); now has
   a ⚪ `OWED.md` line.
+- **:13803** — 2026-08-21 — **A GYM CAN FINALLY CHANGE ITS OWN JOIN CODE (server
+  half): make one · pause/wake · set an end date or a join limit · rotate. NO
+  MIGRATION, and the refusals it reaches were built long ago.** **Read before
+  touching code management, before adding a route that checks a code, before
+  adding a second reader of `gym_codes`, and before putting a NAME BOX on a join
+  code.** **KD RULING — no names**: *"this kind of names not needed men"*, given
+  the cost (a label is §2.1's GROUP mechanism, so §2.3's trainer scoping has
+  nothing to scope to); the COLUMN keeps its `'Front Desk'` default, narrowed at
+  the door not deleted, re-opened by one optional field. **THE FINDING IS HOW
+  NARROW THE GAP WAS: `applyByCode` has refused paused/expired/exhausted codes
+  since the join door was built and all four columns date from `0001_init`** — no
+  enforcement is new; what did not exist was any way for a gym to REACH those
+  states (:11023 named it: "minted unlimited and eternal with no route to change
+  it"). Decisions not to re-derive: **`codes.manage` is a NEW privilege and
+  deliberately NOT `codes.invite`** (§2.2's two rows one line apart mean opposite
+  things — a trainer reads 200 and writes 403, asserted); **tenancy is the pair
+  (gym, code) never the code alone** — codes are globally unique, so `WHERE code
+  = $1` would let one gym pause another's poster, the IDOR hiding behind a unique
+  column (mutant O58 is that deletion); **rotate is ONE transaction** because the
+  halves fail independently and a half-rotate leaves a gym NOBODY can join; **the
+  new code carries the LABEL and none of the restrictions** (copying an expiry
+  forward hands back a code already dead); **a limit below live `uses` is refused
+  and the refusal names the count**; **a PAST end date is refused** (storing it
+  produces a code never joinable under a screen saying it was created) while
+  **`expiresAt: null` means "never" and is NOT run past that check**; **an empty
+  PATCH is a 400**; **the collision retry reuses `OrgNameTakenError`** rather
+  than an outcome arm that needed an `as T` cast (R2.2 — the existing precedent
+  beat the thing written to avoid it). **THE AUDIT'S SURVIVOR IS THE PART TO
+  READ: O61 survived a test that LOOKED like it covered it** — the fixture
+  rotated the gym's ORIGINAL code, which has no expiry, so the mutant copied
+  `null` to `null`; **the FIXTURE was the hole, not the assertion** (:5104 F5).
+  **And the whole-table pre-check ABORTED on my own drift before a byte was
+  written** — folding `listCodes`' mapper into a shared `toCodeRow` moved O23's
+  anchor; re-anchored, re-measured RED, and **its reach WIDENED** (one line now
+  carries the guarantee for the read and all three writers). Two test defects of
+  mine, both found by running them: three fixture users collided by name with the
+  SEAT-cap test's, and the audit test ordered by `created_at`, a column
+  `audit_log` does not have. **PROVE: api 549/549 across 44 files on local
+  Postgres · tsc + eslint clean · 6 new mutants O58–O63 all RED, O23 re-anchored
+  RED, restores sha256-verified.** **NOTHING TICKS — THERE IS NO SCREEN**
+  (:11846's shape: an endpoint with no caller); the web half is the next card and
+  carries the SMOKE, T3 UNRUN. **OWED: a code can be turned off but never
+  DELETED** — the 100 cap counts retired codes, and a delete has to rule on
+  `gym_members.code_id`, the group attribution every membership carries.
 - **:13746** — 2026-08-21 — **ADDENDUM to :13659: I raised the worker cap on a
   guess, the measurement killed it, and what it uncovered is worth more than what
   it was aiming at.** **Read WITH :13659 — it CORRECTS two of that entry's

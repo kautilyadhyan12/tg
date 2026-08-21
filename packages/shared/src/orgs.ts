@@ -4,6 +4,7 @@
 // visibility boundary), §3.3 (route surface), §4.0 (onboarding wizard fields);
 // Part 4 §3.2 (DDL), §4.2 (seat-safe join).
 import { z } from "zod";
+import { instantSchema } from "./time.js";
 
 /** The DB vocabulary (Part 4 §3.2's CHECK), used to PARSE rows on the way out.
  *  It still contains `clinic` on purpose — see `createOrgTypeSchema`. */
@@ -229,6 +230,90 @@ export type OrgCode = z.infer<typeof orgCodeSchema>;
 
 export const orgCodesResponseSchema = z.object({ codes: z.array(orgCodeSchema) });
 export type OrgCodesResponse = z.infer<typeof orgCodesResponseSchema>;
+
+/** THE WRITE HALF of Part 3 §3.3's `GET/POST/PATCH /codes`, and §2.2's
+ *  "Create / rotate / expire codes" row.
+ *
+ *  **NO `label` FIELD, AND THAT IS A KD RULING (2026-08-21), not an omission.**
+ *  Shown a plan whose create form asked for a name ("Morning Batch"), he
+ *  answered *"this kind of names not needed men"* and confirmed it when the cost
+ *  was put to him: a label is Part 3 §2.1's GROUP mechanism — the thing that
+ *  eventually tells a gym which desk, class or campaign a member arrived
+ *  through — so dropping the input means a gym cannot tell its cohorts apart
+ *  later, and §2.3's trainer-scoping-to-group has nothing to scope to.
+ *
+ *  **The COLUMN is untouched and keeps its `'Front Desk'` default** (no-removal
+ *  rule: narrowed at the door, never deleted from the database — the same shape
+ *  as the clinic narrowing at `createOrgTypeSchema`). Every code this route
+ *  mints carries the default, nothing reads it as meaningful, and re-opening the
+ *  door is adding one optional field here. No migration either way.
+ *
+ *  `expiresAt` and `maxUses` are BOTH optional and BOTH default to null, which
+ *  is the plain-language shape Kd approved: a code with no end date and no limit
+ *  is the ordinary one, and the two restrictions are things you opt into. */
+export const createOrgCodeRequestSchema = z
+  .object({
+    /** ISO instant, or null for "never expires". Whether it is in the FUTURE is
+     *  the service's answer, not the schema's, so the refusal can be a sentence
+     *  an owner understands — the `country` precedent above. */
+    expiresAt: instantSchema.nullable().default(null),
+    /** null = unlimited. Upper bound is the COLUMN's (`integer`), so a value the
+     *  schema blesses can always be stored: a bound invented smaller would be a
+     *  number nobody chose, and no bound at all turns `1e30` into a 500 from
+     *  Postgres rather than a 400 from here (:4483's shape — a schema that
+     *  proves less than the code assumes). */
+    maxUses: z.number().int().min(1).max(2147483647).nullable().default(null),
+  })
+  .strict();
+export type CreateOrgCodeRequest = z.infer<typeof createOrgCodeRequestSchema>;
+
+/** Changing an existing code: pause it, wake it up, or move either restriction.
+ *
+ *  **Every field is optional and at least one must be present.** An empty body
+ *  would otherwise be a 200 that changed nothing while reading, to the screen
+ *  and to the audit row it writes, exactly like a change that landed.
+ *
+ *  **`paused` is separate from `expiresAt` on purpose, and the split is the
+ *  product rule**: pause means OFF NOW and is reversible; an expiry means off
+ *  LATER and is a date. Collapsing them — "expire it by setting the date to the
+ *  past" — is how an owner who mistypes a year silently kills the poster their
+ *  members are holding. */
+export const updateOrgCodeRequestSchema = z
+  .object({
+    paused: z.boolean().optional(),
+    expiresAt: instantSchema.nullable().optional(),
+    maxUses: z.number().int().min(1).max(2147483647).nullable().optional(),
+  })
+  .strict()
+  .refine((v) => v.paused !== undefined || v.expiresAt !== undefined || v.maxUses !== undefined, {
+    message: "nothing to change",
+  });
+export type UpdateOrgCodeRequest = z.infer<typeof updateOrgCodeRequestSchema>;
+
+/** One code, after it was created or changed. The row as it NOW STANDS rather
+ *  than an echo of the request: `uses` and `label` were never in the request,
+ *  and a screen that re-derived the new state from what it sent is a screen that
+ *  disagrees with the next `GET /codes`. */
+export const orgCodeMutationResponseSchema = z.object({ code: orgCodeSchema });
+export type OrgCodeMutationResponse = z.infer<typeof orgCodeMutationResponseSchema>;
+
+/** ROTATE — Part 3 §7's answer to "code leaked publicly", and ONE call rather
+ *  than two.
+ *
+ *  Kd's words for it: *"new code out, old one off, together"*. It is a server
+ *  route and not two client calls because the halves fail independently: pause
+ *  the old one, lose the connection, and the gym is left with NO working code —
+ *  a gym nobody can join, which is the exact state `createOrgAttempt` opens a
+ *  transaction to prevent. One transaction, both or neither.
+ *
+ *  BOTH rows come back. The new code is what the owner shares; `replaced` is
+ *  proof the old one is off, so the screen can say so instead of the owner
+ *  reloading to check. */
+export const rotateOrgCodeResponseSchema = z.object({
+  code: orgCodeSchema,
+  replaced: orgCodeSchema,
+});
+export type RotateOrgCodeResponse = z.infer<typeof rotateOrgCodeResponseSchema>;
 
 /** One row of "my orgs". A single row carries BOTH relationships because the
  *  default owner IS a member (Part 3 §4.0 step 6) — two lists would show the

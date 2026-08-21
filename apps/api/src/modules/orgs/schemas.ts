@@ -5,6 +5,7 @@ import { z } from "zod";
 
 export {
   confirmApplicationResponseSchema,
+  createOrgCodeRequestSchema,
   createOrgRequestSchema,
   createOrgResponseSchema,
   createOrgTypeSchema,
@@ -18,6 +19,7 @@ export {
   orgApplicationPageSchema,
   orgApplicationSchema,
   orgApplicationStatusSchema,
+  orgCodeMutationResponseSchema,
   orgCodeSchema,
   orgCodesResponseSchema,
   orgMemberListQuerySchema,
@@ -27,9 +29,12 @@ export {
   orgTypeSchema,
   rejectApplicationResponseSchema,
   removeMemberResponseSchema,
+  rotateOrgCodeResponseSchema,
+  updateOrgCodeRequestSchema,
 } from "@app/shared";
 export type {
   ConfirmApplicationResponse,
+  CreateOrgCodeRequest,
   CreateOrgRequest,
   CreateOrgResponse,
   JoinOrgRequest,
@@ -46,6 +51,7 @@ export type {
   OrgApplicationPage,
   OrgApplicationStatus,
   OrgCode,
+  OrgCodeMutationResponse,
   OrgCodesResponse,
   OrgMember,
   OrgMemberListQuery,
@@ -55,6 +61,8 @@ export type {
   OrgType,
   RejectApplicationResponse,
   RemoveMemberResponse,
+  RotateOrgCodeResponse,
+  UpdateOrgCodeRequest,
 } from "@app/shared";
 
 /** A non-uuid :gymId must fail as a 400 at the boundary, never as a 500 from
@@ -79,6 +87,23 @@ export const memberParamsSchema = z
   .object({ gymId: z.string().uuid(), userId: z.string().uuid() })
   .strict();
 export type MemberParams = z.infer<typeof memberParamsSchema>;
+
+/** The gym id AND the code being changed.
+ *
+ *  **The code is bounded but NOT alphabet-checked here, deliberately.** A code
+ *  that is six legal characters and belongs to another gym, and a code that is
+ *  six characters of nonsense, must both come back as the module's standing 404
+ *  — an alphabet rejection would be a 400, and the difference between "400" and
+ *  "404" is an oracle telling a stranger which strings are real codes. Length is
+ *  bounded so a megabyte of path never reaches Postgres.
+ *
+ *  Uppercase-and-strip happens in the SERVICE (`normaliseCode`), not here: the
+ *  join door already normalises there and one spelling of that rule is what
+ *  stops a pasted "k7qm-2x" missing a row stored as "K7QM2X". */
+export const codeParamsSchema = z
+  .object({ gymId: z.string().uuid(), code: z.string().trim().min(1).max(32) })
+  .strict();
+export type CodeParams = z.infer<typeof codeParamsSchema>;
 
 /** The nudge route carries NO gym id, and that is the tenancy decision rather
  *  than an omission: the caller is nudging THEIR OWN application, so the pair
