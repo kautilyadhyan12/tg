@@ -14143,3 +14143,30 @@ site in both cases). Logged in `BACKLOG.md`, not fixed here (R1.1).
 
 **NOTHING TICKS except the delete/pile-up line.** The SMOKE (13 steps now, two
 new) and a T3 round finding zero Critical/High are both UNRUN.
+
+## THE JOIN-CODE SMOKE PASSES — 13 steps, and the gate that remains (2026-08-21)
+
+Kd ran `RUNBOOK/smoke-join-codes.md` against commit `2273fc4` and answered **"all
+passed"**. The run record lives in the sheet; this entry exists so the next chat
+does not ask him to run it again (the standing lesson at :12841 — a smoke sheet
+that cannot say whether it was run sends the next chat back to Kd for a test he
+has already done).
+
+**What the pass settles, and only this:** the five new or rewritten steps were
+exercised in a real browser against the Neon dev branch and none of them lied —
+step 6's count read **1** where the old counter said 2, steps 8–9's boxes refused
+typing (including `19 07 2026` verbatim, the input that produced the wrong date),
+step 12 removed a switched-off code with its member surviving, and step 13's
+WORKING code offered no Remove button. **It also settles the CORS preflight for
+`DELETE /v1/orgs/:gymId/codes/:code`** — the one class of failure `fastify.inject`
+is structurally incapable of seeing (the Card-4 precedent, 250 green tests over a
+dead browser method).
+
+**What it does not settle:** wording regressions, and steps 1–5/7/10/11 beyond
+"still works" — those were re-run, not re-verified in detail.
+
+**THE REMAINING GATE IS T3, AND IT IS NOW OWED ON THREE COMMITS** — :13803
+(server), :13920 (web), :14013 (these fixes). None has been reviewed by anybody.
+A passing smoke is a user confirming the screens do what they say; it is not a
+reviewer reading the diff for the things a screen cannot show. `OWED.md`'s console
+line now names T3 as its only blocker.

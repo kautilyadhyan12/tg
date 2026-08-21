@@ -4292,9 +4292,13 @@ file and is stated so nobody reads these as lower priority than they are.
       six and surfaces Groups as a filter rather than a screen, which is the same
       call :12343 made for the confirm queue. **A trainer sees the code and none
       of the controls** (§2.2's two rows), and the 403 stays the enforcement.
-      **What holds the tick now is the two GATES, not the build:** the browser
-      SMOKE (`RUNBOOK/smoke-join-codes.md`, written, UNRUN) and a T3 round
-      finding zero Critical/High (UNRUN). Also still unbuilt on this line:
+      **What holds the tick now is ONE gate, not two: T3.** The browser SMOKE
+      **PASSED 2026-08-21** — Kd ran all 13 steps against commit `2273fc4` and
+      answered "all passed"; the run record is in the sheet itself and the round
+      of fixes it produced is DECISIONS :14013. **A T3 round finding zero
+      Critical/High is still UNRUN, on all three join-code commits** (:13803
+      server, :13920 web, :14013 the smoke fixes) — a passing smoke is not a
+      review. Also still unbuilt on this line:
       RESTORE, staff management, CSV export, nudges.
       ~~**AND A DEFERRAL THIS CARD MAKES, recorded here rather than in prose: a
       code can be turned OFF but never DELETED.** `ORG_CODES_MAX` is 100, derived

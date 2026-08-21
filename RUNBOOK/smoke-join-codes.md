@@ -4,6 +4,26 @@
 and back on, put an end date or a people-limit on one, and swap a leaked code for
 a fresh one.
 
+## RESULT — PASSED 2026-08-21 (Kd), on commit `2273fc4`: "all passed"
+
+**Recorded as a GLOBAL pass across all 13 steps, not per-step evidence.** What it
+settles: the five steps that were new or rewritten this day were exercised in a
+real browser against the Neon dev database and none of them lied — the count under
+a code read **1** where the old counter said 2 (step 6), neither the date box nor
+the people-limit box accepted typing (steps 8–9), a switched-off code was removed
+and the member who joined with it survived (step 12), and a WORKING code offered no
+Remove button (step 13). It also settles the CORS preflight question for `DELETE
+/v1/orgs/:gymId/codes/:code`, which no `fastify.inject` test can see.
+
+**What it does NOT settle:** exact wording regressions, and anything on steps 1–5,
+7, 10 and 11 beyond "it still works" — those passed on the earlier build too and
+were re-run rather than re-verified in detail.
+
+**T3 IS STILL OWED.** A passing smoke is not a review, and no chat has reviewed
+any of the three join-code commits (:13803, :13920, :14013).
+
+---
+
 **13 steps, about 20 minutes.**
 
 **Updated 2026-08-21 after Kd's first run.** Three things he found are fixed and

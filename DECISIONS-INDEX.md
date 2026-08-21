@@ -106,6 +106,15 @@ mid-file: re-derive them with
   sweep ran — :13336's permanent guard working on the file it was added for.
   **NOTHING ELSE TICKS: the SMOKE (`RUNBOOK/smoke-join-codes.md`, written) and
   T3 are both UNRUN.**
+- **:14147** — 2026-08-21 — **THE JOIN-CODE SMOKE PASSES (13 steps, Kd, commit
+  `2273fc4`, "all passed").** **Read before asking Kd to run that sheet again —
+  he has.** Settles: the count reads 1 not 2, neither box accepts typing (`19 07
+  2026` verbatim), a removed code keeps its member, a WORKING code offers no
+  Remove — **and the CORS preflight on `DELETE …/codes/:code`, which
+  `fastify.inject` cannot see** (Card-4's 250-green-tests-over-a-dead-method
+  precedent). Does NOT settle wording, or steps 1–5/7/10/11 beyond "still works".
+  **THE ONLY REMAINING GATE IS T3, now owed on THREE commits — :13803, :13920,
+  :14013 — none reviewed by anybody. A passing smoke is not a review.**
 - **:14013** — 2026-08-21 — **KD'S SMOKE FINDS A NUMBER THAT LIES, AND THE
   PILE-UP HE PREDICTED.** Fixes on top of :13803/:13920. **Read before touching a
   code's count, `gym_codes.uses`, the limits editor, or anything that deletes a

@@ -9048,3 +9048,24 @@ NEXT
   2. **T3 — a fresh chat, on the diff of ALL THREE commits** (:13803 server,
      :13920 web, :14013 these fixes). None has been reviewed.
 ```
+
+```
+TASK: THE JOIN-CODE SMOKE PASSED. DECISIONS :14147. **Do NOT ask Kd to run
+      `RUNBOOK/smoke-join-codes.md` again — he ran all 13 steps on `2273fc4`
+      and answered "all passed".** The run record is in the sheet's own header.
+
+WHAT THIS LEAVES
+  · **ONE gate: T3, and it is owed on THREE commits** — :13803 (server half),
+    :13920 (web half), :14013 (the fixes his smoke produced). NONE has been
+    reviewed. `OWED.md`'s console line names T3 as its only blocker now.
+  · A T3 is a FRESH CHAT on the diff, never a subagent and never this chat.
+
+THE DIFF TO REVIEW
+  `git diff fce9ad6..HEAD` — the three join-code commits together.
+
+STATE
+  · Branch `web-repoint`, clean, `2273fc4` + this doc commit.
+  · Migration `0012` is applied to BOTH databases (local + the Neon dev branch).
+  · Local Postgres is running in Docker; `pnpm --filter api test:local` is the
+    command, and `MUTATE_ONLY=` (not `--only=`) scopes a mutation sweep.
+```
