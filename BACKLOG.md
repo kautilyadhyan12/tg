@@ -1557,3 +1557,40 @@ line that merely contains it), O29's application lookup in the confirm path
 (reject holds the second). **So both mutants still test what they claim**, and
 the risk is drift: an edit above either site would silently re-point the mutant
 rather than abort. Not fixed here (R1.1 — this card changed neither site).
+
+---
+
+## 2026-08-21 · T3 round 1 on the three join-code commits — 10 Lows, ALL FIXED
+
+**VERDICT: 0 Critical/High → the packet SHIPS** (:5348 rule 1). No redesign
+trigger — round 1, nothing to repeat. Ten Low findings, every one fixed in the
+same round, because a Low buys no further round and is still fixed. Fixed in
+commit named at the end of this block.
+
+**The reviewer's own instrument work is worth keeping**: they ran a mutation
+themselves rather than reading, which is what turned L-1 from an opinion into a
+measurement — `onSaveLimits` shorn of `expiresAt`, 101 tests still green.
+
+| # | What | Fix |
+|---|---|---|
+| L-1 | **The per-code Limits editor was reached by NO test.** Proved by mutation: dropping `expiresAt` from its save left 101 tests green. C26 guards this exact class on the PAUSE switch; the control beside it had nothing, and :13920 claimed it was guarded. | Four render tests (both-fields, refusal, past-date, changed-past-date) + mutants **C33/C34/C35**, all RED. |
+| L-2 | `DELETE …/codes/:code` missing from the 401 list — whose own comment says the list exists because "a card can add routes and leave this list naming the old ones". Second time. | Added beside the other four. |
+| L-3 | `createCode`'s comment claimed one transaction made the cap safe. **Under READ COMMITTED it does not**: two staff both read 99, both insert, and the 101st code is invisible to `listCodes`' `LIMIT` while the door honours it. | **Made the claim TRUE**: `lockOrgRow` (§4.2's own instrument, same row, same order) in `createCode` and `rotateCode`; two-client race test; mutant **O71**. |
+| L-4 | `updateCode`'s comment implied `FOR UPDATE OF c` covered the live count — it cannot, `joined` comes from `gym_members`. | **Comment corrected, code left alone**, with the reason stated: the race is self-healing (a code reads "Fully used" early, revives when anybody leaves) and the fix would serialise an owner's typing against every confirm in the gym. |
+| L-5 | `ORG_CODES_MAX`'s comment still said "retired codes count" and "delete an old code is a real feature request" — both made false by removal shipping in the same diff. | Rewritten against `0012`. |
+| L-6 | `whyNotUsable`'s exhausted sentence ("used the number of times you allowed") described the retired `uses` semantics and implied the state was permanent. Reviewer weighed C/H under :5807 1a and landed Low — no number, and true when shown. | Reworded to name people who are IN and say it lifts when somebody leaves; the test now asserts the CLAIM, not the phrasing. |
+| L-7 | `save()` closed the editor before the await, so any refusal discarded the owner's edits. The create form does the opposite. | `run()` now answers whether the change landed; the editor closes only on success. Mutant **C34**. |
+| L-8 | `removeOrgCode` returned a bare `{ removed: true }` — the only answer in the module not parsed through a shared schema. | `removeOrgCodeResponseSchema` in `@app/shared`, parsed on the way out, `{ status: "removed" }` like its sibling. |
+| L-9 | A test titled "leaves a value it cannot read alone" asserted the opposite. Behaviour fine, title wrong. | Renamed to what it asserts, with the reasoning. |
+| L-10 | Opening Limits on an EXPIRED code seeded the past date, so saving a limit change was refused over a field the owner never touched (and, per L-7, lost the edit). | An UNTOUCHED past date is omitted from the PATCH; a date they DID change still travels and still gets refused. Mutant **C35**. |
+
+**Two instrument guards fired while fixing these, both worth the noise:** a first
+draft of C33 mutated to `if (false)` before a `const` — a SyntaxError, which the
+harness caught as "no test tally" rather than reporting a false RED; and C35's
+`expect` filter carried a curly apostrophe copied from its test's title, which
+the harness refuses outright because `-t` would match nothing and the mutant
+would look ALIVE. **Neither guard was written for this card.**
+
+**Also learned and worth carrying: the web harness has NO scoping flag** — no
+`MUTATE_ONLY`, no `--only`. It always runs all 35. The api harness reads
+`MUTATE_ONLY` from the environment (`--only=` is silently ignored there too).

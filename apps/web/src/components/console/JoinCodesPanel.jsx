@@ -178,25 +178,26 @@ function CodeRow({ code, busy, onPause, onWake, onRotate, onSaveLimits, onRemove
   const why = whyNotUsable(code);
   const removable = canRemoveCode(code);
 
+  // What `openEditor` seeded, kept so `save` can tell an UNTOUCHED field from a
+  // deliberate one. Only the date needs it — see the past-expiry case in `save`.
+  const [seededEndDate, setSeededEndDate] = useState('');
+
   const openEditor = () => {
     // Seeded from the row's CURRENT values so the owner edits what is there
     // rather than a blank form that would read as "no limits" and, on save,
     // become that. The date input needs `YYYY-MM-DD` in the LOCAL zone, which is
     // what these three getters give — `toISOString().slice(0,10)` is UTC's day
     // and is the wrong one for half the world late in the evening.
+    let seeded = '';
     if (typeof code.expiresAt === 'string' && code.expiresAt !== '') {
       const at = new Date(code.expiresAt);
       if (!Number.isNaN(at.getTime())) {
         const pad = (n) => String(n).padStart(2, '0');
-        setEndDate(
-          `${String(at.getFullYear())}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`,
-        );
-      } else {
-        setEndDate('');
+        seeded = `${String(at.getFullYear())}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
       }
-    } else {
-      setEndDate('');
     }
+    setEndDate(seeded);
+    setSeededEndDate(seeded);
     setLimit(typeof code.maxUses === 'number' ? String(code.maxUses) : '');
     setFieldError(null);
     setEditing(true);
@@ -212,8 +213,30 @@ function CodeRow({ code, busy, onPause, onWake, onRotate, onSaveLimits, onRemove
     // date box means "never expires" and must actually clear it. That is the
     // opposite of the pause switch, which sends only `paused` precisely because
     // it shows nothing else.
-    setEditing(false);
-    onSaveLimits({ expiresAt: endOfDayIso(endDate), maxUses: parsed.value });
+    //
+    // ONE EXCEPTION, and it is narrow (T3 L-10): an end date the owner did NOT
+    // TOUCH and that has ALREADY PASSED is left out. The server refuses a past
+    // expiry with "that end date has already passed" — correctly, since a code
+    // created dead is a trap — but on an already-expired code that refusal lands
+    // on a field the owner never went near, over a limit change they did make.
+    // An absent field is left alone by a PATCH, which is exactly the intent. A
+    // date they DID change still travels, past or not, and still gets the
+    // refusal it deserves.
+    const patch = { maxUses: parsed.value };
+    const endIso = endOfDayIso(endDate);
+    const untouchedAndPast =
+      endDate === seededEndDate && endIso !== null && Date.parse(endIso) <= Date.now();
+    if (!untouchedAndPast) patch.expiresAt = endIso;
+
+    // The editor closes only when the change LANDED (T3 L-7). It used to close
+    // first, so a refusal — a limit below the people already in, a date in the
+    // past — threw away everything the owner had typed and left them re-opening
+    // the form to find out what it had been. The create form has always worked
+    // this way; this control was the odd one out.
+    void (async () => {
+      const ok = await onSaveLimits(patch);
+      if (ok) setEditing(false);
+    })();
   };
 
   return (
@@ -440,15 +463,22 @@ export default function JoinCodesPanel({ gymId, codes, staffRole, onChanged }) {
    *  sentence rather than a re-worded guess, and success re-reads from the
    *  server rather than patching a row into local state — the list is the
    *  server's answer, and a screen that edits its own copy is a screen that can
-   *  disagree with the next reload. */
+   *  disagree with the next reload.
+   *
+   *  **It answers whether the change LANDED** (T3 L-7). Callers that hold the
+   *  owner's typing — only the limits editor — need to know, because closing a
+   *  form on a refusal discards the edit. The rest ignore it, and the error is
+   *  on screen either way. */
   const run = async (action) => {
     setBusy(true);
     setError(null);
     try {
       await action();
       await onChanged();
+      return true;
     } catch (err) {
       setError(errorText(err, "That didn't work. Please try again."));
+      return false;
     } finally {
       setBusy(false);
     }

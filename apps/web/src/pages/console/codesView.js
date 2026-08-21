@@ -84,7 +84,13 @@ export function whyNotUsable(code, now = Date.now()) {
     case 'expired':
       return 'Past its end date, so nobody can join with it any more.';
     case 'exhausted':
-      return 'It has been used the number of times you allowed, so nobody else can join with it.';
+      // NOT "it has been used the number of times you allowed" (T3 L-6). The
+      // limit counts PEOPLE WHO ARE IN, not times the code was used, so a code
+      // may have admitted far more people than its limit over its life — and,
+      // more importantly, this state undoes itself the moment somebody leaves,
+      // which the old sentence implied was impossible. Same standard
+      // `codeSummary` is written to: the words are the thing that can be false.
+      return 'The number of people you allowed are in through it, so nobody else can join until somebody leaves.';
     default:
       // `codeState` answers 'unknown' for a missing row. Saying nothing is the
       // only honest option — a reason invented here would be a false sentence

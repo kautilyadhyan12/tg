@@ -616,6 +616,91 @@ describe('The gym', () => {
     });
   });
 
+  // ── THE LIMITS EDITOR (T3 L-1: this control was reached by NO test, which a
+  //    reviewer proved by deleting `expiresAt` from its save and watching 101
+  //    tests stay green — C26's data-loss class on the other control) ────────
+
+  it('sends BOTH fields from the Limits editor, so clearing the date clears it', async () => {
+    orgService.getCodes.mockResolvedValue({
+      data: {
+        codes: [{ ...LIVE_CODE, expiresAt: '2099-12-31T18:29:59.000Z', maxUses: 5, joined: 1 }],
+      },
+    });
+    drawOverview();
+    fireEvent.click(await screen.findByText('Limits'));
+
+    // Seeded from the row, not blank — a blank form would read as "no limits"
+    // and become that on save.
+    expect(screen.getByLabelText(/Maximum people/i).value).toBe('5');
+    expect(screen.getByLabelText(/Stop working after/i).value).not.toBe('');
+
+    fireEvent.click(screen.getByText('Clear the end date'));
+    fireEvent.click(screen.getByText('Save'));
+    await waitFor(() => {
+      expect(orgService.updateCode).toHaveBeenCalled();
+    });
+    // BOTH keys. Dropping either one silently discards a restriction this
+    // editor displayed — the exact defect the reviewer measured.
+    expect(orgService.updateCode.mock.calls[0][2]).toEqual({ expiresAt: null, maxUses: 5 });
+  });
+
+  it('keeps the editor open and the typing when the server refuses (T3 L-7)', async () => {
+    orgService.getCodes.mockResolvedValue({
+      data: { codes: [{ ...LIVE_CODE, maxUses: 5, joined: 3 }] },
+    });
+    orgService.updateCode.mockRejectedValue(
+      apiError(409, 'max_uses_below_uses', '3 people are in through this code, so the limit can’t be lower than that.'),
+    );
+    drawOverview();
+    fireEvent.click(await screen.findByText('Limits'));
+    fireEvent.click(screen.getByLabelText('One fewer'));
+    fireEvent.click(screen.getByText('Save'));
+
+    expect(await screen.findByText(/3 people are in through this code/i)).toBeTruthy();
+    // Still open, still holding what the owner set — closing on a refusal threw
+    // the edit away and made them re-open the form to see what it had been.
+    expect(screen.getByLabelText(/Maximum people/i).value).toBe('4');
+    expect(screen.getByText('Save')).toBeTruthy();
+  });
+
+  it('does not resend an expired code’s old date the owner never touched (T3 L-10)', async () => {
+    orgService.getCodes.mockResolvedValue({
+      data: {
+        codes: [{ ...LIVE_CODE, expiresAt: '2020-01-01T00:00:00.000Z', maxUses: null, joined: 0 }],
+      },
+    });
+    drawOverview();
+    fireEvent.click(await screen.findByText('Limits'));
+    fireEvent.click(screen.getByLabelText('One more'));
+    fireEvent.click(screen.getByText('Save'));
+    await waitFor(() => {
+      expect(orgService.updateCode).toHaveBeenCalled();
+    });
+    // The server refuses a past expiry, correctly. Sending one back untouched
+    // would refuse the owner's LIMIT change over a date they never went near.
+    expect(orgService.updateCode.mock.calls[0][2]).toEqual({ maxUses: 1 });
+  });
+
+  it('still sends a past date the owner DID choose, and lets the server refuse it', async () => {
+    orgService.getCodes.mockResolvedValue({
+      data: {
+        codes: [{ ...LIVE_CODE, expiresAt: '2020-01-01T00:00:00.000Z', maxUses: null, joined: 0 }],
+      },
+    });
+    drawOverview();
+    fireEvent.click(await screen.findByText('Limits'));
+    // A DIFFERENT past date — still past, but chosen. The exemption above is for
+    // an untouched field only; widening it would swallow a real mistake.
+    fireEvent.change(screen.getByLabelText(/Stop working after/i), {
+      target: { value: '2020-02-02' },
+    });
+    fireEvent.click(screen.getByText('Save'));
+    await waitFor(() => {
+      expect(orgService.updateCode).toHaveBeenCalled();
+    });
+    expect(orgService.updateCode.mock.calls[0][2].expiresAt).not.toBeUndefined();
+  });
+
   it('offers Remove only on a code that cannot let anybody in', async () => {
     drawOverview();
     // A WORKING code has no Remove button — the server refuses that with a 409

@@ -29,6 +29,7 @@ export {
   orgTypeSchema,
   rejectApplicationResponseSchema,
   removeMemberResponseSchema,
+  removeOrgCodeResponseSchema,
   rotateOrgCodeResponseSchema,
   updateOrgCodeRequestSchema,
 } from "@app/shared";
@@ -61,6 +62,7 @@ export type {
   OrgType,
   RejectApplicationResponse,
   RemoveMemberResponse,
+  RemoveOrgCodeResponse,
   RotateOrgCodeResponse,
   UpdateOrgCodeRequest,
 } from "@app/shared";

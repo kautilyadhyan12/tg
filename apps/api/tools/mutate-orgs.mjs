@@ -810,6 +810,14 @@ const MUTANTS = [
     expect: 'removes an EXPIRED code',
   },
   {
+    id: 'O71',
+    target: 'repo',
+    why: "DATA LOSS / A CODE THE CONSOLE CANNOT SEE: the cap stops being serialised on the gym row, so under READ COMMITTED two staff creating at once both read 99 and both insert — the gym holds 101 codes and the 101st is invisible to `listCodes`' LIMIT while the join door honours it (T3 L-3)",
+    from: '      await lockOrgRow(tx, input.gymId);\n      const counted = await tx<{ n: number }[]>`',
+    to: '      const counted = await tx<{ n: number }[]>`',
+    expect: 'two staff create at once',
+  },
+  {
     id: 'O70',
     target: 'service',
     why: "PRIVILEGE: tidying a code away drops to the INVITE tick, which §2.2 grants all three roles — so a trainer can make a gym's codes disappear from the owner's screen",

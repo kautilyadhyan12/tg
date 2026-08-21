@@ -1359,11 +1359,31 @@ function toCodeRow(raw: RawCode): CodeRow {
  *  creation at the same figure makes the list provably whole instead of
  *  provably truncated, which is worth more than any larger number would be.
  *
- *  Retired codes count. That is deliberate: they stay readable (a gym should be
- *  able to see the code it turned off last month) and a gym rotating monthly
- *  reaches this in eight years, by which time "delete an old code" is a real
- *  feature request rather than a guess. */
+ *  **REMOVED CODES DO NOT COUNT** (T3 L-5 — this paragraph said the opposite
+ *  until removal shipped in the same diff that made it false). Switched-off ones
+ *  still do: they stay on the list, a gym should be able to see the code it
+ *  turned off last month, and every visible code is one `listCodes` must be able
+ *  to return. What a gym does when it reaches the cap is take a finished code
+ *  off the list — which is what the refusal now tells them to do, and, unlike
+ *  the "delete one" it used to say, is a button that exists. */
 export const ORG_CODES_MAX = ORG_CODES_LIMIT;
+
+/** Serialise everything that follows against the SAME gym.
+ *
+ *  §4.2's instrument, on §4.2's row: the seat claim locks `gyms` and not a
+ *  COUNT, because locking a count serialises nothing — a second transaction
+ *  reads the same pre-insert number and passes the same check. A cap enforced by
+ *  "count, then insert, in one transaction" has exactly that hole under READ
+ *  COMMITTED, which is what this database runs and what every statement here has
+ *  always assumed (T3 L-3).
+ *
+ *  **CALL IT FIRST, BEFORE ANY `gym_codes` ROW IS LOCKED.** Lock order in this
+ *  module is org row → child rows, always, and it is stated in one place —
+ *  `claimSeat` — for the same reason: an ordering decided per-function is an
+ *  ordering that eventually reverses somewhere and deadlocks. */
+async function lockOrgRow(tx: TransactionSql, gymId: string): Promise<void> {
+  await tx`SELECT 1 FROM gyms WHERE id = ${gymId} FOR UPDATE`;
+}
 
 export type CreateCodeOutcome =
   | { kind: "created"; code: CodeRow }
@@ -1380,8 +1400,17 @@ export type CreateCodeOutcome =
  *  constraint is in `0001_init`, not merely in Drizzle's mind), which is what
  *  lets `applyByCode` look one up without being told the gym.
  *
- *  The count and the insert share ONE transaction so the cap is not a
- *  check-then-act two staff members can both pass. */
+ *  **THE CAP IS SERIALISED ON THE GYM ROW, and one transaction was NOT enough**
+ *  (T3 L-3 — this comment claimed the transaction alone did it, and under
+ *  READ COMMITTED, which is what this database runs, it does not: two staff
+ *  members creating at once both read 99 and both insert). The lock is §4.2's
+ *  own instrument, taken on the same row and in the same order the seat claim
+ *  takes it — org row first, `gym_codes` after — so the two cannot deadlock
+ *  against each other. Nothing in this module locks `gym_codes` and then reaches
+ *  for `gyms`, which is the ordering that would.
+ *
+ *  Cheap by construction: it serialises creating a code for ONE gym, an action a
+ *  gym takes a handful of times a year. */
 export async function createCode(
   sql: Sql,
   input: {
@@ -1395,6 +1424,7 @@ export async function createCode(
 ): Promise<CreateCodeOutcome> {
   try {
     return await sql.begin(async (tx) => {
+      await lockOrgRow(tx, input.gymId);
       const counted = await tx<{ n: number }[]>`
         SELECT count(*)::int AS n FROM gym_codes
         WHERE gym_id = ${input.gymId} AND removed_at IS NULL`;
@@ -1456,10 +1486,22 @@ export interface CodePatch {
  *  one gym's manager pause a DIFFERENT gym's poster by typing six characters —
  *  the textbook IDOR, hiding behind a column that happens to be unique.
  *
- *  `SELECT ... FOR UPDATE` then `UPDATE` in one transaction, rather than one
- *  clever statement, because `max_uses` has to be compared against the row's
- *  LIVE `uses`: two front-desk staff moving the limit at once would otherwise
- *  each read a count the other has already changed.
+ *  `SELECT ... FOR UPDATE OF c` then `UPDATE` in one transaction, rather than one
+ *  clever statement, because the new `max_uses` has to be compared against a
+ *  count read in the same breath, and because two front-desk staff moving the
+ *  limit at once must not each read a row the other has already changed.
+ *
+ *  **WHAT THE LOCK DOES NOT COVER, stated because the comment here used to imply
+ *  otherwise (T3 L-4): `joined` is counted from `gym_members`, and locking this
+ *  `gym_codes` row does not hold that count still.** A confirm landing between
+ *  the count and the UPDATE can leave `max_uses` one below the people actually
+ *  in. **Left as it is, deliberately.** The consequence is a code that reads
+ *  "Fully used" a little early and revives the moment anybody leaves — no seat is
+ *  lost, no member is affected, nothing is written that a later read disagrees
+ *  with. The alternative is taking the gym's row lock on every limit edit, which
+ *  serialises an owner's typing against every confirm in the gym to prevent a
+ *  self-healing display. `createCode` takes that lock because ITS race admits a
+ *  code the console can never list; this one does not, because it does not.
  *
  *  **A field the caller did not send is left ALONE**, which is what makes this a
  *  PATCH rather than a PUT: a screen that only knows about `paused` must not
@@ -1557,6 +1599,9 @@ export async function rotateCode(
 ): Promise<RotateCodeOutcome> {
   try {
     return await sql.begin(async (tx) => {
+      // BEFORE the code row is locked, so this path and `createCode` take the
+      // gym's row in the same order (T3 L-3's fix; `lockOrgRow` carries the why).
+      await lockOrgRow(tx, input.gymId);
       const existing = await tx<(RawCode & { removed_at: Date | null })[]>`
         SELECT c.code, c.label, c.paused, c.expires_at, c.max_uses, c.removed_at,
                (SELECT count(*)::int FROM gym_members m

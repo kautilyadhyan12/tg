@@ -377,6 +377,47 @@ const MUTANTS = [
     from: '              onClick={() => setConfirmingRemove(true)}',
     to: '              onClick={() => onRemove()}',
   },
+
+  // ── C33–C35: THE LIMITS EDITOR, WHICH NO MUTANT AND NO TEST REACHED ─────
+  //
+  // T3 L-1 found it by deleting `expiresAt` from the save and watching 101 tests
+  // stay green. C26 already guarded the PAUSE switch against exactly this class
+  // (a control silently dropping a field it displayed) and the sibling control
+  // beside it had nothing. That is what a mutant row is for.
+  {
+    id: 'C33',
+    target: 'codespanel',
+    suite: RENDER_SUITE,
+    why: "DATA LOSS: the limits editor stops sending the end date it DISPLAYED, so an owner who clears the date to mean 'never expires' saves a change that silently keeps the old expiry — C26's class on the control C26 does not cover",
+    expect: 'sends BOTH fields from the Limits editor',
+    // The condition INVERTED rather than the statement deleted: a first draft
+    // wrote `if (false)` before a `const`, which is a SyntaxError, and the
+    // harness aborted on "no test tally" rather than reporting a false RED. A
+    // mutant has to be code that RUNS and is wrong, not code that fails to load.
+    from: '    if (!untouchedAndPast) patch.expiresAt = endIso;',
+    to: '    if (untouchedAndPast) patch.expiresAt = endIso;',
+  },
+  {
+    id: 'C34',
+    target: 'codespanel',
+    suite: RENDER_SUITE,
+    why: "THE OWNER'S TYPING: the editor closes before the change lands, so a refusal — a limit below the people already in — throws away what they set and leaves them re-opening the form to find out what it was",
+    expect: 'keeps the editor open and the typing when the server refuses',
+    from: '      const ok = await onSaveLimits(patch);\n      if (ok) setEditing(false);',
+    to: '      await onSaveLimits(patch);\n      setEditing(false);',
+  },
+  {
+    id: 'C35',
+    target: 'codespanel',
+    suite: RENDER_SUITE,
+    why: "A REFUSAL ABOUT A FIELD NOBODY TOUCHED: an expired code's old date is sent back untouched, so the server refuses the owner's LIMIT change with 'that end date has already passed' — about a box they never went near",
+    // ASCII only: the test's own title carries a curly apostrophe and the
+    // harness refuses such a filter outright, because `-t` would match nothing
+    // and the mutant would report ALIVE for a reason that is not about the code.
+    expect: 'does not resend an expired code',
+    from: '    if (!untouchedAndPast) patch.expiresAt = endIso;',
+    to: '    patch.expiresAt = endIso;',
+  },
 ];
 
 const abort = (msg) => {

@@ -9069,3 +9069,44 @@ STATE
   · Local Postgres is running in Docker; `pnpm --filter api test:local` is the
     command, and `MUTATE_ONLY=` (not `--only=`) scopes a mutation sweep.
 ```
+
+```
+TASK: T3 ROUND 1 ON THE JOIN-CODE PACKET. **ZERO Critical/High — IT SHIPS.**
+      Ten Lows, ALL FIXED in the round. DECISIONS :14174, table in BACKLOG.md.
+      **NO ROUND 2 — a Low buys no round (:5348 r1).**
+
+THE TWO A NEXT CHAT SHOULD ACTUALLY CARRY
+  · **A MUTANT ROW IS A CLAIM ABOUT ONE CALL SITE.** C26 had guarded "a control
+    silently dropping a field it displayed" on the PAUSE switch since :13920, and
+    the LIMITS EDITOR one component away had no test at all — the reviewer proved
+    it by deleting `expiresAt` from its save and watching 101 tests stay green.
+    Writing a mutant for a sibling makes a control LOOK covered.
+  · **A LOCK IS WARRANTED BY THE CONSEQUENCE, NOT BY THE RACE.** Two findings,
+    same shape, opposite answers. `createCode`'s cap raced and admitted a 101st
+    code the console can never list ⇒ `lockOrgRow` added (§4.2's instrument, org
+    row → child rows, matching `claimSeat`). `updateCode`'s count races too but
+    self-heals — "Fully used" early, revives when anybody leaves ⇒ comment fixed,
+    code untouched, reason written down.
+
+THINGS A LATER CHAT WILL OTHERWISE GET WRONG
+  · **`OWED.md`'s §2.2-matrix line STILL DOES NOT TICK, and both gates ARE met.**
+    Its title is the whole matrix: RESTORE a member, staff management, CSV export
+    and nudges are still routeless. A draft of :14174 claimed the tick; ticking it
+    loses four items.
+  · **api 555/555 was a CLEAN FULL RUN and that is a claim about a RUN.** :14013
+    measured 3 reds in `catalog.seed` on the same suite hours earlier. The
+    seed-count flake is unfixed and keeps its own OWED line.
+  · A mutant that is a SyntaxError reads as "no test tally", not as RED. A `-t`
+    filter containing a curly apostrophe is REFUSED by the harness outright.
+  · **The web harness has NO scoping flag** — it always runs all 35. The api's is
+    `MUTATE_ONLY` in the environment; `--only=` is silently ignored by both.
+
+GATES
+  · api **555/555 / 44 files** local · web **980/980 / 41 files** · orgs 108/108 ·
+    web sweep **35 mutants 35 RED 0 ALIVE** · O58/O67/O69/O71 RED (subset) ·
+    tsc + eslint clean.
+
+NEXT
+  1. **The join-code packet is DONE — build, smoke and review all behind it.**
+  2. Kd's next card is still the LOGIN DOOR (:10824), unchanged by any of this.
+```

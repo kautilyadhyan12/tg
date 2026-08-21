@@ -307,6 +307,9 @@ d("orgs routes (real Postgres)", () => {
       401,
     );
     expect((await post(`/v1/orgs/${someGym}/codes/${someCode}/rotate`, {})).statusCode).toBe(401);
+    // T3 L-2: added the day removal shipped, because this list had already been
+    // named in its own comment as the thing a new card forgets. Twice now.
+    expect((await del(`/v1/orgs/${someGym}/codes/${someCode}`)).statusCode).toBe(401);
   });
 
   it("creates the org, its first code, the owner staff row and the owner's seat", { timeout: 30_000 }, async () => {
@@ -2729,6 +2732,64 @@ d("orgs routes (real Postgres)", () => {
       SELECT count(*)::int AS n FROM gym_members
       WHERE gym_id = ${org.org.id} AND removed_at IS NULL AND complimentary = false`;
     expect(live[0]?.n).toBe(1);
+  });
+
+  it("admits exactly one code past the cap when two staff create at once (T3 L-3)", { timeout: 90_000 }, async () => {
+    const owner = await makeUser("caprace-owner");
+    const org = await makeOrg(owner.cookies, "Orgs Test Cap Race");
+    // ONE PLACE LEFT, so the two creates below contend for it. `MAX - 2` and not
+    // `MAX - 1`: the gym already holds its own Front Desk code, so this puts it
+    // at 99. The first draft used `MAX - 1`, filled the gym TO the cap, and both
+    // calls were correctly refused — a fixture that made the test pass for the
+    // wrong reason and would have gone green with the lock deleted (:5104 F5,
+    // fix the fixture and never the assertion).
+    const bulk = Array.from({ length: orgRepo.ORG_CODES_MAX - 2 }, (_, i) => ({
+      gym_id: org.org.id,
+      code: `XR${String(i).padStart(4, "0")}`,
+      label: `Bulk ${String(i)}`,
+    }));
+    await sql`INSERT INTO gym_codes ${sql(bulk, "gym_id", "code", "label")}`;
+
+    // TWO SEPARATE CLIENTS for the reason the seat race names: the app's pool is
+    // max:1 and would serialise these for us, making the assertion true with the
+    // lock removed. Under READ COMMITTED and no lock, both transactions read the
+    // same count of 99, both pass the check, and the gym ends up holding 101
+    // codes — one of which `listCodes`' `LIMIT 100` can never show, while the
+    // join door honours it happily.
+    const c1 = postgres(url ?? "", { prepare: false, max: 1 });
+    const c2 = postgres(url ?? "", { prepare: false, max: 1 });
+    try {
+      const [r1, r2] = await Promise.all([
+        orgRepo.createCode(c1, {
+          gymId: org.org.id,
+          code: "RACEAA",
+          label: "Front Desk",
+          expiresAt: null,
+          maxUses: null,
+          actorUserId: owner.userId,
+        }),
+        orgRepo.createCode(c2, {
+          gymId: org.org.id,
+          code: "RACEBB",
+          label: "Front Desk",
+          expiresAt: null,
+          maxUses: null,
+          actorUserId: owner.userId,
+        }),
+      ]);
+      expect([r1.kind, r2.kind].sort()).toEqual(["created", "too_many"]);
+    } finally {
+      await c1.end({ timeout: 5 });
+      await c2.end({ timeout: 5 });
+    }
+
+    // AND THE LIST IS STILL WHOLE, which is the guarantee the cap exists for:
+    // every visible code is one `listCodes` can return.
+    const visible = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_codes
+      WHERE gym_id = ${org.org.id} AND removed_at IS NULL`;
+    expect(visible[0]?.n).toBe(orgRepo.ORG_CODES_MAX);
+    expect(await readCodes(org.org.id, owner.cookies)).toHaveLength(orgRepo.ORG_CODES_MAX);
   });
 
   it("collapses two simultaneous APPLIES by the same person into one application", { timeout: 60_000 }, async () => {

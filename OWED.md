@@ -4292,14 +4292,17 @@ file and is stated so nobody reads these as lower priority than they are.
       six and surfaces Groups as a filter rather than a screen, which is the same
       call :12343 made for the confirm queue. **A trainer sees the code and none
       of the controls** (§2.2's two rows), and the 403 stays the enforcement.
-      **What holds the tick now is ONE gate, not two: T3.** The browser SMOKE
-      **PASSED 2026-08-21** — Kd ran all 13 steps against commit `2273fc4` and
-      answered "all passed"; the run record is in the sheet itself and the round
-      of fixes it produced is DECISIONS :14013. **A T3 round finding zero
-      Critical/High is still UNRUN, on all three join-code commits** (:13803
-      server, :13920 web, :14013 the smoke fixes) — a passing smoke is not a
-      review. Also still unbuilt on this line:
-      RESTORE, staff management, CSV export, nudges.
+      **BOTH GATES ARE NOW MET, AND THIS LINE STILL DOES NOT TICK — read the
+      next sentence before quoting either fact.** The browser SMOKE **PASSED
+      2026-08-21** (Kd, all 13 steps, commit `2273fc4`, "all passed"; run record
+      in the sheet, the fixes it produced at DECISIONS :14013), and **T3 round 1
+      came back ZERO Critical/High** across all three join-code commits, ten Lows,
+      all fixed in the round (DECISIONS :14174, `BACKLOG.md` for the table).
+      **So the JOIN-CODE half of this line is DONE and its gates are behind it.**
+      What holds the line open is the rest of its own title, which was never about
+      codes: **RESTORE a member, staff management, CSV export, nudges** — all four
+      still unbuilt, none with a route. A chat that ticks this line because the
+      code work finished will lose those four.
       ~~**AND A DEFERRAL THIS CARD MAKES, recorded here rather than in prose: a
       code can be turned OFF but never DELETED.** `ORG_CODES_MAX` is 100, derived
       from the `listCodes` ceiling so the list is provably whole rather than

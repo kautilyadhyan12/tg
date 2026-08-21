@@ -92,7 +92,12 @@ describe('whyNotUsable', () => {
 
     expect(paused).toMatch(/switch it back on/i);
     expect(expired).toMatch(/end date/i);
-    expect(used).toMatch(/number of times/i);
+    // The claim, not the phrasing: this state is about people who are IN and it
+    // undoes itself when one leaves. "used the number of times you allowed" said
+    // the opposite and was T3 L-6.
+    expect(used).toMatch(/are in through it/i);
+    expect(used).toMatch(/until somebody leaves/i);
+    expect(used).not.toMatch(/number of times/i);
     // Three genuinely different sentences: a single "this code doesn't work"
     // would leave the owner guessing which of three fixes applies.
     expect(new Set([paused, expired, used]).size).toBe(3);
@@ -247,7 +252,12 @@ describe('stepLimit', () => {
     }
   });
 
-  it('leaves a value it cannot read alone rather than inventing one', () => {
+  it('treats a value it cannot read as "no limit" and steps from there', () => {
+    // The title used to say it left such a value ALONE, which is the opposite of
+    // what these two lines assert (T3 L-9). Stepping from zero is the right
+    // behaviour — the box cannot be typed into, so an unreadable value is a
+    // restored form's leftover, and one tap should give the owner a usable
+    // number rather than preserving something they never wrote.
     expect(stepLimit('lots', 1)).toBe('1');
     expect(stepLimit('lots', -1)).toBe('');
   });

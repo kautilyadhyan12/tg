@@ -106,6 +106,38 @@ mid-file: re-derive them with
   sweep ran — :13336's permanent guard working on the file it was added for.
   **NOTHING ELSE TICKS: the SMOKE (`RUNBOOK/smoke-join-codes.md`, written) and
   T3 are both UNRUN.**
+- **:14174** — 2026-08-21 — **T3 ROUND 1 ON THE JOIN-CODE PACKET: ZERO
+  CRITICAL/HIGH — IT SHIPS — and ten Lows, all fixed in the round.** **Read
+  before writing a mutant row, before trusting a cap enforced by "one
+  transaction", and before adding a control beside a guarded one.** **L-1: the
+  Limits editor was reached by NO test, and the reviewer PROVED it by mutation —
+  deleted `expiresAt` from its save, 101 tests stayed green.** C26 guards that
+  exact class on the PAUSE switch one component away, and :13920 claimed the
+  editor was guarded; **a mutant row is a claim about ONE call site, and writing
+  one for a sibling makes a control LOOK covered.** **L-3: `createCode`'s cap was
+  a check-then-act and its comment denied it** — under READ COMMITTED two staff
+  both read 99 and both insert, and the 101st code is invisible to `listCodes`'
+  LIMIT while the door honours it. Fixed by making the claim TRUE: `lockOrgRow`
+  (§4.2's instrument, org row → child rows, matching `claimSeat`) in `createCode`
+  and `rotateCode`; race test + mutant **O71**; **its fixture was wrong first
+  (`MAX-1` filled the gym TO the cap, so both were refused and the test would
+  have passed with the lock deleted — :5104 F5).** **L-4 is the same shape,
+  answered the OTHER way on purpose: comment corrected, code left alone, because
+  that race is self-healing and a lock there would serialise an owner's typing
+  against every confirm in the gym. A LOCK IS WARRANTED BY THE CONSEQUENCE, NOT
+  BY THE RACE.** Also: removal now answers a shared schema (L-8), the editor no
+  longer closes on a refusal (L-7), an untouched past expiry is not resent
+  (L-10), and the exhausted sentence names people who are IN (L-6, weighed
+  against :5807 1a and landed Low WITH reasoning). **PROVE: api 555/555 (a
+  CLEAN full run — a claim about a RUN, not the suite; the `catalog.seed` flake is
+  unfixed) · web 980/980 · web sweep 35/35 RED · orgs 108/108 · O58/O67/O69/O71
+  RED.** Instrument: a mutant
+  that is a SyntaxError reads as "no test tally", a `-t` filter with a curly
+  apostrophe is REFUSED, and **the web harness has no scoping flag; the api's is
+  `MUTATE_ONLY`.** **BOTH GATES ARE MET AND THE `OWED.md` LINE STILL DOES NOT TICK** — its title
+  is the §2.2 MATRIX, and RESTORE / staff management / CSV export / nudges are
+  still routeless. A draft of this entry claimed the tick; ticking it would have
+  lost four items.
 - **:14147** — 2026-08-21 — **THE JOIN-CODE SMOKE PASSES (13 steps, Kd, commit
   `2273fc4`, "all passed").** **Read before asking Kd to run that sheet again —
   he has.** Settles: the count reads 1 not 2, neither box accepts typing (`19 07

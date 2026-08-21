@@ -328,6 +328,20 @@ export const rotateOrgCodeResponseSchema = z.object({
 });
 export type RotateOrgCodeResponse = z.infer<typeof rotateOrgCodeResponseSchema>;
 
+/** Taking a finished code off the gym's list.
+ *
+ *  **No row comes back, and that is the point**: the code has left the list, so
+ *  there is no state for a screen to draw from it — the panel re-reads the list
+ *  like it does after every other change. `status` is a literal for the same
+ *  reason `removeMemberResponseSchema`'s is: it means "this code is not on your
+ *  list now", equally true whether this call removed it or the previous tap did.
+ *
+ *  It exists at all because every other answer this module gives is parsed
+ *  through a shared schema and this one was a bare object literal (T3 L-8) — the
+ *  one shape a typed client could not see. */
+export const removeOrgCodeResponseSchema = z.object({ status: z.literal("removed") });
+export type RemoveOrgCodeResponse = z.infer<typeof removeOrgCodeResponseSchema>;
+
 /** One row of "my orgs". A single row carries BOTH relationships because the
  *  default owner IS a member (Part 3 §4.0 step 6) — two lists would show the
  *  same gym twice and invite a screen that double-counts it. */

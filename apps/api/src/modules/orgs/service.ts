@@ -20,6 +20,7 @@ import {
   orgMemberPageSchema,
   rejectApplicationResponseSchema,
   removeMemberResponseSchema,
+  removeOrgCodeResponseSchema,
   rotateOrgCodeResponseSchema,
 } from "./schemas.js";
 import type {
@@ -44,6 +45,7 @@ import type {
   OrgSummary,
   RejectApplicationResponse,
   RemoveMemberResponse,
+  RemoveOrgCodeResponse,
   RotateOrgCodeResponse,
   UpdateOrgCodeRequest,
 } from "./schemas.js";
@@ -700,7 +702,7 @@ export async function removeOrgCode(
   userId: string,
   gymId: string,
   code: string,
-): Promise<{ removed: true }> {
+): Promise<RemoveOrgCodeResponse> {
   await requirePrivilege(deps, gymId, userId, "codes.manage");
 
   const outcome = await repo.removeCode(deps.sql, {
@@ -711,7 +713,7 @@ export async function removeOrgCode(
 
   switch (outcome.kind) {
     case "removed":
-      return { removed: true };
+      return removeOrgCodeResponseSchema.parse({ status: "removed" });
     case "not_found":
       throw new OrgsError(404, "code_not_found", "That code isn't one of this gym's.");
     case "still_usable":

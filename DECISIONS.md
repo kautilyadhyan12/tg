@@ -14170,3 +14170,91 @@ dead browser method).
 A passing smoke is a user confirming the screens do what they say; it is not a
 reviewer reading the diff for the things a screen cannot show. `OWED.md`'s console
 line now names T3 as its only blocker.
+
+## T3 ROUND 1 ON THE JOIN-CODE PACKET — ZERO CRITICAL/HIGH, TEN LOWS, ALL FIXED (2026-08-21)
+
+**The packet SHIPS** (:5348 rule 1: zero Critical/High is the stopping condition).
+Round 1 across all three commits — :13803, :13920, :14013. No redesign trigger:
+there is no prior round for a Critical to repeat in. **Ten Lows, every one fixed
+in this round**, because :5307's "everything found is still FIXED before the card
+closes" stands word for word; the table and the reviewer's own evidence are in
+`BACKLOG.md`.
+
+### THE FINDING THAT MATTERED, AND WHY IT WAS FOUND BY MUTATION AND NOT BY READING
+
+**L-1: the per-code Limits editor was reached by NO test at all**, and the
+reviewer PROVED it rather than asserting it — they deleted `expiresAt` from
+`onSaveLimits` and ran the two console suites: **101 tests, still green.** The word
+"Limits" did not appear in `console.render.test.jsx`.
+
+**That is C26's exact class on the control next door.** C26 has guarded the PAUSE
+switch against "a control silently dropping a field it displayed" since :13920 —
+and :13920's own entry claims the limits editor is guarded, which it was not.
+**The lesson is not "write more tests": it is that a mutant row is a claim about
+ONE call site, and writing one for the pause switch made the sibling look
+covered.** Four render tests and mutants C33/C34/C35 now cover it.
+
+### THE ONE THAT CHANGED CODE RATHER THAN COMMENTS
+
+**L-3: `createCode`'s cap was a check-then-act, and its comment said it was not.**
+"The count and the insert share ONE transaction so the cap is not a check-then-act
+two staff members can both pass" is false under READ COMMITTED, which is what this
+database runs and what every statement in the module has always assumed: two staff
+creating at once both read 99, both insert, and the gym holds 101 codes — the
+101st invisible to `listCodes`' `LIMIT 100` while the join door honours it
+happily. That is precisely the state the cap exists to prevent.
+
+**Fixed by making the claim TRUE, not by deleting it** — `lockOrgRow`, which is
+§4.2's own instrument on §4.2's own row, taken in `createCode` and `rotateCode`
+BEFORE any `gym_codes` row is locked so the order matches `claimSeat`'s (org row →
+child rows, and nothing in this module goes the other way). Cost: creating a code
+for one gym serialises against other creates for that gym, a handful of times a
+year. **Proven by a two-client race test and mutant O71**, and the FIXTURE was
+wrong first — `MAX - 1` filled the gym TO the cap, both calls were correctly
+refused, and the test would have passed with the lock deleted (:5104 F5 again,
+inside the fix for a different finding).
+
+**L-4 is the same shape and was answered the other way, deliberately.**
+`updateCode`'s `FOR UPDATE OF c` cannot hold `gym_members` still, so a confirm
+racing a limit edit can store `max_uses` one below `joined`. **The comment was
+corrected and the code left alone**, with the reason written down: that race is
+self-healing — a code reads "Fully used" early and revives when anybody leaves,
+no seat lost, nothing written that a later read disagrees with — and the fix
+would serialise an owner's typing against every confirm in their gym. **A lock is
+warranted by the CONSEQUENCE, not by the existence of a race.**
+
+### WHAT THE REVIEWER GOT RIGHT THAT A CHAT WOULD HAVE ARGUED WITH
+
+**L-6 was weighed against :5807 1a and landed Low, with the reasoning shown** —
+no number is printed and the state asserted is true while displayed. It was
+flagged anyway because `codeSummary` three functions away argues the opposite
+standard in its own comment ("THE WORDS ARE THE POINT"). **Fixed at full severity
+regardless**, which is what rule 1 asks for: a Low buys no round and is still
+fixed. The test now asserts the CLAIM ("are in through it", "until somebody
+leaves") rather than the phrasing.
+
+**PROVE:** api **555/555 across 44 files** on LOCAL Postgres — **a fully clean
+full run, no flake this time**, which is worth stating precisely: :14013 measured
+3 reds in `catalog.seed` on the same suite, so THIS is a claim about a RUN and not
+about the suite (:13247's Low-3, the trap this project keeps re-entering). The
+seed-count flake is unfixed and keeps its `OWED.md` line. · web **980/980 across
+41 files** (+4) · **web sweep 35 mutants · 35 RED · 0 ALIVE**, including
+C33/C34/C35 on the control that had none · orgs suites **108/108** ·
+**O58/O67/O69/O71 re-measured RED** (subset run, labelled as one) · tsc + eslint
+clean on api and on every changed web file.
+
+**Two instrument guards fired while fixing, neither written for this card:** a
+draft of C33 mutated to `if (false)` before a `const` — a SyntaxError, caught as
+"no test tally" instead of a false RED — and C35's filter carried a curly
+apostrophe from its test title, which the harness refuses outright because `-t`
+would match nothing and the mutant would read ALIVE. **And the web harness has no
+scoping flag at all**; the api's is `MUTATE_ONLY`, never `--only=`.
+
+**AND `OWED.md`'s LINE STILL DOES NOT TICK — I wrote that it did, and checked.**
+Both GATES are met (smoke :14147, this review), so the join-code half is finished
+and nothing gates it any more. But the line's own title is "THE REST OF THE §2.2
+MATRIX HAS NO ROUTES" and it names four other things — **RESTORE a member, staff
+management, CSV export, nudges** — none of which has a route. Ticking it here
+would have silently lost all four, which is the exact failure `OWED.md` exists to
+prevent. The line now says both gates are met, the code half is done, and what
+holds it open is the other four.
