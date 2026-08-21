@@ -1,6 +1,53 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE API'S TESTS STOP TRAVELLING TO SINGAPORE. **Read this BEFORE running
+      any api test or mutation sweep.** DECISIONS :13659. Kd asked for it
+      directly. Closes half of :5857 rule 4a's owed item.
+
+USE THIS, NOT `pnpm --filter api test`
+  · `docker compose -f infra/docker-compose.dev.yml up -d postgres redis`
+    (once per machine restart; Docker Desktop must be running)
+  · `pnpm --filter api test:local` — arguments pass straight through, so a
+    `-t "filter"` and a file path work exactly as before.
+  · For a mutation sweep: `export DATABASE_URL=postgres://aihg:aihg@localhost:5433/aihg`
+    then run the harness as normal. It PRINTS its database and warns when remote.
+
+WHY, MEASURED — same machine, same day (:5857 created this item with the saving
+explicitly UNVERIFIED and forbade quoting a number until it existed)
+  · round-trip `select 1`: **202.9 ms** Singapore → **2.7 ms** local
+  · `orgs.sweep.test.ts` (18 tests): **158.2 s** → **10.8 s**, i.e. **14.7×**
+  · `orgs.routes` + `orgs.sweep` (67): **did not finish in 10 min** → 77 s
+  · whole api suite (536 tests, 44 files): **51 s** local
+  · **The did-not-finish row is a LOWER BOUND, not a ratio, and NO full-suite
+    Neon figure exists — do not quote one.** The governing row is the second: a
+    sweep re-runs a suite ONCE PER MUTANT, so six DB mutants was ~16 min.
+
+THINGS A LATER CHAT WILL OTHERWISE GET WRONG
+  · **`apps/api/.env` still points at Neon and that is DELIBERATE** — Kd's own
+    test gyms and accounts live there and his browser smokes read them. Local is
+    OPT-IN. Do not "fix" the env file.
+  · **CI is unaffected by construction.** `vitest.config.ts`'s 4-worker cap now
+    lifts to 8 only when the host parses as localhost; CI's is `*.neon.tech`.
+  · **The native PostgreSQL 18 on the dev machine is NOT usable** — the schema
+    needs the `vector` extension, a third-party build on Windows. The compose
+    image bundles it, and its port 5433 never collides with 5432.
+  · **STILL OPEN: the severity class per mutant** (:5857 rule 4a item 1). The
+    rule that slow mutants are spent only on Critical/High surfaces is still
+    followed by hand. Its `OWED.md` line stays.
+
+GATES
+  · api **536/536 across 44 files, exit 0, 51 s** against the local database ·
+    tsc clean · eslint clean on `src test tools` · harness parse check clean at
+    23 scripts · both `test:local` refusals proven by CAUSING them, source
+    sha256-verified restored · the throwaway database was dropped.
+
+NEXT
+  1. Kd's go-ahead on the join-code card (create / rotate / pause / expire) —
+     recommended, not yet approved.
+```
+
+```
 TASK: THE CLOCK — T3 ROUND 5 AND ITS FIXES. **ZERO Critical/High. THE PACKET
       SHIPS and `OWED.md`'s clock line TICKS.** Nine Lows, all fixed.
       DECISIONS :13552. **NO ROUND 6 — a Low buys no round (:5348 r1).**

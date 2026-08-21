@@ -694,6 +694,31 @@ the scoped suite and paste it green. No drive-by changes.
 
 # APPENDIX — Verification commands (you run these locally; the model requests them and reads your pasted output)
 
+**THE API'S DB-BACKED TESTS RUN LOCALLY, NOT AGAINST SINGAPORE — use this and
+never wonder why a sweep is slow** (added 2026-08-21 at Kd's direct request;
+DECISIONS :13659, which carries the measurements):
+
+```bash
+# ONCE per machine restart — Docker Desktop must be running first
+docker compose -f infra/docker-compose.dev.yml up -d postgres redis
+
+# Then, instead of `pnpm --filter api test`. Arguments pass straight through,
+# so `-t "some name"` and a file path work exactly as before.
+pnpm --filter api test:local
+```
+
+`apps/api/.env`'s `DATABASE_URL` still points at the Neon branch in
+`ap-southeast-1` — **deliberately**, because Kd's own test gyms and accounts live
+there and his browser smokes read them. So the local database is OPT-IN and this
+command is the opt-in. **Measured, same machine same day: a round-trip `select 1`
+is 202.9 ms to Singapore and 2.7 ms locally; `orgs.sweep.test.ts` is 158.2 s
+against Neon and 10.8 s locally (14.7×); the whole api suite is 536 tests in
+51 s locally.** A mutation sweep re-runs a suite ONCE PER MUTANT, so that 14.7×
+is the per-mutant saving — six DB mutants was ~16 minutes and is now ~1.
+`mutate-orgs.mjs` prints which database it is about to use and says so when it is
+remote. First run on a fresh database needs `drizzle-kit migrate` then the seed;
+`test:local` refuses and names the command rather than failing forty tests.
+
 ```bash
 # Standard gate (every task)
 pnpm -w typecheck && pnpm -w lint && pnpm -w test
