@@ -11,6 +11,7 @@ import type { z } from "zod";
 import type { RedisLike } from "../../redis.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
 import {
+  addOrgStaffRequestSchema,
   applicationParamsSchema,
   codeParamsSchema,
   createOrgCodeRequestSchema,
@@ -21,7 +22,9 @@ import {
   orgApplicationListQuerySchema,
   orgMemberListQuerySchema,
   orgParamsSchema,
+  staffParamsSchema,
   updateOrgCodeRequestSchema,
+  updateOrgStaffRequestSchema,
 } from "./schemas.js";
 import * as service from "./service.js";
 
@@ -334,6 +337,72 @@ export function registerOrgRoutes(
       const params = parseOr400(memberParamsSchema, req.params, req, reply);
       if (params === null) return;
       const result = await service.removeOrgMember(
+        orgDeps,
+        requireUserId(req),
+        params.gymId,
+        params.userId,
+      );
+      return reply.status(200).send(result);
+    },
+  );
+
+  // Part 3 §4.7's Staff surface — "list, invite by email/phone with role, change
+  // role, remove". All four are owner-only through `staff.manage`, which is
+  // §2.2's own "Staff management" row and the one capability that matrix gives
+  // to nobody but the owner.
+  //
+  // NO RATE LIMIT BEYOND THE GLOBAL FLOOR, on the same reasoning the code routes
+  // record: every one of these first proves the caller OWNS this gym, a check no
+  // script can pass, and the only person they let an abusive owner act against is
+  // somebody already on their own roster. The apply and nudge routes are limited
+  // because a signed-in stranger can reach them; these cannot be.
+  //
+  // PATCH and DELETE reach a browser only through a CORS PREFLIGHT — the failure
+  // `fastify.inject` is structurally unable to see (Card-4's dead-method bug
+  // behind 250 green tests). `app.ts` lists both methods, which the member and
+  // code routes above already depend on; the SMOKE is what proves it.
+  app.get("/v1/orgs/:gymId/staff", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const staff = await service.listOrgStaff(orgDeps, requireUserId(req), params.gymId);
+    return reply.status(200).send(staff);
+  });
+
+  app.post("/v1/orgs/:gymId/staff", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(addOrgStaffRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const added = await service.addOrgStaff(orgDeps, requireUserId(req), params.gymId, body);
+    return reply.status(201).send(added);
+  });
+
+  app.patch(
+    "/v1/orgs/:gymId/staff/:userId",
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const params = parseOr400(staffParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const body = parseOr400(updateOrgStaffRequestSchema, req.body, req, reply);
+      if (body === null) return;
+      const updated = await service.updateOrgStaffRole(
+        orgDeps,
+        requireUserId(req),
+        params.gymId,
+        params.userId,
+        body,
+      );
+      return reply.status(200).send(updated);
+    },
+  );
+
+  app.delete(
+    "/v1/orgs/:gymId/staff/:userId",
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const params = parseOr400(staffParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const result = await service.removeOrgStaff(
         orgDeps,
         requireUserId(req),
         params.gymId,

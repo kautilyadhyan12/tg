@@ -825,6 +825,112 @@ const MUTANTS = [
     to: '  await requirePrivilege(deps, gymId, userId, "codes.invite");\n\n  const outcome = await repo.removeCode(deps.sql, {',
     expect: 'refuses a TRAINER',
   },
+
+  // O72–O81 — STAFF (Part 3 §4.7, Kd 2026-08-21). Scoped by :5857 rule 4a, and
+  // every row is in one of its four columns:
+  //   · OWNERSHIP — one gym's staff list reachable from another gym, and the
+  //     account-existence oracle the gym-scoped email lookup exists to close
+  //     (O72, O74, O79)
+  //   · DATA LOSS — a gym left with NOBODY in charge, and a remove that takes
+  //     the whole staff list with it (O77, O78)
+  //   · MONEY — Kd's "yes staff seats free" in both directions (O75, O80)
+  //   · WHAT A USER SEES AND COULD BE FALSE — a silent demotion, an owner
+  //     demoted, an audit trail claiming something that never happened
+  //     (O73, O76, O81)
+  //
+  // NOT MUTATED, per the same rule: the refusal wording, the list's ORDER, and
+  // `since`'s formatting. Also NOT mutated and said rather than skipped
+  // silently: `removeStaff`'s `lockOrgRow` has NO OBSERVABLE SUBJECT here — the
+  // race needs two concurrent owner removals and this gym can only ever have
+  // one owner, so a mutant would report ALIVE for a reason that is about the
+  // fixture, not the guard (:13552's recursion row, same call made the same
+  // way). It becomes observable on the day a second owner can exist, which is
+  // the card that owes it.
+  {
+    id: 'O72',
+    target: 'repo',
+    why: "OWNERSHIP: the staff list stops being scoped to one gym, so any owner reads every gym's staff — names and EMAIL ADDRESSES — off a uuid",
+    from: '    WHERE s.gym_id = ${gymId}\n    ORDER BY (s.role = \'owner\') DESC',
+    to: "    WHERE ${gymId} IS NOT NULL\n    ORDER BY (s.role = 'owner') DESC",
+    expect: 'lists the owner as staff',
+  },
+  {
+    id: 'O73',
+    target: 'repo',
+    why: 'A SILENT DEMOTION: a second appointment OVERWRITES the role, so a stale screen still offering "add as trainer" quietly strips a manager of every right they had',
+    from: '      ON CONFLICT (gym_id, user_id) DO NOTHING\n      RETURNING user_id`;',
+    to: '      ON CONFLICT (gym_id, user_id) DO UPDATE SET role = EXCLUDED.role\n      RETURNING user_id`;',
+    expect: 'a second appointment REPORTS the existing role',
+  },
+  {
+    id: 'O74',
+    target: 'repo',
+    why: 'THE ACCOUNT-EXISTENCE ORACLE: the email lookup stops being scoped to this gym\'s roster, so "added" vs "nobody here has that email" answers *does this address have an account* for anything an owner cares to type',
+    from: '      WHERE m.gym_id = ${input.gymId}\n        AND m.removed_at IS NULL\n        AND u.email = ${input.email}',
+    to: '      WHERE ${input.gymId} IS NOT NULL\n        AND m.removed_at IS NULL\n        AND u.email = ${input.email}',
+    expect: 'refuses an email that is not a member HERE',
+  },
+  {
+    id: 'O75',
+    target: 'repo',
+    why: 'MONEY, against Kd\'s ruling of 2026-08-21 ("yes staff seats free"): the appointment stops freeing the seat, so a gym pays for a member seat per trainer before one real member has walked in',
+    from: '    await setSeatComplimentary(tx, input.gymId, candidate.user_id, true);',
+    to: '    await setSeatComplimentary(tx, input.gymId, candidate.user_id, false);',
+    expect: 'appoints a member as a trainer',
+  },
+  {
+    id: 'O76',
+    target: 'repo',
+    why: "LOCKOUT BY ANOTHER DOOR (:11429 rule 2): the owner's role becomes changeable, so a mis-tap demotes the only person who can appoint staff and nobody inside the gym can undo it",
+    from: '    if (previous === "owner") return { kind: "is_owner" };',
+    to: '    if (previous === "nobody") return { kind: "is_owner" };',
+    expect: "refuses to change the OWNER's role",
+  },
+  {
+    id: 'O77',
+    target: 'repo',
+    why: 'A GYM WITH NOBODY IN CHARGE: the last-owner guard stops firing, so the only owner can remove themselves and no one left inside can appoint anybody — appointing staff is owner-only, so the gym is unrecoverable without us',
+    from: '      if ((counted[0]?.n ?? 0) <= 1) return { kind: "last_owner" };',
+    to: '      if ((counted[0]?.n ?? 0) <= 0) return { kind: "last_owner" };',
+    expect: 'nobody in charge',
+  },
+  {
+    id: 'O78',
+    target: 'repo',
+    why: "DATA LOSS: the DELETE loses its user half, so taking one trainer's keys deletes the gym's ENTIRE staff list — owner included — behind a 200",
+    from: '      DELETE FROM gym_staff\n      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}\n      RETURNING user_id`;',
+    to: '      DELETE FROM gym_staff\n      WHERE gym_id = ${input.gymId} AND ${input.userId} IS NOT NULL\n      RETURNING user_id`;',
+    expect: 'leaves them a MEMBER',
+  },
+  {
+    id: 'O79',
+    target: 'service',
+    why: "OWNERSHIP: staff management drops to the members tick, which §2.2 grants all three roles — so a TRAINER can appoint themselves manager, or take the owner's keys",
+    from: '  await requirePrivilege(deps, gymId, userId, "staff.manage");\n\n  const outcome = await repo.addStaff(deps.sql, {',
+    to: '  await requirePrivilege(deps, gymId, userId, "members.read");\n\n  const outcome = await repo.addStaff(deps.sql, {',
+    expect: 'refused all four staff routes',
+  },
+  {
+    id: 'O80',
+    target: 'repo',
+    why: "MONEY, the other direction: the seat is never put back, so somebody taken off staff keeps a free seat for ever and the gym's cap silently under-counts its own roster",
+    from: '    await setSeatComplimentary(tx, input.gymId, input.userId, false);',
+    to: '    await setSeatComplimentary(tx, input.gymId, input.userId, true);',
+    expect: 'puts their seat back',
+  },
+  {
+    id: 'O81',
+    target: 'repo',
+    why: 'AN AUDIT TRAIL THAT LIES: a no-op tap writes a role change that never happened, so the history says the owner demoted somebody on a day they touched nothing',
+    // The no-op branch is made unreachable, so a repeat tap falls through to the
+    // UPDATE and writes a second audit row. Mutating the RETURNED KIND instead
+    // would be a no-op — the service maps `updated` and `unchanged` to the same
+    // 200 — and a no-op mutation reports ALIVE, whose honest reading is "this
+    // guarantee has no test" (:10726).
+    from: '    if (previous === input.role) {',
+    to: '    if (previous === "impossible-role") {',
+    expect: 'records BOTH ends in the audit row',
+  },
 ];
 
 /** ANCHORS ARE CONVERTED TO THE FILE'S OWN LINE ENDINGS, and the file is never

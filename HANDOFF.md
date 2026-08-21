@@ -9134,3 +9134,62 @@ NEXT
      cannot be honest until the nightly rollup worker exists — two cards, not
      one, and neither is approved.
 ```
+
+```
+TASK: A GYM CAN HAVE MORE THAN ONE PERSON RUNNING IT — staff, SERVER HALF.
+      DECISIONS :14262. **NO MIGRATION.** NOTHING TICKS: no screen, so no
+      smoke; T3 UNRUN. Kd approved the card and both deferrals up front.
+
+WHAT SHIPPED
+  · `GET/POST /v1/orgs/:gymId/staff` · `PATCH/DELETE .../staff/:userId`.
+    All four owner-only through a NEW `staff.manage` tick (§2.2's one
+    owner-only row). No migration — :11891's privilege seam is why.
+  · KD RULING: **staff seats are free** ("yes staff seats free"). Appointing
+    sets `gym_members.complimentary`, removing clears it.
+
+THINGS A LATER CHAT WILL OTHERWISE GET WRONG
+  · **BEING STAFF GRANTS NO PERKS AND NEVER HAS.** `getCandidates` reads
+    neither `complimentary` nor `gym_staff`. Perks come from MEMBERSHIP of a
+    paying gym. Kd's own message read the other way and was CORRECTED to him
+    before he approved — do not "fix" removal to strip entitlements, and do
+    not add a cache bust here. Letting somebody go is TWO taps by design.
+  · **THE EMAIL LOOKUP IS SCOPED TO THIS GYM'S LIVE ROSTER AND MUST STAY SO.**
+    A global `users` lookup is an account-existence ORACLE. The test proving
+    it gives the route a REAL account from ANOTHER gym and asserts the error
+    AND MESSAGE match a fictional address — both-404 is not the assertion.
+  · **NO SECOND OWNERS, ANYWHERE.** `manager|trainer` at the boundary, the
+    owner's role refused at the row. So every owner is the LAST owner, and
+    the removal guard is a COUNT (not "is this the owner") precisely so it
+    survives the day that stops being true. Own OWED line.
+  · **A SECOND POST REPORTS, IT DOES NOT OVERWRITE** — no silent demotion from
+    a stale screen. A no-op role PATCH writes NO audit row, on purpose.
+  · **`removeStaff` takes `lockOrgRow`, `addStaff` does not** (:14174: a lock
+    is warranted by the CONSEQUENCE — a gym with zero owners nobody inside
+    can repair vs. a primary-key collision `ON CONFLICT` already settles).
+  · **The lock's mutant is deliberately absent with its reason** — no
+    observable subject while a gym has one owner (:13552's shape).
+  · **Promoting a member makes the number beside a join code FALL BY ONE.**
+    That number is live non-complimentary memberships (:14013). True both
+    sides — but the WEB HALF OWES A SENTENCE explaining it.
+  · FOUND, NOT FIXED (R1.1): the DPDP Day-0 cascade leaves `gym_staff` alone,
+    so a self-deleted staff member stays on the list as a tombstone. Already
+    on `privacy/tables.ts`'s recorded-not-ruled list.
+
+GATES
+  · api **570/570 / 44 files** local (`test:local`), **exit 0 read directly**,
+    +15 tests · `@app/shared` 48/48 · api tsc + shared tsc clean · api eslint
+    clean on `src test` at --max-warnings=0.
+  · **10 mutants O72–O81 · 10 RED · 0 ALIVE · 0 never ran**, controls GREEN
+    first, restores sha256-verified, `node --check` before the run, **exit
+    read into a variable — the first run read it through `| tail` and was
+    re-run for that alone** (:5906/:9509).
+  · `apps/web` NOT re-run: this card changed no web source (stated, not
+    implied). `apps/web` has no `tsc`.
+
+NEXT
+  1. **T3 — a FRESH CHAT on this diff.** Never a subagent, never this chat.
+     The prompt is in the message that closed this card.
+  2. Then the WEB half: a `/console/:orgSlug/settings` screen with a Staff
+     section (§3.1 names Settings; §4.7 puts Staff under it), which is what
+     carries the SMOKE. Not started, not approved.
+```

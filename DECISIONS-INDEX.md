@@ -809,6 +809,49 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:14262** — 2026-08-22 — **A GYM CAN FINALLY HAVE MORE THAN ONE PERSON
+  RUNNING IT (server half), and KD RULED STAFF SEATS FREE.** **Read before
+  touching the staff surface, before adding a role to
+  `staffAssignableRoleSchema`, before letting ANY route look a user up by EMAIL,
+  and before writing `complimentary`.** Part 3 §4.7's Staff list/add/change-role/
+  remove behind §2.2's owner-only row. **NO MIGRATION** — :11429's seam, built at
+  :11891, is what makes it one privilege plus one defaults row, and the per-staff
+  TICKS are still unbuilt with their `OWED.md` line unchanged. **THE HOLE,
+  MEASURED: the only `INSERT INTO gym_staff` in the product was the owner's own,
+  hard-coded inside `createOrgAttempt`** — so two of the CHECK's three roles had
+  been unreachable since `0001_init`, and the join door was built around a front
+  desk no gym could have. **KD RULING: *"yes staff seats free"*** — appointing
+  sets `gym_members.complimentary`, removing clears it, the mechanism being the
+  owner's own §4.0-step-6 seat reused rather than a new concept. **AND IT CHANGES
+  NO ENTITLEMENT, VERIFIED NOT ASSUMED: `getCandidates` reads neither
+  `complimentary` nor `gym_staff`** — perks come from MEMBERSHIP of a paying gym,
+  so Kd's "off staff ⇒ no perks" reading was CORRECTED to him before he approved
+  and letting somebody go is deliberately TWO taps (keys, then membership).
+  Decisions not to re-derive: **the email lookup is scoped to this gym's live
+  roster** because a global `users` lookup is an account-existence ORACLE — pinned
+  by a test giving the route a REAL account from ANOTHER gym and asserting the
+  error and message are IDENTICAL to a fictional one, both-404 being insufficient;
+  **inviting somebody with no account is DEFERRED because `EmailSender` sends
+  nothing** (:11385), own OWED line; **no second owners** — `manager|trainer` at
+  the boundary and the owner's role refused at the row, so every owner is the LAST
+  owner and `last_owner` is the only answer removal can give about one, own OWED
+  line. **The lock is on REMOVAL alone (:14174's rule): counting owners then
+  deleting one is check-then-act whose loser is a gym with ZERO owners nobody
+  inside can repair, while `addStaff`'s race is settled by `ON CONFLICT DO
+  NOTHING`; the guard is a COUNT, not "is this the owner", so it survives the day
+  a second owner exists.** A second appointment REPORTS the role and never
+  overwrites it (no silent demotion from a stale screen); a no-op role tap writes
+  NO audit row. **Said rather than discovered later: promoting a member makes the
+  number beside a join code FALL BY ONE** — it is live non-complimentary
+  memberships (:14013), true both sides, and the web half owes that sentence.
+  **Found and NOT fixed (R1.1): the DPDP Day-0 cascade leaves `gym_staff`
+  untouched**, so a self-deleted staff member stays on this list as a tombstone —
+  already on `privacy/tables.ts`'s recorded-not-ruled list. **My own oracle test
+  was the first red and could NEVER have passed** (it compared whole bodies, which
+  carry a per-request id) — the mirror of :5104 F5, caught only by running it.
+  **NOTHING TICKS — THERE IS NO SCREEN** (:11846/:13803's shape); the web half is
+  the next card and carries the SMOKE, T3 UNRUN.
+
 - **:278** — Card 1 auth → httpOnly-cookie on the new /v1 API (07-15)
 - **:287** — Card 2 per-user storage keying + displayName migration (07-15)
 - **:299** — Card 3 progress + measurements (07-16)

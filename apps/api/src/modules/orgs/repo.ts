@@ -1737,6 +1737,305 @@ export async function removeCode(
   });
 }
 
+// ---------------------------------------------------------------------------
+// STAFF — Part 3 §4.7. Until this card, the ONLY `INSERT INTO gym_staff` in the
+// product was the one inside `createOrgAttempt`, hard-coded to `'owner'`
+// (grep-verified before a line was written), so a gym had exactly one person
+// who could do anything and no way to appoint another. The join door's whole
+// design says "the front desk confirms" and no gym could have a front desk.
+// ---------------------------------------------------------------------------
+
+export interface StaffRow {
+  userId: string;
+  displayName: string;
+  email: string | null;
+  role: OrgRole;
+  since: Date;
+}
+
+/** Everyone who runs this gym, owner first and then oldest appointment first.
+ *
+ *  UNBOUNDED, and unlike `listCodes`' cap that is defensible rather than
+ *  overlooked: a staff row can only be created by an owner naming an existing
+ *  member of the same gym, so the ceiling is the roster and the only person who
+ *  can approach it is the person reading this list. `ORG_CODES_LIMIT` exists
+ *  because a code is minted by a tap; a staff row costs a deliberate act
+ *  against a named human.
+ *
+ *  Tenancy IS the WHERE (R3.2). There is no read-a-staff-row-by-id anywhere in
+ *  this module, so a staff row is only ever reachable through a gym the caller
+ *  was authorised against first. */
+export async function listStaff(sql: Sql, gymId: string): Promise<StaffRow[]> {
+  const rows = await sql<
+    { user_id: string; display_name: string; email: string | null; role: string; since: Date }[]
+  >`
+    SELECT s.user_id, u.display_name, u.email, s.role, s.created_at AS since
+    FROM gym_staff s
+    JOIN users u ON u.id = s.user_id
+    WHERE s.gym_id = ${gymId}
+    ORDER BY (s.role = 'owner') DESC, s.created_at ASC, s.user_id ASC`;
+  return rows.map((r) => ({
+    userId: r.user_id,
+    displayName: r.display_name,
+    email: r.email,
+    role: toOrgRole(r.role),
+    since: r.since,
+  }));
+}
+
+/** One staff row by (gym, user) — the shape every mutation answers with, read
+ *  back through `listStaff`'s own projection so the list and the mutation can
+ *  never describe the same person differently. */
+async function readStaffRow(
+  tx: TransactionSql,
+  gymId: string,
+  userId: string,
+): Promise<StaffRow | null> {
+  const rows = await tx<
+    { user_id: string; display_name: string; email: string | null; role: string; since: Date }[]
+  >`
+    SELECT s.user_id, u.display_name, u.email, s.role, s.created_at AS since
+    FROM gym_staff s
+    JOIN users u ON u.id = s.user_id
+    WHERE s.gym_id = ${gymId} AND s.user_id = ${userId}`;
+  const row = rows[0];
+  return row === undefined
+    ? null
+    : {
+        userId: row.user_id,
+        displayName: row.display_name,
+        email: row.email,
+        role: toOrgRole(row.role),
+        since: row.since,
+      };
+}
+
+/** KD RULING 2026-08-21: **staff seats are free.** *"yes staff seats free"* —
+ *  asked whether a gym should pay for a member seat per trainer the way it does
+ *  not for the owner's, and given the reason: a gym should not be paying for
+ *  five seats before one real member has walked in.
+ *
+ *  The mechanism already existed — `gym_members.complimentary` is what keeps the
+ *  owner's §4.0-step-6 seat out of `claimSeat`'s count — so this ruling is one
+ *  column write and no new concept. **It does NOT touch entitlements:** the §4.1
+ *  resolver counts a live membership and never reads `complimentary`, so a staff
+ *  member keeps the gym's perks exactly like any other member, and nothing needs
+ *  busting when this flips.
+ *
+ *  **ONE VISIBLE CONSEQUENCE, said rather than discovered later:** the number a
+ *  console prints beside a join code is live non-complimentary memberships
+ *  (:14013), so promoting a member to staff makes that number fall by one. It is
+ *  TRUE both before and after — the definition is the seat count, and their seat
+ *  genuinely stopped being paid for. */
+async function setSeatComplimentary(
+  tx: TransactionSql,
+  gymId: string,
+  userId: string,
+  complimentary: boolean,
+): Promise<void> {
+  await tx`
+    UPDATE gym_members SET complimentary = ${complimentary}
+    WHERE gym_id = ${gymId} AND user_id = ${userId} AND removed_at IS NULL`;
+}
+
+export type AddStaffOutcome =
+  | { kind: "added"; staff: StaffRow }
+  | { kind: "not_a_member" }
+  | { kind: "already_staff"; staff: StaffRow };
+
+/** Appoint a member of this gym as staff.
+ *
+ *  **THE LOOKUP IS SCOPED TO THIS GYM'S LIVE ROSTER, and that is the security
+ *  property, not a convenience.** Resolving the email against `users` globally
+ *  would answer "does this address have an account" for anything an owner types.
+ *  Joined to `gym_members` with `removed_at IS NULL`, the only addresses that
+ *  resolve are people already on a roster the caller can read.
+ *
+ *  `email` is `citext` (Part 4 §3.1), so the equality is case-insensitive in the
+ *  DATABASE rather than by a `lower()` this file would have to remember.
+ *
+ *  **No org lock, and :14174's rule is why: a lock is warranted by the
+ *  CONSEQUENCE, not by the race.** Two owners appointing the same person
+ *  concurrently both target one primary key `(gym_id, user_id)`; `ON CONFLICT DO
+ *  NOTHING` makes the loser read the winner's row and answer `already_staff`,
+ *  which is the correct answer either way. Nothing here is a check-then-act
+ *  against a cap. */
+export async function addStaff(
+  sql: Sql,
+  input: { gymId: string; email: string; role: OrgRole; actorUserId: string },
+): Promise<AddStaffOutcome> {
+  return await sql.begin(async (tx) => {
+    const candidates = await tx<{ user_id: string }[]>`
+      SELECT m.user_id
+      FROM gym_members m
+      JOIN users u ON u.id = m.user_id
+      WHERE m.gym_id = ${input.gymId}
+        AND m.removed_at IS NULL
+        AND u.email = ${input.email}
+      LIMIT 1`;
+    const candidate = candidates[0];
+    if (candidate === undefined) return { kind: "not_a_member" };
+
+    const inserted = await tx<{ user_id: string }[]>`
+      INSERT INTO gym_staff (gym_id, user_id, role)
+      VALUES (${input.gymId}, ${candidate.user_id}, ${input.role})
+      ON CONFLICT (gym_id, user_id) DO NOTHING
+      RETURNING user_id`;
+
+    const staff = await readStaffRow(tx, input.gymId, candidate.user_id);
+    if (staff === null) throw new Error("gym_staff row missing immediately after insert");
+
+    // The row already existed. Its role is REPORTED, never overwritten — a
+    // second POST must not silently demote a manager to trainer because a stale
+    // screen still offered "add as trainer". Changing a role is the PATCH.
+    if (inserted[0] === undefined) return { kind: "already_staff", staff };
+
+    await setSeatComplimentary(tx, input.gymId, candidate.user_id, true);
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.staff_added",
+      targetType: "gym_staff",
+      targetId: candidate.user_id,
+      meta: { role: input.role },
+    });
+
+    return { kind: "added", staff };
+  });
+}
+
+export type UpdateStaffOutcome =
+  | { kind: "updated"; staff: StaffRow }
+  | { kind: "unchanged"; staff: StaffRow }
+  | { kind: "not_staff" }
+  | { kind: "is_owner" };
+
+/** Change somebody between manager and trainer.
+ *
+ *  **AN OWNER'S ROLE IS REFUSED HERE.** Demoting the owner is last-owner lockout
+ *  wearing a different hat — §4.7 blocks removing them and :11429's rule 2 makes
+ *  the point that reaching the same lockout by another door is the same defect —
+ *  and PROMOTING somebody to owner is the transfer question this card defers
+ *  (`staffAssignableRoleSchema` refuses that direction at the boundary; this
+ *  refuses the other one at the row).
+ *
+ *  `unchanged` is a distinct outcome rather than a silent success because it
+ *  decides whether an audit row is written: "the owner set Priya to trainer" in
+ *  a history is a claim about something that happened, and a no-op tap did not
+ *  happen. The CALLER cannot tell the two apart and does not need to — both are
+ *  a 200 carrying the same row. */
+export async function updateStaffRole(
+  sql: Sql,
+  input: { gymId: string; userId: string; role: OrgRole; actorUserId: string },
+): Promise<UpdateStaffOutcome> {
+  return await sql.begin(async (tx) => {
+    const rows = await tx<{ role: string }[]>`
+      SELECT role FROM gym_staff
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
+      FOR UPDATE`;
+    const before = rows[0];
+    if (before === undefined) return { kind: "not_staff" };
+    const previous = toOrgRole(before.role);
+    if (previous === "owner") return { kind: "is_owner" };
+
+    if (previous === input.role) {
+      const staff = await readStaffRow(tx, input.gymId, input.userId);
+      if (staff === null) throw new Error("gym_staff row vanished under FOR UPDATE");
+      return { kind: "unchanged", staff };
+    }
+
+    await tx`
+      UPDATE gym_staff SET role = ${input.role}
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
+
+    const staff = await readStaffRow(tx, input.gymId, input.userId);
+    if (staff === null) throw new Error("gym_staff row vanished under FOR UPDATE");
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.staff_role_changed",
+      targetType: "gym_staff",
+      targetId: input.userId,
+      // BOTH ends, because the question a human asks weeks later is "what did
+      // they used to be able to do", which the new role alone cannot answer.
+      meta: { from: previous, to: input.role },
+    });
+
+    return { kind: "updated", staff };
+  });
+}
+
+export type RemoveStaffOutcome =
+  | { kind: "removed" }
+  | { kind: "not_staff" }
+  | { kind: "last_owner" };
+
+/** Take somebody off staff. **They stay a MEMBER** — the two are different
+ *  relationships and Kd was shown that before approving: this takes away the
+ *  keys, `removeMember` takes away the membership, and only the second one costs
+ *  them the gym's perks.
+ *
+ *  **THE LAST-OWNER GUARD IS A COUNT INSIDE THE ORG LOCK, and the lock is the
+ *  point.** Counting owners and then deleting one is check-then-act — :14174's
+ *  L-3 exactly — and the consequence of losing that race is a gym with ZERO
+ *  owners, which nobody inside the gym can repair, because appointing staff is
+ *  owner-only. That is the severity :14174 says warrants a lock, in contrast to
+ *  the self-healing count it says does not.
+ *
+ *  It is written as a COUNT rather than as "is this the owner" so it stays
+ *  correct on the day a second owner becomes possible: today every owner is the
+ *  last one, and the guard does not have to be rewritten to notice when that
+ *  stops being true.
+ *
+ *  The seat reverts to paid in the same transaction. If that pushes the gym over
+ *  its cap, the cap does what it does everywhere else — it refuses the NEXT join
+ *  rather than evicting anybody — which is the honest direction. */
+export async function removeStaff(
+  sql: Sql,
+  input: { gymId: string; userId: string; actorUserId: string },
+): Promise<RemoveStaffOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+
+    const rows = await tx<{ role: string }[]>`
+      SELECT role FROM gym_staff
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
+    const before = rows[0];
+    if (before === undefined) return { kind: "not_staff" };
+    const role = toOrgRole(before.role);
+
+    if (role === "owner") {
+      const counted = await tx<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_staff
+        WHERE gym_id = ${input.gymId} AND role = 'owner'`;
+      if ((counted[0]?.n ?? 0) <= 1) return { kind: "last_owner" };
+    }
+
+    const deleted = await tx<{ user_id: string }[]>`
+      DELETE FROM gym_staff
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
+      RETURNING user_id`;
+    if (deleted[0] === undefined) {
+      throw new Error("DELETE FROM gym_staff removed no row under the org lock");
+    }
+
+    await setSeatComplimentary(tx, input.gymId, input.userId, false);
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.staff_removed",
+      targetType: "gym_staff",
+      targetId: input.userId,
+      meta: { role },
+    });
+
+    return { kind: "removed" };
+  });
+}
+
 /** Part 3 §3.3: "every mutating call writes `audit_log`". Written inside the
  *  caller's transaction, so a join that is rolled back leaves no audit row
  *  claiming it happened, and a committed join can never be missing one. */

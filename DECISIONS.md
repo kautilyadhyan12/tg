@@ -14258,3 +14258,142 @@ management, CSV export, nudges** — none of which has a route. Ticking it here
 would have silently lost all four, which is the exact failure `OWED.md` exists to
 prevent. The line now says both gates are met, the code half is done, and what
 holds it open is the other four.
+
+## A GYM CAN FINALLY HAVE MORE THAN ONE PERSON RUNNING IT (server half) — and KD RULED STAFF SEATS FREE (2026-08-22)
+
+**Read before touching `modules/orgs`'s staff surface, before adding a role to
+`staffAssignableRoleSchema`, before letting any route look a user up by EMAIL,
+and before writing `complimentary`.** Implements Part 3 §4.7's Staff surface
+("list, invite by email/phone with role, change role, remove; every staff
+mutation audit-logged; last-owner removal blocked") behind §2.2's
+**owner-only** Staff-management row. **NO MIGRATION.** Kd approved the card and
+its two deferrals before a line was written.
+
+**THE HOLE, MEASURED BEFORE THE CARD: a gym had exactly ONE person who could do
+anything.** The only `INSERT INTO gym_staff` in the entire product was the one
+inside `createOrgAttempt`, hard-coded to `'owner'` (grep-verified: one site).
+So `owner|manager|trainer` has been a three-value CHECK constraint with two
+unreachable values since `0001_init`, and **the join door — built around "the
+front desk confirms" — was built for a front desk no gym could have.**
+:11891 had already named the consequence in a comment ("a gym whose front desk
+is a TRAINER cannot confirm joins") without anyone noticing the larger half:
+there was no trainer either.
+
+**NO MIGRATION, AND THAT IS THE SEAM PAYING FOR ITSELF.** :11429's whole
+argument was that converting role-name checks into privilege checks costs one
+function today and a dozen-route migration later; :11891 did it. This card adds
+`staff.manage` to the catalogue and one row to the defaults table, and every
+route it ships enforces a TICK rather than a role name. **The per-staff ticks
+themselves are still unbuilt and their `OWED.md` line is unchanged** — what
+ships here is the ROLE half, which is what makes a front desk possible at all.
+
+**KD RULING 2026-08-22 — STAFF SEATS ARE FREE.** *"yes staff seats free"*, in
+answer to the cost put to him: as built, every trainer and manager is also a
+member, so each would eat a paid member seat the way the owner's does not. He
+was given the recommendation and the reason — a gym should not pay for five
+seats before one real member walks in — and took it. **The mechanism already
+existed**: `gym_members.complimentary` is what keeps the owner's §4.0-step-6
+seat out of `claimSeat`'s count, so the ruling is one column write and no new
+concept. Appointing sets it, removing clears it, both inside the mutation's own
+transaction.
+
+**AND IT CHANGES NO ENTITLEMENT, WHICH WAS VERIFIED RATHER THAN ASSUMED.** Kd's
+own message — *"normal member but wont be able to enjoy the perks such as 8 meal
+scan route planning etc"* — reads as though coming OFF staff should cost the
+perks. It does not, and the correction was put to him before he approved:
+`getCandidates` (§4.1's canonical SQL) joins `gym_members` on
+`removed_at IS NULL` and reads neither `complimentary` nor `gym_staff` at all.
+**Perks come from MEMBERSHIP of a paying gym; being staff has never granted
+one.** So what costs somebody the perks is `removeOrgMember`, which already
+busts the cache, and letting a trainer go is deliberately TWO taps: take the
+keys, then end the membership. He was shown that split and kept it.
+
+**THREE DECISIONS NOT TO RE-DERIVE.**
+- **THE EMAIL LOOKUP IS SCOPED TO THIS GYM'S LIVE ROSTER, and that is the
+  security property.** §4.7 says "invite by email", and a global `users` lookup
+  would make the route an ORACLE: "added" versus "nobody here has that email"
+  would answer *does this address have an account* for anything an owner types.
+  Joined through `gym_members` with `removed_at IS NULL`, the only addresses
+  that resolve belong to people already on a roster the caller can read.
+  **Pinned by a test that gives the route a REAL account belonging to ANOTHER
+  gym and asserts the error and message are identical to a fictional address** —
+  both-404 is not enough, a difference in the wording is the same oracle.
+- **INVITING SOMEBODY WITH NO ACCOUNT IS DEFERRED, because the email cannot be
+  sent.** `EmailSender` logs an event name and delivers nothing (:11385), so an
+  invite flow would be a promise the product cannot keep. The cost is stated
+  rather than hidden: a manager who is not a member joins with the gym's own
+  code first, which takes seconds. Own `OWED.md` line, closes with the
+  notifications module.
+- **NO SECOND OWNERS.** `staffAssignableRoleSchema` is `manager|trainer`, and
+  the owner's own role is refused at the row as well as at the boundary. Making
+  a second owner is the first half of transferring a gym and the second half —
+  what happens to the outgoing owner, their complimentary seat, their billing —
+  is a Kd question nobody has been asked. **The consequence worth holding:
+  every owner is therefore the LAST owner, so `last_owner` is not an edge case
+  here, it is the only answer removal can give about an owner.** Own `OWED.md`
+  line.
+
+**THE LOCK IS ON REMOVAL AND NOWHERE ELSE, per :14174's rule that a lock is
+warranted by the CONSEQUENCE and not by the race.** `removeStaff` counts owners
+and then deletes one — check-then-act, L-3's exact shape — and the consequence
+of losing that race is a gym with ZERO owners that **nobody inside can repair**,
+because appointing staff is owner-only. So it takes `lockOrgRow`. `addStaff`
+does not: two owners appointing the same person collide on the primary key,
+`ON CONFLICT DO NOTHING` makes the loser read the winner's row, and
+`already_staff` is the right answer either way. **The guard is written as a
+COUNT rather than as "is this the owner"** so it stays correct on the day a
+second owner exists, instead of needing to be noticed again.
+
+**A SECOND APPOINTMENT REPORTS, IT DOES NOT OVERWRITE.** A stale screen still
+offering "add as trainer" must not silently demote a manager; changing a role is
+the PATCH, and the POST answers 409 naming what they already are. The
+`unchanged` outcome exists for the same reason in the other direction: a no-op
+role tap writes NO audit row, because "the owner set Priya to trainer" in a
+history is a claim about something that happened.
+
+**ONE VISIBLE CONSEQUENCE, SAID RATHER THAN DISCOVERED LATER: promoting a member
+to staff makes the number beside a join code fall by one.** That number is live
+non-complimentary memberships (:14013), so it is TRUE before and after — their
+seat genuinely stopped being paid for — but a console will show it move for a
+reason the screen does not explain. The web half owes that sentence.
+
+**FOUND AND NOT FIXED (R1.1), because it is somebody else's ruling:** the DPDP
+Day-0 cascade closes `gym_members` and cancels applications but leaves
+`gym_staff` untouched, so a staff member who deletes their own account keeps
+their staff row and appears on this list as a tombstone. `gym_staff` is already
+on `privacy/tables.ts`'s recorded-not-ruled list awaiting Kd, alongside
+`gym_members` and `gym_join_applications`, and this card deliberately does not
+build a guarantee that depends on the invariant it breaks.
+
+**MY OWN TEST WAS THE FIRST THING THAT WENT RED, and it could never have
+passed:** the oracle test compared whole response BODIES, which carry a
+per-request `requestId`. Fixed to compare the error and message, with the reason
+written beside it — a test that cannot pass is the mirror of :5104 F5's test
+that cannot fail, and both are caught only by running them.
+
+**PROVE** — api **570/570 across 44 files** on LOCAL Postgres (`test:local`,
+:13659), **exit 0 read from the command and not through a pipe** (:9509's
+recorded shape); **+15 tests**, all in `orgs.routes.test.ts`, against the
+join-code packet's 555. `tsc` clean on `api` and `@app/shared`; `eslint` clean
+on `api`'s `src` and `test` at `--max-warnings=0`; `@app/shared` **48/48**.
+**`apps/web` was NOT re-run and this card changed no web source** — stated
+rather than implied (:10726's precedent); `apps/web` has no `tsc` and never has.
+**MUTATION AUDIT: 10 mutants (O72–O81) · 10 RED · 0 ALIVE · 0 never ran**,
+control GREEN on all ten filters BEFORE any mutation, restores sha256-verified
+after every mutant, harness parse-checked with `node --check` first (:13336's
+permanent guard), **harness exit code read directly into a variable rather than
+through `| tail`** — the first run of this sweep DID read it through a pipe and
+was re-run for that reason alone, because :5906 and :9509 both record that exact
+instrument failure and a pipe reports `tail`'s success as the harness's.
+`git status` after the sweep showed only the seven files this card edits.
+Scoped by :5857 rule 4a: every mutant sits in OWNERSHIP (O72, O74, O79), DATA
+LOSS (O77, O78), MONEY (O75, O80) or A FALSE THING A USER SEES (O73, O76, O81).
+**`removeStaff`'s `lockOrgRow` is deliberately NOT mutated and the reason is
+written in the harness: it has no observable subject** — the race needs two
+concurrent owner removals and a gym can only have one owner, so the mutant would
+report ALIVE about the FIXTURE rather than about the guard (:13552's recursion
+row, same call made the same way). It becomes observable on the day the transfer
+card lands, which is the card that owes it.
+
+**NOTHING TICKS — THERE IS NO SCREEN** (:11846/:13803's shape: an endpoint with
+no caller). The web half is the next card and carries the SMOKE; **T3 is UNRUN**.

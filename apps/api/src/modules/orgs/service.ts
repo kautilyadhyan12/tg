@@ -18,12 +18,16 @@ import {
   orgCodeMutationResponseSchema,
   orgCodesResponseSchema,
   orgMemberPageSchema,
+  orgStaffMutationResponseSchema,
+  orgStaffResponseSchema,
   rejectApplicationResponseSchema,
   removeMemberResponseSchema,
   removeOrgCodeResponseSchema,
+  removeOrgStaffResponseSchema,
   rotateOrgCodeResponseSchema,
 } from "./schemas.js";
 import type {
+  AddOrgStaffRequest,
   ConfirmApplicationResponse,
   CreateOrgCodeRequest,
   CreateOrgRequest,
@@ -42,12 +46,17 @@ import type {
   OrgMemberListQuery,
   OrgMemberPage,
   OrgRole,
+  OrgStaff,
+  OrgStaffMutationResponse,
+  OrgStaffResponse,
   OrgSummary,
   RejectApplicationResponse,
   RemoveMemberResponse,
   RemoveOrgCodeResponse,
+  RemoveOrgStaffResponse,
   RotateOrgCodeResponse,
   UpdateOrgCodeRequest,
+  UpdateOrgStaffRequest,
 } from "./schemas.js";
 
 /** Typed failure for the central error mapper (R8.1); messages are authored
@@ -357,6 +366,7 @@ export const ORG_PRIVILEGES = [
   "codes.manage",
   "members.confirm",
   "members.remove",
+  "staff.manage",
 ] as const;
 export type OrgPrivilege = (typeof ORG_PRIVILEGES)[number];
 
@@ -389,9 +399,26 @@ export type OrgPrivilege = (typeof ORG_PRIVILEGES)[number];
  *  are one line apart in §2.2 and mean opposite things: a trainer handing a
  *  member the poster is inviting; a trainer switching the gym's door off is not
  *  something the matrix ever granted. Merging them would silently widen a
- *  trainer's power under cover of a read they already had. */
+ *  trainer's power under cover of a read they already had.
+ *
+ *  `staff.manage` is §2.2's "Staff management" row LITERALLY — the ONE row in
+ *  that matrix granted to the owner and to nobody else, and the line every
+ *  product in this market draws in the same place (:11429's industry check:
+ *  money and staff belong to the owner alone). **It gates the READ as well as
+ *  the writes, which is narrower than §2.2 strictly requires** — the matrix has
+ *  no "view staff" row at all, so the choice was between owner-only and
+ *  inventing a grant. Narrow is the reversible direction: widening it later is
+ *  one tick under :11429 rule 3, whereas a manager who has been reading the
+ *  staff list for a month cannot be un-shown it. */
 const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>> = {
-  owner: ["members.read", "codes.invite", "codes.manage", "members.confirm", "members.remove"],
+  owner: [
+    "members.read",
+    "codes.invite",
+    "codes.manage",
+    "members.confirm",
+    "members.remove",
+    "staff.manage",
+  ],
   manager: ["members.read", "codes.invite", "codes.manage", "members.confirm", "members.remove"],
   trainer: ["members.read", "codes.invite"],
 };
@@ -927,6 +954,161 @@ export async function removeOrgMember(
         409,
         "member_is_staff",
         `${outcome.role === "owner" ? "The owner" : "A staff member"} can't be removed from the member list. Staff membership is managed with staff.`,
+      );
+    default:
+      return assertNever(outcome);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// STAFF — Part 3 §4.7, approved by Kd 2026-08-21. Before this card a gym had
+// exactly ONE person who could do anything: the account that created it. The
+// join door was built around "the front desk confirms" and no gym could have a
+// front desk.
+// ---------------------------------------------------------------------------
+
+/** `isYou` is computed HERE against the caller, never inferred by the screen
+ *  (:10726's Low-3 — the last thing this console derived instead of comparing
+ *  was true only by coincidence). */
+function toOrgStaff(row: repo.StaffRow, viewerUserId: string): OrgStaff {
+  return {
+    userId: row.userId,
+    displayName: row.displayName,
+    email: row.email,
+    role: row.role,
+    since: row.since.toISOString(),
+    isYou: row.userId === viewerUserId,
+  };
+}
+
+export async function listOrgStaff(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+): Promise<OrgStaffResponse> {
+  await requirePrivilege(deps, gymId, userId, "staff.manage");
+  const rows = await repo.listStaff(deps.sql, gymId);
+  // Parsed on the way out like every other list in this module: this response
+  // carries an email, so a field that reached the row without reaching the
+  // schema is dropped here rather than served.
+  return orgStaffResponseSchema.parse({ staff: rows.map((r) => toOrgStaff(r, userId)) });
+}
+
+/** APPOINT SOMEBODY. See `addOrgStaffRequestSchema` for why the email must
+ *  belong to a member of this gym; the short version is that inviting a
+ *  stranger needs an email nothing in this product can send, and a global
+ *  lookup would be an account-existence oracle. */
+export async function addOrgStaff(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+  input: AddOrgStaffRequest,
+): Promise<OrgStaffMutationResponse> {
+  await requirePrivilege(deps, gymId, userId, "staff.manage");
+
+  const outcome = await repo.addStaff(deps.sql, {
+    gymId,
+    email: input.email,
+    role: input.role,
+    actorUserId: userId,
+  });
+
+  switch (outcome.kind) {
+    case "added":
+      return orgStaffMutationResponseSchema.parse({ staff: toOrgStaff(outcome.staff, userId) });
+    case "not_a_member":
+      // 404 and NOT "no account with that email", which would be the oracle the
+      // gym-scoped lookup exists to avoid. The message names the fix, because
+      // the owner's next question is always the same one.
+      throw new OrgsError(
+        404,
+        "not_a_member",
+        "Nobody in this gym has that email address. They need to join the gym first — send them your join code.",
+      );
+    case "already_staff":
+      throw new OrgsError(
+        409,
+        "already_staff",
+        outcome.staff.role === "owner"
+          ? "That person owns this gym."
+          : `${outcome.staff.displayName} is already ${outcome.staff.role === "manager" ? "a manager" : "a trainer"} here. Change their role instead of adding them again.`,
+      );
+    default:
+      return assertNever(outcome);
+  }
+}
+
+export async function updateOrgStaffRole(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+  targetUserId: string,
+  input: UpdateOrgStaffRequest,
+): Promise<OrgStaffMutationResponse> {
+  await requirePrivilege(deps, gymId, userId, "staff.manage");
+
+  const outcome = await repo.updateStaffRole(deps.sql, {
+    gymId,
+    userId: targetUserId,
+    role: input.role,
+    actorUserId: userId,
+  });
+
+  switch (outcome.kind) {
+    // Both are a 200 carrying the row. The caller asked for a state and the
+    // state holds; which of the two calls produced it is the audit log's
+    // business, not the screen's (:12227 L-3's asymmetry, avoided rather than
+    // repeated).
+    case "updated":
+    case "unchanged":
+      return orgStaffMutationResponseSchema.parse({ staff: toOrgStaff(outcome.staff, userId) });
+    case "not_staff":
+      throw new OrgsError(404, "not_staff", "That person doesn't run this gym.");
+    case "is_owner":
+      throw new OrgsError(
+        409,
+        "owner_role_locked",
+        "The gym's owner keeps the owner role. Handing a gym over to somebody else isn't something the app can do yet.",
+      );
+    default:
+      return assertNever(outcome);
+  }
+}
+
+/** TAKE THE KEYS BACK. They stay a MEMBER — Kd was given that distinction
+ *  before approving the card, and it is the honest one: this ends what somebody
+ *  can DO in the console, `removeOrgMember` ends whether they are in the gym at
+ *  all, and only the second costs them the gym's perks.
+ *
+ *  **No entitlement bust, and that is verified rather than assumed:** the §4.1
+ *  candidate query joins `gym_members` on `removed_at IS NULL` and never reads
+ *  `complimentary` or `gym_staff`, so nothing this route changes can alter what
+ *  the person is entitled to. `removeOrgMember` is where the bust belongs and it
+ *  is already there. */
+export async function removeOrgStaff(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+  targetUserId: string,
+): Promise<RemoveOrgStaffResponse> {
+  await requirePrivilege(deps, gymId, userId, "staff.manage");
+
+  const outcome = await repo.removeStaff(deps.sql, {
+    gymId,
+    userId: targetUserId,
+    actorUserId: userId,
+  });
+
+  switch (outcome.kind) {
+    case "removed":
+      return removeOrgStaffResponseSchema.parse({ status: "removed" });
+    case "not_staff":
+      throw new OrgsError(404, "not_staff", "That person doesn't run this gym.");
+    case "last_owner":
+      throw new OrgsError(
+        409,
+        "last_owner",
+        "A gym can't be left with nobody in charge, so its last owner can't be removed.",
       );
     default:
       return assertNever(outcome);

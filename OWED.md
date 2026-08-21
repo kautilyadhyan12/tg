@@ -4300,9 +4300,18 @@ file and is stated so nobody reads these as lower priority than they are.
       all fixed in the round (DECISIONS :14174, `BACKLOG.md` for the table).
       **So the JOIN-CODE half of this line is DONE and its gates are behind it.**
       What holds the line open is the rest of its own title, which was never about
-      codes: **RESTORE a member, staff management, CSV export, nudges** — all four
-      still unbuilt, none with a route. A chat that ticks this line because the
-      code work finished will lose those four.
+      codes: ~~RESTORE a member, staff management, CSV export, nudges~~ — **and
+      STAFF MANAGEMENT's SERVER half is now built too (2026-08-22, DECISIONS
+      :14262): list · add by email · change role · remove**, all four owner-only
+      through the new `staff.manage` tick, no migration, and Kd's
+      *"yes staff seats free"* written into the appointment. **THE LINE STILL DOES
+      NOT TICK, and there are two separate reasons — do not tick it on either
+      alone.** (1) The staff work has **NO SCREEN**, so no smoke and no T3
+      (:11846/:13803's shape); the web half is its own card. (2) Even when that
+      lands, **RESTORE a member, CSV export and nudges are still routeless**, and
+      staff management itself ships only its ROLE half — the per-staff privilege
+      TICKS keep their own line below. A chat that ticks this line because the
+      staff work finished will lose three items and half of a fourth.
       ~~**AND A DEFERRAL THIS CARD MAKES, recorded here rather than in prose: a
       code can be turned OFF but never DELETED.** `ORG_CODES_MAX` is 100, derived
       from the `listCodes` ceiling so the list is provably whole rather than
@@ -4648,6 +4657,49 @@ file and is stated so nobody reads these as lower priority than they are.
       REMOVAL and ticking away billing/staff-management is the same lockout by
       another door)**, audit logging, and the Staff screen. When it lands it
       replaces the body of one function and no caller changes.
+      **UPDATE 2026-08-22 (DECISIONS :14262) — THE ROLE HALF IS BUILT AND THIS
+      LINE DOES NOT TICK.** A gym can now appoint managers and trainers (server
+      only, no screen), so *"a gym whose front desk is a TRAINER cannot confirm
+      joins"* is a REACHABLE state rather than a hypothetical one — which makes
+      the ticks more wanted, not less. **Discharged by that card and no longer
+      owed here: the last-owner lockout guard** (a COUNT inside the org lock,
+      written so it stays correct on the day a second owner can exist) **and the
+      audit logging** (add · role change · remove; a no-op role tap deliberately
+      writes nothing). **Still owed here: the migration, the owner-only ticks
+      route, and the Staff screen.** The permission model is no longer the
+      missing part — `staff.manage` is the owner-only privilege that card added —
+      what is missing is STORAGE.
+- [ ] 🟡 **A GYM CANNOT APPOINT SOMEBODY WHO IS NOT ALREADY A MEMBER — because
+      the invite email cannot be sent** (deferred 2026-08-22, DECISIONS :14262).
+      Part 3 §4.7 says "invite by email/phone with role"; what ships is the
+      by-email half narrowed to **people already on this gym's live roster**.
+      Two reasons, and only the first is a dependency: **`EmailSender` logs an
+      event name and delivers nothing** (:11385's own line), so an invite to
+      somebody with no account would be a promise the product cannot keep; and a
+      lookup across the whole `users` table would turn the route into an
+      **account-existence oracle** for any address an owner types. **The second
+      reason does not expire** — whenever the invite lands it must go through a
+      token the invitee redeems, never a "does this email exist" answer.
+      Cost today, stated to Kd before he approved: a manager who is not a member
+      joins with the gym's own code first, which takes seconds. **Closes with the
+      notifications module**, alongside the three silent join events and password
+      reset. Phone is separate and is NOT owed — :12600 struck phone OTP.
+- [ ] 🟡 **A GYM CANNOT BE HANDED TO SOMEBODY ELSE: there is no second owner and
+      no transfer** (deferred 2026-08-22, DECISIONS :14262). The staff card ships
+      `manager|trainer` as the assignable roles and refuses the owner's own role
+      at the row as well as at the boundary, so **every owner is the LAST owner**
+      and `last_owner` is the only answer removal can give about one. That is the
+      safe half; the unsafe half is what nobody has ruled: **when an owner hands
+      the gym over, what happens to them** — do they stay staff, keep §4.0 step
+      6's complimentary seat, keep billing (§2.2 gives billing to the owner
+      alone), and may there be TWO owners at once or only a swap? Shipping the
+      widening half alone would let a gym acquire a second owner with no ruling on
+      what that means, which is how §4.7's last-owner rule quietly stops meaning
+      anything. **The removal guard is already written as a COUNT, not as "is this
+      the owner", so the day a second owner exists it keeps working** — that was
+      deliberate and is the only part of this that is done. Needs a Kd ruling
+      (R0.2) before a card, and it is a real gym's real question: owners sell
+      gyms.
 - [ ] 🟡 **THE ROSTER'S CURSOR CAN SILENTLY SKIP A MEMBER — a millisecond
       cursor against a microsecond column** (found 2026-08-19 by the join
       door's own new test finding the mirror-image bug in ITS pager; DECISIONS

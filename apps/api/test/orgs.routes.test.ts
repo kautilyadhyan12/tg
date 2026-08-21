@@ -2865,4 +2865,460 @@ d("orgs routes (real Postgres)", () => {
       SELECT uses FROM gym_codes WHERE code = ${org.joinCode.code}`;
     expect(uses[0]?.uses).toBe(1);
   });
+
+  // -------------------------------------------------------------------------
+  // STAFF (Part 3 §4.7). Before this card the only `INSERT INTO gym_staff` in
+  // the product was the owner's own, written when the gym was created.
+  // -------------------------------------------------------------------------
+
+  interface StaffBody {
+    userId: string;
+    displayName: string;
+    email: string | null;
+    role: string;
+    since: string;
+    isYou: boolean;
+  }
+
+  const readStaff = async (gymId: string, cookies: Record<string, string>) => {
+    const res = await get(`/v1/orgs/${gymId}/staff`, { cookies });
+    expect(res.statusCode).toBe(200);
+    return (JSON.parse(res.body) as { staff: StaffBody[] }).staff;
+  };
+
+  /** The seat as the DATABASE holds it. Asserted from here rather than from the
+   *  response because "staff seats are free" is a claim about what a gym is
+   *  BILLED for, and the seat cap reads this column — not anything on screen. */
+  const seatIsFree = async (gymId: string, userId: string) => {
+    const rows = await sql<{ complimentary: boolean }[]>`
+      SELECT complimentary FROM gym_members
+      WHERE gym_id = ${gymId} AND user_id = ${userId} AND removed_at IS NULL`;
+    return rows[0]?.complimentary;
+  };
+
+  it("lists the owner as staff, and marks the row as the viewer's own", async () => {
+    const owner = await makeUser("staff-list-owner");
+    const org = await makeOrg(owner.cookies, "Orgs Test Staff List");
+
+    const staff = await readStaff(org.org.id, owner.cookies);
+    expect(staff).toHaveLength(1);
+    expect(staff[0]?.userId).toBe(owner.userId);
+    expect(staff[0]?.role).toBe("owner");
+    expect(staff[0]?.isYou).toBe(true);
+    expect(staff[0]?.email).toBe("orgs-t-staff-list-owner@example.com");
+  });
+
+  it("appoints a member as a trainer, and the appointment makes their seat FREE", async () => {
+    const owner = await makeUser("staff-add-owner");
+    const hire = await makeUser("staff-add-hire");
+    const org = await makeOrg(owner.cookies, "Orgs Test Staff Add");
+    await joinAsMember(hire.cookies, org, owner.cookies);
+
+    // The seat is PAID before the appointment. Asserted rather than assumed, so
+    // the assertion below is about the appointment and not about a default.
+    expect(await seatIsFree(org.org.id, hire.userId)).toBe(false);
+
+    const res = await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-staff-add-hire@example.com", role: "trainer" },
+      { cookies: owner.cookies },
+    );
+    expect(res.statusCode).toBe(201);
+    const body = JSON.parse(res.body) as { staff: StaffBody };
+    expect(body.staff.userId).toBe(hire.userId);
+    expect(body.staff.role).toBe("trainer");
+    expect(body.staff.isYou).toBe(false);
+
+    // KD RULING 2026-08-21, "yes staff seats free".
+    expect(await seatIsFree(org.org.id, hire.userId)).toBe(true);
+
+    const staff = await readStaff(org.org.id, owner.cookies);
+    expect(staff.map((s) => s.role)).toEqual(["owner", "trainer"]);
+
+    const audit = await sql<{ action: string; meta: { role?: string } }[]>`
+      SELECT action, meta FROM audit_log
+      WHERE gym_id = ${org.org.id} AND action = 'org.staff_added'`;
+    expect(audit).toHaveLength(1);
+    expect(audit[0]?.meta.role).toBe("trainer");
+  });
+
+  it("the appointment is EMAIL-matched case-insensitively (the column is citext)", async () => {
+    const owner = await makeUser("staff-case-owner");
+    const hire = await makeUser("staff-case-hire");
+    const org = await makeOrg(owner.cookies, "Orgs Test Staff Case");
+    await joinAsMember(hire.cookies, org, owner.cookies);
+
+    const res = await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "ORGS-T-STAFF-CASE-HIRE@EXAMPLE.COM", role: "manager" },
+      { cookies: owner.cookies },
+    );
+    expect(res.statusCode).toBe(201);
+    expect((JSON.parse(res.body) as { staff: StaffBody }).staff.role).toBe("manager");
+  });
+
+  /** THE ORACLE TEST, and it is the security property of the whole route: the
+   *  lookup is scoped to THIS gym's roster, so a real account that belongs to
+   *  somebody else's gym answers exactly like an address nobody has ever used.
+   *  If these two ever diverge, a gym owner can enumerate who has an account. */
+  it("refuses an email that is not a member HERE — and a stranger's real account answers identically", async () => {
+    const owner = await makeUser("staff-oracle-owner");
+    const outsider = await makeUser("staff-oracle-outsider");
+    const otherOwner = await makeUser("staff-oracle-other");
+    const org = await makeOrg(owner.cookies, "Orgs Test Staff Oracle");
+    const otherOrg = await makeOrg(otherOwner.cookies, "Orgs Test Staff Oracle Two");
+    // The outsider is a REAL, live member — of the wrong gym.
+    await joinAsMember(outsider.cookies, otherOrg, otherOwner.cookies);
+
+    const real = await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-staff-oracle-outsider@example.com", role: "trainer" },
+      { cookies: owner.cookies },
+    );
+    const fictional = await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-staff-oracle-nobody@example.com", role: "trainer" },
+      { cookies: owner.cookies },
+    );
+
+    expect(real.statusCode).toBe(404);
+    expect(fictional.statusCode).toBe(404);
+    // The same ERROR and the same MESSAGE, not merely both-404: a difference in
+    // the wording is the same oracle wearing a different hat. `requestId` is
+    // per-request and is excluded deliberately — comparing whole bodies is an
+    // assertion that can never pass, which is how the first draft of this test
+    // failed.
+    const shape = (body: string) => {
+      const parsed = JSON.parse(body) as { error: string; message: string };
+      return { error: parsed.error, message: parsed.message };
+    };
+    expect(shape(real.body)).toEqual(shape(fictional.body));
+  });
+
+  it("refuses a member who has LEFT the gym", async () => {
+    const owner = await makeUser("staff-left-owner");
+    const leaver = await makeUser("staff-left-leaver");
+    const org = await makeOrg(owner.cookies, "Orgs Test Staff Left");
+    await joinAsMember(leaver.cookies, org, owner.cookies);
+    const removed = await del(`/v1/orgs/${org.org.id}/members/${leaver.userId}`, {
+      cookies: owner.cookies,
+    });
+    expect(removed.statusCode).toBe(200);
+
+    const res = await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-staff-left-leaver@example.com", role: "trainer" },
+      { cookies: owner.cookies },
+    );
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("a second appointment REPORTS the existing role and never overwrites it", async () => {
+    const owner = await makeUser("staff-dup-owner");
+    const hire = await makeUser("staff-dup-hire");
+    const org = await makeOrg(owner.cookies, "Orgs Test Staff Dup");
+    await joinAsMember(hire.cookies, org, owner.cookies);
+
+    const first = await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-staff-dup-hire@example.com", role: "manager" },
+      { cookies: owner.cookies },
+    );
+    expect(first.statusCode).toBe(201);
+
+    // A stale screen offering "add as trainer" must not silently DEMOTE them.
+    const second = await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-staff-dup-hire@example.com", role: "trainer" },
+      { cookies: owner.cookies },
+    );
+    expect(second.statusCode).toBe(409);
+
+    const staff = await readStaff(org.org.id, owner.cookies);
+    expect(staff.find((s) => s.userId === hire.userId)?.role).toBe("manager");
+  });
+
+  it("changes a role, records BOTH ends in the audit row, and repeats without a second row", async () => {
+    const owner = await makeUser("staff-role-owner");
+    const hire = await makeUser("staff-role-hire");
+    const org = await makeOrg(owner.cookies, "Orgs Test Staff Role");
+    await joinAsMember(hire.cookies, org, owner.cookies);
+    await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-staff-role-hire@example.com", role: "trainer" },
+      { cookies: owner.cookies },
+    );
+
+    const res = await patch(
+      `/v1/orgs/${org.org.id}/staff/${hire.userId}`,
+      { role: "manager" },
+      { cookies: owner.cookies },
+    );
+    expect(res.statusCode).toBe(200);
+    expect((JSON.parse(res.body) as { staff: StaffBody }).staff.role).toBe("manager");
+
+    const again = await patch(
+      `/v1/orgs/${org.org.id}/staff/${hire.userId}`,
+      { role: "manager" },
+      { cookies: owner.cookies },
+    );
+    expect(again.statusCode).toBe(200);
+
+    // ONE row, not two: a no-op tap did not happen, so the history must not say
+    // it did.
+    const audit = await sql<{ meta: { from?: string; to?: string } }[]>`
+      SELECT meta FROM audit_log
+      WHERE gym_id = ${org.org.id} AND action = 'org.staff_role_changed'`;
+    expect(audit).toHaveLength(1);
+    expect(audit[0]?.meta.from).toBe("trainer");
+    expect(audit[0]?.meta.to).toBe("manager");
+  });
+
+  it("refuses to change the OWNER's role, and refuses to hand the owner role out", async () => {
+    const owner = await makeUser("staff-ownrole-owner");
+    const hire = await makeUser("staff-ownrole-hire");
+    const org = await makeOrg(owner.cookies, "Orgs Test Staff Owner Role");
+    await joinAsMember(hire.cookies, org, owner.cookies);
+    await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-staff-ownrole-hire@example.com", role: "manager" },
+      { cookies: owner.cookies },
+    );
+
+    // Demoting the owner is last-owner lockout by another door (:11429 rule 2).
+    const demote = await patch(
+      `/v1/orgs/${org.org.id}/staff/${owner.userId}`,
+      { role: "manager" },
+      { cookies: owner.cookies },
+    );
+    expect(demote.statusCode).toBe(409);
+
+    // Promoting is refused at the BOUNDARY — `owner` is not an assignable role —
+    // so it is a 400 and never reaches the row.
+    const promote = await patch(
+      `/v1/orgs/${org.org.id}/staff/${hire.userId}`,
+      { role: "owner" },
+      { cookies: owner.cookies },
+    );
+    expect(promote.statusCode).toBe(400);
+
+    const staff = await readStaff(org.org.id, owner.cookies);
+    expect(staff.filter((s) => s.role === "owner").map((s) => s.userId)).toEqual([owner.userId]);
+  });
+
+  it("removing somebody from staff leaves them a MEMBER, and puts their seat back", async () => {
+    const owner = await makeUser("staff-rm-owner");
+    const hire = await makeUser("staff-rm-hire");
+    const org = await makeOrg(owner.cookies, "Orgs Test Staff Remove");
+    await joinAsMember(hire.cookies, org, owner.cookies);
+    await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-staff-rm-hire@example.com", role: "trainer" },
+      { cookies: owner.cookies },
+    );
+    expect(await seatIsFree(org.org.id, hire.userId)).toBe(true);
+
+    const res = await del(`/v1/orgs/${org.org.id}/staff/${hire.userId}`, {
+      cookies: owner.cookies,
+    });
+    expect(res.statusCode).toBe(200);
+
+    // THE DISTINCTION KD WAS GIVEN BEFORE APPROVING THIS CARD: the keys go, the
+    // membership stays. Read from the roster the console actually draws.
+    const roster = await get(`/v1/orgs/${org.org.id}/members`, { cookies: owner.cookies });
+    expect(roster.statusCode).toBe(200);
+    const members = (JSON.parse(roster.body) as { items: { userId: string }[] }).items;
+    expect(members.map((m) => m.userId)).toContain(hire.userId);
+    expect(await seatIsFree(org.org.id, hire.userId)).toBe(false);
+
+    // ONE row went, not the gym's whole staff list: the DELETE is scoped by the
+    // PAIR (gym, user), and a `WHERE gym_id` that lost its user half would take
+    // the owner out with them — silently, since the caller still gets a 200.
+    const left = await readStaff(org.org.id, owner.cookies);
+    expect(left.map((s) => s.userId)).toEqual([owner.userId]);
+
+    // Idempotent-ish: a second tap is a 404 because they are no longer staff,
+    // which is the honest answer to "remove this staff row".
+    const twice = await del(`/v1/orgs/${org.org.id}/staff/${hire.userId}`, {
+      cookies: owner.cookies,
+    });
+    expect(twice.statusCode).toBe(404);
+  });
+
+  it("a gym cannot be left with nobody in charge — the last owner cannot be removed", async () => {
+    const owner = await makeUser("staff-lastowner-owner");
+    const org = await makeOrg(owner.cookies, "Orgs Test Staff Last Owner");
+
+    const res = await del(`/v1/orgs/${org.org.id}/staff/${owner.userId}`, {
+      cookies: owner.cookies,
+    });
+    expect(res.statusCode).toBe(409);
+    expect(await readStaff(org.org.id, owner.cookies)).toHaveLength(1);
+  });
+
+  it("a MANAGER and a TRAINER are refused all four staff routes with 403", async () => {
+    const owner = await makeUser("staff-403-owner");
+    const manager = await makeUser("staff-403-manager");
+    const trainer = await makeUser("staff-403-trainer");
+    const org = await makeOrg(owner.cookies, "Orgs Test Staff Denied");
+    await joinAsMember(manager.cookies, org, owner.cookies);
+    await joinAsMember(trainer.cookies, org, owner.cookies);
+    await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-staff-403-manager@example.com", role: "manager" },
+      { cookies: owner.cookies },
+    );
+    await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-staff-403-trainer@example.com", role: "trainer" },
+      { cookies: owner.cookies },
+    );
+
+    // 403 and NOT 404: these two are staff of this gym, so they already know it
+    // exists — the 404 disguise is for strangers, and using it here would be a
+    // lie to somebody standing inside the building.
+    for (const who of [manager, trainer]) {
+      expect((await get(`/v1/orgs/${org.org.id}/staff`, { cookies: who.cookies })).statusCode).toBe(
+        403,
+      );
+      const added = await post(
+        `/v1/orgs/${org.org.id}/staff`,
+        { email: "orgs-t-staff-403-owner@example.com", role: "trainer" },
+        { cookies: who.cookies },
+      );
+      expect(added.statusCode).toBe(403);
+      const changed = await patch(
+        `/v1/orgs/${org.org.id}/staff/${trainer.userId}`,
+        { role: "manager" },
+        { cookies: who.cookies },
+      );
+      expect(changed.statusCode).toBe(403);
+      const removed = await del(`/v1/orgs/${org.org.id}/staff/${trainer.userId}`, {
+        cookies: who.cookies,
+      });
+      expect(removed.statusCode).toBe(403);
+    }
+
+    expect(await readStaff(org.org.id, owner.cookies)).toHaveLength(3);
+  });
+
+  /** R3.2's required case, for all four routes at once: another gym's OWNER —
+   *  somebody with a real session and real authority somewhere else — must not
+   *  reach this gym, and must not learn that it exists. */
+  it("another gym's owner gets 404 from every staff route", async () => {
+    const owner = await makeUser("staff-tenant-owner");
+    const hire = await makeUser("staff-tenant-hire");
+    const stranger = await makeUser("staff-tenant-stranger");
+    const org = await makeOrg(owner.cookies, "Orgs Test Staff Tenancy");
+    await makeOrg(stranger.cookies, "Orgs Test Staff Tenancy Other");
+    await joinAsMember(hire.cookies, org, owner.cookies);
+
+    expect(
+      (await get(`/v1/orgs/${org.org.id}/staff`, { cookies: stranger.cookies })).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await post(
+          `/v1/orgs/${org.org.id}/staff`,
+          { email: "orgs-t-staff-tenant-hire@example.com", role: "trainer" },
+          { cookies: stranger.cookies },
+        )
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await patch(
+          `/v1/orgs/${org.org.id}/staff/${owner.userId}`,
+          { role: "trainer" },
+          { cookies: stranger.cookies },
+        )
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (await del(`/v1/orgs/${org.org.id}/staff/${owner.userId}`, { cookies: stranger.cookies }))
+        .statusCode,
+    ).toBe(404);
+
+    // Nothing moved.
+    expect(await readStaff(org.org.id, owner.cookies)).toHaveLength(1);
+  });
+
+  it("rejects a malformed staff request at the boundary", async () => {
+    const owner = await makeUser("staff-400-owner");
+    const org = await makeOrg(owner.cookies, "Orgs Test Staff Validation");
+
+    // Unknown role.
+    expect(
+      (
+        await post(
+          `/v1/orgs/${org.org.id}/staff`,
+          { email: "orgs-t-staff-400-owner@example.com", role: "receptionist" },
+          { cookies: owner.cookies },
+        )
+      ).statusCode,
+    ).toBe(400);
+    // Unknown key — `.strict()` rejects rather than silently carrying it.
+    expect(
+      (
+        await post(
+          `/v1/orgs/${org.org.id}/staff`,
+          { email: "orgs-t-staff-400-owner@example.com", role: "trainer", privileges: ["all"] },
+          { cookies: owner.cookies },
+        )
+      ).statusCode,
+    ).toBe(400);
+    // A non-uuid in the path is a 400 at the boundary, never a 500 from
+    // Postgres refusing the cast (:4483's shape).
+    expect(
+      (await get(`/v1/orgs/not-a-uuid/staff`, { cookies: owner.cookies })).statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await del(`/v1/orgs/${org.org.id}/staff/not-a-uuid`, { cookies: owner.cookies })
+      ).statusCode,
+    ).toBe(400);
+  });
+
+  it("every staff route requires a session", async () => {
+    const owner = await makeUser("staff-anon-owner");
+    const org = await makeOrg(owner.cookies, "Orgs Test Staff Anon");
+    const id = org.org.id;
+
+    expect((await get(`/v1/orgs/${id}/staff`)).statusCode).toBe(401);
+    expect(
+      (await post(`/v1/orgs/${id}/staff`, { email: "a@example.com", role: "trainer" })).statusCode,
+    ).toBe(401);
+    expect(
+      (await patch(`/v1/orgs/${id}/staff/${owner.userId}`, { role: "trainer" })).statusCode,
+    ).toBe(401);
+    expect((await del(`/v1/orgs/${id}/staff/${owner.userId}`)).statusCode).toBe(401);
+  });
+
+  /** The other half of the two-tap flow Kd was shown: while somebody is staff,
+   *  the MEMBER remove button refuses them. This is pre-existing behaviour
+   *  (`repo.removeMember`'s `is_staff` arm) and it is asserted HERE because this
+   *  card is what finally makes a non-owner staff member reachable — before it,
+   *  that arm could only ever fire on the owner. */
+  it("a staff member cannot be removed from the member list until their keys are taken", async () => {
+    const owner = await makeUser("staff-order-owner");
+    const hire = await makeUser("staff-order-hire");
+    const org = await makeOrg(owner.cookies, "Orgs Test Staff Order");
+    await joinAsMember(hire.cookies, org, owner.cookies);
+    await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-staff-order-hire@example.com", role: "trainer" },
+      { cookies: owner.cookies },
+    );
+
+    const blocked = await del(`/v1/orgs/${org.org.id}/members/${hire.userId}`, {
+      cookies: owner.cookies,
+    });
+    expect(blocked.statusCode).toBe(409);
+
+    await del(`/v1/orgs/${org.org.id}/staff/${hire.userId}`, { cookies: owner.cookies });
+    const allowed = await del(`/v1/orgs/${org.org.id}/members/${hire.userId}`, {
+      cookies: owner.cookies,
+    });
+    expect(allowed.statusCode).toBe(200);
+  });
 });

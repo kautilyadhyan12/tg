@@ -4,6 +4,7 @@
 import { z } from "zod";
 
 export {
+  addOrgStaffRequestSchema,
   confirmApplicationResponseSchema,
   createOrgCodeRequestSchema,
   createOrgRequestSchema,
@@ -25,15 +26,22 @@ export {
   orgMemberListQuerySchema,
   orgMemberPageSchema,
   orgRoleSchema,
+  orgStaffMutationResponseSchema,
+  orgStaffResponseSchema,
+  orgStaffSchema,
   orgSummarySchema,
   orgTypeSchema,
   rejectApplicationResponseSchema,
   removeMemberResponseSchema,
   removeOrgCodeResponseSchema,
+  removeOrgStaffResponseSchema,
   rotateOrgCodeResponseSchema,
+  staffAssignableRoleSchema,
   updateOrgCodeRequestSchema,
+  updateOrgStaffRequestSchema,
 } from "@app/shared";
 export type {
+  AddOrgStaffRequest,
   ConfirmApplicationResponse,
   CreateOrgCodeRequest,
   CreateOrgRequest,
@@ -58,13 +66,19 @@ export type {
   OrgMemberListQuery,
   OrgMemberPage,
   OrgRole,
+  OrgStaff,
+  OrgStaffMutationResponse,
+  OrgStaffResponse,
   OrgSummary,
   OrgType,
   RejectApplicationResponse,
   RemoveMemberResponse,
   RemoveOrgCodeResponse,
+  RemoveOrgStaffResponse,
   RotateOrgCodeResponse,
+  StaffAssignableRole,
   UpdateOrgCodeRequest,
+  UpdateOrgStaffRequest,
 } from "@app/shared";
 
 /** A non-uuid :gymId must fail as a 400 at the boundary, never as a 500 from
@@ -89,6 +103,17 @@ export const memberParamsSchema = z
   .object({ gymId: z.string().uuid(), userId: z.string().uuid() })
   .strict();
 export type MemberParams = z.infer<typeof memberParamsSchema>;
+
+/** The staff routes address a person by the USER's id for the same reason the
+ *  member route does — the staff list the console renders carries `userId` and
+ *  nothing else that identifies a row. It is spelled separately from
+ *  `memberParamsSchema` rather than shared: the two happen to have the same
+ *  shape today, and a schema whose NAME says "member" quietly becomes the
+ *  justification for the next person who widens one of them. */
+export const staffParamsSchema = z
+  .object({ gymId: z.string().uuid(), userId: z.string().uuid() })
+  .strict();
+export type StaffParams = z.infer<typeof staffParamsSchema>;
 
 /** The gym id AND the code being changed.
  *

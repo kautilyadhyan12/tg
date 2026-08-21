@@ -666,3 +666,95 @@ export const orgMemberPageSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 export type OrgMemberPage = z.infer<typeof orgMemberPageSchema>;
+
+// ---------------------------------------------------------------------------
+// STAFF — Part 3 §4.7 ("list, invite by email/phone with role, change role,
+// remove; every staff mutation audit-logged; last-owner removal blocked") and
+// §2.2's "Staff management: owner only" row. Kd approved this card 2026-08-21.
+// ---------------------------------------------------------------------------
+
+/** The roles this card can HAND OUT, which is deliberately not every role.
+ *
+ *  **`owner` is absent and that is a deferral, not an oversight.** Making a
+ *  second owner is the first half of transferring a gym, and the second half —
+ *  what happens to the first owner, whether §4.0 step 6's complimentary seat
+ *  follows, whether the outgoing owner keeps billing — is a Kd question nobody
+ *  has been asked. Shipping only the widening half would let a gym acquire two
+ *  owners with no ruling on what the second one means. Own `OWED.md` line.
+ *
+ *  The consequence to hold in mind while reading the rest of this file: every
+ *  owner is therefore the LAST owner, so `last_owner` is not an edge case here,
+ *  it is the only answer removal can give about an owner. */
+export const staffAssignableRoleSchema = z.enum(["manager", "trainer"]);
+export type StaffAssignableRole = z.infer<typeof staffAssignableRoleSchema>;
+
+/** One person who runs this gym.
+ *
+ *  **`email` IS on this row, and it is checked against §2.4 rather than waved
+ *  through.** That boundary governs what an org sees about its MEMBERS, and its
+ *  never-see list is meals, body measurements, coach conversations, run routes
+ *  and out-of-membership activity — contact details are not on it. §4.7's own
+ *  staff flow is "invite by email", so the email is the value the owner TYPED to
+ *  create this row in the first place; showing it back is not disclosure. It
+ *  earns its place because two people can share a display name and the tap this
+ *  screen offers hands somebody the keys to the gym.
+ *
+ *  `isYou` is computed by the SERVER against the caller. :10726's Low-3 is the
+ *  precedent and the reason it is not inferred client-side: "(you)" was once
+ *  derived from a seat being complimentary, which was true only while one
+ *  caller happened to behave a certain way. */
+export const orgStaffSchema = z.object({
+  userId: z.string().uuid(),
+  displayName: z.string(),
+  /** Null for an OAuth-only account: `users.email` is nullable by design. */
+  email: z.string().nullable(),
+  role: orgRoleSchema,
+  since: z.string(),
+  isYou: z.boolean(),
+});
+export type OrgStaff = z.infer<typeof orgStaffSchema>;
+
+export const orgStaffResponseSchema = z.object({ staff: z.array(orgStaffSchema) });
+export type OrgStaffResponse = z.infer<typeof orgStaffResponseSchema>;
+
+/** ADDING SOMEBODY: an email, and it must belong to a LIVE MEMBER of this gym.
+ *
+ *  **Two reasons, and the second is the one a later chat will want to relax.**
+ *  (1) Inviting a person who has no account means SENDING THEM AN EMAIL, and
+ *  nothing in this product has ever sent one — `EmailSender` logs an event name
+ *  (:11385). A card cannot ship an invite whose delivery does not exist.
+ *  (2) Looking a stranger up by email across the whole `users` table turns this
+ *  route into an oracle: "no such member" vs "added" would answer *does this
+ *  person have an account here* for any address a gym owner cares to type.
+ *  Scoping the lookup to the gym's own roster discloses nothing the owner cannot
+ *  already read on the Members screen.
+ *
+ *  Cost, stated rather than discovered: a manager who is not a member has to
+ *  join with the gym's own code first — which takes seconds and which the owner
+ *  can already do. The invite-a-stranger half has its own `OWED.md` line and
+ *  lands with the notifications module. */
+export const addOrgStaffRequestSchema = z
+  .object({
+    /** Bounded at 320 (the RFC's local@domain maximum) so a megabyte of body
+     *  never reaches Postgres. NOT `z.string().email()`: the column is `citext`
+     *  and the comparison is an equality against rows we already store, so a
+     *  format opinion here could only ever reject an address the app itself
+     *  accepted at registration. */
+    email: z.string().trim().min(3).max(320),
+    role: staffAssignableRoleSchema,
+  })
+  .strict();
+export type AddOrgStaffRequest = z.infer<typeof addOrgStaffRequestSchema>;
+
+export const updateOrgStaffRequestSchema = z.object({ role: staffAssignableRoleSchema }).strict();
+export type UpdateOrgStaffRequest = z.infer<typeof updateOrgStaffRequestSchema>;
+
+export const orgStaffMutationResponseSchema = z.object({ staff: orgStaffSchema });
+export type OrgStaffMutationResponse = z.infer<typeof orgStaffMutationResponseSchema>;
+
+/** `removed` is a statement about the STATE, not about this request — the same
+ *  wording and the same reason as `removeMemberResponseSchema`: a second tap
+ *  answers "this person does not run your gym now", which is true whether this
+ *  call deleted the row or the previous one did. */
+export const removeOrgStaffResponseSchema = z.object({ status: z.literal("removed") });
+export type RemoveOrgStaffResponse = z.infer<typeof removeOrgStaffResponseSchema>;
