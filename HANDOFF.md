@@ -9108,5 +9108,29 @@ GATES
 
 NEXT
   1. **The join-code packet is DONE — build, smoke and review all behind it.**
-  2. Kd's next card is still the LOGIN DOOR (:10824), unchanged by any of this.
+  2. ~~Kd's next card is still the LOGIN DOOR (:10824), unchanged by any of
+     this.~~ **STRUCK 2026-08-21. THE LINE WAS FALSE WHEN IT WAS WRITTEN AND IT
+     COST A SESSION — do not act on it, and do not restore it.**
+     · **The login door was already FINISHED, one day before the join-code work
+       started.** Built :10866 (`a18a15b`, 2026-08-19), amended :10959, smoked
+       **11/11 by Kd** :11706, T3 **zero Critical/High** :11757 — and
+       `OWED.md:4908` ("SEPARATE GYM LOGIN AND USER LOGIN") has read `[x] DONE`
+       ever since, naming `a18a15b` + `80ee871`.
+     · **The `My Gym` question :10824 left open is ALSO ruled.** Kd shut the
+       crossing in BOTH directions at :11616: `My Gym` out of the member
+       sidebar, "Back to the app" out of the console, Sign out added to the
+       console and the questionnaire. The two doors are the only way across.
+       **It is not an open question and must not be put to him again.**
+     · **How it went wrong, because the shape will recur.** The line appears
+       NOWHERE else in this file (grep-verified, single occurrence), so it was
+       not copied — it was WRITTEN, by the chat closing the join-code T3, about
+       a card it had not looked up. Checking would have cost one grep of
+       `OWED.md`. On 2026-08-21 a fresh chat was handed it as its card and spent
+       its whole first message discovering the work was finished. **A NEXT line
+       is a CLAIM and takes V1's evidence like any other — before naming a card
+       here, open its `OWED.md` line and look at the box.**
+  3. **NO CARD IS QUEUED. Kd picks the next one.** The nearest unbuilt thing in
+     this thread is the console OVERVIEW's numbers (`OWED.md:4824`), which
+     cannot be honest until the nightly rollup worker exists — two cards, not
+     one, and neither is approved.
 ```
