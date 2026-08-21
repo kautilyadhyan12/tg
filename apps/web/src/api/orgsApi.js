@@ -16,10 +16,12 @@ import {
   myOrgsResponseSchema,
   nudgeApplicationResponseSchema,
   orgApplicationPageSchema,
+  orgCodeMutationResponseSchema,
   orgCodesResponseSchema,
   orgMemberPageSchema,
   rejectApplicationResponseSchema,
   removeMemberResponseSchema,
+  rotateOrgCodeResponseSchema,
 } from '@app/shared';
 import authApi from './authApi';
 
@@ -81,6 +83,52 @@ export const orgService = {
    *  a reload. */
   getCodes: (gymId) =>
     readThrough(orgCodesResponseSchema, 'the join code', authApi.get(`/v1/orgs/${gymId}/codes`)),
+
+  /** POST /v1/orgs/:gymId/codes — mint another code.
+   *
+   *  **No `label`**: Kd ruled names off join codes (2026-08-21). The server
+   *  applies the gym's default and the request schema is `.strict()`, so sending
+   *  one is a 400 rather than a field quietly ignored.
+   *
+   *  `expiresAt` (ISO instant or null) and `maxUses` (integer or null) are both
+   *  optional and both default to null server-side — a code with no end date and
+   *  no limit is the ordinary one. */
+  createCode: (gymId, body = {}) =>
+    readThrough(
+      orgCodeMutationResponseSchema,
+      'the new code',
+      authApi.post(`/v1/orgs/${gymId}/codes`, body),
+    ),
+
+  /** PATCH /v1/orgs/:gymId/codes/:code — pause/wake, or move a restriction.
+   *
+   *  **Send ONLY what is changing.** The server leaves an absent field alone, so
+   *  the pause switch does not have to restate an end date it never displayed —
+   *  and an empty body is a 400 rather than a success that did nothing. */
+  updateCode: (gymId, code, patch) =>
+    readThrough(
+      orgCodeMutationResponseSchema,
+      'that change',
+      authApi.patch(`/v1/orgs/${gymId}/codes/${encodeURIComponent(code)}`, patch),
+    ),
+
+  /** POST /v1/orgs/:gymId/codes/:code/rotate — new code on, old code off.
+   *
+   *  ONE call because the halves must not fail apart: a client that paused and
+   *  then created could drop its connection between the two and leave the gym
+   *  with no working code at all. The response carries BOTH rows, so the screen
+   *  can say what happened to the old one instead of the owner reloading.
+   *
+   *  **Deliberately NOT idempotent, and it must not be retried**: a second call
+   *  mints a second code. `authApi`'s 401-refresh retry is safe (the server
+   *  rejected that request before running it); a network-failure retry is not,
+   *  and nothing here adds one (R10.2). */
+  rotateCode: (gymId, code) =>
+    readThrough(
+      rotateOrgCodeResponseSchema,
+      'that replacement',
+      authApi.post(`/v1/orgs/${gymId}/codes/${encodeURIComponent(code)}/rotate`, {}),
+    ),
 
   /** POST /v1/orgs/join — the member's half of the door.
    *

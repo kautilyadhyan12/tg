@@ -46,6 +46,7 @@ import { dirname, resolve } from 'node:path';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 const VIEW_SUITE = 'src/pages/console/consoleView.test.js';
+const CODES_VIEW_SUITE = 'src/pages/console/codesView.test.js';
 const RENDER_SUITE = 'src/pages/console/console.render.test.jsx';
 const API_SUITE = 'src/api/orgsApi.test.js';
 
@@ -56,6 +57,9 @@ const TARGETS = {
   members: { file: resolve(ROOT, 'apps/web/src/pages/console/Members.jsx') },
   newgym: { file: resolve(ROOT, 'apps/web/src/pages/console/NewGym.jsx') },
   overview: { file: resolve(ROOT, 'apps/web/src/pages/console/Overview.jsx') },
+  codesview: { file: resolve(ROOT, 'apps/web/src/pages/console/codesView.js') },
+  codespanel: { file: resolve(ROOT, 'apps/web/src/components/console/JoinCodesPanel.jsx') },
+  queue: { file: resolve(ROOT, 'apps/web/src/pages/console/ApplicationsQueue.jsx') },
 };
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
@@ -259,6 +263,68 @@ const MUTANTS = [
     expect: 'shows ONE error, not two, when both reads fail the same way',
     from: "      {!members.loading && members.error !== null && members.error !== codes.error ? (",
     to: "      {!members.loading && members.error !== null ? (",
+  },
+
+  // ── C22–C27: MANAGING JOIN CODES ────────────────────────────────────────
+  //
+  // Scoped by :5857 rule 4a. This is a web card, so there are NO database
+  // mutants and the sweep runs in minutes. What earns a mutant here is what
+  // rule 1a calls Critical/High: a control offered to somebody the server will
+  // refuse, a DATE a user sees that is wrong, and a change that silently
+  // destroys a setting the owner never saw.
+  {
+    id: 'C22',
+    target: 'codesview',
+    suite: CODES_VIEW_SUITE,
+    why: 'PRIVILEGE ON SCREEN: a trainer is drawn the code controls the server answers 403 to — the console offering a person a control it knows they will be told off for',
+    expect: 'grants owner and manager and refuses everyone else',
+    from: "  return staffRole === 'owner' || staffRole === 'manager';",
+    to: "  return staffRole !== 'trainer';",
+  },
+  {
+    id: 'C23',
+    target: 'codesview',
+    suite: CODES_VIEW_SUITE,
+    why: 'A DATE A USER SEES: the end date becomes the START of the chosen day, so a code an owner set to work THROUGH the 31st dies at the beginning of it — up to a full day early, and in the wrong timezone as well',
+    expect: 'sends the END of the chosen day',
+    from: '  const at = new Date(year, month - 1, day, 23, 59, 59, 0);',
+    to: '  const at = new Date(year, month - 1, day, 0, 0, 0, 0);',
+  },
+  {
+    id: 'C24',
+    target: 'codesview',
+    suite: CODES_VIEW_SUITE,
+    why: 'FALSE ON SCREEN: an unread code list reports as "full", so the New code button vanishes for a gym whose request merely blipped',
+    expect: 'is null when the list could not be read',
+    from: '  if (!Array.isArray(codes)) return null;',
+    to: '  if (!Array.isArray(codes)) return true;',
+  },
+  {
+    id: 'C25',
+    target: 'codesview',
+    suite: CODES_VIEW_SUITE,
+    why: 'A NUMBER A USER SEES: a code whose count could not be read prints "Nobody has joined with this code yet" — a claim about other people built out of a missing field',
+    expect: 'says nothing about a count it does not have',
+    from: '? code.uses : null;',
+    to: '? code.uses : 0;',
+  },
+  {
+    id: 'C26',
+    target: 'codespanel',
+    suite: RENDER_SUITE,
+    why: "DATA LOSS: the pause switch starts sending the restrictions too, so switching a code off silently clears an end date and a join limit the owner set elsewhere and this control never showed them",
+    expect: 'sending ONLY the pause',
+    from: "            onPause={() => run(() => orgService.updateCode(gymId, code.code, { paused: true }))}",
+    to: "            onPause={() => run(() => orgService.updateCode(gymId, code.code, { paused: true, expiresAt: null, maxUses: null }))}",
+  },
+  {
+    id: 'C27',
+    target: 'codespanel',
+    suite: RENDER_SUITE,
+    why: 'FALSE ON SCREEN: the panel stops re-reading after a change, so a code an owner just switched off still reads as working until they reload — the screen and the server disagree about the door of the owner’s own gym',
+    expect: 're-reads the codes after a change',
+    from: '      await onChanged();',
+    to: '      void 0;',
   },
 ];
 

@@ -13,6 +13,15 @@ import { ConsoleCard } from './ConsoleStates';
 // is not live the screen says which of the three it is, and the invitation
 // sentence is withheld rather than reworded.
 
+// SINCE THE MANAGEMENT PANEL LANDED, THIS CARD IS ONE OF TWO PLACES THE CODE
+// APPEARS, and the duplication is deliberate: this is "the code to hand out"
+// (§4.0 step 4's "show code big", readable across a front desk, with Copy),
+// while the panel below is "every code and what you can do to it". A test that
+// asks whether a code is on screen at all can no longer tell the two apart, so
+// this card carries a `data-testid` and the hero assertions are scoped to it —
+// weakening them to `getAllByText` would have quietly dropped the claim that
+// this card shows the first LIVE code rather than merely the oldest.
+
 export default function JoinCodeCard({ code }) {
   const [copied, setCopied] = useState(false);
   const state = codeState(code);
@@ -31,7 +40,7 @@ export default function JoinCodeCard({ code }) {
 
   return (
     <ConsoleCard>
-      <div className="flex items-start justify-between gap-3 flex-wrap">
+      <div data-testid="join-code-card" className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <div className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
             Join code · {code.label}

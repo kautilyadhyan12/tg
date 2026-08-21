@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Users, ChevronRight } from 'lucide-react';
 import JoinCodeCard from '../../components/console/JoinCodeCard';
+import JoinCodesPanel from '../../components/console/JoinCodesPanel';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { orgService, errorText, errorStatus } from '../../api/orgsApi';
 import { useAuth } from '../../context/AuthContext';
@@ -148,6 +149,23 @@ export default function Overview() {
     setAttempt((n) => n + 1);
   };
 
+  /** Re-read the CODES ONLY, after the panel below changes one.
+   *
+   *  Not `retry()`, deliberately: bumping `attempt` re-runs all three reads, so
+   *  pausing a code would blank and redraw the member count and the waiting
+   *  figure — a whole-screen flash for a change that touched one list. Nothing
+   *  else on this screen depends on a code.
+   *
+   *  It REJECTS on failure rather than swallowing, because the panel's own `run`
+   *  is what reports to the owner: a refresh that failed silently would leave
+   *  the change applied on the server and invisible on screen, which is the
+   *  empty-vs-failed defect wearing a different hat. The panel is also the only
+   *  caller, so there is no floating promise here (R2.5). */
+  const reloadCodes = async () => {
+    const res = await orgService.getCodes(gymId);
+    setCodes({ loading: false, error: null, retryable: true, list: res.data?.codes ?? [] });
+  };
+
   if (orgLoading) {
     return (
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
@@ -212,6 +230,26 @@ export default function Overview() {
             </p>
           </ConsoleCard>
         )
+      ) : null}
+
+      {/* MANAGING the codes, under the one being handed out. Kept on Overview
+          rather than given a tab of its own: §3.1 fixes the console's nav at six
+          screens and surfaces Groups as a filter rather than a screen, and the
+          confirm queue took the same decision one card ago. An owner looks for
+          their code here, so the controls belong beside it.
+
+          Drawn only on a SUCCESSFUL read: over a failed one the list is null,
+          and a panel that rendered "New code" over a gym whose codes it could
+          not read would offer a second code to a gym that may already be at its
+          limit. The failure card above already says what happened, with the
+          retry. */}
+      {!codes.loading && codes.error === null ? (
+        <JoinCodesPanel
+          gymId={org.id}
+          codes={codes.list}
+          staffRole={org.staffRole}
+          onChanged={reloadCodes}
+        />
       ) : null}
 
       {/* ── The members pane, on ITS own outcome ───────────────────────── */}

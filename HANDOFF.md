@@ -8953,3 +8953,44 @@ NEXT
      that card's one-liner (OWED's ⚪ line, :13174).
   2. T3 on this server half (diff, fresh chat) — UNRUN.
 ```
+
+```
+TASK: JOIN-CODE MANAGEMENT, WEB HALF. DECISIONS :13920.
+      **NOTHING TICKS except the "Front Desk" ⚪ line — SMOKE and T3 are UNRUN.**
+
+WHAT EXISTS NOW
+  · A **Join codes** section on the gym's Overview, under the hero code card:
+    every code with its state in plain words · Switch off / Switch on · Limits
+    (end date + people-limit) · Replace, behind a confirmation.
+  · `RUNBOOK/smoke-join-codes.md` — 11 steps, written, UNRUN.
+
+THINGS A LATER CHAT WILL OTHERWISE GET WRONG
+  · **THE CODE IS ON SCREEN TWICE ON PURPOSE** — hero card (hand it out) and the
+    row below (manage it). `JoinCodeCard` carries `data-testid="join-code-card"`
+    and the HERO assertions are scoped to it. **Do not "fix" the duplication and
+    do not relax those queries to `getAllByText`** — that drops L-4's claim that
+    the hero shows the first LIVE code, which is what a rotated gym depends on.
+  · **The "Front Desk" label is OFF the waiting row by KD RULING** and its OWED
+    line is ticked. `groupLabelText` and the roster's column are untouched. Do
+    not restore it; the §2.4 test now asserts its ABSENCE.
+  · **The pause switch sends ONLY `paused`.** The limits editor sends both
+    fields. Each control must send exactly what it displayed — mutant C26.
+  · **An end date is the END of the chosen day, in the viewer's own zone.**
+    `${value}T00:00:00Z` is a day early and somebody else's midnight — C23.
+  · **`atCodeLimit` returns NULL for an unread list**, and null is not "full" —
+    reading it as full takes the New code button away on a blip. C24.
+
+GATES
+  · web **963/963 across 41 files** (+35) · `vite build` ✓ · eslint clean on all
+    eight changed files.
+  · **The console sweep ran to COMPLETION: 27 mutants · 27 RED · 0 ALIVE · 0
+    never ran**, control GREEN first, restores sha256-verified, tree clean after.
+  · **INSTRUMENT NOTE: three of six new mutant rows had broken anchors** (two
+    real newlines, one nested quote). `node --check` caught all three before a
+    sweep ran — :13336's guard, on the file it was added for.
+
+NEXT
+  1. **Kd runs `RUNBOOK/smoke-join-codes.md`** (11 steps, ~15 min, two accounts).
+  2. **T3 — a fresh chat, on the diff of BOTH halves** (:13803 server, :13920
+     web). Neither has been reviewed.
+```

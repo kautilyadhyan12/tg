@@ -13916,3 +13916,96 @@ truncated, and retired codes count toward it. The refusal tells an owner to
 delete one, which nothing can do. Deliberate: a delete has to decide what happens
 to `gym_members.code_id` — the group attribution every membership carries — and
 that is a ruling, not a chat's guess.
+
+## THE JOIN-CODE SCREEN — and Kd's no-names ruling closes a line he opened two days earlier (2026-08-21)
+
+**Read before touching `JoinCodesPanel`, `codesView.js`, the Overview's code
+panes, or the waiting queue's row — and before putting a code's label back on
+any screen.** Web half of :13803.
+
+**WHERE IT LIVES, decided not defaulted: a SECTION on the Overview, not a
+seventh tab.** §3.1 fixes the console's navigation at six (Overview · Members ·
+Leaderboard · Reports · Billing · Settings) and surfaces Groups "as a filter
+everywhere rather than a screen". :12343 made the identical call for the confirm
+queue and put it on Members. An owner looks for their code on the screen they
+land on, and it is already there in the card above.
+
+**THE CODE NOW APPEARS TWICE ON ONE SCREEN AND THAT IS DELIBERATE** — the hero
+card is §4.0 step 4's "show code big" (readable across a front desk, with Copy),
+the row below is "every code and what you can do to it". **The tests are what
+made this a decision rather than an accident**: four existing assertions broke on
+`Found multiple elements`, and the fix was to SCOPE them to a new
+`data-testid="join-code-card"` rather than relax them to `getAllByText`. Relaxing
+would have silently dropped the claim that the hero shows the first LIVE code
+rather than merely the oldest (L-4), which is exactly what a rotated gym depends
+on. **One assertion's CLAIM genuinely moved and was rewritten rather than
+deleted**: "OLDPAU is nowhere on screen" is now false and no longer the point,
+because the panel lists every code — including retired ones, which an owner must
+still be able to see.
+
+**KD'S NO-NAMES RULING CLOSED THE "FRONT DESK" LINE, and the mechanism is worth
+recording.** He raised that label during the clock smoke (:13174) and did not
+rule; the ⚪ line proposed "hide it while a gym has exactly one live code". What
+actually settled it was a ruling made about something else the next day: **once
+no code can be given a name, every code carries the same default label**, so the
+field cannot distinguish anything and the conditional fix collapses into an
+unconditional one. Off the waiting row; `groupLabelText` and the roster's column
+UNTOUCHED (R1.1 — he named the waiting list). **The §2.4 test that asserted the
+label was INVERTED, not deleted** — "an applicant's four facts and nothing else"
+is still its subject and the allowed set got smaller by one.
+
+**Decisions not to re-derive.**
+- **A trainer sees the code and NONE of the controls.** §2.2 grants Invite to all
+  three roles and code management to owner and manager. `canManageCodes` is an
+  ALLOW-list so a role added later is refused by default. **Hiding is not the
+  enforcement and does not pretend to be** (R3.3) — the server's 403 is, and it
+  has its own test; this stops the console drawing a control it knows will be
+  refused, which is :12518 C/H-2's shape on this very screen.
+- **The pause switch sends ONLY `paused`.** It displays nothing else, so a body
+  carrying `expiresAt: null` would silently clear an end date the owner set on
+  another control. The limits editor sends BOTH fields, because it displayed
+  both and clearing its date box must mean "never expires". Mutant **C26**.
+- **An end date is the END of the chosen day in the VIEWER'S OWN zone.** A person
+  picking "31 August" means "works through the 31st"; the obvious
+  `${value}T00:00:00Z` is both a day early AND somebody else's midnight (playbook
+  trap #8). `endOfDayIso` builds from local parts, and **refuses a date that does
+  not exist** rather than letting `Date` roll 31 February into 3 March and showing
+  the owner a date they did not type. Mutant **C23**.
+- **`todayInputValue` is the LOCAL day**, never `toISOString().slice(0,10)` —
+  UTC's day is yesterday for anyone east of London late in the evening, and the
+  date box would offer a minimum the server then refuses as past.
+- **A limit is checked before it is sent.** `parseLimit` refuses what the server's
+  `.min(1)` refuses, so a 0 gets a sentence rather than a 400 round trip. Zero is
+  pause wearing a number.
+- **`atCodeLimit` answers NULL when the list could not be read** — not "full", and
+  not "room". A null must leave the New code button alone; reading it as full
+  takes the control away from a gym whose network blipped. Mutant **C24**.
+- **The panel re-reads from the server after every change** rather than patching
+  its own copy, and the re-read is CODES ONLY — `retry()` would re-run all three
+  Overview reads and flash the member count and waiting figure for a change that
+  touched one list. Mutant **C27**.
+- **No controls are drawn over a list that failed to read.** A New code button
+  above an unread list offers a second code to a gym that may already be at its
+  limit.
+- **Replace asks first; pause and limits do not.** Pause is undone with a tap and
+  limits are editable for ever; replacing hands out a new code and turns this one
+  off, so anybody holding the old poster is turned away — not undone by tapping
+  again. §4.3's confirm-sheet reasoning, spent on the one action that needs it.
+  **The question states both halves**, and the second is the one an owner fears:
+  people who already joined stay members.
+
+**PROVE:** web **963/963 across 41 files** (+35: 23 pure-helper, 12 render) ·
+`vite build` ✓ · eslint clean on all eight changed files · **the console
+mutation sweep run to COMPLETION: 27 mutants · 27 RED · 0 ALIVE · 0 never ran**,
+control GREEN on every filter first, restores sha256-verified, tree clean after.
+
+**Instrument note, mine:** three of the six new mutant rows were written with
+broken anchors — two carried real newlines where escaped ones were intended and
+one nested quotes inside a single-quoted JS string — and `node --check` caught
+all three before a sweep ran. The permanent parse guard added at :13336 doing its
+job on the file it was added for.
+
+**NOTHING TICKS.** The build is done and both GATES are unrun: the browser SMOKE
+(`RUNBOOK/smoke-join-codes.md`, written) and a T3 round finding zero
+Critical/High. **The `OWED.md` "Front Desk" line DOES tick** — that one is a Kd
+ruling carried out, not a build awaiting proof.

@@ -67,6 +67,45 @@ mid-file: re-derive them with
   unless dedupe is in that card's definition.** Health data lands inside the open
   privacy question at :592. Tracked NOWHERE before today (grep-verified); now has
   a ⚪ `OWED.md` line.
+- **:13920** — 2026-08-21 — **THE JOIN-CODE SCREEN — and Kd's no-names ruling
+  CLOSES a line he opened two days earlier.** Web half of :13803. **Read before
+  touching `JoinCodesPanel`, `codesView.js`, the Overview's code panes, or the
+  waiting queue's row — and before putting a code's LABEL back on any screen.**
+  **A SECTION on Overview, not a seventh tab** (§3.1 fixes the nav at six and
+  surfaces Groups as a filter; :12343's identical call for the confirm queue).
+  **THE CODE APPEARS TWICE ON PURPOSE** — hero card to hand out (§4.0 step 4's
+  "show code big"), row below to manage — **and the TESTS are what made that a
+  decision rather than an accident**: four assertions broke on `Found multiple
+  elements` and were SCOPED to a new `data-testid` rather than relaxed to
+  `getAllByText`, which would have silently dropped L-4's claim that the hero
+  shows the first LIVE code (what a rotated gym depends on); **one assertion's
+  claim genuinely MOVED and was rewritten, not deleted** — "OLDPAU is nowhere" is
+  now false, because the panel lists retired codes an owner must still see.
+  **THE "FRONT DESK" ⚪ LINE TICKS, and the mechanism is the point: it was closed
+  by a ruling about something else.** Kd raised it at the clock smoke (:13174)
+  without ruling; the line proposed hiding the label "while a gym has one code",
+  and his no-names ruling made every code carry the same default — so the
+  conditional fix collapsed into an unconditional one. `groupLabelText` and the
+  roster's column UNTOUCHED (R1.1); **the §2.4 test was INVERTED rather than
+  deleted.** Decisions not to re-derive: **a trainer sees the code and none of
+  the controls** (§2.2's two rows; hiding is not the enforcement, the 403 is);
+  **the pause switch sends ONLY `paused`** while the limits editor sends both
+  fields, because each must not clear what it never displayed (C26); **an end
+  date is the END of the chosen day in the VIEWER's zone** — `${value}T00:00:00Z`
+  is a day early AND somebody else's midnight (trap #8) — and an impossible date
+  is refused rather than rolled forward (C23); **`atCodeLimit` is NULL when the
+  list could not be read**, never "full" (C24); **the panel re-reads from the
+  server** and re-reads CODES ONLY, so one change does not flash the whole screen
+  (C27); **no controls over a list that failed to read**; **Replace asks first
+  and pause does not** — only Replace is irreversible, and the question names the
+  half an owner fears (people who already joined stay members). **PROVE: web
+  963/963 across 41 files (+35) · build ✓ · eslint clean on eight files · the
+  console sweep run to COMPLETION, 27 mutants · 27 RED · 0 ALIVE · 0 never ran.**
+  **Instrument note, mine: three of six new mutant rows had broken anchors** (two
+  real newlines, one nested quote) and `node --check` caught all three before a
+  sweep ran — :13336's permanent guard working on the file it was added for.
+  **NOTHING ELSE TICKS: the SMOKE (`RUNBOOK/smoke-join-codes.md`, written) and
+  T3 are both UNRUN.**
 - **:13803** — 2026-08-21 — **A GYM CAN FINALLY CHANGE ITS OWN JOIN CODE (server
   half): make one · pause/wake · set an end date or a join limit · rotate. NO
   MIGRATION, and the refusals it reaches were built long ago.** **Read before

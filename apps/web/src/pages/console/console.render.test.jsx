@@ -11,7 +11,7 @@
 // assertion is that none of them reach the screen. It fails the moment somebody
 // spreads the member object onto the row.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -23,6 +23,9 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getMine: vi.fn(),
       getMembers: vi.fn(),
       getCodes: vi.fn(),
+      createCode: vi.fn(),
+      updateCode: vi.fn(),
+      rotateCode: vi.fn(),
       getApplications: vi.fn(),
       confirmApplication: vi.fn(),
       rejectApplication: vi.fn(),
@@ -171,6 +174,12 @@ beforeEach(() => {
   // Nobody waiting, by default: every test that is not about the queue should
   // see the screen it saw before the queue existed.
   orgService.getApplications.mockResolvedValue(queue([]));
+  // The three code-management calls resolve by default so a test about the
+  // SCREEN does not fail on a mock that returns undefined. Each one that is
+  // genuinely about a mutation sets its own.
+  orgService.createCode.mockResolvedValue({ data: { code: LIVE_CODE } });
+  orgService.updateCode.mockResolvedValue({ data: { code: LIVE_CODE } });
+  orgService.rotateCode.mockResolvedValue({ data: { code: LIVE_CODE, replaced: LIVE_CODE } });
 });
 
 afterEach(() => {
@@ -346,7 +355,9 @@ describe('Create a gym', () => {
 describe('The gym', () => {
   it('shows the join code read back from the server, not remembered from creation', async () => {
     drawOverview();
-    expect(await screen.findByText('K7QM2X')).toBeTruthy();
+    // Scoped to the HERO card: since the management panel landed the code also
+    // appears in the list below, and an unscoped query would pass on either.
+    expect(within(await screen.findByTestId('join-code-card')).getByText('K7QM2X')).toBeTruthy();
     expect(orgService.getCodes).toHaveBeenCalledWith(ORG.id);
     expect(screen.getByText(/Give this code to your members/i)).toBeTruthy();
   });
@@ -404,7 +415,7 @@ describe('The gym', () => {
     expect(await screen.findByText(/Trainer access to this list isn't available yet/i)).toBeTruthy();
     expect(screen.queryAllByText('Try again')).toHaveLength(0);
     // The half that works is still there — this must not become "hide it all".
-    expect(screen.getByText('K7QM2X')).toBeTruthy();
+    expect(within(screen.getByTestId('join-code-card')).getByText('K7QM2X')).toBeTruthy();
   });
 
   it('shows ONE error, not two, when both reads fail the same way (round 2 Low-4)', async () => {
@@ -444,7 +455,7 @@ describe('The gym', () => {
     );
     drawOverview();
 
-    expect(await screen.findByText('K7QM2X')).toBeTruthy();
+    expect(within(await screen.findByTestId('join-code-card')).getByText('K7QM2X')).toBeTruthy();
     expect(screen.getByText(/Give this code to your members/i)).toBeTruthy();
     expect(screen.getByText(/Trainer access to this list isn't available yet/i)).toBeTruthy();
   });
@@ -461,8 +472,18 @@ describe('The gym', () => {
       },
     });
     drawOverview();
-    expect(await screen.findByText('NEWLIV')).toBeTruthy();
-    expect(screen.queryByText('OLDPAU')).toBeNull();
+    // THE CLAIM IS ABOUT THE HERO CARD, and it had to be re-scoped rather than
+    // weakened when the management panel landed: the panel lists EVERY code, so
+    // the old "OLDPAU is nowhere on screen" is no longer true and no longer the
+    // point. What still matters — and is what a rotated gym depends on — is
+    // that the code offered under "give this to your members" is the LIVE one.
+    const hero = within(await screen.findByTestId('join-code-card'));
+    expect(hero.getByText('NEWLIV')).toBeTruthy();
+    expect(hero.queryByText('OLDPAU')).toBeNull();
+    // The retired code is still VISIBLE to its owner, in the list below, with
+    // its state on it — hiding a code an owner turned off would be its own
+    // defect.
+    expect(screen.getByText('OLDPAU')).toBeTruthy();
   });
 
   it('still shows a gym its ONLY code when that code is dead (L-4 fallback)', async () => {
@@ -471,7 +492,7 @@ describe('The gym', () => {
     });
     drawOverview();
     // Shown, with its state — "this gym has no join code" would be false.
-    expect(await screen.findByText('DEADXX')).toBeTruthy();
+    expect(within(await screen.findByTestId('join-code-card')).getByText('DEADXX')).toBeTruthy();
     expect(screen.getByText(/This code is paused/i)).toBeTruthy();
     expect(screen.queryByText(/has no join code/i)).toBeNull();
   });
@@ -526,6 +547,177 @@ describe('The gym', () => {
     expect(screen.queryByText(/couldn't find a gym you run/i)).toBeNull();
     // And it must not be reported as a network problem — the server answered.
     expect(screen.queryByText(/Check your connection/i)).toBeNull();
+  });
+
+  // ── MANAGING CODES ────────────────────────────────────────────────────────
+  //
+  // THESE ARE REACHABILITY TESTS FIRST. Round 1 of the join-door review found
+  // that nothing asserted any of that card's components was reachable at all —
+  // deleting the route left 857 tests green while the feature vanished. So each
+  // of the three controls is driven THROUGH the Overview screen, not by
+  // rendering the panel directly, and each asserts the call the server would
+  // actually receive.
+
+  it('offers the code controls on the screen an owner lands on', async () => {
+    drawOverview();
+    // `findAllByText` on purpose: the code is deliberately in TWO places — the
+    // hero card to hand out, and the row below it to manage.
+    expect(await screen.findAllByText('K7QM2X')).toHaveLength(2);
+    expect(screen.getByText('Join codes')).toBeTruthy();
+    expect(screen.getByText('Switch off')).toBeTruthy();
+    expect(screen.getByText('New code')).toBeTruthy();
+    expect(screen.getByText('Replace')).toBeTruthy();
+  });
+
+  it('switches a code off, sending ONLY the pause — not the limits it never showed', async () => {
+    drawOverview();
+    fireEvent.click(await screen.findByText('Switch off'));
+    await waitFor(() => {
+      expect(orgService.updateCode).toHaveBeenCalledWith(ORG.id, 'K7QM2X', { paused: true });
+    });
+    // THE ASSERTION WITH TEETH is the exact body: a patch carrying
+    // `expiresAt: null` here would silently clear an end date the owner set on
+    // another screen and was never shown on this control.
+    expect(orgService.updateCode.mock.calls[0][2]).toEqual({ paused: true });
+  });
+
+  it('switches a paused code back ON — the control says what it will do', async () => {
+    orgService.getCodes.mockResolvedValue({
+      data: { codes: [{ ...LIVE_CODE, paused: true }] },
+    });
+    drawOverview();
+    // The button is "Switch on" and NOT "Switch off": a paused code offering
+    // "Switch off" is the screen describing the opposite of what it does.
+    fireEvent.click(await screen.findByText('Switch on'));
+    await waitFor(() => {
+      expect(orgService.updateCode).toHaveBeenCalledWith(ORG.id, 'K7QM2X', { paused: false });
+    });
+  });
+
+  it('asks before replacing a code, and says who is affected', async () => {
+    drawOverview();
+    fireEvent.click(await screen.findByText('Replace'));
+    // Nothing has happened yet — the first tap opens a question.
+    expect(orgService.rotateCode).not.toHaveBeenCalled();
+    // And the question states BOTH halves, because the second is the one an
+    // owner is afraid of.
+    expect(screen.getByText(/this one stops working/i)).toBeTruthy();
+    expect(screen.getByText(/already joined stay members/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Keep it'));
+    expect(orgService.rotateCode).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText('Replace'));
+    fireEvent.click(screen.getByText('Replace it'));
+    await waitFor(() => {
+      expect(orgService.rotateCode).toHaveBeenCalledWith(ORG.id, 'K7QM2X');
+    });
+  });
+
+  it('makes a new code with no restrictions when neither box is filled', async () => {
+    drawOverview();
+    fireEvent.click(await screen.findByText('New code'));
+    fireEvent.click(screen.getByText('Make the code'));
+    await waitFor(() => {
+      expect(orgService.createCode).toHaveBeenCalledWith(ORG.id, {
+        expiresAt: null,
+        maxUses: null,
+      });
+    });
+  });
+
+  it('sends the END of the chosen day, so a code works THROUGH that date', async () => {
+    drawOverview();
+    fireEvent.click(await screen.findByText('New code'));
+    fireEvent.change(screen.getByLabelText(/Stop working after/i), {
+      target: { value: '2026-12-31' },
+    });
+    fireEvent.click(screen.getByText('Make the code'));
+    await waitFor(() => {
+      expect(orgService.createCode).toHaveBeenCalled();
+    });
+    const sent = orgService.createCode.mock.calls[0][1].expiresAt;
+    const at = new Date(sent);
+    // Local parts, because that is the promise: the owner's own 31st, late in
+    // the evening. A UTC-midnight implementation would kill it a day early.
+    expect(at.getDate()).toBe(31);
+    expect(at.getMonth()).toBe(11);
+    expect(at.getHours()).toBe(23);
+  });
+
+  it('explains a bad limit instead of sending it and getting a 400', async () => {
+    drawOverview();
+    fireEvent.click(await screen.findByText('New code'));
+    fireEvent.change(screen.getByLabelText(/Maximum people/i), { target: { value: '0' } });
+    fireEvent.click(screen.getByText('Make the code'));
+    expect(await screen.findByText(/whole number, 1 or more/i)).toBeTruthy();
+    // NOTHING was sent. A screen that posts a value it knows is invalid turns
+    // its own explanation into a server round trip.
+    expect(orgService.createCode).not.toHaveBeenCalled();
+  });
+
+  it('shows the server’s own words when a change is refused', async () => {
+    orgService.updateCode.mockRejectedValue(
+      apiError(
+        409,
+        'max_uses_below_uses',
+        '2 people have already joined with this code, so the limit can’t be lower than that.',
+      ),
+    );
+    drawOverview();
+    fireEvent.click(await screen.findByText('Switch off'));
+    // The SERVER's sentence, not a re-worded guess — the two drifting apart is
+    // how a screen ends up explaining a refusal that did not happen.
+    expect(await screen.findByText(/2 people have already joined/i)).toBeTruthy();
+  });
+
+  it('re-reads the codes after a change instead of editing its own copy', async () => {
+    drawOverview();
+    await screen.findAllByText('K7QM2X');
+    expect(orgService.getCodes).toHaveBeenCalledTimes(1);
+    // The server answers with a DIFFERENT state than the screen would have
+    // guessed, which is the whole point: the list is the server's answer.
+    orgService.getCodes.mockResolvedValue({
+      data: { codes: [{ ...LIVE_CODE, paused: true }] },
+    });
+    fireEvent.click(screen.getByText('Switch off'));
+    expect(await screen.findByText('Switch on')).toBeTruthy();
+    expect(orgService.getCodes).toHaveBeenCalledTimes(2);
+    // …and the re-read does NOT drag the rest of the screen through a reload.
+    expect(orgService.getMembers).toHaveBeenCalledTimes(1);
+    expect(orgService.getApplications).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives a TRAINER the code but none of the controls (§2.2’s two rows)', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer' }] } });
+    drawOverview();
+    // Invite is granted to all three roles, so the code itself stays.
+    expect(await screen.findByText('K7QM2X')).toBeTruthy();
+    // Management is owner+manager, and the server refuses a trainer with a 403.
+    // Drawing these would offer a person a control they will be told off for.
+    expect(screen.queryByText('Join codes')).toBeNull();
+    expect(screen.queryByText('Switch off')).toBeNull();
+    expect(screen.queryByText('New code')).toBeNull();
+    expect(screen.queryByText('Replace')).toBeNull();
+  });
+
+  it('says a code is switched off in words, not just with a chip', async () => {
+    orgService.getCodes.mockResolvedValue({
+      data: { codes: [{ ...LIVE_CODE, paused: true }] },
+    });
+    drawOverview();
+    expect(await screen.findByText(/until you switch it back on/i)).toBeTruthy();
+  });
+
+  it('draws no code controls over a list it could not read', async () => {
+    orgService.getCodes.mockRejectedValue(offline());
+    drawOverview();
+    expect(await screen.findByText(/Check your connection/i)).toBeTruthy();
+    // A "New code" button over an unread list would offer a second code to a
+    // gym that may already be at its limit — and there is no code on screen for
+    // the other controls to act on.
+    expect(screen.queryByText('New code')).toBeNull();
+    expect(screen.queryByText('Join codes')).toBeNull();
   });
 });
 
@@ -610,13 +802,18 @@ describe('Members', () => {
 describe('Waiting to join', () => {
   it("shows an applicant's four facts AND NOTHING ELSE (Part 3 §2.4)", async () => {
     orgService.getApplications.mockResolvedValue(queue([waitingApplicant]));
-    // An empty roster below, so the only "Front Desk" on screen is the
-    // applicant's own — the owner's seat carries the same label.
     orgService.getMembers.mockResolvedValue(page([]));
     drawMembers();
 
     expect(await screen.findByText('Anil Bora')).toBeTruthy();
-    expect(screen.getByText(/Front Desk/)).toBeTruthy();
+    // **THE CODE'S LABEL IS GONE FROM THIS ROW BY KD'S RULING (2026-08-21)** —
+    // he asked during the clock smoke why every row said "Front Desk", and then
+    // ruled names off join codes entirely, which settles it: every code now
+    // carries the same default label, so the field cannot distinguish anything.
+    // The assertion is INVERTED rather than deleted, because "§2.4's four facts
+    // and nothing else" is still this test's subject and the allowed set just
+    // got smaller by one.
+    expect(screen.queryByText(/Front Desk/)).toBeNull();
 
     // §2.4 governs an applicant exactly as it governs a member — and a person
     // who is only WAITING is even less the gym's business. The fixture carries

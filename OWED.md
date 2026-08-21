@@ -4284,12 +4284,18 @@ file and is stated so nobody reads these as lower priority than they are.
       merged with `codes.invite`**: §2.2 grants Invite to all three roles and
       "Create / rotate / expire codes" to owner and manager only, so a trainer
       reads 200 and writes 403.
-      **WHAT STILL DOES NOT TICK, and it is the reason: THERE IS NO SCREEN.**
-      Nothing in the console calls any of the three, so an owner still cannot do
-      any of it — the same shape as :11846, where the join endpoint existed for a
-      day with no caller. The web half is the next card and carries the SMOKE.
-      Also still unbuilt on this line: RESTORE, staff management, CSV export,
-      nudges.
+      **UPDATE, SAME DAY — THE SCREEN IS BUILT and the line STILL does not
+      tick.** A **Join codes** section now sits on the gym's Overview, under the
+      code being handed out: every code with its live state in words, plus
+      switch-off/switch-on, an end date, a people-limit, and Replace behind a
+      confirmation. It is a SECTION and not a seventh tab — §3.1 fixes the nav at
+      six and surfaces Groups as a filter rather than a screen, which is the same
+      call :12343 made for the confirm queue. **A trainer sees the code and none
+      of the controls** (§2.2's two rows), and the 403 stays the enforcement.
+      **What holds the tick now is the two GATES, not the build:** the browser
+      SMOKE (`RUNBOOK/smoke-join-codes.md`, written, UNRUN) and a T3 round
+      finding zero Critical/High (UNRUN). Also still unbuilt on this line:
+      RESTORE, staff management, CSV export, nudges.
       **AND A DEFERRAL THIS CARD MAKES, recorded here rather than in prose: a
       code can be turned OFF but never DELETED.** `ORG_CODES_MAX` is 100, derived
       from the `listCodes` ceiling so the list is provably whole rather than
@@ -4522,7 +4528,21 @@ file and is stated so nobody reads these as lower priority than they are.
       a human for the first time, and the final run caught the C/H-1 fix
       refusing to delete a real request in a browser. Two sheet defects were
       found and fixed mid-run, both the sheet's.
-- [ ] ⚪ **THE CONSOLE'S WAITING QUEUE PRINTS THE JOIN CODE'S LABEL ("Front
+- [x] ⚪ **DONE 2026-08-21 — KD RULED IT OFF, and the ruling that settled it was
+      a different one.** He asked about this during the clock smoke and did not
+      rule; what closed it was his no-names ruling on join codes the next day
+      (*"this kind of names not needed men"*). **Once no code can be given a
+      name, EVERY code carries the same default label** — so the field can no
+      longer distinguish anything, and "hide it while a gym has one code" (the
+      fix this line proposed) became "hide it always". The label is off the
+      waiting row; `groupLabelText` and the roster's own column are UNTOUCHED
+      (R1.1 — he named the waiting list). The §2.4 test that asserted the label
+      was INVERTED rather than deleted, because "four facts and nothing else" is
+      still its subject and the allowed set got smaller by one. Ticked against
+      the code-management web half; the no-removal rule's authorised path is the
+      explicit ruling. **Original text below.**
+
+      **WAS: THE CONSOLE'S WAITING QUEUE PRINTS THE JOIN CODE'S LABEL ("Front
       Desk") AND IT IS NOISE WHILE A GYM HAS ONE CODE** (raised by Kd during the
       clock smoke, 2026-08-21, DECISIONS :13174). It is Part 3 §2.1's group
       mechanism — the thing that tells a big gym which desk, class or campaign a

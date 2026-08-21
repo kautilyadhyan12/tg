@@ -1,0 +1,222 @@
+# SMOKE — managing your gym's join codes
+
+**What changed, in one line:** a gym can now make a new join code, switch one off
+and back on, put an end date or a people-limit on one, and swap a leaked code for
+a fresh one.
+
+**11 steps, about 15 minutes.**
+
+**Why this matters.** Until now a gym got one code when it was created and could
+never change it. If it leaked, there was nothing anybody could do.
+
+**The one thing to keep an eye on.** Every step where you switch a code off ends
+with you actually trying to join with it from a second account. That is the whole
+point of the sheet — a screen saying "switched off" is worth nothing if the door
+still opens.
+
+**Nobody who already joined is ever affected.** If at any point in this sheet a
+person disappears from the members list, that is a failure — say so.
+
+---
+
+## Before you start
+
+Two terminals, from the repo root.
+
+**Terminal 1 — the API**
+```
+cd apps/api && node --import tsx --env-file=.env src/index.ts
+```
+Wait for it to say it is listening on port 3000.
+
+**Terminal 2 — the web app**
+```
+cd apps/web && npx vite
+```
+
+Open **http://localhost:5173/login** and press **F5** once.
+
+**You need two accounts.** One that runs a gym (call it the **owner**) and one
+that does not (call it the **joiner**). Use two different browsers, or one normal
+window and one private window — not two tabs of the same window, because they
+share a login.
+
+If the owner account does not have a gym yet: sign in, choose **I run a gym**,
+and make one. Any name is fine.
+
+---
+
+## Step 1 — find the controls
+
+As the **owner**, go to your gym's page (**/console**, then click your gym).
+
+✅ **Expect:** your join code in big orange letters near the top, and underneath
+it a section headed **Join codes** with the same code listed again and three
+buttons beside it: **Switch off**, **Limits**, **Replace**.
+
+The code appearing twice is deliberate — the big one is the one you hand out, the
+list below is where you manage them.
+
+❌ **Failure:** no **Join codes** section at all, or the section is there but has
+no buttons.
+
+---
+
+## Step 2 — switch the code off
+
+Click **Switch off**.
+
+✅ **Expect:** within a second or two, the row's green **Working** tag becomes a
+grey one, the button becomes **Switch on**, and a line appears saying *"Switched
+off. Nobody can join with it until you switch it back on."*
+
+❌ **Failure:** nothing changes, the tag still says Working, or you have to
+reload the page to see the change.
+
+---
+
+## Step 3 — prove the door is actually shut
+
+As the **joiner**, go to **Settings → Gym** and type the code you just switched
+off.
+
+✅ **Expect:** you are turned away, with a message about the code being paused.
+You do **not** end up on any gym's waiting list.
+
+❌ **Failure:** you get in, or you land on a "waiting to be confirmed" screen.
+This is the most important step on the sheet — if the screen and the door
+disagree, stop and report it.
+
+---
+
+## Step 4 — switch it back on
+
+Back as the **owner**, click **Switch on**.
+
+✅ **Expect:** the grey tag turns green and says **Working** again, and the
+"switched off" sentence disappears.
+
+Now, as the **joiner**, type the same code again.
+
+✅ **Expect:** it works this time — you land on the waiting screen.
+
+❌ **Failure:** still refused after switching it back on.
+
+---
+
+## Step 5 — confirm the joiner, so there is somebody to protect
+
+As the **owner**, go to **Members**. The joiner should be in a **Waiting to
+join** section at the top. Click **Confirm**.
+
+✅ **Expect:** they move down into the members list.
+
+✅ **Also check, and this is the bit Kd asked for:** the waiting row does **not**
+say *"Front Desk"* anywhere. That label used to appear on every row and told you
+nothing.
+
+❌ **Failure:** "Front Desk" is still printed on the waiting row.
+
+---
+
+## Step 6 — the code now says somebody used it
+
+Go back to your gym's page (**/console**, then your gym).
+
+✅ **Expect:** under the code in the **Join codes** list, it now says *"1 person
+has joined with it"*.
+
+❌ **Failure:** it still says nobody has joined.
+
+---
+
+## Step 7 — make a second code
+
+Click **New code**, then click **Make the code** without filling anything in.
+
+✅ **Expect:** a second code appears in the list, six characters, different from
+the first. Both show the green **Working** tag.
+
+❌ **Failure:** an error, or the new code is the same as the old one.
+
+---
+
+## Step 8 — put a limit on the new code
+
+On the **new** code's row, click **Limits**. Type **1** in **Maximum people** and
+click **Save**.
+
+✅ **Expect:** the row now says something like *"Nobody has joined with this code
+yet · 1 of 1 left"*.
+
+Now type a deliberately silly value: click **Limits** again, clear the box, type
+**0**, and click **Save**.
+
+✅ **Expect:** it refuses with *"The maximum has to be a whole number, 1 or more."*
+and nothing changes.
+
+❌ **Failure:** it accepts the 0, or it shows an error mentioning a server or a
+number like 400.
+
+---
+
+## Step 9 — give a code an end date
+
+On the **new** code's row, click **Limits**, pick **tomorrow's date** in **Stop
+working after**, and click **Save**.
+
+✅ **Expect:** the row now says *"Ends"* followed by tomorrow's date.
+
+Now click **Limits** once more, try to pick a date in the **past**.
+
+✅ **Expect:** the date box will not let you pick one — dates before today are
+greyed out.
+
+❌ **Failure:** you can pick and save a date that has already gone.
+
+---
+
+## Step 10 — replace a leaked code
+
+On the **first** code's row (the one the joiner used), click **Replace**.
+
+✅ **Expect:** it asks you first, saying you get a new code and this one stops
+working, **and** that people who already joined stay members.
+
+Click **Replace it**.
+
+✅ **Expect:** a brand-new code appears at the top of the list with the green
+**Working** tag, and the old code is now grey and switched off.
+
+✅ **Now the part that matters:** click **Members**.
+
+✅ **Expect:** the joiner you confirmed in step 5 is **still there**.
+
+❌ **Failure:** the joiner has disappeared from the members list. Stop and report
+this immediately.
+
+---
+
+## Step 11 — the replaced code really is dead
+
+As the **joiner**, sign out and sign in as a **third** account if you have one —
+or just use the joiner account, which is already a member.
+
+Type the **old** code (the one that was replaced in step 10).
+
+✅ **Expect (third account):** refused, with a message about the code being
+paused.
+
+✅ **Expect (joiner account, already a member):** either refused for the same
+reason, or told you are already a member. Both are correct — neither should let
+somebody new in.
+
+❌ **Failure:** a brand-new person gets onto the waiting list using the replaced
+code.
+
+---
+
+## When you are done
+
+Tell me **pass** or **fail per step number**. If a step failed, the most useful
+thing you can send is what the screen actually said, word for word.

@@ -4,7 +4,6 @@ import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleS
 import { orgService, errorText, errorStatus } from '../../api/orgsApi';
 import {
   expiresInLabel,
-  groupLabelText,
   nudgedLabel,
   waitingCountLabel,
   waitingForLabel,
@@ -74,8 +73,20 @@ function ApplicantRow({ applicant, busy, onConfirm, onReject }) {
             </span>
           ) : null}
         </div>
+        {/* KD RULING 2026-08-21 — THE CODE'S LABEL IS OFF THIS ROW.
+            He raised it during the clock smoke ("Front Desk" on every row) and
+            was told what it is for: Part 3 §2.1's group mechanism, the thing
+            that tells a big gym which desk, class or campaign somebody came
+            through. He then ruled names off join codes altogether — *"this kind
+            of names not needed men"* — which settles it, because EVERY code now
+            carries the same default label and the field can no longer
+            distinguish anything. It was noise while a gym had one code; it is
+            noise permanently until names come back.
+            **The no-removal rule's AUTHORISED path**: an explicit ruling against
+            a cited cost. `groupLabelText` and the roster's own column are
+            UNTOUCHED (R1.1) — this is the row he named. */}
         <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          {[waiting, expiring, groupLabelText(applicant)].filter(Boolean).join(' · ')}
+          {[waiting, expiring].filter(Boolean).join(' · ')}
         </div>
         {nudged !== null ? (
           <div className="text-xs mt-0.5" style={{ color: '#FF8A1F' }}>
