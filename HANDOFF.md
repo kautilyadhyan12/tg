@@ -9240,3 +9240,54 @@ NEXT
   2. Then the WEB half (a console Settings screen with a Staff section), which
      carries the SMOKE. Not started.
 ```
+
+```
+TASK: STAFF CARD, T3 ROUND 2 (diff-only) — THE FIXES HOLD. Zero behavioural
+      defects. One Critical/High (missing coverage) + two Low, ALL FIXED here.
+      DECISIONS :14493. **KD RULED PATCH on the escape hatch.**
+
+THE ESCAPE HATCH, AND WHY IT DID NOT STOP THE CARD
+  · Two consecutive rounds found a Critical/High in orgs, so :5348's hatch
+    armed mechanically and went to Kd. He ruled **"keep patching, don't
+    redesign"**. The distinction he was given, and a round 3 must not
+    re-litigate it: **round 1 found three things the app DID WRONG; round 2
+    found NONE** — its Critical/High is missing coverage on correct code.
+  · Third use of the hatch, third PATCH ruling (:6277, :9509).
+
+WHAT ROUND 2 FOUND
+  · C/H-1 — round 1's own fixes added THREE `gym_id` predicates and none had a
+    test. Verified by hand-mutating `claimSeat` myself: 88/88 green, restored
+    sha256-verified. Now guarded by two cross-gym tests + O88/O89/O90.
+  · Low-2 — round 1 taught `getStaffRole` to refuse an ex-member and left
+    `listStaff` behind, so the LIST called a deleted account "manager" while
+    its authority was null. **The fix is what made that row false.**
+  · Low-1 — two titles promised a seat coming back; no body checked it.
+
+THINGS A LATER CHAT WILL OTHERWISE GET WRONG
+  · **`listStaff` and `getStaffRole` SPELL THE SAME ELIGIBILITY TEST TWICE ON
+    PURPOSE.** A shared `sql` fragment is R3.8's forbidden shape. They are
+    anchored by a test that drives BOTH and asserts they agree row for row —
+    change one without the other and it fails. Do not "de-duplicate" them.
+  · **THE PRE-CHECK CANNOT CATCH A DOUBLE MATCH.** Those two functions now hold
+    identical SQL text, so O85/O86's one-line anchors matched in BOTH and hit
+    the right one only by POSITION (:11846's O14). Re-anchored on
+    `getStaffRole`'s parameter line. **Any new anchor in this file must be
+    checked for uniqueness by hand until the harness can do it.**
+  · The three `gym_id` predicates are the card's most fragile surface — every
+    one is cross-tenant, and none of them had an alarm until this round.
+
+GATES
+  · `orgs.routes.test.ts` **91/91 alone, exit 0** (+3) · tsc + eslint clean.
+  · **21 mutants · 21 RED · 0 ALIVE · 0 never ran**, controls green first,
+    restores sha256-verified, `node --check` first, exit read into a variable.
+  · Full api suite still NOT green — `catalog.seed`'s global-count race, own
+    OWED line, unchanged by this round.
+  · Reminder: `test:local <file>` scopes; `test:local -- <file>` does NOT.
+
+NEXT
+  1. **No further review round.** Zero Critical/High about behaviour; the two
+    Low are fixed and logged in BACKLOG.md, and a Low buys no round (:5348 r1).
+  2. **The card's remaining gate is the SMOKE, and it needs a SCREEN.** The web
+     half — a console Settings screen with a Staff section (§3.1 names
+     Settings, §4.7 puts Staff under it) — is the next card. Not started.
+```

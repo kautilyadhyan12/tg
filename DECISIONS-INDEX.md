@@ -809,6 +809,44 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:14493** — 2026-08-22 — **T3 ROUND 2 ON THE STAFF CARD: the three fixes HOLD
+  (zero behavioural defects), the escape hatch ARMED, and KD RULED PATCH.**
+  Diff-only re-review of `445f406`. **Read before deleting a `gym_id` from any
+  predicate in the orgs repo, before adding a THIRD reader of `gym_staff`, and
+  before quoting the escape hatch as a rule that fires by itself.** **KD RULING:
+  *"keep patching, don't redesign"*** — :5348's hatch armed mechanically (two
+  consecutive rounds with a Critical/High in orgs) and Kd was given the
+  distinction that decides it: **round 1 found three things the app DID WRONG;
+  round 2 found none, its Critical/High being missing COVERAGE on correct code.**
+  Third use of the hatch, third PATCH ruling (:6277, :9509) — **the hatch counts
+  ROUNDS and Kd rules on what the rounds FOUND.** **C/H-1: round 1's own fixes
+  added THREE `gym_id` predicates and not one had a test** — delete any and 88
+  tests stayed green; **verified independently by hand-mutating `claimSeat` and
+  running the suite** (88/88 green, restored sha256-verified) rather than taken on
+  the reviewer's word. Costs if they regress: staff anywhere frees a seat
+  everywhere (money) · an ex-member of A keeps A's roster via a membership at B
+  (**C/H-3 reopened sideways**) · §4.7's invited manager is DENIED at the gym that
+  invited them. Closed with two cross-gym tests + **O88/O89/O90**. **Low-2 is the
+  lesson: round 1's fix made a SECOND reader false** — `getStaffRole` learned to
+  refuse an ex-member and `listStaff` did not, so the list returned
+  `"role":"manager"` for a deleted account with null authority; **the row was TRUE
+  before the fix.** Latent only because no Staff screen exists (grep-verified).
+  Both readers now spell the test out — **duplicated deliberately, a shared `sql`
+  fragment being R3.8's forbidden shape** — anchored by a test driving BOTH
+  (:14013's precedent). **O91.** **Low-1: two titles promised "puts their seat
+  back" and no body checked it** (round 1 deleted the assertions that stood in);
+  one trimmed, one now tested against the cap itself. **INSTRUMENT, fourth time on
+  this card and my fix moved the anchor every time:** the pre-check ABORTED on
+  O72's drift — **and exposed one it CANNOT catch, since `listStaff` now holds the
+  same SQL text as `getStaffRole`, so O85/O86's one-line anchors matched in BOTH
+  places and hit the right one only BY POSITION** (:11846's O14). Re-anchored on
+  the parameter line the sibling lacks. **A pre-check that asks "does this match?"
+  cannot ask "does this match ONCE" — worth fixing in the harness.** PROVE:
+  **91/91 alone, exit 0** (+3) · tsc + eslint clean · **21 mutants · 21 RED · 0
+  ALIVE**, controls green first, exit read into a variable. Full api suite still
+  not quoted green (`catalog.seed`'s race, own line). **The remaining gate is not
+  a review: there is STILL NO SCREEN, so no smoke. The web half carries it.**
+
 - **:14401** — 2026-08-22 — **T3 ROUND 1 ON THE STAFF CARD: THREE Critical/High,
   all fixed — and the reviewer's own one-liner was WRONG, measured.** Reviews
   :14262; **the packet did NOT ship this round.** Escape hatch NOT armed (:14174

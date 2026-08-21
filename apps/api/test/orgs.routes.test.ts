@@ -2993,6 +2993,25 @@ d("orgs routes (real Postgres)", () => {
       { cookies: owner.cookies },
     );
     expect(admitted.statusCode).toBe(200);
+
+    // AND THE SEAT COMES BACK. T3 round 2's Low-1: this test's title promised
+    // the return half and only ever checked the outward half — and the round-1
+    // fix had deleted the two flag assertions that used to stand in for it.
+    // The gym is now at 2 of 1 paid seats, so taking the trainer's keys back
+    // means the next person is refused.
+    const another = await makeUser("staff-seat-another");
+    await del(`/v1/orgs/${org.org.id}/staff/${hire.userId}`, { cookies: owner.cookies });
+    await applyWithCode(another.cookies, org.joinCode.code);
+    const queue2 = JSON.parse(
+      (await get(`/v1/orgs/${org.org.id}/applications`, { cookies: owner.cookies })).body,
+    ) as { items: { id: string; userId: string }[] };
+    const pending2 = queue2.items.find((a) => a.userId === another.userId)?.id ?? "none";
+    const refused = await post(
+      `/v1/orgs/${org.org.id}/applications/${pending2}/confirm`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(refused.statusCode).toBe(409);
   });
 
   /** T3 round 1, C/H-1 — the regression that fails without the fix. The three
@@ -3201,7 +3220,10 @@ d("orgs routes (real Postgres)", () => {
     expect(staff.filter((s) => s.role === "owner").map((s) => s.userId)).toEqual([owner.userId]);
   });
 
-  it("removing somebody from staff leaves them a MEMBER, and puts their seat back", async () => {
+  // TITLE TRIMMED (T3 round 2, Low-1): it used to promise "and puts their seat
+  // back", which this body has never checked — the seat's return is proved by
+  // the SEAT CAP test above, against the cap itself. A title is a claim.
+  it("removing somebody from staff leaves them a MEMBER", async () => {
     const owner = await makeUser("staff-rm-owner");
     const hire = await makeUser("staff-rm-hire");
     const org = await makeOrg(owner.cookies, "Orgs Test Staff Remove");
@@ -3355,6 +3377,119 @@ d("orgs routes (real Postgres)", () => {
     expect(await orgRepo.getStaffRole(sql, org.org.id, invited.userId)).toBe("trainer");
     await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${invited.userId}`;
     expect(await orgRepo.getStaffRole(sql, org.org.id, invited.userId)).toBeNull();
+  });
+
+  /** T3 round 2, C/H-1. Round 1's three fixes added three `gym_id` predicates
+   *  and NOT ONE had a test — deleting any of them left all 88 green. The code
+   *  was right; nothing would have noticed it going wrong. These two tests are
+   *  the alarm, and each names the cost of the predicate it guards. */
+  it("CROSS-GYM: being staff at one gym does not free your seat at another", async () => {
+    const ownerA = await makeUser("xg-seat-owner-a");
+    const ownerB = await makeUser("xg-seat-owner-b");
+    const dual = await makeUser("xg-seat-dual");
+    const walkIn = await makeUser("xg-seat-walkin");
+    const gymA = await makeOrg(ownerA.cookies, "Orgs Test Cross Seat A");
+    const gymB = await makeOrg(ownerB.cookies, "Orgs Test Cross Seat B");
+    await subscribeGym(gymB.org.id, CAP1_PLAN); // gym B has ONE paid seat
+
+    // The same person trains at B and works the desk at A.
+    await joinAsMember(dual.cookies, gymA, ownerA.cookies);
+    await joinAsMember(dual.cookies, gymB, ownerB.cookies);
+    await post(
+      `/v1/orgs/${gymA.org.id}/staff`,
+      { email: "orgs-t-xg-seat-dual@example.com", role: "trainer" },
+      { cookies: ownerA.cookies },
+    );
+
+    // Gym B is FULL. Their staff badge belongs to gym A and must not spend
+    // gym B's money — without the gym scope on the staff exclusion, B's one
+    // paid seat reads as free and B under-counts what it sold.
+    await applyWithCode(walkIn.cookies, gymB.joinCode.code);
+    const queue = JSON.parse(
+      (await get(`/v1/orgs/${gymB.org.id}/applications`, { cookies: ownerB.cookies })).body,
+    ) as { items: { id: string; userId: string }[] };
+    const pending = queue.items.find((a) => a.userId === walkIn.userId)?.id ?? "none";
+    const refused = await post(
+      `/v1/orgs/${gymB.org.id}/applications/${pending}/confirm`,
+      {},
+      { cookies: ownerB.cookies },
+    );
+    expect(refused.statusCode).toBe(409);
+  });
+
+  it("CROSS-GYM: authority at one gym is never decided by membership at another", async () => {
+    const ownerA = await makeUser("xg-auth-owner-a");
+    const ownerB = await makeUser("xg-auth-owner-b");
+    const exMember = await makeUser("xg-auth-ex");
+    const invited = await makeUser("xg-auth-invited");
+    const gymA = await makeOrg(ownerA.cookies, "Orgs Test Cross Auth A");
+    const gymB = await makeOrg(ownerB.cookies, "Orgs Test Cross Auth B");
+
+    // (a) LEFT gym A, still trains at gym B. The live-member arm must not be
+    // rescued by the WRONG gym's membership — that is C/H-3's hole reopened
+    // sideways.
+    await joinAsMember(exMember.cookies, gymA, ownerA.cookies);
+    await joinAsMember(exMember.cookies, gymB, ownerB.cookies);
+    await post(
+      `/v1/orgs/${gymA.org.id}/staff`,
+      { email: "orgs-t-xg-auth-ex@example.com", role: "manager" },
+      { cookies: ownerA.cookies },
+    );
+    await del(`/v1/orgs/${gymA.org.id}/staff/${exMember.userId}`, { cookies: ownerA.cookies });
+    await del(`/v1/orgs/${gymA.org.id}/members/${exMember.userId}`, { cookies: ownerA.cookies });
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role)
+              VALUES (${gymA.org.id}, ${exMember.userId}, 'manager')`;
+    expect(await orgRepo.getStaffRole(sql, gymA.org.id, exMember.userId)).toBeNull();
+
+    // (b) NEVER a member of gym A — §4.7's invited manager — who happens to
+    // train at gym B. The never-a-member arm must look at gym A only, or the
+    // allow silently becomes a deny.
+    await joinAsMember(invited.cookies, gymB, ownerB.cookies);
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role)
+              VALUES (${gymA.org.id}, ${invited.userId}, 'trainer')`;
+    expect(await orgRepo.getStaffRole(sql, gymA.org.id, invited.userId)).toBe("trainer");
+  });
+
+  /** T3 round 2, Low-2. The list and the authority check are two readers of
+   *  `gym_staff` and must never disagree about who holds keys — the round-1 fix
+   *  taught one of them and not the other. This test drives BOTH, which is what
+   *  keeps two written-out copies honest (:14013's precedent). */
+  it("the staff LIST and the authority check agree about every row", async () => {
+    const owner = await makeUser("agree-owner");
+    const ghost = await makeUser("agree-ghost");
+    const live = await makeUser("agree-live");
+    const org = await makeOrg(owner.cookies, "Orgs Test Staff Agreement");
+    await joinAsMember(ghost.cookies, org, owner.cookies);
+    await joinAsMember(live.cookies, org, owner.cookies);
+    for (const [who, role] of [
+      ["orgs-t-agree-ghost@example.com", "manager"],
+      ["orgs-t-agree-live@example.com", "trainer"],
+    ] as const) {
+      await post(`/v1/orgs/${org.org.id}/staff`, { email: who, role }, { cookies: owner.cookies });
+    }
+    expect((await readStaff(org.org.id, owner.cookies)).map((s) => s.role)).toEqual([
+      "owner",
+      "manager",
+      "trainer",
+    ]);
+
+    // Delete one account, the way the DPDP Day-0 cascade does.
+    await sql`UPDATE gym_members SET removed_at = now()
+              WHERE gym_id = ${org.org.id} AND user_id = ${ghost.userId} AND removed_at IS NULL`;
+    await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${ghost.userId}`;
+
+    const listed = await readStaff(org.org.id, owner.cookies);
+    for (const person of [owner, ghost, live]) {
+      const onList = listed.some((s) => s.userId === person.userId);
+      const hasAuthority = (await orgRepo.getStaffRole(sql, org.org.id, person.userId)) !== null;
+      expect({ userId: person.userId, onList }).toEqual({
+        userId: person.userId,
+        onList: hasAuthority,
+      });
+    }
+    // And concretely: the deleted manager is gone from the screen, not shown
+    // holding a role they no longer hold.
+    expect(listed.map((s) => s.userId)).not.toContain(ghost.userId);
   });
 
   /** O3's subject, restored. That mutant deletes `complimentary = false` from

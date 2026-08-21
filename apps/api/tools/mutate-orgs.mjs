@@ -861,8 +861,14 @@ const MUTANTS = [
     id: 'O72',
     target: 'repo',
     why: "OWNERSHIP: the staff list stops being scoped to one gym, so any owner reads every gym's staff — names and EMAIL ADDRESSES — off a uuid",
-    from: '    WHERE s.gym_id = ${gymId}\n    ORDER BY (s.role = \'owner\') DESC',
-    to: "    WHERE ${gymId} IS NOT NULL\n    ORDER BY (s.role = 'owner') DESC",
+    // RE-ANCHORED 2026-08-22: T3 round 2's Low-2 fix inserted the eligibility
+    // test between this WHERE and the ORDER BY the old anchor spanned. Caught by
+    // the whole-table pre-check ABORTING — the FOURTH time on this card, and
+    // each time it was my own fix that moved the anchor (:5199/:8610's class).
+    // The new anchor uses the line `getStaffRole` does NOT have, so it cannot
+    // drift onto the sibling copy of the same SQL.
+    from: "    WHERE s.gym_id = ${gymId}\n      AND u.status = 'active'",
+    to: "    WHERE ${gymId} IS NOT NULL\n      AND u.status = 'active'",
     expect: 'lists the owner as staff',
   },
   {
@@ -958,21 +964,66 @@ const MUTANTS = [
     to: '        OR true\n      )`;',
     expect: 'GHOST',
   },
+  // O85 AND O86 RE-ANCHORED 2026-08-22 (T3 round 2's Low-2 fix). `listStaff`
+  // now spells the SAME eligibility test as `getStaffRole` — deliberately, so
+  // the two readers cannot disagree — which means their old one-line anchors
+  // appear TWICE in the file. `String.replace` takes the FIRST, so they still
+  // happened to hit `getStaffRole`; "happened to" is :11846's O14 exactly (a
+  // mutant named for the roster reporting on the queue). Both now carry
+  // `getStaffRole`'s own parameter line, which `listStaff` does not have.
   {
     id: 'O85',
     target: 'repo',
     why: "LOCKOUT: the owner's exemption goes, so a gym whose owner is not a member of it — `gyms.owner_included_as_member`, which the create path already honours — locks its own owner out with a 404 and nobody inside can let them back in",
-    from: '        g.owner_user_id = s.user_id\n        OR EXISTS (',
-    to: '        false\n        OR EXISTS (',
+    from: '      AND s.user_id = ${userId}\n      AND u.status = \'active\'\n      AND (\n        g.owner_user_id = s.user_id',
+    to: '      AND s.user_id = ${userId}\n      AND u.status = \'active\'\n      AND (\n        false',
     expect: 'GHOST',
   },
   {
     id: 'O86',
     target: 'repo',
     why: 'A DELETED ACCOUNT KEEPS ITS KEYS: the account-status check goes, so the window between a DPDP delete and its restore leaves a tombstoned user still authorised over a live gym',
-    from: "      AND u.status = 'active'",
-    to: '      AND true',
+    from: "      AND s.user_id = ${userId}\n      AND u.status = 'active'",
+    to: '      AND s.user_id = ${userId}\n      AND true',
     expect: 'GHOST',
+  },
+
+  // O88–O91 — T3 ROUND 2. Round 1's three fixes added three `gym_id` predicates
+  // and NOT ONE had a test: deleting any of them left all 88 green. The code was
+  // correct; nothing would have noticed it going wrong, which is rule 3's whole
+  // subject. O91 guards the OTHER reader of `gym_staff` against drifting from
+  // the first — round 1 taught one and forgot the other.
+  {
+    id: 'O88',
+    target: 'repo',
+    why: "MONEY, ACROSS TENANTS: the seat exclusion stops asking WHICH gym somebody is staff of, so being a trainer anywhere frees your seat everywhere and a gym silently under-counts the seats it sold",
+    from: '            WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)',
+    to: '            WHERE s.user_id = m.user_id)',
+    expect: 'does not free your seat at another',
+  },
+  {
+    id: 'O89',
+    target: 'repo',
+    why: "OWNERSHIP, ACROSS TENANTS: the live-member arm stops asking WHICH gym, so an ex-member of gym A keeps gym A's roster on the strength of a membership at gym B — C/H-3's hole reopened sideways",
+    from: '        OR EXISTS (\n          SELECT 1 FROM gym_members m\n          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id AND m.removed_at IS NULL\n        )\n        OR NOT EXISTS (',
+    to: '        OR EXISTS (\n          SELECT 1 FROM gym_members m\n          WHERE m.user_id = s.user_id AND m.removed_at IS NULL\n        )\n        OR NOT EXISTS (',
+    expect: 'never decided by membership at another',
+  },
+  {
+    id: 'O90',
+    target: 'repo',
+    why: "AN ALLOW BECOMES A DENY: the never-a-member arm stops asking WHICH gym, so §4.7's invited manager is locked out of the gym that invited them the moment they hold a membership at any OTHER gym",
+    from: '        OR NOT EXISTS (\n          SELECT 1 FROM gym_members m\n          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id\n        )\n      )`;',
+    to: '        OR NOT EXISTS (\n          SELECT 1 FROM gym_members m\n          WHERE m.user_id = s.user_id\n        )\n      )`;',
+    expect: 'never decided by membership at another',
+  },
+  {
+    id: 'O91',
+    target: 'repo',
+    why: 'TWO READERS THAT DISAGREE: the staff LIST drops the eligibility test, so it shows a deleted account still holding "manager" while that person\'s actual authority is null — the screen states a fact the server denies (round 1 taught `getStaffRole` and left this reader behind)',
+    from: "      AND u.status = 'active'\n      AND (\n        g.owner_user_id = s.user_id\n        OR EXISTS (\n          SELECT 1 FROM gym_members m\n          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id AND m.removed_at IS NULL\n        )\n        OR NOT EXISTS (\n          SELECT 1 FROM gym_members m\n          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id\n        )\n      )\n    ORDER BY",
+    to: '    ORDER BY',
+    expect: 'agree about every row',
   },
   {
     id: 'O87',

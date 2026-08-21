@@ -1843,7 +1843,17 @@ export interface StaffRow {
  *
  *  Tenancy IS the WHERE (R3.2). There is no read-a-staff-row-by-id anywhere in
  *  this module, so a staff row is only ever reachable through a gym the caller
- *  was authorised against first. */
+ *  was authorised against first.
+ *
+ *  **THE ELIGIBILITY TEST IS WRITTEN OUT AGAIN HERE, MATCHING `getStaffRole`
+ *  WORD FOR WORD, and the duplication is deliberate** (T3 round 2, Low-2). Round
+ *  1's C/H-3 fix taught `getStaffRole` to refuse an ex-member and left this
+ *  reader alone, so the LIST said "manager" about somebody whose authority was
+ *  already `null` — the fix is what made the row false. Two readers of
+ *  `gym_staff` that disagree is the defect; a shared `sql` fragment is R3.8's
+ *  forbidden shape, so they are spelled twice and **anchored by a test that
+ *  drives BOTH** (:14013's six-site precedent, same reasoning). Change one and
+ *  the test fails; change neither and a screen lies about who holds keys. */
 export async function listStaff(sql: Sql, gymId: string): Promise<StaffRow[]> {
   const rows = await sql<
     { user_id: string; display_name: string; email: string | null; role: string; since: Date }[]
@@ -1851,7 +1861,20 @@ export async function listStaff(sql: Sql, gymId: string): Promise<StaffRow[]> {
     SELECT s.user_id, u.display_name, u.email, s.role, s.created_at AS since
     FROM gym_staff s
     JOIN users u ON u.id = s.user_id
+    JOIN gyms g ON g.id = s.gym_id
     WHERE s.gym_id = ${gymId}
+      AND u.status = 'active'
+      AND (
+        g.owner_user_id = s.user_id
+        OR EXISTS (
+          SELECT 1 FROM gym_members m
+          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id AND m.removed_at IS NULL
+        )
+        OR NOT EXISTS (
+          SELECT 1 FROM gym_members m
+          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id
+        )
+      )
     ORDER BY (s.role = 'owner') DESC, s.created_at ASC, s.user_id ASC`;
   return rows.map((r) => ({
     userId: r.user_id,

@@ -14489,3 +14489,80 @@ often**, and that belongs on its line rather than in a shrug.
 `test:local -- <file>` does NOT scope — pnpm eats the `--` and all 44 files run.
 The form that works is `test:local <file>`.** Every "scoped" figure in this
 session before that discovery was a full-suite run.
+
+## T3 ROUND 2 ON THE STAFF CARD — the three fixes HOLD, the escape hatch armed, and KD RULED PATCH (2026-08-22)
+
+**Read before deleting a `gym_id` from any predicate in `modules/orgs/repo.ts`,
+before adding a THIRD reader of `gym_staff`, and before quoting the escape hatch
+as a rule that fires by itself.** Diff-only re-review of `445f406`, which fixed
+:14401's three Critical/High.
+
+**THE HEADLINE IS THAT THE FIXES ARE REAL.** The reviewer broke each of the
+three deliberately and a test caught every break — the round found **zero
+behavioural defects**. Round 1's two survivors were re-verified rather than
+taken on the record's word: **O86 and O3 are both genuinely RED now.**
+
+**KD RULING — PATCH, NOT REDESIGN.** :5348's escape hatch armed mechanically:
+two consecutive rounds with a Critical/High in the orgs subsystem. It was put to
+Kd with the distinction that decides it and he ruled *"keep patching, don't
+redesign"*. **The distinction, recorded so a third round does not re-litigate
+it: round 1 found three things the app DID WRONG; round 2 found none.** Its
+Critical/High is *missing test coverage on correct code* — convergence, not a
+subsystem resisting patches. Third use of this hatch, third PATCH ruling
+(:6277, :9509 are the precedents), and the shape is the same each time: **the
+hatch counts ROUNDS, and Kd rules on what the rounds FOUND.**
+
+**C/H-1 — THREE `gym_id` PREDICATES SHIPPED WITH NO TEST.** Round 1's own fixes
+added them and not one was guarded: delete any of the three and all 88 tests
+stayed green. **Verified independently before accepting it** — I hand-mutated
+`claimSeat`'s and ran the suite: 88/88 green, source restored sha256-verified.
+What each would cost: being staff at ANY gym frees your seat at EVERY gym
+(money); an ex-member of gym A keeps gym A's roster because they still train at
+gym B (**C/H-3's hole reopened sideways**); and §4.7's invited manager is locked
+out of the gym that invited them the moment they hold a membership anywhere else
+(an allow silently becoming a deny). Closed with two cross-gym tests and three
+permanent mutants, **O88/O89/O90**.
+
+**Low-2 IS THE ONE WITH A LESSON: MY OWN FIX MADE A SECOND READER FALSE.** Round
+1 taught `getStaffRole` to refuse an ex-member and left `listStaff` alone, so the
+LIST returned `"role":"manager"` for a deleted account whose authority was
+already `null`. **The row was TRUE before the fix; the fix is what made it a
+lie** — the same shape as C/H-1 one layer out, and it would have been
+Critical/High the day the Staff screen ships (verified there is none today: no
+staff call in `orgsApi.js`, no Staff tab). The eligibility test is now written
+out in BOTH readers — **duplicated deliberately, because a shared `sql` fragment
+is R3.8's forbidden shape** — and anchored by a test that drives both and
+asserts they agree row for row (:14013's six-site precedent, same reasoning).
+Mutant **O91**.
+
+**Low-1: two test titles promised what their bodies never checked** — "and puts
+their seat back", where round 1 had deleted the flag assertions that used to
+stand in for it. One title is trimmed; the other claim is now actually TESTED
+against the cap (remove the trainer, the gym is over its one paid seat again,
+the next applicant is refused). A title is a claim.
+
+**THE INSTRUMENT NOTE IS THE SAME ONE FOR THE FOURTH TIME ON THIS CARD, and it
+was my fix that moved the anchor every time.** The Low-2 fix inserted the
+eligibility block between O72's `WHERE` and the `ORDER BY` it spanned; the
+whole-table pre-check ABORTED rather than reporting a false ALIVE. **And it
+exposed a subtler one the pre-check CANNOT catch: `listStaff` now contains the
+same SQL text as `getStaffRole`, so O85's and O86's one-line anchors matched in
+BOTH places** — `String.replace` takes the first, so they still hit the intended
+function *by position*. That is :11846's O14 exactly (a mutant named for the
+roster reporting on the queue). Both re-anchored on `getStaffRole`'s own
+parameter line, which the sibling does not have. **A pre-check that asks "does
+this match?" cannot ask "does this match ONCE"** — worth knowing, and worth
+fixing in the harness the day a card can afford it.
+
+**PROVE** — `orgs.routes.test.ts` **91/91 alone, exit 0** (88 before; +3). tsc
+clean on `api`; eslint clean on `api`'s `src test` at `--max-warnings=0`.
+**MUTATION AUDIT: 21 mutants · 21 RED · 0 ALIVE · 0 never ran**, controls GREEN
+on all twenty-one filters first, restores sha256-verified after every mutant,
+`node --check` before the run, **exit code read into a variable, not through a
+pipe**. The full api suite is still NOT quoted green — `catalog.seed.test.ts`'s
+global-count race is unchanged and on its own line.
+
+**WHAT SHIPS.** Zero Critical/High findings about BEHAVIOUR, and the one
+Critical/High about coverage is closed in this round with permanent guards. The
+packet's remaining gate is unchanged and is not a review: **there is still no
+screen, so no smoke.** The web half carries it.

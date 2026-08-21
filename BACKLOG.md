@@ -1609,3 +1609,19 @@ entry instead**, because both are facts about the fixes rather than defects:
 **O86** had no subject until a staff row with no membership existed to give it
 one, and **O3** is double-covered now that the owner is excluded as staff as well
 as complimentary.
+
+## Staff card, T3 round 2 (2026-08-22) — DECISIONS :14493
+
+One Critical/High (missing coverage on correct code) — fixed in the round with
+permanent guards, so it is not logged here. **Two Low, both fixed:**
+
+| # | Finding | Fix |
+|---|---|---|
+| L-1 | Two test titles promised "…and puts their seat back" / "…and removing them takes it back". Neither body checked the return half, and round 1 had deleted the flag assertions that used to stand in for it. Behaviour was correct; the suite over-claimed. | One title trimmed to what it checks; the other claim now genuinely tested against the seat cap — remove the trainer, the gym is over its one paid seat again, the next applicant is refused. |
+| L-2 | `listStaff` had no eligibility filter, so after round 1's C/H-3 fix it disagreed with `getStaffRole`: a deleted account came back as `"role":"manager"` while its authority was already null. **The row was TRUE before the fix — the fix is what made it false.** Low only because no Staff screen exists yet (grep-verified: no staff call in `orgsApi.js`, no Staff tab). | The eligibility test written out in BOTH readers — duplicated deliberately, since a shared `sql` fragment is R3.8's forbidden shape — and anchored by a test that drives both and asserts they agree row for row. Mutant **O91**. |
+
+**Carried forward as a harness improvement, not fixed here:** the whole-table
+pre-check asks "does this anchor match?" and cannot ask "does it match ONCE".
+`listStaff` and `getStaffRole` now share SQL text, so O85/O86's one-line anchors
+matched twice and hit the intended function only by position (:11846's O14).
+Both were re-anchored; the harness gap is real and wants a uniqueness check.
