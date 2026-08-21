@@ -698,6 +698,29 @@ if (!process.env.DATABASE_URL) {
   abort('DATABASE_URL is not set. The suite would SKIP and every mutant would report ALIVE for the wrong reason.');
 }
 
+/** SAY WHICH DATABASE, because this harness runs the whole suite ONCE PER
+ *  MUTANT and the choice dominates the wall clock (DECISIONS :5857 rule 4a).
+ *  **Measured 2026-08-21 on `orgs.sweep.test.ts`: 158.2 s against the Neon
+ *  branch in `ap-southeast-1`, 10.8 s against a local docker Postgres — 14.7×
+ *  per mutant**, and the clock card's audit had its control ABORT twice under
+ *  Singapore contention (:13336), which is the harness correctly refusing to
+ *  report a verdict it cannot back.
+ *
+ *  Host only, never the url: a connection string carries a password and this
+ *  prints to a terminal that gets pasted into chats (R3.10, and the Neon
+ *  password was burned exactly that way on 2026-07-26). */
+{
+  let dbHost = 'unparseable';
+  try {
+    dbHost = new URL(process.env.DATABASE_URL).host;
+  } catch {
+    // An unreadable url is not fatal here — the suite will fail on its own and
+    // say why. What must not happen is this line inventing a host.
+  }
+  const local = /^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(dbHost);
+  console.log(`Database: ${dbHost}${local ? '' : '  ← REMOTE. `pnpm --filter api test:local` is ~15x faster per mutant.'}`);
+}
+
 /** `MUTATE_ONLY=O6,O14` runs a SUBSET — the web harness has had this since
  *  :4855 F6 and this one did not, which is why every fix round here cost a
  *  full 35-mutant sweep against a database in another country.

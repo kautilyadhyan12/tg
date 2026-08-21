@@ -2109,17 +2109,30 @@ then; none may be hidden or reduced to close the gap.
          can only be followed by hand — which is how a rule quietly becomes
          whatever chats have been doing with it (:5307's recorded lesson).
          Wanted: a `class` field, and a default run that skips the cosmetic ones.
-      2. **No local-Postgres switch.** Every DB mutant round-trips to Neon in
-         ap-southeast-1. `docker-compose.dev.yml` already runs
-         `pgvector/pgvector:pg16` on host port 5433 — the same image CI uses — so
-         the pieces exist and nothing needs building, only wiring.
-      **AND THE MEASUREMENT IS PART OF THIS LINE (V1):** the local-DB saving is
-      **UNVERIFIED**. It is expected to be large and has been timed by nobody.
-      The next card that uses it must measure it, and no record may quote a
-      number before then. The ~40 min / ~18 min figures in :5857 ARE measured and
-      are the baseline to beat.
-      **Not blocking anything.** The audit works today; it is simply more
-      expensive than the rule now asks for.
+      2. ~~**No local-Postgres switch.** Every DB mutant round-trips to Neon in
+         ap-southeast-1.~~ **DONE 2026-08-21 (DECISIONS :13659).**
+         `pnpm --filter api test:local` runs the suite against the
+         `docker-compose.dev.yml` Postgres on host port 5433, and
+         `mutate-orgs.mjs` now PRINTS which database it is about to use — host
+         only, never the url — so a slow sweep explains itself instead of being
+         wondered about. The runner's 4-worker cap also lifts itself when the
+         database is local, since that cap exists solely for the remote pooler.
+      **THE MEASUREMENT THIS LINE DEMANDED IS NOW MADE (V1), 2026-08-21:**
+      | measured on this machine, same day | Singapore (Neon) | local docker |
+      |---|---|---|
+      | round-trip `select 1`, median | **202.9 ms** | **2.7 ms** |
+      | `orgs.sweep.test.ts` (18 tests) | **158.2 s** | **10.8 s** — 14.7× |
+      | `orgs.routes` + `orgs.sweep` (67) | **did not finish in 10 min** | 77 s |
+      | whole api suite (536 tests, 44 files) | not measured | **51 s** |
+      **Read the third row as a LOWER BOUND, not a ratio** — that run was killed
+      at a ten-minute cap, and no full-suite Neon figure has been taken, so none
+      may be quoted. The row that matters for the audit is the second: the
+      harness runs a suite once PER MUTANT, so 14.7× is the per-mutant saving,
+      and the clock card's six DB mutants would have cost ~16 minutes of
+      Singapore against ~1 minute local. It also removes the cause of the two
+      control aborts at :13336 — contention on a database in another country.
+      **STILL OPEN: item 1, the severity class per mutant.** The rule still
+      cannot be followed by the tool, only by hand.
 - [x] ~~🟡 **THE NEW API DOES NOT STORE A WORKOUT'S WALL-CLOCK DURATION.**~~
       **DONE 2026-08-07** (DECISIONS :5906) — Kd RULED the contract change this
       line said was needed. `durationSeconds` (the on-screen workout timer) and

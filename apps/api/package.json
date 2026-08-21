@@ -11,6 +11,8 @@
     "lint": "eslint src test tools",
     "_lint:harness_why": "T3 round 3 C/H-1 put `node scripts/check-harnesses.mjs` on the END OF THIS LINE: a raw newline inside a mutant string had made mutate-orgs.mjs a SyntaxError, so none of its 57 mutants could run and nothing saw it (eslint ignores tools/**/*.mjs, tsc never reads it). ROUND 5, Low-6 MOVED THE CALL TO THE ROOT lint SCRIPT and it is not duplicated here: as a step in THIS task it was cached on this package's inputs, none of which reach the 16 harnesses outside apps/api, so a warm run replayed a pass without running it. The guard is unchanged and stronger; only the place it is invoked from moved. Do not re-add it here — that is what made a repo-wide check look like an apps/api one.",
     "test": "vitest run",
+    "test:local": "node scripts/test-local.mjs",
+    "_test:local_why": "DECISIONS :5857 rule 4a asked for a local-Postgres switch and left the saving UNVERIFIED. Measured 2026-08-21: a round-trip `select 1` is 202.9 ms median to the Neon branch in ap-southeast-1 (Singapore) and 2.7 ms to a local docker Postgres; orgs.routes + orgs.sweep is 77 s locally against a Singapore run that DID NOT FINISH in 10 minutes. Use this for mutation sweeps above all — the harness runs the suite once per mutant, and the clock card's audit had its control abort twice under Singapore contention (:13336). Needs `docker compose -f infra/docker-compose.dev.yml up -d postgres redis`; the script refuses to run against a missing or unseeded database rather than failing forty tests confusingly.",
     "db:generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
     "seed": "tsx src/db/seed.ts",

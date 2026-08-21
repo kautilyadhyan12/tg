@@ -13655,3 +13655,90 @@ this round never touched.
 **THE PACKET SHIPS** (:5348 rule 1: zero Critical/High). **`OWED.md`'s clock line
 TICKS** — built (:12878), smoked 10/10 (:13174), and five review rounds closed.
 **No round 6: a Low buys no round, and all nine are fixed and logged.**
+
+## 2026-08-21 — THE TESTS STOP TRAVELLING TO SINGAPORE: a local Postgres for the suite and the mutation sweep, and the saving :5857 left UNVERIFIED is now measured
+
+**Read before running a mutation sweep, before quoting a suite's duration,
+before changing `apps/api/vitest.config.ts`'s worker cap, and before assuming
+the dev database is the only one available.** Closes half of the `OWED.md` item
+created with :5857 rule 4a; the severity-class half stays open.
+
+**KD ASKED FOR THIS DIRECTLY** — *"first lets fix the mutation part how to avoid
+travelling to singapore server solve it"* — after five review rounds in which the
+audit's cost was dominated by a database in `ap-southeast-1`.
+
+**THE MEASUREMENT, which is the point of the entry (:5857 said quote no number
+until it exists).** Same machine, same day, same config:
+
+| | Singapore (Neon) | local docker |
+|---|---|---|
+| round-trip `select 1`, median of 20 | **202.9 ms** | **2.7 ms** |
+| `orgs.sweep.test.ts`, 18 tests | **158.2 s** | **10.8 s** |
+| `orgs.routes` + `orgs.sweep`, 67 tests | **did not finish in 10 min** | 77 s |
+| whole api suite, 536 tests / 44 files | not measured | **51 s** |
+
+**The third row is a LOWER BOUND and is written as one** — that run was killed at
+a ten-minute cap rather than completing, and **no full-suite Neon figure was
+taken, so none may be quoted**. The row that governs the audit is the second:
+**the harness runs a suite once PER MUTANT, so 14.7× is the per-mutant saving.**
+The clock card's six database mutants would have cost ~16 minutes of Singapore
+against ~1 minute local, which matches :5857's own measured ~18 minutes.
+
+**WHAT WAS ALREADY THERE, and why this was wiring rather than building.**
+`infra/docker-compose.dev.yml` has run `pgvector/pgvector:pg16` on host port 5433
+since the deploy-infra card. **Nothing needed to be built** — bring it up, apply
+the 11 migrations, seed, and the suite passes 536/536. Verified rather than
+assumed: 47 tables, and all three required extensions present (`citext`,
+`pgcrypto`, `vector`).
+
+**THE NATIVE POSTGRES ON THE DEV MACHINE IS NOT THE ANSWER AND THE REASON IS
+WORTH RECORDING.** A PostgreSQL 18 service is already running there on 5432. It
+was rejected on evidence: the schema needs the `vector` extension, which does not
+ship with Postgres and is a third-party build on Windows, whereas the compose
+image bundles it. **Port 5433 also means the two never collide** — the docker
+database does not care that 5432 is taken.
+
+**THREE PIECES OF WIRING, and each is deliberately small:**
+1. `apps/api/scripts/test-local.mjs` + a `test:local` script. Arguments pass
+   straight through to vitest, so a `-t` filter works exactly as before.
+   **It REFUSES rather than running against a database that is missing, empty or
+   unseeded** — each case named separately with the command that fixes it, and
+   **both refusals were proven by causing them**, not by reading the code. An
+   unseeded run would otherwise fail forty tests in ways that read as code
+   defects, which is this repo's most-recorded failure shape (:4855).
+2. **The 4-worker cap in `vitest.config.ts` is now conditional.** Its entire
+   justification was contention on the REMOTE pooler, which a local database does
+   not have: measured, lifting it took the two org suites from 138 s to 77 s.
+   The host is PARSED, never string-matched, so a password containing the word
+   "localhost" cannot fool it, and an unparseable url is treated as REMOTE —
+   the cautious direction. **CI is unaffected by construction**: its host is
+   `*.neon.tech`, which is not local by any reading.
+3. `mutate-orgs.mjs` now PRINTS its database before running. **Host only, never
+   the url** (R3.10 — the Neon password was burned on 2026-07-26 by exactly the
+   kind of string that gets pasted into a chat), with a one-line nudge when it is
+   remote. A sweep that is going to take fifteen times longer should say so at
+   the top rather than be wondered about at the bottom.
+
+**A SMALL ONE CAUGHT BY CAUSING THE FAILURE RATHER THAN READING IT:** the
+"cannot reach the database" message hardcoded `localhost:5433` while the url it
+actually tries is a constant above it — so pointing that constant at a dead port
+produced a message naming the wrong port. Derived from the url now. It is the
+card's own defect class in miniature: a sentence that outlives what it describes.
+
+**AND THE GUARD BUILT THIS MORNING PAID FOR ITSELF THE SAME DAY.** `test-local.mjs`
+lives in `apps/api/scripts`, the directory round 5's Low-5 added to the harness
+walk — so the new file was parse-checked automatically, with no edit to the
+guard, the first time it ran (23 scripts, up from 22). That directory is outside
+eslint's project service and `tsc` never reads it, so the parse check is the only
+thing covering it. **Left that way deliberately (R1.1): widening the eslint
+config is a separate change with its own blast radius.**
+
+**GATES.** api **536/536 across 44 files, exit 0, in 51 s** against the local
+database · api tsc clean · api eslint clean on `src test tools` · harness parse
+check clean at 23 scripts · both `test-local` refusals proven by causing them,
+source sha256-verified restored after each · the throwaway database made to prove
+refusal 2 was dropped.
+
+**STILL OPEN, and not smuggled into "done":** the severity class per mutant
+(:5857 rule 4a item 1) is untouched, so the rule that slow mutants are spent only
+on Critical/High surfaces is still followed by hand. Its `OWED.md` line stays.

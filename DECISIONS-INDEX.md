@@ -67,6 +67,36 @@ mid-file: re-derive them with
   unless dedupe is in that card's definition.** Health data lands inside the open
   privacy question at :592. Tracked NOWHERE before today (grep-verified); now has
   a ⚪ `OWED.md` line.
+- **:13659** — 2026-08-21 — **THE TESTS STOP TRAVELLING TO SINGAPORE: a local
+  Postgres for the suite and the mutation sweep, and :5857's UNVERIFIED saving is
+  now MEASURED.** **Read before running a mutation sweep, before quoting a
+  suite's duration, before touching `vitest.config.ts`'s worker cap, and before
+  assuming the Neon branch is the only database available.** Kd asked for it
+  directly after five review rounds whose audit cost was dominated by a database
+  in `ap-southeast-1`. **Measured, same machine same day: round-trip `select 1`
+  202.9 ms → 2.7 ms · `orgs.sweep` (18 tests) 158.2 s → 10.8 s (14.7×) · two org
+  suites DID NOT FINISH in 10 min on Neon vs 77 s local · whole api suite 536
+  tests in 51 s local.** **The did-not-finish row is a LOWER BOUND, written as
+  one, and NO full-suite Neon figure exists so none may be quoted.** The governing
+  row is the second — **a sweep runs a suite once PER MUTANT**, so the clock
+  card's six DB mutants were ~16 min of Singapore against ~1 min local, matching
+  :5857's own ~18 min. **It was WIRING, not building**: `docker-compose.dev.yml`
+  has run `pgvector/pgvector:pg16` on port 5433 since the deploy-infra card —
+  migrate, seed, 536/536, 47 tables, all three extensions verified. **The native
+  PostgreSQL 18 already on the dev machine was REJECTED on evidence** (the schema
+  needs `vector`, a third-party build on Windows; the compose image bundles it,
+  and port 5433 means they never collide). Three small pieces: a `test:local`
+  script that **refuses** a missing/empty/unseeded database with the fixing
+  command — **both refusals proven by causing them** · **the 4-worker cap is now
+  conditional**, since its whole justification was the REMOTE pooler (138 s → 77 s
+  local), host PARSED not string-matched, unparseable treated as remote, **CI
+  unaffected by construction** · the sweep harness now **prints its database, host
+  only never the url** (R3.10). **The guard built that same morning paid for
+  itself**: the new script landed in `apps/api/scripts`, the directory round 5's
+  Low-5 added to the walk, so it was parse-checked with no edit to the guard —
+  which is the only thing covering that directory, eslint and tsc both being blind
+  to it. **STILL OPEN and not smuggled into "done": the severity class per mutant**
+  (:5857 rule 4a item 1) is untouched.
 - **:13552** — 2026-08-21 — **THE CLOCK, T3 ROUND 5: ZERO Critical/High — THE
   PACKET SHIPS, five rounds closed, and `OWED.md`'s clock line TICKS.** **Read
   before adding a day word to `joinClock.js`, before deleting the floor under its
