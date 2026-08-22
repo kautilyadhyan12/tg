@@ -2325,7 +2325,15 @@ export type RemoveStaffOutcome =
  *  rather than evicting anybody — which is the honest direction. */
 export async function removeStaff(
   sql: Sql,
-  input: { gymId: string; userId: string; actorUserId: string },
+  input: {
+    gymId: string;
+    userId: string;
+    /** What the last owner may not be left without — the SAME list
+     *  `setStaffPrivileges` takes, because it is the same question at the other
+     *  door (T3 round 2, Low-1). Policy stays in the service. */
+    lastOwnerRequires: readonly string[];
+    actorUserId: string;
+  },
 ): Promise<RemoveStaffOutcome> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId);
@@ -2337,11 +2345,29 @@ export async function removeStaff(
     if (before === undefined) return { kind: "not_staff" };
     const role = toOrgRole(before.role);
 
+    // T3 round 2, Low-1 — THE SAME LOCKOUT AT THIS DOOR, and the third time this
+    // guard has been copied and got the same thing wrong.
+    //
+    // Counting owner ROWS was right when a row was the only thing that carried
+    // authority. Since the ticks card an owner can be ticked DOWN, so two owner
+    // rows can mean one person who can manage staff: remove that person and the
+    // gym keeps an owner and loses the ability to appoint anybody — the same
+    // unrepairable state `setStaffPrivileges` was fixed for one round earlier.
+    //
+    // **The question both doors now ask is identical: does anybody ELSE still
+    // HOLD every privilege the last owner may not lose.** It is written out
+    // TWICE rather than shared, because a shared `sql` fragment is R3.8's
+    // forbidden shape (:14493 Low-2) — and, exactly as there, ONE TEST DRIVES
+    // BOTH DOORS so the copies cannot drift (:14013's precedent). Edit one, edit
+    // the other, or a gym can lock itself out through whichever you left behind.
     if (role === "owner") {
-      const counted = await tx<{ n: number }[]>`
+      const otherOwners = await tx<{ n: number }[]>`
         SELECT count(*)::int AS n FROM gym_staff
-        WHERE gym_id = ${input.gymId} AND role = 'owner'`;
-      if ((counted[0]?.n ?? 0) <= 1) return { kind: "last_owner" };
+        WHERE gym_id = ${input.gymId}
+          AND role = 'owner'
+          AND user_id <> ${input.userId}
+          AND (privileges IS NULL OR privileges @> ${[...input.lastOwnerRequires]})`;
+      if ((otherOwners[0]?.n ?? 0) === 0) return { kind: "last_owner" };
     }
 
     const deleted = await tx<{ user_id: string }[]>`

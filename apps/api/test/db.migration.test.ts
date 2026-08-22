@@ -381,7 +381,15 @@ d("0001_init on a real database", () => {
     if (def === undefined) throw new Error("gym_staff_privileges_check is not on the table");
 
     // Every quoted string inside the deployed ARRAY[...] literal.
-    const inCheck = [...def.matchAll(/'([a-z][a-z.]*)'::text/g)].map((m) => m[1]).sort();
+    //
+    // **`[^']*` and not `[a-z][a-z.]*` — T3 round 2, Low-2.** The narrow pattern
+    // silently skipped any privilege whose name falls outside `[a-z.]`, so a
+    // `tv_token` added to the database was INVISIBLE to the guard and it stayed
+    // green — a drift detector that cannot see half the vocabulary. The
+    // reviewer measured it: `CHECK + tv.token` went RED, `CHECK + tv_token`
+    // stayed GREEN. The catalogue :11429 names includes a TV-mode token, so
+    // this was not a hypothetical shape.
+    const inCheck = [...def.matchAll(/'([^']*)'::text/g)].map((m) => m[1]).sort();
     expect(inCheck).toEqual([...ORG_PRIVILEGES].sort());
   });
 });

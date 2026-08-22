@@ -809,6 +809,46 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:15673** — 2026-08-23 — **PER-STAFF PRIVILEGE TICKS, T3 ROUND 2 (diff-only):
+  ZERO Critical/High — THE PACKET SHIPS, and the fix round's own fix made a
+  mutant ALIVE.** Reviews :15534. **Read before copying the last-owner guard a
+  FOURTH time, before parsing a deployed constraint with a narrow character
+  class, and before assuming a fix cannot un-cover a guarantee it never
+  touched.** Escape hatch NOT armed and the reviewer said so — no Critical/High
+  in `modules/orgs` this round. **He established by RUNNING, not reading, that no
+  non-owner can hold `staff.manage` by any route or sequence** (four writers
+  grep-verified; probes over every role transition and four request shapes, 409
+  every time with nothing written), that rule 3 holds (O102/O103 both RED), and
+  that the ticks door counts holders. **THREE LOW, ALL FIXED. L-1 is the THIRD
+  occurrence of one shape: `removeStaff` still counted owner ROWS**, which was
+  right while a row was the only thing carrying authority — since the ticks card
+  an owner can be ticked DOWN, so two owner rows can mean ONE person able to
+  manage staff, and removing them leaves a gym with an owner who cannot appoint
+  anybody. Both doors now ask the identical question, **written out twice
+  (R3.8) and anchored by ONE TEST DRIVING BOTH** (:14013). **L-2: the new drift
+  guard could not see half the vocabulary** — `[a-z][a-z.]*` made `tv_token`
+  INVISIBLE and the guard stayed green (the reviewer measured all four
+  directions); widened, and **proven by CAUSING the drift**, with the constraint
+  restored byte-identically afterwards. **L-3**: a comment claiming a guarantee
+  its test does not make. **THE FINDING NEITHER REVIEW PRODUCED — MY OWN HARNESS
+  DID: the L-1 fix made O87 ALIVE**, because the new `privileges @>` clause meant
+  an ordinary trainer failed the count anyway, so deleting `role = 'owner'`
+  changed nothing observable — :14401's O3 and :11846's both-halves-moved, one
+  card later, incurred by a fix aimed at something else. **The subject that
+  isolates it is a staff row with NULL privileges** (a row from before the ticks
+  column, counting as "holds the template" by design), which without the role
+  filter would let the last owner walk out; added and O87 re-measured RED.
+  **Standing lesson, third occurrence: a fix can un-cover a guarantee it never
+  touched, and only a sweep RE-RUN after the fix reports it.** **FOR KD RATHER
+  THAN THE NEXT CHAT: Low-1 is the third authority defect in four orgs rounds —
+  not the redesign trigger, and he was told so, with the recommendation that a
+  fourth means rebuilding the guard once rather than patching it again.**
+  **PROVE: orgs.routes 103/103 exit 0 · db.migration 8/8 exit 0 · tsc + eslint
+  clean · 13 mutants · 13 RED · 0 ALIVE · 0 never ran, a stated SUBSET (13 of
+  104) covering every mutant on both changed files; the ALIVE run that produced
+  the O87 finding is not summed into it (:5199).** **NOTHING TICKS — the ticks
+  line names a SCREEN, which does not exist, so there is still no smoke.**
+
 - **:15534** — 2026-08-22 — **PER-STAFF PRIVILEGE TICKS, T3 ROUND 1: ONE
   Critical/High — THE CARD BUILT THE THING THAT MADE ITS OWN GATE'S PREMISE
   FALSE. The packet did NOT ship this round.** Reviews :15381. **Read before

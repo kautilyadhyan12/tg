@@ -3475,12 +3475,32 @@ d("orgs routes (real Postgres)", () => {
       { cookies: owner.cookies },
     );
 
-    // Two staff rows, ONE owner. A guard counting STAFF would let this through.
+    // A THIRD ROW, WITH NO TICKS, AND IT IS THE SUBJECT RATHER THAN SCENERY.
+    //
+    // T3 round 2's fix taught this guard to count owners who still HOLD the
+    // keys, and **that quietly made O87 unobservable**: with a `privileges @>`
+    // clause in the query, an ordinary trainer fails it anyway, so deleting
+    // `role = 'owner'` changed nothing the test could see and the mutant came
+    // back ALIVE. The row that isolates it is one whose privileges are NULL —
+    // a staff row written before the ticks column existed — because NULL counts
+    // as "holds the template" by design (the deploy window). Without the role
+    // filter, that legacy trainer would be counted as somebody who can still run
+    // the gym, and the last owner could walk out.
+    //
+    // Inserted directly because no route can produce it any more; that IS the
+    // point — it is what a row from the previous deploy looks like.
+    const legacy = await makeUser("staff-lastowner-legacy");
+    await joinAsMember(legacy.cookies, org, owner.cookies);
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges)
+              VALUES (${org.org.id}, ${legacy.userId}, 'trainer', NULL)`;
+
+    // Three staff rows, ONE owner. A guard counting STAFF — or counting anybody
+    // whose ticks merely look sufficient — would let this through.
     const res = await del(`/v1/orgs/${org.org.id}/staff/${owner.userId}`, {
       cookies: owner.cookies,
     });
     expect(res.statusCode).toBe(409);
-    expect(await readStaff(org.org.id, owner.cookies)).toHaveLength(2);
+    expect(await readStaff(org.org.id, owner.cookies)).toHaveLength(3);
   });
 
   /** T3 round 1, C/H-2 — the regression, and it fails without the org lock.
@@ -3793,10 +3813,14 @@ d("orgs routes (real Postgres)", () => {
         cookies: who.cookies,
       });
       expect(removed.statusCode).toBe(403);
-      // THE TICKS ROUTE IS THE ONE THAT MATTERS MOST HERE: a manager who could
-      // reach it could tick themselves `staff.manage` and become an owner in
-      // all but name — the privilege-escalation door :11429 rule 1 shuts by
-      // keeping tick-changing owner-only.
+      // THE TICKS ROUTE, and this comment says LESS than it used to on purpose
+      // (T3 round 2, Low-3). Round 1 found it claiming to shut ":11429 rule 1's
+      // privilege-escalation door" while that door stood wide open and this test
+      // stayed green — it asserts the DEFAULT state (a manager holds no
+      // `staff.manage`, so the route refuses them), never the invariant.
+      // **What shuts the escalation door is the ESCALATION test above**, which
+      // fails without the refusal in `setStaffPrivileges`; this one proves the
+      // route is not reachable by a staff member who was never granted the tick.
       const ticked = await put(
         `/v1/orgs/${org.org.id}/staff/${who.userId}/privileges`,
         { privileges: ["members.read", "codes.invite", "staff.manage"] },
@@ -4213,6 +4237,81 @@ d("orgs routes (real Postgres)", () => {
     // the guard rather than a property of the error code.
     expect(
       (await get(`/v1/orgs/${org.org.id}/staff`, { cookies: owner.cookies })).statusCode,
+    ).toBe(200);
+  });
+
+  /** T3 round 2, Low-1 — ONE FIXTURE, BOTH DOORS, because the rule is written
+   *  out twice and this is what stops the copies drifting (:14013's precedent,
+   *  the same instrument :14493 Low-2 chose for the same reason).
+   *
+   *  **The defect it pins: `removeStaff` still counted owner ROWS.** Counting
+   *  rows was right while a row was the only thing carrying authority; since the
+   *  ticks card an owner can be ticked DOWN, so two owner rows can mean ONE
+   *  person who can manage staff — remove that person and the gym keeps an owner
+   *  and loses the ability to appoint anybody. **Third time this guard has been
+   *  copied and got the same thing wrong** (:14401's O87 at this door, round 1's
+   *  Low-1 at the ticks door, this).
+   *
+   *  Both arms are here in one test on purpose: an edit that fixes one door and
+   *  leaves the other fails HERE rather than in whichever suite nobody re-ran. */
+  it("LOCKOUT: both doors refuse to leave a gym with an owner who cannot run it", async () => {
+    const owner = await makeUser("ticks-doors-owner");
+    const second = await makeUser("ticks-doors-second");
+    const org = await makeOrg(owner.cookies, "Orgs Test Ticks Both Doors");
+    await joinAsMember(second.cookies, org, owner.cookies);
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges)
+              VALUES (${org.org.id}, ${second.userId}, 'owner',
+                      ARRAY['codes.invite','codes.manage','members.confirm','members.read','members.remove','staff.manage']::text[])`;
+
+    // Tick the second owner down. Allowed — the first still holds the keys.
+    expect(
+      (
+        await put(
+          `/v1/orgs/${org.org.id}/staff/${second.userId}/privileges`,
+          { privileges: ["members.read"] },
+          { cookies: owner.cookies },
+        )
+      ).statusCode,
+    ).toBe(200);
+
+    // DOOR 1, the ticks route: the first owner may not strip themselves.
+    const stripped = await put(
+      `/v1/orgs/${org.org.id}/staff/${owner.userId}/privileges`,
+      { privileges: ["members.read"] },
+      { cookies: owner.cookies },
+    );
+    expect(stripped.statusCode).toBe(409);
+    expect((JSON.parse(stripped.body) as { error: string }).error).toBe("last_owner_locked");
+
+    // DOOR 2, the remove route — THE ARM THAT WAS MISSING. Two owner ROWS exist,
+    // so a row count says "go ahead"; only one of them can manage staff.
+    const removed = await del(`/v1/orgs/${org.org.id}/staff/${owner.userId}`, {
+      cookies: owner.cookies,
+    });
+    expect(removed.statusCode).toBe(409);
+    expect((JSON.parse(removed.body) as { error: string }).error).toBe("last_owner");
+
+    // THE CONTROL, without which both arms above pass against a guard that
+    // simply refuses every owner: give the second owner the keys back and the
+    // first may leave.
+    expect(
+      (
+        await put(
+          `/v1/orgs/${org.org.id}/staff/${second.userId}/privileges`,
+          { privileges: ["members.read", "staff.manage"] },
+          { cookies: owner.cookies },
+        )
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (await del(`/v1/orgs/${org.org.id}/staff/${owner.userId}`, { cookies: owner.cookies }))
+        .statusCode,
+    ).toBe(200);
+
+    // And the gym is still runnable by the person who is left, which is the
+    // whole point of both guards rather than a property of their error codes.
+    expect(
+      (await get(`/v1/orgs/${org.org.id}/staff`, { cookies: second.cookies })).statusCode,
     ).toBe(200);
   });
 

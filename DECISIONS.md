@@ -15669,3 +15669,100 @@ mutants** and both go RED, i.e. each fix carries a test that fails without it.
 the owner-only list as well as the lockout list. **The remaining gate is a
 DIFF-ONLY re-review** (:5348 rule 2); its prompt is handed over with the commit.
 There is still no screen, so there is still no smoke.
+
+## PER-STAFF PRIVILEGE TICKS, T3 ROUND 2 (diff-only): ZERO CRITICAL/HIGH — THE PACKET SHIPS, and the fix round's own fix made a mutant ALIVE (2026-08-23)
+
+Reviews `fc72c88` (:15534). **ZERO Critical/High ⇒ the packet SHIPS** (:5348
+rule 1). **Read before copying this last-owner guard a FOURTH time, before
+parsing a deployed constraint with a narrow character class, and before trusting
+that a fix cannot un-cover an existing guarantee.** Escape hatch NOT armed and
+the reviewer said so explicitly — no Critical/High in `modules/orgs` this round,
+so there is no two-rounds-running trigger.
+
+### WHAT THE REVIEWER ESTABLISHED BY RUNNING IT
+
+**(a) No non-owner can hold `staff.manage`, by any route or sequence.** Four
+writers of `gym_staff.privileges` grep-verified, and two probes against local
+Postgres, since deleted: the appointment path plus six role transitions in both
+directions for a manager and a trainer (never stored, 403 at every step, the
+owner never loses their own), and the ticks route × {manager, trainer} × four
+request shapes — `staff.manage` alone, mixed, the full six, duplicated — **409
+`owner_only_privilege` every time, nothing written**.
+**(b) Rule 3 measured, not read**: `MUTATE_ONLY=O102,O103`, controls GREEN, both
+RED. **(c)** the ticks door counts holders. **(d)** the drift guard goes red in
+three of four directions — the fourth is Low-2 below.
+
+### THE THREE LOWS, ALL FIXED (`BACKLOG.md` carries them in full)
+
+**L-1 — THE SAME LOCKOUT AT THE REMOVE DOOR, AND THE THIRD OCCURRENCE OF ONE
+SHAPE.** `removeStaff` still counted owner ROWS. Counting rows was correct while
+a row was the only thing carrying authority; since the ticks card an owner can be
+ticked DOWN, so two owner rows can mean ONE person able to manage staff — remove
+that person and the gym keeps an owner and loses the ability to appoint anybody.
+Both doors now ask the identical question, **written out twice rather than shared
+(R3.8, :14493 Low-2) and anchored by ONE TEST DRIVING BOTH**, so an edit that
+fixes one and forgets the other fails in the test rather than in a gym.
+
+**L-2 — the drift guard could not see half the vocabulary**, parsing the
+deployed CHECK with `[a-z][a-z.]*`: the reviewer measured code+1 RED, code−1 RED,
+CHECK−1 RED, **CHECK + `tv_token` GREEN**, and :11429's catalogue names a TV-mode
+token. Widened to every quoted string, **and proven by CAUSING the drift** — the
+deployed constraint altered to accept `tv_token`, guard RED, constraint restored
+and verified byte-identical against the definition captured before the break,
+suite re-run GREEN.
+
+**L-3 — a comment claiming a guarantee its test does not make**: the five-routes
+test still said it shuts the escalation door, which round 1 measured that it does
+not. Rewritten to claim only what it proves.
+
+### THE FINDING NEITHER REVIEW PRODUCED — MY OWN HARNESS DID
+
+**The L-1 fix made O87 ALIVE.** O87 deletes `role = 'owner'` from the remove
+door's count. Adding the `privileges @>` clause meant an ordinary trainer failed
+the count anyway, so **deleting the role filter changed nothing the test could
+observe** — the guarantee had become enforced twice, which is :14401's O3 and
+:11846's both-halves-moved, one card later, incurred by a fix aimed at something
+else entirely.
+
+**The subject that isolates it is a staff row with NULL privileges** — a row from
+before the ticks column, which counts as holding the template by design (the
+deploy window). Without the role filter that legacy TRAINER counts as somebody
+who can still run the gym, and the last owner may walk out. Added to the
+last-owner test and inserted directly, because no route can produce that row any
+more — **which is exactly the point: it is what a row from the previous deploy
+looks like.** O87 re-measured RED.
+
+**Standing lesson, third occurrence in this repo (:14401's O3, :11846's O8/O17):
+a fix can un-cover a guarantee it never touched, and the only instrument that
+reports it is a sweep re-run after the fix.** A fix round that re-runs only its
+own new mutants would have shipped this.
+
+### THE ONE FOR KD RATHER THAN THE NEXT CHAT
+
+**Low-1 is the third authority defect in four `modules/orgs` rounds** — the same
+guard, copied a third time, failing the same way. It is NOT the redesign trigger
+(:5348's hatch needs Criticals two rounds running, and this round has none), and
+the reviewer was explicit about that. **It was put to Kd in plain words with the
+recommendation that a fourth occurrence means rebuilding the guard once rather
+than patching it again.** Recorded here so a fourth chat does not have to
+rediscover the pattern.
+
+### PROVE (round 2, local Postgres)
+
+`test/orgs.routes.test.ts` **103/103, exit 0** (+1) · `test/db.migration.test.ts`
+**8/8, exit 0** · tsc clean · eslint **exit 0 at `--max-warnings=0`** on the four
+touched files. **The drift guard proven BOTH WAYS by breaking the deployed
+constraint and restoring it byte-identically.** Mutation: **13 mutants · 13 RED ·
+0 ALIVE · 0 never ran, exit 0** — every mutant standing on the two files this
+round changed, re-run rather than assumed (:10726 the other way about) —
+**a stated SUBSET, 13 of 104**, controls GREEN through the same path first,
+restores sha256-verified. The ALIVE run that produced the O87 finding is NOT
+summed into that figure (:5199).
+
+### WHAT TICKS
+
+**Nothing.** The packet ships in the review's sense — no Critical/High — but
+`OWED.md`'s ticks line still names the SCREEN, which does not exist, so an owner
+cannot reach any of this and there is still no smoke to run. Card B is the Staff
+screen; card C is custom role names and Kd's "Change everyone on Front Desk too?"
+button.

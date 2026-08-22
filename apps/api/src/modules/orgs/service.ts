@@ -1253,6 +1253,10 @@ export async function removeOrgStaff(
   const outcome = await repo.removeStaff(deps.sql, {
     gymId,
     userId: targetUserId,
+    // The same list the ticks door uses: "can somebody else still run this gym"
+    // is one question, and answering it differently at the two doors is what
+    // T3 round 2 found (Low-1).
+    lastOwnerRequires: LAST_OWNER_REQUIRED_PRIVILEGES,
     actorUserId: userId,
   });
 

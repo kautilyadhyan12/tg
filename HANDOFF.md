@@ -9865,3 +9865,62 @@ NEXT
   3. Then card C: custom role names, the second migration, and Kd's "Change
      everyone on Front Desk too?" button.
 ```
+
+```
+TASK: PER-STAFF PRIVILEGE TICKS, T3 ROUND 2 (diff-only) — ZERO Critical/High.
+      THE PACKET SHIPS. DECISIONS :15673. Reviews fc72c88. Three Low, all fixed.
+      Escape hatch NOT armed (no C/H in modules/orgs this round).
+
+THE THREE LOWS
+  · L-1 **THE SAME LOCKOUT AT THE REMOVE DOOR, third occurrence of one shape**:
+    `removeStaff` still counted owner ROWS. Both doors now ask "does anybody
+    ELSE still HOLD the keys", written out twice (R3.8) and anchored by ONE TEST
+    DRIVING BOTH. Mutant O104; O77 and O87 re-anchored onto the new count.
+  · L-2 the drift guard parsed the CHECK with `[a-z][a-z.]*`, so `tv_token` was
+    INVISIBLE and it stayed green. Widened to every quoted string and **proven
+    by CAUSING the drift** — constraint altered, guard RED, constraint restored
+    byte-identically, suite re-run GREEN.
+  · L-3 a comment claiming the five-routes test shuts the escalation door. It
+    does not; round 1 measured that. Rewritten to claim only what it proves.
+
+THINGS A LATER CHAT WILL OTHERWISE GET WRONG
+  · **A FIX CAN UN-COVER A GUARANTEE IT NEVER TOUCHED.** The L-1 fix made O87
+    ALIVE: with a `privileges @>` clause in the count, an ordinary trainer fails
+    it anyway, so deleting `role = 'owner'` changed nothing observable. Third
+    occurrence in this repo (:14401 O3, :11846 O8/O17). **Only a sweep RE-RUN
+    after the fix reports it — a round that re-runs just its new mutants ships
+    it.**
+  · **The subject that isolates O87 is a staff row with NULL privileges** — a
+    row from before the ticks column, which counts as "holds the template" by
+    design. Do not "tidy" that row out of the last-owner test; it is what a row
+    from the previous deploy looks like, and without the role filter it would let
+    the last owner walk out.
+  · **THE TWO DOORS HOLD THE SAME FOUR-LINE QUERY ON PURPOSE.** Only the outcome
+    name differs (`last_owner` vs `last_owner_locked`) and only the variable name
+    keeps the mutant anchors unique (`otherOwners` vs `others`). A shared `sql`
+    fragment is R3.8's forbidden shape. Edit one, edit the other.
+  · **`OWNER_ONLY_PRIVILEGES` and `LAST_OWNER_REQUIRED_PRIVILEGES` are two lists
+    and billing belongs on BOTH** when it exists (`OWED.md`).
+
+GATES
+  · orgs.routes **103/103, exit 0** (+1) — RE-RUN after the O87 fix edit, because
+    the earlier 103/103 predated it · db.migration **8/8, exit 0** · tsc clean ·
+    eslint exit 0 at `--max-warnings=0` on the four touched files.
+  · **13 mutants · 13 RED · 0 ALIVE · 0 never ran, exit 0** — every mutant on
+    both changed files, re-run rather than assumed. **A stated SUBSET: 13 of
+    104.** The ALIVE run that produced the O87 finding is not summed into it.
+  · The drift guard proven BOTH WAYS against the live constraint.
+
+NEXT
+  1. **THE REVIEW GATE IS CLOSED — no further round** (:5348 rule 1: a Low buys
+     none). Nothing ticks anyway: `OWED.md`'s ticks line names a SCREEN.
+  2. **Card B — the Staff screen's tick boxes (web).** It carries the SMOKE, and
+     its warning copy must say **"their permissions become the defaults for the
+     new role"**, never "your changes will be lost" (round 1's Low-6).
+  3. **Card C — custom role names**: the second migration (`gym_staff.role` is
+     `text` under a three-value CHECK), the three built-ins as presets, and Kd's
+     **"Change everyone on Front Desk too?"** button (his ruling, :15381).
+  4. **FOR KD, NOT THE NEXT CHAT: Low-1 is the third authority defect in four
+     orgs rounds.** Not the redesign trigger; he was told, with the
+     recommendation that a fourth means rebuilding the guard once.
+```

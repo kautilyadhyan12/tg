@@ -1729,3 +1729,36 @@ It deletes the route's gate, which was owner-only by accident rather than by
 enforcement — **a mutation harness can only kill a guard that EXISTS.** Same
 lesson :14745 recorded when Kd's browser found what no mutant could. O100's
 wording is corrected and **O102 is the escalation itself**.
+
+## PER-STAFF PRIVILEGE TICKS, T3 ROUND 2 (diff-only) — 2026-08-23, reviews `fc72c88`
+
+**ZERO Critical/High — THE PACKET SHIPS** (:5348 rule 1). Escape hatch NOT
+armed: no Critical/High in `modules/orgs` this round, so there is no
+two-rounds-running trigger. **Three Low, all fixed in the round.** The reviewer
+confirmed by RUNNING rather than reading that no non-owner can hold
+`staff.manage` by any route or sequence (four writers grep-verified, two probes
+covering every role transition and four request shapes), that rule 3 holds
+(O102/O103 both RED), and that the last-owner guard counts holders at the ticks
+door.
+
+| # | Finding | Fix |
+|---|---|---|
+| L-1 | **THE SAME LOCKOUT AT THE OTHER DOOR — and the THIRD time this guard has been copied and got the same thing wrong.** `removeStaff` still counted owner ROWS. Counting rows was right while a row was the only thing carrying authority; since the ticks card an owner can be ticked DOWN, so two owner rows can mean ONE person who can manage staff — remove that person and the gym keeps an owner and loses the ability to appoint anybody, unrepairable from inside. Latent today (no route makes a second owner), exactly as round 1's Low-1 was. | Both doors now ask the identical question — does anybody ELSE still HOLD every privilege the last owner may not lose. **Written out twice, not shared** (R3.8, :14493 Low-2) and **anchored by ONE TEST DRIVING BOTH DOORS** (:14013's precedent), so an edit that fixes one and forgets the other fails in the test rather than in production. Mutant **O104**; O77 and O87 re-anchored onto the new count. |
+| L-2 | **The new drift guard could not see half the vocabulary.** It parsed the deployed CHECK with `/'([a-z][a-z.]*)'::text/`, so any privilege whose name falls outside `[a-z.]` was INVISIBLE and the guard stayed green. The reviewer measured all four directions: code+1 RED, code−1 RED, CHECK−1 RED, **CHECK + `tv_token` GREEN**. :11429's own catalogue names a TV-mode token, so this was not a hypothetical shape. | `/'([^']*)'::text/` — every quoted string in the literal. **Proven by CAUSING it**: the deployed constraint was altered to accept `tv_token`, the guard went RED, the constraint was restored and verified byte-identical against the definition captured before the break, and the suite re-run GREEN. |
+| L-3 | **A comment claiming a guarantee the test does not make.** The five-routes test still said it shuts ":11429 rule 1's privilege-escalation door" — round 1 measured that it does not: it asserts the DEFAULT state (a manager holds no `staff.manage`, so the route refuses them), never the invariant. A later chat editing that test would have trusted the comment. | Comment rewritten to claim only what the test proves, and to name the ESCALATION test as what actually shuts the door. |
+
+**MY OWN HARNESS FOUND WHAT THE REVIEW COULD NOT, AND IT IS THE ENTRY WORTH
+READING: the L-1 fix made O87 ALIVE.** O87 deletes `role = 'owner'` from the
+remove door's count. Adding the `privileges @>` clause meant an ordinary trainer
+failed the count anyway, so deleting the role filter **changed nothing the test
+could observe** — a guarantee enforced twice over, which is :14401's O3 and
+:11846's both-halves-moved, one card later, incurred by the fix written for a
+different finding.
+
+**The subject that isolates it is a staff row with NULL privileges** — a row
+written before the ticks column existed, which counts as "holds the template" by
+design (the deploy window). Without the role filter that legacy TRAINER would be
+counted as somebody who can still run the gym, and the last owner could walk out.
+Added to the last-owner test, inserted directly because no route can produce it
+any more — **which is the point: it is what a row from the previous deploy looks
+like**. O87 re-measured RED.

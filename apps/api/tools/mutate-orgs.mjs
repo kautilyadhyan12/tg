@@ -918,8 +918,11 @@ const MUTANTS = [
     id: 'O77',
     target: 'repo',
     why: 'A GYM WITH NOBODY IN CHARGE: the last-owner guard stops firing, so the only owner can remove themselves and no one left inside can appoint anybody — appointing staff is owner-only, so the gym is unrecoverable without us',
-    from: '      if ((counted[0]?.n ?? 0) <= 1) return { kind: "last_owner" };',
-    to: '      if ((counted[0]?.n ?? 0) <= 0) return { kind: "last_owner" };',
+    // RE-ANCHORED by T3 round 2's Low-1 fix: the row count became a count of
+    // owners who still HOLD the keys, so the comparison moved from `<= 1` to
+    // `=== 0`. Guarantee unchanged — this guard must fire.
+    from: '      if ((otherOwners[0]?.n ?? 0) === 0) return { kind: "last_owner" };',
+    to: '      if ((otherOwners[0]?.n ?? 0) < 0) return { kind: "last_owner" };',
     expect: 'nobody in charge',
   },
   {
@@ -1051,12 +1054,19 @@ const MUTANTS = [
     // (`last_owner` here, `last_owner_locked` there). This is precisely the
     // hazard :14493 named and :15259 built the guard for; it fired on its first
     // real occasion.
+    // RE-ANCHORED AGAIN by T3 round 2's Low-1 fix, which gave this door the
+    // ticks door's holder-aware count. The GUARANTEE is unchanged — count
+    // OWNERS, not staff — and `otherOwners` is what keeps the anchor unique
+    // against the sibling query in `setStaffPrivileges`.
     from:
-      "        WHERE gym_id = ${input.gymId} AND role = 'owner'`;\n" +
-      '      if ((counted[0]?.n ?? 0) <= 1) return { kind: "last_owner" };',
+      '      const otherOwners = await tx<{ n: number }[]>`\n' +
+      '        SELECT count(*)::int AS n FROM gym_staff\n' +
+      '        WHERE gym_id = ${input.gymId}\n' +
+      "          AND role = 'owner'\n",
     to:
-      '        WHERE gym_id = ${input.gymId}`;\n' +
-      '      if ((counted[0]?.n ?? 0) <= 1) return { kind: "last_owner" };',
+      '      const otherOwners = await tx<{ n: number }[]>`\n' +
+      '        SELECT count(*)::int AS n FROM gym_staff\n' +
+      '        WHERE gym_id = ${input.gymId}\n',
     expect: 'nobody in charge',
   },
   {
@@ -1144,9 +1154,29 @@ const MUTANTS = [
     id: 'O103',
     target: 'repo',
     why: "T3 Low-1 RESTORED: the last-owner guard stops asking whether the OTHER owners still HOLD the power and counts rows again, so with two owners each can strip the other — both left unable to manage staff, and nobody inside the gym able to repair it. Stripping a privilege removes no row, which is why `removeStaff`'s identically-shaped count is correct and this one was not",
-    from: '          AND (privileges IS NULL OR privileges @> ${[...input.lastOwnerRequires]})`;',
-    to: '          `;',
+    // The second line is what makes this unique: the two doors now hold the
+    // SAME four-line query, deliberately (R3.8 forbids sharing the fragment),
+    // and only the outcome name differs. T3 round 2's Low-1 is what created the
+    // twin — the ambiguity guard would have aborted on a one-line anchor.
+    from:
+      '          AND (privileges IS NULL OR privileges @> ${[...input.lastOwnerRequires]})`;\n' +
+      '      if ((others[0]?.n ?? 0) === 0) return { kind: "last_owner_locked" };',
+    to:
+      '          `;\n' +
+      '      if ((others[0]?.n ?? 0) === 0) return { kind: "last_owner_locked" };',
     expect: 'a second owner counts only while they still HOLD the power',
+  },
+  {
+    id: 'O104',
+    target: 'repo',
+    why: "T3 ROUND 2's Low-1 RESTORED, AT THE OTHER DOOR: `removeStaff` stops asking whether the remaining owners still HOLD the keys and counts owner ROWS again — so a gym with two owner rows, only one of whom can manage staff, lets that one be removed and keeps an owner who cannot appoint anybody. THE THIRD TIME THIS GUARD HAS BEEN COPIED AND GOT THE SAME THING WRONG (:14401's O87 here, round 1's Low-1 at the ticks door, this)",
+    from:
+      '          AND (privileges IS NULL OR privileges @> ${[...input.lastOwnerRequires]})`;\n' +
+      '      if ((otherOwners[0]?.n ?? 0) === 0) return { kind: "last_owner" };',
+    to:
+      '          `;\n' +
+      '      if ((otherOwners[0]?.n ?? 0) === 0) return { kind: "last_owner" };',
+    expect: 'both doors refuse to leave a gym with an owner who cannot run it',
   },
   {
     id: 'O97',
