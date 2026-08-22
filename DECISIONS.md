@@ -14949,3 +14949,57 @@ untouched by this round.
 
 **NOTHING TICKS.** Two gates outstanding, not one: **the re-smoke of steps 9 and
 11**, and **a diff-only re-review** of these fixes (:5348 rule 2).
+
+## THE RE-SMOKE PASSES ON THE SHIPPING BYTES — and Kd finds that the roster does not say who is free (2026-08-22)
+
+**Read before touching the Members roster's badge, before writing
+`gym_members.complimentary` anywhere, and before citing the staff smoke as
+complete.** Kd's REPORT (:4829) on commit `2e5500e`.
+
+**STEPS 9 AND 11 PASSED — "all passed".** The three-tap removal was exercised by a
+person on the code that ships: the middle question, the last check, **Cancel at
+the last check leaving everything alone**, and the destructive arm naming the
+bigger outcome. **The gate :14840 opened is closed** — every step of
+`RUNBOOK/smoke-staff.md` has now been run against the bytes it describes, which
+was not true between `ba7bd13` and this run.
+
+**HIS FINDING, IN HIS WORDS:** *"when a member is added as a staff there badge
+should also show complimentary and like owner should not occupy gyms member
+space"*. **It is two claims and they land differently — measured before
+answering, because his diagnosis and his instinct came apart once before
+(:14013).**
+
+**THE SECOND HALF IS ALREADY TRUE.** `claimSeat` counts live members
+`AND m.complimentary = false AND NOT EXISTS (SELECT 1 FROM gym_staff …)`, so a
+staff member has consumed no seat since :14401's C/H-1 moved his "staff seats
+free" ruling into the count. Verified in the SQL this session rather than recalled
+from the entry that describes it.
+
+**THE FIRST HALF IS A REAL GAP AND HE IS RIGHT.** `Members.jsx` draws its
+"Complimentary" badge off `gym_members.complimentary`, which is deliberately NOT
+written for staff — so a trainer sits on the roster looking exactly like somebody
+occupying a paid seat. **The door and the screen disagree about who costs money**,
+and the owner cannot see which seats are free. Not a false NUMBER (`joinedCount`
+asks who JOINED, and staff did), so not :5807 on its face — it is a missing fact
+rather than a wrong one, which is why no test and no mutant found it and a person
+looking at the screen did. **Third finding on this branch produced only by Kd's
+browser** (:12832, :12660, and the removal confirmation two commits ago).
+
+**THE FIX MUST NOT BE THE OBVIOUS ONE, and this is the part to carry forward:
+DO NOT WRITE `complimentary` FOR STAFF.** That is precisely the defect :14401
+C/H-1 removed — the column means **"did not JOIN"**, and three readers act on it
+(`joinedCount`, the join door's `max_uses` gate, `orgCodeSchema.joined`), which is
+how an appointment once printed "Nobody has joined yet" over a two-member gym and
+handed a one-use code a second place. The roster needs a **separate derived
+field** meaning "takes no seat", computed the way the DOOR computes it and
+**anchored by a test driving both**, so the screen and the cap cannot drift
+(:14013's six-site precedent).
+
+**AND IT IS A §2.4 QUESTION, not only a badge.** `/v1/orgs/:gymId/members` has its
+key set asserted EXACTLY by a test, on purpose (:10010), so any addition is argued
+at its card rather than waved through — and telling a gym that one of its members
+is staff is itself a fact about a person, which is the axis §2.4 governs.
+
+**NOT BUILT (R1.1):** it needs a server half, and the packet is mid-review-round
+with a diff-only re-review outstanding — a feature landing inside a fix round is
+what :5348 rule 6 forbids. Own `OWED.md` line.

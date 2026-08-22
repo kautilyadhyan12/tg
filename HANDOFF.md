@@ -9498,3 +9498,35 @@ NEXT — TWO GATES, NOT ONE
   2. **DIFF-ONLY re-review** of this round's fixes, fresh chat (:5348 rule 2).
   3. Nothing ticks until both are done.
 ```
+
+```
+TASK: STAFF SCREEN — THE RE-SMOKE PASSED ON THE SHIPPING BYTES, and Kd's browser
+      produced one more finding. DECISIONS :14953. No code changed in this
+      commit — record only.
+
+  · **Steps 9 and 11 PASSED on `2e5500e`** ("all passed"): the three-tap removal,
+    Cancel at the last check changing nothing, both arms ending correct.
+    **The gate :14840 opened is CLOSED** — every step of the sheet has now been
+    run by a person against the bytes it describes.
+  · **KD'S FINDING: the roster does not say who is FREE.** Two claims, and they
+    land differently — measured before answering (:14013's lesson).
+      – "staff should not occupy the gym's member space" — **ALREADY TRUE**,
+        verified in `claimSeat`'s SQL, since :14401 C/H-1.
+      – "the badge should show complimentary" — **A REAL GAP.** The roster's badge
+        reads `gym_members.complimentary`, which is deliberately not written for
+        staff, so a trainer looks like somebody paying for a seat.
+  · **DO NOT CLOSE IT BY WRITING `complimentary` FOR STAFF** — that IS :14401's
+    C/H-1 (the column means "did not JOIN"; three readers act on it). It needs a
+    separate derived field computed the way the DOOR computes it, anchored by a
+    test driving both, and it widens a response whose key set is asserted exactly
+    on purpose (§2.4, :10010). Server + web, own `OWED.md` line, NOT built here
+    (R1.1; :5348 rule 6 forbids a feature inside a fix round).
+
+NEXT
+  1. **DIFF-ONLY re-review of :14840's fixes** — fresh chat, the last gate on this
+     packet (:5348 rule 2).
+  2. Then the roster-badge card, then the per-staff privilege ticks + custom role
+     names (:14745), which needs its own migration and carries the open
+     snapshot-vs-named-role question.
+  3. Nothing ticks until the re-review comes back with zero Critical/High.
+```

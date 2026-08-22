@@ -4908,6 +4908,31 @@ file and is stated so nobody reads these as lower priority than they are.
       **All six safety rules above still bind** — and rule 2 (the last owner
       cannot be ticked out of billing or staff management) matters MORE now, a
       custom role being a new way to hand somebody an incomplete set.
+- [ ] 🟡 **THE ROSTER DOES NOT SAY WHICH MEMBERS ARE FREE — a staff member takes
+      no seat and looks exactly like somebody who pays for one (Kd's finding at
+      the staff re-smoke, 2026-08-22, DECISIONS :14953).** His words: *"when a
+      member is added as a staff there badge should also show complimentary and
+      like owner should not occupy gyms member space"*.
+      **THE SECOND HALF IS ALREADY TRUE AND WAS VERIFIED, NOT ASSUMED**: `claimSeat`
+      counts live members `AND m.complimentary = false AND NOT EXISTS (SELECT 1
+      FROM gym_staff …)`, so staff have consumed no seat since :14401's C/H-1.
+      **The first half is the gap**: `Members.jsx` draws its "Complimentary" badge
+      off `gym_members.complimentary`, which is deliberately NOT written for staff,
+      so the screen and the door disagree about who costs money and an owner
+      cannot see which seats are free.
+      **THE FIX MUST NOT BE TO WRITE `complimentary` FOR STAFF — that is exactly
+      the defect :14401 C/H-1 removed** (the column means "did not JOIN", and
+      three readers act on it: `joinedCount`, the join door's `max_uses` gate, and
+      `orgCodeSchema.joined`). The roster response needs a SEPARATE derived field
+      meaning "this person takes no seat", computed the same way the door computes
+      it, and **anchored by a test that drives both** so the screen and the cap
+      cannot drift (:14013's six-site precedent).
+      **It widens `/v1/orgs/:gymId/members`, whose key set is asserted EXACTLY by
+      a §2.4 test on purpose** (:10010), so the addition is argued at the card, not
+      waved through — and a staff flag on a roster row is a §2.4 question in its
+      own right, since it tells the gym something about a person.
+      Server half plus web half; not built at the staff card (R1.1, and the packet
+      was mid-review-round).
 - [ ] 🟡 **A NAMED ROLE AND A SNAPSHOT CONTRADICT EACH OTHER, AND KD HAS NOT BEEN
       ASKED (raised 2026-08-22 by his own "want both" amendment, DECISIONS
       :14745).** :11429 ruled the effective privilege set is stored as a

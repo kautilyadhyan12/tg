@@ -809,6 +809,37 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:14953** — 2026-08-22 — **THE RE-SMOKE PASSES ON THE SHIPPING BYTES — and Kd
+  finds that the roster does not say who is FREE.** **Read before touching the
+  Members roster's badge, before writing `gym_members.complimentary` anywhere, and
+  before citing the staff smoke as complete.** Steps 9 and 11 run by a person on
+  `2e5500e`: the three-tap removal, **Cancel at the last check leaving everything
+  alone**, both arms ending correct — **so the gate :14840 opened is CLOSED**, and
+  every step of the sheet has now been run against the bytes it describes.
+  **HIS FINDING IS TWO CLAIMS AND THEY LAND DIFFERENTLY, measured before answering
+  because his diagnosis and his instinct came apart once before (:14013).**
+  *"when a member is added as a staff there badge should also show complimentary
+  and like owner should not occupy gyms member space"*. **The SECOND half is
+  ALREADY TRUE** — `claimSeat` counts `AND m.complimentary = false AND NOT EXISTS
+  (SELECT 1 FROM gym_staff …)`, so staff have taken no seat since :14401's C/H-1;
+  verified in the SQL, not recalled. **The FIRST half is a real gap and he is
+  right**: `Members.jsx` draws its badge off `gym_members.complimentary`, which is
+  deliberately not written for staff, so **a trainer looks exactly like somebody
+  occupying a paid seat and the door and the screen disagree about who costs
+  money.** Not a wrong NUMBER (`joinedCount` asks who JOINED, and staff did) — a
+  MISSING fact rather than a false one, which is why no test and no mutant found it
+  and a person at a screen did. **Third finding on this branch produced only by
+  Kd's browser** (:12832, :12660, plus the removal confirmation at :14745).
+  **THE FIX MUST NOT BE THE OBVIOUS ONE: DO NOT WRITE `complimentary` FOR STAFF** —
+  that is exactly :14401 C/H-1, the column means "did not JOIN", and three readers
+  act on it. It needs a SEPARATE derived field meaning "takes no seat", computed
+  the way the DOOR computes it and **anchored by a test driving both** (:14013's
+  six-site precedent). **And it is a §2.4 question, not only a badge** — that
+  response's key set is asserted exactly on purpose (:10010), and telling a gym
+  that a member is staff is itself a fact about a person. **NOT BUILT (R1.1): it
+  needs a server half and the packet is mid-review-round, where :5348 rule 6
+  forbids a feature landing inside a fix round.** Own `OWED.md` line.
+
 - **:14840** — 2026-08-22 — **T3 ROUND 1 ON THE STAFF SCREEN: TWO Critical/High,
   and the packet did NOT ship this round.** Reviews :14570 and :14745. **Read
   before writing any role hint, before shipping a control whose Cancel is not

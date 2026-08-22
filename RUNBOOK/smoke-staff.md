@@ -32,7 +32,20 @@ gained a THIRD stage — picking an outcome used to do it — and Kd amended :11
 want custom role names as well as per-staff ticks. **Steps 9 and 11 below are
 rewritten for the three-tap flow; the version he ran had two.**
 
-**⚠️ THIS PASS DOES NOT COVER THE SHIPPING CODE — STEPS 9 AND 11 ARE OWED AGAIN.**
+## RE-SMOKE — STEPS 9 AND 11 PASSED 2026-08-22 (Kd), on commit `2e5500e`: "all passed"
+
+The three-tap removal was exercised in a browser on the shipping bytes: the middle
+question, the last check, **Cancel at the last check leaving everything alone**,
+and the destructive arm naming the bigger outcome in red. Both arms end with the
+list and the count correct, and "just take the keys" leaves the person on Members.
+**The gap the note below describes is now closed** — everything on this sheet has
+been run by a person on the code that ships.
+
+**HIS RE-SMOKE ALSO PRODUCED A FINDING, and it is not about these steps:** a staff
+member takes no seat but the roster does not say so. Recorded at DECISIONS
+:14953 with its own `OWED.md` line; not built here.
+
+**⚠️ THE NOTE BELOW IS WHY THIS RE-RUN HAPPENED — kept, not deleted.**
 He ran the sheet on `971836d`, which had the TWO-tap removal. `ba7bd13` rewrote
 that exact control into three taps and rewrote steps 9 and 11 *after* he had run
 them, and T3 round 1's fixes (`the next commit`) touched the same panel again.
