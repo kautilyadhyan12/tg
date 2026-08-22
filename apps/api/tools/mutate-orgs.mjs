@@ -435,7 +435,14 @@ const MUTANTS = [
   },
   {
     id: 'O34',
-    target: 'service',
+    // RE-ANCHORED 2026-08-23 (target only; the mutation is byte-identical).
+    // `ROLE_PRIVILEGES` moved to `@app/shared` with the Staff SCREEN card, for
+    // the reason the country→currency map above is there: the console has to
+    // draw the role's template when a row arrives without a stored set, and a
+    // table the web derives separately is a second answer to "what may a
+    // trainer do". Re-measured RED after the move — a re-aimed mutant is an
+    // unproven one (:8610).
+    target: 'shared',
     why: "KD'S RULING 2026-08-19: a trainer gains the power to confirm, which he reserved to owner and manager until an owner ticks it on for one named person",
     expect: 'holds a TRAINER back from confirming',
     from: '  trainer: ["members.read", "codes.invite"],',
@@ -548,7 +555,8 @@ const MUTANTS = [
   },
   {
     id: 'O46',
-    target: 'service',
+    // RE-ANCHORED 2026-08-23 with O34 and for the same reason — see there.
+    target: 'shared',
     why: "§2.2's remove/restore row widened to trainers, so anybody on staff can end a membership — the same power as confirm, which Kd explicitly held at owner and manager",
     expect: 'a trainer gets 403, another gym',
     from: '  trainer: ["members.read", "codes.invite"],',

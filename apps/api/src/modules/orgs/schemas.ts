@@ -42,7 +42,7 @@ export {
   updateOrgStaffPrivilegesRequestSchema,
   updateOrgStaffRequestSchema,
 } from "@app/shared";
-export { ORG_PRIVILEGES } from "@app/shared";
+export { ORG_PRIVILEGES, OWNER_ONLY_PRIVILEGES, ROLE_PRIVILEGES } from "@app/shared";
 export type {
   AddOrgStaffRequest,
   ConfirmApplicationResponse,

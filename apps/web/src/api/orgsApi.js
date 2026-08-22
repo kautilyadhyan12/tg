@@ -278,6 +278,32 @@ export const orgService = {
       authApi.patch(`/v1/orgs/${gymId}/staff/${userId}`, body),
     ),
 
+  /** PUT /v1/orgs/:gymId/staff/:userId/privileges — the TICK BOXES.
+   *
+   *  **PUT and not PATCH, because the body is the WHOLE set every time.** A diff
+   *  (`add`/`remove`) applied to a row somebody else has just edited produces a
+   *  set nobody chose; sending the whole set means the last writer wins on a set
+   *  a human actually looked at, and the audit row can name both ends. It is
+   *  also what makes a STALE screen safe — an owner saving from a tab opened an
+   *  hour ago overwrites with what they can see, rather than merging into
+   *  something they cannot.
+   *
+   *  **Two refusals this call gets that no other staff route does**, both 409
+   *  and both carrying a sentence written for a person, which is why the panel
+   *  prints the server's own words rather than inventing any:
+   *    · `owner_only_privilege` — managing staff cannot be given to anybody but
+   *      the owner (:11429 rule 1, and :15534 C/H-1 is what happens without it);
+   *    · `last_owner_locked` — the last owner cannot be ticked out of managing
+   *      staff, or nobody inside the gym could ever hand it out again.
+   *  The screen does not OFFER the box that causes the first (R3.3: hiding is
+   *  not the enforcement — the 409 is, and it is still handled here). */
+  updateStaffPrivileges: (gymId, userId, body) =>
+    readThrough(
+      orgStaffMutationResponseSchema,
+      'those permissions',
+      authApi.put(`/v1/orgs/${gymId}/staff/${userId}/privileges`, body),
+    ),
+
   /** DELETE /v1/orgs/:gymId/staff/:userId — take the keys back.
    *
    *  **This ends what they can DO, not whether they are IN the gym.** They stay

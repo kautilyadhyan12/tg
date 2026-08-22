@@ -22,6 +22,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getStaff: vi.fn(),
       addStaff: vi.fn(),
       updateStaffRole: vi.fn(),
+      updateStaffPrivileges: vi.fn(),
       removeStaff: vi.fn(),
       removeMember: vi.fn(),
     },
@@ -118,6 +119,7 @@ beforeEach(() => {
   orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER] } });
   orgService.addStaff.mockResolvedValue({ data: { staff: TRAINER } });
   orgService.updateStaffRole.mockResolvedValue({ data: { staff: MANAGER } });
+  orgService.updateStaffPrivileges.mockResolvedValue({ data: { staff: MANAGER } });
   orgService.removeStaff.mockResolvedValue({ data: { status: 'removed' } });
   orgService.removeMember.mockResolvedValue({ data: { status: 'removed' } });
 });
@@ -201,10 +203,20 @@ describe("the owner's own row", () => {
 // ── Changing a role ─────────────────────────────────────────────────────────
 
 describe('changing what somebody can do', () => {
+  /** THE ROLE BUTTON NOW ASKS FIRST, so every test here taps it twice — the
+   *  trigger, then the confirmation. **No assertion in this describe moved**;
+   *  what changed is that the OWNER presses the button where the app used to act
+   *  on the first tap (the :6008 precedent for a control gaining a question).
+   *  The question itself is pinned in its own describe below. */
+  const clickThroughRoleChange = (row) => {
+    fireEvent.click(within(row).getByText('Make trainer'));
+    fireEvent.click(within(row).getByText('Make trainer'));
+  };
+
   it('offers the OTHER role and sends exactly that', async () => {
     drawSettings();
     const row = await screen.findByTestId('staff-u2');
-    fireEvent.click(within(row).getByText('Make trainer'));
+    clickThroughRoleChange(row);
     await waitFor(() => expect(orgService.updateStaffRole).toHaveBeenCalledTimes(1));
     expect(orgService.updateStaffRole).toHaveBeenCalledWith(ORG.id, 'u2', { role: 'trainer' });
   });
@@ -213,7 +225,7 @@ describe('changing what somebody can do', () => {
     drawSettings();
     const row = await screen.findByTestId('staff-u2');
     expect(orgService.getStaff).toHaveBeenCalledTimes(1);
-    fireEvent.click(within(row).getByText('Make trainer'));
+    clickThroughRoleChange(row);
     await waitFor(() => expect(orgService.getStaff).toHaveBeenCalledTimes(2));
   });
 
@@ -223,9 +235,44 @@ describe('changing what somebody can do', () => {
     );
     drawSettings();
     const row = await screen.findByTestId('staff-u2');
-    fireEvent.click(within(row).getByText('Make trainer'));
+    clickThroughRoleChange(row);
     expect(await screen.findByText(/owner keeps the owner role/i)).toBeTruthy();
     expect(screen.getByText('Rita Sen')).toBeTruthy();
+  });
+
+  /** THE QUESTION ITSELF (T3 round 1 Low-6, and the reason this control gained
+   *  a stage at all). A role change RESETS the ticks to the new role's defaults,
+   *  and before this the tap was immediate — so an owner who had hand-tuned
+   *  somebody's boxes lost that work with nothing on screen saying so. */
+  it('ASKS before changing a role, and does nothing on the first tap', async () => {
+    drawSettings();
+    const row = await screen.findByTestId('staff-u2');
+    fireEvent.click(within(row).getByText('Make trainer'));
+    expect(await within(row).findByText(/permissions become the defaults/i)).toBeTruthy();
+    expect(orgService.updateStaffRole).not.toHaveBeenCalled();
+  });
+
+  /** THE WORDING IS THE FINDING AND IT IS ASSERTED AS A PROMISE, NOT AS WORDS.
+   *  "Your changes will be lost" describes only half of what happens: the new
+   *  role's defaults BECOME the set, so for somebody an owner had NARROWED the
+   *  reset hands back MORE than they had. The banned phrasing is checked too,
+   *  because it is the sentence a later edit will reach for. */
+  it('says their permissions BECOME the new defaults, not that changes are lost', async () => {
+    drawSettings();
+    const row = await screen.findByTestId('staff-u2');
+    fireEvent.click(within(row).getByText('Make trainer'));
+    const question = await within(row).findByText(/permissions become the defaults for the new role/i);
+    expect(question.textContent).not.toMatch(/will be lost|lose your changes/i);
+  });
+
+  it('CANCEL on that question changes nothing and puts the button back', async () => {
+    drawSettings();
+    const row = await screen.findByTestId('staff-u2');
+    fireEvent.click(within(row).getByText('Make trainer'));
+    fireEvent.click(within(row).getByText('Cancel'));
+    expect(orgService.updateStaffRole).not.toHaveBeenCalled();
+    expect(within(row).getByText('Make trainer')).toBeTruthy();
+    expect(within(row).queryByText(/permissions become the defaults/i)).toBeNull();
   });
 });
 
@@ -372,6 +419,7 @@ describe('taking somebody’s keys back', () => {
     drawSettings();
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Make trainer'));
+    fireEvent.click(within(row).getByText('Make trainer'));
     await screen.findByText(/Your role doesn't allow that/i);
     expect(screen.queryByText('Try again')).toBeNull();
 
@@ -384,6 +432,7 @@ describe('taking somebody’s keys back', () => {
     orgService.updateStaffRole.mockRejectedValue(offline());
     drawSettings();
     const row2 = await screen.findByTestId('staff-u2');
+    fireEvent.click(within(row2).getByText('Make trainer'));
     fireEvent.click(within(row2).getByText('Make trainer'));
     await screen.findByText(/Couldn't reach the server/i);
     expect(screen.getByText('Try again')).toBeTruthy();
@@ -651,5 +700,261 @@ describe('the Staff panel mounted on its own', () => {
     cleanup();
     render(<StaffPanel gymId={ORG.id} staffRole="owner" />);
     expect(await screen.findByText('Staff')).toBeTruthy();
+  });
+});
+
+// ── The tick boxes ──────────────────────────────────────────────────────────
+//
+// Kd's ruling :11429 reaching a person for the first time. The server half has
+// shipped and been reviewed twice; until this card an owner could not reach any
+// of it. What these pin is the three ways a permissions screen lies: offering a
+// box whose save is refused, drawing a set that is not the one the server holds,
+// and losing something the owner never saw.
+
+/** Deliberately NARROWER than the manager template, so a test that simply drew
+ *  "what a manager gets" would fail rather than pass by coincidence. */
+const MANAGER_TICKED = { ...MANAGER, privileges: ['members.read', 'codes.invite'] };
+
+/** Draws Settings, waits for the row, and opens its permissions. The `getStaff`
+ *  mock is set by each test BEFORE this runs, which is why the render happens
+ *  here rather than in `beforeEach`. */
+const openTicks = async (testId, label = 'What they can do') => {
+  drawSettings();
+  const row = await screen.findByTestId(testId);
+  fireEvent.click(within(row).getByText(label));
+  return row;
+};
+
+describe('what one person is allowed to do', () => {
+  it('ticks exactly what the SERVER says, not what the role would give', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    const row = await openTicks('staff-u2');
+    expect(within(row).getByLabelText(/See the member list/i).checked).toBe(true);
+    expect(within(row).getByLabelText(/Share the join code/i).checked).toBe(true);
+    // In the manager TEMPLATE and not in this person's set — the difference is
+    // the whole feature, and a screen reading the template would tick it.
+    expect(within(row).getByLabelText(/Remove members/i).checked).toBe(false);
+    expect(within(row).getByLabelText(/Let people into the gym/i).checked).toBe(false);
+  });
+
+  /** :15534 C/H-1 on screen. The server answers 409 `owner_only_privilege`, so
+   *  a box here would be one whose every save fails — and the escalation it
+   *  guards ended with the owner 403'd on their own member list. */
+  it('does NOT offer "Manage staff" for a manager', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    const row = await openTicks('staff-u2');
+    expect(within(row).queryByLabelText(/Manage staff/i)).toBeNull();
+    // Positive control: the boxes ARE drawn, so "no Manage staff" is not just an
+    // unopened panel satisfying the assertion.
+    expect(within(row).getByLabelText(/See the member list/i)).toBeTruthy();
+  });
+
+  it('sends the WHOLE set, including the boxes the owner never touched', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    const row = await openTicks('staff-u2');
+    fireEvent.click(within(row).getByLabelText(/Remove members/i));
+    fireEvent.click(within(row).getByText('Save permissions'));
+    await waitFor(() => expect(orgService.updateStaffPrivileges).toHaveBeenCalledTimes(1));
+    const body = orgService.updateStaffPrivileges.mock.calls[0][2];
+    expect([...body.privileges].sort()).toEqual(
+      ['codes.invite', 'members.read', 'members.remove'].sort(),
+    );
+  });
+
+  it('sends it to the right gym and the right person', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    const row = await openTicks('staff-u2');
+    fireEvent.click(within(row).getByLabelText(/Remove members/i));
+    fireEvent.click(within(row).getByText('Save permissions'));
+    await waitFor(() => expect(orgService.updateStaffPrivileges).toHaveBeenCalledTimes(1));
+    expect(orgService.updateStaffPrivileges.mock.calls[0][0]).toBe(ORG.id);
+    expect(orgService.updateStaffPrivileges.mock.calls[0][1]).toBe('u2');
+  });
+
+  it('sends an EMPTY set when every box is cleared, rather than refusing to', async () => {
+    // Somebody who can do nothing is a real thing an owner may want, and it is
+    // the server's business to refuse it if it is not. A screen that quietly
+    // declines to send it leaves an owner tapping a dead button.
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    const row = await openTicks('staff-u2');
+    fireEvent.click(within(row).getByLabelText(/See the member list/i));
+    fireEvent.click(within(row).getByLabelText(/Share the join code/i));
+    fireEvent.click(within(row).getByText('Save permissions'));
+    await waitFor(() => expect(orgService.updateStaffPrivileges).toHaveBeenCalledTimes(1));
+    expect(orgService.updateStaffPrivileges.mock.calls[0][2]).toEqual({ privileges: [] });
+  });
+
+  it('asks the server NOTHING until something actually changes', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    const row = await openTicks('staff-u2');
+    expect(within(row).getByText('Save permissions').disabled).toBe(true);
+    fireEvent.click(within(row).getByText('Save permissions'));
+    expect(orgService.updateStaffPrivileges).not.toHaveBeenCalled();
+    fireEvent.click(within(row).getByLabelText(/Remove members/i));
+    expect(within(row).getByText('Save permissions').disabled).toBe(false);
+  });
+
+  it('goes back to disabled if the owner un-does their own change', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    const row = await openTicks('staff-u2');
+    fireEvent.click(within(row).getByLabelText(/Remove members/i));
+    fireEvent.click(within(row).getByLabelText(/Remove members/i));
+    expect(within(row).getByText('Save permissions').disabled).toBe(true);
+  });
+
+  it('re-reads the list from the server after a save', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    const row = await openTicks('staff-u2');
+    expect(orgService.getStaff).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(row).getByLabelText(/Remove members/i));
+    fireEvent.click(within(row).getByText('Save permissions'));
+    await waitFor(() => expect(orgService.getStaff).toHaveBeenCalledTimes(2));
+  });
+
+  it('CANCEL throws the edit away and asks the server nothing', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    const row = await openTicks('staff-u2');
+    fireEvent.click(within(row).getByLabelText(/Remove members/i));
+    fireEvent.click(within(row).getByText('Cancel'));
+    expect(orgService.updateStaffPrivileges).not.toHaveBeenCalled();
+    // And re-opening shows the SERVER's set again, not the abandoned edit.
+    fireEvent.click(within(row).getByText('What they can do'));
+    expect(within(row).getByLabelText(/Remove members/i).checked).toBe(false);
+  });
+});
+
+describe('when the server refuses a permission change', () => {
+  /** The 409 the screen tries not to cause, handled anyway — R3.3 and :11429
+   *  rule 4: hiding the box is NOT the enforcement, so the refusal has to be
+   *  survivable however it arrives (a stale tab, a second owner, a direct call). */
+  it('shows the SERVER’s own sentence rather than one of ours', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    orgService.updateStaffPrivileges.mockRejectedValue(
+      apiError(
+        409,
+        'owner_only_privilege',
+        'Managing staff stays with the gym owner. You can give this person any of the other permissions.',
+      ),
+    );
+    const row = await openTicks('staff-u2');
+    fireEvent.click(within(row).getByLabelText(/Remove members/i));
+    fireEvent.click(within(row).getByText('Save permissions'));
+    expect(await screen.findByText(/Managing staff stays with the gym owner/i)).toBeTruthy();
+  });
+
+  it('says something TRUE about the last owner, not "something went wrong"', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    orgService.updateStaffPrivileges.mockRejectedValue(
+      apiError(
+        409,
+        'last_owner_locked',
+        'A gym last owner has to keep the ability to manage staff, or nobody could ever hand it out again.',
+      ),
+    );
+    const row = await openTicks('staff-u2');
+    fireEvent.click(within(row).getByLabelText(/Remove members/i));
+    fireEvent.click(within(row).getByText('Save permissions'));
+    expect(
+      await screen.findByText(/last owner has to keep the ability to manage staff/i),
+    ).toBeTruthy();
+  });
+
+  it('KEEPS the boxes open with the edit still in them, so nothing is retyped', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    orgService.updateStaffPrivileges.mockRejectedValue(
+      apiError(409, 'owner_only_privilege', 'Managing staff stays with the owner.'),
+    );
+    const row = await openTicks('staff-u2');
+    fireEvent.click(within(row).getByLabelText(/Remove members/i));
+    fireEvent.click(within(row).getByText('Save permissions'));
+    await screen.findByText(/Managing staff stays with the owner/i);
+    expect(within(row).getByLabelText(/Remove members/i).checked).toBe(true);
+    expect(within(row).getByText('Save permissions')).toBeTruthy();
+  });
+
+  it('offers NO Try again — re-reading the list cannot save anything', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    orgService.updateStaffPrivileges.mockRejectedValue(offline());
+    const row = await openTicks('staff-u2');
+    fireEvent.click(within(row).getByLabelText(/Remove members/i));
+    fireEvent.click(within(row).getByText('Save permissions'));
+    await screen.findByText(/Couldn't reach the server/i);
+    expect(screen.queryByText('Try again')).toBeNull();
+  });
+
+  it('closes the boxes when the save DOES land — the positive control for all of the above', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    const row = await openTicks('staff-u2');
+    fireEvent.click(within(row).getByLabelText(/Remove members/i));
+    fireEvent.click(within(row).getByText('Save permissions'));
+    await waitFor(() => expect(within(row).queryByText('Save permissions')).toBeNull());
+  });
+});
+
+describe('the owner’s own permissions', () => {
+  it('are shown, and cannot be changed from this screen', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    const row = await openTicks('staff-u1', 'What you can do');
+    expect(within(row).getByLabelText(/Manage staff/i).checked).toBe(true);
+    expect(within(row).getByLabelText(/Manage staff/i).disabled).toBe(true);
+    expect(within(row).queryByText('Save permissions')).toBeNull();
+    expect(within(row).getByText(/can't be changed here/i)).toBeTruthy();
+  });
+
+  /** It draws the STORED set, never a claim that the owner can do everything —
+   *  which is one direct API call away from being false, and a screen must not
+   *  print what it has not been told (:5807). */
+  it('shows what the server actually holds, not "you can do everything"', async () => {
+    orgService.getStaff.mockResolvedValue({
+      data: {
+        staff: [{ ...OWNER, privileges: ['members.read', 'staff.manage'] }, MANAGER_TICKED],
+      },
+    });
+    const row = await openTicks('staff-u1', 'What you can do');
+    expect(within(row).getByLabelText(/Manage staff/i).checked).toBe(true);
+    expect(within(row).getByLabelText(/Remove members/i).checked).toBe(false);
+  });
+});
+
+describe('an older server that sends no permissions at all', () => {
+  /** The window `orgStaffSchema.privileges` is optional FOR (:12660): the web
+   *  and the api deploy separately. What must never happen is a row drawn with
+   *  nothing ticked — that says a colleague can do nothing, which is false, and
+   *  an owner "correcting" it would save the falsehood into the database. */
+  it('shows what the ROLE gives, not an empty set', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER] } });
+    const row = await openTicks('staff-u2');
+    expect(within(row).getByLabelText(/See the member list/i).checked).toBe(true);
+    expect(within(row).getByLabelText(/Remove members/i).checked).toBe(true);
+    expect(within(row).getByLabelText(/Let people into the gym/i).checked).toBe(true);
+  });
+});
+
+describe('a permission this screen is too old to show', () => {
+  /** The save is the WHOLE set, so a tick this build has no words for would be
+   *  stripped by an owner who never saw it — a real loss of access from a save
+   *  they thought changed one thing. It travels through untouched, and the
+   *  screen SAYS so rather than pretending it is not there. */
+  const WITH_UNKNOWN = { ...MANAGER, privileges: ['members.read', 'billing.manage'] };
+
+  it('is carried through the save unchanged', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, WITH_UNKNOWN] } });
+    const row = await openTicks('staff-u2');
+    fireEvent.click(within(row).getByLabelText(/Remove members/i));
+    fireEvent.click(within(row).getByText('Save permissions'));
+    await waitFor(() => expect(orgService.updateStaffPrivileges).toHaveBeenCalledTimes(1));
+    expect(orgService.updateStaffPrivileges.mock.calls[0][2].privileges).toContain('billing.manage');
+  });
+
+  it('is mentioned on screen, so Save is not a silent half-truth', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, WITH_UNKNOWN] } });
+    const row = await openTicks('staff-u2');
+    expect(within(row).getByText(/too old to show/i)).toBeTruthy();
+  });
+
+  it('says nothing when there is nothing to say — the control for the line above', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    const row = await openTicks('staff-u2');
+    expect(within(row).queryByText(/too old to show/i)).toBeNull();
   });
 });

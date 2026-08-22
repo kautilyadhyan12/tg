@@ -6,9 +6,15 @@ import {
   STAFF_SEATS_NOTE,
   canChangeStaff,
   canManageStaff,
+  effectivePrivileges,
   otherStaffRole,
+  privilegeChoices,
+  privilegesDiffer,
+  roleChangeWarning,
   staffCountLabel,
   staffRoleChoices,
+  unknownPrivileges,
+  unknownPrivilegesNote,
 } from '../../pages/console/staffView';
 import { orgService, errorText, isRetryable } from '../../api/orgsApi';
 
@@ -270,7 +276,217 @@ function RemoveControl({ person, busy, onRemove }) {
   );
 }
 
-function StaffRow({ person, busy, onChangeRole, onRemove }) {
+/** THE TICK BOXES — Kd's ruling :11429 ("the three roles stay AND per-staff
+ *  privilege ticks go on top"), reaching a person for the first time.
+ *
+ *  **WHAT IS SENT IS THE WHOLE SET, EVERY TIME, and that is what makes a stale
+ *  screen safe.** A diff applied to a row somebody else has edited produces a
+ *  set nobody chose. Sending everything means the last writer wins on a set a
+ *  human actually looked at — including the ticks this build has no words for,
+ *  which travel through untouched rather than being stripped by an owner who
+ *  never saw them.
+ *
+ *  **"Manage staff" is not offered here for anybody but the owner** — see
+ *  `privilegeChoices`. Hiding it is not the enforcement (R3.3, :11429 rule 4);
+ *  the server's 409 is, and the panel prints its sentence if one ever arrives.
+ *
+ *  **The owner's own row is READ-ONLY, and that is a smaller claim than it
+ *  looks.** It draws the boxes and does not let them be tapped. The reason is
+ *  the reason the row already has no Remove and no role button: every owner is
+ *  the LAST owner, so the two ticks §2.2 keeps for the owner alone cannot come
+ *  off (the server answers `last_owner_locked`), and the rest would only ever
+ *  take an owner's own access away from them with no other route to put it back
+ *  on this screen. It shows the REAL stored set rather than claiming "you can do
+ *  everything", because that claim is one direct API call away from being false
+ *  and a screen must not print what it has not been told.
+ *
+ *  **ONE STRIP IS DELIBERATE AND IS NOT THE `unknownPrivileges` CASE.** A
+ *  MANAGER's row holding `staff.manage` gets no box for it (that box is the
+ *  owner's alone) and is therefore saved without it — silently narrowed. That is
+ *  the safe direction and it is the state the server now refuses to create at
+ *  all (409 `owner_only_privilege`, :15534 C/H-1), so such a row could only be a
+ *  leftover from before that fix; re-adding it is refused anyway. Unknown ticks
+ *  are carried through precisely because the opposite is true of them — nothing
+ *  refuses those, so dropping one would be a loss nobody chose. */
+function PrivilegesControl({ person, busy, onSave }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(null);
+
+  const current = effectivePrivileges(person);
+  const readOnly = person.role === 'owner';
+  const choices = privilegeChoices(person.role);
+  const extraNote = unknownPrivilegesNote(person);
+  const ticked = draft ?? current;
+
+  const openIt = () => {
+    setDraft(current);
+    setOpen(true);
+  };
+  const closeIt = () => {
+    setOpen(false);
+    setDraft(null);
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={openIt}
+        className="text-xs rounded-lg px-3 py-1.5 self-start"
+        style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
+      >
+        {readOnly ? 'What you can do' : 'What they can do'}
+      </button>
+    );
+  }
+
+  const toggle = (value) => {
+    if (readOnly) return;
+    setDraft((prev) => {
+      const base = prev ?? current;
+      return base.includes(value) ? base.filter((v) => v !== value) : [...base, value];
+    });
+  };
+
+  const dirty = !readOnly && privilegesDiffer(current, ticked);
+
+  return (
+    <div
+      data-testid={`privileges-${person.userId}`}
+      className="rounded-xl p-3 flex flex-col gap-2 w-full"
+      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
+    >
+      {choices.map((choice) => {
+        const on = ticked.includes(choice.value);
+        return (
+          <label key={choice.value} className="flex items-start gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={on}
+              disabled={busy || readOnly}
+              onChange={() => toggle(choice.value)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-sm" style={{ color: on ? '#fff' : 'rgba(255,255,255,0.5)' }}>
+                {choice.label}
+              </span>
+              <span className="block" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                {choice.hint}
+              </span>
+            </span>
+          </label>
+        );
+      })}
+
+      {extraNote !== null ? (
+        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          {extraNote}
+        </p>
+      ) : null}
+
+      {readOnly ? (
+        <>
+          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
+            This is what you can do. It can&apos;t be changed here — a gym has to keep somebody who
+            can hand out the keys.
+          </p>
+          <button
+            type="button"
+            onClick={closeIt}
+            className="text-xs rounded-lg px-3 py-1.5 self-start"
+            style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
+          >
+            Close
+          </button>
+        </>
+      ) : (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={busy || !dirty}
+            onClick={async () => {
+              const saved = await onSave([...ticked, ...unknownPrivileges(person)]);
+              if (saved) closeIt();
+            }}
+            className="text-xs rounded-lg px-3 py-1.5 font-semibold disabled:opacity-40"
+            style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+          >
+            {busy ? 'Saving…' : 'Save permissions'}
+          </button>
+          <button
+            type="button"
+            onClick={closeIt}
+            disabled={busy}
+            className="text-xs rounded-lg px-3 py-1.5 disabled:opacity-40"
+            style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** CHANGING SOMEBODY'S ROLE ASKS FIRST, and the question is the whole reason it
+ *  exists: **a role change RESETS their ticks to the new role's defaults**
+ *  (:15381). Before this the tap was immediate, so an owner who had hand-tuned
+ *  somebody's boxes lost that work — or, for somebody they had narrowed, handed
+ *  MORE back — with nothing on screen saying so.
+ *
+ *  The wording is fixed by T3 round 1's Low-6 and is not free to reword: "your
+ *  changes will be lost" is only half true, because the defaults BECOME the set
+ *  in both directions. `roleChangeWarning` owns the sentence. */
+function RoleChangeControl({ person, nextRole, busy, onConfirm }) {
+  const [asking, setAsking] = useState(false);
+
+  if (!asking) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAsking(true)}
+        disabled={busy}
+        className="text-xs rounded-lg px-3 py-1.5 self-start disabled:opacity-40"
+        style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
+      >
+        Make {roleLabel(nextRole).toLowerCase()}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2 w-full sm:w-auto sm:items-end">
+      <span className="text-xs sm:text-right" style={{ color: 'rgba(255,255,255,0.75)' }}>
+        {roleChangeWarning(person, nextRole)}
+      </span>
+      <div className="flex items-center gap-2 self-start sm:self-end">
+        <button
+          type="button"
+          onClick={() => {
+            setAsking(false);
+            onConfirm();
+          }}
+          disabled={busy}
+          className="text-xs rounded-lg px-3 py-1.5 font-semibold disabled:opacity-40"
+          style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+        >
+          Make {roleLabel(nextRole).toLowerCase()}
+        </button>
+        <button
+          type="button"
+          onClick={() => setAsking(false)}
+          className="text-xs rounded-lg px-3 py-1.5"
+          style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function StaffRow({ person, busy, onChangeRole, onRemove, onSavePrivileges }) {
   const changeable = canChangeStaff(person);
   const nextRole = otherStaffRole(person.role);
   // Absent rather than an em dash: `users.email` is nullable by design (an
@@ -283,52 +499,57 @@ function StaffRow({ person, busy, onChangeRole, onRemove }) {
   return (
     <div
       data-testid={`staff-${person.userId}`}
-      className="rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-3"
+      className="rounded-2xl p-4 flex flex-col gap-3"
       style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.06)' }}
     >
-      <div className="flex-1 min-w-0">
-        <div className="font-semibold truncate" style={{ color: '#fff' }}>
-          {person.displayName}
-          {person.isYou ? (
-            <span className="ml-2 text-xs font-normal" style={{ color: 'rgba(255,255,255,0.45)' }}>
-              (you)
-            </span>
-          ) : null}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold truncate" style={{ color: '#fff' }}>
+            {person.displayName}
+            {person.isYou ? (
+              <span className="ml-2 text-xs font-normal" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                (you)
+              </span>
+            ) : null}
+          </div>
+          <div className="text-xs mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>
+            {meta}
+          </div>
         </div>
-        <div className="text-xs mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          {meta}
-        </div>
+
+        {changeable ? (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-shrink-0">
+            {nextRole !== null ? (
+              <RoleChangeControl
+                person={person}
+                nextRole={nextRole}
+                busy={busy}
+                onConfirm={onChangeRole}
+              />
+            ) : null}
+            <RemoveControl person={person} busy={busy} onRemove={onRemove} />
+          </div>
+        ) : (
+          /* THE OWNER'S ROW GETS THE REASON, NOT TWO DEAD BUTTONS. Both mutations
+             refuse it — the role change with `owner_role_locked`, the removal with
+             `last_owner` — and both refusals come from the same fact: nothing in
+             the product can appoint a second owner, so every owner is the LAST
+             owner. A greyed control over a guaranteed refusal is the defect §2.2's
+             own rules warn about; a sentence states the rule instead. */
+          <span
+            className="text-xs flex-shrink-0 sm:text-right"
+            style={{ color: 'rgba(255,255,255,0.35)' }}
+          >
+            A gym can&apos;t be left with nobody in charge.
+          </span>
+        )}
       </div>
 
-      {changeable ? (
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-shrink-0">
-          {nextRole !== null ? (
-            <button
-              type="button"
-              onClick={onChangeRole}
-              disabled={busy}
-              className="text-xs rounded-lg px-3 py-1.5 self-start disabled:opacity-40"
-              style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
-            >
-              Make {roleLabel(nextRole).toLowerCase()}
-            </button>
-          ) : null}
-          <RemoveControl person={person} busy={busy} onRemove={onRemove} />
-        </div>
-      ) : (
-        /* THE OWNER'S ROW GETS THE REASON, NOT TWO DEAD BUTTONS. Both mutations
-           refuse it — the role change with `owner_role_locked`, the removal with
-           `last_owner` — and both refusals come from the same fact: nothing in
-           the product can appoint a second owner, so every owner is the LAST
-           owner. A greyed control over a guaranteed refusal is the defect §2.2's
-           own rules warn about; a sentence states the rule instead. */
-        <span
-          className="text-xs flex-shrink-0 sm:text-right"
-          style={{ color: 'rgba(255,255,255,0.35)' }}
-        >
-          A gym can&apos;t be left with nobody in charge.
-        </span>
-      )}
+      {/* THE TICKS SIT UNDER THE PERSON THEY BELONG TO, on every row including
+          the owner's — read-only there. Kd's ruling is per-STAFF-MEMBER, so a
+          screen that put them anywhere else would be describing a different
+          feature. */}
+      <PrivilegesControl person={person} busy={busy} onSave={onSavePrivileges} />
     </div>
   );
 }
@@ -402,6 +623,41 @@ export default function StaffPanel({ gymId, staffRole, orgType }) {
         message: errorText(err, "We couldn't change what they can do. Please try again."),
         retryable: isRetryable(err),
       });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  /** SAVING THE TICKS. Returns whether it landed, so the control can close on
+   *  success and stay open — with what the owner ticked still on screen — when
+   *  it did not. Closing on a refusal would throw away the edit and hide the
+   *  sentence explaining why, which is the join-code editor's recorded defect
+   *  (:14174 L-7) and the same rule the add form follows above.
+   *
+   *  **The two refusals only this route gives are shown in the SERVER's own
+   *  words**: `owner_only_privilege` ("Managing staff stays with the gym's
+   *  owner…") and `last_owner_locked` ("A gym's last owner has to keep the
+   *  ability to manage staff…"). Both are already sentences a person can read,
+   *  and re-wording them here is how the screen and the door drift apart.
+   *
+   *  **No Try again** (the rule the add form and the half-done removal already
+   *  follow): `retry` re-reads the LIST, which cannot save anything, and both
+   *  refusals above are permanent for the set that was sent — a button offering
+   *  to redo them would be promising something it does not do. */
+  const savePrivileges = async (person, privileges) => {
+    if (gymId === null) return false;
+    setBusyId(person.userId);
+    setActionError(null);
+    try {
+      await orgService.updateStaffPrivileges(gymId, person.userId, { privileges });
+      reload();
+      return true;
+    } catch (err) {
+      setActionError({
+        message: errorText(err, "We couldn't save those permissions. Please try again."),
+        retryable: false,
+      });
+      return false;
     } finally {
       setBusyId(null);
     }
@@ -558,6 +814,7 @@ export default function StaffPanel({ gymId, staffRole, orgType }) {
               busy={busyId === person.userId}
               onChangeRole={() => changeRole(person)}
               onRemove={(alsoRemoveFromGym) => removePerson(person, alsoRemoveFromGym)}
+              onSavePrivileges={(privileges) => savePrivileges(person, privileges)}
             />
           ))}
 

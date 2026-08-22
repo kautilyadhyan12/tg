@@ -9924,3 +9924,73 @@ NEXT
      orgs rounds.** Not the redesign trigger; he was told, with the
      recommendation that a fourth means rebuilding the guard once.
 ```
+
+```
+TASK: THE STAFF SCREEN'S TICK BOXES, WEB HALF (card B) — an owner can finally
+      say what ONE person may do. DECISIONS :15770. No migration.
+      apps/api's ONLY change is two constants moving to @app/shared.
+
+WHAT SHIPPED
+  · **What they can do** on every staff row: the six ticks in plain words,
+    showing the EFFECTIVE set the server holds, with Save sending the WHOLE set.
+  · "Manage staff" is not OFFERED to a non-owner — and the 409 is still handled.
+  · The owner's own row is READ-ONLY and draws the STORED set.
+  · The role button ASKS FIRST: "their permissions become the defaults for the
+    new role" (:15534 Low-6 verbatim — NOT "your changes will be lost").
+  · An unknown tick rides through the save untouched and is SAID on screen.
+
+THINGS A LATER CHAT WILL OTHERWISE GET WRONG
+  · **THE FALLBACK AND THE EMPTY ARRAY ARE DIFFERENT ANSWERS.** No `privileges`
+    key ⇒ draw the ROLE's template (:12660's deploy window; an empty row is a
+    FALSE claim an owner would then save). `privileges: []` ⇒ draw NOTHING, that
+    is a choice somebody made. Mutants S19/S20 are the pair.
+  · **ONE SILENT STRIP IS DELIBERATE**: a manager row holding `staff.manage` is
+    saved without it (no box, safe direction, server refuses to re-create it).
+    UNKNOWN ticks are the opposite — nothing refuses those, so they are carried.
+  · **THE TWO CONSTANTS ARE CONTRACT NOW.** `ROLE_PRIVILEGES` and
+    `OWNER_ONLY_PRIVILEGES` live in `@app/shared`; api re-exports them through
+    `modules/orgs/schemas.ts`. A copy on either side is a second answer.
+    Mutants O34/O46 were re-anchored `service` → `shared` and re-measured RED.
+  · **FOUR INSTRUMENT FAILURES, ALL MINE, THREE OF THEM ONE HABIT — believing a
+    tool's REPORT instead of its OUTPUT.** (1) `| head -5` masked a sweep's exit
+    code, :5906/:10596's shape a THIRD time; nothing from that run is quoted.
+    (2) The killed run left `code.paused && false` LIVE in `consoleView.js` and
+    `git status` on a file I never edited is what found it — restored and
+    verified by BLOB HASH, not on the restore's word. (3) That restore then made
+    the file CRLF in an LF tree (`autocrlf=true`) and broke C18's two-line
+    anchor — :4267's class caused by a REPAIR. (4) The web harness lacked BOTH
+    the uniqueness pre-check and `MUTATE_ONLY`.
+  · **THE UNIQUENESS GUARD FOUND S7 ON ITS FIRST RUN** — ambiguous because an
+    add-form line's 16-space indent CONTAINS its 8-space anchor. Measured 2 at
+    HEAD and 2 now: PRE-EXISTING, landing right only BY POSITION. Re-anchored,
+    re-measured RED, NOT allow-listed.
+  · **THE api HARNESS'S COMMENT ABOUT ITS SIBLING IS FALSE** — it says the web
+    harness "has had MUTATE_ONLY since :4855 F6"; that was a DIFFERENT web
+    harness. Do not trust a record's claim about a file it does not live in.
+
+GATES
+  · web **1108/1108 across 43 files, exit 0** (+51) · build ✓ · eslint exit 0 at
+    `--max-warnings=0` on all nine touched source files.
+  · orgs.routes **103/103 exit 0** · db.migration **8/8 exit 0** · shared
+    **48/48** · tsc clean (api + shared). The api suites were RE-RUN because this
+    card edits api source, small though the edit is.
+  · **API SWEEP a stated SUBSET — 2 of 104** (O34/O46), 2 RED · 0 ALIVE · 0 never
+    ran, controls green first, whole-table pre-check over all 104 rows.
+  · **WEB SWEEP on the FINAL harness and final bytes — 60 mutants · 60 RED · 0
+    ALIVE · 0 never ran, exit 0**, all 60 controls GREEN first, restores
+    sha256-verified, tree verified after (`consoleView.js` blob = HEAD's).
+    **An EARLIER complete run also read 60/60 and is NOT summed with it**
+    (:5199) — it measured a harness without the uniqueness guard, without
+    `MUTATE_ONLY`, and with S7's ambiguous anchor.
+
+NEXT
+  1. **THE SMOKE — `RUNBOOK/smoke-staff-privileges.md`, 10 steps, Kd runs it.**
+     **Step 6 is the one the card rests on**: it is the only step that proves the
+     SERVER refuses what an owner unticks, rather than the screen drawing it.
+  2. **T3 — a FRESH CHAT, never a subagent.** Prompt handed over with the commit.
+  3. `OWED.md`'s ticks line owes NO CODE any more; smoke + a round finding zero
+     Critical/High is the whole remaining gate.
+  4. Then card C: custom role names — the second migration (`gym_staff.role` is
+     `text` under a three-value CHECK, verified at `tenancy.ts:251`), the three
+     built-ins as presets, and Kd's "Change everyone on Front Desk too?" button.
+```

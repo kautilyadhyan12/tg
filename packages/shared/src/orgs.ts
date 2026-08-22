@@ -758,6 +758,94 @@ export const ORG_PRIVILEGES = [
 export const orgPrivilegeSchema = z.enum(ORG_PRIVILEGES);
 export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
 
+/** Part 3 §2.2's matrix, as the DEFAULT ticks each role starts with.
+ *
+ *  **IT LIVES HERE FOR THE REASON THE VOCABULARY ABOVE DOES (R7.2), and the
+ *  Staff screen is what moved it.** `orgStaffSchema.privileges` is OPTIONAL, so
+ *  a screen that meets a row without it has to draw SOMETHING — and the only
+ *  honest something is what that person's role grants, which is exactly what
+ *  they could do before the column existed. Computing that needs this table, so
+ *  either it is contract or the web keeps a second copy of it — and a second
+ *  copy is a second answer to "what may a trainer do", which the two sides would
+ *  then disagree about silently. The api re-exports it through
+ *  `modules/orgs/schemas.ts`; nothing derives it twice.
+ *
+ *  **This is the TEMPLATE, never the answer.** What somebody may actually do is
+ *  the stored set on their row (`privilegesFor` in the api service), and the
+ *  server is what enforces it (R3.3, :11429 rule 4). A screen reading this table
+ *  is filling a gap in a response, not deciding anything.
+ *
+ *  `members.read` and `codes.invite` reproduce §2.2's own rows exactly — the
+ *  matrix grants "Members list + detail" and "Invite (share code / print
+ *  poster)" to all three roles, and the studio/clinic trainer hold-back on the
+ *  ROSTER is a separate rule applied at its own call site (§2.3's group
+ *  scoping, still unbuildable).
+ *
+ *  `members.confirm` is an ADDITION — §2.2 predates the application door — and
+ *  it is aligned with the matrix's "Remove / restore member" row (owner and
+ *  manager, not trainer) because confirming and removing are the same power
+ *  pointed in opposite directions: both decide who is inside the gym. Kd was
+ *  given that cost before approving: a gym whose front desk is a TRAINER cannot
+ *  confirm until an owner ticks the box, and that widening is one tick rather
+ *  than a redesign (:11429 rule 3 — ticks may widen, not only narrow).
+ *
+ *  `members.remove` is §2.2's "Remove / restore member" row LITERALLY — owner
+ *  and manager, never trainer (the matrix hides Remove from a trainer by name,
+ *  §4.3). It sits beside `members.confirm` because they are the same power in
+ *  two directions, and Kd's ruling of 2026-08-19 is that the second direction
+ *  has to exist at all: confirming somebody was a one-way door until it did.
+ *
+ *  `codes.manage` is §2.2's "Create / rotate / expire codes" row LITERALLY —
+ *  owner and manager, never trainer — and it is DELIBERATELY NOT the same tick
+ *  as `codes.invite`, which the same matrix grants to all three. The two rows
+ *  are one line apart in §2.2 and mean opposite things: a trainer handing a
+ *  member the poster is inviting; a trainer switching the gym's door off is not
+ *  something the matrix ever granted. Merging them would silently widen a
+ *  trainer's power under cover of a read they already had.
+ *
+ *  `staff.manage` is §2.2's "Staff management" row LITERALLY — the ONE row in
+ *  that matrix granted to the owner and to nobody else, and the line every
+ *  product in this market draws in the same place (:11429's industry check:
+ *  money and staff belong to the owner alone). **It gates the READ as well as
+ *  the writes, which is narrower than §2.2 strictly requires** — the matrix has
+ *  no "view staff" row at all, so the choice was between owner-only and
+ *  inventing a grant. Narrow is the reversible direction: widening it later is
+ *  one tick under :11429 rule 3, whereas a manager who has been reading the
+ *  staff list for a month cannot be un-shown it. */
+export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>> = {
+  owner: [
+    "members.read",
+    "codes.invite",
+    "codes.manage",
+    "members.confirm",
+    "members.remove",
+    "staff.manage",
+  ],
+  manager: ["members.read", "codes.invite", "codes.manage", "members.confirm", "members.remove"],
+  trainer: ["members.read", "codes.invite"],
+};
+
+/** PRIVILEGES ONLY AN OWNER'S ROW MAY CARRY — §2.2's owner-alone rows, and the
+ *  enforcement of :11429 rule 1 ("only an OWNER may change anybody's ticks").
+ *
+ *  **Contract for the same reason the table above is** (:15534 C/H-1): the
+ *  server refuses one of these on a non-owner row with 409
+ *  `owner_only_privilege`, so a screen that does not know the list will draw a
+ *  box whose every save fails. It is what stops staff management being handed to
+ *  a manager, which the reviewer proved could end with the owner 403'd on their
+ *  own roster.
+ *
+ *  **Hiding a box is NOT the enforcement** (:11429 rule 4, R3.3): the 409 is,
+ *  and it stays wherever the request comes from. This list exists so the screen
+ *  does not OFFER what it knows will be refused — the defect that rule names in
+ *  advance — and a screen reading it still has to handle the refusal.
+ *
+ *  It is a LIST rather than one name because §2.2 puts money in the same
+ *  owner-alone row and BILLING has no tick yet; the day one exists it belongs
+ *  here and on the api's `LAST_OWNER_REQUIRED_PRIVILEGES` in the same commit
+ *  (`OWED.md` carries that line). */
+export const OWNER_ONLY_PRIVILEGES: readonly OrgPrivilege[] = ["staff.manage"];
+
 /** One person who runs this gym.
  *
  *  **`email` IS on this row, and it is checked against §2.4 rather than waved

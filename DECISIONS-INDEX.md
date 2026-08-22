@@ -809,6 +809,65 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:15770** — 2026-08-23 — **THE STAFF SCREEN'S TICK BOXES (web half): an owner
+  can finally say what ONE person may do — and FOUR instrument failures in one
+  afternoon, all mine.** Web half of :15381/:15534/:15673. **Read before touching
+  `StaffPanel.jsx`, `staffView.js`, `ROLE_PRIVILEGES`/`OWNER_ONLY_PRIVILEGES`,
+  before writing a mutant for `mutate-console.mjs`, and before restoring a file a
+  killed sweep left behind.** **No migration; `apps/api`'s only change is TWO
+  CONSTANTS MOVING to `@app/shared`** — the screen needs the role template (to
+  draw a row the server sent no set for) and the owner-only list (to know which
+  box never to offer), and a second copy of either is a second answer to "what
+  may a trainer do" (:15381's own R7.2 argument, applied to the tables that
+  travel with the vocabulary). Decisions not to re-derive: **the WHOLE set is
+  sent, never a diff** · **"Manage staff" is not OFFERED to a non-owner and the
+  409 is still handled** — hiding is not the enforcement (R3.3, :11429 rule 4) ·
+  **the owner's own row is READ-ONLY and draws the STORED set**, never "you can
+  do everything", which is one API call away from false (:5807) · **the role
+  button ASKS FIRST** and says *"their permissions become the defaults for the
+  new role"*, never "your changes will be lost" (:15534 Low-6 verbatim — "lost"
+  is half true, since a hand-NARROWED person gets MORE back) · **an unknown tick
+  is carried through the save untouched and SAID on screen** (the save is the
+  whole set, web and api deploy separately, a billing tick is already owed) · **an
+  absent field falls back to the ROLE's template, an EMPTY array does not** · **one
+  strip IS deliberate** (a manager row holding `staff.manage` — the safe
+  direction, and a state the server now refuses to create). Two existing role
+  tests click through the new question with **no assertion moved** (:6008).
+  **THE FOUR INSTRUMENT FAILURES ARE THE PART TO READ, and three are one habit —
+  believing a tool's REPORT instead of its OUTPUT.** (1) **I masked a sweep's exit
+  code with `| head -5`** — :5906/:10596's shape, THIRD occurrence, in the session
+  citing them; the reported exit 0 belonged to the `node --check` after it, and
+  nothing from that run is quoted. (2) **The killed run left a LIVE MUTATION in
+  the tree** (`consoleView.js` holding `code.paused && false`, a paused code
+  reading as usable) and what found it was `git status` on a file I had never
+  edited; restored and **verified by blob hash** (worktree = index = HEAD), not on
+  the restore's word. (3) **My own restore then broke the harness** — `git
+  checkout --` re-materialised the file CRLF under `autocrlf=true` in an LF tree,
+  so C18's two-line anchor matched nothing; **:4267's class caused by a REPAIR for
+  the first time here.** (4) **The web harness lacked TWO guards the api harness
+  has.** The anchor-UNIQUENESS pre-check (:15259 L-2) was never ported —
+  :14493 named the gap and only the api fixed it (:1239's instance-not-class) —
+  and on its FIRST run it **ABORTED on S7**, ambiguous because an add-form line's
+  sixteen-space indent CONTAINS its eight-space anchor; **measured both ways, 2
+  matches at HEAD and 2 now, so pre-existing debt, landing right only BY
+  POSITION** — re-anchored and re-measured RED rather than allow-listed. And
+  **`MUTATE_ONLY` did not exist here while the api harness's own comment claims it
+  does** (":4855 F6" was a DIFFERENT web harness — a claim about a sibling file
+  that nobody checked); added with the api's semantics, unknown label FATAL, both
+  pre-checks still whole-table, subset printed as one. **Both new guards proven by
+  CAUSING them.** **PROVE: web 1108/1108 exit 0 (+51) · orgs.routes 103/103 exit 0
+  · db.migration 8/8 exit 0 · shared 48/48 · build ✓ · tsc + eslint clean on nine
+  files · API SWEEP a stated SUBSET, 2 of 104 (O34/O46 re-anchored `service` →
+  `shared`, mutation byte-identical), 2 RED 0 ALIVE, whole-table pre-check over
+  all 104 · WEB SWEEP on the FINAL harness and final bytes, 60 mutants · 60 RED ·
+  0 ALIVE · 0 never ran, exit 0, all 60 controls green first. An EARLIER complete
+  run also read 60/60 and is NOT summed with it (:5199) — it measured a harness
+  without the uniqueness guard, without `MUTATE_ONLY` and with S7's ambiguous
+  anchor, so S7's RED there was a verdict on whichever line came first.** **NOTHING TICKS: the `OWED.md` ticks line owes no CODE any more — what
+  holds it open is the SMOKE (`RUNBOOK/smoke-staff-privileges.md`, 10 steps,
+  UNRUN) and T3 (UNRUN), and its step 6 is the only one that proves the SERVER
+  enforces an untick rather than the screen drawing it.**
+
 - **:15673** — 2026-08-23 — **PER-STAFF PRIVILEGE TICKS, T3 ROUND 2 (diff-only):
   ZERO Critical/High — THE PACKET SHIPS, and the fix round's own fix made a
   mutant ALIVE.** Reviews :15534. **Read before copying the last-owner guard a

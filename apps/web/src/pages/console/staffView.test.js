@@ -4,13 +4,21 @@
 // server refuses — a role it will not assign, a button on a row it will not
 // change, a count nobody can act on — or say something that is not true.
 import { describe, expect, it } from 'vitest';
+import { ROLE_PRIVILEGES } from '@app/shared';
 import {
   staffRoleChoices,
   STAFF_SEATS_NOTE,
   canChangeStaff,
   canManageStaff,
+  effectivePrivileges,
+  isOwnerOnlyPrivilege,
   otherStaffRole,
+  privilegeChoices,
+  privilegesDiffer,
+  roleChangeWarning,
   staffCountLabel,
+  unknownPrivileges,
+  unknownPrivilegesNote,
 } from './staffView';
 
 describe('who may manage staff', () => {
@@ -178,3 +186,185 @@ describe('what the screen says becoming staff costs', () => {
     expect(STAFF_SEATS_NOTE).not.toMatch(/drop|fall|fewer|one less/i);
   });
 });
+
+// ── THE TICK BOXES ──────────────────────────────────────────────────────────
+
+describe('which boxes a row is offered', () => {
+  /** T3 :15534's C/H-1, from the screen's side. The ticks route is itself gated
+   *  on `staff.manage`, so a manager holding it could change ANYBODY's ticks —
+   *  the reviewer ran the chain and the owner ended up 403'd on their own member
+   *  list. The server refuses it on a non-owner row (409 `owner_only_privilege`)
+   *  and this is the screen agreeing rather than arguing. */
+  it('NEVER offers "Manage staff" for a manager — every save of it is refused', () => {
+    expect(privilegeChoices('manager').map((c) => c.value)).not.toContain('staff.manage');
+  });
+
+  it('NEVER offers it for a trainer either', () => {
+    expect(privilegeChoices('trainer').map((c) => c.value)).not.toContain('staff.manage');
+  });
+
+  /** The refusing side for anything invented later, like `canManageStaff` and
+   *  `staffRoleChoices` above. A role this build has never heard of gets the
+   *  SMALLER set, never the keys to the gym by default. */
+  it('NEVER offers it for a role it does not know', () => {
+    expect(privilegeChoices('front_desk').map((c) => c.value)).not.toContain('staff.manage');
+    expect(privilegeChoices(null).map((c) => c.value)).not.toContain('staff.manage');
+    expect(privilegeChoices(undefined).map((c) => c.value)).not.toContain('staff.manage');
+  });
+
+  /** The OWNER's row draws it, because that row is read-only and its job is to
+   *  say what is TRUE about them. Leaving it out would under-state what the
+   *  owner can do on the one row nobody can edit. */
+  it('DOES show it on the owner’s row, which is read-only', () => {
+    expect(privilegeChoices('owner').map((c) => c.value)).toContain('staff.manage');
+  });
+
+  it('offers everything else to a manager and a trainer alike — the ROW decides, not the role', () => {
+    // The role picks the STARTING ticks; the boxes on offer are the same, or an
+    // owner could never widen a trainer, which is the whole point of :11429
+    // rule 3 ("ticks may widen, not just narrow").
+    expect(privilegeChoices('trainer').map((c) => c.value)).toEqual(
+      privilegeChoices('manager').map((c) => c.value),
+    );
+  });
+
+  it('gives every box plain words a gym owner can read, not the name in the code', () => {
+    for (const choice of privilegeChoices('manager')) {
+      expect(choice.label).not.toMatch(/[._]/);
+      expect(choice.label.length).toBeGreaterThan(4);
+      expect(choice.hint.length).toBeGreaterThan(10);
+    }
+  });
+
+  it('knows which ticks are the owner’s alone, from the shared list the server refuses on', () => {
+    expect(isOwnerOnlyPrivilege('staff.manage')).toBe(true);
+    expect(isOwnerOnlyPrivilege('members.read')).toBe(false);
+  });
+});
+
+describe('what a row shows as ticked', () => {
+  it('uses the set the SERVER sent for this person, not their role', () => {
+    // A hand-narrowed manager: fewer than the manager template.
+    expect(effectivePrivileges({ role: 'manager', privileges: ['members.read'] })).toEqual([
+      'members.read',
+    ]);
+  });
+
+  it('shows a hand-WIDENED set too — ticks widen as well as narrow', () => {
+    expect(
+      effectivePrivileges({ role: 'trainer', privileges: ['members.read', 'members.remove'] }),
+    ).toEqual(['members.read', 'members.remove']);
+  });
+
+  /** THE FALLBACK, AND IT IS THE REASON THE FIELD IS OPTIONAL (:12660). The web
+   *  and the api deploy separately, so a web build can meet an api that does not
+   *  send this field yet. Drawing NOTHING ticked would say a colleague can do
+   *  nothing — false — and an owner "fixing" it would save that falsehood. */
+  it('falls back to what the ROLE grants when the server sent no set', () => {
+    expect(effectivePrivileges({ role: 'trainer' })).toEqual([...ROLE_PRIVILEGES.trainer].sort(byOrder));
+  });
+
+  it('is NEVER empty on that fallback — an empty row is the defect it exists to prevent', () => {
+    for (const role of ['owner', 'manager', 'trainer']) {
+      expect(effectivePrivileges({ role }).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('falls back for a null or a non-array, not only for a missing key', () => {
+    expect(effectivePrivileges({ role: 'trainer', privileges: null }).length).toBeGreaterThan(0);
+    expect(effectivePrivileges({ role: 'trainer', privileges: 'members.read' }).length).toBeGreaterThan(0);
+  });
+
+  /** An EMPTY array is a real answer and must NOT be treated as absent: it means
+   *  an owner deliberately ticked everything off. Falling back there would show
+   *  ticks the server does not hold and hand the owner back what they removed. */
+  it('respects an EMPTY set — that is a choice somebody made, not a missing field', () => {
+    expect(effectivePrivileges({ role: 'manager', privileges: [] })).toEqual([]);
+  });
+
+  it('draws them in ONE order however the server listed them', () => {
+    const a = effectivePrivileges({ role: 'manager', privileges: ['members.remove', 'members.read'] });
+    const b = effectivePrivileges({ role: 'manager', privileges: ['members.read', 'members.remove'] });
+    expect(a).toEqual(b);
+  });
+
+  it('invents nothing for a role it does not know and a set it was not sent', () => {
+    expect(effectivePrivileges({ role: 'front_desk' })).toEqual([]);
+    expect(effectivePrivileges(null)).toEqual([]);
+  });
+});
+
+/** A NEWER SERVER CAN SEND A TICK THIS BUILD HAS NO WORDS FOR, and the save is
+ *  the WHOLE set — so without this the box an owner never saw would be stripped
+ *  from that person by a save they thought only changed one thing. `OWED.md`
+ *  already schedules a BILLING tick, so this is a near case, not a hypothetical. */
+describe('a permission this screen is too old to know', () => {
+  it('is picked out rather than silently dropped', () => {
+    expect(
+      unknownPrivileges({ role: 'manager', privileges: ['members.read', 'billing.manage'] }),
+    ).toEqual(['billing.manage']);
+  });
+
+  it('is not something the tick list pretends to show', () => {
+    const shown = effectivePrivileges({ role: 'manager', privileges: ['billing.manage'] });
+    expect(shown).toEqual([]);
+  });
+
+  it('is SAID, in the singular and the plural', () => {
+    expect(unknownPrivilegesNote({ role: 'manager', privileges: ['billing.manage'] })).toMatch(
+      /1 permission/,
+    );
+    expect(
+      unknownPrivilegesNote({ role: 'manager', privileges: ['billing.manage', 'tv_token'] }),
+    ).toMatch(/2 permissions/);
+  });
+
+  it('says nothing at all when there is nothing to say', () => {
+    expect(unknownPrivilegesNote({ role: 'manager', privileges: ['members.read'] })).toBeNull();
+    expect(unknownPrivilegesNote({ role: 'manager' })).toBeNull();
+  });
+});
+
+describe('whether Save has anything to save', () => {
+  it('says no when the same ticks come back in a different order', () => {
+    expect(privilegesDiffer(['a', 'b'], ['b', 'a'])).toBe(false);
+  });
+
+  it('says yes when one is added and when one is taken away', () => {
+    expect(privilegesDiffer(['a'], ['a', 'b'])).toBe(true);
+    expect(privilegesDiffer(['a', 'b'], ['a'])).toBe(true);
+  });
+
+  it('says yes when everything is taken away', () => {
+    expect(privilegesDiffer(['a'], [])).toBe(true);
+  });
+});
+
+/** T3 round 1 Low-6. A role change RESETS the ticks to the new role's defaults,
+ *  and "your changes will be lost" describes only HALF of that: for somebody an
+ *  owner had hand-NARROWED, the reset hands back MORE than they had. */
+describe('the question asked before a role changes', () => {
+  const RITA = { displayName: 'Rita Sen', role: 'manager' };
+
+  it('says their permissions BECOME the new role’s defaults', () => {
+    expect(roleChangeWarning(RITA, 'trainer')).toMatch(
+      /permissions become the defaults for the new role/i,
+    );
+  });
+
+  it('does NOT say the changes are lost, which is only half of what happens', () => {
+    expect(roleChangeWarning(RITA, 'trainer')).not.toMatch(/lost|lose/i);
+  });
+
+  it('names the person and the role being handed out', () => {
+    expect(roleChangeWarning(RITA, 'trainer')).toMatch(/Rita Sen/);
+    expect(roleChangeWarning(RITA, 'trainer')).toMatch(/trainer/i);
+  });
+});
+
+/** The drawing order, derived from the module rather than restated, so this
+ *  helper cannot disagree with the list the screen renders. */
+function byOrder(a, b) {
+  const order = privilegeChoices('owner').map((c) => c.value);
+  return order.indexOf(a) - order.indexOf(b);
+}

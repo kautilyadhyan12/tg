@@ -4703,6 +4703,19 @@ file and is stated so nobody reads these as lower priority than they are.
       smoke to run (:10010's no-screen precedent). The last-owner lockout guard
       on the TICK door landed with it (a count inside the org lock, the sibling
       of the REMOVE door's guard built at :14262).
+      **UPDATE 2026-08-23 (DECISIONS :15773) — THE SCREEN IS BUILT AND THE LINE
+      STILL DOES NOT TICK, because its two gates are unrun.** An owner opens
+      **What they can do** on any staff row and gets the boxes: the effective set
+      the server holds, `staff.manage` absent for anybody but the owner, Save
+      sending the WHOLE set, and the role button asking first because a role
+      change resets the ticks. **NOTHING IS OWED IN CODE ON THIS LINE ANY MORE**
+      — what holds it open is `RUNBOOK/smoke-staff-privileges.md` (10 steps,
+      written, UNRUN) and T3 (UNRUN). It ticks on a passed smoke plus a review
+      round finding zero Critical/High, and on nothing less (:4718 F4, :5034 —
+      ticking on code alone is this branch's most repeated bookkeeping defect).
+      **Step 6 of that sheet is the one the tick really rests on:** it is the
+      only step that proves the SERVER enforces an untick rather than the screen
+      merely drawing it (R3.3, :11429 rule 4).
 - [ ] 🟡 **A GYM CANNOT APPOINT SOMEBODY WHO IS NOT ALREADY A MEMBER — because
       the invite email cannot be sent** (deferred 2026-08-22, DECISIONS :14262).
       Part 3 §4.7 says "invite by email/phone with role"; what ships is the

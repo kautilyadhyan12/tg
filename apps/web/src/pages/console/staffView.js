@@ -1,3 +1,6 @@
+import { OWNER_ONLY_PRIVILEGES, ROLE_PRIVILEGES } from '@app/shared';
+import { roleLabel } from './consoleView';
+
 // Pure view helpers for the console's Staff section — Part 3 §4.7 ("list,
 // invite by email/phone with role, change role, remove; every staff mutation
 // audit-logged; last-owner removal blocked"), behind §2.2's owner-only "Staff
@@ -141,3 +144,162 @@ export function staffCountLabel(staff) {
  *  seat cap, so appointing somebody does not use up a paid member seat. */
 export const STAFF_SEATS_NOTE =
   "Staff don't use up one of your paid member seats.";
+
+// ── THE TICK BOXES (Kd ruling :11429, settled :15381) ───────────────────────
+//
+// The ROLE picks what somebody starts with; the TICKS are what the server
+// actually enforces. Everything below exists so the screen shows the same set
+// the server would, and never offers a box whose save is guaranteed to fail.
+
+/** WHAT EACH TICK MEANS, in words a gym owner reads.
+ *
+ *  **The order is least powerful first**, so an owner scanning down the list
+ *  meets "see who has joined" before "take somebody out of the gym", and
+ *  `staff.manage` — the one that hands over the gym itself — is last.
+ *
+ *  **The words describe what the PERSON can do, never what the code is called.**
+ *  `members.confirm` is "Let people into the gym"; nobody outside this repo has
+ *  ever heard of an application being confirmed. */
+const PRIVILEGE_COPY = [
+  {
+    value: 'members.read',
+    label: 'See the member list',
+    hint: 'Who has joined your gym, and when.',
+  },
+  {
+    value: 'codes.invite',
+    label: 'Share the join code',
+    hint: 'See the code and hand it out to new people.',
+  },
+  {
+    value: 'members.confirm',
+    label: 'Let people into the gym',
+    hint: 'Say yes or no to people waiting to join.',
+  },
+  {
+    value: 'members.remove',
+    label: 'Remove members',
+    hint: 'Take somebody out of your gym.',
+  },
+  {
+    value: 'codes.manage',
+    label: 'Change join codes',
+    hint: 'Make a new code, pause one, or give it an end date.',
+  },
+  {
+    value: 'staff.manage',
+    label: 'Manage staff',
+    hint: 'Add people, change what they can do, and take their keys back.',
+  },
+];
+
+/** The ticks in drawing order, as plain strings. */
+const PRIVILEGE_ORDER = PRIVILEGE_COPY.map((p) => p.value);
+
+/** THE BOXES THIS ROW MAY BE GIVEN — and for anybody but the owner, "Manage
+ *  staff" is not among them.
+ *
+ *  **The server refuses it with 409 `owner_only_privilege`** (:15534 C/H-1: the
+ *  ticks route is gated on that very privilege, so handing it to a manager let
+ *  that manager strip the owner, who then got 403 on their own member list).
+ *  Drawing a box whose every save is refused is the "greyed control over a live
+ *  route" :11429 rule 4 names in advance — so it is not drawn.
+ *
+ *  **This is NOT the enforcement and must never be read as it** (R3.3). The 409
+ *  is, wherever the request comes from, and `StaffPanel` still shows the
+ *  server's sentence if one arrives.
+ *
+ *  An unknown role takes the REFUSING side, like `canManageStaff` above: a role
+ *  invented later is offered the smaller set until somebody decides otherwise. */
+export function privilegeChoices(role) {
+  if (role === 'owner') return PRIVILEGE_COPY.map((choice) => ({ ...choice }));
+  return PRIVILEGE_COPY.filter((choice) => !isOwnerOnlyPrivilege(choice.value)).map((choice) => ({
+    ...choice,
+  }));
+}
+
+/** Is this one of the ticks only an owner's row may carry? Read from the shared
+ *  list the server refuses on, never from a copy written here. */
+export function isOwnerOnlyPrivilege(privilege) {
+  return OWNER_ONLY_PRIVILEGES.includes(privilege);
+}
+
+/** WHAT THIS PERSON CAN ACTUALLY DO, as the screen should draw it.
+ *
+ *  **The stored set wins; the role's template is only the fallback** — the same
+ *  order of preference the server's own `privilegesFor` uses, so the screen and
+ *  the door cannot disagree about a row.
+ *
+ *  **THE FALLBACK IS THE POINT AND IT IS NOT DEFENSIVE PADDING.**
+ *  `orgStaffSchema.privileges` is optional on purpose (:12660,
+ *  expand-then-contract): a REQUIRED key would destroy this whole screen during
+ *  any window where the web is newer than the API. What must never happen in
+ *  that window is a row drawn with NOTHING ticked — that reads as a colleague
+ *  who can do nothing, which is false, and an owner "fixing" it would save that
+ *  falsehood into the database. So an absent field falls back to what the ROLE
+ *  grants, which is exactly what that person could do before the column existed.
+ *
+ *  Ordered by `PRIVILEGE_ORDER` rather than by the server's order so one row
+ *  cannot list its ticks differently from the next. */
+export function effectivePrivileges(person) {
+  const held = Array.isArray(person?.privileges)
+    ? person.privileges
+    : (ROLE_PRIVILEGES[person?.role] ?? []);
+  return PRIVILEGE_ORDER.filter((value) => held.includes(value));
+}
+
+/** TICKS THIS BUILD HAS NO WORDS FOR — held by the row, unknown to this screen.
+ *
+ *  **Empty today and it must not stay unhandled, because the whole set is what
+ *  gets saved.** The api can gain a privilege before the web is redeployed (they
+ *  ship separately — Vercel and Hetzner), and `OWED.md` already schedules a
+ *  BILLING tick. If this screen simply drew the six it knows and then saved
+ *  them, the seventh would be stripped from that person by an owner who never
+ *  saw it and never agreed to it — a real loss of access, silently, which is
+ *  worse than anything a tick box was meant to fix.
+ *
+ *  So they are carried through the save UNCHANGED, and the panel says a line
+ *  about them rather than pretending they are not there. */
+export function unknownPrivileges(person) {
+  if (!Array.isArray(person?.privileges)) return [];
+  return person.privileges.filter(
+    (value) => typeof value === 'string' && !PRIVILEGE_ORDER.includes(value),
+  );
+}
+
+/** The sentence for those, or null when there are none. Said rather than
+ *  omitted (:9390's "say it" shape): an owner pressing Save is entitled to know
+ *  the save is not the whole story. */
+export function unknownPrivilegesNote(person) {
+  const extra = unknownPrivileges(person);
+  if (extra.length === 0) return null;
+  return extra.length === 1
+    ? 'They also have 1 permission this screen is too old to show. Saving leaves it alone.'
+    : `They also have ${extra.length} permissions this screen is too old to show. Saving leaves them alone.`;
+}
+
+/** Has the owner actually moved anything? Compared as SETS, because the order a
+ *  list arrives in is not a change anybody made — and a Save button that lights
+ *  up for nothing teaches an owner to ignore it. */
+export function privilegesDiffer(before, after) {
+  const a = [...new Set(before ?? [])].sort();
+  const b = [...new Set(after ?? [])].sort();
+  return a.length !== b.length || a.some((value, i) => value !== b[i]);
+}
+
+/** WHAT CHANGING SOMEBODY'S ROLE REALLY DOES, before the tap rather than after.
+ *
+ *  **A role change RESETS the ticks to the new role's defaults** (:15381 — and
+ *  it is deliberate: without it "change them to trainer" would leave every
+ *  manager power standing, so the one control an owner reaches for to REDUCE
+ *  access would reduce nothing).
+ *
+ *  **The wording is T3 round 1's Low-6 and the correction matters.** "Your
+ *  changes will be lost" describes only half of what happens: the new defaults
+ *  BECOME the set, so for somebody an owner had hand-NARROWED the reset can
+ *  hand back MORE than they had. "Their permissions become the defaults for the
+ *  new role" is true in both directions. */
+export function roleChangeWarning(person, nextRole) {
+  const name = person?.displayName ?? 'them';
+  return `Make ${name} a ${roleLabel(nextRole).toLowerCase()}? Their permissions become the defaults for the new role.`;
+}

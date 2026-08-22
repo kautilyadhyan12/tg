@@ -209,6 +209,36 @@ describe('orgService endpoints', () => {
     expect(seen[3]).toMatchObject({ url: '/v1/orgs/gym-1/staff/user-9', method: 'delete' });
   });
 
+  /** THE TICK BOXES. **PUT is the assertion, not decoration.** It is a THIRD
+   *  method on this path prefix and a browser reaches it only through the same
+   *  CORS preflight that left the app's DELETE dead behind 250 green server
+   *  tests (Card 4). `app.ts` lists PUT in its allowed methods; this is the
+   *  client half of the same claim, and the browser smoke is what proves the
+   *  pair end to end. */
+  it('saves permissions with PUT, on the privileges path', async () => {
+    const seen = recordRequests(authApi);
+    await orgService.updateStaffPrivileges('gym-1', 'user-9', {
+      privileges: ['members.read', 'codes.invite'],
+    });
+    expect(seen[0]).toMatchObject({
+      url: '/v1/orgs/gym-1/staff/user-9/privileges',
+      method: 'put',
+    });
+  });
+
+  /** THE WHOLE SET, never a diff — the request schema is `.strict()`, so an
+   *  `add`/`remove` shape would be a 400, and a diff applied to a row somebody
+   *  else edited produces a set nobody chose. */
+  it('sends the whole set and nothing else', async () => {
+    const seen = recordRequests(authApi);
+    await orgService.updateStaffPrivileges('gym-1', 'user-9', {
+      privileges: ['members.read', 'codes.invite'],
+    });
+    expect(JSON.parse(seen[0].data)).toEqual({
+      privileges: ['members.read', 'codes.invite'],
+    });
+  });
+
   it('sends the email and role exactly as given — the body schema is strict', async () => {
     const seen = recordRequests(authApi);
     await orgService.addStaff('gym-1', { email: 'rita@example.com', role: 'manager' });
@@ -298,6 +328,13 @@ describe('a 200 that does not match its contract is a FAILURE, not empty data (T
   it('rejects a staff row missing the fields the screen prints', async () => {
     answerWith(authApi, { staff: [{ userId: 'u2' }] }); // no role, displayName, since
     await expect(orgService.getStaff('gym-1')).rejects.toMatchObject({ isContractError: true });
+  });
+
+  it('rejects a permissions save whose answer is not the row that was written', async () => {
+    answerWith(authApi, { ok: true });
+    await expect(
+      orgService.updateStaffPrivileges('gym-1', 'u2', { privileges: [] }),
+    ).rejects.toMatchObject({ isContractError: true });
   });
 
   it('rejects an appointment whose answer is not the row that was written', async () => {

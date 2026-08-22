@@ -9,6 +9,8 @@ import { codeFromBytes, normaliseCode, slugCandidate, slugifyName } from "./code
 import * as repo from "./repo.js";
 import {
   ORG_PRIVILEGES,
+  OWNER_ONLY_PRIVILEGES,
+  ROLE_PRIVILEGES,
   confirmApplicationResponseSchema,
   createOrgResponseSchema,
   joinOrgResponseSchema,
@@ -374,58 +376,15 @@ export async function nudgeMyApplication(
 export { ORG_PRIVILEGES };
 export type { OrgPrivilege };
 
-/** Part 3 §2.2's matrix, as the DEFAULT ticks each role starts with.
+/** Part 3 §2.2's matrix, as the DEFAULT ticks each role starts with — **now in
+ *  `@app/shared`, where its own doc comment explains every row.**
  *
- *  `members.read` and `codes.invite` reproduce §2.2's own rows exactly — the
- *  matrix grants "Members list + detail" and "Invite (share code / print
- *  poster)" to all three roles, and the studio/clinic trainer hold-back on the
- *  ROSTER is a separate rule applied at its own call site (§2.3's group
- *  scoping, still unbuildable).
- *
- *  `members.confirm` is an ADDITION — §2.2 predates the application door — and
- *  it is aligned with the matrix's "Remove / restore member" row (owner and
- *  manager, not trainer) because confirming and removing are the same power
- *  pointed in opposite directions: both decide who is inside the gym. Kd was
- *  given that cost before approving: a gym whose front desk is a TRAINER
- *  cannot confirm until the tick storage lands, and widening it then is one
- *  tick rather than a redesign (:11429 rule 3 — ticks may widen, not only
- *  narrow).
- *
- *  `members.remove` is §2.2's "Remove / restore member" row LITERALLY — owner
- *  and manager, never trainer (the matrix hides Remove from a trainer by name,
- *  §4.3). It sits beside `members.confirm` because they are the same power in
- *  two directions, and Kd's ruling of 2026-08-19 is that the second direction
- *  has to exist at all: confirming somebody was a one-way door until it did.
- *
- *  `codes.manage` is §2.2's "Create / rotate / expire codes" row LITERALLY —
- *  owner and manager, never trainer — and it is DELIBERATELY NOT the same tick
- *  as `codes.invite`, which the same matrix grants to all three. The two rows
- *  are one line apart in §2.2 and mean opposite things: a trainer handing a
- *  member the poster is inviting; a trainer switching the gym's door off is not
- *  something the matrix ever granted. Merging them would silently widen a
- *  trainer's power under cover of a read they already had.
- *
- *  `staff.manage` is §2.2's "Staff management" row LITERALLY — the ONE row in
- *  that matrix granted to the owner and to nobody else, and the line every
- *  product in this market draws in the same place (:11429's industry check:
- *  money and staff belong to the owner alone). **It gates the READ as well as
- *  the writes, which is narrower than §2.2 strictly requires** — the matrix has
- *  no "view staff" row at all, so the choice was between owner-only and
- *  inventing a grant. Narrow is the reversible direction: widening it later is
- *  one tick under :11429 rule 3, whereas a manager who has been reading the
- *  staff list for a month cannot be un-shown it. */
-const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>> = {
-  owner: [
-    "members.read",
-    "codes.invite",
-    "codes.manage",
-    "members.confirm",
-    "members.remove",
-    "staff.manage",
-  ],
-  manager: ["members.read", "codes.invite", "codes.manage", "members.confirm", "members.remove"],
-  trainer: ["members.read", "codes.invite"],
-};
+ *  It moved there with the Staff SCREEN card (2026-08-23) for the reason the
+ *  vocabulary moved with the server one (R7.2): `orgStaffSchema.privileges` is
+ *  optional, so a screen meeting a row without it must draw the ROLE's template,
+ *  and a table the web derives separately is a second answer to "what may a
+ *  trainer do". Re-exported through `./schemas.js` so this file still reads as
+ *  the seam. **Nothing about the values or this module's use of them changed.** */
 
 /** WHAT THIS PERSON MAY DO, and the argument order is the whole ruling: the
  *  STORED ticks win, and the role's template is only what somebody starts with.
@@ -1166,11 +1125,14 @@ const LAST_OWNER_REQUIRED_PRIVILEGES: readonly OrgPrivilege[] = ["staff.manage"]
 
 /** PRIVILEGES ONLY AN OWNER'S ROW MAY CARRY — §2.2's owner-alone rows, and the
  *  enforcement of :11429 rule 1 ("only an OWNER may change anybody's ticks; this
- *  ruling does not widen it").
+ *  ruling does not widen it"). **The list itself is now in `@app/shared`** and
+ *  moved there with the Staff screen (2026-08-23), because a screen that does
+ *  not know it draws a box whose every save is refused; the ENFORCEMENT did not
+ *  move and is still `setStaffPrivileges`'s 409.
  *
  *  **T3 C/H-1: without this the ticks route was owner-only by ACCIDENT.** Its
  *  gate is the `staff.manage` tick, which was the owner's alone only because
- *  nothing could grant it — and granting ticks is exactly what this card built.
+ *  nothing could grant it — and granting ticks is exactly what that card built.
  *  One owner action then handed a manager the power to change anybody's
  *  privileges, the owner's included; the reviewer ran the chain and the owner
  *  ended up 403'd on their own roster.
@@ -1181,7 +1143,6 @@ const LAST_OWNER_REQUIRED_PRIVILEGES: readonly OrgPrivilege[] = ["staff.manage"]
  *  is a Kd decision with its own card, and it is the reversible direction —
  *  refusing today costs a feature nobody has asked for, while allowing it costs
  *  an escalation nobody can see. */
-const OWNER_ONLY_PRIVILEGES: readonly OrgPrivilege[] = ["staff.manage"];
 
 /** CHANGE WHAT ONE PERSON MAY DO. Owner-only — `staff.manage` is §2.2's
  *  owner-alone row and :11429 rule 1 says this ruling does not widen it.

@@ -605,8 +605,18 @@ const MUTANTS = [
     suite: SETTINGS_SUITE,
     why: 'A HALF-DONE CHANGE REPORTED AS NOTHING: the keys came back and the membership did not, and the notice goes to the add-form field instead of the screen — so it is rendered nowhere and the owner believes somebody is out of their gym who is still in it',
     expect: 'SAYS SO when the keys came back but the membership did not',
-    from: '        setActionError(',
-    to: '        setFieldError(',
+    // RE-ANCHORED 2026-08-23 by the uniqueness guard added above, on its FIRST
+    // run — and this row is why that guard is worth having. `        setActionError(`
+    // matched TWICE: here, and inside the add form's Cancel, whose sixteen-space
+    // `setActionError(null)` CONTAINS the eight-space anchor. It was ambiguous at
+    // HEAD too (measured both ways: 2 before this card and 2 after), so it is
+    // pre-existing debt rather than something a card broke — the api harness's
+    // O88 in a different file. It happened to land on the right line BY POSITION,
+    // which is exactly the property :14493 said a pre-check cannot verify.
+    // Now anchored on the notice's own first line, which appears once.
+    // Re-measured RED after re-aiming (:8610 — a re-aimed mutant is unproven).
+    from: '        setActionError({\n          message:\n            `${person.displayName} no longer runs your gym',
+    to: '        setFieldError({\n          message:\n            `${person.displayName} no longer runs your gym',
   },
   {
     id: 'S8',
@@ -691,6 +701,74 @@ const MUTANTS = [
     from: '  return member.complimentary === true;',
     to: '  return false;',
   },
+
+  // ── S17–S22: THE PER-STAFF TICK BOXES ───────────────────────────────────
+  //
+  // Scoped by :5857 rule 4a. A web card, so no database mutants — and what
+  // earns a row here is exactly 4a's own columns:
+  //   · AUTHORITY — a box offered that hands somebody the keys to the gym
+  //     (S17), and the owner's own row becoming editable (S22)
+  //   · DATA LOSS — a save that strips a permission nobody saw (S18), and a
+  //     role change that resets the ticks with no question asked (S21)
+  //   · ON SCREEN AND FALSE — a colleague drawn as able to do nothing (S19),
+  //     or as able to do what their ROLE gives rather than what they hold (S20)
+  //
+  // Deliberately NOT mutated: the wording of the six labels and hints, the
+  // order they are drawn in, the disabled state of the Save button.
+  {
+    id: 'S17',
+    target: 'staffview',
+    suite: STAFF_VIEW_SUITE,
+    why: "AUTHORITY, and it is DECISIONS :15534's C/H-1 arriving on a screen: the owner-only filter goes, so an owner is offered a Manage staff box for a MANAGER. The server refuses it (409 owner_only_privilege) — and the escalation that refusal exists to stop ended with the owner 403'd on their own member list, unable to undo it",
+    expect: 'NEVER offers "Manage staff" for a manager',
+    from: "  if (role === 'owner') return PRIVILEGE_COPY.map((choice) => ({ ...choice }));",
+    to: "  if (role !== null) return PRIVILEGE_COPY.map((choice) => ({ ...choice }));",
+  },
+  {
+    id: 'S18',
+    target: 'staffpanel',
+    suite: SETTINGS_SUITE,
+    why: 'DATA LOSS, and the kind nobody sees: the save stops carrying the ticks this build has no words for, so an owner ticking ONE box silently strips a permission that was never on their screen. The whole set is what gets written, so what is left out is what is taken away — and OWED.md already schedules a billing tick, which is exactly such a box',
+    expect: 'is carried through the save unchanged',
+    from: '              const saved = await onSave([...ticked, ...unknownPrivileges(person)]);',
+    to: '              const saved = await onSave([...ticked]);',
+  },
+  {
+    id: 'S19',
+    target: 'staffview',
+    suite: STAFF_VIEW_SUITE,
+    why: 'ON SCREEN AND FALSE (:5807): the fallback for a row the server sent no permissions for is deleted, so against an API older than this build every colleague is drawn with NOTHING ticked — a claim that they can do nothing, which is false, and an owner "correcting" it would save that falsehood into the database. The field is optional precisely so this window is survivable (:12660)',
+    expect: 'falls back to what the ROLE grants when the server sent no set',
+    from: '    : (ROLE_PRIVILEGES[person?.role] ?? []);',
+    to: '    : [];',
+  },
+  {
+    id: 'S20',
+    target: 'staffview',
+    suite: STAFF_VIEW_SUITE,
+    why: "ON SCREEN AND FALSE: the row ignores the set the server actually holds and always draws the ROLE's template, so every hand-tuned person is shown boxes that are not theirs — and the first Save writes the template over what the owner had set. It is the pre-ticks screen wearing the new code's clothes",
+    expect: 'uses the set the SERVER sent for this person, not their role',
+    from: '  const held = Array.isArray(person?.privileges)\n    ? person.privileges',
+    to: '  const held = Array.isArray(person?.privileges)\n    ? (ROLE_PRIVILEGES[person?.role] ?? [])',
+  },
+  {
+    id: 'S21',
+    target: 'staffpanel',
+    suite: SETTINGS_SUITE,
+    why: "DATA LOSS WITH NO WARNING (T3 :15534 Low-6): the question disappears and the first tap changes the role — which RESETS that person's ticks to the new role's defaults. An owner who had hand-tuned somebody loses that work, or for somebody they had narrowed hands MORE back, with nothing on screen having said so",
+    expect: 'ASKS before changing a role, and does nothing on the first tap',
+    from: '        onClick={() => setAsking(true)}',
+    to: '        onClick={onConfirm}',
+  },
+  {
+    id: 'S22',
+    target: 'staffpanel',
+    suite: SETTINGS_SUITE,
+    why: "AUTHORITY: the owner's own row becomes editable, so a gym's owner can tick away their own access on the one row nothing else on this screen can repair — and the two the server locks (last_owner_locked) would fail on save while the rest would succeed, leaving an owner who cannot read their own roster",
+    expect: 'are shown, and cannot be changed from this screen',
+    from: "  const readOnly = person.role === 'owner';",
+    to: '  const readOnly = false;',
+  },
 ];
 
 const abort = (msg) => {
@@ -723,12 +801,39 @@ const originals = new Map(
 // line an existing mutant named (O21 was the first), which is exactly the
 // recurring CLASS that :5348 rule 5 says gets a permanent guard rather than
 // another careful fix.
+/** AND IT MUST MATCH EXACTLY ONCE — ported from `apps/api/tools/mutate-orgs.mjs`
+ *  2026-08-23, where T3 L-2 on the badge card (:15093/:15259) added it.
+ *
+ *  **This harness had the "matches nothing" half and not the "matches twice"
+ *  half, and the gap was NAMED before it was fixed there** — :14493 wrote it out
+ *  in as many words: *"a pre-check that asks 'does this match?' cannot ask 'does
+ *  this match ONCE' — worth fixing in the harness"*. The api side then hit it
+ *  for real when a new 14-space line CONTAINED an existing 12-space anchor, so a
+ *  mutant silently went from one match to two while three documents recorded it
+ *  as verified. `String.replace` takes the FIRST occurrence, so an ambiguous
+ *  mutant still lands somewhere — just not provably on the line its `why`
+ *  describes, which makes its RED evidence for a claim nobody checked.
+ *
+ *  Fixing one harness and leaving its sibling is the "fixed the instance, left
+ *  the class" defect this repo has recorded since :1239, so the guard is now in
+ *  both. **There is no allow-list here and there must not be one added
+ *  casually**: the api's exists only for three rows that were already ambiguous
+ *  before it was written, and it may only shrink. Every one of this table's
+ *  anchors matches exactly once (measured when this landed) — a row that becomes
+ *  ambiguous aborts the run, which is the point. */
 for (const m of MUTANTS) {
   const original = originals.get(m.target);
-  if (!original.text.includes(m.from)) {
+  const hits = original.text.split(m.from).length - 1;
+  if (hits === 0) {
     abort(
       `${m.id}: its anchor matches nothing in '${m.target}'. Nothing has been written yet. ` +
       `Re-anchor it against the current file — a no-op mutation reports as ALIVE, which reads as "this guarantee has no test".`,
+    );
+  }
+  if (hits > 1) {
+    abort(
+      `${m.id}: its anchor matches ${String(hits)} times in '${m.target}', so the mutation lands on whichever comes FIRST rather than on the line its \`why\` describes. ` +
+      `Re-anchor it on text unique to that function. Nothing has been written yet.`,
     );
   }
 }
@@ -760,13 +865,55 @@ const run = (suite, filter) => {
 // "this guarantee has no test" and sends the next chat hunting a hole that was
 // never there.
 console.log('control (unmutated) — every filter must be GREEN and must tally ...');
+/** `MUTATE_ONLY=S7,S17` RUNS A SUBSET — added 2026-08-23, and its absence is
+ *  what made the gap worth closing.
+ *
+ *  **The api harness carries a comment saying the web side "has had this since
+ *  :4855 F6". That is FALSE of THIS harness and was measured, not assumed**: a
+ *  `MUTATE_ONLY=S7` run here was silently ignored and started a full sweep, which
+ *  a ten-minute timeout then killed MID-MUTANT, leaving `consoleView.js` holding
+ *  `code.paused && false` in the working tree. :4855 F6 was about
+ *  `mutate-date-window`; a claim true of one web harness had been generalised to
+ *  all of them, which is :2825's "an index entry you skipped is not evidence of
+ *  absence" pointed the other way — a record claiming coverage that was never
+ *  checked in the file it names.
+ *
+ *  **Why it matters beyond convenience: re-anchoring is routine here** (five
+ *  recorded occurrences on this branch alone), a re-aimed mutant is unproven
+ *  until re-measured (:8610), and without this flag re-measuring ONE of them
+ *  costs the whole hour-long table. The cost of that is not the hour — it is the
+ *  temptation to skip the re-measurement.
+ *
+ *  **An unknown label is FATAL, never a silent empty run** (:4855's own
+ *  requirement): a typo would otherwise "pass" while mutating nothing, which is
+ *  the unearned-pass shape this project has recorded six times. **The controls
+ *  and both pre-checks still run over the WHOLE table** — a subset run still
+ *  proves every anchor is sane — and the summary PRINTS that it is a subset, so
+ *  a partial figure cannot be quoted as a complete sweep (:5199). */
+const onlyRaw = process.env.MUTATE_ONLY;
+const only = onlyRaw === undefined || onlyRaw.trim() === ''
+  ? null
+  : new Set(onlyRaw.split(',').map((s) => s.trim()).filter((s) => s !== ''));
+if (only !== null) {
+  const known = new Set(MUTANTS.map((m) => m.id));
+  const unknown = [...only].filter((id) => !known.has(id));
+  if (unknown.length > 0) {
+    abort(`MUTATE_ONLY names ${unknown.join(', ')}, which are not in the table. Nothing has been run.`);
+  }
+}
+const SELECTED = only === null ? MUTANTS : MUTANTS.filter((m) => only.has(m.id));
+
 // Deduped as OBJECTS rather than by splitting a joined string: every filter
 // here contains spaces, so a naive split would run the control on the first
 // WORD of each -- a broader filter than the mutants use, i.e. the control
 // quietly checking something else.
+//
+// Built from SELECTED, so a one-mutant run pays for one control rather than
+// sixty. The pre-checks above still cover the whole table; what narrows here is
+// only how many suites are run, never how much is VERIFIED.
 const pairs = [];
 const seenPairs = new Set();
-for (const m of MUTANTS) {
+for (const m of SELECTED) {
   const key = `${m.suite} :: ${m.expect}`;
   if (seenPairs.has(key)) continue;
   seenPairs.add(key);
@@ -782,7 +929,7 @@ for (const { suite, filter } of pairs) {
 console.log('control complete\n');
 
 const results = [];
-for (const m of MUTANTS) {
+for (const m of SELECTED) {
   const target = TARGETS[m.target];
   const original = originals.get(m.target);
   const mutated = original.text.replace(m.from, m.to);
@@ -811,6 +958,15 @@ for (const m of MUTANTS) {
 
 const bad = results.filter((r) => !r.ok);
 console.log('\n--- summary ---');
+// A SUBSET SAYS SO IN ITS OWN SUMMARY (:5199). Without this line "2 mutants ·
+// 2 RED" reads exactly like a complete sweep, and a later chat quoting it would
+// be reporting coverage nobody ran.
+if (only !== null) {
+  console.log(
+    `SUBSET RUN (MUTATE_ONLY=${[...only].join(',')}) — ${SELECTED.length} of ${MUTANTS.length} mutants. ` +
+    `THIS IS NOT A FULL SWEEP; do not quote it as one.`,
+  );
+}
 console.log(
   `${results.length} mutants · ${results.filter((r) => r.verdict === 'RED').length} RED · ` +
   `${results.filter((r) => r.verdict === 'ALIVE').length} ALIVE (0 expected) · 0 never ran`,

@@ -15766,3 +15766,160 @@ summed into that figure (:5199).
 cannot reach any of this and there is still no smoke to run. Card B is the Staff
 screen; card C is custom role names and Kd's "Change everyone on Front Desk too?"
 button.
+
+## THE STAFF SCREEN'S TICK BOXES (web half): AN OWNER CAN FINALLY SAY WHAT ONE PERSON MAY DO — and four instrument failures in one afternoon, every one of them mine (2026-08-23)
+
+**Read before touching `StaffPanel.jsx`, `staffView.js`, `ROLE_PRIVILEGES` or
+`OWNER_ONLY_PRIVILEGES`, before adding a privilege to `ORG_PRIVILEGES`, before
+writing a mutant for `mutate-console.mjs`, and before restoring a file a killed
+sweep left behind.** Web half of :15381 / :15534 / :15673. **No migration, and
+`apps/api`'s only change is two constants moving to `@app/shared` — no server
+behaviour moved with them.** Card B of the three Kd approved (ticks · screen ·
+names); card C is the names.
+
+### WHAT SHIPPED
+
+Under every row on the Staff screen there is now **What they can do**: the six
+ticks, in plain words, showing the EFFECTIVE set the server holds. An owner ticks
+and presses **Save permissions**.
+
+**Decisions not to re-derive:**
+
+- **THE WHOLE SET IS SENT, never a diff** — the server's rule (:15381) reaching
+  the screen. It is also what makes a stale tab safe: an owner saving from a tab
+  opened an hour ago overwrites with what they can SEE, rather than merging into
+  something they cannot.
+- **"Manage staff" IS NOT OFFERED to anybody but the owner**, and the refusal is
+  still handled. :15534's C/H-1 is why: that tick gates the ticks route itself,
+  so a manager holding it could strip the owner, who then got 403 on their own
+  member list. Drawing a box whose every save is refused is :11429 rule 4's named
+  defect — but hiding it is NOT the enforcement (R3.3), so the 409's own sentence
+  is shown if one ever arrives (a stale tab, a direct call, a second owner).
+- **THE OWNER'S OWN ROW IS READ-ONLY**, which is the rule that row already
+  follows for Remove and for the role button. Every owner is the LAST owner, so
+  the two ticks §2.2 keeps for them cannot come off (`last_owner_locked`), and
+  the rest would only ever remove an owner's own access with no route on this
+  screen to put it back. **It draws the STORED set rather than claiming "you can
+  do everything"** — that claim is one direct API call away from being false, and
+  a screen must not print what it has not been told (:5807).
+- **THE ROLE BUTTON ASKS FIRST, and the wording is T3 :15534's Low-6 verbatim:**
+  *"their permissions become the defaults for the new role"*, never "your changes
+  will be lost". A role change RESETS the ticks, and "lost" describes only half
+  of it — for somebody an owner had hand-NARROWED, the reset hands back MORE.
+  Two existing tests now click through the question; **no assertion in them
+  moved** (:6008's precedent for a control gaining a stage).
+- **A TICK THIS BUILD HAS NO WORDS FOR IS CARRIED THROUGH THE SAVE UNTOUCHED,
+  and said on screen.** The save is the whole set, the web and api deploy
+  separately, and `OWED.md` already schedules a BILLING tick — so without this an
+  owner ticking one box would strip a permission that was never on their screen.
+  Mutant **S18**.
+- **AN ABSENT `privileges` FIELD FALLS BACK TO THE ROLE'S TEMPLATE, never to an
+  empty set.** The field is optional for :12660's expand-then-contract reason;
+  what must never happen in that window is a colleague drawn as able to do
+  nothing, because that is false and an owner "correcting" it would save the
+  falsehood. **An EMPTY ARRAY is respected as a real answer** — that is a choice
+  somebody made, and falling back there would hand back what they removed.
+  Mutants **S19**, **S20**.
+- **ONE SILENT STRIP IS DELIBERATE AND IS NOT THAT CASE:** a MANAGER row holding
+  `staff.manage` gets no box for it and is saved without it. That is the safe
+  direction, it is the state the server now refuses to create at all, and
+  re-adding it is refused anyway — the opposite of an unknown tick, which nothing
+  refuses. Written into the code rather than left to be rediscovered.
+
+### THE `apps/api` CHANGE, WHICH THE CARD SAID WOULD BE ONE LINE AND WAS TWO CONSTANTS
+
+`ROLE_PRIVILEGES` and `OWNER_ONLY_PRIVILEGES` moved to `@app/shared`, re-exported
+through `modules/orgs/schemas.ts`; the service imports them and **nothing else
+changed** (`orgs.routes` 103/103 proves it). The screen needs both — one to draw
+the role's template when a response carries no set, the other to know which box
+never to offer — and the alternative was a second copy of each, i.e. a second
+answer to "what may a trainer do". **It is the argument :15381 already made when
+it moved the vocabulary** (R7.2), applied to the two tables that travel with it.
+**Kd was told the cost before approving and told again when it grew from one line
+to two constants.**
+
+### THE INSTRUMENTS FAILED FOUR TIMES AND EVERY ONE WAS MINE
+
+**1. I MASKED A SWEEP'S EXIT CODE WITH A PIPE — :5906's and :10596's exact
+recorded shape, third occurrence, in the session that cites them.** The sweep was
+started as `node mutate-console.mjs --help 2>&1 | head -5`; `head` closed the
+pipe after five lines, the harness's verdicts went nowhere, and the `exit code 0`
+reported belonged to the `node --check` that followed. **Nothing from that run is
+quoted anywhere.** The tell was that the log held four control lines and a
+summary that never came — read the OUTPUT, never the exit status.
+
+**2. A KILLED RUN LEFT A LIVE MUTATION IN THE TREE, and what found it was
+`git status` on a file I had never edited.** A ten-minute timeout killed a sweep
+mid-mutant; `consoleView.js` was left holding `code.paused && false` — a paused
+join code reading as usable, which is precisely the guarantee C20 exists for.
+Restored and **verified by blob hash against HEAD** (`bb615d65…`, worktree =
+index = HEAD) rather than on the restore's word (:5199 F1's shape from the
+operator's side).
+
+**3. MY OWN RESTORE THEN BROKE THE HARNESS — `git checkout --` re-materialised
+the file as CRLF under `core.autocrlf=true`, in a tree that is otherwise LF**, so
+C18's two-line anchor matched nothing and the next run ABORTED naming it.
+:4267's class, and the first time in this repo it was caused by a REPAIR rather
+than by an edit. Converted back to LF; the ` M` that `git status` still shows is
+a stale stat entry with an empty `git diff` and identical blob hashes.
+
+**4. THE WEB HARNESS WAS MISSING TWO GUARDS THE API HARNESS HAS, and one of them
+found a real defect on its first run.**
+  - **Anchor uniqueness (:15259 L-2) was never ported.** :14493 named the gap in
+    as many words and the api side fixed it; fixing one harness and leaving its
+    sibling is :1239's "fixed the instance, left the class". Ported — and it
+    **ABORTED IMMEDIATELY on S7**, whose anchor `        setActionError(` matches
+    twice, the second being an add-form line whose sixteen-space indent CONTAINS
+    the eight-space anchor. **Measured both ways: 2 matches at HEAD and 2 now, so
+    it is pre-existing debt rather than something this card broke** — the api's
+    O88 in a different file. It had been landing on the right line BY POSITION,
+    which is exactly the property :14493 said a pre-check cannot verify.
+    **Re-anchored on the notice's own first line and re-measured RED** (:8610),
+    rather than allow-listed: one row is worth fixing, and an allow-list that
+    grows is not a guard.
+  - **`MUTATE_ONLY` did not exist here, and the api harness's own comment claims
+    it does** ("the web harness has had this since :4855 F6"). **False of THIS
+    harness and measured, not assumed**: the flag was ignored and started the full
+    sweep that finding 2 then killed. :4855 F6 was about `mutate-date-window`, so
+    a claim true of one web harness had been generalised to all of them. Added
+    with the api's semantics — unknown label FATAL, both pre-checks still over the
+    WHOLE table, and the summary PRINTS that it is a subset (:5199). **Both new
+    guards proven by CAUSING them**, not by reading them.
+
+**The through-line worth carrying: three of the four are one habit — believing a
+tool's report instead of its output.** The pipe reported success it never earned,
+the timeout reported a stop that was still writing files, and the restore reported
+a repair that changed the bytes it was repairing.
+
+### PROVE
+
+- web **1108/1108 across 43 files, exit 0** (+51) · `vite build` exit 0 ·
+  eslint **exit 0 at `--max-warnings=0`** on all nine touched source files.
+- `test/orgs.routes.test.ts` **103/103, exit 0** and `test/db.migration.test.ts`
+  **8/8, exit 0**, both on the LOCAL Postgres (:13659) · shared **48/48** ·
+  `tsc --noEmit` clean on api and shared. **The api suites were re-run because
+  this card edits api source**, even though only two constants moved.
+- **API SWEEP — a stated SUBSET, 2 of 104:** O34 and O46 re-anchored `service` →
+  `shared` with the mutation byte-identical, **2 mutants · 2 RED · 0 ALIVE · 0
+  never ran, exit 0**, controls GREEN first, restores sha256-verified. The
+  whole-table pre-check ran all 104 rows and passed, so no other anchor drifted.
+- **WEB SWEEP, ON THE FINAL HARNESS AND THE FINAL BYTES — 60 mutants · 60 RED ·
+  0 ALIVE · 0 never ran, exit 0**, all 60 controls GREEN through the same path
+  first, restores sha256-verified after every mutant, and the tree verified
+  afterwards (`consoleView.js` blob = HEAD's `bb615d65…`). **An EARLIER complete
+  run also read 60/60 and is NOT summed with this one** (:5199): it predates the
+  uniqueness guard, the `MUTATE_ONLY` flag and S7's re-anchor, so it measured a
+  harness that is not the committed one. **S7's RED in that earlier run was a
+  verdict on whichever line came first**, which is the whole reason it was
+  re-anchored and re-measured.
+- Re-run after the last source edit, so these are the shipping bytes: web
+  **1108/1108 exit 0**, `vite build` exit 0, eslint exit 0 at
+  `--max-warnings=0`, `node --check` on the harness.
+
+### NOTHING TICKS
+
+`OWED.md`'s ticks line is UPDATED, not ticked, and **nothing is owed on it in
+code any more** — what holds it open is `RUNBOOK/smoke-staff-privileges.md` (10
+steps, written, UNRUN) and T3 (UNRUN). **Its step 6 is the one the tick really
+rests on**: the only step that proves the SERVER refuses what an owner unticks,
+rather than the screen merely drawing it.
