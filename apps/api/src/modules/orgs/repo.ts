@@ -2162,6 +2162,7 @@ export type SetStaffPrivilegesOutcome =
   | { kind: "updated"; staff: StaffRow }
   | { kind: "unchanged"; staff: StaffRow }
   | { kind: "not_staff" }
+  | { kind: "owner_only_privilege" }
   | { kind: "last_owner_locked" };
 
 /** REPLACE ONE PERSON'S TICKS with the set an owner just looked at.
@@ -2200,6 +2201,10 @@ export async function setStaffPrivileges(
      *  here: which privileges are lockout-capable is a policy question and the
      *  service owns policy (`LAST_OWNER_REQUIRED_PRIVILEGES`). */
     lastOwnerRequires: readonly string[];
+    /** Privileges that only an OWNER's row may carry (§2.2's owner-alone rows,
+     *  :11429 rule 1). Policy, so it is the service's — `OWNER_ONLY_PRIVILEGES`
+     *  — and this file only enforces it. */
+    ownerOnly: readonly string[];
     actorUserId: string;
   },
 ): Promise<SetStaffPrivilegesOutcome> {
@@ -2213,11 +2218,50 @@ export async function setStaffPrivileges(
     if (before === undefined) return { kind: "not_staff" };
     const role = toOrgRole(before.role);
 
+    // T3 C/H-1, and it is a PRIVILEGE ESCALATION rather than a tidiness point:
+    // `staff.manage` gates this very route, so handing it to a manager hands
+    // them the power to change ANYBODY's ticks — the owner's included. The
+    // reviewer proved the whole chain by running it: a manager granted the tick
+    // stripped the owner, and the owner then got a 403 on their own roster.
+    //
+    // :11429 rule 1 is what this restores — "only an OWNER may change anybody's
+    // ticks… this ruling does not widen it" — and rule 3's licence to widen
+    // rests on it ("safe BECAUSE rule 1 means only an owner can hand out the
+    // keys"). The route's own gate could not enforce rule 1, because until this
+    // card nobody could hold that tick but an owner: **this card is what made
+    // the gate's premise false.**
+    //
+    // Refused HERE, at the write, rather than at the route: this is the only
+    // door that can put an owner-only privilege on a non-owner row (the other
+    // two writers copy a role TEMPLATE, and no template contains one), so the
+    // rule is enforced where the value is stored rather than where it is asked
+    // for. A DB-level CHECK across `role` and `privileges` was considered and
+    // NOT taken: it would need a second migration inside a fix round (:5348
+    // rule 6) and would hard-code the vocabulary into DDL a third time, which
+    // is the drift T3 Low-5's new guard exists to prevent.
+    if (role !== "owner" && input.ownerOnly.some((p) => input.privileges.includes(p))) {
+      return { kind: "owner_only_privilege" };
+    }
+
+    // T3 Low-1: this counted owner ROWS, and stripping a privilege does not
+    // remove a row, so with two owners each could strip the other and the count
+    // never fell — measured by the reviewer, both owners left unable to manage
+    // staff and nobody inside the gym able to repair it. `removeStaff`'s
+    // identically-shaped count is correct because DELETE does decrement it;
+    // copying the shape did not transfer the property.
+    //
+    // It now counts owners who still HOLD every required privilege, excluding
+    // this row — whose state after this write is the incoming set, which the
+    // condition above has already found wanting. A NULL row counts as a holder
+    // because `privilegesFor` gives it the owner template (the deploy window).
     if (role === "owner" && input.lastOwnerRequires.some((p) => !input.privileges.includes(p))) {
-      const counted = await tx<{ n: number }[]>`
+      const others = await tx<{ n: number }[]>`
         SELECT count(*)::int AS n FROM gym_staff
-        WHERE gym_id = ${input.gymId} AND role = 'owner'`;
-      if ((counted[0]?.n ?? 0) <= 1) return { kind: "last_owner_locked" };
+        WHERE gym_id = ${input.gymId}
+          AND role = 'owner'
+          AND user_id <> ${input.userId}
+          AND (privileges IS NULL OR privileges @> ${[...input.lastOwnerRequires]})`;
+      if ((others[0]?.n ?? 0) === 0) return { kind: "last_owner_locked" };
     }
 
     // A row that predates the column (`null`) is never "unchanged": writing it

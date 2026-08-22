@@ -2991,17 +2991,30 @@ d("orgs routes (real Postgres)", () => {
    *  something else (T3 round 1, C/H-1). A seat is free if and only if the SEAT
    *  CAP stops counting it, so the assertion is a gym at its cap admitting one
    *  more person. */
-  // THE TIMEOUT ON THIS AND THREE SIBLINGS IS A MEASUREMENT, NOT A NUDGE TO GET
-  // GREEN. All four are seat-cap tests that drive a subscription, a join, a
-  // confirm and an appointment through real HTTP against real Postgres, and all
-  // four sit ON the 5000 ms default. Timed at HEAD (`9a4e022`), BEFORE this
-  // card, on the local database: 4782 · 5020 · 4762 · 5017 ms — two of them
-  // already failing there, which is how this was found. The ticks card adds one
-  // column to a few SELECTs and tipped the other two over.
+  // THE TIMEOUT ON THIS AND THREE SIBLINGS, AND THE TWO MEASUREMENTS DISAGREE —
+  // T3 Low-4, which is why both are written here instead of one.
   //
-  // The file's own convention is an explicit timeout on every DB-heavy test
-  // (30_000 and 90_000 appear throughout); these four were the ones that never
-  // got one. Nothing about the assertions changes.
+  // All four are seat-cap tests driving a subscription, a join, a confirm and an
+  // appointment through real HTTP against real Postgres, and none carried an
+  // explicit timeout though the file gives one to every other DB-heavy test.
+  //   · AUTHOR, on this machine, whole-file run at HEAD (`9a4e022`), local
+  //     Postgres in Docker Desktop: 4782 · 5020 · 4762 · 5017 ms — two ALREADY
+  //     FAILING the 5000 ms default before the ticks card existed, which is how
+  //     this was found at all.
+  //   · REVIEWER, same suite, two consecutive local runs: 1412 · 1716 · 1363 ·
+  //     1348 ms. Roughly 3x faster and nowhere near the limit.
+  // Neither reading is disputed and NOBODY HAS EXPLAINED THE GAP — most likely
+  // the author's machine was running these back to back against a database
+  // already busy with the same suite. **The honest state is that the runtime is
+  // environment-dependent by ~3x, and a chat quoting either number alone is
+  // quoting one machine.**
+  //
+  // 30_000 is the file's own convention rather than a fitted number, and the
+  // cost is stated: against the reviewer's baseline it is ~21x headroom, so a
+  // real 10x regression would pass silently here. A tighter bound would re-open
+  // the flake on the slower reading. Nothing about the assertions changes — the
+  // only edit to each of the four is this options object, and a timeout cannot
+  // weaken an assertion.
   it("SEAT CAP: appointing a member frees their seat, and removing them takes it back", { timeout: 30_000 }, async () => {
     const owner = await makeUser("staff-seat-owner");
     const hire = await makeUser("staff-seat-hire");
@@ -4094,6 +4107,113 @@ d("orgs routes (real Postgres)", () => {
       "members.read",
       "staff.manage",
     ]);
+  });
+
+  /** T3 C/H-1's REGRESSION TEST, and it fails without the fix (:5348 rule 3).
+   *
+   *  **The escalation the reviewer proved by running it:** `staff.manage` gates
+   *  this very route, so one owner action handed a manager the power to change
+   *  anybody's ticks — the owner's included. His chain was grant → the manager
+   *  strips the owner → the owner gets 403 on their own roster. The route's gate
+   *  was owner-only only because nothing could grant that tick, and granting
+   *  ticks is what this card built: **the card made its own gate's premise
+   *  false.** :11429 rule 1 restored.
+   *
+   *  Asserted at BOTH ends deliberately — the refusal, and that the refusal
+   *  wrote nothing. A 409 that had already saved would be the escalation with a
+   *  polite message on top. */
+  it("ESCALATION: the owner's own power to manage staff cannot be given away", async () => {
+    const owner = await makeUser("ticks-esc-owner");
+    const manager = await makeUser("ticks-esc-manager");
+    const trainer = await makeUser("ticks-esc-trainer");
+    const org = await makeOrg(owner.cookies, "Orgs Test Ticks Escalation");
+    await joinAsMember(manager.cookies, org, owner.cookies);
+    await joinAsMember(trainer.cookies, org, owner.cookies);
+    await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-ticks-esc-manager@example.com", role: "manager" },
+      { cookies: owner.cookies },
+    );
+    await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-ticks-esc-trainer@example.com", role: "trainer" },
+      { cookies: owner.cookies },
+    );
+
+    for (const who of [manager, trainer]) {
+      const attempt = await put(
+        `/v1/orgs/${org.org.id}/staff/${who.userId}/privileges`,
+        { privileges: ["members.read", "staff.manage"] },
+        { cookies: owner.cookies },
+      );
+      expect(attempt.statusCode).toBe(409);
+      expect((JSON.parse(attempt.body) as { error: string }).error).toBe("owner_only_privilege");
+      // NOTHING WAS WRITTEN — not the forbidden tick, and not the rest of the
+      // set either: a refusal that half-applied would leave a set nobody chose.
+      expect(await storedPrivileges(org.org.id, who.userId)).not.toContain("staff.manage");
+      // ...and the door itself is still shut, which is the claim that matters.
+      expect(
+        (await get(`/v1/orgs/${org.org.id}/staff`, { cookies: who.cookies })).statusCode,
+      ).toBe(403);
+    }
+
+    // THE POSITIVE CONTROL, without which this test passes just as happily
+    // against a server that refuses every tick change: everything NOT
+    // owner-only is still grantable, and the owner keeps their own.
+    const allowed = await put(
+      `/v1/orgs/${org.org.id}/staff/${manager.userId}/privileges`,
+      { privileges: ["members.read", "codes.invite", "codes.manage", "members.confirm"] },
+      { cookies: owner.cookies },
+    );
+    expect(allowed.statusCode).toBe(200);
+    expect(await storedPrivileges(org.org.id, owner.userId)).toContain("staff.manage");
+  });
+
+  /** T3 Low-1 (latent Critical): the guard counted owner ROWS, and stripping a
+   *  privilege removes no row, so with two owners each could strip the other
+   *  and the count never fell — both left unable to manage staff, and nobody
+   *  inside the gym able to repair it.
+   *
+   *  Unreachable through the product today (`staffAssignableRoleSchema` is
+   *  `manager|trainer` and `createOrgAttempt` writes one owner), so the second
+   *  owner is inserted directly — the same way :14401's O87 test had to build
+   *  the case its own count could not tell apart. */
+  it("LOCKOUT: a second owner counts only while they still HOLD the power", async () => {
+    const owner = await makeUser("ticks-two-owner");
+    const second = await makeUser("ticks-two-second");
+    const org = await makeOrg(owner.cookies, "Orgs Test Ticks Two Owners");
+    await joinAsMember(second.cookies, org, owner.cookies);
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges)
+              VALUES (${org.org.id}, ${second.userId}, 'owner',
+                      ARRAY['codes.invite','codes.manage','members.confirm','members.read','members.remove','staff.manage']::text[])`;
+
+    // Stripping the SECOND owner is allowed — the first still holds it. This
+    // arm is the positive control: without it the test passes against a guard
+    // that refuses every owner.
+    const first = await put(
+      `/v1/orgs/${org.org.id}/staff/${second.userId}/privileges`,
+      { privileges: ["members.read"] },
+      { cookies: owner.cookies },
+    );
+    expect(first.statusCode).toBe(200);
+    expect(await storedPrivileges(org.org.id, second.userId)).toEqual(["members.read"]);
+
+    // Now the first owner is the last HOLDER, though not the last owner ROW —
+    // which is the distinction the old count could not make.
+    const second_ = await put(
+      `/v1/orgs/${org.org.id}/staff/${owner.userId}/privileges`,
+      { privileges: ["members.read"] },
+      { cookies: owner.cookies },
+    );
+    expect(second_.statusCode).toBe(409);
+    expect((JSON.parse(second_.body) as { error: string }).error).toBe("last_owner_locked");
+    expect(await storedPrivileges(org.org.id, owner.userId)).toContain("staff.manage");
+
+    // And the gym is still runnable by somebody, which is the whole point of
+    // the guard rather than a property of the error code.
+    expect(
+      (await get(`/v1/orgs/${org.org.id}/staff`, { cookies: owner.cookies })).statusCode,
+    ).toBe(200);
   });
 
   /** A DEMOTION HAS TO DEMOTE. Without the reset, "change them to trainer"

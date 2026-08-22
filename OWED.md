@@ -5000,6 +5000,13 @@ file and is stated so nobody reads these as lower priority than they are.
       inside the gym can restore it. It is a ONE-LINE change and it belongs in
       the SAME commit that creates the privilege. The guard is already written as
       a LIST for exactly this reason.
+      **WIDENED 2026-08-22 by T3 round 1 (DECISIONS :15534): there are now TWO
+      lists and billing belongs on BOTH.** `OWNER_ONLY_PRIVILEGES` is what stops
+      an owner-only power being handed to a manager at all — the round's
+      Critical/High — and `LAST_OWNER_REQUIRED_PRIVILEGES` is what stops the last
+      owner losing it. §2.2 puts money and staff in the same owner-alone row, so
+      a billing tick that lands on neither list is the escalation and the lockout
+      at once.
 - [ ] ⚪ **THREE MUTATION ANCHORS MATCH TWICE AND LAND RIGHT ONLY BY POSITION
       (O17, O29, O89 in `mutate-orgs.mjs`; found by the census T3 L-1 prompted,
       2026-08-22, DECISIONS :15259).** The pre-check now REFUSES an ambiguous

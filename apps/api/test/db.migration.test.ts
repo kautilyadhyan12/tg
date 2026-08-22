@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { seed } from "../src/db/seed.js";
+import { ORG_PRIVILEGES } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -355,5 +356,32 @@ d("0001_init on a real database", () => {
 
     await sql`DELETE FROM workouts WHERE id = ${workoutId}`;
     await sql`DELETE FROM users WHERE id = ${userId}`;
+  });
+
+  /** T3 Low-5 — a PERMANENT GUARD (:5348 rule 5) for a class this repo has no
+   *  other defence against: the SAME vocabulary written down twice.
+   *
+   *  `ORG_PRIVILEGES` in `@app/shared` and migration `0013`'s CHECK list the
+   *  same six strings, and **nothing bound them**, so each direction of drift
+   *  fails somewhere far from the edit:
+   *    · add a privilege to the code without a migration ⇒ `createOrgAttempt`
+   *      writes it into a role template and Postgres raises an unmapped 23514 —
+   *      **CREATING A GYM 500s**, not merely appointing somebody;
+   *    · drop one from the CHECK ⇒ `privilegesFor`'s filter silently narrows
+   *      every stored row, and everybody quietly loses a power.
+   *
+   *  It reads the DEPLOYED predicate rather than a copy of the DDL — the
+   *  `log_only_unscored_check` test's own lesson, one table over. */
+  it("0013's privilege CHECK lists exactly the privileges the code knows", async () => {
+    const [defRow] = await sql<{ def: string }[]>`
+      SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+      WHERE conrelid = 'gym_staff'::regclass
+        AND conname = 'gym_staff_privileges_check'`;
+    const def = defRow?.def;
+    if (def === undefined) throw new Error("gym_staff_privileges_check is not on the table");
+
+    // Every quoted string inside the deployed ARRAY[...] literal.
+    const inCheck = [...def.matchAll(/'([a-z][a-z.]*)'::text/g)].map((m) => m[1]).sort();
+    expect(inCheck).toEqual([...ORG_PRIVILEGES].sort());
   });
 });

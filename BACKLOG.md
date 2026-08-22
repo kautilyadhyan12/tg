@@ -1690,3 +1690,42 @@ generalisation from five anchors, a verification written in the past tense befor
 it happened, step numbers taken from a sheet nobody ran, and a description of a
 test that does not match the test. The code shipped correct; the account of it did
 not.
+
+## PER-STAFF PRIVILEGE TICKS (server half), T3 ROUND 1 — 2026-08-22, commit `3526a44`
+
+**ONE Critical/High — the packet did NOT ship this round** (:5348 rule 1). The
+C/H and its fix are in `DECISIONS.md`, not here; this file logs the **six Low,
+all fixed in the round**. Escape hatch NOT armed: the previous orgs round
+(:15259) found zero Critical/High, so there is no two-rounds-running trigger —
+but the reviewer noted, short of the trigger, that **two of the last three orgs
+rounds found an AUTHORITY defect** (:14401's ghost staff row, and this one). A
+third is the hatch.
+
+| # | Finding | Fix |
+|---|---|---|
+| L-1 | **LATENT CRITICAL — the last-owner guard counted owner ROWS, not owners who still HOLD the power.** Stripping a privilege removes no row, so the count never fell: with two owners each could strip the other, and the reviewer proved it by inserting a second owner directly — both left with `["members.read"]`, both 403 on the staff list, **nobody inside the gym able to repair it**. `removeStaff`'s identically-shaped count is correct because DELETE *does* decrement it; **copying the shape did not transfer the property**, and the docstring's claim that it "stays correct on the day a second owner becomes possible" was exactly backwards. Unreachable through the product today (`staffAssignableRoleSchema` is `manager\|trainer`, `createOrgAttempt` writes one owner — verified). | Counts owners **other than this row** who still hold every `lastOwnerRequires` entry (`privileges @> …`, with NULL counting as a holder because `privilegesFor` gives it the owner template). New test inserts a second owner directly and drives BOTH arms — stripping the second is allowed (the positive control), stripping the first is then refused. Mutant **O103**. |
+| L-2 | **R2.2 — an `as` cast outside an adapter file**, one of five in `apps/api/src`: `(ORG_PRIVILEGES as readonly string[]).includes(p)`, on the path every authorisation decision runs through. | A module-level `ReadonlySet<string>` and `.has(p)`. No cast, and the O(1) is incidental — the point is the rule needs no cast to express. |
+| L-3 | **`canonicalPrivileges` was exported and used nowhere outside its own module** (grep-verified; only `defaultPrivilegesFor` is imported elsewhere). | Export dropped; the function stays. |
+| L-4 | **The recorded timing baseline did not reproduce.** The author measured the four seat-cap tests at 4782 · 5020 · 4762 · 5017 ms at HEAD (two already failing); the reviewer measured 1412 · 1716 · 1363 · 1348 ms over two consecutive local runs. Neither reading is disputed and **nobody has explained the ~3x gap**. The comment presented one machine's numbers as characterising the tests, and `30_000` is ~21x the reviewer's baseline, so a genuine 10x regression now passes silently. | **Both measurements written into the comment with the environments named**, plus the sensitivity cost stated out loud. The timeout stays at the file's own convention (30_000) rather than being fitted to either reading — a tighter bound re-opens the flake on the slower one. |
+| L-5 | **Nothing bound `ORG_PRIVILEGES` to the database CHECK** — the same six strings written down twice, with each direction of drift failing far from the edit: add a privilege in code without a migration and `createOrgAttempt` raises an unmapped `23514`, so **CREATING A GYM 500s** rather than merely appointing somebody; remove one from the CHECK and `privilegesFor`'s filter silently narrows every stored row. | **A permanent guard** (:5348 rule 5) in `db.migration.test.ts`: it reads the DEPLOYED predicate from `pg_get_constraintdef` — not a copy of the DDL, which is what drifts — and asserts its string list equals `ORG_PRIVILEGES` exactly. |
+| L-6 | **The role-reset's stated cost was too small.** The comment said hand-made edits "are lost"; the ticks BECOME the new role's template, which for a hand-NARROWED person can be MORE than they had (ticked to nothing, then set to trainer ⇒ regains `members.read` + `codes.invite`). Not a silent widening — an owner tapped it — but the Staff screen's warning copy would have been written from a false description. | Comment corrected, and the wording the screen must use is named in it: **"their permissions become the defaults for the new role"**, never "your changes will be lost". |
+
+**THE REVIEWER'S RULE-4 FINDINGS, and the first is the one to carry.** Three
+tests were green while the thing they claim was broken:
+
+1. **"a MANAGER and a TRAINER are refused all five staff routes with 403" says
+   in its own comment that it shuts "the privilege-escalation door :11429 rule
+   1" — and it was green with that door WIDE OPEN.** It asserts the DEFAULT
+   state, never the invariant. Closed by the C/H's own regression test.
+2. **The LOCKOUT test could not tell the two counts apart** — one owner, so
+   "count rows" and "count holders" agree. **The identical blind spot O87 was
+   written for at the REMOVE door**, one function away.
+3. **No test bound the vocabulary to the CHECK** (L-5) — a drift went red in no
+   suite.
+
+**And the sharpest thing in the round is about the instrument, not the code:
+mutant O100's `why` claimed it guarded this exact escalation, and O100 PASSES.**
+It deletes the route's gate, which was owner-only by accident rather than by
+enforcement — **a mutation harness can only kill a guard that EXISTS.** Same
+lesson :14745 recorded when Kd's browser found what no mutant could. O100's
+wording is corrected and **O102 is the escalation itself**.

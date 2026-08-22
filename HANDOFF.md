@@ -9804,3 +9804,64 @@ NEXT
      snapshot-contradiction line TICKS; two NEW lines (NOT NULL contract ·
      billing joining the last-owner guard).
 ```
+
+```
+TASK: PER-STAFF PRIVILEGE TICKS, T3 ROUND 1 — ONE Critical/High, six Low, all
+      fixed in the round. THE PACKET DID NOT SHIP. DECISIONS :15534.
+      Reviews 3526a44. Escape hatch NOT armed (:15259 found zero).
+
+THE CRITICAL, AND IT IS THE CARD'S OWN DOING
+  · `staff.manage` gates the TICKS route. It was owner-only ONLY because nothing
+    could grant it — and granting ticks is what the card built. **The card
+    falsified its own gate's premise while the docstring went on claiming
+    "owner-only".**
+  · The reviewer RAN the chain: owner grants the tick to a manager → the manager
+    strips the OWNER → **the owner gets 403 on their own member list**.
+  · Fixed at the WRITE (`setStaffPrivileges` refuses an owner-only privilege on a
+    non-owner row, 409). **Gating the route on `role === "owner"` does NOT fix
+    it** — a manager holding the tick could still add, remove and re-role staff.
+  · **A DB CHECK across `role` + `privileges` was weighed and NOT taken**: second
+    migration inside a fix round, and a THIRD copy of the vocabulary in DDL.
+  · **CONSEQUENCE: staff management cannot be delegated at all.** §2.2's row,
+    Kd's rule 1, told to him in the fix report. Widening is his call, own card.
+
+THINGS A LATER CHAT WILL OTHERWISE GET WRONG
+  · **A MUTANT'S `why` IS NOT EVIDENCE.** O100 claimed to guard this exact
+    escalation and PASSED throughout, because it deletes a gate that was
+    owner-only by accident. **A harness can only kill a guard that EXISTS.**
+    O102 is the escalation; O103 is Low-1.
+  · **COPYING A GUARD'S SHAPE DOES NOT COPY ITS PROPERTY.** The last-owner guard
+    was `removeStaff`'s count of owner ROWS — correct there because DELETE
+    decrements, wrong here because stripping a privilege removes no row. Two
+    owners could strip each other. Now counts owners still HOLDING each required
+    privilege; the test inserts the second owner directly.
+  · **THE TIMING NUMBERS IN THE TEST FILE ARE TWO READINGS, NOT ONE.** Author
+    4782 · 5020 · 4762 · 5017 ms; reviewer 1412 · 1716 · 1363 · 1348 ms. The gap
+    is UNEXPLAINED. Quote neither alone.
+  · **The vocabulary now has a binding test** (`db.migration.test.ts`, reading
+    `pg_get_constraintdef`). Add a privilege in code without a migration and it
+    goes RED there — before `createOrgAttempt` starts 500ing on an unmapped
+    23514, which is what would have happened.
+  · **`OWNER_ONLY_PRIVILEGES` and `LAST_OWNER_REQUIRED_PRIVILEGES` are two lists
+    and billing belongs on BOTH** when it exists (`OWED.md`, widened).
+
+GATES
+  · orgs.routes **102/102, exit 0** (+2) · db.migration **8/8, exit 0** (+1) ·
+    tsc clean · eslint exit 0 at `--max-warnings=0` on the four touched files.
+  · **9 mutants · 9 RED · 0 ALIVE · 0 never ran, exit 0**, controls GREEN first,
+    restores sha256-verified. **A STATED SUBSET — 9 of 103.**
+  · **Rule 3 MEASURED rather than asserted: O102 and O103 are the two fixes' own
+    mutants and both go RED** — each fix carries a test that fails without it.
+
+NEXT
+  1. **DIFF-ONLY re-review** (:5348 rule 2) — fresh chat, never a subagent. The
+     prompt is handed over with this commit and names the three things to
+     confirm: no non-owner can end up holding `staff.manage` by ANY sequence;
+     each fix has a test that fails without it; the last-owner guard counts
+     HOLDERS.
+  2. Still no screen ⇒ still no smoke. Card B (the Staff screen's tick boxes)
+     carries it, and its warning copy must say **"their permissions become the
+     defaults for the new role"** — not "your changes will be lost" (T3 Low-6).
+  3. Then card C: custom role names, the second migration, and Kd's "Change
+     everyone on Front Desk too?" button.
+```

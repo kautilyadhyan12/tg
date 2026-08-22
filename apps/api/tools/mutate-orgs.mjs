@@ -1126,9 +1126,27 @@ const MUTANTS = [
     id: 'O96',
     target: 'repo',
     why: "LOCKOUT, and nobody inside the gym could repair it: the last-owner guard stops firing, so an owner can tick away their own staff management — the same lockout §4.7 blocks at the REMOVE door, reached through the one this ruling opened (:11429 rule 2). Handing `staff.manage` back requires `staff.manage`",
-    from: '      if ((counted[0]?.n ?? 0) <= 1) return { kind: "last_owner_locked" };',
-    to: '      if ((counted[0]?.n ?? 0) <= 0) return { kind: "last_owner_locked" };',
+    // RE-ANCHORED by T3's Low-1 fix, which replaced the owner-ROW count with a
+    // count of owners still HOLDING each required privilege.
+    from: '      if ((others[0]?.n ?? 0) === 0) return { kind: "last_owner_locked" };',
+    to: '      if ((others[0]?.n ?? 0) < 0) return { kind: "last_owner_locked" };',
     expect: 'the last owner cannot be ticked out of managing staff',
+  },
+  {
+    id: 'O102',
+    target: 'repo',
+    why: "T3 C/H-1 RESTORED — PRIVILEGE ESCALATION: a non-owner can be handed `staff.manage`, which gates the ticks route itself, so one owner action gives a manager the power to change ANYBODY's ticks including the owner's. The reviewer ran the whole chain: granted, the manager stripped the owner, and the owner got 403 on their own roster. This is :11429 rule 1 deleted, and rule 3's licence to widen rests on rule 1 holding",
+    from: '    if (role !== "owner" && input.ownerOnly.some((p) => input.privileges.includes(p))) {\n      return { kind: "owner_only_privilege" };\n    }',
+    to: '    if (false) {\n      return { kind: "owner_only_privilege" };\n    }',
+    expect: "the owner's own power to manage staff cannot be given away",
+  },
+  {
+    id: 'O103',
+    target: 'repo',
+    why: "T3 Low-1 RESTORED: the last-owner guard stops asking whether the OTHER owners still HOLD the power and counts rows again, so with two owners each can strip the other — both left unable to manage staff, and nobody inside the gym able to repair it. Stripping a privilege removes no row, which is why `removeStaff`'s identically-shaped count is correct and this one was not",
+    from: '          AND (privileges IS NULL OR privileges @> ${[...input.lastOwnerRequires]})`;',
+    to: '          `;',
+    expect: 'a second owner counts only while they still HOLD the power',
   },
   {
     id: 'O97',
@@ -1157,7 +1175,13 @@ const MUTANTS = [
   {
     id: 'O100',
     target: 'service',
-    why: "PRIVILEGE ESCALATION: changing somebody's ticks stops being owner-only and needs only `members.read`, which every trainer holds — so any staff member can tick themselves `staff.manage` and become an owner in all but name. :11429 rule 1 says this ruling does not widen who may change ticks; this is that rule deleted",
+    // WORDING CORRECTED after T3: this row's `why` used to claim it guarded the
+    // escalation door, and it was GREEN while that door stood open — the gate it
+    // deletes was owner-only by accident, not by enforcement. It guards the
+    // ROUTE's gate; **O102 is the escalation itself.** A mutant can only kill a
+    // guard that EXISTS, which is the lesson :14745 recorded when Kd's browser
+    // found what no mutant could.
+    why: "THE ROUTE'S GATE: changing somebody's ticks stops needing `staff.manage` and accepts `members.read`, which every trainer holds — so any staff member reaches the route at all. Necessary and NOT sufficient on its own: what stops a granted manager escalating is O102's refusal, not this gate",
     from: '  await requirePrivilege(deps, gymId, userId, "staff.manage");\n\n  const outcome = await repo.setStaffPrivileges(deps.sql, {',
     to: '  await requirePrivilege(deps, gymId, userId, "members.read");\n\n  const outcome = await repo.setStaffPrivileges(deps.sql, {',
     expect: 'refused all five staff routes with 403',

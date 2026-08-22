@@ -809,6 +809,50 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:15534** — 2026-08-22 — **PER-STAFF PRIVILEGE TICKS, T3 ROUND 1: ONE
+  Critical/High — THE CARD BUILT THE THING THAT MADE ITS OWN GATE'S PREMISE
+  FALSE. The packet did NOT ship this round.** Reviews :15381. **Read before
+  writing any route gated on a TICK, before copying a guard's SHAPE from a
+  neighbouring function, before quoting a mutant's `why` as evidence that
+  something is guarded, and before quoting this card's timing numbers.** Escape
+  hatch NOT armed (:15259 found zero) — **but two of the last three orgs rounds
+  found an AUTHORITY defect** (:14401's ghost staff row, and this); a third is
+  the hatch. **C/H-1: `staff.manage` gates the ticks route itself and was the
+  owner's alone ONLY because nothing could grant it — and granting ticks is what
+  this card built.** The reviewer ran the chain rather than reading it: owner
+  grants the tick to a manager → that manager grants it onward and STRIPS THE
+  OWNER → **the owner gets 403 on their own member list**. :11429 rule 1 deleted
+  in practice, and rule 3's licence to widen expressly rests on rule 1 holding.
+  **Fixed at the WRITE, not the route** — the reviewer named why gating on
+  `role === "owner"` fails (a manager holding the tick could still add, remove
+  and re-role staff) — so `setStaffPrivileges` refuses an owner-only privilege on
+  a non-owner row (409). **A DB CHECK across the two columns was weighed and NOT
+  taken**: a second migration inside a fix round, and a THIRD copy of the
+  vocabulary in DDL. **Consequence stated rather than discovered later: staff
+  management cannot be delegated at all** — §2.2's own row, Kd's to widen, and
+  the reversible direction. **Low-1 is a LATENT CRITICAL and its lesson is about
+  copying a SHAPE: the last-owner guard counted owner ROWS, and stripping a
+  privilege removes no row**, so two owners could strip each other and the count
+  never fell; `removeStaff`'s identical shape is correct because DELETE
+  decrements. Now counts owners still HOLDING each required privilege.
+  **RULE 4 — THREE GREEN LIARS, and one is a MUTANT: O100's `why` claimed it
+  guarded this exact escalation and O100 PASSES**, because it deletes a gate that
+  was owner-only by accident rather than by enforcement — **a harness can only
+  kill a guard that EXISTS** (:14745's lesson). O102 is the escalation, O103 is
+  Low-1. Also green while broken: the five-routes test, whose own comment claims
+  it shuts this door, and the LOCKOUT test, which had one owner and could not
+  tell the two counts apart (:14401's O87 blind spot at the other door).
+  **Low-4: MY TIMING BASELINE DID NOT REPRODUCE** — author 4782 · 5020 · 4762 ·
+  5017 ms, reviewer 1412 · 1716 · 1363 · 1348 ms, gap unexplained, **both now in
+  the test file with their environments** and the sensitivity cost stated
+  (~21x headroom hides a 10x regression). **Low-5 is a permanent guard**: nothing
+  bound `ORG_PRIVILEGES` to the database CHECK, so the new test reads the
+  DEPLOYED predicate from `pg_get_constraintdef` rather than a copy of the DDL.
+  **PROVE: orgs.routes 102/102 exit 0 · db.migration 8/8 exit 0 · tsc + eslint
+  clean · 9 mutants · 9 RED · 0 ALIVE · 0 never ran, a stated SUBSET (9 of 103).
+  Rule 3 MEASURED — O102 and O103 are the two fixes' own mutants and both go
+  RED.** **NOTHING TICKS; the remaining gate is the DIFF-ONLY re-review.**
+
 - **:15381** — 2026-08-22 — **PER-STAFF PRIVILEGE TICKS (server half): a gym can
   say what ONE person may do — and KD SETTLED the snapshot-vs-named-role question
   :14745 left open.** **Read before touching `gym_staff`, before adding a

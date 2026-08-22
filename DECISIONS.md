@@ -15530,3 +15530,142 @@ reach any of it** — there is no screen. `OWED.md`'s ticks line is UPDATED, not
 ticked; the snapshot-contradiction line TICKS on Kd's ruling alone. **T3 is the
 only gate this packet can pass today**, and a fresh chat runs it (never a
 subagent).
+
+## PER-STAFF PRIVILEGE TICKS, T3 ROUND 1: ONE CRITICAL/HIGH — THE CARD BUILT THE THING THAT MADE ITS OWN GATE'S PREMISE FALSE (2026-08-22)
+
+Reviews `3526a44` (:15381). **The packet did NOT ship this round** (:5348 rule
+1). **Read before writing any route gated on a TICK, before copying a guard's
+SHAPE from a neighbouring function, before quoting a mutant's `why` as evidence
+that something is guarded, and before quoting this card's timing numbers.**
+Escape hatch NOT armed — the previous orgs round (:15259) found zero — **but the
+reviewer said, short of the trigger, that two of the last three orgs rounds found
+an AUTHORITY defect** (:14401's ghost staff row, and this). A third is the hatch.
+
+### C/H-1 — A PRIVILEGE ESCALATION, AND THE CARD IS WHAT CREATED IT
+
+`staff.manage` gates the ticks route itself. It was the owner's alone **only
+because nothing could grant it** — and granting ticks is precisely what this card
+built, so **the card falsified its own gate's premise while its docstring went on
+claiming "owner-only".** One owner action then handed a manager the power to
+change ANYBODY's ticks.
+
+**The reviewer proved the whole chain by running it, not by reading it:** owner
+grants `staff.manage` to a manager (200) → that manager grants it to a trainer
+(200) → that manager strips the OWNER (200, owner left holding `staff.manage`
+alone... then nothing) → **the owner gets 403 on their own member list** → the
+manager removes the trainer from staff (200). :11429 rule 1 — "only an OWNER may
+change anybody's ticks; this ruling does not widen it" — deleted in practice, and
+**rule 3's licence to widen expressly rests on rule 1 holding** ("safe BECAUSE
+rule 1 means only an owner can hand out the keys").
+
+**FIXED at the WRITE, not at the route**, and the reviewer named why the obvious
+alternative fails: gating the route on `authority.role === "owner"` leaves a
+manager holding the tick still able to add staff, remove staff and change roles,
+so it does not restore rule 1. `setStaffPrivileges` now refuses any incoming set
+that puts an OWNER-ONLY privilege on a non-owner row (`OWNER_ONLY_PRIVILEGES`,
+409 `owner_only_privilege`). It is the only door that can do that — the other two
+writers copy a role TEMPLATE and no template contains one — so the rule is
+enforced where the value is stored.
+
+**A DB-level CHECK across `role` and `privileges` was considered and NOT taken:**
+a second migration inside a fix round (:5348 rule 6), and it would hard-code the
+vocabulary into DDL a THIRD time — the drift Low-5's new guard exists to stop.
+Recorded so a later chat knows it was weighed rather than missed.
+
+**THE CONSEQUENCE, STATED RATHER THAN DISCOVERED LATER: staff management cannot
+be delegated at all.** An owner cannot make anybody else able to hire, fire or
+change permissions. That is §2.2's own row and Kd's rule 1, so it is not this
+card's to widen — and it is the reversible direction: refusing today costs a
+feature nobody has asked for, allowing it costs an escalation nobody can see. Kd
+was told in the fix report. Widening is his ruling and its own card.
+
+### Low-1 — LATENT CRITICAL, AND THE LESSON IS ABOUT COPYING A SHAPE
+
+The last-owner guard counted owner ROWS. **Stripping a privilege removes no
+row**, so the count never fell: with two owners each could strip the other, and
+the reviewer demonstrated it — both left with `["members.read"]`, both 403 on the
+staff list, **nobody inside the gym able to repair it**, because handing
+`staff.manage` back requires `staff.manage`.
+
+`removeStaff`'s identically-shaped count is CORRECT, because `DELETE` does
+decrement it. **Copying the shape did not transfer the property** — and the
+docstring's proud claim that it "stays correct on the day a second owner becomes
+possible" was exactly backwards. It now counts owners OTHER than this row who
+still HOLD every required privilege (`privileges @> …`; a NULL row counts, since
+`privilegesFor` gives it the owner template). Unreachable through the product
+today, and its test therefore inserts the second owner directly — the same way
+:14401's O87 test had to build the case its own count could not tell apart.
+
+### RULE 4 — THREE TESTS WERE GREEN WHILE WHAT THEY CLAIM WAS BROKEN, AND ONE OF THEM IS A MUTANT
+
+1. **"a MANAGER and a TRAINER are refused all five staff routes with 403" says in
+   its own comment that it shuts "the privilege-escalation door :11429 rule 1",
+   and it was green with that door WIDE OPEN.** It asserts the DEFAULT state,
+   never the invariant.
+2. **The LOCKOUT test could not tell the two counts apart** — one owner, so
+   "count rows" and "count holders" agree. :14401's O87 blind spot, one function
+   away, at the other door.
+3. **Nothing bound `ORG_PRIVILEGES` to the database CHECK** (Low-5).
+
+**AND THE SHARPEST: mutant O100's `why` claimed it guarded this exact escalation,
+and O100 PASSES.** It deletes the ROUTE's gate — which was owner-only by accident
+rather than by enforcement — so it was never evidence for the claim its own text
+made. **A mutation harness can only kill a guard that EXISTS**, the lesson
+:14745 recorded when Kd's browser found what no mutant could. O100's wording is
+corrected; **O102 is the escalation itself** and **O103 is Low-1**.
+
+### Low-4 — MY OWN MEASUREMENT DID NOT REPRODUCE, AND BOTH READINGS ARE NOW IN THE FILE
+
+The four seat-cap tests were recorded at **4782 · 5020 · 4762 · 5017 ms** at
+HEAD, two already failing the 5000 ms default. The reviewer measured **1412 ·
+1716 · 1363 · 1348 ms** over two consecutive local runs — roughly 3x faster and
+nowhere near the limit. **Neither reading is disputed and nobody has explained
+the gap**; the likeliest cause is the author running them back to back against a
+database already busy with the same suite. Both are now written into the test
+file with their environments, along with the cost: at the reviewer's baseline
+`30_000` is ~21x headroom, so a genuine 10x regression passes silently. The
+timeout stays at the file's own convention rather than being fitted to either
+reading — a tighter bound re-opens the flake on the slower one. **The standing
+point: a number measured on one machine is a fact about that machine** (:13746's
+"a number quoted from one run is a coin toss with a citation", one axis over).
+
+### THE OTHER FOUR LOWS
+
+`BACKLOG.md` carries all six in full. In short: **L-2** an `as` cast outside an
+adapter file (R2.2) on the path every authorisation decision runs through, now a
+`ReadonlySet`; **L-3** `canonicalPrivileges` exported and used nowhere outside
+its module; **L-5** the vocabulary written down twice with nothing binding it —
+now a **permanent guard** (:5348 rule 5) reading the DEPLOYED predicate out of
+`pg_get_constraintdef` and asserting it equals `ORG_PRIVILEGES`, because a copy
+of the DDL is the thing that drifts; **L-6** the role-reset's stated cost was too
+small — the ticks BECOME the new template, which for a hand-NARROWED person can
+be MORE than they had, so the Staff screen's warning must read "their permissions
+become the defaults for the new role" and never "your changes will be lost".
+
+### WHAT THE REVIEWER CONFIRMED RATHER THAN FOUND
+
+The NULL window is genuinely closed — **four write sites and no more**,
+grep-verified over the whole tree, all four supplying the column; `privacy/
+tables.ts` only deletes and no seed touches the table. The R4.4 backfill
+departure is defensible on the measured 2 rows, is idempotent by its own `WHERE`,
+and its three sets match `ROLE_PRIVILEGES` character for character. The
+role-reset does not silently widen through the obvious doors (same-role PATCH
+short-circuits to `unchanged`; a repeat POST is `ON CONFLICT DO NOTHING`).
+Security clean on authn, tenancy, input parsing, idempotency, logs and SQL.
+
+### PROVE (fix round, local Postgres)
+
+`test/orgs.routes.test.ts` **102/102, exit 0** (+2) · `test/db.migration.test.ts`
+**8/8, exit 0** (+1, the new permanent guard) · tsc clean · eslint **exit 0 at
+`--max-warnings=0`** on the four touched files · **9 mutants · 9 RED · 0 ALIVE ·
+0 never ran, exit 0**, controls GREEN through the same path first, restores
+sha256-verified, **and the harness prints that it is a SUBSET — 9 of 103**.
+**Rule 3 is MEASURED, not asserted: O102 and O103 are the two fixes' own
+mutants** and both go RED, i.e. each fix carries a test that fails without it.
+
+### NOTHING TICKS
+
+`OWED.md` is unchanged by this round except the billing line, which now names
+the owner-only list as well as the lockout list. **The remaining gate is a
+DIFF-ONLY re-review** (:5348 rule 2); its prompt is handed over with the commit.
+There is still no screen, so there is still no smoke.

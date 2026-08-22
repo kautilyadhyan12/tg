@@ -451,10 +451,14 @@ function privilegesFor(role: OrgRole, stored: readonly string[] | null): readonl
   // The DATABASE's own CHECK restricts this column to the vocabulary, but a
   // value read back is external input all the same (R2.3): anything the enum
   // does not recognise is dropped rather than trusted or thrown over.
-  return stored.filter((p): p is OrgPrivilege =>
-    (ORG_PRIVILEGES as readonly string[]).includes(p),
-  );
+  return stored.filter((p): p is OrgPrivilege => ORG_PRIVILEGE_SET.has(p));
 }
+
+/** A Set rather than `(ORG_PRIVILEGES as readonly string[]).includes(...)` —
+ *  T3 Low-2, R2.2: that cast was one of five in `apps/api/src` and sat outside
+ *  an adapter file. It runs on every authorisation decision, so O(1) is the
+ *  incidental half; the point is that the rule needs no cast to express. */
+const ORG_PRIVILEGE_SET: ReadonlySet<string> = new Set(ORG_PRIVILEGES);
 
 /** The ticks a BRAND-NEW appointment starts with, and the ONLY place the role
  *  templates are read for a write. Sorted and de-duplicated so the column, the
@@ -466,7 +470,7 @@ export function defaultPrivilegesFor(role: OrgRole): OrgPrivilege[] {
 /** One order, everywhere: sorted, no repeats. A set stored two different ways
  *  reads as two different sets in an audit log, and "did anything change" is
  *  then a question about ordering rather than about access. */
-export function canonicalPrivileges(privileges: readonly OrgPrivilege[]): OrgPrivilege[] {
+function canonicalPrivileges(privileges: readonly OrgPrivilege[]): OrgPrivilege[] {
   return [...new Set(privileges)].sort();
 }
 
@@ -1111,9 +1115,15 @@ export async function updateOrgStaffRole(
     // the load-bearing half of the decision rather than a convenience: without
     // it, demoting a manager to trainer would leave every manager tick standing,
     // so the one control an owner reaches for to REDUCE somebody's access would
-    // reduce nothing. A demotion has to actually demote. The cost, stated: an
-    // owner who had hand-ticked that person loses those edits, which is why the
-    // screen (its own card) must say so before the tap.
+    // reduce nothing. A demotion has to actually demote.
+    //
+    // THE COST IS BIGGER THAN "EDITS ARE LOST" AND T3 Low-6 CORRECTED IT: the
+    // ticks BECOME the new role's template, which for a hand-NARROWED person can
+    // be MORE than they had — ticked down to nothing and then set to trainer,
+    // they get `members.read` and `codes.invite` back. Not a silent widening
+    // (an owner tapped it), but the Staff screen's warning must say **"their
+    // permissions become the defaults for the new role"** and NOT "your changes
+    // will be lost", which describes only the narrowing half.
     privileges: defaultPrivilegesFor(input.role),
     actorUserId: userId,
   });
@@ -1154,6 +1164,25 @@ export async function updateOrgStaffRole(
  *  remembered by luck. */
 const LAST_OWNER_REQUIRED_PRIVILEGES: readonly OrgPrivilege[] = ["staff.manage"];
 
+/** PRIVILEGES ONLY AN OWNER'S ROW MAY CARRY — §2.2's owner-alone rows, and the
+ *  enforcement of :11429 rule 1 ("only an OWNER may change anybody's ticks; this
+ *  ruling does not widen it").
+ *
+ *  **T3 C/H-1: without this the ticks route was owner-only by ACCIDENT.** Its
+ *  gate is the `staff.manage` tick, which was the owner's alone only because
+ *  nothing could grant it — and granting ticks is exactly what this card built.
+ *  One owner action then handed a manager the power to change anybody's
+ *  privileges, the owner's included; the reviewer ran the chain and the owner
+ *  ended up 403'd on their own roster.
+ *
+ *  **The consequence is real and is Kd's ruling rather than a limitation to
+ *  work around: staff management cannot be delegated at all.** An owner cannot
+ *  make somebody else able to hire, fire or change permissions. Widening that
+ *  is a Kd decision with its own card, and it is the reversible direction —
+ *  refusing today costs a feature nobody has asked for, while allowing it costs
+ *  an escalation nobody can see. */
+const OWNER_ONLY_PRIVILEGES: readonly OrgPrivilege[] = ["staff.manage"];
+
 /** CHANGE WHAT ONE PERSON MAY DO. Owner-only — `staff.manage` is §2.2's
  *  owner-alone row and :11429 rule 1 says this ruling does not widen it.
  *
@@ -1173,6 +1202,7 @@ export async function updateOrgStaffPrivileges(
     userId: targetUserId,
     privileges: canonicalPrivileges(input.privileges),
     lastOwnerRequires: LAST_OWNER_REQUIRED_PRIVILEGES,
+    ownerOnly: OWNER_ONLY_PRIVILEGES,
     actorUserId: userId,
   });
 
@@ -1185,6 +1215,12 @@ export async function updateOrgStaffPrivileges(
       return orgStaffMutationResponseSchema.parse({ staff: toOrgStaff(outcome.staff, userId) });
     case "not_staff":
       throw new OrgsError(404, "not_staff", "That person doesn't run this gym.");
+    case "owner_only_privilege":
+      throw new OrgsError(
+        409,
+        "owner_only_privilege",
+        "Managing staff stays with the gym's owner. You can give this person any of the other permissions.",
+      );
     case "last_owner_locked":
       throw new OrgsError(
         409,
