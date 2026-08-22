@@ -1625,3 +1625,36 @@ pre-check asks "does this anchor match?" and cannot ask "does it match ONCE".
 `listStaff` and `getStaffRole` now share SQL text, so O85/O86's one-line anchors
 matched twice and hit the intended function only by position (:11846's O14).
 Both were re-anchored; the harness gap is real and wants a uniqueness check.
+
+## Staff SCREEN (web half), T3 round 1 (2026-08-22) — DECISIONS :14840
+
+**Two Critical/High, fixed in the round with permanent guards (S13/S14/S15), so
+they are not logged here. Five Low, all fixed:**
+
+| # | Finding | Fix |
+|---|---|---|
+| L-1 | The four staff endpoints were the ONLY reads on `orgsApi.js` not parsed under test. Deleting `readThrough` from `getStaff` left 223 tests green, and the consequence is the console's oldest defect arriving through the parser: no `staff` key → `[]` → the screen prints a number about who runs a gym that nobody wrote. | Five contract tests, one per shape — a non-list, a row missing the fields the screen prints, both mutation answers, and the removal. |
+| L-2 | `if (!allowed) return null` in `StaffPanel` was S11's SIBLING: delete it and every console test stayed green, because `Settings.jsx` never mounts the panel for a non-owner. Two guards in one file, and making the first observable left the second exactly as it was. | Mounted directly with a non-owner role, asserting an empty container, with a positive control so a panel that rendered nothing at all could not satisfy it. |
+| L-3 | `staffCountLabel([])` returned "0 people run this gym" — the sentence the helper exists to make impossible. Only non-arrays were guarded. Unreachable today (the owner's own row is always present) and one empty array away. | Empty array returns null, beside the non-array arm. |
+| L-4 | `Try again` was drawn over refusals retrying cannot fix — a permanent 403, and the half-done removal notice where `retry` re-reads the STAFF LIST and cannot finish the membership. | `actionError` carries a `retryable` flag; the add form is its own retry surface so its failures carry no button. Follows `Overview`'s existing precedent. |
+| L-5 | A one- or two-character email hit the server's `.min(3)` and printed `email: too_small` at the owner verbatim. | Bound mirrored client-side with the number quoted from the schema. Deliberately NOT a format check — the server does not do one either, so a format opinion here could reject an address registration accepted. |
+
+## Staff SCREEN (web half), T3 round 2 — diff-only (2026-08-22) — DECISIONS :15007
+
+**ZERO Critical/High — the packet SHIPS.** All four re-derivations of round 1's
+fixes came back clean and no fix created a new defect. **Six Low, all fixed:**
+
+| # | Finding | Fix |
+|---|---|---|
+| L-1 | Round 1's own empty-array guard was observed by nothing — deleted, 57 tests stayed GREEN. | `expect(staffCountLabel([])).toBeNull()` beside the non-array cases. |
+| L-2 | Round 1's `.min(3)` mirror was observed by nothing — neutered to `if (false)`, 35 tests stayed GREEN. | A render test typing `ab` and asserting the WRITTEN sentence, that `too_small` is absent, and that no request left the client. |
+| L-3 | Round 1's whole `retryable` gate was observed by nothing — reverted to an unconditional `onRetry`, 35 tests stayed GREEN, **the half-done test included, because it asserts the notice and never that Try again is ABSENT.** | Two tests: no button over the half-done removal, none over a permanent 403 — **with a positive control proving the identical failure offline still offers it**, so the gate is a bound and not a ban. |
+| L-4 | Only the LOWER bound was mirrored. The schema is `.min(3).max(320)`, so a pasted 321-character entry still printed `email: too_big` verbatim. **The same defect at the other end, inside the fix written for it.** | Upper bound mirrored with the number quoted from the schema; its own test, plus a control that an ordinary address is still SENT. |
+| L-5 | `errorStatus(err) !== 403` was inlined twice in `StaffPanel` while `Overview.jsx` held the identical predicate as `isRetryable` — three copies of one rule, and the fix's own comment cited that file as its precedent. | `isRetryable` moved to `orgsApi.js` beside `errorStatus` and imported by both. Moved rather than exported from a page: a component importing a predicate out of a screen is a dependency nobody wants. |
+| L-6 | **:14840 and its index line both said the five Lows were logged "(BACKLOG.md)". They were not** — `git log -- BACKLOG.md` last touched it four commits earlier, and a grep for the entry found nothing. A record is a claim (:1173's class), and this one was mine. | Both sections written — round 1's above, and this one. |
+
+**The shape worth carrying: three of round 1's six Lows were guards decided in one
+file and observed in none — the same finding round 1 itself made about S11's
+sibling, recurring in round 1's own fix commit.** Behaviour was correct every
+time; only the coverage was absent. A fix is not done when the code is right, it
+is done when something would notice the code going wrong.

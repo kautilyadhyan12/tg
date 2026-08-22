@@ -809,6 +809,47 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:15007** — 2026-08-22 — **T3 ROUND 2 ON THE STAFF SCREEN (diff-only): ZERO
+  Critical/High — THE PACKET SHIPS.** **Read before writing a guard whose only
+  proof is that the code looks right, before mirroring one end of a bound, before
+  inlining a predicate a sibling file already owns, and before writing
+  "(BACKLOG.md)" into an entry.** Escape hatch NOT armed — none anywhere this
+  round. **Did any fix create a new defect? NO, and the reviewer RE-DERIVED all
+  four rather than reading them** (:6277's shape — a fix aimed at a Low creating a
+  Critical): the refusing side checked against the server's only org-type branch
+  with the old constant grep-verified gone; the `actionError` rewrite counted at
+  four sets and one guarded read, so `[object Object]` is unreachable and
+  `retryable:false` hides only the BUTTON; the `.min(3)` mirror identical to the
+  server's bound on an identically-trimmed value. **SIX LOW, ALL FIXED, AND THREE
+  ARE ONE SHAPE — round 1's own fixes were guards decided in one file and observed
+  in NONE**, each measured not asserted (delete the empty-array arm, 57 GREEN;
+  neuter the length mirror, 35 GREEN; revert the whole retryable gate, 35 GREEN
+  **including the half-done test, which asserts the notice and never that Try
+  again is ABSENT**). Behaviour correct every time, coverage absent — **the
+  finding round 1 itself made about S11's sibling, recurring inside round 1's own
+  fix commit.** The retryable pair now carries a POSITIVE CONTROL so the gate is a
+  bound and not a ban. **L-4 is the same defect at the other end of the fix
+  written for it**: only `.min(3)` was mirrored, so a 321-character paste still
+  printed `email: too_big` verbatim. **L-5: three copies of one rule, and the
+  fix's own comment cited the file holding the original** — `isRetryable` moved to
+  `orgsApi.js` beside `errorStatus` rather than exported from a page. **L-6 IS
+  MINE AND IT IS A FALSE CLAIM IN THE RECORD: :14840 said its Lows were logged
+  "(BACKLOG.md)" and nothing had been** — `git log` showed the file untouched for
+  four commits. **The reviewer CHECKED a citation instead of reading it**;
+  corrected at the source, not only where it was caught (:1173's class, and V1
+  does not relax for bookkeeping). **INSTRUMENT: the L-5 fix deleted the line C20
+  was anchored to and the whole-table pre-check ABORTED the sweep before a byte was
+  written** — fifth time on this branch a fix of mine moved an anchor and fifth
+  time the guard paid for itself; re-targeted `overview`→`api`, **and it needed a
+  SIBLING (S16), because de-duplicating a rule means one edit reaches two screens
+  and a mutant is a claim about a CALL SITE.** **PROVE: web 1050/1050 exit 0 (+6) ·
+  build ✓ · eslint clean on five files · 51 mutants · 51 RED · 0 ALIVE · 0 never
+  ran, exit 0** (the aborted run is not quoted, :5199). **ALL THREE GATES ARE NOW
+  BEHIND THIS PACKET** — smoke complete (:14953), review clean, sweep green — **but
+  `OWED.md`'s §2.2-matrix line STILL DOES NOT TICK**: RESTORE a member, CSV export
+  and nudges are routeless and staff management ships only its ROLE half. What
+  ticks is the console-screen line's Settings/Staff clause and nothing else.
+
 - **:14953** — 2026-08-22 — **THE RE-SMOKE PASSES ON THE SHIPPING BYTES — and Kd
   finds that the roster does not say who is FREE.** **Read before touching the
   Members roster's badge, before writing `gym_members.complimentary` anywhere, and
@@ -862,7 +903,9 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   makes every org read the STUDIO sentence, so the studio test still passes and the
   GYM test is the one that fails; **:11846's two-halves lesson (anchor says what
   breaks, filter says what should notice), second recorded occurrence of the filter
-  half, incurred by the chat quoting it.** Five Low, all fixed: the four staff
+  half, incurred by the chat quoting it.** Five Low, all fixed (**this line and
+  the entry both said "logged in BACKLOG.md" and nothing was — struck by round 2's
+  L-6, :15007; the section exists now**): the four staff
   endpoints were the only unparsed reads on the client (delete `readThrough`, 223
   tests green) · **`if (!allowed) return null` is S11's SIBLING**, left
   unfalsifiable beside the guard the previous round made observable ·

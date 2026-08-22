@@ -4995,6 +4995,17 @@ file and is stated so nobody reads these as lower priority than they are.
       tab that answers nothing is still a promise on screen. Their server sides
       are owed elsewhere: leaderboards at P4.x, `org_daily_stats` for reports (the
       line above), billing at P3.
+      **✅ SETTINGS IS DONE — ALL THREE GATES BEHIND IT (2026-08-22).** Built at
+      :14570; **SMOKE complete** — 12/12 plus steps 9 and 11 re-run on the shipping
+      bytes after the removal control was rewritten (:14953); **T3 round 1 found
+      two Critical/High, both fixed (:14840), and round 2 (diff-only) found ZERO
+      Critical/High, which is the severity gate's own shipping condition**
+      (:15007). Commits `971836d` · `ba7bd13` · `2e5500e` · `a5ef49c` and the
+      round-2 fixes. **THIS TICKS THE SETTINGS/STAFF CLAUSE OF THIS LINE AND
+      NOTHING ELSE** — Leaderboard, Reports and Billing keep the line open, and
+      the §2.2-matrix line below is UNTOUCHED by this (RESTORE a member, CSV
+      export and nudges are still routeless, and staff management ships only its
+      ROLE half).
       **SETTINGS SHIPPED 2026-08-22 (DECISIONS :14570) AND CARRIES §4.7's STAFF
       LIST — but it is drawn for the OWNER ONLY**, because the one thing on it is
       §2.2's owner-only row and the server gates even the READ with it, so for a

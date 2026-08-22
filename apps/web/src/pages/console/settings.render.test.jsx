@@ -345,6 +345,50 @@ describe('taking somebody’s keys back', () => {
     expect(orgService.removeMember).not.toHaveBeenCalled();
   });
 
+  /** T3 round 2 L-3. The whole `retryable` gate was observed by nothing — the
+   *  reviewer reverted it to an unconditional `onRetry` and 35 tests stayed
+   *  green, the half-done test included, because that test asserts the NOTICE
+   *  and never that Try again is absent. Both arms are pinned here: the
+   *  half-done removal (where `retry` re-reads the staff list and cannot finish
+   *  the membership) and a permanent 403 (where pressing anything changes
+   *  nothing). */
+  it('offers NO Try again over a half-done removal — retrying cannot finish it', async () => {
+    orgService.removeMember.mockRejectedValue(offline());
+    drawSettings();
+    const row = await screen.findByTestId('staff-u2');
+    fireEvent.click(within(row).getByText('Remove'));
+    fireEvent.click(within(row).getByText('Remove from the gym too'));
+    fireEvent.click(within(row).getByText('Remove them'));
+    await screen.findByText(/no longer runs your gym, but they are still a member/i);
+    expect(screen.queryByText('Try again')).toBeNull();
+    // The instruction that IS actionable stays.
+    expect(screen.getByText(/Members screen/i)).toBeTruthy();
+  });
+
+  it('offers NO Try again over a permanent 403, and DOES over a dropped connection', async () => {
+    orgService.updateStaffRole.mockRejectedValue(
+      apiError(403, 'forbidden', "Your role doesn't allow that."),
+    );
+    drawSettings();
+    const row = await screen.findByTestId('staff-u2');
+    fireEvent.click(within(row).getByText('Make trainer'));
+    await screen.findByText(/Your role doesn't allow that/i);
+    expect(screen.queryByText('Try again')).toBeNull();
+
+    // POSITIVE CONTROL, and it is the half that makes this a gate rather than a
+    // ban: the identical failure offline must still offer the button.
+    cleanup();
+    vi.clearAllMocks();
+    orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER] } });
+    orgService.updateStaffRole.mockRejectedValue(offline());
+    drawSettings();
+    const row2 = await screen.findByTestId('staff-u2');
+    fireEvent.click(within(row2).getByText('Make trainer'));
+    await screen.findByText(/Couldn't reach the server/i);
+    expect(screen.getByText('Try again')).toBeTruthy();
+  });
+
   /** T3 C/H-2. The MIDDLE stage's Cancel was covered by nothing: the reviewer
    *  pointed it at `onRemove(true)` — Cancel ending somebody's membership — and
    *  all 195 console tests stayed green. The commit that added the third stage
@@ -406,6 +450,45 @@ describe('adding somebody', () => {
   it('tells a GYM owner their trainer CAN see it — the same control, the other answer', async () => {
     await openForm();
     expect(screen.getByText(/Can see your member list/i)).toBeTruthy();
+  });
+
+  /** T3 round 2 L-2 and L-4. Both length mirrors were observed by nothing — the
+   *  reviewer neutered the lower one to `if (false)` and 35 tests stayed green.
+   *  The claim is not "the form validates": it is that **what an owner reads is a
+   *  sentence somebody wrote**, never the server's raw `email: too_small`, which
+   *  is what `errorText` prints verbatim when the request is allowed to go. So
+   *  each case asserts the written words AND that no request left the client. */
+  it('refuses a too-SHORT entry in words, without asking the server', async () => {
+    await openForm();
+    fireEvent.change(screen.getByLabelText(/Their email address/i), { target: { value: 'ab' } });
+    fireEvent.click(screen.getByText('Add'));
+    expect(screen.getByText(/too short for an email address/i)).toBeTruthy();
+    expect(screen.queryByText(/too_small/)).toBeNull();
+    expect(orgService.addStaff).not.toHaveBeenCalled();
+  });
+
+  it('refuses a too-LONG entry in words, without asking the server', async () => {
+    await openForm();
+    // 321 characters — one past the schema's `.max(320)`, the RFC maximum.
+    const tooLong = `${'a'.repeat(310)}@example.com`;
+    expect(tooLong.length).toBe(322);
+    fireEvent.change(screen.getByLabelText(/Their email address/i), { target: { value: tooLong } });
+    fireEvent.click(screen.getByText('Add'));
+    expect(screen.getByText(/too long to be an email address/i)).toBeTruthy();
+    expect(screen.queryByText(/too_big/)).toBeNull();
+    expect(orgService.addStaff).not.toHaveBeenCalled();
+  });
+
+  /** The positive control for both: a length the server accepts must still be
+   *  SENT. Without it, a client that refused everything would satisfy the two
+   *  cases above — the shape S15 was caught by one round ago. */
+  it('sends an ordinary-length address, so the guards are bounds and not a wall', async () => {
+    await openForm();
+    fireEvent.change(screen.getByLabelText(/Their email address/i), {
+      target: { value: 'rita@example.com' },
+    });
+    fireEvent.click(screen.getByText('Add'));
+    await waitFor(() => expect(orgService.addStaff).toHaveBeenCalledTimes(1));
   });
 
   it('starts on the SMALLER grant, so a form nobody reads hands out less', async () => {

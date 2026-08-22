@@ -4,7 +4,7 @@ import { Users, ChevronRight } from 'lucide-react';
 import JoinCodeCard from '../../components/console/JoinCodeCard';
 import JoinCodesPanel from '../../components/console/JoinCodesPanel';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
-import { orgService, errorText, errorStatus } from '../../api/orgsApi';
+import { orgService, errorText, isRetryable } from '../../api/orgsApi';
 import { useAuth } from '../../context/AuthContext';
 import { useConsoleOrg } from './useConsoleOrg';
 import {
@@ -31,22 +31,12 @@ import {
 // The §4.2 banner slot is absent for the same reason — its states are read off
 // `subscriptions`, and billing does not exist.
 
-/** ROUND 2 Low-4: WOULD PRESSING "Try again" CHANGE ANYTHING?
- *
- *  The L-3 fix closed half its own finding: it stopped one refused read taking
- *  the whole screen, but left the refused pane offering a retry that can never
- *  succeed. A trainer held off the roster (§2.2, a permanent 403 until group
- *  scoping is built) is not going to be let in by pressing a button, and a
- *  button that promises otherwise is a small false thing on screen.
- *
- *  Only 403 is treated as permanent, deliberately: 401 rotates and retries by
- *  itself, 404 here means the gym vanished (the whole screen re-resolves), 5xx
- *  and offline are exactly what a retry is FOR, and a contract failure may well
- *  be a deploy mid-flight. Part 3 §4's "every error state has a retry" still
- *  holds for every one of those. */
-function isRetryable(err) {
-  return errorStatus(err) !== 403;
-}
+/* ROUND 2 Low-4's "would pressing Try again change anything?" predicate MOVED to
+   `orgsApi.js` beside `errorStatus` (T3 round 2 L-5). It was private here, the
+   Staff panel then inlined the same 403 test at two more sites, and three copies
+   of one rule is how two places come to disagree. Its full reasoning travelled
+   with it — Part 3 §4's "every error state has a retry" still holds for every
+   status except the permanent one. */
 
 /** One label/value line. Deliberately plain: every value on this screen is a
  *  fact the server stated, not a figure this page derived. */

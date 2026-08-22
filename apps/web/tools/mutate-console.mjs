@@ -256,11 +256,34 @@ const MUTANTS = [
     to: "  const whole = true;",
   },
   {
+    // RE-TARGETED `overview` -> `api` when T3 round 2's L-5 moved `isRetryable`
+    // into `orgsApi.js` (three copies of one rule, one of them the precedent the
+    // other two cited). The GUARANTEE is unchanged and so is the mutation; only
+    // the file holding the line moved. The whole-table pre-check ABORTED the
+    // sweep on the stale anchor before a byte was written — a no-op mutation
+    // would have reported ALIVE, whose honest reading is "this guarantee has no
+    // test" (:10726's class, and the fifth time on this branch that a fix of
+    // mine moved an anchor).
     id: 'C20',
-    target: 'overview',
+    target: 'api',
     suite: RENDER_SUITE,
     why: 'ROUND 2 Low-4 RESTORED: a permanent 403 is offered a Try again that can never succeed',
     expect: 'no retry on a refusal that retrying can never fix',
+    from: "  return errorStatus(err) !== 403;",
+    to: "  return true;",
+  },
+  {
+    // THE SAME LINE, THE OTHER CALLER. Sharing the predicate means one edit now
+    // reaches two screens, so it needs two observers: C20 above is the gym
+    // Overview's panes, this is the Staff panel's action errors (T3 round 2 L-3,
+    // whose gate was observed by nothing at all until that round). Identical
+    // mutation, different suite — a mutant is a claim about a CALL SITE, and
+    // de-duplicating the rule did not merge the two guarantees.
+    id: 'S16',
+    target: 'api',
+    suite: SETTINGS_SUITE,
+    why: 'ON SCREEN AND FALSE: the Staff panel offers Try again over a permanent 403 and over a half-done removal it cannot finish — a button promising to redo something it does not do',
+    expect: 'offers NO Try again over a permanent 403',
     from: "  return errorStatus(err) !== 403;",
     to: "  return true;",
   },

@@ -14885,7 +14885,10 @@ the FILTER says what should notice — incurred by the chat quoting it, and this
 now the second recorded occurrence of the filter half.** Re-aimed and re-measured
 RED on a completed sweep.
 
-**FIVE LOW, ALL FIXED IN-ROUND (`BACKLOG.md`), and three are the same shape as the
+**FIVE LOW, ALL FIXED IN-ROUND (~~`BACKLOG.md`~~ — **that citation was FALSE when
+written and is corrected here rather than only where it was caught: nothing was
+logged, and round 2's L-6 found it by checking the file instead of reading the
+claim. The section exists now**), and three are the same shape as the
 Criticals.**
 - **The four staff endpoints were the only reads on this client not parsed under
   test.** Deleting `readThrough` from `getStaff` left 223 tests green, and the
@@ -15003,3 +15006,86 @@ is staff is itself a fact about a person, which is the axis §2.4 governs.
 **NOT BUILT (R1.1):** it needs a server half, and the packet is mid-review-round
 with a diff-only re-review outstanding — a feature landing inside a fix round is
 what :5348 rule 6 forbids. Own `OWED.md` line.
+
+## T3 ROUND 2 ON THE STAFF SCREEN (diff-only): ZERO CRITICAL/HIGH — THE PACKET SHIPS (2026-08-22)
+
+**Read before writing a guard whose only proof is that the code looks right,
+before mirroring one end of a bound, before inlining a predicate a sibling file
+already owns, and before writing "(BACKLOG.md)" into an entry.** Diff-only
+re-review of `2e5500e`. Escape hatch **NOT armed** — it needs Critical/High two
+rounds running in one subsystem and this round has none anywhere.
+
+**DID ANY FIX CREATE A NEW DEFECT? NO — and the reviewer re-derived all four
+rather than reading them.** `staffRoleChoices`'s refusing side checked against the
+server's only org-type branch, with the old `STAFF_ROLE_CHOICES` grep-verified to
+have zero survivors; the `actionError` rewrite counted at four object sets, four
+null sets and one guarded read, so `[object Object]` is unreachable and
+`retryable:false` hides only the BUTTON; the `.min(3)` mirror confirmed identical
+to the server's bound on an identically-trimmed value; and `staffCountLabel([])`
+returning null confirmed to render an empty unstyled span rather than an empty
+badge. **This is the question the round existed to ask** (:6277's shape — a fix
+aimed at a Low creating a Critical), and the answer held.
+
+**SIX LOW, ALL FIXED IN THE ROUND. THREE ARE ONE SHAPE AND IT IS THE ROUND'S
+FINDING: round 1's own fixes were guards decided in one file and observed in
+none.** The reviewer measured each rather than asserting it — deleted the
+empty-array arm (57 tests GREEN), neutered the `.min(3)` mirror to `if (false)`
+(35 GREEN), reverted the whole `retryable` gate to an unconditional `onRetry`
+(35 GREEN, **the half-done-removal test included, because it asserts the NOTICE
+and never that Try again is ABSENT**). **The behaviour was correct every time;
+only the coverage was absent — which is exactly the finding round 1 itself made
+about S11's sibling, recurring inside round 1's own fix commit.** Each now has a
+test, and the retryable pair carries a **positive control** (the identical failure
+offline must still offer the button), so the gate is a bound and not a ban.
+
+**L-4 IS THE SAME DEFECT AT THE OTHER END OF THE FIX WRITTEN FOR IT.** The schema
+is `.min(3).max(320)`; only the lower bound was mirrored, so a pasted 321-character
+entry still printed `email: too_big` at the owner verbatim. Upper bound mirrored
+with the number quoted from the schema, its own test, and a control that an
+ordinary address is still SENT.
+
+**L-5: three copies of one rule, and the fix's own comment cited the file holding
+the original.** `errorStatus(err) !== 403` was inlined twice in `StaffPanel` while
+`Overview.jsx` had it as a private `isRetryable`. **Moved to `orgsApi.js` beside
+`errorStatus` rather than exported from the page** — a component importing a
+predicate out of a screen is a dependency nobody wants to maintain — and both
+callers now import it. In a repo whose own comments say two places deciding is two
+places to disagree.
+
+**L-6 IS MINE AND IT IS A FALSE CLAIM IN THE RECORD.** :14840 and its index line
+both said the five Lows were logged "(BACKLOG.md)". **They were not** —
+`git log -- BACKLOG.md` last touched the file four commits earlier and a grep for
+the entry returned nothing. The reviewer checked a citation instead of reading it.
+**"A record is a claim" (:1173's class), and V1 does not relax because the claim
+is about bookkeeping.** Both sections are written now — round 1's and this one's.
+
+**THE INSTRUMENT FINDING IS THE L-5 FIX'S OWN CONSEQUENCE, and the guard caught
+it before a byte was written.** Moving `isRetryable` deleted the line **C20** was
+anchored to, and the whole-table pre-check **ABORTED the sweep** rather than
+letting a no-op mutation report ALIVE — whose honest reading is "this guarantee
+has no test". **Fifth time on this branch that a fix of mine moved an anchor, and
+the fifth time that guard paid for itself** (:10402, :11757, :11846, :14493).
+Re-targeted `overview` → `api`, guarantee and mutation unchanged, only the file
+holding the line moved. **And it needed a SIBLING: de-duplicating the rule means
+one edit now reaches two screens, so it takes two observers** — C20 keeps the
+Overview panes, new **S16** takes the Staff panel's action errors. A mutant is a
+claim about a CALL SITE, and merging the rule did not merge the guarantees.
+
+**PROVE** — web **1050/1050 across 43 files, exit 0 read into a variable** (+6;
+1044 before). `staffView` 23/23, `settings.render` 40/40 (63/63 together).
+`vite build` exit 0. eslint exit 0 with no output at `--max-warnings=0` on the
+five touched source files. **MUTATION AUDIT: 51 mutants · 51 RED · 0 ALIVE · 0
+never ran, exit 0**, controls GREEN on all fifty-one filters first, restores
+sha256-verified after every mutant, `node --check` first. **The ABORTED run is
+not quoted as a result** (:5199) — only the completed sweep on the final bytes is.
+`apps/api` untouched by this round.
+
+**WHAT SHIPS, AND WHAT TICKS.** Zero Critical/High in a review round is the
+severity gate's own shipping condition (:5348 rule 1). Both other gates are
+behind it: the **SMOKE is complete** — 12/12 plus steps 9 and 11 re-run on the
+shipping bytes (:14953) — and this is the diff-only re-review rule 2 asks for.
+**`OWED.md`'s §2.2-matrix line STILL DOES NOT TICK**, and a chat closing it here
+would lose four items: RESTORE a member, CSV export and nudges are still
+routeless, and staff management ships only its ROLE half (:14745's custom names
+and the per-staff ticks keep their own lines). **What ticks is the console-screen
+line's Settings/Staff clause, and nothing else.**

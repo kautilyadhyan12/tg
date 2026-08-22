@@ -337,3 +337,22 @@ export function errorStatus(err) {
   const status = err?.response?.status;
   return typeof status === 'number' ? status : null;
 }
+
+/** Is offering "Try again" honest about this failure?
+ *
+ *  **Only 403 is permanent, deliberately:** 401 rotates and retries by itself,
+ *  404 means the thing vanished and the screen re-resolves, 5xx and offline are
+ *  exactly what a retry is FOR, and a contract failure may well be a deploy
+ *  mid-flight. A trainer held off the roster (§2.2, a permanent 403 until group
+ *  scoping is built) is not going to be let in by pressing a button, and a button
+ *  that promises otherwise is a small false thing on screen.
+ *
+ *  **Lives HERE, beside `errorStatus`, because it was written twice.** It began
+ *  as a private helper in `Overview.jsx` and the Staff panel then inlined the
+ *  same predicate at two more sites — three copies of one rule, in a file whose
+ *  own comments say two places deciding is two places to disagree (T3 round 2
+ *  L-5). Moved rather than re-exported from a page: a component importing a
+ *  predicate out of a screen is a dependency nobody wants to maintain. */
+export function isRetryable(err) {
+  return errorStatus(err) !== 403;
+}

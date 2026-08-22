@@ -9530,3 +9530,60 @@ NEXT
      snapshot-vs-named-role question.
   3. Nothing ticks until the re-review comes back with zero Critical/High.
 ```
+
+```
+TASK: STAFF SCREEN, T3 ROUND 2 (diff-only) — ZERO Critical/High. THE PACKET
+      SHIPS. DECISIONS :15007. Escape hatch NOT armed (none anywhere).
+
+  · **No fix created a new defect** — the reviewer RE-DERIVED all four of round
+    1's fixes rather than reading them (:6277's shape). All held.
+  · **SIX Low, all fixed. THREE ARE ONE SHAPE and it is the round's finding:
+    round 1's own fixes were guards decided in one file and observed in NONE.**
+    Measured, not asserted — delete the empty-array arm (57 GREEN), neuter the
+    length mirror (35 GREEN), revert the retryable gate (35 GREEN, **the
+    half-done test included, because it asserts the NOTICE and never that Try
+    again is ABSENT**). Behaviour correct every time; only the coverage absent.
+    **The finding round 1 made about S11's sibling, recurring in round 1's own
+    fix commit.**
+  · **L-4: the same defect at the other end of the fix written for it** — only
+    `.min(3)` was mirrored, so a 321-char paste printed `email: too_big`.
+  · **L-5: three copies of one rule.** `isRetryable` now lives in `orgsApi.js`
+    beside `errorStatus`; Overview and StaffPanel import it. Do not re-inline it.
+  · **L-6 was MINE: :14840 claimed its Lows were logged in `BACKLOG.md` and
+    nothing had been.** The reviewer CHECKED the citation instead of reading it.
+    Corrected at the source, not only where caught. **A record is a claim.**
+
+THINGS A LATER CHAT WILL OTHERWISE GET WRONG
+  · **C20 moved `overview` -> `api` and gained a SIBLING (S16).** Sharing
+    `isRetryable` means one edit reaches two screens, so it needs two observers.
+    A mutant is a claim about a CALL SITE; merging the rule did not merge the
+    guarantees.
+  · **The L-5 fix deleted the line C20 was anchored to and the pre-check ABORTED
+    the sweep** — fifth time on this branch a fix of mine moved an anchor, fifth
+    time that guard paid for itself. The ABORTED run is not quoted as a result.
+  · **A retryable gate needs a POSITIVE CONTROL** — the identical failure offline
+    must still offer the button, or the test permits a client that never retries.
+
+GATES
+  · web **1050/1050 across 43 files, exit 0 read into a variable** (+6).
+  · build ✓ · eslint clean at `--max-warnings=0` on the five touched files.
+  · **51 mutants · 51 RED · 0 ALIVE · 0 never ran, exit 0**, controls green
+    first, restores sha256-verified, `node --check` first.
+  · `apps/api` untouched by this round.
+  · Instrument note: the shell's cwd was still `apps/web` from an earlier `cd`,
+    so a root-relative append FAILED loudly this time. **Earlier in this session
+    the same mistake silently created a stray `apps/web/DECISIONS.md` and I read
+    the short line count as data loss and said so.** Nothing had been lost. Append
+    from the repo root and bracket every append with a before/after line count.
+
+NEXT
+  1. **NOTHING IS OWED ON THIS PACKET.** Smoke complete (:14953), review clean,
+     sweep green. The console-screen line's Settings/Staff clause TICKS.
+  2. **The §2.2-matrix line does NOT tick** — RESTORE a member, CSV export and
+     nudges are routeless, and staff management ships only its ROLE half.
+  3. Next cards, in the order they were raised: **the roster badge** (a staff
+     member takes no seat and the roster cannot say so, :14953 — and do NOT close
+     it by writing `complimentary`), then **per-staff privilege ticks + custom
+     role names** (:14745), which needs its own migration and carries the open
+     snapshot-vs-named-role question.
+```

@@ -10,7 +10,7 @@ import {
   staffCountLabel,
   staffRoleChoices,
 } from '../../pages/console/staffView';
-import { orgService, errorText, errorStatus } from '../../api/orgsApi';
+import { orgService, errorText, isRetryable } from '../../api/orgsApi';
 
 // WHO RUNS THIS GYM — Part 3 §4.7's Staff surface, on §3.1's Settings screen.
 //
@@ -400,7 +400,7 @@ export default function StaffPanel({ gymId, staffRole, orgType }) {
     } catch (err) {
       setActionError({
         message: errorText(err, "We couldn't change what they can do. Please try again."),
-        retryable: errorStatus(err) !== 403,
+        retryable: isRetryable(err),
       });
     } finally {
       setBusyId(null);
@@ -426,7 +426,7 @@ export default function StaffPanel({ gymId, staffRole, orgType }) {
     } catch (err) {
       setActionError({
         message: errorText(err, "We couldn't take their keys back. Please try again."),
-        retryable: errorStatus(err) !== 403,
+        retryable: isRetryable(err),
       });
       setBusyId(null);
       return;
@@ -475,6 +475,15 @@ export default function StaffPanel({ gymId, staffRole, orgType }) {
     // app itself accepted at registration.
     if (value.length < 3) {
       setFieldError('That looks too short for an email address.');
+      return;
+    }
+    // AND THE UPPER BOUND, because only mirroring the lower one left the same
+    // defect at the other end (T3 round 2 L-4): the schema is
+    // `.min(3).max(320)`, and a pasted 321-character entry came back as the raw
+    // `email: too_big`. 320 is the RFC's local@domain maximum and is quoted from
+    // the schema, not chosen here.
+    if (value.length > 320) {
+      setFieldError('That is too long to be an email address.');
       return;
     }
     if (gymId === null) return;

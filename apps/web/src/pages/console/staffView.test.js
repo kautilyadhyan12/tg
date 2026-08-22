@@ -149,6 +149,14 @@ describe('how many people run the gym', () => {
     expect(staffCountLabel(undefined)).toBeNull();
     expect(staffCountLabel('three')).toBeNull();
   });
+
+  /** T3 round 2 L-1. The EMPTY-array arm was added in round 1 and observed by
+   *  nothing — the reviewer deleted the guard and 57 tests stayed green. Same
+   *  claim as the case above ("0 people run this gym" is never true of any gym),
+   *  reached by the input that actually produces it rather than by a non-array. */
+  it('says NOTHING for an EMPTY list either — the arm that can really occur', () => {
+    expect(staffCountLabel([])).toBeNull();
+  });
 });
 
 describe('what the screen says becoming staff costs', () => {
