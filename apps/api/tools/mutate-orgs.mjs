@@ -119,7 +119,13 @@ const MUTANTS = [
     target: 'service',
     why: 'OWNERSHIP: a caller who is not staff no longer gets the same answer as a stranger, which confirms the gym exists to anyone holding a uuid',
     expect: 'serves the roster to staff and hides it',
-    from: '  if (org === null || role === null) {',
+    // RE-ANCHORED 2026-08-22 by the ticks card: `requirePrivilege` now reads a
+    // whole AUTHORITY (role + stored ticks) in one query, so the null check
+    // renamed. The GUARANTEE is untouched — a caller who is not staff of this
+    // gym must get the stranger's 404 — and the whole-table pre-check is what
+    // caught the drift, before a byte ran (:5199's class, sixth time on this
+    // branch that a fix of mine moved an anchor).
+    from: '  if (org === null || authority === null) {',
     to: '  if (org === null) {',
   },
   {
@@ -1037,8 +1043,20 @@ const MUTANTS = [
     id: 'O87',
     target: 'repo',
     why: "THE REVIEWER'S OWN MUTANT (T3 round 1, rule 4): the last-owner guard counts STAFF instead of OWNERS, so a gym holding one owner and one trainer lets the owner remove themselves. It stayed GREEN against the original test, whose gym had a single staff row and could not tell the two counts apart",
-    from: "        WHERE gym_id = ${input.gymId} AND role = 'owner'`;",
-    to: '        WHERE gym_id = ${input.gymId}`;',
+    // RE-ANCHORED 2026-08-22 by the ticks card, and the ambiguity guard is what
+    // caught it: `setStaffPrivileges` counts owners with the SAME SQL text —
+    // deliberately, because it is the same rule pointed at the other door — so
+    // this one-line anchor went from one match to two and would have mutated
+    // whichever came first. The second line is what makes it unique
+    // (`last_owner` here, `last_owner_locked` there). This is precisely the
+    // hazard :14493 named and :15259 built the guard for; it fired on its first
+    // real occasion.
+    from:
+      "        WHERE gym_id = ${input.gymId} AND role = 'owner'`;\n" +
+      '      if ((counted[0]?.n ?? 0) <= 1) return { kind: "last_owner" };',
+    to:
+      '        WHERE gym_id = ${input.gymId}`;\n' +
+      '      if ((counted[0]?.n ?? 0) <= 1) return { kind: "last_owner" };',
     expect: 'nobody in charge',
   },
   {
@@ -1089,6 +1107,68 @@ const MUTANTS = [
     from: '              WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS takes_seat',
     to: '              WHERE s.user_id = m.user_id)) AS takes_seat',
     expect: 'does not free your seat at another',
+  },
+  // ---------------------------------------------------------------------
+  // PER-STAFF PRIVILEGE TICKS (Kd ruling :11429, amended :14745, snapshot
+  // question settled by him 2026-08-22). Every row here is 4a's OWNERSHIP
+  // column — "can this person do a thing they should not" — which is the one
+  // the rule says always earns a database mutant.
+  // ---------------------------------------------------------------------
+  {
+    id: 'O95',
+    target: 'service',
+    why: "THE WHOLE FEATURE, INERT: the seam stops reading the ticks stored on the row and decides on the role's template instead. Every tick an owner sets is then decoration — the greyed-control-over-a-live-route defect :11429 rule 4 names in advance — and a gym whose front desk is a trainer still cannot let anybody in",
+    from: 'if (!privilegesFor(authority.role, authority.privileges).includes(privilege)) {',
+    to: 'if (!privilegesFor(authority.role, null).includes(privilege)) {',
+    expect: 'an owner can give one trainer the power to let people in',
+  },
+  {
+    id: 'O96',
+    target: 'repo',
+    why: "LOCKOUT, and nobody inside the gym could repair it: the last-owner guard stops firing, so an owner can tick away their own staff management — the same lockout §4.7 blocks at the REMOVE door, reached through the one this ruling opened (:11429 rule 2). Handing `staff.manage` back requires `staff.manage`",
+    from: '      if ((counted[0]?.n ?? 0) <= 1) return { kind: "last_owner_locked" };',
+    to: '      if ((counted[0]?.n ?? 0) <= 0) return { kind: "last_owner_locked" };',
+    expect: 'the last owner cannot be ticked out of managing staff',
+  },
+  {
+    id: 'O97',
+    target: 'repo',
+    why: "A DEMOTION THAT DEMOTES NOBODY: changing somebody to trainer stops resetting their ticks, so every manager power they were given stays live under a role that says trainer — the one control an owner reaches for to REDUCE access reduces nothing, and the screen says otherwise",
+    from: '      UPDATE gym_staff SET role = ${input.role}, privileges = ${[...input.privileges]}',
+    to: '      UPDATE gym_staff SET role = ${input.role}',
+    expect: 'RESETS their ticks to that role',
+  },
+  {
+    id: 'O98',
+    target: 'repo',
+    why: "THE OWNER'S OWN ROW SHIPS EMPTY: creating a gym stops writing the owner's ticks, so their authority rests for ever on the deploy-window fallback — which means a later edit to the role template silently changes what every gym owner can do, the exact silent widening Kd ruled against on 2026-08-22",
+    from: "        VALUES (${org.id}, ${input.ownerUserId}, 'owner', ${[...input.ownerPrivileges]})",
+    to: "        VALUES (${org.id}, ${input.ownerUserId}, 'owner', ${null})",
+    expect: 'gives a new appointment the ticks its role starts with',
+  },
+  {
+    id: 'O99',
+    target: 'repo',
+    why: "THE SAME HOLE AT THE OTHER WRITER: an appointment stores no ticks, so a new manager's row has no effective set of its own and inherits whatever the template says later. Two writers of `gym_staff`, and a card that fixes one and forgets the other is how this defect ships — it did, and this suite caught it",
+    from: '      VALUES (${input.gymId}, ${candidate.user_id}, ${input.role}, ${[...input.privileges]})',
+    to: '      VALUES (${input.gymId}, ${candidate.user_id}, ${input.role}, ${null})',
+    expect: 'gives a new appointment the ticks its role starts with',
+  },
+  {
+    id: 'O100',
+    target: 'service',
+    why: "PRIVILEGE ESCALATION: changing somebody's ticks stops being owner-only and needs only `members.read`, which every trainer holds — so any staff member can tick themselves `staff.manage` and become an owner in all but name. :11429 rule 1 says this ruling does not widen who may change ticks; this is that rule deleted",
+    from: '  await requirePrivilege(deps, gymId, userId, "staff.manage");\n\n  const outcome = await repo.setStaffPrivileges(deps.sql, {',
+    to: '  await requirePrivilege(deps, gymId, userId, "members.read");\n\n  const outcome = await repo.setStaffPrivileges(deps.sql, {',
+    expect: 'refused all five staff routes with 403',
+  },
+  {
+    id: 'O101',
+    target: 'service',
+    why: "ON SCREEN AND FALSE (:5807): the staff list stops serving the EFFECTIVE set and serves the role's template, so an owner reads back boxes they never ticked and misses ones they did — the screen and the server disagreeing about what a colleague may do, which is the pair rule 4 exists to keep in step",
+    from: '    privileges: [...privilegesFor(row.role, row.privileges)],',
+    to: '    privileges: [...privilegesFor(row.role, null)],',
+    expect: 'an owner can give one trainer the power to let people in',
   },
 ];
 

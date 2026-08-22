@@ -8,6 +8,7 @@ import type { RedisLike } from "../../redis.js";
 import { codeFromBytes, normaliseCode, slugCandidate, slugifyName } from "./codes.js";
 import * as repo from "./repo.js";
 import {
+  ORG_PRIVILEGES,
   confirmApplicationResponseSchema,
   createOrgResponseSchema,
   joinOrgResponseSchema,
@@ -45,6 +46,7 @@ import type {
   OrgCodesResponse,
   OrgMemberListQuery,
   OrgMemberPage,
+  OrgPrivilege,
   OrgRole,
   OrgStaff,
   OrgStaffMutationResponse,
@@ -56,6 +58,7 @@ import type {
   RemoveOrgStaffResponse,
   RotateOrgCodeResponse,
   UpdateOrgCodeRequest,
+  UpdateOrgStaffPrivilegesRequest,
   UpdateOrgStaffRequest,
 } from "./schemas.js";
 
@@ -141,6 +144,10 @@ export async function createOrg(
         currencyDisplay,
         code: codeFromBytes(deps.randomBytes(6)),
         codeLabel: FIRST_CODE_LABEL,
+        // §4.0 step 1's owner row starts with the owner role's whole set. Same
+        // source as an appointment's, so "what does an owner start with" has
+        // one answer in one place.
+        ownerPrivileges: defaultPrivilegesFor("owner"),
       });
       // The owner is member #1 (Part 3 §4.0 step 6), which is a membership
       // change like any other — §4.1's cache would otherwise answer from a
@@ -354,21 +361,18 @@ export async function nudgeMyApplication(
  *  of them go through here — the applicant's own list does not, because it is
  *  scoped by `user_id` and asks nothing about a gym.
  *
- *  **WHAT IS NOT BUILT YET, said plainly: the per-staff TICKS have no
- *  storage.** `gym_staff` holds gym/user/role and nothing else, so today the
- *  effective set is the ROLE'S DEFAULT and an owner cannot yet widen one
- *  person's. That is the staff-management card (its own `OWED.md` line), and
- *  when it lands it replaces the body of `privilegesFor` with a read of the
- *  stored SNAPSHOT — no caller changes. */
-export const ORG_PRIVILEGES = [
-  "members.read",
-  "codes.invite",
-  "codes.manage",
-  "members.confirm",
-  "members.remove",
-  "staff.manage",
-] as const;
-export type OrgPrivilege = (typeof ORG_PRIVILEGES)[number];
+ *  **THE TICKS NOW HAVE STORAGE (2026-08-22), and this comment's own prophecy
+ *  is what landed: `privilegesFor` reads the stored set and NO CALLER
+ *  CHANGED.** `gym_staff.privileges` holds the EFFECTIVE set as a snapshot
+ *  (migration `0013`), an owner edits it through `updateOrgStaffPrivileges`,
+ *  and the role's template below is only what a NEW appointment starts from.
+ *
+ *  **The vocabulary moved to `@app/shared` in the same card** and is re-exported
+ *  here so this file still reads as the seam: the staff list serves these
+ *  strings and the ticks route accepts them, so it is contract now (R7.2) and a
+ *  second copy would be a second vocabulary. */
+export { ORG_PRIVILEGES };
+export type { OrgPrivilege };
 
 /** Part 3 §2.2's matrix, as the DEFAULT ticks each role starts with.
  *
@@ -423,8 +427,47 @@ const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>> = {
   trainer: ["members.read", "codes.invite"],
 };
 
-function privilegesFor(role: OrgRole): readonly OrgPrivilege[] {
-  return ROLE_PRIVILEGES[role];
+/** WHAT THIS PERSON MAY DO, and the argument order is the whole ruling: the
+ *  STORED ticks win, and the role's template is only what somebody starts with.
+ *
+ *  **`stored === null` is the DEPLOY WINDOW, not the model** (R4.4
+ *  expand-then-contract). Migration `0013` filled every row that predates the
+ *  column, and every writer since fills it, so the only rows that can be null
+ *  are ones written by OLD code between the migration landing and this code
+ *  deploying. They read as their role's defaults — exactly what they could do
+ *  before — rather than as "no privileges", which would lock a gym's owner out
+ *  of their own console for the length of a deploy.
+ *
+ *  It is deliberately NOT a permanent fallback: `OWED.md` carries the contract
+ *  to NOT NULL, and while this branch exists a change to `ROLE_PRIVILEGES` could
+ *  reach a null row — which is the silent widening Kd ruled against on
+ *  2026-08-22, bounded here to a deploy window rather than left open for ever. */
+function privilegesFor(role: OrgRole, stored: readonly string[] | null): readonly OrgPrivilege[] {
+  // Canonical, not the template's own order: a null row and a stored row must
+  // be indistinguishable to every reader, and a set that arrives in a different
+  // order depending on which branch produced it is a difference a screen and an
+  // audit row can both see.
+  if (stored === null) return defaultPrivilegesFor(role);
+  // The DATABASE's own CHECK restricts this column to the vocabulary, but a
+  // value read back is external input all the same (R2.3): anything the enum
+  // does not recognise is dropped rather than trusted or thrown over.
+  return stored.filter((p): p is OrgPrivilege =>
+    (ORG_PRIVILEGES as readonly string[]).includes(p),
+  );
+}
+
+/** The ticks a BRAND-NEW appointment starts with, and the ONLY place the role
+ *  templates are read for a write. Sorted and de-duplicated so the column, the
+ *  audit rows and the screen all show one canonical order. */
+export function defaultPrivilegesFor(role: OrgRole): OrgPrivilege[] {
+  return canonicalPrivileges(ROLE_PRIVILEGES[role]);
+}
+
+/** One order, everywhere: sorted, no repeats. A set stored two different ways
+ *  reads as two different sets in an audit log, and "did anything change" is
+ *  then a question about ordering rather than about access. */
+export function canonicalPrivileges(privileges: readonly OrgPrivilege[]): OrgPrivilege[] {
+  return [...new Set(privileges)].sort();
 }
 
 /** Part 3 §2.2's matrix, enforced server-side (R3.3 — UI hiding is never the
@@ -440,17 +483,20 @@ async function requirePrivilege(
   userId: string,
   privilege: OrgPrivilege,
 ): Promise<{ org: repo.OrgRow; role: OrgRole }> {
-  const [org, role] = await Promise.all([
+  const [org, authority] = await Promise.all([
     repo.getOrgById(deps.sql, gymId),
-    repo.getStaffRole(deps.sql, gymId, userId),
+    repo.getStaffAuthority(deps.sql, gymId, userId),
   ]);
-  if (org === null || role === null) {
+  if (org === null || authority === null) {
     throw new OrgsError(404, "org_not_found", "Gym not found.");
   }
-  if (!privilegesFor(role).includes(privilege)) {
+  if (!privilegesFor(authority.role, authority.privileges).includes(privilege)) {
+    // The message says ROLE because that is what a person understands, and it
+    // stays true of a ticked-down manager: what their account is allowed to do
+    // here does not cover this.
     throw new OrgsError(403, "forbidden", "Your role doesn't allow that.");
   }
-  return { org, role };
+  return { org, role: authority.role };
 }
 
 export async function listOrgMembers(
@@ -977,6 +1023,11 @@ function toOrgStaff(row: repo.StaffRow, viewerUserId: string): OrgStaff {
     displayName: row.displayName,
     email: row.email,
     role: row.role,
+    // THE EFFECTIVE SET, run through the same function `requirePrivilege` asks,
+    // so the screen cannot draw a tick the server would refuse or hide one it
+    // honours (:11429 rule 4 — the UI hides, the SERVER enforces, and the two
+    // disagreeing is the defect that rule names in advance).
+    privileges: [...privilegesFor(row.role, row.privileges)],
     since: row.since.toISOString(),
     isYou: row.userId === viewerUserId,
   };
@@ -1011,6 +1062,10 @@ export async function addOrgStaff(
     gymId,
     email: input.email,
     role: input.role,
+    // The role picks the STARTING ticks and the row carries them from its first
+    // moment (:11429). The policy is computed here and the repo only stores it,
+    // so there is one place that knows what a trainer starts with.
+    privileges: defaultPrivilegesFor(input.role),
     actorUserId: userId,
   });
 
@@ -1052,6 +1107,14 @@ export async function updateOrgStaffRole(
     gymId,
     userId: targetUserId,
     role: input.role,
+    // CHANGING THE ROLE RESETS THE TICKS to the new role's defaults, and this is
+    // the load-bearing half of the decision rather than a convenience: without
+    // it, demoting a manager to trainer would leave every manager tick standing,
+    // so the one control an owner reaches for to REDUCE somebody's access would
+    // reduce nothing. A demotion has to actually demote. The cost, stated: an
+    // owner who had hand-ticked that person loses those edits, which is why the
+    // screen (its own card) must say so before the tap.
+    privileges: defaultPrivilegesFor(input.role),
     actorUserId: userId,
   });
 
@@ -1070,6 +1133,63 @@ export async function updateOrgStaffRole(
         409,
         "owner_role_locked",
         "The gym's owner keeps the owner role. Handing a gym over to somebody else isn't something the app can do yet.",
+      );
+    default:
+      return assertNever(outcome);
+  }
+}
+
+/** THE TICKS THE LAST OWNER CANNOT BE STRIPPED OF (:11429 rule 2).
+ *
+ *  §4.7 blocks removing the last owner; **ticking away the same rights reaches
+ *  the identical lockout by another door**, and the spec's rule does not cover
+ *  it because per-staff ticks did not exist when it was written. Without this a
+ *  gym locks itself out of its own console with one tap and only we can let it
+ *  back in.
+ *
+ *  **It is a LIST rather than one name because :11429 names TWO — staff
+ *  management and BILLING — and billing has no tick yet**, there being no
+ *  billing surface in the product. The day one is added to `ORG_PRIVILEGES` it
+ *  belongs here in the same commit; `OWED.md` carries that line so it is not
+ *  remembered by luck. */
+const LAST_OWNER_REQUIRED_PRIVILEGES: readonly OrgPrivilege[] = ["staff.manage"];
+
+/** CHANGE WHAT ONE PERSON MAY DO. Owner-only — `staff.manage` is §2.2's
+ *  owner-alone row and :11429 rule 1 says this ruling does not widen it.
+ *
+ *  The WHOLE set arrives, never a diff (see the request schema), and the last
+ *  writer wins on a set a human looked at. */
+export async function updateOrgStaffPrivileges(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+  targetUserId: string,
+  input: UpdateOrgStaffPrivilegesRequest,
+): Promise<OrgStaffMutationResponse> {
+  await requirePrivilege(deps, gymId, userId, "staff.manage");
+
+  const outcome = await repo.setStaffPrivileges(deps.sql, {
+    gymId,
+    userId: targetUserId,
+    privileges: canonicalPrivileges(input.privileges),
+    lastOwnerRequires: LAST_OWNER_REQUIRED_PRIVILEGES,
+    actorUserId: userId,
+  });
+
+  switch (outcome.kind) {
+    // Both carry the row, for `updateOrgStaffRole`'s reason: the caller asked
+    // for a state and the state holds. Which call produced it is the audit
+    // log's business (:12227 L-3).
+    case "updated":
+    case "unchanged":
+      return orgStaffMutationResponseSchema.parse({ staff: toOrgStaff(outcome.staff, userId) });
+    case "not_staff":
+      throw new OrgsError(404, "not_staff", "That person doesn't run this gym.");
+    case "last_owner_locked":
+      throw new OrgsError(
+        409,
+        "last_owner_locked",
+        "A gym's last owner has to keep the ability to manage staff, or nobody could ever hand it out again.",
       );
     default:
       return assertNever(outcome);

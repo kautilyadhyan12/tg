@@ -24,6 +24,7 @@ import {
   orgParamsSchema,
   staffParamsSchema,
   updateOrgCodeRequestSchema,
+  updateOrgStaffPrivilegesRequestSchema,
   updateOrgStaffRequestSchema,
 } from "./schemas.js";
 import * as service from "./service.js";
@@ -386,6 +387,34 @@ export function registerOrgRoutes(
       const body = parseOr400(updateOrgStaffRequestSchema, req.body, req, reply);
       if (body === null) return;
       const updated = await service.updateOrgStaffRole(
+        orgDeps,
+        requireUserId(req),
+        params.gymId,
+        params.userId,
+        body,
+      );
+      return reply.status(200).send(updated);
+    },
+  );
+
+  // The TICKS (Kd ruling :11429, amended :14745, settled 2026-08-22). PUT and
+  // not PATCH: the body is the WHOLE set every time, so this replaces a value
+  // rather than merging into one — and merging is exactly what a stale screen
+  // must not be allowed to do here.
+  //
+  // It is a THIRD method on this path prefix and reaches a browser through the
+  // same CORS preflight PATCH and DELETE do. `app.ts:111` already lists PUT
+  // (verified, not assumed) — without it every call here would die in the
+  // browser behind a green suite, which is Card 4's dead-method bug exactly.
+  app.put(
+    "/v1/orgs/:gymId/staff/:userId/privileges",
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const params = parseOr400(staffParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const body = parseOr400(updateOrgStaffPrivilegesRequestSchema, req.body, req, reply);
+      if (body === null) return;
+      const updated = await service.updateOrgStaffPrivileges(
         orgDeps,
         requireUserId(req),
         params.gymId,

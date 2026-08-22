@@ -9730,3 +9730,77 @@ NEXT
      names** (:14745), which needs its own migration and carries the open
      snapshot-vs-named-role question for Kd.
 ```
+
+```
+TASK: PER-STAFF PRIVILEGE TICKS, SERVER HALF — a gym can now say what ONE
+      person may do, and KD SETTLED the question :14745 left open.
+      DECISIONS :15381. Migration 0013. No screen, so no smoke.
+
+KD'S RULING (asked in five lines with a recommendation, before any code, R0.2)
+  · **Editing what a named role may do changes NOBODY on its own.** The owner is
+    offered "Change everyone on Front Desk too?" and taps it. :11429's SNAPSHOT
+    stands; propagation is an explicit ACT. The BUTTON is the custom-names
+    card's — there are no named roles to edit until it exists.
+  · `OWED.md`'s snapshot-contradiction line TICKS on the ruling alone.
+
+WHAT SHIPPED
+  · `gym_staff.privileges text[]` + a CHECK holding it to the six named
+    privileges + a backfill (migration `0013`, Kd reviewed the SQL first).
+  · `requirePrivilege` decides on the STORED set (`getStaffRole` →
+    `getStaffAuthority`, one query for role AND ticks — two reads would decide
+    against a set that never existed).
+  · `PUT /v1/orgs/:gymId/staff/:userId/privileges`, owner-only, WHOLE SET only.
+  · Both writers of `gym_staff` fill the column in; a role change RESETS it.
+  · Audit rows name BOTH ends; an unchanged save writes none.
+
+THINGS A LATER CHAT WILL OTHERWISE GET WRONG
+  · **THERE ARE TWO WRITERS OF `gym_staff` AND THE CARD FORGOT ONE.**
+    `createOrgAttempt` writes the owner's row; `addStaff` writes appointments.
+    Fixing one and forgetting the other is how this defect ships — it did, tests
+    caught it, and O98/O99 are one mutant each so it cannot come back.
+  · **NULL IS THE DEPLOY WINDOW, NOT A MODEL.** Old code inserts staff rows
+    without the column and a NOT NULL would break CREATING A GYM, not merely
+    appointing. Those rows read as their ROLE's defaults. Contracting to NOT
+    NULL is owed and must land in a LATER deploy than this code.
+  · **A ROLE CHANGE RESETS THE TICKS ON PURPOSE.** Without it "change them to
+    trainer" leaves every manager power standing. Cost: hand-made edits are lost
+    on a role change, and **the SCREEN must say so before the tap** (card B).
+  · **THE LAST-OWNER GUARD COVERS `staff.manage` ALONE** because billing has no
+    tick yet. It is written as a LIST so the day one exists it joins in the same
+    commit — own `OWED.md` line.
+  · **`setStaffPrivileges` and `removeStaff` count owners with IDENTICAL SQL**,
+    deliberately (same rule, two doors). That is what made O87 ambiguous; the
+    anchors are now distinguished by `last_owner` vs `last_owner_locked`. Do not
+    "tidy" either into a shared fragment — R3.8's forbidden shape (:14493 Low-2).
+  · **FOUR SEAT-CAP TESTS SIT ON THE 5 s DEFAULT AND TWO WERE ALREADY RED AT
+    HEAD** — measured by stashing to `9a4e022`: 4782 · 5020 · 4762 · 5017 ms.
+    They now carry `{ timeout: 30_000 }` with the numbers in the file. No
+    assertion changed.
+  · **A `git stash` round-trip flipped five files LF → CRLF.** Content identical
+    (verified byte-wise), `git diff` shows no rewrite. :4267's class, fifth
+    occurrence — suspect line endings before content when an anchor fails here.
+
+GATES
+  · orgs.routes **100/100, exit 0** (+8) · shared **48/48** · db.migration
+    **7/7, exit 0** · tsc clean (api + shared) · eslint exit 0 at
+    `--max-warnings=0` on all six touched source files.
+  · The deployed CHECK proven by CAUSING it (`23514`) in a rolled-back
+    transaction; the backfill's three sets compared BY COMMAND against
+    `ROLE_PRIVILEGES` — all three match exactly.
+  · **9 mutants · 9 RED · 0 ALIVE · 0 never ran, exit 0** — O95–O101 plus the
+    two re-anchored (O4, O87). Controls GREEN first, restores sha256-verified.
+    **THE HARNESS PRINTS THAT IT IS A SUBSET: 9 of 101. Not a full sweep.**
+  · `apps/web` untouched.
+
+NEXT
+  1. **T3 — a FRESH CHAT, never a subagent. It is the ONLY gate this packet can
+     pass**: there is no screen, so there is nothing for Kd to click (:10010 /
+     :11846 / :14262's no-screen precedent). Prompt handed over with the commit.
+  2. Then card B: the Staff screen's tick boxes (web), which carries the SMOKE.
+  3. Then card C: custom role names — the second migration (`gym_staff.role` is
+     `text` under a three-value CHECK), presets, and Kd's "Change everyone on
+     Front Desk too?" button.
+  4. `OWED.md`: the ticks line is UPDATED not ticked (no screen); the
+     snapshot-contradiction line TICKS; two NEW lines (NOT NULL contract ·
+     billing joining the last-owner guard).
+```

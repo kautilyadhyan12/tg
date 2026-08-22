@@ -809,6 +809,57 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:15381** — 2026-08-22 — **PER-STAFF PRIVILEGE TICKS (server half): a gym can
+  say what ONE person may do — and KD SETTLED the snapshot-vs-named-role question
+  :14745 left open.** **Read before touching `gym_staff`, before adding a
+  privilege to `ORG_PRIVILEGES`, before adding a THIRD writer of the staff table,
+  before writing a route that checks a role NAME, and before designing the Staff
+  screen's tick boxes.** **KD'S RULING, put to him in five lines with a
+  recommendation before a byte was written (R0.2): editing what a named role may
+  do changes NOBODY on its own — the owner is offered "Change everyone on Front
+  Desk too?" and taps it.** So :11429's SNAPSHOT stands and propagation is an
+  explicit ACT; the button is the custom-names card's, and `OWED.md`'s
+  snapshot-contradiction line TICKS on the ruling alone. **Step 1 of three Kd
+  approved (ticks · screen · names).** Migration **`0013`**: `privileges text[]`,
+  a CHECK holding it to the six named privileges, and a backfill. Decisions not
+  to re-derive: **`text[]` not JSONB, decided against R4.2 as :11429 asked** ·
+  **the WHOLE set is sent, never a diff** (a diff applied to a row somebody else
+  edited produces a set nobody chose) · **a role change RESETS the ticks**, or
+  "change them to trainer" leaves every manager power standing and the one
+  control that reduces access reduces nothing (**O97**) · **the last-owner guard
+  is a COUNT inside the org lock**, `removeStaff`'s shape deliberately, and it
+  covers `staff.manage` ALONE because :11429 names two and **billing has no tick
+  yet** (own OWED line) · **`privileges` is OPTIONAL in the contract** for
+  :12660's reason, carrying the EFFECTIVE set through the same function the seam
+  asks (**O101**) · **the vocabulary MOVED to `@app/shared`** (R7.2) · **NULL
+  means the DEPLOY WINDOW, not "no privileges"** — a NOT NULL would have broken
+  CREATING A GYM between migration and deploy; the contract to NOT NULL is owed.
+  **THE MIGRATION'S ONE DEPARTURE IS NAMED RATHER THAN SLIPPED PAST: the backfill
+  sits inside it, which R4.4 forbids** — measured first (`gym_staff` = **2 rows,
+  both owners**, 107 gyms; 0 on a fresh database), and a separate job somebody
+  forgets is the larger risk. Kd reviewed the SQL first (T5), and the three sets
+  were compared BY COMMAND against `ROLE_PRIVILEGES` — all three match, so no
+  access moves on the day it lands. **THE INSTRUMENTS FOUND THREE THINGS, ALL
+  MINE: `createOrgAttempt` WAS FORGOTTEN** — the second writer of `gym_staff`, so
+  every new gym's owner would have rested on the fallback for ever; caught by
+  TESTS, not review (**O98**, with **O99** the same hole at the other writer) ·
+  **four tests were sitting on the 5000 ms default and TWO WERE ALREADY RED AT
+  HEAD** — baselined by stashing to `9a4e022` and re-running: **4782 · 5020 ·
+  4762 · 5017 ms**, closed with the explicit `{ timeout: 30_000 }` the file gives
+  every other DB-heavy test, no assertion touched (**not** Part 0 rule 3's
+  widened tolerance, and the numbers are in the test file so a later chat can see
+  the margin was pre-existing) · **O4 and O87 DRIFTED, and O87 is the ambiguity
+  guard's FIRST REAL FIRING** — `setStaffPrivileges` counts owners with the same
+  SQL text as `removeStaff`, so a one-line anchor went from one match to two and
+  :15259's pre-check ABORTED before a byte was written; both re-anchored and
+  **re-measured RED**. **PROVE, all on LOCAL Postgres: orgs.routes 100/100 exit 0
+  (+8) · shared 48/48 · db.migration 7/7 exit 0 · tsc + eslint clean · the
+  deployed CHECK tested by CAUSING it (23514) inside a rolled-back transaction ·
+  MUTATION AUDIT 9 mutants · 9 RED · 0 ALIVE · 0 never ran, exit 0, and the
+  harness PRINTS that it is a SUBSET — 9 of 101.** **NOTHING TICKS BEYOND THE
+  RULING: there is no screen, so an owner cannot reach any of it and there was no
+  smoke to run; T3 is the only gate this packet can pass today.**
+
 - **:15259** — 2026-08-22 — **THE ROSTER BADGE, T3 ROUND 1: ZERO Critical/High —
   THE PACKET SHIPS.** Reviews :15093 and :15187. Escape hatch NOT armed (:15007
   found zero). **Read before writing a `gym_id` predicate on `gym_members`,

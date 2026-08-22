@@ -15377,3 +15377,156 @@ What backs it is that the suite, the build and the sweep were re-run afterwards
 and the badge's behaviour is pinned by C36/C37/C38. **The stronger citation costs
 ten seconds — re-run sheet step 6 — and a later chat wanting one should take it
 rather than lean on this paragraph.**
+
+## PER-STAFF PRIVILEGE TICKS: A GYM CAN SAY WHAT ONE PERSON MAY DO — and KD SETTLED THE QUESTION :14745 LEFT OPEN (2026-08-22)
+
+**Read before touching `gym_staff`, before adding a privilege to
+`ORG_PRIVILEGES`, before adding a THIRD writer of the staff table, before
+writing any route that checks a role NAME, and before designing the Staff
+screen's tick boxes.** Server half only — **no screen, therefore no smoke**
+(:10010 / :11846 / :14262's precedent). Implements :11429 as amended by :14745.
+Step 1 of the three Kd approved: **ticks · the screen · custom role names.**
+
+### KD'S RULING — the question :14745 said this card must put to him
+
+:11429 stores the effective set as a **SNAPSHOT**; :14745 recorded that a NAMED
+role invites the opposite expectation, and called snapshot-plus-a-visible-name
+"a contradiction a user can see". It was put to him in five lines with a
+recommendation, before a byte was written (R0.2), and he chose the
+recommendation: **nothing changes on its own — editing what a role may do
+offers the owner "Change everyone on Front Desk too?" and they tap it.**
+
+So the snapshot STANDS and propagation is an explicit ACT. **The button belongs
+to the custom-names card** (there are no named roles to edit until it exists);
+what this card owes it is storage that makes the batch write a one-statement job
+with no further migration. `OWED.md`'s snapshot-contradiction line TICKS on this
+ruling.
+
+### WHAT SHIPPED
+
+Migration **`0013_gym_staff_privileges`** — `gym_staff.privileges text[]`, a
+CHECK restricting it to the six named privileges, and a backfill. The seam
+(`requirePrivilege`) now decides on the STORED set; `PUT
+/v1/orgs/:gymId/staff/:userId/privileges` is how an owner changes it; both
+writers of `gym_staff` fill it in; every change is audit-logged with BOTH ends.
+
+**Decisions not to re-derive:**
+
+- **`text[]`, not JSONB, decided against R4.2 as :11429 asked.** JSONB is for
+  documents; this is a set of enumerated strings, and the moment anything
+  filters on one privilege (:11429 names the notifications case) an array
+  answers it in SQL. The CHECK gives it the same `text` + CHECK treatment every
+  status column in this schema gets — a privilege nobody defined cannot be
+  stored. It does NOT forbid duplicates (verified against the deployed
+  constraint, not assumed); the write path stores a sorted, de-duplicated set.
+- **THE WHOLE SET IS SENT, never a diff.** A diff applied to a row somebody else
+  edited produces a set nobody chose; the whole set means the last writer wins
+  on a set a human looked at, and the audit row can name both ends.
+- **A ROLE CHANGE RESETS THE TICKS, and this is load-bearing rather than tidy.**
+  Without it "change them to trainer" leaves every manager tick standing, so the
+  one control an owner reaches for to REDUCE access reduces nothing. Cost,
+  stated: hand-made edits are lost on a role change, and the SCREEN must say so
+  before the tap. Mutant **O97**.
+- **THE LAST-OWNER GUARD IS A COUNT INSIDE THE ORG LOCK** — `removeStaff`'s
+  shape, deliberately identical, because it is the same rule pointed at the
+  other door (:11429 rule 2: ticking away staff management is §4.7's lockout
+  reached another way, and **nobody inside the gym could repair it**, since
+  handing `staff.manage` back requires `staff.manage`). Counting OWNERS rather
+  than asking "is this the owner" keeps it correct on the day a second owner
+  exists. **It covers `staff.manage` ALONE because :11429 names TWO and BILLING
+  HAS NO TICK YET** — own `OWED.md` line so the day a billing privilege lands it
+  joins the list in the same commit rather than by luck.
+- **`privileges` is OPTIONAL in the contract** for :12660's expand-then-contract
+  reason (`orgsApi.js` treats a contract mismatch as a hard failure, so a
+  required key would destroy the whole Staff screen in any web-newer-than-API
+  window). The response carries the EFFECTIVE set — run through the same
+  function the seam asks — so a screen cannot draw a tick the server would
+  refuse (:11429 rule 4). Mutant **O101**.
+- **The vocabulary MOVED to `@app/shared`** (R7.2): the list is contract now —
+  served by the staff list, accepted by the ticks route, and read by the screen
+  next card. A second copy would be a second vocabulary.
+- **NULL means the DEPLOY WINDOW, not "no privileges".** Old code inserts staff
+  rows without the column, and a NOT NULL would have broken CREATING A GYM
+  between the migration landing and the code deploying. Those rows read as their
+  role's defaults — what they could do before. **Contracting to NOT NULL is
+  owed**, and while the branch exists a template edit could still reach a null
+  row, which is the silent widening Kd ruled against, bounded to a deploy window
+  rather than left open.
+
+### THE MIGRATION'S ONE DEPARTURE, MEASURED RATHER THAN WAVED THROUGH
+
+**The backfill sits INSIDE the migration, which R4.4 says never to do.** The
+rule guards against long locks on big tables; measured first, on the dev
+database: **`gym_staff` holds 2 rows, both owners** (107 gyms, and 0 rows on a
+fresh local database). Against that, a separate batched job somebody has to
+remember to run is the larger risk — an un-run backfill leaves staff rows
+reading their defaults for ever, which is the thing the snapshot exists to
+prevent. **Kd reviewed the SQL before any other code (R4.4, T5) and was told
+which line departs and why.** It is idempotent by its own `WHERE`, and its three
+sets were compared BY COMMAND against `ROLE_PRIVILEGES` — all three match
+exactly, so nobody's access moves by one tick on the day it lands.
+
+### WHAT THE INSTRUMENTS FOUND, AND ALL THREE WERE MINE
+
+1. **`createOrgAttempt` WAS FORGOTTEN — the second writer of `gym_staff`.** The
+   card wrote ticks at appointment and left gym creation inserting a bare owner
+   row, so every new gym's owner would have rested on the deploy-window fallback
+   for ever. **Three tests caught it**, not review. Mutant **O98** is that defect
+   restored; **O99** is the same hole at the other writer, because a card that
+   fixes one and forgets the other is exactly how this shipped.
+2. **FOUR TESTS WERE SITTING ON THE 5000 ms DEFAULT AND TWO WERE ALREADY RED AT
+   HEAD.** My first suite run showed four failures; the honest reading needed a
+   baseline, so the tree was stashed to `9a4e022` and the same command run:
+   **4782 · 5020 · 4762 · 5017 ms, two failing there too.** They are seat-cap
+   tests driving a subscription, a join, a confirm and an appointment through
+   real HTTP; this card adds one column to a few SELECTs and tipped the other
+   two over. Fixed the way the file already handles every other DB-heavy test —
+   an explicit `{ timeout: 30_000 }` — with the measurement written into the
+   test file. **Not a tolerance widened to buy green** (Part 0 rule 3): no
+   assertion changed, and the numbers are recorded so a later chat can see the
+   margin was pre-existing.
+3. **TWO EXISTING MUTANTS DRIFTED, AND THE SECOND IS THE GUARD'S FIRST REAL
+   FIRING.** **O4**'s anchor renamed with the seam (`role` → `authority`);
+   **O87 became AMBIGUOUS** because `setStaffPrivileges` counts owners with the
+   same SQL text as `removeStaff` — one match became two, and the pre-check
+   :15259 built for exactly this ABORTED before a byte was written. Re-anchored
+   on the line unique to each (`last_owner` vs `last_owner_locked`) and **both
+   re-measured RED**, because a re-aimed mutant is an unproven one (:8610).
+
+### A LINE-ENDING NOTE A LATER CHAT WILL OTHERWISE MISREAD
+
+The baseline measurement above used `git stash`, and the pop brought five files
+back **CRLF where they had been LF**. Content is identical — verified by
+stripping CR and diffing, then byte-compared to find the cause — and `git diff`
+shows no whole-file rewrite, because git normalises on commit. It is recorded
+because :4267's class has now bitten five harnesses in this repo, and a chat
+seeing a mutant anchor fail here should suspect line endings before content.
+
+### PROVE — all on the LOCAL Postgres (:13659), every figure from a real run
+
+- `test/orgs.routes.test.ts` **100/100, exit 0** (+8) · shared **48/48** ·
+  `tsc --noEmit` clean on api and shared · eslint **exit 0 at
+  `--max-warnings=0`** on all six touched source files plus `packages/shared`.
+- Migration applied to the local database and **`test/db.migration.test.ts`
+  7/7, exit 0** — so it applies to a database built from scratch, not only to
+  this one.
+- The deployed CHECK was tested by CAUSING it: an invented privilege is refused
+  (`23514`), a duplicate is allowed (which is what the comment claims), and the
+  backfill's three sets read back correct — all inside a transaction that was
+  rolled back, with `gym_staff` verified empty afterwards.
+- **MUTATION AUDIT — 9 mutants · 9 RED · 0 ALIVE · 0 never ran, exit 0**, in two
+  runs: **O95–O101** (the card's own guarantees) and **O4 + O87** (the two
+  re-anchored). Controls GREEN through the same path first, restores
+  sha256-verified after every mutant. **THE HARNESS PRINTS THAT IT IS A SUBSET —
+  9 of 101 — and this entry says so rather than implying a full sweep** (:5199).
+  Every row sits in :5857 rule 4a's OWNERSHIP column, which is the one the rule
+  says always earns a database mutant.
+- `apps/web` untouched.
+
+### NOTHING TICKS BEYOND THE RULING
+
+The ticks have storage, a route and an audit trail, and **an owner still cannot
+reach any of it** — there is no screen. `OWED.md`'s ticks line is UPDATED, not
+ticked; the snapshot-contradiction line TICKS on Kd's ruling alone. **T3 is the
+only gate this packet can pass today**, and a fresh chat runs it (never a
+subagent).

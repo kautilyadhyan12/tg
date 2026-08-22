@@ -727,6 +727,37 @@ export type OrgMemberPage = z.infer<typeof orgMemberPageSchema>;
 export const staffAssignableRoleSchema = z.enum(["manager", "trainer"]);
 export type StaffAssignableRole = z.infer<typeof staffAssignableRoleSchema>;
 
+/** EVERY TICK THE SERVER CAN ENFORCE. Kd ruling :11429 — "the three roles stay
+ *  AND per-staff privilege ticks go on top", the role picking the STARTING
+ *  ticks and the ticks being what `requirePrivilege` actually checks.
+ *
+ *  **It lives HERE rather than in the api because it is now part of the
+ *  contract** (R7.2): the staff list serves these strings and the ticks route
+ *  accepts them, so a vocabulary defined twice is two vocabularies. The api
+ *  re-exports it; `apps/web` reads the same list, which is what stops a screen
+ *  offering a box the server has never heard of.
+ *
+ *  **FINITE AND NAMED ON PURPOSE — a tick nobody defined is a tick nobody
+ *  enforces** (:11429). Adding one means adding the check that reads it in the
+ *  same card, and the database's own CHECK (migration `0013`) refuses anything
+ *  outside this list, so a widened enum without a migration fails loudly rather
+ *  than storing a permission that does nothing.
+ *
+ *  **NOT a scope** (:11429 rule 6). "May see members" is a tick; WHICH members
+ *  (§2.2's trainer *assigned/group only*) is a different axis, still blocked on
+ *  `gym_staff` having no group column. Conflating them hands a trainer the whole
+ *  roster. */
+export const ORG_PRIVILEGES = [
+  "members.read",
+  "codes.invite",
+  "codes.manage",
+  "members.confirm",
+  "members.remove",
+  "staff.manage",
+] as const;
+export const orgPrivilegeSchema = z.enum(ORG_PRIVILEGES);
+export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
+
 /** One person who runs this gym.
  *
  *  **`email` IS on this row, and it is checked against §2.4 rather than waved
@@ -748,6 +779,22 @@ export const orgStaffSchema = z.object({
   /** Null for an OAuth-only account: `users.email` is nullable by design. */
   email: z.string().nullable(),
   role: orgRoleSchema,
+  /** WHAT THIS PERSON MAY ACTUALLY DO — the effective set the server enforces,
+   *  not the role's template. The role picked it when they were appointed; an
+   *  owner can then tick boxes on or off for this one person (:11429, amended
+   *  :14745 and settled 2026-08-22).
+   *
+   *  **OPTIONAL for the expand-then-contract reason `takesSeat` is optional
+   *  above** (:12660, :15093): `orgsApi.js` treats a contract mismatch as a hard
+   *  failure, so a REQUIRED key would destroy the whole Staff screen during any
+   *  window where the web is newer than the API. Absent, the screen falls back
+   *  to what the role grants by default — which is exactly what shipped before
+   *  this card, and is right for every row that has never been ticked.
+   *
+   *  **No §2.4 question arises**: this list is gated on `staff.manage`, which is
+   *  the owner's alone, and it describes what a colleague may DO rather than
+   *  anything about a member. */
+  privileges: z.array(orgPrivilegeSchema).optional(),
   since: z.string(),
   isYou: z.boolean(),
 });
@@ -787,6 +834,21 @@ export type AddOrgStaffRequest = z.infer<typeof addOrgStaffRequestSchema>;
 
 export const updateOrgStaffRequestSchema = z.object({ role: staffAssignableRoleSchema }).strict();
 export type UpdateOrgStaffRequest = z.infer<typeof updateOrgStaffRequestSchema>;
+
+/** CHANGING SOMEBODY'S TICKS. The WHOLE set every time, never a diff.
+ *
+ *  **Sending the whole set is what makes a stale screen safe.** A diff
+ *  (`add: [...]`, `remove: [...]`) applied to a row somebody else has edited
+ *  produces a set nobody chose; the whole set means the last writer wins on a
+ *  set a human actually looked at, and the audit row can record both ends.
+ *
+ *  Bounded at the vocabulary's own length so a body cannot carry a megabyte of
+ *  repeats; duplicates inside it are de-duplicated by the server rather than
+ *  refused, because a repeated tick is not a mistake a human can see. */
+export const updateOrgStaffPrivilegesRequestSchema = z
+  .object({ privileges: z.array(orgPrivilegeSchema).max(ORG_PRIVILEGES.length) })
+  .strict();
+export type UpdateOrgStaffPrivilegesRequest = z.infer<typeof updateOrgStaffPrivilegesRequestSchema>;
 
 export const orgStaffMutationResponseSchema = z.object({ staff: orgStaffSchema });
 export type OrgStaffMutationResponse = z.infer<typeof orgStaffMutationResponseSchema>;

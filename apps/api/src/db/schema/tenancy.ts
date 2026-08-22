@@ -211,10 +211,47 @@ export const gymStaff = pgTable(
       .notNull()
       .references(() => users.id),
     role: text("role").notNull(),
+    /** WHAT THIS PERSON MAY ACTUALLY DO — the EFFECTIVE set, stored as a
+     *  snapshot on the row (Kd ruling :11429's K4 call, ratified at this card;
+     *  amended :14745 and again 2026-08-22 when he chose "nobody changes on
+     *  their own — I tap a button").
+     *
+     *  **The ROLE picks the starting ticks; the TICKS are what the server
+     *  enforces** (`requirePrivilege`). Storing the effective set rather than a
+     *  diff against the role's template is what makes "what can this person do"
+     *  answerable without knowing which version of the template they were
+     *  appointed under — and it is what stops a template edit silently widening
+     *  ten people's access, which is exactly what Kd ruled against.
+     *
+     *  **`text[]` and not JSONB, decided against R4.2 at the card as :11429
+     *  asked.** JSONB is for values the app treats as a document; this is a set
+     *  of enumerated strings, and the moment anything filters on one privilege
+     *  (:11429 names the notifications case — "email every staff member who can
+     *  manage members") an array answers it in SQL with `= ANY` and a GIN index,
+     *  where a JSONB field would have to become a column.
+     *
+     *  **NULLABLE ONLY FOR THE DEPLOY WINDOW (R4.4 expand-then-contract), not
+     *  as a model.** Every writer fills it in, and `0013`'s own backfill filled
+     *  the rows that predate it, so after that migration no row is NULL —
+     *  measured. The window that needs the nullability is the one where the
+     *  MIGRATION has landed and the new code has not: old `createOrgAttempt` and
+     *  old `addStaff` insert without this column, and a NOT NULL would break
+     *  creating a gym. The reader falls back to the role's defaults for exactly
+     *  those rows. Contracting to NOT NULL is owed (`OWED.md`).
+     *
+     *  The CHECK constrains the vocabulary the way every status column in this
+     *  schema does — `text` + CHECK, never a PG enum (R4.2) — so a privilege
+     *  nobody defined cannot be stored even if a caller invents one. It does NOT
+     *  forbid duplicates; the write path stores a sorted, de-duplicated set. */
+    privileges: text("privileges").array(),
     createdAt: createdAt(),
   },
   (t) => [
     primaryKey({ columns: [t.gymId, t.userId] }),
     check("gym_staff_role_check", sql`${t.role} IN ('owner','manager','trainer')`),
+    check(
+      "gym_staff_privileges_check",
+      sql`${t.privileges} IS NULL OR ${t.privileges} <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage']::text[]`,
+    ),
   ],
 );

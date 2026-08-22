@@ -25,6 +25,7 @@ export {
   orgCodesResponseSchema,
   orgMemberListQuerySchema,
   orgMemberPageSchema,
+  orgPrivilegeSchema,
   orgRoleSchema,
   orgStaffMutationResponseSchema,
   orgStaffResponseSchema,
@@ -38,8 +39,10 @@ export {
   rotateOrgCodeResponseSchema,
   staffAssignableRoleSchema,
   updateOrgCodeRequestSchema,
+  updateOrgStaffPrivilegesRequestSchema,
   updateOrgStaffRequestSchema,
 } from "@app/shared";
+export { ORG_PRIVILEGES } from "@app/shared";
 export type {
   AddOrgStaffRequest,
   ConfirmApplicationResponse,
@@ -65,6 +68,7 @@ export type {
   OrgMember,
   OrgMemberListQuery,
   OrgMemberPage,
+  OrgPrivilege,
   OrgRole,
   OrgStaff,
   OrgStaffMutationResponse,
@@ -78,6 +82,7 @@ export type {
   RotateOrgCodeResponse,
   StaffAssignableRole,
   UpdateOrgCodeRequest,
+  UpdateOrgStaffPrivilegesRequest,
   UpdateOrgStaffRequest,
 } from "@app/shared";
 

@@ -29,6 +29,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { JOIN_CODE_ALPHABET } from "@app/shared";
 import * as orgRepo from "../src/modules/orgs/repo.js";
+import * as orgService from "../src/modules/orgs/service.js";
 // The REAL spend-attribution readers, called by the permanent guard rather
 // than re-typed into it (T3 security-pass note). Three imports because R7.1
 // keeps them module-local — that duplication is the reason to name all three.
@@ -147,6 +148,23 @@ d("orgs routes (real Postgres)", () => {
   ) =>
     api().inject({
       method: "PATCH",
+      url: path,
+      remoteAddress: nextIp(),
+      headers: { "content-type": "application/json" },
+      cookies: opts.cookies ?? {},
+      payload: JSON.stringify(payload),
+    });
+
+  /** The ticks route replaces a whole set, so it is a PUT. `fastify.inject`
+   *  cannot see the CORS preflight this needs in a browser — `app.ts` lists the
+   *  method and the SMOKE is what proves it (Card 4's dead-method precedent). */
+  const put = (
+    path: string,
+    payload: unknown,
+    opts: { cookies?: Record<string, string> } = {},
+  ) =>
+    api().inject({
+      method: "PUT",
       url: path,
       remoteAddress: nextIp(),
       headers: { "content-type": "application/json" },
@@ -2880,6 +2898,11 @@ d("orgs routes (real Postgres)", () => {
     displayName: string;
     email: string | null;
     role: string;
+    /** The EFFECTIVE ticks — what the server would enforce, not the role's
+     *  template. Optional in the contract for the expand-then-contract reason
+     *  `takesSeat` is (:12660), so it is optional here too rather than asserted
+     *  into existence by the test's own type. */
+    privileges?: string[];
     since: string;
     isYou: boolean;
   }
@@ -2903,6 +2926,25 @@ d("orgs routes (real Postgres)", () => {
       SELECT complimentary FROM gym_members
       WHERE gym_id = ${gymId} AND user_id = ${userId} AND removed_at IS NULL`;
     return rows[0]?.complimentary;
+  };
+
+  /** The role `requirePrivilege` would honour — `getStaffAuthority`'s answer
+   *  narrowed to the half these particular assertions are about.
+   *
+   *  It exists so the ghost, cross-gym and both-readers tests below read exactly
+   *  as they did when the function was called `getStaffRole`: those tests are
+   *  about WHOSE staff row counts at all, and the ticks card changed the shape
+   *  of the answer without changing one of their claims. */
+  const staffRoleOf = async (gymId: string, userId: string) =>
+    (await orgRepo.getStaffAuthority(sql, gymId, userId))?.role ?? null;
+
+  /** The ticks as the DATABASE holds them — `null` for a row written before the
+   *  column existed, which is the one state `privilegesFor` turns back into the
+   *  role's defaults. */
+  const storedPrivileges = async (gymId: string, userId: string) => {
+    const rows = await sql<{ privileges: string[] | null }[]>`
+      SELECT privileges FROM gym_staff WHERE gym_id = ${gymId} AND user_id = ${userId}`;
+    return rows[0]?.privileges ?? null;
   };
 
   it("lists the owner as staff, and marks the row as the viewer's own", async () => {
@@ -2949,7 +2991,18 @@ d("orgs routes (real Postgres)", () => {
    *  something else (T3 round 1, C/H-1). A seat is free if and only if the SEAT
    *  CAP stops counting it, so the assertion is a gym at its cap admitting one
    *  more person. */
-  it("SEAT CAP: appointing a member frees their seat, and removing them takes it back", async () => {
+  // THE TIMEOUT ON THIS AND THREE SIBLINGS IS A MEASUREMENT, NOT A NUDGE TO GET
+  // GREEN. All four are seat-cap tests that drive a subscription, a join, a
+  // confirm and an appointment through real HTTP against real Postgres, and all
+  // four sit ON the 5000 ms default. Timed at HEAD (`9a4e022`), BEFORE this
+  // card, on the local database: 4782 · 5020 · 4762 · 5017 ms — two of them
+  // already failing there, which is how this was found. The ticks card adds one
+  // column to a few SELECTs and tipped the other two over.
+  //
+  // The file's own convention is an explicit timeout on every DB-heavy test
+  // (30_000 and 90_000 appear throughout); these four were the ones that never
+  // got one. Nothing about the assertions changes.
+  it("SEAT CAP: appointing a member frees their seat, and removing them takes it back", { timeout: 30_000 }, async () => {
     const owner = await makeUser("staff-seat-owner");
     const hire = await makeUser("staff-seat-hire");
     const walkIn = await makeUser("staff-seat-walkin");
@@ -3037,7 +3090,7 @@ d("orgs routes (real Postgres)", () => {
    *  false` from the roster and the owner reads as taking a seat; drop the
    *  `NOT EXISTS` and the appointed trainer does; drop either from the count and
    *  the gym stays full where this expects room. */
-  it("ROSTER + CAP: the badge and the seat count answer the same question", async () => {
+  it("ROSTER + CAP: the badge and the seat count answer the same question", { timeout: 30_000 }, async () => {
     const owner = await makeUser("seat-both-owner");
     const payer = await makeUser("seat-both-payer");
     const walkIn = await makeUser("seat-both-walkin");
@@ -3101,7 +3154,7 @@ d("orgs routes (real Postgres)", () => {
     await joinAsMember(comped.cookies, org, owner.cookies);
     await sql`UPDATE gym_members SET complimentary = true
               WHERE gym_id = ${org.org.id} AND user_id = ${comped.userId} AND removed_at IS NULL`;
-    expect(await orgRepo.getStaffRole(sql, org.org.id, comped.userId)).toBeNull();
+    expect(await staffRoleOf(org.org.id, comped.userId)).toBeNull();
 
     const withComped = await roster();
     expect(rowFor(withComped, comped.userId)?.complimentary).toBe(true);
@@ -3438,6 +3491,7 @@ d("orgs routes (real Postgres)", () => {
           gymId: org.org.id,
           email: "orgs-t-staff-race-target@example.com",
           role: "manager",
+          privileges: orgService.defaultPrivilegesFor("manager"),
           actorUserId: owner.userId,
         }),
         orgRepo.removeMember(c2, {
@@ -3463,7 +3517,7 @@ d("orgs routes (real Postgres)", () => {
 
     // And the authorisation answer agrees with both — the second line of
     // defence, which holds even if a future edit drops the lock.
-    const role = await orgRepo.getStaffRole(sql, org.org.id, target.userId);
+    const role = await staffRoleOf(org.org.id, target.userId);
     if ((liveRows[0]?.n ?? 0) === 0) expect(role).toBeNull();
     else expect(role).toBe("manager");
   });
@@ -3481,23 +3535,23 @@ d("orgs routes (real Postgres)", () => {
       { email: "orgs-t-staff-ghost-ghost@example.com", role: "manager" },
       { cookies: owner.cookies },
     );
-    expect(await orgRepo.getStaffRole(sql, org.org.id, ghost.userId)).toBe("manager");
+    expect(await staffRoleOf(org.org.id, ghost.userId)).toBe("manager");
 
     // The DPDP Day-0 cascade: memberships close, `gym_staff` is untouched.
     await sql`UPDATE gym_members SET removed_at = now()
               WHERE gym_id = ${org.org.id} AND user_id = ${ghost.userId} AND removed_at IS NULL`;
     await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${ghost.userId}`;
-    expect(await orgRepo.getStaffRole(sql, org.org.id, ghost.userId)).toBeNull();
+    expect(await staffRoleOf(org.org.id, ghost.userId)).toBeNull();
 
     // Restore. The account is live again; the membership deliberately is not.
     await sql`UPDATE users SET status = 'active', deleted_at = NULL WHERE id = ${ghost.userId}`;
-    expect(await orgRepo.getStaffRole(sql, org.org.id, ghost.userId)).toBeNull();
+    expect(await staffRoleOf(org.org.id, ghost.userId)).toBeNull();
 
     // The OWNER is exempt and must stay exempt — a gym whose owner opted out of
     // membership (`gyms.owner_included_as_member`) must not be locked out.
     await sql`UPDATE gym_members SET removed_at = now()
               WHERE gym_id = ${org.org.id} AND user_id = ${owner.userId} AND removed_at IS NULL`;
-    expect(await orgRepo.getStaffRole(sql, org.org.id, owner.userId)).toBe("owner");
+    expect(await staffRoleOf(org.org.id, owner.userId)).toBe("owner");
 
     // STAFF WHO WERE NEVER MEMBERS — the state §4.7's invite-by-email flow will
     // produce, and the ONLY case the account-status check carries on its own.
@@ -3508,16 +3562,16 @@ d("orgs routes (real Postgres)", () => {
     const invited = await makeUser("staff-ghost-invited");
     await sql`INSERT INTO gym_staff (gym_id, user_id, role)
               VALUES (${org.org.id}, ${invited.userId}, 'trainer')`;
-    expect(await orgRepo.getStaffRole(sql, org.org.id, invited.userId)).toBe("trainer");
+    expect(await staffRoleOf(org.org.id, invited.userId)).toBe("trainer");
     await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${invited.userId}`;
-    expect(await orgRepo.getStaffRole(sql, org.org.id, invited.userId)).toBeNull();
+    expect(await staffRoleOf(org.org.id, invited.userId)).toBeNull();
   });
 
   /** T3 round 2, C/H-1. Round 1's three fixes added three `gym_id` predicates
    *  and NOT ONE had a test — deleting any of them left all 88 green. The code
    *  was right; nothing would have noticed it going wrong. These two tests are
    *  the alarm, and each names the cost of the predicate it guards. */
-  it("CROSS-GYM: being staff at one gym does not free your seat at another", async () => {
+  it("CROSS-GYM: being staff at one gym does not free your seat at another", { timeout: 30_000 }, async () => {
     const ownerA = await makeUser("xg-seat-owner-a");
     const ownerB = await makeUser("xg-seat-owner-b");
     const dual = await makeUser("xg-seat-dual");
@@ -3575,7 +3629,7 @@ d("orgs routes (real Postgres)", () => {
     expect(rosterA.items.find((m) => m.userId === dual.userId)?.takesSeat).toBe(false);
   });
 
-  it("CROSS-GYM: authority at one gym is never decided by membership at another", async () => {
+  it("CROSS-GYM: authority at one gym is never decided by membership at another", { timeout: 30_000 }, async () => {
     const ownerA = await makeUser("xg-auth-owner-a");
     const ownerB = await makeUser("xg-auth-owner-b");
     const exMember = await makeUser("xg-auth-ex");
@@ -3597,7 +3651,7 @@ d("orgs routes (real Postgres)", () => {
     await del(`/v1/orgs/${gymA.org.id}/members/${exMember.userId}`, { cookies: ownerA.cookies });
     await sql`INSERT INTO gym_staff (gym_id, user_id, role)
               VALUES (${gymA.org.id}, ${exMember.userId}, 'manager')`;
-    expect(await orgRepo.getStaffRole(sql, gymA.org.id, exMember.userId)).toBeNull();
+    expect(await staffRoleOf(gymA.org.id, exMember.userId)).toBeNull();
 
     // (b) NEVER a member of gym A — §4.7's invited manager — who happens to
     // train at gym B. The never-a-member arm must look at gym A only, or the
@@ -3605,7 +3659,7 @@ d("orgs routes (real Postgres)", () => {
     await joinAsMember(invited.cookies, gymB, ownerB.cookies);
     await sql`INSERT INTO gym_staff (gym_id, user_id, role)
               VALUES (${gymA.org.id}, ${invited.userId}, 'trainer')`;
-    expect(await orgRepo.getStaffRole(sql, gymA.org.id, invited.userId)).toBe("trainer");
+    expect(await staffRoleOf(gymA.org.id, invited.userId)).toBe("trainer");
   });
 
   /** T3 round 2, Low-2. The list and the authority check are two readers of
@@ -3639,7 +3693,7 @@ d("orgs routes (real Postgres)", () => {
     const listed = await readStaff(org.org.id, owner.cookies);
     for (const person of [owner, ghost, live]) {
       const onList = listed.some((s) => s.userId === person.userId);
-      const hasAuthority = (await orgRepo.getStaffRole(sql, org.org.id, person.userId)) !== null;
+      const hasAuthority = (await staffRoleOf(org.org.id, person.userId)) !== null;
       expect({ userId: person.userId, onList }).toEqual({
         userId: person.userId,
         onList: hasAuthority,
@@ -3669,7 +3723,7 @@ d("orgs routes (real Postgres)", () => {
     // owner's own seat, and the column exists precisely to say "unpaid".
     await sql`UPDATE gym_members SET complimentary = true
               WHERE gym_id = ${org.org.id} AND user_id = ${comped.userId} AND removed_at IS NULL`;
-    expect(await orgRepo.getStaffRole(sql, org.org.id, comped.userId)).toBeNull();
+    expect(await staffRoleOf(org.org.id, comped.userId)).toBeNull();
 
     // The one paid seat is therefore still free.
     await applyWithCode(walkIn.cookies, org.joinCode.code);
@@ -3685,7 +3739,7 @@ d("orgs routes (real Postgres)", () => {
     expect(admitted.statusCode).toBe(200);
   });
 
-  it("a MANAGER and a TRAINER are refused all four staff routes with 403", async () => {
+  it("a MANAGER and a TRAINER are refused all five staff routes with 403", async () => {
     const owner = await makeUser("staff-403-owner");
     const manager = await makeUser("staff-403-manager");
     const trainer = await makeUser("staff-403-trainer");
@@ -3726,9 +3780,24 @@ d("orgs routes (real Postgres)", () => {
         cookies: who.cookies,
       });
       expect(removed.statusCode).toBe(403);
+      // THE TICKS ROUTE IS THE ONE THAT MATTERS MOST HERE: a manager who could
+      // reach it could tick themselves `staff.manage` and become an owner in
+      // all but name — the privilege-escalation door :11429 rule 1 shuts by
+      // keeping tick-changing owner-only.
+      const ticked = await put(
+        `/v1/orgs/${org.org.id}/staff/${who.userId}/privileges`,
+        { privileges: ["members.read", "codes.invite", "staff.manage"] },
+        { cookies: who.cookies },
+      );
+      expect(ticked.statusCode).toBe(403);
     }
 
     expect(await readStaff(org.org.id, owner.cookies)).toHaveLength(3);
+    // And the refusals left nothing behind: neither of them holds the tick they
+    // tried to hand themselves.
+    for (const who of [manager, trainer]) {
+      expect(await storedPrivileges(org.org.id, who.userId)).not.toContain("staff.manage");
+    }
   });
 
   /** R3.2's required case, for all four routes at once: another gym's OWNER —
@@ -3764,12 +3833,24 @@ d("orgs routes (real Postgres)", () => {
       ).statusCode,
     ).toBe(404);
     expect(
+      (
+        await put(
+          `/v1/orgs/${org.org.id}/staff/${owner.userId}/privileges`,
+          { privileges: [] },
+          { cookies: stranger.cookies },
+        )
+      ).statusCode,
+    ).toBe(404);
+    expect(
       (await del(`/v1/orgs/${org.org.id}/staff/${owner.userId}`, { cookies: stranger.cookies }))
         .statusCode,
     ).toBe(404);
 
-    // Nothing moved.
+    // Nothing moved. The ticks line is not decoration: a 404 that had already
+    // written would be the worst possible pass — the gym's owner stripped of
+    // everything by somebody who was told the gym does not exist.
     expect(await readStaff(org.org.id, owner.cookies)).toHaveLength(1);
+    expect(await storedPrivileges(org.org.id, owner.userId)).toContain("staff.manage");
   });
 
   it("rejects a malformed staff request at the boundary", async () => {
@@ -3820,7 +3901,378 @@ d("orgs routes (real Postgres)", () => {
     expect(
       (await patch(`/v1/orgs/${id}/staff/${owner.userId}`, { role: "trainer" })).statusCode,
     ).toBe(401);
+    // The ticks route is named HERE and not only in its own tests, because
+    // :12227's L-1 is precisely this test claiming to cover "every route" while
+    // naming five of nine — a route added later inherits the claim and none of
+    // the checking.
+    expect(
+      (await put(`/v1/orgs/${id}/staff/${owner.userId}/privileges`, { privileges: [] })).statusCode,
+    ).toBe(401);
     expect((await del(`/v1/orgs/${id}/staff/${owner.userId}`)).statusCode).toBe(401);
+  });
+
+  // -------------------------------------------------------------------------
+  // PER-STAFF PRIVILEGE TICKS (Kd ruling :11429, amended :14745, and the
+  // snapshot-vs-named-role question settled by him on 2026-08-22: nothing
+  // changes on its own, an owner taps to push a change).
+  //
+  // The ROLE picks the starting ticks; the TICKS are what the server enforces.
+  // Every test below therefore proves the change through a ROUTE the ticked
+  // person calls, never by reading the column — a stored array nobody consults
+  // is not a permission (:11429 rule 4).
+  // -------------------------------------------------------------------------
+
+  it("gives a new appointment the ticks its role starts with", async () => {
+    const owner = await makeUser("ticks-start-owner");
+    const hire = await makeUser("ticks-start-hire");
+    const org = await makeOrg(owner.cookies, "Orgs Test Ticks Start");
+    await joinAsMember(hire.cookies, org, owner.cookies);
+    await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-ticks-start-hire@example.com", role: "trainer" },
+      { cookies: owner.cookies },
+    );
+
+    // The row carries its set from the first moment (:11429's snapshot): a
+    // staff record that is briefly tick-less would be a staff record whose
+    // authority depends on when you looked.
+    expect(await storedPrivileges(org.org.id, hire.userId)).toEqual([
+      "codes.invite",
+      "members.read",
+    ]);
+    // The owner's own row got one when the gym was created, through the same
+    // path — nothing about this is special-cased for appointments.
+    expect(await storedPrivileges(org.org.id, owner.userId)).toContain("staff.manage");
+
+    const staff = await readStaff(org.org.id, owner.cookies);
+    expect(staff.find((s) => s.userId === hire.userId)?.privileges).toEqual([
+      "codes.invite",
+      "members.read",
+    ]);
+  });
+
+  /** THE FEATURE, IN THE DIRECTION KD ASKED FOR FIRST (:11891 — "if owner gives
+   *  permission others can also add"): a gym whose front desk is a TRAINER
+   *  could not let anybody in, and now can.
+   *
+   *  Proven through the confirm ROUTE at both ends, because that is the whole
+   *  claim. A test that only read the column back would pass just as happily
+   *  against a server that ignores it. */
+  it("WIDEN: an owner can give one trainer the power to let people in", async () => {
+    const owner = await makeUser("ticks-widen-owner");
+    const desk = await makeUser("ticks-widen-desk");
+    const joiner = await makeUser("ticks-widen-joiner");
+    const org = await makeOrg(owner.cookies, "Orgs Test Ticks Widen");
+    await joinAsMember(desk.cookies, org, owner.cookies);
+    await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-ticks-widen-desk@example.com", role: "trainer" },
+      { cookies: owner.cookies },
+    );
+    await applyWithCode(joiner.cookies, org.joinCode.code);
+    const queued = JSON.parse(
+      (await get(`/v1/orgs/${org.org.id}/applications`, { cookies: owner.cookies })).body,
+    ) as { items: { id: string; userId: string }[] };
+    const application = queued.items.find((a) => a.userId === joiner.userId)?.id ?? "none";
+
+    // BEFORE: §2.2 gives a trainer no say in who is in the gym.
+    const refused = await post(
+      `/v1/orgs/${org.org.id}/applications/${application}/confirm`,
+      {},
+      { cookies: desk.cookies },
+    );
+    expect(refused.statusCode).toBe(403);
+
+    const ticked = await put(
+      `/v1/orgs/${org.org.id}/staff/${desk.userId}/privileges`,
+      { privileges: ["members.read", "codes.invite", "members.confirm"] },
+      { cookies: owner.cookies },
+    );
+    expect(ticked.statusCode).toBe(200);
+    expect((JSON.parse(ticked.body) as { staff: StaffBody }).staff.privileges).toEqual([
+      "codes.invite",
+      "members.confirm",
+      "members.read",
+    ]);
+
+    // AFTER: the same call, the same person, now allowed — and the member is
+    // actually in, not merely un-refused.
+    const allowed = await post(
+      `/v1/orgs/${org.org.id}/applications/${application}/confirm`,
+      {},
+      { cookies: desk.cookies },
+    );
+    expect(allowed.statusCode).toBe(200);
+    const roster = JSON.parse(
+      (await get(`/v1/orgs/${org.org.id}/members`, { cookies: owner.cookies })).body,
+    ) as { items: { userId: string }[] };
+    expect(roster.items.map((m) => m.userId)).toContain(joiner.userId);
+  });
+
+  /** THE OTHER DIRECTION, and the one a gym reaches for after somebody
+   *  mis-uses a control: narrowing has to actually narrow. */
+  it("NARROW: an owner can take one power off a manager and leave the rest", async () => {
+    const owner = await makeUser("ticks-narrow-owner");
+    const manager = await makeUser("ticks-narrow-manager");
+    const member = await makeUser("ticks-narrow-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Ticks Narrow");
+    await joinAsMember(manager.cookies, org, owner.cookies);
+    await joinAsMember(member.cookies, org, owner.cookies);
+    await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-ticks-narrow-manager@example.com", role: "manager" },
+      { cookies: owner.cookies },
+    );
+
+    // A manager may remove members by default (§2.2's own row).
+    expect(
+      (await get(`/v1/orgs/${org.org.id}/members`, { cookies: manager.cookies })).statusCode,
+    ).toBe(200);
+
+    const ticked = await put(
+      `/v1/orgs/${org.org.id}/staff/${manager.userId}/privileges`,
+      { privileges: ["members.read", "codes.invite", "members.confirm", "codes.manage"] },
+      { cookies: owner.cookies },
+    );
+    expect(ticked.statusCode).toBe(200);
+
+    // The one power that was taken away is gone...
+    const removal = await del(`/v1/orgs/${org.org.id}/members/${member.userId}`, {
+      cookies: manager.cookies,
+    });
+    expect(removal.statusCode).toBe(403);
+    // ...and the member is still there, which is the half that would matter to
+    // a person: a 403 that had already deleted somebody is not a refusal.
+    const roster = JSON.parse(
+      (await get(`/v1/orgs/${org.org.id}/members`, { cookies: owner.cookies })).body,
+    ) as { items: { userId: string }[] };
+    expect(roster.items.map((m) => m.userId)).toContain(member.userId);
+    // ...while everything NOT unticked still works. Without this the test would
+    // pass just as well against a server that refuses a narrowed person
+    // everything.
+    expect(
+      (await get(`/v1/orgs/${org.org.id}/members`, { cookies: manager.cookies })).statusCode,
+    ).toBe(200);
+    expect(
+      (await get(`/v1/orgs/${org.org.id}/codes`, { cookies: manager.cookies })).statusCode,
+    ).toBe(200);
+  });
+
+  /** :11429 RULE 2 — the hole this ruling opens and must therefore close. §4.7
+   *  blocks removing the last owner; ticking away the same power reaches the
+   *  identical lockout through another door, and NOBODY INSIDE THE GYM COULD
+   *  REPAIR IT, because handing out `staff.manage` requires `staff.manage`. */
+  it("LOCKOUT: the last owner cannot be ticked out of managing staff", async () => {
+    const owner = await makeUser("ticks-lockout-owner");
+    const org = await makeOrg(owner.cookies, "Orgs Test Ticks Lockout");
+
+    const attempt = await put(
+      `/v1/orgs/${org.org.id}/staff/${owner.userId}/privileges`,
+      { privileges: ["members.read", "codes.invite"] },
+      { cookies: owner.cookies },
+    );
+    expect(attempt.statusCode).toBe(409);
+    expect((JSON.parse(attempt.body) as { error: string }).error).toBe("last_owner_locked");
+
+    // NOTHING WAS WRITTEN. A 409 that had already saved would lock the gym out
+    // while telling the owner it had refused.
+    expect(await storedPrivileges(org.org.id, owner.userId)).toContain("staff.manage");
+    expect(
+      (await get(`/v1/orgs/${org.org.id}/staff`, { cookies: owner.cookies })).statusCode,
+    ).toBe(200);
+
+    // And the guard is not "an owner may change nothing": the same owner can
+    // still edit their OWN other ticks, as long as the keys stay. Without this
+    // the test above passes against a server that refuses owners outright.
+    const allowed = await put(
+      `/v1/orgs/${org.org.id}/staff/${owner.userId}/privileges`,
+      { privileges: ["members.read", "staff.manage"] },
+      { cookies: owner.cookies },
+    );
+    expect(allowed.statusCode).toBe(200);
+    expect(await storedPrivileges(org.org.id, owner.userId)).toEqual([
+      "members.read",
+      "staff.manage",
+    ]);
+  });
+
+  /** A DEMOTION HAS TO DEMOTE. Without the reset, "change them to trainer"
+   *  would leave every manager tick standing — the one control an owner reaches
+   *  for to REDUCE somebody's access would reduce nothing. */
+  it("changing somebody's role RESETS their ticks to that role's defaults", async () => {
+    const owner = await makeUser("ticks-reset-owner");
+    const person = await makeUser("ticks-reset-person");
+    const member = await makeUser("ticks-reset-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Ticks Reset");
+    await joinAsMember(person.cookies, org, owner.cookies);
+    await joinAsMember(member.cookies, org, owner.cookies);
+    await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-ticks-reset-person@example.com", role: "manager" },
+      { cookies: owner.cookies },
+    );
+    // Hand-ticked WIDER than a manager starts: this is the state the reset has
+    // to be able to clear.
+    await put(
+      `/v1/orgs/${org.org.id}/staff/${person.userId}/privileges`,
+      { privileges: ["members.read", "codes.invite", "members.remove", "members.confirm"] },
+      { cookies: owner.cookies },
+    );
+
+    const demoted = await patch(
+      `/v1/orgs/${org.org.id}/staff/${person.userId}`,
+      { role: "trainer" },
+      { cookies: owner.cookies },
+    );
+    expect(demoted.statusCode).toBe(200);
+    expect(await storedPrivileges(org.org.id, person.userId)).toEqual([
+      "codes.invite",
+      "members.read",
+    ]);
+
+    // Proven at a route, not only in the column: the power they were hand-given
+    // is gone.
+    expect(
+      (await del(`/v1/orgs/${org.org.id}/members/${member.userId}`, { cookies: person.cookies }))
+        .statusCode,
+    ).toBe(403);
+
+    // The audit row records the ticks the change reset them to, not only the
+    // role — a role change is now also a permission change.
+    const audit = await sql<{ meta: { to?: string; privileges?: string[] } }[]>`
+      SELECT meta FROM audit_log
+      WHERE gym_id = ${org.org.id} AND action = 'org.staff_role_changed'`;
+    expect(audit).toHaveLength(1);
+    expect(audit[0]?.meta.to).toBe("trainer");
+    expect(audit[0]?.meta.privileges).toEqual(["codes.invite", "members.read"]);
+  });
+
+  it("writes an audit row naming both ends, and none at all when nothing changed", async () => {
+    const owner = await makeUser("ticks-audit-owner");
+    const hire = await makeUser("ticks-audit-hire");
+    const org = await makeOrg(owner.cookies, "Orgs Test Ticks Audit");
+    await joinAsMember(hire.cookies, org, owner.cookies);
+    await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-ticks-audit-hire@example.com", role: "trainer" },
+      { cookies: owner.cookies },
+    );
+
+    const next = ["members.read", "codes.invite", "members.confirm"];
+    expect(
+      (
+        await put(
+          `/v1/orgs/${org.org.id}/staff/${hire.userId}/privileges`,
+          { privileges: next },
+          { cookies: owner.cookies },
+        )
+      ).statusCode,
+    ).toBe(200);
+
+    const rows = async () =>
+      await sql<{ meta: { from?: string[]; to?: string[] } }[]>`
+        SELECT meta FROM audit_log
+        WHERE gym_id = ${org.org.id} AND action = 'org.staff_privileges_changed'`;
+    const after = await rows();
+    expect(after).toHaveLength(1);
+    // BOTH ends: the question asked weeks later is "what could they do before",
+    // which the new set alone cannot answer.
+    expect(after[0]?.meta.from).toEqual(["codes.invite", "members.read"]);
+    expect(after[0]?.meta.to).toEqual(["codes.invite", "members.confirm", "members.read"]);
+
+    // Saving the same set again is a 200 and writes NOTHING: "the owner changed
+    // what they can do" is a claim about something that happened, and re-saving
+    // an unchanged set did not happen. Sent in a DIFFERENT order on purpose —
+    // "did anything change" is a question about access, never about ordering.
+    const repeat = await put(
+      `/v1/orgs/${org.org.id}/staff/${hire.userId}/privileges`,
+      { privileges: ["members.confirm", "members.read", "codes.invite"] },
+      { cookies: owner.cookies },
+    );
+    expect(repeat.statusCode).toBe(200);
+    expect(await rows()).toHaveLength(1);
+  });
+
+  /** THE DEPLOY WINDOW R4.4's expand-then-contract creates, and the reason
+   *  `privilegesFor` has a null branch at all: a row written by code that
+   *  predates the column must behave exactly as it did before, not as somebody
+   *  with no privileges. Locking a gym's owner out of their own console for the
+   *  length of a deploy would be a self-inflicted outage. */
+  it("a staff row written before the ticks existed still works, as its role", async () => {
+    const owner = await makeUser("ticks-legacy-owner");
+    const legacy = await makeUser("ticks-legacy-manager");
+    const org = await makeOrg(owner.cookies, "Orgs Test Ticks Legacy");
+    await joinAsMember(legacy.cookies, org, owner.cookies);
+    await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-ticks-legacy-manager@example.com", role: "manager" },
+      { cookies: owner.cookies },
+    );
+
+    // Exactly what old code left behind: a role, and no ticks.
+    await sql`UPDATE gym_staff SET privileges = NULL
+              WHERE gym_id = ${org.org.id} AND user_id = ${legacy.userId}`;
+    expect(await storedPrivileges(org.org.id, legacy.userId)).toBeNull();
+
+    // They can still do a manager's job...
+    expect(
+      (await get(`/v1/orgs/${org.org.id}/codes`, { cookies: legacy.cookies })).statusCode,
+    ).toBe(200);
+    // ...and no more than one: the fallback is the ROLE's defaults, not
+    // everything. Without this line the test would pass against a null branch
+    // that grants the lot.
+    expect(
+      (await get(`/v1/orgs/${org.org.id}/staff`, { cookies: legacy.cookies })).statusCode,
+    ).toBe(403);
+    // The screen shows the same effective set rather than an empty list.
+    const listed = await readStaff(org.org.id, owner.cookies);
+    expect(listed.find((s) => s.userId === legacy.userId)?.privileges).toEqual([
+      "codes.invite",
+      "codes.manage",
+      "members.confirm",
+      "members.read",
+      "members.remove",
+    ]);
+  });
+
+  it("refuses a tick nobody defined, and an unknown key", async () => {
+    const owner = await makeUser("ticks-400-owner");
+    const hire = await makeUser("ticks-400-hire");
+    const org = await makeOrg(owner.cookies, "Orgs Test Ticks Validation");
+    await joinAsMember(hire.cookies, org, owner.cookies);
+    await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-ticks-400-hire@example.com", role: "trainer" },
+      { cookies: owner.cookies },
+    );
+
+    for (const body of [
+      { privileges: ["members.read", "everything"] },
+      { privileges: "members.read" },
+      { privileges: ["members.read"], role: "manager" },
+      {},
+    ]) {
+      const res = await put(`/v1/orgs/${org.org.id}/staff/${hire.userId}/privileges`, body, {
+        cookies: owner.cookies,
+      });
+      expect(res.statusCode).toBe(400);
+    }
+    // Untouched by every refusal.
+    expect(await storedPrivileges(org.org.id, hire.userId)).toEqual([
+      "codes.invite",
+      "members.read",
+    ]);
+
+    // Somebody who does not run this gym at all is a 404 from this route, the
+    // same answer every other staff route gives about a person who is not on it.
+    const outsider = await makeUser("ticks-400-outsider");
+    const missing = await put(
+      `/v1/orgs/${org.org.id}/staff/${outsider.userId}/privileges`,
+      { privileges: ["members.read"] },
+      { cookies: owner.cookies },
+    );
+    expect(missing.statusCode).toBe(404);
+    expect((JSON.parse(missing.body) as { error: string }).error).toBe("not_staff");
   });
 
   /** The other half of the two-tap flow Kd was shown: while somebody is staff,

@@ -190,6 +190,9 @@ export interface CreateOrgInput {
   currencyDisplay: string;
   code: string;
   codeLabel: string;
+  /** The owner's starting ticks, computed by the service from the owner role's
+   *  template — policy stays in one place, storage in this one. */
+  ownerPrivileges: readonly string[];
 }
 
 export interface CreateOrgResult {
@@ -225,9 +228,14 @@ export async function createOrgAttempt(
       if (rawOrg === undefined) throw new Error("INSERT INTO gyms returned no row");
       const org = toOrgRow(rawOrg);
 
+      // The owner's ticks are written HERE, with the row, for the same reason
+      // an appointment's are: a staff record whose effective set arrives later
+      // is a record whose authority depends on when you looked. This is the
+      // SECOND writer of `gym_staff` in the product and the one that is easy to
+      // forget — the ticks card's own tests caught it doing exactly that.
       await tx`
-        INSERT INTO gym_staff (gym_id, user_id, role)
-        VALUES (${org.id}, ${input.ownerUserId}, 'owner')`;
+        INSERT INTO gym_staff (gym_id, user_id, role, privileges)
+        VALUES (${org.id}, ${input.ownerUserId}, 'owner', ${[...input.ownerPrivileges]})`;
 
       const codeRows = await tx<{ id: string; code: string; label: string }[]>`
         INSERT INTO gym_codes (gym_id, code, label)
@@ -403,8 +411,29 @@ export async function getOrgById(sql: SqlOrTx, gymId: string): Promise<OrgRow | 
   return row === undefined ? null : toOrgRow(row);
 }
 
-/** The caller's staff role in ONE org. Null means "not staff here", which the
- *  service turns into a 404 — a stranger must not learn the org exists.
+/** A staff row's authority: the role it was appointed under, and the effective
+ *  ticks stored on it. `privileges` is null only for a row written by code that
+ *  predates the column (see the schema's own note). */
+export interface StaffAuthority {
+  role: OrgRole;
+  privileges: string[] | null;
+}
+
+/** WHAT THE CALLER MAY DO IN ONE ORG — their role and the ticks stored beside
+ *  it. Null means "not staff here", which the service turns into a 404 — a
+ *  stranger must not learn the org exists.
+ *
+ *  **It reads the ticks in the SAME query as the role, deliberately.** Two
+ *  reads would leave a window where the role is this person's and the ticks are
+ *  from a moment before an owner changed them, and the seam would decide against
+ *  a set that never existed. `privileges` null is the deploy window R4.4's
+ *  expand-then-contract creates; `privilegesFor` in the service is the one place
+ *  that decides what null means, and it means "the role's defaults".
+ *
+ *  **Renamed from `getStaffRole` in the same card that gave it the ticks** — it
+ *  no longer answers "what role", it answers "what authority", and a name that
+ *  says role invites a caller to compare it to one (the exact thing :11429's
+ *  seam exists to stop).
  *
  *  **A STAFF ROW ALONE IS NOT AUTHORITY — it must belong to a live account that
  *  is still IN the gym.** T3 round 1 (2026-08-22) found two ways to hold a
@@ -439,13 +468,13 @@ export async function getOrgById(sql: SqlOrTx, gymId: string): Promise<OrgRow | 
  *
  *  `users.status` is checked as well, so the window BEFORE a restore is shut
  *  too, not only the state after it. */
-export async function getStaffRole(
+export async function getStaffAuthority(
   sql: Sql,
   gymId: string,
   userId: string,
-): Promise<OrgRole | null> {
-  const rows = await sql<{ role: string }[]>`
-    SELECT s.role
+): Promise<StaffAuthority | null> {
+  const rows = await sql<{ role: string; privileges: string[] | null }[]>`
+    SELECT s.role, s.privileges
     FROM gym_staff s
     JOIN users u ON u.id = s.user_id
     JOIN gyms g ON g.id = s.gym_id
@@ -464,7 +493,7 @@ export async function getStaffRole(
         )
       )`;
   const row = rows[0];
-  return row === undefined ? null : toOrgRole(row.role);
+  return row === undefined ? null : { role: toOrgRole(row.role), privileges: row.privileges };
 }
 
 export type ApplyOutcome =
@@ -1866,6 +1895,10 @@ export interface StaffRow {
   displayName: string;
   email: string | null;
   role: OrgRole;
+  /** The stored ticks, RAW — null meaning "this row predates the column". The
+   *  service turns that into the role's defaults; nothing here decides it, so
+   *  the rule lives in one place rather than in every reader. */
+  privileges: string[] | null;
   since: Date;
 }
 
@@ -1893,9 +1926,16 @@ export interface StaffRow {
  *  the test fails; change neither and a screen lies about who holds keys. */
 export async function listStaff(sql: Sql, gymId: string): Promise<StaffRow[]> {
   const rows = await sql<
-    { user_id: string; display_name: string; email: string | null; role: string; since: Date }[]
+    {
+      user_id: string;
+      display_name: string;
+      email: string | null;
+      role: string;
+      privileges: string[] | null;
+      since: Date;
+    }[]
   >`
-    SELECT s.user_id, u.display_name, u.email, s.role, s.created_at AS since
+    SELECT s.user_id, u.display_name, u.email, s.role, s.privileges, s.created_at AS since
     FROM gym_staff s
     JOIN users u ON u.id = s.user_id
     JOIN gyms g ON g.id = s.gym_id
@@ -1918,6 +1958,7 @@ export async function listStaff(sql: Sql, gymId: string): Promise<StaffRow[]> {
     displayName: r.display_name,
     email: r.email,
     role: toOrgRole(r.role),
+    privileges: r.privileges,
     since: r.since,
   }));
 }
@@ -1931,9 +1972,16 @@ async function readStaffRow(
   userId: string,
 ): Promise<StaffRow | null> {
   const rows = await tx<
-    { user_id: string; display_name: string; email: string | null; role: string; since: Date }[]
+    {
+      user_id: string;
+      display_name: string;
+      email: string | null;
+      role: string;
+      privileges: string[] | null;
+      since: Date;
+    }[]
   >`
-    SELECT s.user_id, u.display_name, u.email, s.role, s.created_at AS since
+    SELECT s.user_id, u.display_name, u.email, s.role, s.privileges, s.created_at AS since
     FROM gym_staff s
     JOIN users u ON u.id = s.user_id
     WHERE s.gym_id = ${gymId} AND s.user_id = ${userId}`;
@@ -1945,6 +1993,7 @@ async function readStaffRow(
         displayName: row.display_name,
         email: row.email,
         role: toOrgRole(row.role),
+        privileges: row.privileges,
         since: row.since,
       };
 }
@@ -1979,7 +2028,16 @@ export type AddStaffOutcome =
  *  order. */
 export async function addStaff(
   sql: Sql,
-  input: { gymId: string; email: string; role: OrgRole; actorUserId: string },
+  input: {
+    gymId: string;
+    email: string;
+    role: OrgRole;
+    /** The starting ticks, computed by the SERVICE from the role's template.
+     *  Written with the row so a staff record is never a moment old without an
+     *  effective set (:11429's snapshot). */
+    privileges: readonly string[];
+    actorUserId: string;
+  },
 ): Promise<AddStaffOutcome> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId);
@@ -1996,8 +2054,8 @@ export async function addStaff(
     if (candidate === undefined) return { kind: "not_a_member" };
 
     const inserted = await tx<{ user_id: string }[]>`
-      INSERT INTO gym_staff (gym_id, user_id, role)
-      VALUES (${input.gymId}, ${candidate.user_id}, ${input.role})
+      INSERT INTO gym_staff (gym_id, user_id, role, privileges)
+      VALUES (${input.gymId}, ${candidate.user_id}, ${input.role}, ${[...input.privileges]})
       ON CONFLICT (gym_id, user_id) DO NOTHING
       RETURNING user_id`;
 
@@ -2019,7 +2077,7 @@ export async function addStaff(
       action: "org.staff_added",
       targetType: "gym_staff",
       targetId: candidate.user_id,
-      meta: { role: input.role },
+      meta: { role: input.role, privileges: [...input.privileges] },
     });
 
     return { kind: "added", staff };
@@ -2048,7 +2106,16 @@ export type UpdateStaffOutcome =
  *  a 200 carrying the same row. */
 export async function updateStaffRole(
   sql: Sql,
-  input: { gymId: string; userId: string; role: OrgRole; actorUserId: string },
+  input: {
+    gymId: string;
+    userId: string;
+    role: OrgRole;
+    /** The new role's DEFAULT ticks. A role change RESETS them — see the
+     *  service's note: without that, "demote to trainer" would leave every
+     *  manager tick standing and demote nobody. */
+    privileges: readonly string[];
+    actorUserId: string;
+  },
 ): Promise<UpdateStaffOutcome> {
   return await sql.begin(async (tx) => {
     const rows = await tx<{ role: string }[]>`
@@ -2067,7 +2134,7 @@ export async function updateStaffRole(
     }
 
     await tx`
-      UPDATE gym_staff SET role = ${input.role}
+      UPDATE gym_staff SET role = ${input.role}, privileges = ${[...input.privileges]}
       WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
 
     const staff = await readStaffRow(tx, input.gymId, input.userId);
@@ -2081,7 +2148,106 @@ export async function updateStaffRole(
       targetId: input.userId,
       // BOTH ends, because the question a human asks weeks later is "what did
       // they used to be able to do", which the new role alone cannot answer.
-      meta: { from: previous, to: input.role },
+      // The ticks the change RESET them to are recorded for the same reason: a
+      // role change is now also a permission change, and an audit row that
+      // names only the role would hide half of what happened.
+      meta: { from: previous, to: input.role, privileges: [...input.privileges] },
+    });
+
+    return { kind: "updated", staff };
+  });
+}
+
+export type SetStaffPrivilegesOutcome =
+  | { kind: "updated"; staff: StaffRow }
+  | { kind: "unchanged"; staff: StaffRow }
+  | { kind: "not_staff" }
+  | { kind: "last_owner_locked" };
+
+/** REPLACE ONE PERSON'S TICKS with the set an owner just looked at.
+ *
+ *  **THE WHOLE SET IS WRITTEN, never a diff** — see the request schema for why:
+ *  a diff applied to a row somebody else edited produces a set nobody chose.
+ *
+ *  **THE LAST-OWNER GUARD IS A COUNT INSIDE THE ORG LOCK, and it is the same
+ *  shape as `removeStaff`'s for the same reason** (:11429 rule 2, :14174's rule
+ *  on when a lock is warranted). Reading "how many owners are there" and then
+ *  writing is check-then-act; the loser of that race is a gym whose last owner
+ *  can no longer manage staff, which **nobody inside the gym can repair**,
+ *  because handing out `staff.manage` requires `staff.manage`. That is the
+ *  severity that buys a lock, in contrast to the self-healing races :14174 says
+ *  do not.
+ *
+ *  It counts OWNERS rather than asking "is this the owner", so it stays correct
+ *  on the day a second owner becomes possible — `removeStaff`'s wording, kept
+ *  deliberately identical because it is the same rule pointed at a different
+ *  door.
+ *
+ *  **`unchanged` is a distinct outcome because it decides whether an audit row
+ *  is written**: "the owner changed what Priya can do" in a gym's history is a
+ *  claim about something that happened, and re-saving the same set did not
+ *  happen. The caller cannot tell the two apart and does not need to. */
+export async function setStaffPrivileges(
+  sql: Sql,
+  input: {
+    gymId: string;
+    userId: string;
+    /** Already canonical (sorted, de-duplicated) — the service does that, so
+     *  the stored order is one order and "did anything change" is a question
+     *  about ACCESS rather than about ordering. */
+    privileges: readonly string[];
+    /** What the LAST owner may not be stripped of. Passed in rather than named
+     *  here: which privileges are lockout-capable is a policy question and the
+     *  service owns policy (`LAST_OWNER_REQUIRED_PRIVILEGES`). */
+    lastOwnerRequires: readonly string[];
+    actorUserId: string;
+  },
+): Promise<SetStaffPrivilegesOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+
+    const rows = await tx<{ role: string; privileges: string[] | null }[]>`
+      SELECT role, privileges FROM gym_staff
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
+    const before = rows[0];
+    if (before === undefined) return { kind: "not_staff" };
+    const role = toOrgRole(before.role);
+
+    if (role === "owner" && input.lastOwnerRequires.some((p) => !input.privileges.includes(p))) {
+      const counted = await tx<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_staff
+        WHERE gym_id = ${input.gymId} AND role = 'owner'`;
+      if ((counted[0]?.n ?? 0) <= 1) return { kind: "last_owner_locked" };
+    }
+
+    // A row that predates the column (`null`) is never "unchanged": writing it
+    // is what materialises the snapshot, so the deploy-window fallback stops
+    // applying to this person from here on.
+    const previous = before.privileges === null ? null : [...before.privileges].sort();
+    const next = [...input.privileges];
+    if (previous !== null && previous.length === next.length && previous.every((p, i) => p === next[i])) {
+      const staff = await readStaffRow(tx, input.gymId, input.userId);
+      if (staff === null) throw new Error("gym_staff row vanished under the org lock");
+      return { kind: "unchanged", staff };
+    }
+
+    await tx`
+      UPDATE gym_staff SET privileges = ${next}
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
+
+    const staff = await readStaffRow(tx, input.gymId, input.userId);
+    if (staff === null) throw new Error("gym_staff row vanished under the org lock");
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.staff_privileges_changed",
+      targetType: "gym_staff",
+      targetId: input.userId,
+      // BOTH ends, `updateStaffRole`'s reason: the question asked weeks later is
+      // "what could they do before", which the new set alone cannot answer. A
+      // null `from` is the honest record of a row that predated the column.
+      meta: { role, from: previous, to: next },
     });
 
     return { kind: "updated", staff };
@@ -2175,10 +2341,17 @@ export async function insertAudit(
     action: string;
     targetType: string;
     targetId: string;
-    /** String-valued by construction: an audit row is read by a human weeks
-     *  later, and a nested object is where the interesting field goes to hide.
-     *  Widen it when a caller genuinely needs structure, not before. */
-    meta: Record<string, string>;
+    /** Strings, or a LIST of strings — and the list arrived on the terms this
+     *  comment set: "widen it when a caller genuinely needs structure, not
+     *  before". The ticks card is that caller. A permission change's whole
+     *  content is which privileges moved, and flattening them into one string
+     *  would put the interesting part inside a value nothing can query — the
+     *  opposite of what the original rule was protecting.
+     *
+     *  Still deliberately NOT `unknown`: no nested objects, no dates, nothing a
+     *  human reading the row weeks later has to unpack. `null` is allowed for
+     *  exactly one thing — a "before" state that genuinely did not exist. */
+    meta: Record<string, string | readonly string[] | null>;
   },
 ): Promise<void> {
   await tx`

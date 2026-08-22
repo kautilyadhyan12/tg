@@ -4693,6 +4693,16 @@ file and is stated so nobody reads these as lower priority than they are.
       route, and the Staff screen.** The permission model is no longer the
       missing part — `staff.manage` is the owner-only privilege that card added —
       what is missing is STORAGE.
+      **UPDATE 2026-08-22 (DECISIONS :15381) — THE STORAGE AND THE ROUTE ARE
+      BUILT AND THIS LINE STILL DOES NOT TICK.** Migration `0013` gives
+      `gym_staff` its `privileges` column; `requirePrivilege` decides on the
+      STORED set; `PUT /v1/orgs/:gymId/staff/:userId/privileges` is the
+      owner-only way to change it, audit-logged at both ends; a role change
+      RESETS the ticks, so a demotion demotes. **What remains is the SCREEN — an
+      owner cannot reach any of this today**, which is also why there was no
+      smoke to run (:10010's no-screen precedent). The last-owner lockout guard
+      on the TICK door landed with it (a count inside the org lock, the sibling
+      of the REMOVE door's guard built at :14262).
 - [ ] 🟡 **A GYM CANNOT APPOINT SOMEBODY WHO IS NOT ALREADY A MEMBER — because
       the invite email cannot be sent** (deferred 2026-08-22, DECISIONS :14262).
       Part 3 §4.7 says "invite by email/phone with role"; what ships is the
@@ -4908,6 +4918,19 @@ file and is stated so nobody reads these as lower priority than they are.
       **All six safety rules above still bind** — and rule 2 (the last owner
       cannot be ticked out of billing or staff management) matters MORE now, a
       custom role being a new way to hand somebody an incomplete set.
+      **UPDATE 2026-08-22 (DECISIONS :15381) — THE TICKS HALF IS BUILT ON THE
+      SERVER. THIS LINE DOES NOT TICK: the SCREEN and the NAMES are both
+      unbuilt.** Kd approved a three-step split — ticks · the Staff screen's tick
+      boxes · custom role names — and step 1 shipped: storage (migration `0013`),
+      the owner-only route, the seam reading the stored set, the last-owner
+      guard, audit rows both ends, and a role change resetting the ticks.
+      **KD SETTLED THE SNAPSHOT-vs-NAMED-ROLE QUESTION the same day and the
+      NAMES card inherits the consequence:** editing what a named role may do
+      changes **nobody** on its own — the owner is offered *"Change everyone on
+      Front Desk too?"* and taps it. **That button is the names card's to build**
+      (a batch write over one gym's staff rows, no further migration), and it is
+      recorded here because the ruling that produced it lives on a line that has
+      now ticked.
 - [x] 🟡 **DONE 2026-08-22 — THE ROSTER DOES NOT SAY WHICH MEMBERS ARE FREE — a staff member takes
       no seat and looks exactly like somebody who pays for one (Kd's finding at
       the staff re-smoke, 2026-08-22, DECISIONS :14953).** His words: *"when a
@@ -4946,6 +4969,37 @@ file and is stated so nobody reads these as lower priority than they are.
       counted (T3 L-4).
       **T3 ROUND 1 RAN: ZERO Critical/High — THE PACKET SHIPS (DECISIONS :15259).**
       Six Low, all fixed in the round. **This line ticks on the commit.**
+- [ ] 🟡 **`gym_staff.privileges` IS NULLABLE AND SHOULD NOT STAY THAT WAY — the
+      CONTRACT half of expand-then-contract (deferred 2026-08-22, DECISIONS
+      :15381).** Migration `0013` adds the column nullable and backfills every
+      existing row, and both writers fill it in, so **no row is NULL today**
+      (measured: the backfill's own `WHERE` found 2 rows on the dev database, and
+      a fresh database creates none). The nullability exists for ONE window: the
+      minutes between the migration landing and the new code deploying, where
+      OLD code still inserts staff rows without the column — a NOT NULL there
+      would break CREATING A GYM, not merely appointing somebody.
+      **Why it matters that this closes:** while the null branch exists,
+      `privilegesFor` falls back to the ROLE's template, so a later edit to
+      `ROLE_PRIVILEGES` would reach any row that slipped through — **the silent
+      widening Kd ruled against on 2026-08-22**, bounded to a deploy window
+      rather than shut. Closing it is one migration (`SET NOT NULL` after a
+      re-run of the same idempotent backfill) plus deleting the fallback branch
+      and its test. **Do it AFTER the deploy that carries this code, never in the
+      same one** — that ordering is the whole point of the rule.
+- [ ] 🟡 **THE LAST-OWNER LOCKOUT GUARD COVERS ONE PRIVILEGE AND :11429 NAMES TWO
+      — BILLING IS MISSING BECAUSE IT DOES NOT EXIST YET (deferred 2026-08-22,
+      DECISIONS :15381).** Rule 2 says the last owner cannot be ticked out of
+      **billing or staff management**; `LAST_OWNER_REQUIRED_PRIVILEGES` in
+      `modules/orgs/service.ts` holds `staff.manage` alone, because there is no
+      billing tick in `ORG_PRIVILEGES` and inventing one would be R0.2's
+      forbidden shape (a tick nobody enforces).
+      **The trap this line exists to stop:** the day a billing privilege is
+      added, adding it to `ORG_PRIVILEGES` and the database CHECK is the obvious
+      work and adding it to the lockout list is the part that gets forgotten —
+      after which an owner can tick away their own billing access and no one
+      inside the gym can restore it. It is a ONE-LINE change and it belongs in
+      the SAME commit that creates the privilege. The guard is already written as
+      a LIST for exactly this reason.
 - [ ] ⚪ **THREE MUTATION ANCHORS MATCH TWICE AND LAND RIGHT ONLY BY POSITION
       (O17, O29, O89 in `mutate-orgs.mjs`; found by the census T3 L-1 prompted,
       2026-08-22, DECISIONS :15259).** The pre-check now REFUSES an ambiguous
@@ -4973,7 +5027,22 @@ file and is stated so nobody reads these as lower priority than they are.
       a paid place), i.e. trades a disclosure for something FALSE on screen, and
       :5807 outranks a tidier boundary. If Kd wants it hidden it is his ruling and
       needs its own card, with the trade named to him first.
-- [ ] 🟡 **A NAMED ROLE AND A SNAPSHOT CONTRADICT EACH OTHER, AND KD HAS NOT BEEN
+- [x] 🟡 **DONE 2026-08-22 — KD RULED IT: NOTHING CHANGES ON ITS OWN, THE OWNER
+      TAPS A BUTTON.** Asked in plain words at the per-staff ticks card with a
+      recommendation, as this line required, and he chose the recommended
+      answer: editing what a named role may do changes **nobody** by itself;
+      the owner is offered *"Change everyone on Front Desk too?"* and decides.
+      **So :11429's SNAPSHOT stands and the propagation is an explicit ACT** —
+      the third option this line named, and the only one that is neither a
+      silent widening nor a rename that visibly does nothing.
+      **WHAT THE RULING NOW OWES, and it is tracked on the ticks line above
+      rather than here:** the button itself, which belongs to the custom-role-
+      names card (there are no named roles to edit until it lands). The storage
+      built on 2026-08-22 makes it a batch write over one gym's staff rows and
+      needs no further migration. Ruling recorded at DECISIONS :15381.
+      **The question as originally raised follows, kept whole rather than
+      rewritten — the reasoning is what makes the ruling legible later.**
+      **A NAMED ROLE AND A SNAPSHOT CONTRADICT EACH OTHER, AND KD HAS NOT BEEN
       ASKED (raised 2026-08-22 by his own "want both" amendment, DECISIONS
       :14745).** :11429 ruled the effective privilege set is stored as a
       **SNAPSHOT**, so editing a template never silently widens ten people's
