@@ -9363,3 +9363,65 @@ NEXT
   2. **T3 — a FRESH CHAT on this diff.** Never a subagent, never this chat.
   3. NOTHING TICKS until both are done.
 ```
+
+```
+TASK: THE STAFF SCREEN — KD'S SMOKE. PASSED 12/12. One fix in this commit, one
+      RULING recorded and not built. DECISIONS :14745.
+
+THE FIX (in this commit)
+  · Removing staff is now THREE taps: Remove · which outcome · a last check that
+    names the OUTCOME with Yes/Cancel. Nothing fires until the last tap; Cancel
+    at any stage changes nothing.
+  · **Kd found it in a browser and no test could have.** Every removal test
+    clicked STRAIGHT THROUGH the question, so "picking an option acts
+    immediately" was asserted neither way — and a mutation harness can only
+    delete a guard that EXISTS, never notice a missing one.
+  · **My push-back was wrong and the reason is worth keeping**: I cited :13920
+    ("only irreversible things ask first"). The destructive arm of this control
+    is the exact act the Members screen already guards with "Remove? / Keep", so
+    the defect was ONE ACT ASKING TWO DIFFERENT WAYS ON TWO SCREENS.
+  · New test pins both halves (nothing fires on the pick; Cancel is honoured).
+    Permanent guard **S12** restores the two-stage shape.
+
+THE RULING (recorded, NOT built — its own card, its own migration)
+  · **Kd amends :11429: CUSTOM ROLE NAMES *AND* per-staff ticks, both.** His own
+    rejection of a fourth role is overruled, additively.
+  · **ONE feature and a label, and the build order follows: no route checks a
+    role NAME** (:11891's seam), **so a custom role is a NAMED PRESET OF TICKS.**
+    Ticks first, names second. `owner|manager|trainer` become presets.
+  · Measured cost: `gym_staff.role` is `text` under
+    `CHECK role IN ('owner','manager','trainer')` (`tenancy.ts:213,218`) — a
+    SECOND migration on top of the ticks' own.
+  · **OPEN QUESTION FOR KD, own OWED line, do not settle it in a chat:** :11429
+    stores the effective set as a SNAPSHOT, but a NAMED role invites the opposite
+    expectation — edit "Front Desk" and an owner expects everyone on it to
+    change. Snapshot-plus-a-visible-name is a contradiction a user can SEE.
+
+SMOKE
+  · **12/12, `RUNBOOK/smoke-staff.md`, commit `971836d`.** Settles what only a
+    browser can: `PATCH` and `DELETE` on `…/staff/:userId` work through a CORS
+    preflight (`fastify.inject` cannot see those — Card 4's precedent), and the
+    join code's count read 1 before and after an appointment on LIVE data.
+  · **STEP 8 TOOK A SECOND ASK.** It needs the helper account's password, his
+    first report did not say whether he had it, and it was written down as
+    UNESTABLISHED rather than folded into "all passed" — the naming of the doubt
+    is what produced the evidence. **A global pass does not cover a step whose
+    prerequisite is in doubt.**
+  · The sheet is UPDATED for the three-tap flow — steps 9 and 11 differ from the
+    version he ran.
+
+GATES
+  · settings suite **30/30** · web **1029/1029 across 43 files, exit 0 read into
+    a variable** · sweep **47 mutants · 47 RED · 0 ALIVE · 0 never ran, exit 0**,
+    controls green first, restores sha256-verified, `node --check` first.
+  · `apps/api` untouched by both commits.
+
+NEXT
+  1. **T3 — a FRESH CHAT, on everything after `4d6201f` (both commits).** Never a
+     subagent. The prompt was handed over with this commit.
+  2. **Two things a reviewer gets wrong here, and the prompt says so:** the
+     join-code-count sentence :14262 promised is deliberately NOT on screen
+     (:14401 made it false), and the three-tap removal is KD'S RULING, not
+     over-engineering.
+  3. Nothing ticks until T3 comes back with zero Critical/High.
+```

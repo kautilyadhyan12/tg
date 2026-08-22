@@ -809,6 +809,53 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:14745** — 2026-08-22 — **KD'S SMOKE ON THE STAFF SCREEN: PASSED 12/12 — and
+  it produced a FIX and an AMENDMENT to his own permission ruling.** **Read before
+  touching `RemoveControl` in `StaffPanel.jsx`, before designing the per-staff
+  privilege card, and before quoting :11429 as the settled permission model.**
+  Kd's REPORT (:4829) on `971836d`, his own gym and his own second account.
+  **What only a browser could settle: the two CORS-preflight methods work** —
+  `PATCH` and `DELETE` on `…/staff/:userId`, which `fastify.inject` cannot
+  exercise and which Card 4 proved can be dead app-wide behind a green suite — and
+  the join code's count read **1** before and after an appointment on live data,
+  :14401's C/H-1 holding outside a fixture. **STEP 8 TOOK A SECOND ASK AND THE
+  METHOD IS THE POINT: a global "all passed" does not cover a step whose
+  prerequisite is in doubt** (it needed the helper account's password); written
+  down as UNESTABLISHED, and naming the doubt is what produced the evidence.
+  **FINDING 1 — THE CONFIRMATION, AND MY PUSH-BACK WAS WRONG.** Choosing an
+  outcome used to DO it. The control did ask — but **a menu of two long
+  descriptive options reads as CHOOSING, not as a last chance, while the Members
+  screen one tab away asks the same act as "Remove? / Keep"**, so the defect was
+  one act asking two different ways on two screens, not a missing tap. My first
+  answer leaned on :13920 ("only irreversible things ask first"); he reaffirmed
+  and is right, because **the destructive arm of this control IS the act Members
+  already guards.** Now three stages, the last naming the OUTCOME rather than the
+  button pressed (a confirmation that does not repeat the choice back is a rubber
+  stamp), and Cancel at the last tap changes nothing. **THE TEST THAT WOULD HAVE
+  CAUGHT IT DID NOT EXIST — every removal test CLICKED THROUGH the question**, so
+  "picking an outcome acts immediately" was asserted neither way; **a mutation
+  harness can only delete a guard that EXISTS**, which is why a person at a screen
+  found it (third time on this branch: :12832, :12660). Permanent guard **S12**.
+  **FINDING 2 — KD AMENDS :11429: CUSTOM ROLE NAMES *AND* PER-STAFF TICKS, BOTH**
+  (*"now want custom role names instead of ticks. want both"*), overruling his own
+  rejection of a fourth role in the additive direction. **It is ONE feature and a
+  label: no route checks a role NAME** (:11891's seam, :14262's `staff.manage`
+  tick), **so a custom role is a NAMED PRESET OF TICKS** — ticks are the
+  substance, the three built-ins become presets, and a card building names before
+  ticks reinvents an enforcement model that exists. **Measured cost:**
+  `gym_staff.role` is `text` under `CHECK role IN ('owner','manager','trainer')`
+  (`tenancy.ts:213,218`), so a SECOND migration on top of the ticks' own; §2.2 is
+  a fixed three-role matrix, so an ADDITION with no governing § (:9809's class).
+  :11429's six safety rules all still bind, **rule 2 more than before** (a custom
+  role is a new way to hand somebody an incomplete set). **THE QUESTION IT MAKES
+  LIVE, RECORDED NOT DECIDED: :11429 stores the effective set as a SNAPSHOT, but a
+  NAMED role invites the opposite expectation** — edit "Front Desk" and an owner
+  expects everyone on it to change; snapshot-plus-a-visible-name is a
+  contradiction a user can SEE. Own `OWED.md` line; the per-staff card must put it
+  to Kd (R0.2). **PROVE (the fix only): settings 30/30 · web 1029/1029 exit 0 ·
+  sweep 47 mutants · 47 RED · 0 ALIVE · 0 never ran, exit 0.** **The card's
+  remaining gate is T3 — a passing smoke is not a review.**
+
 - **:14570** — 2026-08-22 — **THE STAFF SCREEN: a gym owner can hand over the
   keys, and the console gets its SETTINGS tab.** Web half of :14262/:14401/:14493;
   no API change, no migration. **Read before touching the console's Settings

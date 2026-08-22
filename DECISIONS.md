@@ -14741,3 +14741,98 @@ on and the screen is no longer the blocker; the route is.** Own `OWED.md` line.
 structurally unable to cover: a browser reaches PATCH and DELETE only through a
 CORS preflight, which `fastify.inject` cannot exercise — Card 4's precedent,
 where 250 green tests sat on top of an app-wide dead method.
+
+## KD'S SMOKE ON THE STAFF SCREEN: PASSED — and it produced a fix and an AMENDMENT to his own permission ruling (2026-08-22)
+
+**Read before touching `RemoveControl` in `StaffPanel.jsx`, before designing the
+per-staff privilege card, and before quoting :11429 as the settled shape of the
+permission model.** Continues :14570. Kd's REPORT (:4829), run in his own browser
+against the Neon dev database on `971836d`, on his real gym `iron man` with his
+existing `Smoke Test Member` account.
+
+**RESULT: PASSED 12/12** — *"apart from that all passed"*, then *"yes is did all
+step and passed"* on a second ask — with two observations, both below.
+**STEP 8 TOOK THAT SECOND ASK AND THE METHOD IS WORTH KEEPING.** Signing in as the
+helper needs that account's password, his first report did not say whether he had
+it, and a global "all passed" does not cover a step whose prerequisite is in
+doubt. It was written down as UNESTABLISHED (:11706's precedent) and the naming of
+the doubt is what produced the evidence. So "a manager gets no Settings tab and
+the typed address lands on the refusal" is carried by a person, not only by mutant
+**S9**.
+
+**WHAT THE PASS ESTABLISHES that nothing else could:** the two CORS-preflight
+methods work in a real browser — `PATCH …/staff/:userId` (step 7, the role
+switch) and `DELETE …/staff/:userId` (step 9) — which `fastify.inject` is
+structurally unable to exercise and which Card 4 proved can be dead app-wide
+behind a green suite. Also confirmed against his live data: the number beside
+join code `WE6RGX` read **1** before and after an appointment, which is the
+:14401 C/H-1 correction holding on a real gym rather than in a fixture.
+
+**FINDING 1 — THE CONFIRMATION, AND MY PUSH-BACK WAS WRONG.** He reported that
+choosing an outcome removed somebody with no further confirmation. The control
+DID ask — one tap opened a question with two answers and a Cancel — and my first
+answer to him leaned on :13920 ("only irreversible things ask first"; taking keys
+back is seconds to undo). **He reaffirmed, and he is right for a reason my answer
+missed: the DESTRUCTIVE arm of this control is the very act the Members screen
+already guards with "Remove? / Keep", so the two screens asked the same question
+in two different shapes** — a menu of two long descriptive options reads as
+CHOOSING, not as a last chance. The defect was the inconsistency, not the missing
+tap. Now three stages: the button · the two outcomes · **a final line naming the
+consequence, with Yes/Cancel, and nothing happens until that tap.** The
+confirmation names the OUTCOME rather than the button pressed, and the two arms
+say different things — a confirmation that does not repeat the choice back is a
+rubber stamp.
+**THE TEST THAT WOULD HAVE CAUGHT IT DID NOT EXIST, and that is the lesson: every
+removal test simply CLICKED THROUGH the question**, so "picking an outcome acts
+immediately" was never asserted either way. New test pins both halves (nothing
+fires on the pick; Cancel at the last tap leaves everything alone — half the
+value of a confirmation is that it can be refused). Permanent guard **S12**
+restores the two-stage shape. **A mutation harness can only delete a guard that
+EXISTS** — this one had to be found by a person using the product, which is the
+third time on this branch that only Kd's browser produced the finding (:12832,
+:12660).
+
+**FINDING 2 — KD AMENDS :11429: CUSTOM ROLE NAMES *AND* PER-STAFF TICKS, BOTH.**
+His words: *"now want custom role names instead of ticks. want both"*. :11429
+(2026-08-19) ruled the three roles STAY with privilege ticks on top, and
+expressly REJECTED a fourth front-desk role on the grounds that ticks made it
+unnecessary. **That rejection is now overruled by the person who made it** — the
+no-removal rule's authorised path, in the additive direction.
+
+**THE ENGINEERING FACT THAT MAKES THIS ONE FEATURE AND NOT TWO, and it should
+shape the card: no route in the product checks a role NAME.** :11891 converted the
+whole permission seam to privilege checks and :14262's four staff routes enforce
+the `staff.manage` TICK. So **a custom role is a named preset of ticks** — the
+ticks are the substance, the name is a label, and `owner|manager|trainer` become
+three presets rather than three special cases. Build order follows: ticks first,
+names second; a card that tries names first has to invent an enforcement model
+that already exists.
+
+**COSTS, MEASURED NOT RECALLED.** `gym_staff.role` is `text` NOT NULL with
+`check("gym_staff_role_check", role IN ('owner','manager','trainer'))`
+(`db/schema/tenancy.ts:213,218`), so custom names cannot live in that column as
+it stands — **a migration is required**, on top of the one :11429 already owes for
+the ticks themselves. §2.2 is a FIXED three-role matrix, so this is an ADDITION
+with no governing § (:9809's class) and must be presented as one.
+
+**:11429's SIX SAFETY RULES ALL STILL BIND and are not reopened by this** — only
+an owner may change ticks · ticks may widen, not only narrow · the UI hides but
+the SERVER enforces · every change audit-logged · **the last owner cannot be
+ticked out of billing or staff management** (its rule 2, which closes the lockout
+this amendment makes easier to reach, since a custom role is a new way to hand
+somebody an incomplete set) · **a tick is not a SCOPE** — trainer-assigned-to-a-
+group is the group axis and stays blocked on `gym_staff` having no group column.
+
+**THE QUESTION THIS AMENDMENT MAKES LIVE, RECORDED AND NOT DECIDED (R0.2).**
+:11429 ruled the effective privilege set is stored as a **SNAPSHOT**, so editing a
+template does not silently widen ten people's access. A NAMED role invites the
+opposite expectation: an owner who edits "Front Desk" will expect everyone on it
+to change. Snapshot-plus-visible-names is a contradiction a user can see, and the
+per-staff card must put it to Kd rather than pick one. Own `OWED.md` line.
+
+**NOTHING BUILT for finding 2.** The confirmation fix is in this commit; custom
+roles and ticks are their own card and their own migration.
+
+**PROVE (the fix only)** — settings suite **30/30** (+1) · web **1029/1029 across
+43 files, exit 0 read into a variable** · sweep re-run to completion with the new
+guard, figures in the commit. `apps/api` untouched.

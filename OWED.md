@@ -4885,10 +4885,42 @@ file and is stated so nobody reads these as lower priority than they are.
       set as a snapshot rather than a diff against the role template (a template
       edit must never silently widen ten people's access; the cost is that
       default changes do not retro-apply), and decide table-vs-JSONB against
-      R4.2 at the card. **A fourth FRONT-DESK role was recommended against and
+      R4.2 at the card. ~~**A fourth FRONT-DESK role was recommended against and
       not taken** — it guards a till we do not have, and ticks make it
       unnecessary; revisit only if attendance and product sales make a standard
-      receptionist bundle worth naming.
+      receptionist bundle worth naming.~~
+      **KD AMENDED THIS 2026-08-22 AT THE STAFF SCREEN'S SMOKE (DECISIONS
+      :14745): CUSTOM ROLE NAMES *AND* THE TICKS — *"now want custom role names
+      instead of ticks. want both"*.** The struck sentence above is his own
+      rejection of a fourth role, overruled by him in the additive direction.
+      **IT IS ONE FEATURE AND A LABEL, NOT TWO, and the build order follows from
+      that: no route in the product checks a role NAME** (:11891 converted the
+      seam; :14262's four staff routes enforce the `staff.manage` TICK), **so a
+      custom role is a NAMED PRESET OF TICKS** — ticks are the substance,
+      `owner|manager|trainer` become three presets rather than three special
+      cases, and a card that builds names before ticks has to invent an
+      enforcement model that already exists. **Second migration cost, measured:**
+      `gym_staff.role` is `text` NOT NULL under
+      `check("gym_staff_role_check", role IN ('owner','manager','trainer'))`
+      (`db/schema/tenancy.ts:213,218`), so custom names cannot live in that
+      column as it stands. §2.2 is a FIXED three-role matrix, so this is an
+      ADDITION with no governing § (:9809's class) and must be presented as one.
+      **All six safety rules above still bind** — and rule 2 (the last owner
+      cannot be ticked out of billing or staff management) matters MORE now, a
+      custom role being a new way to hand somebody an incomplete set.
+- [ ] 🟡 **A NAMED ROLE AND A SNAPSHOT CONTRADICT EACH OTHER, AND KD HAS NOT BEEN
+      ASKED (raised 2026-08-22 by his own "want both" amendment, DECISIONS
+      :14745).** :11429 ruled the effective privilege set is stored as a
+      **SNAPSHOT**, so editing a template never silently widens ten people's
+      access. **A NAMED role invites the opposite expectation**: an owner who
+      edits "Front Desk" will expect everybody on Front Desk to change, and
+      snapshot-plus-a-visible-name is a contradiction *a user can see* — they
+      rename or re-tick a role, nothing moves, and nothing on screen explains
+      why. **Neither answer is obviously right** (retro-apply is the intuitive
+      one and is exactly what the snapshot rule exists to prevent; a third option
+      is to apply forward and offer "update everyone on this role" explicitly).
+      **The per-staff privilege card must PUT THIS TO KD rather than pick one**,
+      and it cannot be settled by a chat (R0.2). Closes with that card.
 - [ ] ⚪ **THE CONSOLE'S ANALYTICS EVENTS ARE NOT EMITTED.** Part 3 §4.0 names
       `org_created{type}`, `org_trial_started`, `org_logo_added`,
       `org_poster_downloaded` and the TTFMJ timer; `gym_code_redeemed` is

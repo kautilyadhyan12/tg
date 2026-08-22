@@ -4,7 +4,35 @@
 see everyone who helps run the gym, add someone, change what they can do, and take
 the keys back.
 
-## RESULT — UNRUN
+## RESULT — PASSED 2026-08-22 (Kd), on commit `971836d`: "apart from that all passed"
+
+**Recorded as a GLOBAL pass with two observations, not per-step evidence.** Run in
+his own browser against the Neon dev database, on his real gym `iron man` with the
+`Smoke Test Member` account that was already on its roster.
+
+**What it settles, and only a browser could:** the two CORS-preflight methods work
+— `PATCH …/staff/:userId` (step 7) and `DELETE …/staff/:userId` (step 9) — which
+`fastify.inject` cannot exercise and which Card 4 proved can be dead app-wide
+behind a green suite. Also, against live data: the number beside join code
+`WE6RGX` read **1** before and after an appointment (step 6), which is :14401's
+C/H-1 correction holding on a real gym rather than in a fixture.
+
+**STEP 8 IS ATTESTED — confirmed on a second ask** (*"yes is did all step and
+passed"*). It was written down as unestablished first, because his initial report
+did not say whether he had the helper account's password and the step needs a
+sign-in as that account; asking again is what turned it into evidence. So a
+manager signing in really does get no Settings tab, and typing the address really
+does land on the refusal — carried by a person, not only by mutant S9.
+**Worth keeping as method, not as an apology: the global "all passed" did not
+cover the one step whose prerequisite was in doubt, and only naming the doubt got
+it covered.**
+
+**IT PRODUCED ONE FIX AND ONE RULING** (DECISIONS :14746): the removal question
+gained a THIRD stage — picking an outcome used to do it — and Kd amended :11429 to
+want custom role names as well as per-staff ticks. **Steps 9 and 11 below are
+rewritten for the three-tap flow; the version he ran had two.**
+
+**T3 IS STILL OWED.** A passing smoke is not a review.
 
 ---
 
@@ -204,11 +232,21 @@ Back as the **owner**, on Settings. On the helper's row, click **Remove**.
 
 Click **Just take the keys**.
 
+✅ **Expect:** **still nothing has happened.** You now get a last check —
+*"Take [name]'s keys back? They stay a member of your gym."* — with **Take the
+keys** and **Cancel**.
+
+❌ **Failure:** they were removed as soon as you picked. That is the defect Kd
+found on 2026-08-22 and it has mutant **S12** on it now.
+
+Click **Cancel** once and check the row goes back to a plain **Remove** button
+with nothing changed. Then do it again and click **Take the keys**.
+
 ✅ **Expect:** their row disappears from Staff and the count goes back to
 **1 person runs this gym**.
 
 ❌ **Failure:** nothing happens (again, check **F12 → Console** and tell me), or
-only one answer was offered.
+only one answer was offered at the first question.
 
 ---
 
@@ -226,8 +264,14 @@ keys must not throw them out of the gym.
 ## Step 11 — the other answer
 
 Go back to **Settings**, add the helper again (**Add someone** → their email →
-**Add**). Then click **Remove** on their row, and this time choose **Remove from
-the gym too**.
+**Add**). Then click **Remove** on their row, choose **Remove from the gym too**,
+and confirm at the last check with **Remove them**.
+
+✅ **Expect at the last check:** the sentence names the bigger outcome — *"Remove
+[name] from your gym as well? They lose your gym's features. They keep every
+workout they have done."* — and the button is red. If it repeats the SMALLER
+outcome back at you, that is a failure: the confirmation is meant to say what you
+actually chose.
 
 ✅ **Expect:** their row disappears from Staff, the count goes back to **1 person
 runs this gym**, and when you click **Members** they are **gone from there too**.

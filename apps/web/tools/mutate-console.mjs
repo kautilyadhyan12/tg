@@ -502,6 +502,21 @@ const MUTANTS = [
     to: '    if (true) {',
   },
   {
+    // KD FOUND THIS ONE IN A BROWSER, WHICH IS WHY IT IS HERE. The control used
+    // to have two stages, so picking an outcome DID it — he read the two options
+    // as a menu and reported the missing confirmation. Nothing in the suite
+    // could see it: every removal test simply clicked through, and a mutation
+    // harness can only delete a guard that EXISTS. This mutant restores that
+    // shape, so the third stage cannot be quietly removed again.
+    id: 'S12',
+    target: 'staffpanel',
+    suite: SETTINGS_SUITE,
+    why: 'A DESTRUCTIVE ACT WITH NO LAST CHANCE: picking "remove from the gym too" fires immediately instead of asking, so one mis-tap on a menu of two options ends somebody\'s membership with no way to back out — the defect Kd found in his own smoke',
+    expect: 'does NOTHING until the last tap',
+    from: '          onClick={() => setStage(true)}',
+    to: '          onClick={() => onRemove(true)}',
+  },
+  {
     id: 'S7',
     target: 'staffpanel',
     suite: SETTINGS_SUITE,

@@ -252,11 +252,34 @@ describe('taking somebody’s keys back', () => {
     expect(within(row).getByText(/keep every workout they have done/i)).toBeTruthy();
   });
 
+  /** KD'S FINDING FROM HIS OWN SMOKE (2026-08-22): picking an outcome used to DO
+   *  it. He read the two options as a menu rather than a last chance — which is
+   *  how the Members screen one tab away does NOT read, because it asks
+   *  "Remove? / Keep". This is the test that would have caught the difference,
+   *  and it did not exist: every test below simply clicked through. */
+  it('does NOTHING until the last tap — picking an outcome only asks again', async () => {
+    drawSettings();
+    const row = await screen.findByTestId('staff-u2');
+    fireEvent.click(within(row).getByText('Remove'));
+    fireEvent.click(within(row).getByText('Remove from the gym too'));
+    expect(within(row).getByText(/Remove Rita Sen from your gym as well\?/)).toBeTruthy();
+    expect(orgService.removeStaff).not.toHaveBeenCalled();
+    expect(orgService.removeMember).not.toHaveBeenCalled();
+
+    // CANCEL AT THE LAST TAP LEAVES EVERYTHING ALONE — half the value of a
+    // confirmation is that it can be refused, and a confirm nothing can back out
+    // of is a delay rather than a question.
+    fireEvent.click(within(row).getByText('Cancel'));
+    expect(within(row).getByText('Remove')).toBeTruthy();
+    expect(orgService.removeStaff).not.toHaveBeenCalled();
+  });
+
   it('JUST THE KEYS ends the staff row and leaves the membership alone', async () => {
     drawSettings();
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Remove'));
     fireEvent.click(within(row).getByText('Just take the keys'));
+    fireEvent.click(within(row).getByText('Take the keys'));
     await waitFor(() => expect(orgService.removeStaff).toHaveBeenCalledWith(ORG.id, 'u2'));
     // The whole point of the two-button question: this arm must not touch it.
     expect(orgService.removeMember).not.toHaveBeenCalled();
@@ -267,6 +290,7 @@ describe('taking somebody’s keys back', () => {
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Remove'));
     fireEvent.click(within(row).getByText('Remove from the gym too'));
+    fireEvent.click(within(row).getByText('Remove them'));
     await waitFor(() => expect(orgService.removeMember).toHaveBeenCalledWith(ORG.id, 'u2'));
     expect(orgService.removeStaff).toHaveBeenCalledWith(ORG.id, 'u2');
     // ORDER IS THE ASSERTION. `removeMember` answers 409 `member_is_staff` for
@@ -284,6 +308,7 @@ describe('taking somebody’s keys back', () => {
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Remove'));
     fireEvent.click(within(row).getByText('Remove from the gym too'));
+    fireEvent.click(within(row).getByText('Remove them'));
     // Both halves of the true state, because the first one LANDED: an owner told
     // "that didn't work" would go and undo something that already happened, and
     // an owner told nothing would believe somebody is out of their gym who is
@@ -299,6 +324,7 @@ describe('taking somebody’s keys back', () => {
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Remove'));
     fireEvent.click(within(row).getByText('Remove from the gym too'));
+    fireEvent.click(within(row).getByText('Remove them'));
     expect(await screen.findByText(/Couldn't reach the server/i)).toBeTruthy();
     // Nothing landed, so the second call must not be attempted.
     expect(orgService.removeMember).not.toHaveBeenCalled();
