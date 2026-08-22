@@ -39,6 +39,7 @@ import ConsoleHome     from './pages/console/ConsoleHome';
 import NewGym          from './pages/console/NewGym';
 import ConsoleOverview from './pages/console/Overview';
 import ConsoleMembers  from './pages/console/Members';
+import ConsoleSettings from './pages/console/Settings';
 
 export default function App() {
   return (
@@ -196,6 +197,11 @@ export default function App() {
             <Route path="/console/:orgSlug/members" element={
               <ProtectedRoute requireOnboarding={false}>
                 <ConsoleLayout><ConsoleMembers /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/console/:orgSlug/settings" element={
+              <ProtectedRoute requireOnboarding={false}>
+                <ConsoleLayout><ConsoleSettings /></ConsoleLayout>
               </ProtectedRoute>
             } />
 

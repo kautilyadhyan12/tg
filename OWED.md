@@ -4321,11 +4321,18 @@ file and is stated so nobody reads these as lower priority than they are.
       STAFF MANAGEMENT's SERVER half is now built too (2026-08-22, DECISIONS
       :14262): list · add by email · change role · remove**, all four owner-only
       through the new `staff.manage` tick, no migration, and Kd's
-      *"yes staff seats free"* written into the appointment. **THE LINE STILL DOES
-      NOT TICK, and there are two separate reasons — do not tick it on either
-      alone.** (1) The staff work has **NO SCREEN**, so no smoke and no T3
-      (:11846/:13803's shape); the web half is its own card. (2) Even when that
-      lands, **RESTORE a member, CSV export and nudges are still routeless**, and
+      *"yes staff seats free"* written into the appointment.
+      **AND ITS SCREEN LANDED 2026-08-22 (DECISIONS :14570): a Settings tab in the
+      console with the Staff list on it** — every row with its role and when they
+      got the keys, Add someone by email, one tap to switch between manager and
+      trainer, and a Remove that asks whether they also stop being a member (Kd's
+      ruling that day, on his own question *"suppose owner fires a staff should he
+      be still a member after that?"*). **THE LINE STILL DOES NOT TICK, and reason
+      (1) has CHANGED SHAPE rather than closed — do not tick it on either reason
+      alone.** (1) The staff packet's gates are **NOT behind it: the SMOKE
+      (`RUNBOOK/smoke-staff.md`, written) and the web half's T3 are both UNRUN**,
+      and a screen with no smoke is what :11846/:13803 refused to tick on.
+      (2) **RESTORE a member, CSV export and nudges are still routeless**, and
       staff management itself ships only its ROLE half — the per-staff privilege
       TICKS keep their own line below. A chat that ticks this line because the
       staff work finished will lose three items and half of a fourth.
@@ -4924,17 +4931,49 @@ file and is stated so nobody reads these as lower priority than they are.
       market is now US gyms (:9604 §2), so a picker offering en/hi/as today
       would be a control with no effect. **Closed by whichever card first makes
       the org's language change something a user sees.**
-- [ ] 🟡 **FOUR OF THE CONSOLE'S SIX SECTIONS HAVE NO SCREEN: Leaderboard,
-      Reports, Billing, Settings (+ Staff) (deferred with the console screen,
-      2026-08-18).** §3.1's nav lists six; the shell renders the two that exist
-      and the other four are ABSENT rather than greyed out — a disabled tab that
-      answers nothing is still a promise on screen. Their server sides are owed
-      elsewhere: leaderboards at P4.x, `org_daily_stats` for reports (the line
-      above), billing at P3, and the §2.2 matrix line for staff and settings.
+- [ ] 🟡 **~~FOUR~~ THREE OF THE CONSOLE'S SIX SECTIONS HAVE NO SCREEN:
+      Leaderboard, Reports, Billing ~~, Settings (+ Staff)~~ (deferred with the
+      console screen, 2026-08-18).** §3.1's nav lists six; the shell renders the
+      ones that exist and the rest are ABSENT rather than greyed out — a disabled
+      tab that answers nothing is still a promise on screen. Their server sides
+      are owed elsewhere: leaderboards at P4.x, `org_daily_stats` for reports (the
+      line above), billing at P3.
+      **SETTINGS SHIPPED 2026-08-22 (DECISIONS :14570) AND CARRIES §4.7's STAFF
+      LIST — but it is drawn for the OWNER ONLY**, because the one thing on it is
+      §2.2's owner-only row and the server gates even the READ with it, so for a
+      manager or a trainer the tab would open onto a refusal. The condition is
+      `canManageStaff`, so the tab widens by itself the day Settings grows a
+      section a manager can use — a different question rather than a forgotten
+      one. **§4.7 lists FIVE things under Settings and this ships ONE**: Profile,
+      Notifications and Privacy have no server side at all (Profile's gap has its
+      own new line below); Codes are deliberately NOT moved here — Kd's join-code
+      card put them on Overview under the code an owner hands out, and moving them
+      would be a removal from the screen a ruling put them on, so Settings points
+      at them instead.
       **§4.2's banner slot is unbuilt for the same reason** — every one of its
       states (trial, trial-urgent, grace, past-due, seat pressure) is read off
       `subscriptions`, so today the banner would have nothing to say and no way
       to know it.
+- [ ] 🟡 **A GYM CANNOT CHANGE ITS OWN NAME, CITY, TIMEZONE OR CURRENCY AFTER IT
+      IS CREATED — everything the wizard asks is written once and can never be
+      corrected (raised 2026-08-18 at DECISIONS :10606, tracked NOWHERE until
+      2026-08-22; grep-verified across `OWED.md` before adding).** Measured, not
+      recalled: the orgs module exposes nineteen routes and **not one of them is a
+      `PATCH /v1/orgs/:gymId`** — a gym's own row is insert-only after
+      `createOrgAttempt`. :10596's C/H-1 named the currency half of this while
+      fixing the wizard's preselected United States, in prose, and prose is how
+      work gets silently lost — which is what the deferral rule exists to stop.
+      **The cost is not cosmetic.** `gyms.timezone` is what the rollup worker uses
+      to decide when a gym's day ends (trap #8), so a gym set up in the wrong zone
+      has its day boundaries wrong for ever; `currency_display` is what a gym is
+      billed in and Kd ruled it follows the gym's LOCATION (:10099), which a gym
+      that moves cannot act on; and a typo in the name is on every screen the
+      owner shows a member. **The slug is deliberately NOT part of this** — it is
+      minted once against `RESERVED_SLUGS` and a gym named "New" already collides
+      with the console's own create form (:10596 L-2), so renaming the address is
+      a separate and harder question. **Settings is the screen this belongs on and
+      it now exists** (2026-08-22, DECISIONS :14570) — the screen is no longer the
+      blocker, the route is.
 - [ ] 🟡 **THE CONSOLE IS BUILT ONCE — responsive, opened from inside the phone
       app.** Kd demanded phone management (*"main idea is convenience"*); Part 3
       §3.1 already chose responsive web for the same reason (*"owners live on

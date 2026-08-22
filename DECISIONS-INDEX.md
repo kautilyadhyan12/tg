@@ -809,6 +809,60 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:14570** — 2026-08-22 — **THE STAFF SCREEN: a gym owner can hand over the
+  keys, and the console gets its SETTINGS tab.** Web half of :14262/:14401/:14493;
+  no API change, no migration. **Read before touching the console's Settings
+  screen, `staffView.js`, `StaffPanel.jsx`, `ConsoleLayout`'s nav list or
+  `useConsoleOrg` — before moving the join codes onto Settings — and before
+  quoting a mutation verdict on a component the screen above it may never mount.**
+  **THE CARD WAS RECOVERED, NOT WRITTEN**: an interrupted session left it
+  uncommitted and this one treated the tree as unverified (S5) — **which is what
+  caught a REGRESSION inside it on the first command.** `Overview.jsx` had been
+  gated so the join-code pane failed whenever the MEMBERS read did, printing
+  *"Couldn't reach the server"* over a code that loaded perfectly (a fulfilled
+  outcome has no `reason`, so `errorText` takes the OFFLINE branch) while L-4's
+  duplicate-suppression hid the one true card; **two tests went red naming the two
+  guarantees it broke**, and it is reverted. **Standing shape: an interrupted
+  session's working tree is a CLAIM about finished work, not a state of it.**
+  **KD RULING — removing staff ASKS about the membership too** (*"suppose owner
+  fires a staff should he be still a member after that?"*): both outcomes offered,
+  **neither preselected**, keys always first because `removeMember` refuses anybody
+  still staff; the half-done state is REPORTED (not a clean failure, not silence)
+  and names the Members screen, with the instruction unconditional and the server's
+  reason appended, since a dropped connection has no sentence of its own.
+  **THE SENTENCE :14262 SAID THIS HALF OWED IS NOT THE ONE THAT SHIPPED** — the
+  join-code count no longer moves when somebody is promoted, because :14401's C/H-1
+  removed the `complimentary` write, so printing the promised sentence would be
+  :5807's class **arriving through a stale note in the record rather than through
+  code**; struck in place, mutant S4, and the smoke checks the number holds.
+  Decisions not to re-derive: **the Settings TAB is owner-only and widens by
+  itself** (`canManageStaff`, so the day Settings grows a manager-usable section it
+  is a different question rather than a forgotten one) · **hiding is not the
+  enforcement** — typing the address is TOLD, never shown an empty list that reads
+  as a gym nobody runs · **knowing the role costs the shell a second
+  `/v1/orgs/mine`**, stated not hidden · **the owner's row carries the reason, not
+  two dead buttons** · **trainer is the default** (smaller grant) · **`owner` is
+  absent from the picker and the hints name only what is BUILT** · **codes are NOT
+  moved** — §4.7 lists them here but :13920 put them on Overview, so Settings
+  points at them. **THE AUDIT'S SURVIVOR IS THE PART TO READ: S11 was ALIVE
+  because the guarantee had no OBSERVABLE SUBJECT** — `Settings.jsx` checks the
+  role BEFORE mounting the panel, so the panel's own guard could never be caught
+  failing and the protection sat entirely in a different file. Closed :14401's way,
+  by mounting the component DIRECTLY **with a positive control in the same test**;
+  **the anchor never moved, only what could notice it did** (:11846's usually
+  unrecorded half). **And the first sweep's exit code was 1 while the background
+  wrapper reported 0** — :5906/:9509's shape in a new disguise; the verdict came
+  from the harness's log, never the notification. **PROVE: web 1028/1028 across 43
+  files exit 0 · build ✓ · eslint clean on eleven files · sweep RE-RUN on the final
+  bytes, 46 mutants · 46 RED · 0 ALIVE · 0 never ran, exit 0** (the first sweep's
+  figures are not summed with it, :5199). **A NEW OWED LINE, found not fixed: a gym
+  cannot change its own name, city, timezone or currency after creation** —
+  nineteen routes in the module and no `PATCH /v1/orgs/:gymId`; raised at :10606 in
+  PROSE and tracked nowhere since, and timezone is what decides a gym's day
+  boundary. **NOTHING TICKS — SMOKE (`RUNBOOK/smoke-staff.md`, 12 steps) and T3
+  both UNRUN**; its steps 7 and 9 are the PATCH/DELETE preflights `fastify.inject`
+  cannot see.
+
 - **:14493** — 2026-08-22 — **T3 ROUND 2 ON THE STAFF CARD: the three fixes HOLD
   (zero behavioural defects), the escape hatch ARMED, and KD RULED PATCH.**
   Diff-only re-review of `445f406`. **Read before deleting a `gym_id` from any

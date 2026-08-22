@@ -49,6 +49,8 @@ const VIEW_SUITE = 'src/pages/console/consoleView.test.js';
 const CODES_VIEW_SUITE = 'src/pages/console/codesView.test.js';
 const RENDER_SUITE = 'src/pages/console/console.render.test.jsx';
 const API_SUITE = 'src/api/orgsApi.test.js';
+const STAFF_VIEW_SUITE = 'src/pages/console/staffView.test.js';
+const SETTINGS_SUITE = 'src/pages/console/settings.render.test.jsx';
 
 const TARGETS = {
   view: { file: resolve(ROOT, 'apps/web/src/pages/console/consoleView.js') },
@@ -60,6 +62,12 @@ const TARGETS = {
   codesview: { file: resolve(ROOT, 'apps/web/src/pages/console/codesView.js') },
   codespanel: { file: resolve(ROOT, 'apps/web/src/components/console/JoinCodesPanel.jsx') },
   queue: { file: resolve(ROOT, 'apps/web/src/pages/console/ApplicationsQueue.jsx') },
+  staffview: { file: resolve(ROOT, 'apps/web/src/pages/console/staffView.js') },
+  staffpanel: { file: resolve(ROOT, 'apps/web/src/components/console/StaffPanel.jsx') },
+  // CRLF — every anchor aimed at this file must be ONE line. A two-line anchor
+  // written with `\n` matches nothing here and the mutant reports ALIVE, whose
+  // honest reading is "this guarantee has no test" (:4267, four harnesses).
+  layout: { file: resolve(ROOT, 'apps/web/src/components/console/ConsoleLayout.jsx') },
 };
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
@@ -417,6 +425,141 @@ const MUTANTS = [
     expect: 'does not resend an expired code',
     from: '    if (!untouchedAndPast) patch.expiresAt = endIso;',
     to: '    patch.expiresAt = endIso;',
+  },
+
+  // ── S1–S11: THE STAFF SECTION ───────────────────────────────────────────
+  //
+  // The web half of Part 3 §4.7. Still no server behaviour and therefore still
+  // no database mutants (:5857 rule 4a); the columns these sit in are
+  //   · AUTHORITY — who is shown the keys to a gym, and whose row gets a
+  //     control the server would refuse (S1, S2, S9, S11)
+  //   · DATA LOSS / A DESTRUCTIVE ACT NOBODY CHOSE — Kd's removal ruling
+  //     reaching the network in the wrong order, or with the choice ignored
+  //     (S5, S6), and the half-done state being swallowed (S7)
+  //   · A FALSE THING A USER SEES — "0 people run this gym" off a failed read,
+  //     a failed read drawn as a list with controls over it, and the join-code
+  //     sentence that stopped being true (S3, S4, S8)
+  //   · MONEY-ADJACENT — the form defaulting to the LARGER grant (S10)
+  //
+  // NOT mutated, per the same rule: the confirmation wording, the role hints,
+  // the layout, the icons, the "(you)" chip's styling.
+  //
+  // Every anchor here is ONE LINE. `ConsoleLayout.jsx` is CRLF and the other two
+  // are LF, so a multi-line anchor would work in one file and silently match
+  // nothing in the other.
+  {
+    id: 'S1',
+    target: 'staffview',
+    suite: STAFF_VIEW_SUITE,
+    why: 'AUTHORITY: the Staff section is drawn for any staff role, so a manager is shown the list of who holds the keys to the gym — and the server, which gates the READ with `staff.manage` too, answers their request with a 404',
+    expect: 'is NOT a manager or a trainer',
+    from: "  return staffRole === 'owner';",
+    to: '  return staffRole != null;',
+  },
+  {
+    id: 'S2',
+    target: 'staffview',
+    suite: STAFF_VIEW_SUITE,
+    why: "AUTHORITY: the OWNER's row gets controls, so an owner taps Remove on themselves and reads `last_owner` — a button whose only outcome is a refusal, over the one row that can never change",
+    expect: 'gives NONE to the owner',
+    from: "  return person?.role === 'manager' || person?.role === 'trainer';",
+    to: '  return person?.role != null;',
+  },
+  {
+    id: 'S3',
+    target: 'staffview',
+    suite: STAFF_VIEW_SUITE,
+    why: 'A NUMBER A USER SEES AND IS FALSE: a staff list that could not be read prints "0 people run this gym" — which is never true of any gym, because a gym always has its owner',
+    expect: 'says NOTHING when the list could not be read',
+    from: '  if (!Array.isArray(staff)) return null;',
+    to: "  if (!Array.isArray(staff)) return '0 people run this gym';",
+  },
+  {
+    id: 'S4',
+    target: 'staffview',
+    suite: STAFF_VIEW_SUITE,
+    why: 'FALSE ON SCREEN, AND IT IS THE SENTENCE THE RECORD ASKED FOR: the server card promised the web half would explain that promoting somebody makes a join code\'s count fall by one. T3 round 1 removed the `complimentary` write that made it true, so printing it now states something the product does not do',
+    expect: 'does NOT claim the number beside a join code moves',
+    from: `  "Staff don't use up one of your paid member seats.";`,
+    to: "  'Making somebody staff makes the number beside your join code drop by one.';",
+  },
+  {
+    id: 'S5',
+    target: 'staffpanel',
+    suite: SETTINGS_SUITE,
+    why: "DATA LOSS BY SILENCE: the membership is ended before the keys are taken back, which the server refuses with 409 `member_is_staff` — so the owner is told the person is out of the gym and they are still in it, with the keys",
+    expect: 'keys FIRST',
+    from: '      await orgService.removeStaff(gymId, person.userId);',
+    to: '      await orgService.removeMember(gymId, person.userId);',
+  },
+  {
+    id: 'S6',
+    target: 'staffpanel',
+    suite: SETTINGS_SUITE,
+    why: "A DESTRUCTIVE ACT NOBODY CHOSE: the owner's choice is ignored and every removal also ends the membership, so 'just take the keys' throws somebody out of the gym and takes the gym's features with them — the exact outcome Kd's two-button question exists to let an owner avoid",
+    expect: 'JUST THE KEYS ends the staff row',
+    from: '    if (alsoRemoveFromGym) {',
+    to: '    if (true) {',
+  },
+  {
+    id: 'S7',
+    target: 'staffpanel',
+    suite: SETTINGS_SUITE,
+    why: 'A HALF-DONE CHANGE REPORTED AS NOTHING: the keys came back and the membership did not, and the notice goes to the add-form field instead of the screen — so it is rendered nowhere and the owner believes somebody is out of their gym who is still in it',
+    expect: 'SAYS SO when the keys came back but the membership did not',
+    from: '        setActionError(',
+    to: '        setFieldError(',
+  },
+  {
+    id: 'S8',
+    target: 'staffpanel',
+    suite: SETTINGS_SUITE,
+    why: 'A FAILED READ DRAWN AS A LIST: the rows and "Add someone" render over an unreadable staff list, so an owner is invited to hand out keys without being able to see who already holds them',
+    expect: 'NEVER draws a failed read as a gym with no staff',
+    // TWO LINES, AND THE SECOND ONE IS WHY. The count label eight lines above is
+    // guarded by the identical condition at a deeper indent, so the one-line
+    // anchor is a substring of THAT line too and `String.replace` — which takes
+    // the first match — would have mutated the header while this row's name said
+    // it was testing the list. That is :14493's O85/O86 exactly, caught here by
+    // looking rather than by a sweep, because the pre-check can ask "does this
+    // match?" and cannot ask "does this match ONCE?".
+    from: '      {!state.loading && state.error === null ? (\n        <div className="flex flex-col gap-3">',
+    to: '      {!state.loading ? (\n        <div className="flex flex-col gap-3">',
+  },
+  {
+    id: 'S9',
+    target: 'layout',
+    suite: SETTINGS_SUITE,
+    why: 'A TAB THAT ANSWERS NOTHING: Settings is drawn for every role, so a manager and a trainer get a nav item whose only screen tells them they may not be there',
+    expect: 'is NOT drawn for a manager',
+    from: '        ...(canManageStaff(org?.staffRole ?? null)',
+    to: '        ...(true',
+  },
+  {
+    id: 'S10',
+    target: 'staffpanel',
+    suite: SETTINGS_SUITE,
+    why: "AUTHORITY BY DEFAULT: the add form opens on the LARGER grant, so an owner who does not read the two options hands somebody the power to remove members and replace join codes when they meant to add a trainer",
+    expect: 'starts on the SMALLER grant',
+    from: "  const [role, setRole] = useState('trainer');",
+    to: "  const [role, setRole] = useState('manager');",
+  },
+  {
+    // SURVIVED ITS FIRST RUN, and the survival was the finding rather than a
+    // hole in the code: `Settings.jsx` checks `canManageStaff` BEFORE it mounts
+    // this panel, so for a manager the component never exists and its own guard
+    // could not be observed from the screen. The filter below now also matches a
+    // test that mounts the panel DIRECTLY ("…when the viewer is not the owner"),
+    // which is the case that isolates the guard. Re-measured RED after that
+    // test landed — the ANCHOR never moved, only what could notice it (:11846:
+    // a mutant has two halves).
+    id: 'S11',
+    target: 'staffpanel',
+    suite: SETTINGS_SUITE,
+    why: 'AUTHORITY: the panel asks for the staff list whatever the role, so a manager\'s Settings screen fires an owner-only read the server answers 404 — the request a non-owner should never make',
+    expect: 'asks the server NOTHING about staff',
+    from: '    if (!allowed || gymId === null) return undefined;',
+    to: '    if (gymId === null) return undefined;',
   },
 ];
 

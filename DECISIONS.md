@@ -14566,3 +14566,178 @@ global-count race is unchanged and on its own line.
 Critical/High about coverage is closed in this round with permanent guards. The
 packet's remaining gate is unchanged and is not a review: **there is still no
 screen, so no smoke.** The web half carries it.
+
+## THE STAFF SCREEN — A GYM OWNER CAN HAND OVER THE KEYS, AND THE CONSOLE GETS ITS SETTINGS TAB (2026-08-22)
+
+**Read before touching `apps/web/src/pages/console/Settings.jsx`, `staffView.js`,
+`StaffPanel.jsx`, `ConsoleLayout`'s nav list or `useConsoleOrg` — before moving
+the join codes onto Settings — and before quoting a mutation verdict on a
+component the screen above it may never mount.** Web half of :14262 / :14401 /
+:14493. **No API change, no migration, no `@app/shared` change.**
+
+**THIS CARD WAS RECOVERED, NOT WRITTEN.** The build happened in a session whose
+terminal closed before it committed; this session inherited an uncommitted tree
+and treated it as unverified work (S5). Everything below that is a finding came
+out of that decision, and the first one arrived on the first command.
+
+**THE INHERITED TREE CARRIED A REGRESSION AND THE SUITE CAUGHT IT IMMEDIATELY.**
+`Overview.jsx` had been edited to gate the join-code pane on the MEMBERS read as
+well as its own. That re-collapses the two panes round 2's L-3 deliberately split
+apart, and it is worse than the defect L-3 fixed: a fulfilled outcome carries no
+`reason`, so `errorText(undefined, …)` takes the OFFLINE branch and the screen
+prints **"Couldn't reach the server. Check your connection and try again."** over
+a join code that loaded perfectly — while the L-4 duplicate-suppression then
+hides the members card that was the only true one. Two tests went red naming
+exactly the two guarantees it broke ("keeps the half that works when only ONE of
+the two reads is refused", "shows ONE error, not two"). **REVERTED** — the file
+is byte-identical to HEAD — and the suite went 73/73 on that file. Unrelated to
+staff (R1.1), and Kd was told rather than it being quietly kept or quietly
+dropped. **Standing shape: an interrupted session's working tree is a CLAIM about
+finished work, not a state of it.**
+
+**KD RULING 2026-08-22 — TAKING SOMEBODY'S KEYS ASKS ABOUT THEIR MEMBERSHIP TOO.**
+His question, unprompted: *"suppose owner fires a staff should he be still a
+member after that?"* The two stay separate on the server — `removeStaff` ends
+what somebody can DO, `removeMember` ends whether they are IN, and only the
+second costs them the gym's paid features (:14262 verified that being staff
+grants no perks) — **but making an owner REMEMBER the second call is how an
+ex-employee keeps a paying gym's features.** So Remove asks, and offers **both
+outcomes with neither preselected**: *Just take the keys — they stay a member of
+your gym* · *Remove from the gym too — they lose your gym's features. They keep
+every workout they have done.* The workouts clause is there because it is the
+fear the sentence has to answer. **The ORDER is the server's and not a
+preference:** `removeMember` refuses anybody still staff (409 `member_is_staff`),
+so it is always keys first — mutant **S5** is that inversion.
+
+**THE HALF-DONE STATE IS A REAL STATE AND THE SCREEN SAYS SO.** Keys back,
+membership not: the panel does NOT report a clean failure (the first half
+landed, and saying otherwise sends an owner to undo something that already
+happened) and does NOT swallow it (an owner who believes somebody is out of their
+gym when they are not is the exact outcome this control exists to prevent). It
+names the Members screen, where the remaining half can be finished. **The
+instruction is unconditional and the server's reason is APPENDED, not the other
+way round** — a dropped connection has no server sentence, so putting the next
+step inside `errorText`'s fallback loses it precisely when it is needed. Mutants
+**S7** (notice routed to the add-form field, so it renders nowhere) and **S6**
+(the owner's choice ignored and every removal ends the membership).
+
+**THE SENTENCE THE SERVER CARD SAID THE WEB HALF OWED IS NOT THE ONE THAT
+SHIPPED, AND THAT IS THE POINT.** :14262 promised this screen would explain that
+"promoting a member to staff makes the number beside a join code fall by one".
+That was TRUE of the first implementation — appointing wrote
+`gym_members.complimentary`, and a code's `joined` excludes complimentary rows —
+and **:14401's C/H-1 removed that write**, moving Kd's ruling into `claimSeat`'s
+own count. Printing the promised sentence today would put a FALSE statement on
+screen: **:5807's class arriving through a stale note in the record rather than
+through code.** What ships is what is true after the fix — *"Staff don't use up
+one of your paid member seats."* — the claim is struck in :14262 in place, mutant
+**S4** restores it, and the smoke sheet's step 6 makes Kd check the number does
+not move.
+
+**DECISIONS NOT TO RE-DERIVE.**
+- **The Settings TAB is drawn for the OWNER ONLY, and that is the shell's
+  existing rule rather than a new one.** §2.2's Staff-management row is
+  owner-only and the server gates the READ with `staff.manage` too, so for a
+  manager the tab would open onto a sentence telling them they may not be there —
+  the "tab that answers nothing" `ConsoleLayout` already refuses to draw for
+  Leaderboard, Reports and Billing. The condition is `canManageStaff`, so **it
+  widens by itself** the day Settings grows a section a manager can use: a
+  different question rather than a forgotten one. Mutant **S9**.
+- **Hiding is NOT the enforcement (R3.3).** Typing the address still reaches the
+  screen, and it TELLS them — rather than drawing an empty staff list, which
+  would read as a gym nobody runs.
+- **KNOWING THE ROLE COSTS THE SHELL A READ, stated rather than hidden.**
+  `ConsoleLayout` now calls `useConsoleOrg`, so a console page issues
+  `/v1/orgs/mine` twice. It is the cheapest read in the module (indexed, capped
+  at 100 rows, no joins to the workout tables), and the alternative — threading
+  the role from each page up into its own layout — needs a context this card has
+  no other use for. `useConsoleOrg` gained an early return for a missing slug so
+  `/console` and `/console/new` ask nothing at all.
+- **THE OWNER'S ROW GETS THE REASON, NOT TWO DEAD BUTTONS.** Both mutations
+  refuse it (`owner_role_locked`, `last_owner`) and both refusals come from one
+  fact: nothing in the product can appoint a second owner, so every owner is the
+  LAST owner. The row says *"A gym can't be left with nobody in charge."* Mutant
+  **S2**.
+- **TRAINER IS THE DEFAULT in the add form** — the smaller of the two grants, in
+  a form whose whole subject is authority. Mutant **S10**.
+- **`owner` is ABSENT from the role choices**, matching
+  `staffAssignableRoleSchema`: the server refuses it, so the option would be a
+  400 behind a picker. **The role hints name ONLY WHAT IS BUILT**, not §2.2's
+  full matrix — a hint describing the matrix would promise a gym owner powers
+  they are about to go looking for.
+- **THE ADD FORM STAYS OPEN ON A REFUSAL and the typing survives** (the join-code
+  limits editor shipped the opposite and it has its own finding at :14174 L-7),
+  and the SERVER's own sentence is shown, because *"Nobody in this gym has that
+  email address…"* names the fix better than a rewrite could.
+- **EVERY CHANGE RE-READS FROM THE SERVER** rather than patching the row in hand:
+  the list carries `isYou`, the eligibility rule and the ordering, so a screen
+  that edits its own copy is one that can disagree with the next reload.
+- **NO SORTING HELPER, deliberately** — `listStaff` already orders
+  `(role = 'owner') DESC, created_at ASC, user_id ASC`, and a second ordering
+  here would be a second opinion that disagrees the day either moves.
+- **CODES ARE NOT MOVED.** §4.7 lists them under Settings; Kd's join-code card
+  put them on Overview under the code an owner is handing out (:13920), and
+  moving them would be a removal from the screen a ruling put them on. Settings
+  POINTS at them instead, so an owner reading §4.7's list finds an answer here
+  rather than nothing.
+
+**THE AUDIT'S SURVIVOR IS THE PART WORTH READING, AND IT IS ABOUT WHERE A GUARD
+LIVES.** First sweep: **46 mutants · 45 RED · 1 ALIVE.** **S11** deletes
+`!allowed` from `StaffPanel`'s own read guard — the one whose comment says
+"without it a manager's Settings screen would fire a request the server answers
+404" — and **every test stayed green**, including the one named "asks the server
+NOTHING about staff". The cause is not a missing test of the screen:
+**`Settings.jsx` decides on `canManageStaff` BEFORE it mounts the panel, so for a
+manager the component never exists and its internal guard has no observable
+subject.** The guarantee was carried entirely by a DIFFERENT guard one file up.
+:5104 F5's shape — a guard whose protection cannot fail is the same gap with a
+comment on it — and :12343's standing lesson applied in the other direction: ask
+whether the guarantee is OBSERVABLE before assuming the test is missing, then go
+and MAKE it observable rather than retiring the mutant. Closed the way :14401
+closed O86, with the case that isolates it: the panel is mounted DIRECTLY with a
+non-owner role, **with a positive control in the same test** (the owner mount
+must still read the list, or a panel that had stopped reading altogether would
+satisfy the assertion and the audit would have swapped one unfalsifiable claim
+for another). **The mutant's ANCHOR never moved — only what could notice it
+did**, which is the half of :11846's two-halves lesson that usually goes
+unrecorded.
+
+**AND THE FIRST SWEEP'S EXIT CODE IS WHY THE RUN WAS READ AND NOT REPORTED.** The
+harness exited **1** on that survivor and the background wrapper around it exited
+**0** — the wrapper's own `echo` succeeding, reported as the sweep succeeding.
+:5906's and :9509's exact recorded shape, in a new disguise (a background task
+notification rather than a `| tail`). The verdict was taken from the log the
+harness wrote, never from the notification.
+
+**PROVE** — web **1028/1028 across 43 files, exit 0 read into a variable** (+1
+for the S11 test; 1027 before it) · `vite build` exit 0 · **eslint exit 0 with no
+output at `--max-warnings=0`** on all eleven touched source files (`.mjs` tools
+are outside eslint's reach here, which is what `node --check` exists for and it
+was run first, :13336's permanent guard). **MUTATION AUDIT, RE-RUN TO COMPLETION
+ON THE FINAL BYTES: 46 mutants · 46 RED · 0 ALIVE · 0 never ran, exit 0**,
+controls GREEN on all forty-six filters before any mutation, restores
+sha256-verified after every mutant, `git status` after the run showing only this
+card's files. **The first sweep's figures are NOT summed with the second and are
+not quotable** (:5199) — the second is the one that stands, because the test file
+changed between them. **`apps/api` was NOT re-run and this card changed no api
+source** — stated rather than implied (:10726). `apps/web` has no `tsc`.
+
+**FOUND AND FIXED IN THE RECORD RATHER THAN THE CODE (R1.1): a gym cannot change
+its own name, city, timezone or currency after it is created.** Measured, not
+recalled — the orgs module exposes **nineteen** routes and **not one is a
+`PATCH /v1/orgs/:gymId`**; a gym's row is insert-only after `createOrgAttempt`.
+:10606 named the currency half of this while fixing the wizard's preselected
+United States, **in prose, and it has been tracked in no `OWED.md` line since**
+(grep-verified before adding one). Not cosmetic: `gyms.timezone` is what the
+rollup worker uses to decide when a gym's day ends (trap #8), so a gym set up in
+the wrong zone has its day boundaries wrong for ever. The SLUG is deliberately
+excluded — it is minted once against `RESERVED_SLUGS` and a gym named "New"
+already collides with the console's own create form (:10596 L-2), so renaming the
+address is a separate and harder question. **Settings is the screen this belongs
+on and the screen is no longer the blocker; the route is.** Own `OWED.md` line.
+
+**NOTHING TICKS.** The SMOKE (`RUNBOOK/smoke-staff.md`, 12 steps, written) and
+**T3 are both UNRUN**. The sheet's steps 7 and 9 are the two the suite is
+structurally unable to cover: a browser reaches PATCH and DELETE only through a
+CORS preflight, which `fastify.inject` cannot exercise — Card 4's precedent,
+where 250 green tests sat on top of an app-wide dead method.

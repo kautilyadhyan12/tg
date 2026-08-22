@@ -19,8 +19,11 @@ import {
   orgCodeMutationResponseSchema,
   orgCodesResponseSchema,
   orgMemberPageSchema,
+  orgStaffMutationResponseSchema,
+  orgStaffResponseSchema,
   rejectApplicationResponseSchema,
   removeMemberResponseSchema,
+  removeOrgStaffResponseSchema,
   rotateOrgCodeResponseSchema,
 } from '@app/shared';
 import authApi from './authApi';
@@ -232,6 +235,64 @@ export const orgService = {
       removeMemberResponseSchema,
       'that removal',
       authApi.delete(`/v1/orgs/${gymId}/members/${userId}`),
+    ),
+
+  /** GET /v1/orgs/:gymId/staff — Part 3 §4.7's list, owner-only.
+   *
+   *  The READ is gated too, not just the writes: §2.2 has no "view staff" row,
+   *  so `staff.manage` covers all four routes and a manager asking gets the
+   *  module's usual 404 rather than a read-only copy. `canManageStaff` mirrors
+   *  that so the section is not drawn at somebody who would only see an error. */
+  getStaff: (gymId) =>
+    readThrough(orgStaffResponseSchema, 'who runs this gym', authApi.get(`/v1/orgs/${gymId}/staff`)),
+
+  /** POST /v1/orgs/:gymId/staff — hand somebody the keys.
+   *
+   *  **The email must belong to a LIVE MEMBER of this gym**, and the 404 that
+   *  comes back otherwise is deliberately the same answer for a real account at
+   *  another gym as for an address nobody has ever used — a global lookup would
+   *  make this route an account-existence oracle. The server's own sentence
+   *  names the fix (send them your join code), so the screen prints it rather
+   *  than inventing its own.
+   *
+   *  **Not retried and it must not be** (R10.2): there is no Idempotency-Key
+   *  here. A second call is harmless in the sense that it cannot demote anybody
+   *  — the server answers 409 `already_staff` and never overwrites a role — but
+   *  a network-failure retry is still forbidden on a POST without a key. */
+  addStaff: (gymId, body) =>
+    readThrough(
+      orgStaffMutationResponseSchema,
+      'that change',
+      authApi.post(`/v1/orgs/${gymId}/staff`, body),
+    ),
+
+  /** PATCH /v1/orgs/:gymId/staff/:userId — change what somebody may do.
+   *
+   *  A no-op change is a 200 and writes no audit row, so the screen does not
+   *  have to work out whether anything moved. The OWNER's row is refused with
+   *  409 `owner_role_locked`; `canChangeStaff` mirrors it. */
+  updateStaffRole: (gymId, userId, body) =>
+    readThrough(
+      orgStaffMutationResponseSchema,
+      'that change',
+      authApi.patch(`/v1/orgs/${gymId}/staff/${userId}`, body),
+    ),
+
+  /** DELETE /v1/orgs/:gymId/staff/:userId — take the keys back.
+   *
+   *  **This ends what they can DO, not whether they are IN the gym.** They stay
+   *  a member and keep the gym's features; `removeMember` is the other half, and
+   *  the Staff panel offers both in one question because Kd ruled that an owner
+   *  should not have to remember the second step (2026-08-22).
+   *
+   *  **The ORDER is forced by the server**: `removeMember` refuses anybody who
+   *  is still staff (409 `member_is_staff`), so it is always keys first, then
+   *  membership. Doing it the other way round cannot work. */
+  removeStaff: (gymId, userId) =>
+    readThrough(
+      removeOrgStaffResponseSchema,
+      'that removal',
+      authApi.delete(`/v1/orgs/${gymId}/staff/${userId}`),
     ),
 };
 

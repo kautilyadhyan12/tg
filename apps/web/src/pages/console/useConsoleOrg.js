@@ -27,6 +27,18 @@ export function useConsoleOrg(orgSlug) {
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    // NO SLUG, NO QUESTION. Added when `ConsoleLayout` began using this hook to
+    // find out the viewer's role: the shell renders on `/console` and
+    // `/console/new` too, where there is no gym to resolve, and without this it
+    // would ask the server which gyms you run in order to answer a question
+    // nobody asked. The state stays `loading`, which is the truthful answer —
+    // no org has been resolved and none is being — and the shell reads only
+    // `org`, so it simply draws no gym tabs.
+    //
+    // STRUCTURALLY UNREACHABLE FOR THE SCREENS: both page callers take the slug
+    // from `/console/:orgSlug[/...]`, and react-router does not match those
+    // patterns with the segment empty.
+    if (typeof orgSlug !== 'string' || orgSlug === '') return undefined;
     let cancelled = false;
     orgService
       .getMine()

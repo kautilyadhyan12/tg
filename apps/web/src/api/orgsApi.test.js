@@ -37,8 +37,26 @@ const APPLICATION_BODY = {
   decidedAt: null,
 };
 
-const okBody = (url) => {
+const STAFF_BODY = {
+  userId: '66666666-6666-6666-6666-666666666666',
+  displayName: 'Rita Sen',
+  email: 'rita@example.com',
+  role: 'manager',
+  since: '2026-08-20T09:00:00.000Z',
+  isYou: false,
+};
+
+/** The METHOD is a parameter because the staff surface answers two different
+ *  shapes at ONE address: `GET /staff` is the list and `POST /staff` is the one
+ *  row that was just written. A url-only fixture would have to pick one, and the
+ *  contract assertions below would then be measuring the parser rather than the
+ *  endpoint on whichever call it guessed wrong. */
+const okBody = (url, method = 'get') => {
   if (url === '/v1/orgs/mine') return { orgs: [] };
+  if (url.includes('/staff/')) {
+    return method === 'delete' ? { status: 'removed' } : { staff: STAFF_BODY };
+  }
+  if (url.endsWith('/staff')) return method === 'post' ? { staff: STAFF_BODY } : { staff: [] };
   if (url === '/v1/orgs/join') {
     return { outcome: 'pending', org: ORG_BODY, application: APPLICATION_BODY };
   }
@@ -70,7 +88,7 @@ function recordRequests(api) {
   api.defaults.adapter = async (config) => {
     seen.push({ url: config.url, method: config.method, params: config.params, data: config.data });
     return {
-      data: okBody(config.url), status: 200, statusText: '', headers: {}, config, request: {},
+      data: okBody(config.url, config.method), status: 200, statusText: '', headers: {}, config, request: {},
     };
   };
   return seen;
@@ -172,6 +190,29 @@ describe('orgService endpoints', () => {
     // preflight for it, which `fastify.inject` never exercises. A repoint of
     // this to POST would sail past every server test.
     expect(seen[5]).toMatchObject({ url: '/v1/orgs/gym-1/members/user-9', method: 'delete' });
+  });
+
+  it('hits the staff surface: list, add, change role and take the keys back', async () => {
+    const seen = recordRequests(authApi);
+    await orgService.getStaff('gym-1');
+    await orgService.addStaff('gym-1', { email: 'rita@example.com', role: 'manager' });
+    await orgService.updateStaffRole('gym-1', 'user-9', { role: 'trainer' });
+    await orgService.removeStaff('gym-1', 'user-9');
+
+    expect(seen[0]).toMatchObject({ url: '/v1/orgs/gym-1/staff', method: 'get' });
+    expect(seen[1]).toMatchObject({ url: '/v1/orgs/gym-1/staff', method: 'post' });
+    // PATCH and DELETE, and the METHODS are the assertion: a browser reaches
+    // both only through a CORS preflight, which `fastify.inject` is structurally
+    // unable to exercise — the shape of the bug that left the app's DELETE dead
+    // behind 250 green server tests.
+    expect(seen[2]).toMatchObject({ url: '/v1/orgs/gym-1/staff/user-9', method: 'patch' });
+    expect(seen[3]).toMatchObject({ url: '/v1/orgs/gym-1/staff/user-9', method: 'delete' });
+  });
+
+  it('sends the email and role exactly as given — the body schema is strict', async () => {
+    const seen = recordRequests(authApi);
+    await orgService.addStaff('gym-1', { email: 'rita@example.com', role: 'manager' });
+    expect(JSON.parse(seen[0].data)).toEqual({ email: 'rita@example.com', role: 'manager' });
   });
 
   it('nudges at an address carrying NO gym id — the tenancy pair is (application, caller)', async () => {

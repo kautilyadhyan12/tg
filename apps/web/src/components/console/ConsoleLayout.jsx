@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { NavLink, Link, useParams, useNavigate } from 'react-router-dom';
-import { Building2, Users, ChevronLeft, LogOut } from 'lucide-react';
+import { Building2, Users, Settings, ChevronLeft, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useConsoleOrg } from '../../pages/console/useConsoleOrg';
+import { canManageStaff } from '../../pages/console/staffView';
 
 // The console's own shell — Part 3 §3.1: "Responsive web app (owners live on
 // phones; no native console app). Left rail (desktop) / bottom tabs (mobile)."
@@ -13,10 +15,27 @@ import { useAuth } from '../../context/AuthContext';
 // surface Kd asked to be usable from a phone (:9604 §4), so it gets a shell
 // that actually collapses: rail at `md` and above, tab bar below.
 //
-// Only the two BUILT sections appear. §3.1 lists six (Overview · Members ·
-// Leaderboard · Reports · Billing · Settings); the other four have no server
-// side at all and each has its own owed line. A greyed-out tab that answers
-// nothing is a promise on screen, so they are absent rather than disabled.
+// Only the BUILT sections appear. §3.1 lists six (Overview · Members ·
+// Leaderboard · Reports · Billing · Settings); Leaderboard, Reports and Billing
+// have no server side at all and each has its own owed line. A greyed-out tab
+// that answers nothing is a promise on screen, so they are absent rather than
+// disabled.
+//
+// SETTINGS IS DRAWN FOR THE OWNER ONLY, and it is the same rule rather than a
+// new one. The one thing on that screen today is §4.7's Staff list, which §2.2
+// grants to the owner alone and the server gates with `staff.manage` — the READ
+// included. For a manager or a trainer the tab would open onto a sentence
+// telling them they may not be there, which is the "tab that answers nothing"
+// this shell already refuses to draw. It widens by itself the day Settings
+// grows a section their role can use: the condition is `canManageStaff`, so
+// that day it becomes a different question rather than a forgotten one.
+//
+// Knowing the role costs this shell a read of `/v1/orgs/mine`, the same list the
+// screen inside it resolves its own gym from. Stated rather than hidden: it is
+// one extra request per console page, it is the cheapest read in the module
+// (indexed, capped at 100 rows, no joins to the workout tables), and the
+// alternative — threading the role from each page up into its own layout —
+// needs a context this card has no other use for.
 //
 // THE WAY OUT IS SIGN OUT, NOT A LINK INTO THE MEMBER APP (Kd ruling
 // 2026-08-19, mid-smoke on the login door). This shell used to end in "Back to
@@ -43,6 +62,12 @@ export default function ConsoleLayout({ children }) {
   const { orgSlug } = useParams();
   const { logout }  = useAuth();
   const navigate    = useNavigate();
+  // Asks nothing when there is no gym in the address (`/console`,
+  // `/console/new`) — the hook returns early there. A failure is not handled
+  // here on purpose: the screen inside reads the same list and owns the error
+  // card, and a shell that drew a second one would stack two failures for one
+  // dropped request. Unknown role simply means no Settings tab.
+  const { org }     = useConsoleOrg(orgSlug);
 
   // `signingOut` is feedback, not a guard (T3 round 1, L8). The member sidebar
   // wraps its sign-out in `triggerTransition`, which covers the wait with an
@@ -64,6 +89,9 @@ export default function ConsoleLayout({ children }) {
     ? [
         { to: `/console/${orgSlug}`, end: true, icon: Building2, label: 'Gym' },
         { to: `/console/${orgSlug}/members`, end: false, icon: Users, label: 'Members' },
+        ...(canManageStaff(org?.staffRole ?? null)
+          ? [{ to: `/console/${orgSlug}/settings`, end: false, icon: Settings, label: 'Settings' }]
+          : []),
       ]
     : [];
 

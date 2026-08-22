@@ -9291,3 +9291,75 @@ NEXT
      half — a console Settings screen with a Staff section (§3.1 names
      Settings, §4.7 puts Staff under it) — is the next card. Not started.
 ```
+
+```
+TASK: THE STAFF SCREEN — the web half of the staff card. A Settings tab in the
+      console with §4.7's Staff list on it. DECISIONS :14570. No API change, no
+      migration, no `@app/shared` change.
+
+HOW THIS CARD ARRIVED
+  · **RECOVERED, NOT WRITTEN.** A previous session built it and its terminal
+    closed before it committed. This session inherited the uncommitted tree and
+    treated it as UNVERIFIED (S5) — which is the only reason the next line
+    exists.
+  · **THE TREE CARRIED A REGRESSION AND THE SUITE FOUND IT ON THE FIRST RUN.**
+    `Overview.jsx` gated the join-code pane on the MEMBERS read too, which
+    re-collapses round 2's L-3 split and prints "Couldn't reach the server" over
+    a code that loaded fine (a fulfilled outcome has no `reason`, so `errorText`
+    takes the offline branch). Two tests went red naming the two guarantees it
+    broke. REVERTED — the file is byte-identical to HEAD.
+  · Standing shape: **an interrupted session's working tree is a CLAIM about
+    finished work, not a state of it.**
+
+WHAT SHIPPED
+  · `/console/:orgSlug/settings` — Settings screen, Staff section, and the nav
+    tab. Four calls wired: list · add by email · change role · remove.
+  · KD RULING (2026-08-22, his own question): removing staff ASKS whether they
+    also stop being a member. Both outcomes, NEITHER preselected. Keys always
+    first — `removeMember` refuses anybody still staff.
+
+THINGS A LATER CHAT WILL OTHERWISE GET WRONG
+  · **DO NOT PRINT "promoting somebody makes the join-code count fall by one".**
+    :14262 promised that sentence and :14401's C/H-1 made it FALSE by removing
+    the `complimentary` write. Mutant S4 restores it. The true sentence is
+    "Staff don't use up one of your paid member seats."
+  · **THE SETTINGS TAB IS OWNER-ONLY AND THAT IS NOT A SPECIAL CASE** — the one
+    thing on it is §2.2's owner-only row and the server gates even the READ, so
+    the tab would open onto a refusal. It widens BY ITSELF (`canManageStaff`) the
+    day Settings grows a manager-usable section.
+  · **CODES ARE NOT MOVED ONTO SETTINGS** even though §4.7 lists them there —
+    :13920 put them on Overview under the code an owner hands out, and moving
+    them is a removal from a screen a ruling chose. Settings points at them.
+  · **`ConsoleLayout` NOW READS `/v1/orgs/mine`**, so a console page issues it
+    twice. Deliberate and stated; `useConsoleOrg` early-returns with no slug so
+    `/console` and `/console/new` ask nothing.
+  · **THE OWNER'S ROW HAS NO BUTTONS, ON PURPOSE** — both mutations refuse it and
+    every owner is the last owner. It carries the reason instead.
+  · **S11's LESSON, and it generalises: a guard can be UNFALSIFIABLE because the
+    caller above it never mounts the component.** `Settings.jsx` checks the role
+    before mounting `StaffPanel`, so the panel's own guard had no observable
+    subject and 28 green tests said nothing about it. Closed by mounting the
+    panel DIRECTLY, with a positive control. **The anchor never moved — only what
+    could notice it did.**
+
+GATES
+  · web **1028/1028 across 43 files, exit 0 read into a variable** (+1) · `vite
+    build` exit 0 · eslint exit 0, no output, `--max-warnings=0`, eleven files.
+  · **SWEEP RE-RUN ON THE FINAL BYTES: 46 mutants · 46 RED · 0 ALIVE · 0 never
+    ran, exit 0**, controls green first, restores sha256-verified, `node --check`
+    on the harness first. **The FIRST sweep (45 RED / 1 ALIVE) is not summed with
+    it and is not quotable** — the test file changed between them (:5199).
+  · **THE FIRST SWEEP'S EXIT WAS 1 AND ITS BACKGROUND NOTIFICATION SAID 0** — the
+    wrapper's `echo` succeeding, read as the sweep succeeding. :5906/:9509 in a
+    new disguise. Read the harness's own log, never the task notification.
+  · `apps/api` NOT re-run; this card changed no api source (stated, not implied).
+    `apps/web` has no `tsc`.
+
+NEXT
+  1. **THE SMOKE — `RUNBOOK/smoke-staff.md`, 12 steps, UNRUN.** Kd needs a second
+     account already joined to his gym. **Steps 7 and 9 are the point**: PATCH and
+     DELETE reach a browser only through a CORS preflight, which `fastify.inject`
+     cannot exercise (Card 4's 250-green-tests-over-a-dead-method precedent).
+  2. **T3 — a FRESH CHAT on this diff.** Never a subagent, never this chat.
+  3. NOTHING TICKS until both are done.
+```
