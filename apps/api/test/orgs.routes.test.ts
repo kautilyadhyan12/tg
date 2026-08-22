@@ -1767,9 +1767,13 @@ d("orgs routes (real Postgres)", () => {
     expect(page.items.find((i) => i.userId === owner.userId)?.complimentary).toBe(true);
     expect(page.items.find((i) => i.userId === member.userId)?.groupLabel).toBe("Front Desk");
     // Part 3 §2.4: nothing outside the boundary is even in the shape.
+    //
+    // `takesSeat` was argued INTO this list on 2026-08-22 (:14953), not waved
+    // through: it is a fact about the gym's own bill, the same kind as
+    // `complimentary` beside it, and it deliberately does not say "staff".
     for (const item of page.items) {
       expect(Object.keys(item).sort()).toEqual(
-        ["complimentary", "displayName", "groupLabel", "joinedAt", "userId"].sort(),
+        ["complimentary", "displayName", "groupLabel", "joinedAt", "takesSeat", "userId"].sort(),
       );
     }
 
@@ -3014,6 +3018,136 @@ d("orgs routes (real Postgres)", () => {
     expect(refused.statusCode).toBe(409);
   });
 
+  /** THE BADGE AND THE CAP ARE ONE QUESTION, AND THIS TEST DRIVES BOTH ENDS OF
+   *  IT ON ONE FIXTURE — the anchor :14953 and `OWED.md` require, following
+   *  :14013's six-site precedent.
+   *
+   *  **What Kd found:** the roster drew its "Complimentary" badge off
+   *  `gym_members.complimentary`, which is deliberately never written for staff,
+   *  so a trainer sat there looking exactly like somebody occupying a paid
+   *  place. The door and the screen disagreed about who costs money.
+   *
+   *  **Why the rule is written out TWICE** (`claimSeat`'s count and
+   *  `listMembers`' `takes_seat`): a shared `sql` fragment is R3.8's forbidden
+   *  shape, so the duplication is deliberate and THIS is what stops it drifting.
+   *  The roster's own answer is what the cap assertions are derived from — not a
+   *  number typed in here — so the two cannot pass while disagreeing.
+   *
+   *  It fails on EITHER half losing EITHER condition: drop `complimentary =
+   *  false` from the roster and the owner reads as taking a seat; drop the
+   *  `NOT EXISTS` and the appointed trainer does; drop either from the count and
+   *  the gym stays full where this expects room. */
+  it("ROSTER + CAP: the badge and the seat count answer the same question", async () => {
+    const owner = await makeUser("seat-both-owner");
+    const payer = await makeUser("seat-both-payer");
+    const walkIn = await makeUser("seat-both-walkin");
+    const org = await makeOrg(owner.cookies, "Orgs Test Seat Both Ends");
+    await subscribeGym(org.org.id, CAP1_PLAN); // one paid seat
+
+    interface RosterRow {
+      userId: string;
+      complimentary: boolean;
+      takesSeat: boolean;
+    }
+    const roster = async (): Promise<RosterRow[]> => {
+      const res = await get(`/v1/orgs/${org.org.id}/members`, { cookies: owner.cookies });
+      expect(res.statusCode).toBe(200);
+      const page = JSON.parse(res.body) as { items: RosterRow[]; nextCursor: string | null };
+      // Every assertion below counts the WHOLE roster, so a truncated page
+      // would make this test say something it cannot know.
+      expect(page.nextCursor).toBeNull();
+      return page.items;
+    };
+    const seatsTaken = (rows: RosterRow[]) => rows.filter((r) => r.takesSeat).length;
+    const rowFor = (rows: RosterRow[], userId: string) => rows.find((r) => r.userId === userId);
+    /** Ask the DOOR whether there is room, by the only means that answers
+     *  honestly: put a real person in front of it.
+     *
+     *  Applies only if this person is not already in the queue — a refused
+     *  confirm leaves the application PENDING (a full gym must not throw the
+     *  applicant away), and re-applying answers `already_pending`. */
+    const confirmWalkIn = async (who: { userId: string; cookies: Record<string, string> }) => {
+      const queue = JSON.parse(
+        (await get(`/v1/orgs/${org.org.id}/applications`, { cookies: owner.cookies })).body,
+      ) as { items: { id: string; userId: string }[] };
+      const waiting = queue.items.find((a) => a.userId === who.userId)?.id;
+      const id = waiting ?? (await applyWithCode(who.cookies, org.joinCode.code));
+      return await post(
+        `/v1/orgs/${org.org.id}/applications/${id}/confirm`,
+        {},
+        { cookies: owner.cookies },
+      );
+    };
+
+    // (1) OWNER ONLY. Their §4.0-step-6 seat is complimentary, so the screen
+    // says it costs nothing and the cap agrees the gym is empty.
+    const justOwner = await roster();
+    expect(rowFor(justOwner, owner.userId)?.takesSeat).toBe(false);
+    expect(seatsTaken(justOwner)).toBe(0);
+
+    // (1b) A COMPED MEMBER WHO IS NOT STAFF, and the mutation audit is what
+    // demanded them: O92 — deleting `complimentary = false` from the roster's
+    // rule — SURVIVED the first run of this test. **THE OWNER IS EXCLUDED
+    // TWICE**, being complimentary AND holding a staff row, so with that
+    // condition gone their place still read as free and the assertion above
+    // could not fail. :14401's O3 exactly, repeating on the roster's copy of
+    // the rule a card later, and :5104 F5's shape: a guarantee whose protection
+    // cannot fail is the same gap with a comment on it.
+    //
+    // This person is the only subject in the product that isolates the
+    // complimentary half. Comped by hand for the reason the door's own test
+    // gives: nothing writes this flag today except the wizard's owner seat.
+    const comped = await makeUser("seat-both-comped");
+    await joinAsMember(comped.cookies, org, owner.cookies);
+    await sql`UPDATE gym_members SET complimentary = true
+              WHERE gym_id = ${org.org.id} AND user_id = ${comped.userId} AND removed_at IS NULL`;
+    expect(await orgRepo.getStaffRole(sql, org.org.id, comped.userId)).toBeNull();
+
+    const withComped = await roster();
+    expect(rowFor(withComped, comped.userId)?.complimentary).toBe(true);
+    expect(rowFor(withComped, comped.userId)?.takesSeat).toBe(false);
+    expect(seatsTaken(withComped)).toBe(0);
+
+    // (2) ONE PAYING MEMBER. The badge is absent and the gym is full — both
+    // read off the same fact, and the cap assertion follows the ROSTER's count.
+    await joinAsMember(payer.cookies, org, owner.cookies);
+    const withPayer = await roster();
+    expect(rowFor(withPayer, payer.userId)?.takesSeat).toBe(true);
+    expect(seatsTaken(withPayer)).toBe(1); // === the plan's seat_cap
+    expect((await confirmWalkIn(walkIn)).statusCode).toBe(409);
+
+    // (3) APPOINT THEM. The screen now says their place is free, `complimentary`
+    // has NOT moved (that is :14401 C/H-1, and this is the assertion that keeps
+    // the obvious wrong fix out), and the door lets the next person in.
+    expect(
+      (
+        await post(
+          `/v1/orgs/${org.org.id}/staff`,
+          { email: "orgs-t-seat-both-payer@example.com", role: "trainer" },
+          { cookies: owner.cookies },
+        )
+      ).statusCode,
+    ).toBe(201);
+    const withTrainer = await roster();
+    expect(rowFor(withTrainer, payer.userId)?.takesSeat).toBe(false);
+    expect(rowFor(withTrainer, payer.userId)?.complimentary).toBe(false);
+    expect(seatsTaken(withTrainer)).toBe(0);
+    expect((await confirmWalkIn(walkIn)).statusCode).toBe(200);
+
+    // (4) AND BACK AGAIN. Taking the keys away puts the place back on the bill,
+    // on the screen and at the door together.
+    const withWalkIn = await roster();
+    expect(rowFor(withWalkIn, walkIn.userId)?.takesSeat).toBe(true);
+    expect(seatsTaken(withWalkIn)).toBe(1);
+
+    await del(`/v1/orgs/${org.org.id}/staff/${payer.userId}`, { cookies: owner.cookies });
+    const afterRemoval = await roster();
+    expect(rowFor(afterRemoval, payer.userId)?.takesSeat).toBe(true);
+    expect(seatsTaken(afterRemoval)).toBe(2); // over the cap, as the door will now say
+    const last = await makeUser("seat-both-last");
+    expect((await confirmWalkIn(last)).statusCode).toBe(409);
+  });
+
   /** T3 round 1, C/H-1 — the regression that fails without the fix. The three
    *  readers of `complimentary` must not move when somebody is appointed. */
   it("appointing somebody changes NO number a member or the door can see", async () => {
@@ -3415,6 +3549,30 @@ d("orgs routes (real Postgres)", () => {
       { cookies: ownerB.cookies },
     );
     expect(refused.statusCode).toBe(409);
+
+    // AND THE ROSTER MUST SAY THE SAME THING — T3 L-1 on the badge card
+    // (:15093), which added a FOURTH `gym_id` predicate and gave it no
+    // observer. Measured before it was written: deleting `s.gym_id = m.gym_id`
+    // from the roster's own copy left the whole 92-test file green, including
+    // the both-ends test the record names as what stops the two copies
+    // drifting. **:14401 round 2 wrote O88–O90 for exactly this class — "round
+    // 1's three fixes added three `gym_id` predicates and NOT ONE had a test" —
+    // and this card repeated the omission one predicate later.**
+    //
+    // Asserted HERE rather than in a new test, on the fixture that already
+    // exists, because the door's refusal three lines up and the roster's answer
+    // are the two ends of one rule: this person's keys belong to gym A, so gym B
+    // both charges for them and must SAY it charges for them.
+    const rosterB = JSON.parse(
+      (await get(`/v1/orgs/${gymB.org.id}/members`, { cookies: ownerB.cookies })).body,
+    ) as { items: { userId: string; takesSeat: boolean }[] };
+    expect(rosterB.items.find((m) => m.userId === dual.userId)?.takesSeat).toBe(true);
+    // The control, so this cannot pass by reporting everybody as paying: gym A,
+    // where the keys actually are, says the same person's place is free.
+    const rosterA = JSON.parse(
+      (await get(`/v1/orgs/${gymA.org.id}/members`, { cookies: ownerA.cookies })).body,
+    ) as { items: { userId: string; takesSeat: boolean }[] };
+    expect(rosterA.items.find((m) => m.userId === dual.userId)?.takesSeat).toBe(false);
   });
 
   it("CROSS-GYM: authority at one gym is never decided by membership at another", async () => {

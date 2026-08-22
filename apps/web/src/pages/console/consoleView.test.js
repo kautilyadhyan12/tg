@@ -20,6 +20,7 @@ import {
   memberCountLine,
   orgTypeLabel,
   roleLabel,
+  seatIsFree,
   timezoneOptions,
   waitingCountLabel,
   waitingForLabel,
@@ -415,5 +416,44 @@ describe('the org-type picker matches what the server will accept', () => {
     // Kd's 2026-08-18 ruling narrowed org creation to `gym|studio`. An option
     // for `clinic` here would be a card the server refuses.
     expect(ORG_TYPE_CHOICES.map((c) => c.value)).toEqual(['gym', 'studio']);
+  });
+});
+
+describe('which places on the roster cost the gym money (:14953)', () => {
+  // Kd found that a trainer looked exactly like somebody occupying a paid seat.
+  // The server answers this now, by the same rule the seat cap counts with; the
+  // helper's whole job is to READ that answer and to fall back safely when an
+  // older API did not send one.
+  const row = (extra) => ({ userId: 'u1', displayName: 'X', complimentary: false, ...extra });
+
+  it('reads the server’s answer, whichever way it points', () => {
+    expect(seatIsFree(row({ takesSeat: false }))).toBe(true);
+    expect(seatIsFree(row({ takesSeat: true }))).toBe(false);
+  });
+
+  it('believes the server OVER the old flag when the two disagree', () => {
+    // This is the case Kd found: a staff member has `complimentary: false` (they
+    // did join — :14401 is why that flag must not be touched) and takes no seat.
+    expect(seatIsFree(row({ complimentary: false, takesSeat: false }))).toBe(true);
+    // And the mirror, so the test cannot pass by always preferring "free".
+    expect(seatIsFree(row({ complimentary: true, takesSeat: true }))).toBe(false);
+  });
+
+  it('falls back to the old flag when the server sent no answer', () => {
+    // An API older than this web build (:12660's expand-then-contract window).
+    // The fallback is exactly the behaviour that shipped before this card.
+    expect(seatIsFree(row({ complimentary: true }))).toBe(true);
+    expect(seatIsFree(row({ complimentary: false }))).toBe(false);
+    // A non-boolean is not an answer, so it does not count as one.
+    expect(seatIsFree(row({ complimentary: true, takesSeat: 'no' }))).toBe(true);
+  });
+
+  it('claims nothing about a row it cannot read', () => {
+    // A badge is a claim, and "this place is free" is the direction that costs a
+    // gym money, so an unreadable row gets no badge.
+    expect(seatIsFree(null)).toBe(false);
+    expect(seatIsFree(undefined)).toBe(false);
+    expect(seatIsFree('Kd Owner')).toBe(false);
+    expect(seatIsFree({})).toBe(false);
   });
 });

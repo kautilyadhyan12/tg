@@ -490,6 +490,7 @@ export async function listOrgMembers(
       joinedAt: m.joinedAt.toISOString(),
       groupLabel: m.groupLabel,
       complimentary: m.complimentary,
+      takesSeat: m.takesSeat,
     })),
     nextCursor:
       page.nextCursor === null

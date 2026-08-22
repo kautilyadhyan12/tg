@@ -82,6 +82,20 @@ const ownerSeat = {
   joinedAt: '2026-08-18T09:00:00.000Z',
   groupLabel: 'Front Desk',
   complimentary: true,
+  takesSeat: false,
+};
+
+/** A TRAINER who joined the gym like anybody else and was later handed the
+ *  keys. `complimentary` is FALSE — they did join, and :14401 C/H-1 is why that
+ *  flag must not be touched — while the gym is charged nothing for their place.
+ *  Before :14953 this row was indistinguishable from a paying member. */
+const staffMemberSeat = {
+  userId: 'u4',
+  displayName: 'Bhaskar Das',
+  joinedAt: '2026-08-16T09:00:00.000Z',
+  groupLabel: 'Front Desk',
+  complimentary: false,
+  takesSeat: false,
 };
 
 /** A joined member carrying FOUR fields the server does not send and Part 3
@@ -93,6 +107,7 @@ const joinedMemberWithForbiddenExtras = {
   joinedAt: '2026-08-17T09:00:00.000Z',
   groupLabel: 'Morning Batch',
   complimentary: false,
+  takesSeat: true,
   email: 'rita-private@example.com',
   weightKg: 61.5,
   workouts30d: 9137,
@@ -1233,6 +1248,57 @@ describe('Removing a member', () => {
     drawMembers();
     expect(await screen.findByText('Kd Owner')).toBeTruthy();
     expect(screen.queryByText('Remove')).toBeNull();
+  });
+
+  /** KD'S FINDING AT THE STAFF RE-SMOKE (:14953): *"when a member is added as a
+   *  staff there badge should also show complimentary"*. He was right, and only
+   *  about the SCREEN — the gym has been charged nothing for a staff member
+   *  since :14401, but the badge read `complimentary`, which is deliberately
+   *  never written for them, so a trainer looked exactly like somebody paying.
+   *
+   *  BOTH HALVES ARE ASSERTED. The badge alone would pass on a screen that
+   *  badges everybody; the paying member in the same roster is the control. */
+  it('badges a staff member’s place as free, and still bills the paying member (:14953)', async () => {
+    orgService.getMembers.mockResolvedValue(
+      page([ownerSeat, staffMemberSeat, joinedMemberWithForbiddenExtras]),
+    );
+    drawMembers();
+
+    expect(await screen.findByText('Bhaskar Das')).toBeTruthy();
+    // Two free places — the owner's and the trainer's — and NOT the third row.
+    expect(screen.getAllByText('Complimentary')).toHaveLength(2);
+    // The control: Rita pays, so she keeps her Remove button and no badge.
+    expect(screen.getByText('Rita Sen')).toBeTruthy();
+    expect(screen.getAllByText('Remove')).toHaveLength(1);
+  });
+
+  it('offers NO Remove beside a staff member, because the server refuses it', async () => {
+    // `removeMember` refuses anybody who is still staff, so drawing the button
+    // is drawing a live refusal. Ending their membership is the Staff screen's
+    // own flow — keys first, then the membership.
+    orgService.getMembers.mockResolvedValue(page([staffMemberSeat]));
+    drawMembers();
+    expect(await screen.findByText('Bhaskar Das')).toBeTruthy();
+    expect(screen.queryByText('Remove')).toBeNull();
+  });
+
+  /** THE EXPAND-THEN-CONTRACT WINDOW, and it is why the field is optional
+   *  (:12660). An API older than this web build sends no `takesSeat` at all.
+   *  `orgsApi` treats a contract mismatch as a hard failure, so a REQUIRED key
+   *  would blank the whole roster to add one badge — and defaulting to "takes a
+   *  seat" would strip the OWNER's badge and offer a Remove the server refuses.
+   *  The fallback is the behaviour that shipped before this card, exactly. */
+  it('falls back to the old flag when the server is too old to send the new one', async () => {
+    const legacyOwner = { ...ownerSeat };
+    delete legacyOwner.takesSeat;
+    const legacyMember = { ...joinedMemberWithForbiddenExtras };
+    delete legacyMember.takesSeat;
+    orgService.getMembers.mockResolvedValue(page([legacyOwner, legacyMember]));
+    drawMembers();
+
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+    expect(screen.getAllByText('Complimentary')).toHaveLength(1);
+    expect(screen.getAllByText('Remove')).toHaveLength(1);
   });
 
   it('hides Remove from a TRAINER, who may read the roster and may not remove (T3 r1 C/H-2)', async () => {

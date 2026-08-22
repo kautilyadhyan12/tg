@@ -55,6 +55,9 @@ export interface MemberRow {
   joinedAt: Date;
   groupLabel: string | null;
   complimentary: boolean;
+  /** Does this person occupy one of the gym's paid places? Derived, never
+   *  stored — see `listMembers`, which writes out `claimSeat`'s count rule. */
+  takesSeat: boolean;
 }
 
 export interface CodeRow {
@@ -699,6 +702,14 @@ async function claimSeat(
       // non-complimentary members", which this narrows with "and not staff".
       // The RULING is Kd's and predates the fix; what changed is the mechanism,
       // because the literal reading was satisfied only by corrupting the flag.
+      //
+      // **THESE TWO CONDITIONS ARE ALSO WRITTEN OUT IN `listMembers`, which is
+      // what the roster's "Complimentary" badge now reads (:14953).** A shared
+      // `sql` fragment is R3.8's forbidden shape, so they are duplicated on
+      // purpose and anchored by a test that drives BOTH — the cap's refusal and
+      // the roster's answer — on one fixture. Editing either without the other
+      // puts the screen and the door back into disagreement about who costs
+      // money, which is the defect Kd found.
       const countRows = await tx<{ n: number }[]>`
         SELECT count(*)::int AS n FROM gym_members m
         WHERE m.gym_id = ${input.org.id} AND m.removed_at IS NULL
@@ -1307,7 +1318,27 @@ export async function removeMember(
  *  `org_member_stats`, which this slice does not build, so the order here is
  *  newest-joined-first and the cursor matches it exactly. Sorting is not
  *  cosmetic for a cursor walk: an ordering the cursor does not match drops or
- *  repeats rows silently. */
+ *  repeats rows silently.
+ *
+ *  **`takes_seat` IS `claimSeat`'s COUNT RULE, WRITTEN OUT A SECOND TIME — and
+ *  the duplication is deliberate (Kd's finding at the staff re-smoke,
+ *  :14953).** The screen drew its badge off `gym_members.complimentary`, which
+ *  is deliberately NOT written for staff, so a trainer sat on the roster
+ *  looking exactly like somebody occupying a paid place: the door and the
+ *  screen disagreed about who costs money.
+ *
+ *  **The fix is NOT to write `complimentary` for staff — that is precisely the
+ *  defect :14401 C/H-1 removed.** That column means "did not JOIN", not "unpaid
+ *  seat", and three readers act on that meaning (`joinedCount`, the join door's
+ *  `max_uses` gate, `orgCodeSchema.joined`), which is how an appointment once
+ *  printed "Nobody has joined yet" over a two-member gym. Kd's ruling is about
+ *  MONEY, so the answer is derived where money is counted and nowhere else.
+ *
+ *  **A shared `sql` fragment is R3.8's forbidden shape**, so the two conditions
+ *  are spelled out in both places, exactly as `listStaff` and `getStaffRole`
+ *  spell out their eligibility test (:14493 Low-2). What stops them drifting is
+ *  a test that drives BOTH on one fixture — the roster's answer and the cap's
+ *  refusal — per :14013's six-site precedent. Change one, change the other. */
 export async function listMembers(
   sql: Sql,
   input: { gymId: string; limit: number; cursor: { joinedAt: string; id: string } | null },
@@ -1322,10 +1353,15 @@ export async function listMembers(
       joined_at: Date;
       group_label: string | null;
       complimentary: boolean;
+      takes_seat: boolean;
     }[]
   >`
     SELECT m.id, m.user_id, u.display_name, m.joined_at,
-           c.label AS group_label, m.complimentary
+           c.label AS group_label, m.complimentary,
+           (m.complimentary = false
+            AND NOT EXISTS (
+              SELECT 1 FROM gym_staff s
+              WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS takes_seat
     FROM gym_members m
     JOIN users u ON u.id = m.user_id
     LEFT JOIN gym_codes c ON c.id = m.code_id
@@ -1352,6 +1388,7 @@ export async function listMembers(
       joinedAt: r.joined_at,
       groupLabel: r.group_label,
       complimentary: r.complimentary,
+      takesSeat: r.takes_seat,
     })),
     nextCursor,
   };

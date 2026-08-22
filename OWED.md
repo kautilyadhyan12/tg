@@ -4908,7 +4908,7 @@ file and is stated so nobody reads these as lower priority than they are.
       **All six safety rules above still bind** — and rule 2 (the last owner
       cannot be ticked out of billing or staff management) matters MORE now, a
       custom role being a new way to hand somebody an incomplete set.
-- [ ] 🟡 **THE ROSTER DOES NOT SAY WHICH MEMBERS ARE FREE — a staff member takes
+- [x] 🟡 **DONE 2026-08-22 — THE ROSTER DOES NOT SAY WHICH MEMBERS ARE FREE — a staff member takes
       no seat and looks exactly like somebody who pays for one (Kd's finding at
       the staff re-smoke, 2026-08-22, DECISIONS :14953).** His words: *"when a
       member is added as a staff there badge should also show complimentary and
@@ -4933,6 +4933,46 @@ file and is stated so nobody reads these as lower priority than they are.
       own right, since it tells the gym something about a person.
       Server half plus web half; not built at the staff card (R1.1, and the packet
       was mid-review-round).
+      **BUILT 2026-08-22 (DECISIONS :15093) — THIS LINE DOES NOT TICK YET.** The
+      roster carries a derived `takesSeat` computed by `claimSeat`'s own count
+      rule, anchored by a test driving the badge and the cap together, and the
+      badge is drawn for anybody whose place is free. `complimentary` was NOT
+      written for staff.
+      **SMOKE PASSED 2026-08-22, "all passed", on his own gym against live data
+      (DECISIONS :15187)** — including the control that an ordinary member is NOT
+      badged, and that the join-code count does not move on a promotion. He ran a
+      **7-step compressed version typed in chat**, not the 8-step sheet; sheet
+      step 2 was swallowed by the compression and is named as unrun rather than
+      counted (T3 L-4).
+      **T3 ROUND 1 RAN: ZERO Critical/High — THE PACKET SHIPS (DECISIONS :15259).**
+      Six Low, all fixed in the round. **This line ticks on the commit.**
+- [ ] ⚪ **THREE MUTATION ANCHORS MATCH TWICE AND LAND RIGHT ONLY BY POSITION
+      (O17, O29, O89 in `mutate-orgs.mjs`; found by the census T3 L-1 prompted,
+      2026-08-22, DECISIONS :15259).** The pre-check now REFUSES an ambiguous
+      anchor — the improvement :14493 named and never built — but these three
+      pre-date it and sit in an explicit `AMBIGUOUS_ALLOWED` allow-list so the
+      guard could be turned on at all. **Each still mutates its intended line,
+      because `String.replace` takes the first occurrence and that happens to be
+      the right one; what is missing is any PROOF that it does.** O29 and O89 are
+      the `getStaffRole`/`listStaff` pair that deliberately hold identical SQL
+      text (:14493 Low-2), so re-anchoring means finding a line unique to each
+      function — the same job O88 took in that round. **The list may only ever
+      shrink**; closing this empties it and deletes the allow-list.
+- [ ] ⚪ **A TRAINER AND A MANAGER CAN NOW WORK OUT WHO HOLDS THE GYM'S KEYS, AND
+      KD HAS NOT BEEN ASKED (T3 L-1 on the badge card, 2026-08-22, DECISIONS
+      :15259).** The roster serves `complimentary` and `takesSeat` together, and
+      `complimentary === false && takesSeat === false` means exactly "this person
+      is staff here" — an exact inference, not a guess. Both roles hold
+      `members.read`; only the owner holds `staff.manage`, which is what gates the
+      staff LIST, so the two roles the server answers 403 can derive it from the
+      roster instead. **Accepted at the card and recorded rather than reversed**:
+      §2.4's never-see list is member health and personal data, none of which
+      moves, and what a colleague learns is a role inside their own gym.
+      **Do NOT close this by withholding `takesSeat` from trainers** — that hands
+      them back the defect the card removed (a staff colleague drawn as occupying
+      a paid place), i.e. trades a disclosure for something FALSE on screen, and
+      :5807 outranks a tidier boundary. If Kd wants it hidden it is his ruling and
+      needs its own card, with the trade named to him first.
 - [ ] 🟡 **A NAMED ROLE AND A SNAPSHOT CONTRADICT EACH OTHER, AND KD HAS NOT BEEN
       ASKED (raised 2026-08-22 by his own "want both" amendment, DECISIONS
       :14745).** :11429 ruled the effective privilege set is stored as a

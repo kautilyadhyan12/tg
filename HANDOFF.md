@@ -9587,3 +9587,145 @@ NEXT
      role names** (:14745), which needs its own migration and carries the open
      snapshot-vs-named-role question.
 ```
+
+```
+TASK: THE ROSTER BADGE — a staff member's place now shows as free, and the
+      MUTATION AUDIT caught my own test proving nothing. DECISIONS :15093.
+      Server + web, no migration. Builds :14953 (Kd's finding).
+
+WHAT SHIPPED
+  · `/v1/orgs/:gymId/members` gains ONE derived field, `takesSeat`, computed by
+    `claimSeat`'s own count rule. `Members.jsx` badges anybody whose place is
+    free — the owner as before, and now anybody holding the keys.
+  · **`gym_members.complimentary` WAS NOT WRITTEN FOR STAFF.** That is :14401
+    C/H-1 and the whole reason this needed its own card. `joinedCount` and the
+    join door's `max_uses` gate are untouched.
+
+THINGS A LATER CHAT WILL OTHERWISE GET WRONG
+  · **THE OWNER IS EXCLUDED TWICE — complimentary AND a `gym_staff` row.** This
+    is why O92 SURVIVED its first run: delete `complimentary = false` from the
+    roster's rule and the owner's place still reads free, so the assertion could
+    not fail. **:14401's O3 exactly, one card later, on the roster's copy.** The
+    only subject that isolates that half is a COMPED MEMBER WHO IS NOT STAFF —
+    comp one by hand, as the door's own test does. Re-measured RED.
+  · **The rule is spelled out TWICE and must stay that way** (`claimSeat`'s
+    count and `listMembers`' `takes_seat`; a shared `sql` fragment is R3.8's
+    forbidden shape, :14493 Low-2). The two comments name each other. Edit one,
+    edit the other, or the screen and the door go back to disagreeing.
+  · **`repo.ts` is CRLF** (measured: 2188 CRLF, 0 bare LF). The harness converts
+    anchors, but any hand-check of an anchor must too — a raw `\n` compare
+    reports zero matches and reads as "this anchor is dead".
+  · **The door's anchors and the roster's each match EXACTLY ONCE**, verified,
+    because the two SQL texts are similar and the whole-table pre-check cannot
+    ask "does this match ONCE" (:14493).
+  · **`takesSeat` is OPTIONAL in `orgMemberSchema` and that is load-bearing**
+    (:12660). Required ⇒ the whole roster blanks during a web-newer-than-API
+    window. Defaulting to `true` ⇒ the OWNER loses their badge and gains a
+    Remove the server refuses. `seatIsFree` falls back to `complimentary`; C38
+    is its guard. Do not "tidy" the optionality away.
+
+GATES
+  · web **1057/1057 across 43 files, exit 0 read into a variable** (+7) ·
+    shared 48/48 · `orgs.routes` **92/92, exit 0** (+1) · build ✓ · tsc clean ·
+    eslint exit 0 at `--max-warnings=0` on all seven touched source files.
+  · **WEB SWEEP: 54 mutants · 54 RED · 0 ALIVE · 0 never ran, exit 0**, controls
+    green first, restores sha256-verified, `node --check` first. C36/C37/C38 new.
+  · **API SWEEP IS A SUBSET AND THE HARNESS PRINTS SO — 9 of 93.** O92/O93 plus
+    every mutant in the two functions this card edited. First run 8 RED · 1
+    ALIVE (O92, above); after the fix O92/O93 re-measured 2 · 2 RED · 0 ALIVE.
+    The other seven stand on untouched source (:10726, stated not implied).
+    **The whole-table anchor pre-check ran over all 93 both times and passed** —
+    that is what proves this card moved no existing anchor.
+  · Instrument note: a FULL 93-mutant sweep was started and stopped at ~4 hours'
+    projected cost. **TaskStop was not trusted** — the process list and
+    `git status` are what confirmed it dead and the tree clean.
+
+NEXT — ONE GATE, NOTHING TICKS
+  · **CORRECTED IN PLACE the same session: this block first said the SMOKE was
+    UNRUN. Kd ran it before the commit and it PASSED — "all passed", 7 steps
+    (DECISIONS :15187).** Corrected here rather than only in the newer entry,
+    because the place a correction is missed is the document you were not
+    editing (:5748).
+  1. **SMOKE PASSED** on his own gym against live data. Step 5 (the subject) and
+     the three controls that stop "badge everybody" passing all held, and the
+     join-code count did not move on a promotion — :14401's C/H-1 outside a
+     fixture. **It ran on UNCOMMITTED bytes.** VERIFIED: no source file was
+     touched between his run and this block being written (mtimes). **NOT
+     verified, and corrected here by T3 L-3: an earlier draft of this line said
+     `git status` "was clean immediately after" the commit — in the past tense,
+     with no commit in existence and `DECISIONS.md` saying the opposite three
+     lines from where it was quoted.** :5748 again: the correction was applied to
+     the document being edited and missed in the two that were not. **Editing any
+     of the seven source files VOIDS the pass** (:10959).
+  2. **T3 — a FRESH CHAT, never a subagent. The only remaining gate.** Prompt
+     handed over with this commit. A passing smoke is not a review, recorded on
+     this branch three times (:14147, :14745, :12832).
+  3. The `OWED.md` roster line is UPDATED, not ticked. It ticks on a clean T3.
+```
+
+```
+TASK: ROSTER BADGE, T3 ROUND 1 — ZERO Critical/High. THE PACKET SHIPS.
+      DECISIONS :15259. Escape hatch NOT armed (:15007 found zero).
+      Six Low, ALL FIXED in the round; BACKLOG.md has them.
+
+THE ONE THAT WAS CODE
+  · **L-1: the roster's cross-gym predicate had NO observer — the FOURTH
+    `gym_id` predicate on `gym_members` to ship untested.** :14401 round 2 wrote
+    O88–O90 for that exact class ("round 1's three fixes added three `gym_id`
+    predicates and NOT ONE had a test") and this card added a fourth. Measured:
+    delete it, all 92 tests stay green INCLUDING the both-ends test the record
+    names as the drift guard. Closed on the existing cross-gym fixture with the
+    other gym's roster as the control. Mutant **O94**.
+
+THINGS A LATER CHAT WILL OTHERWISE GET WRONG
+  · **THE PRE-CHECK NOW REFUSES AN AMBIGUOUS ANCHOR** — the improvement :14493
+    named and never built. `AMBIGUOUS_ALLOWED` holds **O17, O29, O89**,
+    pre-existing, with an `OWED.md` line. **It may only ever shrink.** Do not add
+    to it: re-anchor instead. Proven to abort by removing one entry, not by
+    reading it.
+  · **O88 was re-anchored because THIS CARD broke it** — the roster's 14-space
+    line contains its 12-space prefix, so it went from one match to two while
+    three documents called it verified. A NEW line can make an old anchor
+    ambiguous; the drift check cannot see that, which is why the count check now
+    exists.
+  · **A TRAINER AND A MANAGER CAN NOW DERIVE WHO HOLDS THE KEYS** —
+    `complimentary === false && takesSeat === false` means exactly "staff here",
+    and both roles hold `members.read` while only the owner holds `staff.manage`.
+    **Accepted, recorded, own `OWED.md` line, KD NOT YET ASKED.** Do NOT close it
+    by withholding the field from trainers: that trades a disclosure for
+    something FALSE on screen (:5807) and hands back the defect this card removed.
+  · **The smoke was run from a 7-step CHAT version, not the 8-step sheet.**
+    Mapping is in :15187. **Sheet step 2 is named UNRUN**, implicitly covered
+    because `readThrough` throws on a contract mismatch.
+
+MY OWN INSTRUMENT FAILURES THIS ROUND, both recorded because both flattered me
+  · **My first probe of L-1 came back RED and the red was a 5-second TIMEOUT on
+    an unrelated test** — it would have "disproved" a true finding. Re-measured
+    scoped: green under the mutation, restore sha256-verified. A verdict nobody
+    can name a cause for is not evidence (:11846).
+  · **A draft of the PROVE line said "orgs.routes 93/93 (+1)". It is 92/92** —
+    L-1's assertions went into an EXISTING test, so the count does not move.
+    **This round's own headline finding, recurring in the entry recording it.**
+
+GATES
+  · `orgs.routes` **92/92, exit 0** · web **1057/1057 across 43 files, exit 0** ·
+    shared **48/48** · build ✓ · tsc clean (api + shared) · eslint exit 0 at
+    `--max-warnings=0` on every touched source file · `node --check` both
+    harnesses.
+  · **API SWEEP is a stated SUBSET — 4 of 94** (O88 re-anchored, O92, O93, O94):
+    **4 mutants · 4 RED · 0 ALIVE · 0 never ran, exit 0**, controls green first,
+    restores sha256-verified. **The whole-table pre-check ran all 94 rows under
+    the NEW uniqueness rule and passed.** Full census: 94 rows, 3 ambiguous, all
+    allow-listed and owed.
+  · Web sweep NOT re-run: this round changed no web source but one comment block
+    (stated rather than implied, :10726).
+
+NEXT
+  1. **THE `OWED.md` ROSTER LINE TICKS ON THE COMMIT.** Smoke passed (:15187),
+     review clean (:15259), sweep green. Nothing else on this packet is owed.
+  2. **The §2.2-matrix line still does NOT tick** — RESTORE a member, CSV export
+     and nudges are routeless, staff management ships only its ROLE half.
+  3. Next card, as sequenced at :15007: **per-staff privilege ticks + custom role
+     names** (:14745), which needs its own migration and carries the open
+     snapshot-vs-named-role question for Kd.
+```

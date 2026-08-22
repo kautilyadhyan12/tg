@@ -1658,3 +1658,35 @@ file and observed in none — the same finding round 1 itself made about S11's
 sibling, recurring in round 1's own fix commit.** Behaviour was correct every
 time; only the coverage was absent. A fix is not done when the code is right, it
 is done when something would notice the code going wrong.
+
+## ROSTER BADGE, T3 round 1 (2026-08-22) — DECISIONS :15259
+
+**ZERO Critical/High — the packet SHIPS** (:5348 rule 1). Escape hatch NOT armed:
+the previous orgs round (:15007) found zero, so there is no two-rounds-running
+trigger. **Six Low, all fixed in the round.** Every one was re-measured here
+before being fixed — one of the reviewer's own figures did not reproduce first
+time and is noted below.
+
+| # | Finding | Fix |
+|---|---|---|
+| L-1 | **The roster's new cross-gym predicate had NO observer.** Deleting `s.gym_id = m.gym_id` from `listMembers`' `takes_seat` left the whole file green — including the both-ends test the record names as what stops the two copies drifting. **The FOURTH `gym_id` predicate on this table to ship untested**; :14401 round 2 wrote O88–O90 because "round 1's three fixes added three `gym_id` predicates and NOT ONE had a test", and this card added a fourth and repeated it. Consequence: a paying member of gym B who holds keys at gym A is badged Complimentary on B's roster and loses their Remove button — false on screen AND a money undercount, across tenants. | Asserted on the fixture that already existed (`CROSS-GYM: being staff at one gym does not free your seat at another`), so the door's refusal and the roster's answer are anchored by ONE fixture — with gym A's roster as the control, so it cannot pass by calling everybody a payer. New mutant **O94**. |
+| L-2 | **This card made an existing mutant's anchor ambiguous and three documents recorded the opposite as verified.** O88's anchor matched ONCE at `3950a5d` and TWICE after, because the roster's new 14-space line contains its 12-space prefix; it still landed on `claimSeat` only because `String.replace` takes the first occurrence. The claim "the door's anchors and the roster's each match EXACTLY ONCE" was **generalised from a five-anchor sample**. | O88 re-anchored on `claimSeat`'s backtick-semicolon tail (unique). **The pre-check now REFUSES any anchor matching more than once** — the improvement :14493 named and never built — with the three pre-existing ambiguous rows in a shrink-only allow-list carrying an `OWED.md` line. **Guard proven to abort by removing one of them.** Both false claims corrected. |
+| L-3 | **A past-tense verification that had not happened, in the two documents that were not being edited.** `HANDOFF.md` and `DECISIONS-INDEX.md` both said `git status` "was clean immediately after" the commit, while `DECISIONS.md` said the opposite in as many words and no commit existed. **:5748's own lesson, one paragraph after quoting it.** | Both corrected to say what is verified (mtimes: no source file touched between the smoke and the record) and what is owed (the post-commit check). |
+| L-4 | **The smoke was cited by step numbers that do not match the sheet.** The sheet has 8 steps; Kd ran a **7-step compressed version typed in chat**, and every number in the record was one lower. The sheet was untracked, so no version existed to diff. | The mapping is written out, the subject and controls named in BOTH numberings, and **sheet step 2 named as unrun rather than counted** — implicitly covered, because `readThrough` throws on a contract mismatch so a roster that failed to parse would have shown no list at all. Sheet committed. |
+| L-5 | **The §2.4 argument was unsound as written — two load-bearing sentences false.** (a) "It says this place is free, NOT this person is staff": `complimentary === false && takesSeat === false` means exactly "holds a `gym_staff` row here", and both fields ship in one object — an exact inference, not a probabilistic one. (b) "A trainer learns no more than they already could": `members.read` is granted to trainer and manager, `staff.manage` to the owner alone, and `listOrgStaff` gates the staff list on `staff.manage` — so the two roles refused that list with a 403 can now derive it. | **The record corrected to what is true, and the disclosure ACCEPTED rather than reversed.** §2.4's never-see list is member health and personal data and none of it moves; what a colleague learns is a role in their own gym. **Not "fixed" by withholding `takesSeat` from trainers — that trades a disclosure for a FALSEHOOD**, handing them back the pre-card defect (:5807 outranks a tidier boundary). Hiding it is Kd's ruling and has its own `OWED.md` line. |
+| L-6 | **The both-ends test is described doing something it does not do.** The record said the cap assertions were "derived from the ROSTER's own count rather than from a number typed into the test". They are not — `seatsTaken()` reads the roster and is compared to a literal 0/1/2, and the door's half is independent 409/200 assertions. The test is sound; the account of why is wrong, and that account is what a later chat trusts while editing it. | Corrected in `DECISIONS.md` and the index line. |
+
+**MY OWN MEASUREMENT NOTE, because a verdict nobody can name a cause for is not
+evidence (:11846).** The reviewer reported L-1's probe as 92/92 GREEN. My first
+run of it came back RED — and the single red was **`Test timed out in 5000ms` on
+an unrelated cross-gym test**, i.e. the instrument, not the mutant being caught.
+Re-measured scoped: all three candidate tests GREEN under the mutation, restore
+sha256-verified both times. **The reviewer's finding was right; my first red would
+have "disproved" it for the wrong reason.**
+
+**The shape worth carrying: five of the six are the RECORD rather than the code,
+and four of those five are claims that outran what was measured** — a
+generalisation from five anchors, a verification written in the past tense before
+it happened, step numbers taken from a sheet nobody ran, and a description of a
+test that does not match the test. The code shipped correct; the account of it did
+not.

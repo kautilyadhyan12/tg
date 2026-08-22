@@ -15089,3 +15089,290 @@ would lose four items: RESTORE a member, CSV export and nudges are still
 routeless, and staff management ships only its ROLE half (:14745's custom names
 and the per-staff ticks keep their own lines). **What ticks is the console-screen
 line's Settings/Staff clause, and nothing else.**
+
+## THE ROSTER SAYS WHO HAS A FREE PLACE — and the audit found the guarantee had no observable subject (2026-08-22)
+
+**Read before touching the Members roster's badge, before adding a field to
+`/v1/orgs/:gymId/members`, before writing `gym_members.complimentary` anywhere,
+and before writing a mutant aimed at a rule the OWNER is excluded by twice.**
+Builds :14953, Kd's finding at the staff re-smoke. Server + web, **no migration**.
+
+**WHAT A GYM OWNER SEES.** A trainer's row on the Members list now carries the
+same orange **Complimentary** badge the owner's own row carries, because the gym
+is not charged for their place. Before this, a trainer looked exactly like
+somebody occupying a paid seat, and the owner could not tell which of their
+places were free.
+
+**THE FIX IS DELIBERATELY NOT THE OBVIOUS ONE.** Writing `complimentary` for
+staff is precisely the defect :14401 C/H-1 removed — that column means "did not
+JOIN", and three readers act on that meaning. The roster carries a SEPARATE
+derived field, `takesSeat`, computed by `claimSeat`'s own count rule. Kd's ruling
+is about MONEY, so the answer is derived where money is counted.
+
+**THE RULE IS WRITTEN OUT TWICE AND THE DUPLICATION IS THE DESIGN.** A shared
+`sql` fragment is R3.8's forbidden shape, so `listMembers` spells out the two
+conditions again, exactly as `listStaff` spells out `getStaffRole`'s eligibility
+test (:14493 Low-2). What stops them drifting is a test that drives BOTH ends on
+ONE fixture — the roster's answer and the cap's refusal (:14013's six-site
+precedent).
+
+**TWO CLAIMS IN THIS PARAGRAPH'S FIRST DRAFT WERE FALSE AND T3 MEASURED BOTH.**
+(1) It said the cap assertions were "derived from the ROSTER's own count rather
+than from a number typed into the test" (L-6). **They are not**: `seatsTaken()`
+reads the roster and is then compared to a literal 0/1/2, and the door's half is
+independent 409/200 status assertions. The test is sound — the account of WHY it
+is sound was wrong, and that account is what a later chat would trust while
+editing it. (2) It said "the door's anchors and the roster's each match EXACTLY
+ONCE" (L-2). **FIVE anchors were measured and the claim was written about all of
+them.** O88's matched once before this card and TWICE after it, because the
+roster's 14-space line contains that anchor's 12-space prefix — :14493's
+double-match hazard, arriving through a NEW line rather than a moved one. O88 is
+re-anchored on `claimSeat`'s backtick-semicolon tail, and **the pre-check now
+refuses any anchor matching more than once** (three pre-existing rows named in a
+shrink-only allow-list with an `OWED.md` line; the guard was proven to abort by
+removing one of them). **A generalisation from a sample is not a measurement.**
+
+**THE AUDIT'S SURVIVOR IS THE PART TO READ, AND IT WAS MINE. O92 SURVIVED ITS
+FIRST RUN: the OWNER IS EXCLUDED TWICE.** The mutant deletes
+`m.complimentary = false` from the roster's rule — and the owner holds a
+`gym_staff` row as well as a complimentary seat, so the surviving `NOT EXISTS`
+still reported their place as free and the assertion could not fail. **:14401's
+O3 exactly, one card later, on the roster's copy of the same rule** (:11846 — a
+mutant has two halves, and here both of them moved), and :5104 F5's shape: a
+guarantee whose protection cannot fail is the same gap with a comment on it.
+**Closed the way the door closed it — a COMPED MEMBER WHO IS NOT STAFF**, the
+only subject in the product that isolates the complimentary half. Re-measured
+RED. **The code was right throughout; only the coverage was absent** — the
+finding :15007 made three times, recurring in the card that quotes it.
+
+**THE §2.4 ADDITION WAS ARGUED, NOT WAVED THROUGH.** That response's key set is
+asserted EXACTLY by a test on purpose (:10010), and the test's list is widened by
+one with its reason beside it. **The field says "this place is free" and never
+"this person is staff"**: §2.4 governs what a gym may be told about a PERSON, and
+this is a fact about the gym's own bill, of the same kind as `complimentary`,
+which the roster has carried since :10010. Who holds the keys stays on the
+owner-only Staff screen — so a trainer reading the roster learns no more about a
+colleague than they already could.
+
+**`takesSeat` IS OPTIONAL IN THE CONTRACT, for :12660's expand-then-contract
+reason, and the alternative was measured not guessed.** `orgsApi.js` treats a
+contract mismatch as a hard failure, so a REQUIRED key would blank the WHOLE
+roster with "we couldn't load the members" during any window where the web is
+newer than the API — a screen destroyed to add one badge. Defaulting to "takes a
+seat" was the other option and is worse: it strips the OWNER's badge during that
+window and offers a Remove the server refuses. **Absent, `seatIsFree` falls back
+to `complimentary`, i.e. exactly the behaviour that shipped before this card**,
+with its own test and its own mutant (C38).
+
+**Decisions not to re-derive:** the badge keeps the word **Complimentary** rather
+than gaining a second vocabulary, because it is the word Kd asked for and the
+word already on the screen · **no Remove control beside a free place, and that is
+the OLD rule not a new one** — `removeMember` refuses anybody still staff, so
+drawing it would be a live refusal wearing a working button's clothes · the
+web reads the server's answer and never computes one (R3.1) · `joinedCount` and
+the join door's `max_uses` gate are UNTOUCHED, because "did they join" and "does
+this cost money" are different questions and conflating them is :14401.
+
+**PROVE** — web **1057/1057 across 43 files, exit 0 read into a variable** (+7;
+1050 before) · shared **48/48** · `orgs.routes` **92/92, exit 0** (+1) · `vite
+build` exit 0 · tsc clean on api and shared · eslint exit 0 with no output at
+`--max-warnings=0` on all seven touched source files · `node --check` clean on
+both harnesses. **WEB SWEEP: 54 mutants · 54 RED · 0 ALIVE · 0 never ran, exit
+0**, controls green on all fifty-four filters first, restores sha256-verified.
+**API SWEEP IS A SUBSET AND SAYS SO — 9 of 93** (`MUTATE_ONLY`, and the harness
+prints that it is not a full sweep): O92/O93 plus every mutant living in the two
+functions this card edited (O2/O3/O7/O8/O28/O75 in `claimSeat`, O14 in
+`listMembers`). **First run 9 · 8 RED · 1 ALIVE — O92, above.** After the fixture
+fix, O92/O93 re-measured **2 · 2 RED · 0 ALIVE, exit 0**; the other seven stand
+on source and tests this fix does not touch (:10726's precedent, stated rather
+than implied). **The whole-table anchor pre-check ran over all 93 both times and
+passed**, which is what proves this card moved no existing mutant's anchor.
+**A full 93-mutant sweep was STARTED and STOPPED at ~4 hours' projected cost**;
+the stop was verified by `Get-CimInstance` and by `git status`, not by the
+tool's word (the recorded TaskStop hazard), and the tree was clean.
+
+**NOTHING TICKS. TWO GATES OUTSTANDING:** the SMOKE
+(`RUNBOOK/smoke-roster-badge.md`, 8 steps, written, UNRUN) and T3, unrun. The
+`OWED.md` line is UPDATED, not ticked.
+
+## THE ROSTER-BADGE SMOKE PASSES — on live data, and on bytes that were not yet committed (2026-08-22)
+
+**Read before citing the roster badge as verified, before quoting this pass as
+covering the older-API fallback, and before editing any of the card's seven
+source files.** Kd's REPORT (:4829) on :15093, run in his own browser against the
+**Neon dev database** — his real gym, his real accounts — with both servers
+started by the chat (:9328's process note).
+
+**"ALL PASSED".**
+
+**WHICH STEPS, EXACTLY — corrected by T3 L-4, which caught this entry numbering
+them one way and the sheet numbering them another.** He did NOT run the sheet.
+He asked for the steps in the chat and ran a **7-step compressed version typed
+there**, while `RUNBOOK/smoke-roster-badge.md` has **8**. The mapping, so no
+later chat has to guess: chat 1→sheet 1+2 · 2→3 · 3→4 · 4→5 · **5→6 (the
+subject)** · 6→7 · 7→8.
+
+The card's subject is **chat step 5 / sheet step 6** and it is the one that
+matters: a member appointed as a trainer comes back to the Members list carrying
+the **Complimentary** badge, with the Remove control correctly absent beside it.
+**Chat 2/3/7 (sheet 3/4/8) are the CONTROLS** that stop "badge everybody"
+passing — his own row badged, an ordinary member NOT badged and still removable,
+and the badge GOING AWAY when the keys are taken back. **Chat 6 (sheet 7) is
+:14401's C/H-1 holding outside a fixture: the join-code count did not move when
+somebody was promoted**, on live data, which is the number the obvious wrong fix
+would have broken.
+
+**SHEET STEP 2 IS THE ONE THE COMPRESSION SWALLOWED** ("the list still loads;
+every row shows a name and a date"). Under :10959 an unrun step is unrun, so it
+is named rather than counted as passed — **but it is implicitly covered, and the
+reasoning is checkable: `readThrough` throws on a contract mismatch, so had the
+roster failed to parse the new field there would have been no list at all and
+chat steps 2, 3 and 5 could not have passed.** It is not re-asked. **The sheet
+was untracked while he ran it, so no version existed to diff** — committing it
+is part of the fix.
+
+**IT RAN ON UNCOMMITTED BYTES AND THAT IS RECORDED, NOT GLOSSED.** The card was
+still in the working tree when he ran it, so the sheet cites no commit hash —
+which is a weaker citation than this repo's own precedent asks for (:10959,
+:11616, :3917 all turn on a smoke naming the bytes it ran against). **What is
+VERIFIED at the time of writing: no source file was touched between his run and
+now** — all seven mtimes predate the servers starting, measured rather than
+recalled, the last two of them being the mutation harness restoring the files.
+**What is NOT yet verified, and is written as owed rather than as done: a clean
+`git status` immediately after the commit**, which is what would prove tested
+bytes = committed bytes. A draft of this entry asserted that check in the past
+tense before any commit existed — **V1 does not relax because the claim is about
+bookkeeping** (:15007's L-6, one card later, by the chat that read it). **Any
+later edit to the seven source files voids this pass** and the sheet says so.
+
+**WHAT THIS SMOKE DOES NOT SETTLE, stated rather than implied:** the
+expand-then-contract fallback — an API older than the web build — because no such
+API is running anywhere to point a browser at; it is carried by mutant **C38** and
+its own render test, and by nothing a person has seen. And the **§2.4 argument**
+for widening the roster response is a review question, not a browser one: a
+passing smoke says the badge is right, never that the field was allowed.
+
+**THE REMAINING GATE IS T3, and a passing smoke has never been a review** — this
+branch has recorded that three times (:14147, :14745, :12832). The `OWED.md`
+roster line still does NOT tick.
+
+## THE ROSTER BADGE, T3 ROUND 1: ZERO CRITICAL/HIGH — THE PACKET SHIPS (2026-08-22)
+
+**Read before writing a `gym_id` predicate on `gym_members`, before writing
+"verified" about anything measured on a sample, before citing a smoke by step
+number, and before repeating this card's §2.4 argument.** Reviews :15093 and
+:15187. Escape hatch **NOT armed** — :15007 found zero Critical/High, so there is
+no two-rounds-running trigger in orgs.
+
+**SIX LOW, ALL FIXED IN THE ROUND, and the shape is the finding: FIVE OF THE SIX
+ARE THE RECORD RATHER THAN THE CODE.** The screen and the SQL shipped correct;
+the account of them did not. Four of those five are the same defect — **a claim
+that outran what was measured**: a generalisation from five anchors written as
+"every anchor", a verification written in the PAST tense before it had happened,
+step numbers quoted from a sheet nobody ran, and a description of a test that does
+not match the test.
+
+**L-1 IS THE ONE WITH TEETH AND IT IS CODE: the roster's cross-gym predicate had
+no observer, and it is the FOURTH such predicate on this table to ship untested.**
+:14401 round 2 wrote O88–O90 in exactly these words — *"round 1's three fixes
+added three `gym_id` predicates and NOT ONE had a test"* — and this card added a
+fourth and repeated the omission one predicate later. **Measured: delete
+`s.gym_id = m.gym_id` from `listMembers` and all 92 tests stay green, the
+both-ends test included** — the test :15093 names as what stops the two copies
+drifting, observing one of the two axes on which they can drift. Consequence: a
+paying member of gym B who holds keys at gym A is badged **Complimentary** on gym
+B's roster and loses their Remove button — false on screen AND a money undercount,
+across tenants. Closed on the fixture that already existed, so the door's refusal
+and the roster's answer are anchored by ONE fixture, with gym A's roster as the
+control. Mutant **O94**.
+
+**MY OWN INSTRUMENT FAILURE, and it would have "disproved" a true finding.** The
+reviewer reported that probe as 92/92 GREEN; my first run came back RED. The
+single red was **`Test timed out in 5000ms` on an unrelated cross-gym test** — the
+instrument, not the mutant being caught. Re-measured scoped: all three candidate
+tests GREEN under the mutation, restores sha256-verified both times. **A verdict
+nobody can name a cause for is not evidence** (:11846), and here the unnamed cause
+pointed the flattering way.
+
+**L-2: THIS CARD MADE AN EXISTING ANCHOR AMBIGUOUS AND THREE DOCUMENTS RECORDED
+THE OPPOSITE AS VERIFIED.** O88's anchor matched ONCE at `3950a5d` and TWICE
+after, because the roster's new 14-space line CONTAINS its 12-space prefix — it
+kept landing on `claimSeat` only because `String.replace` takes the first
+occurrence. **:14493's double-match hazard, arriving through a NEW line rather
+than a moved one, which is why the drift check could not see it.** The claim
+"the door's anchors and the roster's each match EXACTLY ONCE" was **generalised
+from five measured anchors**; a census of all 93 found four ambiguous, three of
+them pre-existing. **The fix is the guard :14493 named and never built: the
+pre-check now REFUSES any anchor matching more than once**, with the three
+pre-existing rows in a shrink-only `AMBIGUOUS_ALLOWED` list carrying an `OWED.md`
+line — **and the guard was proven to abort by removing one of them**, not by
+reading it.
+
+**L-3 IS :5748 CATCHING ME IN THE ACT, ONE PARAGRAPH AFTER I QUOTED IT.** :15187
+records a draft of itself claiming `git status` was clean after the commit, and
+corrects it — **in `DECISIONS.md` and the smoke sheet, leaving `HANDOFF.md` and
+this file's index line still asserting the check in the past tense, with no commit
+in existence.** The place a correction is missed is the document you were not
+editing. Both corrected.
+
+**L-4: THE SMOKE WAS CITED BY STEP NUMBERS THAT DO NOT MATCH THE SHEET.** He did
+not run the sheet — he asked for the steps in chat and ran a **7-step compressed
+version typed there** against the sheet's 8, so every number in the record was one
+lower. The mapping is now written out and the subject named in both numberings.
+**Sheet step 2 is what the compression swallowed and it is named as UNRUN rather
+than counted** (:10959), while being implicitly covered by an argument that can be
+checked: `readThrough` throws on a contract mismatch, so a roster that failed to
+parse the new field would have shown no list at all and three other steps could
+not have passed. **The sheet was UNTRACKED while he ran it, so no version existed
+to diff** — committing it is part of the fix.
+
+**L-5: THE §2.4 ARGUMENT WAS UNSOUND AS WRITTEN, AND THE OUTCOME IS STILL RIGHT.**
+Two load-bearing sentences were false. "It says this place is free, NOT this
+person is staff" — **`complimentary === false && takesSeat === false` means
+exactly "holds a `gym_staff` row in this gym"**, and both fields ship in one
+object; the inference is exact, not probabilistic. "A trainer learns no more than
+they already could" — **`members.read` is granted to trainer and manager while
+`staff.manage` is the owner alone, and `listOrgStaff` gates the staff LIST on
+`staff.manage`**, so the two roles the server answers 403 can now derive that list
+from the roster. **The disclosure is ACCEPTED and recorded, not reversed**: §2.4's
+enumerated never-see list is member health and personal data and none of it moves,
+and what a colleague learns is a role inside their own gym. **It must NOT be
+closed by withholding `takesSeat` from trainers — that trades a disclosure for a
+FALSEHOOD**, handing them back the pre-card defect, and :5807 outranks a tidier
+boundary. **Kd has not been asked; hiding it is his ruling and needs its own
+card.** Own `OWED.md` line.
+
+**L-6: the both-ends test is described doing something it does not do.** The
+record said the cap assertions were "derived from the ROSTER's own count rather
+than from a number typed into the test". They are not — `seatsTaken()` reads the
+roster and is then compared to a literal 0/1/2, and the door's half is independent
+409/200 assertions. **The test is sound and the reviewer re-derived that
+separately** (applying O75's mutation reddened it at the assertion whose subject
+it is). What was wrong is the account, which is what a later chat trusts while
+editing it.
+
+**PROVE** — `orgs.routes` **92/92, exit 0** (unchanged — L-1's assertions went into an EXISTING test rather than a new one, so the COUNT does not move; a draft of this line said 93/93 (+1), which is this round's own finding recurring in the entry that records it) · web **1057/1057 across 43
+files, exit 0** (unchanged; this round touched no web source but the comment) ·
+shared **48/48** · `vite build` exit 0 · tsc clean on api and shared · eslint exit
+0 at `--max-warnings=0` on every touched source file · `node --check` clean on
+both harnesses. **API SWEEP, subset and it says so: O88 re-anchored + O92/O93/O94
+— 4 mutants · 4 RED · 0 ALIVE · 0 never ran, exit 0**, controls green first,
+restores sha256-verified. **The whole-table pre-check ran over all 94 rows,
+including the NEW uniqueness rule, and passed.** Full anchor census: 94 rows, 3
+ambiguous, all three allow-listed and owed.
+
+**THE `OWED.md` ROSTER LINE TICKS ON THE COMMIT** — smoke passed (:15187), review
+clean, and its remaining gate was this round.
+
+**ADDENDUM to :15187, written by the T3 round that made it necessary.** The fix
+round edited **two of the seven source files** the smoke's own rule protects —
+`Members.jsx`'s header and `orgMemberSchema`'s doc block, both from L-5. **Under
+:10959 as written, that voids the pass.** It is treated as not voiding it here,
+and the reasoning is recorded rather than assumed: **both edits replaced comment
+text with comment text and changed no executable line.** That is reasoned from the
+edits, **not proven at byte level** — no build hash was taken before the smoke, so
+there is nothing to compare against, and this entry does not pretend otherwise.
+What backs it is that the suite, the build and the sweep were re-run afterwards
+and the badge's behaviour is pinned by C36/C37/C38. **The stronger citation costs
+ten seconds — re-run sheet step 6 — and a later chat wanting one should take it
+rather than lean on this paragraph.**

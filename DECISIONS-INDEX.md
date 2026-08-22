@@ -809,6 +809,135 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:15259** — 2026-08-22 — **THE ROSTER BADGE, T3 ROUND 1: ZERO Critical/High —
+  THE PACKET SHIPS.** Reviews :15093 and :15187. Escape hatch NOT armed (:15007
+  found zero). **Read before writing a `gym_id` predicate on `gym_members`,
+  before writing "verified" about anything measured on a sample, before citing a
+  smoke by step number, and before repeating this card's §2.4 argument.** **SIX
+  LOW, ALL FIXED, and FIVE OF THE SIX ARE THE RECORD RATHER THAN THE CODE** —
+  four of those five being one defect, **a claim that outran what was measured**.
+  **L-1 is the one with teeth and it is code: the roster's cross-gym predicate had
+  NO observer, the FOURTH such predicate on this table to ship untested** —
+  :14401 round 2 wrote O88–O90 saying "round 1's three fixes added three `gym_id`
+  predicates and NOT ONE had a test", and this card added a fourth. Measured:
+  delete it and all 92 tests stay green, **the both-ends test included**, which
+  observes one of the two axes the copies can drift on. A payer at gym B holding
+  keys at gym A would be badged Complimentary on B's roster and lose their Remove
+  button — false on screen AND a money undercount, across tenants. Closed on the
+  existing cross-gym fixture with gym A's roster as the control; mutant **O94**.
+  **INSTRUMENT, MINE: my first probe of L-1 came back RED and the red was a
+  5-second TIMEOUT on an unrelated test** — it would have "disproved" a true
+  finding, and the unnamed cause pointed the flattering way (:11846). **L-2: this
+  card made O88's anchor AMBIGUOUS** (one match at `3950a5d`, two after, the
+  roster's 14-space line containing the 12-space prefix) **while three documents
+  called it verified — a claim generalised from five measured anchors.** Census of
+  all 93 found four ambiguous, three pre-existing. **Fixed with the guard :14493
+  NAMED AND NEVER BUILT: the pre-check now refuses any anchor matching more than
+  once**, three legacy rows in a shrink-only allow-list with an `OWED.md` line,
+  **the guard proven to abort by removing one of them.** **L-3 is :5748 catching
+  the chat in the act one paragraph after quoting it** — :15187's own correction
+  was applied to `DECISIONS.md` and the sheet and missed in `HANDOFF.md` and this
+  index, both still claiming a post-commit `git status` check that had not
+  happened. **L-4: the smoke was cited by step numbers that do not match the
+  sheet** — he ran a 7-step compressed version typed in CHAT, not the 8-step
+  sheet; mapping now written out, **sheet step 2 named as UNRUN rather than
+  counted** (implicitly covered: `readThrough` throws on a contract mismatch, so a
+  roster that failed to parse would have shown no list), sheet committed. **L-5:
+  the §2.4 argument was UNSOUND as written and the outcome still right** —
+  `complimentary === false && takesSeat === false` means exactly "staff here", an
+  EXACT inference, and trainers/managers hold `members.read` while `staff.manage`
+  (which gates the staff LIST) is the owner's alone, so the roles refused that
+  list can derive it. **Disclosure ACCEPTED and recorded, not reversed**; **must
+  NOT be closed by withholding the field from trainers — that trades a disclosure
+  for a FALSEHOOD** (:5807), and hiding it is Kd's ruling with its own card and
+  `OWED.md` line. **L-6: the both-ends test is described doing something it does
+  not do** — the cap assertions are compared to LITERALS, not derived from the
+  roster's count; test sound, account wrong. **PROVE: orgs.routes 92/92 exit 0**
+  (unchanged — L-1's assertions went into an EXISTING test, so the count does not
+  move; a draft of this line said "93/93 (+1)", **this round's own finding
+  recurring in the line recording it**) **· web 1057/1057 · shared 48/48 · build ✓
+  · tsc + eslint clean · API SWEEP a
+  stated SUBSET, O88 re-anchored + O92/O93/O94, 4 mutants · 4 RED · 0 ALIVE · 0
+  never ran, exit 0**, with the whole-table pre-check running all 94 rows under the
+  NEW uniqueness rule. **THE `OWED.md` ROSTER LINE TICKS ON THE COMMIT.**
+
+- **:15187** — 2026-08-22 — **THE ROSTER-BADGE SMOKE PASSES — on live data, and
+  on bytes that were not yet committed.** Kd's REPORT (:4829) on :15093, his own
+  gym on the Neon dev database, both servers started by the chat. **Read before
+  citing the roster badge as verified, before quoting this pass as covering the
+  older-API fallback, and before editing any of the card's seven source files.**
+  **"all passed".** **He ran a 7-step compressed version typed in CHAT, not the
+  8-step sheet** (T3 L-4 caught the two numberings; mapping in the entry). Chat
+  step 5 = sheet 6 is the subject and passed: an appointed trainer comes back to
+  Members carrying the **Complimentary** badge with Remove correctly absent.
+  **Chat 2/3/7 (sheet 3/4/8) are the CONTROLS that stop "badge everybody"
+  passing.** **Chat 6 (sheet 7) is :14401's C/H-1 outside a fixture: the
+  join-code count did not move on a promotion, on live data.** **Sheet step 2 was
+  swallowed by the compression and is named as unrun** — implicitly covered,
+  because `readThrough` throws on a contract mismatch, so a roster that failed to
+  parse the new field would have shown no list at all. **IT RAN ON UNCOMMITTED BYTES, RECORDED NOT
+  GLOSSED** — no commit hash on the sheet, which is weaker than :10959/:11616/
+  :3917 ask for. **VERIFIED: no source file was touched between his run and the
+  entry being written** (mtimes). **NOT verified and written as owed, not done: a
+  clean `git status` after the commit** — this index line and `HANDOFF.md` both
+  asserted that check in the PAST tense while `DECISIONS.md` said the opposite
+  and no commit existed (T3 L-3, :5748's lesson landing in the two documents that
+  were not being edited). **A later edit to those seven files VOIDS this pass.**
+  **NOT settled: the expand-then-contract fallback** (no older API exists to
+  point a browser at — carried by mutant C38 and its test alone) **and the §2.4
+  widening argument**, which is a review question and not a browser one.
+  **T3 IS THE REMAINING GATE; the OWED roster line does NOT tick.**
+
+- **:15093** — 2026-08-22 — **THE ROSTER SAYS WHO HAS A FREE PLACE — and the
+  audit found the guarantee had no observable subject.** Builds :14953; server +
+  web, **no migration**. **Read before touching the Members roster's badge,
+  before adding a field to `/v1/orgs/:gymId/members`, before writing
+  `gym_members.complimentary` anywhere, and before writing a mutant aimed at a
+  rule the OWNER is excluded by twice.** A trainer's row now carries the same
+  **Complimentary** badge the owner's does, because the gym is not charged for
+  their place; before this they looked exactly like somebody occupying a paid
+  seat. **NOT closed by writing `complimentary` for staff** — that is :14401
+  C/H-1, the column meaning "did not JOIN" with three readers acting on it — but
+  by a separate derived `takesSeat`, computed by `claimSeat`'s own count rule.
+  **The rule is written out TWICE on purpose** (a shared `sql` fragment is R3.8's
+  forbidden shape, :14493 Low-2) and what stops the copies drifting is a test
+  driving BOTH ends on ONE fixture (:14013). **Two claims in this entry's first
+  draft were FALSE and T3 measured both** — the cap assertions are compared to
+  LITERALS, not derived from the roster's count (L-6), and "every anchor matches
+  exactly once" was generalised from a five-anchor sample while O88 had gone from
+  one match to two because of this card's own new line (L-2). O88 re-anchored;
+  **the pre-check now REFUSES any anchor matching more than once**, with three
+  pre-existing rows in a shrink-only allow-list carrying an `OWED.md` line. **THE AUDIT'S SURVIVOR IS
+  THE PART TO READ AND IT WAS MINE: O92 SURVIVED because the OWNER IS EXCLUDED
+  TWICE** — delete `complimentary = false` and their staff row still reports the
+  place free, so the assertion could not fail. **:14401's O3 one card later on
+  the roster's copy of the same rule**, :11846's both-halves-moved, :5104 F5's
+  shape; closed the way the door closed it, with a **comped member who is not
+  staff**, and re-measured RED. Code right throughout, coverage absent —
+  :15007's own three-times finding, recurring in the card quoting it. **The §2.4
+  addition was ARGUED**: the key set is asserted exactly on purpose (:10010), the
+  field says "this place is free" and never "this person is staff", and who holds
+  the keys stays on the owner-only Staff screen. **`takesSeat` is OPTIONAL for
+  :12660's expand-then-contract reason and the alternative was measured**: a
+  required key blanks the WHOLE roster during a web-newer-than-API window, and
+  defaulting to "takes a seat" strips the OWNER's badge and offers a Remove the
+  server refuses; absent, the client falls back to `complimentary` (its own test,
+  its own mutant C38). Decisions not to re-derive: the badge keeps the word
+  **Complimentary** · **no Remove beside a free place is the OLD rule** (the
+  server refuses anybody still staff) · the web renders and never computes
+  (R3.1) · **`joinedCount` and the `max_uses` gate are UNTOUCHED**. **PROVE: web
+  1057/1057 exit 0 (+7) · shared 48/48 · orgs.routes 92/92 exit 0 (+1) · build ✓ ·
+  tsc + eslint clean on seven files · WEB SWEEP 54 mutants · 54 RED · 0 ALIVE · 0
+  never ran, exit 0.** **THE API SWEEP IS A SUBSET AND SAYS SO — 9 of 93**
+  (O92/O93 plus every mutant in the two functions edited); first run **8 RED · 1
+  ALIVE**, then O92/O93 re-measured **2 · 2 RED** after the fixture fix, the other
+  seven standing on untouched source (:10726). **The whole-table anchor pre-check
+  ran over all 93 both times and passed.** A full sweep was started and stopped at
+  ~4 hours' projected cost, the stop verified by process list and `git status`
+  rather than the tool's word. **NOTHING TICKS — SMOKE
+  (`RUNBOOK/smoke-roster-badge.md`, 8 steps) and T3 both UNRUN**; the `OWED.md`
+  line is UPDATED, not ticked.
+
 - **:15007** — 2026-08-22 — **T3 ROUND 2 ON THE STAFF SCREEN (diff-only): ZERO
   Critical/High — THE PACKET SHIPS.** **Read before writing a guard whose only
   proof is that the code looks right, before mirroring one end of a bound, before

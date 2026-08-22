@@ -116,6 +116,34 @@ export function canRemoveMembers(staffRole) {
   return staffRole === 'owner' || staffRole === 'manager';
 }
 
+/** DOES THIS ROSTER ROW COST THE GYM A PLACE? — Kd's finding at the staff
+ *  re-smoke (:14953): *"when a member is added as a staff there badge should
+ *  also show complimentary"*.
+ *
+ *  He was right, and only about the SCREEN. The gym has charged nothing for a
+ *  staff member since :14401 — `claimSeat` excludes them from the count — but
+ *  the badge read the `complimentary` flag alone, which is deliberately never
+ *  written for staff (it means "did not JOIN"). So a trainer sat on the roster
+ *  looking exactly like somebody occupying a paid place, and an owner could not
+ *  see which of their places were free.
+ *
+ *  **THE SERVER DECIDES THIS, NOT THIS FUNCTION** (R3.1). `takesSeat` is
+ *  derived by the same rule the seat cap counts with, so the badge and the door
+ *  cannot disagree. What is left here is one fallback and it is deliberate:
+ *  when the field is ABSENT — an API older than this web build, which
+ *  `orgMemberSchema` permits for :12660's expand-then-contract reason — we fall
+ *  back to `complimentary`, i.e. exactly what shipped before this card. The
+ *  alternative was defaulting to "takes a seat", which during that window would
+ *  strip the OWNER's badge and offer a Remove the server refuses.
+ *
+ *  Answers false for a row it cannot read at all: a badge is a claim, and
+ *  claiming a place is free is the direction that costs a gym money. */
+export function seatIsFree(member) {
+  if (!member || typeof member !== 'object') return false;
+  if (typeof member.takesSeat === 'boolean') return member.takesSeat === false;
+  return member.complimentary === true;
+}
+
 /** The org with this slug, or null. The console's URLs are `/console/:orgSlug`
  *  (Part 3 §3.1) while the API is keyed by uuid, so the slug is resolved
  *  against the caller's own org list — which means an unknown slug and a gym

@@ -658,6 +658,45 @@ export const orgMemberSchema = z.object({
   groupLabel: z.string().nullable(),
   /** The owner's own seat (Part 3 §4.0 step 6) — excluded from seat counts. */
   complimentary: z.boolean(),
+  /** Does this person occupy one of the gym's paid places?
+   *
+   *  **A §2.4 ADDITION, argued rather than waved through** (Kd's finding at the
+   *  staff re-smoke, :14953). The roster badge read `complimentary` alone, which
+   *  is deliberately never written for staff, so a trainer looked exactly like
+   *  somebody the gym pays for — the door and the screen disagreeing about who
+   *  costs money. Derived server-side by `claimSeat`'s own count rule; the
+   *  screen renders it and never computes it (R3.1).
+   *
+   *  **THE §2.4 ARGUMENT, CORRECTED BY T3 L-1 — the first version of this
+   *  comment was false twice and the outcome it defended is still right.**
+   *
+   *  It claimed the field "says this place is free, NOT this person is staff".
+   *  **That is not true and the inference is exact, not probabilistic**:
+   *  `complimentary === false && takesSeat === false` can only mean a
+   *  `gym_staff` row in this gym, and both fields ship in the same object. It
+   *  also claimed a trainer "learns no more than they already could" —
+   *  **also false**: `ROLE_PRIVILEGES` grants `members.read` to trainer and
+   *  manager while `staff.manage` is the owner alone, and `listOrgStaff` gates
+   *  the staff list on `staff.manage`, so the two roles refused that list with a
+   *  403 can now derive it from the roster.
+   *
+   *  **What IS true, and is the argument: that disclosure is accepted.** §2.4's
+   *  enumerated never-see list is member health and personal data — meals,
+   *  weight, coach chats, routes — and none of it moves here. What a colleague
+   *  learns is a role inside their own gym, rendered as the same word the
+   *  owner's row has carried since :10010. **Withholding it from trainers would
+   *  trade a disclosure for a FALSEHOOD** — it hands them back the pre-card
+   *  defect, a staff colleague drawn as occupying a paid place (:5807 outranks
+   *  a tidier boundary). Hiding it is Kd's ruling to make and would need its own
+   *  card; it has an `OWED.md` line.
+   *
+   *  **OPTIONAL for :12660's expand-then-contract reason**, and this is not
+   *  timidity: `orgsApi.js` treats a contract mismatch as a hard failure, so a
+   *  required key would blank the WHOLE roster with "we couldn't load the
+   *  members" during any window where the web is newer than the API — a screen
+   *  destroyed to add one badge. Absent, the client falls back to
+   *  `complimentary`, i.e. exactly the behaviour that shipped before this. */
+  takesSeat: z.boolean().optional(),
 });
 export type OrgMember = z.infer<typeof orgMemberSchema>;
 

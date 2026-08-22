@@ -10,15 +10,27 @@ import {
   formatJoinedAt,
   groupLabelText,
   memberCountLabel,
+  seatIsFree,
 } from './consoleView';
 
 // The roster — Part 3 §4.3's Members screen, holding EXACTLY to §2.4's
 // visibility boundary.
 //
-// FOUR FACTS PER PERSON, and no fifth: display name, the day they joined, the
-// label of the code that brought them in, and whether their seat is
-// complimentary. That is the whole of what the endpoint returns, and it is the
-// whole of what §2.4 lets a gym see about somebody. No email address, no body
+// FIVE FACTS PER PERSON, and no sixth: display name, the day they joined, the
+// label of the code that brought them in, whether their seat is complimentary,
+// and whether they occupy one of the gym's paid places at all. That is the
+// whole of what the endpoint returns, and it is the whole of what §2.4 lets a
+// gym see about somebody.
+//
+// **The fifth was added 2026-08-22 (:14953), and T3 L-1 corrected the argument
+// for it — see `orgMemberSchema`, which carries the corrected version.** In
+// short: it does NOT merely say "this place is free". Read beside the
+// complimentary flag it is served with, it tells any trainer or manager exactly
+// which colleagues hold the keys — a list the server otherwise refuses them
+// with a 403. That disclosure is ACCEPTED rather than unnoticed: §2.4's
+// never-see list is member health and personal data, none of which moves, and
+// withholding it would hand a trainer back the defect this card removed.
+// No email address, no body
 // weight, no meals, no coach conversations, no run routes — and no workout
 // figures either, since the columns §4.3 lists (last active, workouts 30d,
 // average form 30d, streak) come from `org_member_stats`, a view that does not
@@ -105,11 +117,18 @@ function MemberRow({ member, busy, canRemove, onRemove }) {
           Joined {formatJoinedAt(member.joinedAt)} · {groupLabelText(member)}
         </div>
       </div>
-      {member.complimentary ? (
-        /* The owner's own §4.0-step-6 seat, and the server refuses to remove
-           staff — so no Remove control is drawn beside it. A greyed control over
-           a live refusal is the defect §2.2's own rules warn about; an absent
-           one states nothing. */
+      {seatIsFree(member) ? (
+        /* A place the gym is not charged for: the owner's own §4.0-step-6 seat,
+           and — since Kd's finding at the staff re-smoke (:14953) — anybody
+           holding the keys, who has cost the gym nothing since :14401 while
+           still looking on this screen exactly like somebody who does.
+
+           No Remove control is drawn beside it, and that is the same rule as
+           before rather than a new one: `removeMember` refuses anybody who is
+           still staff, and an owner is member #1 of their own gym. A greyed
+           control over a live refusal is the defect §2.2's own rules warn
+           about; an absent one states nothing. Ending a staff member's
+           membership is the Staff screen's two-stage flow. */
         <span
           className="text-xs rounded-lg px-2 py-1 flex-shrink-0"
           style={{ background: 'rgba(255,138,31,0.12)', color: '#FF8A1F' }}
@@ -119,8 +138,8 @@ function MemberRow({ member, busy, canRemove, onRemove }) {
       ) : canRemove ? (
         /* §4.3: "Trainer role: … Remove hidden." A trainer reads this roster in
            full and is refused the removal itself, so the control is not drawn
-           for them — same reasoning as the complimentary seat above, and the
-           server's 403 remains the enforcement (`canRemoveMembers`). */
+           for them — same reasoning as the free place above, and the server's
+           403 remains the enforcement (`canRemoveMembers`). */
         <RemoveControl member={member} busy={busy} onRemove={onRemove} />
       ) : null}
     </div>

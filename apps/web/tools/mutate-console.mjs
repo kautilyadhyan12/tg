@@ -659,6 +659,38 @@ const MUTANTS = [
     from: '    if (!allowed || gymId === null) return undefined;',
     to: '    if (gymId === null) return undefined;',
   },
+  // WHICH PLACES ON THE ROSTER COST THE GYM MONEY (:14953). Three rows, because
+  // the guarantee passes through three hands — the screen choosing what to ask,
+  // the helper reading the server's answer, and the helper's fallback for an API
+  // too old to give one. A mutant is a claim about ONE call site (:15007's S16),
+  // so merging these into one would leave two of the three unobserved.
+  {
+    id: 'C36',
+    target: 'members',
+    suite: RENDER_SUITE,
+    why: "KD'S FINDING ITSELF: the roster goes back to reading the old flag, so a trainer is drawn as somebody occupying a paid place — the gym has not been charged for them since :14401 and the screen says otherwise",
+    expect: 'badges a staff member',
+    from: '      {seatIsFree(member) ? (',
+    to: '      {member.complimentary ? (',
+  },
+  {
+    id: 'C37',
+    target: 'view',
+    suite: VIEW_SUITE,
+    why: "ON SCREEN AND FALSE: the helper ignores the server's answer and falls through to the old flag every time, which is the pre-card behaviour wearing the new code's clothes — the badge would be right for the owner and wrong for everybody holding the keys",
+    expect: 'believes the server OVER the old flag',
+    from: "  if (typeof member.takesSeat === 'boolean') return member.takesSeat === false;",
+    to: "  if (typeof member.takesSeat === 'boolean' && false) return member.takesSeat === false;",
+  },
+  {
+    id: 'C38',
+    target: 'view',
+    suite: VIEW_SUITE,
+    why: "THE EXPAND-THEN-CONTRACT WINDOW (:12660): the fallback is deleted, so against an API older than this build EVERY badge vanishes — including the owner's — and each of those rows gains a Remove button the server refuses. The field is optional precisely so this window is survivable",
+    expect: 'falls back to the old flag when the server sent no answer',
+    from: '  return member.complimentary === true;',
+    to: '  return false;',
+  },
 ];
 
 const abort = (msg) => {

@@ -997,8 +997,16 @@ const MUTANTS = [
     id: 'O88',
     target: 'repo',
     why: "MONEY, ACROSS TENANTS: the seat exclusion stops asking WHICH gym somebody is staff of, so being a trainer anywhere frees your seat everywhere and a gym silently under-counts the seats it sold",
-    from: '            WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)',
-    to: '            WHERE s.user_id = m.user_id)',
+    // RE-ANCHORED by T3 L-2 on the badge card (:15093). This anchor matched
+    // ONCE until that card added the roster's copy of the same subquery, whose
+    // 14-space indent CONTAINS this 12-space line — so it began matching twice
+    // and landed on `claimSeat` only because `String.replace` takes the first
+    // occurrence and this one comes first in the file. :14493's recorded
+    // double-match hazard, arriving through a new line rather than a moved one.
+    // The trailing backtick-semicolon is what `claimSeat`'s copy has and the
+    // roster's (`)) AS takes_seat`) does not.
+    from: '            WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)`;',
+    to: '            WHERE s.user_id = m.user_id)`;',
     expect: 'does not free your seat at another',
   },
   {
@@ -1045,6 +1053,42 @@ const MUTANTS = [
     from: '    if (previous === input.role) {',
     to: '    if (previous === "impossible-role") {',
     expect: 'records BOTH ends in the audit row',
+  },
+  // THE ROSTER'S ANSWER AND THE SEAT COUNT ARE ONE RULE WRITTEN TWICE (:14953).
+  // A shared `sql` fragment is R3.8's forbidden shape, so `listMembers` spells
+  // out `claimSeat`'s two conditions again — exactly as `listStaff` spells out
+  // `getStaffRole`'s eligibility test (:14493 Low-2). These two rows are what
+  // stop the copies drifting: one per condition, each aimed at the ROSTER's
+  // copy, both caught by the test that drives the badge and the cap together.
+  // The door's own copy already has its guards (O3 and the seat-cap rows).
+  {
+    id: 'O92',
+    target: 'repo',
+    why: "A NUMBER ON SCREEN AND FALSE: the roster stops treating a complimentary seat as free, so the owner's own §4.0-step-6 place is drawn on their console as one they are paying for — the screen and the seat cap disagreeing about who costs money, which is the defect Kd found",
+    from: '           (m.complimentary = false\n            AND NOT EXISTS (',
+    to: '           (true\n            AND NOT EXISTS (',
+    expect: 'the badge and the seat count answer the same question',
+  },
+  {
+    id: 'O93',
+    target: 'repo',
+    why: "KD'S FINDING ITSELF, restored: the roster stops asking whether this member holds the keys, so a trainer sits on the console looking exactly like somebody occupying a paid place while the cap has not charged for them since :14401. This is the mutant that would be ALIVE if the card had never been built",
+    from: '            AND NOT EXISTS (\n              SELECT 1 FROM gym_staff s\n              WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS takes_seat',
+    to: '            ) AS takes_seat',
+    expect: 'the badge and the seat count answer the same question',
+  },
+  {
+    // T3 L-1's finding, and it is the FOURTH `gym_id` predicate on this table to
+    // ship without an observer. :14401 round 2 wrote O88–O90 because "round 1's
+    // three fixes added three `gym_id` predicates and NOT ONE had a test"; the
+    // badge card added a fourth and repeated it. Measured before this row
+    // existed: deleting the scope left all 92 tests green.
+    id: 'O94',
+    target: 'repo',
+    why: "MONEY AND FALSE ON SCREEN, ACROSS TENANTS: the ROSTER's staff exclusion stops asking WHICH gym, so a paying member of gym B who happens to hold keys at gym A is badged Complimentary on gym B's roster and loses their Remove button — gym B told its own paying member costs it nothing. O88 is this same deletion at the DOOR; this is the screen's copy",
+    from: '              WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS takes_seat',
+    to: '              WHERE s.user_id = m.user_id)) AS takes_seat',
+    expect: 'does not free your seat at another',
   },
 ];
 
@@ -1131,12 +1175,44 @@ const originals = new Map(
   Object.entries(TARGETS).map(([k, t]) => [k, { sha: sha(t.file), text: readFileSync(t.file, 'utf8') }]),
 );
 
-// Every anchor is proven to match BEFORE the first run, so a drifted anchor
-// costs seconds rather than being discovered twenty minutes in.
+/** ANCHORS MUST MATCH, AND MUST MATCH EXACTLY ONCE.
+ *
+ *  The first half is old (:5199): an anchor matching nothing is a no-op
+ *  mutation, and a no-op mutation reports ALIVE, whose honest reading is "this
+ *  guarantee has no test".
+ *
+ *  **The second half is new, added by T3 L-2 on the badge card (:15093), and it
+ *  closes a hole this harness had NAMED and not fixed.** :14493 recorded it in
+ *  as many words — *"a pre-check that asks 'does this match?' cannot ask 'does
+ *  this match ONCE' — worth fixing in the harness"* — after O85/O86 matched in
+ *  two places and hit the right one only BY POSITION. It bit again immediately:
+ *  the badge card added the roster's copy of a `gym_staff` subquery whose
+ *  14-space indent CONTAINS O88's 12-space anchor, so O88 silently went from one
+ *  match to two while three documents recorded it as verified-unique.
+ *  `String.replace` takes the first occurrence, so such a mutant still lands
+ *  somewhere — just not provably where its `why` says it does.
+ *
+ *  **THE ALLOW-LIST IS PRE-EXISTING DEBT, NOT AN EXEMPTION.** These three were
+ *  already ambiguous at `3950a5d`, before the badge card existed (census run
+ *  2026-08-22: O17, O29, O89 — and O88, which that card broke and which is now
+ *  re-anchored). Each still lands on its intended line by position. They are
+ *  named here rather than tolerated silently, and they carry an `OWED.md` line;
+ *  **the list may only ever shrink.** A row not on it that becomes ambiguous
+ *  aborts the run, which is the point. */
+const AMBIGUOUS_ALLOWED = new Set(['O17', 'O29', 'O89']);
+
 for (const m of MUTANTS) {
   const original = originals.get(m.target);
-  if (!original.text.includes(withEolOf(m.from, original.text))) {
+  const anchor = withEolOf(m.from, original.text);
+  const hits = original.text.split(anchor).length - 1;
+  if (hits === 0) {
     abort(`${m.id}: its anchor matched nothing in ${m.target}. A no-op mutation reports as a missing test. Re-anchor it against the current file.`);
+  }
+  if (hits > 1 && !AMBIGUOUS_ALLOWED.has(m.id)) {
+    abort(
+      `${m.id}: its anchor matches ${String(hits)} times in ${m.target}, so the mutation lands on whichever comes FIRST rather than on the line its \`why\` describes. ` +
+      `Re-anchor it on text unique to that function. Nothing has been written yet.`,
+    );
   }
 }
 
