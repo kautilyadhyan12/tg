@@ -5,7 +5,7 @@
 // change, a count nobody can act on — or say something that is not true.
 import { describe, expect, it } from 'vitest';
 import {
-  STAFF_ROLE_CHOICES,
+  staffRoleChoices,
   STAFF_SEATS_NOTE,
   canChangeStaff,
   canManageStaff,
@@ -36,20 +36,63 @@ describe('who may manage staff', () => {
 
 describe('the roles this screen hands out', () => {
   it('offers manager and trainer, and nothing else', () => {
-    expect(STAFF_ROLE_CHOICES.map((c) => c.value)).toEqual(['manager', 'trainer']);
+    expect(staffRoleChoices('gym').map((c) => c.value)).toEqual(['manager', 'trainer']);
   });
 
   it('NEVER offers owner — the server refuses it, so the option would be a 400 behind a picker', () => {
     // Making a second owner is half of handing a gym over and the other half is
     // unruled; `staffAssignableRoleSchema` is `manager|trainer`.
-    expect(STAFF_ROLE_CHOICES.some((c) => c.value === 'owner')).toBe(false);
+    expect(staffRoleChoices('gym').some((c) => c.value === 'owner')).toBe(false);
   });
 
   it('gives every role a plain-words description, because the tap hands over authority', () => {
-    for (const choice of STAFF_ROLE_CHOICES) {
+    for (const choice of staffRoleChoices('gym')) {
       expect(typeof choice.hint).toBe('string');
       expect(choice.hint.length).toBeGreaterThan(10);
     }
+  });
+
+  /** T3 C/H-1. The hint promised a studio's trainer something the server refuses:
+   *  `listOrgMembers` throws 403 `trainer_scope_unavailable` unless the org is a
+   *  `gym`, and Studio is offered in the create wizard. The old hint said "Can
+   *  see your member list and your join code" to everybody.
+   *
+   *  **THESE ASSERT THE PROMISE, NOT THE WORDS, and the first draft got that
+   *  wrong.** It asserted the studio hint does not contain "member list" — which
+   *  the honest copy DOES contain, in order to deny it ("they can't see your
+   *  member list yet"). A substring ban would have forced vaguer copy to satisfy
+   *  a test, i.e. the assertion driving the product instead of describing it. So
+   *  the affirmative "CAN see" is what each case is measured on. */
+  it('does NOT promise a STUDIO trainer the member list — the server refuses it', () => {
+    const trainer = staffRoleChoices('studio').find((c) => c.value === 'trainer');
+    expect(trainer.hint).not.toMatch(/can see your member list/i);
+    expect(trainer.hint).toMatch(/join code/i);
+  });
+
+  /** The denial is SAID rather than merely omitted. A studio owner appointing a
+   *  trainer for the roster needs to learn it here, not from the trainer hitting
+   *  a 403 later — :5807's shape from the side where the app stays silent. */
+  it('TELLS a studio owner the member list is not included', () => {
+    const trainer = staffRoleChoices('studio').find((c) => c.value === 'trainer');
+    expect(trainer.hint).toMatch(/can't see your member list/i);
+  });
+
+  it('DOES promise a GYM trainer the member list, which is the case §2.2 grants', () => {
+    const trainer = staffRoleChoices('gym').find((c) => c.value === 'trainer');
+    expect(trainer.hint).toMatch(/can see your member list/i);
+  });
+
+  /** An unknown type takes the REFUSING side, so a type added later cannot
+   *  silently promise access the server has not been taught to give. */
+  it('treats an unknown org type as NOT a gym', () => {
+    const trainer = staffRoleChoices(undefined).find((c) => c.value === 'trainer');
+    expect(trainer.hint).not.toMatch(/can see your member list/i);
+  });
+
+  it('says the same thing about a MANAGER whatever the org type', () => {
+    const a = staffRoleChoices('gym').find((c) => c.value === 'manager');
+    const b = staffRoleChoices('studio').find((c) => c.value === 'manager');
+    expect(a.hint).toBe(b.hint);
   });
 });
 

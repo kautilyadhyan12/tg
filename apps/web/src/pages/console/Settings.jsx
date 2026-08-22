@@ -71,7 +71,7 @@ export default function Settings() {
       </div>
 
       {isOwner ? (
-        <StaffPanel gymId={org.id} staffRole={org.staffRole} />
+        <StaffPanel gymId={org.id} staffRole={org.staffRole} orgType={org.orgType} />
       ) : (
         /* REACHABLE BY TYPING THE ADDRESS, and that is the only way here — the
            nav does not draw this tab for a manager or a trainer, because the one

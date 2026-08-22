@@ -9425,3 +9425,76 @@ NEXT
      over-engineering.
   3. Nothing ticks until T3 comes back with zero Critical/High.
 ```
+
+```
+TASK: STAFF SCREEN, T3 ROUND 1 — TWO Critical/High, five Low, ALL FIXED.
+      The packet did NOT ship this round. DECISIONS :14840.
+      Escape hatch NOT armed (:14493 was in apps/api, both of these in apps/web;
+      :13336 judges the subsystem at file granularity — the reviewer reasoned it
+      out unprompted rather than leaving it to be assumed).
+
+**CORRECTING THE PREVIOUS HANDOFF BLOCK, WHICH IS WRONG.** It says "T3 is the
+only remaining gate". **THE SMOKE DOES NOT CARRY THE SHIPPING BYTES**: Kd passed
+12/12 on `971836d`, which had the TWO-tap removal, and `ba7bd13` rewrote that
+control and rewrote sheet steps 9 and 11 AFTER he ran them. Precedent is
+unambiguous — :10959 (a smoke restarts on the amended bytes), :11616 (steps
+re-run when the screen they land on changed), :3917 (a control step cannot be
+carried across a rewrite of what it controls). **Steps 9 and 11 are UNRUN on the
+shipping code.** Corrected in the sheet too, not only here.
+
+WHAT THE TWO CRITICALS WERE
+  · **C/H-1: the trainer hint was true for a GYM and false for a STUDIO.**
+    `listOrgMembers` 403s any trainer whose org is not a `gym` (§2.3 group
+    scoping, unbuilt), and Studio is in the create wizard — so a studio owner
+    appointed a trainer for a job the app had just promised on their behalf.
+    Now `staffRoleChoices(orgType)`; **an unknown type takes the REFUSING side**,
+    and the studio sentence NAMES the limit rather than omitting it.
+  · **C/H-2: the middle Cancel was covered by nothing** — point it at
+    `onRemove(true)` and it ends a membership, with all 195 console tests green.
+    `ba7bd13`'s "Cancel is honoured at every stage" was true of the CODE and
+    false of the COVERAGE.
+
+THINGS A LATER CHAT WILL OTHERWISE GET WRONG
+  · **S15 SURVIVED ITS FIRST RUN AND THE FILTER WAS WHY.** Dropping `orgType`
+    makes the helper's argument undefined, which it treats as NOT-a-gym — so
+    EVERY org reads the studio sentence and the STUDIO test still passes. The
+    test that fails is the GYM one. **:11846's two halves: the anchor says what
+    breaks, the FILTER says what should notice.** Second recorded occurrence of
+    the filter half, and it was mine.
+  · **`staffView.js` is PURE and takes the org type as an ARGUMENT.** Do not make
+    it read anything. The screen passes it; **S15 is the guard that the screen
+    still does.**
+  · **A TEST MUST ASSERT THE PROMISE, NOT THE WORDS.** My first studio test
+    banned the substring "member list", which the honest copy CONTAINS in order
+    to deny it — a ban would have forced vaguer wording to satisfy a test.
+  · **`onClick={() => setStage(null)}` APPEARS TWICE in `StaffPanel.jsx`**, so
+    any anchor there needs two lines. The file is LF (measured, 0 CRLF);
+    ConsoleLayout is the CRLF one. **Build the newline with
+    `String.fromCharCode(10)`** — writing it as an escape put a REAL line break
+    in the harness twice and `node --check` refused it both times (:9111).
+  · **`if (!allowed) return null` was S11's sibling** — two guards in one file,
+    and making the first observable left the second exactly as it was. Both are
+    now mounted directly with positive controls.
+
+GATES
+  · web **1044/1044 across 43 files, exit 0 read into a variable** (+15).
+    staffView 22/22 · settings.render 35/35 · orgsApi 33/33.
+  · build ✓ · eslint clean at `--max-warnings=0` on the six touched files.
+  · **50 mutants · 50 RED · 0 ALIVE · 0 never ran, exit 0**, controls green
+    first, restores sha256-verified, `node --check` first. **The run where S15
+    survived is NOT summed with this one** (:5199) — the harness changed between
+    them, and only a completed sweep on the final bytes is quotable.
+  · `apps/api` untouched by this round.
+  · Instrument note: an earlier `cd apps/web` left the shell there and a later
+    `cat >> DECISIONS.md` created a STRAY 113-line file at `apps/web/DECISIONS.md`
+    rather than appending to the record. **I read the short line count and
+    announced data loss; nothing had been lost.** Stray deleted, real file
+    verified 14,951 lines with a before/after count around the append. **A
+    surprising measurement is a reason to find the cause, not to raise an alarm.**
+
+NEXT — TWO GATES, NOT ONE
+  1. **RE-SMOKE steps 9 and 11 only** (`RUNBOOK/smoke-staff.md`, rewritten for the
+     three-tap flow). Everything else on the sheet stands.
+  2. **DIFF-ONLY re-review** of this round's fixes, fresh chat (:5348 rule 2).
+  3. Nothing ticks until both are done.
+```

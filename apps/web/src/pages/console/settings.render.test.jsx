@@ -274,6 +274,21 @@ describe('taking somebody’s keys back', () => {
     expect(orgService.removeStaff).not.toHaveBeenCalled();
   });
 
+  /** THE OTHER ARM, ASSERTED FOR ITS OWN REASON (T3 Low). The test above drives
+   *  only the destructive choice. Firing the gentle one immediately does go red
+   *  elsewhere — but as a `getByText('Take the keys')` not-found inside a test
+   *  titled "JUST THE KEYS ends the staff row", i.e. red for the wrong reason,
+   *  which certifies the wrong assertion (:4718 F2). This one names the claim. */
+  it('does NOTHING on the gentle arm either, until the last tap', async () => {
+    drawSettings();
+    const row = await screen.findByTestId('staff-u2');
+    fireEvent.click(within(row).getByText('Remove'));
+    fireEvent.click(within(row).getByText('Just take the keys'));
+    expect(within(row).getByText(/Take Rita Sen's keys back\? They stay a member/)).toBeTruthy();
+    expect(orgService.removeStaff).not.toHaveBeenCalled();
+    expect(orgService.removeMember).not.toHaveBeenCalled();
+  });
+
   it('JUST THE KEYS ends the staff row and leaves the membership alone', async () => {
     drawSettings();
     const row = await screen.findByTestId('staff-u2');
@@ -329,6 +344,28 @@ describe('taking somebody’s keys back', () => {
     // Nothing landed, so the second call must not be attempted.
     expect(orgService.removeMember).not.toHaveBeenCalled();
   });
+
+  /** T3 C/H-2. The MIDDLE stage's Cancel was covered by nothing: the reviewer
+   *  pointed it at `onRemove(true)` — Cancel ending somebody's membership — and
+   *  all 195 console tests stayed green. The commit that added the third stage
+   *  claimed "Cancel is honoured at every stage" and only the LAST stage's was
+   *  tested; the claim was true of the code and untrue of the coverage.
+   *
+   *  Both exits are asserted, because a Cancel that fires nothing but also never
+   *  puts the control back is its own defect — an owner stuck looking at a
+   *  question they already dismissed. */
+  it('CANCEL at the choosing stage fires nothing and restores the button', async () => {
+    drawSettings();
+    const row = await screen.findByTestId('staff-u2');
+    fireEvent.click(within(row).getByText('Remove'));
+    expect(within(row).getByText(/Take Rita Sen's keys back\?/)).toBeTruthy();
+
+    fireEvent.click(within(row).getByText('Cancel'));
+    expect(orgService.removeStaff).not.toHaveBeenCalled();
+    expect(orgService.removeMember).not.toHaveBeenCalled();
+    expect(within(row).getByText('Remove')).toBeTruthy();
+    expect(within(row).queryByText('Just take the keys')).toBeNull();
+  });
 });
 
 // ── Adding somebody ─────────────────────────────────────────────────────────
@@ -351,6 +388,24 @@ describe('adding somebody', () => {
       email: 'anil@example.com',
       role: 'manager',
     });
+  });
+
+  /** T3 C/H-1 AT THE SCREEN. The helper decides the wording; this proves the
+   *  gym's TYPE actually reaches it. Without this, `orgType` could be dropped
+   *  from `Settings.jsx`'s `<StaffPanel>` — or from the panel's own pass-through
+   *  to the form — and every helper test would stay green while a studio owner
+   *  read the gym sentence: S11's shape (a guarantee decided in one file and
+   *  observed in none) in the fix written for a different finding. */
+  it('tells a STUDIO owner their trainer cannot see the member list', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, orgType: 'studio' }] } });
+    await openForm();
+    expect(screen.getByText(/can't see your member list/i)).toBeTruthy();
+    expect(screen.queryByText(/Can see your member list/i)).toBeNull();
+  });
+
+  it('tells a GYM owner their trainer CAN see it — the same control, the other answer', async () => {
+    await openForm();
+    expect(screen.getByText(/Can see your member list/i)).toBeTruthy();
   });
 
   it('starts on the SMALLER grant, so a form nobody reads hands out less', async () => {
@@ -494,5 +549,24 @@ describe('the Staff panel mounted on its own', () => {
     render(<StaffPanel gymId={ORG.id} staffRole="owner" />);
     await waitFor(() => expect(orgService.getStaff).toHaveBeenCalledTimes(1));
     expect(orgService.getStaff).toHaveBeenCalledWith(ORG.id);
+  });
+
+  /** S11'S SIBLING, found by the T3 reviewer in the fix written for S11: the
+   *  RENDER guard beside the effect guard was equally unfalsifiable — delete
+   *  `if (!allowed) return null` and every console test stayed green, because
+   *  `Settings.jsx` never mounts the panel for a non-owner. Two guards, one
+   *  file, and making the first observable left the second exactly as it was. */
+  it('renders NOTHING for a non-owner, not an empty Staff card', async () => {
+    // Plain DOM, not `toBeEmptyDOMElement`: this repo does not install
+    // `jest-dom`, and an unknown matcher throws "Invalid Chai property" — which
+    // reads as a failing assertion rather than as a missing one.
+    const { container } = render(<StaffPanel gymId={ORG.id} staffRole="trainer" />);
+    expect(container.innerHTML).toBe('');
+
+    // Positive control: the same mount for an owner DOES draw the card, so an
+    // empty render everywhere would not satisfy this.
+    cleanup();
+    render(<StaffPanel gymId={ORG.id} staffRole="owner" />);
+    expect(await screen.findByText('Staff')).toBeTruthy();
   });
 });

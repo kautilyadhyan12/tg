@@ -284,6 +284,43 @@ describe('a 200 that does not match its contract is a FAILURE, not empty data (T
     await expect(orgService.createOrg({})).rejects.toMatchObject({ isContractError: true });
   });
 
+  /** T3 Low, and the class fix is the point: NONE of the four staff endpoints
+   *  was parsed under test, while every other read on this client was. Deleting
+   *  `readThrough` from `getStaff` left 223 tests green — and the consequence is
+   *  the same false sentence as above, arriving the same way: a body with no
+   *  `staff` becomes `[]`, `staffCountLabel` is handed an empty array, and the
+   *  screen says a number about who runs a gym that nobody wrote. */
+  it('rejects a staff list that is not a list', async () => {
+    answerWith(authApi, { staff: 'nobody' });
+    await expect(orgService.getStaff('gym-1')).rejects.toMatchObject({ isContractError: true });
+  });
+
+  it('rejects a staff row missing the fields the screen prints', async () => {
+    answerWith(authApi, { staff: [{ userId: 'u2' }] }); // no role, displayName, since
+    await expect(orgService.getStaff('gym-1')).rejects.toMatchObject({ isContractError: true });
+  });
+
+  it('rejects an appointment whose answer is not the row that was written', async () => {
+    answerWith(authApi, { ok: true });
+    await expect(
+      orgService.addStaff('gym-1', { email: 'rita@example.com', role: 'manager' }),
+    ).rejects.toMatchObject({ isContractError: true });
+  });
+
+  it('rejects a role change whose answer is not the row that was written', async () => {
+    answerWith(authApi, { ok: true });
+    await expect(
+      orgService.updateStaffRole('gym-1', 'u2', { role: 'trainer' }),
+    ).rejects.toMatchObject({ isContractError: true });
+  });
+
+  it('rejects a removal that does not say it removed anything', async () => {
+    answerWith(authApi, { status: 'maybe' });
+    await expect(orgService.removeStaff('gym-1', 'u2')).rejects.toMatchObject({
+      isContractError: true,
+    });
+  });
+
   it('lets a WELL-FORMED reply through untouched — the control', async () => {
     answerWith(authApi, { orgs: [] });
     await expect(orgService.getMine()).resolves.toMatchObject({ data: { orgs: [] } });

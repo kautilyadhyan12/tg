@@ -64,6 +64,7 @@ const TARGETS = {
   queue: { file: resolve(ROOT, 'apps/web/src/pages/console/ApplicationsQueue.jsx') },
   staffview: { file: resolve(ROOT, 'apps/web/src/pages/console/staffView.js') },
   staffpanel: { file: resolve(ROOT, 'apps/web/src/components/console/StaffPanel.jsx') },
+  settings: { file: resolve(ROOT, 'apps/web/src/pages/console/Settings.jsx') },
   // CRLF — every anchor aimed at this file must be ONE line. A two-line anchor
   // written with `\n` matches nothing here and the mutant reports ALIVE, whose
   // honest reading is "this guarantee has no test" (:4267, four harnesses).
@@ -500,6 +501,65 @@ const MUTANTS = [
     expect: 'JUST THE KEYS ends the staff row',
     from: '    if (alsoRemoveFromGym) {',
     to: '    if (true) {',
+  },
+  {
+    // T3 C/H-2. The MIDDLE stage's Cancel was reachable by no test at all: the
+    // reviewer pointed it at `onRemove(true)` — Cancel ending a membership — and
+    // all 195 console tests stayed GREEN. S12 guards the stage EXISTING; this
+    // guards its Cancel doing nothing, which is a different claim.
+    id: 'S13',
+    target: 'staffpanel',
+    suite: SETTINGS_SUITE,
+    why: "A DESTRUCTIVE ACT FROM THE BUTTON THAT MEANS NO: Cancel at the choose-an-outcome stage ends the person's membership instead of backing out — the worst possible direction for a mis-wired control, and it was covered by nothing until T3 found it",
+    expect: 'CANCEL at the choosing stage fires nothing',
+    // TWO LINES, and it has to be: `onClick={() => setStage(null)}` on its own
+    // appears TWICE in this file (this Cancel and the last stage's), so a
+    // one-line anchor would hit the right one only BY POSITION — :14493's
+    // recorded hazard, which the whole-table pre-check cannot detect. The
+    // className differs between the two and is what makes the pair unique.
+    //
+    // The newline comes from `String.fromCharCode(10)` and NOT from an escape
+    // in the source: writing this row twice put a REAL line break inside the
+    // string literal and `node --check` refused the file both times (:9111's
+    // recorded class fix, incurred again by the chat that cited it). Safe as a
+    // multi-line anchor because StaffPanel.jsx is LF — measured, 0 CRLF —
+    // while ConsoleLayout is the CRLF file the one-line rule above exists for.
+    from: `          onClick={() => setStage(null)}${String.fromCharCode(10)}          className="text-xs rounded-lg px-3 py-1.5 self-start sm:self-end"`,
+    to: `          onClick={() => onRemove(true)}${String.fromCharCode(10)}          className="text-xs rounded-lg px-3 py-1.5 self-start sm:self-end"`,
+  },
+  {
+    // T3 C/H-1. The trainer hint promised a STUDIO's trainer the member list,
+    // which `listOrgMembers` refuses with 403 `trainer_scope_unavailable`. This
+    // mutant makes the hint unconditional again — the shipped defect exactly.
+    id: 'S14',
+    target: 'staffview',
+    suite: STAFF_VIEW_SUITE,
+    why: "FALSE ON SCREEN: a STUDIO owner is told their trainer can see the member list, and the server turns that trainer away — the owner appoints somebody for a job the app has just promised on its behalf",
+    expect: 'does NOT promise a STUDIO trainer the member list',
+    from: "      orgType === 'gym'",
+    to: "      orgType !== null",
+  },
+  {
+    // T3 C/H-1's other half, and the S11 class again: the helper can be right
+    // while the SCREEN never passes it the org type.
+    //
+    // THIS ROW SURVIVED ITS FIRST RUN AND THE FILTER WAS WHY — :11846's lesson,
+    // incurred by the chat that quoted it. Dropping the prop makes `orgType`
+    // undefined, which the helper treats as NOT-a-gym, so EVERY org now reads
+    // the studio sentence. The studio test therefore still PASSES; the test that
+    // fails is the GYM one, and the filter was pointed at the studio. A mutant
+    // has two halves — the anchor says what breaks, the filter says what should
+    // notice — and only the anchor was right.
+    //
+    // Keep the pair together: the studio test proves the helper is consulted at
+    // all, this mutant proves the SCREEN feeds it the real type.
+    id: 'S15',
+    target: 'settings',
+    suite: SETTINGS_SUITE,
+    why: 'FALSE ON SCREEN, THROUGH A DROPPED PROP: the Staff panel is never told what kind of org this is, so `staffRoleChoices` falls to its refusing default and every GYM owner is told their trainer cannot see the member list — a correct helper bypassed entirely by the screen that renders it',
+    expect: 'tells a GYM owner their trainer CAN see it',
+    from: '<StaffPanel gymId={org.id} staffRole={org.staffRole} orgType={org.orgType} />',
+    to: '<StaffPanel gymId={org.id} staffRole={org.staffRole} />',
   },
   {
     // KD FOUND THIS ONE IN A BROWSER, WHICH IS WHY IT IS HERE. The control used

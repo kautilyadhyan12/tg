@@ -809,6 +809,52 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:14840** — 2026-08-22 — **T3 ROUND 1 ON THE STAFF SCREEN: TWO Critical/High,
+  and the packet did NOT ship this round.** Reviews :14570 and :14745. **Read
+  before writing any role hint, before shipping a control whose Cancel is not
+  tested, before pointing a mutant's FILTER at a test, and before calling a card
+  done because its smoke passed.** Escape hatch **NOT armed** and the reviewer
+  reasoned it out unprompted: :14493's Critical/High was in `orgs/repo.ts`, both of
+  these are in `apps/web`, and :13336 judges the subsystem at file granularity.
+  **C/H-1: the trainer hint is TRUE FOR A GYM AND FALSE FOR A STUDIO** — "can see
+  your member list" to everybody, while `listOrgMembers` 403s any trainer whose org
+  is not a `gym` (§2.3 group scoping, unbuilt), and Studio is offered in the create
+  wizard; **the file's own rule "THE HINTS NAME ONLY WHAT IS BUILT" is what it
+  broke**, and `Members.jsx` already branched on that error code one component
+  away. Now `staffRoleChoices(orgType)`, an unknown type taking the REFUSING side,
+  and the studio sentence NAMES the limit rather than omitting it. **C/H-2: the
+  middle Cancel was covered by nothing, in the control :14745 had just written** —
+  pointed at `onRemove(true)` it ends a membership, and all 195 console tests
+  stayed green; **that commit's "Cancel is honoured at every stage" was true of the
+  code and false of the coverage.** **THE FIX ROUND'S OWN FINDING IS THE ONE TO
+  READ: my guard for C/H-1 SURVIVED because of its FILTER** — dropping `orgType`
+  makes every org read the STUDIO sentence, so the studio test still passes and the
+  GYM test is the one that fails; **:11846's two-halves lesson (anchor says what
+  breaks, filter says what should notice), second recorded occurrence of the filter
+  half, incurred by the chat quoting it.** Five Low, all fixed: the four staff
+  endpoints were the only unparsed reads on the client (delete `readThrough`, 223
+  tests green) · **`if (!allowed) return null` is S11's SIBLING**, left
+  unfalsifiable beside the guard the previous round made observable ·
+  `staffCountLabel([])` said "0 people run this gym" · `Try again` offered over a
+  permanent 403 and over the half-done removal it cannot finish · a 1–2 character
+  email printed `email: too_small` verbatim. **Two instrument failures of mine,
+  both caught before anything ran: a real line break inside a mutant string made
+  the harness a SyntaxError TWICE** (:13336's `node --check` guard working;
+  :9111's `String.fromCharCode` fix applied on the third try), **and the anchor
+  needed two lines at all because `onClick={() => setStage(null)}` appears TWICE
+  in the file** — :14493's double-match hazard, still undetectable by the
+  pre-check. **A test of mine asserted the WORDS rather than the PROMISE** (it
+  banned a substring the honest copy contains in order to deny it) — a ban would
+  have forced vaguer wording to satisfy a test. **THE GATE FINDING, correcting
+  three documents of mine: THE SMOKE DOES NOT CARRY THE SHIPPING BYTES** — Kd
+  passed 12/12 on `971836d`'s two-tap removal and `ba7bd13` rewrote that control
+  and its sheet steps afterwards, so :14745, `HANDOFF.md` and that commit are all
+  wrong to say T3 is the only gate (:10959, :11616, :3917). **PROVE: web 1044/1044
+  exit 0 (+15) · build ✓ · eslint clean on six files · 50 mutants · 50 RED · 0
+  ALIVE · 0 never ran, exit 0**, with the S15-survived run NOT summed into it
+  (:5199). New guards S13/S14/S15. **NOTHING TICKS — TWO gates outstanding: the
+  re-smoke of steps 9 and 11, and a diff-only re-review.**
+
 - **:14745** — 2026-08-22 — **KD'S SMOKE ON THE STAFF SCREEN: PASSED 12/12 — and
   it produced a FIX and an AMENDMENT to his own permission ruling.** **Read before
   touching `RemoveControl` in `StaffPanel.jsx`, before designing the per-staff

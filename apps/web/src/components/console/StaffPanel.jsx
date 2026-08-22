@@ -3,14 +3,14 @@ import { Loader2, Plus, UserMinus } from 'lucide-react';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from './ConsoleStates';
 import { formatJoinedAt, roleLabel } from '../../pages/console/consoleView';
 import {
-  STAFF_ROLE_CHOICES,
   STAFF_SEATS_NOTE,
   canChangeStaff,
   canManageStaff,
   otherStaffRole,
   staffCountLabel,
+  staffRoleChoices,
 } from '../../pages/console/staffView';
-import { orgService, errorText } from '../../api/orgsApi';
+import { orgService, errorText, errorStatus } from '../../api/orgsApi';
 
 // WHO RUNS THIS GYM — Part 3 §4.7's Staff surface, on §3.1's Settings screen.
 //
@@ -42,7 +42,8 @@ import { orgService, errorText } from '../../api/orgsApi';
  *  for anything an owner cares to type. The server scopes it to this gym's own
  *  roster and its refusal names the fix, so the sentence below says the same
  *  thing BEFORE the refusal rather than after it. */
-function AddStaffForm({ email, setEmail, role, setRole, fieldError, busy, onAdd, onCancel }) {
+function AddStaffForm({ email, setEmail, role, setRole, fieldError, busy, onAdd, onCancel, orgType }) {
+  const choices = staffRoleChoices(orgType);
   return (
     <div
       className="rounded-2xl p-4 flex flex-col gap-3"
@@ -69,7 +70,7 @@ function AddStaffForm({ email, setEmail, role, setRole, fieldError, busy, onAdd,
       <div className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
         <span id="staff-role-label">What they can do</span>
         <div className="flex flex-col gap-2 mt-1.5" role="radiogroup" aria-labelledby="staff-role-label">
-          {STAFF_ROLE_CHOICES.map((choice) => (
+          {choices.map((choice) => (
             <button
               key={choice.value}
               type="button"
@@ -332,7 +333,7 @@ function StaffRow({ person, busy, onChangeRole, onRemove }) {
   );
 }
 
-export default function StaffPanel({ gymId, staffRole }) {
+export default function StaffPanel({ gymId, staffRole, orgType }) {
   const allowed = canManageStaff(staffRole);
 
   const [state, setState] = useState({ loading: true, error: null, staff: [] });
@@ -397,7 +398,10 @@ export default function StaffPanel({ gymId, staffRole }) {
       await orgService.updateStaffRole(gymId, person.userId, { role: next });
       reload();
     } catch (err) {
-      setActionError(errorText(err, "We couldn't change what they can do. Please try again."));
+      setActionError({
+        message: errorText(err, "We couldn't change what they can do. Please try again."),
+        retryable: errorStatus(err) !== 403,
+      });
     } finally {
       setBusyId(null);
     }
@@ -420,7 +424,10 @@ export default function StaffPanel({ gymId, staffRole }) {
     try {
       await orgService.removeStaff(gymId, person.userId);
     } catch (err) {
-      setActionError(errorText(err, "We couldn't take their keys back. Please try again."));
+      setActionError({
+        message: errorText(err, "We couldn't take their keys back. Please try again."),
+        retryable: errorStatus(err) !== 403,
+      });
       setBusyId(null);
       return;
     }
@@ -433,11 +440,18 @@ export default function StaffPanel({ gymId, staffRole }) {
         // inside `errorText`'s fallback loses it exactly when it is needed most:
         // a dropped connection HAS no server sentence, so the fallback never
         // runs and the owner is left holding half a change with no next step.
-        setActionError(
-          `${person.displayName} no longer runs your gym, but they are still a member of it. ` +
+        // NO RETRY ON THIS ONE (T3 Low). The failed half was `removeMember`, and
+        // `retry` re-reads the STAFF LIST — it cannot finish the membership, so a
+        // Try again here offers to redo something it does not do. The sentence
+        // already names the surface that can (Members), which is the honest
+        // next step.
+        setActionError({
+          message:
+            `${person.displayName} no longer runs your gym, but they are still a member of it. ` +
             `${errorText(err, "We couldn't remove them from the gym.")} ` +
             'You can remove them on the Members screen.',
-        );
+          retryable: false,
+        });
       }
     }
     setBusyId(null);
@@ -448,6 +462,19 @@ export default function StaffPanel({ gymId, staffRole }) {
     const value = email.trim();
     if (value === '') {
       setFieldError('Type the email address they use for the app.');
+      return;
+    }
+    // THE SERVER'S FLOOR IS 3 AND ITS REFUSAL IS NOT A SENTENCE (T3 Low).
+    // `addOrgStaffRequestSchema` is `.min(3)`, and a one- or two-character entry
+    // comes back as the raw `email: too_small`, which `errorText` then prints at
+    // an owner verbatim. Mirroring the bound here — with the number cited rather
+    // than chosen — means the only thing on screen is a sentence somebody wrote.
+    // Deliberately NOT an address-format check: the server does not do one
+    // either (the column is `citext` and the match is an equality against rows
+    // we already store), so a format opinion here could reject an address the
+    // app itself accepted at registration.
+    if (value.length < 3) {
+      setFieldError('That looks too short for an email address.');
       return;
     }
     if (gymId === null) return;
@@ -466,7 +493,15 @@ export default function StaffPanel({ gymId, staffRole }) {
       // the join-code editor shipped that defect and it has its own recorded
       // finding. The server's own message is what gets shown: "Nobody in this
       // gym has that email address…" names the fix better than a rewrite could.
-      setActionError(errorText(err, "We couldn't add them. Please try again."));
+      // NO RETRY (T3 Low): the FORM is the retry surface and it stays open with
+      // the typing in it. `retry` re-reads the list, which cannot add anybody —
+      // and over the `not_a_member` 404 (the commonest refusal here) it would
+      // promise that pressing a button fixes an address that is simply not in
+      // this gym.
+      setActionError({
+        message: errorText(err, "We couldn't add them. Please try again."),
+        retryable: false,
+      });
     } finally {
       setBusyId(null);
     }
@@ -498,7 +533,10 @@ export default function StaffPanel({ gymId, staffRole }) {
 
       {actionError !== null ? (
         <div className="mb-3">
-          <ConsoleFailed message={actionError} onRetry={retry} />
+          <ConsoleFailed
+            message={actionError.message}
+            onRetry={actionError.retryable ? retry : undefined}
+          />
         </div>
       ) : null}
 
@@ -516,6 +554,7 @@ export default function StaffPanel({ gymId, staffRole }) {
 
           {adding ? (
             <AddStaffForm
+              orgType={orgType}
               email={email}
               setEmail={setEmail}
               role={role}

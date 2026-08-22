@@ -14836,3 +14836,116 @@ roles and ticks are their own card and their own migration.
 **PROVE (the fix only)** — settings suite **30/30** (+1) · web **1029/1029 across
 43 files, exit 0 read into a variable** · sweep re-run to completion with the new
 guard, figures in the commit. `apps/api` untouched.
+
+## T3 ROUND 1 ON THE STAFF SCREEN: TWO CRITICAL/HIGH, AND ONE OF THEM IS A SENTENCE THAT IS ONLY FALSE FOR A STUDIO (2026-08-22)
+
+**Read before writing any role hint, before adding a control whose Cancel is not
+tested, before pointing a mutant's FILTER at a test, and before calling a card
+done because its smoke passed.** Reviews :14570 and :14745 (both commits).
+**The packet did NOT ship this round.** Escape hatch **NOT armed** and the
+reviewer said so unprompted with his reasoning: :14493's Critical/High was in
+`apps/api/src/modules/orgs/repo.ts` and both of these are in `apps/web`, and
+:13336's precedent judges the subsystem at file granularity — first round on this
+code. He declined to declare it and left it as Kd's call, which is the shape
+:13432 asks for.
+
+**C/H-1 — THE TRAINER HINT IS TRUE FOR A GYM AND FALSE FOR A STUDIO.** It read
+"Can see your member list and your join code" to everybody, and `listOrgMembers`
+throws 403 `trainer_scope_unavailable` whenever `org.orgType !== 'gym'`
+(`orgs/service.ts:470-476`) because §2.3 makes group scoping CORE for studios and
+nothing assigns a trainer to a group yet. **Studio is offered in the create
+wizard** (`createOrgTypeSchema = ['gym','studio']`), so this is reachable rather
+than theoretical: a studio owner reads the sentence, appoints a trainer for
+exactly that job, and the trainer opens Members and is turned away. **The file's
+own rule is what it broke** — "THE HINTS NAME ONLY WHAT IS BUILT" — and
+`Members.jsx` already branches on that error code one component away, so the
+distinction was known in the codebase and not in the copy. `STAFF_ROLE_CHOICES`
+becomes `staffRoleChoices(orgType)`; an unknown type takes the REFUSING side, so
+a type added later cannot silently promise access the server has not been taught
+to give. **The studio sentence NAMES the limit rather than omitting it** — "they
+can't see your member list yet" — because an owner who is never told will find
+out from the trainer's 403.
+
+**C/H-2 — THE MIDDLE CANCEL WAS COVERED BY NOTHING, in the control :14745 had just
+rewritten.** The reviewer pointed it at `onRemove(true)` — Cancel ending
+somebody's membership — and **all 195 console tests stayed GREEN**. :14745's own
+commit message says "Cancel is honoured at every stage"; only the LAST stage's
+was tested. **The claim was true of the code and false of the coverage, which is
+the class this repo records most.** Both exits are now asserted (nothing fires,
+AND the button comes back), because a Cancel that fires nothing but never
+restores the control is its own defect.
+
+**THE FIX ROUND'S OWN FINDING, AND IT IS THE ONE WORTH READING: MY GUARD FOR C/H-1
+SURVIVED, AND THE FILTER WAS WHY.** S15 drops `orgType` from `<StaffPanel>` in
+`Settings.jsx`. Dropping it makes the helper's argument `undefined`, which the
+helper treats as NOT-a-gym — **so every org reads the STUDIO sentence, and the
+studio test still passes.** The test that fails is the GYM one, and the filter was
+pointed at the studio. **:11846's two-halves lesson — the anchor says what breaks,
+the FILTER says what should notice — incurred by the chat quoting it, and this is
+now the second recorded occurrence of the filter half.** Re-aimed and re-measured
+RED on a completed sweep.
+
+**FIVE LOW, ALL FIXED IN-ROUND (`BACKLOG.md`), and three are the same shape as the
+Criticals.**
+- **The four staff endpoints were the only reads on this client not parsed under
+  test.** Deleting `readThrough` from `getStaff` left 223 tests green, and the
+  consequence is the console's oldest defect arriving through the parser: no
+  `staff` key → `[]` → a number on screen about who runs a gym that nobody wrote.
+  Five contract tests, one per shape.
+- **`if (!allowed) return null` — S11's SIBLING, sitting beside the guard the last
+  round made observable.** Delete it and every console test stayed green, because
+  `Settings.jsx` never mounts the panel for a non-owner. Two guards in one file,
+  and making the first observable left the second exactly as it was. Now mounted
+  directly, with a positive control.
+- **`staffCountLabel([])` returned "0 people run this gym"** — the sentence the
+  helper exists to make impossible. Only non-arrays were guarded. Unreachable
+  today (the owner's own row is always present) and one empty array away.
+- **`Try again` was offered over refusals retrying cannot fix** and over the
+  half-done removal notice, where `retry` re-reads the STAFF LIST and cannot
+  finish the membership. Now conditional, following `Overview`'s `isRetryable`
+  precedent (403 permanent); the add form is its own retry surface, so its
+  failures carry no button.
+- **A one- or two-character email hit the server's `.min(3)` and printed
+  `email: too_small` verbatim.** Mirrored client-side with the bound cited;
+  deliberately NOT a format check, because the server does not do one either.
+
+**TWO INSTRUMENT FAILURES OF MINE IN THE FIX ROUND, both caught before anything
+ran.** A real line break inside a mutant's string literal made the harness a
+SyntaxError — **twice** — and `node --check` refused the file both times
+(:13336's permanent guard, working on the file it was added for; :9111's
+`String.fromCharCode` class fix applied on the third attempt). **And the anchor it
+was carrying had to be two lines at all because `onClick={() => setStage(null)}`
+appears TWICE in `StaffPanel.jsx`** — :14493's recorded double-match hazard, which
+the whole-table pre-check still cannot detect.
+
+**A TEST OF MINE ASSERTED THE WORDS INSTEAD OF THE PROMISE, and it failed for the
+right reason.** The first studio test banned the substring "member list" — which
+the honest copy CONTAINS, in order to deny it. **A substring ban would have forced
+vaguer wording to satisfy a test: the assertion driving the product instead of
+describing it.** Rewritten around the affirmative "CAN see", with the reasoning
+beside it.
+
+**THE GATE FINDING, AND IT CORRECTS THREE DOCUMENTS OF MINE: THE SMOKE DOES NOT
+CARRY THE SHIPPING BYTES.** Kd passed 12/12 on `971836d`, which had the TWO-tap
+removal; `ba7bd13` rewrote that control and rewrote sheet steps 9 and 11 *after*
+he ran them. :14745, `HANDOFF.md` and that commit all say "T3 is the only
+remaining gate" and **all three are wrong by this repo's own precedent** —
+:10959's "smoke restarts on the amended bytes", :11616 re-running steps because
+the screens they land on changed, :3917's control step. **Steps 9 and 11 are UNRUN
+on the shipping code and are owed before the packet closes.** Corrected in place
+rather than only here.
+
+**PROVE** — web **1044/1044 across 43 files, exit 0 read into a variable** (+15;
+1029 before). `staffView` 22/22 (+5), `settings.render` 35/35 (+5), `orgsApi`
+33/33 (+5). `vite build` exit 0. eslint exit 0 with no output at
+`--max-warnings=0` on the six touched files. **MUTATION AUDIT: 50 mutants · 50 RED
+· 0 ALIVE · 0 never ran, exit 0**, controls GREEN on all fifty filters first,
+restores sha256-verified after every mutant, `node --check` first, exit read into
+a variable. **The run where S15 survived is NOT summed with this one** (:5199) —
+the harness changed between them, and only a completed sweep on the final bytes
+is quotable. Three new permanent guards: **S13** (the middle Cancel), **S14** (the
+studio hint), **S15** (the screen feeding the helper its org type). `apps/api`
+untouched by this round.
+
+**NOTHING TICKS.** Two gates outstanding, not one: **the re-smoke of steps 9 and
+11**, and **a diff-only re-review** of these fixes (:5348 rule 2).

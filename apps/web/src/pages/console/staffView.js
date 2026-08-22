@@ -45,19 +45,39 @@ export function canManageStaff(staffRole) {
  *  **THE HINTS NAME ONLY WHAT IS BUILT.** §2.2 grants a manager rather more
  *  than this — TV-mode tokens, CSV export, the rest of Settings — and none of
  *  it has a route yet. A hint describing the matrix instead of the product
- *  would promise a gym owner powers they are about to go looking for. */
-export const STAFF_ROLE_CHOICES = [
-  {
-    value: 'manager',
-    label: 'Manager',
-    hint: 'Can confirm people joining, remove members, and manage your join codes.',
-  },
-  {
-    value: 'trainer',
-    label: 'Trainer',
-    hint: 'Can see your member list and your join code.',
-  },
-];
+ *  would promise a gym owner powers they are about to go looking for.
+ *
+ *  **THE TRAINER HINT DEPENDS ON THE ORG TYPE, and that is T3's C/H-1.** It read
+ *  "Can see your member list and your join code" for everybody, which is FALSE
+ *  for a STUDIO: `listOrgMembers` refuses a trainer with 403
+ *  `trainer_scope_unavailable` unless `orgType === 'gym'`, because §2.3 makes
+ *  group scoping CORE for studios and nothing assigns a trainer to a group yet
+ *  (`gym_staff` has no group column). Studio is offered in the create wizard, so
+ *  this is reachable: a studio owner reads the sentence, appoints a trainer for
+ *  exactly that, and the trainer opens Members and is turned away. **The rule
+ *  above is what it broke — the hint named what the MATRIX grants rather than
+ *  what this gym's trainer actually gets.**
+ *
+ *  Taking the org type as an argument rather than reading it: this file is pure,
+ *  and an unknown type is treated as NOT a gym — the refusing side — so a type
+ *  added later cannot silently promise access it does not have. */
+export function staffRoleChoices(orgType) {
+  return [
+    {
+      value: 'manager',
+      label: 'Manager',
+      hint: 'Can confirm people joining, remove members, and manage your join codes.',
+    },
+    {
+      value: 'trainer',
+      label: 'Trainer',
+      hint:
+        orgType === 'gym'
+          ? 'Can see your member list and your join code.'
+          : "Can see your join code. They can't see your member list yet.",
+    },
+  ];
+}
 
 /** The role the "switch to…" button offers, or null when there is nothing to
  *  offer. There are exactly two assignable roles, so a change is a single tap
@@ -94,6 +114,12 @@ export function canChangeStaff(person) {
 export function staffCountLabel(staff) {
   if (!Array.isArray(staff)) return null;
   const n = staff.length;
+  // AN EMPTY ARRAY IS THE SAME CLAIM AS AN UNREADABLE ONE (T3 Low). Only
+  // non-arrays were guarded, so an empty list printed "0 people run this gym" —
+  // the sentence this helper exists to make impossible. Unreachable today (the
+  // owner's own row is always in the list), and one empty array away, which is
+  // the distance :5104 F5 says not to leave.
+  if (n === 0) return null;
   return n === 1 ? '1 person runs this gym' : `${n} people run this gym`;
 }
 

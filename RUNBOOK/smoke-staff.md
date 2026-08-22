@@ -27,12 +27,25 @@ does land on the refusal — carried by a person, not only by mutant S9.
 cover the one step whose prerequisite was in doubt, and only naming the doubt got
 it covered.**
 
-**IT PRODUCED ONE FIX AND ONE RULING** (DECISIONS :14746): the removal question
+**IT PRODUCED ONE FIX AND ONE RULING** (DECISIONS :14745): the removal question
 gained a THIRD stage — picking an outcome used to do it — and Kd amended :11429 to
 want custom role names as well as per-staff ticks. **Steps 9 and 11 below are
 rewritten for the three-tap flow; the version he ran had two.**
 
-**T3 IS STILL OWED.** A passing smoke is not a review.
+**⚠️ THIS PASS DOES NOT COVER THE SHIPPING CODE — STEPS 9 AND 11 ARE OWED AGAIN.**
+He ran the sheet on `971836d`, which had the TWO-tap removal. `ba7bd13` rewrote
+that exact control into three taps and rewrote steps 9 and 11 *after* he had run
+them, and T3 round 1's fixes (`the next commit`) touched the same panel again.
+:14745, `HANDOFF.md` and `ba7bd13`'s own message all said "T3 is the only
+remaining gate" and **all three were wrong** — this repo's precedent is that a
+smoke restarts on the amended bytes (:10959), that steps are re-run when the
+screen they land on changed (:11616), and that a control step cannot be carried
+forward across a rewrite of the thing it controls (:3917). **Everything else on
+this sheet stands and is not re-run**; only 9 and 11 are.
+
+**T3 ROUND 1 IS RUN — two Critical/High, both fixed (:14840); a diff-only
+re-review is owed.** A passing smoke was never a review, and this review was
+never a substitute for re-running what it changed.
 
 ---
 
