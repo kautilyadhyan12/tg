@@ -26,10 +26,12 @@ behaviour is pinned by C36/C37/C38.
 **If a later chat wants the stronger citation, the honest way to get it is to
 re-run sheet step 6 — ten seconds — not to argue from this paragraph.**
 
-**What IS verified: no source file was touched between his run and the T3 round**
-(mtimes, measured). **What is NOT: a post-commit `git status` check**, which the
-committing chat must do and write here. A further edit to any of the seven source
-files voids this pass under :10959.
+**BOTH CHECKS ARE NOW DONE.** No source file was touched between his run and the
+T3 round (mtimes, measured). **And the post-commit check has been performed rather
+than promised: commit `a7af7f7`, `git status --short` empty immediately after** —
+so the bytes committed are the bytes he tested, plus the two comment-only edits
+above. A further edit to any of the seven source files voids this pass under
+:10959.
 
 **What only a browser could settle:** the badge appearing on a trainer's row is
 the whole card, and it was drawn from **live data** rather than a fixture — the

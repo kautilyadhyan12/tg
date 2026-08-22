@@ -9650,8 +9650,9 @@ NEXT — ONE GATE, NOTHING TICKS
      the three controls that stop "badge everybody" passing all held, and the
      join-code count did not move on a promotion — :14401's C/H-1 outside a
      fixture. **It ran on UNCOMMITTED bytes.** VERIFIED: no source file was
-     touched between his run and this block being written (mtimes). **NOT
-     verified, and corrected here by T3 L-3: an earlier draft of this line said
+     touched between his run and this block being written (mtimes). **NOW VERIFIED at commit `a7af7f7`, `git status --short` empty immediately
+     after. Corrected here by T3 L-3 because an earlier draft claimed it before
+     it was true: an earlier draft of this line said
      `git status` "was clean immediately after" the commit — in the past tense,
      with no commit in existence and `DECISIONS.md` saying the opposite three
      lines from where it was quoted.** :5748 again: the correction was applied to

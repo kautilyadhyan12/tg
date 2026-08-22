@@ -15238,9 +15238,10 @@ which is a weaker citation than this repo's own precedent asks for (:10959,
 VERIFIED at the time of writing: no source file was touched between his run and
 now** — all seven mtimes predate the servers starting, measured rather than
 recalled, the last two of them being the mutation harness restoring the files.
-**What is NOT yet verified, and is written as owed rather than as done: a clean
-`git status` immediately after the commit**, which is what would prove tested
-bytes = committed bytes. A draft of this entry asserted that check in the past
+**DONE RATHER THAN OWED, as of commit `a7af7f7`: `git status --short` was empty
+immediately after it**, which is what proves tested bytes = committed bytes. It
+is written here having been run, not before it was run — which is the whole point
+of the correction below. A draft of this entry asserted that check in the past
 tense before any commit existed — **V1 does not relax because the claim is about
 bookkeeping** (:15007's L-6, one card later, by the chat that read it). **Any
 later edit to the seven source files voids this pass** and the sheet says so.

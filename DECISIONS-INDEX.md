@@ -878,8 +878,9 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   parse the new field would have shown no list at all. **IT RAN ON UNCOMMITTED BYTES, RECORDED NOT
   GLOSSED** — no commit hash on the sheet, which is weaker than :10959/:11616/
   :3917 ask for. **VERIFIED: no source file was touched between his run and the
-  entry being written** (mtimes). **NOT verified and written as owed, not done: a
-  clean `git status` after the commit** — this index line and `HANDOFF.md` both
+  entry being written** (mtimes). **NOW DONE, at commit `a7af7f7` with `git status --short` empty immediately
+  after — written having been run. It was previously owed, and this index line and
+  `HANDOFF.md` had both asserted it in the PAST tense before any commit existed** — this index line and `HANDOFF.md` both
   asserted that check in the PAST tense while `DECISIONS.md` said the opposite
   and no commit existed (T3 L-3, :5748's lesson landing in the two documents that
   were not being edited). **A later edit to those seven files VOIDS this pass.**
