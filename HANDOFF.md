@@ -1,6 +1,61 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: NUTRITION AND RUNNING LEAVE THE WEB — a MOVE to the phone app, not a
+      deletion. The map choice leaves with them. DECISIONS :16812.
+      **Nothing built. `apps/mobile` still does not exist.**
+
+THE RULING
+  · Kd: "nutrion and running will not be there in web , but men we will build
+    the app we are going there bit by bit and nutrion and running will be
+    there". **A MOVE, not a cancellation — he said both halves in one breath.**
+  · **No-removal rule's AUTHORISED path**: ruled against a cited option (shown
+    the line counts, that apps/mobile does not exist, and that users lose both
+    features until it does). Same shape as the coach at :9604 §5.
+  · **The chat ASKED instead of guessing** — his sentence had three readings
+    and :16702 had just established that resolving one silently is a protocol
+    failure. That guard worked; keep using it.
+
+⚠ THE THING A NEXT CHAT WILL GET WRONG
+  · **THE SERVER SIDE IS UNTOUCHED.** `modules/nutrition` and `modules/geo`
+    stay whole — the phone app calls exactly them. **The Gemini swap, the 768px
+    cap, the parity test and EVERY price/quota at :16548 + :16702 ALL STAND.**
+    Reading this as "cancel the Gemini card" is a misread. None of the cost
+    work is wasted.
+  · **UNWIRE, DO NOT DELETE. Remove the ROUTE and import, not the nav button**
+    (coach precedent). A hidden button leaves 3,700 lines in the download; a
+    removed route drops them and their exclusive deps (leaflet, react-leaflet,
+    leaflet-rotate). **KEEP THE SOURCE** — it is the reference for the phone
+    screens; re-deriving a rotating turn-by-turn view beats nothing.
+  · **PARK, DO NOT TICK, the web nutrition/running items in OWED.md.** They
+    return with the phone screens (the ~seven parked coach items are precedent).
+
+MEASURED: Nutrition 2,026 + 194 · Running 1,484 across 7 files · apps/mobile
+  DOES NOT EXIST.
+
+THE MAP — answered, not chosen, and now a PHONE decision. Nothing blocked.
+  · Kd doubted the free answer. **HALF RIGHT, do not collapse the halves:**
+    WRONG on DATA (**Strava's map data IS OpenStreetMap**; Mapbox is paid to
+    host/render, not for better data) · WRONG on the renderer (**MapLibre is
+    Mapbox GL forked at closure** — same 3D API, which is why 3D is free) ·
+    **RIGHT on ADDRESS SEARCH**, where free geocoders are weaker for Indian
+    addresses — but the app already runs LocationIQ + Nominatim, never Google.
+  · **A prior chat recommended Google Maps; it is NOT in the record**
+    (grep-verified — that chat was abruptly closed). Never a ruling, reasoning
+    unavailable. On cost it is dearest: **Google $7/1,000 views (10k free) ·
+    Mapbox ~$5 (50k free) · MapLibre+OpenFreeMap $0.**
+  · **⚠ LIVE RISK, recorded because the phone app will copy-paste it:**
+    `NavigationMap.jsx:173` / `RouteMap.jsx:79` use `tile.openstreetmap.org`,
+    the OSMF **charity** server — no SLA, "commercial ... access may be
+    withdrawn at any point", and default User-Agent traffic "will be blocked"
+    (a browser cannot set one). Moot on web now; it BINDS mobile.
+
+NEXT
+  1. The unwire card (web nutrition + running routes).
+  2. The parity-test card — cost is answered, QUALITY is not.
+```
+
+```
 TASK: CORRECTION TO THE BLOCK BELOW — A RULING WAS FABRICATED, the consumer
       tier gets a price, four recommendations ratified. DECISIONS :16702.
       **READ THIS BEFORE THE :16548 BLOCK BELOW IT.** Still nothing built.

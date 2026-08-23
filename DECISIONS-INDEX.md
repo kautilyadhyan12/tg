@@ -825,6 +825,39 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:16812** — 2026-08-24 — **NUTRITION AND RUNNING LEAVE THE WEB AND BECOME
+  PHONE FEATURES — a MOVE, not a deletion — and the map choice leaves with
+  them.** **Read before touching `pages/Nutrition.jsx`, `pages/Running.jsx`,
+  `RunPlanner.jsx`, `ActiveRun.jsx`, `components/running/*`,
+  `components/nutrition/*`, or before wiring ANY map anywhere.** Kd: *"nutrion
+  and running will not be there in web , but men we will build the app we are
+  going there bit by bit and nutrion and running will be there"* — **the
+  no-removal rule's AUTHORISED path** (he was shown the line counts, that
+  `apps/mobile` does not exist, and that users lose both until it does).
+  **Measured: Nutrition 2,026 + 194 lines · Running 1,484 across 7 files ·
+  `apps/mobile` does not exist.** **THE POINT A LATER CHAT WILL MISS: the
+  SERVER side is untouched — `modules/nutrition` and `modules/geo`, the Gemini
+  swap, the 768px cap, the parity test, every price and quota at
+  :16548/:16702 ALL STAND, because the phone app calls exactly those
+  endpoints. Reading this as "cancel the Gemini card" is a misread.**
+  **Recommended execution: unwire the ROUTE, not the nav button; KEEP the
+  source as the reference for the phone screens** (coach precedent, :9604 §5).
+  **THE MAP: not blocked, it moves to the phone card.** The prior Google Maps
+  recommendation **is NOT in the record** (grep-verified; that chat was
+  abruptly closed) so it was never a ruling and its reasoning is unavailable —
+  and on cost it is the dearest: **Google $7/1,000 map views (10k free) vs
+  Mapbox ~$5 (50k free) vs MapLibre+OpenFreeMap $0.** **Kd's doubt is HALF
+  RIGHT and the halves must not be collapsed: WRONG on map DATA — Strava's data
+  IS OpenStreetMap, it pays Mapbox to host and render, not for better data —
+  and WRONG on the renderer (MapLibre is Mapbox GL forked at closure, same 3D
+  API, which is why 3D is free); RIGHT on ADDRESS SEARCH, where free geocoders
+  are genuinely weaker for Indian addresses — though the app already runs
+  LocationIQ + Nominatim, never Google, so that is a separate later decision.**
+  **LIVE RISK FOUND AND RECORDED: the shipped web maps point at
+  `tile.openstreetmap.org`, the OSMF CHARITY server, whose policy gives no SLA,
+  warns commercial access "may be withdrawn at any point", and blocks traffic
+  using default User-Agents — which a browser cannot set. Moot on web now; it
+  BINDS the phone app, where the URL is an easy copy-paste.** Nothing built.
 - **:16702** — 2026-08-24 — **CORRECTION TO :16548 — A RULING WAS FABRICATED
   FROM A SENTENCE ABOUT SALES; the consumer tier gets a real price; four
   recommendations are ratified.** **READ THIS BEFORE :16548, and read it before

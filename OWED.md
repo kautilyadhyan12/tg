@@ -4260,8 +4260,67 @@ file and is stated so nobody reads these as lower priority than they are.
       **What it needs is storage and a map to draw on, not an API.** Nothing
       built; no governing spec § (Part 6 §5.1 covers the permission flow and
       its Play-rejection-proof copy, which binds this).
-- [ ] 🟡❓ **CHOOSE THE MAP RENDERER AND TILE SOURCE — KD ASKED, IT IS ANSWERED,
-      HE HAS NOT CHOSEN (DECISIONS :16702).** **Read before wiring any map.**
+- [ ] 🟡 **UNWIRE NUTRITION AND RUNNING FROM WEB — Kd ruling 2026-08-24
+      (DECISIONS :16812). A MOVE TO THE PHONE APP, NOT A DELETION.**
+      Kd: *"nutrion and running will not be there in web , but ... we will build
+      the app ... and nutrion and running will be there"*. **The no-removal
+      rule's AUTHORISED path** — ruled against a cited option (he was shown the
+      line counts and that users lose both until `apps/mobile` exists, which it
+      does not).
+      **Measured 2026-08-24:** `pages/Nutrition.jsx` 2,026 + `MacroRings.jsx`
+      194 · `pages/Running.jsx` + `RunPlanner.jsx` 361 + `ActiveRun.jsx` 216 +
+      `components/running/` 4 files = **1,484** · **`apps/mobile` DOES NOT
+      EXIST.**
+      **EXECUTION — the coach precedent verbatim: remove the ROUTE and the
+      import, NOT the nav button.** A hidden button leaves 3,700 lines in the
+      download; a removed route drops them and their exclusive deps
+      (`leaflet`, `react-leaflet`, `leaflet-rotate`). **KEEP THE SOURCE** — it
+      is the working reference for the phone screens, and re-deriving a
+      rotating turn-by-turn view from nothing is strictly worse than porting
+      one that ran.
+      **⚠ THE SERVER SIDE IS NOT TOUCHED AND MUST NOT BE.** `modules/nutrition`
+      and `modules/geo` stay whole — the phone app calls exactly them. **The
+      Gemini swap, the 768px cap, the parity test and every price/quota at
+      :16548 + :16702 ALL STAND.** A chat reading this as "cancel the Gemini
+      card" has misread it.
+      **Park, do NOT tick, the web-side nutrition/running items in this file** —
+      they return with the phone screens (the ~seven parked coach items are the
+      precedent).
+- [ ] 🟡❓ **CHOOSE THE MAP RENDERER AND TILE SOURCE — ANSWERED, NOT CHOSEN, AND
+      IT IS NOW A PHONE-APP DECISION, NOT A WEB ONE (DECISIONS :16702, moved by
+      :16812).** **Nothing is blocked today** — the only map surface was the web
+      running screens, which are leaving. **Read before wiring any map.**
+      **⚠ LIVE RISK IN THE CODE THAT IS ABOUT TO BE UNWIRED, recorded because
+      the phone app will copy-paste it:** `NavigationMap.jsx:173` and
+      `RouteMap.jsx:79` point at `https://{s}.tile.openstreetmap.org/...` —
+      **the OSM Foundation's CHARITY tile server.** Its policy
+      (`operations.osmfoundation.org/policies/tiles/`, read 2026-08-24) gives
+      **no SLA**, warns that **"commercial services ... should be especially
+      aware that access may be withdrawn at any point"**, and states traffic
+      using default User-Agents **"will be blocked"** — which a browser app
+      cannot set. **A paid product was leaning on a volunteer project and
+      nobody had written it down.**
+      **KD DOUBTED THE FREE ANSWER ("will it give good result i dont think
+      so"). HE IS HALF RIGHT AND THE HALVES MUST NOT BE COLLAPSED:**
+      · **WRONG on map DATA — Strava's data IS OpenStreetMap** (support.strava.com);
+        Mapbox is paid to HOST and RENDER it, not for better data.
+      · **WRONG on the renderer — MapLibre GL JS is Mapbox GL forked at the
+        point Mapbox closed it.** Same engine, same 3D terrain API. **The 3D
+        recap belongs to the RENDERER, which is why it costs nothing.**
+      · **RIGHT on ADDRESS SEARCH** — free geocoders are genuinely weaker for
+        Indian addresses and business names. **But the app already runs
+        LocationIQ + Nominatim fallback** (`LocationAutocomplete.jsx:24,39`),
+        never Google — so "go free" is not the change on the table; improving
+        search is a separate and legitimately PAID later decision.
+      · **RIGHT to distrust an unbacked host** — OpenFreeMap's public instance
+        has no SLA; self-hosted PMTiles on the R2 in v1 §19 is the answer.
+      **A PRIOR CHAT RECOMMENDED GOOGLE MAPS AND IT IS NOT IN THE RECORD** —
+      grep-verified across DECISIONS/INDEX/OWED; Kd confirms that chat was
+      abruptly closed. **Never a ruling, reasoning unavailable (S1: hearsay).**
+      On cost it is the dearest of the three: **Google $7/1,000 map views
+      (10,000 free/mo) · Mapbox ~$5 (50,000 free, MAU-billed on mobile) ·
+      MapLibre+OpenFreeMap $0.** If that chat had a non-cost reason, it is worth
+      hearing before this is settled.
       **What Strava actually does, since that is what Kd is comparing against:**
       it renders with **MAPBOX** over OpenStreetMap data plus its own
       heat/popularity layer, and **the 3D route recap he likes is Mapbox 3D

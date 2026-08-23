@@ -16808,3 +16808,115 @@ cost figures stand — **note the 20-gym month's cost is unaffected by this
 correction, because the trial was always what those gyms were getting.**
 Still not inferable from anything here: whether badges and progress move behind
 the consumer trial.
+
+## NUTRITION AND RUNNING LEAVE THE WEB AND BECOME PHONE FEATURES — and the map choice leaves with them (2026-08-24)
+
+**Read before touching `pages/Nutrition.jsx`, `pages/Running.jsx`,
+`pages/RunPlanner.jsx`, `pages/ActiveRun.jsx`, `components/running/*`,
+`components/nutrition/*`, or before wiring ANY map anywhere.**
+
+### THE RULING
+
+Kd: *"nutrion and running will not be there in web , but men we will build the
+app we are going there bit by bit and nutrion and running will be there"*.
+
+**Both features come OFF the web and live in the phone app.** They are not
+cancelled — he said so in the same breath, and the distinction is the whole
+entry: **this is a MOVE, not a deletion.**
+
+**THIS IS THE NO-REMOVAL RULE'S AUTHORISED PATH, not a breach** — an explicit
+Kd ruling made against a cited option (he was shown the built line counts, the
+fact that `apps/mobile` does not exist, and the consequence that users lose both
+features until it does; he ruled anyway). Same shape as the chat coach at
+:9604 §5.
+
+**THE CHAT ASKED INSTEAD OF GUESSING, AND SHOULD HAVE.** His sentence admitted
+three readings — off-web-onto-phone · no such features at all · web-only
+product — which differ by the entire nutrition and running roadmap. :16702's
+correction had just established that a chat resolving an ambiguity on its own
+and writing the result into the RULED column is a protocol failure. It was put
+back to him and he answered in one line. **That is the guard working.**
+
+### WHAT ACTUALLY MOVES, MEASURED (V1)
+
+| Surface | Lines | Fate |
+|---|---|---|
+| `pages/Nutrition.jsx` + `components/nutrition/MacroRings.jsx` | 2,026 + 194 | off web |
+| `pages/Running.jsx`, `RunPlanner.jsx`, `ActiveRun.jsx`, `components/running/*` (4 files incl. `NavigationMap`, `RouteMap`) | 1,484 total | off web |
+| **`apps/mobile`** | **does not exist** | the destination, unbuilt |
+
+**THE SERVER SIDE IS UNTOUCHED AND THIS IS THE POINT A LATER CHAT WILL MISS.**
+Nothing in `apps/api/src/modules/nutrition` or `.../geo` is affected. The
+Gemini swap, the 768px cap, the parity test, the food table, the portion
+resolver, the ORS adapter, the geocode cache, every price and quota ruled at
+:16548/:16702 — **all of it stands, because the phone app calls exactly those
+endpoints.** None of the cost work is wasted. **A chat that reads "nutrition
+leaves web" as "cancel the Gemini card" has misread this entry.**
+
+### RECOMMENDED EXECUTION — unwire, do not delete
+
+Follow the coach precedent verbatim (`OWED.md`, "The AI chat coach — switched
+OFF by Kd ruling"): **remove the ROUTE and the import, not the nav button.**
+Hiding a button leaves 3,700 lines in the download; removing the route drops
+them and their exclusive dependencies (`leaflet`, `react-leaflet`,
+`leaflet-rotate`) automatically. **Keep the source** — it is the working
+reference for building the phone screens, and re-deriving a rotating
+turn-by-turn view from nothing is strictly worse than porting one that ran.
+
+### THE MAP DECISION MOVES TO THE PHONE APP — nothing is blocked today
+
+Kd asked what Strava uses, doubted the free answer, and said a previous chat
+had recommended Google Maps. All three are addressed and **none of it needs
+ruling now**, because the only map surface was the web running screens that are
+leaving.
+
+**THE PRIOR GOOGLE RECOMMENDATION IS NOT IN THE RECORD.**
+`grep -niE "google map|maps platform|mapbox|leaflet|tile"` over DECISIONS.md,
+DECISIONS-INDEX.md and OWED.md returns no such recommendation — Kd confirms
+that chat **was abruptly closed**, which is how it was lost. **It was therefore
+never a ruling and its reasoning is unavailable** (S1: another chat's output is
+hearsay, not a source). Measured against the published books, cost was not the
+reason it could have been right:
+
+| Option | Per 1,000 map views | Free/month | Source, read 2026-08-24 |
+|---|---|---|---|
+| **Google Maps Dynamic Maps** | **$7** | 10,000 | `developers.google.com/maps/billing-and-pricing` |
+| Mapbox (Strava's) | ~$5 web; MAU-billed on mobile (25k free) | 50,000 | `mapbox.com/pricing` |
+| MapLibre + OpenFreeMap | **$0** | uncapped | maplibre / openfreemap |
+
+**KD'S DOUBT — "will it give good result i dont think so" — IS HALF RIGHT, AND
+THE HALVES MUST NOT BE COLLAPSED.**
+
+- **WRONG about map DATA, and Strava is the proof: Strava's map data IS
+  OpenStreetMap** (`support.strava.com` "About Strava Maps"). It pays Mapbox to
+  HOST and RENDER that data, not for better data. A running app drawing a line
+  over streets is the exact case OSM data serves well.
+- **WRONG about the renderer: MapLibre GL JS is not a cheap imitation** — it is
+  Mapbox GL forked at the point Mapbox closed the source. Same engine, same 3D
+  terrain API. **The 3D recap belongs to the renderer, which is why it is free.**
+- **RIGHT about ADDRESS SEARCH.** Typing "Jorhat railway station" is where free
+  geocoders are genuinely weaker than Google, especially for Indian addresses
+  and business names. **Noted rather than assumed: the app already runs on
+  LocationIQ with a Nominatim fallback** (`LocationAutocomplete.jsx:24,39`) —
+  it was never on Google, so "switch to free" is not the change; improving
+  search is a separate, later, and legitimately paid decision.
+- **RIGHT to distrust an unbacked free host.** OpenFreeMap's public instance
+  carries no SLA. Self-hosting PMTiles on the R2 already in v1 §19 is the
+  answer if that matters.
+
+### A LIVE RISK IN SHIPPED CODE, FOUND WHILE ANSWERING AND RECORDED BEFORE IT IS MOOT
+
+`NavigationMap.jsx:173` and `RouteMap.jsx:79` point at
+`https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png` — **the OSM Foundation's
+charity tile server.** Its usage policy (`operations.osmfoundation.org/policies/tiles/`,
+read 2026-08-24) states there is **no SLA**, that **"commercial services ...
+should be especially aware that access may be withdrawn at any point"**, that a
+clear identifying User-Agent is required and **"traffic that uses these defaults
+will be blocked"** — which a browser app cannot set. **A paid product was
+relying on a volunteer project's goodwill and nobody had written that down.**
+Made moot on web by this ruling; **it binds the phone app, where the same URL
+would be an easy copy-paste.**
+
+### NOTHING BUILT
+
+No code changed. `apps/mobile` still does not exist. The unwiring is owed.
