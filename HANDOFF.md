@@ -10392,3 +10392,55 @@ NEXT
      the 🟡 migration-lag line (boot-time refusal recommended).
   4. Then card C: custom role names.
 ```
+
+```
+TASK: THE CONSOLE-REFRESH SMOKE — PASSED 4/4, Kd, on `e8a7e5c`. No code changed;
+      this commit is the record. DECISIONS :16495. **ONE of the ⚪ line's two
+      gates is met; T3 is UNRUN and the line does NOT tick.**
+
+WHAT A PERSON ACTUALLY WATCHED, and it is the thing every earlier gate missed
+  · **A permission ticked ON reached a control in a SECOND window with NO F5.**
+    The tick-boxes card could only observe that direction AFTER a reload
+    (:16221's re-smoke has the reload written into the step); this is the card
+    that removes the reload, and it has now been seen working by a human rather
+    than by tests and mutants.
+  · **Step 3 is why steps 1 and 2 mean anything** — a reload afterwards showed
+    the SAME screen, so "the buttons changed" is not the screen guessing.
+  · **Step 4 answers the question Kd asked before approving the card** ("will
+    this make things slow and bad?"): no spinner, no blank, no error card on
+    repeated switching, and moving between the three console screens is
+    instant.
+
+TWO THINGS THE PASS DOES NOT COVER — SAY SO RATHER THAN LET IT READ AS FOUR
+  · **A background re-check that FAILS leaving the screen alone.** Needs the
+    request blocked in devtools (the nutrition re-smoke's instrument); carried
+    by a test and mutant C45 alone.
+  · **THE SHARED-BROWSER STAMP, AND THE SHEET CANNOT EXERCISE IT AS WRITTEN.**
+    A normal window and an incognito window are two cookie jars, so no account
+    is ever swapped inside ONE window — which is exactly what the stamp exists
+    for. :16095's step-7 shape, except absent rather than misleading. **Own 🟡
+    `OWED.md` line**, one step, belongs with the next run of that sheet
+    (:5348 rule 6 — not written into a sheet inside the smoke's own commit).
+
+METHOD NOTES A LATER CHAT SHOULD REUSE
+  · **Tree verified byte-identical to `e8a7e5c` before AND after** (`git status`
+    empty both times), so the pass is about committed bytes (:15187's weakness
+    designed out).
+  · Servers started BY THE CHAT; `/health` answered 200 before he was sent in,
+    which is the cheap check that the dev database is reachable — the gap that
+    cost a day at :15927 was a database a migration behind, invisible until a
+    screen inside a gym failed.
+  · Steps were handed to him IN THE ORDER HIS FIXTURE ALLOWS: the helper is a
+    TRAINER, who has no Remove button to take away until one is given, so the
+    tick goes ON first. The sheet says this; a runner reading only the sheet's
+    numbering would have hit :16095's four-wrong-steps problem.
+
+NEXT
+  1. **T3 round 1 — the last gate.** Prompt at `t3-console-refresh-r1-PROMPT.md`
+     with `t3-console-refresh-r1.diff` (both gitignored). A passing smoke is not
+     a review (:14147).
+  2. Then the ⚪ line ticks if the round is clean.
+  3. Then the 🟡 tick-boxes-sheet line (missing TRAINER step) and the 🟡
+     migration-lag line (boot-time refusal recommended).
+  4. Then card C: custom role names.
+```

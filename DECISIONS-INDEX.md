@@ -809,6 +809,28 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:16495** — 2026-08-23 — **THE CONSOLE-REFRESH SMOKE PASSES 4/4 — and the
+  direction nothing had ever seen without a reload was seen by a PERSON.** Kd's
+  REPORT (:4829) on `e8a7e5c` (:16331), his own gym, **tree verified
+  byte-identical before and after** (`git status` empty both times). **Read
+  before citing that card as verified, before quoting this pass as covering a
+  FAILED re-check or a SHARED browser, and before writing a smoke step that
+  swaps accounts in an incognito window.** **Step 1 is the headline: a permission
+  ticked ON reached a control in a SECOND window with no F5** — the direction
+  :16221's re-smoke could only see AFTER a reload, which is the reload this card
+  removes. **Step 3 is what makes 1 and 2 mean anything** (a reload afterwards
+  showed the SAME screen, so the change was not the screen guessing), and **step
+  4 answers the question Kd asked before approving — no spinner, no blank, no
+  error card** on repeated switching. **NOT ESTABLISHED, and the second is a hole
+  in the SHEET rather than the card: a failed background re-check leaving the
+  screen alone** (needs devtools blocking; carried by mutant C45 alone) **and THE
+  SHARED-BROWSER STAMP, which this sheet cannot exercise as written** — an
+  incognito window and a normal window are two cookie jars, so no account is ever
+  swapped inside ONE window, which is the situation the stamp exists for;
+  :16095's step-7 shape (a step whose fixture cannot produce the state it claims
+  to check), fix is one step and belongs with the next run. **NOTHING TICKS: one
+  of the ⚪ line's two gates is met and T3 is UNRUN** — a passing smoke is not a
+  review (:14147).
 - **:16331** — 2026-08-23 — **THE CONSOLE STOPS NEEDING F5: one kept answer to
   "what may I do here?", shared by every console screen and re-checked when the
   window comes back — and the card's own first build LOOPED FOR EVER.** Builds

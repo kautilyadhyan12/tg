@@ -6,7 +6,42 @@ window — you do not have to press F5 any more.
 
 **4 steps, about 5 minutes.**
 
-## RESULT — NOT YET RUN
+## RESULT — PASSED 4/4 (Kd, 2026-08-23, commit `e8a7e5c`)
+
+Run in Kd's own browser against his own gym on the shared dev database, both
+servers started by the chat. **The working tree was verified byte-identical to
+`e8a7e5c` before the run and after it** (`git status` empty both times), so this
+pass is about the bytes that are committed.
+
+Two windows — his normal window as the owner, an incognito window as the helper
+(the trainer `user2` from the tick-boxes smoke). He ran the steps in the order
+below: the box was ticked ON first, because a trainer has no Remove button to
+take away until one is given.
+
+**WHAT THIS PASS ESTABLISHES**
+
+- **Step 1 is the headline and it is the direction nothing had ever observed
+  without a reload:** a permission ticked ON reached a control in a SECOND
+  window, with no F5. The tick-boxes card needed a reload to see that
+  (DECISIONS :16221's re-smoke) and this is what removes the reload.
+- **Step 2 is the other direction** — the power taken away, the control gone,
+  and the member list underneath it untouched.
+- **Step 3 is the discriminator** and it is why 1 and 2 mean anything: what the
+  screen showed after the re-check is what a reload shows. Without it, "the
+  buttons changed" could have been the screen guessing.
+- **Step 4 is the "is it worse?" check Kd asked for before approving the card:**
+  clicking in and out repeatedly, and moving between the three console screens,
+  produced no spinner, no blank and no error card.
+
+**WHAT IT DOES NOT ESTABLISH, stated rather than glossed**
+
+- **A re-check that FAILS** leaving the screen alone — that needs the request
+  blocked in devtools, which this sheet does not ask for. Carried by a test and
+  by mutant C45 only.
+- **The shared-browser stamp.** An incognito window and a normal window are two
+  separate logins in two separate cookie jars, so no account was ever swapped
+  inside ONE window. Carried by a test and by mutant C46 only.
+- **A gym leaving your list while the tab sits open.** Same — test and mutants.
 
 ---
 

@@ -16491,3 +16491,56 @@ outstanding: the browser **SMOKE** (`RUNBOOK/smoke-console-refresh.md`, 4 steps,
 written, UNRUN) and **T3** (UNRUN). **The smoke's step 2 is the one it rests
 on** — a permission GIVEN appearing in a second window with no reload, which is
 the direction a screen that merely stopped drawing things would pass without.
+
+## THE CONSOLE-REFRESH SMOKE PASSES 4/4 — and the direction nothing had ever seen without a reload was seen by a person (2026-08-23)
+
+Kd's **REPORT** (:4829) on `e8a7e5c` (:16331), his own gym on the shared dev
+database, both servers started by the chat. **"all passed."** **Read before
+citing this card as verified, before quoting this pass as covering a failed
+re-check or a shared browser, and before writing a smoke step that swaps
+accounts in an incognito window.**
+
+**Tree verified byte-identical to `e8a7e5c` before the run and after it** —
+`git status` empty both times — so the pass is about the committed bytes, not
+about a working tree that happened to be lying around (:15187's weakness designed
+out rather than repeated).
+
+### WHAT THE PASS IS LOAD-BEARING FOR
+
+- **Step 1 is the headline: a permission ticked ON reached a control in a SECOND
+  window with NO RELOAD.** That is the direction the tick-boxes card could only
+  observe *after* an F5 (:16221's re-smoke, where the reload is written into the
+  step), and removing that reload is the whole point of this card. A human has
+  now watched it.
+- **Step 2 is the other direction**, and the member list underneath the vanished
+  controls was unchanged — the card must take away one control, not the screen.
+- **Step 3 is what makes 1 and 2 mean anything.** After the re-check, a reload
+  showed the SAME screen. Without that step "the buttons changed" would be
+  consistent with the screen guessing; with it, what the screen showed is what
+  the server thinks.
+- **Step 4 answers the question Kd asked before approving the card — "will this
+  make things slow and bad?"** Clicking in and out repeatedly and moving between
+  the three console screens produced no spinner, no blank and no error card.
+
+### WHAT IT DOES NOT ESTABLISH, AND THE SECOND ONE IS A REAL GAP IN THE SHEET
+
+- **A background re-check that FAILS leaving the screen alone** — that needs the
+  request blocked in devtools (the nutrition re-smoke's own instrument,
+  2026-07-21), which this sheet does not ask for. Carried by a test and mutant
+  C45.
+- **THE SHARED-BROWSER STAMP WAS NOT EXERCISED AND THE SHEET CANNOT EXERCISE IT
+  AS WRITTEN.** An incognito window and a normal window are two cookie jars, so
+  no account was ever swapped inside ONE window — which is exactly the situation
+  the stamp exists for (a gym's front desk). Carried by a test and mutant C46
+  only. **Not a defect in the card; a hole in the sheet**, and it is the same
+  shape as :16095's step 7 (a step whose fixture cannot produce the state it
+  claims to check). Its fix is one step — sign out in the normal window, sign in
+  as the helper, confirm the gym list is theirs and not the owner's — and it
+  belongs with the next run rather than inside a passed one.
+- **A gym leaving your list while the tab sits open** — test and mutant only.
+
+### NOTHING TICKS YET
+
+`OWED.md`'s ⚪ line has **one of its two gates met**. **T3 is UNRUN** and is the
+remaining gate; the prompt and the diff are written (`t3-console-refresh-r1-*`,
+gitignored). A passing smoke is not a review (:14147).

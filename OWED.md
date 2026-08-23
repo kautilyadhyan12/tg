@@ -4820,14 +4820,37 @@ file and is stated so nobody reads these as lower priority than they are.
       **BUILT 2026-08-23 AND DELIBERATELY NOT TICKED — DECISIONS :16331.** Kd
       approved the card and it is written: one kept answer in
       `pages/console/consoleOrgs.js`, read by every console screen and by the
-      shell around them, re-checked on `focus` AND `visibilitychange`. **The two
-      gates this line ticks on are the ones this branch most often ticks over
-      (:5034, :4718 F4): the browser SMOKE (`RUNBOOK/smoke-console-refresh.md`,
-      4 steps, UNRUN) and T3 (UNRUN).** What is already measured is in the
-      DECISIONS entry; what a person has not yet watched is a control appearing
-      in a SECOND window without a reload, which is the whole claim.
+      shell around them, re-checked on `focus` AND `visibilitychange`.
+      **THE SMOKE PASSED 4/4 on `e8a7e5c` (Kd, 2026-08-23, DECISIONS :16495) —
+      so ONE of the two gates is met and the whole claim has now been WATCHED:
+      a permission ticked ON reached a control in a SECOND window with no F5.**
+      **T3 IS THE REMAINING GATE and it is UNRUN** (prompt and diff written,
+      `t3-console-refresh-r1-*`, gitignored). A passing smoke is not a review
+      (:14147), and this branch's most repeated bookkeeping defect is ticking on
+      less than the full gate (:5034, :4718 F4).
+      **TWO THINGS THE PASS DOES NOT COVER, carried by tests and mutants alone:**
+      a background re-check that FAILS leaving the screen alone (C45), and **the
+      shared-browser stamp (C46), which that sheet CANNOT exercise as written** —
+      an incognito window and a normal window are two cookie jars, so no account
+      is swapped inside one window. One extra step fixes it, owed with the next
+      run of that sheet.
       **Read the entry before re-reading the rest of this line — the paragraphs
       below describe the defect as it stood, not as the code stands.**
+- [ ] 🟡 **THE CONSOLE-REFRESH SMOKE CANNOT EXERCISE THE ONE GUARANTEE ABOUT
+      OTHER PEOPLE'S DATA, AND IT PASSED WITHOUT NOTICING** (2026-08-23,
+      DECISIONS :16495). **Read before running or editing
+      `RUNBOOK/smoke-console-refresh.md`.** The sheet asks for a normal window
+      and an INCOGNITO window, which are two cookie jars — so no account is ever
+      swapped inside ONE window, and **the kept answer's user stamp, the thing
+      that stops a gym's shared front-desk browser handing the next person the
+      last one's gyms, is never touched by any step.** The 4/4 pass is TRUE and
+      is not evidence about that. **Same shape as the tick-boxes sheet's step 7
+      (:16095): a step whose fixture cannot produce the state it claims to
+      check** — except here the step is absent rather than misleading. Fix is one
+      step: in the normal window sign OUT and sign in as the helper, then confirm
+      the console lists THEIR gyms and powers, not the owner's. Carried today by
+      a test and mutant C46 alone. Not written into the sheet inside the smoke's
+      own commit (:5348 rule 6); it belongs with the next run.
       **Not a security defect and that half is verified:** OWASP's rule is that
       the server decides every request and that hiding is never the lock, and
       `requirePrivilege` does exactly that on every gym-scoped route — a stale tab
