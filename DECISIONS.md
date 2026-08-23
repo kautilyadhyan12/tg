@@ -16091,3 +16091,123 @@ which is the evidence that re-checking on focus is the ordinary answer rather th
 a nicety; we hand-rolled the hook and inherited no such default. **Kd pushed back
 on "leave it" and was right to** — own ⚪ `OWED.md` line, its own card, straight
 after the fix round.
+
+## THE TICK BOXES, T3 ROUND 1: ONE CRITICAL/HIGH — a power ticked ON for a trainer reached no control, because the console asked the job title while the server asked the tick (2026-08-23)
+
+Reviews `245632d` (:15770); the smoke that preceded it is :15927. **The packet did
+NOT ship this round.** Findings listed and **approved by Kd before a byte was
+written** (:5348). **Escape hatch NOT armed** — :15673 found zero, and this round's
+Critical/High is in the web console's gating rather than `modules/orgs`.
+
+**Read before writing any screen that decides what a person may do, before adding
+a field to `/v1/orgs/mine`, before enum-validating anything a NEWER server can
+send, and before believing a browser check taken on a tab that has been open a
+while.**
+
+### C/H-1 — THE SEAM NEVER REACHED THE CLIENT, AND THIS CARD IS WHAT MADE THAT MATTER
+
+`canManageCodes` and `canRemoveMembers` both read `role === 'owner' || role ===
+'manager'`. The server gates the same four code routes on `codes.manage` and
+removal on `members.remove`. **Those were the same answer for exactly as long as
+nothing could grant a tick — and granting ticks is what :15770 built.** So an
+owner ticking *Change join codes* onto a trainer stored it, the server would have
+allowed it, and no button was drawn anywhere. Same for *Remove members*.
+
+**THE ROOT IS NOT THE TWO FUNCTIONS, IT IS THAT THE CONSOLE WAS NEVER TOLD.**
+`myOrgSchema` carried `staffRole` and no `privileges`, so the client had no source
+for the caller's own set and could not have asked the right question. That is why
+the fix crosses `@app/shared` + `apps/api` + `apps/web` rather than being the
+one-line change it looks like: `/v1/orgs/mine` now returns the caller's effective
+set, computed by **the same `privilegesFor` `requirePrivilege` uses**, so the
+answer a screen draws and the answer the door enforces come out of one function.
+
+Decisions not to re-derive: **`staffRole` STAYS** (it is what a screen SHOWS a
+person, and the role button still writes it) — what changes is that no screen may
+DECIDE on it · **absent means the api is older and the client falls back to the
+ROLE's defaults**, never to "no powers", which would strip a real manager's
+controls the moment the web deployed first · **an EMPTY array is a real answer**
+and is not fallback-eligible, or an owner who narrows somebody to nothing hands it
+all straight back · **a non-staff caller gets `[]`, not the absent field** ·
+**hiding is still not the enforcement** (R3.3) — the 403 is where it always was,
+and what changed is that the screen stops hiding a control it has been TOLD about.
+
+**:13920's ruling is NOT re-litigated. Its stated basis stopped being true.** "A
+trainer sees the code and none of the controls… this stops the console drawing a
+control it KNOWS will be refused" was correct when written; the console no longer
+knows.
+
+### THE SMOKE PASSED 10/10 AND COULD NOT HAVE CAUGHT THIS
+
+Step 7's ✅ reads "the helper can now use the join-code controls… that they could
+not before" — **unachievable for a trainer by construction**, and the run used a
+MANAGER, who already holds both powers, so step 7 was taken in the parenthetical
+UNTICK direction. **10/10 is true and is not evidence about widening.** A step
+that ticks a power ON for a TRAINER is owed on the sheet — its own `OWED.md` line.
+
+### KD'S BROWSER SAID THE OPPOSITE AND BOTH WERE RIGHT — THE NEAR-MISS IS THE PART TO CARRY
+
+Told the finding, Kd tested it and reported that his trainer COULD pause and
+change a code. **Taken at face value that closes a real Critical/High.** Each
+console page mounts its OWN `useConsoleOrg`, keyed `[orgSlug, attempt]`, so the
+viewer's role is re-read when a SCREEN MOUNTS and never after; his Overview tab
+had been open since that account was a Manager, so it still drew the panel — **and
+the pause then SUCCEEDED, because the tick genuinely granted it**. Members,
+freshly mounted, correctly showed no Remove: one sitting, two correct answers, and
+the wrong conclusion available from either alone. **He reloaded and the controls
+were gone.**
+
+**Standing lesson: a browser check on a stale tab is not a measurement, and this
+one pointed the flattering way** (:11846). The staleness itself is PRE-EXISTING,
+OWASP-clean (the server decides every request), **and below the industry norm
+nonetheless — `refetchOnWindowFocus: true` is a TanStack Query DEFAULT, which is
+the evidence that re-checking on focus is ordinary rather than a nicety. Kd pushed
+back on "leave it" and was right.** Own ⚪ line, its own card, NOT this round
+(:5348 rule 6).
+
+### THREE LOW, ALL FIXED, ALL IN `BACKLOG.md` — and L-1 is a latent HIGH
+
+The enum on the READ schemas made the card's own unknown-tick carry-through
+unreachable AND would have killed every owner's Staff screen the day a seventh
+privilege shipped api-first. Lenient in, strict out. Details and the other two in
+`BACKLOG.md`.
+
+### PROVE — ALL ON THE FINAL BYTES
+
+- **web 1127/1127 exit 0** (+19) · `vite build` exit 0 · eslint **exit 0 at
+  `--max-warnings=0`** on all ten changed web files.
+- **`orgs.routes` 104/104 exit 0** and **`db.migration` 8/8 exit 0**, both on the
+  LOCAL Postgres and both re-run AFTER the last source edit · **shared 51/51**
+  (+3) · `tsc --noEmit` clean on api and shared · harness guard **23 scripts
+  parse**.
+- **WEB SWEEP, WHOLE TABLE: 64 mutants · 64 RED · 0 ALIVE · 0 never ran, exit 0**,
+  all controls GREEN through the same path first, restores sha256-verified after
+  every mutant, and the tree checked afterwards rather than taken on the tool's
+  word. Five rows are new — **C22 re-anchored AND re-aimed** (its old mutation
+  widened a role list; the sharp one now is reading `codes.invite` instead of
+  `codes.manage`, one line away in §2.2 and held by every trainer), **C39/C40 are
+  the Critical itself at both doors**, **C41/C42 pin empty-vs-absent**.
+- **API SWEEP a stated SUBSET, 2 of 105 — O105 (new) and O101 (its sibling at the
+  staff list) — 2 RED · 0 ALIVE · 0 never ran, exit 0.** O105 exists because
+  :15770's own lesson is that **a mutant is a claim about ONE call site**: O101
+  guarded the staff LIST and the `/orgs/mine` reader had none, which is how the
+  console came to have no source for the caller's own set at all.
+- **Rule 3 measured, not asserted, for all four fixes** — each watched RED under
+  its own defect and GREEN restored, with sources sha256-verified back.
+
+### FOUR INSTRUMENT FAILURES, THREE OF THEM MINE, ALL IN `BACKLOG.md`
+
+The one to carry: **I masked a sweep's exit code with `| head -14` — :15770's
+finding 1, third recorded occurrence, made a fourth time in the session that read
+it.** The harness was killed mid-run, no verdict existed, and the `exit 0` belonged
+to `head`. Also: my tree-checker raised two false alarms on backtick anchors (safe
+direction, run down by hand); **I declared the api harness broken and it is not —
+the database had gone down, which produces the identical symptom, and a diagnosis
+is a claim that takes V1's evidence like any other**; and I ran a seed-asserting
+suite against a database a sweep was using, got one red, and re-measured it alone
+at 8/8 rather than quote it.
+
+### NOTHING TICKS
+
+`OWED.md`'s ticks line stays open: **the remaining gate is the DIFF-ONLY
+RE-REVIEW** (:5348 rule 2). Two new lines — the smoke's missing widening step, and
+the stale-tab refresh.

@@ -444,7 +444,7 @@ function CodeRow({ code, busy, onPause, onWake, onRotate, onSaveLimits, onRemove
   );
 }
 
-export default function JoinCodesPanel({ gymId, codes, staffRole, onChanged }) {
+export default function JoinCodesPanel({ gymId, codes, privileges, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -452,7 +452,7 @@ export default function JoinCodesPanel({ gymId, codes, staffRole, onChanged }) {
   const [limit, setLimit] = useState('');
   const [fieldError, setFieldError] = useState(null);
 
-  if (!canManageCodes(staffRole)) return null;
+  if (!canManageCodes(privileges)) return null;
 
   const list = sortedCodes(codes);
   const full = atCodeLimit(codes);

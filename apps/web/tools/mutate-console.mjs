@@ -305,13 +305,61 @@ const MUTANTS = [
   // refuse, a DATE a user sees that is wrong, and a change that silently
   // destroys a setting the owner never saw.
   {
+    // RE-ANCHORED AND RE-AIMED, T3 round 1 C/H-1. Both halves moved (:11846):
+    // the gate no longer reads a role, and the test that names the guarantee was
+    // renamed with it. The OLD mutant widened the role list; the sharp mutation
+    // now is reading the WRONG TICK — `codes.invite` is one line away in §2.2,
+    // every trainer holds it, and swapping them hands the whole default roster
+    // the controls while looking entirely reasonable in the diff.
     id: 'C22',
     target: 'codesview',
     suite: CODES_VIEW_SUITE,
-    why: 'PRIVILEGE ON SCREEN: a trainer is drawn the code controls the server answers 403 to — the console offering a person a control it knows they will be told off for',
-    expect: 'grants owner and manager and refuses everyone else',
-    from: "  return staffRole === 'owner' || staffRole === 'manager';",
-    to: "  return staffRole !== 'trainer';",
+    why: 'PRIVILEGE ON SCREEN: the gate reads `codes.invite` instead of `codes.manage`, so every DEFAULT trainer is drawn code controls the server answers 403 to — the console offering a person a control it knows they will be told off for',
+    expect: 'still refuses the default trainer, who holds Invite and not management',
+    from: "  return Array.isArray(privileges) && privileges.includes('codes.manage');",
+    to: "  return Array.isArray(privileges) && privileges.includes('codes.invite');",
+  },
+  {
+    // THE OTHER DIRECTION, and it is the defect the round was actually convened
+    // for. C22 catches the gate opening too WIDE; nothing caught it staying shut
+    // over a tick that was granted — which is what shipped.
+    id: 'C39',
+    target: 'codesview',
+    suite: CODES_VIEW_SUITE,
+    why: 'THE ROUND-1 CRITICAL ITSELF: the gate goes back to asking the job title, so an owner who ticks `codes.manage` onto a trainer buys them a power with no button anywhere — stored, allowed by the server, and invisible',
+    expect: 'asks for the POWER, so a trainer who was GIVEN it is allowed',
+    from: "  return Array.isArray(privileges) && privileges.includes('codes.manage');",
+    to: "  return privileges === 'owner' || privileges === 'manager';",
+  },
+  {
+    id: 'C40',
+    target: 'view',
+    suite: VIEW_SUITE,
+    why: 'THE SAME CRITICAL AT THE OTHER DOOR: Remove goes back to the job title, so `members.remove` ticked onto a trainer reaches no button — its sibling had no direct test at all before this round, which is how one of the two was missed',
+    expect: 'asks for the POWER, so a trainer who was GIVEN it is allowed',
+    from: "  return Array.isArray(privileges) && privileges.includes('members.remove');",
+    to: "  return privileges === 'owner' || privileges === 'manager';",
+  },
+  {
+    // THE DEPLOY WINDOW. Absent and empty are DIFFERENT answers and this is the
+    // only thing that says so: fall back on an empty array and an owner who has
+    // just narrowed somebody to nothing hands it all straight back.
+    id: 'C41',
+    target: 'view',
+    suite: VIEW_SUITE,
+    why: 'A DELIBERATE SET IS OVERRULED: an EMPTY privileges array is treated as "ask the role", so a person an owner narrowed to nothing gets their whole role template back — the one direction a permissions screen must never move on its own',
+    expect: 'treats an EMPTY array as a real answer',
+    from: '  if (Array.isArray(org?.privileges)) return org.privileges;',
+    to: '  if (Array.isArray(org?.privileges) && org.privileges.length > 0) return org.privileges;',
+  },
+  {
+    id: 'C42',
+    target: 'view',
+    suite: VIEW_SUITE,
+    why: 'THE WEB-NEWER-THAN-API WINDOW: an ABSENT privileges field falls back to NOTHING instead of the role, so the moment the web deploys ahead of the api every real manager loses their controls — the failure `.optional()` exists to prevent, arriving through the fallback instead of the parser',
+    expect: 'falls back to the ROLE when the field is absent',
+    from: '  return ROLE_PRIVILEGES[org?.staffRole] ?? [];',
+    to: '  return [];',
   },
   {
     id: 'C23',

@@ -1232,6 +1232,19 @@ const MUTANTS = [
     to: '    privileges: [...privilegesFor(row.role, null)],',
     expect: 'an owner can give one trainer the power to let people in',
   },
+  {
+    // T3 ROUND 1 C/H-1, THE SERVER HALF. Its sibling O101 is the SAME mistake at
+    // the staff LIST, and writing this row is the point :15770 made about
+    // siblings: a mutant is a claim about ONE call site, and the /orgs/mine
+    // reader had none, which is how the console came to have no source for the
+    // caller's own set in the first place.
+    id: 'O105',
+    target: 'service',
+    why: "THE ROUND-1 CRITICAL AT ITS ROOT: `/v1/orgs/mine` serves the ROLE's template instead of the caller's stored set, so a trainer an owner ticked `codes.manage` onto reads back the plain trainer defaults — the console then gates its controls on a set the server does not enforce, and the tick reaches no button anywhere. The screen and the door answering differently about the SAME person",
+    from: '      privileges: r.staffRole === null ? [] : [...privilegesFor(r.staffRole, r.privileges)],',
+    to: '      privileges: r.staffRole === null ? [] : [...privilegesFor(r.staffRole, null)],',
+    expect: 'tells a caller what they may DO here, not just what they are called',
+  },
 ];
 
 /** ANCHORS ARE CONVERTED TO THE FILE'S OWN LINE ENDINGS, and the file is never

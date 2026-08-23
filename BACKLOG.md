@@ -1762,3 +1762,48 @@ counted as somebody who can still run the gym, and the last owner could walk out
 Added to the last-owner test, inserted directly because no route can produce it
 any more — **which is the point: it is what a row from the previous deploy looks
 like**. O87 re-measured RED.
+
+## THE STAFF SCREEN'S TICK BOXES (web half) — T3 ROUND 1's THREE LOW (2026-08-23)
+
+Reviews `245632d`; the round's Critical/High is in `DECISIONS.md`. All three fixed
+in the round (:5348 rule 1 — a Low buys no further round and is still fixed), and
+**all three carry a test that fails without the fix, which rule 3 does not demand
+of a Low and which is the whole reason this round exists**: round 1's finding was
+guards decided in one file and observed in none.
+
+| # | Finding | Fix |
+|---|---|---|
+| L-1 | **A LATENT HIGH: the "a permission this screen is too old to show" feature could never run, and the window it exists for would have KILLED the screen.** `orgStaffSchema.privileges` validated the whole list against THIS build's enum, so a response naming a privilege a newer api knows failed to parse before any component saw it; `readThrough` turns that into a hard contract failure. Consequences measured, with a positive control: a known-only row parsed, the same row plus `billing.manage` did not. So `unknownPrivileges`, its on-screen sentence and **mutant S18 all guarded a path no response could survive** — and the day a seventh privilege ships api-first, **every owner's Staff screen shows an error instead of their staff**, which is precisely what `.optional()` was chosen to prevent, arriving through the PARSER instead of the network. Tagged Low on :15534 Low-1's precedent (a latent critical unreachable through the product today). | **Lenient IN, strict OUT.** The two READ schemas (`orgStaffSchema`, `myOrgSchema`) take `z.array(z.string())`; the WRITE body keeps the enum, because the server is the authority on its own vocabulary and the database CHECK agrees with it. The SCREEN filters to what it has words for and carries the rest through, which is what it was always written to do. Three tests in `packages/shared`, two through the REAL client parser in `orgsApi.test.js` — **that last pair is what closes rule 4's first item**, since the Staff screen's own tests mock `orgService` and never reach the parser the defect lived in. Both directions measured against the enum restored. |
+| L-2 | **The read-only row said "you" about somebody else.** `readOnly` keyed on `person.role === 'owner'` and drove BOTH editability and the wording, so a SECOND owner reading the first owner's row was told it was their own. `person.isYou` is the server's answer and the row already carried it. Unreachable today — a gym has one owner — and `OWED.md` keeps the second owner live. | Wording moves to `isYou`; **editability stays on the ROLE**, and the test asserts both, or it would pass against a build that let one owner edit another's ticks. |
+| L-3 | **A comment describing the opposite of the code.** It said a manager row holding `staff.manage` "is therefore saved without it — silently narrowed". It was not: `ticked` came from the STORED set, so the box nobody was offered rode into the save and the server answered 409 `owner_only_privilege` — **every save on such a row failed**, which is the opposite of silently narrowing. | The CODE changed to match the comment rather than the comment to match the code: `ticked` is filtered to the boxes the row is actually offered, so the save succeeds and drops the tick. Unknown ticks are still added back — they are the opposite case, since nothing refuses those. |
+
+**THE INSTRUMENT ENTRIES, AND THREE OF THE FOUR ARE MINE.**
+
+1. **I MASKED A SWEEP'S EXIT CODE WITH A PIPE — `| head -14` — WHICH IS
+   :15770's finding 1, THIRD RECORDED OCCURRENCE, MADE A FOURTH TIME IN THE
+   SESSION THAT READ IT.** `head` closed the pipe, the harness was killed
+   mid-run, and the `exit 0` reported belonged to `head`. Ten minutes bought
+   nothing and **no verdict existed**. The tell was the same as every previous
+   time: controls printed, then the summary never came. Re-run with output to a
+   FILE and the exit code written into it by the shell.
+2. **THE KILLED RUN'S TREE WAS CHECKED RATHER THAN ASSUMED** (:15770 finding 2,
+   where a killed run left `code.paused && false` in the source). Nothing
+   survived — but the checker written for it **raised two false alarms**, S4 and
+   S13, because it could not read BACKTICK anchors and mis-paired ids with
+   strings. Both were run down by hand: S4's original is present at
+   `staffView.js:146`, S13's two-line anchor matches exactly once and the file is
+   LF. **It lied toward a FALSE ALARM, which is the safe direction** (:11846).
+3. **I DECLARED THE API HARNESS BROKEN AND IT IS NOT.** Its control aborted with
+   "no test tally", I reproduced a filter losing its quotes through
+   `corepack pnpm --filter api exec`, and I told Kd the harness cannot pass a
+   multi-word `-t`. **The database had gone down**, which produces the identical
+   symptom; with it back, the harness's exact command form returns
+   `1 passed | 103 skipped`. **A diagnosis is a claim and takes V1's evidence
+   like any other** (:13552, applied to my own). Corrected to Kd in the same
+   session, and nothing was changed in the harness on the strength of it.
+4. **I RAN A SEED-ASSERTING SUITE WHILE A SWEEP WAS LIVE against the same
+   database** and got one red in `db.migration.test.ts` — the exact collision
+   `vitest.config.ts` documents (nine files call `seed()`, two assert global
+   counts). :3819's "never run the harness while something else is using the
+   database", one instrument over. Re-run alone: **8/8**. The red was NOT quoted
+   as a result in either direction until it had been re-measured.

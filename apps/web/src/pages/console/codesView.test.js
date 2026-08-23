@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ROLE_PRIVILEGES } from '@app/shared';
 import {
   CODES_MAX,
   atCodeLimit,
@@ -30,16 +31,41 @@ const code = (over = {}) => ({
 
 const NOW = Date.parse('2026-08-21T12:00:00.000Z');
 
+/** T3 round 1 C/H-1 CHANGED THE QUESTION THIS FUNCTION ASKS, so these
+ *  assertions are re-expressed rather than deleted, and the change is named
+ *  rather than slipped past: it used to take a ROLE and now takes the set of
+ *  powers `viewerPrivileges` resolves. The old cases all survive — they were
+ *  really claims about what each role's DEFAULT set contains — and the case the
+ *  old shape could not express at all is the one the round was about. */
 describe('canManageCodes', () => {
-  it('grants owner and manager and refuses everyone else', () => {
-    expect(canManageCodes('owner')).toBe(true);
-    expect(canManageCodes('manager')).toBe(true);
+  it('asks for the POWER, so a trainer who was GIVEN it is allowed', () => {
+    // The case that was unreachable before: §2.2's own row, ticked on for one
+    // person. The server allows it; this is what stopped the screen drawing it.
+    expect(canManageCodes(['members.read', 'codes.invite', 'codes.manage'])).toBe(true);
+  });
+
+  it('still refuses the default trainer, who holds Invite and not management', () => {
     // §2.2 grants a trainer Invite (they see the code) and NOT code management.
-    expect(canManageCodes('trainer')).toBe(false);
+    expect(canManageCodes(['members.read', 'codes.invite'])).toBe(false);
+  });
+
+  it('grants the roles §2.2 always granted, through their default sets', () => {
+    expect(canManageCodes(ROLE_PRIVILEGES.owner)).toBe(true);
+    expect(canManageCodes(ROLE_PRIVILEGES.manager)).toBe(true);
+    expect(canManageCodes(ROLE_PRIVILEGES.trainer)).toBe(false);
+  });
+
+  it('refuses anything that is not a set of powers', () => {
+    expect(canManageCodes([])).toBe(false);
     expect(canManageCodes(null)).toBe(false);
     expect(canManageCodes(undefined)).toBe(false);
-    // An allow-list, so a role invented later is refused rather than admitted.
-    expect(canManageCodes('front_desk')).toBe(false);
+    // It reads a POWER, never a role, so a role name arriving here — which is
+    // what every call site used to pass — is refused rather than mistaken for
+    // one. A caller that was not updated fails closed.
+    expect(canManageCodes('owner')).toBe(false);
+    expect(canManageCodes(['owner'])).toBe(false);
+    // A power invented later is refused until this build has words for it.
+    expect(canManageCodes(['codes.superadmin'])).toBe(false);
   });
 });
 

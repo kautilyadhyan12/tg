@@ -195,6 +195,16 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
     orgs: rows.map((r) => ({
       ...toOrgSummary(r),
       staffRole: r.staffRole,
+      // WHAT THIS CALLER MAY DO HERE, so the console can stop deciding on the
+      // role NAME (T3 round 1 C/H-1). Run through the SAME `privilegesFor` that
+      // `requirePrivilege` uses, so the answer a screen draws and the answer the
+      // door enforces come out of one function — a second interpretation of a
+      // null row is a second definition of what a trainer may do.
+      //
+      // A caller who staffs nothing gets `[]`, not the absent field: absent means
+      // "this api is too old to say" and the client falls back to the role's
+      // defaults, which for a non-staff member would be nonsense.
+      privileges: r.staffRole === null ? [] : [...privilegesFor(r.staffRole, r.privileges)],
       isMember: r.isMember,
       joinedAt: r.joinedAt === null ? null : r.joinedAt.toISOString(),
     })),

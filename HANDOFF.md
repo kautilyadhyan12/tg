@@ -10119,3 +10119,91 @@ NEXT
      man* (step 8 demoted them on purpose). Promote back to Manager before any
      re-run of this sheet.
 ```
+
+```
+TASK: THE TICK BOXES — T3 ROUND 1 AND ITS FIXES. ONE Critical/High, three Low,
+      ALL FIXED. **The packet does NOT ship on this round; the DIFF-ONLY
+      RE-REVIEW is the one gate left.** DECISIONS :16095. Escape hatch NOT armed.
+
+THE CRITICAL, AND WHY IT IS NOT WHERE IT LOOKS
+  · **A power ticked ON for a TRAINER reached no control.** `canManageCodes` and
+    `canRemoveMembers` read the ROLE NAME; the server gates the same routes on
+    `codes.manage` / `members.remove`. Those agreed for exactly as long as
+    nothing could grant a tick — **and granting ticks is what :15770 built.**
+  · **THE ROOT IS THAT THE CONSOLE WAS NEVER TOLD.** `myOrgSchema` carried
+    `staffRole` and no `privileges`, so the client had no source for the caller's
+    own set. Hence a three-package fix: `/v1/orgs/mine` now returns the effective
+    set through **the same `privilegesFor` `requirePrivilege` uses**.
+  · Not to re-derive: **`staffRole` STAYS** (show it, never decide on it) ·
+    **absent ⇒ the ROLE's defaults**, never "no powers" · **empty array is a real
+    answer**, not fallback-eligible · **non-staff gets `[]`** · hiding is still
+    not the enforcement. **:13920 is NOT re-litigated — its stated basis ("a
+    control it KNOWS will be refused") stopped being true.**
+
+THE TWO THINGS A NEXT CHAT WILL OTHERWISE GET WRONG
+  · **THE SMOKE'S 10/10 IS TRUE AND SAYS NOTHING ABOUT WIDENING.** Step 7 is
+    unachievable for a trainer by construction and the run used a MANAGER, so
+    only the UNTICK direction was ever observed. Own 🟡 `OWED.md` line for the
+    missing step. Do not cite :15927 as covering this.
+  · **A BROWSER CHECK ON A STALE TAB IS NOT A MEASUREMENT.** Kd tested the
+    finding and reported the OPPOSITE — his trainer COULD pause a code — and
+    both observations were correct. Each page mounts its own `useConsoleOrg`
+    (`[orgSlug, attempt]`), so the role is re-read when a SCREEN MOUNTS and never
+    after; his Overview tab predated the demotion, so it drew the panel, **and
+    the action then SUCCEEDED because the tick genuinely granted it**. Members,
+    freshly mounted, correctly showed no Remove. **Face value closes a real
+    Critical/High.** He reloaded and it was gone. Staleness is pre-existing,
+    OWASP-clean, below the norm anyway (`refetchOnWindowFocus: true` is a
+    TanStack Query default) — ⚪ line, own card, Kd overruled "leave it".
+
+THE LOW WITH TEETH (all three in BACKLOG.md)
+  · **L-1 is a LATENT HIGH: the READ schemas enum-checked `privileges`**, so the
+    card's own unknown-tick carry-through — and mutant S18 — guarded a path no
+    response could survive, **and a seventh privilege shipping api-first would
+    have shown every owner an error instead of their staff.** Lenient IN
+    (`z.array(z.string())` on `orgStaffSchema` and `myOrgSchema`), strict OUT
+    (the write body keeps the enum; the server owns its vocabulary and the DB
+    CHECK agrees). Two of its tests run through the REAL client parser, which is
+    what closes rule 4's first item — the Staff screen's own tests mock
+    `orgService` and never reach it.
+
+GATES — ALL ON THE FINAL BYTES
+  · web **1127/1127 exit 0** (+19) · `vite build` exit 0 · eslint **exit 0 at
+    `--max-warnings=0`** on ten changed web files.
+  · **`orgs.routes` 104/104 exit 0** · **`db.migration` 8/8 exit 0** — both on
+    LOCAL Postgres, both RE-RUN after the last source edit · shared **51/51** ·
+    tsc clean (api + shared) · harness guard **23 scripts parse**.
+  · **WEB SWEEP, WHOLE TABLE: 64 · 64 RED · 0 ALIVE · 0 never ran, exit 0.**
+    C22 re-anchored AND re-aimed (both halves moved); C39–C42 new.
+  · **API SWEEP a stated SUBSET, 2 of 105: O105 (new) + O101 (its sibling at the
+    staff list) · 2 RED · 0 ALIVE.** O105 exists because **a mutant is a claim
+    about ONE call site** and the `/orgs/mine` reader had none.
+  · **Rule 3 measured for all four fixes**, each RED under its own defect and
+    GREEN restored, sources sha256-verified.
+
+INSTRUMENTS — FOUR FAILURES, THREE MINE, AND THE FIRST IS THE ONE THAT MATTERS
+  · **I MASKED A SWEEP'S EXIT CODE WITH `| head -14`.** :15770's finding 1,
+    THIRD recorded occurrence, made a FOURTH time **in the session that read
+    it**. The harness was killed mid-run, no verdict existed, and the `exit 0`
+    belonged to `head`. Re-run with output to a FILE and the exit code written
+    into it. **If you take one thing from this block: never pipe a harness.**
+  · **I DECLARED THE API HARNESS BROKEN AND IT IS NOT.** Its control aborted with
+    "no test tally" and I reproduced quote-stripping through
+    `corepack pnpm --filter api exec`. **The database had gone down**, which
+    produces the identical symptom; with it back the exact command form returns
+    `1 passed | 103 skipped`. **A diagnosis is a claim and takes V1's evidence**
+    (:13552, turned on myself). Nothing was changed in the harness on it.
+  · A tree-checker of mine false-alarmed twice on BACKTICK anchors (S4, S13) —
+    safe direction (:11846), both run down by hand.
+  · I ran a seed-asserting suite against a database a sweep was using and got one
+    red; re-measured ALONE at 8/8 rather than quote it either way (:3819).
+
+NEXT
+  1. **THE DIFF-ONLY RE-REVIEW — a FRESH CHAT, never a subagent.** It is the only
+     gate left on the ticks line. Prompt handed to Kd with the commit.
+  2. Then the two new `OWED.md` lines: the smoke's missing widening step
+     (🟡, belongs with the re-smoke) and the stale-tab refresh (⚪, own card,
+     re-check on window focus recommended).
+  3. Then Kd's call on the migration-lag 🟡 line (boot-time refusal recommended).
+  4. Then card C: custom role names.
+```

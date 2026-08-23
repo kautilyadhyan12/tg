@@ -23,11 +23,20 @@ import { codeState } from './consoleView';
  *  console DRAWING a control it knows will be refused — the same defect a
  *  previous round measured one component away on this very screen.
  *
- *  An ALLOW-list rather than `!== 'trainer'`, so a role added later is refused
- *  by DEFAULT rather than silently handed the gym's front door. Sibling of
- *  `canRemoveMembers`, written the same way for the same reason. */
-export function canManageCodes(staffRole) {
-  return staffRole === 'owner' || staffRole === 'manager';
+ *  **IT ASKS FOR THE POWER, NOT THE JOB TITLE, AND T3 ROUND 1 IS WHY.** This
+ *  read `staffRole === 'owner' || staffRole === 'manager'`, and the paragraph
+ *  above — §2.2's two rows, a trainer sees the code and none of the controls —
+ *  described the DEFAULT trainer rather than a rule. All four code routes gate
+ *  on `codes.manage` (`service.ts`), an owner can now tick that onto a trainer,
+ *  and this panel went on asking the title: the tick was stored, the server
+ *  allowed it, and no button was ever drawn. **The ruling is not being
+ *  re-litigated — its own stated basis ("a control it KNOWS will be refused")
+ *  simply stopped being true the day a tick could grant it.**
+ *
+ *  Sibling of `canRemoveMembers`, changed the same way for the same reason;
+ *  both read the set `viewerPrivileges` resolves. */
+export function canManageCodes(privileges) {
+  return Array.isArray(privileges) && privileges.includes('codes.manage');
 }
 
 /** How many codes one gym may hold. Mirrors the server's `ORG_CODES_MAX`, which

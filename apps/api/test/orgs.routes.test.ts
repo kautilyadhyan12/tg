@@ -3988,6 +3988,86 @@ d("orgs routes (real Postgres)", () => {
     ]);
   });
 
+  /** T3 ROUND 1 C/H-1, THE SERVER HALF. `/v1/orgs/mine` told a caller their
+   *  ROLE and never their POWERS, so the console had no way to ask the question
+   *  the server answers — it asked "are you a manager?" instead, and a trainer
+   *  handed `codes.manage` got a stored tick with no control anywhere.
+   *
+   *  Asserted for a TRAINER WHO HOLDS A TICK THEIR ROLE DOES NOT GRANT, which is
+   *  the only shape that can tell this apart from the old behaviour: for anybody
+   *  on their role's defaults, "the role's template" and "the stored set" are
+   *  the same list, so a test on a default row would pass against a server that
+   *  still sends nothing but the role (:5104 F5 — a fix whose protection cannot
+   *  fail). The default-row and non-staff cases are the controls beneath it. */
+  // 30s for the same reason four neighbours carry it (:15381 Low-4): this walks
+  // create → join → confirm → appoint → tick → read → create-a-code, and on the
+  // remote database that is well past the 5s default. The margin is headroom,
+  // not a performance claim.
+  it("tells a caller what they may DO here, not just what they are called", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("mine-privs-owner");
+    const desk = await makeUser("mine-privs-desk");
+    const org = await makeOrg(owner.cookies, "Orgs Test Mine Privileges");
+    await joinAsMember(desk.cookies, org, owner.cookies);
+    await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-mine-privs-desk@example.com", role: "trainer" },
+      { cookies: owner.cookies },
+    );
+
+    type MineRow = { id: string; staffRole: string | null; privileges?: string[] };
+    const readMine = async (cookies: Record<string, string>): Promise<MineRow> => {
+      const res = await get("/v1/orgs/mine", { cookies });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body) as { orgs: MineRow[] };
+      const row = body.orgs.find((o) => o.id === org.org.id);
+      // Thrown rather than `!`-asserted: R2.2 bans the non-null assertion, and a
+      // throw names the missing gym instead of failing later on `undefined`.
+      if (row === undefined) throw new Error(`gym ${org.org.id} missing from /orgs/mine`);
+      return row;
+    };
+
+    // CONTROL: on their role's defaults the two answers agree, which is exactly
+    // why this row cannot carry the claim on its own.
+    const before = await readMine(desk.cookies);
+    expect(before.staffRole).toBe("trainer");
+    expect(before.privileges).toEqual(["codes.invite", "members.read"]);
+
+    // THE SUBJECT: the owner ticks on a power the trainer's role does not grant.
+    expect(
+      (
+        await put(
+          `/v1/orgs/${org.org.id}/staff/${desk.userId}/privileges`,
+          { privileges: ["members.read", "codes.invite", "codes.manage"] },
+          { cookies: owner.cookies },
+        )
+      ).statusCode,
+    ).toBe(200);
+
+    const after = await readMine(desk.cookies);
+    // Still a trainer — the ROLE did not move, and the screen still says so.
+    expect(after.staffRole).toBe("trainer");
+    // ...but the answer the console gates on now differs from the role's
+    // template, which is the whole point.
+    expect(after.privileges).toContain("codes.manage");
+    expect(after.privileges).not.toEqual(before.privileges);
+
+    // AND IT AGREES WITH THE DOOR. Without this the response is just a field:
+    // the claim is that what a screen draws and what the server allows are the
+    // same answer, so the route the tick unlocks is exercised too (:14013's
+    // both-ends precedent).
+    expect(
+      (await post(`/v1/orgs/${org.org.id}/codes`, {}, { cookies: desk.cookies })).statusCode,
+    ).toBe(201);
+
+    // CONTROL: somebody who staffs nothing gets an empty set, never a fallback
+    // to a role they do not hold.
+    const plain = await makeUser("mine-privs-plain");
+    await joinAsMember(plain.cookies, org, owner.cookies);
+    const plainRow = await readMine(plain.cookies);
+    expect(plainRow.staffRole).toBeNull();
+    expect(plainRow.privileges).toEqual([]);
+  });
+
   /** THE FEATURE, IN THE DIRECTION KD ASKED FOR FIRST (:11891 — "if owner gives
    *  permission others can also add"): a gym whose front desk is a TRAINER
    *  could not let anybody in, and now can.

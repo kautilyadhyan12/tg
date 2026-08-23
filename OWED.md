@@ -4739,6 +4739,30 @@ file and is stated so nobody reads these as lower priority than they are.
       found zero, and this is the web console rather than `modules/orgs`). **The run needed a MIGRATION APPLIED FIRST — see the ⚪ line below;
       the dev database was one change behind and every screen inside a gym was
       failing.**
+      **UPDATE 2026-08-23 (DECISIONS :16095) — ALL FOUR FINDINGS ARE FIXED AND
+      THIS LINE STILL DOES NOT TICK: the DIFF-ONLY RE-REVIEW is the one gate
+      left** (:5348 rule 2). `/v1/orgs/mine` now serves the caller's effective set
+      through the SAME `privilegesFor` the door uses, so screen and server come
+      out of one function; both gates ask for the POWER; `privileges` is parsed
+      leniently on READS and strictly on the WRITE. **Rule 3 measured for all
+      four** — each watched RED under its own defect and GREEN restored, sources
+      sha256-verified. web 1127/1127 · orgs.routes 104/104 · db.migration 8/8 ·
+      shared 51/51 · WEB SWEEP whole table 64 · 64 RED · 0 ALIVE · API SWEEP a
+      stated subset 2 of 105 · 2 RED. **A passing smoke plus a closed round is
+      still not a review** (:14147).
+- [ ] 🟡 **THE TICK-BOXES SMOKE HAS NO STEP THAT TICKS A POWER *ON* FOR A
+      TRAINER — which is the only shape that can catch the defect T3 round 1
+      found** (2026-08-23, DECISIONS :16095). **Read before running or editing
+      `RUNBOOK/smoke-staff-privileges.md`.** Step 7's ✅ says "the helper can now
+      use the join-code controls that they could not before", which **a MANAGER
+      cannot demonstrate** — they already hold every non-owner power, so the sheet
+      itself sends the runner down the parenthetical UNTICK path. The 10/10 pass
+      at :15927 is TRUE and is **not evidence about widening**, and the Critical
+      it missed is precisely widening. Fix is one step: appoint a TRAINER, tick
+      *Change join codes* on, and confirm the controls APPEAR in their window
+      **after a reload** — the reload matters, see the line below. Not written
+      into the sheet in the fix round (:5348 rule 6); it is a sheet change and
+      belongs with the re-smoke.
 - [ ] ⚪ **THE CONSOLE LEARNS WHAT YOU MAY DO WHEN A SCREEN OPENS AND NEVER
       AGAIN — so an idle tab keeps drawing controls for a role you no longer
       hold** (found 2026-08-23, DECISIONS :15927; **Kd pushed back on "leave it"

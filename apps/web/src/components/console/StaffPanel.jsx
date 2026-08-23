@@ -313,10 +313,26 @@ function PrivilegesControl({ person, busy, onSave }) {
   const [draft, setDraft] = useState(null);
 
   const current = effectivePrivileges(person);
+  // WHOSE ROW THIS IS and WHETHER IT CAN BE EDITED are two questions, and T3
+  // round 1 Low-2 is that they were one. An OWNER's row is read-only — every
+  // owner is the last owner, so the two ticks §2.2 keeps for them cannot come
+  // off — but "you" is about identity, and the server already answers it with
+  // `isYou`. With a second owner (OWED.md keeps that live) the old code told one
+  // owner that another owner's row was their own.
   const readOnly = person.role === 'owner';
+  const isSelf = person.isYou === true;
   const choices = privilegeChoices(person.role);
   const extraNote = unknownPrivilegesNote(person);
-  const ticked = draft ?? current;
+  // T3 round 1 Low-3. The comment above says a manager row holding
+  // `staff.manage` is "saved without it — silently narrowed", and it was not:
+  // `current` is the STORED set, so the tick rode through into the save and the
+  // server answered 409 `owner_only_privilege` — every save on such a row
+  // failed. Narrowed HERE, to the boxes this row is actually offered, which
+  // makes the sentence true. Unknown ticks are added back at the save (they are
+  // the opposite case: nothing refuses those, so dropping one is a loss nobody
+  // chose).
+  const offered = choices.map((choice) => choice.value);
+  const ticked = (draft ?? current).filter((value) => offered.includes(value));
 
   const openIt = () => {
     setDraft(current);
@@ -335,7 +351,7 @@ function PrivilegesControl({ person, busy, onSave }) {
         className="text-xs rounded-lg px-3 py-1.5 self-start"
         style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
       >
-        {readOnly ? 'What you can do' : 'What they can do'}
+        {isSelf ? 'What you can do' : 'What they can do'}
       </button>
     );
   }
@@ -388,8 +404,8 @@ function PrivilegesControl({ person, busy, onSave }) {
       {readOnly ? (
         <>
           <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            This is what you can do. It can&apos;t be changed here — a gym has to keep somebody who
-            can hand out the keys.
+            {isSelf ? 'This is what you can do.' : 'This is what the owner can do.'} It can&apos;t be
+            changed here — a gym has to keep somebody who can hand out the keys.
           </p>
           <button
             type="button"

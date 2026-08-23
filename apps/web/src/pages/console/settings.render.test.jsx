@@ -914,6 +914,71 @@ describe('the owner’s own permissions', () => {
     expect(within(row).getByLabelText(/Manage staff/i).checked).toBe(true);
     expect(within(row).getByLabelText(/Remove members/i).checked).toBe(false);
   });
+
+  /** T3 round 1 Low-2. "Read-only" and "yours" were ONE flag, keyed on the role,
+   *  so a SECOND owner reading the first owner's row was told it was their own.
+   *  `isYou` is the server's answer to that question and the row already carries
+   *  it. Unreachable today — a gym has one owner — and `OWED.md` keeps the second
+   *  owner live, which is what makes it worth pinning rather than shrugging at.
+   *
+   *  Both halves asserted: the wording moves to `isYou`, and editability stays
+   *  on the ROLE. Without the second assertion this would pass just as happily
+   *  against a build that let one owner edit another's ticks. */
+  it('says "they" about ANOTHER owner, and still refuses to let anyone edit the row', async () => {
+    const secondOwner = {
+      userId: 'u4',
+      displayName: 'Priya Owner',
+      email: 'priya@example.com',
+      role: 'owner',
+      since: '2026-08-19T09:00:00.000Z',
+      isYou: false,
+    };
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, secondOwner] } });
+
+    const row = await openTicks('staff-u4', 'What they can do');
+    expect(within(row).getByText(/what the owner can do/i)).toBeTruthy();
+    expect(within(row).queryByText(/what you can do/i)).toBeNull();
+    // Still nobody's to change from here.
+    expect(within(row).getByLabelText(/Manage staff/i).disabled).toBe(true);
+    expect(within(row).queryByText('Save permissions')).toBeNull();
+  });
+});
+
+/** T3 round 1 Low-3. The file's own comment said a manager row holding
+ *  `staff.manage` "is therefore saved without it — silently narrowed", and it
+ *  was not: the ticks came from the STORED set, so the box nobody was offered
+ *  rode through into the save and the server answered 409 — every save on such a
+ *  row failed, which is the opposite of silently narrowing. A leftover row like
+ *  that can only predate the fix that made the state unreachable, and it is
+ *  exactly the row an owner would be trying to tidy up. */
+describe('a leftover row holding a tick it should never have had', () => {
+  const legacyManager = {
+    ...MANAGER,
+    privileges: ['members.read', 'codes.invite', 'staff.manage'],
+  };
+
+  it('is not offered the box, and the save drops it instead of failing', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, legacyManager] } });
+    orgService.updateStaffPrivileges.mockResolvedValue({
+      data: { staff: { ...legacyManager, privileges: ['members.read'] } },
+    });
+
+    const row = await openTicks('staff-u2');
+    // Not offered — that box is the owner's alone.
+    expect(within(row).queryByLabelText(/Manage staff/i)).toBeNull();
+
+    fireEvent.click(within(row).getByLabelText(/Share the join code/i));
+    fireEvent.click(within(row).getByText('Save permissions'));
+
+    await waitFor(() => expect(orgService.updateStaffPrivileges).toHaveBeenCalled());
+    const sent = orgService.updateStaffPrivileges.mock.calls[0][2].privileges;
+    // THE CLAIM: the tick this screen never showed is gone from the save, so the
+    // save can succeed. Before the fix it was still in there and the server
+    // refused the whole thing.
+    expect(sent).not.toContain('staff.manage');
+    // POSITIVE CONTROL — it dropped the forbidden one, not everything.
+    expect(sent).toContain('members.read');
+  });
 });
 
 describe('an older server that sends no permissions at all', () => {

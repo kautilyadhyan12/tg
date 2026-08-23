@@ -330,6 +330,55 @@ describe('a 200 that does not match its contract is a FAILURE, not empty data (T
     await expect(orgService.getStaff('gym-1')).rejects.toMatchObject({ isContractError: true });
   });
 
+  /** T3 round 1 Low-1, and this is the test that closes rule 4's first item.
+   *  The Staff screen's "a permission this screen is too old to show" tests mock
+   *  `orgService`, so they never touch `readThrough` — they were green over a
+   *  path the product could not take, because the READ schema enum-checked the
+   *  whole list and a newer server's privilege failed to parse right here.
+   *
+   *  This is the only place that difference is observable, so it is asserted at
+   *  the seam the defect lived in rather than one layer above it. The pair below
+   *  is deliberate: leniency must be scoped to what a NEWER SERVER can add, not
+   *  a licence to accept rubbish. */
+  it('ACCEPTS a privilege this build has no words for, and hands it on untouched', async () => {
+    answerWith(authApi, {
+      staff: [
+        {
+          userId: '11111111-1111-4111-8111-111111111111',
+          displayName: 'Rita',
+          email: 'rita@example.com',
+          role: 'trainer',
+          since: '2026-01-01T00:00:00.000Z',
+          isYou: false,
+          privileges: ['members.read', 'billing.manage'],
+        },
+      ],
+    });
+    const res = await orgService.getStaff('gym-1');
+    // Carried through, not filtered here — the SCREEN decides what it has words
+    // for, and the save puts the rest back. Dropping it at the client would
+    // strip a permission from the next person who pressed Save.
+    expect(res.data.staff[0].privileges).toEqual(['members.read', 'billing.manage']);
+  });
+
+  it('still rejects a privileges field that is not a list of strings', async () => {
+    // The positive control. Without it, "accept anything" passes the test above.
+    answerWith(authApi, {
+      staff: [
+        {
+          userId: '11111111-1111-4111-8111-111111111111',
+          displayName: 'Rita',
+          email: 'rita@example.com',
+          role: 'trainer',
+          since: '2026-01-01T00:00:00.000Z',
+          isYou: false,
+          privileges: [{ nope: true }],
+        },
+      ],
+    });
+    await expect(orgService.getStaff('gym-1')).rejects.toMatchObject({ isContractError: true });
+  });
+
   it('rejects a permissions save whose answer is not the row that was written', async () => {
     answerWith(authApi, { ok: true });
     await expect(

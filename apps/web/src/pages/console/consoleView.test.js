@@ -2,9 +2,11 @@
 // something it does not know, so each test here is aimed at the false version
 // rather than at the happy path.
 import { describe, expect, it } from 'vitest';
-import { SUPPORTED_COUNTRIES } from '@app/shared';
+import { ROLE_PRIVILEGES, SUPPORTED_COUNTRIES } from '@app/shared';
 import {
   ORG_TYPE_CHOICES,
+  canRemoveMembers,
+  viewerPrivileges,
   codeState,
   codeToShow,
   countryOptions,
@@ -455,5 +457,64 @@ describe('which places on the roster cost the gym money (:14953)', () => {
     expect(seatIsFree(undefined)).toBe(false);
     expect(seatIsFree('Kd Owner')).toBe(false);
     expect(seatIsFree({})).toBe(false);
+  });
+});
+
+/** T3 round 1 C/H-1. **`canRemoveMembers` had NO direct test at all** — its
+ *  sibling `canManageCodes` had one, which is the asymmetry the whole finding is
+ *  about: two functions written the same way for the same reason, and only one
+ *  of them watched. Both now ask for the POWER rather than the job title. */
+describe('canRemoveMembers', () => {
+  it('asks for the POWER, so a trainer who was GIVEN it is allowed', () => {
+    expect(canRemoveMembers(['members.read', 'codes.invite', 'members.remove'])).toBe(true);
+  });
+
+  it('still refuses the default trainer (§4.3 "Remove hidden")', () => {
+    expect(canRemoveMembers(ROLE_PRIVILEGES.trainer)).toBe(false);
+  });
+
+  it('grants the roles §2.2 always granted, through their default sets', () => {
+    expect(canRemoveMembers(ROLE_PRIVILEGES.owner)).toBe(true);
+    expect(canRemoveMembers(ROLE_PRIVILEGES.manager)).toBe(true);
+  });
+
+  it('refuses anything that is not a set of powers', () => {
+    expect(canRemoveMembers([])).toBe(false);
+    expect(canRemoveMembers(null)).toBe(false);
+    expect(canRemoveMembers(undefined)).toBe(false);
+    // A role name is what every call site used to pass. It must fail CLOSED
+    // rather than be mistaken for a power.
+    expect(canRemoveMembers('owner')).toBe(false);
+    expect(canRemoveMembers(['owner'])).toBe(false);
+  });
+});
+
+/** The one place the console decides what an ABSENT `privileges` field means,
+ *  and the three answers are deliberately different from one another. */
+describe('viewerPrivileges', () => {
+  it('uses the set the server sent', () => {
+    expect(viewerPrivileges({ staffRole: 'trainer', privileges: ['codes.manage'] })).toEqual([
+      'codes.manage',
+    ]);
+  });
+
+  it('falls back to the ROLE when the field is absent — the deploy window', () => {
+    // An api older than this bundle sends no field. Falling back to "nothing"
+    // would strip a real manager's controls the moment the web deployed first,
+    // which is the failure `.optional()` exists to prevent (:12660).
+    expect(viewerPrivileges({ staffRole: 'manager' })).toEqual(ROLE_PRIVILEGES.manager);
+    expect(viewerPrivileges({ staffRole: 'trainer' })).toEqual(ROLE_PRIVILEGES.trainer);
+  });
+
+  it('treats an EMPTY array as a real answer, not as "ask the role"', () => {
+    // Somebody hand-narrowed to nothing has been narrowed to nothing. Falling
+    // back here would hand back exactly what an owner had just removed.
+    expect(viewerPrivileges({ staffRole: 'manager', privileges: [] })).toEqual([]);
+  });
+
+  it('gives nothing to somebody who staffs no gym', () => {
+    expect(viewerPrivileges({ staffRole: null })).toEqual([]);
+    expect(viewerPrivileges(null)).toEqual([]);
+    expect(viewerPrivileges(undefined)).toEqual([]);
   });
 });

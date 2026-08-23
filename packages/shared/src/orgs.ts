@@ -347,6 +347,36 @@ export type RemoveOrgCodeResponse = z.infer<typeof removeOrgCodeResponseSchema>;
  *  same gym twice and invite a screen that double-counts it. */
 export const myOrgSchema = orgSummarySchema.extend({
   staffRole: orgRoleSchema.nullable(),
+  /** WHAT THE CALLER MAY DO AT THIS GYM — their OWN effective set, not anybody
+   *  else's (T3 round 1 C/H-1).
+   *
+   *  **Without this the console had no way to ask the right question.** The
+   *  server decides on the TICK (`requirePrivilege`), the screens decided on the
+   *  ROLE NAME, and those two were the same answer only while nothing could
+   *  grant a tick — which is exactly what the ticks card built. An owner ticking
+   *  `codes.manage` onto a trainer bought them a power the server allowed and no
+   *  screen would draw. :11429's seam, finally reaching the client.
+   *
+   *  **`staffRole` STAYS.** It is what a screen shows a person about themselves,
+   *  and the Staff screen's role button still writes it. What changes is that no
+   *  screen may DECIDE on it (R3.3 — and hiding was never the enforcement; the
+   *  server's 403 is, and still is).
+   *
+   *  **OPTIONAL, for the same expand-then-contract reason as everything else on
+   *  this response** (:12660): absent means the api is older than this bundle,
+   *  and the client falls back to the ROLE's own defaults — i.e. exactly the
+   *  behaviour that shipped before the ticks, which is right for every row
+   *  nobody has ticked. Falling back to "no powers" would strip a real manager's
+   *  controls the moment the web deployed first.
+   *
+   *  **Strings, not the enum**, for the reason written out at
+   *  `orgStaffSchema.privileges`: an older browser must not be destroyed by a
+   *  newer server's seventh privilege.
+   *
+   *  **`[]` is a real answer and is not the same as absent** — a member who
+   *  staffs nothing has no powers here, and that must not read as "fall back to
+   *  a role you do not hold". */
+  privileges: z.array(z.string()).optional(),
   isMember: z.boolean(),
   joinedAt: z.string().nullable(),
 });
@@ -882,7 +912,26 @@ export const orgStaffSchema = z.object({
    *  **No §2.4 question arises**: this list is gated on `staff.manage`, which is
    *  the owner's alone, and it describes what a colleague may DO rather than
    *  anything about a member. */
-  privileges: z.array(orgPrivilegeSchema).optional(),
+  /** **STRINGS, NOT THE ENUM, AND THAT IS THE WHOLE POINT OF THE FIELD** (T3
+   *  round 1 Low-1, a latent High). This is a READ parsed by whichever build the
+   *  BROWSER is running, and the api can gain a privilege before the web
+   *  redeploys — `OWED.md` already schedules a billing tick. Under
+   *  `z.array(orgPrivilegeSchema)` an older bundle answered a newer server with
+   *  `invalid_enum_value`, `orgsApi.readThrough` turned that into a hard contract
+   *  failure, and **every owner's Staff screen died until the web caught up** —
+   *  precisely the outcome `.optional()` was chosen to prevent, arriving through
+   *  the parser instead of the network (:12660, :15093's `takesSeat`).
+   *
+   *  It also made the card's own carry-through unreachable: `unknownPrivileges`
+   *  and its on-screen sentence, and mutant S18, all guarded a path no response
+   *  could survive. **Measured before the change, with a positive control** — a
+   *  row of known-only values parsed, the same row plus `billing.manage` did not.
+   *
+   *  **The WRITE side stays the enum on purpose** (`orgStaffPrivilegesRequest`
+   *  below): the server is the authority on its own vocabulary and the database
+   *  CHECK matches it. Lenient in, strict out. The SCREEN filters to what it has
+   *  words for and carries the rest through untouched. */
+  privileges: z.array(z.string()).optional(),
   since: z.string(),
   isYou: z.boolean(),
 });

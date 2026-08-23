@@ -809,6 +809,65 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:16095** — 2026-08-23 — **THE TICK BOXES, T3 ROUND 1: ONE Critical/High — a
+  power ticked ON for a TRAINER reached no control, because the console asked the
+  JOB TITLE while the server asked the TICK. The packet did NOT ship this round.**
+  Reviews `245632d` (:15770); smoke at :15927. Escape hatch NOT armed (:15673
+  found zero; this is the web console, not `modules/orgs`). Findings listed and
+  **approved by Kd before a byte was written**. **Read before writing any screen
+  that decides what a person may do, before adding a field to `/v1/orgs/mine`,
+  before enum-validating anything a NEWER server can send, and before believing a
+  browser check taken on a tab that has been open a while.**
+  **THE ROOT IS NOT THE TWO GATE FUNCTIONS — `myOrgSchema` carried `staffRole` and
+  no `privileges`, so the client had no source for the caller's own set and could
+  not have asked the right question**; that is why the fix crosses
+  `@app/shared` + `apps/api` + `apps/web`. `/orgs/mine` now serves the effective
+  set through **the same `privilegesFor` `requirePrivilege` uses**, so screen and
+  door come out of one function. Decisions not to re-derive: **`staffRole` STAYS**
+  (a screen may SHOW it, no screen may DECIDE on it) · **absent ⇒ the ROLE's
+  defaults**, never "no powers" (a web-newer-than-api deploy would otherwise strip
+  a real manager) · **an EMPTY array is a real answer** and is not
+  fallback-eligible · **non-staff gets `[]`** · **hiding is still not the
+  enforcement** — what changed is the screen no longer HIDES a control it has been
+  told about. **:13920's ruling is not re-litigated; its stated basis ("a control
+  it KNOWS will be refused") simply stopped being true.**
+  **THE SMOKE COULD NOT HAVE CAUGHT IT and that is the sheet's gap: step 7's
+  widening ✅ is unachievable for a trainer BY CONSTRUCTION and the run used a
+  MANAGER**, so only the untick direction was observed — **10/10 is true and is
+  not evidence about widening**; a tick-ON-for-a-trainer step is owed.
+  **THE NEAR-MISS IS THE PART TO CARRY: Kd's browser said the OPPOSITE and BOTH
+  were right.** Each page mounts its own `useConsoleOrg` (`[orgSlug, attempt]`), so
+  the role is re-read when a SCREEN MOUNTS and never after; his Overview tab was
+  open from when that account was a Manager, so the panel drew **and the pause
+  SUCCEEDED, because the tick genuinely granted it**, while freshly-mounted Members
+  correctly showed no Remove. **A browser check on a stale tab is not a
+  measurement, and it pointed the flattering way** (:11846) — face value closes a
+  real Critical/High. Staleness is PRE-EXISTING and OWASP-clean, **below the norm
+  regardless (`refetchOnWindowFocus: true` is a TanStack Query DEFAULT), and Kd
+  pushed back on "leave it" and was right** — ⚪ line, own card, not this round.
+  **THREE LOW, all fixed, in `BACKLOG.md`; L-1 is a LATENT HIGH** — the READ
+  schemas enum-checked `privileges`, so the card's own unknown-tick carry-through
+  (and mutant S18) guarded a path no response could survive, **and a seventh
+  privilege shipping api-first would have shown every owner an error instead of
+  their staff**. Lenient IN, strict OUT.
+  **PROVE, all on final bytes: web 1127/1127 exit 0 (+19) · build ✓ · eslint 0 at
+  `--max-warnings=0` on ten files · `orgs.routes` 104/104 and `db.migration` 8/8
+  on LOCAL Postgres, both re-run after the last edit · shared 51/51 · tsc clean ·
+  harness guard 23 scripts · WEB SWEEP WHOLE TABLE 64 · 64 RED · 0 ALIVE · 0 never
+  ran, exit 0 (C22 re-anchored AND re-aimed, C39–C42 new) · API SWEEP a stated
+  SUBSET 2 of 105 (O105 new, O101 its sibling) · 2 RED · 0 ALIVE.** Rule 3
+  measured for all four fixes.
+  **FOUR INSTRUMENT FAILURES, THREE MINE.** The one to carry: **I masked a sweep's
+  exit code with `| head -14`** — :15770's finding 1, THIRD occurrence, made a
+  FOURTH time in the session that read it; the harness was killed mid-run and the
+  `exit 0` belonged to `head`. Also **I declared the api harness broken and it is
+  NOT** — the database had gone down and produces the identical symptom; **a
+  diagnosis is a claim and takes V1's evidence like any other** (:13552 turned on
+  myself). Plus a tree-checker that false-alarmed on backtick anchors (safe
+  direction), and a seed-asserting suite run against a database a sweep was using
+  (re-measured alone, 8/8, rather than quoted). **NOTHING TICKS — the DIFF-ONLY
+  RE-REVIEW is the remaining gate.**
+
 - **:15927** — 2026-08-23 — **THE TICK-BOXES SMOKE PASSES 10/10 — and the finding
   is that it could not START: the database a BROWSER reads was a migration
   behind, and no gate in this repo can see that.** Kd's REPORT (:4829) on

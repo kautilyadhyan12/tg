@@ -7,10 +7,13 @@ import {
   frameResultSchema,
   holdEventSchema,
   instantSchema,
+  myOrgsResponseSchema,
+  orgStaffResponseSchema,
   poseFrameSchema,
   repEventSchema,
   sessionInputSchema,
   setSummarySchema,
+  updateOrgStaffPrivilegesRequestSchema,
   workoutListQuerySchema,
   workoutSyncPayloadSchema,
 } from "../src/index.js";
@@ -349,5 +352,99 @@ describe("workout sync payload (v1 §5.3)", () => {
       const sets = [{ ...validSetSummary, engineVersion: "" }];
       expect(workoutSyncPayloadSchema.safeParse({ ...payload, sets }).success).toBe(false);
     });
+  });
+});
+
+/** T3 round 1 Low-1 (a LATENT HIGH). The Staff screen was built to carry a
+ *  privilege it has no words for straight through a save, and to say so on
+ *  screen — the api and the web deploy separately and a billing tick is already
+ *  scheduled. **None of it could ever run**, because the READ schema validated
+ *  the whole list against this build's enum, so a response mentioning a newer
+ *  privilege failed to parse before any component saw it. `readThrough` turns
+ *  that into a hard contract failure, which means the day a seventh privilege
+ *  ships api-first, every owner's Staff screen shows an error instead of their
+ *  staff — the precise outcome `.optional()` was chosen to prevent, arriving
+ *  through the parser rather than the network.
+ *
+ *  Lenient IN, strict OUT: the write body below stays the enum, because the
+ *  server is the authority on its own vocabulary and the database CHECK agrees
+ *  with it. */
+describe("privileges a newer server knows and this build does not", () => {
+  const staffRow = {
+    userId: "11111111-1111-4111-8111-111111111111",
+    displayName: "Rita",
+    email: "rita@example.com",
+    role: "trainer" as const,
+    since: "2026-01-01T00:00:00.000Z",
+    isYou: false,
+  };
+
+  it("does not destroy the staff list", () => {
+    const known = orgStaffResponseSchema.safeParse({
+      staff: [{ ...staffRow, privileges: ["members.read"] }],
+    });
+    expect(known.success).toBe(true);
+
+    const newer = orgStaffResponseSchema.safeParse({
+      staff: [{ ...staffRow, privileges: ["members.read", "billing.manage"] }],
+    });
+    expect(newer.success).toBe(true);
+    // Carried through UNCHANGED — the screen filters to what it has words for
+    // and puts the rest back on save. Dropping it here would silently strip a
+    // permission from the next person who pressed Save.
+    if (newer.success) {
+      expect(newer.data.staff[0]?.privileges).toEqual(["members.read", "billing.manage"]);
+    }
+  });
+
+  /** THIS TEST WAS A LIAR IN ITS FIRST DRAFT AND ITS OWN MUTANT CAUGHT IT
+   *  (rule 4, in the round convened to fix that class). It asserted only that
+   *  the response PARSED — and Zod strips keys it does not know rather than
+   *  refusing them, so deleting `privileges` from `myOrgSchema` entirely left it
+   *  green. It has to assert the value SURVIVES.
+   *
+   *  That is not pedantry: the console's render tests mock `orgService`, so they
+   *  never run this parser. A silently stripped field would reach no screen, the
+   *  whole C/H-1 fix would be dead, and nothing else in the repo would notice. */
+  it("does not destroy the caller's own gym list, and the set SURVIVES the parse", () => {
+    const parsed = myOrgsResponseSchema.safeParse({
+      orgs: [
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          slug: "iron-house",
+          name: "Iron House",
+          city: null,
+          orgType: "gym",
+          timezone: "Asia/Kolkata",
+          locale: "en",
+          currencyDisplay: "INR",
+          status: "active",
+          staffRole: "manager",
+          privileges: ["members.read", "billing.manage"],
+          isMember: true,
+          joinedAt: null,
+        },
+      ],
+      formerOrgs: [],
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.orgs[0]?.privileges).toEqual(["members.read", "billing.manage"]);
+    }
+  });
+
+  it("STILL REFUSES an unknown privilege on the way IN — the server's own vocabulary", () => {
+    // The positive control for the pair above: leniency is scoped to READS.
+    // Without this, "accept anything" would pass both tests and would let a
+    // client write a value the database CHECK then rejects with a 500.
+    const ok = updateOrgStaffPrivilegesRequestSchema.safeParse({
+      privileges: ["members.read"],
+    });
+    expect(ok.success).toBe(true);
+
+    const bad = updateOrgStaffPrivilegesRequestSchema.safeParse({
+      privileges: ["members.read", "billing.manage"],
+    });
+    expect(bad.success).toBe(false);
   });
 });

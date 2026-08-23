@@ -888,6 +888,70 @@ describe('The gym', () => {
     expect(screen.queryByText('Replace')).toBeNull();
   });
 
+  /** T3 ROUND 1 C/H-1, THE WIDENING HALF. The test above pins the DEFAULT
+   *  trainer — no tick, no controls — and it stayed green while this was broken,
+   *  because it asks what a trainer WITHOUT the power sees. Since the ticks card
+   *  an owner can GIVE a trainer `codes.manage`; the server then allows every
+   *  code route (`service.ts` gates them on the privilege, not the role), and
+   *  this screen drew nothing, so the tick bought a power with no way to use it.
+   *
+   *  The pair is the point: same role, same screen, the TICK is the only
+   *  difference. Without the pair, "show the controls" passes by showing them to
+   *  everybody, which is the defect in the opposite direction (:11429 rule 4). */
+  it('WIDENING: a TRAINER given `codes.manage` gets the code controls', async () => {
+    orgService.getMine.mockResolvedValue({
+      data: {
+        orgs: [
+          {
+            ...ORG,
+            staffRole: 'trainer',
+            privileges: ['members.read', 'codes.invite', 'codes.manage'],
+          },
+        ],
+      },
+    });
+    drawOverview();
+
+    // SCOPED to the hero card, not relaxed to `getAllByText`. Once the panel
+    // draws, the code is on screen TWICE by design (:13920 — one to hand out,
+    // one to manage), and `getAllByText` would let the hero's own claim quietly
+    // disappear. The duplication IS the fix working.
+    expect(within(await screen.findByTestId('join-code-card')).getByText('K7QM2X')).toBeTruthy();
+    expect(screen.getByText('New code')).toBeTruthy();
+    expect(screen.getByText('Switch off')).toBeTruthy();
+    expect(screen.getByText('Replace')).toBeTruthy();
+  });
+
+  it('NEGATIVE CONTROL: a TRAINER without `codes.manage` still gets none of them', async () => {
+    orgService.getMine.mockResolvedValue({
+      data: {
+        orgs: [{ ...ORG, staffRole: 'trainer', privileges: ['members.read', 'codes.invite'] }],
+      },
+    });
+    drawOverview();
+
+    expect(await screen.findByText('K7QM2X')).toBeTruthy();
+    expect(screen.queryByText('New code')).toBeNull();
+    expect(screen.queryByText('Switch off')).toBeNull();
+    expect(screen.queryByText('Replace')).toBeNull();
+  });
+
+  /** THE DEPLOY WINDOW (:12660's reason, and why `privileges` is optional here).
+   *  An API too old to send the field must leave this screen exactly as it was
+   *  before the ticks existed — the ROLE's own defaults — never "no powers",
+   *  which would strip a real manager's controls the moment the web deployed
+   *  first. */
+  it('an org carrying NO privileges field falls back to the role, not to nothing', async () => {
+    // Built by omission rather than by deleting a key, so the fixture cannot
+    // drift into carrying `privileges: undefined`, which is a different input.
+    const noField = { ...ORG, staffRole: 'manager' };
+    expect('privileges' in noField).toBe(false);
+    orgService.getMine.mockResolvedValue({ data: { orgs: [noField] } });
+    drawOverview();
+
+    expect(await screen.findByText('New code')).toBeTruthy();
+  });
+
   it('says a code is switched off in words, not just with a chip', async () => {
     orgService.getCodes.mockResolvedValue({
       data: { codes: [{ ...LIVE_CODE, paused: true }] },
@@ -1318,6 +1382,28 @@ describe('Removing a member', () => {
     expect(await screen.findByText('Rita Sen')).toBeTruthy();
     expect(screen.getByText(/Morning Batch/)).toBeTruthy();
     expect(screen.queryByText('Remove')).toBeNull();
+  });
+
+  /** T3 ROUND 1 C/H-1, the roster half. `removeOrgMember` gates on
+   *  `members.remove`, which an owner can now tick onto a trainer — and this
+   *  screen asked the ROLE, so the tick reached no button anywhere. */
+  it('WIDENING: a TRAINER given `members.remove` gets the Remove control', async () => {
+    orgService.getMine.mockResolvedValue({
+      data: {
+        orgs: [
+          {
+            ...ORG,
+            staffRole: 'trainer',
+            privileges: ['members.read', 'codes.invite', 'members.remove'],
+          },
+        ],
+      },
+    });
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
+    drawMembers();
+
+    expect(await screen.findByText('Rita Sen')).toBeTruthy();
+    expect(screen.getByText('Remove')).toBeTruthy();
   });
 
   it('still offers Remove to a MANAGER (the gate must not shut on the people §2.2 allows)', async () => {

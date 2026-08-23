@@ -13,6 +13,7 @@ import {
   memberCountLine,
   orgTypeLabel,
   roleLabel,
+  viewerPrivileges,
   waitingCountLabel,
 } from './consoleView';
 
@@ -237,7 +238,7 @@ export default function Overview() {
         <JoinCodesPanel
           gymId={org.id}
           codes={codes.list}
-          staffRole={org.staffRole}
+          privileges={viewerPrivileges(org)}
           onChanged={reloadCodes}
         />
       ) : null}

@@ -6,7 +6,7 @@
 // does not know: a country the server would refuse, a timezone that is not the
 // user's own, a member count taken off one page of a cursor walk, or a join
 // code printed as usable when the join path will turn it away.
-import { SUPPORTED_COUNTRIES } from '@app/shared';
+import { ROLE_PRIVILEGES, SUPPORTED_COUNTRIES } from '@app/shared';
 
 /** Region names from the browser's own database rather than a table typed here.
  *  A hand-written name table is a second place to be wrong about a country's
@@ -97,6 +97,28 @@ export function manageableOrgs(orgs) {
   return (orgs ?? []).filter((o) => o?.staffRole != null);
 }
 
+/** WHAT THE VIEWER MAY DO AT THIS GYM — the one place the console turns an org
+ *  row into a set of powers, so no screen has to decide what an absent field
+ *  means (T3 round 1 C/H-1).
+ *
+ *  **Absent is NOT the same as empty and the difference is load-bearing.**
+ *  `privileges` is optional on the response for the expand-then-contract reason
+ *  every other added field here is (:12660): absent means the api is older than
+ *  this bundle, and the honest fallback is **the role's own defaults** — exactly
+ *  what shipped before the ticks, and right for every row nobody has ticked.
+ *  Falling back to "no powers" would strip a real manager's controls the moment
+ *  the web deployed first. An EMPTY ARRAY is a real answer and is returned as
+ *  one: somebody who staffs nothing has no powers here.
+ *
+ *  Mirrors `effectivePrivileges` on the Staff screen, which answers the same
+ *  question about SOMEBODY ELSE's row. Both defer to `ROLE_PRIVILEGES` from
+ *  `@app/shared` rather than a table written here — a second copy would be a
+ *  second answer to "what may a trainer do". */
+export function viewerPrivileges(org) {
+  if (Array.isArray(org?.privileges)) return org.privileges;
+  return ROLE_PRIVILEGES[org?.staffRole] ?? [];
+}
+
 /** WHO MAY SEE A REMOVE CONTROL ON THE ROSTER.
  *
  *  Part 3 §4.3's member table ends with the rule verbatim: *"Trainer role:
@@ -104,16 +126,20 @@ export function manageableOrgs(orgs) {
  *  served the whole roster (:10010) and may read every row on it — what they
  *  may not do is end a membership, and the server already refuses them.
  *
+ *  **IT ASKS FOR THE POWER, NOT THE JOB TITLE, AND T3 ROUND 1 IS WHY.** This
+ *  read `staffRole === 'owner' || staffRole === 'manager'`, which was the same
+ *  answer as the server's for as long as nothing could grant a tick. The ticks
+ *  card made those two questions come apart: `removeOrgMember` gates on
+ *  `members.remove`, an owner can now tick that onto a trainer, and this screen
+ *  went on asking the title — so the tick bought a power with no button
+ *  anywhere. :11429's seam, which the server has honoured since :11891,
+ *  finally reaching the client.
+ *
  *  **Hiding is not the enforcement and is not pretending to be** (R3.3): the
  *  403 stays exactly where it was. This stops a console DRAWING a control it
- *  knows will be refused, which is the same defect J11 measures one component
- *  away on this very screen — a person doing their job, told off by a button
- *  the screen offered them.
- *
- *  Written as a rule rather than `!== 'trainer'` so a role added later is
- *  refused by DEFAULT rather than silently handed the button. */
-export function canRemoveMembers(staffRole) {
-  return staffRole === 'owner' || staffRole === 'manager';
+ *  knows will be refused — and, now, from HIDING one it has been told about. */
+export function canRemoveMembers(privileges) {
+  return Array.isArray(privileges) && privileges.includes('members.remove');
 }
 
 /** DOES THIS ROSTER ROW COST THE GYM A PLACE? — Kd's finding at the staff

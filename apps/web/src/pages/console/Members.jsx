@@ -7,6 +7,7 @@ import { useConsoleOrg } from './useConsoleOrg';
 import ApplicationsQueue from './ApplicationsQueue';
 import {
   canRemoveMembers,
+  viewerPrivileges,
   formatJoinedAt,
   groupLabelText,
   memberCountLabel,
@@ -162,7 +163,7 @@ export default function Members() {
   // already has, so there is no second read to disagree with the first, and it
   // is false while the org is still loading — the roster cannot be on screen
   // before then anyway.
-  const canRemove = canRemoveMembers(org?.staffRole ?? null);
+  const canRemove = canRemoveMembers(viewerPrivileges(org));
 
   useEffect(() => {
     if (gymId === null) return undefined;

@@ -38,6 +38,12 @@ export interface OrgRow {
 
 export interface MyOrgRow extends OrgRow {
   staffRole: OrgRole | null;
+  /** THE STORED TICKS ON THE CALLER'S OWN STAFF ROW, raw. `null` means either no
+   *  staff row at all (a plain member) or a row written before the column
+   *  existed — the service's `privilegesFor` is the one place that tells those
+   *  apart, exactly as it does for `getStaffAuthority`. Never interpreted here
+   *  (T3 round 1 C/H-1). */
+  privileges: string[] | null;
   isMember: boolean;
   joinedAt: Date | null;
 }
@@ -305,11 +311,17 @@ export const MY_ORGS_LIMIT = 100;
  *  never render the same gym twice. */
 export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyOrgRow[]> {
   const rows = await sql<
-    (RawOrg & { staff_role: string | null; is_member: boolean; joined_at: Date | null })[]
+    (RawOrg & {
+      staff_role: string | null;
+      privileges: string[] | null;
+      is_member: boolean;
+      joined_at: Date | null;
+    })[]
   >`
     SELECT g.id, g.slug, g.name, g.city, g.org_type, g.timezone, g.locale,
            g.currency_display, g.status,
            s.role AS staff_role,
+           s.privileges,
            (m.id IS NOT NULL) AS is_member,
            m.joined_at
     FROM gyms g
@@ -322,6 +334,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
   return rows.map((r) => ({
     ...toOrgRow(r),
     staffRole: r.staff_role === null ? null : toOrgRole(r.staff_role),
+    privileges: r.privileges,
     isMember: r.is_member,
     joinedAt: r.joined_at,
   }));
