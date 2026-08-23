@@ -4260,6 +4260,104 @@ file and is stated so nobody reads these as lower priority than they are.
       **What it needs is storage and a map to draw on, not an API.** Nothing
       built; no governing spec § (Part 6 §5.1 covers the permission flow and
       its Play-rejection-proof copy, which binds this).
+- [ ] 🟡 **THE MAP STACK IS RULED — MapLibre + PMTiles on R2 + bundled
+      elevation. Google is STRUCK (DECISIONS :17012).** **Read before wiring any
+      map.** Kd: *"abondoned google map i think"*, *"i want it to be like
+      starva"*. **Do not re-propose Google**, and note WHY it is struck: it is
+      free on mobile, but four of Google's own terms kill Kd's feature list —
+      no storing Content past **30 days**, no *"create or augment your own
+      mapping-related dataset"*, no offline, and styling cannot change WHAT is
+      on the map. **That is saved routes, shared routes, no-signal running, and
+      a runner's map.**
+      **BUILD: MapLibre GL Native · OpenStreetMap data · a self-hosted PMTiles
+      file on the R2 already in v1 §19 · ELEVATION BUNDLED INTO THAT SAME FILE.**
+      **The bundling is not optional polish:** AWS's terrarium tiles are free
+      with **no SLA and no guarantee**, and the dataset **already moved once**
+      when Mapzen shut down in 2018. Bundling costs nothing and makes the 3D
+      recap unbreakable.
+      **Measured: $1.80/mo at 1,000 AND at 10,000 users, $7.92 at 100,000**,
+      heavy-use ceiling ~$40. Egress is $0, which is the whole reason.
+      **The job Kd takes on: refreshing the map file every few months.** That is
+      the entire maintenance burden and he accepted it knowingly.
+- [ ] 🟡 **THE TWO SAFE SCAN-COST FIXES — ship them with the Gemini adapter
+      (DECISIONS :17012). 29% off, no quality risk.**
+      1. **Trim the model's JSON to ~120 tokens.** Output is 44% of the bill
+         (4× the input rate). Cut `cuisine_guess` and the free-text
+         `scale_anchors.notes`; shorten field names. **NEVER cut `confidence`
+         or `photo_quality`** — they drive the retake-photo path. You are
+         removing words, not decisions.
+      2. **GROW the prompt past ~1,024 tokens with 6-8 worked WESTERN
+         examples** (burger and fries, caesar salad, pasta, steak, breakfast
+         plate, sandwich, stir fry, smoothie bowl). Google's implicit cache
+         gives **90% off a repeated prefix above that threshold** and the
+         prompt is byte-identical every scan — **so a bigger prompt is cheaper
+         AND more accurate.** **Kd corrected the audience: WESTERN, not
+         Indian.** Vary the examples or the model over-predicts whatever
+         dominates them, and **no example may contain a calorie number.**
+      **$0.000229 → $0.000162.**
+      **⚠ DO NOT DROP TO 384px. Ruled out deliberately** — 34% saving,
+      unmeasured quality risk, on a bill that is 2.4¢ per member. **768px is
+      KEPT.** And know the shape before "compromising": **the image price is a
+      CLIFF — 385/512/640/768px all cost 1,032 tokens, only ≤384 drops to 258.**
+      A 512px compromise pays full price for a worse picture.
+      **⚠ THE MONTHLY POOL IS REJECTED. Kd: *"i do not agree with pool keep 5
+      scan per day for gyms users"*. 5/day per member is a HARD daily cap. Do
+      not re-propose the pool.** His $200 ceiling is held instead by
+      **staggering onboarding — 10 gyms one month, 10 the next** — which halves
+      the peak and touches nobody's allowance.
+- [ ] 🟡 **MEAL PHOTOS ARE NOW STORED — this REVERSES the request-only design
+      (Kd ruling 2026-08-24, DECISIONS :17012; supersedes the "photo storage
+      does not exist at all today" state at DECISIONS-INDEX:2934).**
+      **THE DECISION THAT DOMINATES EVERY OTHER: store the 768px copy you
+      already made for the AI, NOT the phone original.** 0.15 MB vs 3 MB ⇒
+      **$0.57 vs $11.45 added per month, EVERY month, forever. 20×.**
+      **STORAGE ACCUMULATES — API calls do not, and this is the new cost
+      SHAPE.** 20 gyms add 42 GB/mo → **$8.53/mo after a year**; 100,000
+      members add 418 GB/mo → **$87/mo**.
+      **Build R3.9's five guarantees** (magic-byte validation, size cap,
+      server-generated keys, signed URLs, never reflect a user filename) —
+      they are exactly the five ways object storage leaks.
+      **OFFERED, NOT RULED: delete meal photos at 90 days** — holds storage near
+      $2.86/mo at two years instead of $14.88. Kd's call whether people want
+      last year's lunch.
+- [ ] 🟡 **VIDEO FROM GYMS AND USERS — R2, NEVER CLOUDFLARE STREAM
+      (DECISIONS :17012).** Stream bills **$1 per 1,000 minutes WATCHED**, so
+      popularity IS the bill: at 100k members it is **$610/mo against R2's
+      $1.00**. R2's egress is $0.
+      **Kd's plan: 20 videos per gym, 5 minutes max, pay extra beyond.**
+      **STRAVA CAPS VIDEO AT 30 SECONDS** and auto-crops anything longer.
+      **RECOMMENDED 60s, and the argument is NOT money — it is the VIEWER'S
+      DATA PLAN:** a 5-minute 720p clip is **94 MB**, so five gym videos burn
+      half a gigabyte of a member's mobile data, and a raw 94 MB file from R2
+      has no quality-switching so it buffers on weak signal. **Fixing THAT
+      means Stream, and Stream at 5 minutes is $410/mo.**
+      **Also recommended: sell MINUTES, not video count** — 20 five-minute
+      videos is ten times 20 thirty-second ones.
+      **Do not launch video without report-and-remove** — same surface as
+      route sharing.
+- [ ] ⚪ **THE SHARE CARD KD ASKED FOR ALREADY EXISTS IN THE SPEC — build
+      Part 7 §5.1, do not design it (DECISIONS :17012).** His *"photo with this
+      much running for his time"* is §5.1's card generator: workout summary, PR,
+      streak, challenge, certificate, and a **run card whose map thumb already
+      carries the 200 m end-trim** (Part 6 §5.4) that :16924 independently
+      re-derived for shared routes. R2 `share-cards/` with a 7-day lifecycle,
+      20/day rate limit, org logo for gym members. **Free-tier watermark +
+      referral QR IS the growth mechanic** — it is not decoration. Cost ≈ $0.
+- [ ] 🟡 **BACK THE MEAL PHOTOS UP OFF R2, AND RENDER A PLACEHOLDER WHEN AN
+      IMAGE FAILS (DECISIONS :17012).** R2 is KEPT and it is the right call —
+      but its record is younger: **13 Cloudflare outages 7-14 Aug 2026, with R2
+      write availability down ~2 h in Eastern North America on 7 Aug and one
+      customer reporting ~67 GB unrestored days later.** One tier, no Object
+      Lock, limited versioning; **5 of 14 studied migrations went BACK to S3.**
+      **Meal photos are the only stored thing that cannot be regenerated** — the
+      map file can be rebuilt, share cards redrawn. A weekly copy elsewhere is
+      cents. And a failed image must never break a screen.
+- [ ] 🟡❓ **DOES R2 MEET US HEALTH-DATA COMPLIANCE? Joins the :592 / :9944
+      lawyer list (DECISIONS :17012).** R2's compliance certifications are less
+      mature than S3's — no Object Lock/WORM, thinner audit surface — and this
+      app stores **meals, weight and workouts, which are health data under
+      several US state laws.** Not a reason to move today; a question the
+      pre-signing lawyer review must actually answer.
 - [ ] 🔴❓ **ROUTE SHARING PUBLISHES WHERE PEOPLE LIVE UNLESS FOUR THINGS ARE
       BUILT IN FROM THE FIRST LINE — Kd asked for the feature 2026-08-24
       (DECISIONS :16924); the privacy shape is UNRULED.**

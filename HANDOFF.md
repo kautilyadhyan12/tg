@@ -1,6 +1,75 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE MAP IS SETTLED, THE SCAN BILL IS HALVED, MEDIA BECOMES STORED.
+      DECISIONS :17012 — the last of a long ruling session (:16548, :16702,
+      :16812, :16924, :17012 are ONE conversation, read in that order).
+      **NOTHING BUILT ALL SESSION. Records only.**
+
+THE FIVE THINGS A NEXT CHAT WILL OTHERWISE GET WRONG
+  1. **GOOGLE MAPS IS STRUCK — but NOT because it is expensive.** On MOBILE it
+     is FREE and unlimited (the earlier chat was right; this one quoted the WEB
+     price list at a phone-only feature and was corrected). It is struck
+     because FOUR of Google's own terms kill Kd's features: no storing Content
+     past 30 days · no "create or augment your own mapping-related dataset" ·
+     no offline · styling cannot change WHAT is on the map. That is saved
+     routes, shared routes, no-signal running, and a runner's map.
+     **RULED STACK: MapLibre GL Native + OpenStreetMap + self-hosted PMTiles on
+     the R2 in v1 §19 + ELEVATION BUNDLED IN** (AWS's free tiles have no SLA
+     and already moved once when Mapzen died). $1.80/mo at 10k users, $7.92 at
+     100k.
+  2. **DO NOT DROP THE IMAGE TO 384px, and do not "compromise" at 512.** The
+     image price is a CLIFF: 385/512/640/768px ALL cost 1,032 tokens; only
+     ≤384 drops to 258. 512px = full price, worse picture. **768px is KEPT** —
+     34% was available and was declined for quality.
+  3. **THE MONTHLY POOL IS REJECTED.** Kd: "i do not agree with pool keep 5
+     scan per day for gyms users". **5/day is a HARD daily cap. Do not
+     re-propose.** His $200 ceiling is held by STAGGERING onboarding instead —
+     10 gyms, then 10.
+  4. **A BIGGER PROMPT IS CHEAPER.** Google's implicit cache gives 90% off a
+     repeated prefix above ~1,024 tokens, and the prompt is byte-identical
+     every scan. So grow it to ~1,100 with 6-8 worked WESTERN examples — that
+     is cheaper AND more accurate. **Audience is WESTERN, Kd corrected this.**
+     Pair with trimming OUTPUT to ~120 tokens (44% of the bill; never cut
+     `confidence`/`photo_quality`). Net $0.000229 → $0.000162.
+  5. **MEAL PHOTOS ARE NOW STORED** — reverses the request-only design at
+     index :2934. **Store the 768px copy, NOT the phone original: $0.57 vs
+     $11.45 added EVERY month, 20×.** Storage ACCUMULATES; API calls do not.
+
+VIDEO
+  · **R2, never Cloudflare Stream** — Stream bills $1 per 1,000 minutes
+    WATCHED ($610/mo vs R2's $1.00 at 100k members).
+  · Kd wants 20/gym at 5 MINUTES. **Strava caps at 30 SECONDS.** Recommended
+    60s — **the argument is the VIEWER'S DATA PLAN, not money**: 5 min 720p =
+    94 MB, and a raw 94 MB file has no quality-switching. Sell MINUTES, not
+    video count.
+  · **The share card Kd described ALREADY EXISTS: Part 7 §5.1**, run card
+    included, map thumb already 200 m end-trimmed. Build it, don't design it.
+
+R2 — KEPT, with its unflattering half on the record
+  · 13 Cloudflare outages 7-14 Aug 2026; R2 writes down ~2 h on 7 Aug, one
+    customer ~67 GB unrestored days later. One tier, no Object Lock, limited
+    versioning. 5 of 14 studied migrations went BACK to S3.
+  · OWED: back meal photos up off R2 (only unregenerable thing stored) · a
+    failed image renders a placeholder · **R2 vs US health-data compliance
+    joins the :592/:9944 lawyer list**.
+  · Security: storage is never where apps leak, CONFIGURATION is. R3.9 already
+    mandates the fix for all five real risks. Real exposure is cross-gym
+    access (R3.2), the NEW sharing surfaces, and the P0 secret rotation.
+
+THE MARGIN, recorded so a future pricing chat does not blame the API
+  · Cal AI charges the PERSON $2.42/mo against a 2.4¢ heavy user = 100×.
+    This app charges the GYM 7.8¢/member for the same 2.4¢ = 3.2×.
+    Same product, 30× difference in what is collected. **The gym model works
+    only because most members never open the app.**
+
+NEXT
+  1. The parity-test card — cost is answered, QUALITY is not, and nobody has
+     shown Flash-Lite reads food as well as Qwen.
+  2. Then the Gemini adapter (with the two cost fixes built in).
+```
+
+```
 TASK: NUTRITION AND RUNNING LEAVE THE WEB — a MOVE to the phone app, not a
       deletion. The map choice leaves with them. DECISIONS :16812.
       **Nothing built. `apps/mobile` still does not exist.**

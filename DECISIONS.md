@@ -17008,3 +17008,209 @@ without paying anyone.
 - **The map renderer decision (:16702), still Kd's and still unmade.**
 
 **Nothing built. No schema change in this commit.**
+
+## THE MAP IS SETTLED, THE SCAN BILL IS HALVED, AND MEDIA BECOMES A THING THIS APP STORES — the long session's remaining rulings (2026-08-24)
+
+**Read before wiring any map, before touching `vision.adapter.ts`, before
+building photo or video upload, and before quoting any storage cost.**
+Continues :16548 / :16702 / :16812 / :16924 from the same session.
+
+### 1 · GOOGLE MAPS — THE CHAT WAS WRONG FIRST, THEN RIGHT, AND BOTH HALVES MATTER
+
+**MY ERROR, corrected mid-session:** I told Kd Google Maps costs $7/1,000 views.
+**That is the WEB price list.** Running is phone-only (:16812), and **Google's
+mobile Maps SDK for Android and iOS is listed by Google as "Unlimited" — free,
+no cap** (`developers.google.com/maps/billing-and-pricing/pricing`, read
+2026-08-24). **The abruptly-closed previous chat that recommended Google was
+RIGHT on that point and I quoted the wrong price list at it.**
+
+**Then the deeper question — "why doesn't Strava use Google?" — produced the
+answer that actually decides it.** Four clauses from Google's own terms
+(`developers.google.com/maps/terms-20180207`):
+
+| Google's term | What it costs Kd |
+|---|---|
+| *"must not pre-fetch, cache, index, or store any Content"* — coordinates max **30 days** | **Kills saved routes and shared routes**, which are :16924 items 3 and 4 |
+| *"will not use Google's Content or Services to create or augment your own mapping-related dataset"* | **Kills the popular-routes database**, :16924 item 4 |
+| No offline maps | The app dies where the signal does |
+| Styling cannot change WHAT is on the map | Cannot build a runner's map — the documented reason Strava went to Mapbox |
+
+Plus **Google's photorealistic 3D is a separate paid SKU** (1,000 free/month,
+then $0.60/1,000), while MapLibre's terrain 3D is free.
+
+**KD'S RULING: drop Google.** *"abondoned google map i think"*, then
+*"i want it to be like starva"*.
+
+**THE STACK, RULED:** **MapLibre GL Native** (Mapbox GL forked at the point
+Mapbox closed it — same engine, same 3D terrain API) · **OpenStreetMap data**
+(what Strava's maps are made of) · **self-hosted PMTiles on the R2 already in
+v1 §19** · **elevation bundled into that same file** · LocationIQ stays for
+address search.
+
+**MEASURED — the whole reason self-hosting wins:** R2 storage $0.015/GB-mo,
+Class B reads $0.36/M, **egress $0**. Whole-planet PMTiles ≈130 GB.
+**1,000 users $1.80/mo · 10,000 users $1.80/mo · 100,000 users $7.92/mo**,
+heavy-use ceiling ~$40.
+
+**Why Strava itself is on Mapbox and not this** — asked directly, answered
+honestly: R2 launched 2021 and PMTiles later, while Strava chose ~2015; at
+~150M users they are buying operated infrastructure, support and an SLA, not a
+renderer; and the invoice is a rounding error against their revenue. **All
+three reverse at Kd's scale.** The trade he accepts: **he owns refreshing the
+map file every few months.**
+
+### 2 · AWS ELEVATION TILES ARE FREE WITH NO PROMISE — bundle, don't depend
+
+`registry.opendata.aws/terrain-tiles/` (read 2026-08-24): free, no
+authentication, **managed by Mapzen under the AWS Open Data Sponsorship
+Program — no SLA and no stated guarantee of permanence.** **It has already
+moved once: Mapzen shut down in 2018 and AWS picked the data up.**
+**RECOMMENDED: put elevation INSIDE the PMTiles file on R2** so the 3D recap
+cannot break when someone else's sponsorship ends. Costs nothing extra.
+
+### 3 · CUTTING THE SCAN BILL — what was kept, and the one thing DROPPED for quality
+
+**KEPT (both ship, neither risks quality):**
+- **Trim the model's JSON output to ~120 tokens.** Output is 44% of the bill
+  because it costs 4× input. **Cut `cuisine_guess` and the free-text
+  `scale_anchors.notes`; shorten field names. NEVER cut `confidence` or
+  `photo_quality`** — those drive the retake-photo path. Removing words, not
+  decisions.
+- **GROW the prompt past ~1,024 tokens with 6-8 worked WESTERN examples**
+  (burger and fries, caesar salad, pasta, steak, breakfast plate, sandwich,
+  stir fry, smoothie bowl). **Google's implicit caching gives 90% off a
+  repeated prefix above that threshold**, and the prompt is byte-identical on
+  every scan. **So a BIGGER prompt is both cheaper and more accurate** —
+  few-shot examples are the most reliable accuracy lever there is.
+  **Kd corrected the audience mid-session: the target is WESTERN, not Indian.**
+  Examples must be varied or the model over-predicts whatever dominates them,
+  and **no example may contain a calorie number** (the never-do-nutrition-maths
+  rule stands).
+- Net: **$0.000229 → $0.000162 per scan, 29% off, no quality risk.**
+
+**DROPPED ON PURPOSE — the 384px image.** It saves 34% and **it is not worth
+it.** A 384px photo is small and mixed plates would suffer; nobody has
+measured it; the saving is a third of a bill that is already 2.4 cents per
+member. **768px is KEPT.**
+
+**THE FINDING THAT MAKES THAT CHEAP TO OBEY — the image price is a CLIFF, not a
+slope.** Computed from Google's own tiling rule (258 tokens if both dimensions
+≤384; otherwise 768×768 tiles at 258 each):
+
+| 384px | 385px | 512px | 640px | 768px | 1024px |
+|---|---|---|---|---|---|
+| 258 tok | 1,032 | 1,032 | 1,032 | 1,032 | 1,032 |
+
+**Everything from 385 to 768 costs exactly the same.** There is no middle
+ground to split — a chat "compromising" at 512px would pay full price for a
+worse picture.
+
+**KD REJECTED THE MONTHLY POOL.** It was recommended (a gym pool of 90/member
+bounds the worst case at $146 instead of $243 while nobody loses 5/day) and he
+declined: *"i do not agree with pool keep 5 scan per day for gyms users"*.
+**5/day per member stays a hard daily cap. Do not re-propose the pool.**
+**The accepted alternative for his stated $200 ceiling: STAGGER THE ONBOARDING
+— 10 gyms one month, 10 the next.** Halves the peak, touches nobody's
+allowance, and is better sales practice.
+
+### 4 · THE MARGIN, WHICH IS THE REAL CONSTRAINT AND IS NOT AN API PROBLEM
+
+Kd asked how Cal AI affords scanning. Measured comparison:
+
+| | Charges | Cost of a 5-a-day member | Margin |
+|---|---|---|---|
+| **Cal AI** | **$29/yr = $2.42/mo, to the PERSON** | 2.4¢ | **100×** |
+| **This app** | **7.8¢/member, to the GYM** ($39 ÷ 499) | 2.4¢ | **3.2×** |
+
+**Same product, same API bill, 30× difference in what is collected.** Cal AI
+reached ~$40M ARR and was acquired by MyFitnessPal in March 2026 selling to the
+END USER. **The gym model works only because most members never open the app —
+which is exactly why the worst case must stay affordable.** Recorded because a
+future pricing conversation will otherwise blame the API.
+
+### 5 · MEAL PHOTOS WILL NOW BE STORED, AND VIDEO ARRIVES — a new cost SHAPE
+
+**KD RULING: meal photos ARE stored.** This REVERSES the request-only design
+(`DECISIONS-INDEX:2934`, "photo storage does not exist at all today"). **Plus
+limited video from gyms AND users, Strava-style.**
+
+**STORAGE ACCUMULATES. API calls do not. This is the genuinely new thing** — a
+month's photos keep costing every month after.
+
+**THE DECISION THAT DOMINATES ALL OTHERS: store the 768px copy you already
+made for the AI, NOT the phone original.** 0.15 MB vs 3 MB ⇒ **$0.57 vs $11.45
+added per month, every month, forever. 20×.**
+
+| | adds/month | after 12 months |
+|---|---|---|
+| 20 gyms @ 499 | 42 GB | **$8.53/mo** |
+| 100,000 members | 418 GB | **$87/mo** |
+
+Deleting meal photos at 90 days holds it near $2.86/mo at two years instead of
+$14.88 — **offered, not ruled.**
+
+**VIDEO — R2, NEVER CLOUDFLARE STREAM.** Stream bills **$1 per 1,000 minutes
+WATCHED**, so popularity is the bill; R2's egress is free.
+
+| 30s clips | Stream | R2 |
+|---|---|---|
+| 5,000 clips / 100k plays | $65 | **$0.64** |
+| 50,000 clips / 1M plays | $625 | **$6.44** |
+| 4,000 clips / 1.2M plays (100k members) | $610 | **$1.00** |
+
+**KD'S PLAN: 20 videos per gym, 5 minutes max, pay extra beyond that.**
+**STRAVA CAPS VIDEO AT 30 SECONDS** and auto-crops anything longer
+(`support.strava.com`); photos are unlimited but only 6 show on mobile.
+**RECOMMENDED, not ruled: 60 seconds** — double Strava, 19 MB, free on R2, and
+it loads. **Money is NOT the argument. The viewer's data plan is:** a 5-minute
+720p clip is **94 MB**, so five gym videos burn half a gigabyte of a member's
+mobile data, and a 94 MB file served raw from R2 has no quality-switching so it
+buffers on weak signal. **Fixing THAT means Stream, and Stream at 5 minutes is
+$410/mo.** **Also recommended: sell MINUTES, not video count** — 20 five-minute
+videos is ten times 20 thirty-second ones.
+
+**THE SHARE CARD KD DESCRIBED ALREADY EXISTS IN THE SPEC.** "a photo with this
+much running for his time" is **Part 7 §5.1's card generator** — workout
+summary, PR, streak, challenge, certificate, and a **run card whose map thumb
+already carries the 200 m end-trim** (Part 6 §5.4) that :16924 independently
+recommended for shared routes. Free tier carries wordmark + referral QR — **the
+watermark IS the growth mechanic.** 7-day R2 lifecycle, 20/day rate limit.
+**Cost ≈ $0. Nothing to design; build what §5.1 says.**
+
+### 6 · R2 ITSELF — asked directly, answered with the unflattering parts
+
+**Ruled: KEEP R2.** Reasons: it is already v1 §19's choice; his workload
+(photos, video, map tiles, share cards) is precisely the read-heavy
+public-facing case R2 wins by 40-70%; and the alternative bills per byte sent.
+
+**THE DOWNSIDES, recorded so nobody re-discovers them as news:**
+- **Reliability is younger and bumpier. Cloudflare logged 13 outages 7-14 Aug
+  2026; R2 write availability failed in Eastern North America on 7 Aug for
+  ~2 h, with one customer reporting ~67 GB unrestored days later.** This
+  month.
+- One storage tier — no cheap archive.
+- Limited versioning; **no Object Lock (WORM)**.
+- **Compliance certifications less mature than S3's — and this one is about
+  THIS app**, which stores meals, weight and workouts, i.e. US health data.
+  **Goes on the :592 / :9944 lawyer list before the first US gym signs.**
+- One study of 14 migrations: 9 saved 40-70%, **5 went back to S3 within 90
+  days.**
+
+**THREE THINGS OWED BECAUSE OF IT:** back the meal photos up off R2 (the only
+stored thing that cannot be regenerated — the map file can) · a failed image
+must render a placeholder, never break a screen · the compliance question to
+the lawyer.
+
+**On "will R2 make my app insecure" — no, and the honest framing is that
+storage is never where apps leak; configuration is.** The five real risks are
+public buckets, guessable keys, leaked credentials, fake uploads and upload
+flooding — **and R3.9 already mandates the fix for all five** (magic-byte
+validation, size cap, server-generated keys, signed URLs, never reflecting a
+user filename). **Kd's actual exposure is elsewhere: cross-gym data access
+(R3.2's per-route denial test), the NEW sharing surfaces, and the P0 secret
+rotation the playbook opens with — if that was never done it is a bigger hole
+than anything here.**
+
+### NOTHING BUILT IN THIS COMMIT
+
+No code changed all session. Records only.

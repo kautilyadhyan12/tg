@@ -825,6 +825,71 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:17012** — 2026-08-24 — **THE MAP IS SETTLED, THE SCAN BILL IS HALVED, AND
+  MEDIA BECOMES A THING THIS APP STORES.** **Read before wiring any map, before
+  touching `vision.adapter.ts`, before building photo/video upload, and before
+  quoting any storage cost.**
+  **GOOGLE MAPS — the chat was WRONG then RIGHT and both halves bind.** It
+  quoted $7/1,000 (the WEB list) at a phone-only feature; **Google's mobile
+  Maps SDK is listed "Unlimited", free** — the abruptly-closed earlier chat was
+  right on that. **But four of Google's OWN TERMS kill Kd's feature list:** no
+  storing Content beyond **30 days**, no *"create or augment your own
+  mapping-related dataset"*, no offline, and styling cannot change WHAT is on
+  the map. **That is saved routes, shared routes, no-signal running, and a
+  runner's map — :16924 items 2/3/4.** Plus Google's photorealistic 3D is a
+  paid SKU. **KD RULED: drop Google** (*"abondoned google map"*, *"i want it to
+  be like starva"*). **STACK RULED: MapLibre GL Native + OpenStreetMap +
+  self-hosted PMTiles on the R2 in v1 §19 + elevation bundled in.** Measured:
+  **$1.80/mo at 1k AND 10k users, $7.92 at 100k**, heavy ceiling ~$40 (egress
+  is $0). Why Strava is on Mapbox instead: R2 launched 2021 and Strava chose
+  ~2015; at 150M users they buy operated infra + SLA, and the invoice is a
+  rounding error — **all three reverse at Kd's scale.**
+  **AWS elevation tiles are free with NO guarantee** (Open Data sponsorship, no
+  SLA, and the data ALREADY moved once when Mapzen died in 2018) — **bundle
+  elevation into the PMTiles file rather than depending on it.**
+  **SCAN COST: two fixes KEPT, one DROPPED.** Kept — trim output to ~120 tokens
+  (44% of the bill; cut `cuisine_guess` and free-text `scale_anchors.notes`,
+  **never `confidence`/`photo_quality`**) and **GROW the prompt past ~1,024
+  tokens with 6-8 WESTERN worked examples**, because Google's implicit cache
+  gives **90% off a repeated prefix above that size** — so a bigger prompt is
+  cheaper AND more accurate. **$0.000229 → $0.000162, 29% off, no quality
+  risk.** **DROPPED deliberately: the 384px image** — 34% saving, unmeasured
+  quality risk, not worth it on a 2.4¢ bill. **768px KEPT.** **THE IMAGE PRICE
+  IS A CLIFF, NOT A SLOPE: 385/512/640/768px ALL cost 1,032 tokens; only ≤384
+  drops to 258** — a chat "compromising" at 512px pays full price for a worse
+  picture. **KD REJECTED THE MONTHLY POOL** (*"i do not agree with pool keep 5
+  scan per day"*) — **5/day hard cap stands, do not re-propose**; the accepted
+  ceiling control is **staggering onboarding, 10 gyms then 10**.
+  **THE MARGIN IS THE REAL CONSTRAINT AND IS NOT AN API PROBLEM: Cal AI charges
+  the PERSON $2.42/mo against a 2.4¢ heavy user = 100× margin; this app charges
+  the GYM 7.8¢/member for the same 2.4¢ = 3.2×.** Same product, 30× difference
+  in what is collected; the gym model works only because most members never
+  open the app.
+  **KD RULED MEAL PHOTOS ARE STORED — reversing the request-only design at
+  index :2934 — plus limited gym AND user video.** **STORAGE ACCUMULATES; API
+  calls do not.** **The dominating decision: store the 768px copy, not the
+  phone original — $0.57 vs $11.45 added EVERY month, 20×.** 20 gyms: +42
+  GB/mo → $8.53/mo at a year. 100k members: +418 GB/mo → $87/mo. **VIDEO: R2,
+  NEVER Cloudflare Stream** — Stream bills **$1/1,000 minutes WATCHED**
+  ($610/mo vs R2's $1.00 at 100k members). Kd wants 20 videos/gym at **5
+  minutes**; **Strava caps at 30 SECONDS and auto-crops**; **recommended 60s —
+  and money is NOT the argument, the VIEWER'S DATA PLAN is** (5 min 720p = 94
+  MB, and a raw 94 MB file has no quality-switching, so fixing that means
+  Stream at $410/mo). Also: **sell MINUTES, not video count.** **The share card
+  Kd described ALREADY EXISTS in the spec — Part 7 §5.1**, run card included,
+  **whose map thumb already carries the 200 m end-trim :16924 re-derived**;
+  free-tier watermark IS the growth mechanic. ~$0.
+  **R2 KEPT, with its unflattering half recorded: 13 Cloudflare outages 7-14
+  Aug 2026, R2 writes down ~2 h on 7 Aug with ~67 GB unrestored days later; one
+  tier, no Object Lock, limited versioning; compliance certs less mature than
+  S3's — which matters HERE because meals/weight/workouts are US health data,
+  so it joins the :592/:9944 lawyer list; and 5 of 14 studied migrations went
+  BACK to S3.** Owed because of it: **back meal photos up off R2** (the only
+  unregenerable thing stored), a failed image renders a placeholder, and the
+  compliance question. **On security: storage is never where apps leak,
+  configuration is — R3.9 already mandates the fix for all five real risks; the
+  actual exposure is cross-gym access (R3.2), the NEW sharing surfaces, and the
+  P0 secret rotation the playbook opens with.** Nothing built.
 - **:16924** — 2026-08-24 — **KD SPECIFIES THE RUNNING FEATURE IN FULL — five
   parts, FOUR ALREADY ON THE SERVER, and the fifth publishes where people
   live.** **Read before planning the phone running card, before touching
