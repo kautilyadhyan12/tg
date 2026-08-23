@@ -4666,7 +4666,26 @@ file and is stated so nobody reads these as lower priority than they are.
       applicant waits for a front-desk tap, including a gym's own existing
       members.** Acceptable only because :11132 keeps them on the whole free app
       meanwhile. Closes with the import card, not before.
-- [ ] 🟡 **PER-STAFF PRIVILEGE TICKS HAVE NO STORAGE — the seam is in, the
+- [x] 🟡 **DONE 2026-08-23 — commits `245632d` (screen) · `f1a334a` (T3 r1 fixes)
+      · `291f499` (T3 r2 fixes), and the re-smoke Kd ran on the last of them.
+      TICKED ON THE FULL GATE AND NOT A BYTE LESS:** a passed 10-step smoke
+      (:15927), a review round finding **zero Critical/High** (:16221), **and the
+      one observation both of those were missing** — a human watching a power
+      ticked ON reach a control. Kd ran that himself on a TRAINER, after the
+      reload: *Change join codes* ticked on → Pause/Replace/New code **appeared**;
+      ticked off → they **disappeared**, with the code itself still visible
+      because sharing it is a different tick. **That last step is why this line
+      sat unticked for a day after its stated conditions were already met** —
+      step 7 of the original sheet was meant to be it and proved nothing (:16221
+      L-3), and ticking over that would have been :5034's recorded defect wearing
+      a better argument. **The remaining work on this SURFACE is card C (custom
+      role names) and the ⚪ refresh line; neither belongs to this item.**
+
+      **The whole history below is kept UNSTRUCK and is worth reading** — it is
+      the clearest worked example on this branch of a gate being met on paper
+      before it was met in fact.
+
+      **ORIGINALLY: PER-STAFF PRIVILEGE TICKS HAVE NO STORAGE — the seam is in, the
       table is not** (deferred 2026-08-19, DECISIONS :11891). Kd ruled the model
       at :11429 and reaffirmed the widening half on 2026-08-19: *"ok only owner
       and manager but if owner gives permission others can also add"*. Built

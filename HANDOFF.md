@@ -10273,3 +10273,61 @@ NEXT
   3. Kd's call on the migration-lag 🟡 line (boot-time refusal recommended).
   4. Then card C: custom role names.
 ```
+
+```
+TASK: THE TICK-BOXES RE-SMOKE — PASSED, and `OWED.md`'s ticks line is TICKED.
+      Kd ran it himself on `291f499`. No code changed; this commit is the tick.
+
+WHAT HE ACTUALLY OBSERVED, and it is the thing every earlier gate was missing
+  · TRAINER `user2`, after a RELOAD: *Change join codes* ticked ON →
+    **Pause / Replace / New code APPEARED**; ticked OFF → they **DISAPPEARED**,
+    with the code itself still visible (sharing it is a different tick).
+  · **That is the widening direction, seen by a human for the first time.** The
+    10-step smoke (:15927) never observed it — step 7 ran with a MANAGER and
+    could not — and T3 could only reason about it. The line's two STATED
+    conditions had been met for a day; this is what made them TRUE in fact.
+  · **The tick was held back deliberately for that day** rather than taken on
+    the stated conditions, and Kd was given the choice in one line. :5034's
+    recorded defect is ticking on less than the real gate; the mirror defect —
+    a met gate left unticked — is what this commit closes.
+
+TWO THINGS KD RAISED THAT ARE NOW MEASURED, NOT GUESSED
+  · **"Why is it slow?" — the database is in SINGAPORE and every query is a
+    ~92 ms round trip.** Proven, not inferred: `/health` runs exactly one
+    `SELECT 1` and takes exactly 92 ms. From his own clicks: `/orgs/mine`
+    1246 ms median, members 2888 ms, codes 2132 ms, save-permissions 2394 ms.
+    A screen asks 5–15 questions, so a second or two is TRAVEL, not work.
+    **Ruled out with evidence: Redis** (no `REDIS_URL`, the code uses its
+    no-op fallback outside production, zero redis lines in the log).
+    **Incidental to any measurement taken with curl on this machine: TCP
+    connect to localhost alone is ~210 ms** — a Windows artifact, not the app,
+    and browsers amortise it with keep-alive.
+  · **"Will millions of users break it?" — that is LOAD; this is DISTANCE, and
+    they are different.** §20's scale path already has triggers (0–2k: change
+    nothing · ~10k: bigger VPS or 2 containers behind an LB, at p95 > 250 ms or
+    CPU > 70% · ~50k: read replica). **Said plainly to him and repeated here:
+    NOTHING HAS EVER BEEN LOAD-TESTED.**
+
+A GAP IN THE PLAN, FOUND BY HIS QUESTION AND TRACKED NOWHERE
+  · **No REGION is named anywhere** — v1 §19 fixes Hetzner + Neon + Upstash +
+    Vercel and never says WHERE, and neither `OWED.md` nor `DECISIONS-INDEX.md`
+    records a choice (grep-verified). **It is the single decision that decides
+    whether today's 92 ms disappears at launch or follows the product into
+    production**, and the market is US gyms (:9604), so both halves belong in a
+    US region. Needs its own line before the deploy card.
+
+NEXT
+  1. **The ⚪ refresh line — recommended next and Kd has now FELT it** ("each
+     time i have to reload"). One change fixes both his complaints: ask once,
+     keep it, re-check on window focus. Fewer round trips AND no manual reload.
+  2. The 🟡 smoke line — the missing TRAINER step (now proven by the re-smoke,
+     so it is writing it down, not discovering it).
+  3. The 🟡 migration-lag line — boot-time refusal recommended.
+  4. **Card C: custom role names** — the last of the three Kd approved. Smallest
+     of them, because no route checks a role NAME (:11891's seam): a custom role
+     is a NAMED PRESET OF TICKS. Needs a second migration (`gym_staff.role` is
+     `text` under a three-value CHECK) and must carry :14745's open question —
+     :11429 stores the effective set as a SNAPSHOT while a NAMED role invites
+     the opposite expectation, and Kd settled it at :15381 (editing a named role
+     changes nobody until the owner taps "change everyone on this role too").
+```
