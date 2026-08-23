@@ -4720,9 +4720,10 @@ file and is stated so nobody reads these as lower priority than they are.
       LINE STILL DOES NOT TICK: T3 IS THE ONE REMAINING GATE.** Kd's run on
       `245632d`, tree verified byte-identical before and after. **Step 6 passed in
       BOTH directions** — the helper was refused the member list the moment the
-      box came off and got it back when it went on — and **step 7 repeated the
-      enforcement on a SECOND power** (`codes.manage`: the controls went, the code
-      itself stayed, because `codes.invite` is a different tick). A passing smoke
+      box came off and got it back when it went on — and ~~step 7 repeated the enforcement on a
+      SECOND power~~ **— STRUCK 2026-08-23 by the re-review's L-3: step 7 ran with a
+      MANAGER, whose ROLE alone drew those controls, so it proved nothing either
+      way, and its "gone or refused" ✅ was satisfied by the defect round 1 found.** A passing smoke
       is not a review (:14147); one round finding zero Critical/High is what is
       left.
       **T3 ROUND 1 HAS SINCE RUN — ONE Critical/High, THREE Low; THE PACKET DOES
@@ -4750,6 +4751,35 @@ file and is stated so nobody reads these as lower priority than they are.
       shared 51/51 · WEB SWEEP whole table 64 · 64 RED · 0 ALIVE · API SWEEP a
       stated subset 2 of 105 · 2 RED. **A passing smoke plus a closed round is
       still not a review** (:14147).
+      **DEPLOY THE API BEFORE THE WEB FOR THIS FIELD — re-review L-2, and it is
+      the one operational thing this line carries.** `viewerPrivileges` falls back
+      to the ROLE's defaults when `privileges` is absent, which is right in the
+      direction it was chosen for (a real manager keeps their controls if the web
+      ships first) and WRONG in the narrowing direction: in a window where the web
+      is newer than an api that has the ticks WRITE route but not this READ field,
+      **somebody an owner has NARROWED is still drawn Remove and the code
+      controls**, and the server 403s them — the "offers a control it knows will
+      be refused" defect, at the one moment the fallback cannot avoid it. R3.3
+      holds throughout (the 403 is still the enforcement) and **api-first closes
+      it entirely**. Nothing else on this branch depends on the ordering, so it is
+      written here rather than made a separate line.
+      **RE-REVIEW: ZERO Critical/High — THE PACKET SHIPS** (:5348 rule 1). Three
+      Lows, all fixed on top: the THIRD gate of round 1's own class
+      (`canManageStaff` still read the job title — Low only because
+      `staff.manage` cannot diverge from `role === 'owner'` on any reachable row
+      today, and it stops being Low the day a second owner or delegated staff
+      management ships), this deploy note, and the smoke's step-7 overstatement.
+      **STILL NOT TICKED, AND THE REASON IS A JUDGEMENT PUT TO KD RATHER THAN MADE
+      QUIETLY.** Both conditions this line names are literally met — a passed
+      smoke and a round finding zero Critical/High — **and the step the line
+      itself calls load-bearing (step 6) is sound and discriminates.** What holds
+      it is that **no human has yet watched a power ticked ON reach a control**:
+      step 7 was meant to be that observation and proved nothing (L-3 above), so
+      the headline direction of the feature has been seen working by tests and
+      mutants only. That is a small, named, tracked thing — the 🟡 line below — and
+      ticking over it would be :5034's recorded defect wearing a better argument.
+      **Kd's call: tick now on the stated conditions, or hold for the one-step
+      re-smoke.** Recommended: hold, it is two minutes of clicking.
 - [ ] 🟡 **THE TICK-BOXES SMOKE HAS NO STEP THAT TICKS A POWER *ON* FOR A
       TRAINER — which is the only shape that can catch the defect T3 round 1
       found** (2026-08-23, DECISIONS :16095). **Read before running or editing

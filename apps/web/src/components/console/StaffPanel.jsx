@@ -570,8 +570,8 @@ function StaffRow({ person, busy, onChangeRole, onRemove, onSavePrivileges }) {
   );
 }
 
-export default function StaffPanel({ gymId, staffRole, orgType }) {
-  const allowed = canManageStaff(staffRole);
+export default function StaffPanel({ gymId, privileges, orgType }) {
+  const allowed = canManageStaff(privileges);
 
   const [state, setState] = useState({ loading: true, error: null, staff: [] });
   const [attempt, setAttempt] = useState(0);

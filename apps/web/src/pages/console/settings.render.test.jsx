@@ -12,6 +12,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { ROLE_PRIVILEGES } from '@app/shared';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -669,7 +670,7 @@ describe('the Settings tab', () => {
 // it, exactly as :14401 closed O86.
 describe('the Staff panel mounted on its own', () => {
   it('asks the server NOTHING about staff when the viewer is not the owner', async () => {
-    render(<StaffPanel gymId={ORG.id} staffRole="manager" />);
+    render(<StaffPanel gymId={ORG.id} privileges={ROLE_PRIVILEGES.manager} />);
     // `render` wraps in `act`, so effects have already flushed here — this is a
     // measurement, not a race the assertion happens to win.
     expect(orgService.getStaff).not.toHaveBeenCalled();
@@ -678,7 +679,7 @@ describe('the Staff panel mounted on its own', () => {
     // stopped reading the list altogether would satisfy the assertion above,
     // and the audit would have swapped one unfalsifiable claim for another.
     cleanup();
-    render(<StaffPanel gymId={ORG.id} staffRole="owner" />);
+    render(<StaffPanel gymId={ORG.id} privileges={ROLE_PRIVILEGES.owner} />);
     await waitFor(() => expect(orgService.getStaff).toHaveBeenCalledTimes(1));
     expect(orgService.getStaff).toHaveBeenCalledWith(ORG.id);
   });
@@ -692,13 +693,13 @@ describe('the Staff panel mounted on its own', () => {
     // Plain DOM, not `toBeEmptyDOMElement`: this repo does not install
     // `jest-dom`, and an unknown matcher throws "Invalid Chai property" — which
     // reads as a failing assertion rather than as a missing one.
-    const { container } = render(<StaffPanel gymId={ORG.id} staffRole="trainer" />);
+    const { container } = render(<StaffPanel gymId={ORG.id} privileges={ROLE_PRIVILEGES.trainer} />);
     expect(container.innerHTML).toBe('');
 
     // Positive control: the same mount for an owner DOES draw the card, so an
     // empty render everywhere would not satisfy this.
     cleanup();
-    render(<StaffPanel gymId={ORG.id} staffRole="owner" />);
+    render(<StaffPanel gymId={ORG.id} privileges={ROLE_PRIVILEGES.owner} />);
     expect(await screen.findByText('Staff')).toBeTruthy();
   });
 });

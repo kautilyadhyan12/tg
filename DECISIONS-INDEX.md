@@ -809,6 +809,51 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:16221** — 2026-08-23 — **THE TICK BOXES, T3 ROUND 2 (diff-only): ZERO
+  Critical/High — THE PACKET SHIPS — and the reviewer found the THIRD gate of
+  round 1's own class.** Reviews `f1a334a`. Escape hatch NOT armed and there was
+  nothing to arm it with (no Criticals anywhere this round). **Read before adding
+  any screen gate, before assuming a "no screen decides on the role" claim is true
+  of the whole TREE, before deploying the `privileges` field, and before citing
+  the tick-boxes smoke for anything.** He **RE-DERIVED the whole path** (SQL →
+  `privilegesFor` → schema → `readThrough` → `useConsoleOrg` → `findOrgBySlug` →
+  `viewerPrivileges` → both gates) rather than reading it, and confirmed the fix
+  reaches the screen. **THREE LOW, ALL FIXED. L-1: `canManageStaff` still read
+  `staffRole === 'owner'` at three call sites** — round 1 fixed the two gates the
+  defect surfaced on and left the third, **while the commit claimed no screen
+  decides on the role**; :1239's instance-not-class inside the fix written for
+  that class. Low because `staff.manage` cannot diverge from `role === 'owner'` on
+  any reachable row (four independent reasons, re-derived) — **and it stops being
+  Low the day a second owner or delegated staff management ships, both live
+  `OWED.md` lines.** S1 re-anchored AND re-aimed at the WRONG TICK; breaking it
+  turns 64 tests red. **L-2: the absent⇒role fallback is right web-first and WRONG
+  api-behind** — a narrowed person is still drawn controls the server 403s — **and
+  the fix is a DEPLOY ORDER (api first), written on the OWED line, no code
+  change.** **L-3: THE SMOKE'S STEP 7 PROVED NOTHING AND THE RECORD SAID IT DID.**
+  Run with a MANAGER, whose ROLE alone drew those controls, so it discriminated in
+  neither direction, **and its "gone OR REFUSED" ✅ was satisfied by the defect
+  itself** — buttons present, server 403. Struck in all four documents (:5748), and
+  the step rewritten to need a TRAINER, a RELOAD, and the control to DISAPPEAR.
+  **Confirmed rather than found:** security clean on every axis; **tenancy — the
+  caller reads only their OWN ticks**; lenient-in/strict-out holds **and the
+  mirror was checked** (`orgsApi` parses responses only, so the strict write
+  schema does not kill the carry-through); empty-vs-absent right in both windows;
+  **rule 4 — no test this commit adds or changes stays green when broken.**
+  **Recorded NOT scored: screen and door share `privilegesFor` but not the ROW that
+  feeds it** — `listOrgsForUser` LEFT JOINs unconditionally while
+  `getStaffAuthority` also demands an active, non-ex-member account, so a removed
+  staffer reads a set while every gated route 404s them; **pre-existing, identical
+  for `staffRole` before this commit, neither created nor widened here.**
+  **PROVE: web 1128/1128 exit 0 · build ✓ · eslint 0 at `--max-warnings=0` on six
+  files · WEB SWEEP whole table on the FINAL harness and bytes 64 · 64 RED · 0
+  ALIVE · 0 never ran, exit 0 · the api half NOT re-run and said so** (:10726).
+  **S1/S9/S15 re-anchored because my own fix moved their lines, and the
+  whole-table pre-check ABORTED on S15 before a byte was written — sixth time on
+  this branch that guard has paid for itself.** **THE OWED TICK IS PUT TO KD
+  RATHER THAN TAKEN:** both stated conditions are met and step 6 is sound, but
+  **no human has watched a power ticked ON reach a control** — recommended HOLD
+  for the one-step re-smoke rather than tick over :5034's defect.
+
 - **:16095** — 2026-08-23 — **THE TICK BOXES, T3 ROUND 1: ONE Critical/High — a
   power ticked ON for a TRAINER reached no control, because the console asked the
   JOB TITLE while the server asked the TICK. The packet did NOT ship this round.**
@@ -877,10 +922,10 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   writing a smoke step that assumes a helper with a MIXED set of ticks.**
   **Step 6 passed BOTH WAYS** — the helper was refused the member list the moment
   the box came off and got it back when it went on — which is the only step
-  separating "the server enforces it" from "the screen draws it"; **step 7
-  repeated it on a SECOND power and its detail is the useful part** (with
-  `codes.manage` off the helper still SAW the code and lost only the controls,
-  §2.2's two rows one line apart, observed in a browser for the first time);
+  separating "the server enforces it" from "the screen draws it"; ~~**step 7 repeated it on a SECOND power**~~ **— STRUCK by the re-review's L-3
+  (:16095): step 7 was run with a MANAGER, whose ROLE alone drew those controls,
+  so it discriminated in NEITHER direction, and its "gone or refused" ✅ was
+  satisfied by the very defect round 1 then found;**
   **step 3 is the CORS-preflight `PUT` `fastify.inject` cannot exercise.**
   **THE MIGRATION GAP IS A HOLE BETWEEN TWO CORRECT DECISIONS, not carelessness:**
   :13659 moved the api suite to a LOCAL Postgres, :15381's PROVE properly says so,

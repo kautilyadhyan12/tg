@@ -1807,3 +1807,21 @@ guards decided in one file and observed in none.
    counts). :3819's "never run the harness while something else is using the
    database", one instrument over. Re-run alone: **8/8**. The red was NOT quoted
    as a result in either direction until it had been re-measured.
+
+## THE TICK BOXES — T3 ROUND 2's THREE LOW (2026-08-23)
+
+Reviews `f1a334a`. **ZERO Critical/High — the packet SHIPS** (DECISIONS :16221).
+All three fixed in the round; L-1 carries a test, L-2 is a deploy note with no
+code, L-3 is the record and the sheet.
+
+| # | Finding | Fix |
+|---|---|---|
+| L-1 | **The THIRD gate of round 1's own class.** `canManageStaff` still read `staffRole === 'owner'`, deciding whether the Settings TAB exists (`ConsoleLayout`), whether Settings renders the panel, and whether the panel renders at all — **while the commit and :16095 both claimed "no screen may DECIDE on `staffRole`"**. Round 1 fixed the two gates the defect surfaced on and left the third: :1239's instance-not-class, inside the fix written for that class. **Low, with the reasoning shown rather than asserted**: `staff.manage` cannot diverge from `role === 'owner'` on any reachable row — the server 409s it onto a non-owner, the last owner cannot be ticked out of it, an owner's role cannot be changed, and `owner` is not a role this screen hands out. **It stops being Low the day a second owner or delegated staff management ships**, both of which have live `OWED.md` lines. | Reads `privileges.includes('staff.manage')`, same shape as its two siblings; three call sites pass `viewerPrivileges(org)`. The unit tests were **re-expressed, not deleted** — every old case survives as a claim about that role's DEFAULT set, plus the case the old shape could not express (a set that holds the tick without the title, and a role NAME failing CLOSED). **Mutant S1 re-anchored AND re-aimed** — both halves moved (:11846), the sharp mutation now being the WRONG TICK (`members.read`, held by every staff role) rather than a widened role test. **Breaking the gate turns 64 tests red.** |
+| L-2 | **The absent⇒role-defaults fallback is right in one direction and wrong in the other.** Correct for the window it was chosen for (web newer than api: a real manager keeps their controls). Wrong in the NARROWING direction — with an api that has the ticks WRITE route but not the `/orgs/mine` READ field, **somebody an owner has narrowed is still drawn Remove and the code controls**, and the server 403s them. R3.3 holds throughout; the 403 is still the enforcement. | **A deploy order, not a code change: api first for this field**, written onto the `OWED.md` ticks line. The code has no better answer than the one it already makes — every alternative fallback is wrong in the other window. |
+| L-3 | **The smoke's step 7 proved nothing, and the record said it did.** The result block claimed "both directions" while :16095 said only the untick parenthetical — both could not be true, **and neither was the useful statement**: step 7 ran with a MANAGER, whose ROLE alone drew the join-code controls, so it discriminated in NEITHER direction. Its ✅ read *"gone or refused"*, which **the defect satisfied** — buttons present, server 403. **A runner would fairly mark that ✅ over a live bug, and did.** | Struck in **all four** documents rather than only where it was noticed (:5748). Step 7 rewritten: needs a **TRAINER**, demands a **reload** first, and demands the control **DISAPPEAR** rather than be refused. **Two edits, not one** — the direction that WAS run could not discriminate either. The missing widening step keeps its own 🟡 `OWED.md` line. |
+
+**INSTRUMENT, AND IT IS THE SIXTH TIME ON THIS BRANCH:** my own fix moved the
+lines three mutants point at (S1, S9, S15), and **the whole-table pre-check
+ABORTED on S15 before a byte was written.** Re-anchored and re-measured. The guard
+:15259 added and :15770 ported keeps earning its place — a no-op mutation reports
+ALIVE, whose honest reading is "this guarantee has no test".

@@ -4,6 +4,7 @@ import { Building2, Users, Settings, ChevronLeft, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useConsoleOrg } from '../../pages/console/useConsoleOrg';
 import { canManageStaff } from '../../pages/console/staffView';
+import { viewerPrivileges } from '../../pages/console/consoleView';
 
 // The console's own shell — Part 3 §3.1: "Responsive web app (owners live on
 // phones; no native console app). Left rail (desktop) / bottom tabs (mobile)."
@@ -89,7 +90,7 @@ export default function ConsoleLayout({ children }) {
     ? [
         { to: `/console/${orgSlug}`, end: true, icon: Building2, label: 'Gym' },
         { to: `/console/${orgSlug}/members`, end: false, icon: Users, label: 'Members' },
-        ...(canManageStaff(org?.staffRole ?? null)
+        ...(canManageStaff(viewerPrivileges(org))
           ? [{ to: `/console/${orgSlug}/settings`, end: false, icon: Settings, label: 'Settings' }]
           : []),
       ]

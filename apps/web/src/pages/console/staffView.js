@@ -30,10 +30,25 @@ import { roleLabel } from './consoleView';
  *  the defect measured one component away on the Members screen, where a
  *  trainer was handed a Remove button the server turns down.
  *
- *  Written as an equality rather than `!== 'trainer'` so a role invented later
- *  is refused by DEFAULT instead of silently handed the keys to a gym. */
-export function canManageStaff(staffRole) {
-  return staffRole === 'owner';
+ *  **IT ASKS FOR THE POWER, NOT THE JOB TITLE — T3 round 1's re-review, L-1.**
+ *  This read `staffRole === 'owner'` and was the THIRD gate of the class round 1
+ *  called Critical, left behind because its two siblings were the ones the
+ *  defect showed up on. The commit that fixed them said "no screen may DECIDE on
+ *  `staffRole`", and that sentence was not true of the shipped tree.
+ *
+ *  **Nothing false reached a user, which is why the reviewer tagged it Low and
+ *  did not tag it Critical:** `staff.manage` cannot diverge from `role ===
+ *  'owner'` on any row you can reach today — the server 409s an owner-only
+ *  privilege onto a non-owner row, the last owner cannot be ticked out of it, an
+ *  owner's role cannot be changed, and `owner` is not a role this screen hands
+ *  out. **It stops being Low the day a second owner or delegated staff
+ *  management ships, and both have live `OWED.md` lines** — which is exactly the
+ *  reason to fix it now rather than when it starts lying.
+ *
+ *  Reads the set `viewerPrivileges` resolves, the same shape as
+ *  `canManageCodes` and `canRemoveMembers`. */
+export function canManageStaff(privileges) {
+  return Array.isArray(privileges) && privileges.includes('staff.manage');
 }
 
 /** The roles this screen can HAND OUT, with what each one can actually do.

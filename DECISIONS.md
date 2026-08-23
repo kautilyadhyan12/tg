@@ -15945,11 +15945,17 @@ stat entry :15770 already documented, so `git status`'s ` M` is not an edit
   returned. **This is the only step that separates "the server enforces it" from
   "the screen draws it"**, and it is the class Card 4 proved can be dead behind a
   green suite.
-- **Step 7 repeated the enforcement on a SECOND power, and its detail is the
-  useful part:** with `codes.manage` unticked the helper still SAW the join code
-  and lost only the controls — because sharing a code and changing one are
-  different ticks one line apart in §2.2 (:13803's own distinction, observed in a
-  browser for the first time).
+- ~~**Step 7 repeated the enforcement on a SECOND power**~~ **— STRUCK by the
+  re-review's L-3 (2026-08-23) and it is the sharpest correction on this card.
+  STEP 7 PROVED NOTHING, IN EITHER DIRECTION.** It was run with a MANAGER, whose
+  ROLE alone drew the join-code controls at the time, so the panel looked
+  identical whether the tick was honoured or ignored. Its ✅ read *"gone or
+  refused"* — and the defect satisfied "refused", because the buttons stayed and
+  the server answered 403. **A runner would fairly mark that ✅ over a live bug,
+  and did; T3 round 1 then found it.** The observation inside it — that the code
+  itself stayed visible while the controls did not — was about a MANAGER whose
+  panel was drawn from their role, so it is not evidence about the two ticks
+  either. Sheet corrected; the missing TRAINER step has its own `OWED.md` line.
 - **Step 3 is the CORS-preflight step** — `PUT` on the ticks route, which
   `fastify.inject` cannot exercise. It passed in both directions.
 - **Step 8's wording check passed**: the role button asks first and says the
@@ -16211,3 +16217,113 @@ at 8/8 rather than quote it.
 `OWED.md`'s ticks line stays open: **the remaining gate is the DIFF-ONLY
 RE-REVIEW** (:5348 rule 2). Two new lines — the smoke's missing widening step, and
 the stale-tab refresh.
+
+## THE TICK BOXES, T3 ROUND 2 (diff-only): ZERO CRITICAL/HIGH — THE PACKET SHIPS, and the reviewer found the THIRD gate of round 1's own class (2026-08-23)
+
+Reviews `f1a334a` (:16095's fixes). **Zero Critical/High ⇒ the packet SHIPS**
+(:5348 rule 1). Three Low, all fixed here. **Escape hatch NOT armed and there was
+nothing to arm it with — this round found no Criticals at all.**
+
+**Read before adding any screen gate, before assuming a "no screen decides on the
+role" claim is true of the whole tree, before deploying this field, and before
+citing the tick-boxes smoke for anything.**
+
+**The reviewer RE-DERIVED the whole path rather than reading it** — SQL →
+`privilegesFor` → response schema → `readThrough` → `useConsoleOrg` →
+`findOrgBySlug` → `viewerPrivileges` → both gates — and confirmed the fix reaches
+the screen (`findOrgBySlug` returns the parsed row untouched, so `org.privileges`
+is genuinely there). **No fix created a new defect.**
+
+### L-1 — THE THIRD GATE, AND THE COMMIT'S OWN SENTENCE WAS NOT TRUE OF THE TREE
+
+`canManageStaff` still read `staffRole === 'owner'`, at three call sites: whether
+the **Settings tab exists** (`ConsoleLayout`), whether Settings renders the panel,
+and whether the panel renders at all. **Round 1 fixed the two gates the defect
+happened to surface on and left the third**, while the commit and :16095 both
+state "no screen may DECIDE on `staffRole`" — **a claim about the tree that the
+tree did not honour.** :1239's fixed-the-instance-left-the-class, inside the fix
+written for that class.
+
+**Low and not Critical, and the reviewer showed his working rather than asserting
+it:** `staff.manage` cannot diverge from `role === 'owner'` on any reachable row —
+the server 409s an owner-only privilege onto a non-owner, the last owner cannot be
+ticked out of it, an owner's role cannot be changed, and `owner` is not a role this
+screen hands out. **Nothing false reaches a user today** (:5807). **It stops being
+Low the day a second owner or delegated staff management ships, and both have live
+`OWED.md` lines** — which is the argument for fixing it now rather than when it
+starts lying. Fixed to read the tick; mutant **S1 re-anchored AND re-aimed** (both
+halves moved, :11846 — the sharp mutation is now the WRONG TICK, `members.read`,
+which every staff role holds). **Breaking it turns 64 tests red.**
+
+### L-2 — THE FALLBACK IS RIGHT IN ONE DIRECTION AND WRONG IN THE OTHER, AND THE FIX IS A DEPLOY ORDER
+
+`viewerPrivileges` falls back to the role's defaults when the field is absent,
+which is correct for the window it was chosen for (web-newer-than-api: a real
+manager keeps their controls). **In the NARROWING direction it is wrong**: in a
+window where the web is newer than an api that has the ticks WRITE route and not
+this READ field, somebody an owner has narrowed is still drawn Remove and the code
+controls, and the server 403s them. R3.3 holds throughout — the 403 is still the
+enforcement — and **deploying the api first closes it entirely**. Written onto the
+`OWED.md` line; **no code change, because the code has no better answer than the
+one it already makes.**
+
+### L-3 — THE SMOKE'S STEP 7 PROVED NOTHING, AND THE RECORD SAID IT DID
+
+The result block claimed step 7 showed enforcement "in both directions" while
+:16095 said it ran only the untick parenthetical — **both cannot be true, and
+neither was the useful statement.** Step 7 was run with a **MANAGER**, whose ROLE
+alone drew the join-code controls at the time, **so it discriminated in NEITHER
+direction**; and its ✅ read *"gone or refused"*, which **the defect satisfied** —
+the buttons stayed and the server answered 403. **A runner would fairly mark that
+✅ over a live bug, and did.**
+
+Struck in **all four** documents rather than only where it was noticed (:5748's
+recorded shape). The step is rewritten to require a **TRAINER**, to demand a
+**reload** first, and to demand the control **disappear** rather than be refused.
+**Two edits were needed, not one** — the reviewer's own point: the direction that
+WAS run could not discriminate either.
+
+### WHAT THE ROUND CONFIRMED RATHER THAN FOUND
+
+Security pass clean on every axis, each re-derived: authn unchanged; **tenancy —
+`listOrgsForUser` joins on `s.user_id = ${userId}`, so a caller reads only their
+own ticks and no other person's set is on that response**; hiding still not the
+enforcement; the set is server-derived; **"lenient in, strict out" holds, and the
+mirror risk was checked too** — `orgsApi` parses only responses, never request
+bodies, so the strict write schema does not kill the unknown-privilege
+carry-through, and a value it does carry can only ever have come from an api that
+already knows it. Empty-vs-absent correct in **both** deploy windows, on both
+sides, pinned by tests and by mutants C41/C42. **Rule 4: no test this commit adds
+or changes stays green when its claim is broken.**
+
+**One pre-existing divergence recorded, NOT scored:** the commit says screen and
+door "come out of one function", and they share `privilegesFor` but **not the row
+that feeds it** — `listOrgsForUser` LEFT JOINs `gym_staff` unconditionally while
+`getStaffAuthority` also requires `u.status = 'active'` and
+owner-or-live-member-or-never-a-member. A non-owner staffer whose membership was
+removed reads a role and a set from `/orgs/mine` while every gated route 404s them.
+**`staffRole` had the identical divergence before this commit and the affected set
+is unchanged, so this diff neither creates nor widens it.**
+
+### PROVE — ALL ON THE FINAL BYTES
+
+- web **1128/1128 exit 0** · `vite build` exit 0 · eslint **exit 0 at
+  `--max-warnings=0`** on the six newly changed web files.
+- **WEB SWEEP, WHOLE TABLE, ON THE FINAL HARNESS AND FINAL BYTES: 64 mutants · 64
+  RED · 0 ALIVE · 0 never ran, exit 0**, controls GREEN first, restores
+  sha256-verified after every mutant, tree verified afterwards by hand.
+- **The api half is NOT re-run and that is stated rather than implied**: this
+  round changed no api source (:10726's precedent).
+- **S1 re-anchored and re-aimed; S9 and S15 re-anchored** — all three because my
+  own fix moved the lines they point at. **The whole-table pre-check ABORTED on
+  S15 before a byte was written**, which is the sixth time on this branch that
+  guard has paid for itself.
+
+### THE `OWED.md` TICKS LINE — PUT TO KD RATHER THAN DECIDED
+
+Both conditions the line names are now met (a passed smoke; a round finding zero
+Critical/High), **and the step it calls load-bearing — step 6 — is sound**. What
+holds it is that **no human has watched a power ticked ON reach a control**: step
+7 was meant to be that and proved nothing. Recommended: **hold for the one-step
+re-smoke**, which is two minutes of clicking, rather than tick over :5034's
+recorded defect with a better argument.

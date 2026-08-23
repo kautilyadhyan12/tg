@@ -523,10 +523,10 @@ const MUTANTS = [
     id: 'S1',
     target: 'staffview',
     suite: STAFF_VIEW_SUITE,
-    why: 'AUTHORITY: the Staff section is drawn for any staff role, so a manager is shown the list of who holds the keys to the gym — and the server, which gates the READ with `staff.manage` too, answers their request with a 404',
+    why: 'AUTHORITY: the third gate of the class T3 round 1 called Critical reads the WRONG TICK — `members.read`, which every staff role holds — so a manager is shown the list of who holds the keys to the gym, and the server, which gates the READ with `staff.manage` too, answers their request with a 404',
     expect: 'is NOT a manager or a trainer',
-    from: "  return staffRole === 'owner';",
-    to: '  return staffRole != null;',
+    from: "  return Array.isArray(privileges) && privileges.includes('staff.manage');",
+    to: "  return Array.isArray(privileges) && privileges.includes('members.read');",
   },
   {
     id: 'S2',
@@ -629,8 +629,8 @@ const MUTANTS = [
     suite: SETTINGS_SUITE,
     why: 'FALSE ON SCREEN, THROUGH A DROPPED PROP: the Staff panel is never told what kind of org this is, so `staffRoleChoices` falls to its refusing default and every GYM owner is told their trainer cannot see the member list — a correct helper bypassed entirely by the screen that renders it',
     expect: 'tells a GYM owner their trainer CAN see it',
-    from: '<StaffPanel gymId={org.id} staffRole={org.staffRole} orgType={org.orgType} />',
-    to: '<StaffPanel gymId={org.id} staffRole={org.staffRole} />',
+    from: '<StaffPanel gymId={org.id} privileges={viewerPrivileges(org)} orgType={org.orgType} />',
+    to: '<StaffPanel gymId={org.id} privileges={viewerPrivileges(org)} />',
   },
   {
     // KD FOUND THIS ONE IN A BROWSER, WHICH IS WHY IT IS HERE. The control used
@@ -688,7 +688,7 @@ const MUTANTS = [
     suite: SETTINGS_SUITE,
     why: 'A TAB THAT ANSWERS NOTHING: Settings is drawn for every role, so a manager and a trainer get a nav item whose only screen tells them they may not be there',
     expect: 'is NOT drawn for a manager',
-    from: '        ...(canManageStaff(org?.staffRole ?? null)',
+    from: '        ...(canManageStaff(viewerPrivileges(org))',
     to: '        ...(true',
   },
   {

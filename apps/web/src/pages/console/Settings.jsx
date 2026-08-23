@@ -3,6 +3,7 @@ import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/con
 import StaffPanel from '../../components/console/StaffPanel';
 import { useConsoleOrg } from './useConsoleOrg';
 import { canManageStaff } from './staffView';
+import { viewerPrivileges } from './consoleView';
 
 // SETTINGS — Part 3 §3.1's sixth nav item, and §4.7 is what belongs on it:
 // Profile · Codes · Privacy · Notifications · Staff.
@@ -57,7 +58,7 @@ export default function Settings() {
     );
   }
 
-  const isOwner = canManageStaff(org.staffRole);
+  const isOwner = canManageStaff(viewerPrivileges(org));
 
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-4">
@@ -71,7 +72,7 @@ export default function Settings() {
       </div>
 
       {isOwner ? (
-        <StaffPanel gymId={org.id} staffRole={org.staffRole} orgType={org.orgType} />
+        <StaffPanel gymId={org.id} privileges={viewerPrivileges(org)} orgType={org.orgType} />
       ) : (
         /* REACHABLE BY TYPING THE ADDRESS, and that is the only way here — the
            nav does not draw this tab for a manager or a trainer, because the one

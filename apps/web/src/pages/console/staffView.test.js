@@ -21,23 +21,39 @@ import {
   unknownPrivilegesNote,
 } from './staffView';
 
+/** RE-EXPRESSED, NOT DELETED (T3 round 1's re-review, L-1): this gate used to
+ *  take a ROLE and now takes the set of powers `viewerPrivileges` resolves. Every
+ *  old case survives — each was really a claim about what that role's DEFAULT set
+ *  contains — and the case the old shape could not express at all is the first
+ *  one below. */
 describe('who may manage staff', () => {
-  it('is the owner', () => {
-    expect(canManageStaff('owner')).toBe(true);
+  it('asks for the POWER, so it follows the tick and not the title', () => {
+    // Unreachable today: the server refuses `staff.manage` on a non-owner row.
+    // Asserted anyway, because that is the ONLY thing keeping this gate honest
+    // the day a second owner or delegated staff management ships — both of
+    // which have live OWED.md lines.
+    expect(canManageStaff(['members.read', 'staff.manage'])).toBe(true);
+    expect(canManageStaff(['members.read', 'codes.manage'])).toBe(false);
+  });
+
+  it('is the owner, through the set their role gives them', () => {
+    expect(canManageStaff(ROLE_PRIVILEGES.owner)).toBe(true);
   });
 
   it('is NOT a manager or a trainer — the server gates the READ too, so they would see a 404', () => {
-    expect(canManageStaff('manager')).toBe(false);
-    expect(canManageStaff('trainer')).toBe(false);
+    expect(canManageStaff(ROLE_PRIVILEGES.manager)).toBe(false);
+    expect(canManageStaff(ROLE_PRIVILEGES.trainer)).toBe(false);
   });
 
-  it('is nobody when the role is unknown, including a role invented later', () => {
-    // The point of writing the rule as an equality. A future `front_desk` role
-    // must arrive REFUSED and be granted deliberately, rather than inheriting
-    // the keys to the gym because the check was spelled `!== 'trainer'`.
+  it('is nobody when there is no set, and a role name fails CLOSED', () => {
+    expect(canManageStaff([])).toBe(false);
     expect(canManageStaff(null)).toBe(false);
     expect(canManageStaff(undefined)).toBe(false);
-    expect(canManageStaff('front_desk')).toBe(false);
+    // A role name is what every call site used to pass. It must be refused
+    // rather than mistaken for a power — the same fail-closed property the old
+    // equality had, kept through the change of question.
+    expect(canManageStaff('owner')).toBe(false);
+    expect(canManageStaff(['owner'])).toBe(false);
     expect(canManageStaff('')).toBe(false);
   });
 });

@@ -10024,9 +10024,10 @@ WHAT THE SMOKE ACTUALLY ESTABLISHED
   · **Step 6 both ways** — untick *See the member list*, the helper is REFUSED
     (not shown an empty list); tick it back, the list returns. The only step that
     separates server enforcement from screen drawing.
-  · **Step 7 on a SECOND power**, and the detail is the useful part: with
-    `codes.manage` off the helper still SAW the code and lost only the controls —
-    §2.2's two rows one line apart, in a browser for the first time.
+  · **STEP 7 PROVED NOTHING — struck by the re-review's L-3.** Run with a MANAGER,
+    whose ROLE alone drew the join-code controls, so it discriminated in neither
+    direction; its "gone or refused" ✅ was satisfied by the defect round 1 found.
+    Do not cite step 7 for anything. Sheet corrected, TRAINER step owed.
   · **Step 3 is the CORS-preflight `PUT`** `fastify.inject` cannot exercise.
   · Step 8's wording confirmed in a browser: *"become the defaults for the new
     role"*, never "your changes will be lost" (:15534 Low-6).
@@ -10205,5 +10206,70 @@ NEXT
      (🟡, belongs with the re-smoke) and the stale-tab refresh (⚪, own card,
      re-check on window focus recommended).
   3. Then Kd's call on the migration-lag 🟡 line (boot-time refusal recommended).
+  4. Then card C: custom role names.
+```
+
+```
+TASK: THE TICK BOXES — T3 ROUND 2 (diff-only). **ZERO Critical/High. THE PACKET
+      SHIPS** (:5348 rule 1). Three Low, all fixed. DECISIONS :16221. Escape
+      hatch NOT armed — no Criticals anywhere this round.
+
+THE FINDING WORTH CARRYING
+  · **THE THIRD GATE. `canManageStaff` still read `staffRole === 'owner'`** at
+    three call sites — the Settings TAB, the Settings render, and the panel —
+    **while the commit and :16095 both claimed "no screen may DECIDE on
+    `staffRole`".** Round 1 fixed the two gates the defect surfaced on and left
+    the third. :1239's instance-not-class, INSIDE the fix written for that class.
+  · Low with the reasoning shown: `staff.manage` cannot diverge from
+    `role === 'owner'` on any reachable row (server 409s it onto a non-owner ·
+    last owner cannot be ticked out · an owner's role cannot change · `owner` is
+    not handed out here). **It stops being Low the day a second owner or
+    delegated staff management ships — both live `OWED.md` lines.**
+
+TWO THINGS A NEXT CHAT MUST NOT REPEAT
+  · **DO NOT CITE STEP 7 OF THE TICK-BOXES SMOKE FOR ANYTHING.** It ran with a
+    MANAGER, whose ROLE alone drew the join-code controls, so it discriminated in
+    NEITHER direction — and its "gone OR REFUSED" ✅ was satisfied by the very
+    defect round 1 found (buttons present, server 403). Struck in all four
+    documents; the sheet now needs a TRAINER, a RELOAD, and the control to
+    DISAPPEAR. **Step 6 is unaffected and IS sound** — it goes through the server.
+  · **DEPLOY THE API BEFORE THE WEB for the `privileges` field.** The
+    absent⇒role fallback is right web-first and wrong api-behind: a narrowed
+    person is still drawn controls the server 403s. No code change is available
+    that is right in both windows; the ordering is on the OWED line.
+
+RECORDED, NOT SCORED (pre-existing, and the commit message overclaimed slightly)
+  · Screen and door share `privilegesFor` but **not the ROW that feeds it**:
+    `listOrgsForUser` LEFT JOINs `gym_staff` unconditionally while
+    `getStaffAuthority` also requires an active account that is not an ex-member.
+    A removed non-owner staffer reads a role AND a set from `/orgs/mine` while
+    every gated route 404s them. **`staffRole` had the identical divergence
+    before this commit; this diff neither creates nor widens it.**
+
+GATES
+  · web **1128/1128 exit 0** · build ✓ · eslint **0 at `--max-warnings=0`** on the
+    six newly changed web files.
+  · **WEB SWEEP whole table, FINAL harness and FINAL bytes: 64 · 64 RED · 0 ALIVE
+    · 0 never ran, exit 0**, controls green first, restores sha256-verified, tree
+    verified by hand afterwards.
+  · **The api half was NOT re-run and that is stated, not implied** — this round
+    changed no api source (:10726).
+  · **S1/S9/S15 re-anchored, because my own fix moved the lines they point at,
+    and the whole-table pre-check ABORTED on S15 before a byte was written** —
+    sixth time on this branch that guard has paid for itself.
+
+THE ONE OPEN DECISION — KD'S, AND DELIBERATELY NOT TAKEN
+  · `OWED.md`'s ticks line: **both stated conditions are met** (a passed smoke; a
+    round finding zero Critical/High) **and step 6, which the line itself calls
+    load-bearing, is sound.** What holds it is that **no human has watched a power
+    ticked ON reach a control** — step 7 was meant to be that and proved nothing.
+    **Recommended: HOLD for the one-step re-smoke** (two minutes) rather than tick
+    over :5034's recorded defect with a better argument.
+
+NEXT
+  1. Kd's call on the tick, and the one-step re-smoke if he holds.
+  2. The 🟡 smoke line (TRAINER step) and the ⚪ stale-tab line
+     (re-check on window focus recommended).
+  3. Kd's call on the migration-lag 🟡 line (boot-time refusal recommended).
   4. Then card C: custom role names.
 ```

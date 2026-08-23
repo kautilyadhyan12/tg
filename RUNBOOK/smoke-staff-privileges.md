@@ -7,10 +7,25 @@ picking Manager or Trainer.
 ## RESULT — PASSED 10/10 (Kd, 2026-08-23, commit `245632d`)
 
 Run in Kd's own browser against his own gym on the shared dev database, both
-servers started by the chat. **Step 6 passed in both directions** — the helper
-was refused the member list the moment the box came off, and got it back when it
-went on — and step 7 repeated that on a second power. Working tree verified
-byte-identical to `245632d` immediately before the run and after it.
+servers started by the chat. Working tree verified byte-identical to `245632d`
+immediately before the run and after it.
+
+**WHAT THIS PASS DOES AND DOES NOT ESTABLISH — corrected 2026-08-23 after the
+review, because the first version of this block overstated it (DECISIONS :16095's
+re-review, L-3).**
+
+- **Step 6 is sound and is the one the tick rests on.** The helper was refused the
+  member list the moment the box came off and got it back when it went on. That
+  refusal comes from the SERVER, which reads the tick, so it discriminates.
+- **Step 7 DID NOT prove anything about the join-code controls, in either
+  direction.** It was run with a **Manager**, whose role alone was enough to draw
+  those controls at the time, so the panel would have looked identical whether the
+  tick was honoured or ignored. Its ✅ said the controls were *"gone or refused"* —
+  and the defect satisfied "refused", because the buttons stayed and the server
+  answered 403. **A runner would fairly have marked that ✅ over a real bug, and
+  did.** T3 round 1 then found exactly that bug.
+- **Nothing here observed WIDENING** — a power ticked ON reaching a control. That
+  needs a TRAINER, and the sheet has no such step yet; it has an `OWED.md` line.
 
 **FOUR STEPS WERE CORRECTED MID-RUN — 1, 3, 4 and 8 — and all four are ONE
 mistake of this sheet's, not the card's.** It was written imagining a helper with
@@ -227,16 +242,34 @@ enforcing anything.
 
 ## Step 7 — grant something they did not have
 
-As the **owner**, tick **Change join codes** on for the helper and save. In the
-helper's window, reload and go to the gym's main screen.
+**THIS STEP NEEDS A TRAINER, AND THAT IS THE WHOLE POINT OF IT.** A Manager could
+draw these controls from their role alone, so running it with one proves nothing
+in either direction — which is how a real bug passed this step once already.
+If your helper is a Manager, do **step 8** first to make them a Trainer, then come
+back here.
 
-✅ **Expect:** the helper can now use the join-code controls (pause it, make a new
-one) that they could not before.
+As the **owner**, tick **Change join codes** ON for the helper and save.
 
-❌ **Failure:** the controls are still refused after the tick was saved.
+**In the helper's window, press F5** — the app only re-checks what you're allowed
+to do when a screen opens, so without the reload you are looking at an old answer.
+Then go to the gym's main screen.
 
-*(If the helper is a Manager they may already have had this. Then untick it
-instead, save, and expect the controls to be refused.)*
+✅ **Expect:** the join-code controls — **Pause**, **Replace**, **New code** — are
+now **THERE**, and they work. Before the tick they were **absent from the screen
+altogether**, not merely refused when pressed.
+
+❌ **Failure:** the controls are still missing after the tick was saved.
+
+**Now untick it, save, and reload their window again.**
+
+✅ **Expect:** the controls **disappear**. The code itself stays visible — that is
+a different power (*Share the join code*), which you did not touch.
+
+❌ **Failure — and read this carefully, because the sheet used to accept it:** the
+buttons are **still on screen** and only fail when pressed. That is NOT a pass.
+The old wording said "gone **or refused**", and a defect that left every button
+in place while the server turned it down satisfied it. **The control must be
+absent.**
 
 ---
 
