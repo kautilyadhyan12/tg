@@ -825,6 +825,36 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:16924** — 2026-08-24 — **KD SPECIFIES THE RUNNING FEATURE IN FULL — five
+  parts, FOUR ALREADY ON THE SERVER, and the fifth publishes where people
+  live.** **Read before planning the phone running card, before touching
+  `modules/geo`, and before building anything that shows one user's route to
+  another.** His five: record-and-draw-the-line-live · pick a route first by
+  searching near your GPS within a distance limit · reuse your own saved routes
+  · **use routes other users have run** · a recap afterwards.
+  **MEASURED in `geo/service.ts` + `db/schema/geo.ts`: `runs` already stores
+  polyline/duration/distance/splits/kcal (recap needs no new data);
+  `savedRoutes` + create/list/get/delete exist; `listRuns`/`getRun` exist;
+  `generateRoutes` (ORS) exists. MISSING: "near me" search (no location column
+  on `saved_routes`) and SHARING (no public concept at all — the table is
+  `userId`-scoped).** So the feature is far closer to done than it looks and
+  almost none of it costs money.
+  **THE HAZARD IS A SAFETY ONE: a route starting at someone's front door, shown
+  to strangers, is that person's home address** — the best-known privacy
+  failure in this exact category, and Strava's mitigations are the half that
+  does not show in the app. **Recommended and to be designed in from the first
+  line: opt-in only, private by DEFAULT (a back-fill marking existing rows
+  public would publish the whole table) · trim ~200 m off both ends of a shared
+  route · prefer POPULARITY counts to individual tracks · never show who.**
+  Interacts with :9944's consent split (a route IS location-health data), §2.4,
+  and :592 — **shipping sharing without an explicit Kd ruling on those four is
+  making a privacy decision on his behalf.**
+  **KD INVENTED THE CHEAP FIX FOR THE EXPENSIVE PART WITHOUT NOTICING: his
+  "routes other users ran" retires most of :12111's ORS ceiling** — a saved
+  nearby line costs NO external call. **Recommended order is therefore the
+  opposite of the obvious one: build search-over-saved-routes FIRST and treat
+  route GENERATION as the fallback when nothing nearby exists.** Nothing built;
+  no schema change.
 - **:16812** — 2026-08-24 — **NUTRITION AND RUNNING LEAVE THE WEB AND BECOME
   PHONE FEATURES — a MOVE, not a deletion — and the map choice leaves with
   them.** **Read before touching `pages/Nutrition.jsx`, `pages/Running.jsx`,

@@ -4260,6 +4260,44 @@ file and is stated so nobody reads these as lower priority than they are.
       **What it needs is storage and a map to draw on, not an API.** Nothing
       built; no governing spec § (Part 6 §5.1 covers the permission flow and
       its Play-rejection-proof copy, which binds this).
+- [ ] 🔴❓ **ROUTE SHARING PUBLISHES WHERE PEOPLE LIVE UNLESS FOUR THINGS ARE
+      BUILT IN FROM THE FIRST LINE — Kd asked for the feature 2026-08-24
+      (DECISIONS :16924); the privacy shape is UNRULED.**
+      **Read before building anything that shows one user's route to another,
+      and before any migration touching `saved_routes`.**
+      Kd asked for "routes used by other users" because Strava has it. **Strava
+      also has the mitigations, which are the half that does not show in the
+      app.** A route that starts at someone's front door, shown to a stranger,
+      **is that person's home address** — the best-known privacy failure in this
+      product category.
+      **RECOMMENDED, all four, and they are cheap only if designed in now:**
+      1. **Opt-in. Private by DEFAULT.** ⚠ **A migration back-filling existing
+         `saved_routes` rows as public would publish the entire table** — the
+         column defaults to private, always.
+      2. **Trim ~200 m off BOTH ends of a shared route** (Strava's privacy
+         zone). The middle is the useful part; the ends are the dangerous part.
+      3. **Prefer POPULARITY to individual tracks** — "run 40 times" gives Kd
+         what he wants and hands nobody another person's line. Cheapest to
+         compute, too.
+      4. **Never show who.** No name, avatar or link on a shared route.
+      **Binds against rulings already on the board:** :9944's consent split (a
+      route IS location-health data, asked of the MEMBER not the gym), §2.4,
+      and the pending US privacy review at :592. **Shipping sharing without an
+      explicit Kd ruling on 1-4 is a chat making a privacy decision for him.**
+- [ ] 🟡 **THE RUNNING FEATURE'S REAL GAP IS THREE THINGS, NOT A REWRITE —
+      measured 2026-08-24 (DECISIONS :16924).** Four of Kd's five parts are
+      already on the server: `runs` stores polyline/duration/distance/splits/
+      kcal (**a recap needs no new data**), `savedRoutes` has full CRUD,
+      `listRuns`/`getRun` exist, `generateRoutes` exists.
+      **MISSING: (a) a start lat/lng on `saved_routes` so "near me within X km"
+      can be asked at all — a bounding-box query is enough, DO NOT add PostGIS;
+      (b) the sharing/popularity model above; (c) the phone screens.**
+      **BUILD ORDER — the opposite of the obvious one, and it is Kd's own idea
+      turned into an optimisation:** search-over-SAVED-routes FIRST, route
+      GENERATION as the fallback when nothing nearby exists. A saved nearby line
+      costs **no external call**, so this **retires most of :12111's ORS
+      ceiling** without paying anyone. Faster for the user, and it improves as
+      the database fills.
 - [ ] 🟡 **UNWIRE NUTRITION AND RUNNING FROM WEB — Kd ruling 2026-08-24
       (DECISIONS :16812). A MOVE TO THE PHONE APP, NOT A DELETION.**
       Kd: *"nutrion and running will not be there in web , but ... we will build

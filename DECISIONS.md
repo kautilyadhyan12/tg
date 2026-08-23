@@ -16920,3 +16920,91 @@ would be an easy copy-paste.**
 ### NOTHING BUILT
 
 No code changed. `apps/mobile` still does not exist. The unwiring is owed.
+
+## KD SPECIFIES THE RUNNING FEATURE IN FULL — five parts, four of them already on the server, and the fifth publishes where people live (2026-08-24)
+
+**Read before planning the phone running card, before touching
+`modules/geo`, and before building anything that shows one user's route to
+another.**
+
+### WHAT KD ASKED FOR, IN HIS OWN SHAPE
+
+1. Start at a point, press record, **the track draws as a line while you run**,
+   and the line stops when the run stops.
+2. **Pick a route before starting** — search, with a distance limit, from the
+   phone's GPS position.
+3. **Reuse your own previously saved routes.**
+4. **Use routes other users have run.**
+5. **A recap after the run finishes.**
+   *"all these features are in starva i also want it"*
+
+### FOUR OF THE FIVE ARE ALREADY BUILT ON THE SERVER — measured, not assumed
+
+`apps/api/src/modules/geo/service.ts` and `db/schema/geo.ts`, read 2026-08-24:
+
+| Kd's part | Server state today | Cost |
+|---|---|---|
+| 1 · record + draw the line | **`runs` table stores `polyline`, `startedAt`, `durationS`, `distanceM`, `splits`, `kcalPoint`.** The live drawing is phone-side; the device's own GPS. | **$0, no API** |
+| 2 · pick a route first | `generateRoutes` (ORS) makes one; **but "search NEAR ME within a limit" does not exist** — `listSavedRoutes` is a plain per-user list with no location filter | see below |
+| 3 · reuse your saved routes | **`savedRoutes` + create/list/get/delete all exist** | $0 |
+| 4 · routes other users ran | **NOTHING EXISTS.** `savedRoutes` is `userId`-scoped with no shared/public concept at all | $0 to run, but see the hazard |
+| 5 · recap | **`listRuns` / `getRun` exist and the table already holds every number a recap needs** — distance, duration, splits, calories | $0 |
+
+**So the running feature is much closer to done than it looks, and almost none
+of it costs money.** The gap is three things: the phone screens, "near me"
+search, and sharing.
+
+### THE HAZARD, AND IT IS A SAFETY ONE — part 4 publishes where people live
+
+**A route that starts at someone's front door, shown to strangers, is that
+person's home address.** This is not hypothetical: it is the best-known privacy
+failure in this exact product category, and Kd is asking for the feature by
+name because Strava has it — **Strava also has the mitigations, which are the
+half that does not show in the app.**
+
+**RECOMMENDED, and it must be designed in from the first line rather than added
+after a complaint:**
+
+1. **Opt-in only.** A saved route is private by default; it becomes shareable
+   only when its owner says so. **A migration that back-fills every existing
+   `saved_routes` row as public would publish the whole table** — the column
+   defaults to private, always.
+2. **Trim the ends of any shared route.** Cut roughly the first and last 200 m
+   before anyone else sees it (Strava's "privacy zone"). The middle is what is
+   useful; the ends are what is dangerous.
+3. **Prefer POPULARITY to individual tracks.** "This 5 km loop was run 40 times"
+   carries the value Kd wants without ever handing one person another person's
+   line. It also happens to be the cheapest thing to compute.
+4. **Never show who.** No name, no avatar, no link on a shared route.
+
+**This interacts with rulings already on the board and must not be resolved
+against them:** :9944's consent split (health data and the camera are asked of
+the MEMBER directly, and a route IS location-health data), §2.4's promise that
+gyms never see member meal or body data, and the pending US privacy review at
+:592. **A chat that ships route sharing without an explicit Kd ruling on 1-4 is
+making a privacy decision on his behalf.**
+
+### THE CHEAP FIX FOR THE EXPENSIVE PART, and Kd invented it himself
+
+Part 2 ("search a route with a distance limit") is the only piece that can reach
+ORS, whose ~2,000/day allowance is shared app-wide and fails as a dead feature
+(:12111, still UNVERIFIED, still owed). **Kd's part 4 is the answer to it:** if
+somebody has already run a good 5 km loop from that park, the app returns the
+saved line and makes **no external call at all**.
+
+**RECOMMENDED ORDER, therefore, and it is the opposite of the obvious one:
+build search-over-saved-routes FIRST and treat route GENERATION as the
+fallback for when nothing nearby exists.** That is cheaper, faster for the
+user, better as the database fills, and it retires most of the :12111 ceiling
+without paying anyone.
+
+### WHAT THIS NEEDS THAT DOES NOT EXIST
+
+- A start-point location on `saved_routes` (lat/lng columns; a bounding-box
+  query is enough for "within 5 km" — **no PostGIS needed, do not add one**).
+- A shared/public flag, private by default, plus the end-trimming.
+- A popularity counter.
+- The phone screens for all five parts.
+- **The map renderer decision (:16702), still Kd's and still unmade.**
+
+**Nothing built. No schema change in this commit.**
