@@ -1,6 +1,67 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD RE-RULES THE COST SHAPE — Gemini for the meal scanner, the consumer
+      trial ANSWERED, the 20-gym pilot priced. DECISIONS :16548.
+      **NOTHING BUILT. NOTHING SEEDED. NO CODE CHANGED.** Records only.
+
+WHAT A NEXT CHAT MUST NOT GET WRONG
+  · **DO NOT SEED ANY PLAN, QUOTA OR PRICE YET.** `db/seed.ts` still holds the
+    pre-ruling shape (PAID meal_scan 8/day, route_gen 5/day — both now wrong).
+    Three things must be ruled first, then it is ONE seed change, not three:
+    the 500-2099 bands, the trial cap, and (separately) badges/progress.
+  · **THE IMAGE CAP IS NOT A COST DECISION.** Measured: the whole spread
+    between a 384px and a 1024px photo is **$5.80/month** at realistic volume.
+    Pick the size for ACCURACY. A chat shrinking to 384px "to save money" has
+    misread the entry's own table.
+  · **THE GEMINI SWAP IS NOT A MODEL-STRING CHANGE.** Different endpoint,
+    different request shape, and the Groq price constants in
+    `vision.adapter.ts` must move with it or `api_cost_events` reports Groq
+    prices for Gemini calls — that ledger is the tripwire the pricing rests on.
+  · **RUN THE PARITY TEST FIRST.** Cost is answered; QUALITY is not. Nobody has
+    shown Flash-Lite reads Indian food as well as Qwen. :344's verbatim
+    fixtures in `nutrition.unit.test.ts` + 18 real scans exist for this.
+  · **THE CHAT COACH WAS ALREADY RULED DROPPED on 2026-08-18 (:9604 §5).**
+    This chat asked Kd to re-rule it — a protocol failure, recorded in the
+    entry. The OWED block "The AI chat coach — switched OFF by Kd ruling"
+    carries the execution detail: remove the ROUTE, not the nav button; OFF,
+    not deleted; ~seven parked coach items that must NOT be ticked.
+  · **The Strava-style GPS line costs NOTHING** — device GPS, no API. Only
+    route GENERATION hits :12111's shared ~2,000/day ORS ceiling, still
+    unverified. Kd's "most-used routes" IS the cache that fixes it.
+
+RULED (:16548): Gemini 2.5 Flash-Lite · image capped, prompt NOT shortened ·
+  consumer 1 week UNLIMITED then 3/day · gym member 5/day even when gym-paid ·
+  gym trial 30 days · first 20 gyms free · 0-299 $29 · 300-499 $39 · 2100+
+  custom · 2 route plans/day paid · coach dropped (confirms :9604).
+
+NOT RATIFIED — one word from Kd unblocks the billing and Gemini cards:
+  500-999 $59 / 1000-1499 $79 / 1500-2099 $99 · 768px · the parity test ·
+  cheap-first-escalate · 20/day trial cap · OpenFreeMap-or-PMTiles ·
+  Neon stays (self-hosting PG = a v1 §19 DEVIATION PROPOSAL, not a chat's call).
+
+NUMBERS (all command-produced this session; sources in the entry)
+  · Flash-Lite $0.10 in / $0.40 out per 1M · image 258 tok at <=384px, else
+    768x768 tiles @258 · prompt 1,040 chars ~= 260 tok
+  · per scan: 384px $0.000152 · 768px $0.000229 · 1024px $0.000281
+    (vs today's $0.00212 — 9.2x cheaper at 768px)
+  · 20 gyms x 500 members: realistic $10.31 · high $41.26 · max $343.80
+    (adoption %s are labelled ASSUMPTIONS — no measured install/log rate exists)
+  · infra $62.82-$162.87 · GRAND TOTAL $73-$173 vs $1,180/mo revenue
+
+STILL OPEN AND NOT INFERABLE FROM THE RULING
+  · Do badges and progress move behind the trial? They are FREE FOREVER today
+    (v1 §9.1:611, ungated in code) so moving them is a REMOVAL needing its own
+    explicit ruling against a cited option.
+  · :9944's consent split + one-US-lawyer step · :11072's approval gate ·
+    Part 5 §1's India price books.
+
+NEXT
+  1. Kd rules the five unratified items (one message).
+  2. Then: the parity test card, before any adapter work.
+```
+
+```
 TASK: THE API'S TESTS STOP TRAVELLING TO SINGAPORE. **Read this BEFORE running
       any api test or mutation sweep.** DECISIONS :13659. Kd asked for it
       directly. Closes half of :5857 rule 4a's owed item.

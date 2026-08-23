@@ -4135,6 +4135,16 @@ file and is stated so nobody reads these as lower priority than they are.
       underwater only under full-roster daily use; three boundary/cap fixes put
       with the math. **AWAITING KD'S RATIFICATION — do not seed or quote these
       numbers until he confirms.**
+      **UPDATE 2026-08-24 (DECISIONS :16548) — THE NUMBERS ABOVE ARE SUPERSEDED
+      AND MUST NOT BE SEEDED OR QUOTED.** Kd RULED: **0-299 $29 · 300-499 $39 ·
+      2100+ custom**, gym members **5** meal scans/day even though the gym pays,
+      consumers **1 week unlimited then 3/day**, gym trial **30 days**, first
+      **20 gyms free**. He fixed his own overlapping draft ("0-299/0-499", where
+      a 200-member gym fell in both) on being shown it: *"yes good"*.
+      **STILL NOT RULED and the reason this line does not tick: the 500-2099
+      range.** Recommended **500-999 $59 · 1000-1499 $79 · 1500-2099 $99** —
+      continues his own falling per-member curve and clears cost even in the
+      impossible max case (margins 42/35/27%). **One word from Kd closes this.**
 - [ ] 🟡 **IN-APP CONSENT SCREEN FOR HEALTH DATA AND THE CAMERA — needed before
       a US gym signs (DECISIONS :9944).** Whatever the gym's contract says
       about the roster upload, health-type data (meals, weight, workouts) and
@@ -4172,6 +4182,94 @@ file and is stated so nobody reads these as lower priority than they are.
       streaming · read-path ordering tiebreaker · the secure-context message id.
       They park with the feature and return if it does. Ticking them would record
       work that never happened.
+
+### The meal scanner moves to Gemini — Kd's 2026-08-24 rulings (DECISIONS :16548)
+
+- [ ] 🟡 **RUN THE PARITY TEST BEFORE THE GEMINI SWAP SHIPS. THIS IS THE ONE
+      THAT MUST NOT BE SKIPPED.** Kd ruled the scanner moves to
+      `gemini-2.5-flash-lite`, and **nobody has established that it identifies
+      food — Indian food especially — as well as the Qwen path does.** Cost is
+      answered; QUALITY is not, and a cheaper model that reads "roti" as
+      "flatbread stack" costs more in trust than it saves in dollars.
+      **The instrument already exists and was built for exactly this class of
+      failure:** :344 preserved REAL Groq completions verbatim as fixtures in
+      `nutrition.unit.test.ts` (they exist because both vision models once
+      returned shapes the schema rejected and 250+ green tests could not see
+      it), and 18 real scans sit in `api_cost_events`. Replay them through
+      Gemini, compare item-by-item, and put the disagreements in front of Kd.
+      **A swap that ships without this is the Card-5a bug class returning.**
+- [ ] 🟡 **BUILD THE GEMINI ADAPTER — and it is NOT a model-string change.**
+      `vision.adapter.ts` posts to `api.groq.com/openai/v1/chat/completions`
+      with Groq's request shape, a `qwen/`-conditional `reasoning_effort`, and
+      Groq's price constants (`VISION_INPUT/OUTPUT_MICRO_USD_PER_MILLION`).
+      Gemini has its own endpoint, request shape and prices
+      (**$0.10/$0.40 per 1M, verified 2026-08-24**), so the cost-ledger
+      constants must move with it or `api_cost_events` silently reports Groq
+      prices for Gemini calls — the ledger is the tripwire the whole pricing
+      model rests on. Keep the `.strict()` parse and the kcal-smuggling
+      rejection; they are what stop a model inventing nutrition.
+- [ ] 🟡 **RESIZE THE PHOTO BEFORE IT IS SENT — and DO NOT pick the size to
+      save money.** Kd ruled the image is capped. **Measured: the entire spread
+      between a 384px and a 1024px image is $5.80/month at realistic volume**
+      (per scan $0.000152 vs $0.000281). Recommended **768px longest side** for
+      accuracy and upload speed on gym wi-fi; **NOT RATIFIED.** A chat that
+      shrinks to 384px "for cost" has misread the measurement.
+      **The PROMPT is deliberately NOT shortened** — Kd's own call, and correct:
+      it is 260 tokens, $0.000026/scan.
+- [ ] ⚪ **CHEAP-FIRST-ESCALATE ON A FAILED SCAN.** Recommended, not ruled:
+      Flash-Lite at 768px on every scan; on `photo_quality: "poor"` or zero
+      matched items, ONE retry at higher resolution or on Gemini Flash
+      ($0.15/$1.25 per 1M). Fires only on failures, so the average cost barely
+      moves and the person does not hit a dead end. **Pairs with the existing
+      honest "couldn't match" empty state (Card 5b) rather than replacing it.**
+- [ ] 🟡❓ **CAP THE UNLIMITED TRIAL WEEK — RECOMMENDED 20 SCANS/DAY, KD HAS NOT
+      RULED.** The ruled consumer trial (1 week unlimited, then 3/day) is the
+      only allowance in the product with **no ceiling at all**. Priced rather
+      than argued: **1,000 scans/day × 7 days = $1.60 per farmed account** —
+      trivial alone, scriptable in bulk, and the second-email attack :11181
+      raised is unchanged by the ruling. **20/day is invisible to anyone who
+      eats food** and keeps the word "unlimited" honest for every real user.
+      Blocks the seed change, nothing else.
+- [ ] 🟡 **RE-SEED THE QUOTAS TO THE RULED NUMBERS.** `db/seed.ts` currently
+      holds the pre-ruling shape (PAID `meal_scan` 8/day, `route_gen` 5/day —
+      both now wrong). Ruled: **free 3/day after the trial week · gym member
+      5/day · route_gen 2/day for paid.** Do NOT seed until the 500-2099 bands
+      and the trial cap are ruled — one seed change, not three.
+
+### Running: the Strava-style line is free, the route SUGGESTIONS are not
+
+- [ ] ⚪ **GPS TRACK-AND-DRAW — Kd's Strava-style blue line (DECISIONS :16548).**
+      **The point a chat must not lose: this costs NOTHING, ever.** The line is
+      the device's own GPS; no external call, no allowance, no bill. It is the
+      cheapest feature on Kd's list and the one users actually name.
+      **What it needs is storage and a map to draw on, not an API.** Nothing
+      built; no governing spec § (Part 6 §5.1 covers the permission flow and
+      its Play-rejection-proof copy, which binds this).
+- [ ] ⚪ **CHOOSE THE MAP TILE SOURCE — recommended, not ruled.** OpenFreeMap
+      (free, no key, no signup, no usage cap) or self-hosted Protomaps/PMTiles
+      on the **R2 already in v1 §19** (~$0-3/mo). **Do not default to a
+      per-map-load billed provider** — it converts a free feature into a
+      per-view bill at exactly the scale the running feature is meant to reach.
+
+### The 20-gym pilot and what it costs to run
+
+- [ ] 🟡 **THE 30-DAY GYM TRIAL AND THE FIRST-20-GYMS-FREE COHORT (ruled
+      2026-08-24, DECISIONS :16548).** Both are billing-card work and neither
+      exists. **The 30-day trial is card-less (`provider='none'`, Part 5 §6)
+      and therefore sits behind :11072's Kd-approval gate** — no self-serve
+      path may mint a live gym trial, which is what stops the
+      fresh-gym-per-month free ride. **"First 20 gyms free" needs a decision a
+      chat must not invent: is it a pilot CODE (Part 5 §6, already specified)
+      or a counter on the gyms table?** Recommended: the pilot code — it exists,
+      it is auditable, and a counter cannot express "these twenty".
+- [ ] ⚪ **POSTGRES STAYS ON NEON — revisit above ~$150/month.** Measured
+      2026-08-24: Neon Launch is **$32-91/mo** at 10,000 registered members and
+      is the single largest infrastructure line ($62.82-$162.87 total, against
+      $73-$173 all-in for the whole 20-gym pilot). Self-hosting it on the VPS
+      already paid for drops it near zero. **Put to Kd with the trade stated —
+      he would own backups, and a lost database costs more than $91 — and he
+      left it where it is.** Recorded so the lever is findable, not lost.
+      **A move is a v1 §19 DEVIATION PROPOSAL, never a chat's own call.**
 
 ### Gym platform — the console and the gym's own money
 
@@ -5042,6 +5140,14 @@ file and is stated so nobody reads these as lower priority than they are.
       — each cuts the call rate ~3× · a paid ORS plan · self-host.
       **Not urgent today** (5 route_gen calls have ever been recorded) and it
       must not be discovered by a gym's members losing the feature at once.
+      **UPDATE 2026-08-24 (DECISIONS :16548) — KD RULED THE ALLOWANCE BACK DOWN
+      TO 2/day for paid users**, undoing the 3/day that moved this ceiling 33%
+      closer. The ceiling itself is UNCHANGED and this line does not tick: the
+      ORS allowance size is still unverified and nobody has opened the
+      dashboard. **The two free fixes above are now BACKED by a Kd feature ask
+      rather than only by this line — his "most-used routes" IS the candidate
+      cache, and it is the cheapest feature on his list because it reads our own
+      database and makes no external call at all.**
 - [ ] 🟡 **GYM PLAN/TRIAL ACTIVATION SITS BEHIND KD'S APPROVAL — ruled
       2026-08-19 (DECISIONS :11072), binds the BILLING card.** The hazard pair
       this answers was raised by Kd the same day (:11023, tracked nowhere
@@ -5733,7 +5839,22 @@ file and is stated so nobody reads these as lower priority than they are.
       answered. **Nothing may be built here until it is** — this is the one item
       on the 2026-08-18 list where shipping the obvious implementation is worse
       than shipping nothing. Zero spec hits.
-- [ ] ❓ **THE 5-DAY CONSUMER FREE TRIAL — KD'S PLAN WANTS ONE, THE SPEC FORBIDS
+- [x] ~~❓ **THE 5-DAY CONSUMER FREE TRIAL**~~ — **RULED 2026-08-24 (DECISIONS
+      :16548). THE TRIAL EXISTS: ONE WEEK, UNLIMITED, THEN 3 MEAL SCANS/DAY.**
+      Not five days; not :9944's 8/day. **The recommendation on record was to
+      DROP it and Kd ruled the other way** — so
+      `05-part5-billing.md:292-293`'s "Consumer trials: none" is now a KNOWING
+      deviation, and a chat that finds the prohibition must cite this ruling
+      rather than treat the trial as an error to correct.
+      **THREE THINGS THIS RULING DID NOT DISPOSE OF — each keeps its own line
+      below, and none may be inferred from the ruling:** the farming attack
+      (answered only by a recommended, unratified 20-scans/day cap) · whether
+      badges and progress move behind the trial (a REMOVAL of a live free
+      feature; still needs its own explicit ruling) · the seed change itself.
+      The original text is kept below because its reasoning is still the
+      evidence base.
+- [ ] ❓ **[SUPERSEDED — see the ruling directly above; kept for its reasoning]
+      THE 5-DAY CONSUMER FREE TRIAL — KD'S PLAN WANTS ONE, THE SPEC FORBIDS
       ONE BY NAME, AND HE HAS NOT RULED (2026-08-19, DECISIONS :11181).**
       His plan: exercises free always, but personalised plans, recommendations,
       8 meal scans/day, progress tracking and badges free for FIVE DAYS only.

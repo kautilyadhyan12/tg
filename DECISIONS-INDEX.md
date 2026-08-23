@@ -773,17 +773,22 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   2026-08-06 by Kd's ruling at :5307 — STANDING.** Left struck rather than
   deleted: it was open for less than a day, and the useful part is that it
   existed at all. Cards no longer record an apology for citing :2365.
-- **:11181** — 2026-08-19 — **OPEN: THE 5-DAY CONSUMER FREE TRIAL Kd's product
-  plan describes — which `05-part5-billing.md:292-293` forbids by name
-  ("Consumer trials: none — permanent free tier is the funnel") and v1
-  §9.1:626-629 argues against on conversion grounds.** He asked how to stop
-  someone farming it with a second email and then moved on without ruling.
-  **Recommendation on record: DROP the trial — the attack exists only because
-  the trial does; if kept, only a CARD before the trial starts holds** (email
-  and device checks are free to defeat). **Open WITH it: whether badges and
-  progress move behind that trial** — they are free forever today (v1 §9.1:611,
-  and ungated in code), so moving them is a REMOVAL needing an explicit ruling.
-  Check before proposing any paywall, trial, entitlements or seed change.
+- ~~**:11181** — 2026-08-19 — **OPEN: THE 5-DAY CONSUMER FREE TRIAL**~~
+  **CLOSED 2026-08-24 by Kd's ruling at :16548 — the trial EXISTS and is ONE
+  WEEK UNLIMITED, then 3 meal scans/day.** Not five days, not :9944's 8/day.
+  The recommendation on record was to DROP it; **Kd ruled the other way and the
+  spec prohibition (`05-part5-billing.md:292-293`, "Consumer trials: none —
+  permanent free tier is the funnel") is now a KNOWING deviation, not an
+  oversight.** The farming attack the old line named is unchanged and answered
+  only by a recommended, unratified 20/day cap. **STILL OPEN AND NOT INFERABLE
+  FROM THE RULING: whether badges and progress move behind that trial** — free
+  forever today (v1 §9.1:611, ungated in code), so moving them is a REMOVAL
+  needing its own explicit ruling. Check before any paywall, trial,
+  entitlements or seed change.
+- **:16548** — 2026-08-24 — **OPEN, and it is what Kd must say one word on
+  before the billing or Gemini card can start: the 500-2099 price bands, the
+  768px image cap, the pre-switch parity test, the 20/day trial cap, and the
+  map-tile choice are all RECOMMENDED and NOT RATIFIED.** Detail at the §4 line.
 - **:11534** — 2026-08-19 — **OPEN: WHERE THE FOLLOW-ALONG REFERENCE FOOTAGE
   COMES FROM.** Three options priced and put to Kd — film a real person ·
   motion-capture an expert clip onto a rigged 3D model (**possible; his
@@ -809,6 +814,37 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:16548** — 2026-08-24 — **KD RE-RULES THE PRODUCT'S COST SHAPE: the meal
+  scanner moves to Gemini 2.5 Flash-Lite, the consumer trial is ANSWERED after
+  five days open, and the whole 20-gym pilot costs about one gym's
+  subscription.** **Read before touching `nutrition/vision.adapter.ts`, before
+  seeding ANY plan/quota/price, before planning the running feature, and before
+  quoting any per-scan or infrastructure cost.** Supersedes the model half of
+  :344, the consumer-trial half of :11181, the price-band half of
+  :9944/:12111. **RULED:** Gemini 2.5 Flash-Lite replaces Groq/Qwen · image
+  size-capped but the PROMPT deliberately NOT shortened · **consumer trial =
+  ONE WEEK UNLIMITED then 3 scans/day** (a knowing deviation from
+  `05-part5-billing.md:292-293`) · gym members 5/day even though the gym pays ·
+  gym trial 30 days, first 20 gyms free · bands **0-299 $29 · 300-499 $39**
+  (Kd confirmed the fix to his own overlapping "0-299/0-499") **· 2100+
+  custom** · running = 2 route plans/day + Strava-style GPS line + most-used
+  routes · the chat coach confirmed dropped. **MEASURED (V1, sources in the
+  entry): Flash-Lite $0.10/$0.40 per 1M; images 258 tokens at <=384px, else
+  768x768 tiles @258; prompt 1,040 chars ~= 260 tokens; per scan 384px
+  $0.000152 / 768px $0.000229 / 1024px $0.000281 vs today's $0.00212.** **THE
+  FINDING: the whole spread between smallest and largest image is $5.80/month —
+  image size is an ACCURACY decision, not a cost one, and a chat that shrinks
+  the image "to save money" has misread this.** 20 gyms x 500 members: **$10.31
+  realistic, $41.26 high, $343.80 absolute max** (adoption %s are labelled
+  ASSUMPTIONS — no measured install/log rate exists); **infra $62.82-$162.87;
+  grand total $73-$173**, against $1,180/mo revenue. **NOT RATIFIED and named
+  in §2: 500-999 $59 / 1000-1499 $79 / 1500-2099 $99 · 768px · the pre-switch
+  parity test against :344's verbatim fixtures · cheap-first-escalate · the
+  20/day trial cap · OpenFreeMap-or-PMTiles · Neon stays (self-hosting PG is a
+  v1 §19 DEVIATION PROPOSAL, not a chat's call).** **Also records a PROCESS
+  FAILURE: the chat asked Kd to re-rule the chatbot, which :9604 §5 ruled on
+  2026-08-18 — it had not read `OWED.md`'s coach block.** Nothing built,
+  nothing seeded.
 - **:16495** — 2026-08-23 — **THE CONSOLE-REFRESH SMOKE PASSES 4/4 — and the
   direction nothing had ever seen without a reload was seen by a PERSON.** Kd's
   REPORT (:4829) on `e8a7e5c` (:16331), his own gym, **tree verified

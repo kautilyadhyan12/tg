@@ -16544,3 +16544,152 @@ out rather than repeated).
 `OWED.md`'s ⚪ line has **one of its two gates met**. **T3 is UNRUN** and is the
 remaining gate; the prompt and the diff are written (`t3-console-refresh-r1-*`,
 gitignored). A passing smoke is not a review (:14147).
+
+## KD RE-RULES THE PRODUCT'S COST SHAPE: the meal scanner moves to Gemini, the consumer trial is ANSWERED after being open since 2026-08-19, and the whole 20-gym pilot costs about the price of one gym's subscription (2026-08-24)
+
+**Read before touching `nutrition/vision.adapter.ts`, before seeding any plan,
+quota or price, before planning the running feature, and before quoting ANY
+per-scan or infrastructure cost.** Supersedes the model half of :344, the
+consumer-trial half of :11181, and the price-band half of :9944/:12111.
+
+**PROCESS FAILURE, RECORDED FIRST BECAUSE IT IS THE REUSABLE PART.** This chat
+asked Kd to rule on "delete the chatbot or hide it?" — a question :9604 §5 had
+ALREADY RULED on 2026-08-18 (*"i have decided to drop the chat bot from both web
+and mobile"*), with `OWED.md`'s "The AI chat coach — switched OFF by Kd ruling"
+block carrying the execution detail (OFF not deleted; remove the ROUTE not the
+nav button; 1,617 server lines + a 772-line screen; ~seven parked coach items
+that must not be ticked). The chat had read DECISIONS-INDEX and HANDOFF but not
+that OWED block before putting the question. **Re-asking Kd to rule on something
+already ruled is a protocol failure, not diligence** (CLAUDE.md grounding rule).
+Kd's *"dont want it"* CONFIRMS the standing ruling and changes nothing.
+
+### WHAT KD RULED TODAY
+
+1. **The meal scanner moves to `gemini-2.5-flash-lite`.** Replaces the Groq/Qwen
+   path :344 chose on 2026-07-16.
+2. **Nutrition stays OUR arithmetic, computed server-side from our own food
+   table.** Kd stated this as a change; **it is already the built design** and
+   nothing moves — `MEAL_VISION_PROMPT` ends *"Never output calories, kcal,
+   grams, quantities by weight, protein, carbohydrates, fat, fibre, or any
+   nutrition arithmetic."* Recorded so the next chat does not "implement" it.
+3. **The uploaded image is size-capped; the PROMPT is deliberately NOT
+   shortened.** Kd's reasoning — cheaper image, undiminished instruction
+   quality — is measured correct below. The exact pixel cap is recommended, not
+   ruled (see RECOMMENDED).
+4. **CONSUMER TRIAL, WHICH CLOSES THE OPEN QUESTION FROM 2026-08-19 (:11181, and
+   `OWED.md`'s "5-DAY CONSUMER FREE TRIAL" line): ONE WEEK, UNLIMITED, then
+   3 meal scans/day** — not the five days that question was written about, and
+   not the 8/day of :9944. **`05-part5-billing.md:292-293` forbids consumer
+   trials BY NAME** (*"Consumer trials: none — permanent free tier is the
+   funnel"*), so this is a DEVIATION Kd has now taken knowingly; the trial's
+   own farming hazard (a second email buys another week) is priced below and is
+   what the recommended cap answers. **The badges/progress sub-question that
+   line reserved is NOT answered and must not be inferred** — they are free
+   forever today and moving them is a REMOVAL needing its own ruling.
+5. **A gym's members get 5 meal scans/day — even though the gym pays.** Higher
+   than the 3/day free tier, lower than :9944's 8/day.
+6. **A gym gets a 30-day free trial**, and **the first 20 gyms are free, then
+   subscription.**
+7. **Price bands: 0-299 $29 · 300-499 $39 · 2100+ custom price.** Kd's own
+   draft read "0-299 / 0-499"; both started at 0, so a 200-member gym fell in
+   both bands. **He confirmed the 300-499 fix in as many words: "yes good".**
+   The 500-2099 range is his explicit ask for a recommendation — see below.
+8. **Running: 2 route plans/day for paid users** (NOT :12111's 3/day, which
+   :12111 itself flagged as moving the ORS ceiling 33% closer), plus **GPS
+   tracking that draws the run as a line, Strava-style**, plus **most-used
+   routes**.
+9. **The chat coach is dropped** — confirms :9604 §5, above.
+
+### MEASURED, NOT RECALLED (V1)
+
+| Fact | Value | Source, read 2026-08-24 |
+|---|---|---|
+| Flash-Lite input | **$0.10 / 1M tokens** (text/image/video) | `ai.google.dev/gemini-api/docs/pricing` |
+| Flash-Lite output | **$0.40 / 1M tokens** | same |
+| Flash (escalation tier) | $0.15 in / $1.25 out per 1M | pricepertoken.com, secondary |
+| Image tokens | **258 if BOTH dims <=384px**; else 768x768 tiles @ **258 each** | `ai.google.dev/gemini-api/docs/image-understanding` |
+| `MEAL_VISION_PROMPT` | **1,040 chars ~= 260 tokens** | measured in repo this session |
+
+**Per-scan cost, computed from those figures — the whole point of capping the
+image, and the reason the cap should NOT be chosen for cost:**
+
+| Image | Per scan | vs today's $0.00212 | 45,000-scan month |
+|---|---|---|---|
+| 384px (1 tile) | $0.000152 | 14.0x cheaper | $6.84 |
+| **768px (~4 tiles)** | **$0.000229** | **9.2x cheaper** | **$10.30** |
+| 1024px (~6 tiles) | $0.000281 | 7.5x cheaper | $12.64 |
+
+**THE FINDING KD SHOULD CARRY: the entire spread between the smallest and
+largest image is $5.80 a month at realistic volume.** His cost instinct was
+right about the direction and wrong about the magnitude — at Flash-Lite prices
+image size is an ACCURACY decision, not a cost decision. The prompt he wanted
+protected costs $0.000026/scan; keeping it in full is free.
+
+**20 gyms x 500 members x 30 days, under the ruled 5/day member cap:**
+
+| Scenario | Active | Scans | AI cost |
+|---|---|---|---|
+| Absolute max (100% install, 100% log, 5/day) | 10,000 | 1,500,000 | **$343.80** |
+| High (50% install, 40% log, 3/day) | 2,000 | 180,000 | $41.26 |
+| **Realistic (30% install, 25% log, 2/day)** | **750** | **45,000** | **$10.31** |
+| Slow (20%/15%/1.5) | 300 | 13,500 | $3.09 |
+
+**The adoption percentages are ASSUMPTIONS, labelled as such — no measured
+install-or-log rate exists for this product** (5 route_gen calls and 18 scans
+is the entire ledger). The 5/day cap is what makes the max column a real
+ceiling rather than a guess.
+
+**Infrastructure at 10,000 registered members** (v1 §20 puts 10k at "stage 1":
+bigger VPS or 2x API containers, Neon autoscale):
+
+| Piece | Low | High | Source |
+|---|---|---|---|
+| Hetzner CPX42 (8 vCPU/16GB) | $25.49 | $25.49 | comparedge, 2026-07-08 pricing |
+| Neon Launch ($0.106/CU-h + $0.35/GB-mo) | $32.33 | $91.38 | `neon.com/pricing` |
+| Upstash Redis PAYG ($0.20/100k cmds) | $5 | $20 | `upstash.com/pricing/redis` |
+| Vercel, R2, maps, email/push/Sentry/PostHog | $0 | $26 | free tiers + R2 $0.015/GB-mo |
+| **INFRA SUBTOTAL** | **$62.82** | **$162.87** | |
+
+**GRAND TOTAL for the 20-gym pilot month: $73-$173 realistic**, $104-$204 if
+adoption is high, $407-$507 in the max case that cannot happen without every
+member scanning five meals daily. **Then they pay: 20 x $59 = $1,180/mo against
+~$75-175 of cost — profitable from roughly gym #3.**
+
+### RECOMMENDED, NOT RATIFIED — nothing here is a ruling and none of it is seeded
+
+1. **500-999 $59 · 1000-1499 $79 · 1500-2099 $99.** Continues Kd's own falling
+   per-member curve (9.7c -> 7.8c -> 5.9c -> 5.3c -> 4.7c) and clears cost even
+   in the impossible max case (margins 65/56/42/35/27%). A 2,000-member gym at
+   $99 still sits under US gym software's $79-$229 floor (:12111's sources).
+2. **768px longest side** — the accuracy/upload-speed middle, per the finding
+   above, NOT the cost minimum.
+3. **PARITY TEST BEFORE THE SWITCH, and this is the one that must not be
+   skipped: nobody has established that Flash-Lite identifies food — Indian
+   food especially — as well as Qwen does.** The instrument already exists:
+   :344 preserved real Groq completions VERBATIM as fixtures in
+   `nutrition.unit.test.ts` and 18 real scans sit in `api_cost_events`. Run
+   them through Gemini and compare before any swap ships.
+4. **Cheap-first-escalate:** Flash-Lite at 768px on every scan; on
+   `photo_quality: "poor"` or zero matched items, ONE retry at higher
+   resolution or on Flash. Fires only on failures, so the average barely moves.
+5. **A 20 scans/day cap during the unlimited trial week.** Unlimited has no
+   ceiling: 1,000 scans/day x 7 days = **$1.60 per farmed account**, cheap
+   alone and scriptable in bulk. 20/day is invisible to anyone who eats food.
+6. **Running is TWO features and only one costs money.** The Strava-style
+   line is the DEVICE's own GPS — zero API cost, forever. Map tiles:
+   OpenFreeMap (free, no key, no cap) or self-hosted Protomaps/PMTiles on the
+   R2 already in v1 §19 (~$0-3/mo). **Route GENERATION is the constrained one**
+   — :12111's shared ~2,000/day ORS allowance, still UNVERIFIED, failing as a
+   dead feature not a bill. Kd's own "most-used routes" IS the cache that fixes
+   it, and dropping `count` 3->1 is :12111's other free 3x (`geo.ts:14`).
+7. **Postgres stays on Neon.** Self-hosting it on the existing VPS saves
+   $32-91/mo and was put to Kd, who left it; the trade is backups he would own.
+   Revisit above ~$150/mo. **A move is a v1 §19 deviation and needs a
+   DEVIATION PROPOSAL, not a chat's judgement.**
+
+### WHAT THIS DOES NOT TOUCH
+
+:9944's consent split and one-US-lawyer step · :11072's Kd-approval gate on gym
+plan/trial activation · the badges/progress question reserved at :11181 ·
+Part 5 §1's India price books, still unresolved. **Nothing is seeded, nothing
+is built, no code changed in this commit.**
