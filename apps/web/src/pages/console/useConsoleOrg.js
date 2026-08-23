@@ -1,6 +1,11 @@
-import { useEffect, useState } from 'react';
-import { orgService, errorText } from '../../api/orgsApi';
-import { findOrgBySlug } from './consoleView';
+import { useEffect, useSyncExternalStore } from 'react';
+import {
+  consoleOrgsSnapshot,
+  ensureConsoleOrgs,
+  refreshConsoleOrgs,
+  subscribeConsoleOrgs,
+} from './consoleOrgs';
+import { findOrgBySlug, manageableOrgs } from './consoleView';
 
 /** Resolve `/console/:orgSlug` to the org the API is keyed by.
  *
@@ -14,57 +19,84 @@ import { findOrgBySlug } from './consoleView';
  *  apart draws "you don't manage any gyms" at a gym owner whose network blipped:
  *    loading · failed (with `error` and `reload`) · notFound · resolved (`org`)
  *
- *  The effect NEVER calls setState synchronously — `loading` is the initial
- *  state and `reload` re-enters it from the click handler. That is a lint rule
- *  here (cascading renders), and it is also the clearer reading: the effect
- *  starts a request and the handlers report what came back.
+ *  THE LIST ITSELF IS NO LONGER READ HERE. It lives in `consoleOrgs.js`, shared
+ *  by every screen and by the shell around them, and re-read when the window
+ *  regains focus. Two things follow that this hook used to get wrong:
+ *  moving between the console's screens now asks the server NOTHING, and a
+ *  screen that has been open a while stops drawing powers its viewer no longer
+ *  holds. The four states and this hook's shape are unchanged, which is why no
+ *  screen needed editing for either.
  *
- *  No reset when `orgSlug` changes under a mounted hook, deliberately: nothing
- *  in the console navigates from one gym to another without passing through a
- *  screen that unmounts this. Add one and the stale-name flash becomes real. */
+ *  NO SLUG, NO QUESTION — and `loading` is the truthful answer there rather than
+ *  an empty one. `ConsoleLayout` renders on `/console` and `/console/new` too,
+ *  where there is no gym to resolve; it reads only `org`, so it simply draws no
+ *  gym tabs. Structurally unreachable for the SCREENS: all three take the slug
+ *  from the address, and react-router does not match those patterns with the
+ *  segment empty. */
 export function useConsoleOrg(orgSlug) {
-  const [state, setState] = useState({ loading: true, error: null, org: null, notFound: false });
-  const [attempt, setAttempt] = useState(0);
+  const wanted = typeof orgSlug !== 'string' || orgSlug === '' ? null : orgSlug;
+  const snapshot = useSyncExternalStore(subscribeConsoleOrgs, consoleOrgsSnapshot);
 
+  // ON MOUNT ONLY, and `snapshot.status` is deliberately NOT a dependency.
+  //
+  // IT WAS, AND IT LOOPED. `ensure` asks again after a failure, so a failed read
+  // published `failed`, the status change re-ran this effect, `ensure` asked
+  // again, and the screen never got past its spinner while the app hammered the
+  // server for ever. It survived the store's own unit tests — nothing re-runs an
+  // effect there — and the SCREEN test is what caught it: proof that a rule
+  // tested one layer above the screen is not tested where it lives. After a
+  // failure the way on is the Try-again button or clicking back into the window.
   useEffect(() => {
-    // NO SLUG, NO QUESTION. Added when `ConsoleLayout` began using this hook to
-    // find out the viewer's role: the shell renders on `/console` and
-    // `/console/new` too, where there is no gym to resolve, and without this it
-    // would ask the server which gyms you run in order to answer a question
-    // nobody asked. The state stays `loading`, which is the truthful answer —
-    // no org has been resolved and none is being — and the shell reads only
-    // `org`, so it simply draws no gym tabs.
-    //
-    // STRUCTURALLY UNREACHABLE FOR THE SCREENS: both page callers take the slug
-    // from `/console/:orgSlug[/...]`, and react-router does not match those
-    // patterns with the segment empty.
-    if (typeof orgSlug !== 'string' || orgSlug === '') return undefined;
-    let cancelled = false;
-    orgService
-      .getMine()
-      .then((res) => {
-        if (cancelled) return;
-        const org = findOrgBySlug(res.data?.orgs, orgSlug);
-        setState({ loading: false, error: null, org, notFound: org === null });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setState({
-          loading: false,
-          error: errorText(err, "We couldn't load your gyms."),
-          org: null,
-          notFound: false,
-        });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [orgSlug, attempt]);
+    if (wanted !== null) ensureConsoleOrgs();
+  }, [wanted]);
 
-  const reload = () => {
-    setState({ loading: true, error: null, org: null, notFound: false });
-    setAttempt((n) => n + 1);
-  };
+  if (wanted === null) return NO_SLUG;
 
-  return { ...state, reload };
+  if (snapshot.status === 'failed') {
+    return { loading: false, error: snapshot.error, org: null, notFound: false, reload };
+  }
+  if (snapshot.status !== 'ready') {
+    return { loading: true, error: null, org: null, notFound: false, reload };
+  }
+  const org = findOrgBySlug(snapshot.orgs, wanted);
+  return { loading: false, error: null, org, notFound: org === null, reload };
 }
+
+/** "Your gyms" — the same one answer, as a list.
+ *
+ *  It reads the shared store for the same reason the screens do: this is the
+ *  console's front door, so the answer it fetches is the one the gym screen the
+ *  owner taps next is about to want. `manageableOrgs` is applied here rather
+ *  than in the store — the store keeps what the server said, and each reader
+ *  asks its own question of it. */
+export function useConsoleOrgs() {
+  const snapshot = useSyncExternalStore(subscribeConsoleOrgs, consoleOrgsSnapshot);
+
+  // On mount only — see `useConsoleOrg` above for why the status must not be a
+  // dependency here.
+  useEffect(() => {
+    ensureConsoleOrgs();
+  }, []);
+
+  return {
+    loading: snapshot.status === 'idle' || snapshot.status === 'loading',
+    error: snapshot.status === 'failed' ? snapshot.error : null,
+    orgs: snapshot.status === 'ready' ? manageableOrgs(snapshot.orgs) : [],
+    reload,
+  };
+}
+
+/** Try again. A foreground read, so it publishes `loading` and every screen
+ *  reading the store recovers together — one press fixes the shell's nav as
+ *  well as the screen the button is on. */
+function reload() {
+  refreshConsoleOrgs();
+}
+
+const NO_SLUG = Object.freeze({
+  loading: true,
+  error: null,
+  org: null,
+  notFound: false,
+  reload,
+});

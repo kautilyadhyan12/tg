@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Building2, Plus, ChevronRight } from 'lucide-react';
-import { orgService, errorText } from '../../api/orgsApi';
-import { manageableOrgs, roleLabel } from './consoleView';
+import { roleLabel } from './consoleView';
+import { useConsoleOrgs } from './useConsoleOrg';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 
 // "Your gyms" — the console's front door.
@@ -17,36 +16,18 @@ import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/con
 // list is the honest shape and the smoke will say whether the tap annoys.
 
 export default function ConsoleHome() {
-  const [state, setState] = useState({ loading: true, error: null, orgs: [] });
-  const [attempt, setAttempt] = useState(0);
-
-  // `loading` is the INITIAL state and the retry handler re-enters it, so the
-  // effect never sets state synchronously (cascading renders, and a lint rule).
-  useEffect(() => {
-    let cancelled = false;
-    orgService
-      .getMine()
-      .then((res) => {
-        if (cancelled) return;
-        setState({ loading: false, error: null, orgs: manageableOrgs(res.data?.orgs) });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        // The empty arm below says "you don't run a gym yet", which is a CLAIM.
-        // A failed read must never reach it — that sentence at an owner of three
-        // gyms whose connection blipped is the empty-state defect this project
-        // has already shipped once.
-        setState({ loading: false, error: errorText(err, "We couldn't load your gyms."), orgs: [] });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [attempt]);
-
-  const retry = () => {
-    setState({ loading: true, error: null, orgs: [] });
-    setAttempt((n) => n + 1);
-  };
+  // The SAME kept answer every gym screen reads (`consoleOrgs.js`), so tapping
+  // into a gym from here asks the server nothing, and clicking back into the
+  // window re-checks this list too — a gym somebody took you off stops being
+  // listed without a reload.
+  //
+  // The three arms stay distinguishable, which is the load-bearing part: the
+  // empty arm below says "you don't run a gym yet", and that is a CLAIM. A
+  // failed read must never reach it — that sentence at an owner of three gyms
+  // whose connection blipped is the empty-state defect this project has already
+  // shipped once, which is why `error` is checked before `orgs.length`.
+  const state = useConsoleOrgs();
+  const retry = state.reload;
 
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">

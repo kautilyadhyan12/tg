@@ -51,6 +51,7 @@ const RENDER_SUITE = 'src/pages/console/console.render.test.jsx';
 const API_SUITE = 'src/api/orgsApi.test.js';
 const STAFF_VIEW_SUITE = 'src/pages/console/staffView.test.js';
 const SETTINGS_SUITE = 'src/pages/console/settings.render.test.jsx';
+const STORE_SUITE = 'src/pages/console/consoleOrgs.test.js';
 
 const TARGETS = {
   view: { file: resolve(ROOT, 'apps/web/src/pages/console/consoleView.js') },
@@ -63,6 +64,12 @@ const TARGETS = {
   codespanel: { file: resolve(ROOT, 'apps/web/src/components/console/JoinCodesPanel.jsx') },
   queue: { file: resolve(ROOT, 'apps/web/src/pages/console/ApplicationsQueue.jsx') },
   staffview: { file: resolve(ROOT, 'apps/web/src/pages/console/staffView.js') },
+  // The console's ONE kept answer to "what may I do here?", and the hooks that
+  // read it. Both are targets because a mutant is a claim about one call site
+  // (:15007's S16): the store decides WHAT is kept and the hooks decide WHEN it
+  // is asked for, and the loop this card shipped and fixed lived in the second.
+  orgstore: { file: resolve(ROOT, 'apps/web/src/pages/console/consoleOrgs.js') },
+  orghook: { file: resolve(ROOT, 'apps/web/src/pages/console/useConsoleOrg.js') },
   staffpanel: { file: resolve(ROOT, 'apps/web/src/components/console/StaffPanel.jsx') },
   settings: { file: resolve(ROOT, 'apps/web/src/pages/console/Settings.jsx') },
   // CRLF — every anchor aimed at this file must be ONE line. A two-line anchor
@@ -139,12 +146,19 @@ const MUTANTS = [
   },
   {
     id: 'C8',
-    target: 'home',
+    // RE-ANCHORED AND RE-TARGETED, `home` → `orgstore`. The line this named was
+    // `ConsoleHome`'s own `catch`, and the shared-answer card deleted it: the
+    // failure is decided once, in the store, for every console screen. The
+    // GUARANTEE is unchanged and so is the test that carries it — what moved is
+    // the file that can break it. Left aimed at the old line it would have
+    // matched nothing, and a no-op mutation reports ALIVE, whose honest reading
+    // is "this guarantee has no test" (:5199).
+    target: 'orgstore',
     suite: RENDER_SUITE,
     why: 'ON SCREEN AND FALSE: a FAILED read draws the EMPTY state, so an owner of three gyms whose connection blipped is told they run none',
     expect: 'with a way out',
-    from: '        setState({ loading: false, error: errorText(err, "We couldn\'t load your gyms."), orgs: [] });',
-    to: "        setState({ loading: false, error: null, orgs: [] });",
+    from: '        error: errorText(err, "We couldn\'t load your gyms."),',
+    to: '        error: null,',
   },
   {
     id: 'C9',
@@ -816,6 +830,106 @@ const MUTANTS = [
     expect: 'are shown, and cannot be changed from this screen',
     from: "  const readOnly = person.role === 'owner';",
     to: '  const readOnly = false;',
+  },
+
+  // ── C43–C50: THE CONSOLE'S ONE KEPT ANSWER, RE-CHECKED ON FOCUS ──────────
+  //
+  // Scoped by :5857 rule 4a. A web card, so no database mutants — and the rows
+  // are 4a's own columns:
+  //   · ON SCREEN AND FALSE (:5807) — a power taken away going on being drawn
+  //     because the window's return is not noticed, on either of the two events
+  //     that mean "you are back" (C43, C44)
+  //   · DATA IN FRONT OF THE USER — a re-check WE started, failing, wiping the
+  //     screen the person is reading (C45)
+  //   · OWNERSHIP — the next account on a gym's shared front-desk browser
+  //     reading the last one's gyms (C46)
+  //   · BLOCKED FROM FINISHING — a spinner over a working screen every time the
+  //     window comes back (C47), and a screen that can never leave one because
+  //     a failure re-arms its own read for ever (C49, C50)
+  //   · The speed half, which is the other thing Kd asked for (C48)
+  //
+  // Deliberately NOT mutated: the wording of the failure sentence, and the
+  // decision to keep asking on a mount after a FAILED answer — that one is a
+  // judgement about when to retry, not a guarantee.
+  {
+    id: 'C43',
+    target: 'orgstore',
+    suite: RENDER_SUITE,
+    why: 'ON SCREEN AND FALSE (:5807): the window coming back to the front is no longer noticed, so a power an owner took away goes on being drawn until the person presses F5 — the defect this card exists to close, and the one Kd felt',
+    expect: 'a power taken away reaches a screen that is already open',
+    from: "  window.addEventListener('focus', consoleOrgsRegainedFocus);",
+    to: "  window.addEventListener('blur', consoleOrgsRegainedFocus);",
+  },
+  {
+    id: 'C44',
+    target: 'orgstore',
+    suite: RENDER_SUITE,
+    why: 'THE SAME DEFECT THROUGH THE OTHER DOOR, and it is a separate row because it is a separate event: switching tabs never fires `focus` on the window, so with only C43 covered a person who works in tabs would keep the stale screen',
+    expect: 'counts the TAB coming back to the front',
+    from: "  document.addEventListener('visibilitychange', handleVisibilityChange);",
+    to: "  document.addEventListener('blur', handleVisibilityChange);",
+  },
+  {
+    id: 'C45',
+    target: 'orgstore',
+    suite: RENDER_SUITE,
+    why: "DATA IN FRONT OF THE USER: a background re-check that fails takes the screen away — a roster and its controls replaced by an error card because a request nobody asked for dropped its connection. Self-inflicted, and this project's most repeated defect (a failed read drawn as an empty one) arriving from the inside",
+    expect: 'leaves a working screen ALONE when the re-check fails',
+    from: "      if (background && state.status === 'ready' && state.forUserId === forUserId) return;",
+    to: "      if (background && state.status === 'ready' && state.forUserId === forUserId && false) return;",
+  },
+  {
+    id: 'C46',
+    target: 'orgstore',
+    suite: STORE_SUITE,
+    why: "OWNERSHIP, on a gym's SHARED FRONT-DESK BROWSER: the kept answer stops being stamped with the person it was fetched for, so the next account signed in on that machine reads the last one's gyms and the powers that went with them. The same shape as the module-level flag that outlived a sign-out at :618 T3 F1",
+    expect: 'never hands the next account',
+    from: '  return state.forUserId === getUserId() ? state : IDLE;',
+    to: '  return state;',
+  },
+  {
+    id: 'C47',
+    target: 'orgstore',
+    suite: STORE_SUITE,
+    why: 'BLOCKED FROM FINISHING: every re-check publishes a spinner, so the console blanks and redraws each time a person clicks back into the window — which is exactly what makes an app feel broken, and would make this whole card a downgrade',
+    expect: 'replaces the answer WHOLE and never shows a spinner',
+    from: "  if (!background) publish({ status: 'loading', orgs: null, error: null, forUserId });",
+    to: "  publish({ status: 'loading', orgs: null, error: null, forUserId });",
+  },
+  {
+    id: 'C48',
+    target: 'orgstore',
+    suite: RENDER_SUITE,
+    why: 'THE SPEED HALF, which is half of what this card is for: a kept answer stops being used, so every screen asks again — the shell and the screen inside it on every page, over a database in Singapore at ~92 ms a question',
+    // RE-AIMED, and it SURVIVED first — the anchor was always right and the
+    // FILTER was wrong (:11846's two halves, the half this repo keeps recording
+    // last). It named "asked ONCE for the shell and the screen inside it", which
+    // CANNOT notice this mutation: both of those mount together, so the second
+    // ensure lands while the first read is still in flight and the `loading` arm
+    // this mutation leaves standing dedupes it anyway. The arm being deleted is
+    // the `ready` one, and what depends on it is the NEXT screen — so the test
+    // that can see it is the one about opening a second screen.
+    expect: 'is not asked again when the next screen opens',
+    from: "  if (snapshot.status === 'ready' || snapshot.status === 'loading') return;",
+    to: "  if (snapshot.status === 'loading') return;",
+  },
+  {
+    id: 'C49',
+    target: 'orghook',
+    suite: RENDER_SUITE,
+    why: "THE LOOP THIS CARD SHIPPED AND FIXED, restored: the screen's read is re-armed by its own answer, so a failed read asks again, fails again, and the person watches a spinner for ever while the app hammers the server. Every test in the store's own suite stayed green under it — the screen is where it can be seen",
+    expect: 'a reply this screen cannot read is a FAILURE',
+    from: '  }, [wanted]);',
+    to: '  }, [wanted, snapshot.status]);',
+  },
+  {
+    id: 'C50',
+    target: 'orghook',
+    suite: RENDER_SUITE,
+    why: 'THE SAME LOOP AT THE OTHER CALL SITE — "your gyms" reads the same store through its own hook, and a mutant is a claim about ONE of them (:15007 S16). Written out separately because one fix reaching two hooks is exactly what nobody checks',
+    expect: 'NEVER says that when the read failed',
+    from: '  }, []);',
+    to: '  }, [snapshot.status]);',
   },
 ];
 

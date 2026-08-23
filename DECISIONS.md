@@ -16327,3 +16327,167 @@ holds it is that **no human has watched a power ticked ON reach a control**: ste
 7 was meant to be that and proved nothing. Recommended: **hold for the one-step
 re-smoke**, which is two minutes of clicking, rather than tick over :5034's
 recorded defect with a better argument.
+
+## THE CONSOLE STOPS NEEDING F5: one kept answer to "what may I do here?", re-checked when the window comes back — and the card's own first build looped for ever (2026-08-23)
+
+Builds `OWED.md`'s ⚪ line, raised at :15927 and recommended there as option 2 of
+three. Kd approved the card in plain words after being shown what it changes and
+what it costs. **Read before touching `useConsoleOrg`, before adding a second
+reader of `/v1/orgs/mine`, before adding a console screen, and before answering
+"does a real user have to refresh?".**
+
+**What a person gets: two things, from one change.** An owner ticking a power on
+or off for somebody sitting at the next desk now reaches that person's screen
+when they click back into their window — no F5. And the console stops asking the
+same question over and over: it was asked TWICE on every gym page (the shell
+needs the privileges for its nav, the screen needs them for its controls) and
+again on every move between Gym, Members and Settings.
+
+**`refetchOnWindowFocus: true` is a TanStack Query DEFAULT and that is the whole
+argument for the shape** (:16095). What is taken is the default, NOT the library:
+one event listener does not carry a dependency (R1.4).
+
+### DECISIONS NOT TO RE-DERIVE
+
+- **A background re-read never publishes `loading`.** Otherwise every alt-tab
+  blanks a working console — the card would be felt as a downgrade, which is
+  exactly what Kd asked about before approving it.
+- **A background re-read that FAILS changes nothing.** The kept answer stays on
+  screen. Blanking a screen because a check WE started dropped its connection is
+  this repo's empty-vs-failed defect, self-inflicted.
+- **The kept answer is STAMPED with the user it was fetched for, and a reader
+  whose id no longer matches gets the empty state** — never the previous
+  account's gyms. **Deliberately NOT a `resetConsoleOrgs()` call in `logout()`**:
+  that was the first design and it makes the guarantee depend on a second file
+  remembering, which is how :618 T3 F1 happened (a module-level flag that
+  outlived a sign-out, so the second account on a shared laptop stayed
+  mis-bucketed). A gym's front desk is a SHARED BROWSER. The stamp reads
+  `getUserId()` — the same id every per-user storage bucket is keyed by, pushed
+  in by `AuthContext` on restore/login/logout — so a third sign-out path added
+  later cannot forget it. **`AuthContext` is untouched by this card as a result.**
+- **A successful re-read replaces the answer WHOLE, `notFound` included.** Taken
+  off a gym's staff while the tab sat open, a person is told, rather than shown a
+  console for a gym that is no longer theirs.
+- **Opening a screen uses the kept answer and does NOT re-read.** This is the
+  half a person feels as speed, and the freshness it gives up is bounded by a
+  fact rather than by hope: **:11616 removed every link between the member app
+  and the console, so the only way in is the login page's two doors** — which
+  means a new page session and a user id that either changed (stamp ⇒ empty ⇒ a
+  fresh read) or did not (their own answer). The remaining gap is a person who
+  sits inside the console and never leaves the window, which is the same gap
+  TanStack's own default leaves and which only polling closes — option 3, which
+  :15927 rejected as "buys little and chatters".
+- **BOTH events, and they are not one event.** `visibilitychange` is the tab
+  switch; `focus` is the other window on the same screen, which is precisely the
+  case this card exists for (two people side by side, one ticking a box). Two
+  mutants, because deleting one leaves the other passing.
+- **Listeners live only while a console screen is mounted** (attached on the
+  first subscriber, removed with the last), so nothing is listening while a
+  person is in the member app.
+
+### THE DEFECT THIS CARD SHIPPED, AND THE ONLY INSTRUMENT THAT COULD SEE IT
+
+The first build re-armed the mount effect on the store's own status
+(`useEffect(…, [wanted, snapshot.status])`), and `ensure` asks again after a
+FAILED answer. So a failed read published `failed`, the status change re-ran the
+effect, `ensure` asked again — **for ever, with the person watching a spinner and
+the app hammering the server.**
+
+**Every test in the store's own suite passed under it** — nothing re-runs an
+effect there — and the store's rules are all individually correct. **Three
+SCREEN tests caught it**, and all three were failure arms: the arm that says a
+failed read is not drawn as an empty one. Fixed by making the effect mount-only;
+after a failure the way on is the Try-again button or clicking back into the
+window.
+
+**Standing lesson, and it is :15007's shape one card later: a rule proven one
+layer above the screen is not proven where it lives.** The store test and the
+render test are not two versions of one check — the second is the only one with a
+React lifecycle in it. Both mutants (`C49`, `C50`) are written out separately for
+the same reason a mutant is a claim about ONE call site: two hooks read this
+store, and a fix reaching one of them is what nobody checks (:15007 S16).
+
+### WHAT DID NOT CHANGE, STATED BECAUSE IT IS THE FIRST QUESTION
+
+**Not a security fix and it never was** — `requirePrivilege` decides every
+gym-scoped request and always did (R3.3, and :15927 verified that half). What
+changes is that the SCREEN stops saying something untrue in the window between an
+owner's tick and a reload.
+
+**No server change, no migration, no new dependency, and no screen file edited
+for it**: the hook keeps its four states and its shape, which is why `Overview`,
+`Members`, `Settings` and `ConsoleLayout` are untouched. `ConsoleHome` changed
+only because it read `/v1/orgs/mine` itself and now reads the same kept answer.
+
+**The roster, the join codes and the staff list are NOT re-read on focus** (R1.1)
+— this card is the answer to "what may I do here", nothing else. Their reads are
+unchanged.
+
+**Recorded, not deferred: the member app's own `GymMembershipCard` still calls
+`getMine` for itself.** It asks a different question ("which gyms am I in"), it
+has never claimed to refresh, and no line owes it anything — so this is scope,
+not a deferral.
+
+### THE AUDIT
+
+`mutate-console.mjs` gains two targets — the store and the hooks, because they
+decide different things (WHAT is kept vs WHEN it is asked for) — and eight rows,
+scoped by :5857 rule 4a: on-screen-and-false through each of the two events
+(C43, C44), the screen being taken away by a failed background check (C45),
+OWNERSHIP on a shared front-desk browser (C46), a spinner on every return (C47),
+the speed half (C48), and the loop at both call sites (C49, C50).
+
+**C8 was RE-ANCHORED AND RE-TARGETED, `home` → `orgstore`.** Its line was
+`ConsoleHome`'s own `catch`, which this card deletes: the failure is decided once
+now, in the store, for every console screen. The guarantee and its test are
+unchanged; what moved is the file that can break it. Left as it was it would have
+matched nothing — and a no-op mutation reports ALIVE, whose honest reading is
+"this guarantee has no test" (:5199).
+
+**A mutant deliberately NOT written, with its reason** (:5104 F5 — a guard whose
+protection cannot fail is the same gap with a comment on it): deleting the
+generation guard in the store's `then`. Ownership is carried by the user STAMP,
+so the in-flight test passes either way; the guard exists for `resetConsoleOrgs`,
+which only the tests call. Writing that row would have added a green tick that
+proves nothing.
+
+**THE SURVIVOR IS THE PART TO READ, AND IT WAS MINE: C48 came back ALIVE, and the
+ANCHOR was never wrong — the FILTER was.** It named *"is asked ONCE for the shell
+and the screen inside it"*, a test that **cannot** notice this mutation: the shell
+and the screen mount together, so the second `ensure` lands while the first read
+is still in flight and the `loading` arm the mutation LEAVES STANDING dedupes it
+anyway. The arm being deleted is the `ready` one, and the thing that depends on it
+is the NEXT screen — so the only test that can see it is the one about opening a
+second screen, which is where it is now aimed and where it goes RED.
+**:11846's two halves — the anchor says what breaks, the FILTER says what should
+notice — and it is the filter half this repo keeps recording last.** Note what
+ALIVE would have been read as by a later chat if it had been left: "the speed half
+of this card has no test", which was false. The re-measure is a stated SUBSET and
+is **not summed** with the whole-table run (:5199).
+
+### PROVE
+
+- **web 1144/1144 exit 0** (+16: seven store rules, seven screen tests, two nav
+  tests) · `vite build` **exit 0** · eslint **exit 0 at `--max-warnings=0`** on
+  all six changed files · `node --check` on the harness **exit 0**.
+- **WEB SWEEP, WHOLE TABLE: 72 mutants · 71 RED · 1 ALIVE · 0 never ran**, all 72
+  controls GREEN through the same path first, restores sha256-verified after
+  every mutant, and the tree checked by hand afterwards rather than taken on the
+  tool's word. **The ALIVE was C48 and it was a FILTER fault of mine** (below);
+  re-aimed and re-measured as a stated SUBSET, **1 of 72 · 1 RED · 0 ALIVE, exit
+  0** — **not summed with the whole-table run** (:5199).
+- **The api half was NOT run and that is stated, not implied** (:10726): this card
+  changes no api source.
+- Both existing console suites needed `resetConsoleOrgs()` in `beforeEach`, and
+  the reason is worth carrying: **a store shared across screens is also shared
+  across TESTS**, so without it each test reads the previous one's gym. Thirteen
+  tests failed exactly that way on the first run, which is the store working.
+
+### NOTHING TICKS
+
+`OWED.md`'s ⚪ line is UPDATED, not ticked (:5034, :4718 F4 — ticking on less
+than the full gate is this branch's most repeated bookkeeping defect). Two gates
+outstanding: the browser **SMOKE** (`RUNBOOK/smoke-console-refresh.md`, 4 steps,
+written, UNRUN) and **T3** (UNRUN). **The smoke's step 2 is the one it rests
+on** — a permission GIVEN appearing in a second window with no reload, which is
+the direction a screen that merely stopped drawing things would pass without.

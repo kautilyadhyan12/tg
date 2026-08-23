@@ -809,6 +809,52 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:16331** — 2026-08-23 — **THE CONSOLE STOPS NEEDING F5: one kept answer to
+  "what may I do here?", shared by every console screen and re-checked when the
+  window comes back — and the card's own first build LOOPED FOR EVER.** Builds
+  the ⚪ line :15927 raised and recommended (option 2 of three); Kd approved it.
+  **Read before touching `useConsoleOrg`, before adding a second reader of
+  `/v1/orgs/mine`, before adding a console screen, and before answering "does a
+  real user have to refresh?".** **`refetchOnWindowFocus: true` is a TanStack
+  Query DEFAULT and that is the argument for the shape — the DEFAULT is taken,
+  not the library** (one listener does not carry a dependency, R1.4). The same
+  change closes both halves: the question was asked TWICE per gym page (shell +
+  screen) and again on every move between screens. Decisions not to re-derive:
+  **a background re-read never publishes `loading`** (else every alt-tab blanks a
+  working console) · **a background re-read that FAILS changes nothing on
+  screen** · **the kept answer is STAMPED with the user it was fetched for**, so
+  the next account on a gym's shared front-desk browser cannot read the last
+  one's gyms — **deliberately NOT a reset call in `logout()`, which is how :618
+  T3 F1 happened**, so `AuthContext` is untouched · **a successful re-read
+  replaces the answer WHOLE, `notFound` included** · **a mount uses the kept
+  answer and does NOT re-read**, whose freshness cost is bounded by :11616 (no
+  link between the member app and the console, so entering it is a new page
+  session) · **BOTH `focus` and `visibilitychange`, which are different events**
+  and get a mutant each. **THE DEFECT IT SHIPPED AND FIXED: the mount effect was
+  re-armed on the store's own status, so a FAILED read asked again, failed again,
+  for ever** — spinner on screen, server hammered. **Every test in the store's
+  own suite passed under it; three SCREEN tests caught it.** Standing lesson,
+  :15007's shape one card later: **a rule proven one layer above the screen is
+  not proven where it lives.** Not a security fix and never was (R3.3 —
+  `requirePrivilege` decides every request); no server change, no migration, no
+  new dependency, and **no screen file edited**, the hook keeping its four states
+  and its shape. **AUDIT: two new targets** (the store and the hooks decide
+  different things — WHAT is kept vs WHEN it is asked for) **and eight rows
+  C43–C50**, plus **C8 RE-ANCHORED AND RE-TARGETED `home` → `orgstore`** because
+  this card deleted the line it named. **One mutant deliberately NOT written,
+  with its reason** (the generation guard has no observable subject — the user
+  stamp carries ownership; :5104 F5). **THE SURVIVOR IS MINE AND IS THE PART TO
+  READ: C48 came back ALIVE with a correct ANCHOR and a wrong FILTER** — it named
+  a test that cannot notice it, because the shell and the screen mount together
+  so the `loading` arm the mutation leaves standing dedupes them anyway; the arm
+  deleted is `ready`, whose dependant is the NEXT screen. **:11846's two halves,
+  and it is the filter half this repo keeps recording last.** **PROVE: web
+  1144/1144 exit 0 (+16) · build exit 0 · eslint 0 at `--max-warnings=0` on six
+  files · WEB SWEEP whole table 72 · 71 RED · 1 ALIVE · 0 never ran, C48 re-aimed
+  and re-measured as a stated SUBSET 1 of 72, RED, NOT summed (:5199) · the api
+  half not run and said so (:10726).** **NOTHING TICKS
+  — SMOKE (`RUNBOOK/smoke-console-refresh.md`, 4 steps) and T3 both UNRUN**, and
+  the smoke rests on its step 2, the WIDENING direction.
 - **:16221** — 2026-08-23 — **THE TICK BOXES, T3 ROUND 2 (diff-only): ZERO
   Critical/High — THE PACKET SHIPS — and the reviewer found the THIRD gate of
   round 1's own class.** Reviews `f1a334a`. Escape hatch NOT armed and there was

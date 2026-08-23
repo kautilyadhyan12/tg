@@ -4817,6 +4817,17 @@ file and is stated so nobody reads these as lower priority than they are.
       hold** (found 2026-08-23, DECISIONS :15927; **Kd pushed back on "leave it"
       and was right**). **Read before touching `useConsoleOrg`, and before
       answering "does a real user have to refresh?".**
+      **BUILT 2026-08-23 AND DELIBERATELY NOT TICKED — DECISIONS :16331.** Kd
+      approved the card and it is written: one kept answer in
+      `pages/console/consoleOrgs.js`, read by every console screen and by the
+      shell around them, re-checked on `focus` AND `visibilitychange`. **The two
+      gates this line ticks on are the ones this branch most often ticks over
+      (:5034, :4718 F4): the browser SMOKE (`RUNBOOK/smoke-console-refresh.md`,
+      4 steps, UNRUN) and T3 (UNRUN).** What is already measured is in the
+      DECISIONS entry; what a person has not yet watched is a control appearing
+      in a SECOND window without a reload, which is the whole claim.
+      **Read the entry before re-reading the rest of this line — the paragraphs
+      below describe the defect as it stood, not as the code stands.**
       **Not a security defect and that half is verified:** OWASP's rule is that
       the server decides every request and that hiding is never the lock, and
       `requirePrivilege` does exactly that on every gym-scoped route — a stale tab

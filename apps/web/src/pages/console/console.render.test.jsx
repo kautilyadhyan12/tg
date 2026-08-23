@@ -39,11 +39,17 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
 // about the viewer and must not be inferred from the seat. `u1` is `ownerSeat`'s
 // own id, so the default here IS the owner.
 vi.mock('../../context/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'u1' } }),
+  useAuth: () => ({ user: { id: 'u1' }, logout: vi.fn() }),
 }));
 
 const { orgService } = await import('../../api/orgsApi');
+// The console's answer to "what may I do here?" is kept in ONE store shared by
+// every screen and re-read on window focus, so it outlives a `cleanup()` the way
+// it outlives a navigation. Emptied between tests, or each test would be reading
+// the previous one's gym.
+const { resetConsoleOrgs } = await import('./consoleOrgs');
 const ConsoleHome = (await import('./ConsoleHome')).default;
+const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
 const NewGym = (await import('./NewGym')).default;
 const Overview = (await import('./Overview')).default;
 const Members = (await import('./Members')).default;
@@ -184,6 +190,7 @@ const drawMembers = () => drawAt('/console/iron-house/members', <Members />, '/c
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetConsoleOrgs();
   orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
   orgService.getCodes.mockResolvedValue({ data: { codes: [LIVE_CODE] } });
   orgService.getMembers.mockResolvedValue(page([ownerSeat]));
@@ -1429,5 +1436,134 @@ describe('Removing a member', () => {
     expect(await screen.findByText(/A staff member can't be removed/i)).toBeTruthy();
     // Nothing changed, so nothing on the list may look as though it did.
     expect(screen.getByText('Rita Sen')).toBeTruthy();
+  });
+});
+
+// ── Asking once, and asking again when the window comes back ────────────────
+//
+// The console's answer to "what may I do here?" used to be fetched by every
+// screen as it opened and never again. Two things a person felt: an owner
+// changing somebody's powers reached that person only after they pressed F5,
+// and every screen asked the same question twice (the shell, then the screen).
+//
+// These are the SCREEN's half of that change. The store's own rules are next
+// door in `consoleOrgs.test.js`; what is here is the part a person can see —
+// and it is here because the layer above the screen could not see it: the
+// retry loop this card shipped and fixed survived every store test and was
+// caught by the first of these.
+
+const drawShellAround = (element, path, pattern) =>
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path={pattern} element={<ConsoleLayout>{element}</ConsoleLayout>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+
+/** The window came back to the front. Fired on `window` exactly as a browser
+ *  fires it — no test-only entry point, so a mutant that unhooks the listener
+ *  is caught here rather than reported as a passing guard. */
+const clickBackIn = () => fireEvent(window, new Event('focus'));
+
+describe('what may I do here', () => {
+  it('is asked ONCE for the shell and the screen inside it', async () => {
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
+    drawShellAround(<Members />, '/console/iron-house/members', '/console/:orgSlug/members');
+
+    expect(await screen.findByText('Rita Sen')).toBeTruthy();
+    // Both read the same answer. Before this card the shell asked for the nav
+    // and the screen asked for the roster's Remove control — the same question,
+    // twice, on every console page.
+    expect(orgService.getMine).toHaveBeenCalledTimes(1);
+  });
+
+  it('is not asked again when the next screen opens', async () => {
+    drawOverview();
+    await screen.findAllByText('K7QM2X');
+    cleanup();
+
+    orgService.getMembers.mockResolvedValue(page([ownerSeat]));
+    drawMembers();
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+    expect(orgService.getMine).toHaveBeenCalledTimes(1);
+  });
+
+  it('NARROWING: a power taken away reaches a screen that is already open', async () => {
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
+    drawMembers();
+    expect(await screen.findByText('Remove')).toBeTruthy();
+
+    // Somebody at the next desk moves this person off manager. Before this card
+    // the button stayed until they pressed F5 — the server refused the click,
+    // so nothing was ever reachable, but the screen was telling them something
+    // untrue.
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer' }] } });
+    clickBackIn();
+
+    await waitFor(() => expect(screen.queryByText('Remove')).toBeNull());
+    // The roster itself is NOT dragged through a reload: only the answer about
+    // what this person may do was re-read.
+    expect(screen.getByText('Rita Sen')).toBeTruthy();
+    expect(orgService.getMembers).toHaveBeenCalledTimes(1);
+  });
+
+  it('WIDENING: a power given reaches it too — the direction a smoke can only see with a reload', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer' }] } });
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
+    drawMembers();
+    expect(await screen.findByText('Rita Sen')).toBeTruthy();
+    expect(screen.queryByText('Remove')).toBeNull();
+
+    orgService.getMine.mockResolvedValue({
+      data: {
+        orgs: [
+          { ...ORG, staffRole: 'trainer', privileges: ['members.read', 'members.remove'] },
+        ],
+      },
+    });
+    clickBackIn();
+
+    expect(await screen.findByText('Remove')).toBeTruthy();
+  });
+
+  it('counts the TAB coming back to the front, which is a different event', async () => {
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
+    drawMembers();
+    expect(await screen.findByText('Remove')).toBeTruthy();
+
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer' }] } });
+    fireEvent(document, new Event('visibilitychange'));
+
+    await waitFor(() => expect(screen.queryByText('Remove')).toBeNull());
+  });
+
+  it('leaves a working screen ALONE when the re-check fails', async () => {
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
+    drawMembers();
+    expect(await screen.findByText('Remove')).toBeTruthy();
+
+    orgService.getMine.mockRejectedValue(offline());
+    clickBackIn();
+    await waitFor(() => expect(orgService.getMine).toHaveBeenCalledTimes(2));
+
+    // A check WE started, dropping ITS connection, must not take away what the
+    // person is looking at — that would be this project's empty-vs-failed
+    // defect, self-inflicted.
+    expect(screen.getByText('Rita Sen')).toBeTruthy();
+    expect(screen.getByText('Remove')).toBeTruthy();
+    expect(screen.queryByText(/Couldn't reach the server/i)).toBeNull();
+  });
+
+  it('says so when the gym has left your list, rather than drawing a console for it', async () => {
+    orgService.getMembers.mockResolvedValue(page([ownerSeat]));
+    drawMembers();
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+
+    // Taken off this gym's staff entirely while the tab sat open.
+    orgService.getMine.mockResolvedValue({ data: { orgs: [] } });
+    clickBackIn();
+
+    expect(await screen.findByText(/couldn't find a gym you run/i)).toBeTruthy();
   });
 });

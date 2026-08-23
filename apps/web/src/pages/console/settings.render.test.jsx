@@ -35,6 +35,9 @@ vi.mock('../../context/AuthContext', () => ({
 }));
 
 const { orgService } = await import('../../api/orgsApi');
+// One store, shared by the shell and the screen inside it and re-read on window
+// focus — so it survives `cleanup()` and must be emptied between tests.
+const { resetConsoleOrgs } = await import('./consoleOrgs');
 const Settings = (await import('./Settings')).default;
 const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
 // Imported to be mounted DIRECTLY, which is the only way one of its guarantees
@@ -116,6 +119,7 @@ const drawShell = (path = '/console/iron-house') =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetConsoleOrgs();
   orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
   orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER] } });
   orgService.addStaff.mockResolvedValue({ data: { staff: TRAINER } });
@@ -650,6 +654,47 @@ describe('the Settings tab', () => {
     drawShell('/console');
     await waitFor(() => expect(screen.getByText('page')).toBeTruthy());
     expect(orgService.getMine).not.toHaveBeenCalled();
+  });
+
+  // ── and it follows the powers, without a reload ───────────────────────────
+  //
+  // The nav is drawn from the same kept answer the screens read, re-checked
+  // when the window comes back to the front. Both directions are pinned,
+  // because a fix that simply stopped drawing the tab would pass one of them.
+
+  it('appears when the power arrives, on clicking back into the window', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager' }] } });
+    drawShell();
+    await waitFor(() => expect(screen.getAllByText('Members').length).toBeGreaterThan(0));
+    expect(screen.queryByText('Settings')).toBeNull();
+
+    orgService.getMine.mockResolvedValue({
+      data: {
+        orgs: [
+          {
+            ...ORG,
+            staffRole: 'manager',
+            privileges: [...ROLE_PRIVILEGES.manager, 'staff.manage'],
+          },
+        ],
+      },
+    });
+    fireEvent(window, new Event('focus'));
+
+    await waitFor(() => expect(screen.getAllByText('Settings').length).toBeGreaterThan(0));
+  });
+
+  it('goes away when the power does, without a reload', async () => {
+    drawShell();
+    await waitFor(() => expect(screen.getAllByText('Settings').length).toBeGreaterThan(0));
+
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager' }] } });
+    fireEvent(window, new Event('focus'));
+
+    await waitFor(() => expect(screen.queryByText('Settings')).toBeNull());
+    // The rest of the nav is untouched — this must take away one tab, not the
+    // console.
+    expect(screen.getAllByText('Members').length).toBeGreaterThan(0);
   });
 });
 

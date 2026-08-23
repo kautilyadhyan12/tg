@@ -10331,3 +10331,64 @@ NEXT
      the opposite expectation, and Kd settled it at :15381 (editing a named role
      changes nobody until the owner taps "change everyone on this role too").
 ```
+
+```
+TASK: THE CONSOLE STOPS NEEDING F5. One kept answer to "what may I do here?",
+      shared by every console screen, re-checked when the window comes back.
+      Builds the ⚪ line :15927 raised and recommended; Kd approved the card.
+      DECISIONS :16331. **NOTHING TICKS — smoke and T3 both UNRUN.**
+
+THE TWO THINGS A NEXT CHAT MUST CARRY
+  · **THE CARD'S FIRST BUILD LOOPED FOR EVER AND ONLY A SCREEN TEST SAW IT.**
+    The mount effect was keyed on the store's own status, and `ensure` asks
+    again after a FAILED answer — so a failed read published `failed`, the
+    status change re-ran the effect, it asked again, and the person watched a
+    spinner while the app hammered the server. **Every test in the store's own
+    suite passed under it** (nothing re-runs an effect there); three SCREEN
+    tests caught it, all three failure arms. :15007's shape one card later — **a
+    rule proven one layer above the screen is not proven where it lives.**
+  · **THE SWEEP'S SURVIVOR WAS A FILTER, NOT AN ANCHOR.** C48 came back ALIVE
+    with a perfectly good anchor: its `expect` named a test that CANNOT notice
+    it, because the shell and the screen mount together and the `loading` arm
+    the mutation leaves standing dedupes them anyway. Re-aimed at the test about
+    opening the NEXT screen; RED. **:11846's two halves, filter half again.**
+
+THINGS THAT WILL OTHERWISE BE GOT WRONG
+  · **`AuthContext` is deliberately UNTOUCHED.** The kept answer is stamped with
+    `getUserId()` and a reader whose id differs gets the empty state, so a
+    shared front-desk browser cannot leak one account's gyms to the next. A
+    `resetConsoleOrgs()` call in `logout()` was the first design and was
+    REJECTED — that is how :618 T3 F1 happened. **`resetConsoleOrgs` exists for
+    the TESTS only**, and both console suites need it in `beforeEach` or each
+    test reads the previous one's gym (thirteen failed exactly that way).
+  · **A mount uses the kept answer and does NOT re-read.** That is the speed
+    half. Its freshness cost is bounded by :11616 (no link between the member
+    app and the console, so entering the console is a new page session).
+  · **Two listeners, two mutants**: `focus` is the other window on the same
+    screen, `visibilitychange` is the tab switch. Deleting one leaves the other
+    passing, which is why they are separate rows.
+  · **Not a security fix and it never was** (R3.3) — `requirePrivilege` decides
+    every gym-scoped request and did before this card.
+
+GATES
+  · web **1144/1144, exit 0** (+16), exit code read DIRECTLY, not through a pipe
+    · `vite build` exit 0 · eslint **0 at `--max-warnings=0`** on all six changed
+    web files · `node --check` on the harness exit 0.
+  · **WEB SWEEP whole table: 72 mutants · 71 RED · 1 ALIVE · 0 never ran**, all
+    72 controls GREEN first, restores sha256-verified, tree verified by hand
+    afterwards. **C48 re-aimed and re-measured as a stated SUBSET, 1 of 72, RED,
+    exit 0 — NOT summed with the whole-table run** (:5199).
+  · **The api half was NOT run and that is stated** (:10726): no api source
+    changed.
+
+NEXT
+  1. **The SMOKE — `RUNBOOK/smoke-console-refresh.md`, 4 steps, ~5 minutes, two
+     windows.** Its step 2 is what the card rests on: a permission GIVEN
+     appearing in a second window with no reload. A screen that had merely
+     learned to hide things would pass step 1 and fail step 2.
+  2. **T3 round 1** — prompt ready at `t3-console-refresh-r1-PROMPT.md`
+     (gitignored, hand it to a fresh chat with the diff).
+  3. Then the 🟡 smoke line (the tick-boxes sheet's missing TRAINER step) and
+     the 🟡 migration-lag line (boot-time refusal recommended).
+  4. Then card C: custom role names.
+```
