@@ -1,6 +1,61 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: CORRECTION TO THE BLOCK BELOW — A RULING WAS FABRICATED, the consumer
+      tier gets a price, four recommendations ratified. DECISIONS :16702.
+      **READ THIS BEFORE THE :16548 BLOCK BELOW IT.** Still nothing built.
+
+THE FABRICATION — the reusable part, not the trivia
+  · Kd wrote "initially 20 gyms free trisl then subscription". He meant he will
+    APPROACH the first twenty gyms with the 30-day trial. The previous block
+    recorded "the first 20 gyms are free" — a permanent free perk for twenty
+    businesses he never granted ("first 20 gyms free who even said that men").
+  · **THERE IS NO FREE-GYM PROGRAMME. One 30-day trial, every gym gets it, and
+    "the first 20" is a sales target needing no code.** Any seed row, pilot
+    cohort or counter you find for it is this error — delete, do not build.
+  · **THE CLASS: the chat resolved an AMBIGUOUS sentence on its own and wrote
+    the resolution into the RULED column.** S3 forbids it. Two readings ⇒
+    record the ambiguity and ask. A ruling a chat inferred is not a ruling.
+
+NEW AND RULED
+  · **Consumer paid = $6.99/mo for 20 meal scans/day** (supersedes :9944's $5).
+    Ladder: trial week unlimited (capped 20/day) · free 3/day · paid 20/day ·
+    gym member 5/day.
+  · **RATIFIED in one message: bands 500-999 $59 / 1000-1499 $79 /
+    1500-2099 $99 · 768px · the pre-switch parity test · the 20/day trial cap.**
+    Full book now seedable: $29 / $39 / $59 / $79 / $99 / custom above 2099.
+    **Integer minor units (R6.1): $6.99 is 699.**
+  · The 20/day cap turned out to have a better reason than anti-farming: paid
+    is also 20/day, so the trial IS the paid experience.
+
+THE MAP ANSWER (Kd asked what Strava uses)
+  · **Strava renders with MAPBOX over OSM + its own heat layer; the 3D recap is
+    Mapbox 3D terrain.** Mapbox bills ~$5/1,000 web map loads over 50k free,
+    and by MAU on mobile — a per-VIEW bill on a feature that should cost zero.
+  · **THE FINDING: the renderer Strava uses was forked open.** MapLibre GL JS
+    (same engine, same 3D terrain API, no key) + OpenFreeMap or PMTiles on the
+    R2 already in v1 §19 + AWS Open Data terrarium DEM = the same look, 3D
+    included, for ~$0. **The 3D recap belongs to the RENDERER, not the paid
+    provider.** UNVERIFIED: OpenFreeMap has no SLA; AWS terrarium is 256px PNG
+    and reportedly slow (Mapterhorn WebP PMTiles is the alternative).
+  · **STILL KD'S CHOICE. Do not wire a per-map-load provider by default.**
+
+STILL OPEN
+  1. The map choice (above).
+  2. **A gym's member gets 5 scans/day while a $6.99 consumer gets 20** — both
+     Kd's numbers, the clash unruled. `mergeEntitlements` gives a user with
+     both the BETTER, so a member who also pays keeps 20; the real question is
+     whether 5 is right for a gym paying $29-$99. Own ❓ line.
+  3. Badges/progress behind the consumer trial — free forever today, so moving
+     them is a REMOVAL needing its own ruling.
+
+NEXT
+  1. Kd picks the map stack.
+  2. The parity-test card — before any adapter work. Cost is answered; QUALITY
+     is not, and nobody has shown Flash-Lite reads Indian food as well as Qwen.
+```
+
+```
 TASK: KD RE-RULES THE COST SHAPE — Gemini for the meal scanner, the consumer
       trial ANSWERED, the 20-gym pilot priced. DECISIONS :16548.
       **NOTHING BUILT. NOTHING SEEDED. NO CODE CHANGED.** Records only.
@@ -32,7 +87,9 @@ WHAT A NEXT CHAT MUST NOT GET WRONG
 
 RULED (:16548): Gemini 2.5 Flash-Lite · image capped, prompt NOT shortened ·
   consumer 1 week UNLIMITED then 3/day · gym member 5/day even when gym-paid ·
-  gym trial 30 days · first 20 gyms free · 0-299 $29 · 300-499 $39 · 2100+
+  gym trial 30 days · [STRUCK — FABRICATED, see the block above: "first 20 gyms
+  free" was never ruled; there is only the 30-day trial] · 0-299 $29 ·
+  300-499 $39 · 2100+
   custom · 2 route plans/day paid · coach dropped (confirms :9604).
 
 NOT RATIFIED — one word from Kd unblocks the billing and Gemini cards:

@@ -4141,10 +4141,16 @@ file and is stated so nobody reads these as lower priority than they are.
       consumers **1 week unlimited then 3/day**, gym trial **30 days**, first
       **20 gyms free**. He fixed his own overlapping draft ("0-299/0-499", where
       a 200-member gym fell in both) on being shown it: *"yes good"*.
-      **STILL NOT RULED and the reason this line does not tick: the 500-2099
-      range.** Recommended **500-999 $59 · 1000-1499 $79 · 1500-2099 $99** —
-      continues his own falling per-member curve and clears cost even in the
-      impossible max case (margins 42/35/27%). **One word from Kd closes this.**
+      **UPDATE 2026-08-24, SAME DAY (DECISIONS :16702) — THE BANDS ARE COMPLETE
+      AND RATIFIED. THE FULL BOOK, and it is now safe to seed:**
+      **0-299 $29 · 300-499 $39 · 500-999 $59 · 1000-1499 $79 · 1500-2099 $99 ·
+      2100+ custom.** Consumer: **$6.99/mo for 20 meal scans/day** (supersedes
+      :9944's $5). **This line stays open only for the SEED, not the numbers.**
+      **ALSO RULED THE SAME DAY, and it is the one a builder will trip on: a
+      $6.99 consumer gets 20 scans/day while a member of a PAYING GYM gets 5.**
+      `mergeEntitlements` hands a user holding both the BETTER of the two, so
+      the gym member who also subscribes personally keeps 20 — probably right,
+      never ruled. **Its own ❓ line is in the open-questions section.**
 - [ ] 🟡 **IN-APP CONSENT SCREEN FOR HEALTH DATA AND THE CAMERA — needed before
       a US gym signs (DECISIONS :9944).** Whatever the gym's contract says
       about the roster upload, health-type data (meals, weight, workouts) and
@@ -4198,6 +4204,9 @@ file and is stated so nobody reads these as lower priority than they are.
       it), and 18 real scans sit in `api_cost_events`. Replay them through
       Gemini, compare item-by-item, and put the disagreements in front of Kd.
       **A swap that ships without this is the Card-5a bug class returning.**
+      **RATIFIED as a requirement 2026-08-24 (DECISIONS :16702) — Kd agreed it
+      runs before the switch, so this is no longer a recommendation a chat may
+      weigh against schedule.**
 - [ ] 🟡 **BUILD THE GEMINI ADAPTER — and it is NOT a model-string change.**
       `vision.adapter.ts` posts to `api.groq.com/openai/v1/chat/completions`
       with Groq's request shape, a `qwen/`-conditional `reasoning_effort`, and
@@ -4211,9 +4220,10 @@ file and is stated so nobody reads these as lower priority than they are.
 - [ ] 🟡 **RESIZE THE PHOTO BEFORE IT IS SENT — and DO NOT pick the size to
       save money.** Kd ruled the image is capped. **Measured: the entire spread
       between a 384px and a 1024px image is $5.80/month at realistic volume**
-      (per scan $0.000152 vs $0.000281). Recommended **768px longest side** for
-      accuracy and upload speed on gym wi-fi; **NOT RATIFIED.** A chat that
-      shrinks to 384px "for cost" has misread the measurement.
+      (per scan $0.000152 vs $0.000281). **768px longest side — RATIFIED
+      2026-08-24 (DECISIONS :16702)**, chosen for accuracy and upload speed on
+      gym wi-fi, NOT for cost. A chat that shrinks to 384px "for cost" has
+      misread the measurement.
       **The PROMPT is deliberately NOT shortened** — Kd's own call, and correct:
       it is 260 tokens, $0.000026/scan.
 - [ ] ⚪ **CHEAP-FIRST-ESCALATE ON A FAILED SCAN.** Recommended, not ruled:
@@ -4222,19 +4232,24 @@ file and is stated so nobody reads these as lower priority than they are.
       ($0.15/$1.25 per 1M). Fires only on failures, so the average cost barely
       moves and the person does not hit a dead end. **Pairs with the existing
       honest "couldn't match" empty state (Card 5b) rather than replacing it.**
-- [ ] 🟡❓ **CAP THE UNLIMITED TRIAL WEEK — RECOMMENDED 20 SCANS/DAY, KD HAS NOT
-      RULED.** The ruled consumer trial (1 week unlimited, then 3/day) is the
-      only allowance in the product with **no ceiling at all**. Priced rather
-      than argued: **1,000 scans/day × 7 days = $1.60 per farmed account** —
-      trivial alone, scriptable in bulk, and the second-email attack :11181
-      raised is unchanged by the ruling. **20/day is invisible to anyone who
-      eats food** and keeps the word "unlimited" honest for every real user.
-      Blocks the seed change, nothing else.
-- [ ] 🟡 **RE-SEED THE QUOTAS TO THE RULED NUMBERS.** `db/seed.ts` currently
-      holds the pre-ruling shape (PAID `meal_scan` 8/day, `route_gen` 5/day —
-      both now wrong). Ruled: **free 3/day after the trial week · gym member
-      5/day · route_gen 2/day for paid.** Do NOT seed until the 500-2099 bands
-      and the trial cap are ruled — one seed change, not three.
+- [x] ~~🟡❓ **CAP THE UNLIMITED TRIAL WEEK**~~ — **RATIFIED 2026-08-24 AT
+      20 SCANS/DAY (DECISIONS :16702).** Proposed as anti-farming (1,000
+      scans/day × 7 days = $1.60 per farmed account, trivial alone and
+      scriptable in bulk). **It turned out to have a better justification than
+      the one it was proposed for: the paid consumer tier is ALSO 20/day, so
+      capping the trial at 20 makes the trial EXACTLY the paid experience** —
+      which is what a trial should be, and costs nothing in goodwill.
+      **Not ticked as done — it is ratified, not built.** Rides the one seed
+      change below.
+- [ ] 🟡 **RE-SEED THE QUOTAS AND PRICES — EVERY NUMBER IS NOW RULED, so this
+      is unblocked (DECISIONS :16548 + :16702).** `db/seed.ts` holds the
+      pre-ruling shape (PAID `meal_scan` 8/day, `route_gen` 5/day — both
+      wrong). **The complete ruled book, to be seeded in ONE change:**
+      · consumer trial week **unlimited, capped 20/day** · consumer free
+      **3/day** · consumer paid **$6.99/mo, 20/day** · gym member **5/day** ·
+      `route_gen` **2/day** paid · gym bands **$29 / $39 / $59 / $79 / $99 /
+      custom above 2099** · gym trial **30 days**.
+      **Integer minor units end-to-end (R6.1): $6.99 is 699, never 6.99.**
 
 ### Running: the Strava-style line is free, the route SUGGESTIONS are not
 
@@ -4245,23 +4260,52 @@ file and is stated so nobody reads these as lower priority than they are.
       **What it needs is storage and a map to draw on, not an API.** Nothing
       built; no governing spec § (Part 6 §5.1 covers the permission flow and
       its Play-rejection-proof copy, which binds this).
-- [ ] ⚪ **CHOOSE THE MAP TILE SOURCE — recommended, not ruled.** OpenFreeMap
-      (free, no key, no signup, no usage cap) or self-hosted Protomaps/PMTiles
-      on the **R2 already in v1 §19** (~$0-3/mo). **Do not default to a
-      per-map-load billed provider** — it converts a free feature into a
-      per-view bill at exactly the scale the running feature is meant to reach.
+- [ ] 🟡❓ **CHOOSE THE MAP RENDERER AND TILE SOURCE — KD ASKED, IT IS ANSWERED,
+      HE HAS NOT CHOSEN (DECISIONS :16702).** **Read before wiring any map.**
+      **What Strava actually does, since that is what Kd is comparing against:**
+      it renders with **MAPBOX** over OpenStreetMap data plus its own
+      heat/popularity layer, and **the 3D route recap he likes is Mapbox 3D
+      terrain** (`support.strava.com` "About Strava Maps"; mapbox.com blog).
+      **Why not simply copy it: Mapbox bills ~$5 per 1,000 web map loads above
+      50,000/month, and by MONTHLY ACTIVE USER on mobile (25,000 free).** A map
+      load fires every time a member opens a run — **it turns a zero-cost
+      feature into a per-VIEW bill at exactly the scale running is meant to
+      reach.**
+      **THE FINDING, and it is the reason this is cheap: the renderer Strava
+      uses was forked open.**
+      · **MapLibre GL JS** — open-source fork of Mapbox GL, same engine, same
+        3D terrain API, no key, no bill. **The 3D recap is a feature of the
+        RENDERER, not of the paid provider.**
+      · Tiles: **OpenFreeMap** (no key, no cap) or self-hosted
+        **Protomaps/PMTiles on the R2 already in v1 §19** (~$0-3/mo).
+      · 3D elevation: **AWS Open Data terrarium**,
+        `s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png`,
+        no key, no account.
+      · Popular routes: **our own database** — Kd's "most-used routes" makes no
+        external call at all.
+      **UNVERIFIED, and to be settled before committing rather than after:**
+      OpenFreeMap's public instance carries no SLA (self-hosting PMTiles on R2
+      is the answer if that matters), and AWS terrarium is 256px PNG which
+      sources call slow from a browser — **Mapterhorn's WebP PMTiles is the
+      named alternative and nobody here has measured either.**
 
 ### The 20-gym pilot and what it costs to run
 
-- [ ] 🟡 **THE 30-DAY GYM TRIAL AND THE FIRST-20-GYMS-FREE COHORT (ruled
-      2026-08-24, DECISIONS :16548).** Both are billing-card work and neither
-      exists. **The 30-day trial is card-less (`provider='none'`, Part 5 §6)
-      and therefore sits behind :11072's Kd-approval gate** — no self-serve
-      path may mint a live gym trial, which is what stops the
-      fresh-gym-per-month free ride. **"First 20 gyms free" needs a decision a
-      chat must not invent: is it a pilot CODE (Part 5 §6, already specified)
-      or a counter on the gyms table?** Recommended: the pilot code — it exists,
-      it is auditable, and a counter cannot express "these twenty".
+- [ ] 🟡 **THE 30-DAY GYM TRIAL (ruled 2026-08-24, DECISIONS :16548). It is
+      billing-card work and it does not exist.** Card-less
+      (`provider='none'`, Part 5 §6), so it sits behind :11072's Kd-approval
+      gate — no self-serve path may mint a live gym trial, which is what stops
+      the fresh-gym-per-month free ride.
+      **⚠ THERE IS NO "FIRST 20 GYMS FREE" PROGRAMME AND THERE NEVER WAS —
+      DECISIONS :16702.** An earlier version of this line carried one. Kd wrote
+      *"initially 20 gyms free trisl then subscription"*, meaning **he will
+      APPROACH the first twenty gyms with the 30-day trial**; the chat turned
+      that into a permanent free perk for twenty businesses, which he rejected
+      on sight (*"first 20 gyms free who even said that men"*). **There is one
+      trial, every gym gets it, and "the first 20" is a sales target that needs
+      no code at all.** No pilot cohort, no counter, no seed row. Kept as a
+      warning rather than deleted, because the invented version was specific
+      enough to look buildable.
 - [ ] ⚪ **POSTGRES STAYS ON NEON — revisit above ~$150/month.** Measured
       2026-08-24: Neon Launch is **$32-91/mo** at 10,000 registered members and
       is the single largest infrastructure line ($62.82-$162.87 total, against
@@ -5878,6 +5922,20 @@ file and is stated so nobody reads these as lower priority than they are.
       REMOVAL of a live free feature and needs an explicit ruling against the
       cited option, not a plan sentence.**
       **Blocks nothing today. Blocks the billing card and any seed change.**
+- [ ] ❓ **A PAYING GYM'S MEMBER GETS FEWER MEAL SCANS THAN A $6.99 CONSUMER —
+      5/DAY vs 20/DAY (ruled 2026-08-24, DECISIONS :16548 + :16702; the clash
+      is unruled).** **Read before building the entitlement merge or any
+      paywall copy.** Both numbers are Kd's own and the shape may well be
+      deliberate — **a gym perk is not a personal subscription** — but a builder
+      hits it immediately: `mergeEntitlements` (`modules/entitlements/service.ts`)
+      hands a user holding BOTH grants the BETTER of the two, so a gym member
+      who also pays $6.99 keeps 20/day. That is almost certainly right and has
+      never been said out loud.
+      **What needs Kd's word is the OTHER direction: is 5/day what a gym's
+      members should get when the gym is paying $29-$99 for them?** It is the
+      number a gym owner will ask about in the sales call, and it is lower than
+      the free-trial week's 20. Nothing is built either way; it blocks the seed
+      change and the gym pitch, nothing else.
 - [ ] ❓ **WHERE THE FOLLOW-ALONG REFERENCE FOOTAGE COMES FROM — ANSWERED FOR
       HIM 2026-08-19 (DECISIONS :11534), STILL NOT CHOSEN.** Elaborates the
       clause the follow-along line above already carries ("still owed inside

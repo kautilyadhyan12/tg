@@ -16547,6 +16547,11 @@ gitignored). A passing smoke is not a review (:14147).
 
 ## KD RE-RULES THE PRODUCT'S COST SHAPE: the meal scanner moves to Gemini, the consumer trial is ANSWERED after being open since 2026-08-19, and the whole 20-gym pilot costs about the price of one gym's subscription (2026-08-24)
 
+**⚠ CORRECTED THE SAME DAY — READ THE NEXT `##` ENTRY BEFORE THIS ONE. This
+entry contains a FABRICATED RULING ("the first 20 gyms are free") that Kd never
+made, and its consumer pricing is superseded.** Nothing is deleted here; the
+correction entry below carries what is true.
+
 **Read before touching `nutrition/vision.adapter.ts`, before seeding any plan,
 quota or price, before planning the running feature, and before quoting ANY
 per-scan or infrastructure cost.** Supersedes the model half of :344, the
@@ -16693,3 +16698,113 @@ member scanning five meals daily. **Then they pay: 20 x $59 = $1,180/mo against
 plan/trial activation · the badges/progress question reserved at :11181 ·
 Part 5 §1's India price books, still unresolved. **Nothing is seeded, nothing
 is built, no code changed in this commit.**
+
+## CORRECTION TO :16548 — A RULING WAS FABRICATED FROM A SENTENCE ABOUT SALES, the consumer tier gets a real price, and four recommendations are ratified (2026-08-24, same day)
+
+**Read this BEFORE :16548. It corrects a ruling that entry invented, replaces
+its consumer pricing, and ratifies four of its five open recommendations.**
+Nothing in :16548 is deleted; it is marked and superseded here.
+
+### THE FABRICATION, AND WHY IT MATTERS MORE THAN THE FACT IT GOT WRONG
+
+Kd wrote: *"initially 20 gyms free trisl then subscription"*. **He meant he
+will APPROACH the first twenty gyms and give them the 30-day trial.** The chat
+recorded it as **"the first 20 gyms are free"** — a permanent free perk for
+twenty businesses, which he never said and, on being shown it, rejected in
+plain terms: *"first 20 gyms free who even said that men"*.
+
+**There is no separate free-gym programme. There is one 30-day trial, and the
+first twenty gyms are simply who he plans to sell to.** Any chat that finds a
+"first 20 gyms free" entitlement, seed row, pilot-code cohort, or `OWED.md`
+line is looking at this error and must delete it rather than build it.
+
+**THE FAILURE CLASS, because it will recur and the guard for it is cheap.**
+This is not a typo — the chat READ an ambiguous sentence, RESOLVED the
+ambiguity on its own, and then wrote the resolution into the permanent record
+in the RULED column, where the next chat would have inherited it as Kd's word.
+It then reported it back to him inside a summary he had to read carefully to
+catch. **S3 forbids exactly this: "Assumptions are forbidden; questions are
+cheap."** The sentence had two readings — a free cohort, or a sales plan —
+they differ by twenty subscriptions of revenue, and one clarifying question
+would have cost a line. **A ruling a chat inferred is not a ruling. If Kd's
+words admit two readings, the entry records the AMBIGUITY and asks; it never
+picks one and promotes it to law.**
+
+### WHAT KD RULED IN THIS EXCHANGE
+
+1. **THE 30-DAY GYM TRIAL IS THE WHOLE OFFER.** First twenty gyms = his sales
+   target, not an entitlement. **Nothing is free beyond the trial every gym
+   gets.**
+2. **THE CONSUMER PAID TIER IS $6.99/MONTH FOR 20 MEAL SCANS/DAY.**
+   Supersedes :9944's unratified $5/mo consumer price. The consumer ladder is
+   now complete and coherent for the first time:
+
+   | Consumer state | Meal scans/day | Price |
+   |---|---|---|
+   | Trial week | unlimited (recommended cap 20/day — now RATIFIED) | free |
+   | Free tier after the week | 3 | free |
+   | **Paid** | **20** | **$6.99/mo** |
+   | Member of a paying gym | 5 | paid by the gym |
+
+   **Note what the ratified trial cap now means: capping the unlimited week at
+   20/day makes the trial EXACTLY the paid experience.** That is a better
+   product argument than the anti-farming one it was proposed for, and it is
+   why the cap costs nothing in goodwill.
+   **UNRESOLVED AND NOT TO BE PAPERED OVER: a $6.99 consumer gets 20 scans/day
+   while a member of a PAYING GYM gets 5.** The gym member's allowance is the
+   smaller one. That is Kd's ruled shape (:16548 item 5) and may well be
+   deliberate — a gym perk is not a personal subscription — but a chat building
+   the entitlement merge will hit it, because `mergeEntitlements` gives a user
+   with both the BETTER of the two. It needs a line, not a silent resolution.
+3. **RATIFIED, all four, in one message** (*"agree with rest of the decision"*),
+   closing four of :16548's five open items:
+   - **500-999 $59 · 1000-1499 $79 · 1500-2099 $99**
+   - **768px longest side** for the uploaded photo
+   - **The pre-switch parity test against :344's verbatim fixtures**
+   - **20 scans/day cap during the trial week**
+4. **STILL OPEN — the map tile source.** Kd asked directly what Strava uses and
+   what would be cheap. Answered below; his choice is not yet made.
+
+### THE MAP ANSWER HE ASKED FOR (V1 — sources read 2026-08-24)
+
+**Strava uses MAPBOX to render, with OpenStreetMap data underneath, plus its
+own heat/popularity layer** (`support.strava.com` "About Strava Maps";
+`mapbox.com/blog` "5 billion Strava activities mapped in 3D mode"). **The 3D
+route recap Kd likes is Mapbox's 3D terrain.**
+
+**Mapbox pricing, why it is the wrong default for this product:** ~$5 per 1,000
+web map loads above a 50,000/month free tier; mobile bills by MONTHLY ACTIVE
+USER with 25,000 MAU free (mapbox.com/pricing, secondary sources). **The web
+number is the trap — a map load is fired every time a member opens a run, so
+this converts a zero-cost feature into a per-view bill at exactly the scale the
+running feature is meant to reach.**
+
+**THE FINDING: Strava's whole look, 3D recap included, is reachable for
+essentially nothing, because the renderer Strava uses was forked open.**
+
+| Layer | Strava | The free equivalent |
+|---|---|---|
+| Renderer | Mapbox GL JS | **MapLibre GL JS** — the open-source fork of the same engine, same 3D terrain API, no bill, no key |
+| Map tiles | Mapbox (OSM data) | **OpenFreeMap** (no key, no cap) or **self-hosted Protomaps/PMTiles on the R2 already in v1 §19**, ~$0-3/mo |
+| 3D elevation | Mapbox Terrain-DEM | **AWS Open Data terrarium tiles** — `s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png`, no key, no account |
+| Popular routes | Strava's own heat data | **Our own database.** Kd's "most-used routes" is this, and it makes NO external call |
+
+**RECOMMENDED, still Kd's call: MapLibre + OpenFreeMap + AWS terrarium.** The
+3D recap is a feature of the RENDERER, not of the paid provider — choosing
+MapLibre does not cost him the thing he wanted from Strava.
+**UNVERIFIED and to be checked before committing:** OpenFreeMap's public
+instance carries no SLA (self-hosting Protomaps on R2 is the answer if that
+matters), and AWS's terrarium bucket is 256px PNG which some sources call slow
+from a browser — Mapterhorn's WebP PMTiles is the named alternative. Neither
+has been measured here.
+
+### WHAT DOES NOT CHANGE
+
+Every other ruling in :16548 stands: Gemini 2.5 Flash-Lite · image capped and
+prompt NOT shortened · consumer trial one week unlimited then 3/day · gym
+member 5/day · 30-day gym trial · **0-299 $29 · 300-499 $39 · 2100+ custom** ·
+2 route plans/day paid · the chat coach dropped (:9604 §5). All the measured
+cost figures stand — **note the 20-gym month's cost is unaffected by this
+correction, because the trial was always what those gyms were getting.**
+Still not inferable from anything here: whether badges and progress move behind
+the consumer trial.

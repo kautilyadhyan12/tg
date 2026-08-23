@@ -785,10 +785,21 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   forever today (v1 §9.1:611, ungated in code), so moving them is a REMOVAL
   needing its own explicit ruling. Check before any paywall, trial,
   entitlements or seed change.
-- **:16548** — 2026-08-24 — **OPEN, and it is what Kd must say one word on
-  before the billing or Gemini card can start: the 500-2099 price bands, the
-  768px image cap, the pre-switch parity test, the 20/day trial cap, and the
-  map-tile choice are all RECOMMENDED and NOT RATIFIED.** Detail at the §4 line.
+- ~~**:16548** — 2026-08-24 — **OPEN: five unratified recommendations**~~
+  **FOUR CLOSED the same day at :16702 — bands 500-999 $59 / 1000-1499 $79 /
+  1500-2099 $99, the 768px cap, the pre-switch parity test, and the 20/day
+  trial cap are all RATIFIED** (*"agree with rest of the decision"*).
+- **:16702** — 2026-08-24 — **OPEN: THE MAP TILE SOURCE.** Kd asked what Strava
+  uses and what is cheap; answered (Strava = Mapbox + OSM + its own heat data;
+  the 3D recap is Mapbox 3D terrain) and **recommended MapLibre + OpenFreeMap +
+  AWS terrarium DEM, which reaches the same look including 3D for ~$0** — but
+  he has not chosen. **Check before wiring ANY map, and do not default to a
+  per-map-load provider.**
+- **:16702** — 2026-08-24 — **OPEN: a $6.99 consumer gets 20 meal scans/day
+  while a member of a PAYING GYM gets 5.** Kd's ruled shape, possibly
+  deliberate (a gym perk is not a personal subscription), but
+  `mergeEntitlements` gives a user holding both the BETTER of the two — so the
+  entitlement build hits it. Needs a ruling, not a silent resolution.
 - **:11534** — 2026-08-19 — **OPEN: WHERE THE FOLLOW-ALONG REFERENCE FOOTAGE
   COMES FROM.** Three options priced and put to Kd — film a real person ·
   motion-capture an expert clip onto a rigged 3D model (**possible; his
@@ -814,7 +825,41 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
-- **:16548** — 2026-08-24 — **KD RE-RULES THE PRODUCT'S COST SHAPE: the meal
+- **:16702** — 2026-08-24 — **CORRECTION TO :16548 — A RULING WAS FABRICATED
+  FROM A SENTENCE ABOUT SALES; the consumer tier gets a real price; four
+  recommendations are ratified.** **READ THIS BEFORE :16548, and read it before
+  building any gym trial, consumer plan, entitlement merge or map.**
+  **THE FABRICATION: Kd wrote "initially 20 gyms free trisl then subscription"
+  — meaning he will APPROACH the first twenty gyms with the 30-day trial. The
+  chat recorded "the first 20 gyms are free", a permanent free perk he never
+  granted** (*"first 20 gyms free who even said that men"*). **There is no
+  free-gym programme — one 30-day trial, and the first twenty gyms are just who
+  he plans to sell to. Any seed row, pilot cohort or OWED line saying otherwise
+  is this error and must be deleted, not built.** **The failure class, which is
+  the reusable part: the chat resolved an AMBIGUOUS sentence on its own and
+  wrote the resolution into the RULED column, where the next chat inherits it
+  as Kd's word — S3 forbids exactly this. A ruling a chat inferred is not a
+  ruling; two readings means record the ambiguity and ask.** **NEW: the
+  consumer paid tier is $6.99/mo for 20 scans/day** (supersedes :9944's $5),
+  completing the ladder — trial week unlimited (capped 20/day) · free 3/day ·
+  paid 20/day · gym member 5/day. **RATIFIED in one message: bands 500-999 $59
+  / 1000-1499 $79 / 1500-2099 $99 · 768px · the parity test · the 20/day trial
+  cap** — note the cap now makes the trial EXACTLY the paid experience.
+  **THE MAP ANSWER (V1): Strava renders with MAPBOX over OSM plus its own heat
+  layer, and its 3D recap is Mapbox 3D terrain; Mapbox bills ~$5/1,000 web map
+  loads over 50k/mo free and by MAU on mobile — a per-VIEW bill on a feature
+  that should cost nothing. The finding: the renderer Strava uses was forked
+  open, so MapLibre GL JS + OpenFreeMap (or PMTiles on the R2 already in v1
+  §19) + AWS Open Data terrarium DEM reaches the same look, 3D included, for
+  ~$0. The 3D recap is a feature of the RENDERER, not of the paid provider.**
+  UNVERIFIED: OpenFreeMap's public instance has no SLA; AWS terrarium is 256px
+  PNG and reportedly slow from a browser (Mapterhorn WebP PMTiles named as the
+  alternative). **STILL OPEN: the map choice, and the gym-member-5 vs
+  paid-consumer-20 clash.** Everything else in :16548 stands, cost figures
+  included — the 20-gym month is unaffected, because the trial was always what
+  those gyms were getting.
+- **:16548** — 2026-08-24 — **⚠ CONTAINS A FABRICATED RULING — read :16702
+  FIRST. KD RE-RULES THE PRODUCT'S COST SHAPE: the meal
   scanner moves to Gemini 2.5 Flash-Lite, the consumer trial is ANSWERED after
   five days open, and the whole 20-gym pilot costs about one gym's
   subscription.** **Read before touching `nutrition/vision.adapter.ts`, before
@@ -825,7 +870,9 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   size-capped but the PROMPT deliberately NOT shortened · **consumer trial =
   ONE WEEK UNLIMITED then 3 scans/day** (a knowing deviation from
   `05-part5-billing.md:292-293`) · gym members 5/day even though the gym pays ·
-  gym trial 30 days, first 20 gyms free · bands **0-299 $29 · 300-499 $39**
+  gym trial 30 days, ~~first 20 gyms free~~ **(FABRICATED — :16702; there is no
+  free-gym programme, only the 30-day trial every gym gets)** · bands
+  **0-299 $29 · 300-499 $39**
   (Kd confirmed the fix to his own overlapping "0-299/0-499") **· 2100+
   custom** · running = 2 route plans/day + Strava-style GPS line + most-used
   routes · the chat coach confirmed dropped. **MEASURED (V1, sources in the
