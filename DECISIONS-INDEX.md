@@ -809,6 +809,79 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:15927** — 2026-08-23 — **THE TICK-BOXES SMOKE PASSES 10/10 — and the finding
+  is that it could not START: the database a BROWSER reads was a migration
+  behind, and no gate in this repo can see that.** Kd's REPORT (:4829) on
+  :15770, his own gym, tree verified byte-identical to `245632d` before and
+  after. **Read before citing the tick boxes as verified, before quoting a card's
+  PROVE as evidence the app RUNS, before running any browser smoke, and before
+  writing a smoke step that assumes a helper with a MIXED set of ticks.**
+  **Step 6 passed BOTH WAYS** — the helper was refused the member list the moment
+  the box came off and got it back when it went on — which is the only step
+  separating "the server enforces it" from "the screen draws it"; **step 7
+  repeated it on a SECOND power and its detail is the useful part** (with
+  `codes.manage` off the helper still SAW the code and lost only the controls,
+  §2.2's two rows one line apart, observed in a browser for the first time);
+  **step 3 is the CORS-preflight `PUT` `fastify.inject` cannot exercise.**
+  **THE MIGRATION GAP IS A HOLE BETWEEN TWO CORRECT DECISIONS, not carelessness:**
+  :13659 moved the api suite to a LOCAL Postgres, :15381's PROVE properly says so,
+  and CI applies to its own EPHEMERAL Neon branch — **so the one database a
+  browser reads is applied to by hand and by nothing else**, and nobody did.
+  12 of 13 applied; `getStaffAuthority` selects the missing column and every
+  gym-scoped route reaches it, so everything INSIDE a gym failed. **`/console`
+  still worked** (`listOrgsForUser` does not read it), which is what makes it
+  read as one broken screen — **and my "the whole console is dead" to Kd was too
+  broad; he asked whether the decision was right and that is what sent me to
+  measure it** (:6062: V1 binds a BEHAVIOUR claim like a count). Own 🟡
+  `OWED.md` line, three candidate fixes, **boot-time refusal recommended, not
+  built (R1.1).**
+  **THE CHECK THAT COULD HAVE MADE APPLYING IT WRONG WAS RUN FIRST: three applied
+  rows do NOT hash-match** (:3332 R2-F1's desync, whose consequence is a re-run
+  dying on 42710) — **and it cannot bite here, established by READING
+  `pg-core/dialect.js` rather than assuming: `migrate` selects on `created_at`
+  and never consults the hash.** Enumerated 12 skipped / 1 runs; verified AFTER in
+  the database, not on the tool's word — 13 applied, deployed CHECK read from
+  `pg_get_constraintdef`, both owner rows carrying the full six, 0 NULL, 107 gyms
+  untouched. **KD ASKED WHETHER THIS IS ONLY FOR ONE GYM — it is not, and the
+  answer is recorded so nobody re-derives it:** `gym_staff`'s PK is
+  `(gym_id, user_id)`, every read and write in `setStaffPrivileges` is gym-scoped
+  including the last-owner count, and R3.2's case exists by name
+  ("another gym's owner gets 404 from every staff route"). **FIVE SHEET DEFECTS,
+  ALL THE SHEET'S, ALL FIXED HERE, and FOUR of the five are ONE mistake — it was
+  written imagining a MIXED set of ticks while a MANAGER starts with all five
+  ticked**, so steps 1/3/4 each asked for something that cannot exist on the row
+  the sheet itself specifies and **step 8 then pointed back at a fact step 3 could
+  never produce**; **corrected BEFORE he ran them rather than after a false
+  failure** (:13174 anticipated, not incurred), and step 3's replacement (untick →
+  save → reload → re-tick → save → reload) is STRONGER than the original.
+  **One wrong premise about the FIXTURE produced four wrong steps and none looked
+  wrong alone** — :7487's fixture lesson in a smoke sheet. **The fifth was missing
+  entirely and is the wall a first-time runner hits before step 1: you cannot
+  appoint somebody who is not ALREADY A MEMBER** (:14262's roster-scoped lookup),
+  so both obvious helper accounts were refusable; the join → confirm → appoint
+  prerequisite is now written down. Steps 5 and 9 were SHARPENED, not corrected,
+  and are deliberately not counted among the five.
+  **NOTHING TICKS, AND T3 ROUND 1 RAN THE SAME DAY: ONE Critical/High, THREE Low,
+  THE PACKET DOES NOT SHIP — its entry lands with its fixes** (:15534/:14840's
+  pattern). **A power ticked ON for a TRAINER reaches no control**: the console
+  gates on the ROLE NAME while the server gates on the TICK, and `myOrgSchema`
+  carries no `privileges`, so the client has no source for the caller's own set.
+  **THIS ENTRY OWNS WHY THE SMOKE MISSED IT: step 7's widening ✅ is unachievable
+  for a trainer and the run used a MANAGER**, so the untick direction was tested
+  and the widening direction never was — **10/10 is true and is not evidence about
+  widening.** **AND THE NEAR-MISS IS THE PART TO CARRY: told the finding, Kd's
+  browser said the OPPOSITE and both were right** — each console page mounts its
+  own `useConsoleOrg` (keyed `[orgSlug, attempt]`), so his Overview tab, open
+  since that account was a MANAGER, still drew the panel and the action then
+  SUCCEEDED because the tick genuinely granted it; Members, freshly mounted,
+  correctly showed no Remove. He reloaded and the controls were gone. **A browser
+  check on a stale tab is not a measurement, and it pointed the flattering way**
+  (:11846) — it would have closed a real Critical/High. The staleness is
+  PRE-EXISTING, OWASP-clean (the server decides every request), **below the
+  industry norm nonetheless — `refetchOnWindowFocus: true` is a TanStack Query
+  DEFAULT — and Kd pushed back on "leave it" and was right**: own ⚪ line, its own
+  card, after the fix round (:5348 rule 6).
+
 - **:15770** — 2026-08-23 — **THE STAFF SCREEN'S TICK BOXES (web half): an owner
   can finally say what ONE person may do — and FOUR instrument failures in one
   afternoon, all mine.** Web half of :15381/:15534/:15673. **Read before touching

@@ -4716,6 +4716,91 @@ file and is stated so nobody reads these as lower priority than they are.
       **Step 6 of that sheet is the one the tick really rests on:** it is the
       only step that proves the SERVER enforces an untick rather than the screen
       merely drawing it (R3.3, :11429 rule 4).
+      **UPDATE 2026-08-23 (DECISIONS :15927) — THE SMOKE PASSED 10/10 AND THIS
+      LINE STILL DOES NOT TICK: T3 IS THE ONE REMAINING GATE.** Kd's run on
+      `245632d`, tree verified byte-identical before and after. **Step 6 passed in
+      BOTH directions** — the helper was refused the member list the moment the
+      box came off and got it back when it went on — and **step 7 repeated the
+      enforcement on a SECOND power** (`codes.manage`: the controls went, the code
+      itself stayed, because `codes.invite` is a different tick). A passing smoke
+      is not a review (:14147); one round finding zero Critical/High is what is
+      left.
+      **T3 ROUND 1 HAS SINCE RUN — ONE Critical/High, THREE Low; THE PACKET DOES
+      NOT SHIP and this line stays open.** **A power ticked ON for a TRAINER
+      reaches no control**: the console gates the join-code panel and the Remove
+      button on the ROLE NAME (`canManageCodes`, `canRemoveMembers`) while the
+      server gates on the TICK (`codes.manage`, `members.remove`) — :11429's seam
+      never reached the client, and **`myOrgSchema` carries `staffRole` and no
+      `privileges`, so the console has no source for the caller's own set.** That
+      is the root and the fix crosses `@app/shared` + `apps/api` + `apps/web`.
+      **The smoke could not have caught it** — step 7's widening ✅ is
+      unachievable for a trainer and the run used a Manager. Findings listed and
+      **approved by Kd before any code** (:5348). Escape hatch NOT armed (:15673
+      found zero, and this is the web console rather than `modules/orgs`). **The run needed a MIGRATION APPLIED FIRST — see the ⚪ line below;
+      the dev database was one change behind and every screen inside a gym was
+      failing.**
+- [ ] ⚪ **THE CONSOLE LEARNS WHAT YOU MAY DO WHEN A SCREEN OPENS AND NEVER
+      AGAIN — so an idle tab keeps drawing controls for a role you no longer
+      hold** (found 2026-08-23, DECISIONS :15927; **Kd pushed back on "leave it"
+      and was right**). **Read before touching `useConsoleOrg`, and before
+      answering "does a real user have to refresh?".**
+      **Not a security defect and that half is verified:** OWASP's rule is that
+      the server decides every request and that hiding is never the lock, and
+      `requirePrivilege` does exactly that on every gym-scoped route — a stale tab
+      can draw a button, never get one past the server.
+      **What it costs is a lie on screen and a confused person.** `useConsoleOrg`'s
+      effect is keyed `[orgSlug, attempt]` and each console page mounts its own,
+      so moving BETWEEN screens re-reads and **sitting still on one does not**.
+      The realistic case is the one that actually happened here: two people side
+      by side, one ticks a box, the other says "nothing happened".
+      **It is PRE-EXISTING — the ticks card did not cause it — but the ticks make
+      it bite far more often**, because before this a person's powers changed only
+      when their ROLE changed, which is rare, and now an owner can change one at
+      any time.
+      **THE INDUSTRY ANSWER IS RE-CHECK ON WINDOW FOCUS, and the evidence is that
+      it is a DEFAULT rather than a feature: TanStack Query ships
+      `refetchOnWindowFocus: true` out of the box.** We hand-rolled the hook, so we
+      inherited no such default. **Recommended: option 2 of three** — re-read when
+      the window regains focus (small, fixes the case that annoys somebody);
+      option 1 was "leave it" and option 3 was polling every few seconds, which
+      buys little and chatters. **Its own card, straight after the ticks fix
+      round — NOT inside it** (:5348 rule 6: a fix round carries only the fix).
+      **It also nearly cost a real Critical/High:** told about the T3 finding, Kd
+      tested on a tab open since that account was a Manager, it worked, and that
+      read as an acquittal until he reloaded. **A browser check on a stale tab is
+      not a measurement** (:11846 — the unnamed cause pointed the flattering way).
+- [ ] 🟡 **NOTHING NOTICES WHEN THE DEV DATABASE FALLS A MIGRATION BEHIND, AND IT
+      HAD — for a day, with every screen inside a gym failing** (found
+      2026-08-23, DECISIONS :15927). **Read before running any browser smoke, and
+      before quoting a card's PROVE as evidence that the app works.**
+      **Measured, not inferred:** the Neon dev branch `apps/api/.env` points at
+      held **12 of the 13** migrations; `gym_staff.privileges` did not exist, and
+      `getStaffAuthority` — which gates **every** gym-scoped route through
+      `requirePrivilege` — selects it, so Members, Overview, join codes and
+      Settings all failed. Applied by hand and verified in the database
+      (13 applied, both owner rows backfilled, 0 left NULL, 107 gyms untouched).
+      **HOW IT GOT THERE, and it is nobody's carelessness — it is a GAP BETWEEN
+      TWO CORRECT THINGS:** :13659 moved the api suite onto a LOCAL Postgres, and
+      :15381's PROVE says "all on LOCAL Postgres" quite properly; CI applies
+      migrations to its own ephemeral Neon *branch*. **So the one database a
+      browser actually reads is applied to by hand and by nothing else**, and the
+      day the server half shipped, nobody did. **The card was not wrong; the
+      pipeline has no step that owns this.**
+      **Why it is worth a line rather than a shrug:** the failure is SILENT until
+      a person opens a screen, and it points the flattering way — `/console`
+      still lists your gyms, so it reads as one broken screen rather than a
+      database a change behind. **It also rehearses the deploy**: the same gap on
+      the day P2.8 cuts over is every gym's console dark.
+      **Candidate fixes, none chosen (Kd's call, R0.2):** a boot-time check in
+      `apps/api` that refuses to start against a database with pending
+      migrations, naming the command — the loudest and the cheapest; or a line in
+      every smoke sheet's setup (done for the staff-privileges sheet already, as
+      a case fix not a class fix — :1239); or making "apply to the dev database"
+      an explicit step of any card that ships a migration. **The boot-time check
+      is the recommendation**: it is the only one that cannot be forgotten, and
+      it converts a silent wrong answer into a refusal to start (:11846's
+      precedent — an instrument that refuses a verdict it cannot back is the
+      instrument working).
 - [ ] 🟡 **A GYM CANNOT APPOINT SOMEBODY WHO IS NOT ALREADY A MEMBER — because
       the invite email cannot be sent** (deferred 2026-08-22, DECISIONS :14262).
       Part 3 §4.7 says "invite by email/phone with role"; what ships is the

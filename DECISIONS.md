@@ -15923,3 +15923,171 @@ code any more** — what holds it open is `RUNBOOK/smoke-staff-privileges.md` (1
 steps, written, UNRUN) and T3 (UNRUN). **Its step 6 is the one the tick really
 rests on**: the only step that proves the SERVER refuses what an owner unticks,
 rather than the screen merely drawing it.
+
+## THE TICK-BOXES SMOKE PASSES 10/10 — and the database the browser reads was a migration behind, which no gate in this repo can see (2026-08-23)
+
+**Read before citing the tick boxes as verified, before quoting a card's PROVE as
+evidence that the app RUNS, before running any browser smoke, and before writing
+a smoke step that assumes a helper with a mixed set of ticks.** Kd's **REPORT**
+(:4829) on :15770, his own gym on the shared dev database, both servers started
+by the chat. **"passed" on all ten steps, reported step by step.**
+
+### THE PASS, AND WHICH PARTS OF IT ARE LOAD-BEARING
+
+Run on commit `245632d`, **tree verified byte-identical before and after** —
+`consoleView.js`'s worktree blob `bb615d65…` equals HEAD's, which is the stale
+stat entry :15770 already documented, so `git status`'s ` M` is not an edit
+(:15187's uncommitted-bytes weakness designed out rather than repeated).
+
+- **Step 6 is what the tick rests on and it passed in BOTH directions.** The
+  owner unticked *See the member list*; the helper, in a second browser, was
+  REFUSED the member list — not shown an empty one. Ticked back on, the list
+  returned. **This is the only step that separates "the server enforces it" from
+  "the screen draws it"**, and it is the class Card 4 proved can be dead behind a
+  green suite.
+- **Step 7 repeated the enforcement on a SECOND power, and its detail is the
+  useful part:** with `codes.manage` unticked the helper still SAW the join code
+  and lost only the controls — because sharing a code and changing one are
+  different ticks one line apart in §2.2 (:13803's own distinction, observed in a
+  browser for the first time).
+- **Step 3 is the CORS-preflight step** — `PUT` on the ticks route, which
+  `fastify.inject` cannot exercise. It passed in both directions.
+- **Step 8's wording check passed**: the role button asks first and says the
+  permissions *become the defaults for the new role*, never "your changes will be
+  lost" (:15534 Low-6, now observed rather than asserted).
+- Steps 1, 2, 4, 5, 9, 10 passed as controls: five boxes and **no Manage staff**
+  on a manager row, six greyed boxes and no Save on the owner's own row, Save
+  dead until something changes, Cancel changing nothing, and the three-tap Remove
+  still asking three times.
+
+### THE FINDING IS NOT IN THE CARD — IT IS THAT THE SMOKE COULD NOT START
+
+**The dev database held 12 of the 13 migrations.** `gym_staff.privileges` did not
+exist, and `getStaffAuthority` selects it; every gym-scoped route reaches that
+function through `requirePrivilege`, so **Members, Overview, join codes and
+Settings all failed**. Measured, not inferred — `42703` from the column itself,
+then 12 applied rows against 13 journal entries.
+
+**IT IS A GAP BETWEEN TWO CORRECT DECISIONS, which is why nobody was careless.**
+:13659 moved the api suite onto a local Postgres for good reasons; :15381's PROVE
+says "all on LOCAL Postgres" quite properly; CI applies migrations to its own
+ephemeral Neon branch. **So the one database a browser actually reads is applied
+to by hand and by nothing else** — and on the day the server half shipped, nobody
+did. `OWED.md` has a 🟡 line with three candidate fixes and a recommendation
+(a boot-time refusal to start against a database with pending migrations);
+**not built, R1.1, and the choice is Kd's.**
+
+**THE PART THAT WOULD HAVE MISLED A LESS SUSPICIOUS RUN: `/console` still worked.**
+`listOrgsForUser` does not read the missing column, so the list of your gyms
+loaded perfectly while everything inside a gym failed. **I said "the whole console
+is dead" to Kd and it was too broad; he asked whether the decision was right,
+which is what sent me to measure it.** V1 binds a claim about BEHAVIOUR exactly as
+it binds a count (:6062's recorded lesson, earned again).
+
+### THE CHECK THAT WOULD HAVE MADE APPLYING IT WRONG, RUN BEFORE APPLYING IT
+
+Three of the twelve applied rows **do not hash-match** their files — :3332 R2-F1's
+desync, whose consequence is `drizzle-kit migrate` re-running an applied migration
+and dying on `42710`. **It cannot happen here, and this was established by READING
+THE MIGRATOR rather than by assuming:** `pg-core/dialect.js`'s `migrate` selects
+on `Number(lastDbMigration.created_at) < migration.folderMillis` and never
+consults the hash. Enumerated per file: **12 skipped, 1 will run.** Exactly
+`0013` ran, inside one transaction. **A tool's documented behaviour is a claim
+until you read the code that implements it.**
+
+Verified AFTER, in the database rather than on the tool's word (:15770's own
+through-line): 13 applied · the column present · the deployed CHECK read back
+from `pg_get_constraintdef` (:15534 Low-5's instrument) · **both owner rows
+carrying the full six-privilege owner set, 0 rows left NULL** · **107 gyms
+untouched**.
+
+### KD ASKED WHETHER THIS IS ONLY FOR ONE GYM. IT IS NOT, AND HERE IS THE EVIDENCE
+
+Recorded because it is the right question and a later chat should not re-derive
+the answer: **`gym_staff`'s primary key is `(gym_id, user_id)`** — ticks are per
+person PER GYM, so the same person is a manager at one gym and a trainer at
+another with different boxes. **Every read and every write in `setStaffPrivileges`
+is scoped by `gym_id`**, the last-owner count included; the route's gate resolves
+the caller's authority *at that gym*. **`orgs.routes.test.ts` carries R3.2's case
+by name — "another gym's owner gets 404 from every staff route"** — covering all
+four staff routes including the ticks route. The backfill's `WHERE privileges IS
+NULL` is row-count agnostic and idempotent; **its "2 rows" is a fact about today's
+dev database, not a design limit.**
+
+### FIVE SHEET DEFECTS, ALL THE SHEET'S, ALL FIXED IN THIS COMMIT — AND FOUR OF THE FIVE ARE ONE MISTAKE
+
+**The sheet was written imagining a helper with a MIXED set of ticks, and a
+MANAGER starts with all five ticked** — so FOUR steps asked for something that
+does not exist on the very row the sheet itself tells you to use. Step 1 expected
+"some ticked and some not"; step 3 said "pick any box that is currently empty";
+step 4 said "tick any box"; **step 8 then pointed back at "any box you had ticked
+on in step 3"**, a fact step 3 could never produce here. Each was corrected BEFORE
+Kd ran it, not after it produced a false failure (:13174's two mid-run sheet
+defects, anticipated this time rather than incurred). **Step 3 became two halves —
+untick, save, reload, confirm empty; re-tick, save, reload, confirm on — which is
+a STRONGER check than the original**, since it exercises the save in both
+directions. **The shape worth carrying: one wrong premise about the FIXTURE
+produced four wrong steps, and none of them was individually wrong-looking** —
+:7487's fixture lesson, in a smoke sheet instead of a test.
+
+**Two further steps were SHARPENED without having been wrong, and are NOT counted
+among the five.** Step 5 stopped at reopening the panel, which a Cancel that
+tidied the SCREEN while quietly saving anyway would survive — a reload was added.
+Step 9 now names the count (**six** boxes on the owner's own row, the one place
+`staff.manage` is drawn), so "fewer than six" becomes a failure a runner can see
+rather than one they must notice.
+
+**The fifth is the one a first-time runner hits before step 1 and it was missing
+entirely: you cannot appoint somebody who is not ALREADY A MEMBER of that gym.**
+`addStaff` looks the email up on that gym's live roster (:14262 — a global lookup
+would be an account-existence oracle), so the two accounts that looked like
+obvious helpers were both refusable and the only member of Kd's gym was a robot
+account from an old test. The prerequisite is now three written steps — join by
+code, confirm, appoint — all ordinary use of the app. **Kd was told this BEFORE
+he started rather than discovering it at the Add form**, which is the whole
+purpose of reading a sheet's premises before handing it over.
+
+### NOTHING TICKS — AND T3 ROUND 1 HAS SINCE RUN AND DID NOT SHIP THE PACKET
+
+`OWED.md`'s ticks line is UPDATED, not ticked (:14147, and :4718 F4 / :5034 —
+ticking on less than the full gate is this branch's most repeated bookkeeping
+defect). The new migration-lag line is 🟡 and unbuilt.
+
+**T3 round 1 ran the same day and found ONE Critical/High and three Low, so the
+packet does NOT ship this round — its entry lands with its fixes**, which is this
+repo's pattern (:15534, :14840). Recorded here because a reader arriving at this
+entry must not take "the smoke passed" as "the feature works": **a power ticked ON
+for a TRAINER reaches no control, because the console asks "are you a manager?"
+while the server asks "do you hold the tick?"**
+
+**AND THE SMOKE IS WHY IT WAS NOT CAUGHT, which belongs in THIS entry rather than
+the review's.** Step 7's ✅ reads "the helper can now use the join-code controls
+that they could not before" — **unachievable for a trainer by construction, and
+the run used a MANAGER**, who already holds both powers, so step 7 was taken in
+the parenthetical UNTICK direction and the widening direction was never observed.
+**10/10 is true and it is not evidence about widening.** A step that ticks a power
+ON for a TRAINER is owed on the sheet.
+
+**A SECOND THING THE REVIEW DID NOT FIND AND KD'S BROWSER DID — and it nearly
+produced a FALSE ACQUITTAL.** Told the finding, Kd tested it and reported the
+opposite: his trainer COULD pause and change a code. **Both observations were
+correct.** Each console screen calls its own `useConsoleOrg`, whose effect is
+keyed `[orgSlug, attempt]`, so the viewer's role is re-read **when a screen
+mounts** and never after; his Overview tab had been open since that account was a
+MANAGER, so it kept drawing the panel — and the action then SUCCEEDED, because the
+tick genuinely granted it. Clicking to Members mounted a fresh read, which is why
+Remove was correctly absent in the same sitting. **He re-tested after a reload and
+the controls were gone.** Standing lesson: **a browser check on a stale tab is not
+a measurement, and this one pointed the flattering way** (:11846's shape) — a
+"works for me" that would have closed a real Critical/High. `RUNBOOK` sheets that
+change permissions now say to reload the other window first.
+
+**The staleness itself is NOT this card's defect and is NOT fixed in the fix
+round** (:5348 rule 6): it predates the ticks, and OWASP's rule — the server
+decides every request, hiding is never the lock — is satisfied, so nothing is
+reachable that should not be. **But "stale until you navigate" is below the
+industry norm and `refetchOnWindowFocus: true` is the default in TanStack Query**,
+which is the evidence that re-checking on focus is the ordinary answer rather than
+a nicety; we hand-rolled the hook and inherited no such default. **Kd pushed back
+on "leave it" and was right to** — own ⚪ `OWED.md` line, its own card, straight
+after the fix round.

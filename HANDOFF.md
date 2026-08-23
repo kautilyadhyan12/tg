@@ -9994,3 +9994,128 @@ NEXT
      `text` under a three-value CHECK, verified at `tenancy.ts:251`), the three
      built-ins as presets, and Kd's "Change everyone on Front Desk too?" button.
 ```
+
+```
+TASK: THE TICK-BOXES SMOKE — PASSED 10/10, and the finding is that it could not
+      START. DECISIONS :15927. **`OWED.md`'s ticks line does NOT tick: T3 is the
+      one remaining gate.** No app source changed; the card's bytes are untouched
+      at `245632d`.
+
+THE ONE THING A NEXT CHAT MUST NOT MISS
+  · **THE DEV DATABASE WAS A MIGRATION BEHIND AND NOTHING IN THIS REPO COULD SEE
+    IT.** `apps/api/.env`'s Neon branch held 12 of 13; `gym_staff.privileges` did
+    not exist; `getStaffAuthority` selects it and EVERY gym-scoped route reaches
+    that function through `requirePrivilege` — so Members, Overview, join codes
+    and Settings all failed. Applied by hand (`drizzle-kit migrate` with
+    `DATABASE_URL` exported) and verified IN the database.
+  · **It is a gap between two CORRECT decisions, not carelessness:** :13659 moved
+    the api suite to LOCAL Postgres, :15381's PROVE properly says "all on LOCAL
+    Postgres", and CI applies to its own EPHEMERAL Neon branch. **The one database
+    a browser reads is applied to by hand and by nothing else.** Own 🟡 `OWED.md`
+    line; **boot-time refusal-to-start recommended, NOT built (R1.1) — Kd's call.**
+  · **BEFORE APPLYING, THE DESYNC CHECK WAS RUN AND IT MATTERS: three of the
+    twelve applied rows do NOT hash-match their files** (:3332 R2-F1, whose
+    consequence is a re-run dying on 42710). **It cannot bite, established by
+    READING `pg-core/dialect.js`: `migrate` selects on `created_at` and never
+    consults the hash.** Enumerated 12 skipped / 1 runs. Do not panic at those
+    three, and do not "fix" them.
+
+WHAT THE SMOKE ACTUALLY ESTABLISHED
+  · **Step 6 both ways** — untick *See the member list*, the helper is REFUSED
+    (not shown an empty list); tick it back, the list returns. The only step that
+    separates server enforcement from screen drawing.
+  · **Step 7 on a SECOND power**, and the detail is the useful part: with
+    `codes.manage` off the helper still SAW the code and lost only the controls —
+    §2.2's two rows one line apart, in a browser for the first time.
+  · **Step 3 is the CORS-preflight `PUT`** `fastify.inject` cannot exercise.
+  · Step 8's wording confirmed in a browser: *"become the defaults for the new
+    role"*, never "your changes will be lost" (:15534 Low-6).
+  · Controls: five boxes and no Manage staff on a manager row; six greyed boxes
+    and no Save on the owner's own; Save dead until something changes; Cancel
+    changing nothing; three-tap Remove still asking three times.
+
+FIVE SHEET DEFECTS, ALL THE SHEET'S, ALL FIXED IN THIS COMMIT
+  · **FOUR of the five are ONE mistake: the sheet was written imagining a MIXED
+    set of ticks, and a MANAGER starts with ALL FIVE ticked** — so steps 1, 3 and
+    4 each asked for something that cannot exist on the row the sheet itself
+    specifies, and **step 8 then pointed back at a fact step 3 could never
+    produce**. **Corrected BEFORE Kd ran them** rather than after a false failure
+    (:13174 anticipated, not incurred). Step 3's replacement — untick → save →
+    reload → re-tick → save → reload — is STRONGER than the original.
+    **One wrong premise about the FIXTURE produced four wrong steps and not one of
+    them looked wrong on its own** (:7487's lesson, in a sheet instead of a test).
+  · **Steps 5 and 9 were SHARPENED, not corrected, and are NOT among the five:**
+    step 5 stopped at reopening the panel, which a Cancel that tidied the SCREEN
+    while quietly saving would survive (reload added); step 9 now names SIX boxes
+    on the owner's own row, so "fewer than six" is a failure a runner sees rather
+    than one they must notice.
+  · **The fifth was missing entirely and is the wall before step 1: you cannot
+    appoint somebody who is not ALREADY A MEMBER** (:14262's roster-scoped lookup
+    — a global one would be an account-existence oracle). Both obvious helper
+    accounts were refusable. join → confirm → appoint is now written down.
+
+A CORRECTION OF MINE, RECORDED BECAUSE KD'S QUESTION CAUSED IT
+  · I told him "the whole gym console is dead" and it was TOO BROAD. `/console`
+    still lists your gyms (`listOrgsForUser` does not read the column); it is
+    everything INSIDE a gym that fails. **He asked whether the decision was right,
+    and that is what sent me to measure it** — :6062's lesson, V1 binds a claim
+    about BEHAVIOUR exactly as it binds a count.
+
+KD'S QUESTION, ANSWERED WITH EVIDENCE SO NOBODY RE-DERIVES IT
+  · "there will be other gyms — do you know it is not only for one gym". It is
+    not: **`gym_staff`'s PK is `(gym_id, user_id)`** (ticks are per person PER
+    GYM), **every read and write in `setStaffPrivileges` is gym-scoped** including
+    the last-owner count, and **R3.2's case exists by name** —
+    "another gym's owner gets 404 from every staff route", covering all four staff
+    routes. The backfill's `WHERE privileges IS NULL` is row-count agnostic; its
+    "2 rows" is a fact about today's dev database, not a design limit.
+
+GATES
+  · **No app source was touched, so no suite was re-run and none is quoted.** The
+    commit changes four documents and one runbook. Tree verified byte-identical to
+    `245632d` before the smoke and after it (`consoleView.js` blob `bb615d65…` =
+    HEAD's; the ` M` is :15770's documented stale stat entry, `git diff` empty).
+  · Database verified AFTER applying, not on the tool's word: 13 applied · column
+    present · deployed CHECK read from `pg_get_constraintdef` · both owner rows
+    carrying the full six · 0 rows NULL · 107 gyms untouched.
+
+T3 ROUND 1 RAN THE SAME DAY AND THE PACKET DOES NOT SHIP — its entry lands with
+its fixes (:15534/:14840's pattern). Summarised here so nobody reads "smoke
+passed 10/10" as "the feature works":
+  · **ONE Critical/High: a power ticked ON for a TRAINER reaches no control.**
+    The console gates the join-code panel and the Remove button on the ROLE NAME
+    (`canManageCodes`, `canRemoveMembers` — both take a role and nothing else)
+    while the server gates on the TICK (`codes.manage`, `members.remove`).
+    **Root: `myOrgSchema` carries `staffRole` and NO `privileges`, so the console
+    has no source for the caller's own set** — :11429's seam never reached the
+    client. Fix crosses `@app/shared` + `apps/api` + `apps/web`. Three Low.
+    Findings listed and **approved by Kd before any code** (:5348). Escape hatch
+    NOT armed (:15673 found zero; this is the web console, not `modules/orgs`).
+  · **THE SMOKE COULD NOT HAVE CAUGHT IT and this is the sheet's gap, not Kd's:**
+    step 7's widening ✅ is unachievable for a trainer BY CONSTRUCTION, and the
+    run used a MANAGER (who holds both powers already), so step 7 went in the
+    parenthetical UNTICK direction. **A step that ticks a power ON for a TRAINER
+    is owed on the sheet.**
+  · **THE NEAR-MISS IS THE THING TO CARRY: Kd's browser said the OPPOSITE of the
+    finding and BOTH were right.** Each console page mounts its OWN
+    `useConsoleOrg`, keyed `[orgSlug, attempt]`, so the role is re-read when a
+    SCREEN MOUNTS and never after. His Overview tab had been open since that
+    account was a Manager, so it still drew the panel — and the pause then
+    SUCCEEDED, because the tick genuinely granted it. Members, freshly mounted,
+    correctly showed no Remove: one sitting, two correct answers. **He reloaded
+    and the controls were gone.** **A browser check on a stale tab is not a
+    measurement, and it pointed the flattering way** (:11846) — taken at face
+    value it would have closed a real Critical/High. Sheets that change
+    permissions now say to reload the other window first.
+
+NEXT
+  1. **THE FIX ROUND — approved, in progress. Failing tests FIRST (R9.5), Kd
+     watching them go red before green.** Only the fix (:5348 rule 6).
+  2. Then Kd's call on the migration-lag 🟡 line (boot-time refusal recommended).
+  3. Then card C: custom role names — the second migration (`gym_staff.role` is
+     `text` under a three-value CHECK), the three built-ins as presets, and Kd's
+     "Change everyone on Front Desk too?" button.
+  4. Housekeeping, not urgent: `user2@example.com` is left a TRAINER at *iron
+     man* (step 8 demoted them on purpose). Promote back to Manager before any
+     re-run of this sheet.
+```
