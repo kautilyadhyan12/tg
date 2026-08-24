@@ -893,6 +893,44 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   one SCREEN is not proven across a NAVIGATION.
   Two Low fixed (`BACKLOG.md`). **Tick still held: round 2 (diff-only) + the
   smoke's new step 5, UNRUN.** Escape hatch NOT armed (:16221 was clean).
+- **:17765** — 2026-08-24 — **KD RULES THE CONSOLE EXISTS IN BOTH PLACES WITH
+  THE SAME FEATURES IN EACH — and strikes a decision a chat made for him that I
+  then quoted back to him as his.** **Read before planning ANY console screen,
+  before proposing a console architecture, and before writing a paywall or a pay
+  button.** **STRIKES the MECHANISM half of :9604 §4** (*"ONE responsive console,
+  opened from inside the phone app"*); everything else in :9604 stands, §1
+  included. **RULED, both halves: (1) the console exists in BOTH the phone app
+  and on the web; (2) EVERY FEATURE EXISTS IN BOTH — the feature set is NOT split
+  by device.** He rejected a proposed camera-based split in as many words
+  (*"does that mean one thing will exsit in web and another feature will exsit in
+  web what is this men"*) and he was right: an owner opening a laptop to find
+  half their gym missing is a broken product, and the premise was thin — the
+  MEMBER scans the QR, the gym only displays it and reads the result.
+  **THE PROCESS FAILURE, and it is the reusable part: I told him "YOU ruled" a
+  thing :9604 §4 explicitly records a CHAT deciding** (*"I made that call…
+  Kd did not overrule it"*). **A chat's own call plus his silence is NOT a
+  ruling, and laundering it into his mouth is worse than making it, because he
+  cannot correct what he is told he already decided.** :16702's class, one step
+  later. **The guard is free — DECISIONS already distinguishes "KD RULED" from
+  "I made that call" / "recommended, not ruled" / "Kd did not overrule it". Read
+  the attribution, not just the content.** **THE ONE DEVICE DIFFERENCE IS NOT A
+  FEATURE SPLIT: the pay button opens a BROWSER**, because a purchase completed
+  inside the app is an IAP at 15–30% — measured at his ratified prices, 500 gyms
+  keeps $17,085 in-app at the GOOD 15% vs **$18,453 on the web, $16,421/yr**, and
+  30% is the default until the small-business programmes are applied for.
+  Apple 3.1.3(c) exempts software sold to ORGANISATIONS, so this is permitted.
+  **THE CONSUMER SIDE IS THE OPPOSITE AND MANDATORY** (Part 5 §2) — **and Apple
+  and Google are MERCHANT OF RECORD there, so they remit sales tax/VAT/GST
+  worldwide and a $10 subscriber is ZERO tax work in every country. Enrol in
+  Apple Small Business + Google's 15% tier BEFORE launch** ($7.00 vs $8.50 kept
+  per $10, ~$18k/yr at 1,000 subscribers). Part 5 §5.4's cross-channel guard
+  stops a double payment. **COST ACCEPTED, NOT WISHED AWAY: :9604 §4's "building
+  the console TWICE" warning stands and Kd has now taken it.** The SERVER is not
+  duplicated (one API, the majority of the work); the SCREENS are — six exist on
+  web today, counted. **UNRESOLVED AND NOT TO BE GUESSED: HOW "both" is built.**
+  Native re-implementation and an in-app web view are very different bills; he
+  was asked what should EXIST and answered that, not a mechanism. A chat
+  proposing one raises it as a costed option (S4).
 - **:17357** — 2026-08-24 — **KD RATIFIES THE WHOLE PRICE BOOK FOR THREE
   CONTINENTS, PADDLE BECOMES THE MONEY ROUTE, AND THE 5-vs-20 SCAN CLASH IS
   ANSWERED BY ARITHMETIC.** **Read before seeding ANY plan/price/quota, before

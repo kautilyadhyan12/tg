@@ -4594,6 +4594,38 @@ file and is stated so nobody reads these as lower priority than they are.
       timestamp, stored against the member. Small, and it is one of the things an
       owner checks when judging whether software is serious enough to run their
       business on. Lands in build wave 2 with the other gym-running work.
+- [ ] 🟡 **THE CONSOLE EXISTS IN BOTH THE PHONE APP AND ON THE WEB, WITH THE SAME
+      FEATURES IN EACH — KD RULED 2026-08-24 (DECISIONS :17765), and this STRIKES
+      the mechanism half of :9604 §4.** **Read before planning any console screen
+      or proposing a console architecture.** He was asked directly and answered
+      *"both men both"*, then rejected a proposed camera-based split of features
+      between the two: *"does that mean one thing will exsit in web and another
+      feature will exsit in web what is this men"*. **THE FEATURE SET IS NOT
+      SPLIT BY DEVICE.** Attendance, announcements, roster, reports, staff,
+      settings — all of it, both places. The only difference is LAYOUT.
+      **THE ONE DEVICE DIFFERENCE, and it is not a missing feature: the PAY
+      BUTTON OPENS A BROWSER.** The billing screen itself exists in both; only
+      card entry leaves, because a purchase completed INSIDE the app is an IAP at
+      15–30% (measured: $16,421/yr at 500 gyms, at the GOOD 15% rate). Apple
+      3.1.3(c) exempts software sold to ORGANISATIONS, so this is permitted.
+      **Consumer subscriptions are the OPPOSITE and IAP is mandatory** (Part 5
+      §2) — and Apple/Google are merchant of record there, so **they remit tax
+      worldwide and a $10 subscriber is zero tax work.** Part 5 §5.4's
+      cross-channel guard must exist or someone pays twice.
+      **NOT RULED AND NOT TO BE GUESSED: HOW "both" is built.** Native screens
+      and an in-app web view are very different bills; **:9604 §4's "building the
+      console TWICE" warning stands and Kd has now accepted that cost** — but he
+      was asked what should EXIST, not which mechanism. A chat proposing one
+      raises it as a costed option (S4) and puts it to him.
+      **Six web console screens exist today** (`apps/web/src/pages/console/`:
+      ConsoleHome, Members, NewGym, Overview, Settings, ApplicationsQueue —
+      counted 2026-08-24). The API is shared and is NOT duplicated work.
+- [ ] 🟡 **APPLE SMALL BUSINESS PROGRAM + GOOGLE'S 15% TIER — APPLY BEFORE
+      LAUNCH, NOT AFTER (DECISIONS :17765; Part 5 §1 already said so).** Free,
+      days to process, and the default is **30%** until it is done. On the ruled
+      $10 consumer price that is **$7.00 kept instead of $8.50 — ~$18,000/yr at
+      1,000 subscribers, for filling in a form.** An OPERATOR step; no code waits
+      on it, but a launch that skips it is paying double commission from day one.
 - [ ] 🟡 **THE GYM CONSOLE DOES NOT EXIST: gyms, join codes, seats.** Measured
       2026-08-18 — `apps/api/src/modules/` has no `org`, `billing`, `webhook` or
       `console` directory; the DB tables (`tenancy.ts`, `orgAnalytics.ts`,

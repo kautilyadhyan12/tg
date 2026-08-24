@@ -17761,3 +17761,109 @@ the harness.**
 - **Not re-run: the full 76-row sweep** (subset runs only — the tool prints that
   this must not be quoted as a sweep) **and the api half** (no api source in
   either commit; :10726's precedent).
+
+## KD RULES THE CONSOLE EXISTS IN BOTH PLACES WITH THE SAME FEATURES IN EACH — and strikes a decision a chat made for him and I then quoted back to him as his (2026-08-24)
+
+**Read before planning ANY console screen, before proposing a console
+architecture, and before writing a paywall or a pay button.** **STRIKES the
+mechanism half of :9604 §4.** Everything else in :9604 stands. No code changed.
+
+### 0 · THE FAILURE FIRST, BECAUSE IT IS THE PART THAT GENERALISES
+
+I told Kd *"Your console is already a web page. **You ruled** that gym owners
+manage the gym from a browser opened inside the phone."* **He never ruled it.**
+:9604 §4 says so in its own words: *"**I made that call** rather than put it to
+him a third time (K4)… **Kd did not overrule it**."*
+
+**A decision a chat made, plus a note that Kd did not object, is NOT a Kd
+ruling — and quoting it back to him AS his ruling is worse than making it, because
+he cannot correct what he is told he already decided.** His reaction was
+verbatim *"when on earth i said that i have said million times…"*, and he was
+right. **:16702 recorded a chat INVENTING a ruling from an ambiguous sentence.
+This is the same class one step later: a chat's own call, laundered into his
+mouth by a later chat reading the record carelessly.**
+
+**THE GUARD, and it is cheap: `DECISIONS.md` already marks these — "I made that
+call", "recommended, not ruled", "Kd did not overrule it" are all distinct from
+"KD RULED".** Read the attribution, not just the content. When the record says a
+CHAT decided, say *"a previous chat decided X and you did not object — do you
+want it?"*, never *"you ruled X"*.
+
+### 1 · WHAT KD RULED
+
+Asked directly whether the gym console is part of the phone app or a website the
+owner opens, he answered: **"both men both"**.
+
+Then, shown a proposed split of features BETWEEN the two (camera-dependent things
+native, the rest on web), he rejected that too: *"does that mean one thing will
+exsit in web and another feature will exsit in web what is this men"*.
+
+**THE RULING, both halves:**
+1. **The console exists in BOTH the phone app and on the web.**
+2. **EVERY FEATURE EXISTS IN BOTH. The feature set is NOT split by device.**
+   Attendance, announcements, roster, reports, staff, settings — all of it, in
+   both places. The only difference is LAYOUT: one column on a phone, spread out
+   on a laptop.
+
+**MY PROPOSED SPLIT WAS WRONG AND HE CAUGHT IT.** I had divided the console by
+what needs a camera. **A gym owner opening a laptop and finding half their gym
+missing is a broken product**, and the technical premise was thin anyway: the
+MEMBER scans the QR with their phone (that is the member app); the gym only needs
+to DISPLAY a QR and SEE who came, and both work on a laptop. Recorded because the
+reasoning looked sound and was not.
+
+### 2 · THE ONE GENUINE DEVICE DIFFERENCE, AND IT IS NOT A FEATURE SPLIT
+
+**The pay button opens a BROWSER rather than charging inside the app.** The
+billing screen itself exists in both, fully. Only the card entry leaves.
+
+**This is the Netflix/Spotify pattern and its reason is money, not capability:**
+a purchase completed INSIDE the app is an in-app purchase and Apple/Google take
+**15–30%**; the same purchase completed in a browser costs them nothing.
+**MEASURED at Kd's own ratified prices (:17357):** at 500 gyms, in-app at the
+GOOD 15% rate keeps **$17,085** against **$18,453** on the web — **$16,421/year**
+— and 15% is not the default, 30% is, until the small-business programmes are
+applied for. Apple's guideline 3.1.3(c) exempts software sold to ORGANISATIONS
+from in-app purchase, so this is permitted, not a workaround.
+
+**THE CONSUMER SIDE IS THE OPPOSITE AND IS NOT OPTIONAL:** Apple and Google
+REQUIRE in-app purchase for consumer digital subscriptions (Part 5 §2 already
+says this). **That is fine, and it carries a benefit worth recording: Apple and
+Google are MERCHANT OF RECORD for those, so they collect and remit sales tax /
+VAT / GST worldwide — a $10 individual subscriber is ZERO tax work for Kd in
+every country.** **Enrol in Apple's Small Business Program and Google's 15% tier
+BEFORE launch** — free, days to process, and it is $7.00 vs $8.50 kept on every
+$10 subscriber (~$18,000/yr at 1,000 subscribers).
+
+**Part 5 §5.4's cross-channel guard therefore matters here:** the mobile paywall
+hides in-app purchase when a web subscription is live and vice versa, or a person
+pays twice.
+
+### 3 · WHAT THIS COSTS, STATED HONESTLY RATHER THAN WISHED AWAY
+
+:9604 §4's warning was real and is NOT dismissed: **a later chat wanting native
+console screens is proposing to build the console TWICE and owes that cost
+explicitly.** Kd has now ruled that cost accepted.
+
+**What is NOT duplicated: the server.** One API serves both, and that is the
+majority of the work (:9604 §1 measured `apps/api` as transferring to mobile
+unchanged). **What IS duplicated: the screens.** Six console screens exist on web
+today (`apps/web/src/pages/console/` — ConsoleHome, Members, NewGym, Overview,
+Settings, ApplicationsQueue; counted 2026-08-24); native equivalents are new
+work.
+
+**Unresolved and NOT to be guessed at the card: HOW the "both" is built.** A
+native re-implementation and an in-app web view are very different bills and
+Kd was not asked to choose a mechanism — he was asked what should EXIST, and
+answered. **A chat proposing a mechanism raises it as a costed option (S4), and
+must not read this entry as licence to pick one.**
+
+### 4 · WHAT DOES NOT CHANGE
+
+:9604 §1 — the mobile app is the product, the web is the test rig — **stands**.
+So does §4's other half: the console is built for the same convenience reason
+Part 3 §3.1 gives (*"owners live on phones"*). What is struck is only the
+MECHANISM sentence (*"ONE responsive console, opened from inside the phone
+app"*), and only because it was never his.
+
+**Nothing built in this commit. Records only.**
