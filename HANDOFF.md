@@ -10791,3 +10791,91 @@ NEXT
      migration-lag line (boot-time refusal recommended).
   4. Then card C: custom role names.
 ```
+
+```
+TASK: NO CARD — A PRODUCT/PRICING SESSION WITH KD. The whole price book is
+      ratified for TWO markets, PADDLE is ruled as the payment route, four
+      retention clocks are set, coach videos are un-struck, and the build order
+      is Kd's. DECISIONS :17357. No code changed.
+
+⚠️ WHERE THIS LIVES, BECAUSE `git log` WILL MISLEAD YOU. These records were
+   committed inside **`4c40cd2`**, whose message is about a console bug — a
+   second chat was running in the same tree and swept them into its card's
+   commit. **Nothing is lost or wrong**; DECISIONS/OWED/INDEX are complete and
+   correct. But do not search commit MESSAGES for pricing history, and if
+   `4c40cd2` is ever reverted, extract these records first.
+
+THE SIX THINGS A NEXT CHAT WILL OTHERWISE GET WRONG
+  1. **EVERY PRICE IN THE REPO'S RECORD BEFORE TODAY IS SUPERSEDED, INCLUDING
+     :16702's, WHICH WAS ITSELF ONLY A DAY OLD.** Safe to seed now:
+     **US/CA/EU (one USD book): $30 · $40 · $69 · $99 · $129 · custom >2099.**
+     **INDIA (INR): ₹1,500 · ₹2,500 · ₹4,500 · ₹6,500 · ₹8,500.**
+     **Individuals: intl $10/mo · India ₹449 · FREE TIER 3/day → 2/day · gym
+     member 5/day.** `db/seed.ts` still holds the pre-ruling shape.
+     **TWO CURRENCY BOOKS NOW EXIST — a seed that assumes one is wrong.**
+  2. **THE 5-vs-20 ❓ IS CLOSED — do not re-raise it with Kd.** He gave the
+     reason and it MEASURES CORRECT: 20 scans/day for gym members is UNDERWATER
+     in three of five bands. An individual pays $10/head, a gym $0.10/head.
+     **The gap is an UPSELL and needs NO CODE** — `mergeEntitlements` already
+     hands a user with both grants the better one.
+  3. **RETENTION IS NOT A COST DECISION — that argument was tested and
+     collapsed** (every posted photo kept FOREVER at 500 gyms = $4.66/mo). Meal
+     SCAN photo **7 days** (data stays forever) · posted photo **1 year** ·
+     announcement **1 year** · coach video **NEVER**, its 20/gym cap is the
+     control. **THE TRAP: the scan photo and the posted photo are TWO COPIES
+     WITH TWO CLOCKS.** One row would make a POST vanish at day 7.
+  4. **PADDLE IS THE PAYMENT ROUTE (Kd: "ok final paddle it is") AND IT DOES NOT
+     OVERTURN :12600's STRIPE = YES** — Stripe stays the destination; Paddle
+     carries the first gyms because Stripe India is invite-only and needs a
+     business Kd does not have. **The deciding constraint was HIS: charge
+     automatically AND require no buyer account.** PayPal cannot do both;
+     Razorpay's e-mandates are India-issued+INR only and it is **STRUCK** for
+     the international book. Paddle is merchant of record ⇒ its webhook is a
+     truth-feed exception shaped like Part 5 §0's RevenueCat carve-out, **still
+     deduped**. Build it as a ≤200-line adapter to the ONE existing machine.
+  5. **`OWED.md` HAD A LINE THAT WAS STALE FOR A DAY AND I ALMOST INHERITED
+     IT** — coach videos read "DROPPED 2026-08-18" while :17012 had already
+     reversed it on 2026-08-24. **A reversal recorded in DECISIONS does not
+     un-strike its own OWED line; somebody must, in the same commit.** Fixed
+     here. Videos: 1 min · 20/gym · no expiry · R2 never Stream.
+  6. **MY OWN CORRECTION, RECORDED SO IT IS NOT RE-INHERITED: I told Kd
+     territory capture was weeks of work. IT IS NOT — I was picturing the wrong
+     (map-tile) design.** His loop-and-area model is DAYS: one distance check
+     for the loop, the shoelace formula for the area, MapLibre draws polygons.
+     Only the CONTEST half is hard (no PostGIS today, grep-verified).
+     **The warning that SURVIVES and is now a 🔴 OWED line: a territory polygon
+     publishes where somebody lives — it needs Part 6 §5.4's 200 m end-trim.**
+
+KD'S BUILD ORDER — HE OVERRULED A FIVE-FIRST PROPOSAL: *"no i disagree need to
+  build all the things i mentioned"*. Everything is built; six waves, in order:
+  (1) image storage · announcements · QR attendance  (2) member's gym home ·
+  dues+reminders · spreadsheet import · WAIVERS · member-limit behaviour
+  (3) stat cards · draggable stickers · in-app post + report-and-remove · share
+  (4) leaderboards · challenges · badges · before/after · City League
+  (5) coach photos+videos · messaging · gym plans · coach-authored plans
+  (6) class booking · territory · custom fields · auto-replies · real payments
+  **Image storage is wave 1 — nothing with a photo works until it exists.**
+  **~30 of Kd's ~47 items were ALREADY decided in spec or OWED.** Read OWED's
+  "Member-side gym surface" / "Plans, food and content" / "Photos and sharing"
+  blocks BEFORE sizing any of this — most of the design already exists.
+
+FILES CHANGED (4, all records, no code)
+  DECISIONS.md :17357 · DECISIONS-INDEX.md (:17357 line) · OWED.md (prices
+  superseded ×2 · 5-vs-20 ❓ STRUCK as answered · retention line replaced ·
+  coach videos UN-STRUCK · +4 new lines: Paddle, PayPal bridge, sole
+  proprietorship, waivers, territory trim) · HANDOFF.md
+
+NEW ON KD'S PLATE, NOT MINE — operator steps, no code waits on them: apply for
+  Udyam registration (free, online, Aadhaar+PAN) then a current account · email
+  Stripe for the India invite · confirm with Paddle whether new sellers face a
+  hold and whether the $15 SWIFT fee hits an Indian bank · a CA for LUT,
+  s.44ADA, and when a Pvt Ltd starts beating an individual.
+
+UNVERIFIED, DO NOT QUOTE AS FACT: Paddle's new-seller hold policy (their page
+  says none, a secondary source disagrees) · Canada's rules for non-resident
+  sellers · whether Kd still holds the Razorpay account the spec credits him
+  with. Every India tax figure here is planning arithmetic, not advice.
+
+NEXT: no card is chosen. The seed change (`db/seed.ts`) is the smallest thing
+  unblocked by today and is now fully specified for both markets.
+```
