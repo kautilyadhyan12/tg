@@ -1,6 +1,55 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: T3 ROUND 2 ON THE F5 CARD — ZERO CRITICAL/HIGH. THE CARD SHIPS AND THE
+      ⚪ CONSOLE LINE IS TICKED. DECISIONS :17676. Card CLOSED.
+
+THE FIVE THINGS A NEXT CHAT WILL OTHERWISE GET WRONG
+  1. **THE CARD IS DONE.** Both gates met: a human watched it (steps 1-4 on
+     `e8a7e5c`, step 5 on `4c40cd2`) and two rounds are closed. Round 2 was
+     diff-only and found zero C/H, so :5348 rule 1 ships it. **Do not re-open
+     it; do not re-review it.**
+  2. **`git checkout --` REWRITES A FILE LF→CRLF ON THIS MACHINE, and a `\n`
+     mutation anchor matches nothing in a CRLF file.** C53 aborted twice for
+     this. **99 two-line anchors across 9 harnesses are exposed** — counted,
+     own 🟡 OWED line. **FAILS SAFE** (the pre-check aborts; never a false
+     green). Prefer ONE-LINE anchors; if no single line carries a guarantee,
+     NAME THE STEP IN THE SOURCE — that is what `forgetTheReadInTheAir` is.
+  3. **A GUARANTEE WHOSE ONLY ALARM IS A HANG IS A GAP.** Round 2's L-2: the
+     in-flight share — the guard the whole design turns on — had no test;
+     deleting it left both suites green, its only instrument being C49, which
+     signals by ABORTING a sweep. An abort reads as "the harness is broken",
+     not "the app is". Now carried by a store test + mutant C54.
+  4. **TWICE IN ONE DAY A REDUNDANT-OR-UNREACHABLE LINE WAS DELETED RATHER
+     THAN KEPT** (:17218's user guard, :17676's generation bump). Same rule
+     both directions: **a line nothing can observe is a line that should not
+     ship.** Do not re-add either as belt-and-braces.
+  5. **THE STORE'S SHAPE IS NOW SETTLED, and :17218 explains why it is not the
+     obvious one.** `if (inFlight && inFlightUserId === forUserId)` — the share
+     is a BACKSTOP against a caller that asks in a loop, and deleting it made
+     C49 hang instead of fail. Read :17218 before "simplifying" it.
+
+FILES CHANGED THIS ROUND (7)
+  src   apps/web/src/pages/console/consoleOrgs.js   (L-1: redundant bump deleted,
+                                                     docblock corrected, discard
+                                                     named as a step)
+  test  apps/web/src/pages/console/consoleOrgs.test.js  (+1, L-2's missing guard)
+  tool  apps/web/tools/mutate-console.mjs           (C53 re-anchored to one line,
+                                                     C54 added → 76 rows)
+  docs  DECISIONS.md :17676 · DECISIONS-INDEX.md · OWED.md (⚪ line TICKED, +1 new
+        🟡 CRLF line) · BACKLOG.md · HANDOFF.md
+
+MEASURED — web 1149/1149 exit 0 · eslint exit 0 at --max-warnings=0 · mutants
+  C43–C54 on the final bytes: 12 RED, 0 ALIVE, controls GREEN, restores
+  sha256-verified · tree verified clean. NOT re-run: the full 76-row sweep
+  (subsets only) and the api half (no api source in the diff).
+
+DEVIATION / SPEC GAP: none.
+
+NEXT: nothing on this card. Pick the next item from OWED.md.
+```
+
+```
 TASK: T3 ROUND 1 ON THE F5 CARD (:16331) — TWO CRITICAL/HIGH, BOTH FIXED.
       DECISIONS :17218. Round 1 found them; this commit fixes them. The card
       still does NOT tick.

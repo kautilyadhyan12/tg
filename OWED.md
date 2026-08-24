@@ -5231,7 +5231,14 @@ file and is stated so nobody reads these as lower priority than they are.
       **after a reload** — the reload matters, see the line below. Not written
       into the sheet in the fix round (:5348 rule 6); it is a sheet change and
       belongs with the re-smoke.
-- [ ] ⚪ **THE CONSOLE LEARNS WHAT YOU MAY DO WHEN A SCREEN OPENS AND NEVER
+- [x] ⚪ **DONE 2026-08-24** (`e8a7e5c` built it · `4c40cd2` fixed T3 round 1's
+      two Critical/High · `42017d2` recorded Kd's step-5 smoke pass · round 2
+      DIFF-ONLY found **ZERO Critical/High**, so under :5348 rule 1 the packet
+      ships; its two Low are fixed in the same commit and logged in `BACKLOG.md`).
+      **Both gates are met: a human watched it (steps 1–4 on `e8a7e5c`, step 5 on
+      `4c40cd2`) and two review rounds are closed.** Instruments on the final
+      bytes: web **1149/1149**, mutants **C43–C54: 12 RED, 0 ALIVE**.
+      **THE CONSOLE LEARNS WHAT YOU MAY DO WHEN A SCREEN OPENS AND NEVER
       AGAIN — so an idle tab keeps drawing controls for a role you no longer
       hold** (found 2026-08-23, DECISIONS :15927; **Kd pushed back on "leave it"
       and was right**). **Read before touching `useConsoleOrg`, and before
@@ -5294,6 +5301,28 @@ file and is stated so nobody reads these as lower priority than they are.
       keeps a fix round to the fix.** Until then the discipline is the one that
       worked: `git status --short` after any sweep that did not print its own
       summary.
+- [ ] 🟡 **99 MUTATION ANCHORS ACROSS 9 HARNESSES SPAN TWO LINES, AND A `git
+      checkout` OF THEIR TARGET FILE BREAKS EVERY ONE OF THEM** (found
+      2026-08-24, DECISIONS :17676). **Read before writing a two-line anchor, and
+      before being surprised by "its anchor matches nothing".** Counted:
+      `mutate-write-path` 45 · `login-door` 15 · `person-gate` 12 ·
+      `console` 9 · `pose-assets` 6 · `join-door` 5 · `dashboard-stats` 4 ·
+      `pose-tuning` 2 · `badge-cue` 1 (which already hard-codes `\r\n`, i.e.
+      somebody hit this once and patched the instance). They match on `\n`, and
+      **this machine's git rewrites a checked-out file to CRLF** — so an anchor
+      that works today stops matching the moment its file is restored, reverted
+      or freshly cloned. It happened here: restoring `consoleOrgs.js` after a
+      probe flipped it to CRLF and aborted C53.
+      **IT FAILS SAFE, which is why this is 🟡 and not 🔴:** the whole-table
+      pre-check ABORTS with "its anchor matches nothing" rather than letting a
+      no-op mutation report ALIVE. The cost is an instrument that is unavailable
+      until re-anchored, never a false green.
+      **Fix is one line in each harness** — normalise both the file text and the
+      anchor (`.replace(/\r\n/g, '\n')`) before matching, then write the mutant
+      back in the file's own ending. **Not done in this commit — :5348 rule 6
+      keeps a fix round to the fix.** Until then: prefer a ONE-LINE anchor, and
+      name the step in the source if no single line carries the guarantee (what
+      `forgetTheReadInTheAir` exists for).
 - [ ] 🟡 **THE CONSOLE-REFRESH SMOKE CANNOT EXERCISE THE ONE GUARANTEE ABOUT
       OTHER PEOPLE'S DATA, AND IT PASSED WITHOUT NOTICING** (2026-08-23,
       DECISIONS :16495). **Read before running or editing

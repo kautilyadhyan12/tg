@@ -825,6 +825,31 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:17676** — 2026-08-24 — **T3 ROUND 2 ON THE F5 CARD: ZERO Critical/High ⇒ the
+  packet SHIPS (:5348 rule 1), and `OWED.md`'s ⚪ console line is TICKED.** Escape
+  hatch NOT armed (round 1 two C/H, round 2 none). Round confirmed both things it
+  was pointed at — the in-flight share and the refresh discard — and checked one
+  this repo had not: **a read can never be stamped `'guest'`**, because
+  `adoptSession` sets the id before `setLoading(false)` and every console route is
+  behind `ProtectedRoute`.
+  **Two Low, both records that had stopped matching their code.** **L-1: the fix
+  for round 1's L-1 contained round 1's L-1** — the docblock credited a
+  `generation += 1` that `load` does anyway; the three statements are MUTUALLY
+  REDUNDANT (measured: drop any one ⇒ GREEN, keep only the bump ⇒ RED). Deleted,
+  not kept as belt-and-braces — same standard :17218 applied to an unreachable
+  guard. **L-2: the guard the whole design turns on had NO test** — deleting
+  `inFlightUserId = forUserId` left both suites GREEN, its only instrument being
+  C49, **whose signal is a HANG, not a RED.** A guarantee whose only alarm is an
+  abort reads as "the harness is broken". Fixed: one store test + mutant C54.
+  **INSTRUMENT LESSON, bigger than either finding: `git checkout --` rewrites a
+  file LF→CRLF on this machine, and a `\n` anchor matches nothing in a CRLF file.**
+  C53 aborted twice for this. **99 two-line anchors across 9 harnesses are
+  exposed** — counted, own 🟡 OWED line, FAILS SAFE (pre-check aborts, never a
+  false green). Fixed here by naming the step in the source
+  (`forgetTheReadInTheAir`) so ONE line carries the guarantee. **When no single
+  line expresses a guarantee, that is a fact about the SOURCE.**
+  Measured on final bytes: web **1149/1149**, mutants **C43–C54: 12 RED, 0 ALIVE**,
+  table now 76 rows.
 - **:17647** — 2026-08-24 — **THE SMOKE'S NEW STEP 5 PASSED, watched by Kd on the
   fixed bytes (`4c40cd2`)**: gym created, "Go to your gym" opened the gym, the new
   gym listed under "Your gyms" — neither false sentence appeared. **First human

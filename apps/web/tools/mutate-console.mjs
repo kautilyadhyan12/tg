@@ -961,15 +961,35 @@ const MUTANTS = [
     id: 'C53',
     target: 'orgstore',
     suite: STORE_SUITE,
-    // FOUR LINES, and deliberately so: the three being deleted are individually
-    // ambiguous (`resetConsoleOrgs` writes the same three), and the fourth is
-    // what makes the block unique to `refreshConsoleOrgs`. Safe here because
-    // this file is pure LF — checked, 0 CRLF — which is the condition the
-    // `layout` note warns about.
+    // ONE LINE, after round 2 taught this the hard way TWICE. It was a four-line
+    // anchor; L-1 deleted one of those lines, so it was re-cut to three — and
+    // that ABORTED TOO, because `git checkout --` had meanwhile rewritten the
+    // file from LF to CRLF and a `\n` anchor matches nothing in a CRLF file.
+    // **THE CRLF NOTE ON `layout` IS NOT ABOUT THAT FILE. It is about any file
+    // git has touched on this machine** — which is every file, eventually. The
+    // fix is not a cleverer anchor: `consoleOrgs.js` now names the step
+    // (`forgetTheReadInTheAir`) so ONE line can carry the guarantee.
+    // Both aborts are the pre-check doing its job — a no-op mutation would
+    // otherwise have reported ALIVE, i.e. "this guarantee has no test".
     why: "ON SCREEN AND FALSE (:5807), C51's other half and the reason `NewGym` calling refresh is not the whole fix: a read asked for ON PURPOSE waits on one that was already in the air. A background re-check begun a moment BEFORE a gym was created cannot know about that gym, so the owner is told their brand-new gym does not exist — the same defect as C51, moved from certain to occasional, which is the version nobody would reproduce",
     expect: 'never answers a person who asked ON PURPOSE',
-    from: '  generation += 1;\n  inFlight = null;\n  inFlightUserId = null;\n  void load({ background: false });',
-    to: '  void load({ background: false });',
+    from: '  forgetTheReadInTheAir();',
+    to: '  void forgetTheReadInTheAir;',
+  },
+  {
+    id: 'C54',
+    target: 'orgstore',
+    suite: STORE_SUITE,
+    // T3 ROUND 2, L-2. Until this row the in-flight SHARE — the guard this whole
+    // design turns on — had no instrument but C49, **whose signal is a HANG, not
+    // a RED**: a sweep that aborts reads as "the harness is broken" rather than
+    // "the app is", which is exactly how it was nearly missed. :5348 rule 5 wants
+    // a permanent guard for a class that has already recurred, and :16388's loop
+    // is that class.
+    why: 'THE APP ASKS THE SERVER THE SAME QUESTION ONCE PER PASS INSTEAD OF ONCE PER FLIGHT. Sharing is permanently disabled, so every caller that asks while a read is already on its way opens another — and this card has already shipped a caller that asks in a LOOP (:16388), where the difference is one request per in-flight window against one per pass, at the server, for ever',
+    expect: 'lets the window coming back JOIN a read',
+    from: '  inFlightUserId = forUserId;',
+    to: '  inFlightUserId = null;',
   },
 ];
 

@@ -176,17 +176,34 @@ export function ensureConsoleOrgs() {
  *  background re-check begun a moment before a gym was created would come back
  *  without that gym, and telling somebody their brand-new gym does not exist is
  *  the exact defect this is fixing — it would simply have moved from certain to
- *  occasional. Bumping the generation first means the discarded read cannot
- *  publish when it lands (`load` checks it), and `load` then starts a fresh one.
+ *  occasional.
+ *
+ *  HOW THE DISCARD ACTUALLY WORKS, corrected in round 2 (L-1) because the first
+ *  version of this paragraph credited the wrong statement — the same shape as
+ *  round 1's own L-1, a record describing code it had stopped matching.
+ *  Forgetting the read is what does it: with `inFlight` cleared, `load`'s share
+ *  check cannot return it, so `load` starts a fresh one. **`load`'s own
+ *  `++generation` is then what stops the forgotten read publishing when it
+ *  lands** — this function does not need to bump the generation itself, and a
+ *  line here that did was deleted rather than left standing as a second
+ *  explanation of a thing that only happens once. The pair is cleared together
+ *  because `load` sets it together.
  *
  *  This is what "one request, and the person who pressed the button can see that
  *  it was heard" used to say. It is now one request PER PRESS, which is what a
  *  retry means. */
 export function refreshConsoleOrgs() {
-  generation += 1;
+  forgetTheReadInTheAir();
+  void load({ background: false });
+}
+
+/** Written out as a named step rather than two inline assignments so that ONE
+ *  line names this guarantee and a mutant can point at it (C53). `resetConsoleOrgs`
+ *  deliberately does NOT call it — it also has to bump the generation, because
+ *  unlike this path nothing downstream of it does. */
+function forgetTheReadInTheAir() {
   inFlight = null;
   inFlightUserId = null;
-  void load({ background: false });
 }
 
 /** The window came back to the front. IDLE means no screen has ever asked, so

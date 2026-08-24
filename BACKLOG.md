@@ -1842,3 +1842,24 @@ that drifted from the code inside ONE card — the file comment and the smoke
 sheet — and the round's two Criticals were also things the card's own reasoning
 had never looked at. A card that changes when a screen asks a question leaves
 stale sentences behind in every document that described the old cost.
+
+## THE CONSOLE STOPS NEEDING F5 — T3 ROUND 2's TWO LOW (2026-08-24)
+
+Reviews `4c40cd2`, diff-only. **ZERO Critical/High — the packet SHIPS**
+(DECISIONS :17676). Both Low fixed in the round; neither bought another.
+
+| # | Finding | Fix |
+|---|---|---|
+| L-1 | **A docblock crediting the wrong statement, inside the fix written for round 1's L-1 — which was also a record that had stopped matching its code.** `refreshConsoleOrgs` said *"bumping the generation first means the discarded read cannot publish"*, but `load` bumps unconditionally on that path, so the discard happened with or without the line. The reviewer measured it properly: the three statements are **mutually redundant** — deleting any ONE leaves the store suite GREEN, keeping only the bump goes RED. No behaviour was wrong; the record was. | The redundant `generation += 1` **deleted rather than kept as belt-and-braces**, and the paragraph rewritten to credit what actually does the work: clearing `inFlight` is what stops `load` sharing the read, and `load`'s own `++generation` is what stops the forgotten read publishing. **Same standard applied earlier in the session to an unreachable guard** — a line that cannot be observed is a line that should not be shipped, whichever direction the redundancy runs. |
+| L-2 | **The guard the whole round's design turns on had NO test.** The reviewer deleted `inFlightUserId = forUserId;` — permanently disabling in-flight sharing — and **both console suites stayed GREEN**. Its only instrument was mutant C49, **whose signal is a HANG rather than a RED**: a sweep that aborts reads as "the harness is broken", which is very nearly how it was missed. :5348 rule 5 wants a permanent guard for a class that has already recurred, and :16388's retry loop is that class. | One store test — hang the read, fire `consoleOrgsRegainedFocus()`, assert `getMine` was called ONCE. **Watched RED under the reviewer's own probe before the fix existed** (2 calls, not 1; the other 9 tests stayed green, reproducing their measurement exactly). Plus **mutant C54** on that line, so the guarantee now fails as a RED rather than as an abort. |
+
+**AN INSTRUMENT LESSON CAME OUT OF FIXING L-1, and it is bigger than the finding.**
+Re-anchoring C53 aborted twice: once because L-1 deleted a line it pointed at, and
+once because **`git checkout --` had rewritten `consoleOrgs.js` from LF to CRLF**,
+and a `\n` anchor matches nothing in a CRLF file. The harness's CRLF warning was
+written as if it were about one file; it is about **any file git has touched**.
+**99 two-line anchors across 9 harnesses are exposed** — counted, and now carrying
+their own 🟡 `OWED.md` line. It fails SAFE (the pre-check aborts rather than
+reporting ALIVE), which is the only reason it is not blocking. The fix used here
+was not a cleverer anchor but a named step in the source — `forgetTheReadInTheAir`
+— so that ONE line can carry the guarantee.

@@ -17672,3 +17672,92 @@ the focus path itself, steps 1–4 need a human again.**
 
 **THE LINE STILL DOES NOT TICK. Round 2 — diff-only (:5348 rule 2) — is now the
 ONLY thing holding it.**
+
+## T3 ROUND 2 ON THE F5 CARD: zero Critical/High, the card ships — and the two Low were both records that had stopped matching their code (2026-08-24)
+
+Reviews `4c40cd2`, **diff-only** (:5348 rule 2). **ZERO Critical/High ⇒ under rule
+1 the packet SHIPS.** Two Low, both fixed in this commit, logged in `BACKLOG.md`,
+neither buying a round. **Escape hatch NOT armed** — round 1 found two C/H and
+round 2 found none, which is not "two rounds running".
+
+**`OWED.md`'s ⚪ console line is TICKED in this commit.** Both gates are met: a
+human has watched it (steps 1–4 on `e8a7e5c` :16495, step 5 on `4c40cd2` :17647)
+and two review rounds are closed.
+
+### THE ROUND CONFIRMED THE TWO THINGS IT WAS ASKED TO
+
+The reviewer was pointed at the in-flight share and at `refreshConsoleOrgs`
+discarding what is in the air — the two places round 1's wrong first fix had
+moved. **Both sound**, every interleaving walked and the dangerous ones probed.
+It also checked something this entry had not: **the `'guest'` window**.
+`getUserId()` returns `'guest'` before `/v1/auth/me` resolves, and a guest-stamped
+read would strand exactly as C/H-2 did — but `adoptSession()` sets the id before
+`setUser`/`setLoading(false)`, and every console route sits behind
+`ProtectedRoute`, so **no console read can be stamped `'guest'`**. Recorded
+because it is the next question anybody will ask of this design.
+
+### L-1 — THE FIX FOR ROUND 1's L-1 CONTAINED ROUND 1's L-1
+
+`refreshConsoleOrgs`'s docblock credited the generation bump as the mechanism of
+the discard. **`load` bumps unconditionally on that path**, so the discard
+happened with or without it. The reviewer measured what this entry had only
+asserted: **the three statements are mutually redundant** — deleting any ONE
+leaves the store suite GREEN; keeping ONLY the bump goes RED. C53 deleted all four
+lines together, so nothing distinguished them.
+
+**The redundant line was deleted rather than kept as belt-and-braces**, which is
+the same standard this card applied hours earlier to an unreachable guard (:17218)
+— **a line nothing can observe is a line that should not ship, whichever direction
+the redundancy runs.** The paragraph now credits clearing `inFlight` (which is
+what stops `load` sharing the read) and `load`'s own `++generation` (which is what
+stops the forgotten read publishing).
+
+### L-2 — THE GUARD THE WHOLE DESIGN TURNS ON HAD NO TEST
+
+Deleting `inFlightUserId = forUserId;` — permanently disabling the share — **left
+both console suites GREEN.** Its only instrument was C49, **whose signal is a HANG
+rather than a RED.** That is worth stating plainly: an aborting sweep reads as
+*"the harness is broken"*, not *"the app is"*, and :17218 had already written that
+down approvingly without noticing it described a gap. **A guarantee whose only
+alarm is an abort is a guarantee one tired session away from being deleted.**
+
+Fixed with one store test (hang the read, fire the focus re-check, assert ONE
+call) — **watched RED under the reviewer's probe before the fix existed**, 2 calls
+not 1, the other 9 green, reproducing their measurement exactly — plus **mutant
+C54**. :5348 rule 5 satisfied: :16388's retry loop is a class that has recurred,
+and it now has a permanent guard that fails loudly.
+
+### THE INSTRUMENT LESSON, WHICH IS BIGGER THAN EITHER FINDING
+
+Re-anchoring C53 **aborted twice**. Once because L-1 deleted a line it pointed at.
+Then again because **`git checkout --` had rewritten `consoleOrgs.js` from LF to
+CRLF** — the file was pure LF when C53 was written, and restoring it after a probe
+flipped it. **A `\n` anchor matches nothing in a CRLF file.**
+
+**The harness's CRLF note was written as if it were about `ConsoleLayout.jsx`. It
+is about any file git has touched — which is every file, eventually.** Counted:
+**99 two-line anchors across 9 harnesses** (`write-path` 45 · `login-door` 15 ·
+`person-gate` 12 · `console` 9 · `pose-assets` 6 · `join-door` 5 ·
+`dashboard-stats` 4 · `pose-tuning` 2 · `badge-cue` 1, and that last one already
+hard-codes `\r\n` — somebody hit this before and patched the instance).
+**It fails SAFE**: the pre-check aborts rather than letting a no-op report ALIVE,
+so the cost is an unavailable instrument, never a false green. Own 🟡 `OWED.md`
+line; the one-line fix (normalise both sides before matching) is deferred under
+rule 6.
+
+**The fix used HERE was not a cleverer anchor.** `consoleOrgs.js` now names the
+step — `forgetTheReadInTheAir()` — so that ONE line carries the guarantee. **When
+no single line expresses a guarantee, that is a fact about the source, not about
+the harness.**
+
+### MEASURED, on the final bytes
+
+- web **1149/1149 exit 0** (1148 before; +1 test) · eslint **exit 0 at
+  `--max-warnings=0`** on the changed files.
+- **Mutants C43–C54 re-run: 12 RED, 0 ALIVE**, controls GREEN, restores
+  sha256-verified, tree verified clean. Table is now **76 rows**.
+- The reviewer independently reproduced 1148/1148, eslint clean, and C51–C53 RED
+  on the tree rather than reading them off the commit message.
+- **Not re-run: the full 76-row sweep** (subset runs only — the tool prints that
+  this must not be quoted as a sweep) **and the api half** (no api source in
+  either commit; :10726's precedent).

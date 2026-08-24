@@ -55,6 +55,31 @@ describe('asking once', () => {
     expect(consoleOrgsSnapshot()).toMatchObject({ status: 'ready', orgs: [ORG] });
   });
 
+  it('lets the window coming back JOIN a read already on its way instead of starting a second one', async () => {
+    // T3 round 2, L-2 — and this guard had NO test, which is the whole reason it
+    // is here. The sharing is what stops a caller that asks in a loop putting one
+    // request per pass on the wire, and this card has already shipped exactly
+    // such a loop once (:16388). Its only instrument was mutant C49, **whose
+    // signal is a HANG rather than a RED** — a sweep that aborts, which is how it
+    // reads as "the harness is broken" rather than "the app is". :5348 rule 5
+    // wants a class that has recurred to have a permanent guard; this is it.
+    let land;
+    orgService.getMine.mockReturnValueOnce(
+      new Promise((resolve) => {
+        land = () => resolve(answer([ORG]));
+      }),
+    );
+    ensureConsoleOrgs();
+
+    // The screen is still waiting when the person clicks back into the window.
+    consoleOrgsRegainedFocus();
+    land();
+    await settled();
+
+    expect(orgService.getMine).toHaveBeenCalledTimes(1);
+    expect(consoleOrgsSnapshot()).toMatchObject({ status: 'ready', orgs: [ORG] });
+  });
+
   it('asks again when the last answer FAILED, so a fresh screen is not handed a dead error card', async () => {
     orgService.getMine.mockRejectedValueOnce(offline());
     ensureConsoleOrgs();
