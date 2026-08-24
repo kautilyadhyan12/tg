@@ -17867,3 +17867,34 @@ MECHANISM sentence (*"ONE responsive console, opened from inside the phone
 app"*), and only because it was never his.
 
 **Nothing built in this commit. Records only.**
+
+### ADDENDUM to :17765, same day — KD CLOSED THE MECHANISM QUESTION IMMEDIATELY, AND IT WAS NEVER AS OPEN AS I MADE IT SOUND
+
+The entry above left "HOW both is built" unresolved and told him a chat should
+bring him two costed options. **He answered in one sentence and treated the
+question as obvious:** *"the web gets build for web and the apps gets build for
+android and ios what is the confusion"*.
+
+**RULED: NATIVE console screens in the Android/iOS app, and the existing REACT
+console on web. Not a web view, not a wrapper.** The in-app-web-view option is
+struck; do not re-propose it as a cost saving.
+
+**He is right that this is the ordinary shape of a product, and my framing made
+a routine call sound like a hard architectural fork (K4 — routine engineering
+calls are MINE to state, not his to arbitrate).** Recorded because the lesson
+runs opposite to :17765's: that entry was about a chat deciding something and
+calling it Kd's; **this one is a chat refusing to decide something ordinary and
+handing him the pieces.** Both fail him. The test is whether he has a basis to
+judge: "which of these should exist" he does; "web view or native" he does not,
+and it should have been stated with its cost and moved past.
+
+**THE COST, STATED PLAINLY AND ACCEPTED BY HIM: every console screen is written
+TWICE, and it stays twice.** :9604 §1's measurement holds — `apps/api`,
+`packages/engine` and `packages/shared` transfer unchanged, so the SERVER is
+built once — but React and React Native do not share screen code. **The ongoing
+half matters more than the build: every future change to a console screen must
+be made in both places, forever.** He was told this in those words before the
+line was written.
+
+**Six web console screens exist today** (counted 2026-08-24); their native
+counterparts are new work in build wave 2 and after.

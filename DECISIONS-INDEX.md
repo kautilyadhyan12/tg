@@ -927,10 +927,20 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   stops a double payment. **COST ACCEPTED, NOT WISHED AWAY: :9604 §4's "building
   the console TWICE" warning stands and Kd has now taken it.** The SERVER is not
   duplicated (one API, the majority of the work); the SCREENS are — six exist on
-  web today, counted. **UNRESOLVED AND NOT TO BE GUESSED: HOW "both" is built.**
-  Native re-implementation and an in-app web view are very different bills; he
-  was asked what should EXIST and answered that, not a mechanism. A chat
-  proposing one raises it as a costed option (S4).
+  web today, counted. ~~UNRESOLVED: HOW "both" is built.~~ **CLOSED THE SAME DAY
+  — see the ADDENDUM at :17871. RULED: NATIVE console screens in the Android/iOS
+  app, the existing REACT console on web. Not a web view, not a wrapper — the
+  web-view option is STRUCK, do not re-propose it as a cost saving.** He answered
+  in one sentence (*"the web gets build for web and the apps gets build for
+  android and ios what is the confusion"*) and was right that it is the ordinary
+  shape of a product. **The lesson runs OPPOSITE to the entry above, and both
+  fail him: :17765 is a chat deciding something and calling it Kd's; the addendum
+  is a chat refusing to decide something ordinary and handing him the pieces
+  (K4).** The test is whether he has a basis to judge — "which of these should
+  exist" he does, "web view or native" he does not. **COST STATED AND ACCEPTED:
+  every console screen is written TWICE and STAYS twice — the ongoing half
+  (every future change made in both places, forever) matters more than the
+  build.** The SERVER is built once; :9604 §1's measurement holds.
 - **:17357** — 2026-08-24 — **KD RATIFIES THE WHOLE PRICE BOOK FOR THREE
   CONTINENTS, PADDLE BECOMES THE MONEY ROUTE, AND THE 5-vs-20 SCAN CLASH IS
   ANSWERED BY ARITHMETIC.** **Read before seeding ANY plan/price/quota, before

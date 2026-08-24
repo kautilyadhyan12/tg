@@ -4612,11 +4612,15 @@ file and is stated so nobody reads these as lower priority than they are.
       §2) — and Apple/Google are merchant of record there, so **they remit tax
       worldwide and a $10 subscriber is zero tax work.** Part 5 §5.4's
       cross-channel guard must exist or someone pays twice.
-      **NOT RULED AND NOT TO BE GUESSED: HOW "both" is built.** Native screens
-      and an in-app web view are very different bills; **:9604 §4's "building the
-      console TWICE" warning stands and Kd has now accepted that cost** — but he
-      was asked what should EXIST, not which mechanism. A chat proposing one
-      raises it as a costed option (S4) and puts it to him.
+      **HOW "both" IS BUILT — RULED THE SAME DAY (DECISIONS :17871): NATIVE
+      console screens in the Android/iOS app, the existing REACT console on web.
+      NOT a web view and NOT a wrapper — that option is STRUCK, do not
+      re-propose it as a cost saving.** His words: *"the web gets build for web
+      and the apps gets build for android and ios what is the confusion"*.
+      **:9604 §4's "building the console TWICE" warning stands and Kd has
+      ACCEPTED that cost, having been told the ongoing half in plain words:
+      every console screen is written twice and STAYS twice — every future
+      change must be made in both places, forever.**
       **Six web console screens exist today** (`apps/web/src/pages/console/`:
       ConsoleHome, Members, NewGym, Overview, Settings, ApplicationsQueue —
       counted 2026-08-24). The API is shared and is NOT duplicated work.
