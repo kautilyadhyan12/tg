@@ -1,6 +1,62 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: T3 ROUND 1 ON THE F5 CARD (:16331) — TWO CRITICAL/HIGH, BOTH FIXED.
+      DECISIONS :17218. Round 1 found them; this commit fixes them. The card
+      still does NOT tick.
+
+THE FIVE THINGS A NEXT CHAT WILL OTHERWISE GET WRONG
+  1. **THE PACKET HAS NOT SHIPPED.** :5348 rule 1 ships on a round finding ZERO
+     Critical/High. Round 1 found two. **What is owed: ROUND 2, DIFF-ONLY (rule
+     2), and the smoke's NEW STEP 5, UNRUN.** Do not tick the ⚪ console line
+     on this commit — that is :5034's recorded defect.
+  2. **THE FIRST FIX FOR C/H-2 WAS WRONG AND EVERY GREEN INSTRUMENT AGREED WITH
+     IT.** It deleted the in-flight share (`if (background && inFlight)`).
+     1148 tests green, eslint green, both new mutants RED. **Then C49 aborted:
+     the retry-loop mutant stopped FAILING and started HANGING (>600 s).** The
+     share is a BACKSTOP against a caller that asks in a loop, and this card
+     had already shipped exactly such a loop once. **Shipped design:
+     `if (inFlight && inFlightUserId === forUserId)`.** Do not "simplify" it
+     back — read :17218 first.
+  3. **CREATING A GYM IS THE ONE FLOW THAT CHANGES THE CONSOLE'S OWN LIST FROM
+     THE INSIDE.** :16371 bounded the kept answer's staleness with "the only
+     way in is the login page's two doors" — true about ENTERING, silent about
+     this. Anything else that changes a person's gym list must call
+     `refreshConsoleOrgs()` too.
+  4. **EVERY HELPER IN `console.render.test.jsx` MOUNTS ONE ROUTE**, which is
+     how 1144 tests, 72 mutants and a 4/4 human smoke all passed over an owner
+     being told their new gym was not theirs. `drawConsoleFrom(path)` is the
+     new multi-route helper — use it for anything spanning a navigation.
+  5. **A KILLED MUTATION SWEEP LEAVES THE MUTANT ON DISK.** Happened here;
+     `git status` caught it because the file was one I had not edited. Own
+     🟡 OWED line now. **Run `git status --short` after any sweep that did not
+     print its own summary.**
+
+FILES CHANGED (11)
+  src   apps/web/src/pages/console/consoleOrgs.js        (share check + refresh
+                                                          discards what is in the air)
+        apps/web/src/pages/console/NewGym.jsx            (refreshConsoleOrgs on create)
+        apps/web/src/components/console/ConsoleLayout.jsx (Low-1, stale comment)
+  test  apps/web/src/pages/console/consoleOrgs.test.js   (+2)
+        apps/web/src/pages/console/console.render.test.jsx (+2, drawConsoleFrom)
+  tool  apps/web/tools/mutate-console.mjs                (C51, C52, C53 → 75 rows)
+  docs  DECISIONS.md :17218 · DECISIONS-INDEX.md · OWED.md · BACKLOG.md ·
+        RUNBOOK/smoke-console-refresh.md (Low-2 + new step 5)
+
+MEASURED — web 1148/1148 exit 0 · eslint exit 0 at --max-warnings=0 on the five
+  changed js/jsx files · mutants C43–C53 re-run on the final bytes: 11 RED, 0
+  ALIVE, controls GREEN, restores sha256-verified · whole-table anchor pre-check
+  (75 rows) passed on every run · tree verified clean.
+  **The api half is NOT re-run and that is stated rather than implied: this
+  round changed no api source (:10726's precedent).**
+
+DEVIATION / SPEC GAP: none.
+
+NEXT: T3 round 2 — DIFF-ONLY on this commit (:5348 rule 2). Then Kd runs the
+      smoke's step 5. Both clean ⇒ the ⚪ console line ticks.
+```
+
+```
 TASK: THE MAP IS SETTLED, THE SCAN BILL IS HALVED, MEDIA BECOMES STORED.
       DECISIONS :17012 — the last of a long ruling session (:16548, :16702,
       :16812, :16924, :17012 are ONE conversation, read in that order).

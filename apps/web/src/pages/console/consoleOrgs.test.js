@@ -67,6 +67,33 @@ describe('asking once', () => {
     expect(consoleOrgsSnapshot()).toMatchObject({ status: 'ready' });
   });
 
+  it('never answers a person who asked ON PURPOSE with a read that was already in the air', async () => {
+    // T3 C/H-1's other half, and the reason `NewGym` calling `refresh` is not
+    // the whole fix. A background re-check begun a moment BEFORE a gym was
+    // created cannot know about that gym — so waiting on it would tell the owner
+    // their brand-new gym does not exist, exactly as before, just less often.
+    ensureConsoleOrgs();
+    await settled();
+
+    let landStale;
+    orgService.getMine.mockReturnValueOnce(
+      new Promise((resolve) => {
+        landStale = () => resolve(answer([ORG]));
+      }),
+    );
+    consoleOrgsRegainedFocus();
+
+    // ...and now the gym is created, which asks the store to go again.
+    const newGym = { ...ORG, id: 'g2', slug: 'new-gym', name: 'New Gym' };
+    orgService.getMine.mockResolvedValue(answer([ORG, newGym]));
+    refreshConsoleOrgs();
+    landStale();
+    await settled();
+
+    expect(orgService.getMine).toHaveBeenCalledTimes(3);
+    expect(consoleOrgsSnapshot().orgs).toEqual([ORG, newGym]);
+  });
+
   it('shows the spinner when a person presses Try again', async () => {
     orgService.getMine.mockRejectedValueOnce(offline());
     ensureConsoleOrgs();
@@ -145,6 +172,35 @@ describe('a shared front-desk browser', () => {
     await settled();
 
     expect(consoleOrgsSnapshot()).toMatchObject({ status: 'idle', orgs: null });
+  });
+
+  it('asks for the next person’s OWN gyms rather than waiting on a read that can never be theirs', async () => {
+    // T3 C/H-2. The one above proves the previous account's answer never lands;
+    // this proves the next account gets an answer AT ALL. A read for `u1` that
+    // is still in the air when `u2` signs in used to be handed to `u2` as if it
+    // were theirs — and when it came back stamped `u1` their console was left
+    // with nothing, on a spinner, with no way out but reloading the page: the
+    // mount effect had already run, and the focus re-check returns early on an
+    // empty store.
+    let answerU1;
+    orgService.getMine.mockReturnValueOnce(
+      new Promise((resolve) => {
+        answerU1 = () => resolve(answer([ORG]));
+      }),
+    );
+    ensureConsoleOrgs();
+
+    const theirGym = { ...ORG, id: 'g2', slug: 'their-gym', name: 'Their Gym' };
+    setCurrentUserId('u2');
+    orgService.getMine.mockResolvedValue(answer([theirGym]));
+    ensureConsoleOrgs();
+    // The hung read finally lands, after the second person is already looking at
+    // the screen — the order that makes this a defect rather than a race.
+    answerU1();
+    await settled();
+
+    expect(orgService.getMine).toHaveBeenCalledTimes(2);
+    expect(consoleOrgsSnapshot()).toMatchObject({ status: 'ready', orgs: [theirGym] });
   });
 });
 

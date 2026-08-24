@@ -1567,3 +1567,74 @@ describe('what may I do here', () => {
     expect(await screen.findByText(/couldn't find a gym you run/i)).toBeTruthy();
   });
 });
+
+// ── A gym you have just made ────────────────────────────────────────────────
+//
+// T3 C/H-1, and the seam it came through is the reason these two tests exist at
+// all. The kept answer is re-checked when the window comes back — so the card
+// above reasoned that the only way INTO the console is the login page, and every
+// entry is therefore a fresh page session. It never considered the console
+// changing its OWN list from the inside, which is exactly what creating a gym
+// does. Every other helper in this file mounts ONE route, so nothing had ever
+// left the wizard for the gym it created: 1144 tests, a 72-mutant sweep and a
+// 4/4 human smoke all passed over an owner being told their brand-new gym is not
+// theirs.
+
+const drawConsoleFrom = (path) =>
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/console" element={<ConsoleHome />} />
+        <Route path="/console/new" element={<NewGym />} />
+        <Route path="/console/:orgSlug" element={<Overview />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+
+describe('a gym you have just made', () => {
+  /** The wizard, from the front door to the code reveal. Started from
+   *  `ConsoleHome` on purpose: the kept answer has to be READY, and know of no
+   *  gyms, BEFORE the gym exists — a store that had never been read would simply
+   *  read on the way in and hide the whole defect. */
+  const createIronHouse = async () => {
+    orgService.createOrg.mockResolvedValue({
+      data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } },
+    });
+    fireEvent.click(screen.getByText('Create a gym'));
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
+    await chooseCountry('United States');
+    fireEvent.click(screen.getByText('Create gym'));
+    expect(await screen.findByText('K7QM2X')).toBeTruthy();
+  };
+
+  it('opens when its owner presses "Go to your gym", instead of saying it is not theirs', async () => {
+    orgService.getMine.mockResolvedValueOnce({ data: { orgs: [] } });
+    drawConsoleFrom('/console');
+    expect(await screen.findByText(/don't run a gym yet/i)).toBeTruthy();
+
+    await createIronHouse();
+    fireEvent.click(screen.getByText('Go to your gym'));
+
+    // Scoped to the hero card: the code also appears in the panel below, and an
+    // unscoped query would pass on either.
+    expect(within(await screen.findByTestId('join-code-card')).getByText('K7QM2X')).toBeTruthy();
+    expect(screen.queryByText(/couldn't find a gym you run/i)).toBeNull();
+  });
+
+  it('is listed under "Your gyms" without a reload', async () => {
+    orgService.getMine.mockResolvedValueOnce({ data: { orgs: [] } });
+    drawConsoleFrom('/console');
+    expect(await screen.findByText(/don't run a gym yet/i)).toBeTruthy();
+
+    await createIronHouse();
+    // Back to the front door — `ConsoleLayout`'s "Your gyms" link, expressed the
+    // way this file already expresses a navigation between console screens.
+    cleanup();
+    drawConsoleFrom('/console');
+
+    expect(await screen.findByText('Iron House')).toBeTruthy();
+    // The sentence a FIRST-TIME owner was reading, seconds after making their
+    // first gym.
+    expect(screen.queryByText(/don't run a gym yet/i)).toBeNull();
+  });
+});

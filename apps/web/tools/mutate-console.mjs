@@ -931,6 +931,46 @@ const MUTANTS = [
     from: '  }, []);',
     to: '  }, [snapshot.status]);',
   },
+  // ── The T3 round that found what the eight above could not ────────────────
+  //
+  // C43–C50 mutate the store's rules and the hooks' timing, and all eight are
+  // honest. What none of them could see is the console changing its OWN list
+  // from the inside: the card reasoned that the only way IN is the login page,
+  // which is true of ENTERING the console and says nothing about what happens
+  // once you are in it. Creating a gym is the one flow that does, and an owner
+  // who made one was told it was not theirs.
+  {
+    id: 'C51',
+    target: 'newgym',
+    suite: RENDER_SUITE,
+    why: 'ON SCREEN AND FALSE (:5807), and it is the card\'s worst: the console is never told a gym was created, so "Go to your gym" lands on "we couldn\'t find a gym you run at this address" and "Your gyms" tells somebody who has just made their first gym that they don\'t run one. Nothing but F5 or a window-focus event clears it, and clicking a link inside the window is neither',
+    expect: 'a gym you have just made',
+    from: '      refreshConsoleOrgs();',
+    to: '      void refreshConsoleOrgs;',
+  },
+  {
+    id: 'C52',
+    target: 'orgstore',
+    suite: STORE_SUITE,
+    why: "BLOCKED FROM FINISHING, on a gym's SHARED FRONT-DESK BROWSER: a read already on its way is shared with WHOEVER asks next, not only the person it was started for. `u1`'s hanging read is handed to `u2`, comes back stamped `u1`, and rule 3 correctly empties it — so `u2`'s console has nothing and no way to ask again, the mount effect having already run and the focus re-check returning early on an empty store. Only reloading the page recovers it",
+    expect: 'asks for the next person',
+    from: '  if (inFlight && inFlightUserId === forUserId) return inFlight;',
+    to: '  if (inFlight) return inFlight;',
+  },
+  {
+    id: 'C53',
+    target: 'orgstore',
+    suite: STORE_SUITE,
+    // FOUR LINES, and deliberately so: the three being deleted are individually
+    // ambiguous (`resetConsoleOrgs` writes the same three), and the fourth is
+    // what makes the block unique to `refreshConsoleOrgs`. Safe here because
+    // this file is pure LF — checked, 0 CRLF — which is the condition the
+    // `layout` note warns about.
+    why: "ON SCREEN AND FALSE (:5807), C51's other half and the reason `NewGym` calling refresh is not the whole fix: a read asked for ON PURPOSE waits on one that was already in the air. A background re-check begun a moment BEFORE a gym was created cannot know about that gym, so the owner is told their brand-new gym does not exist — the same defect as C51, moved from certain to occasional, which is the version nobody would reproduce",
+    expect: 'never answers a person who asked ON PURPOSE',
+    from: '  generation += 1;\n  inFlight = null;\n  inFlightUserId = null;\n  void load({ background: false });',
+    to: '  void load({ background: false });',
+  },
 ];
 
 const abort = (msg) => {

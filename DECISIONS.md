@@ -17214,3 +17214,432 @@ than anything here.**
 ### NOTHING BUILT IN THIS COMMIT
 
 No code changed all session. Records only.
+
+## T3 ON THE F5 CARD: two Criticals, and both were the console failing to notice something IT had just done (2026-08-24)
+
+Reviews `e8a7e5c` (+ `0633eb8`), the card recorded at :16331. **TWO Critical/High,
+so under :5348 rule 1 the packet did NOT ship on this round.** Both are fixed in
+this commit, each with a test that fails without the fix (rule 3) and a mutant.
+**Read before touching `consoleOrgs.js`, before adding anything that CHANGES a
+person's gym list, and before trusting this repo's render suite to have crossed
+two screens.**
+
+### C/H-1 — AN OWNER MADE A GYM AND WAS TOLD IT WAS NOT THEIRS
+
+Create a gym, press **Go to your gym**, and the screen said *"We couldn't find a
+gym you run at this address."* Open **Your gyms** and a first-time owner was told
+*"You don't run a gym yet."* Both on screen, both false, both new with this card
+(:5807 makes that Critical on sight).
+
+**The cause is one sentence and the card's own reasoning is in it.** The console
+keeps ONE answer to "which gyms do I run?" and re-checks it when the window comes
+BACK — and creating a gym happens INSIDE the window, so nothing ever told it.
+`ensureConsoleOrgs` no-ops on a ready store, `findOrgBySlug` returns null, and the
+screen draws `notFound`. Only F5 or a focus event cleared it; **clicking a link
+inside the window is neither.**
+
+**:16371 is where this was decided, and it is worth reading as a shape rather than
+a slip.** That bullet defended "opening a screen does not re-read" with a real
+argument: :11616 removed every link between the member app and the console, *"so
+the only way in is the login page's two doors"* — a new page session and a fresh
+read either way. **Every word of that is true about ENTERING the console, and it
+is silent about the console changing its own list from the INSIDE.** The gap was
+not overlooked; it was outside the frame the argument was built in.
+
+**Fix:** `NewGym.submit`'s success path calls `refreshConsoleOrgs()` before the
+code reveal. Not awaited — the join code is what the person asked for, and the
+read is on its way long before they can reach the button.
+
+### C/H-2 — A SHARED FRONT DESK COULD STRAND THE NEXT PERSON ON A SPINNER
+
+`u1`'s `/v1/orgs/mine` still in flight when `u1` signs out, `u2` signs in and
+opens the console: `u2`'s read was handed `u1`'s promise, which came back stamped
+`u1`, which rule 3 correctly empties — leaving `u2` with an empty store, a
+spinner, and **no way out inside the app.** The mount effect had already run
+(mount-only since this card's own loop fix), and `consoleOrgsRegainedFocus`
+returns early on an empty store, so clicking back into the window could not
+rescue it either. Only reloading the page could.
+
+Rarer than C/H-1 — it needs a hung read spanning a sign-out — **and tagged
+Critical because the surface it strands is exactly the shared browser the user
+stamp was written for**, with no in-app recovery. Never a leak: the stamp holds
+throughout, and this is the stamp working, not failing.
+
+**Fix:** `if (inFlight) return inFlight` became
+`if (inFlight && inFlightUserId === forUserId) return inFlight`. **A read already
+on its way is shared only with the person it was STARTED for.**
+
+### THE FIRST FIX FOR C/H-2 WAS WRONG, AND ONLY THE MUTATION TABLE COULD SAY SO
+
+**This is the part of the entry worth reading.** The first fix deleted the
+sharing outright — `if (background && inFlight)` — on the reasoning that a read
+somebody asked for ON PURPOSE must never accept an answer that was already in the
+air. That reasoning is correct and is still in the code; **the instrument it was
+implemented with was not.** All 1147 tests passed, eslint passed, and the two new
+Criticals' own mutants went RED. Then:
+
+**C49 ABORTED — "the run produced no test tally, so it proves nothing."** C49
+restores the retry loop this card shipped and fixed (:16388), and under the
+deleted sharing that mutant stopped being a test that FAILS and became **a test
+that never finishes**: a single mutant ran past 600 s and had to be killed, which
+left the mutated file on disk (`git checkout` restored it — and that is the
+:12227-shaped hazard of killing a sweep, recorded again here).
+
+**What it means, and it is a real property of the code, not an artefact of the
+harness: the in-flight share is a BACKSTOP against a caller that asks in a loop.**
+With it, such a loop puts one request on the wire per in-flight window. Without
+it, one per pass. **The card had already shipped exactly that loop once**, so
+removing its backstop while fixing something else was trading a rare defect for a
+rarer, worse one — and no test asserts "the app does not hammer the server",
+which is why nothing but the mutant could see it.
+
+**So the guard that the first fix deleted as "unreachable" is the one that
+shipped.** It is not unreachable: with the sharing kept, `u2`'s own mount read is
+what meets `u1`'s hanging one, and the C/H-2 test kills C52 on exactly that line.
+The lesson is narrower than "keep guards" — it is that **"unreachable" was a
+conclusion drawn from the shape of the first fix, not from the code**, and it
+stopped being true the moment the fix changed.
+
+**THE OTHER HALF OF C/H-1 LIVES IN `refreshConsoleOrgs`, and this is why `NewGym`
+calling it is not the whole fix.** A refresh now DISCARDS what is in the air
+rather than waiting on it (`generation += 1`, then load). A background re-check
+begun a moment BEFORE a gym was created cannot know about that gym, so waiting on
+it would tell the owner their brand-new gym does not exist — **the same defect,
+moved from certain to occasional, which is the version nobody would ever
+reproduce.** Mutant C53. What this gives up is the "one request" note at :16352's
+neighbour: Try again is now one request PER PRESS, which is what a retry means.
+
+### THE INSTRUMENT, AND IT IS THE POINT OF THIS ROUND
+
+**1147 tests, a 74-mutant table and a 4/4 human smoke all passed over an owner
+being told their brand-new gym was not theirs.** The reason is structural and
+worth carrying: **every helper in `console.render.test.jsx` mounts ONE route** —
+`drawHome`, `drawNew`, `drawAt`, `drawShellAround` — so no test had ever left a
+screen for the screen it navigates to. The create tests used `drawNew()`, a router
+containing only `/console/new`. **A guarantee that spans two screens has no
+instrument here unless one is written on purpose**, and this is :15007's lesson
+one layer out again: a rule proven where it is DECIDED is not proven where it is
+FELT, and a rule proven on one SCREEN is not proven across a navigation.
+
+New: `drawConsoleFrom(path)` mounts `/console`, `/console/new` and
+`/console/:orgSlug` in one router and walks the real journey. Both new render
+tests start at `ConsoleHome` **on purpose** — the kept answer must be READY, and
+know of no gyms, before the gym exists, or the store would simply read on the way
+in and hide the whole defect.
+
+### MEASURED
+
+- web **1148/1148 exit 0** (1144 before; +4 tests) · eslint **exit 0 at
+  `--max-warnings=0`** on the five changed js/jsx files.
+- **Three of the four new tests were watched RED before any fix existed, and for
+  the stated reason** — the render pair on `We couldn't find a gym you run at this
+  address.` and `You don't run a gym yet.` in the rendered DOM, the store test on
+  `getMine` called 1 time instead of 2. **The fourth (the refresh-discard test)
+  was written alongside the second design and was NOT watched red that way**; what
+  proves it is mutant C53, which removes the invalidation and turns it red. Said
+  plainly because "watched red first" and "killed by its mutant" are different
+  evidence and this entry should not blur them.
+- **Three new mutants — C51 (`newgym`), C52 and C53 (`orgstore`) — controls
+  GREEN, all RED.** The card's existing eight (C43–C50) were **re-run under the
+  final design: 8 RED, 0 ALIVE.** Table is now **75 rows**.
+- **The whole-table anchor pre-check (all 75 rows) passed on every run**, which is
+  what proves this diff moved no existing mutant's anchor.
+- **C49 is the row that earned its place today**: it aborted under the first fix
+  and is RED in normal time under the final one. That single row is the whole
+  reason the shipped design is not the first one.
+
+### THE TWO LOW — fixed in this commit, logged in `BACKLOG.md`, bought no round
+
+`ConsoleLayout`'s comment still charged the console "one extra request per console
+page" — the exact cost this card deleted. And the smoke sheet's result block
+called step 1 what the sheet calls step 2 and vice versa, a crossing **:16495
+copied**; both directions genuinely passed, so nothing was claimed that was not
+established. Corrected by stating WHY they crossed rather than by a blind swap.
+
+### WHAT STILL HOLDS THE TICK
+
+Round 2 — a **diff-only** re-review of these fixes (:5348 rule 2) — and the
+smoke's **new step 5** (create a gym, press Go to your gym, see the gym), which is
+UNRUN. **Escape hatch NOT armed:** the previous round in this subsystem
+(:16221) found zero Critical/High, so "two rounds running" does not apply.
+
+## KD RATIFIES THE WHOLE PRICE BOOK FOR THREE CONTINENTS, PADDLE BECOMES THE MONEY ROUTE, AND THE 5-vs-20 SCAN CLASH IS ANSWERED BY ARITHMETIC (2026-08-24)
+
+**Read before seeding ANY plan, price or quota · before building the billing
+card · before quoting a payment provider · before planning photo/video retention
+· before writing the territory feature · and before proposing a build order.**
+Supersedes the price half of :16548 / :16702 and the consumer price of :16702.
+Closes the ❓ open question at `OWED.md`'s "A PAYING GYM'S MEMBER GETS FEWER MEAL
+SCANS THAN A $6.99 CONSUMER". No code changed in this commit.
+
+### 0 · A PROCESS NOTE FIRST, BECAUSE IT IS THE REUSABLE PART
+
+Kd wrote *"for usa and canada and europe the price will be same as discussed for
+usa"*. **"As discussed" had TWO readings** — the $59/$79/$99 standing in the
+record from :16702, or the $69/$99/$129 this chat had RECOMMENDED and he had
+never answered. They differ by ~$18,600/yr at 500 gyms. **The chat did not pick
+one. It asked.** He then ratified the higher set explicitly (*"your
+recommendation"*). This is :16702's fabrication lesson applied BEFORE the error
+rather than after it: an inferred ruling is not a ruling.
+
+### 1 · THE PRICE BOOK — RATIFIED, BOTH MARKETS, SAFE TO SEED
+
+**USA · CANADA · EUROPE (one book, USD).** Kd: *"for usa and canada and europe
+the price will be same as discussed for usa"*.
+
+| Members | Price/mo | Was (:16702) |
+|---|---|---|
+| 0–299 | **$30** | $29 |
+| 300–499 | **$40** | $39 |
+| 500–999 | **$69** | $59 |
+| 1000–1499 | **$99** | $79 |
+| 1500–2099 | **$129** | $99 |
+| 2100+ | custom | unchanged |
+
+**INDIA (INR).** Kd fixed the first two — *"for indian gyms the price will be
+initial 1500 then 2500 and the rest you need to decide"* — and delegated bands
+3–5, which this chat chose and he did not overrule:
+
+| Members | Price/mo | Per member at a FULL gym | Margin over AI cost |
+|---|---|---|---|
+| 0–299 | **₹1,500** (Kd) | ₹5.02 | 2.4× |
+| 300–499 | **₹2,500** (Kd) | ₹5.01 | 2.4× |
+| 500–999 | **₹4,500** (chat) | ₹4.50 | 2.1× |
+| 1000–1499 | **₹6,500** (chat) | ₹4.34 | 2.1× |
+| 1500–2099 | **₹8,500** (chat) | ₹4.05 | 1.9× |
+
+**COMPUTED, not recalled** (SCAN=$0.000162 from :17012, ₹87/$): a gym member
+maxing 5 scans/day costs **₹2.11/month**. India lands at **~57% of the US price**
+at band 1. The Indian margin is roughly HALF the US margin (≈2× vs ≈4×) — bands
+3–5 were chosen to stop it sagging below 1.9×, which is why they are steeper than
+a straight scaling of the US curve would give.
+
+**INDIVIDUALS.**
+
+| | Price | Scans/day | Margin |
+|---|---|---|---|
+| Paid, international | **$10/mo** (supersedes :16702's $6.99) | 20 | 103× |
+| Paid, India | **$5** → chat recommends **₹449** (≈$5.16) | 20 | 51× |
+| Free, anyone | free | **2** (supersedes :16548's 3) | — |
+| Member of a paying gym | paid by gym | 5 (unchanged) | — |
+
+**TWO THINGS KD DID NOT MENTION AND THAT ARE THEREFORE UNCHANGED — stated as
+assumptions, not rulings, per S3:** the paid individual's allowance stays
+**20/day**, and the **one-week unlimited trial (capped 20/day)** from :16548 /
+:16702 survives. A chat finding either contradicted must ask, not resolve.
+
+### 2 · THE 5-vs-20 CLASH IS CLOSED, AND KD'S REASON MEASURES CORRECT
+
+The ❓ question — is 5/day right for a gym's member when a $10 individual gets
+20? — Kd answered: *"its beacuse not finnacially possible to give gym user 20
+scans"*. **MEASURED, and he is right by a wide margin:**
+
+| Band | worst case at 5/day | worst case at 20/day |
+|---|---|---|
+| 0–299 $30 | $7.27 (24% of revenue) | $29.06 — **97%** |
+| 300–499 $40 | $12.13 (30%) | $48.50 — **UNDERWATER** |
+| 500–999 $69 | $24.28 (35%) | $97.10 — **UNDERWATER** |
+| 1500–2099 $129 | $51.01 (40%) | $204.02 — **UNDERWATER** |
+
+**20/day for gym members puts three of five bands underwater.** The structural
+reason, recorded so it is not re-argued: an individual pays **$10 per head**; a
+gym pays **$0.10 per head** (:17012's Cal AI comparison from the other side). The
+individual pays ~100× more per person, so they can eat 4× the scans.
+
+**THE CLASH IS THEREFORE NOT A DEFECT — IT IS AN UPSELL, AND IT NEEDS NO CODE.**
+`mergeEntitlements` already hands a user holding both grants the BETTER of the
+two, so a gym member who wants 20/day buys the $10 subscription and gets it. The
+gap is the reason to buy. **Its `OWED.md` ❓ line is struck by this ruling.**
+
+### 3 · RETENTION — FOUR DURATIONS, AND THE COST ARGUMENT COLLAPSED
+
+**THE FINDING THAT DECIDED ALL FOUR: storage is not a cost worth designing
+around.** Computed this session at 0.15 MB per 768px image, R2 $0.015/GB-mo:
+
+| | 90 days | 1 year | forever (yr 3) |
+|---|---|---|---|
+| Posted photos, 500 gyms | $0.39/mo | $1.55/mo | $4.66/mo |
+| Announcements, 500 gyms | — | $0.05/mo | — |
+| Coach videos, 500 gyms (capped) | — | — | $2.78/mo |
+
+**Deletion is therefore a PRIVACY and CLUTTER decision, never a money one.** A
+chat proposing a shorter retention "to save cost" is answering a question nobody
+asked.
+
+| Thing | Lives | Ruling |
+|---|---|---|
+| Meal SCAN photo | **7 days** | Kd, unchanged. **The nutrition data stays forever** — only the image goes. |
+| A POSTED photo (stats burned in) | **1 year** | Kd asked for a recommendation; chat proposed 1 year, he did not overrule |
+| Gym announcement | **1 year**, gym may delete or pin | same |
+| Coach video | **NEVER expires** | same — see §4 |
+
+**THE SCAN PHOTO AND THE POSTED PHOTO ARE TWO COPIES WITH TWO CLOCKS, and this
+is the thing a builder will get wrong.** Kd described them as one image
+(*"it is same single photo"*) and physically that is where it starts — scan →
+stats → paste → post. **But the moment stats are burned in it is a NEW file.**
+If they shared one row and one lifetime, posting a meal photo would make the POST
+vanish at day 7 and the user would read that as deletion of their post. Same
+path for workout and running pictures.
+
+### 4 · COACH VIDEOS — THE REVERSAL IS CONFIRMED AND `OWED.md` WAS STALE
+
+`OWED.md`'s "Dropped and parked" carried **~~COACH-UPLOADED INSTRUCTION
+VIDEOS.~~ DROPPED BY KD 2026-08-18** (*"ok will not upload video"*). **:17012
+(2026-08-24) already reversed it** — 20 videos per gym — and Kd confirmed again
+today. **The struck line is UN-STRUCK in this commit.** Final shape:
+
+**1 minute each · 20 per gym · gym deletes to make room · NO expiry.** The
+duration is Kd's (he asked for 1 min, which is also :17012's recommended 60s over
+Strava's 30s). **The 20-cap IS the storage control** — $2.78/mo at 500 gyms
+forever — so expiring a "how to squat" video only makes the coach re-upload it.
+
+### 5 · TERRITORY CAPTURE — A CORRECTION I OWE, AND THE WARNING THAT SURVIVES IT
+
+**I told Kd territory capture was "weeks of hard geographic work… last, or
+never". THAT WAS THE WRONG DESIGN IN MY HEAD** — the Turf-Wars model, chopping
+the map into tiles and tracking ownership per tile. **Kd's design is different
+and he was right:** *"suppose a user completes a run alreday a line is drwas with
+the help of gps now the area covered under this line gets captured"*.
+
+**The split, honestly:**
+
+| | Difficulty |
+|---|---|
+| **Your own loops, your own area, your own map** | **Small — days.** Loop detection is one distance check (is the last point near the first); enclosed area is the shoelace formula; MapLibre draws polygons natively. Straight line ⇒ no loop ⇒ no capture, exactly as Kd said. |
+| **Taking someone else's territory** | **Hard, and a separate card.** Needs a spatial index (`geo.ts` stores `polyline` as `text`; there is no PostGIS today — grep-verified), an overlap-resolution rule nobody has written, and the car-driver case. |
+
+**THE WARNING THAT SURVIVES THE CORRECTION, AND IT IS THE IMPORTANT HALF:**
+`apps/api/src/db/schema/geo.ts:2` calls GPS polylines *"the most sensitive data
+in the app — org-invisible (Part 3 §2.4)"*. **A territory polygon drawn around a
+person's neighbourhood publishes where they live.** Part 6 §5.4's **200 m
+end-trim** already exists for shared route thumbnails; **the territory polygon
+needs the same trim** or a user's flag is planted on their own house. Own
+`OWED.md` line.
+
+### 6 · THE BUILD ORDER — KD OVERRULED THE FIVE-FIRST PROPOSAL
+
+Kd: *"no i disagree need to build all the things i mentioned please"*. **Accepted
+and recorded as his decision.** Nothing was being dropped — the five were offered
+as FIRST, not ONLY — but he read it as a cut and the ruling stands either way:
+**everything he listed gets built.** Six waves, dependency-ordered:
+
+1. **Foundations** — image storage · announcements+photo · QR attendance + manual mark
+2. **Running the gym** — member's gym home · dues+reminders · spreadsheet import + manual add · **waivers** · member-limit behaviour
+3. **Sharing** — stat cards (workout/run/meal) · draggable stat stickers · in-app post + report-and-remove · share/export/download
+4. **Competing** — leaderboards+TV+poster · challenges · badges · gym-awarded badges · compare · City League · before/after + 75-day
+5. **Coaching** — coach photos+videos · member↔coach messaging · gym plans + tap-to-ask-staff · coach-authored plans · generated plans
+6. **The big ones** — class booking · territory · custom member fields · auto-replies · real payments
+
+**Image storage is wave 1 because nothing with a photo in it works until it
+exists** — `modules/nutrition/routes.ts:3` still says photos are "request-only".
+**Recommended, not ruled: pull OWN-territory forward out of wave 6** (§5 — it is
+days, and it is the most enjoyable thing on the list).
+
+**MEASURED against the record, not asserted: ~30 of the ~47 items Kd described
+were ALREADY decided** — in `docs/spec/` or `OWED.md` — and 11 are genuinely new
+(zero spec hits: announcements, QR attendance, territory, sticker overlay, gym
+custom badges, custom member fields, staff Q&A automation, manual member add,
+before/after, dues marking, auto-delete sweeps). A chat sizing this work must
+read `OWED.md`'s "Member-side gym surface" / "Plans, food and content" / "Photos
+and sharing" blocks first — most of the design already exists there.
+
+### 7 · MONEY: PADDLE IS THE ROUTE. KD RULED IT AFTER FOUR OPTIONS WERE PRICED
+
+Kd: *"ok final paddle it is"*. **This does NOT overturn :12600's "STRIPE = YES"**
+— Stripe remains the destination (§7.4); Paddle is what carries the first gyms,
+because Stripe cannot.
+
+**THE DECIDING CONSTRAINT WAS KD'S, NOT THE CHAT'S:** *"if user subscribe will it
+pay automatically or they have to pay each month? if not automatic paymnet then
+it wil geniunly create problem"*. That one requirement eliminates three of four
+options:
+
+| | Auto-charges? | Buyer needs an account? | Open to a solo Indian dev today? |
+|---|---|---|---|
+| PayPal SUBSCRIPTION | ✅ | ❌ **buyer must have PayPal** | ✅ |
+| PayPal INVOICE | ❌ manual monthly | ✅ card, no account | ✅ |
+| Razorpay international | ⚠️ **e-mandates are India-issued + INR only** | ✅ | ❌ needs a registered business |
+| **PADDLE** | ✅ | ✅ | ✅ **individuals explicitly supported** |
+| Stripe | ✅ | ✅ | ❌ business + invite queue |
+
+**PayPal forces a choice between automatic and no-account. Paddle is the only row
+with all three.** (Sources read 2026-08-24: PayPal excludes billing-agreement /
+subscription products from guest checkout; Razorpay docs — e-mandate creation
+applies only to India-issued cards in INR; Paddle help — payouts to India for
+"Indian-entity (or individual) founders… as export service income".)
+
+**RAZORPAY IS STRUCK for the international book** (:456's precedent — no
+`OWED.md` line, nothing to build): recurring on foreign cards is unreliable AND a
+US gym has never heard of it, so it loses on both axes it was proposed for. It
+stays the obvious candidate for the INDIA book, which is a separate question
+nobody has ruled on.
+
+**KD'S TRUST QUESTION, ANSWERED WITH SOURCES BECAUSE HE ASKED IT THREE TIMES:**
+the gym **does not see Paddle at checkout** — the page is branded as the app;
+Paddle appears only on the card statement as `PADDLE.NET*`. **PCI DSS Level 1 and
+SOC 2 Type 2.** Sellers include GoodNotes, Tailwind, Plausible, AdGuard,
+Teachable, Leonardo AI, n8n. **The unflattering half, stated to him: the FTC
+fined Paddle $5M in June 2025** for processing on behalf of tech-support
+telemarketers — a who-they-onboard failure, not a payments-security one, and they
+are now barred from that sector.
+
+**PADDLE ALSO ANSWERS "CAN I KEEP BOTH?" WITHOUT A SECOND INTEGRATION —
+PayPal is one of Paddle's own checkout methods** (alongside cards, Apple Pay,
+Google Pay, **and UPI**, which may serve the India book through the same
+checkout). **Two parallel billing systems were argued AGAINST and Kd accepted
+it:** the tax cover only applies to money that actually went through Paddle, so a
+direct-PayPal gym puts US sales tax and EU VAT straight back on him.
+
+**COST — Paddle is CHEAPER than PayPal, which reverses the earlier framing:** on
+a $30 gym, Paddle 5%+50¢ leaves **$28.00**; PayPal (4.4%+30¢ plus its 4% forced
+INR conversion ≈ 9.2%) leaves **$27.24**.
+
+**THE ONE REAL COST OF PADDLE, and Kd asked about it directly: payout is
+MONTHLY, not instant.** Balance converts on the 1st, sent by the 15th, ~3 working
+days to arrive ⇒ **~2½ weeks (paid late in the month) to ~6½ weeks (paid on the
+2nd)**. **It is a ONE-TIME OFFSET, not a recurring loss** — after the first
+payout money arrives every month, a month in arrears. **$100 minimum threshold
+⇒ at $30/gym he needs FOUR gyms before any payout happens at all.** A $15 SWIFT
+fee may apply to India; Payoneer is their alternative. (Paddle's own page states
+no holding period or rolling reserve; one secondary source says new accounts can
+see holds — **UNVERIFIED, confirm with Paddle before committing.**)
+
+**THE AGREED SEQUENCE:** first **4–5 gyms on PayPal INVOICES** (money in days,
+and he is under Paddle's $100 threshold anyway) → **Paddle** once invoicing
+becomes a chore → **Stripe** when the business and the invite exist. A gym that
+refuses Paddle gets a hand-written invoice; that is an escape hatch, not a second
+system.
+
+### 7.4 · WHAT KD MUST DO HIMSELF, AND THE STRIPE PATH IS EASIER THAN HE THINKS
+
+He objected: *"i am a completely solo developer not a business also i donot have
+any transcation in my bank account"*. **Stripe India requires a registered
+business and a sole proprietorship qualifies** — not a company. The free first
+step is **Udyam registration** (`udyamregistration.gov.in`): Aadhaar + PAN, fully
+online, self-declared, no documents uploaded, no fee. Banks typically want ONE
+more paper (GST registration or a Shop Act licence) to open a current account.
+**Recommended he start it now even on Paddle** — it is the door to Stripe and the
+thing a CA will ask for — **but NOT to wait for it**, since Paddle needs none of
+it.
+
+### 8 · EUROPE COSTS MORE ADMIN THAN IT COSTS MONEY
+
+Selling to an EU business means **VAT reverse charge**: charge 0%, collect and
+validate the customer's VAT number (VIES), and state "Reverse charge, Article 196
+of the EU VAT Directive" on the invoice. **Paddle does this automatically as
+merchant of record — which is now a second, independent reason for the Paddle
+ruling**, and a reason a later move to Stripe re-inherits the work. USA and
+Canada carry nothing equivalent for B2B. Canada's own rules for non-resident
+sellers are **UNVERIFIED here and belong on the :592/:9944 lawyer list.**
+
+### 9 · RAISED BY THE CHAT, NOT RULED — one item, and it is a real gap
+
+**SIGNED LIABILITY WAIVERS.** Kd's 47-item plan never mentions them and **every
+US gym needs them**. Zero spec hits. A PDF, a finger signature, a timestamp —
+small, and it is a thing an owner checks for when judging whether software is
+serious. Own `OWED.md` line; no ruling sought yet.
+
+### NOTHING BUILT IN THIS COMMIT
+
+Records only. The seed change (`db/seed.ts`) remains owed and now has a complete,
+ratified book for BOTH markets to seed from.

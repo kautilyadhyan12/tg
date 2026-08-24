@@ -4,9 +4,14 @@
 your gym screens now notice by themselves the moment you click back into the
 window — you do not have to press F5 any more.
 
-**4 steps, about 5 minutes.**
+**5 steps, about 6 minutes.**
 
 ## RESULT — PASSED 4/4 (Kd, 2026-08-23, commit `e8a7e5c`)
+
+> **Step 5 did not exist for that run and is UNRUN.** It was added 2026-08-24
+> after the T3 review found the bug it checks: an owner who made a gym was told
+> the gym was not theirs. The 4/4 above is about steps 1–4 and is untouched by
+> this.
 
 Run in Kd's own browser against his own gym on the shared dev database, both
 servers started by the chat. **The working tree was verified byte-identical to
@@ -20,11 +25,19 @@ take away until one is given.
 
 **WHAT THIS PASS ESTABLISHES**
 
-- **Step 1 is the headline and it is the direction nothing had ever observed
+*(Numbers corrected 2026-08-24, T3 Low-2. The first two bullets named step 1 for
+what the sheet calls step 2 and the other way round: Kd ran the ON direction
+first — which is what step 1's own preamble tells you to do when the helper has
+no Remove button to take away yet — and this block then described the steps in
+the order he RAN them while calling them by number. Both directions genuinely
+passed, so nothing is claimed here that was not established; only the labels were
+crossed, and DECISIONS :16495 copied the crossing.)*
+
+- **Step 2 is the headline and it is the direction nothing had ever observed
   without a reload:** a permission ticked ON reached a control in a SECOND
   window, with no F5. The tick-boxes card needed a reload to see that
   (DECISIONS :16221's re-smoke) and this is what removes the reload.
-- **Step 2 is the other direction** — the power taken away, the control gone,
+- **Step 1 is the other direction** — the power taken away, the control gone,
   and the member list underneath it untouched.
 - **Step 3 is the discriminator** and it is why 1 and 2 mean anything: what the
   screen showed after the re-check is what a reload shows. Without it, "the
@@ -169,6 +182,33 @@ between the three screens feels immediate.
 
 ❌ **Failure:** the screen blanks, shows a spinner, or an error card appears each
 time you come back to it.
+
+---
+
+## Step 5 — a gym you have just made is yours
+
+**Added 2026-08-24. This is the one console flow that changes your own gym list
+from the inside, and it is where the T3 review found the card's worst bug: the
+kept answer only re-checks itself when you click back into the window, and making
+a gym happens inside the window.**
+
+In **window A**, go to **Your gyms** and press **Create a gym**. Give it any name
+(*Smoke Test Gym* is fine), pick a country and leave the timezone as it is, then
+press **Create gym**. When the join code appears, press **Go to your gym**.
+
+✅ **Expect:** the gym's own screen opens, with its name at the top and its join
+code on the card.
+
+Then press **Your gyms** in the left-hand rail.
+
+✅ **Expect:** the gym you just made is in the list.
+
+❌ **Failure — either of these, and they are the exact bug:** *"We couldn't find
+a gym you run at this address."* after pressing Go to your gym, or *"You don't
+run a gym yet."* on the list. Both mean the app has forgotten a gym it created
+seconds earlier.
+
+*(You can leave the test gym where it is — nobody can join it without its code.)*
 
 ---
 

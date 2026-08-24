@@ -47,8 +47,13 @@
 //      drawing a console for a gym that is no longer theirs.
 //
 // Opening a screen uses the kept answer and does NOT re-read. The re-read is
-// the focus event and the Try-again button; that is what makes moving between
-// the console's screens cost nothing at all.
+// the focus event, the Try-again button, and the ONE place the console changes
+// its own list from the inside — creating a gym (`NewGym`). That third one is
+// not a nicety: this card's first build had only the first two, reasoning that
+// the only way into the console is the login page and every entry is therefore
+// a fresh page session — which is true of entering it and says nothing about
+// what happens once you are in. An owner who made a gym was told it was not
+// theirs.
 import { orgService, errorText } from '../../api/orgsApi';
 import { getUserId } from '../../utils/storage';
 
@@ -60,6 +65,9 @@ const IDLE = Object.freeze({ status: 'idle', orgs: null, error: null, forUserId:
 
 let state = IDLE;
 let inFlight = null;
+/** Who the in-flight read was started for. A read answers "which gyms does THIS
+ *  person run?", so it is only ever shareable with that person — see `load`. */
+let inFlightUserId = null;
 /** Bumped by `resetConsoleOrgs`, so an answer already on its way back cannot
  *  land in a store that has since been emptied. The user stamp (rule 3) is what
  *  protects a real sign-out; this protects a deliberate reset. */
@@ -92,13 +100,33 @@ export function subscribeConsoleOrgs(listener) {
 function load({ background }) {
   const forUserId = getUserId();
   // Rule 1: the spinner belongs to somebody who is waiting on purpose. Set
-  // BEFORE the in-flight check so Try again always visibly does something, even
-  // when a background re-read is already on its way — one request, and the
-  // person who pressed the button can see that it was heard.
+  // BEFORE the check below so Try again always visibly does something.
   if (!background) publish({ status: 'loading', orgs: null, error: null, forUserId });
-  if (inFlight) return inFlight;
+  // A READ ALREADY ON ITS WAY IS SHARED ONLY WITH THE PERSON IT WAS STARTED
+  // FOR. This line used to be a bare `if (inFlight) return inFlight`, and that
+  // is what left the next person at a gym's SHARED FRONT DESK unable to
+  // finish: `u1`'s read still hanging when `u2` signed in was handed to `u2` as
+  // if it were theirs, came back stamped `u1`, and rule 3 correctly emptied it —
+  // so `u2`'s console had nothing and NO WAY TO ASK AGAIN. The mount effect had
+  // already run, and `consoleOrgsRegainedFocus` returns early on an empty store,
+  // so clicking back into the window could not rescue it either. Only reloading
+  // the page could (T3 C/H-2).
+  //
+  // THE SHARING ITSELF IS KEPT, and deleting it was tried and rejected. It is
+  // what stops a caller that asks in a loop from putting one request per pass on
+  // the wire: mutant C49 restores exactly such a loop — the one this card
+  // shipped and fixed — and with the sharing gone it stopped being a test that
+  // FAILS and became a test that never finishes. A guard whose absence hangs the
+  // instrument is a guard doing real work.
+  //
+  // The other half of "an answer that can still answer the question" — a read
+  // started BEFORE the thing being asked about — is handled by
+  // `refreshConsoleOrgs` below, which discards what is in the air rather than
+  // waiting on it.
+  if (inFlight && inFlightUserId === forUserId) return inFlight;
 
   const gen = ++generation;
+  inFlightUserId = forUserId;
   inFlight = orgService
     .getMine()
     .then((res) => {
@@ -120,7 +148,10 @@ function load({ background }) {
       });
     })
     .finally(() => {
-      if (gen === generation) inFlight = null;
+      if (gen === generation) {
+        inFlight = null;
+        inFlightUserId = null;
+      }
     });
   return inFlight;
 }
@@ -135,8 +166,26 @@ export function ensureConsoleOrgs() {
   void load({ background: false });
 }
 
-/** The Try-again button, and nothing else. Visible by design. */
+/** SOMEBODY ASKED ON PURPOSE — the Try-again button, and the one place the
+ *  console changes its own list from the inside (`NewGym`, after a gym is
+ *  created). Visible by design.
+ *
+ *  IT DISCARDS WHAT IS IN THE AIR RATHER THAN WAITING ON IT, and that is the
+ *  half of T3 C/H-1 that is not in `NewGym`. A read that was already on its way
+ *  was started BEFORE the question being asked, so it cannot answer it: a
+ *  background re-check begun a moment before a gym was created would come back
+ *  without that gym, and telling somebody their brand-new gym does not exist is
+ *  the exact defect this is fixing — it would simply have moved from certain to
+ *  occasional. Bumping the generation first means the discarded read cannot
+ *  publish when it lands (`load` checks it), and `load` then starts a fresh one.
+ *
+ *  This is what "one request, and the person who pressed the button can see that
+ *  it was heard" used to say. It is now one request PER PRESS, which is what a
+ *  retry means. */
 export function refreshConsoleOrgs() {
+  generation += 1;
+  inFlight = null;
+  inFlightUserId = null;
   void load({ background: false });
 }
 
@@ -187,5 +236,6 @@ function stopWatching() {
 export function resetConsoleOrgs() {
   generation += 1;
   inFlight = null;
+  inFlightUserId = null;
   publish(IDLE);
 }

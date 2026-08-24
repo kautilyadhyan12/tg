@@ -825,6 +825,92 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:17218** — 2026-08-24 — **T3 ON THE F5 CARD (:16331): TWO CRITICAL/HIGH, so
+  the packet did NOT ship on round 1.** Both fixed in that commit with a failing
+  test and a mutant each (C51, C52). **Read before touching `consoleOrgs.js` and
+  before adding ANYTHING that changes a person's gym list.**
+  **C/H-1 — an owner made a gym and was told it was not theirs**: "Go to your
+  gym" drew *"We couldn't find a gym you run at this address"*, "Your gyms" told a
+  first-time owner they run none. The kept answer re-checks on window FOCUS and
+  making a gym happens INSIDE the window. **:16371's defence was true about
+  ENTERING the console and silent about the console changing its OWN list** — a
+  frame problem, not an oversight. Fix: `NewGym` calls `refreshConsoleOrgs()`.
+  **C/H-2 — a shared front desk could strand the next account on a spinner** with
+  no in-app way out, when a hung read outlived a sign-out. Fix:
+  `if (inFlight)` became `if (inFlight && inFlightUserId === forUserId)` — **a
+  read on its way is shared only with the person it was STARTED for.** The other
+  half of C/H-1 is in `refreshConsoleOrgs`, which now DISCARDS what is in the air
+  instead of waiting on it (C53) — otherwise a re-check begun a moment before the
+  gym existed answers the read fetched to go and find it. **Gives up "one request"
+  for Try again, deliberately: one request PER PRESS.**
+  **THE FIRST FIX FOR C/H-2 WAS WRONG AND ONLY THE MUTATION TABLE COULD SAY SO —
+  read this before "simplifying" the in-flight share.** It deleted the sharing
+  outright; 1147 tests, eslint and both new mutants passed. **C49 then ABORTED
+  ("no test tally, so it proves nothing"): the retry-loop mutant stopped FAILING
+  and started HANGING** — one mutant past 600 s, killed, leaving a mutated file on
+  disk. **The share is a BACKSTOP against a caller that asks in a loop** — one
+  request per in-flight window instead of one per pass — **and this card had
+  already shipped exactly that loop once.** No test asserts "does not hammer the
+  server", so nothing else could see it. The guard deleted as "unreachable" is the
+  one that shipped: **"unreachable" was a conclusion about the shape of the first
+  fix, not about the code.**
+  **STANDING LESSON: 1147 tests, 74 mutants and a 4/4 human smoke passed over a
+  screen lying, because EVERY render helper mounts ONE route.** No test had left a
+  screen for the screen it navigates to. :15007 one layer out — a rule proven on
+  one SCREEN is not proven across a NAVIGATION.
+  Two Low fixed (`BACKLOG.md`). **Tick still held: round 2 (diff-only) + the
+  smoke's new step 5, UNRUN.** Escape hatch NOT armed (:16221 was clean).
+- **:17357** — 2026-08-24 — **KD RATIFIES THE WHOLE PRICE BOOK FOR THREE
+  CONTINENTS, PADDLE BECOMES THE MONEY ROUTE, AND THE 5-vs-20 SCAN CLASH IS
+  ANSWERED BY ARITHMETIC.** **Read before seeding ANY plan/price/quota, before
+  the billing card, before quoting a payment provider, before planning photo or
+  video retention, before writing the territory feature, and before proposing a
+  build order.** Supersedes the price half of :16548/:16702 and :16702's $6.99.
+  **RATIFIED, safe to seed — US/CANADA/EUROPE one USD book: $30 · $40 · $69 ·
+  $99 · $129 · custom above 2099.** **INDIA (INR): ₹1,500 · ₹2,500 (Kd) then
+  ₹4,500 · ₹6,500 · ₹8,500 (chat's, not overruled)** — computed at ~57% of the
+  US price with roughly HALF the margin (≈2× vs ≈4×), which is why bands 3–5 are
+  steeper than a straight scaling. **Individuals: international $10/mo (was
+  $6.99) · India $5 → recommended ₹449 · FREE TIER DROPS 3/day → 2/day · gym
+  member 5/day unchanged.** **UNCHANGED BY SILENCE, flagged as assumptions not
+  rulings: paid individual keeps 20/day, and the one-week unlimited trial
+  survives.** **THE ❓ 5-vs-20 QUESTION IS CLOSED and Kd's reason MEASURES
+  CORRECT — 20/day for gym members is UNDERWATER in three of five bands** ($40
+  band: $48.50 cost against $40); an individual pays $10/head, a gym $0.10/head,
+  so **the gap is an UPSELL and needs no code** (`mergeEntitlements` already
+  gives the better grant). **RETENTION, and the cost argument collapsed —
+  keeping every posted photo FOREVER at 500 gyms is $4.66/mo, so deletion is a
+  privacy/clutter call, never a money one:** meal SCAN photo **7 days** (data
+  stays forever) · posted photo **1 year** · announcements **1 year** · coach
+  video **NEVER expires**, the 20-cap is the control. **THE SCAN PHOTO AND THE
+  POSTED PHOTO ARE TWO COPIES WITH TWO CLOCKS** — one row would make a post
+  vanish at day 7. **COACH VIDEOS UN-STRUCK in `OWED.md`** (dropped 2026-08-18,
+  reversed by :17012, confirmed today): 1 min · 20/gym · no expiry. **MY
+  CORRECTION: territory capture is NOT weeks of work — I was picturing the
+  wrong (tile) design. Kd's loop-and-area model is days.** Only the CONTEST half
+  is hard (no PostGIS today, grep-verified). **The warning that survives: a
+  territory polygon publishes where someone lives — it needs Part 6 §5.4's 200 m
+  end-trim.** **KD OVERRULED the five-first build order — everything gets built;
+  six dependency-ordered waves, image storage first.** ~30 of his ~47 items were
+  ALREADY decided in spec or `OWED.md`. **MONEY: PADDLE, ruled by Kd.** Does NOT
+  overturn :12600's Stripe=YES — Stripe is the destination, Paddle carries the
+  first gyms. **The deciding constraint was his: automatic charging.** That
+  eliminates PayPal-invoice (manual), PayPal-subscription (buyer needs an
+  account) and Razorpay (e-mandates are India-issued+INR only) — **Paddle is the
+  only row that auto-charges, needs no buyer account, and admits a solo Indian
+  individual.** **RAZORPAY STRUCK for the international book** (:456 precedent,
+  no OWED line); still the candidate for the INDIA book, unruled. Paddle is also
+  CHEAPER than PayPal ($28.00 vs $27.24 on a $30 gym) and **PayPal is one of
+  Paddle's own checkout methods, so "keep both" needs no second integration**.
+  **Its real cost: payout is MONTHLY — ~2½ to ~6½ weeks, a ONE-TIME offset, $100
+  minimum ⇒ four gyms before any payout.** Trust answered with sources (PCI DSS
+  L1, SOC 2 Type 2, branded checkout, `PADDLE.NET*` on the statement) including
+  the **$5M FTC fine, June 2025**. Sequence: 4–5 gyms on PayPal invoices →
+  Paddle → Stripe. **Stripe needs a sole proprietorship, not a company — Udyam
+  registration is free and online.** EU sales carry VAT reverse charge, which
+  Paddle handles and a later Stripe move re-inherits. **NEW and chat-raised:
+  signed liability waivers, absent from all 47 items and needed by every US
+  gym.** Nothing built.
 - **:17012** — 2026-08-24 — **THE MAP IS SETTLED, THE SCAN BILL IS HALVED, AND
   MEDIA BECOMES A THING THIS APP STORES.** **Read before wiring any map, before
   touching `vision.adapter.ts`, before building photo/video upload, and before

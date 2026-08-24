@@ -5,6 +5,7 @@ import Select from '../../components/common/Select';
 import JoinCodeCard from '../../components/console/JoinCodeCard';
 import { ConsoleCard, ConsoleFailed } from '../../components/console/ConsoleStates';
 import { orgService, errorText } from '../../api/orgsApi';
+import { refreshConsoleOrgs } from './consoleOrgs';
 import { ORG_TYPE_CHOICES, countryOptions, detectTimezone, timezoneOptions } from './consoleView';
 
 // Part 3 §4.0's onboarding wizard, reduced to the steps that have a server
@@ -96,6 +97,20 @@ export default function NewGym() {
         country,
         timezone: timezone.trim(),
       });
+      // THE CONSOLE HAS TO BE TOLD, AND THIS IS THE ONLY PLACE THAT CAN TELL IT
+      // (T3 C/H-1). Every console screen reads one kept answer to "which gyms do
+      // I run?", re-checked when the window comes BACK — and making a gym happens
+      // inside that window, so nothing else here fires. Without this line the
+      // button below lands on "we couldn't find a gym you run at this address",
+      // and "Your gyms" tells somebody who has just made their first gym that
+      // they don't run one.
+      //
+      // Not awaited: the code reveal is what this person asked for and it should
+      // not wait on a second request. The read is on its way long before they can
+      // read a join code and reach for the button — and if it has not landed, the
+      // gym screen shows its own spinner and then the gym, which is the truth
+      // rather than a denial.
+      refreshConsoleOrgs();
       setCreated(res.data);
     } catch (err) {
       // The server's own sentence, verbatim: "We're not open in that country

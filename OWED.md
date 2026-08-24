@@ -4151,6 +4151,21 @@ file and is stated so nobody reads these as lower priority than they are.
       `mergeEntitlements` hands a user holding both the BETTER of the two, so
       the gym member who also subscribes personally keeps 20 — probably right,
       never ruled. **Its own ❓ line is in the open-questions section.**
+      **UPDATE 2026-08-24, THIRD RULING THE SAME DAY (DECISIONS :17357) — EVERY
+      NUMBER ABOVE IS SUPERSEDED. THIS IS THE BOOK TO SEED, AND IT NOW COVERS
+      TWO MARKETS:**
+      **US · CANADA · EUROPE, one USD book: $30 · $40 · $69 · $99 · $129 ·
+      custom above 2099.**
+      **INDIA, INR: ₹1,500 · ₹2,500 · ₹4,500 · ₹6,500 · ₹8,500** (Kd fixed the
+      first two and delegated the rest; the chat's three were not overruled).
+      **Individuals: international $10/mo · India $5, recommended as ₹449 ·
+      FREE TIER FALLS 3/day → 2/day · gym member 5/day unchanged.**
+      **UNCHANGED BY SILENCE — assumptions, not rulings (S3):** the paid
+      individual keeps 20/day and the one-week unlimited trial survives. A chat
+      finding either contradicted must ASK.
+      **THE 5-vs-20 ❓ IS CLOSED, not still open** — see the struck line in the
+      open-questions section. Kd's reason measured correct: 20/day for gym
+      members is UNDERWATER in three of five bands.
 - [ ] 🟡 **IN-APP CONSENT SCREEN FOR HEALTH DATA AND THE CAMERA — needed before
       a US gym signs (DECISIONS :9944).** Whatever the gym's contract says
       about the roster upload, health-type data (meals, weight, workouts) and
@@ -4250,6 +4265,15 @@ file and is stated so nobody reads these as lower priority than they are.
       `route_gen` **2/day** paid · gym bands **$29 / $39 / $59 / $79 / $99 /
       custom above 2099** · gym trial **30 days**.
       **Integer minor units end-to-end (R6.1): $6.99 is 699, never 6.99.**
+      **CORRECTED 2026-08-24 (DECISIONS :17357) — SEED THESE, NOT THE LINE
+      ABOVE:** consumer trial week **unlimited, capped 20/day** (unchanged) ·
+      consumer free **2/day** (was 3) · consumer paid **$10/mo, 20/day** (was
+      $6.99) · gym member **5/day** (unchanged) · `route_gen` **2/day** paid
+      (unchanged) · **US/CA/EU gym bands $30 / $40 / $69 / $99 / $129 / custom
+      above 2099** · **INDIA gym bands ₹1,500 / ₹2,500 / ₹4,500 / ₹6,500 /
+      ₹8,500** · India consumer **₹449** · gym trial **30 days** (unchanged).
+      **R6.1 still binds: $10 is 1000, ₹449 is 44900. Two currency books now
+      exist, so a seed that assumes one is wrong.**
 
 ### Running: the Strava-style line is free, the route SUGGESTIONS are not
 
@@ -4512,6 +4536,64 @@ file and is stated so nobody reads these as lower priority than they are.
 
 ### Gym platform — the console and the gym's own money
 
+- [ ] 🔴 **PADDLE IS THE PAYMENT ROUTE — KD RULED IT 2026-08-24 (DECISIONS
+      :17357), and NOTHING IS BUILT.** **Read before writing any billing code or
+      substituting any provider.** *"ok final paddle it is"*. **This does NOT
+      overturn :12600's STRIPE = YES** — Stripe is still the destination; Paddle
+      is what carries the first gyms, because Stripe India is invite-only and
+      needs a registered business he does not have yet.
+      **THE DECIDING CONSTRAINT WAS HIS, and a chat re-opening this must answer
+      it: the gym must be charged AUTOMATICALLY and must NOT have to create an
+      account.** PayPal cannot do both at once (its subscriptions require the
+      buyer to hold a PayPal account; its invoices are manual). Razorpay's
+      e-mandates are India-issued-card + INR only. **Paddle is the only option
+      that does all three and admits a solo Indian individual.**
+      **What actually has to be BUILT:** Paddle as a provider adapter under Part
+      5 §4's ≤200-line rule, mapping to the ONE internal subscription machine —
+      **not a second billing system.** Paddle is merchant of record, so refunds,
+      US sales tax and EU VAT are theirs, and the webhook is a truth-feed
+      exception in the shape of Part 5 §0's RevenueCat carve-out (**still
+      deduped, R3.4**).
+      **Facts a builder needs and must not re-derive:** payout is MONTHLY
+      (balance converts on the 1st, sent by the 15th, ~3 working days) so money
+      arrives ~2½–6½ weeks after a gym pays, a ONE-TIME offset · **$100 minimum
+      payout ⇒ four gyms at $30 before any payout at all** · PayPal, cards, Apple
+      Pay, Google Pay **and UPI** are all methods INSIDE Paddle's checkout, so
+      "offer PayPal too" needs no second integration · 5% + 50¢, which is
+      CHEAPER than PayPal's ~9.2% all-in.
+      **UNVERIFIED and to confirm with Paddle before committing:** their own page
+      states no holding period or rolling reserve for new sellers; a secondary
+      source says new accounts can see holds. Also whether the $15 SWIFT fee
+      applies to an Indian bank, and whether Payoneer avoids it.
+      **RAZORPAY IS STRUCK for the international book** (:456's precedent — no
+      line of its own, nothing to build, do not re-propose). It remains the
+      obvious candidate for the INDIA book, **which nobody has ruled on**.
+- [ ] 🟡 **THE FIRST 4–5 GYMS GO ON PAYPAL INVOICES, NOT PADDLE — agreed
+      2026-08-24 (DECISIONS :17357).** Below four gyms he is under Paddle's $100
+      payout threshold anyway, and a PayPal invoice is paid **by card with no
+      account**, so the gym feels nothing. This is an OPERATOR step, not code —
+      it is here so a chat does not build Paddle integration before it is needed
+      or wonder why early gyms are not in the system. A gym that later refuses
+      Paddle also gets a hand-written invoice; **that is an escape hatch, never a
+      second billing path.**
+- [ ] 🟡 **KD NEEDS A REGISTERED SOLE PROPRIETORSHIP — the door to Stripe, and a
+      CA will ask for it regardless (DECISIONS :17357).** He raised the blocker
+      himself: *"i am a completely solo developer not a business"*. **Stripe
+      India requires a registered business and a sole proprietorship qualifies —
+      a company is NOT needed.** Free first step: **Udyam registration**
+      (`udyamregistration.gov.in`) — Aadhaar + PAN, fully online, self-declared,
+      no documents uploaded, no fee. Banks then typically want ONE more paper
+      (GST registration or a Shop Act licence) for a current account.
+      **Paddle needs none of this — so START it, do NOT WAIT for it.**
+      Belongs with the :592 / :9944 professional-advice items: **the tax
+      questions (LUT for zero-rated export GST, s.44ADA presumptive taxation,
+      when a Pvt Ltd starts beating an individual) are for a CA, not a chat.**
+- [ ] 🟡 **SIGNED LIABILITY WAIVERS — absent from all ~47 features Kd listed, and
+      every US gym needs them (raised by the chat 2026-08-24, DECISIONS :17357;
+      no ruling sought yet).** **Zero spec hits.** A PDF, a finger signature, a
+      timestamp, stored against the member. Small, and it is one of the things an
+      owner checks when judging whether software is serious enough to run their
+      business on. Lands in build wave 2 with the other gym-running work.
 - [ ] 🟡 **THE GYM CONSOLE DOES NOT EXIST: gyms, join codes, seats.** Measured
       2026-08-18 — `apps/api/src/modules/` has no `org`, `billing`, `webhook` or
       `console` directory; the DB tables (`tenancy.ts`, `orgAnalytics.ts`,
@@ -5161,10 +5243,30 @@ file and is stated so nobody reads these as lower priority than they are.
       **THE SMOKE PASSED 4/4 on `e8a7e5c` (Kd, 2026-08-23, DECISIONS :16495) —
       so ONE of the two gates is met and the whole claim has now been WATCHED:
       a permission ticked ON reached a control in a SECOND window with no F5.**
-      **T3 IS THE REMAINING GATE and it is UNRUN** (prompt and diff written,
-      `t3-console-refresh-r1-*`, gitignored). A passing smoke is not a review
+      **T3 ROUND 1 HAS NOW RUN (2026-08-24) AND FOUND TWO CRITICAL/HIGH, so the
+      packet did NOT ship on it** (DECISIONS :17218). Both are FIXED in that
+      commit, each with a test that fails without the fix and a mutant (C51,
+      C52, C53):
+        · **Creating a gym left the console saying the gym was not yours** —
+          "Go to your gym" landed on *"We couldn't find a gym you run at this
+          address"*, and "Your gyms" told a first-time owner *"You don't run a
+          gym yet"*. The kept answer only re-checks on window focus, and making
+          a gym happens INSIDE the window. **This is the card's own reasoning
+          failing at its edge** (:16371 argued freshness is bounded because "the
+          only way in is the login page's two doors" — true of ENTERING the
+          console, silent about it changing its own list from the inside).
+        · **A shared front-desk browser could strand the next account on a
+          spinner** with no in-app way out, when a hung read outlived a sign-out.
+      **WHAT STILL HOLDS THE TICK: round 2, a DIFF-ONLY re-review of those fixes**
+      (:5348 rule 2), **and the smoke's new step 5** — create a gym, press Go to
+      your gym, see the gym — **which is UNRUN**. A passing smoke is not a review
       (:14147), and this branch's most repeated bookkeeping defect is ticking on
       less than the full gate (:5034, :4718 F4).
+      **THE STANDING LESSON, because it cost 1147 tests, a 74-mutant table and a
+      4/4 human smoke to find one screen lying:** every helper in the render
+      suite mounted ONE route, so no test had ever left a screen for the screen
+      it navigates to. A guarantee that spans two screens has no instrument here
+      unless one is written on purpose.
       **TWO THINGS THE PASS DOES NOT COVER, carried by tests and mutants alone:**
       a background re-check that FAILS leaving the screen alone (C45), and **the
       shared-browser stamp (C46), which that sheet CANNOT exercise as written** —
@@ -5173,6 +5275,22 @@ file and is stated so nobody reads these as lower priority than they are.
       run of that sheet.
       **Read the entry before re-reading the rest of this line — the paragraphs
       below describe the defect as it stood, not as the code stands.**
+- [ ] 🟡 **A MUTATION SWEEP THAT IS KILLED LEAVES THE MUTATED FILE ON DISK, AND
+      NOTHING WARNS YOU** (found 2026-08-24, DECISIONS :17218). **Read before
+      killing a sweep, and before trusting a tree you have not run `git status`
+      on.** `mutate-console.mjs` (and its siblings) restore byte-exactly after
+      every mutant and verify the sha256 — but only on the paths where the run
+      finishes. A run stopped part-way (timeout, `TaskStop`, Ctrl-C) leaves the
+      current mutant written to the source file. It happened here: a single
+      mutant ran past 600 s under a wrong fix, was killed, and left
+      `useConsoleOrg.js` holding C49's `[wanted, snapshot.status]`. **`git
+      status` caught it because the file was one I had not edited; had it been
+      one of the five in the diff, it could have been committed.** Fix is a
+      `SIGINT`/`SIGTERM` handler that restores from the kept original before
+      exiting, in every mutate-*.mjs. **Not done in this commit — :5348 rule 6
+      keeps a fix round to the fix.** Until then the discipline is the one that
+      worked: `git status --short` after any sweep that did not print its own
+      summary.
 - [ ] 🟡 **THE CONSOLE-REFRESH SMOKE CANNOT EXERCISE THE ONE GUARANTEE ABOUT
       OTHER PEOPLE'S DATA, AND IT PASSED WITHOUT NOTICING** (2026-08-23,
       DECISIONS :16495). **Read before running or editing
@@ -6017,8 +6135,28 @@ file and is stated so nobody reads these as lower priority than they are.
       five guarantees this needs: magic-byte content-type validation, size cap,
       server-generated keys, signed URLs, and no user-supplied filename ever
       reflected into a path or header. Add the DPDP/account-delete cascade.
-- [ ] 🟡 **MEAL PHOTOS SELF-DELETE AFTER SEVEN DAYS — Kd ruling.** A timed sweep,
-      not a manual cleanup. The repo already has TTL-sweep patterns to follow.
+- [ ] 🟡 **THE FOUR RETENTION CLOCKS — Kd rulings, COMPLETE as of 2026-08-24
+      (DECISIONS :17357). This line replaces "meal photos self-delete after seven
+      days", which was only one of them.** Timed sweeps, not manual cleanup; the
+      repo already has TTL-sweep patterns to follow.
+
+      | Thing | Lives | Note |
+      |---|---|---|
+      | Meal SCAN photo | **7 days** | Kd, unchanged. **The nutrition data stays FOREVER** — only the image goes |
+      | A POSTED photo (stats burned in) | **1 year** | warn at 11 months with a one-tap save |
+      | Gym announcement | **1 year** | gym may delete earlier, or pin one |
+      | Coach video | **never expires** | the 20-per-gym cap is the control |
+
+      **THE TRAP, AND IT IS THE WHOLE REASON THIS LINE IS LONG: the scan photo
+      and the posted photo are TWO COPIES WITH TWO CLOCKS.** Kd described them as
+      one image (*"it is same single photo"*) and physically that is where it
+      starts — scan, get stats, paste them on, post it. **But the moment stats
+      are burned in it is a NEW file.** One row and one lifetime would make a
+      POST vanish at day 7, and the user would read that as you deleting their
+      post. Same path for workout and running pictures.
+      **DO NOT SHORTEN ANY OF THESE TO SAVE MONEY — measured, keeping every
+      posted photo FOREVER at 500 gyms is $4.66/mo.** Retention here is a
+      privacy and clutter decision; the cost argument was tested and collapsed.
 - [ ] 🟡 **GYM-GLOBAL SHARING NEEDS REPORT-AND-REMOVE.** Kd ruled sharing is the
       member's choice, scoped gym-global or private (:9604 §6). **The moment a
       picture is visible to other members, a way to report and remove one stops
@@ -6030,13 +6168,32 @@ file and is stated so nobody reads these as lower priority than they are.
       deliberately shares.** The boundary is enforced in the repo layer (those
       queries physically cannot join those tables for org callers), not in the UI,
       and it must stay that way as messaging, coach plans and photo feeds land.
+- [ ] 🔴 **A TERRITORY POLYGON PUBLISHES WHERE SOMEBODY LIVES — IT NEEDS THE
+      200 m END-TRIM (raised by the chat 2026-08-24, DECISIONS :17357; not a Kd
+      ruling, and it should not need one).** **Read before writing ANY line of
+      the territory feature.** `apps/api/src/db/schema/geo.ts:2` calls GPS
+      polylines *"the most sensitive data in the app — org-invisible (Part 3
+      §2.4)"*, and a captured area drawn around a person's neighbourhood is that
+      data published to strangers by design. **Part 6 §5.4's 200 m end-trim
+      already exists for shared route thumbnails; the territory polygon takes the
+      same trim.** Without it a user's flag lands on their own house. 🔴 because
+      it is not a polish item — it is the feature being safe or not.
 
 ### Dropped and parked
 
-- [ ] ⚪ **~~COACH-UPLOADED INSTRUCTION VIDEOS.~~ DROPPED BY KD 2026-08-18** —
-      *"ok will not upload video"*, after being offered it as part of the coach
-      surface. Video storage and streaming leave the plan with it. Struck rather
-      than deleted, per this file's rules, so the decision is visible.
+- [ ] 🟡 **COACH-UPLOADED INSTRUCTION VIDEOS — UN-STRUCK 2026-08-24 (DECISIONS
+      :17357). THIS LINE WAS STALE FOR A DAY AND A CHAT ALMOST INHERITED IT.**
+      It read *"~~DROPPED BY KD 2026-08-18~~"* on his *"ok will not upload
+      video"*. **:17012 (2026-08-24) had ALREADY reversed that** — 20 videos per
+      gym — and he confirmed it a third time the same day. **The strike is
+      removed; the history stays visible here deliberately, because the lesson is
+      that a reversal recorded in DECISIONS does not un-strike its own OWED line
+      and somebody must do it in the same commit.**
+      **THE RULED SHAPE: 1 minute each · 20 per gym · the gym deletes to make
+      room · NO EXPIRY.** The 20-cap IS the storage control — measured $2.78/mo
+      at 500 gyms held forever — so expiring a "how to squat" video only makes
+      the coach re-upload it. Video goes to **R2, never Cloudflare Stream**
+      (:17012 §5: Stream bills per minute WATCHED, so popularity is the bill).
 - [ ] ⚪ **~~IMPORT A GYM'S DATA FROM A COMPETITOR MANAGEMENT APP — PARKED.~~
       SUPERSEDED IN PART by Kd's ruling 2026-08-18 (DECISIONS :9809):** *"i
       obvisoulsy can not wait untill someone joins i need to make the system"*.
@@ -6117,20 +6274,17 @@ file and is stated so nobody reads these as lower priority than they are.
       REMOVAL of a live free feature and needs an explicit ruling against the
       cited option, not a plan sentence.**
       **Blocks nothing today. Blocks the billing card and any seed change.**
-- [ ] ❓ **A PAYING GYM'S MEMBER GETS FEWER MEAL SCANS THAN A $6.99 CONSUMER —
-      5/DAY vs 20/DAY (ruled 2026-08-24, DECISIONS :16548 + :16702; the clash
-      is unruled).** **Read before building the entitlement merge or any
-      paywall copy.** Both numbers are Kd's own and the shape may well be
-      deliberate — **a gym perk is not a personal subscription** — but a builder
-      hits it immediately: `mergeEntitlements` (`modules/entitlements/service.ts`)
-      hands a user holding BOTH grants the BETTER of the two, so a gym member
-      who also pays $6.99 keeps 20/day. That is almost certainly right and has
-      never been said out loud.
-      **What needs Kd's word is the OTHER direction: is 5/day what a gym's
-      members should get when the gym is paying $29-$99 for them?** It is the
-      number a gym owner will ask about in the sales call, and it is lower than
-      the free-trial week's 20. Nothing is built either way; it blocks the seed
-      change and the gym pitch, nothing else.
+- [x] ~~❓ **A PAYING GYM'S MEMBER GETS FEWER MEAL SCANS THAN A $6.99 CONSUMER —
+      5/DAY vs 20/DAY.**~~ **ANSWERED AND CLOSED 2026-08-24 by Kd (DECISIONS
+      :17357) — not built, RULED, so it leaves this file by ruling.** He gave
+      the reason himself: *"its beacuse not finnacially possible to give gym user
+      20 scans"*, and **it measures correct — 20/day for gym members is
+      UNDERWATER in three of five bands** (the $40 band would cost $48.50). The
+      structure, recorded so it is never re-argued: an individual pays **$10 per
+      head**, a gym pays **$0.10 per head**, so the individual can eat 4× the
+      scans. **The gap is therefore an UPSELL, not a defect, and needs NO CODE**
+      — `mergeEntitlements` already hands a user holding both grants the better
+      one, so a gym member who wants 20/day buys the $10 subscription.
 - [ ] ❓ **WHERE THE FOLLOW-ALONG REFERENCE FOOTAGE COMES FROM — ANSWERED FOR
       HIM 2026-08-19 (DECISIONS :11534), STILL NOT CHOSEN.** Elaborates the
       clause the follow-along line above already carries ("still owed inside

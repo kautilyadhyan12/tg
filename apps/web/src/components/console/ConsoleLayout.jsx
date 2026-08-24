@@ -31,12 +31,17 @@ import { viewerPrivileges } from '../../pages/console/consoleView';
 // grows a section their role can use: the condition is `canManageStaff`, so
 // that day it becomes a different question rather than a forgotten one.
 //
-// Knowing the role costs this shell a read of `/v1/orgs/mine`, the same list the
-// screen inside it resolves its own gym from. Stated rather than hidden: it is
-// one extra request per console page, it is the cheapest read in the module
-// (indexed, capped at 100 rows, no joins to the workout tables), and the
-// alternative — threading the role from each page up into its own layout —
-// needs a context this card has no other use for.
+// Knowing the role costs this shell NO REQUEST OF ITS OWN. It reads the same
+// kept answer to "which gyms do I run, and what may I do there?" that the screen
+// inside it resolves its own gym from (`pages/console/consoleOrgs.js`), so the
+// shell and its screen are one read between them, and moving between console
+// screens is none at all.
+//
+// This paragraph used to say "it is one extra request per console page", which
+// was true when it was written and is the exact cost :16331 removed. Left as a
+// correction rather than deleted: this is the first file somebody opens to ask
+// how the console learns a role, and a stale answer here sends them looking for
+// a read that no longer happens.
 //
 // THE WAY OUT IS SIGN OUT, NOT A LINK INTO THE MEMBER APP (Kd ruling
 // 2026-08-19, mid-smoke on the login door). This shell used to end in "Back to

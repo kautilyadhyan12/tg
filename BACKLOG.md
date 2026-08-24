@@ -1825,3 +1825,20 @@ lines three mutants point at (S1, S9, S15), and **the whole-table pre-check
 ABORTED on S15 before a byte was written.** Re-anchored and re-measured. The guard
 :15259 added and :15770 ported keeps earning its place — a no-op mutation reports
 ALIVE, whose honest reading is "this guarantee has no test".
+
+## THE CONSOLE STOPS NEEDING F5 — T3 ROUND 1's TWO LOW (2026-08-24)
+
+Reviews `e8a7e5c`. **TWO Critical/High, so the packet did NOT ship on this
+round** — the two below are the Low half, fixed in the same commit as the
+Criticals (DECISIONS :17218). Neither bought a round; both are fixed.
+
+| # | Finding | Fix |
+|---|---|---|
+| L-1 | **A comment that describes the cost this very card removed.** `ConsoleLayout.jsx` still said knowing the role "is one extra request per console page" — true when written, and precisely what the kept answer deleted. **It is the first file somebody opens to ask how the console learns a role**, so a stale answer there sends the next reader looking for a request that no longer happens. | Rewritten to say what it now costs (nothing of its own — the shell and its screen are one read between them), **with the correction left visible rather than the old sentence quietly deleted**: the paragraph names what it used to say and which ruling removed it. |
+| L-2 | **The smoke sheet's result block called step 1 what the sheet calls step 2, and the other way round.** The block said *"Step 1 … a permission ticked ON"* / *"Step 2 … the power taken away"*, while the sheet's step 1 unticks and step 2 ticks on — and the sheet's own *"the step that matters most is 2"* paragraph agrees with the steps, not the block. `DECISIONS.md:16495` copied the crossing. **Both directions genuinely passed, so nothing was claimed that was not established** — only the labels were crossed. | Numbers corrected in the result block, **not by a blind swap**: the correction states WHY they crossed (Kd ran the ON direction first, which step 1's own preamble tells you to do when the helper has no Remove button to take away yet, and the block then described the steps in the order he RAN them while calling them by number). The 4/4 pass is untouched. |
+
+**The instrument that matters here is not in the table.** Both Lows are records
+that drifted from the code inside ONE card — the file comment and the smoke
+sheet — and the round's two Criticals were also things the card's own reasoning
+had never looked at. A card that changes when a screen asks a question leaves
+stale sentences behind in every document that described the old cost.
