@@ -17643,3 +17643,32 @@ serious. Own `OWED.md` line; no ruling sought yet.
 
 Records only. The seed change (`db/seed.ts`) remains owed and now has a complete,
 ratified book for BOTH markets to seed from.
+
+## THE SMOKE'S NEW STEP 5 PASSED, WATCHED BY KD, ON THE FIXED BYTES (2026-08-24)
+
+Follows :17218 the same day. **Kd ran the new step 5 of
+`RUNBOOK/smoke-console-refresh.md` against local api + web on `4c40cd2` and
+reported all five of its actions passing**: the gym was created, **"Go to your
+gym" opened the gym's own screen**, and the new gym **was listed under "Your
+gyms"**. Neither sentence the T3 round found the app printing — *"We couldn't find
+a gym you run at this address"* and *"You don't run a gym yet"* — appeared at
+either point.
+
+**This is the first time a human has watched the C/H-1 flow work**, and it matters
+more than usual for this particular defect: the bug was invisible to 1147 tests, a
+72-mutant table and a 4/4 smoke, so the instrument that finally saw it (a test
+crossing two screens) had never been exercised by a person until now.
+
+**WHAT THIS RUN IS NOT: a 5/5.** Steps 1–4 passed on `e8a7e5c` (:16495) and were
+NOT repeated on `4c40cd2`, **and the commit in between changed the very store
+those steps exercise** — so merging the two runs into one number would be exactly
+the overclaim :16495 was corrected for. **The reasoning for not re-running them,
+offered to be argued with rather than as an assurance:** the change touches which
+reads may SHARE one already in flight, and what an explicit refresh does with one.
+The focus re-check path itself is untouched, so steps 1–4 have no changed
+behaviour to observe; what carries them on these bytes is mutants **C43–C48,
+re-run on the final commit — 6 RED, controls GREEN**. **If a future change touches
+the focus path itself, steps 1–4 need a human again.**
+
+**THE LINE STILL DOES NOT TICK. Round 2 — diff-only (:5348 rule 2) — is now the
+ONLY thing holding it.**

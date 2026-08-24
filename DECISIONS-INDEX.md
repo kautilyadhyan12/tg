@@ -825,6 +825,14 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 
 ## 4 · WEB REPOINT CARDS — all on branch `web-repoint`
 
+- **:17647** — 2026-08-24 — **THE SMOKE'S NEW STEP 5 PASSED, watched by Kd on the
+  fixed bytes (`4c40cd2`)**: gym created, "Go to your gym" opened the gym, the new
+  gym listed under "Your gyms" — neither false sentence appeared. **First human
+  observation of the C/H-1 flow working.** **NOT a 5/5**: steps 1–4 passed on
+  `e8a7e5c` and were not repeated, and the commit between changed the store they
+  exercise — carried on these bytes by mutants C43–C48 re-run (6 RED). **If a
+  future change touches the FOCUS path itself, steps 1–4 need a human again.**
+  **Round 2 (diff-only) is now the ONLY thing holding the ⚪ console line.**
 - **:17218** — 2026-08-24 — **T3 ON THE F5 CARD (:16331): TWO CRITICAL/HIGH, so
   the packet did NOT ship on round 1.** Both fixed in that commit with a failing
   test and a mutant each (C51, C52). **Read before touching `consoleOrgs.js` and

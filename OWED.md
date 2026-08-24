@@ -5257,9 +5257,12 @@ file and is stated so nobody reads these as lower priority than they are.
           console, silent about it changing its own list from the inside).
         · **A shared front-desk browser could strand the next account on a
           spinner** with no in-app way out, when a hung read outlived a sign-out.
-      **WHAT STILL HOLDS THE TICK: round 2, a DIFF-ONLY re-review of those fixes**
-      (:5348 rule 2), **and the smoke's new step 5** — create a gym, press Go to
-      your gym, see the gym — **which is UNRUN**. A passing smoke is not a review
+      **THE SMOKE'S NEW STEP 5 — create a gym, press Go to your gym, see the gym —
+      PASSED (Kd, 2026-08-24, on `4c40cd2`).** The human half of this line is now
+      met ON THE FIXED BYTES. Steps 1–4 were not repeated on that commit; the
+      sheet's result block records that and the reasoning for it.
+      **WHAT STILL HOLDS THE TICK: round 2 alone — a DIFF-ONLY re-review of those
+      fixes** (:5348 rule 2). A passing smoke is not a review
       (:14147), and this branch's most repeated bookkeeping defect is ticking on
       less than the full gate (:5034, :4718 F4).
       **THE STANDING LESSON, because it cost 1147 tests, a 74-mutant table and a

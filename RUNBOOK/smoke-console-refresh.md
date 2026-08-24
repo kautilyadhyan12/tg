@@ -8,10 +8,22 @@ window — you do not have to press F5 any more.
 
 ## RESULT — PASSED 4/4 (Kd, 2026-08-23, commit `e8a7e5c`)
 
-> **Step 5 did not exist for that run and is UNRUN.** It was added 2026-08-24
-> after the T3 review found the bug it checks: an owner who made a gym was told
-> the gym was not theirs. The 4/4 above is about steps 1–4 and is untouched by
-> this.
+> **STEP 5 — PASSED (Kd, 2026-08-24, commit `4c40cd2`).** All five of its actions:
+> the gym was created, **"Go to your gym" opened the gym's own screen**, and the
+> new gym **was listed under "Your gyms"** — the two sentences the T3 review found
+> the app printing instead (*"We couldn't find a gym you run at this address"* and
+> *"You don't run a gym yet"*) appeared at neither point. Run against the local api
+> + web dev servers on the shared dev database.
+>
+> **The 4/4 above is a SEPARATE run on `e8a7e5c` and was NOT repeated on
+> `4c40cd2`.** Stated rather than merged into a "5/5", because the commit in
+> between changed the very store steps 1–4 exercise. **Deliberate, and here is the
+> reasoning to argue with rather than a bare assurance:** the change touches which
+> reads may SHARE one already in flight and what an explicit refresh does with
+> one — the focus re-check path itself is untouched, so steps 1–4 have no changed
+> behaviour to observe. What carries them on these bytes is mutants C43–C48,
+> **re-run on the final commit: 6 RED, controls GREEN**. If a future change touches
+> the focus path itself, steps 1–4 need a human again.
 
 Run in Kd's own browser against his own gym on the shared dev database, both
 servers started by the chat. **The working tree was verified byte-identical to
