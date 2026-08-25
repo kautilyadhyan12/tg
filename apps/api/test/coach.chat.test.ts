@@ -270,7 +270,7 @@ d("coach chat + threads (real Postgres, fake provider)", () => {
     await sql`INSERT INTO gym_members (gym_id, user_id) VALUES (${gymId}, ${g.userId})`;
     await sql`
       INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider)
-      SELECT 'gym', ${gymId}, id, 'active', 'pilot' FROM plans WHERE code = 'org_starter'`;
+      SELECT 'gym', ${gymId}, id, 'active', 'pilot' FROM plans WHERE code = 'org_b1_in_m'`;
 
     const res = await chat("a gym member question about recovery", g.access);
     expect(res.statusCode).toBe(200);

@@ -68,6 +68,14 @@ const TARGETS = {
   // every one of them needs the injected clock the routes suite never touches.
   // Rows aimed here carry `suite: SWEEP_SUITE`.
   sweep: { file: resolve(ROOT, 'apps/api/src/modules/orgs/sweep.ts') },
+  // THE PRICE BOOK. It is not in `modules/orgs`, but it is where a gym's price
+  // AND its member limit actually come from — `seatCapFor` reads
+  // `plans.seat_cap` through the gym's live subscription, so the same number
+  // this file writes is the one the seat door enforces. That puts it squarely
+  // in :5857 rule 4a's MONEY and "numbers a user sees" columns, which is what
+  // buys these rows a slow database mutant. Its guarantees live in the
+  // migration suite, so every row aimed here carries `suite: SEED_SUITE`.
+  seed: { file: resolve(ROOT, 'apps/api/src/db/seed.ts') },
 };
 
 /** The clock's guarantees live in their own suite. Every row that names the
@@ -75,6 +83,20 @@ const TARGETS = {
  *  nothing to break, and reports a RED that has nothing to do with the mutation
  *  — the "red for the wrong reason" shape recorded at :4718 F2. */
 const SWEEP_SUITE = 'test/orgs.sweep.test.ts';
+
+/** The price book's guarantees live in the migration suite, for the same reason
+ *  the clock's live in the sweep suite: that is the only file that seeds and
+ *  then READS BACK. A `seed` row that forgot this would run the routes suite,
+ *  which never asserts a price, and report a RED that means nothing (:4718 F2). */
+const SEED_SUITE = 'test/db.migration.test.ts';
+/** Written ONCE and referenced everywhere, because it is used in two different
+ *  KINDS of place: as the `expect` filter on seven mutants, and as the filter
+ *  the post-sweep database repair runs. Renaming the test would break the seven
+ *  loudly (the control aborts on a filter that matches nothing) and could break
+ *  the repair SILENTLY in the same edit — the repair's failure mode is an abort
+ *  saying "no test tally", which reads as a broken harness rather than as a
+ *  stale string. T3 round-1 Low. */
+const SEED_FILTER = 'matches the ruled price book';
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
 
@@ -1245,6 +1267,96 @@ const MUTANTS = [
     to: '      privileges: r.staffRole === null ? [] : [...privilegesFor(r.staffRole, null)],',
     expect: 'tells a caller what they may DO here, not just what they are called',
   },
+
+  // ---------------------------------------------------------------------
+  // THE PRICE BOOK (:17366 §1 + :17902 §1a/§1b). Every row below is MONEY or a
+  // NUMBER A USER SEES, which is what :5857 rule 4a spends database mutants on.
+  //
+  // Why they exist at all: the seeded book was stale through TWO rulings and
+  // nothing noticed, because the only test over it asserted prices and never
+  // caps, trial days or allowances — and asserted nothing about a currency book
+  // being ABSENT. Each row below is one of the things that silence hid.
+  // ---------------------------------------------------------------------
+  {
+    id: 'O106',
+    target: 'seed',
+    suite: SEED_SUITE,
+    why: "MONEY: a gym band is repriced. This is the class of drift that actually happened — the seed carried the pre-:17366 book while two entries recorded a ratified one, so the app would have charged a number nobody ruled",
+    from: '  { band: 2, seatCap: 500, usd: 5000, inr: 250000 }, //  301–500   $50 / ₹2,500',
+    to: '  { band: 2, seatCap: 500, usd: 4000, inr: 250000 }, //  301–500   $50 / ₹2,500',
+    expect: SEED_FILTER,
+  },
+  {
+    id: 'O107',
+    target: 'seed',
+    suite: SEED_SUITE,
+    why: "MONEY AND A DOOR: `seat_cap` IS the band boundary, and `seatCapFor` reads it to decide who gets in — so a wrong cap both misprices the gym and turns real members away (or lets a 500-member gym sit on the cheapest band forever). The old book's caps were 25/100/150/400 and NO test ever looked at one",
+    from: '  { band: 4, seatCap: 1500, usd: 9900, inr: 650000 }, // 1001–1500 $99 / ₹6,500',
+    to: '  { band: 4, seatCap: 1400, usd: 9900, inr: 650000 }, // 1001–1500 $99 / ₹6,500',
+    expect: SEED_FILTER,
+  },
+  {
+    id: 'O108',
+    target: 'seed',
+    suite: SEED_SUITE,
+    why: "MONEY, IN THE MOST EXPENSIVE DIRECTION: the USD gym book disappears entirely and only the INR one is seeded. That is not hypothetical — it is EXACTLY the state this card found (zero USD org rows since the US became the primary market), and a price book can be wrong by being ABSENT rather than wrong, which is why the assertion compares the SET of active org codes and not a price row by row",
+    from: '    currency: "USD",\n    interval: "month",\n    seatCap,',
+    to: '    currency: "INR",\n    interval: "month",\n    seatCap,',
+    expect: SEED_FILTER,
+  },
+  {
+    id: 'O109',
+    target: 'seed',
+    suite: SEED_SUITE,
+    why: "ON SCREEN AND FALSE (:5807): the gym trial reverts to the spec's 7 days, which Kd superseded with 30 at :16548. A gym told it has a month and cut off after a week is the app breaking a promise it made in writing",
+    from: 'const ORG_TRIAL_DAYS = 30;',
+    to: 'const ORG_TRIAL_DAYS = 7;',
+    expect: SEED_FILTER,
+  },
+  {
+    id: 'O110',
+    target: 'seed',
+    suite: SEED_SUITE,
+    why: "MONEY: a gym's members get the paid consumer's 20 scans a day instead of 5, which :17366 §2 MEASURED as putting three of five bands underwater — the gym pays $35 and the scans cost $48.50. The one number that separates the two blocks",
+    from: '  meal_scan: { window: "day", limit: 5 },\n} as const;',
+    to: '  meal_scan: { window: "day", limit: 20 },\n} as const;',
+    expect: SEED_FILTER,
+  },
+  {
+    id: 'O111',
+    target: 'seed',
+    suite: SEED_SUITE,
+    why: "THE RETIREMENT IS A CLAIM AND NEEDS AN OBSERVER: the pre-ruling book stops being switched off, so six plans carrying caps of 25/100/150/400 and prices no ruled book has matched since 2026-08-24 sit ACTIVE alongside the real ones, ready for a plan picker to offer",
+    from: '  await db\n    .update(plans)\n    .set({ active: false })',
+    to: '  await db\n    .update(plans)\n    .set({ active: true })',
+    expect: SEED_FILTER,
+  },
+  {
+    // O110'S SIBLING, AND THE REASON IT EXISTS IS ROUND 2's Low-2. O110 mutates
+    // this same line and is caught by the SEED suite, which reads the plans
+    // table. This one is caught through the RESOLVER — the path a real member's
+    // app takes — because round 1 claimed five repointed tests now observed the
+    // 5 and round 2 measured that they did not: every assertion in them is
+    // identical in both entitlement blocks. :15770's lesson, one card later —
+    // **a mutant is a claim about ONE call site**, and "the seed writes 5" and
+    // "a member is GRANTED 5" are two different claims.
+    id: 'O113',
+    target: 'seed',
+    suite: 'test/entitlements.routes.test.ts',
+    why: "MONEY, THROUGH THE PATH A REAL MEMBER TAKES: a gym's member is granted the paid consumer's 20 scans a day instead of 5. O110 catches this at the plans TABLE; this catches it at `/v1/entitlements/me`, which is what the app actually reads",
+    from: '  meal_scan: { window: "day", limit: 5 },\n} as const;',
+    to: '  meal_scan: { window: "day", limit: 20 },\n} as const;',
+    expect: "gym membership grants member_entitlements, source 'gym_membership'",
+  },
+  {
+    id: 'O112',
+    target: 'seed',
+    suite: SEED_SUITE,
+    why: "MONEY: the individual's monthly price reverts toward the pre-:17366 figure. Kd raised it from $6.99 to $10 and the seed had never carried either — it still held $3.99 from the original spec book",
+    from: '    priceMinor: 1000, // $10/mo',
+    to: '    priceMinor: 699, // $10/mo',
+    expect: SEED_FILTER,
+  },
 ];
 
 /** ANCHORS ARE CONVERTED TO THE FILE'S OWN LINE ENDINGS, and the file is never
@@ -1284,6 +1396,45 @@ if (!process.env.DATABASE_URL) {
  *  Host only, never the url: a connection string carries a password and this
  *  prints to a terminal that gets pasted into chats (R3.10, and the Neon
  *  password was burned exactly that way on 2026-07-26). */
+
+/** IS THIS HOST THE LOCAL MACHINE? A named function rather than an inline
+ *  regex, because the write-refusal below turns on it and it is the only real
+ *  branching in that guard — round-2 Low-6.
+ *
+ *  **It errs toward REMOTE in every uncertain case**, which is the safe
+ *  direction: the cost of a false "remote" is an unnecessary refusal with the
+ *  fix printed beside it, and the cost of a false "local" is a price nobody
+ *  ruled written into the database Kd's browser reads. Note `[::1]` keeps its
+ *  brackets (that is how `URL.host` renders IPv6) and the trailing `(:|$)` is
+ *  what stops `localhost.evil.com` passing. */
+const isLocalHost = (host) => /^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(host);
+
+/** A SELF-CHECK THAT RUNS EVERY SWEEP, because the refusal it protects has no
+ *  external test and deleting it turns nothing red — round-2 Low-6, the same
+ *  finding as the handler-placement guard above.
+ *
+ *  There is no test harness for `tools/*.mjs`; building one is its own card.
+ *  So the table lives here, costs microseconds, and fails loudly. **Both
+ *  directions are represented on purpose** — a checker that only lists hosts it
+ *  should accept is satisfied by a function that accepts everything (:7104's
+ *  PG1: an assertion satisfied by a threshold loosened until it barely works). */
+for (const [host, expected] of [
+  ['localhost:5433', true],
+  ['127.0.0.1:5433', true],
+  ['[::1]:5433', true],
+  ['localhost', true],
+  ['ep-cool-name-123.ap-southeast-1.aws.neon.tech', false],
+  ['localhost.evil.com:5433', false], // the prefix trap the `(:|$)` closes
+  ['192.168.1.50:5433', false],       // a LAN box is somebody else's machine
+  ['unparseable', false],             // an unreadable url must never read local
+]) {
+  if (isLocalHost(host) !== expected) {
+    abort(`isLocalHost('${host}') should be ${String(expected)}. The remote-write refusal cannot be trusted. Nothing has been run.`);
+  }
+}
+
+let DB_IS_LOCAL = false;
+let DB_HOST = 'unparseable';
 {
   let dbHost = 'unparseable';
   try {
@@ -1292,8 +1443,10 @@ if (!process.env.DATABASE_URL) {
     // An unreadable url is not fatal here — the suite will fail on its own and
     // say why. What must not happen is this line inventing a host.
   }
-  const local = /^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(dbHost);
+  const local = isLocalHost(dbHost);
   console.log(`Database: ${dbHost}${local ? '' : '  ← REMOTE. `pnpm --filter api test:local` is ~15x faster per mutant.'}`);
+  DB_IS_LOCAL = local;
+  DB_HOST = dbHost;
 }
 
 /** `MUTATE_ONLY=O6,O14` runs a SUBSET — the web harness has had this since
@@ -1317,6 +1470,38 @@ if (only !== null) {
   }
 }
 const SELECTED = only === null ? MUTANTS : MUTANTS.filter((m) => only.has(m.id));
+
+/** A WRITE-CAPABLE MUTANT IS REFUSED AGAINST A DATABASE THAT IS NOT LOCAL —
+ *  T3 round-1 Critical/High, and it is a change of RISK CLASS rather than a new
+ *  hazard being discovered.
+ *
+ *  Until the `seed` target existed every mutant here only made the suite READ
+ *  code, so pointing this harness at the Neon branch cost time and nothing else
+ *  — which is why the remote line above is phrased as a SPEED tip. A seed
+ *  mutant WRITES a price nobody ruled into `plans`, and `apps/api/.env`'s
+ *  `DATABASE_URL` is deliberately the Neon branch, because **Kd's own test gyms
+ *  live there and his browser smokes read them** (:13659). Compounded by the
+ *  repair's own limit above: a run killed by hand leaves that price in place.
+ *
+ *  Precedent for refusing rather than warning: `tools/orgs-sweep.ts --now`
+ *  gained a production refusal for the same reason (:13075). The escape hatch
+ *  is deliberate and deliberately awkward — someone who really means it can say
+ *  so, and then owns the consequence. Every other target is unaffected. */
+if (SELECTED.some((m) => m.target === 'seed') && !DB_IS_LOCAL) {
+  if (process.env.MUTATE_SEED_ON_REMOTE_DB !== 'i-know-this-writes-prices') {
+    abort(
+      `a \`seed\` mutant WRITES prices into the database, and ${DB_HOST} is not local.\n` +
+      `  That is very likely the Neon branch Kd's own gyms and browser smokes read.\n` +
+      `  Nothing has been run.\n\n` +
+      `  Use the local database instead:\n` +
+      `    docker compose -f infra/docker-compose.dev.yml up -d postgres redis\n` +
+      `    DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg' node apps/api/tools/mutate-orgs.mjs\n\n` +
+      `  If you genuinely mean to write to ${DB_HOST}, set\n` +
+      `    MUTATE_SEED_ON_REMOTE_DB=i-know-this-writes-prices`,
+    );
+  }
+  console.log(`WARNING: seed mutants will WRITE PRICES to ${DB_HOST}, on your explicit opt-in.`);
+}
 
 // Checked for the WHOLE table before a byte is written (:5199). Runs over
 // MUTANTS, not SELECTED: a subset run still proves the whole table is sane.
@@ -1420,6 +1605,124 @@ for (const { suite, filter } of controlPairs) {
 }
 console.log('control complete\n');
 
+/** SET THE INSTANT A MUTATED `seed.ts` REACHES THE DISK, not when the loop
+ *  finishes. Everything about the repair below turns on this being true even
+ *  when the run dies half way. */
+let seedMutated = false;
+let seedRepaired = false;
+
+/** RESTORING THE FILE IS NOT RESTORING THE WORLD — permanent guard, :5348
+ *  rule 5, added the day the `seed` target was.
+ *
+ *  Every other target in this harness is code the suite READS. `seed.ts` is
+ *  code the suite RUNS, and running it WRITES to the shared database — so a
+ *  mutated price is upserted into `plans` and stays there after the byte-exact
+ *  file restore the summary line proudly reports. **Measured, not feared: the
+ *  first run of O106–O112 left `pro_us_m` at 699 minor units** — the last
+ *  mutant's value — in the database every other suite and Kd's own browser
+ *  read. The harness would have printed "restore verified byte-exact" over it,
+ *  which is this repo's most-recorded failure shape (:5199, :4855 F1, :5906):
+ *  a report that is TRUE about the thing it checked and silent about the thing
+ *  it did not.
+ *
+ *  The repair and the proof are the same act: the seed suite seeds and then
+ *  reads the whole book back, so a GREEN run here means the database matches
+ *  the restored source. A RED one means it does not, and that must be said
+ *  loudly rather than left for the next suite to trip over.
+ *
+ *  **IT RUNS ON EVERY EXIT PATH, NOT ONLY THE HAPPY ONE — T3 round-1
+ *  Critical/High, and the first version of this guard had exactly that hole.**
+ *  Four `abort()`s inside the mutation loop fire AFTER a mutated seed has
+ *  already been executed against the database, and every one of their messages
+ *  talks about the working TREE. Neither is hypothetical: :13336 records the
+ *  control aborting twice under database contention and :17218 a mutant killed
+ *  at 600 s. Hooking `process.on('exit')` covers `abort()` (which is
+ *  `process.exit`, so a `finally` would never run), an uncaught throw, and
+ *  normal completion alike — `execSync` is synchronous, which is the only
+ *  reason an exit handler can do real work here.
+ *
+ *  **THE REGISTRATION SITS ABOVE THE LOOP AND THAT PLACEMENT IS THE WHOLE
+ *  FIX.** The first attempt at this guard defined the handler BELOW the loop,
+ *  so an abort inside the loop exited before the handler existed and the repair
+ *  never ran — measured by forcing a real in-loop abort, which left `pro_us_m`
+ *  at 699 exactly as before the guard was written. A guard that is registered
+ *  after the thing it guards is not a guard. Do not move this back down.
+ *
+ *  **CTRL-C AND `kill` ARE COVERED TOO — round-2 Low-5, and the finding was
+ *  that this comment's own justification named a case it did not cover.** It
+ *  cites :17218, and :17284 records that incident as a mutant that *"had to be
+ *  killed, which left the mutated file on disk"* — a KILL, which fires no
+ *  `exit` handler. Citing the one trigger you do not handle as the reason you
+ *  are needed is the shape :5748 keeps recording. Fixed by handling it rather
+ *  than by narrowing the citation: `SIGINT`/`SIGTERM` repair, then exit with
+ *  the conventional 128+n.
+ *
+ *  **THE COST IS REAL AND IS ACCEPTED: Ctrl-C now takes as long as one suite
+ *  run (~10 s local) before the process ends**, and it prints why, because a
+ *  tool that appears to ignore Ctrl-C is worse than one that is slow.
+ *
+ *  **WHAT STILL CANNOT BE COVERED, stated rather than implied by silence:**
+ *  `SIGKILL`, a power cut, and a SECOND Ctrl-C during the repair. Re-seed by
+ *  hand if you force one of those:
+ *  `DATABASE_URL=<url> corepack pnpm --filter api exec tsx src/db/seed.ts`. */
+const repairSeedDatabase = () => {
+  if (!seedMutated || seedRepaired) return true;
+  seedRepaired = true;
+  console.log('\nseed target was mutated — re-seeding the database and verifying it matches the restored source ...');
+  const { out, failed, fault } = run(SEED_FILTER, SEED_SUITE);
+  const wrong =
+    fault !== null ? `the re-seed could not RUN — ${fault}`
+    : !tallied(out) ? 'the re-seed produced no test tally, so nothing was verified'
+    : failed ? 'THE DATABASE STILL DOES NOT MATCH THE SOURCE after re-seeding'
+    : null;
+  if (wrong !== null) {
+    console.error(
+      `\nDATABASE MAY STILL HOLD A MUTATED PRICE — ${wrong}.\n` +
+      `  Re-seed it by hand before trusting ANY suite or browsing the app:\n` +
+      `  DATABASE_URL=<your url> corepack pnpm --filter api exec tsx src/db/seed.ts\n`,
+    );
+    return false;
+  }
+  console.log('database re-seeded and verified against the restored source');
+  return true;
+};
+
+process.on('exit', () => {
+  repairSeedDatabase();
+});
+
+let seedHandlersRegistered = false;
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    if (seedMutated && !seedRepaired) {
+      console.log(`\n${signal} — repairing the database before exiting; this takes about one suite run.`);
+    }
+    repairSeedDatabase();
+    // 128+n is the conventional exit code for "died on signal", and using it
+    // keeps a killed sweep distinguishable from an ABORT (2) or a clean run.
+    process.exit(signal === 'SIGINT' ? 130 : 143);
+  });
+}
+seedHandlersRegistered = true;
+
+/** THE REGISTRATION MUST ALREADY HAVE HAPPENED BEFORE THE LOOP RUNS, AND THIS
+ *  IS WHAT ENFORCES IT — round-2 Low-6.
+ *
+ *  Round 1's C/H-2 was a repair that never ran because the handler was
+ *  registered BELOW the loop; the fix moved it above, and the only thing
+ *  protecting that placement was a comment saying "do not move this back
+ *  down". **The round's own standing lesson is that reading the code did not
+ *  reveal that defect — only causing it did — so a comment is precisely the
+ *  instrument that lesson says does not work.**
+ *
+ *  There is no test harness for `tools/*.mjs` (building one is its own card),
+ *  so the guard lives where it can actually fire: here, every run, costing
+ *  microseconds. Move the handlers below this line and the next sweep aborts
+ *  before it writes a byte. */
+if (!seedHandlersRegistered) {
+  abort('the seed-repair handlers are registered AFTER the mutation loop, so an early exit would skip the repair (round-1 C/H-2). Move them back above this check. Nothing has been run.');
+}
+
 const results = [];
 for (const m of SELECTED) {
   const target = TARGETS[m.target];
@@ -1432,6 +1735,7 @@ for (const m of SELECTED) {
     abort(`${m.id}: its anchor matched nothing at apply time. Re-anchor it against the current file.`);
   }
   writeFileSync(target.file, mutated);
+  if (m.target === 'seed') seedMutated = true;
 
   const { out, failed, fault } = run(m.expect, m.suite ?? SUITE);
 
@@ -1450,6 +1754,12 @@ for (const m of SELECTED) {
   results.push({ ...m, verdict, ok: verdict === 'RED' });
   console.log(`${m.id.padEnd(4)} ${verdict.padEnd(5)} ${verdict === 'RED' ? 'as expected' : 'UNEXPECTED'}  ${m.why}`);
 }
+
+// The happy path repairs EXPLICITLY, so its output lands in reading order and
+// so a failed repair can still set a non-zero exit code — an exit handler
+// cannot. The `process.on('exit')` registration above the loop is the backstop
+// for every other way out.
+if (!repairSeedDatabase()) process.exit(3);
 
 const bad = results.filter((r) => !r.ok);
 console.log('\n--- summary ---');

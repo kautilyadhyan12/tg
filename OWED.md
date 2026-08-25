@@ -4256,8 +4256,16 @@ file and is stated so nobody reads these as lower priority than they are.
       which is what a trial should be, and costs nothing in goodwill.
       **Not ticked as done — it is ratified, not built.** Rides the one seed
       change below.
-- [ ] 🟡 **RE-SEED THE QUOTAS AND PRICES — EVERY NUMBER IS NOW RULED, so this
-      is unblocked (DECISIONS :16548 + :16702).** `db/seed.ts` holds the
+- [x] ~~🟡 **RE-SEED THE QUOTAS AND PRICES**~~ — **DONE 2026-08-25 in the same
+      change as the 🔴 seed line below.** Seeded exactly the CORRECTED list in
+      this entry, plus :17902's band-1/2 raise ($35/$50) and rounded boundaries,
+      plus Kd's two 2026-08-25 answers (₹449; yearly = eleven months' money).
+      **`route_gen` 2/day paid and the free tier's 2/day are in.** What did NOT
+      ship with it, each with its own line: the trial's MECHANISM (the seed
+      writes `trial_days`; nothing reads it), the org YEARLY book, and the
+      "custom above 2100" tier. Original text kept below:
+- [x] ~~🟡 **RE-SEED THE QUOTAS AND PRICES — EVERY NUMBER IS NOW RULED, so this
+      is unblocked (DECISIONS :16548 + :16702).**~~ `db/seed.ts` holds the
       pre-ruling shape (PAID `meal_scan` 8/day, `route_gen` 5/day — both
       wrong). **The complete ruled book, to be seeded in ONE change:**
       · consumer trial week **unlimited, capped 20/day** · consumer free
@@ -4633,8 +4641,17 @@ file and is stated so nobody reads these as lower priority than they are.
 
 ### Gym platform — the console and the gym's own money
 
-- [ ] 🔴 **THE PLANS SEED MATCHES NO PRICE BOOK THAT HAS EVER BEEN RULED, AND IT
-      HAS ZERO USD GYM PLANS. Measured 2026-08-25 (DECISIONS :17902).**
+- [x] ~~🔴 **THE PLANS SEED MATCHES NO PRICE BOOK THAT HAS EVER BEEN RULED, AND
+      IT HAS ZERO USD GYM PLANS.**~~ **DONE 2026-08-25 — the seeded book is now
+      the ruled one, both currencies, with the caps and the 30-day trial
+      (DECISIONS entry below; `apps/api/src/db/seed.ts`).** Ten gym rows (five
+      USD + five INR), caps 300/500/1000/1500/2100, the individual tiers at
+      $10/₹449 monthly and $110/₹4,939 yearly, paid scans 20/day, gym-member
+      scans 5/day. The six pre-ruling org rows are RETIRED (`active = false`),
+      not deleted. **The 🟡 quota/price re-seed line below closes with it — it
+      was the same one change.** Original text kept below for the record:
+- [x] ~~🔴 **THE PLANS SEED MATCHES NO PRICE BOOK THAT HAS EVER BEEN RULED, AND IT
+      HAS ZERO USD GYM PLANS. Measured 2026-08-25 (DECISIONS :17902).**~~
       **Read before any billing, checkout, trial, seat-cap or entitlement work —
       this file is where a gym's price AND its member limit actually come from.**
       `grep -n 'currency:\|code: "' apps/api/src/db/seed.ts`:
@@ -6504,9 +6521,51 @@ file and is stated so nobody reads these as lower priority than they are.
       / 501–1000 / 1001–1500 / 1501–2100 — because a boundary is a member count,
       not a currency; that is mechanical and is already ruled. **The PRICES are
       not.**
+- [ ] ❓ **THE ORG YEARLY BOOK — TWO CONVENTIONS NOW EXIST AND ONLY ONE IS
+      RULED (2026-08-25, the seed card).** Kd was asked what a YEARLY individual
+      plan costs now that a month is $10, and answered **"one month free"** —
+      so the consumer yearly rows are seeded at **eleven months' money** ($110,
+      ₹4,939). **`05-part5-billing.md:91-97` gives the ORG column a different
+      convention: ×10, "2 months free".** Nothing forces them to agree — a gym
+      and an individual are different buyers — but **no org yearly row is
+      seeded**, so the question is open and nothing is inferred. **Do not seed
+      an org yearly row on either convention without asking him.**
+- [ ] ❓ **₹4,939 IS EXACTLY ELEVEN MONTHS AND LOOKS IT (2026-08-25, the seed
+      card).** ₹449 × 11. Kd was told the figure and offered ₹4,999 instead when
+      the plan was approved; he did not pick, so the exact arithmetic stands.
+      **One line to change if he ever wants the rounder number.** Blocks
+      nothing — nobody can buy anything yet.
+- [ ] 🟡 **"CUSTOM ABOVE 2100" HAS NO ROW AND NO PROCESS (2026-08-25, the seed
+      card).** The ruled book says "custom" above 2,100 members and the seed
+      deliberately writes **no row** for it — a plan row carrying no real price
+      is a number waiting to be read as one. **So a 2,101-member gym cannot be
+      put on a plan by any existing path**, and the biggest customers are the
+      ones with no route in. Needs a decision at the billing card: a bespoke row
+      per deal (fine at these volumes) or a real "enterprise" plan.
+- [ ] 🟡 **THE TRIAL HAS NUMBERS BUT NO MECHANISM (2026-08-25, the seed card).**
+      `plans.trial_days` now carries Kd's ruled lengths — **30 for a gym**
+      (:16548, superseding the spec's 7) and **7 for a paid individual** — and
+      **nothing in the product reads that column** (grep-verified). Nothing
+      starts a trial, ends one, or tells anybody it is running. The billing card
+      owns it. **Recorded so nobody reads a correct number in the database as a
+      working feature.**
+- [ ] ⚪ **NOTHING READS `plans.active`, INCLUDING THE SIX ROWS THE SEED CARD
+      JUST RETIRED (2026-08-25).** The pre-ruling org book is switched off
+      honestly, but the flag is bookkeeping until a plan picker exists —
+      **any code that lists plans for a buyer MUST filter on it**, or a gym
+      gets offered ₹999 for 25 seats. There is no such code today, which is why
+      this is ⚪ and not louder.
 - [ ] ❓ **DOES THE GYM RAISE MOVE THE INDIVIDUAL TIER? (DECISIONS :17902.)**
-      $10/mo international and $5 (₹449) India were ratified at :17366 and were
-      not mentioned on 2026-08-25. **Unchanged.** Worth putting to him with one
+      $10/mo international and $5 India were ratified at :17366 and were not
+      mentioned in that day's raise. **Unchanged.**
+      **CORRECTION 2026-08-25 (the seed card): this line said "$5 (₹449) … were
+      ratified at :17366". The rupee figure was NOT.** That entry's own words
+      are *"Paid, India — **$5** → chat recommends **₹449**"* — a
+      recommendation, and reading it back as a ruling is :16702's fabrication
+      class. **It is a ruling NOW**, because the seed card put it to Kd
+      explicitly before seeding it and he chose ₹449. Corrected here rather than
+      only where it was noticed (:5748).
+      Worth putting to him with one
       measured fact beside it: **Paddle's flat 50¢ makes a $10 subscription cost
       10% to collect (≈14.7% on ₹449) against 6.4% on a $35 gym plan**, and the
       app stores take 15% under $1M/yr — so the individual tier is the one where

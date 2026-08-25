@@ -127,6 +127,178 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:18830** — 2026-08-25 — **THE PLANS SEED, T3 ROUND 2 (diff-only): ZERO
+  Critical/High — THE PACKET SHIPS. The review was WRONG about one thing, and
+  finding out WHY exposed a stale line in THIS FILE that had already turned a
+  settled Kd ruling back into a question for him.** Escape hatch NOT armed (the
+  reviewer said so unprompted). Seven Low, all fixed; Kd approved the list first.
+  **Read before writing any assertion over a whole table in a suite that seeds ·
+  before claiming a repointed fixture now covers something · before citing an
+  entry as OPEN from this index alone · and before adding a guard to
+  `tools/*.mjs` whose only protection is a comment.**
+  **THE WRONG FINDING IS THE MOST VALUABLE THING IN THE ROUND: it said Kd's
+  5-scans-vs-20 question is still open. He CLOSED it 2026-08-24 at :17366 §2 in
+  his own words** (*"its beacuse not finnacially possible to give gym user 20
+  scans"*), `OWED.md` has been ticked since, **and the seed comment it objected
+  to is quoting his ruling.** Acting on it would have been the protocol failure
+  CLAUDE.md names — re-asking Kd to rule on what DECISIONS already rules on.
+  **WHY A CAREFUL REVIEWER GOT IT WRONG IS OURS, NOT THEIRS: §2 OPEN in THIS
+  FILE still listed it.** CLAUDE.md requires §2 be read IN FULL every session
+  whatever the task, so **an error here propagates into every session that
+  follows** — this one reached Kd. Struck. **STANDING: a stale index line is not
+  cosmetic; whoever closes an entry closes its index line in the SAME commit.**
+  **Low-1 and the half the review missed:** the new active-org assertion counted
+  `orgs.routes`' temporary `zz_orgs_cap1` (reproduced, then fixed) — **and
+  running the two suites in ONE invocation, which nobody had done, failed
+  somewhere else: `expected 22 to be 21`, the IDEMPOTENCY comparison counting
+  the same foreign row.** Fixed as a CLASS (:1239) — every read scoped to the
+  seed's own `free`/`pro_`/`org_` namespace, written literally not derived from
+  `planRows` (:3610). **121/121 in one invocation, TWICE** (a race that passes
+  once is not evidence), and 121/121 on a fresh database. **The prefixes are now
+  load-bearing.**
+  **Low-2 is MINE and the shape is worth keeping: round 1 claimed repointing
+  five fixtures gave the 5-scan rule "its first real observer" — MEASURED FALSE.
+  Not one of them looks at the number**; `source`, `coach` and `history_days`
+  are identical in both entitlement blocks, so all five stay green if 5 becomes
+  20. **MOVING A TEST ONTO THE RIGHT FIXTURE DOES NOT MAKE IT ASK THE RIGHT
+  QUESTION**, and the claim reached three documents first (:12731 one round
+  later, in the round quoting it). Fixed by making it TRUE — the gym-membership
+  test now asserts `/v1/entitlements/me` returns 5/day, **through the resolver
+  not the plans table**, with mutant **O113** as O110's SIBLING (:15770).
+  **Low-3/Low-4 are :5748 twice in one round — the place a correction is missed
+  is the file you were not editing:** *"only a count can fail on an absence"*
+  had a THIRD copy inside O108's `why`, **printed on every sweep**; and this
+  index still carried the *"abort arm is honestly unreachable"* sentence round 1
+  had struck in DECISIONS, **both written in the same uncommitted change**.
+  **Low-5: the repair guard's comment cited `:17218` — a mutant that HAD TO BE
+  KILLED — as a reason it was needed, and a kill fires no `exit` handler.** It
+  named the one case it could not handle. **Fixed by handling it**: SIGINT and
+  SIGTERM now repair then exit 130/143, **cost printed (~one suite run)**;
+  SIGKILL, a power cut and a second Ctrl-C are named as still uncovered.
+  **Low-6, the rule-3 answer: NEITHER tool fix had protection — round 1's C/H-2
+  was guarded by a comment saying "do not move this back down", when that
+  round's own lesson is that reading the code did not reveal the defect.** No
+  test harness exists for `tools/*.mjs`, so both guards now live inside the tool
+  and fire every run: a **placement check** that aborts if the handlers are
+  registered after the loop, and an **`isLocalHost` self-check table carrying
+  both directions** (:7104's PG1 — a table of only-should-pass hosts is
+  satisfied by a function that passes everything). Both proven by CAUSING them.
+  **PROVE — LOCAL: three suites in ONE invocation 121/121 TWICE · O106–O113
+  8 RED 0 ALIVE, a stated SUBSET of 113 · FRESH: the same three 121/121 · tsc,
+  eslint, `node --check` clean · 21 rows / 10 active org / 0 stray after.**
+- **:18652** — 2026-08-25 — **THE PLANS SEED, T3 ROUND 1: THREE Critical/High,
+  the packet did NOT ship — and EVERY PRICE WAS RIGHT. All three findings are
+  INSTRUMENTS reporting on a state the dev machine happened to be in.** Reviews
+  :18488. Escape hatch NOT armed (round 1). Kd approved the finding list before
+  a byte was written. **Read before writing a mutant that RUNS code rather than
+  reading it, before pointing any harness at a database that is not local,
+  before quoting a suite as green without saying WHICH DATABASE it ran against,
+  and before adding a fixture that names a plan code.**
+  **CONFIRMED rather than found, and worth as much: all 15 prices, both currency
+  books, ten seat caps, both trial lengths and all three allowances are correct
+  — INCLUDING that bands 3–5 and the INR column were not scaled** to match the
+  band-1/2 raise; the cap off-by-one re-derived (`used >= cap`, so cap 300
+  admits exactly 300); nothing reads `plans.active`; the ₹449 correction
+  accurate. **C/H-1: SIX TESTS PASSED ONLY BECAUSE THE DEV DATABASE STILL HELD
+  THE ROWS THE CARD HAD JUST RETIRED.** The retirement is an `UPDATE` and cannot
+  create a row, so on a fresh database it matches nothing — **measured on a
+  throwaway database: `db.migration` 1 failed, `entitlements` 1 failed,
+  `orgs.routes` 4 failed, 15 rows and 0 retired codes.** **THE SECOND HALF IS
+  WORSE: four of those tests are the ones that LOOK like they check what a gym's
+  member gets, pointed at a retired plan still carrying the OLD 20-scan block**
+  — so the ruled 5-scan figure had exactly one observer. **Mine, and the
+  mechanism is the reusable part: the card's "`free` is the ONLY plan code any
+  production code reads" grep covered `src` and `packages` and NOT
+  `apps/api/test`, then fixed ONE fixture while naming the class in the same
+  sentence** (:1239 at least a fifth time; :10182 C/H-3 exactly). Fixed both
+  ways — five fixtures repointed at a LIVE code (~~which also gives the 5-scan
+  block its first real observer~~ **— STRUCK by round 2's Low-2: repointing them
+  did NOT make them observe the 5, since every assertion in them is identical in
+  both entitlement blocks. Round 2 added the missing one**), and the assertion
+  that REQUIRED the retired
+  rows replaced by **the SET of active org codes being exactly the ten ruled
+  ones**, which also catches an absent book, an extra row and a rename.
+  **C/H-2: the database-repair guard ran on the HAPPY PATH ONLY — and MY FIRST
+  FIX FOR IT WAS ALSO BROKEN.** Four in-loop `abort()`s fire after a mutated
+  seed has already run, all talking about the working TREE; `:13336` and
+  `:17218` are the real triggers. **The fix hooked `process.on('exit')` — right
+  instrument — but REGISTERED IT BELOW THE LOOP, so an in-loop abort still
+  exited first and the repair still never ran: measured, `pro_us_m` left at 699
+  exactly as if unguarded.** Moved above the loop, same forced abort: **699
+  before, 1000 after, exit 2 preserved.** **STANDING LESSON: a guard registered
+  after the thing it guards is not a guard, and only CAUSING the failure shows
+  it** — :12731's "a test written to close a finding is not audited by the
+  review that asked for it", one commit later. Ctrl-C limit stated in the code.
+  **C/H-3: nothing stopped a write-capable mutant reaching the Neon branch Kd's
+  own browser reads** — the REMOTE line was a SPEED tip and did not stop. Until
+  the `seed` target every mutant only made the suite READ; this changed the risk
+  class and compounds with C/H-2. Now REFUSED with an awkward opt-in
+  (`:13075`'s precedent); proven by causing it. **THE FINDING NEITHER REVIEW NOR
+  FIX ROUND PRODUCED — MY OWN HARNESS DID: O111 came back ALIVE on a fresh
+  database and RED on the dev one**, because a retirement has no subject where
+  there is nothing to retire — **a mutant whose verdict depends on which
+  database you point it at is worse than a missing one.** Closed by the TEST
+  BUILDING ITS OWN LEGACY ROW; O111 re-measured RED on a fresh database.
+  Four Low, all fixed (`BACKLOG.md`), incl. **two `OWED.md` lines left as
+  unticked boxes under struck text** and **"only a count can fail on an absence",
+  which is false.** **PROVE, each figure naming its database — FRESH:
+  db.migration 8/8 · entitlements 9/9 · orgs.routes 104/104 · O111 RED. LOCAL:
+  4 suites 52/52 · orgs.routes 104/104 · O106–O112 7 RED 0 ALIVE, a stated
+  SUBSET of 112 · tsc + eslint clean on five files.** **THE ONE-LINE SUMMARY:
+  the prices were never wrong; everything found was an instrument reporting on a
+  state the dev machine happened to be in.** **Round 2 (diff-only) is the
+  remaining gate.**
+- **:18488** — 2026-08-25 — **THE PRICE LIST FINALLY MATCHES A RULED BOOK — ten
+  gym rows in two currencies where there were six in one — AND A MUTATION
+  HARNESS RESTORED A FILE WHILE LEAVING THE DATABASE MUTATED.** Builds :17902
+  §4's 🔴 seed line and closes the 🟡 quota/price line with it. **Read before
+  touching `apps/api/src/db/seed.ts`, before adding a plan row, before writing
+  anything that lists plans to a buyer, before quoting a seat cap, and before
+  adding a mutant that RUNS code rather than reading it.** **SEEDED: gym bands
+  $35/$50/$69/$99/$129 and ₹1,500/₹2,500/₹4,500/₹6,500/₹8,500, caps
+  300/500/1000/1500/2100, org trial 30 days; individuals $10/₹449 monthly and
+  $110/₹4,939 yearly with a 7-day trial; paid 20 scans + 2 routes a day, a gym's
+  member 5 scans, free 2.** **Bands 3–5 and the whole INR column were NOT
+  re-ruled and are seeded at their standing :17366 values — nothing was scaled
+  to match the band-1/2 raise** (:17366 §0's own lesson). **TWO NUMBERS ARE KD'S,
+  GIVEN AT THE PLAN GATE AND NOT INFERABLE: ₹449** — :17366 recorded it as *"chat
+  recommends"* and `OWED.md` had already begun citing it as ratified, corrected
+  in place (:5748) — **and YEARLY = ELEVEN MONTHS' MONEY, one month free**
+  (*"i think should be one month free not two month free"*), asked because
+  ₹999/$29.99 a year became cheaper than three months the moment monthly moved.
+  **That is NOT the spec's org convention (×10, two months, `05-part5-billing.md:91-97`)
+  — the org yearly book is UNSEEDED and open; do not reconcile them on a chat's
+  judgement.** **K4 calls, not put to him:** codes `org_b<n>_<cur>_m`, safe
+  because **`free` is the ONLY plan code any production code reads** · the six
+  pre-ruling rows RETIRED (`active = false`) not deleted, RESTRICT + R4.3 +
+  :10182's clinic-narrowed-at-the-door · **no "custom above 2100" row**, so a
+  2,101-member gym has no path onto a plan (own 🟡 line) · the gym-member block
+  differs from the paid block in ONE key, 5 scans not 20.
+  **THE INSTRUMENT FINDING IS THE PART TO READ: every other target in
+  `mutate-orgs.mjs` is code the suite READS; `seed.ts` is code it RUNS, and
+  running it WRITES to the database — so the mutation outlives the byte-exact
+  file restore the summary reports.** **Measured: the first sweep left
+  `pro_us_m` at 699 minor units in the shared database under a line saying
+  "restore verified byte-exact"** — :5199/:4855 F1/:5906's shape, a report true
+  about what it checked and silent about what it did not. Permanent guard
+  (:5348 rule 5): a sweep touching `seed` re-runs the seed suite and ABORTS if
+  it is not green — repair and proof in one act, **measured both ways on the same
+  mutant (699 without, 1000 with)**; ~~its abort arm is honestly unreachable and
+  said to be~~ **— STRUCK by round 1's Low-6 (:18652): the arm is unreachable
+  only for the seven mutants that exist, and a code-RENAMING mutant reaches it.
+  Do NOT delete that arm citing :17218/:17676.** **The old test asserted prices
+  and NOTHING else, which is much of
+  why the book stayed stale through two rulings** — it now asserts caps (never
+  looked at before, and the cap IS the boundary `seatCapFor` enforces), trial
+  days, allowances, **that BOTH currency books exist** (a book can be wrong by
+  being ABSENT, which is what this card found), the retirements, and idempotency
+  on CONTENT rather than row count. **PROVE: db.migration 8/8 · entitlements
+  9/9 · coach.chat 28/28 · catalog.seed 7/7 · orgs.routes 104/104 · tsc + eslint
+  clean · O106–O112 7 RED 0 ALIVE, a stated SUBSET of 112.** R9.5 red watched
+  first; the table read back OUT of the database, not off the suite's word.
+  **NOTHING IS ON A PLAN — nothing inserts into `subscriptions`, so every cap
+  here is correct in the book and inert in the app; no screen, therefore NO
+  SMOKE, and T3 is UNRUN.**
 - **:17902** — 2026-08-25 — **KD RAISES GYM BANDS 1–2 TO $35/$50, ROUNDS EVERY
   BAND BOUNDARY (0–300 / 301–500 / 501–1000 / 1001–1500 / 1501–2100), RULES THE
   FULL PHOTO EDITOR IN, AND FIXES THE TRIAL'S SHAPE.** Supersedes :17366's
@@ -926,11 +1098,23 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   AWS terrarium DEM, which reaches the same look including 3D for ~$0** — but
   he has not chosen. **Check before wiring ANY map, and do not default to a
   per-map-load provider.**
-- **:16702** — 2026-08-24 — **OPEN: a $6.99 consumer gets 20 meal scans/day
-  while a member of a PAYING GYM gets 5.** Kd's ruled shape, possibly
-  deliberate (a gym perk is not a personal subscription), but
-  `mergeEntitlements` gives a user holding both the BETTER of the two — so the
-  entitlement build hits it. Needs a ruling, not a silent resolution.
+- ~~**:16702** — 2026-08-24 — **OPEN: a $6.99 consumer gets 20 meal scans/day
+  while a member of a PAYING GYM gets 5.**~~ **CLOSED 2026-08-24 THE SAME DAY by
+  Kd at :17366 §2 — *"its beacuse not finnacially possible to give gym user 20
+  scans"* — and it MEASURES CORRECT: 20/day for gym members is underwater in
+  three of five bands.** The gap is an **UPSELL, not a defect, and needs no
+  code** — `mergeEntitlements` already hands a user holding both the better
+  grant, so a gym member who wants 20/day buys the $10 plan. `OWED.md`'s line
+  has been ticked since that ruling.
+  **STRUCK 2026-08-25 BY THE PLANS-SEED ROUND-2 REVIEW, AND HOW IT WAS FOUND IS
+  THE POINT: this line stayed OPEN here for a day after the original closed it,
+  and a reviewer obeying CLAUDE.md — which requires §2 be read IN FULL every
+  session — read it, believed it, and put a settled question back to Kd.**
+  Exactly the failure the amendment names: *"if index and original ever
+  disagree, the ORIGINAL wins and the index is the thing to fix"*. **A stale
+  index line is not a cosmetic defect; it manufactures work for Kd and can
+  re-open his own rulings.** Whoever closes an entry closes its index line in
+  the same commit.
 - **:11534** — 2026-08-19 — **OPEN: WHERE THE FOLLOW-ALONG REFERENCE FOOTAGE
   COMES FROM.** Three options priced and put to Kd — film a real person ·
   motion-capture an expert clip onto a rigged 3D model (**possible; his

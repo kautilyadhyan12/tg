@@ -18484,3 +18484,531 @@ not discovered as surprises:**
   declined to disclose and is then sorted by that non-disclosure. **Not
   harmful, and the alternative is excluding them**, which is what he is fixing.
   Noted, not objected to.
+
+## THE PRICE LIST BECOMES THE RULED ONE — ten gym rows in two currencies where there were six in one, and a harness that restored a file while leaving the database mutated (2026-08-25)
+
+**Read before touching `apps/api/src/db/seed.ts`, before adding a plan row,
+before writing anything that lists plans to a buyer, before quoting a seat cap,
+and before adding a mutant that RUNS code rather than reading it.**
+Builds `OWED.md`'s 🔴 seed line (raised at :17902 §4) and closes the 🟡
+quota/price re-seed line with it — they were always one change. No migration,
+no new dependency, no screen.
+
+### 1 · WHAT THE SEED NOW HOLDS
+
+**The gym book, both currencies, ten rows** — `org_b1_us_m` … `org_b5_us_m` and
+`org_b1_in_m` … `org_b5_in_m`:
+
+| Band | Members | USD | INR | seat_cap |
+|---|---|---|---|---|
+| 1 | 0–300 | $35 | ₹1,500 | 300 |
+| 2 | 301–500 | $50 | ₹2,500 | 500 |
+| 3 | 501–1000 | $69 | ₹4,500 | 1000 |
+| 4 | 1001–1500 | $99 | ₹6,500 | 1500 |
+| 5 | 1501–2100 | $129 | ₹8,500 | 2100 |
+
+Bands 1–2 USD are :17902 §1a; **bands 3–5 and the whole INR column are :17366
+§1 and were NOT re-ruled — they are seeded at their standing values and were
+not scaled to match the raise**, which is the failure :17366 §0 records.
+Boundaries are :17902 §1b's rounded ones, and they move in both books because a
+boundary is a member count, not a currency. Org trial **30 days** (:16548,
+superseding the spec's 7 at `03-part3-org-console.md:236` and
+`05-part5-billing.md` §6.1).
+
+**Individuals:** `$10`/`₹449` monthly, `$110`/`₹4,939` yearly, 7-day trial.
+Paid **20 scans/day** and **2 route plans/day**; a **gym's member 5 scans/day**;
+free **2/day**, unchanged.
+
+**TWO NUMBERS ARE KD'S, GIVEN THIS SESSION AT THE PLAN GATE, and neither was
+inferable:**
+1. **₹449** — :17366 ruled *"$5"* for India and recorded ₹449 as *"chat
+   recommends"*. **It was a recommendation, and `OWED.md` had already started
+   citing it as ratified**; that line is corrected in place (:5748). Put to him
+   with two alternatives; he chose ₹449.
+2. **Yearly = ELEVEN months' money, one month free** — *"i think should be one
+   month free not two month free"*. Asked because the old ₹999/$29.99 yearly
+   rows became **cheaper than three months** the moment monthly moved to
+   $10/₹449. **This is NOT the spec's org convention**
+   (`05-part5-billing.md:91-97` says ×10, two months free) — the org yearly book
+   is unseeded and open, with its own ❓ line. **Do not reconcile the two on a
+   chat's judgement.**
+
+### 2 · DECISIONS TAKEN RATHER THAN PUT TO KD (K4), each with its reason
+
+- **Plan codes `org_b<n>_<cur>_m`.** Resolves the naming gap standing at
+  `DECISIONS.md:91`. Safe because **`free` is the ONLY plan code any production
+  code reads** (`modules/entitlements/repo.ts:38`, grep-verified across
+  `apps/api/src`, `apps/web/src` and `packages`); every other code lived in the
+  seed and in tests. A code no user sees is not Kd's decision to make.
+- **The six pre-ruling org rows are RETIRED (`active = false`), never deleted.**
+  `subscriptions.plan_id` is a RESTRICT reference, history is soft-state (R4.3),
+  and `org_micro_clinic` is the clinic tier :10182 narrowed at the DOOR without
+  deleting. **Said rather than implied: NOTHING reads `plans.active` today**, so
+  this is bookkeeping — but it is the true bookkeeping and it is the seam a plan
+  picker needs. Own ⚪ line, because the day a picker exists it MUST filter on it.
+- **No "custom above 2100" row.** The ruled book says "custom" there, and a plan
+  row carrying no real price is a number waiting to be read as one. Consequence
+  stated rather than discovered later: **a 2,101-member gym has no path onto a
+  plan** — own 🟡 line.
+- **New rows carry `orgTypes: null`** (all types), matching four of the six
+  existing rows and the spec's "all" column; naming types would add a second
+  place to keep in step with the create door.
+- **The gym-member entitlement block differs from the paid block in ONE key:
+  5 scans a day instead of 20.** That is the only difference on record (:17366
+  §1/§2). Inventing a second would be R0.2.
+- **`trial_days` is written for both audiences even though nothing reads it.**
+  The lengths are ruled; the column is where they belong. Its emptiness is a 🟡
+  line, not a silent gap.
+
+### 3 · THE INSTRUMENT FINDING, AND IT IS THE PART TO READ
+
+**A MUTATION HARNESS THAT RESTORES A FILE HAS NOT RESTORED THE WORLD, AND THIS
+ONE PRINTED "restore verified byte-exact (sha256)" OVER A DATABASE HOLDING A
+MUTATED PRICE.**
+
+Every target `mutate-orgs.mjs` had before today is code the suite **reads**.
+`seed.ts` is code the suite **runs**, and running it **upserts into `plans`** —
+so the mutation outlives the file restore. **Measured, not feared: the first
+run of O106–O112 left `pro_us_m` at `699` minor units in the shared local
+database** — the last mutant's value — while the summary reported a clean
+byte-exact restore. Any suite, or Kd's own browser, reading a price between
+that sweep and the next `seed()` call would have read a number nobody ruled.
+
+**This is the repo's most-recorded failure shape wearing a new hat** (:5199,
+:4855 F1, :5906, :2736): a report that is TRUE about the thing it checked and
+silent about the thing it did not.
+
+**Permanent guard (:5348 rule 5): a sweep that mutated the `seed` target
+re-runs the seed suite afterwards and ABORTS if it is not green.** The repair
+and the proof are one act — that suite seeds and then reads the whole book back,
+so green means the database matches the restored source.
+**Proven by measurement in both directions on the SAME mutant (O112): without
+the guard the database was left at `699`; with it, `1000`.**
+~~Honest limit, stated: the guard's *abort* arm is not reachable by any fixture I
+can build, since the re-seed is what would fix the very thing it checks. What is
+load-bearing and measured is the **repair**; the abort is its failure path.~~
+**STRUCK BY T3 ROUND 1 (Low-6), and the reviewer is right: the arm is
+unreachable only for the SEVEN MUTANTS THAT EXIST, each of which changes a value
+the re-seed overwrites. A mutant that renamed a plan code would leave an orphan
+active row the re-seed cannot remove, and the arm would fire.** The corrected
+sentence is in the round-1 entry. **Do not delete the arm citing :17218/:17676's
+"a line nothing can observe should not ship" — it is observable, and this
+over-broad sentence was the only reason to think otherwise.**
+**AND THE GUARD ITSELF WAS BROKEN AS FIRST WRITTEN — round 1's C/H-2. See the
+round-1 entry: it ran on the happy path only.**
+
+### 4 · WHAT THE TEST NOW ASSERTS, AND WHY EACH LINE EXISTS
+
+The old assertion checked prices and **nothing else** — which is a large part of
+why the book stayed stale through two rulings. It now asserts, in
+`test/db.migration.test.ts`:
+
+- every code, price, currency and interval in both tables;
+- **`seat_cap`, which nothing had ever looked at** — and the cap IS the band
+  boundary, read by `seatCapFor` in `modules/orgs/repo.ts` to decide who gets
+  through the door, so a wrong one both misprices a gym and turns members away;
+- `trial_days` on both audiences;
+- the allowances read out of the stored JSON;
+- **that BOTH currency books exist.** A price book can be wrong by being
+  **ABSENT**, which is exactly the state this card found.
+  ~~and only a count can fail on an absence~~ **STRUCK by T3 round 1 (Low-5):
+  that is false — the per-code helper throws `missing plan X` for any code it is
+  asked for, and the old assertion did too. The USD book's absence was invisible
+  because no USD code was ever LISTED, not because counts uniquely see absence.**
+- ~~that the six retired codes are present and inactive — a retirement is a claim
+  and needs an observer;~~ **REPLACED by round 1's C/H-1 with an assertion on the
+  exact SET of active org codes, which holds on a fresh database as well as a
+  long-lived one and is strictly stronger;**
+- **idempotency on CONTENT, not just row count.** The old test compared two row
+  counts; a second pass that repriced a row would have kept the count identical.
+
+### 5 · PROVE (all on the final bytes, local Postgres per :13659)
+
+`db.migration` **8/8** · `entitlements.routes` **9/9** · `coach.chat` **28/28**
+· `catalog.seed` **7/7** · `orgs.routes` **104/104** · `tsc` clean · `eslint`
+clean at `--max-warnings=0` on the three changed api files ·
+**7 new mutants O106–O112 · 7 RED · 0 ALIVE · 0 never ran**, control GREEN
+first, restores sha256-verified, **stated as a SUBSET (7 of 112) by the harness
+itself** (:5199 — this is not a full sweep and must not be quoted as one).
+The R9.5 red was watched first: the new assertions failed against the unchanged
+seed (`pro_in_m price: expected 14900 to be 44900`) before a line of `seed.ts`
+moved. The seeded table was then read back **out of the database** rather than
+taken on the suite's word.
+
+**`pnpm -w typecheck` does not run on this machine** and did not today —
+turbo shells out to the pnpm on PATH (v11.18.0) against the pinned 9.15.4 and
+the root task dies before reaching any package. Pre-existing, unrelated to this
+card, and the reason the per-package `corepack pnpm --filter api exec` form is
+what is quoted above.
+
+### 6 · WHAT THIS DOES NOT DO
+
+**No gym is on a plan.** Nothing in the product inserts into `subscriptions`
+(grep-verified), so every gym is still uncapped (:10010's deferral, unchanged)
+and every caps figure above is correct in the book and inert in the app. No
+checkout, no Paddle, no trial mechanism, no plan picker, no screen — and
+therefore **no SMOKE**, stated rather than skipped (:10010/:11846's precedent).
+
+## THE PLANS SEED, T3 ROUND 1: THREE Critical/High — every price was right and six tests only passed because the dev machine's database still held the rows the card had just retired (2026-08-25)
+
+**Read before writing a mutant that RUNS code rather than reading it, before
+pointing any harness at a database that is not local, before quoting a suite as
+green without saying which database it ran against, and before adding a fixture
+that names a plan code.** Reviews `:18488`. **The packet did NOT ship this
+round.** Escape hatch **NOT armed** — round 1 on this packet, nothing to streak
+against. Findings were listed and **Kd approved the whole list before a byte was
+written** (*"yes fix all"*).
+
+**WHAT THE ROUND CONFIRMED RATHER THAN FOUND, and it is worth as much as the
+findings:** every one of the 15 prices, both currency books, all ten seat caps,
+the trial lengths and all three allowance figures were checked against
+`:17366 §1` and `:17902 §1a/§1b` and are correct — **including that bands 3–5
+and the whole INR column were NOT scaled** to match the band-1/2 raise. The
+reviewer also re-derived the cap off-by-one (`used >= cap`, so cap 300 admits
+exactly 300, matching the "0–300" band), grep-verified that nothing reads
+`plans.active`, and confirmed the `OWED.md` correction about ₹449 was accurate.
+**No user-visible number was wrong. All three Criticals are about the
+INSTRUMENTS.**
+
+### C/H-1 · SIX TESTS PASSED ONLY BECAUSE OF ROWS THE CARD HAD JUST RETIRED
+
+**The card stopped seeding six org plan codes and left five test fixtures asking
+for them by name.** They passed on the dev machine because its database still
+carried the pre-card rows. **On a database that never held them they fail**, and
+the retirement is an `UPDATE` — it cannot create a row, so on a fresh database
+it matches nothing.
+
+**Measured by the reviewer, then independently re-measured here on a throwaway
+database (created, migrated, seeded, dropped) before a line was changed:**
+
+| suite | on a fresh database |
+|---|---|
+| `db.migration` (`-t "matches the ruled price book"`) | 1 failed — `missing plan org_micro` |
+| `entitlements.routes` | 1 failed — `plan org_starter not seeded` |
+| `orgs.routes` | **4 failed** — `null value in column plan_id … violates not-null` |
+
+`SELECT count(*) FROM plans` on that database: **15 rows, 0 retired codes.**
+
+**THE SECOND HALF IS WORSE THAN THE FIRST AND IS WHY THIS IS CRITICAL RATHER
+THAN A BROKEN FIXTURE: four of those tests are the ones that appear to check
+what a member of a paying gym gets, and they were pointed at a RETIRED plan
+still carrying the OLD 20-scans-a-day block.** So the card's own ruled figure —
+5 scans a day, the single number separating the two entitlement blocks — was
+observed in exactly one place, while four tests that look like coverage of it
+could not have failed whatever it said. Rule 4's own shape, in the card that
+introduced the block.
+
+**THIS IS MY ERROR AND THE MECHANISM IS THE REUSABLE PART:** the card's §2
+justified the code rename with *"`free` is the ONLY plan code any production
+code reads"*, grep-verified across `apps/api/src`, `apps/web/src` and
+`packages`. **That grep was true, and it did not cover `apps/api/test`.** The
+card then found the one fixture in `coach.chat.test.ts`, fixed it, and wrote
+"every other code lived in the seed and in tests" — **naming the class in the
+same sentence that fixed one instance of it** (:1239, at least the fifth
+recorded occurrence, and :10182's C/H-3 exactly: *"the cross-tenant test was
+passing by ACCIDENT … on a clean local Postgres the same mutant SURVIVES"*).
+
+**Fixed both ways.** The five fixtures point at `org_b1_in_m` — a live code.
+~~which also makes the four gym-member tests exercise the ruled 5-scan block for
+the first time.~~ **STRUCK BY ROUND 2's Low-2, measured: repointing them did NOT
+make them observe the 5.** Every assertion in those tests — `source`,
+`coach` 30/day, `history_days` — is IDENTICAL in the paid block and the
+gym-member block, so all five stay green if the 5 becomes 20. **Moving a test
+onto the right fixture does not make it ASK the right question**, and the claim
+was written into three documents before anyone checked. Round 2 added the
+assertion that was missing: a gym member's `/v1/entitlements/me` returns
+`meal_scan` 5/day, through the resolver rather than off the plans table.
+And the assertion that required the retired rows to EXIST is
+replaced by one that holds on any database: **the SET of active org codes is
+exactly the ten ruled ones.** That is strictly stronger — it fails on an absent
+book (the state this card was written to fix), on an extra active row, on a
+retirement that did not stick, and on a renamed code, where the old form could
+only fail on the last.
+**Rule 3: the regression evidence is the fresh-database run itself** — 1 failed
+before, 8/8 · 9/9 · 104/104 after, on a database created for the purpose.
+
+### C/H-2 · THE DATABASE-REPAIR GUARD RAN ON THE HAPPY PATH ONLY — AND MY FIRST FIX FOR IT WAS ALSO BROKEN
+
+`:18488 §3`'s permanent guard re-seeds the database after a sweep that mutated
+`seed.ts`, because a seed mutant WRITES a price nobody ruled into `plans`. **It
+sat after the mutation loop, so it was skipped by every early exit.** Four
+`abort()`s inside that loop fire *after* a mutated seed has already run against
+the database, and **every one of their messages talks about the working TREE**,
+saying nothing about the database. Neither trigger is hypothetical: `:13336`
+records the control aborting twice under database contention, `:17218` a mutant
+killed at 600 s.
+
+**THE PART TO READ IS WHAT HAPPENED NEXT. My fix hooked `process.on('exit')` —
+correct instrument, since `abort()` is `process.exit` and a `finally` would
+never run — but REGISTERED IT BELOW THE LOOP. So an in-loop abort still exited
+before the handler existed, and the repair still never ran.** Measured by
+forcing a real in-loop abort: **`pro_us_m` left at `699`, exactly as if the
+guard had never been written.** Moving the registration above the loop and
+forcing the identical abort again: **`699` before, `1000` after, exit code 2
+preserved.** The harness restored byte-identical (sha256 verified either side).
+
+**Standing lesson: a guard registered after the thing it guards is not a guard,
+and reading the code does not show it — only causing the failure does.** This is
+the second time in two commits that a fix for a "the instrument lied" finding
+contained the same defect it was fixing (`:12731`'s standing lesson: *a test
+written to close a review finding is not audited by the review that asked for
+it*). Written into the harness beside the registration as "do not move this back
+down".
+**Honest limit kept in the code: a Ctrl-C or an external kill fires no exit
+handler**, so a hand-killed sweep can still leave a mutated price. Re-seed by
+hand if you kill one.
+
+### C/H-3 · NOTHING STOPPED A WRITE-CAPABLE MUTANT REACHING THE LIVE CLOUD DATABASE
+
+The harness runs against whatever `DATABASE_URL` says, and `apps/api/.env`
+deliberately points at the Neon branch **because Kd's own test gyms live there
+and his browser smokes read them** (`:13659`). It printed
+`← REMOTE. test:local is ~15x faster per mutant` — **a speed tip, not a
+warning, and it did not stop.**
+
+**Until this card every target was code the suite READ, so a remote run cost
+time and nothing else. The `seed` target changed the risk class**, and it
+compounds with C/H-2: a remote run that aborts leaves an unruled price in the
+database Kd browses. Now a `seed` mutant against a non-local host is **REFUSED**
+with the local command in the message, and an opt-in that has to be typed
+deliberately (`MUTATE_SEED_ON_REMOTE_DB=i-know-this-writes-prices`). Every other
+target is untouched — the speed note still stands for them.
+Precedent: `tools/orgs-sweep.ts --now` gained a production refusal for the same
+reason (`:13075`). **Proven by causing it** — exit 2, nothing run.
+
+### THE FINDING NEITHER THE REVIEW NOR THE FIX ROUND PRODUCED — MY OWN HARNESS DID
+
+Re-running the seven mutants after the C/H-1 fix, **O111 came back ALIVE on a
+fresh database and RED on the dev machine's.** The retirement is an `UPDATE`, so
+on a database with nothing to retire, deleting it changes nothing observable —
+`:5104` F5 from the fixture side, and **a mutant whose verdict depends on which
+database you point it at is worse than a missing one**, because a later chat
+running a fresh CI database would read ALIVE as "the retirement has no test" and
+the harness would exit 1 looking broken.
+**Closed by making the test build its own subject**: it inserts one real legacy
+code, ACTIVE, with the pre-ruling price and cap it genuinely had — the exact
+state a long-lived database is in — and asserts the seed switches it off.
+**O111 re-measured RED on a fresh database.** Suspected, then verified rather
+than assumed (V1); the ALIVE run is not summed into the final figures (`:5199`).
+
+### FOUR LOW, ALL FIXED THIS ROUND (`BACKLOG.md`)
+
+Two `OWED.md` lines left as unticked boxes under struck text — **the exact
+failure that file exists to prevent**, and invisible to the `grep` the file is
+read with · **"only a count can fail on an absence" is false** and was written
+in two places; the per-code helper throws on any code it is handed, and the USD
+book was invisible because no USD code was ever LISTED · **"the abort arm is
+unreachable by any fixture I can build" is over-broad** — the reviewer reasoned
+out a renaming mutant that reaches it, and left as written the sentence invites
+a later chat to delete a live guard citing `:17218`/`:17676` · the seed filter
+string written out eight times, failing safe but able to break the repair
+silently.
+
+### PROVE — every figure on the final bytes, and each says which database
+
+**Fresh database** (created, migrated, seeded for the purpose, dropped after):
+`db.migration` **8/8** · `entitlements.routes` **9/9** · `orgs.routes`
+**104/104** · O111 **RED**.
+**Dev-machine local database** (carries the legacy rows): `db.migration` 8/8 ·
+`entitlements.routes` 9/9 · `coach.chat` 28/28 · `catalog.seed` 7/7 ·
+`orgs.routes` **104/104** · **O106–O112 · 7 RED · 0 ALIVE · 0 never ran**,
+control GREEN first, restores sha256-verified, **a stated SUBSET of 112**.
+`tsc` clean · `eslint` clean at `--max-warnings=0` on five files ·
+`node --check` on the harness clean.
+Both new guards **proven by causing them**, in both directions.
+Database read back afterwards: 21 rows, **10 active org rows**, prices correct.
+Tree clean of every experiment (sha256), throwaway database dropped.
+
+**THE ROUND'S ONE-LINE SUMMARY, because it is the shape that will recur: the
+prices were never wrong. Everything found was an instrument that reported on a
+state the dev machine happened to be in** — six tests leaning on rows that were
+about to stop existing, a guard that only ran when nothing went wrong, and a
+harness that would happily write to the production-adjacent database. **A green
+suite is a claim about a RUN, not about the code** (`:13746`), and this round is
+that lesson three times over.
+
+## THE PLANS SEED, T3 ROUND 2 (diff-only): ZERO Critical/High — THE PACKET SHIPS, the review was WRONG about one thing, and finding out why exposed a stale index line that had already cost Kd a question (2026-08-25)
+
+Reviews the round-1 fixes at `:18652`. Escape hatch **NOT armed** and the
+reviewer said so unprompted — nothing severe in `apps/api/test` or in
+`mutate-orgs.mjs`, so round 1's Criticals do not streak. **Seven Low, all fixed
+this round** (:5348 rule 1: a Low buys no round and is still fixed). Kd approved
+the list before a byte moved. **`OWED.md`'s 🔴 seed line and 🟡 quota line stay
+ticked; nothing new is owed by this round.**
+
+**Read before writing any assertion over a whole table in a suite that seeds ·
+before claiming a repointed fixture now covers something · before citing a
+DECISIONS entry as OPEN from the index alone · and before adding a guard to
+`tools/*.mjs` whose only protection is a comment.**
+
+### 1 · THE REVIEW'S ONE WRONG FINDING IS THE MOST VALUABLE THING IN THE ROUND
+
+It closed by saying Kd's *"a gym's member gets 5 scans while a paid individual
+gets 20"* question **is still open and still needs his ruling**, and that the
+seed's comment calling the gap *"an upsell, not a defect"* is a chat's opinion.
+
+**Both halves are false, and it was checked before being acted on.** Kd closed
+it on 2026-08-24 at `:17366` §2 in his own words — *"its beacuse not finnacially
+possible to give gym user 20 scans"* — and that entry MEASURES him correct
+(20/day for gym members is underwater in three of five bands). `OWED.md`'s line
+has been ticked since. **The seed comment is quoting his ruling, not offering an
+opinion.** Putting it back to him would have been the protocol failure CLAUDE.md
+names by name: *"re-asking Kd to rule on something DECISIONS already rules on is
+a protocol failure, not diligence."*
+
+**WHY A CAREFUL REVIEWER GOT IT WRONG IS THE FINDING, AND IT IS OURS, NOT
+THEIRS: `DECISIONS-INDEX.md` still listed it under §2 OPEN.** CLAUDE.md requires
+§2 be read **in full, every session, whatever the task** — so a reviewer doing
+exactly what the protocol demands read "OPEN", believed it, and manufactured a
+question for Kd. The amendment's own sentence covers this: *"if index and
+original ever disagree, the ORIGINAL wins and the index is the thing to fix."*
+
+**The standing lesson, and it upgrades how this repo should treat index rot: a
+stale index line is not a cosmetic defect. It is the one document guaranteed to
+be read in full, so an error there propagates into every session that follows —
+and this one reached the point of putting a settled ruling back in front of
+Kd.** Struck, with the closure and its reason written in. **Whoever closes an
+entry closes its index line in the SAME commit** — the deferral rule's own
+discipline, applied to the index.
+
+### 2 · THE FINDING THE REVIEW FOUND, AND THE SECOND HALF IT DID NOT
+
+**Low-1: the new "exactly ten gym plans" assertion counted a plan another suite
+owns.** `orgs.routes.test.ts` creates `zz_orgs_cap1` for the length of its run,
+so an unscoped `SELECT … WHERE audience='org' AND active` sees ELEVEN. Nine
+files seed against one shared database (:13746) and this file is one of the two
+that assert global shape. **Reproduced rather than reasoned** — inserted the row,
+watched the assertion fail with `received` ending `"zz_orgs_cap1"`, removed it.
+It also reddened the harness's control, which aborts a sweep before it starts.
+
+**AND THE REVIEW'S FIX WAS HALF OF THE FIX. Running the two suites in ONE
+invocation — which nobody had done — failed somewhere else: `expected 22 to be
+21`, the IDEMPOTENCY comparison counting the same foreign row between its two
+reads.** Same defect, one line up, invisible to a single-file run and to the
+reviewer's own parallel two-file run (which passed 112/112 — the window is a
+race, not a certainty, which is what makes it nasty).
+
+**Fixed as a CLASS, not as two cases (:1239):** every read in the test is now
+scoped to the rows the seed owns — `code = 'free' OR code LIKE 'pro\_%' OR code
+LIKE 'org\_%'` — written out literally rather than derived from `planRows`,
+because a test whose inputs and subject share a source proves only that the
+source is self-consistent (:3610). **Measured after: three suites in one
+invocation, 121/121, TWICE** (a race that passes once is not evidence), and
+121/121 again on a brand-new database.
+**Consequence stated so the next person naming a plan knows: the `org_`/`pro_`
+prefixes are now load-bearing.** A plan seeded outside them is invisible to this
+test. Every ruled code has one, and the seed builds them from one template.
+
+### 3 · MY OWN FALSE CLAIM, IN THREE DOCUMENTS, AND THE SHAPE IS WORTH KEEPING
+
+Round 1 said repointing five fixtures onto a live plan *"gives the 5-scan block
+its first real observer"*. **Round 2 measured it false: not one of those tests
+looks at the number.** They assert `source`, `coach` 30/day and `history_days`
+— **all three IDENTICAL in the paid block and the gym-member block** — so every
+one stays green if the 5 becomes 20. The only observer was the seed test,
+reading the plans table.
+
+**MOVING A TEST ONTO THE RIGHT FIXTURE DOES NOT MAKE IT ASK THE RIGHT
+QUESTION**, and the claim went into three documents before anybody checked —
+:12731's standing lesson (*a test written to close a review finding is not
+audited by the review that asked for it*) recurring one round later, in the
+round that quoted it.
+
+Fixed by making the claim TRUE rather than retracting it: the gym-membership
+test now asserts `/v1/entitlements/me` returns `meal_scan` 5/day — **through the
+resolver a real member's app reads, not off the plans table** — and it carries
+its own mutant, **O113**, deliberately a SIBLING of O110 rather than a
+replacement (:15770: *a mutant is a claim about ONE call site*; "the seed writes
+5" and "a member is GRANTED 5" are two different claims). O113 measured RED.
+The three documents are struck in place.
+
+### 4 · TWO SENTENCES ROUND 1 STRUCK WERE STILL ALIVE ELSEWHERE (:5748, twice)
+
+**Low-3:** *"only a count can fail on an absence"* — struck in two places by
+round 1 — had a **third copy inside the O108 mutant's `why`**, which the harness
+**prints to the terminal on every sweep**. Doubly wrong by then, since the
+replacement assertion is a set comparison, not a count. Rewritten.
+**Low-4:** the index still carried *"its abort arm is honestly unreachable and
+said to be"* — the exact sentence round 1's Low-6 struck in `DECISIONS.md`,
+**both written in the same uncommitted change**. This is the worse copy for the
+reason §1 gives, and Low-6's whole stated harm was that the sentence invites a
+later chat to delete a live guard. Struck, with the "do NOT delete that arm"
+instruction carried across.
+
+**:5748's lesson lands twice in one round: the place a correction is missed is
+the file you were not editing.**
+
+### 5 · THE GUARD'S JUSTIFICATION CITED THE ONE CASE IT DID NOT COVER
+
+**Low-5:** the repair guard's comment lists why it is needed and names
+*":17218 a mutant killed at 600 s"* — and `:17284` records that incident as one
+that *"had to be killed, which left the mutated file on disk"*. **A kill fires
+no `exit` handler.** So the guard cited, as its own reason for existing, the one
+trigger it could not handle — and with the deliberate remote opt-in set, a
+Ctrl-C would leave an unruled price in the database Kd's browser reads.
+
+**Fixed by handling it rather than by narrowing the citation:** `SIGINT` and
+`SIGTERM` now repair, then exit 130/143. **Cost accepted and printed: Ctrl-C now
+takes about one suite run (~10 s local) before the process ends, and it says
+so**, because a tool that appears to ignore Ctrl-C is worse than one that is
+slow. **What still cannot be covered is named rather than implied: `SIGKILL`, a
+power cut, and a SECOND Ctrl-C during the repair.**
+
+### 6 · NEITHER TOOL FIX HAD ANY PROTECTION, WHICH IS THE ROUND'S RULE-3 ANSWER
+
+**Low-6, and the reviewer's framing is exactly right: the only thing protecting
+round 1's C/H-2 was a comment reading "do not move this back down" — and that
+round's own standing lesson is that reading the code did not reveal the defect,
+only causing it did.** A comment is precisely the instrument that lesson says
+does not work. The remote refusal (C/H-3) was equally naked: delete it, nothing
+goes red.
+
+There is no test harness for `tools/*.mjs` — building one is its own card — so
+both guards live where they can actually fire, inside the tool, on every run:
+
+1. **A placement check.** `seedHandlersRegistered` is set where the handlers are
+   registered and asserted immediately before the mutation loop. Move them below
+   it and the next sweep **aborts before writing a byte**.
+2. **A self-check table on `isLocalHost`**, extracted from an inline regex
+   because it is the only real branching in the refusal. **Both directions are
+   represented on purpose** — a table listing only hosts that should pass is
+   satisfied by a function that passes everything (:7104's PG1).
+   `localhost.evil.com` and `192.168.1.50` are in it as the traps.
+
+**Both proven by CAUSING them**, and the harness restored byte-identical
+(sha256) either side of each experiment.
+
+**Rule 3, honestly:** C/H-1 carries the fresh-database run plus O111; C/H-2 and
+C/H-3 now carry the two self-checks above; the round-2 fixes carry O113 and the
+combined-suite runs. **The one thing still carried by a comment alone is the
+`org_`/`pro_` prefix convention** — noted in §2 and cheap to keep.
+
+### 7 · WHAT THE REVIEW CONFIRMED RATHER THAN FOUND
+
+Every round-1 fix does what it claims. The repair is reachable from in-loop
+aborts, uncaught errors and normal completion — he traced all three — cannot run
+twice, cannot run when no seed mutant was selected, and cannot exit 0 on a
+failed repair. The remote refusal handles IPv6, an unreadable url and the
+`localhost`-prefix trap, **errs toward refusing in every uncertain case**, fires
+before anything is written, and its opt-in is exact-match. The two ticked
+`OWED.md` boxes are correct and no unticked struck line remains. `SEED_FILTER`
+is used in all eight places.
+
+### 8 · PROVE — every figure names its database
+
+**Local** (carries the legacy rows): `db.migration` + `orgs.routes` +
+`entitlements.routes` in ONE invocation **121/121, run TWICE** · the Low-1
+reproduction re-run with the foreign row present, now **passing** ·
+**O106–O113 · 8 RED · 0 ALIVE · 0 never ran**, control GREEN first, restores
+sha256-verified, **a stated SUBSET of 113**.
+**Fresh** (created, migrated, seeded, dropped): the same three suites
+**121/121**.
+`tsc` clean · `eslint` clean at `--max-warnings=0` · `node --check` clean ·
+both new self-checks proven by causing them · database read back afterwards:
+**21 rows, 10 active org rows, 0 stray** · tree clean.
+
+**THE ROUND IN ONE LINE: the prices were never in question; what this round
+found was one assertion that could lose a race, one claim of mine that was
+false, two struck sentences still alive, a guard citing the case it could not
+handle, two guards protected only by comments — and an index line that had
+already turned a settled ruling back into a question for Kd.**

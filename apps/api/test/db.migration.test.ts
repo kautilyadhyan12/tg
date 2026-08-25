@@ -94,36 +94,191 @@ d("0001_init on a real database", () => {
 
   // 120s: two full seed passes = many sequential round-trips over a WAN
   // pooler; 30s flaked once under load (P2.5a PROVE) — headroom, not a bug.
-  it("seed is idempotent and matches the Part 5 §1 price book", { timeout: 120_000 }, async () => {
-    await seed(url ?? "");
-    const first = await sql`SELECT count(*)::int AS n FROM plans`;
-    await seed(url ?? "");
-    const second = await sql`SELECT count(*)::int AS n FROM plans`;
-    expect(second[0]?.["n"]).toBe(first[0]?.["n"]);
-
-    const book = await sql`
-      SELECT code, price_minor, currency, "interval", seat_cap, rank
-      FROM plans ORDER BY code`;
-    const byCode = new Map(book.map((r) => [r["code"] as string, r]));
-    const expectPrice = (code: string, minor: number, cur: string): void => {
-      const row = byCode.get(code);
-      expect(row, `missing plan ${code}`).toBeDefined();
-      expect(row?.["price_minor"]).toBe(minor);
-      expect(row?.["currency"]).toBe(cur);
+  //
+  // THE BOOK ASSERTED HERE IS THE RULED ONE, and every number is traceable:
+  //  · gym bands + boundaries — Kd, DECISIONS :17902 §1a/§1b (bands 1-2 raised
+  //    to $35/$50; boundaries rounded to 0-300 / 301-500 / 501-1000 /
+  //    1001-1500 / 1501-2100), over :17366 §1's ratified table for bands 3-5
+  //    and the whole INR book.
+  //  · seat_cap IS the band boundary in code (:17902 §4) — a cap asserted
+  //    nowhere was how the old book stayed stale through two rulings.
+  //  · individual tiers — :17366 §1 ($10 international, $5 India) with Kd's
+  //    2026-08-25 ₹449 and "one month free" (yearly = 11x monthly).
+  //  · gym trial 30 days — Kd :16548, superseding the spec's 7.
+  //  · scan/route allowances — :17366 §1/§2 (paid 20/day, gym member 5/day,
+  //    free 2/day) and the OWED re-seed line's route_gen 2/day.
+  it("seed is idempotent and matches the ruled price book", { timeout: 120_000 }, async () => {
+    type PlanRow = {
+      code: string;
+      price_minor: number;
+      currency: string;
+      interval: string;
+      seat_cap: number | null;
+      trial_days: number;
+      rank: number;
+      active: boolean;
+      entitlements: Record<string, unknown>;
+      member_entitlements: Record<string, unknown> | null;
     };
-    expectPrice("free", 0, "INR");
-    expectPrice("pro_in_m", 14900, "INR");
-    expectPrice("pro_in_y", 99900, "INR");
-    expectPrice("pro_us_m", 399, "USD");
-    expectPrice("pro_us_y", 2999, "USD");
-    expectPrice("org_micro", 99900, "INR");
-    expectPrice("org_micro_clinic", 149900, "INR");
-    expectPrice("org_starter", 149900, "INR");
-    expectPrice("org_standard", 199900, "INR");
-    expectPrice("org_growth", 349900, "INR");
-    expectPrice("org_scale", 499900, "INR");
-    expect(byCode.get("free")?.["rank"]).toBe(0);
-    expect(byCode.get("pro_in_m")?.["rank"]).toBe(10);
+    // EVERY READ IN THIS TEST IS SCOPED TO THE ROWS THE SEED OWNS, and that is
+    // a CLASS fix rather than a one-line one (:1239).
+    //
+    // Round 2's Low-1 named the active-codes assertion below; running this file
+    // together with `orgs.routes.test.ts` then failed HERE instead, on
+    // `expected 22 to be 21` — the idempotency comparison counting that suite's
+    // temporary `zz_orgs_cap1` row, which appeared between the two reads. Same
+    // defect, one line up, found only because the two suites were run in ONE
+    // invocation rather than separately. Nine files seed against one shared
+    // database (:13746) and this file is one of the two that assert global
+    // shape, so anything unscoped here is a race waiting for a parallel run.
+    //
+    // The scope is the seed's own naming convention, written out literally
+    // rather than derived from `planRows` — a test whose inputs and subject
+    // share a source proves only that the source is self-consistent (:3610).
+    const readBook = async (): Promise<Map<string, PlanRow>> => {
+      const rows = await sql<PlanRow[]>`
+        SELECT code, price_minor, currency, "interval", seat_cap, trial_days, rank,
+               active, entitlements, member_entitlements
+        FROM plans
+        WHERE code = 'free' OR code LIKE 'pro\_%' OR code LIKE 'org\_%'
+        ORDER BY code`;
+      return new Map(rows.map((r) => [r.code, r]));
+    };
+
+    // THE TEST BUILDS ITS OWN LEGACY ROW, and this is not housekeeping — it is
+    // what makes the retirement OBSERVABLE ON ANY DATABASE.
+    //
+    // The retirement is an UPDATE, so it can only switch off a row that already
+    // exists. On a database that never ran the old seed there is nothing to
+    // retire, the statement matches nothing, and deleting it changes NOTHING —
+    // measured: mutant O111 is RED against a database carrying the six legacy
+    // rows and **ALIVE against a fresh one**. A guarantee whose verdict depends
+    // on which database you point at is a guarantee nobody can rely on, and the
+    // fresh-database ALIVE would read as "the retirement has no test" to the
+    // next chat (:5104 F5, from the fixture side).
+    //
+    // So the precondition is created here rather than inherited: one real
+    // legacy code, ACTIVE, with the pre-ruling price and cap it genuinely had.
+    // That is exactly the state a long-lived database is in, and after seeding
+    // it must come back inactive.
+    await sql`
+      INSERT INTO plans (code, audience, name_key, price_minor, currency, "interval",
+                         seat_cap, trial_days, rank, entitlements, member_entitlements, active)
+      VALUES ('org_micro', 'org', 'plan.org_micro', 99900, 'INR', 'month',
+              25, 7, 10, '{}'::jsonb, '{}'::jsonb, true)
+      ON CONFLICT (code) DO UPDATE SET active = true`;
+
+    await seed(url ?? "");
+    const first = await readBook();
+    await seed(url ?? "");
+    const byCode = await readBook();
+    // Idempotency is about the CONTENT, not the row count: a second pass that
+    // repriced a row would have kept the count identical.
+    expect(byCode.size).toBe(first.size);
+    for (const [code, row] of first) expect(byCode.get(code), code).toEqual(row);
+
+    const row = (code: string): PlanRow => {
+      const r = byCode.get(code);
+      expect(r, `missing plan ${code}`).toBeDefined();
+      if (r === undefined) throw new Error(`missing plan ${code}`);
+      return r;
+    };
+    const day = (limit: number) => ({ window: "day", limit });
+
+    // ---- consumer -------------------------------------------------------
+    const consumer: [string, number, string, string, number][] = [
+      // code, price_minor, currency, interval, trial_days
+      ["free", 0, "INR", "month", 0],
+      ["pro_in_m", 44900, "INR", "month", 7],
+      ["pro_in_y", 493900, "INR", "year", 7],
+      ["pro_us_m", 1000, "USD", "month", 7],
+      ["pro_us_y", 11000, "USD", "year", 7],
+    ];
+    for (const [code, minor, currency, interval, trialDays] of consumer) {
+      const r = row(code);
+      expect(r.price_minor, `${code} price`).toBe(minor);
+      expect(r.currency, `${code} currency`).toBe(currency);
+      expect(r.interval, `${code} interval`).toBe(interval);
+      expect(r.trial_days, `${code} trial days`).toBe(trialDays);
+      expect(r.seat_cap, `${code} is not an org plan`).toBeNull();
+      expect(r.active, `${code} active`).toBe(true);
+    }
+    expect(row("free").rank).toBe(0);
+    expect(row("pro_in_m").rank).toBe(10);
+
+    // ---- gym bands, both books -------------------------------------------
+    const bands: [string, number, string, number][] = [
+      // code, price_minor, currency, seat_cap
+      ["org_b1_us_m", 3500, "USD", 300],
+      ["org_b2_us_m", 5000, "USD", 500],
+      ["org_b3_us_m", 6900, "USD", 1000],
+      ["org_b4_us_m", 9900, "USD", 1500],
+      ["org_b5_us_m", 12900, "USD", 2100],
+      ["org_b1_in_m", 150000, "INR", 300],
+      ["org_b2_in_m", 250000, "INR", 500],
+      ["org_b3_in_m", 450000, "INR", 1000],
+      ["org_b4_in_m", 650000, "INR", 1500],
+      ["org_b5_in_m", 850000, "INR", 2100],
+    ];
+    for (const [code, minor, currency, seatCap] of bands) {
+      const r = row(code);
+      expect(r.price_minor, `${code} price`).toBe(minor);
+      expect(r.currency, `${code} currency`).toBe(currency);
+      expect(r.seat_cap, `${code} seat cap`).toBe(seatCap);
+      expect(r.interval, `${code} interval`).toBe("month");
+      expect(r.trial_days, `${code} trial days`).toBe(30);
+      expect(r.rank, `${code} rank`).toBe(10);
+      expect(r.active, `${code} active`).toBe(true);
+      expect(r.member_entitlements?.["meal_scan"], `${code} member scans`).toEqual(day(5));
+    }
+
+    // WHAT A GYM CAN BE SOLD IS EXACTLY THESE TEN, AND THIS IS THE ASSERTION
+    // WITH THE MOST TEETH IN THE FILE. It fails three different ways at once:
+    // a book that is ABSENT (the state this card found — no USD org row had
+    // ever been seeded), an EXTRA active row (a retirement that did not stick,
+    // or a code accidentally listed in both the seed and the retired list), and
+    // a code that quietly changed name.
+    //
+    // **It replaced a per-code check of the six RETIRED rows, and the reason is
+    // the T3 round-1 Critical (:5104's shape, one layer out): that check
+    // required those rows to EXIST, and on a database that never held them the
+    // retirement is an UPDATE matching nothing.** Six tests passed only because
+    // the dev machine's database still carried pre-card rows — true of a RUN,
+    // false of the code (:13746).
+    //
+    // **SCOPED TO THE SEED'S OWN `org_` NAMESPACE — round-2 Low-1, and it is a
+    // RACE the first version could lose.** `orgs.routes.test.ts` creates a
+    // one-seat plan `zz_orgs_cap1` for the length of its run, so an unscoped
+    // count sees ELEVEN while that suite is running: nine files seed against
+    // one shared database (:13746), and this is the second assertion in this
+    // file to be caught by that. **Reproduced rather than reasoned: with that
+    // row present this line failed, `received` ending `"zz_orgs_cap1"`.** It
+    // also reddened the mutation harness's control, aborting a sweep before it
+    // began. The prefix keeps every tooth — an absent book, an extra `org_`
+    // row, a rename, a retirement that did not stick — while ignoring rows the
+    // seed does not own.
+    //
+    // **CONSEQUENCE, so the next person naming a plan knows: the `org_` prefix
+    // is now load-bearing.** An org plan seeded under a different prefix would
+    // be invisible here. Every ruled code has it, and the seed builds them from
+    // one template, so the convention is cheap to keep.
+    const activeOrgCodes = await sql<{ code: string }[]>`
+      SELECT code FROM plans
+      WHERE audience = 'org' AND active AND code LIKE 'org\_%'
+      ORDER BY code`;
+    expect(activeOrgCodes.map((r) => r.code)).toEqual([
+      "org_b1_in_m", "org_b1_us_m", "org_b2_in_m", "org_b2_us_m", "org_b3_in_m",
+      "org_b3_us_m", "org_b4_in_m", "org_b4_us_m", "org_b5_in_m", "org_b5_us_m",
+    ]);
+    // The legacy row this test switched ON above must have been switched back
+    // OFF by the seed — the retirement's own subject, named directly so the
+    // failure says "the retirement did not fire" rather than "expected 11 codes".
+    expect(row("org_micro").active, "the seed must retire a legacy plan row").toBe(false);
+
+    // ---- allowances -------------------------------------------------------
+    expect(row("pro_us_m").entitlements["meal_scan"], "paid scans").toEqual(day(20));
+    expect(row("pro_us_m").entitlements["route_gen"], "paid routes").toEqual(day(2));
+    expect(row("free").entitlements["meal_scan"], "free scans").toEqual(day(2));
   });
 
   it("subs_one_live_uq rejects a second live subscription (23505)", async () => {

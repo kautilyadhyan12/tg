@@ -185,13 +185,22 @@ d("entitlements + quotas + history gate (real Postgres)", () => {
     if (gymId === undefined) throw new Error("gym fixture failed");
     await sql`
       INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider)
-      VALUES ('gym', ${gymId}, ${await planId("org_starter")}, 'trialing', 'pilot')`;
+      VALUES ('gym', ${gymId}, ${await planId("org_b1_in_m")}, 'trialing', 'pilot')`;
     await sql`INSERT INTO gym_members (gym_id, user_id) VALUES (${gymId}, ${userB})`;
     await bustEntitlements(redis, userB);
     const res = await inject({ url: "/v1/entitlements/me", access: cookieB });
     const me = res.json<{ entitlements: Record<string, unknown>; source: string }>();
     expect(me.source).toBe("gym_membership");
     expect(me.entitlements["coach"]).toEqual({ window: "day", limit: 30 }); // Pro block (v1 §9.2)
+    // THE ONE NUMBER THAT SEPARATES THE GYM-MEMBER BLOCK FROM THE PAID ONE, and
+    // until round 2 nothing outside the seed test observed it. **Every other
+    // assertion here — `source`, `coach`, `history_days` — is IDENTICAL in both
+    // blocks**, so all of them stay green if 5 becomes 20, which is what round-1
+    // claimed this test now covered and round-2 measured false.
+    // 5/day is Kd's, :17366 §1, and §2 measures WHY: 20/day for gym members is
+    // underwater in three of five bands. This asserts it through the resolver a
+    // real member's app reads, not off the plans table.
+    expect(me.entitlements["meal_scan"]).toEqual({ window: "day", limit: 5 });
   });
 
   it("history read-gate: free sees 90 days with limitedToDays; pro sees everything (§0.2, GAP-4)", { timeout: 60_000 }, async () => {

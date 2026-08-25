@@ -1137,7 +1137,7 @@ d("orgs routes (real Postgres)", () => {
     const owner = await makeUser("rment-owner");
     const member = await makeUser("rment-member");
     const org = await makeOrg(owner.cookies, "Orgs Test Remove Ent");
-    await subscribeGym(org.org.id, "org_micro"); // member_entitlements = the Pro doc
+    await subscribeGym(org.org.id, "org_b1_in_m"); // member_entitlements = the gym-member doc
     await joinAsMember(member.cookies, org, owner.cookies);
 
     const warm = await get("/v1/entitlements/me", { cookies: member.cookies });
@@ -1468,7 +1468,7 @@ d("orgs routes (real Postgres)", () => {
     const owner = await makeUser("ent-owner");
     const member = await makeUser("ent-member");
     const org = await makeOrg(owner.cookies, "Orgs Test Ent");
-    await subscribeGym(org.org.id, "org_micro"); // member_entitlements = the Pro doc
+    await subscribeGym(org.org.id, "org_b1_in_m"); // member_entitlements = the gym-member doc
 
     // Populate the cache with the free answer FIRST — without this read the
     // assertion below passes on a cold cache and proves nothing.
@@ -1521,7 +1521,7 @@ d("orgs routes (real Postgres)", () => {
     const owner = await makeUser("guard-owner");
     const waiting = await makeUser("guard-waiting");
     const org = await makeOrg(owner.cookies, "Orgs Test Guard");
-    await subscribeGym(org.org.id, "org_micro"); // a gym whose plan grants Pro
+    await subscribeGym(org.org.id, "org_b1_in_m"); // a gym whose plan grants the member block
     await applyWithCode(waiting.cookies, org.joinCode.code);
 
     // 1. The §4.1 entitlement resolver — the money one.
@@ -1698,7 +1698,7 @@ d("orgs routes (real Postgres)", () => {
 
     // The gym starts paying by a route that busts nobody's cache — which is
     // what a subscription webhook looked like before P3 existed.
-    await subscribeGym(org.org.id, "org_micro");
+    await subscribeGym(org.org.id, "org_b1_in_m");
 
     const retype = await post(
       "/v1/orgs/join",

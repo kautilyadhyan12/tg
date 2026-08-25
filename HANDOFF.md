@@ -1,6 +1,184 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: T3 ROUND 2 (diff-only) ON THE PLANS-SEED CARD — ZERO Critical/High.
+      THE PACKET SHIPS. DECISIONS :18830. Seven Low, all fixed. UNCOMMITTED.
+
+THE SEVEN THINGS A NEXT CHAT WILL OTHERWISE GET WRONG
+  1. **THE CARD IS DONE AND THE PRICES WERE NEVER IN QUESTION.** Both OWED lines
+     (🔴 seed, 🟡 quotas) are ticked. Two rounds closed; round 2 found zero
+     Critical/High, so :5348 rule 1 ships it. Do not re-review it.
+  2. **THE REVIEW WAS WRONG ABOUT ONE THING AND IT MATTERS: Kd's
+     5-scans-vs-20 question is CLOSED** (he ruled it 2026-08-24, :17366 §2, in
+     his own words; OWED ticked since). **The cause of the reviewer's error was
+     OURS — DECISIONS-INDEX §2 still listed it as OPEN, and CLAUDE.md makes §2
+     compulsory reading every session.** Struck. **STANDING: close an entry,
+     close its index line, same commit.**
+  3. **A TEST FILE THAT SEEDS MUST NOT ASSERT OVER THE WHOLE TABLE.**
+     `orgs.routes` creates `zz_orgs_cap1` for its run; the seed test now scopes
+     every read to `free`/`pro_`/`org_`. **The `org_` and `pro_` prefixes are
+     LOAD-BEARING** — a plan seeded outside them is invisible to that test.
+  4. **RUN THOSE SUITES TOGETHER, NOT SEPARATELY.** The review's fix was half a
+     fix; the other half only showed up in ONE invocation of db.migration +
+     orgs.routes (`expected 22 to be 21`). Now 121/121, twice, plus fresh.
+  5. **MOVING A TEST ONTO THE RIGHT FIXTURE DOES NOT MAKE IT ASK THE RIGHT
+     QUESTION.** Round 1 claimed five repointed tests covered the 5-scan rule;
+     none did — every assertion in them is identical in both entitlement
+     blocks. The real one is now in entitlements.routes, through the RESOLVER,
+     with mutant O113 (O110's sibling, not its replacement).
+  6. **CTRL-C NOW REPAIRS THE DATABASE and takes ~one suite run to do it.**
+     Deliberate. SIGKILL, a power cut and a second Ctrl-C are still uncovered
+     and said to be.
+  7. **TWO GUARDS NOW LIVE INSIDE THE HARNESS AND FIRE EVERY RUN** — a
+     placement check (handlers must be registered before the loop) and an
+     `isLocalHost` self-check table. There is no test harness for tools/*.mjs;
+     that is its own card. Do not "tidy" either away.
+
+FILES CHANGED THIS ROUND (7)
+  test  apps/api/test/db.migration.test.ts       (every read scoped to the
+                                                  seed's own namespace)
+        apps/api/test/entitlements.routes.test.ts (the 5-scan assertion)
+  tool  apps/api/tools/mutate-orgs.mjs            (SIGINT/SIGTERM repair · the
+                                                   two self-checks · O113 ·
+                                                   O108's why corrected)
+  docs  DECISIONS.md (:18830 + strikes inside :18652) · DECISIONS-INDEX.md
+        (round-2 line, the stale OPEN line struck, two round-1 claims struck) ·
+        HANDOFF.md · BACKLOG.md (7 Low)
+
+MEASURED THIS ROUND (every figure names its database)
+  LOCAL: db.migration + orgs.routes + entitlements in ONE invocation 121/121,
+  run TWICE · the Low-1 reproduction re-run with the foreign row present, now
+  passing · O106-O113 8 RED 0 ALIVE, a stated SUBSET of 113.
+  FRESH (created, migrated, seeded, dropped): the same three suites 121/121.
+  tsc + eslint + node --check clean · both new self-checks proven by CAUSING
+  them · harness byte-identical (sha256) either side of each experiment ·
+  database after: 21 rows, 10 active org, 0 stray.
+
+DEVIATION / SPEC GAP: none.
+
+NEXT: COMMIT (not done — Kd's call). Then pick from OWED.md. Nothing gates this
+  packet any more.
+```
+
+```
+TASK: T3 ROUND 1 ON THE PLANS-SEED CARD — 3 Critical/High, ALL FIXED.
+      DECISIONS :18652. The packet did NOT ship this round; round 2 is the gate.
+
+THE SIX THINGS A NEXT CHAT WILL OTHERWISE GET WRONG
+  1. **EVERY PRICE WAS RIGHT.** All 15 prices, both books, ten caps, both trial
+     lengths and all three allowances were checked and are correct — including
+     that bands 3-5 and the INR column were NOT scaled. **All three Criticals
+     were INSTRUMENTS, not numbers.**
+  2. **SIX TESTS PASSED ONLY BECAUSE KD'S DATABASE STILL HELD THE RETIRED
+     ROWS.** The retirement is an UPDATE and cannot create a row. On a fresh
+     database: db.migration 1 failed, entitlements 1 failed, orgs.routes 4
+     failed. **My grep for "who reads a plan code" covered src and packages and
+     NOT apps/api/test** — that is the whole cause.
+  3. **FOUR OF THOSE TESTS LOOKED LIKE THEY COVERED THE 5-SCAN GYM-MEMBER RULE
+     AND COULD NOT.** They ran through a retired plan carrying the old 20-scan
+     block. They now use a live code — but see round 2: repointing them did NOT
+     make them observe the 5, and round 2 added the assertion that does.
+  4. **A GUARD REGISTERED AFTER THE THING IT GUARDS IS NOT A GUARD.** My fix for
+     C/H-2 hooked process.on('exit') but registered it BELOW the mutation loop,
+     so an in-loop abort still exited first. **Only forcing a real abort found
+     it** — measured 699 (broken) vs 1000 (fixed). Do not move it back down.
+  5. **A `seed` MUTANT NOW REFUSES A NON-LOCAL DATABASE.** It WRITES prices, and
+     apps/api/.env points at the Neon branch Kd's browser reads. Opt-in exists
+     and is deliberately awkward. Every other target is unaffected.
+  6. **O111 WAS ALIVE ON A FRESH DATABASE AND RED ON KD'S** — a retirement has
+     no subject where there is nothing to retire. **The test now inserts its own
+     legacy row**, so the guarantee holds on any database. A mutant whose
+     verdict depends on the database is worse than a missing one.
+
+FILES CHANGED THIS ROUND (7)
+  test  apps/api/test/db.migration.test.ts       (active-SET assertion replaces
+                                                  the retired-rows one; the test
+                                                  builds its own legacy row)
+        apps/api/test/entitlements.routes.test.ts (fixture → org_b1_in_m)
+        apps/api/test/orgs.routes.test.ts         (4 fixtures → org_b1_in_m)
+  tool  apps/api/tools/mutate-orgs.mjs            (repair moved ABOVE the loop;
+                                                   remote refusal; SEED_FILTER)
+  docs  DECISIONS.md (:18652 + two corrections inside :18488) ·
+        DECISIONS-INDEX.md (+1) · OWED.md (2 boxes ticked) · BACKLOG.md (4 Low)
+
+MEASURED THIS ROUND (every figure names its database)
+  FRESH (created, migrated, seeded, dropped): db.migration 8/8 · entitlements
+  9/9 · orgs.routes 104/104 · O111 RED.
+  LOCAL (carries the legacy rows): 4 suites 52/52 · orgs.routes 104/104 ·
+  O106-O112 7 RED 0 ALIVE, a stated SUBSET of 112 · tsc + eslint clean on five
+  files · node --check clean. Both new guards proven by CAUSING them, both
+  directions. Tree verified clean by sha256 after every experiment.
+
+DEVIATION / SPEC GAP: none this round.
+
+NEXT: T3 ROUND 2, DIFF-ONLY, in a fresh chat — the fixes and the surfaces they
+  touch, no fresh full pass (:5348 rule 2). Nothing else gates this packet.
+```
+
+```
+TASK: THE PLANS SEED BECOMES THE RULED PRICE BOOK. DECISIONS :18488.
+      First code since 2026-08-24. 🔴 seed line TICKS, 🟡 quota line with it.
+
+THE EIGHT THINGS A NEXT CHAT WILL OTHERWISE GET WRONG
+  1. **BANDS 3-5 AND THE WHOLE INR COLUMN WERE NOT RE-RULED.** They are seeded
+     at their standing :17366 values ($69/$99/$129 · ₹4,500/₹6,500/₹8,500).
+     **Nothing was scaled to match :17902's band-1/2 raise** and nothing may be.
+     Their ❓ OWED lines are untouched and still open.
+  2. **TWO NUMBERS ARE KD'S, GIVEN AT THIS CARD'S PLAN GATE:** ₹449 for the
+     Indian individual (`:17366` had it as *"chat recommends"*, NOT a ruling —
+     `OWED.md` was already miscitng it and is corrected in place), and
+     **YEARLY = ELEVEN MONTHS, one month free** → $110 / ₹4,939.
+  3. **THAT YEARLY RULE IS THE CONSUMER'S, NOT THE ORG'S.** The spec's org
+     column says ×10 (two months free). **No org yearly row is seeded.** Own ❓
+     line — do not reconcile the two conventions on your own judgement.
+  4. **PLAN CODES CHANGED: `org_b1_us_m` … `org_b5_in_m`.** Safe because `free`
+     is the ONLY plan code any production code reads (grep-verified). The six
+     old org codes still EXIST with `active = false` — retired, never deleted.
+  5. **NOTHING READS `plans.active`.** Said in the code and in DECISIONS. Any
+     future plan picker MUST filter on it or a gym gets offered ₹999 for 25
+     seats. ⚪ line.
+  6. **THE INSTRUMENT FINDING, and it generalises: a mutation harness that
+     restores a FILE has not restored the WORLD.** `seed.ts` is the first target
+     the suite RUNS rather than reads, so a mutant's price was upserted into the
+     database and SURVIVED the byte-exact file restore — measured, `pro_us_m`
+     left at 699. Permanent guard added (re-seed + verify, aborts if not green),
+     proven both ways on the same mutant. **Read this before adding any mutant
+     that executes code with side effects.**
+  7. **NO SCREEN, THEREFORE NO SMOKE** — stated, not skipped. And **T3 IS
+     UNRUN**: it is the only gate left on this packet.
+  8. **NOTHING IS ON A PLAN.** Nothing inserts into `subscriptions`, so every
+     cap seeded here is correct in the book and inert in the app. The seat cap
+     still binds nobody (:10010's deferral, unchanged).
+
+FILES CHANGED (8)
+  src   apps/api/src/db/seed.ts            (the book, the gym-member block, the
+                                            retirement statement)
+  test  apps/api/test/db.migration.test.ts (the book asserted whole: caps, trial
+                                            days, allowances, both-books count,
+                                            retirements, content idempotency)
+        apps/api/test/coach.chat.test.ts   (fixture off the retired org_starter)
+  tool  apps/api/tools/mutate-orgs.mjs     (`seed` target, O106-O112, and the
+                                            post-sweep re-seed guard)
+  docs  DECISIONS.md (:18488) · DECISIONS-INDEX.md (+1) · OWED.md (2 ticked,
+        1 corrected, 5 new lines) · HANDOFF.md
+
+MEASURED THIS SESSION (local Postgres per :13659; V1-compliant)
+  R9.5 red first: `pro_in_m price: expected 14900 to be 44900` against the
+  unchanged seed. Then db.migration 8/8 · entitlements 9/9 · coach.chat 28/28 ·
+  catalog.seed 7/7 · orgs.routes 104/104 · tsc clean · eslint clean on three
+  files · O106-O112 7 RED 0 ALIVE (a stated SUBSET of 112). The seeded table was
+  read back OUT of the database, not taken on the suite's word.
+  `pnpm -w typecheck` DOES NOT RUN on this machine (turbo → pnpm 11.18.0 vs the
+  pinned 9.15.4) — pre-existing; use `corepack pnpm --filter <pkg> exec`.
+
+DEVIATION / SPEC GAP: Part 5 §1's price tables are superseded by Kd's ruled book
+  (:17366 + :17902) — recorded, not re-opened. The pending code-naming gap at
+  DECISIONS:91 is RESOLVED by this card as a K4 call.
+
+NEXT: T3 on this diff, in a FRESH chat. Then pick from OWED.md.
+```
+
+```
 TASK: IP RESEARCH AT KD'S REQUEST + "THE PACT" DESIGNED IN FULL. No code.
       DECISIONS :18128. Same session as :17902; read both.
 
