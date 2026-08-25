@@ -6286,21 +6286,27 @@ file and is stated so nobody reads these as lower priority than they are.
 - [ ] 🟡 **FINISHING A PACT PRODUCES A JOINT PHOTO (Kd ruling 2026-08-25,
       DECISIONS :18128 §6.3).** **Read with the editor line and the gym-sharing
       line — this is a THIRD kind of stats overlay, not a reuse of either.**
-      One **combined** stats figure covering **every participant and every
-      activity** (running and workouts together, not a card each). Editable,
+      **TOTALS ONLY (Kd, §6.3a): ONE set of summed numbers for the whole pact —
+      no per-person column, no breakdown, no names against figures.** Each
+      person's own numbers stay visible **only inside the pact**. Editable,
       downloadable, postable to Instagram or anywhere.
+      **THE CHAT OVERSTATED THIS AS "a new multi-column overlay" AND CORRECTED
+      ITSELF: the LAYOUT is close to :17902's single-person overlay. What is
+      genuinely new is the SOURCE** — summing several people across running AND
+      workouts is a query nothing else in the product does. **Kd's clarification
+      also removed every individual's figures from a gym feed, unprompted.**
       **It reaches a gym feed only when EVERY participant belongs to that same
       gym** — chat's stated working rule, not a Kd answer; a worldwide or
-      two-gym pact still gets the photo, just no gym feed. There, **the owner
-      and staff see it and encourage them** (Kd's stated purpose).
-      **Three things not to discover late:** the overlay must render **2–4
-      people's combined stats**, which :17902's editor was never specified for ·
-      **it inherits the ONE-WEEK clock**, so a 90-day pact yields a picture gone
-      in seven and **the download warning matters more here than anywhere** ·
-      it lands after the reveal so faces are mutually known, **but a gym feed is
-      a THIRD audience — two strangers who agreed to see each other did not
-      agree to be shown to a hundred members.** **Chat recommendation, unruled:
-      make the gym share a separate opt-in EVERY participant taps.**
+      two-gym pact still gets the photo, just no gym feed. There **the owner,
+      the staff AND every member of that gym** see it and encourage them (Kd,
+      §6.3b — an earlier draft said only owner and staff).
+      **SHARING IS OPTIONAL — finishing a pact posts nothing (Kd, §6.3c).**
+      Unruled detail, small: whether ONE participant may share for the group or
+      **ALL must tap yes** (chat recommends all). A courtesy question now, not a
+      safety one, since totals-only removed the individual figures.
+      **The one thing not to discover late: it inherits the ONE-WEEK clock**, so
+      a 90-day pact yields a picture gone in seven — **the download warning
+      matters more here than anywhere else in the app.**
 - [ ] 🔴 **RUN ROUTES MUST NEVER BE VISIBLE INSIDE A PACT — raised by the chat
       2026-08-25 (DECISIONS :18128 §3.3), NOT a Kd ruling, and it should not need
       one.** **Read with the Pact line above, before implementing "each sees the

@@ -49,14 +49,18 @@ THE NINE THINGS A NEXT CHAT WILL OTHERWISE GET WRONG
      mutually (:18128 §6.4). **My "anyone" idea is superseded — don't re-propose
      it.** Accepted cost, on record: the pool fragments and the small categories
      wait longest.
-  9. **FINISHING A PACT MAKES A JOINT PHOTO, AND IT IS A THIRD OVERLAY SHAPE**
-     (:18128 §6.3) — combined stats across 2–4 PEOPLE and BOTH activity types.
-     :17902's editor was specified for one person; this is more work and must
-     not be discovered late. **Gym feed only when EVERY participant shares that
-     gym** (my stated working rule, not his answer). It inherits the one-week
-     clock, so a 90-day pact yields a picture gone in seven. **Unruled and
-     worth his ruling: the gym share should be a separate opt-in every
-     participant taps — the feed is a third audience the reveal never covered.**
+  9. **FINISHING A PACT MAKES A JOINT PHOTO — TOTALS ONLY** (:18128 §6.3/6.3a).
+     One set of summed numbers for the whole pact; **no per-person breakdown,
+     and individual figures never leave the pact.** **I told him this was a new
+     multi-column overlay and it is NOT** — the layout is close to the
+     single-person one; only the SOURCE is new (summing several people across
+     running and workouts). His clarification also took every individual's
+     numbers off a gym feed, unprompted. **Gym feed only when EVERY participant
+     shares that gym** (my working rule, not his answer), and the audience is
+     **the whole gym**, not just owner and staff. **Sharing is OPTIONAL —
+     finishing posts nothing.** Small unruled detail: one participant sharing
+     for the group vs all tapping yes (I recommend all). It inherits the
+     one-week clock, so a 90-day pact yields a picture gone in seven.
 
 FILES CHANGED (4, all records)
   docs  DECISIONS.md (:18128, new) · DECISIONS-INDEX.md (+1 line, §1) ·

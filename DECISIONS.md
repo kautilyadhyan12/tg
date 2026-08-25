@@ -18421,20 +18421,46 @@ belongs to that same gym.** A worldwide pact — or a squad spanning two gyms �
 produces the same joint photo, downloadable and postable anywhere, **but no gym
 feed.** A chat finding this contradicted must ask, not resolve (S3).
 
-**THREE CONSEQUENCES A BUILDING CHAT MUST CARRY:**
-1. **THE OVERLAY IS A NEW SHAPE.** :17902's editor was specified for ONE
-   person's stats. This needs **combined stats across 2–4 people AND across
-   activity types.** More work than the single-person overlay; not a problem,
-   but not free, and it must not be discovered late.
+**6.3a · KD CLARIFICATION, SAME DAY — THE JOINT PHOTO IS TOTALS ONLY, AND IT
+MAKES THE WORK SMALLER, NOT BIGGER.** *"it will be combination of all members not
+indivisual stats , the indivisual stats wil be only for challenge members to
+see"*. **The photo carries ONE SET OF SUMMED NUMBERS for the whole pact — no
+per-person column, no breakdown, no names against figures.** Each participant's
+own numbers stay visible **only inside the pact**, to its own members, exactly as
+§3's table already says.
+**THE CHAT OVERSTATED THE COST AND CORRECTS ITSELF HERE:** it told Kd this
+needed "combined stats across 2–4 people", implying a multi-column layout. **It
+does not. It is one set of numbers, which is much closer to :17902's
+single-person overlay than to a new component.** What genuinely differs is only
+the SOURCE (sum several people, span running and workouts) — not the layout.
+**AND IT IS A PRIVACY IMPROVEMENT HE MADE WITHOUT BEING ASKED: no individual's
+figures ever reach a gym feed.**
+
+**6.3b · KD: THE AUDIENCE IS THE WHOLE GYM, NOT JUST STAFF.** *"so the owner and
+staff can cheer them on other gyms mebers can also"* — **every member of that
+gym sees it**, alongside the owner and staff. Consistent with §4's member-
+dashboard feed; recorded because the chat's summary had named only owner and
+staff.
+
+**6.3c · KD: SHARING TO THE GYM IS OPTIONAL — the chat's §6.3 item 3 concern is
+ANSWERED and its recommendation is effectively ADOPTED.** *"its sharing of their
+achivement of working together they have the option to share or not share"*.
+**Nothing is posted by finishing; posting is a choice.**
+**ONE DETAIL LEFT UNSPECIFIED, and it is small: whether ONE participant may
+share for the group, or ALL must agree.** He said "they have the option",
+without splitting it. **Chat recommendation, unruled: ALL participants tap yes,
+because the picture carries everyone's achievement into a room of a hundred
+people.** The stake is now lower than when the concern was raised — **6.3a
+removed every individual figure from the image** — so this is a courtesy
+question, not a safety one.
+
+**TWO CONSEQUENCES A BUILDING CHAT MUST STILL CARRY:**
+1. **THE SOURCE IS NEW EVEN THOUGH THE LAYOUT IS NOT** — summing several
+   people's work across running AND workouts is a query nothing else in the
+   product does.
 2. **IT INHERITS THE ONE-WEEK CLOCK (§6.1) and its mandatory download warning.**
    A pact people worked 90 days for produces a picture that is gone in seven —
    **so the warning matters MORE here than anywhere else**, not less.
-3. **IT LANDS AFTER THE REVEAL, so faces are already known to each other** and
-   §3's "no photos until the end" is not violated. **But the gym feed is a
-   THIRD audience**: two strangers who agreed to see each other did not
-   necessarily agree to be shown to a hundred gym members. **Chat
-   recommendation, unruled: sharing to the gym is a separate opt-in that EVERY
-   participant must tap, not a consequence of finishing.**
 
 **6.4 · KD RULING, CLOSING §6.2's GAP HIS OWN WAY — `other` AND
 `prefer_not_to_say` BECOME PAIRING OPTIONS.** *"if users wants to do challenge

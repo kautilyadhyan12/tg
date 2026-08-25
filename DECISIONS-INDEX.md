@@ -111,13 +111,19 @@ mid-file: re-derive them with
   **§6.3 — FINISHING A PACT PRODUCES A JOINT PHOTO: one combined stats figure
   covering EVERY participant and BOTH activity types, editable, downloadable,
   postable anywhere — and it reaches a gym feed only when EVERY participant
-  belongs to that same gym** (chat's stated working rule, not asked), where the
-  owner and staff see it and encourage them. **Three consequences: the overlay is
-  a NEW shape (:17902's editor was specified for ONE person's stats) · it
-  inherits the ONE-WEEK clock, so a 90-day pact yields a picture gone in seven
-  and the download warning matters MORE here · it lands after the reveal so
-  faces are mutually known, BUT the gym feed is a THIRD audience and sharing
-  there should be a separate opt-in every participant taps** (unruled).
+  belongs to that same gym** (chat's stated working rule, not asked), where
+  **the owner, the staff AND every member of that gym** see it (§6.3b).
+  **§6.3a — IT IS TOTALS ONLY: one set of summed numbers, no per-person
+  breakdown; individual figures stay inside the pact. THE CHAT OVERSTATED THIS
+  AS A NEW MULTI-COLUMN COMPONENT AND CORRECTED ITSELF — the LAYOUT is close to
+  the single-person overlay; only the SOURCE is new (summing several people
+  across running and workouts). Kd's clarification also removed every
+  individual's figures from a gym feed, unprompted.** **§6.3c — SHARING IS
+  OPTIONAL; finishing posts nothing.** Unruled detail: whether ONE participant
+  may share for the group or ALL must agree (chat recommends all; a courtesy
+  question now, not a safety one). **It inherits the ONE-WEEK clock, so a 90-day
+  pact yields a picture gone in seven and the download warning matters MORE here
+  than anywhere.**
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
