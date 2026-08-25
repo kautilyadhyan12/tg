@@ -18349,6 +18349,56 @@ what he wants, and nobody's own picture is taken from them, which is what
 ### 5 · WHAT A CHAT MUST NOT DO WITH THIS ENTRY
 
 Do not re-propose §2.7's eight ideas. Do not build a camera-dependent gym
-feature (§2.6). Do not build the pooled popular-routes map (§1.3). Do not pick a
-photo lifetime (§4). Do not treat §1 as legal advice or repeat it to Kd as
-though it were.
+feature (§2.6). Do not build the pooled popular-routes map (§1.3). Do not treat
+§1 as legal advice or repeat it to Kd as though it were. ~~Do not pick a photo
+lifetime (§4).~~ **§4 IS CLOSED — see the addendum below.**
+
+### ADDENDUM, same day — KD CLOSES THE PHOTO CLOCK AT ONE WEEK, AND THE GENDER GAP IS NARROWER THAN I SAID BUT NOT SHUT
+
+**6.1 · KD RULING: A PHOTO SHARED TO A GYM LIVES ONE WEEK, THEN IT IS GONE.**
+Asked directly, shown both his own July ruling and the chat's two-clock
+alternative, he answered: **"one week"**. **This SUPERSEDES :17366's four-clock
+row "A POSTED photo (stats burned in) — 1 year — warn at 11 months with a
+one-tap save".** The clocks now read:
+
+| Thing | Lives | Authority |
+|---|---|---|
+| Meal SCAN photo | 7 days | Kd, :17366, unchanged — **the nutrition DATA stays forever** |
+| **A POSTED photo (stats burned in)** | **1 WEEK** | **Kd, this entry — was 1 year** |
+| Gym announcement | 1 year | Kd, :17366, unchanged |
+| Coach video | never expires | Kd, :17366, unchanged — the 20-per-gym cap is the control |
+
+**THE CHAT'S TWO-CLOCK RECOMMENDATION IS REJECTED** (one week in the feed, one
+year in the poster's own history). **It is gone in one week, both copies.**
+**HOW THAT WAS READ, because "one week" alone could have meant either and an
+inferred ruling is not a ruling (:17366 §0):** his own earlier instruction
+settles it — *"users should explicitly told to download them and that it will be
+deletd after one week"*. **A download warning is pointless if the poster keeps a
+copy for a year.** The warning and the single clock only make sense together.
+**Therefore: ONE clock, and the explicit download warning is not decoration —
+it is the thing that makes a one-week deletion honest**, and it is what answers
+:17366's recorded fear that a vanishing post reads as theft. **Ship the warning
+in the same card as the sweep; a sweep without the warning is the defect
+:17366 named.**
+**Storage was NOT the reason and must not be quoted as one** — :17366 measured
+posted photos at **$4.66/mo forever at 500 gyms**. This is a clutter and
+privacy call, exactly as that entry says.
+
+**6.2 · THE GENDER GAP: KD WAS RIGHT THAT IT CANNOT BE SKIPPED, AND THE CHAT WAS
+RIGHT THAT A GAP REMAINS. Both halves verified 2026-08-25.**
+`apps/web/src/pages/Onboarding.jsx:353-359` — the field is **`Gender *`,
+enforced by the step's own validation at line 239**, so **Kd is correct: nobody
+reaches the app without answering.** **But the screen offers FOUR buttons** —
+`male` · `female` · **`other`** · **`prefer_not_to_say`** — matching the
+schema's CHECK (`identity.ts:144`). **So the gap is not "skipped", it is
+"answered, but not with one of the two his design names":** such a user can
+neither state a preference nor be preferred, and would silently find The Pact
+unusable.
+**CHAT RECOMMENDATION, NOT RULED, and it is one extra button: add "ANYONE" to
+the preference list.** `other` / `prefer_not_to_say` users pick it, and are
+matched with anyone else who picked it. **Nobody is locked out of a feature by a
+profile answer, and nobody is made to state a gender they declined to state.**
+❓ `OWED.md` line stands until he rules.
+**Recorded as an instrument lesson too: the chat first claimed the field did not
+exist (wrong), then that users could skip it (wrong), and only reading BOTH the
+schema and the SCREEN produced the true shape. V4 twice on one field.**

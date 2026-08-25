@@ -4,7 +4,7 @@
 TASK: IP RESEARCH AT KD'S REQUEST + "THE PACT" DESIGNED IN FULL. No code.
       DECISIONS :18128. Same session as :17902; read both.
 
-THE SEVEN THINGS A NEXT CHAT WILL OTHERWISE GET WRONG
+THE EIGHT THINGS A NEXT CHAT WILL OTHERWISE GET WRONG
   1. **ONE FEATURE MUST CHANGE AND IT IS NOT OPTIONAL.** :16924's "routes used
      by other users" is a POOLED preference map — exactly what Strava's
      US 9,297,651 / US 9,778,053 claim, alive to **Dec 2034**, and the patents
@@ -34,11 +34,18 @@ THE SEVEN THINGS A NEXT CHAT WILL OTHERWISE GET WRONG
      collect it; `identity.ts:127,144` says it does, nullable, four values.
      Second time this session that asserting-before-reading cost me (the first
      was the seat cap). **Read the schema before claiming what the app stores.**
-  7. **THE PHOTO LIFETIME IS A LIVE CONFLICT — DO NOT PICK ONE.** He said ONE
-     WEEK today; he ruled ONE YEAR on 08-24, and :17366 records the reason
-     (a post vanishing at day 7 reads as you deleting it). He closed the laptop
-     before answering. **Older ruling stands.** ❓ OWED line carries the
-     recommendation: one week in the FEED, one year in the poster's own history.
+  7. **THE PHOTO LIFETIME IS CLOSED: ONE WEEK, BOTH COPIES** (:18128 §6.1,
+     addendum the same day). Supersedes :17366's one-year row; my
+     one-week-in-feed/one-year-in-history alternative was put to him and
+     REJECTED. **The explicit "download it, it goes in a week" warning is
+     MANDATORY and ships in the same card as the sweep** — :17366's fear that a
+     vanishing post reads as YOU deleting it is now live, and the warning is the
+     whole answer. **The scan photo and the posted photo still stay two rows
+     even though both are now 7 days — do not collapse them.**
+  8. **THE GENDER GAP: he was right, and so was I.** It cannot be skipped
+     (`Onboarding.jsx:353`, `Gender *`, validated at `:239`) — but the screen
+     offers FOUR buttons, so `other` / `prefer_not_to_say` users still can't
+     pair. Unruled fix on the table: **add "anyone" to the preference list.**
 
 FILES CHANGED (4, all records)
   docs  DECISIONS.md (:18128, new) · DECISIONS-INDEX.md (+1 line, §1) ·

@@ -4383,9 +4383,16 @@ file and is stated so nobody reads these as lower priority than they are.
       videos is ten times 20 thirty-second ones.
       **Do not launch video without report-and-remove** — same surface as
       route sharing.
-- [ ] 🟡 **SHARING A STATS PHOTO TO THE GYM — RULED 2026-08-25 (DECISIONS
-      :18128 §4). THE LIFETIME IS THE ONE PART THAT IS NOT RULED — see the ❓
-      line; do not pick one.** A photo carrying the stats overlay and the gym's
+- [ ] 🟡 **SHARING A STATS PHOTO TO THE GYM — RULED IN FULL 2026-08-25
+      (DECISIONS :18128 §4 and §6.1). THE LIFETIME IS NOW RULED: ONE WEEK, both
+      copies, gone.** It supersedes :17366's one-year row.
+      **THE WARNING SHIPS IN THE SAME CARD AS THE SWEEP — this is not polish.**
+      :17366's recorded fear is that a post vanishing reads as *you* deleting
+      someone's work; **the explicit "download it, it goes in a week" notice is
+      the entire answer to that**, and a sweep built without it is that defect.
+      **Do not shorten or lengthen it for cost reasons** — posted photos measure
+      $4.66/mo forever at 500 gyms; this is a clutter and privacy call.
+      A photo carrying the stats overlay and the gym's
       logo can be shared **to the gym the member belongs to**. A section in the
       **member dashboard** shows the shared photos. **Likes and reactions —
       NO COMMENTS** (Kd, explicit). **Gym staff and owners get a similar
@@ -6354,27 +6361,33 @@ file and is stated so nobody reads these as lower priority than they are.
       five guarantees this needs: magic-byte content-type validation, size cap,
       server-generated keys, signed URLs, and no user-supplied filename ever
       reflected into a path or header. Add the DPDP/account-delete cascade.
-- [ ] 🟡 **THE FOUR RETENTION CLOCKS — Kd rulings, COMPLETE as of 2026-08-24
-      (DECISIONS :17357). This line replaces "meal photos self-delete after seven
-      days", which was only one of them.** Timed sweeps, not manual cleanup; the
-      repo already has TTL-sweep patterns to follow.
+- [ ] 🟡 **THE FOUR RETENTION CLOCKS — Kd rulings. AMENDED 2026-08-25: THE
+      POSTED PHOTO IS NOW ONE WEEK, NOT ONE YEAR (DECISIONS :18128 §6.1).**
+      Timed sweeps, not manual cleanup; the repo already has TTL-sweep patterns.
 
       | Thing | Lives | Note |
       |---|---|---|
-      | Meal SCAN photo | **7 days** | Kd, unchanged. **The nutrition data stays FOREVER** — only the image goes |
-      | A POSTED photo (stats burned in) | **1 year** | warn at 11 months with a one-tap save |
-      | Gym announcement | **1 year** | gym may delete earlier, or pin one |
-      | Coach video | **never expires** | the 20-per-gym cap is the control |
+      | Meal SCAN photo | **7 days** | Kd :17357, unchanged. **The nutrition data stays FOREVER** — only the image goes |
+      | A POSTED photo (stats burned in) | ~~1 year~~ **1 WEEK** | **Kd 2026-08-25, :18128 §6.1.** Both copies go. **The explicit "download it, it goes in a week" warning is MANDATORY and ships in the same card as the sweep** |
+      | Gym announcement | **1 year** | Kd :17357, unchanged. Gym may delete earlier, or pin one |
+      | Coach video | **never expires** | Kd :17357, unchanged. The 20-per-gym cap is the control |
 
-      **THE TRAP, AND IT IS THE WHOLE REASON THIS LINE IS LONG: the scan photo
-      and the posted photo are TWO COPIES WITH TWO CLOCKS.** Kd described them as
-      one image (*"it is same single photo"*) and physically that is where it
-      starts — scan, get stats, paste them on, post it. **But the moment stats
-      are burned in it is a NEW file.** One row and one lifetime would make a
-      POST vanish at day 7, and the user would read that as you deleting their
-      post. Same path for workout and running pictures.
-      **DO NOT SHORTEN ANY OF THESE TO SAVE MONEY — measured, keeping every
-      posted photo FOREVER at 500 gyms is $4.66/mo.** Retention here is a
+      **THE TWO-CLOCK POINT STILL STANDS AND IS NOW SUBTLER, SO READ IT: the scan
+      photo and the posted photo are STILL TWO SEPARATE FILES WITH TWO SEPARATE
+      ROWS.** Kd described them as one image (*"it is same single photo"*) and
+      physically that is where it starts — scan, get stats, paste them on, post
+      it — **but the moment stats are burned in it is a NEW file.** They now
+      happen to carry the same 7-day length, **which makes it tempting to collapse
+      them into one row. DO NOT.** They have different owners, different delete
+      triggers and different consent (a scan is private data; a post was
+      deliberately shared), and the moment either clock moves again the collapse
+      becomes a bug. Same path for workout and running pictures.
+      **:17357's recorded fear — a vanishing post reads as YOU deleting someone's
+      work — is now LIVE rather than hypothetical, and the explicit download
+      warning is the whole answer to it.** A sweep shipped without that warning is
+      that defect.
+      **DO NOT SHORTEN OR LENGTHEN ANY OF THESE FOR MONEY — measured, keeping
+      every posted photo FOREVER at 500 gyms is $4.66/mo.** Retention here is a
       privacy and clutter decision; the cost argument was tested and collapsed.
 - [ ] 🟡 **GYM-GLOBAL SHARING NEEDS REPORT-AND-REMOVE.** Kd ruled sharing is the
       member's choice, scoped gym-global or private (:9604 §6). **The moment a
@@ -6426,32 +6439,26 @@ file and is stated so nobody reads these as lower priority than they are.
 
 ## Open questions awaiting a Kd ruling (nothing built on these)
 
-- [ ] ❓ **HOW LONG DOES A PHOTO SHARED TO THE GYM LIVE? KD SAID ONE WEEK ON
-      2026-08-25 AND RULED ONE YEAR ON 2026-08-24. THE OLDER RULING STANDS UNTIL
-      HE SPEAKS (DECISIONS :18128 §4).** **Read before building the gym photo
-      feed or any retention sweep touching it — do NOT pick a lifetime.**
-      :17366's four-clock table reads **"A POSTED photo (stats burned in) —
-      1 year — warn at 11 months with a one-tap save"**, and **its recorded
-      reason is exactly this case**: *"One row and one lifetime would make a POST
-      vanish at day 7, and the user would read that as you deleting their post."*
-      He was shown the conflict and closed the laptop before answering.
-      **THE RECOMMENDATION ON THE TABLE, UNANSWERED: one week in the GYM FEED,
-      one year in the poster's OWN history** — the feed stays fresh, which is what
-      he asked for, and nobody's own picture is taken from them, which is what
-      :17366 protects. **Two clocks, which is :17366's own instrument.**
-      Money is NOT an argument here: :17366 measured posted photos at **$4.66/mo
-      forever at 500 gyms**.
-- [ ] ❓ **THE PACT NAMES ONLY TWO GENDERS AND THE DATABASE HOLDS FOUR
-      (DECISIONS :18128 §3.2).** Verified 2026-08-25:
-      `apps/api/src/db/schema/identity.ts:127,144` — `gender` is **nullable** with
-      CHECK `IN ('male','female','other','prefer_not_to_say')`. Kd's pairing
-      design names male and female only, so **a user who answered `other`,
-      `prefer_not_to_say`, or skipped it can neither state a preference nor be
-      preferred, and silently cannot use the feature.**
-      **Chat recommendation, unruled: they match with anyone who is open to
-      anyone. Do not lock a user out of a feature over a profile field.**
-      Also note the chat CLAIMED gender was not collected, and **Kd corrected it**
-      — V4: read the schema before asserting what the app stores.
+- [x] ~~❓ **HOW LONG DOES A PHOTO SHARED TO THE GYM LIVE?**~~ **CLOSED
+      2026-08-25 by Kd: ONE WEEK, both copies, gone (DECISIONS :18128 §6.1,
+      commit below).** Supersedes :17366's *"posted photo · 1 year"* row. The
+      chat's one-week-in-feed / one-year-in-history alternative was put to him
+      and **REJECTED**. The build requirement moved to the 🟡 sharing line.
+- [ ] ❓ **THE PACT NAMES TWO GENDERS AND THE SCREEN OFFERS FOUR (DECISIONS
+      :18128 §3.2 and §6.2).** **Kd is right that it cannot be skipped and that
+      half is closed** — `apps/web/src/pages/Onboarding.jsx:353` is `Gender *`,
+      enforced by the step validation at `:239`. **What remains: the screen
+      offers FOUR buttons** — `male` · `female` · `other` · `prefer_not_to_say`
+      (matching `identity.ts:144`'s CHECK) — **so a user who answers with either
+      of the last two can neither state a preference nor be preferred, and would
+      silently find The Pact unusable.**
+      **Chat recommendation, unruled, and it is ONE EXTRA BUTTON: add "ANYONE"
+      to the preference list.** Those users pick it and match with anyone else
+      who picked it. **Nobody is locked out of a feature by a profile answer,
+      and nobody is made to state a gender they declined to state.**
+      Instrument note: the chat first said the field did not exist, then that it
+      could be skipped — **both wrong; only reading the schema AND the screen
+      gave the true shape.**
 - [ ] ❓ **GYM BANDS 3–5 (USD) AFTER KD RAISED BANDS 1–2 — HE NAMED TWO NUMBERS
       AND ONLY TWO (DECISIONS :17902, 2026-08-25).** $30 → **$35** and $40 →
       **$50**; $69 / $99 / $129 were not mentioned and **are unchanged until he

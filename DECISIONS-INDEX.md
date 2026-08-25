@@ -91,10 +91,20 @@ mid-file: re-derive them with
   their stats" would hand a stranger a home address, in the one feature that
   pairs strangers by gender. **PHOTO SHARING TO THE GYM IS RULED** (feed in the
   member dashboard, reactions but **NO comments**, staff/owner dashboard, users
-  told to download) **BUT ITS LIFETIME COLLIDES WITH :17366 — he said ONE WEEK
-  today and ruled ONE YEAR in July, and closed the laptop before answering, so
-  the OLDER RULING STANDS and neither may be built.** ❓ line; the standing
-  recommendation is one week in the FEED, one year in the owner's own history.
+  told to download). **ADDENDUM, same day, §6: KD CLOSED THE LIFETIME AT ONE
+  WEEK — BOTH COPIES, GONE. This SUPERSEDES :17366's "posted photo · 1 year"
+  row**, and the chat's one-week-in-feed/one-year-in-history alternative is
+  REJECTED. **The download warning is not decoration — it is what makes a
+  one-week deletion honest, and a sweep shipped without it is the defect :17366
+  named.** Storage is NOT the reason and must not be quoted as one ($4.66/mo
+  forever at 500 gyms). **§6 also settles the gender gap BOTH WAYS: Kd was right
+  it cannot be skipped** (`Onboarding.jsx:353`, `Gender *`, validated at :239)
+  **and the chat was right a gap remains — the screen offers FOUR buttons, so an
+  `other` / `prefer_not_to_say` user can neither state a preference nor be
+  preferred.** Unruled fix on the table: **add "ANYONE" to the preference list.**
+  Instrument lesson: the chat said the field did not exist (wrong), then that it
+  could be skipped (wrong) — **only reading the schema AND the screen gave the
+  true shape. V4 twice on one field.**
 - **:17902** — 2026-08-25 — **KD RAISES GYM BANDS 1–2 TO $35/$50, ROUNDS EVERY
   BAND BOUNDARY (0–300 / 301–500 / 501–1000 / 1001–1500 / 1501–2100), RULES THE
   FULL PHOTO EDITOR IN, AND FIXES THE TRIAL'S SHAPE.** Supersedes :17366's
