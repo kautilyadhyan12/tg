@@ -4,7 +4,7 @@
 TASK: IP RESEARCH AT KD'S REQUEST + "THE PACT" DESIGNED IN FULL. No code.
       DECISIONS :18128. Same session as :17902; read both.
 
-THE EIGHT THINGS A NEXT CHAT WILL OTHERWISE GET WRONG
+THE NINE THINGS A NEXT CHAT WILL OTHERWISE GET WRONG
   1. **ONE FEATURE MUST CHANGE AND IT IS NOT OPTIONAL.** :16924's "routes used
      by other users" is a POOLED preference map — exactly what Strava's
      US 9,297,651 / US 9,778,053 claim, alive to **Dec 2034**, and the patents
@@ -42,10 +42,21 @@ THE EIGHT THINGS A NEXT CHAT WILL OTHERWISE GET WRONG
      vanishing post reads as YOU deleting it is now live, and the warning is the
      whole answer. **The scan photo and the posted photo still stay two rows
      even though both are now 7 days — do not collapse them.**
-  8. **THE GENDER GAP: he was right, and so was I.** It cannot be skipped
-     (`Onboarding.jsx:353`, `Gender *`, validated at `:239`) — but the screen
-     offers FOUR buttons, so `other` / `prefer_not_to_say` users still can't
-     pair. Unruled fix on the table: **add "anyone" to the preference list.**
+  8. **THE GENDER GAP IS CLOSED, HIS WAY, NOT MINE.** It cannot be skipped
+     (`Onboarding.jsx:353`, `Gender *`, validated at `:239`) and the screen
+     offers FOUR buttons — so **`other` and `prefer_not_to_say` become PAIRING
+     OPTIONS** and the preference list is those same four values, still matched
+     mutually (:18128 §6.4). **My "anyone" idea is superseded — don't re-propose
+     it.** Accepted cost, on record: the pool fragments and the small categories
+     wait longest.
+  9. **FINISHING A PACT MAKES A JOINT PHOTO, AND IT IS A THIRD OVERLAY SHAPE**
+     (:18128 §6.3) — combined stats across 2–4 PEOPLE and BOTH activity types.
+     :17902's editor was specified for one person; this is more work and must
+     not be discovered late. **Gym feed only when EVERY participant shares that
+     gym** (my stated working rule, not his answer). It inherits the one-week
+     clock, so a 90-day pact yields a picture gone in seven. **Unruled and
+     worth his ruling: the gym share should be a separate opt-in every
+     participant taps — the feed is a third audience the reveal never covered.**
 
 FILES CHANGED (4, all records)
   docs  DECISIONS.md (:18128, new) · DECISIONS-INDEX.md (+1 line, §1) ·

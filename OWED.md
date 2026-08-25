@@ -6277,6 +6277,30 @@ file and is stated so nobody reads these as lower priority than they are.
       hold them in the queue, notify, invite a friend.**
       **BUILD PAIRS FIRST** (chat recommendation): four matching people is far
       harder to find than two. Block and report on every screen.
+      **GENDER PREFERENCE IS FOUR VALUES, NOT TWO (Kd, :18128 §6.4):** `male` ·
+      `female` · `other` · `prefer_not_to_say` — the same four `Onboarding.jsx`
+      already offers, still matched MUTUALLY. **Do not re-propose an "anyone"
+      option; it was superseded.** Known and accepted: **the pool fragments**
+      (4 × 4 × 3 durations × gym/worldwide) and the small categories wait
+      longest — the honest empty-state is the answer on record.
+- [ ] 🟡 **FINISHING A PACT PRODUCES A JOINT PHOTO (Kd ruling 2026-08-25,
+      DECISIONS :18128 §6.3).** **Read with the editor line and the gym-sharing
+      line — this is a THIRD kind of stats overlay, not a reuse of either.**
+      One **combined** stats figure covering **every participant and every
+      activity** (running and workouts together, not a card each). Editable,
+      downloadable, postable to Instagram or anywhere.
+      **It reaches a gym feed only when EVERY participant belongs to that same
+      gym** — chat's stated working rule, not a Kd answer; a worldwide or
+      two-gym pact still gets the photo, just no gym feed. There, **the owner
+      and staff see it and encourage them** (Kd's stated purpose).
+      **Three things not to discover late:** the overlay must render **2–4
+      people's combined stats**, which :17902's editor was never specified for ·
+      **it inherits the ONE-WEEK clock**, so a 90-day pact yields a picture gone
+      in seven and **the download warning matters more here than anywhere** ·
+      it lands after the reveal so faces are mutually known, **but a gym feed is
+      a THIRD audience — two strangers who agreed to see each other did not
+      agree to be shown to a hundred members.** **Chat recommendation, unruled:
+      make the gym share a separate opt-in EVERY participant taps.**
 - [ ] 🔴 **RUN ROUTES MUST NEVER BE VISIBLE INSIDE A PACT — raised by the chat
       2026-08-25 (DECISIONS :18128 §3.3), NOT a Kd ruling, and it should not need
       one.** **Read with the Pact line above, before implementing "each sees the
@@ -6444,21 +6468,15 @@ file and is stated so nobody reads these as lower priority than they are.
       commit below).** Supersedes :17366's *"posted photo · 1 year"* row. The
       chat's one-week-in-feed / one-year-in-history alternative was put to him
       and **REJECTED**. The build requirement moved to the 🟡 sharing line.
-- [ ] ❓ **THE PACT NAMES TWO GENDERS AND THE SCREEN OFFERS FOUR (DECISIONS
-      :18128 §3.2 and §6.2).** **Kd is right that it cannot be skipped and that
-      half is closed** — `apps/web/src/pages/Onboarding.jsx:353` is `Gender *`,
-      enforced by the step validation at `:239`. **What remains: the screen
-      offers FOUR buttons** — `male` · `female` · `other` · `prefer_not_to_say`
-      (matching `identity.ts:144`'s CHECK) — **so a user who answers with either
-      of the last two can neither state a preference nor be preferred, and would
-      silently find The Pact unusable.**
-      **Chat recommendation, unruled, and it is ONE EXTRA BUTTON: add "ANYONE"
-      to the preference list.** Those users pick it and match with anyone else
-      who picked it. **Nobody is locked out of a feature by a profile answer,
-      and nobody is made to state a gender they declined to state.**
-      Instrument note: the chat first said the field did not exist, then that it
-      could be skipped — **both wrong; only reading the schema AND the screen
-      gave the true shape.**
+- [x] ~~❓ **THE PACT NAMES TWO GENDERS AND THE SCREEN OFFERS FOUR.**~~
+      **CLOSED 2026-08-25 by Kd (DECISIONS :18128 §6.4, commit below): `other`
+      and `prefer_not_to_say` become PAIRING OPTIONS**, so the preference list is
+      the same four values onboarding already offers and the mutual rule is
+      unchanged. **The chat's "ANYONE" idea is superseded — do not re-propose
+      it.** The build requirement moved to the 🟡 Pact line.
+      Instrument note kept: the chat first said the field did not exist, then
+      that it could be skipped — **both wrong; only reading the schema AND the
+      screen gave the true shape.**
 - [ ] ❓ **GYM BANDS 3–5 (USD) AFTER KD RAISED BANDS 1–2 — HE NAMED TWO NUMBERS
       AND ONLY TWO (DECISIONS :17902, 2026-08-25).** $30 → **$35** and $40 →
       **$50**; $69 / $99 / $129 were not mentioned and **are unchanged until he

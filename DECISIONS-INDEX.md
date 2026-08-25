@@ -101,10 +101,26 @@ mid-file: re-derive them with
   it cannot be skipped** (`Onboarding.jsx:353`, `Gender *`, validated at :239)
   **and the chat was right a gap remains — the screen offers FOUR buttons, so an
   `other` / `prefer_not_to_say` user can neither state a preference nor be
-  preferred.** Unruled fix on the table: **add "ANYONE" to the preference list.**
+  preferred.** ~~Unruled fix: add "ANYONE".~~ **SUPERSEDED by §6.4 the same day —
+  KD CLOSED IT HIS OWN WAY: `other` and `prefer_not_to_say` become PAIRING
+  OPTIONS, so the preference list is the SAME FOUR VALUES onboarding already
+  offers and the mutual rule is unchanged. Do not re-propose "anyone".**
   Instrument lesson: the chat said the field did not exist (wrong), then that it
   could be skipped (wrong) — **only reading the schema AND the screen gave the
   true shape. V4 twice on one field.**
+  **§6.3 — FINISHING A PACT PRODUCES A JOINT PHOTO: one combined stats figure
+  covering EVERY participant and BOTH activity types, editable, downloadable,
+  postable anywhere — and it reaches a gym feed only when EVERY participant
+  belongs to that same gym** (chat's stated working rule, not asked), where the
+  owner and staff see it and encourage them. **Three consequences: the overlay is
+  a NEW shape (:17902's editor was specified for ONE person's stats) · it
+  inherits the ONE-WEEK clock, so a 90-day pact yields a picture gone in seven
+  and the download warning matters MORE here · it lands after the reveal so
+  faces are mutually known, BUT the gym feed is a THIRD audience and sharing
+  there should be a separate opt-in every participant taps** (unruled).
+  **Pool-fragmentation is on record and undisputed: four categories × four
+  preferences × three durations × gym/worldwide, and the small categories wait
+  longest — the users the ruling exists to include.**
 - **:17902** — 2026-08-25 — **KD RAISES GYM BANDS 1–2 TO $35/$50, ROUNDS EVERY
   BAND BOUNDARY (0–300 / 301–500 / 501–1000 / 1001–1500 / 1501–2100), RULES THE
   FULL PHOTO EDITOR IN, AND FIXES THE TRIAL'S SHAPE.** Supersedes :17366's

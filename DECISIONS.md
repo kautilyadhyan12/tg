@@ -18402,3 +18402,60 @@ profile answer, and nobody is made to state a gender they declined to state.**
 **Recorded as an instrument lesson too: the chat first claimed the field did not
 exist (wrong), then that users could skip it (wrong), and only reading BOTH the
 schema and the SCREEN produced the true shape. V4 twice on one field.**
+
+### ADDENDUM 2, same day — THE JOINT PHOTO THAT ENDS A PACT, AND KD CLOSES THE GENDER GAP HIS OWN WAY
+
+**6.3 · KD RULING: FINISHING A PACT PRODUCES A JOINT PHOTO.** On completion the
+participants get **one combined stats figure covering everybody in the pact and
+every activity in it** — running and workouts together, not one card each. They
+can **edit it in the editor (:17902), download it, and post it to Instagram or
+anywhere else.**
+**AND IF THEY SHARE A GYM, IT GOES TO THAT GYM'S FEED** — other members of that
+gym see it, and **the owner and staff see it and can encourage them.** His
+words: *"other gym members of that same gym can see owner staffs can see and
+encourage etc"*.
+
+**WORKING RULE the chat states rather than asks, because the plain reading
+carries it:** the joint photo reaches a gym feed **only when EVERY participant
+belongs to that same gym.** A worldwide pact — or a squad spanning two gyms —
+produces the same joint photo, downloadable and postable anywhere, **but no gym
+feed.** A chat finding this contradicted must ask, not resolve (S3).
+
+**THREE CONSEQUENCES A BUILDING CHAT MUST CARRY:**
+1. **THE OVERLAY IS A NEW SHAPE.** :17902's editor was specified for ONE
+   person's stats. This needs **combined stats across 2–4 people AND across
+   activity types.** More work than the single-person overlay; not a problem,
+   but not free, and it must not be discovered late.
+2. **IT INHERITS THE ONE-WEEK CLOCK (§6.1) and its mandatory download warning.**
+   A pact people worked 90 days for produces a picture that is gone in seven —
+   **so the warning matters MORE here than anywhere else**, not less.
+3. **IT LANDS AFTER THE REVEAL, so faces are already known to each other** and
+   §3's "no photos until the end" is not violated. **But the gym feed is a
+   THIRD audience**: two strangers who agreed to see each other did not
+   necessarily agree to be shown to a hundred gym members. **Chat
+   recommendation, unruled: sharing to the gym is a separate opt-in that EVERY
+   participant must tap, not a consequence of finishing.**
+
+**6.4 · KD RULING, CLOSING §6.2's GAP HIS OWN WAY — `other` AND
+`prefer_not_to_say` BECOME PAIRING OPTIONS.** *"if users wants to do challenge
+tey will have option of users who choosed other or prefer not say and will be
+paired with them"*.
+**So the preference list is the SAME FOUR VALUES the onboarding screen already
+offers** — `male` · `female` · `other` · `prefer_not_to_say` — **and the mutual
+rule is unchanged**: A wants X, B is X, B wants Y, A is Y ⇒ pair. **The chat's
+"ANYONE" recommendation is SUPERSEDED and should not be re-proposed** — his
+answer keeps one vocabulary between onboarding and pairing instead of inventing
+a fifth token. ❓ `OWED.md` line CLOSES.
+
+**TWO THINGS THE CHAT PUT TO HIM AND HE DID NOT DISPUTE, recorded so they are
+not discovered as surprises:**
+- **THE POOL FRAGMENTS.** Four gender categories × four preferences × three
+  durations × own-gym/worldwide. **`other` and `prefer_not_to_say` will be small
+  populations, so a user who is `other` and wants `other` may wait a long
+  time** — the very users this ruling exists to include feel it most. His
+  honest empty-state (:18128 §3, "no match — we're new, stay in the queue,
+  bring a friend") is the answer on record.
+- **FILTERING FOR `prefer_not_to_say` IS SLIGHTLY ODD ON ITS FACE** — a person
+  declined to disclose and is then sorted by that non-disclosure. **Not
+  harmful, and the alternative is excluding them**, which is what he is fixing.
+  Noted, not objected to.
