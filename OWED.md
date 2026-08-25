@@ -5720,6 +5720,51 @@ file and is stated so nobody reads these as lower priority than they are.
       that does NOT work stays settled at :10959 (an unpaid gym grants its
       members nothing). **The approval gate is an addition with no governing §
       — the billing card's plan presents it as such (R0.2).**
+      **AND IT HAS NO PATH: the gate is RULED and there is nowhere to perform
+      it.** The surface it belongs on is the line directly below, which until
+      2026-08-25 had never been tracked at all.
+- [ ] 🔴 **KD'S OWN ADMIN PANEL IS IN THE SPEC FIVE TIMES AND WAS TRACKED HERE
+      ZERO TIMES UNTIL 2026-08-25 — the surface he needs to RUN THE BUSINESS,
+      and the deferral rule's own failure mode.** Raised when Kd asked directly
+      whether he should have an admin dashboard and whether it would fail store
+      review. **Read before building any operator tool, before adding an
+      `admin` role anywhere, and before putting an internal control on the gym
+      console or in a phone app.**
+      **THE SPEC ALREADY SPECIFIES IT AND SAYS WHERE IT LIVES** (grep-verified,
+      not recalled): `03-part3-org-console.md:60` — *"Kd (internal) | `admin` |
+      lives on the separate admin panel (v1 §6.1, Part 2 §9.4), **not** in this
+      console"* · `00-architecture-v1.md:480` — *"your internal panel: gyms,
+      cost dashboard, circuit-breaker"* · `:570` lists `admin` in the role set ·
+      `08-part8-ops-runbook.md:97` — changes *"made via admin panel only,
+      audit-logged automatically"* · `:243` — ban tooling lives there ·
+      `05-part5-billing.md:404` — margin on one screen · `03-part3` `:401`/`:454`
+      — churn signals and per-org cost feed it.
+      **THE CODE ALREADY POINTS AT IT AND CORRECTLY REFUSES TO BUILD IT IN THE
+      WRONG PLACE:** `packages/shared/src/orgs.ts:37-38` — *"`admin` is
+      deliberately absent — Kd's internal panel is a separate surface (Part 3
+      §1), never a role inside an org."* **So this was never an oversight of
+      judgement; it is an oversight of TRACKING.** A comment naming a surface is
+      not an `OWED.md` line, and prose is exactly how work gets silently lost —
+      which is the failure this file was created for.
+      **WHY IT IS 🔴 rather than 🟡:** :11072's approval gate (line above) is a
+      Kd RULING with no path to perform it, so **no gym can be legitimately
+      activated at all** once billing exists; and the DPDP/ban/breakglass
+      tooling Part 8 puts here is launch-blocking.
+      **KD'S STORE QUESTION, ANSWERED: it does NOT endanger Play Store or App
+      Store review, because it must NEVER be inside a phone app.** Store review
+      only sees the binary submitted; a separate web surface is not in it. That
+      is also the SECURITY answer — an admin panel is the highest-value target
+      in the product and has no business shipping to a million handsets. **This
+      is the ONE surface exempt from :17765's "same features in both places"
+      ruling, because that ruling governs the GYM'S console, a different
+      audience entirely.**
+      **FIRST SLICE, approved by Kd 2026-08-25: "mark this gym as paid"** — it
+      writes the `subscriptions` row a hand-invoiced gym needs, which turns the
+      seat cap, the 30-day trial and §4.2's banner from correct-but-inert into
+      live, with no payment provider involved. Carries :11072's approval gate
+      with it. **Every write here is audit-logged (Part 8 §97) and the panel
+      needs its own authentication story — it is NOT a privilege on
+      `gym_staff`.**
 - [ ] ⚪ **`GET /v1/orgs/:gymId/codes` IS CAPPED AT 100 AND HAS NO CURSOR**
       (T3 round 1 L-1, 2026-08-18). Added as a BOUND, not as pagination — it was
       the only list in the orgs module without one while `/mine` is capped and

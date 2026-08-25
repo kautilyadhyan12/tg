@@ -19012,3 +19012,116 @@ found was one assertion that could lose a race, one claim of mine that was
 false, two struck sentences still alive, a guard citing the case it could not
 handle, two guards protected only by comments — and an index line that had
 already turned a settled ruling back into a question for Kd.**
+
+## KD SETS THE BUILD ORDER FOR THE WHOLE PROJECT, AND ASKS FOR THE ADMIN PANEL THE SPEC HAS DESCRIBED ALL ALONG AND NOBODY EVER TRACKED (2026-08-25)
+
+**Read before proposing ANY next card, before sequencing work, before telling Kd
+how much is left, and before building any operator/internal tool.** Records only;
+no code changed. The roadmap itself lives in the plan file and is summarised here
+so a chat with no plan file can still follow the order.
+
+### 1 · THE ORDER IS KD'S, GIVEN UNPROMPTED, AND IT IS NOT A CHAT'S TO RE-SEQUENCE
+
+*"lets just completely finish everything that is have to do for the gym part,
+then we go to do all the things related to gym members part once these two are
+finished we go and add the rest of the exercise rule and then create video for
+reference when user does not use camera analysis once these are finished along
+with other remaing things we then build the android once android is finish we
+build the ios once these are finish we get server live connect payments etc,
+then do any thing that is left and when all finished we do a full complete
+review of the application full test and then publish on web playstore and app
+store"*
+
+**Stages: gym → gym members → exercises 4-58 → reference video → the rest of the
+web → Android → iOS → server live + payments → what is left → full review and
+test → publish.** A chat that wants to reorder this proposes it and stops (S4).
+
+**HE ALSO CORRECTED A DRIFT IN THE SAME MESSAGE AND THE CORRECTION BINDS:** asked
+"what next", the chat offered CAMERA work — *"men we were doing the gym part and
+all of sudden going to camera wtf lets first finsih the fucking gym"*. He was
+right; the session had been on the gym console for many cards and the chat
+reached for the biggest 🔴 rather than the thread in hand. **Continuity of thread
+beats severity ranking when picking the next card**, unless something is actually
+blocking.
+
+### 2 · THE HONEST SIZE, MEASURED THIS SESSION AND GIVEN TO HIM PLAINLY
+
+`OWED.md` carries **248 unticked items** — 🔴 23 · 🟡 135 · ⚪ 75 · ❓ 15.
+By area: gym console + money **56** · screens still on the old backend **51** ·
+improvements **30** · camera **17** · running **16** · open questions **16** ·
+member-side gym surface **13** · legal/ops **9** · engine debt **7** · photos
+**5**. `apps/` holds `api` and `web` only — **no mobile app exists**.
+`packages/engine/src/definitions` holds **3** of 58. **57 of 58 catalog rows are
+camera-graded** (`tracking: "pose"`); only Brisk Walking is a timer.
+**He was told 248 and told that most are small — and told nobody should call this
+a few weeks' work** (:9604 §9's "the honest size must not be softened later").
+
+### 3 · FOUR CONFLICTS INSIDE HIS OWN ORDER, PUT TO HIM RATHER THAN SOLVED QUIETLY
+
+1. **Every gym screen is built THREE times** — web now, Android, iOS — because
+   :17765 rules the console exists in both apps with the same features, natively.
+   His accepted cost, restated so "finish the gym" is not read as once.
+2. **No email is ever sent** (`EmailSender` logs and returns), and gym features
+   need it — inviting staff by email, telling a member they were confirmed.
+3. **Paperwork has lead time and costs nothing to start**: Udyam registration,
+   Apple Small Business + Google's 15% tier, the Paddle account. Recommended he
+   start them NOW even though payments are stage 8 — waiting until then waits
+   twice.
+4. **Exercises 4-58 need ~330 recordings FROM HIM** (55 × the §7.3 six-clip
+   matrix). **The single biggest cost of his own time in the project**, and it
+   belongs in front of him before stage 3 rather than during it.
+
+### 4 · KD RULING — THE MONEY-DEPENDENT GYM ITEMS GET AN ADMIN TOOL, NOT A DEFERRAL
+
+Four gym features need a gym to be ON a plan: the seat cap biting, the 30-day
+trial counting down, §4.2's banner, and the Billing tab. Three options were put
+to him — park them until stage 8 · build a small "mark this gym as paid" tool ·
+move real payments earlier (recommended against, and the reason given: it is the
+biggest and riskiest work in the project and his own record says the first 4-5
+gyms are hand-invoiced). **He chose the admin tool.**
+**Consequence, stated: only the Billing TAB now waits for stage 8. The seat cap,
+the trial and the banner all become live in stage 1** — correct-but-inert
+becomes correct-and-working, with no payment provider involved.
+
+### 5 · THE ADMIN PANEL — HIS QUESTION, AND A FINDING THAT IS THE DEFERRAL RULE'S OWN FAILURE MODE
+
+He asked, unprompted: *"a admin dashboard is any way needed for me to control
+things what do you think ? should we have it or not or it will not pass playstore
+and appstore approval"*.
+
+**ANSWER 1 — yes, and it is not a new idea: the SPEC has specified it all along,
+in five places across four files**, grep-verified rather than recalled:
+`03-part3-org-console.md:60` puts `admin` *"on the separate admin panel … **not**
+in this console"* · `00-architecture-v1.md:480` *"your internal panel: gyms, cost
+dashboard, circuit-breaker"* · `:570` lists the role · `08-part8-ops-runbook.md:97`
+requires changes be *"made via admin panel only, audit-logged automatically"* ·
+`:243` puts ban tooling there · `05-part5-billing.md:404` puts margin there.
+
+**ANSWER 2 — it does NOT endanger store review, because it must never be inside a
+phone app.** Review sees the submitted binary; a separate web surface is not in
+it. **That is also the security answer** — an admin panel is the highest-value
+target in the product and should not ship to a million handsets. **It is the one
+surface EXEMPT from :17765's "same features in both places", because that ruling
+governs the GYM'S console — a different audience.**
+
+**THE FINDING, and it is ours: the panel appears in `OWED.md` ZERO times and in
+`DECISIONS-INDEX.md` ZERO times** (grep-verified before writing this).
+**AND A CORRECTION OF MY OWN, MADE TO KD IN THE SAME BREATH: I told him the
+`admin` role "does not exist in the code", which is misleading.**
+`packages/shared/src/orgs.ts:37-38` says *"`admin` is deliberately absent — Kd's
+internal panel is a separate surface (Part 3 §1), never a role inside an org"* —
+so a chat DID reason about it and excluded it from the org enum correctly.
+**The oversight is not one of judgement, it is one of TRACKING, and that is the
+sharper finding: a code comment naming a surface is not an `OWED.md` line.**
+Prose is exactly how work gets lost, which is the failure that created that file
+(operator-added 2026-07-21). Now a 🔴 line.
+**It is 🔴 because :11072's approval gate is a RULING WITH NO PATH** — no gym can
+be legitimately activated once billing exists — and because Part 8 puts the
+DPDP, ban and breakglass tooling there.
+
+### 6 · WHAT THIS ENTRY DOES NOT DO
+
+It does not re-rule anything already decided, and it does not size any stage in
+days — no estimate has been made and none should be quoted from here. The
+per-stage contents are `OWED.md`'s, which stays the authority; this is the ORDER
+and the four conflicts, nothing more.

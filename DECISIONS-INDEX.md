@@ -127,6 +127,49 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:19016** — 2026-08-25 — **KD SETS THE BUILD ORDER FOR THE WHOLE PROJECT, AND
+  ASKS FOR THE ADMIN PANEL THE SPEC HAS DESCRIBED ALL ALONG AND NOBODY EVER
+  TRACKED.** **Read before proposing ANY next card, before sequencing work,
+  before telling Kd how much is left, and before building any operator tool.**
+  **THE ORDER, HIS, UNPROMPTED, NOT A CHAT'S TO RE-SEQUENCE: gym → gym members →
+  exercises 4-58 → reference video → the rest of the web → Android → iOS →
+  server live + payments → what is left → full review and test → publish.**
+  **HE ALSO CORRECTED A DRIFT AND IT BINDS** — asked "what next", the chat
+  offered CAMERA work and he answered *"we were doing the gym part and all of
+  sudden going to camera wtf lets first finsih the fucking gym"*. **Continuity
+  of thread beats severity ranking when picking a card**, unless something
+  actually blocks. **THE HONEST SIZE, MEASURED AND GIVEN TO HIM: 248 unticked
+  items** (🔴 23 · 🟡 135 · ⚪ 75 · ❓ 15); gym console 56 · old-backend screens
+  51 · improvements 30 · camera 17 · running 16 · open questions 16 ·
+  member-side 13 · legal 9 · engine debt 7. **No mobile app exists; 3 of 58
+  exercises have rules; 57 of 58 are camera-graded.** **FOUR CONFLICTS INSIDE
+  HIS OWN ORDER, put to him rather than solved quietly: every gym screen is
+  built THREE times** (:17765, his accepted cost) · **no email is ever sent** and
+  gym features need it · **paperwork has lead time and costs nothing to start**
+  (Udyam, Apple/Google programmes, Paddle) so start now rather than at stage 8 ·
+  **exercises 4-58 need ~330 recordings FROM HIM**, the biggest cost of his own
+  time in the project. **KD RULING: the four money-dependent gym items get a
+  "mark this gym as paid" ADMIN TOOL rather than a deferral** — three options
+  were put to him and moving real payments earlier was recommended AGAINST;
+  **consequence, only the Billing TAB now waits for stage 8, while the seat cap,
+  the trial and the banner go live in stage 1.** **THE ADMIN PANEL — HIS
+  QUESTION ANSWERED BOTH WAYS: yes build it, the SPEC has specified it in FIVE
+  PLACES across four files all along** (`03-part3:60` *"the separate admin
+  panel … not in this console"*, `v1:480`, `v1:570`, `part8:97`, `part8:243`,
+  `part5:404`) — **and NO, it does not endanger store review, because it must
+  never be inside a phone app**; review sees the submitted binary, and that is
+  also the SECURITY answer. **It is the ONE surface exempt from :17765's "same
+  features in both places", which governs the GYM'S console.** **THE FINDING IS
+  OURS AND IS THE DEFERRAL RULE'S OWN FAILURE MODE: the panel appears in
+  `OWED.md` and this index ZERO times.** **AND A CORRECTION OF MINE, MADE TO KD
+  IN THE SAME BREATH: I said the `admin` role "does not exist in the code",
+  which misleads** — `packages/shared/src/orgs.ts:37-38` deliberately excludes it
+  from the ORG enum and names the separate surface. **So it is not an oversight
+  of judgement but of TRACKING, which is sharper: a code comment naming a
+  surface is not an `OWED.md` line.** Now a 🔴 line, 🔴 because :11072's
+  approval gate is a ruling with NO PATH to perform it and Part 8 puts DPDP, ban
+  and breakglass tooling there. **First slice, Kd-approved: "mark this gym as
+  paid".** No estimate in days was made; do not quote one from here.
 - **:18830** — 2026-08-25 — **THE PLANS SEED, T3 ROUND 2 (diff-only): ZERO
   Critical/High — THE PACKET SHIPS. The review was WRONG about one thing, and
   finding out WHY exposed a stale line in THIS FILE that had already turned a
