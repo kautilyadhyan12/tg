@@ -4197,6 +4197,18 @@ file and is stated so nobody reads these as lower priority than they are.
       automatically. The 1,617 server lines are never downloaded by anyone and
       cost app size nothing — this was Kd's own question and it has a precise
       answer.
+      **STILL NOT DONE, AND THAT IS NOW A CHOICE RATHER THAN AN OVERSIGHT — KD
+      WAS ASKED DIRECTLY ON 2026-08-26 AND SAID *"lets do it later so nothing
+      happens now"*.** Verified live that day: `apps/web/src/App.jsx:23,122` and
+      `apps/api/src/app.ts:24`. **DO NOT RE-ASK HIM** — offer it when a card is
+      already touching the web routes or the API app wiring, and until then leave
+      it alone. **Consequence he accepted, stated plainly to him first: the Coach
+      page still opens, still answers, and still bills per question until it is
+      done.**
+      **WHOEVER FINALLY DOES IT MUST ALSO MOVE THE `costs:gym` BUMP** out of
+      `coach/service.ts:224` into nutrition and geo — it is the only call site
+      that feeds the v1 §9.3 breaker, so unwiring the coach leaves that counter
+      with no inputs at all (:19256 §5; the 🔴 breaker line carries the detail).
 - [ ] ⚪ **~SEVEN COACH ITEMS IN THIS FILE ARE PARKED, NOT DONE — DO NOT TICK
       THEM.** Empty conversation on a failed message · a question spent when the
       provider never answers · raw HTML in answers · over-long message recovery ·
