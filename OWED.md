@@ -6173,6 +6173,28 @@ file and is stated so nobody reads these as lower priority than they are.
       `trialing` on first payment for it to bite. That is already what §3
       requires; it is written here so the billing card knows this guard depends
       on it.
+- [ ] 🔴 **THE CURRENCY LOCK IS A CHECK-THEN-ACT AND THE BILLING CARD MUST CLOSE
+      IT: whatever creates a gym subscription MUST take `lockOrgRow` on that gym
+      first.** Found by T3 round 1 (C/H-3) on 2026-08-26, and **the note in the
+      code used to claim the guard was already safe — that claim is now
+      corrected in place** (:5748: a false record is worse than a missing one,
+      because the next card builds on it).
+      **The gap, exactly:** `repo.updateOrg` asks "is this gym paying?" and then
+      writes. It holds the GYM row's lock, which cannot lock a subscription that
+      does not exist yet — so one committing between the SELECT and the UPDATE is
+      missed, and a now-paying gym's billing currency moves. That is precisely
+      what Kd's ruling of 2026-08-26 exists to prevent.
+      **UNREACHABLE TODAY, and that is the danger rather than the comfort:**
+      nothing in the product inserts into `subscriptions` (grep-verified), so it
+      cannot fire until the billing card ships — and whoever writes that card
+      will be reading this guard. **A lock on one side is not a lock.**
+      **What closes it:** the subscription writer takes `lockOrgRow(tx, gymId)`
+      before its INSERT — the same lock and the same order (org row → child rows)
+      every mutation in `modules/orgs` already uses, so the two serialise with no
+      new deadlock edge. A concurrency test driving two real postgres clients is
+      what proves it (`orgs.routes.test.ts` has the precedent: `buildApp` opens
+      its pool at `max: 1`, so two `app.inject` calls are serialised by the
+      CLIENT and would pass with the lock deleted).
 - [ ] ⚪ **A GYM THAT PICKED THE WRONG COUNTRY AND IS ALREADY PAYING CANNOT FIX
       IT ITSELF — and that is the deliberate consequence of the ruling above, not
       an oversight.** The way out exists in principle (Kd approves every gym by

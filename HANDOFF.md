@@ -1,6 +1,51 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: GYM DETAILS, T3 ROUND 1 — THREE Critical/High, ALL FIXED IN THE ROUND.
+      DECISIONS :19656. **The packet did NOT ship; the DIFF-ONLY RE-REVIEW is
+      the remaining gate.** Escape hatch NOT armed (round 1).
+
+  1. **ALL THREE CRITICALS WERE IN THE HALF THAT WAS ONE HOUR OLD** — the
+     country lock, written straight after Kd's ruling. The morning's server half
+     came back clean on every axis. **The defects were in the code written
+     FASTEST, and the ruling behind it was sound.**
+  2. **C/H-1: a PAYING gym could not change its own name.** A settings form
+     returns all four fields on save; the guard asked "was the country
+     MENTIONED?" and refused the whole request over an untouched country. The
+     "lock is narrow" control missed it because **it left `country` out of its
+     payload** — :7487, a control that avoided the only case that could falsify
+     it. Guard O125.
+  3. **C/H-2 AND THE REVIEWER'S FIX FOR IT WAS REJECTED — read this before
+     "simplifying" the lock.** "Refuse only when the country DIFFERS" closes
+     C/H-1 and lets a rupee-billed pre-`0014` gym record `DE` and flip to euros.
+     **The rule shipped compares the resolved CURRENCY, not the country.** Guard
+     **O126 is aimed at the rejected one-liner itself.** :13552 — a reviewer's
+     fix is a claim.
+  4. **C/H-3: `lockOrgRow` does not close the check-then-act and the comment
+     said it did.** It cannot lock a subscription that does not exist yet.
+     Unreachable today, live the day billing ships — **now a 🔴 OWED line: the
+     subscription writer must take `lockOrgRow` first.** A one-sided lock is not
+     a lock.
+  5. **`country_locked` is now `currency_locked`, message included** — the old
+     one told a gym with no country that its country was fixed (:5807).
+
+MEASURED (final bytes, LOCAL): orgs.routes 129/129 (+12) · db.migration 10/10 ·
+  both in ONE invocation 129/129 · shared 51/51 · tsc exit 0 · eslint clean ·
+  sweep a stated SUBSET of 126: 15 RED, 0 ALIVE, 0 never ran. **Rule 3 measured
+  — both C/H fixes watched RED against the restored pre-fix source, verified
+  byte-identical by sha256 after.**
+
+PROCESS NOTE FOR THE NEXT REVIEW PROMPT, and it is mine: my T3 prompt told the
+  reviewer to report to Kd in "plain English, short". **He did — and the detail
+  Kd needed was compressed out of it**, so Kd had to ask twice. Part 0.5 governs
+  what a chat says to KD; it must not be pushed onto a REVIEWER, whose findings
+  are evidence. That instruction is removed from the prompt file.
+
+NEXT: DIFF-ONLY re-review in a FRESH chat (cover ONLY the fixes and the surfaces
+  they touch), then the WEB half, which carries the SMOKE.
+```
+
+```
 TASK: ADDENDUM, same day — KD FREEZES A GYM'S COUNTRY ONCE IT IS PAYING.
       DECISIONS :19560. **SUPERSEDES the block below's "country is editable"
       half; everything else in it stands.** Still no screen, so no smoke; T3

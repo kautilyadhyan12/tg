@@ -19652,3 +19652,139 @@ sha256-verified.
 **Still nothing ticks: there is no screen, so no smoke; T3 is UNRUN.** The
 ❓ currency line raised this morning is CLOSED by this ruling — struck and
 ticked, not deferred.
+
+## GYM DETAILS, T3 ROUND 1: THREE Critical/High — all in the country lock ruled that same day, and the reviewer's own one-line fix for two of them was measured and REJECTED (2026-08-26)
+
+Reviews :19366 and its addendum :19560. **The packet did NOT ship this round.**
+Escape hatch NOT armed (round 1). Findings listed and **approved by Kd before a
+byte was written**. **Read before writing any guard that asks whether a field
+was SENT, before "simplifying" the currency lock, before trusting a comment that
+calls a check-then-act safe, and before building the billing card.**
+
+**ALL THREE CRITICALS ARE IN THE HALF THAT WAS ONE HOUR OLD.** Everything from
+the morning's server half came back clean — ownership, cross-tenant, the
+server-derived currency, the four out-of-scope refusals, the real-IANA timezone
+check, SQL safety, the CORS preflight, and the migration's backfill test (which
+the reviewer confirmed genuinely reads the shipped file). **The defects were all
+in the code written FASTEST, immediately after a ruling, with the least
+deliberation** — and the ruling itself was sound.
+
+### C/H-1 — A PAYING GYM COULD NOT CHANGE ITS OWN NAME
+
+**Reproduced against the real database by the reviewer rather than argued from
+the source.** A settings screen fills every box and returns all four fields on
+save. For a paying gym that save could never succeed: the guard asked *"was the
+country MENTIONED?"*, saw the untouched country sitting beside the name the
+owner had actually changed, and refused the whole request — throwing the name,
+the city and the time zone away with it. **Kd's ruling says those three stay
+editable; in practice none of them were.**
+
+**Every other field in that function compares against the stored row. The
+country was the odd one out, and it was the one that blocked everything.**
+
+**WHY THE TEST MISSED IT, and it is :7487's fixture lesson exactly:** the
+"the lock is narrow, everything else still edits" control **left `country` out
+of its payload**, so it never tried the shape a real screen sends. The control
+was written to prove the lock was narrow and avoided the only case that could
+show it was not. Permanent guard **O125**.
+
+### C/H-2 — AN OLD GYM COULD BE PERMANENTLY STUCK, AND TOLD SOMETHING UNTRUE
+
+The 59 pre-`0014` gyms have no country recorded (correct, and not questioned).
+The plan was that each fills its own in on the first save. **A gym that starts
+paying before its owner ever opens that screen can never fill it in** — and the
+409 told it *"your gym's country is fixed"* when it has no country. :5807 on its
+face: on screen AND wrong.
+
+**THE REVIEWER'S PROPOSED ONE-LINER WAS MEASURED AND REJECTED, AND THAT IS THE
+MOST USEFUL THING IN THE ROUND.** He offered "refuse only when the country
+DIFFERS, treating an unrecorded country as free to set", and called it the same
+one-line fix as C/H-1. It closes C/H-1 cleanly. **It also lets one of those 59
+gyms — billed in rupees, `country` NULL — record `DE` and flip itself to euros:
+a paying gym's billing currency moving, which is the entire thing Kd stopped
+that morning.** :13552's standing lesson, earned again: **a reviewer's proposed
+fix is a claim and takes the same evidence as the code it replaces.**
+
+**THE FIX SHIPPED IS ONE RULE THAT CLOSES BOTH: refuse only when the change
+would MOVE THE MONEY** — compare the resolved CURRENCY, not the country.
+- unchanged country ⇒ unchanged currency ⇒ **allowed** (closes C/H-1)
+- unrecorded country recorded as the one it is ALREADY billed for ⇒ **allowed**,
+  and the gym finally has its country (closes C/H-2)
+- France → Germany, both EUR ⇒ **allowed**, address updated, money untouched
+- India → Germany ⇒ **REFUSED**
+- **It also makes the refusal TRUE**: the message now names the CURRENCY, which
+  every gym has, instead of the country, which some do not. The outcome type
+  renamed `country_locked` → `currency_locked` for the same reason.
+Permanent guard **O126, aimed squarely at the rejected one-liner** — it is the
+shape a later chat is most likely to "simplify" back in, because it reads as the
+obvious answer and closes C/H-1 on its own.
+
+**Kd was given both options with the difference measured, and chose the
+money-moves rule.** He had ruled the underlying question that morning; this is
+the same ruling delivered more precisely, not a new one.
+
+### C/H-3 — THE GUARD IS A CHECK-THEN-ACT AND THE COMMENT CLAIMED IT WAS SAFE
+
+`repo.updateOrg` asks "is this gym paying?" then writes, under `lockOrgRow`.
+**That locks the GYM row and cannot lock a subscription that does not exist
+yet**, so one committing between the SELECT and the UPDATE is missed and a
+now-paying gym's currency moves — the exact failure the ruling exists to stop.
+**The note in the code said the lock made this safe. It did not.**
+
+**UNREACHABLE TODAY AND THAT IS THE DANGER, NOT THE COMFORT:** nothing in the
+product inserts into `subscriptions` (grep-verified), so it cannot fire until
+the billing card ships — **and whoever writes that card will read this guard.**
+:5748's class: a false record is worse than a missing one, because the next card
+builds on it.
+
+**Closed in the only two ways this card can:** the comment is corrected in
+place, and the closing half is written as a REQUIREMENT on the billing card with
+its own 🔴 `OWED.md` line — **whatever creates a gym subscription must take
+`lockOrgRow` on that gym first**, the same lock and the same order every
+mutation in the module already uses, so the two serialise with no new deadlock
+edge. A one-sided lock is not a lock.
+
+### THE THREE LOW, ALL FIXED (`BACKLOG.md`)
+
+- **The `.default(null)` on `country` loosened a safety net**, and the reviewer
+  recommended a TEST rather than undoing it — correctly: the default is right
+  for the browser (:12660), and the cost is that a future read forgetting the
+  column serves "no country" silently instead of throwing. All seven reads are
+  correct today; a new test now pins that a gym WITH a country never reads back
+  without one, on both endpoints that carry an org summary.
+- **Two tests rebuilt an email by hand** from `makeUser`'s naming convention.
+  Fixed at the SOURCE — `makeUser` now returns `email` — rather than at the two
+  call sites (:1239, the class not the case). It also removed a `void person`
+  that existed only because a loop was not using its own subject.
+- **The 409 points at a door that does not exist** ("contact us" — no email is
+  sent and there is no contact page). Not a lie: Kd approves every gym by hand
+  (:11072) and both providers treat this as a support request. Named on the
+  admin-panel `OWED.md` line so the channel is written down when it exists.
+
+### THE TWO TESTS THE REVIEWER LISTED AS UNABLE TO FAIL (rule 4)
+
+Reported, not silently fixed. **(1) The country lock's own control** — it could
+not see C/H-1 because it never sent the country; **fixed here, and that fix is
+C/H-1's regression test.** **(2) "renaming a gym does not change its web
+address"** — the slug is not touched by any new code, so nothing anyone breaks
+turns it red. **Kept deliberately as a tripwire for a future card**, and named
+here so nobody counts it as evidence about today's code.
+
+### RULE 3 — MEASURED, NOT ASSERTED
+
+Both Critical/High fixes were watched RED against the pre-fix source before the
+fix went back: with the guard restored to "was it mentioned", the lock's control
+test fails, and the new legacy-gym test fails `expected 409 to be 200`. Source
+restored and **verified byte-identical by sha256**, not on the restore's word.
+
+### PROVE — final bytes, LOCAL Postgres
+
+`orgs.routes` **129/129** exit 0 (+12 over the pre-review 117) · `db.migration`
+10/10 · **both in ONE invocation 129/129** · shared 51/51 · tsc exit 0 · eslint
+clean on three files · **SWEEP a stated SUBSET of 126: 15 mutants · 15 RED · 0
+ALIVE · 0 never ran**, controls GREEN first, restores sha256-verified, tree
+clean after. **The full api suite is NOT quoted green** (:13746's pre-existing
+flake).
+
+**NOTHING TICKS: no screen, so no smoke, and the DIFF-ONLY RE-REVIEW is the
+remaining gate.**

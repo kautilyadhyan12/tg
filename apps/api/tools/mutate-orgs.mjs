@@ -1457,8 +1457,8 @@ const MUTANTS = [
     id: 'O123',
     target: 'repo',
     why: "MONEY, AND IT IS KD'S OWN RULING OF 2026-08-26: the lock comes off, so a PAYING gym can move its own country and with it the currency its invoices are raised in. Both providers refuse this — Stripe will not change a customer's currency after the first invoice and Paddle will not change a country on a live subscription at all",
-    from: '    if ("country" in input.patch) {\n      const billed = await tx<{ n: number }[]>`',
-    to: '    if (false && "country" in input.patch) {\n      const billed = await tx<{ n: number }[]>`',
+    from: '    if (movesMoney) {\n      const billed = await tx<{ n: number }[]>`',
+    to: '    if (false && movesMoney) {\n      const billed = await tx<{ n: number }[]>`',
     expect: 'freezes the country once the gym is on a paid plan',
   },
   {
@@ -1468,6 +1468,30 @@ const MUTANTS = [
     from: "          AND status <> 'trialing'`;",
     to: '          AND status IS NOT NULL`;',
     expect: 'freezes the country once the gym is on a paid plan',
+  },
+  {
+    // T3 ROUND 1 C/H-1's PERMANENT GUARD (:5348 rule 5). The shipped code asked
+    // "was the country MENTIONED", which refused a paying owner's whole save
+    // because the settings form returned an untouched country with the name they
+    // had actually changed. This restores that question.
+    id: 'O125',
+    target: 'repo',
+    why: "A PAYING GYM CAN NO LONGER CHANGE ITS OWN NAME: the guard goes back to asking whether the country was MENTIONED rather than whether the MONEY would move, so every save from a settings form — which sends all four fields back — is refused, and the name, city and time zone Kd ruled editable are thrown away with it",
+    from: '    const movesMoney =\n      "country" in input.patch &&',
+    to: '    const movesMoney =\n      "country" in input.patch ||',
+    expect: 'freezes the country once the gym is on a paid plan',
+  },
+  {
+    // T3 ROUND 1 C/H-2's PERMANENT GUARD, and it is aimed at THE REVIEWER'S OWN
+    // PROPOSED FIX — the one this round measured and rejected. It is the shape a
+    // later chat is most likely to "simplify" back into the code, because it
+    // reads as the obvious answer and closes C/H-1 on its own.
+    id: 'O126',
+    target: 'repo',
+    why: "THE REJECTED ONE-LINER, RESTORED: the guard compares COUNTRIES instead of CURRENCIES, so one of the 59 pre-`0014` gyms — billed in rupees with no country recorded — can record `DE` and flip itself to euros. A paying gym's billing currency moves, which is the entire thing Kd's ruling stops. It closes C/H-1 and re-opens C/H-2, which is exactly why it is a trap",
+    from: '      input.patch.currencyDisplay !== undefined &&\n      input.patch.currencyDisplay !== before.currencyDisplay;',
+    to: '      input.patch.country !== undefined &&\n      input.patch.country !== (before.country ?? input.patch.country);',
+    expect: 'already billed for',
   },
   {
     id: 'O121',

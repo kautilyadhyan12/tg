@@ -254,16 +254,22 @@ export async function updateOrg(
     case "updated":
     case "unchanged":
       return updateOrgResponseSchema.parse({ org: toOrgSummary(outcome.org) });
-    case "country_locked":
+    case "currency_locked":
       // KD RULING 2026-08-26. The sentence names the reason and the way out,
       // because a refusal an owner cannot act on is a dead end — and the way out
       // is a real one: Kd approves every gym by hand at this scale (:11072), and
       // moving a paying customer between price books is what both Stripe and
       // Paddle also make a support action rather than a self-serve toggle.
+      //
+      // **IT NAMES THE CURRENCY, NOT THE COUNTRY — T3 round 1 C/H-2.** The old
+      // wording said "your gym's country is fixed", which is FALSE to any of the
+      // 59 pre-`0014` gyms that have no country at all (:5807 — on screen AND
+      // wrong). What is actually frozen is the money, and the refusal now only
+      // fires when the money would genuinely move.
       throw new OrgsError(
         409,
-        "country_locked",
-        "Your gym's country is fixed now that it's on a paid plan, because it decides the currency you're billed in. Contact us and we'll move it for you.",
+        "currency_locked",
+        "The currency your gym is billed in can't change now that it's on a paid plan, and that country uses a different one. Contact us and we'll move it for you.",
       );
     case "not_found":
       // Unreachable in practice — `requirePrivilege` has already read the org

@@ -209,7 +209,12 @@ d("orgs routes (real Postgres)", () => {
       payload: JSON.stringify({ email, password: PASSWORD }),
     });
     expect(login.statusCode).toBe(200);
-    return { userId, cookies: cookieMap(login) };
+    // T3 round 1 Low: `email` is RETURNED so a caller never rebuilds it. Two of
+    // this card's tests typed `orgs-t-<local>@example.com` out by hand, which
+    // works only while this line's convention holds — and the day it changes
+    // they fail somewhere far from the cause. Fixed at the source rather than at
+    // the two call sites (:1239, the class not the case).
+    return { userId, email, cookies: cookieMap(login) };
   };
 
   const makeOrg = async (
@@ -4772,23 +4777,132 @@ d("orgs routes (real Postgres)", () => {
       { cookies: owner.cookies },
     );
     expect(locked.statusCode).toBe(409);
-    expect((JSON.parse(locked.body) as { error: string }).error).toBe("country_locked");
+    expect((JSON.parse(locked.body) as { error: string }).error).toBe("currency_locked");
 
     const unmoved = await readGymRow(org.org.id);
     expect(unmoved.country).toBe("CA");
     expect(unmoved.currency_display).toBe("CAD");
 
     // THE CONTROL — the lock is narrow. Everything else still edits.
+    //
+    // **IT SENDS THE COUNTRY BACK UNCHANGED, and that is T3 round 1's C/H-1.**
+    // The version that shipped left `country` OUT, so it never tried the shape a
+    // real settings screen sends — every box filled, all four fields returned on
+    // save — and could not see that a paying owner fixing a typo in the NAME had
+    // the whole request refused because the untouched country was in it. A
+    // control that avoids the realistic shape is not a control (:7487's fixture
+    // lesson: the FIXTURE was the hole, not the assertions).
     const stillOpen = await patch(
       `/v1/orgs/${org.org.id}`,
-      { name: "Orgs Test Edit Locked Renamed", city: "Silchar", timezone: "Asia/Tokyo" },
+      {
+        name: "Orgs Test Edit Locked Renamed",
+        city: "Silchar",
+        country: "CA", // unchanged — exactly what a filled-in form sends back
+        timezone: "Asia/Tokyo",
+      },
       { cookies: owner.cookies },
     );
-    expect(stillOpen.statusCode, "name/city/timezone stay editable").toBe(200);
+    expect(stillOpen.statusCode, "a full form re-save must not be refused").toBe(200);
     const after = await readGymRow(org.org.id);
     expect(after.name).toBe("Orgs Test Edit Locked Renamed");
     expect(after.city).toBe("Silchar");
     expect(after.timezone).toBe("Asia/Tokyo");
+    expect(after.country).toBe("CA");
+    expect(after.currency_display).toBe("CAD");
+
+    // A DIFFERENT COUNTRY ON THE SAME CURRENCY IS ALSO FINE — the rule is about
+    // the money, not the address. Both euro, so nothing about the billing moves.
+    await sql`UPDATE gyms SET country = 'FR', currency_display = 'EUR' WHERE id = ${org.org.id}`;
+    const sameCurrency = await patch(
+      `/v1/orgs/${org.org.id}`,
+      { country: "DE" },
+      { cookies: owner.cookies },
+    );
+    expect(sameCurrency.statusCode, "France to Germany keeps EUR").toBe(200);
+    const moved = await readGymRow(org.org.id);
+    expect(moved.country).toBe("DE");
+    expect(moved.currency_display).toBe("EUR");
+  });
+
+  /** T3 ROUND 1 Low — THE SAFETY NET THE `.default(null)` LOOSENED, made
+   *  observable rather than undone.
+   *
+   *  The server parses its own responses on the way out, and that is what caught
+   *  a missing `currencyDisplay` once before (:10402 T3 L-4). `country`'s
+   *  `.default(null)` is right for the BROWSER — a required field would blank
+   *  the whole gym list during a web-newer-than-api deploy (:12660) — but the
+   *  cost is that a future read which FORGETS to select the column now serves
+   *  "no country" silently instead of throwing.
+   *
+   *  All the reads are correct today; this is what keeps them that way. A gym
+   *  that HAS a country must never come back without one, on either endpoint
+   *  that carries an org summary. The reviewer recommended a test over undoing
+   *  the default, and that is the right direction. */
+  it("a gym with a country recorded never reads back without one", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("edit-carry");
+    const org = await makeOrg(owner.cookies, "Orgs Test Edit Carry", { country: "CA" });
+    expect(org.org.country).toBe("CA");
+
+    const mine = await get("/v1/orgs/mine", { cookies: owner.cookies });
+    expect(mine.statusCode).toBe(200);
+    const listed = (JSON.parse(mine.body) as { orgs: CreatedOrg["org"][] }).orgs.find(
+      (o) => o.id === org.org.id,
+    );
+    expect(listed?.country, "/v1/orgs/mine must carry the country").toBe("CA");
+
+    const edited = await patch(
+      `/v1/orgs/${org.org.id}`,
+      { name: "Orgs Test Edit Carry Two" },
+      { cookies: owner.cookies },
+    );
+    expect(edited.statusCode).toBe(200);
+    expect(
+      (JSON.parse(edited.body) as { org: CreatedOrg["org"] }).org.country,
+      "the edit response must carry it too",
+    ).toBe("CA");
+  });
+
+  /** T3 ROUND 1 C/H-2 — a pre-`0014` gym has NO country, and the first version
+   *  of this rule locked it out of ever recording one while telling it that its
+   *  country was "fixed". There are 59 such gyms and no admin tool to repair
+   *  them.
+   *
+   *  **The reviewer's proposed fix — treat an unrecorded country as free to set
+   *  — was measured and REJECTED**, and this test is where the difference
+   *  shows: under that rule the SECOND half below would pass, and a gym billed
+   *  in rupees would have flipped itself to euros. The money is what is locked. */
+  it("lets a paying gym with no country recorded set the one it is already billed for, and only that one", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("edit-legacy");
+    const org = await makeOrg(owner.cookies, "Orgs Test Edit Legacy");
+
+    // A gym as it existed before migration `0014`: billed in rupees, country
+    // never recorded, because the wizard's answer used to be thrown away.
+    await sql`UPDATE gyms SET country = NULL WHERE id = ${org.org.id}`;
+    await subscribeGym(org.org.id, CAP1_PLAN);
+    await sql`
+      UPDATE subscriptions SET status = 'active'
+      WHERE owner_type = 'gym' AND owner_id = ${org.org.id}`;
+    expect((await readGymRow(org.org.id)).currency_display).toBe("INR");
+
+    // THE ONE THAT MUST BE REFUSED, and it is the half the reviewer's simpler
+    // rule would have let through: recording Germany moves this gym from rupees
+    // to euros — a paying gym's billing currency, which is the whole ruling.
+    const flip = await patch(`/v1/orgs/${org.org.id}`, { country: "DE" }, { cookies: owner.cookies });
+    expect(flip.statusCode, "recording a country that changes the money").toBe(409);
+    expect((JSON.parse(flip.body) as { error: string }).error).toBe("currency_locked");
+    expect((await readGymRow(org.org.id)).country).toBeNull();
+
+    // THE ONE THAT MUST BE ALLOWED: India is what it is already billed for, so
+    // nothing about the money moves and the gym finally has its country.
+    const record = await patch(
+      `/v1/orgs/${org.org.id}`,
+      { country: "IN" },
+      { cookies: owner.cookies },
+    );
+    expect(record.statusCode, "recording the country it is already billed for").toBe(200);
+    const healed = await readGymRow(org.org.id);
+    expect(healed.country).toBe("IN");
+    expect(healed.currency_display).toBe("INR");
   });
 
   /** A gym must not be able to declare its own money (R3.1, Kd ruling
@@ -4928,14 +5042,16 @@ d("orgs routes (real Postgres)", () => {
       [trainer, "trainer"],
       [manager, "manager"],
     ] as const) {
-      const local = role === "trainer" ? "edit-trainer" : "edit-manager";
+      // The email comes from the account this test CREATED (T3 Low), not from a
+      // hand-typed copy of `makeUser`'s naming convention. The `local` variable
+      // that rebuilt it is gone, and with it the `void person` that only existed
+      // because the loop was not using its own subject.
       const appointed = await post(
         `/v1/orgs/${org.org.id}/staff`,
-        { email: `orgs-t-${local}@example.com`, role },
+        { email: person.email, role },
         { cookies: owner.cookies },
       );
       expect(appointed.statusCode, role).toBe(201);
-      void person;
     }
 
     const attempt = (cookies: Record<string, string>) =>
@@ -4983,7 +5099,7 @@ d("orgs routes (real Postgres)", () => {
     await joinAsMember(helper.cookies, org, owner.cookies);
     await post(
       `/v1/orgs/${org.org.id}/staff`,
-      { email: "orgs-t-edit-grant-helper@example.com", role: "manager" },
+      { email: helper.email, role: "manager" },
       { cookies: owner.cookies },
     );
 

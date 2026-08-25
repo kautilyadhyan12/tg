@@ -453,7 +453,10 @@ export interface OrgPatch {
 export type UpdateOrgOutcome =
   | { kind: "updated"; org: OrgRow; changed: readonly string[] }
   | { kind: "unchanged"; org: OrgRow }
-  | { kind: "country_locked" }
+  /** RENAMED from `country_locked` in the T3 round-1 fix, because the old name
+   *  described the wrong thing and the message built on it was false to a gym
+   *  with no country recorded. What is locked is the CURRENCY. */
+  | { kind: "currency_locked" }
   | { kind: "not_found" };
 
 /** EDIT THE GYM'S OWN ROW (Kd's `org.manage`, 2026-08-26).
@@ -509,17 +512,57 @@ export async function updateOrg(
      *  question is answerable from a column the billing card must maintain
      *  anyway rather than from a table that card has to remember to write.
      *
-     *  **Inside the transaction and under the org lock** — this is a
-     *  check-then-act, and the thing it guards is money. Outside the lock a
-     *  subscription committing between the check and the UPDATE would move a
-     *  paying gym's currency, which is the entire failure Kd named. */
-    if ("country" in input.patch) {
+     *  **IT ASKS WHETHER THE MONEY WOULD MOVE, NOT WHETHER THE COUNTRY WAS
+     *  MENTIONED — T3 round 1 C/H-1, and the first version asked the wrong
+     *  question in a way that broke the whole route.** A settings screen fills
+     *  every box and sends all four fields back on save, so a paying owner
+     *  fixing a typo in the NAME also re-sent an unchanged country; the old
+     *  guard saw the key, refused the entire request, and threw the name, the
+     *  city and the time zone away with it. Kd's ruling says those three stay
+     *  editable and in practice none of them were. **Every other field in this
+     *  function compares against the stored row; the country was the odd one
+     *  out, and it was the one that blocked everything.**
+     *
+     *  **THE REVIEWER'S OWN PROPOSED FIX WAS MEASURED AND REJECTED — it
+     *  re-opens the hole this rule exists to close** (T3 C/H-2). "Refuse only
+     *  when the country DIFFERS, and treat an unrecorded country as free to
+     *  set" fixes the typo case and lets one of the 59 pre-`0014` gyms — billed
+     *  in rupees, `country` NULL — record `DE` and flip itself to euros. That is
+     *  a paying gym's billing currency moving, which is the entire thing Kd
+     *  stopped. :13552's standing lesson: **a reviewer's proposed fix is a claim
+     *  and takes the same evidence as the code it replaces.**
+     *
+     *  So the question is the CURRENCY's, which is what the ruling was always
+     *  about: unchanged country ⇒ unchanged currency ⇒ allowed · an unrecorded
+     *  country recorded as the one it is ALREADY billed for ⇒ allowed, and the
+     *  gym finally has its country ⇒ closes C/H-2 · France → Germany ⇒ both EUR
+     *  ⇒ allowed, address updated, money untouched · India → Germany ⇒ REFUSED.
+     *  It also makes the refusal TRUE: the old sentence told a gym with no
+     *  country that its country was fixed (:5807).
+     *
+     *  **INSIDE THE TRANSACTION AND UNDER THE ORG LOCK, AND THAT IS NOT
+     *  SUFFICIENT ON ITS OWN — T3 C/H-3, and this note used to claim otherwise.**
+     *  `lockOrgRow` locks the GYM row; it cannot lock a subscription that does
+     *  not exist yet, so one committing between this SELECT and the UPDATE below
+     *  is missed and a now-paying gym's currency moves. **Unreachable today —
+     *  nothing in the product inserts into `subscriptions`, grep-verified — and
+     *  live the day the billing card ships.** The closing half is therefore a
+     *  REQUIREMENT on that card rather than something this one can build:
+     *  **whatever creates a gym subscription must take `lockOrgRow` on the same
+     *  gym first**, which is the lock and the order every mutation in this module
+     *  already uses, so the two serialise. Own `OWED.md` line. **Do not read this
+     *  guard as complete.** */
+    const movesMoney =
+      "country" in input.patch &&
+      input.patch.currencyDisplay !== undefined &&
+      input.patch.currencyDisplay !== before.currencyDisplay;
+    if (movesMoney) {
       const billed = await tx<{ n: number }[]>`
         SELECT count(*)::int AS n FROM subscriptions
         WHERE owner_type = 'gym'
           AND owner_id = ${input.gymId}
           AND status <> 'trialing'`;
-      if ((billed[0]?.n ?? 0) > 0) return { kind: "country_locked" };
+      if ((billed[0]?.n ?? 0) > 0) return { kind: "currency_locked" };
     }
 
     // Compared against the CURRENT row rather than trusted from the request:

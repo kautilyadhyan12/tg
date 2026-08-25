@@ -244,10 +244,17 @@ export const updateOrgRequestSchema = z
      *  **KD RULING 2026-08-26 — THIS FIELD FREEZES THE DAY THE GYM STARTS
      *  PAYING** (*"a gym should not be able to change the country as it will
      *  create problem of money"*). It decides `currency_display`, which is the
-     *  money the gym is BILLED in. The SERVER enforces it — a gym on any
-     *  subscription past `trialing` gets a 409 `country_locked` — so this schema
+     *  money the gym is BILLED in. The SERVER enforces it — so this schema
      *  accepting the field is not the same as the field being changeable, and a
      *  console must handle the refusal rather than only hiding the box (R3.3).
+     *
+     *  **WHAT IS REFUSED IS A CHANGE THAT MOVES THE MONEY, not any mention of
+     *  the country — T3 round 1 C/H-1/C/H-2.** A paying gym on a subscription
+     *  past `trialing` gets a 409 `currency_locked` only when the new country
+     *  resolves to a DIFFERENT currency. So a settings form may safely send the
+     *  country back unchanged with a name edit (the first version refused that
+     *  whole save), a pre-`0014` gym may record the country it is already billed
+     *  for, and France → Germany is allowed because both are EUR.
      *
      *  **He first said "lock it outright" and refined it after being shown what
      *  the providers do**: Stripe refuses a currency change once a customer has

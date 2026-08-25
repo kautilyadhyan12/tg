@@ -210,6 +210,67 @@ mid-file: re-derive them with
   currency it is BILLED in once it is actually paying is Kd's to rule.~~
   **— CLOSED THE SAME DAY BY KD; see the ADDENDUM at :19560, which SUPERSEDES
   this entry's "the country is freely editable" half.**
+- **:19656** — 2026-08-26 — **GYM DETAILS, T3 ROUND 1: THREE Critical/High, ALL
+  in the country lock ruled that same day — and THE REVIEWER'S OWN ONE-LINE FIX
+  FOR TWO OF THEM WAS MEASURED AND REJECTED.** Reviews :19366 + :19560; **the
+  packet did NOT ship this round.** Escape hatch NOT armed (round 1). Kd
+  approved the finding list before a byte was written. **Read before writing any
+  guard that asks whether a field was SENT, before "simplifying" the currency
+  lock, before trusting a comment that calls a check-then-act safe, and before
+  building the billing card.**
+  **ALL THREE ARE IN THE HALF THAT WAS ONE HOUR OLD** — the morning's server
+  half came back clean on every axis (ownership, cross-tenant, server-derived
+  currency, the four out-of-scope refusals, real-IANA timezones, SQL safety,
+  CORS, and the migration backfill test the reviewer confirmed genuinely reads
+  the shipped file). **The defects were in the code written FASTEST, straight
+  after a ruling, and the ruling itself was sound.**
+  **C/H-1 — A PAYING GYM COULD NOT CHANGE ITS OWN NAME**, reproduced against the
+  real database rather than argued: a settings screen returns all four fields on
+  save, the guard asked *"was the country MENTIONED?"*, and an untouched country
+  refused the whole request — throwing away the name, city and time zone Kd's
+  ruling says stay editable. **Every other field compares against the stored
+  row; the country was the odd one out and it blocked everything.** The test
+  missed it because the "the lock is narrow" control **left `country` out of its
+  payload** — :7487's fixture lesson, a control that avoided the only case that
+  could falsify it. Guard **O125**.
+  **C/H-2 — AN OLD GYM COULD BE STUCK FOR EVER AND TOLD SOMETHING UNTRUE:** a
+  pre-`0014` gym that starts paying before its owner opens the screen can never
+  record a country, and was told *"your country is fixed"* when it has none
+  (:5807). **THE REVIEWER'S ONE-LINER — "refuse only when the country DIFFERS,
+  treat unrecorded as free to set" — CLOSES C/H-1 AND RE-OPENS THE HOLE KD SHUT
+  THAT MORNING**: one of the 59 rupee-billed gyms records `DE` and flips itself
+  to euros. :13552 earned again — **a reviewer's proposed fix is a claim and
+  takes the same evidence as the code it replaces.** **THE FIX SHIPPED IS ONE
+  RULE FOR BOTH: refuse only when the MONEY would move** (compare the resolved
+  CURRENCY, not the country) — unchanged country allowed · an unrecorded country
+  recorded as the one already billed for allowed · France→Germany allowed, both
+  EUR · India→Germany REFUSED. **It also makes the refusal TRUE**, naming the
+  currency every gym has instead of the country some lack; outcome renamed
+  `country_locked` → `currency_locked`. Guard **O126 aimed squarely at the
+  rejected one-liner**, the shape a later chat is most likely to "simplify" back
+  in. Kd was shown both with the difference measured and chose money-moves.
+  **C/H-3 — THE GUARD IS A CHECK-THEN-ACT AND ITS COMMENT CLAIMED IT WAS SAFE.**
+  `lockOrgRow` locks the GYM row and cannot lock a subscription that does not
+  exist yet, so one committing between the SELECT and the UPDATE moves a
+  now-paying gym's currency. **Unreachable today (nothing inserts into
+  `subscriptions`) AND THAT IS THE DANGER, NOT THE COMFORT** — :5748's class, a
+  false record the next card builds on. Comment corrected in place; the closing
+  half is a 🔴 `OWED.md` REQUIREMENT on the billing card: **whatever creates a
+  gym subscription must take `lockOrgRow` first.** A one-sided lock is not a lock.
+  **THREE LOW, all fixed:** the `.default(null)` safety net got a TEST rather
+  than being undone (the reviewer's own recommendation, and right) · two tests
+  rebuilt an email by hand, fixed at the SOURCE (`makeUser` returns it) not the
+  call sites (:1239) · the 409 names a contact channel that does not exist yet,
+  recorded on the admin-panel line. **TWO TESTS LISTED AS UNABLE TO FAIL (rule
+  4):** the lock's own control (fixed here — that fix IS C/H-1's regression
+  test) and the slug tripwire, **kept deliberately and named so nobody counts it
+  as evidence about today's code.**
+  **RULE 3 MEASURED: both C/H fixes watched RED against the restored pre-fix
+  source, which was then verified byte-identical by sha256.**
+  **PROVE, final bytes, LOCAL: orgs.routes 129/129 (+12) · db.migration 10/10 ·
+  both in ONE invocation 129/129 · shared 51/51 · tsc exit 0 · eslint clean ·
+  SWEEP a stated SUBSET of 126: 15 RED, 0 ALIVE, 0 never ran.** **NOTHING TICKS
+  — no screen, no smoke, and the DIFF-ONLY RE-REVIEW is the remaining gate.**
 - **:19560** — 2026-08-26 — **ADDENDUM to :19366 — KD FREEZES A GYM'S COUNTRY
   ONCE IT IS PAYING, AND STOPPED ME IMPLEMENTING AN OPINION AS A RULING.**
   **Read before touching the country on any org route, before writing anything
