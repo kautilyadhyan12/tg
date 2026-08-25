@@ -1,6 +1,87 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD SET THE BUILD ORDER FOR THE WHOLE PROJECT + the admin-panel finding.
+      DECISIONS :19016, committed f3977eb. Records only, no code.
+      **NEXT CARD IS PLANNED AND AWAITING KD'S ONE-WORD APPROVAL — see below.**
+
+WHERE THE PROJECT IS
+  The plans-seed card is DONE, reviewed twice, committed (e894eef). Both its
+  OWED lines are ticked. Nothing is in flight and nothing is broken.
+  Branch `web-repoint`, everything committed, NOT pushed.
+
+THE SIX THINGS A NEXT CHAT MUST NOT GET WRONG
+  1. **THE ORDER IS KD'S AND IS NOT YOURS TO RE-SEQUENCE** (:19016): gym → gym
+     members → exercises 4-58 → reference video → the rest of the web →
+     Android → iOS → server live + payments → what is left → full review and
+     test → publish. **We are in STAGE 1, the gym.**
+  2. **HE CORRECTED A DRIFT AND IT BINDS: do not wander off the gym.** Asked
+     "what next", the last chat offered CAMERA work and he answered *"we were
+     doing the gym part and all of sudden going to camera wtf"*. Continuity of
+     thread beats severity ranking unless something actually blocks.
+  3. **THE ADMIN PANEL IS NOW A 🔴 OWED LINE AND IT IS THE DEFERRAL RULE'S OWN
+     FAILURE MODE** — in the spec five times, tracked zero times. It is a WEB
+     surface, never inside a phone app (that is both the store answer and the
+     security answer), and it is the ONE surface exempt from :17765.
+  4. **KD RULED the money-dependent gym items get a "mark this gym as paid"
+     admin tool rather than a deferral.** That is card 1.2 and it makes the
+     seat cap, the 30-day trial and the §4.2 banner live without any payment
+     provider. Only the Billing TAB waits for stage 8.
+  5. **THE ROADMAP LIVES IN A PLAN FILE OUTSIDE THE REPO** — its ORDER and its
+     four conflicts are at :19016, which is the citable copy. `OWED.md` stays
+     the authority on individual items.
+  6. **248 unticked items, measured.** Do not soften that and do not quote a
+     number of weeks; none was estimated.
+
+THE NEXT CARD — PLANNED, NOT STARTED, AWAITING ONE WORD FROM KD
+  **1.1 A GYM CAN FIX ITS OWN DETAILS.** Nineteen routes in `modules/orgs` and
+  not one is a `PATCH /v1/orgs/:gymId`; a gym's row is insert-only after
+  `createOrgAttempt`. A typo in the name is on every screen forever, and
+  `gyms.timezone` decides that gym's day boundary, so a wrong zone corrupts
+  streaks permanently. Own 🟡 OWED line.
+  SCOPE: name · city · country · timezone. Currency is DERIVED from country by
+  the server (`currencyForCountry`), never accepted from the client (R3.1).
+  OUT OF SCOPE and say so: the slug (minted once against `RESERVED_SLUGS`;
+  renaming an address is its own harder question), `orgType`, and `locale`
+  (a control with no effect — its own OWED line says so).
+  **THE OPEN DECISION PUT TO KD, AND HIS ANSWER IS THE GATE:** what gates it.
+  RECOMMENDED — a NEW privilege `org.manage`, owner-only by default, migration
+  `0014` widening `gym_staff_privileges_check` (today's six values are in
+  `0013`). The alternative offered was reusing `staff.manage` (no migration)
+  and it was recommended AGAINST on :13803's precedent — *"`codes.manage` is a
+  NEW privilege and deliberately NOT `codes.invite`"*, because two rows that
+  mean different things get different privileges.
+  A 7th privilege is SAFE to ship api-first now: :16095's L-1 (read schemas
+  enum-checking `privileges`) was fixed to lenient-in/strict-out.
+  SPLIT: server half first (migration + route + tests), web half its own card
+  with the SMOKE — the shape every gym card has used (:13803/:13920,
+  :15381/:15770, :14262/:14570).
+  REUSE, do not reinvent: `requirePrivilege` · `currencyForCountry` and
+  `COUNTRY_CURRENCY` in `@app/shared` · `isValidTimeZone` (already proves a
+  real IANA zone in `createOrgRequestSchema`) · `lockOrgRow` · `insertAudit`.
+  TESTS: happy path per field · foreign gym 404 · trainer 403 · unsupported
+  country refused rather than defaulted · audit row per change and NONE on a
+  no-op · a junk timezone refused.
+  TRAP, measured on this machine: `Intl.supportedValuesOf('timeZone')` returns
+  `Asia/Calcutta` and NOT `Asia/Kolkata`, so the web half must inject the
+  browser's own zone or a user cannot pick their own (:10402).
+
+MEASURED THIS SESSION
+  OWED.md 248 unticked (🔴 23 · 🟡 135 · ⚪ 75 · ❓ 15). `apps/` = api + web,
+  no mobile. 3 of 58 engine definitions. 57 of 58 catalog rows `tracking:
+  "pose"`. Admin panel: 5 spec hits, 0 OWED hits, 0 index hits before today.
+  `packages/shared/src/orgs.ts:37-38` deliberately excludes `admin` from the
+  ORG role enum and names the separate surface — so the gap was TRACKING, not
+  judgement, and a chat's earlier "the admin role does not exist in the code"
+  was corrected to Kd in the same message.
+
+DEVIATION / SPEC GAP: none.
+
+NEXT: Kd approves (or changes) the `org.manage` gating call, then build the
+  SERVER half of card 1.1.
+```
+
+```
 TASK: T3 ROUND 2 (diff-only) ON THE PLANS-SEED CARD — ZERO Critical/High.
       THE PACKET SHIPS. DECISIONS :18830. Seven Low, all fixed. UNCOMMITTED.
 
