@@ -1,6 +1,61 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD RULINGS ONLY — no code. Prices, band boundaries, the FULL photo editor,
+      and the trial's shape. DECISIONS :17902. Records commit; nothing built.
+
+THE SIX THINGS A NEXT CHAT WILL OTHERWISE GET WRONG
+  1. **HE NAMED TWO PRICES, NOT A FORMULA.** $30→$35 (band 1) and $40→$50
+     (band 2). **Bands 3-5 ($69/$99/$129), the WHOLE INR book, and the $10/$5
+     individual tier are UNTOUCHED and UNRULED.** Scaling them ~17% "to match"
+     is inventing a ruling — the exact failure :17366 §0 recorded the day
+     before. Three ❓ OWED lines.
+  2. **BOUNDARIES ARE ROUND NOW AND THIS APPLIES TO BOTH BOOKS**: 0-300 /
+     301-500 / 501-1000 / 1001-1500 / 1501-2100 / 2101+. A boundary is a member
+     count, not a currency — mechanical, not a second ruling.
+  3. **THE PHOTO EDITOR IS THE FULL BUILD.** Kd overruled my recommendation to
+     ship only the transparent sticker + drag/resize. Crop, resize, brightness,
+     contrast, grayscale, limited fonts, undo/redo, movable/resizable overlay —
+     all of it. **The stats are never typed; they come from the real workout.**
+     Do not re-propose the smaller version; the argument for it is recorded and
+     was rejected with the reasoning in front of him.
+  4. **THE TRIAL: gym picks the plan at signup, and THAT PLAN IS FIXED for the
+     trial.** He proposed mid-trial changes and REVERSED IT HIMSELF one message
+     later. A chat reading only the first message builds the wrong thing.
+     **LENGTH IS 30 DAYS (:16548), NOT the spec's 7** — :17902 §2 quotes the
+     spec's "7-day" line verbatim, so do not carry the 7 forward.
+  5. **I WAS WRONG ONCE, IN FRONT OF HIM, AND THE SHAPE REPEATS.** I advised
+     against blocking members at the seat cap. Then measured: `repo.ts:763`
+     ALREADY refuses them, v1 §9.2 calls gym plans "seat-capped in code", and
+     Part 3 §4.0 step 2 is already the member-count slider he had just
+     re-derived. **A recommendation formed without reading the built code is a
+     guess (V4).** I also recommended pilot codes for the first 20 gyms and
+     STRUCK IT before committing — :16702 already ruled one trial for every gym
+     and "the first 20" as a sales target with no code.
+  6. **THE PLANS SEED HAS NEVER MATCHED ANY RULED BOOK AND HAS ZERO USD GYM
+     PLANS.** Measured this session; own 🔴 OWED line. :17366 ratified prices
+     against a seed nobody re-read. The `seat_cap` values are the boundaries in
+     code, so item 2 lands there too.
+
+FILES CHANGED (4, all records)
+  docs  DECISIONS.md (:17902, new) · DECISIONS-INDEX.md (+1 line, §1) ·
+        OWED.md (+6 lines: 🔴 seed · 🟡 trial shape · 🟡 photo editor ·
+        3× ❓ unruled prices) · HANDOFF.md
+
+MEASURED THIS SESSION (all V1-compliant, commands in :17902)
+  seed.ts org plans: 6 rows, ALL INR, prices ₹999-₹4,999, caps 25-400 · zero USD
+  org rows · `repo.ts:763` seat refusal · spec quotes at 03-part3:236/303 and
+  00-architecture-v1:631. Market research (competitor pricing, CAC, headcounts,
+  the $500k and 20-gym models) is in :17902 §5 with sources — DO NOT re-derive.
+
+DEVIATION / SPEC GAP: the spec's 7-day org trial (Part 5 §6.1, Part 3 §4.0) is
+  superseded by Kd's 30 days (:16548). Recorded, not re-opened.
+
+NEXT: nothing is in flight. Pick from OWED.md. The 🔴 seed line is the cheapest
+  real work and it now blocks every billing/trial/seat-cap card.
+```
+
+```
 TASK: T3 ROUND 2 ON THE F5 CARD — ZERO CRITICAL/HIGH. THE CARD SHIPS AND THE
       ⚪ CONSOLE LINE IS TICKED. DECISIONS :17676. Card CLOSED.
 

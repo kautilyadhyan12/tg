@@ -42,6 +42,52 @@ mid-file: re-derive them with
 - **:1110** — 2026-07-26 — the hardcoded 100-XP-per-level curve must NEVER be
   copied into a client. The server sends `xpInLevel`/`xpForNext`/`progressPct`;
   clients render, never compute. (`xp.level + 1` survives as a label only.)
+- **:17902** — 2026-08-25 — **KD RAISES GYM BANDS 1–2 TO $35/$50, ROUNDS EVERY
+  BAND BOUNDARY (0–300 / 301–500 / 501–1000 / 1001–1500 / 1501–2100), RULES THE
+  FULL PHOTO EDITOR IN, AND FIXES THE TRIAL'S SHAPE.** Supersedes :17366's
+  band-1/2 USD prices and **all boundaries in BOTH books**. **Read before seeding
+  any plan or price, before touching `apps/api/src/db/seed.ts`, before building
+  the onboarding wizard or the trial, before building photo sharing, and before
+  answering Kd on whether the business works.** **BANDS 3–5, the ENTIRE INR BOOK,
+  and the $10/$5 individual tier are UNRULED — he named TWO numbers, and scaling
+  the rest by the same ~17% is INVENTING A RULING**
+  (:17366 §0's own lesson, from the session one day earlier). ❓ `OWED.md` lines.
+  **THE EDITOR IS FULL** — crop, resize, brightness/contrast/grayscale, limited
+  fonts, undo/redo, a movable/resizable stats overlay — **overruling the chat's
+  recommendation to ship only the sticker + drag/resize because Instagram does
+  the rest free**; the stats are never typed, they come from the real workout.
+  **THE TRIAL: no card · the gym picks WHICH PLAN it trials at signup · that plan
+  is FIXED for the whole trial · that plan's member cap is enforced.** He proposed
+  mid-trial plan changes and **reversed it himself one message later** — a chat
+  reading only the first message builds the wrong thing. **The trial LENGTH is
+  NOT touched and is NOT open: 30 DAYS per :16548, superseding the spec's 7 —
+  this entry quotes the spec's "7-day" line verbatim and a chat must not carry
+  it forward.** The chat also recommended pilot codes for the first 20 gyms
+  **and struck it before committing against :16702** (one trial, every gym, "the
+  first 20" is a sales target with no code); **only its reason survives — never
+  discount the list price to win the first 20.** **THE CHAT WAS WRONG
+  ONCE AND THE CORRECTION IS THE USEFUL PART: it advised against blocking members
+  at the seat cap, then measured that `apps/api/src/modules/orgs/repo.ts:763`
+  ALREADY refuses them, that v1 §9.2 calls gym plans "seat-capped in code", and
+  that Part 3 §4.0 step 2 is already the member-count slider Kd had just
+  re-derived** — a recommendation formed without reading the built code is a
+  guess (V4). **MEASURED, NOW A 🔴 `OWED.md` LINE: the plans seed has ZERO USD
+  org rows and its six INR rows carry the PRE-:17366 book** (₹999–₹4,999, caps
+  25–400) — **:17366 ratified a price book against a seed nobody re-read**, and
+  the `seat_cap` values ARE the boundaries this ruling moves. Carries the market
+  research so no chat re-derives it: rival gym software $99–599/mo **plus $81–97
+  for a plain branded app that does none of this** · the bundle a member gets
+  free retails at **$47.97/mo**, so a 200-member gym at $35 pays 17.5¢/member ·
+  **incumbents charge $12–20 because acquiring one payer costs $20–80 in ADS, not
+  because serving them costs anything — Kd's cost through a gym is ≈$0, and THAT
+  is the moat, not the technology** · $500k ≈ 300 gyms + 3,000 individuals ⇒
+  ~$283k after tax solo · **20 gyms worst-case costs ~$257/mo and leaves ~$398 —
+  proof, not income** · Paddle's flat 50¢ is 6.4% on a $35 gym and **10% on a $10
+  consumer** · **the ClassPass/Mindbody scar is the true shape of his "will gyms
+  think I'm using them" fear, and he sells a $10 consumer tier so an owner WILL
+  ask** · honest odds given as judgement: $500k ≈ 1-in-4/5 over 3–4 years,
+  $50–150k considerably likelier, and Gymdesk took **four years** to
+  product-market fit in this exact market.
 - **:8808** — 2026-08-16 — **WEARABLES: both directions are possible, they are
   ONE integration rather than two, and the cost is a MOBILE APP rather than
   money.** **NO DECISION WAS MADE — Kd asked whether it is possible and costly

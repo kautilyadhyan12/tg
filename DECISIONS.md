@@ -17898,3 +17898,229 @@ line was written.
 
 **Six web console screens exist today** (counted 2026-08-24); their native
 counterparts are new work in build wave 2 and after.
+
+## KD RAISES BANDS 1 AND 2, ROUNDS EVERY BAND BOUNDARY, RULES THE FULL PHOTO EDITOR IN, AND FIXES THE TRIAL'S SHAPE — with the market research that answers "is this viable" so nobody re-derives it (2026-08-25)
+
+**Read before seeding ANY plan or price · before touching `apps/api/src/db/seed.ts`
+· before building the onboarding wizard or the trial · before building photo
+sharing or the share card · and before answering Kd on whether this business
+works.** Supersedes the band-1 and band-2 USD prices of :17366 and **every band
+BOUNDARY in both books**. No code changed in this commit — records only.
+
+### 1 · KD RULINGS
+
+**1a · GYM PRICE, BANDS 1 AND 2 ONLY — RAISED.** *"i think i need to increase the
+gym price lets take 35 dollar and then 50 dollar or should i keep the initial 30
+and 40"*. Recommended $35/$50 with reasons; he took it. **$30 → $35 · $40 → $50.**
+
+**1b · BAND BOUNDARIES BECOME ROUND NUMBERS.** *"299 does not make sense make it
+300 then 301 to like that"*. **This applies to BOTH books** — a boundary is a
+member count, not a currency, so the INR book's boundaries move with it. That is
+mechanical, not a second ruling.
+
+| Members | USD (US/CA/EU) | INR |
+|---|---|---|
+| 0–300 | **$35** (was $30 at 0–299) | ₹1,500 — **UNRULED**, unchanged |
+| 301–500 | **$50** (was $40 at 300–499) | ₹2,500 — **UNRULED** |
+| 501–1000 | $69 — **UNRULED**, unchanged | ₹4,500 — **UNRULED** |
+| 1001–1500 | $99 — **UNRULED** | ₹6,500 — **UNRULED** |
+| 1501–2100 | $129 — **UNRULED** | ₹8,500 — **UNRULED** |
+| 2101+ | custom | custom |
+
+**"UNRULED" IS NOT A GAP TO FILL. HE NAMED TWO NUMBERS.** A chat that scales
+bands 3–5, or the whole INR book, by the same ~17% is **inventing a ruling** —
+which is :17366 §0's own recorded lesson, from the session immediately before
+this one (*"an inferred ruling is not a ruling"*). Both carry ❓ `OWED.md` lines.
+**The margin question this opens and that nobody has computed: raising band 1 by
+17% while leaving band 3 alone flattens the curve — the price per member now
+falls faster as a gym grows than :17366's table assumed.** Not a defect, not
+ruled either way; measure before proposing anything.
+
+**1c · THE PHOTO/STATS EDITOR IS BUILT IN FULL.** *"think we will build full as
+originally decided"*. **This OVERRULES the chat's recommendation**, which was to
+build only the transparent stats sticker plus drag/resize and to SKIP crop,
+filters, fonts and undo on the grounds that Instagram already does them free.
+He was shown that reasoning and chose the full build. **Ruled scope, from his own
+first description:** take or pick a photo · attach the stats as an overlay ·
+move and resize the overlay · undo/redo · crop · resize · brightness · contrast ·
+grayscale · add text with a **limited** font selection · add an overlay and edit
+it the same way. **The stats are never typed — they come from the workout, run or
+meal the person actually did**, which is the whole difference between this and
+any photo editor on the store.
+
+**1d · THE TRIAL — RULED SHAPE.** No card or bank details to start · **the gym
+picks WHICH PLAN it is trialling at signup** · **that plan is FIXED for the whole
+trial** · that plan's member limit is enforced during the trial · a prompt to
+subscribe when it ends.
+**He proposed mid-trial plan changes and REVERSED IT HIMSELF one message later**
+(*"they can not change the trial plan mid trial , my mistake"*). **Recorded
+because a chat reading only the first message would build the wrong thing.** The
+reversal is the ruling.
+
+### 2 · THE CHAT WAS WRONG ONCE HERE, AND THE CORRECTION IS THE USEFUL PART
+
+**The chat first told Kd NOT to block members at the seat cap** — argued that
+locking a gym for onboarding members punishes the exact behaviour a trial wants,
+and that removing members to get back under a cap throws real people out of their
+gym. **Kd clarified that he meant something else and narrower, and the advice was
+wrong for this system anyway.** Measured after he pushed back:
+
+- `apps/api/src/modules/orgs/repo.ts:763` — `if (used >= cap) return { kind:
+  "seat_cap", cap }`. **A member joining a full gym is ALREADY refused today.**
+- `00-architecture-v1.md:631` §9.2 — gym plans are *"tiered flat fee, seat-capped
+  in code"*. The block is the pricing ceiling; without it a 500-member gym sits
+  on the cheapest band forever.
+- `03-part3-org-console.md:303` — the 90%-of-cap banner (*"87/100 seats —
+  **Upgrade tier**"*) is named *"the cost-ceiling-as-upsell mechanism"*.
+- `03-part3-org-console.md:236` §4.0 step 2 — *"member-count slider →
+  recommended seat tier … **Start 7-day free trial** (no card required)"*.
+
+**Kd re-derived the spec's own onboarding step independently, and his instinct
+beat the chat's fresh judgement.** Standing shape, not new: a recommendation
+formed without reading the built code is a guess wearing a recommendation's
+clothes (V4).
+
+### 3 · CHAT RECOMMENDATIONS — OFFERED, NOT RULED (he shut the laptop before answering)
+
+1. ~~The first 20 gyms come from PILOT CODES, not a cheap list price.~~
+   **STRUCK BY THE CHAT BEFORE COMMITTING, against :16702, which this chat had
+   not read when it said this to Kd.** The record already answers it: **there is
+   ONE trial, every gym gets it, it is 30 DAYS (Kd, :16548 — the spec's 7 days at
+   Part 5 §6.1 and Part 3 §4.0 is SUPERSEDED), and "the first 20 gyms" is a SALES
+   TARGET that needs no code** (:16702 — Kd rejected an invented free-20 cohort
+   on sight: *"first 20 gyms free who even said that men"*). **What survives of
+   the recommendation is only its reason, and it stands: do NOT discount the list
+   price to win the first 20 — that caps what the next 200 pay, forever.**
+   **Recorded rather than quietly deleted because Kd was told the pilot-code
+   version in chat and may repeat it back; if he does, this line is the answer.**
+2. **Warn the owner at 90% of the cap** before the wall (already designed at
+   Part 3 §4.2 — this is a "make sure it gets built", not a new idea).
+3. **The blocked member sees a sentence, not an error** — *"This gym is full —
+   ask at the front desk"* — so they walk to the one person who can fix it.
+4. **The trial plan is picked FROM their stated member count**, so a gym with 400
+   members is never offered the $35 trial. This is what makes 1d's fixed plan
+   harmless.
+5. **Subscribing early is the escape hatch** from a wrongly-picked trial plan —
+   not a plan change, a conversion, which is the outcome wanted anyway.
+
+### 4 · THE PLANS SEED IS NOW STALE AGAINST TWO PRICE BOOKS — measured this session
+
+`grep -n 'currency:\|code: "' apps/api/src/db/seed.ts`:
+
+- **ZERO USD org plans exist.** Consumer plans are seeded in both books
+  (`pro_in_m/y`, `pro_us_m/y`); **every org plan is INR.** The whole US/CA/EU
+  book — the primary market since :9604 — **has never been seeded at all.**
+- The six seeded org rows carry the **pre-:17366** book: `org_micro` ₹999 (cap
+  25) · `org_micro_clinic` ₹1,499 (cap 25) · `org_starter` ₹1,499 (cap 100) ·
+  `org_standard` ₹1,999 (cap 150) · `org_growth` ₹3,499 (cap 400) · `org_scale`
+  ₹4,999 (capless). **Not one price and not one cap matches the ratified book,
+  and they did not match it yesterday either** — :17366 ratified prices against
+  a seed nobody re-read.
+- **The `seat_cap` values ARE the band boundaries in code**, so 1b lands here
+  too: caps become 300 / 500 / 1000 / 1500 / 2100 / null.
+
+**Nothing is fixed in this commit** (R1.1 — this is a records commit). Own 🔴
+`OWED.md` line, because the seed is what a gym's price and member limit are
+actually read from.
+
+### 5 · MARKET RESEARCH — the evidence base for "is this viable", so it is never re-derived
+
+Kd asked, in order: will it be profitable · can it beat the crowd · will gyms say
+yes or think he is using them · can it make $500k · and why are the incumbents so
+expensive. All figures below were read from sources this session, 2026-08-25.
+
+**5.1 · WHO HE IS ACTUALLY COMPETING WITH — not the App Store.** The competitor
+is the member app bundled into the gym's existing software, and that field is
+weak on features and expensive:
+
+| Vendor | Base | Branded member app |
+|---|---|---|
+| PushPress | $0 / $159 / $229 per mo | **+$81–97/mo** |
+| Zen Planner | $99–348/mo | included tiers vary |
+| Mindbody | $139 / $469 / $599+/mo | not published |
+| Glofox | not published; gyms report $100–600+/mo | not published |
+
+**None of them coach form through a camera and none scan a meal.** US market:
+**107,751–114,370** gyms (IBISWorld, 2026).
+
+**5.2 · THE BUNDLE ARGUMENT, PRICED.** Strava $11.99/mo · MyFitnessPal Premium
+$19.99/mo · Fitbod $15.99/mo = **$47.97/month retail** for what a gym member
+would get free. **A 200-member gym at $35 pays 17.5 cents per member.** This is
+the sales line; it is true and checkable.
+
+**5.3 · WHY THE INCUMBENTS CHARGE $12–20 — it is NOT their server bill, and this
+is the finding that explains Kd's whole strategy.** Acquiring one paying user of
+a consumer fitness app costs **$20–80 in advertising** (freemium converts 2–5% of
+installs, so 20–50 installs are bought per payer). App stores then take 15–30%.
+At $12/mo they need ~4–5 months just to repay the ad spend. **At $2/mo they would
+lose money on every customer.** Their price is set by what it costs to FIND a
+user, not to SERVE one.
+**Kd's cost to reach a member through a gym is ≈ $0** — the gym announces it to
+200 people at once. **That, not the technology, is the moat**, and it is why he
+can give members the app free and charge the owner $35.
+Scale check: Strava ~**964 employees** on **$415M** revenue (2025); MyFitnessPal
+~**247 employees** on **$310M**, and **declining 5.7%** — the incumbent is
+shrinking, and it BOUGHT Cal AI (~$40M ARR at **$29/YEAR**) in March 2026.
+**Cheap AI-first is eating expensive incumbent**, which is :17012 §4 from the
+other side.
+
+**5.4 · THE $500k QUESTION — computed.** Three routes: **~1,190 gyms** at $35
+alone · **~4,200 individual subscribers** at $10 alone · or the realistic blend,
+**~300 gyms + ~3,000 individuals ≈ $486k**. At that blend, after Paddle on the
+gym half (~6.4%), 15% app-store on the individual half, and all infrastructure:
+**~$405k before tax, ~$283k after ~30% tax, solo.** **The commissions and API
+bills are NOT what will stop him** — reaching 300 gyms is.
+
+**5.5 · THE 20-GYM COST MODEL, worst case** (20 gyms × 250 members = 5,000
+members, **every member scanning 5×/day every day** — the true ceiling):
+
+| | Monthly |
+|---|---|
+| AI scans — 750,000 × $0.000162 (:17012) | **$121.50** |
+| Photo storage (:17366 §3) | ~$9 |
+| Map tiles (:17012 §1) | $1.80 |
+| Server · database · tools · store accounts — **CHAT ESTIMATES, UNVERIFIED** | ~$125 |
+| **Total** | **~$257** |
+
+Revenue at $35 = $700, less Paddle ($2.25/gym) = $655 ⇒ **~$398/mo before tax.**
+Realistic (20% of members active at 2 scans/day) the AI line falls to **~$10** and
+it is **~$510/mo**. **Stated plainly to Kd: 20 gyms is proof, not income.**
+
+**5.6 · PADDLE'S FLAT 50¢ IS THE WRONG SHAPE FOR THE CONSUMER TIER.** 5% + $0.50
+is **6.4% on a $35 gym plan** and **10% on a $10 individual** (≈**14.7%** on
+₹449). Apple/Google Small Business Program is 15% under $1M/yr. **So gym billing
+on the web is cheap and personal subscriptions cost 10–15% however they are
+collected.** Not a proposal to change :17366's Paddle ruling — a number to have
+before the billing card.
+
+**5.7 · HIS FEAR — "will gyms think I am using them?" — HAS A REAL, DOCUMENTED
+SHAPE, AND IT IS NOT THE ONE HE NAMED.** Owners do not price a founder's motives;
+they ask whether it makes money, saves time, or stops members quitting. **What
+they do fear is losing members**, and this industry has the scar: Mindbody bought
+ClassPass and studio owners said publicly it *"steal[s] your customers"* and
+*"completely devalued the worth of what people now believe they should be
+paying"*; ClassPass had to ship a **Direct Protection** tool that blocks poaching
+a studio's own recent customers. **Kd sells a $10 consumer tier alongside the gym
+tier, so a sharp owner WILL ask.** The answer must exist before the first meeting:
+the gym's brand fronts the app · we never message their members · their members'
+data is theirs. **Part 3 §2.4's promise is already the technical half of that.**
+
+**5.8 · THE HONEST ODDS, given to him as judgement and labelled as judgement.**
+Reaching $500k ≈ **one in four or five** with good execution over 3–4 years;
+**$50k–150k/yr is considerably more likely**, and is still a real income.
+Gymdesk — gym software, bootstrapped, one technical founder — took **four years
+to product-market fit** before seven figures. **The thing that kills gym-channel
+businesses is not the product: it is a gym signing up, announcing it once, and
+twelve members installing.** The pilot's job is to prove members KEEP USING it —
+install rate and week-4 retention are the two numbers that matter.
+
+### 6 · WHAT KD WAS NOT ASKED AND MUST NOT BE ASSUMED
+
+Bands 3–5 USD · the entire INR book · whether the ~17% raise changes the
+individual $10/$5 tier. **All three are silent and all three are ❓ `OWED.md`
+lines.**
+
+**The trial LENGTH is NOT one of them — it is RULED at 30 DAYS** (:16548), and
+the spec's 7-day figure (Part 5 §6.1, Part 3 §4.0 step 2) is superseded. Quoted
+here because this entry's §2 reproduces that spec line verbatim and a chat could
+otherwise carry the 7 forward.

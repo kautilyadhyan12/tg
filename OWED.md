@@ -4359,6 +4359,32 @@ file and is stated so nobody reads these as lower priority than they are.
       videos is ten times 20 thirty-second ones.
       **Do not launch video without report-and-remove** — same surface as
       route sharing.
+- [ ] 🟡 **THE PHOTO + STATS EDITOR — KD RULED THE FULL BUILD 2026-08-25
+      (DECISIONS :17902), OVERRULING THE CHAT'S "SHIP ONLY THE STICKER".**
+      **Read before building share cards, photo posting, or anything that puts a
+      number on an image.** This is the Strava-stats-on-a-photo trend, and the
+      research behind it matters: **Strava itself has NO editor** — its Stats
+      Stickers are a transparent PNG (distance, elevation, time, route line,
+      logo) handed to Instagram, whose editor does the moving. A paid market
+      exists in that gap (StatShot $19.99/yr–$49 one-time; FitnessOverlays free).
+      **Ruled scope, all of it:** take or pick a photo · attach the stats as an
+      overlay · move and resize it · undo/redo · crop · resize · brightness ·
+      contrast · grayscale · add text with a **limited** font selection · add an
+      overlay and edit it the same way.
+      **The stats are NEVER typed — they come from the workout, run or meal the
+      person actually did.** That is the entire difference from any photo editor
+      on the store, and it must not be "simplified" away.
+      **The chat's case for the smaller build is recorded so it is not re-argued
+      from scratch: Instagram is free, better, and already on the phone, and
+      Strava's own team chose not to build one.** Kd was shown that and chose the
+      full build. **The counter-argument that decides it: his gym feed is his own
+      (:9604 §6, share gym-global or private) and Instagram is not in that loop —
+      a member posting to their gym has no other way to put stats on a photo.**
+      **Two costs stated at ruling time:** it gets built TWICE (web now, native
+      later — :17765's standing cost), and the tools are each easy while making
+      them work TOGETHER with undo is where the time goes.
+      **Feeds the two-clock trap already recorded below** — the moment stats are
+      burned in it is a NEW file with a 1-year life, not the 7-day scan photo.
 - [ ] ⚪ **THE SHARE CARD KD ASKED FOR ALREADY EXISTS IN THE SPEC — build
       Part 7 §5.1, do not design it (DECISIONS :17012).** His *"photo with this
       much running for his time"* is §5.1's card generator: workout summary, PR,
@@ -4525,6 +4551,25 @@ file and is stated so nobody reads these as lower priority than they are.
       no code at all.** No pilot cohort, no counter, no seed row. Kept as a
       warning rather than deleted, because the invented version was specific
       enough to look buildable.
+- [ ] 🟡 **THE TRIAL'S SHAPE IS RULED AND NONE OF IT IS BUILT — Kd 2026-08-25
+      (DECISIONS :17902).** Sits with the 30-day trial line above; that line owns
+      the LENGTH, this one owns the SHAPE.
+      **Ruled:** no card or bank details · **the gym picks WHICH PLAN it is
+      trialling at signup** · **that plan is FIXED for the whole trial** · that
+      plan's member cap is enforced during it · a prompt to subscribe at the end.
+      **He proposed mid-trial plan changes and reversed it himself one message
+      later — build the FIXED version.**
+      **Three chat recommendations, NOT ruled, that make the fixed plan
+      harmless** (without them a gym that picks $35 with 400 members is walled at
+      300 for the whole trial — the exact week members should be pouring in):
+      **(a)** pick the plan FROM their stated member count, so a 400-member gym is
+      never offered the $35 trial — Part 3 §4.0 step 2's slider already does this,
+      it just has to gate the choice; **(b)** warn the owner at **90% of cap**
+      before the wall (Part 3 §4.2's banner exists in the spec — make sure it is
+      actually built); **(c)** the refused member sees **"This gym is full — ask
+      at the front desk"**, never an error, because that sends them to the one
+      person who can fix it. Subscribing early is the escape hatch and is a
+      conversion, not a plan change.
 - [ ] ⚪ **POSTGRES STAYS ON NEON — revisit above ~$150/month.** Measured
       2026-08-24: Neon Launch is **$32-91/mo** at 10,000 registered members and
       is the single largest infrastructure line ($62.82-$162.87 total, against
@@ -4536,6 +4581,26 @@ file and is stated so nobody reads these as lower priority than they are.
 
 ### Gym platform — the console and the gym's own money
 
+- [ ] 🔴 **THE PLANS SEED MATCHES NO PRICE BOOK THAT HAS EVER BEEN RULED, AND IT
+      HAS ZERO USD GYM PLANS. Measured 2026-08-25 (DECISIONS :17902).**
+      **Read before any billing, checkout, trial, seat-cap or entitlement work —
+      this file is where a gym's price AND its member limit actually come from.**
+      `grep -n 'currency:\|code: "' apps/api/src/db/seed.ts`:
+      **every org plan is INR** (consumer plans are seeded in both books, so the
+      absence is specific to gyms) and **the entire US/CA/EU book — the primary
+      market since :9604 — has never been seeded at all.** The six INR rows carry
+      the **pre-:17366** prices: `org_micro` ₹999 cap 25 · `org_micro_clinic`
+      ₹1,499 cap 25 · `org_starter` ₹1,499 cap 100 · `org_standard` ₹1,999 cap
+      150 · `org_growth` ₹3,499 cap 400 · `org_scale` ₹4,999 capless.
+      **Not one price and not one cap has matched a ruled book since 2026-08-24 —
+      :17366 ratified a price book against a seed nobody re-read**, and :17902
+      then moved bands 1–2 and every boundary on top of that.
+      **The `seat_cap` values ARE the band boundaries in code**, so the fix is
+      both halves at once: prices **$35 / $50 / $69 / $99 / $129 / custom** (USD,
+      bands 3–5 still unruled — see the ❓ line) and caps **300 / 500 / 1000 /
+      1500 / 2100 / null**.
+      **DO NOT "tidy" this by scaling the INR rows to match** — that book is
+      unruled (❓ line below) and inventing it is the failure :17366 §0 names.
 - [ ] 🔴 **PADDLE IS THE PAYMENT ROUTE — KD RULED IT 2026-08-24 (DECISIONS
       :17357), and NOTHING IS BUILT.** **Read before writing any billing code or
       substituting any provider.** *"ok final paddle it is"*. **This does NOT
@@ -6274,6 +6339,33 @@ file and is stated so nobody reads these as lower priority than they are.
       real gym asks for them.
 
 ## Open questions awaiting a Kd ruling (nothing built on these)
+
+- [ ] ❓ **GYM BANDS 3–5 (USD) AFTER KD RAISED BANDS 1–2 — HE NAMED TWO NUMBERS
+      AND ONLY TWO (DECISIONS :17902, 2026-08-25).** $30 → **$35** and $40 →
+      **$50**; $69 / $99 / $129 were not mentioned and **are unchanged until he
+      says otherwise.**
+      **DO NOT scale them by the same ~17%.** :17366 §0 is the recorded lesson,
+      from the day before: *"an inferred ruling is not a ruling"* — that session
+      caught itself about to read "as discussed" two ways worth ~$18,600/yr and
+      asked instead. **Same discipline here.**
+      **The thing nobody has computed and that this question should carry when it
+      is put to him: raising band 1 by 17% while band 3 stands flattens the
+      curve** — price per member now falls faster as a gym grows than :17366's
+      margin table assumed. Measure it before proposing anything; it may be fine.
+- [ ] ❓ **THE ENTIRE INR GYM BOOK AFTER THE USD RAISE (DECISIONS :17902).**
+      ₹1,500 / ₹2,500 (Kd's own numbers at :17366) and ₹4,500 / ₹6,500 / ₹8,500
+      (chat-chosen, un-overruled) were **not touched on 2026-08-25** and are not
+      inferable from the USD change. **The BOUNDARIES do move** — 0–300 / 301–500
+      / 501–1000 / 1001–1500 / 1501–2100 — because a boundary is a member count,
+      not a currency; that is mechanical and is already ruled. **The PRICES are
+      not.**
+- [ ] ❓ **DOES THE GYM RAISE MOVE THE INDIVIDUAL TIER? (DECISIONS :17902.)**
+      $10/mo international and $5 (₹449) India were ratified at :17366 and were
+      not mentioned on 2026-08-25. **Unchanged.** Worth putting to him with one
+      measured fact beside it: **Paddle's flat 50¢ makes a $10 subscription cost
+      10% to collect (≈14.7% on ₹449) against 6.4% on a $35 gym plan**, and the
+      app stores take 15% under $1M/yr — so the individual tier is the one where
+      the collection fee actually bites.
 
 - [ ] ❓ **NEARBY GYMS AND PAID DAY PASSES — WANTED, NEVER SIZED OR SEQUENCED.**
       Kd 2026-08-18: a user with no gym, or away from their own, searches gyms
