@@ -4611,25 +4611,59 @@ file and is stated so nobody reads these as lower priority than they are.
       no code at all.** No pilot cohort, no counter, no seed row. Kept as a
       warning rather than deleted, because the invented version was specific
       enough to look buildable.
-- [ ] 🟡 **THE TRIAL'S SHAPE IS RULED AND NONE OF IT IS BUILT — Kd 2026-08-25
-      (DECISIONS :17902).** Sits with the 30-day trial line above; that line owns
-      the LENGTH, this one owns the SHAPE.
-      **Ruled:** no card or bank details · **the gym picks WHICH PLAN it is
-      trialling at signup** · **that plan is FIXED for the whole trial** · that
-      plan's member cap is enforced during it · a prompt to subscribe at the end.
-      **He proposed mid-trial plan changes and reversed it himself one message
-      later — build the FIXED version.**
-      **Three chat recommendations, NOT ruled, that make the fixed plan
-      harmless** (without them a gym that picks $35 with 400 members is walled at
-      300 for the whole trial — the exact week members should be pouring in):
-      **(a)** pick the plan FROM their stated member count, so a 400-member gym is
-      never offered the $35 trial — Part 3 §4.0 step 2's slider already does this,
-      it just has to gate the choice; **(b)** warn the owner at **90% of cap**
-      before the wall (Part 3 §4.2's banner exists in the spec — make sure it is
-      actually built); **(c)** the refused member sees **"This gym is full — ask
-      at the front desk"**, never an error, because that sends them to the one
-      person who can fix it. Subscribing early is the escape hatch and is a
-      conversion, not a plan change.
+- [ ] 🟡 **THE TRIAL'S SHAPE IS RULED AND NONE OF IT IS BUILT — Kd 2026-08-25,
+      RE-RULED THE SAME DAY (DECISIONS :19129, superseding :17902 §1d in part).**
+      Sits with the 30-day trial line above; that line owns the LENGTH, this one
+      owns the SHAPE.
+      **Ruled, current:** no card or bank details · **NO plan choice at signup** ·
+      **EVERY gym trials at the SAME limit: 300 members** · **the gym subscribes
+      according to its own member count AFTER the trial** · a prompt to subscribe
+      at the end. :11083's Kd-approval gate still governs activation.
+      ~~the gym picks WHICH PLAN it is trialling at signup · that plan is FIXED
+      for the whole trial~~ **— DEAD at :19129. There is no plan to pick and none
+      to fix.** (:17902's own note that he proposed mid-trial plan changes and
+      reversed it himself is now moot for the same reason; do not build either.)
+      **Kd confirmed the consequence knowingly: a gym with 800 members brings
+      only 300 through the door for the month, and the refusal lands on members
+      the OWNER invited.**
+      **Two of the three chat recommendations SURVIVE and matter MORE now** — the
+      wall is certain for every gym above 300, not just for one that picked badly:
+      **(b)** warn the owner at **90% of cap** before the wall (Part 3 §4.2's
+      banner exists in the spec — make sure it is actually built); **(c)** the
+      refused member sees **"This gym is full — ask at the front desk"**, never an
+      error, because that sends them to the one person who can fix it.
+      Subscribing early is the escape hatch and is a conversion.
+      ~~**(a)** pick the plan FROM their stated member count~~ **— DEAD with the
+      plan-pick it existed to make harmless.**
+- [ ] 🔴 **THE v1 §9.3 COST BREAKER IS HALF-BUILT AND ENFORCES NOTHING — measured
+      2026-08-25 (DECISIONS :19129 §3).** `00-architecture-v1.md:651` promises an
+      alert at **₹800/gym/month** and soft-degrade past **3× the gym's fee**, in
+      its own words *"bankruptcy-by-API-bill is now mathematically impossible."*
+      **Grep-verified: `costs:gym:{id}:{month}` is incremented in exactly ONE
+      place** (`apps/api/src/modules/coach/service.ts:224`), **nothing reads it**
+      (the only other hits are a comment and `coach.chat.test.ts:281`), and
+      **meal scans and ORS never bump it at all** — so even the counter that
+      exists is incomplete. There is no alert and no soft-degrade.
+      🔴 because it is the instrument that BOUNDS the worst case whatever
+      allowance is chosen, which makes it worth more than the allowance decision
+      itself. Must be live before the first real gym starts a trial.
+- [ ] ❓ **THE GYM MEMBER'S COACH ALLOWANCE HAS NEVER BEEN PRICED — Kd has NOT
+      ruled and must not be recorded as having declined (DECISIONS :19129 §2).**
+      `gymMemberEntitlements` in `apps/api/src/db/seed.ts` spreads
+      `proEntitlements` changing `meal_scan` alone, so **`coach: {day, 30}` is
+      inherited untouched from the $10 consumer tier** and was never chosen for
+      the gym tier. **Computed: $0.705/member/month at the caps today ($0.474
+      after the Gemini swap), of which the coach is 64% / 95%** — a full gym at
+      its cap costs $211 (band 1, pays $35), $705 (band 3, pays $69), $1,481
+      (band 5, pays $129). **EVERY BAND IS UNDERWATER AT THE CEILING.**
+      **Every margin table on record means SCANS when it says "AI cost"** —
+      :17427's figures reproduce exactly, which is how the omission was found.
+      **Kd made this exact call once already for the other feature** (:17366 §2,
+      20 scans → 5, *"its beacuse not finnacially possible to give gym user 20
+      scans"*) and nobody applied it to the more expensive one.
+      Realistic usage is fine (~$26 against $69 at 1,000 members) — **the
+      exposure is a CEILING, not a forecast.** **OWED: bring Kd a costed table of
+      allowance options; he has not seen one.**
 - [ ] ⚪ **POSTGRES STAYS ON NEON — revisit above ~$150/month.** Measured
       2026-08-24: Neon Launch is **$32-91/mo** at 10,000 registered members and
       is the single largest infrastructure line ($62.82-$162.87 total, against

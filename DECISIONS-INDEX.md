@@ -127,6 +127,44 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:19129** — 2026-08-25 — **KD CAPS EVERY GYM TRIAL AT 300 MEMBERS — and his
+  own challenge to the cost number finds THE COACH ALLOWANCE WAS NEVER PRICED
+  INTO ANY BAND.** **SUPERSEDES :17902 §1d in part.** **Read before building the
+  trial, the onboarding wizard or the seat cap · before quoting any gym margin ·
+  and before setting any per-member allowance.**
+  **THE RULING: no plan choice at signup · EVERY gym trials at the SAME limit,
+  300 members · the gym subscribes to its real band AFTER the trial.** Unchanged
+  and NOT superseded: no card, 30 days (:16548), the subscribe prompt, and
+  :11083's Kd-approval gate. **DEAD: "the gym picks WHICH PLAN it is trialling"
+  and "that plan is FIXED for the whole trial", plus :17902 §3's recommendation
+  4, which existed only to make the fixed plan harmless.** :17902 §3's
+  recommendations 2/3/5 (the 90% banner · *"This gym is full — ask at the front
+  desk"* · subscribing early as the escape hatch) **matter MORE now**, the wall
+  being certain for every gym above 300 rather than only for one that picked
+  badly. He confirmed knowing an 800-member gym gets only 300 through the door.
+  **THE CHAT RECOMMENDED AGAINST THE CAP, WAS OVERRULED, AND THE OVERRULE WAS
+  RIGHT — this is the part to read.** The recommendation rested on ~2.4¢/member/
+  month, which counted **MEAL SCANS ONLY**. Kd answered *"a 1000 member gym all
+  member using every feature to the fullest … always need to think about the
+  worst case"*. **The omission is the coach at 30/day**, which
+  `gymMemberEntitlements` inherits untouched from the paid consumer tier.
+  **COMPUTED: $0.705/member/month today ($0.474 after the Gemini swap), of which
+  the coach is 64% / 95%.** A full gym at its cap, everyone maxing out: band 1
+  $211 against $35 · band 3 $705 against $69 · band 5 $1,481 against $129 —
+  **EVERY BAND UNDERWATER AT THE CEILING.** The scans-only figures at :17427
+  reproduce exactly, which is how it was found: **every margin table on record
+  means SCANS when it says "AI cost".** **Kd already made this exact call once
+  for the other feature** (:17366 §2, 20 scans → 5, *"not finnacially possible"*)
+  and **nobody applied it to the more expensive one.** Realistic usage is fine
+  (~$26 against $69 at a 1,000-member gym) — **the exposure is a CEILING, not a
+  forecast**, but it is a ceiling Kd set himself and nothing stops a gym reaching
+  it. **§3 — THE SPEC'S BREAKER IS HALF-BUILT AND ENFORCES NOTHING:** v1 §9.3
+  promises an alert at ₹800/gym/month and soft-degrade past 3× the fee —
+  *"bankruptcy-by-API-bill is now mathematically impossible"* — but
+  `costs:gym:{id}:{month}` is incremented in **exactly one place**
+  (`coach/service.ts:224`), **nothing reads it**, and scans and ORS never bump it
+  at all. **§4 — THE COACH ALLOWANCE WAS NOT CHANGED and 30/day STANDS**; he has
+  had no costed table of options and must not be treated as having declined one.
 - **:19016** — 2026-08-25 — **KD SETS THE BUILD ORDER FOR THE WHOLE PROJECT, AND
   ASKS FOR THE ADMIN PANEL THE SPEC HAS DESCRIBED ALL ALONG AND NOBODY EVER
   TRACKED.** **Read before proposing ANY next card, before sequencing work,

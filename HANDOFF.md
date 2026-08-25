@@ -1,6 +1,36 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD RE-RULED THE TRIAL — 300 members for every gym — and his challenge to
+      the cost number found the coach allowance was never priced into any band.
+      DECISIONS :19129. Records only, no code. **The next card is UNCHANGED:
+      1.1, still awaiting his one word — see the block below.**
+
+THE THREE THINGS A NEXT CHAT MUST NOT GET WRONG
+  1. **:17902 §1d IS PARTLY DEAD.** "The gym picks WHICH PLAN it is trialling at
+     signup" and "that plan is FIXED for the whole trial" are SUPERSEDED. Every
+     gym now trials at ONE limit — 300 members — and subscribes to its real band
+     AFTER the trial. :17902 §3's recommendation 4 dies with it; its 2, 3 and 5
+     survive and matter MORE. A chat reading :17902 alone builds the wrong thing.
+  2. **A 🔴 LINE WAS ADDED: the v1 §9.3 cost breaker enforces nothing.**
+     `costs:gym:{id}:{month}` is incremented in one place and READ NOWHERE; scans
+     and ORS never bump it. The spec's "bankruptcy-by-API-bill is now
+     mathematically impossible" describes a thing that does not run. Must be live
+     before the first real gym trials.
+  3. **THE COACH ALLOWANCE IS ❓ AND KD HAS NOT RULED.** 30/day was inherited
+     untouched from the $10 consumer tier into `gymMemberEntitlements`. At the
+     caps, a full gym costs 4–11× what it pays. **He has not been given a costed
+     table of options — do not record him as having declined one.** Realistic
+     usage is fine; the exposure is a CEILING, not a forecast. Say both.
+
+WHAT THE CHAT GOT WRONG, because the shape recurs
+  It recommended dropping the 300 cap on a figure that counted MEAL SCANS ONLY,
+  and Kd overruled it with "think about the worst case". He was right. Every
+  margin table in this repo means SCANS when it says "AI cost" — :17427's
+  figures reproduce exactly, which is how the omission surfaced at all.
+```
+
+```
 TASK: KD SET THE BUILD ORDER FOR THE WHOLE PROJECT + the admin-panel finding.
       DECISIONS :19016, committed f3977eb. Records only, no code.
       **NEXT CARD IS PLANNED AND AWAITING KD'S ONE-WORD APPROVAL — see below.**

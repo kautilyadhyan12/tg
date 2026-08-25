@@ -19125,3 +19125,130 @@ It does not re-rule anything already decided, and it does not size any stage in
 days — no estimate has been made and none should be quoted from here. The
 per-stage contents are `OWED.md`'s, which stays the authority; this is the ORDER
 and the four conflicts, nothing more.
+
+## KD CAPS EVERY GYM TRIAL AT 300 MEMBERS, AND HIS OWN CHALLENGE TO THE COST NUMBER FINDS THAT THE COACH ALLOWANCE WAS NEVER PRICED INTO ANY BAND (2026-08-25)
+
+**Read before building the trial, the onboarding wizard, or the seat cap · before
+quoting any gym margin · and before setting any per-member allowance.**
+**SUPERSEDES :17902 §1d** — that entry's trial shape is dead in one respect and
+alive in the rest. No code changed in this commit; records only.
+
+### 1 · THE KD RULING
+
+*"when a trial happens a gym can only trial with 300 members later they can take
+subscription according to their member count after trial"*, confirmed on being
+asked whether it REPLACES the plan-pick — *"yes thats right is my decision"*.
+
+**THE TRIAL, AS NOW RULED:**
+
+- **No plan choice at signup.** The gym does not pick a band to trial on.
+- **Every gym trials at the SAME limit: 300 members.**
+- **After the trial, the gym subscribes according to its own member count.**
+- Unchanged from :17902 §1d and NOT superseded: **no card or bank details** to
+  start · **30 days** (:16548) · a prompt to subscribe when it ends.
+- Unchanged from :11083: **no trial activates until Kd approves the gym.**
+
+**WHAT THIS KILLS in :17902 §1d:** *"the gym picks WHICH PLAN it is trialling at
+signup"* and *"that plan is FIXED for the whole trial"*. There is no plan to pick
+and none to fix. **:17902 §3's recommendation 4** — *"the trial plan is picked
+FROM their stated member count"* — dies with it; it existed only to make the
+fixed plan harmless.
+
+**WHAT SURVIVES AND STILL MUST BE BUILT:** :17902 §3's recommendations 2, 3 and
+5 — warn the owner at 90% of the cap (Part 3 §4.2's banner), the blocked member
+sees *"This gym is full — ask at the front desk"* and never an error, and
+subscribing early is the escape hatch. **Under this ruling they matter MORE, not
+less**: the wall is now certain for every gym above 300 rather than only for one
+that picked badly.
+
+**THE CONSEQUENCE, PUT TO HIM BEFORE HE CONFIRMED:** a gym with 800 members can
+bring only 300 through the door during its trial; the other 500 are refused for
+the month, and the refusal lands on members the OWNER invited. He confirmed
+knowing this.
+
+### 2 · THE CHAT RECOMMENDED AGAINST IT, WAS ANSWERED, AND THE ANSWER WAS RIGHT
+
+Recommended dropping the cap, on a computed figure: a trialling member costs
+~2.4 cents/month, so a 1,000-member trial costs ~$24 worst case against a gym
+worth $69–99/month. **Kd rejected the reasoning** — *"a 1000 member gym all
+member using every feature to the fullest think about the bill then always need
+to think about the worst case scenario"*.
+
+**HE WAS RIGHT AND THE RECOMMENDATION WAS BUILT ON AN INCOMPLETE COST.** The
+figure counted **meal scans only**. It omitted the coach, which a gym member may
+use **30 times a day** (`apps/api/src/db/seed.ts` — `gymMemberEntitlements`
+spreads `proEntitlements`, changing `meal_scan` alone, so `coach: {day, 30}`
+carries over from the paid consumer tier untouched).
+
+**COMPUTED THIS SESSION** (COACH=$0.0005/question — :738's measured $0.0004 plus
+:739's ~$0.0001 for the 1200-token raise; SCAN=$0.0017 today per :347, or
+$0.000162 after the Gemini swap per :17089; ORS routes priced 0n in
+`geo/cost.ts`). Per member per month at the caps as they stand:
+
+| | today | after the Gemini swap |
+|---|---|---|
+| coach 30/day | $0.450 | $0.450 |
+| scans 5/day | $0.255 | $0.024 |
+| **total** | **$0.705** | **$0.474** |
+| **coach's share** | **64%** | **95%** |
+
+A full gym at its band cap, everyone maxing every allowance:
+
+| Band | Members | Pays | Costs today | After Gemini |
+|---|---|---|---|---|
+| 1 | 300 | $35 | $211.50 (6.0×) | $142.29 (4.1×) |
+| 2 | 500 | $50 | $352.50 (7.1×) | $237.15 (4.7×) |
+| 3 | 1000 | $69 | $705.00 (10.2×) | $474.30 (6.9×) |
+| 4 | 1500 | $99 | $1,057.50 (10.7×) | $711.45 (7.2×) |
+| 5 | 2100 | $129 | $1,480.50 (11.5×) | $996.03 (7.7×) |
+
+**EVERY BAND IS UNDERWATER AT THE CEILING, AND THE COACH IS WHY.** For contrast,
+the scans-only figures at :17427 — band 1 $7.29 (4.8× margin), band 3 $24.30
+(2.8×), band 5 $51.03 (2.5×) — reproduce exactly, which is how the omission was
+identified: **every margin table on record computes "margin over AI cost" with AI
+cost meaning SCANS.** :17411's *"a gym member maxing 5 scans/day costs
+₹2.11/month"* is true and is not the whole bill.
+
+**THE SHAPE TO KEEP: Kd already made this exact call once, for the other
+feature.** At :17366 §2 he cut the gym member from 20 scans to 5 — *"its beacuse
+not finnacially possible to give gym user 20 scans"* — on the structural reason
+recorded there, that an individual pays ~$10 a head and a gym ~$0.10. **That
+reasoning was never applied to the coach**, which is the more expensive feature
+of the two. The 30/day is inherited from the $10 tier, not chosen for the gym
+tier.
+
+**REALISTIC IS FINE AND MUST BE SAID IN THE SAME BREATH** (:5.5's own assumption,
+20% of members active at 2/day): ~$0.026/member/month today, so a 1,000-member
+gym is ~$26 against $69. **The exposure is a ceiling, not a forecast** — but the
+ceiling is one Kd set himself by choosing the allowance, and nothing currently
+stops a gym reaching it.
+
+### 3 · THE SPEC'S BREAKER IS HALF-BUILT AND ENFORCES NOTHING — found chasing the above
+
+`00-architecture-v1.md:651` §9.3 promises the protection: an alert at
+**₹800/gym/month**, soft-degrade past **3× the gym's fee**, and in its own words
+*"bankruptcy-by-API-bill is now mathematically impossible."*
+
+**MEASURED, by grep, this session:**
+
+- `costs:gym:{id}:{month}` is incremented in **exactly one place** —
+  `apps/api/src/modules/coach/service.ts:224`.
+- **Nothing reads it.** The only other occurrences in the repo are a comment and
+  one assertion in `apps/api/test/coach.chat.test.ts:281`.
+- **Meal scans and ORS never bump it at all**, so even the counter that exists is
+  incomplete.
+
+**There is no alert and no soft-degrade.** The sentence that makes the worst case
+survivable describes a thing that does not run. Own `OWED.md` line — it is the
+instrument that bounds §2's ceiling whatever allowance is eventually chosen, so
+it is worth more than the allowance decision itself.
+
+### 4 · WHAT WAS NOT DECIDED AND MUST NOT BE ASSUMED
+
+**The coach allowance was NOT changed.** 30/day stands until Kd rules. He was
+shown the numbers, asked what the allowance was, and told the chat to record his
+trial decision — **he has not been given a costed table of options and must not
+be treated as having declined one.** ❓ `OWED.md` line.
+
+Also untouched and still open from :17902 §6: bands 3–5 USD, the entire INR book,
+and the individual $10/$5 tier.
