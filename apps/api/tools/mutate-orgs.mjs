@@ -1615,36 +1615,53 @@ if (only !== null) {
 }
 const SELECTED = only === null ? MUTANTS : MUTANTS.filter((m) => only.has(m.id));
 
-/** A WRITE-CAPABLE MUTANT IS REFUSED AGAINST A DATABASE THAT IS NOT LOCAL —
- *  T3 round-1 Critical/High, and it is a change of RISK CLASS rather than a new
- *  hazard being discovered.
+/** THIS HARNESS IS REFUSED AGAINST A DATABASE THAT IS NOT LOCAL — **EVERY
+ *  target, not just `seed`.**
  *
- *  Until the `seed` target existed every mutant here only made the suite READ
- *  code, so pointing this harness at the Neon branch cost time and nothing else
- *  — which is why the remote line above is phrased as a SPEED tip. A seed
- *  mutant WRITES a price nobody ruled into `plans`, and `apps/api/.env`'s
- *  `DATABASE_URL` is deliberately the Neon branch, because **Kd's own test gyms
- *  live there and his browser smokes read them** (:13659). Compounded by the
- *  repair's own limit above: a run killed by hand leaves that price in place.
+ *  **T3 ROUND 2 Critical/High, and the premise this guard was built on had
+ *  already gone false.** Its previous wording read *"until the `seed` target
+ *  existed every mutant here only made the suite READ code"* and *"every other
+ *  target is unaffected"*, so it fired only for `seed`. **Both sentences stopped
+ *  being true the moment this repo grew a route that WRITES**, and O114 is the
+ *  proof: it deletes the tenancy predicate from `updateOrg`'s UPDATE, so while
+ *  that mutant is live the suite runs the real route and **rewrites the name,
+ *  city, country, currency and timezone of EVERY ROW IN `gyms`.** The file is
+ *  then restored byte-exact and the rows are not — a summary reading "restore
+ *  verified byte-exact (sha256)" over a wrecked table, which is :5199/:4855 F1's
+ *  shape and :18488's own finding recurring at the target its fix excluded.
  *
- *  Precedent for refusing rather than warning: `tools/orgs-sweep.ts --now`
- *  gained a production refusal for the same reason (:13075). The escape hatch
- *  is deliberate and deliberately awkward — someone who really means it can say
- *  so, and then owns the consequence. Every other target is unaffected. */
-if (SELECTED.some((m) => m.target === 'seed') && !DB_IS_LOCAL) {
-  if (process.env.MUTATE_SEED_ON_REMOTE_DB !== 'i-know-this-writes-prices') {
+ *  **Measured by the reviewer: 59 canary rows stamped, O114 run, 59 → 0**, every
+ *  row carrying one test's payload, exit 0. `insertAudit` records only the ONE
+ *  gym the route was called for, so the rest are overwritten with no record
+ *  anywhere of what they held. `apps/api/.env`'s `DATABASE_URL` is deliberately
+ *  the Neon branch, because **Kd's own test gyms live there and his browser
+ *  smokes read them** (:13659) — 108 gyms, verified intact 2026-08-26.
+ *
+ *  **SO THE ENUMERATION IS ABANDONED RATHER THAN EXTENDED.** Deciding per
+ *  target which mutants can write is a judgement that was wrong once and gets
+ *  harder every time the product grows a write route; the next one re-opens
+ *  this silently. A blanket refusal cannot go stale. Precedent for refusing
+ *  rather than warning: `tools/orgs-sweep.ts --now` (:13075). The escape hatch
+ *  stays deliberate and deliberately awkward, and its name is no longer about
+ *  prices, because the damage no longer is. */
+if (!DB_IS_LOCAL) {
+  if (process.env.MUTATE_ON_REMOTE_DB !== 'i-know-this-writes-to-the-database') {
     abort(
-      `a \`seed\` mutant WRITES prices into the database, and ${DB_HOST} is not local.\n` +
+      `this harness makes the suite WRITE, and ${DB_HOST} is not local.\n` +
       `  That is very likely the Neon branch Kd's own gyms and browser smokes read.\n` +
       `  Nothing has been run.\n\n` +
+      `  A repo-target mutant can rewrite EVERY ROW in \`gyms\` (O114 deletes the\n` +
+      `  tenancy predicate on purpose — that is how it proves the predicate is real),\n` +
+      `  and a seed mutant writes prices nobody ruled. Neither is undone by the\n` +
+      `  byte-exact FILE restore this harness reports.\n\n` +
       `  Use the local database instead:\n` +
       `    docker compose -f infra/docker-compose.dev.yml up -d postgres redis\n` +
       `    DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg' node apps/api/tools/mutate-orgs.mjs\n\n` +
       `  If you genuinely mean to write to ${DB_HOST}, set\n` +
-      `    MUTATE_SEED_ON_REMOTE_DB=i-know-this-writes-prices`,
+      `    MUTATE_ON_REMOTE_DB=i-know-this-writes-to-the-database`,
     );
   }
-  console.log(`WARNING: seed mutants will WRITE PRICES to ${DB_HOST}, on your explicit opt-in.`);
+  console.log(`WARNING: this sweep will WRITE to ${DB_HOST}, on your explicit opt-in.`);
 }
 
 // Checked for the WHOLE table before a byte is written (:5199). Runs over
@@ -1831,8 +1848,134 @@ const repairSeedDatabase = () => {
   return true;
 };
 
+/** THE GYM ROWS ARE PROVEN TO HAVE SURVIVED — T3 round 2 Critical/High's
+ *  durable half, and Kd approved building it rather than only widening the
+ *  refusal above.
+ *
+ *  **The refusal stops this reaching Kd's database. It does NOT stop a mutant
+ *  wrecking the LOCAL one**, and the round measured exactly that: O114 removes
+ *  the tenancy predicate on purpose — that is how it proves the predicate is
+ *  real — so while it is live the suite rewrites every row in `gyms`. 59 canary
+ *  rows went to 0 under a summary reading "restore verified byte-exact".
+ *
+ *  **A FILE RESTORE IS NOT A DATABASE RESTORE, and the summary said only the
+ *  first.** This is the second instrument in this harness to learn that
+ *  (:18488's seed repair was the first, and its fix deliberately excluded every
+ *  other target). Rather than enumerate which mutants can write — the judgement
+ *  that was already wrong once and gets harder with every new write route —
+ *  **this snapshots the rows and checks them, so a mutant that mass-writes is
+ *  caught wherever it lives.** :5348 rule 5: fix the CLASS.
+ *
+ *  **IT COMPARES ROWS THAT EXISTED BEFORE AND STILL EXIST AFTER.** Rows the
+ *  suite CREATES are expected, rows its cleanup DELETES are expected; a
+ *  pre-existing row whose columns moved is not, and is the only signature of
+ *  the defect. That is why this cannot be a count or a whole-table checksum —
+ *  both false-alarm on a suite that legitimately creates and drops gyms.
+ *
+ *  It reports rather than repairs, deliberately: this harness has no record of
+ *  what the rows held (`insertAudit` logs only the ONE gym the route was called
+ *  for), so a repair would be an invention. Naming the damage loudly is the
+ *  honest act — and on a local database the fix is a re-seed.
+ *
+ *  **WHAT IT CANNOT DO, MEASURED ON THE RUN THAT PROVED IT WORKS: it catches the
+ *  FIRST mass-write and cannot re-alarm on a table that is ALREADY uniform.**
+ *  O114 rewrites every gym to the acting test's payload; run it twice and the
+ *  second run writes the identical values, so nothing CHANGES and this reports
+ *  "rows unchanged" — truthfully, and misleadingly if read as "O114 is safe".
+ *  Measured 2026-08-26: O114 alone against a healthy table caught 59 rows; the
+ *  same mutant inside a 15-mutant sweep, on a table already flattened by that
+ *  first run, reported 63 unchanged. **The alarm does not repeat once the fire
+ *  has burned everything.**
+ *
+ *  That is acceptable because it is not the primary defence — the blanket
+ *  REFUSAL above is, and it is what keeps this away from Kd's database
+ *  entirely. This catches the local case, once, which is when it matters. **If
+ *  the local `gyms` table is uniform, this guard is blind until it is cleaned;**
+ *  `OWED.md` carries that state and the cleanup. */
+const gymFingerprint = () => {
+  const sql =
+    'SELECT id::text, coalesce(name,\'\') || \'|\' || coalesce(city,\'\') || \'|\' || ' +
+    'coalesce(country,\'\') || \'|\' || coalesce(currency_display,\'\') || \'|\' || ' +
+    'coalesce(timezone,\'\') AS f FROM gyms';
+  // Plain `node` with cwd = apps/api, NOT `pnpm exec tsx`: measured 2026-08-26,
+  // `pnpm --filter api exec tsx` reports "Command tsx not found" from the repo
+  // root, and the first version of this probe therefore returned null on every
+  // run — the guard announced itself OFF and the sweep passed. It failed in the
+  // SAFE direction (it says so rather than passing quietly), and it was still a
+  // guard that could not fire. `postgres` resolves from apps/api's own
+  // node_modules, which is where the suite gets it too.
+  try {
+    const out = execSync(
+      `node -e ${JSON.stringify(
+        `const postgres=require('postgres');` +
+        `const s=postgres(process.env.DATABASE_URL,{prepare:false,max:1});` +
+        `s\`${sql}\`.then(r=>{console.log(JSON.stringify(r.map(x=>[x.id,x.f])));return s.end();})` +
+        `.catch(e=>{console.error(e.message);process.exit(1);});`,
+      )}`,
+      {
+        cwd: resolve(ROOT, 'apps/api'),
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        maxBuffer: 64 * 1024 * 1024,
+      },
+    );
+    const line = out.split('\n').reverse().find((l) => l.trim().startsWith('[['))
+      ?? out.split('\n').reverse().find((l) => l.trim() === '[]');
+    if (line === undefined) return null;
+    return new Map(JSON.parse(line.trim()));
+  } catch {
+    return null;
+  }
+};
+
+/** Taken BEFORE any mutation is written, for the same reason the anchor
+ *  pre-check runs over the whole table first: a baseline taken after the damage
+ *  is not a baseline. `null` means the probe could not run, and that is reported
+ *  as "unverified" rather than quietly passing (:5906 — a check that cannot fail
+ *  is worse than no check). */
+const gymsBefore = gymFingerprint();
+if (gymsBefore === null) {
+  console.log('WARNING: could not fingerprint `gyms` — mass-write detection is OFF for this run.');
+} else {
+  console.log(`fingerprinted ${String(gymsBefore.size)} gym rows for mass-write detection`);
+}
+
+let gymsChecked = false;
+const verifyGymRows = () => {
+  if (gymsBefore === null || gymsChecked) return true;
+  gymsChecked = true;
+  const after = gymFingerprint();
+  if (after === null) {
+    console.error('\nCOULD NOT RE-READ `gyms` — the mass-write check did NOT run. Verify the table by hand.');
+    return false;
+  }
+  const moved = [];
+  for (const [id, f] of gymsBefore) {
+    const now = after.get(id);
+    // Absent = the suite's cleanup deleted it, which is expected. Present and
+    // different = a row this sweep had no business touching was rewritten.
+    if (now !== undefined && now !== f) moved.push(id);
+  }
+  if (moved.length > 0) {
+    console.error(
+      `\nA MUTANT REWROTE ${String(moved.length)} GYM ROW(S) THAT EXISTED BEFORE THIS SWEEP.\n` +
+      `  The FILE restores above are byte-exact and say nothing about this — the\n` +
+      `  database was written through the real route while a mutation was live\n` +
+      `  (O114 deletes the tenancy predicate on purpose; that is its job).\n` +
+      `  First few: ${moved.slice(0, 5).join(', ')}\n` +
+      `  Nothing here can put them back — the audit log records only the one gym\n` +
+      `  each call named. On a local database, re-seed:\n` +
+      `  DATABASE_URL=<your url> corepack pnpm --filter api exec tsx src/db/seed.ts\n`,
+    );
+    return false;
+  }
+  console.log(`gym rows verified — ${String(gymsBefore.size)} pre-existing rows unchanged`);
+  return true;
+};
+
 process.on('exit', () => {
   repairSeedDatabase();
+  verifyGymRows();
 });
 
 let seedHandlersRegistered = false;
@@ -1842,6 +1985,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
       console.log(`\n${signal} — repairing the database before exiting; this takes about one suite run.`);
     }
     repairSeedDatabase();
+    verifyGymRows();
     // 128+n is the conventional exit code for "died on signal", and using it
     // keeps a killed sweep distinguishable from an ABORT (2) or a clean run.
     process.exit(signal === 'SIGINT' ? 130 : 143);
@@ -1904,6 +2048,10 @@ for (const m of SELECTED) {
 // cannot. The `process.on('exit')` registration above the loop is the backstop
 // for every other way out.
 if (!repairSeedDatabase()) process.exit(3);
+// Same reasoning for the gym-row check: run it here so a wrecked table can set
+// a non-zero exit code and land its report in reading order, with the exit
+// handler as the backstop for every other way out.
+if (!verifyGymRows()) process.exit(4);
 
 const bad = results.filter((r) => !r.ok);
 console.log('\n--- summary ---');

@@ -5819,6 +5819,46 @@ file and is stated so nobody reads these as lower priority than they are.
       with it. **Every write here is audit-logged (Part 8 §97) and the panel
       needs its own authentication story — it is NOT a privilege on
       `gym_staff`.**
+      **IT ALSO OWES A CONTACT CHANNEL, AND SOMETHING IN THE APP ALREADY POINTS
+      AT ONE THAT DOES NOT EXIST** (T3 round 2 Low-4, and the round before it
+      recorded this as done when it was not — the claim reached four documents;
+      `git show` of that commit's `OWED.md` diff contains only the lock block).
+      `PATCH /v1/orgs/:gymId`'s 409 tells a gym *"Contact us and we'll move it
+      for you"* when its country would change the currency it is billed in.
+      **Not a falsehood** — Kd approves every gym by hand at this scale (:11072)
+      and both Stripe and Paddle treat a currency move as a support request — but
+      **the app sends no email and has no contact page**, so an owner reading it
+      has nowhere to go. **Two things close it together: the panel gains the tool
+      that performs the move, and the sentence names the real channel** (whatever
+      it turns out to be — an address, a form, a WhatsApp number). Until then the
+      sentence stays, because a refusal naming no way out is worse than one
+      naming a way out still being built.
+- [ ] ⚪ **`db.migration.test.ts` LEAKS A GYM ROW EVERY RUN AND NEVER CLEANS UP,
+      AND THE LEAK IS BIGGER ON KD'S NEON BRANCH THAN ON THE LOCAL DATABASE.**
+      Found out-of-diff by T3 round 2 (R1.1 — reported, not fixed in a fix
+      round). Its uniqueness fixture inserts `uq-gym-<Date.now()>` rows and
+      deletes none: **59 had accumulated locally since 2026-08-21, and a
+      read-only count of the Neon branch the same day found 102 rows named
+      "UQ Gym"** — every one of them junk beside Kd's four real test gyms.
+      **Harmless in itself and NOT harmless in aggregate**, for three reasons
+      that are each worth more than the tidiness: they are what made the
+      mass-write Critical's blast radius visible at all (59 canaries destroyed);
+      they inflate every "how many gyms" figure anyone reads out of either
+      database; and `/v1/orgs/mine` truncates at 100, which the Neon count has
+      already passed. **Fix is a cleanup in that suite's own teardown**, matching
+      what `orgs.routes.test.ts` already does by slug and by owner.
+      **AND THE LOCAL TABLE IS CURRENTLY FLATTENED, WHICH BLINDS THE NEW
+      MASS-WRITE GUARD — measured 2026-08-26, all 63 local rows carry
+      `Orgs Test Edit Authz Renamed | Dibrugarh`**, the payload O114 wrote while
+      the round-2 Critical was being reproduced. That guard compares rows before
+      and after a sweep, so on an already-uniform table O114 writes identical
+      values, nothing changes, and it reports "rows unchanged" — true, and
+      misleading if read as "O114 is safe". **It catches the FIRST mass-write and
+      cannot re-alarm on a table already destroyed.** Deleting the junk rows
+      restores the guard's sight as well as the counts; nothing real is in them
+      (every one is a `uq-gym-*` leak or a test leftover). Kd's Neon branch is
+      NOT in this state — verified 108 rows, zero test names, his own gyms
+      intact.
 - [ ] ⚪ **`GET /v1/orgs/:gymId/codes` IS CAPPED AT 100 AND HAS NO CURSOR**
       (T3 round 1 L-1, 2026-08-18). Added as a BOUND, not as pagination — it was
       the only list in the orgs module without one while `/mine` is capped and
@@ -6156,7 +6196,16 @@ file and is stated so nobody reads these as lower priority than they are.
       the ruling is BUILT, not deferred** (DECISIONS :19366 addendum, commit
       below). **NO: a gym's country — and so the currency it is billed in —
       FREEZES the day it goes on a paid plan.** `PATCH /v1/orgs/:gymId` returns
-      409 `country_locked` for any gym holding a subscription past `trialing`.
+      409 `currency_locked` — **AMENDED BY T3 ROUND 1 (:19656) AND CORRECTED HERE
+      BY ROUND 2's Low-3: it fires only when the new country resolves to a
+      DIFFERENT currency, not for "any gym holding a subscription past
+      `trialing`", which is what this line said and is over-broad.** A paying gym
+      may re-save its own details with the country unchanged (the first version
+      refused that whole save — round 1's C/H-1), a pre-`0014` gym may record the
+      country it is already billed for, and France → Germany is a 200 because
+      both are EUR. **This file is what the billing and admin-panel cards read,
+      so the stale name and the stale condition are corrected in place rather
+      than left for the diary** (:18830 — a stale record manufactures work).
       **He raised it himself** (*"a gym should not be able to change the country
       as it will create problem of money"*), **asked for a recommendation rather
       than compliance, and refined his own ruling on the evidence**: locking from

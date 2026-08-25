@@ -266,10 +266,18 @@ export async function updateOrg(
       // 59 pre-`0014` gyms that have no country at all (:5807 — on screen AND
       // wrong). What is actually frozen is the money, and the refusal now only
       // fires when the money would genuinely move.
+      //
+      // **"WHILE YOUR GYM HAS A SUBSCRIPTION", NOT "ON A PAID PLAN" — T3 round
+      // 2 Low-1.** The guard fires on `status <> 'trialing'`, and :19560
+      // deliberately includes `canceled` and `expired` ("over-locking is the
+      // safe direction") — so two of the states it knowingly covers are NOT a
+      // paid plan, and the old sentence told those gyms they were on one. The
+      // round that wrote it said its purpose was to make the refusal TRUE and
+      // left this half carrying the pre-fix wording.
       throw new OrgsError(
         409,
         "currency_locked",
-        "The currency your gym is billed in can't change now that it's on a paid plan, and that country uses a different one. Contact us and we'll move it for you.",
+        "The currency your gym is billed in can't change while your gym has a subscription, and that country uses a different one. Contact us and we'll move it for you.",
       );
     case "not_found":
       // Unreachable in practice — `requirePrivilege` has already read the org

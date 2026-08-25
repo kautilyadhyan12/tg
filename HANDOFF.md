@@ -1,6 +1,51 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: GYM DETAILS, T3 ROUND 2 (diff-only) — ONE Critical/High, ALL FIXED.
+      DECISIONS :19799. **The packet did NOT ship; a DIFF-ONLY ROUND 3 on these
+      fixes is the remaining gate.** ESCAPE HATCH NOT ARMED — round 1's three
+      were all in `modules/orgs`, this round found ZERO there and the Critical is
+      in the HARNESS, its own subsystem at file granularity (:13336).
+
+  1. **THE CRITICAL IS NOT IN THE APP. `O114` deletes the tenancy predicate —
+     that is its JOB — so while it is live the suite rewrites EVERY ROW in
+     `gyms`, and the summary says "restore verified byte-exact" about the FILE.**
+     Reproduced twice: 59 canaries → 0, exit 0. **Kd's Neon branch was never
+     touched — verified read-only twice** (108 gyms, zero test names). That was
+     habit, not a control.
+  2. **THE REFUSAL NOW COVERS EVERY TARGET AND THE PER-TARGET ENUMERATION IS
+     ABANDONED.** Deciding which mutants can write was wrong once and gets harder
+     with every new write route. Opt-in renamed (`MUTATE_ON_REMOTE_DB`).
+     **Proven by causing it**, both directions.
+  3. **THE HARNESS NOW FINGERPRINTS THE GYM ROWS before and after** and names
+     rows that existed both times and MOVED. **Its FIRST version could not fire**
+     — the probe used `pnpm exec tsx`, which is "not found" from the repo root —
+     and it announced itself OFF rather than passing quietly, which is the safe
+     direction and still a dead guard (:5104 F5).
+  4. **WHAT THAT GUARD CANNOT DO, MEASURED: it catches the FIRST mass-write and
+     cannot re-alarm on an ALREADY-UNIFORM table.** A second O114 run writes
+     identical values, nothing changes, and it truthfully reports "unchanged".
+     **The local `gyms` table is currently in exactly that flattened state** (63
+     rows, all `Orgs Test Edit Authz Renamed | Dibrugarh`) — own OWED line. Do
+     not read "rows unchanged" beside O114 as "O114 is safe".
+  5. **FOUR OF THE FIVE LOWS ARE MINE AND IN THE RECORD, and Low-4 is the one to
+     read: a Low was recorded as FIXED in four documents and never fixed**
+     (:15007 L-6 exactly; `git show --numstat` disproved it). **Low-2 has the
+     teeth** — C/H-2's user-visible half was asserted nowhere, so the false
+     sentence could return under a green suite. **Low-5: `orgs.routes` is
+     119/119, not the 129/129 I wrote in four places** (129 is the COMBINED
+     figure; the entry contradicted itself).
+
+MEASURED (final bytes, LOCAL): orgs.routes 119/119 · db.migration 10/10 · both
+  in ONE invocation 129/129 · shared 51/51 · tsc + eslint + `node --check` clean
+  · sweep a stated SUBSET of 126: 15 RED, 0 ALIVE, 0 never ran. Rule 3 measured
+  both ways (the refusal by causing it against the real remote host; the message
+  assertion watched RED against the restored sentence).
+
+NEXT: DIFF-ONLY round 3 in a FRESH chat, then the WEB half with its SMOKE.
+```
+
+```
 TASK: GYM DETAILS, T3 ROUND 1 — THREE Critical/High, ALL FIXED IN THE ROUND.
       DECISIONS :19656. **The packet did NOT ship; the DIFF-ONLY RE-REVIEW is
       the remaining gate.** Escape hatch NOT armed (round 1).
@@ -29,7 +74,8 @@ TASK: GYM DETAILS, T3 ROUND 1 — THREE Critical/High, ALL FIXED IN THE ROUND.
   5. **`country_locked` is now `currency_locked`, message included** — the old
      one told a gym with no country that its country was fixed (:5807).
 
-MEASURED (final bytes, LOCAL): orgs.routes 129/129 (+12) · db.migration 10/10 ·
+MEASURED (final bytes, LOCAL): orgs.routes 119/119 (+2) — **corrected from
+  "129/129 (+12)" by round 2's Low-5; 129 was the COMBINED figure** · db.migration 10/10 ·
   both in ONE invocation 129/129 · shared 51/51 · tsc exit 0 · eslint clean ·
   sweep a stated SUBSET of 126: 15 RED, 0 ALIVE, 0 never ran. **Rule 3 measured
   — both C/H fixes watched RED against the restored pre-fix source, verified

@@ -4889,7 +4889,25 @@ d("orgs routes (real Postgres)", () => {
     // to euros — a paying gym's billing currency, which is the whole ruling.
     const flip = await patch(`/v1/orgs/${org.org.id}`, { country: "DE" }, { cookies: owner.cookies });
     expect(flip.statusCode, "recording a country that changes the money").toBe(409);
-    expect((JSON.parse(flip.body) as { error: string }).error).toBe("currency_locked");
+    const refusal = JSON.parse(flip.body) as { error: string; message: string };
+    expect(refusal.error).toBe("currency_locked");
+    // **THE SENTENCE, NOT JUST THE CODE — T3 round 2 Low-2.** The outcome name
+    // was asserted and the words a gym owner actually reads were not, so the
+    // pre-fix string could be restored with this suite green: a gym with no
+    // country was told "your gym's country is fixed", the exact :5807 falsehood
+    // C/H-2 was raised for. A fix whose protection cannot fail is the same
+    // defect with a comment on it (:5104 F5).
+    //
+    // It asserts the PROMISE rather than the prose: the message must name the
+    // CURRENCY (true of every gym) and must NOT claim this gym has a country
+    // that is fixed (false of the 59 that have none). Banning the exact old
+    // string would force vaguer wording to satisfy a test (:14840's lesson);
+    // this bans the CLAIM.
+    expect(refusal.message).toMatch(/currency/i);
+    expect(refusal.message).not.toMatch(/country is fixed/i);
+    // Low-1's half: `canceled` and `expired` also lock, so the sentence must not
+    // tell those gyms they are on a paid plan.
+    expect(refusal.message).not.toMatch(/on a paid plan/i);
     expect((await readGymRow(org.org.id)).country).toBeNull();
 
     // THE ONE THAT MUST BE ALLOWED: India is what it is already billed for, so

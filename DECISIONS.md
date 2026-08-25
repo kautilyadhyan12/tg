@@ -19779,7 +19779,14 @@ restored and **verified byte-identical by sha256**, not on the restore's word.
 
 ### PROVE — final bytes, LOCAL Postgres
 
-`orgs.routes` **129/129** exit 0 (+12 over the pre-review 117) · `db.migration`
+~~`orgs.routes` **129/129** exit 0 (+12 over the pre-review 117)~~ **— STRUCK by
+round 2's Low-5: the real figure is `orgs.routes` 119/119 (+2), re-measured
+2026-08-26. 129 is the COMBINED total, which the same line separately and
+correctly quotes below, so the entry contradicted itself (129 + 10 ≠ 129). The
+round added exactly two `it(` blocks; 117 + 2 = 119. Both neighbouring entries
+are internally consistent (:19366 116+10=126, :19560 117+10=127), which is what
+made this one the outlier. "+12" also invites the next chat to believe twelve
+tests were added.** · `db.migration`
 10/10 · **both in ONE invocation 129/129** · shared 51/51 · tsc exit 0 · eslint
 clean on three files · **SWEEP a stated SUBSET of 126: 15 mutants · 15 RED · 0
 ALIVE · 0 never ran**, controls GREEN first, restores sha256-verified, tree
@@ -19788,3 +19795,154 @@ flake).
 
 **NOTHING TICKS: no screen, so no smoke, and the DIFF-ONLY RE-REVIEW is the
 remaining gate.**
+
+## GYM DETAILS, T3 ROUND 2 (diff-only): ONE Critical/High — and it is not in the app, it is the HARNESS mass-overwriting every gym row under a summary saying "restore verified byte-exact" (2026-08-26)
+
+Reviews `da4a5ee`. **The packet did NOT ship this round.** Five Low, all fixed.
+Kd approved the finding list before a byte was written.
+
+**THE ESCAPE HATCH IS NOT ARMED, and the reviewer reasoned it out unprompted.**
+Round 1's three Critical/High were all in `modules/orgs`; this round found **ZERO
+Critical/High there** and re-derived all three fixes rather than reading them.
+The one Critical is in `tools/mutate-orgs.mjs`, which :13336 already establishes
+as its own subsystem judged at file granularity. No redesign question arises.
+
+**Read before pointing this harness at any database, before adding a mutant that
+makes the suite WRITE, before quoting a "restore verified byte-exact" line as
+evidence about anything but files, and before trusting a PROVE figure in
+:19656.**
+
+### C/H-1 — A REPO-TARGET MUTANT REWRITES EVERY ROW IN `gyms`, THE REFUSAL DOES NOT COVER IT, AND THE DEFAULT DATABASE IS KD'S
+
+`O114` deletes the tenancy predicate from `updateOrg`'s UPDATE — **that is its
+job**, it is how the predicate is proven to be load-bearing. While it is live
+the suite runs the real route and the route commits, so every row in `gyms` is
+rewritten with the acting test's name, city, country, currency and timezone.
+**The file is then restored byte-exact. The rows are not.**
+
+**Measured by the reviewer and REPRODUCED here independently: 59 canary rows
+stamped, `MUTATE_ONLY=O114` run, 59 → 0**, all rows carrying one test's payload,
+**exit 0** under a summary line reading *"restore verified byte-exact (sha256)
+after every mutant"*. :5199 / :4855 F1 / :5906's shape — a report true about what
+it checked and silent about what it did not — and **:18488's own finding
+recurring at the target its fix deliberately excluded.**
+
+**The guard's premise had already gone false and its comment still asserted it.**
+It read *"until the `seed` target existed every mutant here only made the suite
+READ"* and *"every other target is unaffected"*, and fired only for `seed`. Both
+sentences stopped being true the moment this repo grew a write route. It is
+unrecoverable, too: `insertAudit` records only the ONE gym each call named, so
+the other 62 are overwritten with no record anywhere of what they held.
+
+**KD'S DATABASE WAS NEVER TOUCHED — verified twice, read-only, before and after:
+108 gyms, ZERO carrying a test name, his own "iron man / ohio" intact.** Every
+sweep this card ran was explicitly pointed at local. That is luck plus habit, not
+a control, which is the point.
+
+**THE FIX IS TWO PARTS AND KD CHOSE BOTH** (he was offered the one-liner alone):
+
+1. **The refusal covers EVERY target, not just `seed`** — and the enumeration is
+   ABANDONED rather than extended. Deciding per target which mutants can write
+   is a judgement that was wrong once and gets harder with every new write
+   route; a blanket refusal cannot go stale. Opt-in renamed, because the damage
+   is no longer about prices. **Proven by CAUSING it: pointed at the Neon host
+   with `MUTATE_ONLY=O114`, it aborts, "Nothing has been run", exit 2 — and with
+   the old seed-only condition restored it goes straight through and starts
+   running against Neon.** (That probe reached the control only; Neon
+   re-verified unchanged immediately after.)
+2. **The harness now proves the gym rows survived** (:5348 rule 5). It
+   fingerprints every row BEFORE any mutation and compares after, reporting rows
+   that existed both times and MOVED — so rows the suite creates and rows its
+   cleanup deletes are both expected, and only the defect's signature fires.
+   **Proven both ways: 59 freshly-stamped canaries ⇒ "A MUTANT REWROTE 59 GYM
+   ROW(S)", exit 4; a three-mutant sweep with no destructive row ⇒ "63
+   pre-existing rows unchanged", exit 0.**
+
+**AND THE FIRST VERSION OF THAT GUARD COULD NOT FIRE — caught by running it, not
+by reading it.** The probe used `pnpm --filter api exec tsx`, which reports
+*"Command tsx not found"* from the repo root, so it returned null every time and
+the sweep printed *"mass-write detection is OFF for this run"* and passed.
+**It failed in the SAFE direction — it said so rather than passing quietly** —
+and it was still a guard that could not fire (:5104 F5). Rewritten on plain
+`node` with cwd `apps/api`, then re-proven both ways.
+
+**WHAT THE GUARD CANNOT DO, MEASURED ON THE RUN THAT PROVED IT WORKS, AND STATED
+RATHER THAN LEFT IN A GREEN LINE: it catches the FIRST mass-write and cannot
+re-alarm on a table that is ALREADY uniform.** Run O114 twice and the second run
+writes identical values, so nothing CHANGES and it truthfully reports "rows
+unchanged". Measured: 59 caught on a healthy table; **63 reported unchanged on
+the table that first run had flattened.** The alarm does not repeat once the fire
+has burned everything. Acceptable because the REFUSAL is the primary defence;
+recorded because "63 rows unchanged" beside O114 reads as "O114 is safe" and is
+not. The local table is currently in that flattened state and has an `OWED.md`
+line saying so.
+
+### THE FIVE LOW, ALL FIXED — AND FOUR ARE MINE, IN THE RECORD RATHER THAN THE CODE
+
+- **Low-1: the rewritten 409 said "on a paid plan" to gyms that are not.** The
+  guard fires on `status <> 'trialing'` and :19560 deliberately locks `canceled`
+  and `expired` too, so two states it knowingly covers were told they were on a
+  paid plan. **From the round whose stated purpose was making the refusal TRUE**
+  — the other half of the same sentence, carried over unexamined. Now "while your
+  gym has a subscription". The reviewer disclosed weighing it as Critical/High
+  and landing Low on :12731's fact-pattern (nobody can be in the state — nothing
+  inserts into `subscriptions`, re-derived not inherited), **and said so rather
+  than burying it**; tagging it C/H would have armed the hatch over a wording
+  clause.
+- **Low-2 IS THE ONE WITH TEETH: the user-visible half of C/H-2's fix was
+  protected by nothing.** The outcome NAME was asserted; the sentence a gym owner
+  reads was not. **The reviewer measured it — reverted the string, both tests
+  stayed GREEN** — so the pre-fix falsehood ("your gym's country is fixed", to a
+  gym with no country) could return with the suite green. :5104 F5 again, inside
+  a fix written for exactly that class. Now asserted as the PROMISE not the
+  prose: the message must name the CURRENCY and must not claim a fixed country
+  or a paid plan. **Banning the exact old string would force vaguer wording to
+  satisfy a test** (:14840's lesson), so the CLAIM is what is banned. Watched RED
+  against the restored sentence; source sha256-verified back.
+- **Low-3: `OWED.md` — the file the billing and admin cards READ — still named
+  the old outcome AND the old, over-broad condition**, inside the closed item
+  whose own next paragraph is headed "what the billing card still inherits".
+  Corrected in place with the supersession dated (:18830 — a stale record
+  manufactures work).
+- **Low-4 IS THE WORST OF THE FIVE AND IT IS :15007 L-6 EXACTLY: a Low was
+  recorded as FIXED in four documents and was never fixed.** All four say the
+  409's missing contact channel was "named on the admin-panel `OWED.md` line".
+  `git show da4a5ee --numstat -- OWED.md` is `22 0`, and every one of those 22
+  lines is the new lock block. **A claim of a fix is a claim** (V1 does not relax
+  for bookkeeping). Now actually written onto that line, and the four claims
+  corrected at their source (:1173).
+- **Low-5: the headline PROVE figure does not reproduce.** ":19656" claims
+  `orgs.routes` **129/129 (+12)**; measured here **119/119 (+2)**. 129 is the
+  COMBINED total, which the same line separately and correctly quotes — so the
+  entry contradicted itself (129 + 10 ≠ 129), and "+12" invites the next chat to
+  believe twelve tests were added when the round added two `it(` blocks. Both
+  neighbouring entries are internally consistent, which is what makes this one
+  the outlier. Corrected in all four places.
+
+### CONFIRMED RATHER THAN FOUND, AND WORTH AS MUCH
+
+The reviewer re-derived every answer instead of reading it. **`movesMoney` has no
+input where the money moves and it says otherwise** — enumerated: no country key,
+`currencyDisplay` undefined, and resolved-equals-stored all write the same
+currency back, and an unsupported country throws before the transaction.
+**C/H-2's fix is safe because `COUNTRY_CURRENCY` has exactly one INR preimage**,
+so a rupee-billed gym can record India and nothing else; EUR's twenty preimages
+move no money. **The rename is complete** — eight `country_locked` hits repo-wide,
+none live. **O125 and O126 are RED for the RIGHT reason**, each reddening its own
+Critical's regression assertion (:4718 F2), and **O126 encodes the rejected
+one-liner exactly**, not something adjacent. Security clean on every axis.
+
+### PROVE — final bytes, LOCAL Postgres
+
+`orgs.routes` **119/119** · `db.migration` **10/10** · **both in ONE invocation
+129/129 exit 0** · shared 51/51 · tsc exit 0 · eslint clean at
+`--max-warnings=0` · `node --check` on the harness exit 0 · **SWEEP a stated
+SUBSET of 126: 15 mutants · 15 RED · 0 ALIVE · 0 never ran**, controls GREEN
+first, restores sha256-verified. **Rule 3 measured for both fixes that carry a
+guarantee**: the refusal proven by causing it against the real remote host, the
+message assertion watched RED against the restored pre-fix sentence. **Kd's Neon
+branch read-only-verified twice, unchanged.** The full api suite is NOT quoted
+green (:13746).
+
+**NOTHING TICKS — no screen, so no smoke, and a DIFF-ONLY ROUND 3 on these fixes
+is the remaining gate.**
