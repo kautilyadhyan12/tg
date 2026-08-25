@@ -95,3 +95,8 @@ infra/api.env
 .scratch/
 t3-*
 NEXT-*
+
+# Guardrail rules written by the `/hookify` plugin. These are one operator's
+# local reminders to the chat ("never do X"), not project law — CLAUDE.md is.
+# Kd's ruling 2026-08-26: ignored, never committed.
+.claude/hookify.*
