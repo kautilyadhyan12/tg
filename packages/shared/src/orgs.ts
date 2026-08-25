@@ -239,8 +239,24 @@ export const updateOrgRequestSchema = z
     city: z.string().trim().max(120).nullable(),
     /** ISO 3166-1 alpha-2. Shape only here — whether we are OPEN there is the
      *  service's answer, so the refusal can be a sentence a gym owner
-     *  understands rather than an enum error. Identical to create's, on
-     *  purpose. */
+     *  understands rather than an enum error. Identical to create's, on purpose.
+     *
+     *  **KD RULING 2026-08-26 — THIS FIELD FREEZES THE DAY THE GYM STARTS
+     *  PAYING** (*"a gym should not be able to change the country as it will
+     *  create problem of money"*). It decides `currency_display`, which is the
+     *  money the gym is BILLED in. The SERVER enforces it — a gym on any
+     *  subscription past `trialing` gets a 409 `country_locked` — so this schema
+     *  accepting the field is not the same as the field being changeable, and a
+     *  console must handle the refusal rather than only hiding the box (R3.3).
+     *
+     *  **He first said "lock it outright" and refined it after being shown what
+     *  the providers do**: Stripe refuses a currency change once a customer has
+     *  been invoiced once, and Paddle refuses a COUNTRY change on a live
+     *  subscription outright — but NEITHER freezes from day one, because before
+     *  any money moves there is nothing to protect and a gym that mistyped its
+     *  country on the first screen of signup would be stuck for ever. The
+     *  card-less 30-day trial (:16548) is deliberately NOT a lock, for the same
+     *  reason: it is the moment before the typo starts to cost. */
     country: z.string().trim().length(2),
     /** PROVEN to name a real IANA zone, not merely bounded in length — the same
      *  refine create uses. A junk zone written here is a permanent row, and the

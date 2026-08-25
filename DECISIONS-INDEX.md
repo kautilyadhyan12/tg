@@ -205,11 +205,69 @@ mid-file: re-derive them with
   ran, controls green first, restores sha256-verified, tree clean after · the
   schema read back OUT of the database (0 owners missing it, 55 gyms, 0 with a
   country). The FULL api suite is NOT quoted green — :13746's pre-existing flake.**
-  **NOTHING TICKS — no screen, so no smoke; T3 UNRUN.** Two new `OWED.md` lines:
-  existing gyms have no country recorded, and **whether a gym may change the
-  currency it is BILLED in once it is actually paying is Kd's to rule** — inert
-  today (nothing inserts into `subscriptions`), a real money question the moment
-  billing ships, and `05-part5-billing.md` names none of it.
+  **NOTHING TICKS — no screen, so no smoke; T3 UNRUN.** New `OWED.md` line:
+  existing gyms have no country recorded. ~~And whether a gym may change the
+  currency it is BILLED in once it is actually paying is Kd's to rule.~~
+  **— CLOSED THE SAME DAY BY KD; see the ADDENDUM at :19560, which SUPERSEDES
+  this entry's "the country is freely editable" half.**
+- **:19560** — 2026-08-26 — **ADDENDUM to :19366 — KD FREEZES A GYM'S COUNTRY
+  ONCE IT IS PAYING, AND STOPPED ME IMPLEMENTING AN OPINION AS A RULING.**
+  **Read before touching the country on any org route, before writing anything
+  that changes `currency_display`, and before building the billing card.**
+  **SUPERSEDES :19366's "the country is freely editable" half**; everything else
+  there stands. **RULED: a gym's country — and so the currency it is billed in —
+  freezes the day it goes on a paid plan**; `PATCH /v1/orgs/:gymId` answers 409
+  `country_locked` for any gym on a subscription past `trialing`. Name, city and
+  time zone stay editable, **with the control driven on the same locked gym**,
+  because a route that refused a paying gym EVERYTHING would be a different
+  product and nothing else in the suite could tell them apart (:7104's PG1).
+  **THE PROCESS FAILURE IS MINE AND IS THE PART TO KEEP: he said *"a gym should
+  not be able to change the country"*, I started implementing it, and he stopped
+  me — *"wait men i just said an opinion i need your recommendation as well is it
+  correct decision what do production grade applications do?"*. I had taken an
+  OPINION for a RULING.** That is :17765's failure MIRRORED — there a chat
+  laundered its own call into his mouth, here I promoted his musing to law —
+  **and both are one defect: not reading the ATTRIBUTION of a statement.** The
+  tell was available: no option list, no gate. **When he states a preference
+  mid-flow, the response is a recommendation with evidence, not a diff.**
+  **THE EVIDENCE WAS WEB-SEARCHED, NOT RECALLED (V5), because "what do production
+  applications do" is exactly what model memory answers confidently and wrongly:
+  Stripe LOCKS a customer's currency once they have been invoiced** (dashboard
+  dropdown disabled; API *"Can't combine currencies on a single customer"*;
+  workaround = new customer or cancel-and-resubscribe) **while leaving the
+  ADDRESS editable — updating the country is the documented way to fix a tax
+  location, changing future invoices at the next cycle with no proration. Paddle,
+  the route ruled at :17366, is STRICTER and closest to Kd's instinct: it refuses
+  a COUNTRY change on an existing subscription outright, for tax reasons, and its
+  own answer is cancel-and-resubscribe. BUT NEITHER FREEZES FROM DAY ONE** — that
+  is the finding that moved the ruling, since before money moves there is no
+  invoice to protect and a gym that mistyped its country on the FIRST screen of
+  signup would be stuck for ever.
+  **THE CARD-LESS 30-DAY TRIAL (:16548) IS DELIBERATELY NOT A LOCK** — a
+  `trialing` gym has paid nothing, so freezing there traps the typo at the moment
+  before it starts to cost. Every other status locks, `canceled` and `expired`
+  included, because an ended subscription may still have raised invoices and
+  over-locking is the safe direction. **It reads `subscriptions.status`, not
+  `invoices`**: an invoice cannot exist without a subscription
+  (`invoices.subscription_id` NOT NULL) and Part 5 §3's machine leaves `trialing`
+  on first payment, so the question is answerable from a column the billing card
+  must maintain anyway — **that dependency is written onto the `OWED.md` line
+  rather than left implicit.** **The check is INSIDE the transaction and under
+  the org lock**: it is a check-then-act guarding money, and outside the lock a
+  subscription committing between check and UPDATE moves a paying gym's currency.
+  **CONSEQUENCE RECORDED, NOT DISCOVERED LATER: a paying gym that picked the
+  wrong country cannot fix it itself** — the ADMIN PANEL's job beside :19016's
+  "mark this gym as paid", own ⚪ line, and both providers make it a support
+  action too. Bounded and currently empty (nothing inserts into `subscriptions`).
+  **AUDIT — two mutants, and the SECOND is the one worth having: O123 deletes the
+  lock; O124 deletes the TRIAL CARVE-OUT so the lock fires too EARLY. A lock has
+  TWO failure directions and a test that only checks it FIRES is satisfied by a
+  door that is simply shut** (:7104's PG1). Both RED.
+  **PROVE, final bytes, LOCAL: orgs.routes 117/117 (+1) · db.migration 10/10 ·
+  both in ONE invocation 127/127 · shared 51/51 · tsc exit 0 · eslint clean on
+  four files · SWEEP a stated SUBSET of 124: 13 RED, 0 ALIVE, 0 never ran.**
+  **Nothing ticks — no screen, no smoke, T3 UNRUN.** The ❓ currency line raised
+  that morning is CLOSED by this ruling, struck and ticked rather than deferred.
 - **:19256** — 2026-08-26 — **CORRECTION TO :19129 — ITS COST ANALYSIS PRICED A
   FEATURE KD HAD ALREADY KILLED.** **READ THIS BEFORE :19129.** The AI chat coach
   was ruled DROPPED 2026-08-18 (:9604 §5, *"OFF, NOT DELETED"*) and confirmed

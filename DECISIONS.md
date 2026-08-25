@@ -19556,3 +19556,99 @@ junk time zone is the one built to FIX a wrong one.
 commit: existing gyms have no country recorded, and **whether a gym may change
 the currency it is billed in once it is actually paying is Kd's to rule** — safe
 today because nothing is on a plan, and not safe once billing ships.
+
+### ADDENDUM, same day — KD FREEZES A GYM'S COUNTRY ONCE IT IS PAYING, AND ASKED FOR A RECOMMENDATION RATHER THAN COMPLIANCE
+
+**Read before touching the country on any org route, before writing anything
+that changes `currency_display`, and before building the billing card.**
+**SUPERSEDES the "country is freely editable" half of the entry above**, which
+shipped in commit `8540691` and was corrected within the hour. Everything else
+in that entry stands.
+
+**KD'S RULING: a gym's country — and so the currency it is billed in — freezes
+the day the gym goes on a paid plan.** `PATCH /v1/orgs/:gymId` answers 409
+`country_locked` for any gym holding a subscription past `trialing`. Name, city
+and time zone stay editable, and a test drives that control on the same locked
+gym, because a route that refuses a paying gym *everything* would be a different
+product and nothing else in the suite could tell the two apart (:7104's PG1).
+
+**THE PROCESS IS THE PART TO KEEP, AND IT CUTS AGAINST ME.** He opened with
+*"a gym should not be able to change the country as it will create problem of
+money"* — and I started implementing it. He stopped me: *"wait men i just said an
+opinion i need your recommendation as well is it correct decision what do
+production grade applications do?"* **I had taken an opinion for a ruling and
+begun coding it.** That is the mirror image of :17765's failure — there a chat
+laundered its OWN call into his mouth; here I promoted his musing to law without
+being asked. **Both are the same defect: not reading the ATTRIBUTION of a
+statement.** DECISIONS already distinguishes "KD RULED" from "recommended, not
+ruled"; the same discipline applies to what he says in the moment, and the tell
+is that he had given no option list and no gate. **When he states a preference
+mid-flow, the response is a recommendation with evidence, not a diff.**
+
+**THE EVIDENCE, web-searched and sourced rather than recalled (V5), because
+"what do production applications do" is exactly the question model memory
+answers confidently and wrongly:**
+- **Stripe: a customer's currency is LOCKED once they have been invoiced.** The
+  dashboard disables the dropdown; the API refuses *"Can't combine currencies on
+  a single customer"*. The documented workarounds are a second customer, or
+  cancel-and-resubscribe on new prices.
+  (`support.stripe.com/questions/why-are-customers-locked-to-a-specific-currency-and-can-not-be-moved-to-a-price-in-another-currency`)
+- **Stripe: the ADDRESS is not locked** — updating a customer's country is the
+  documented way to fix their tax location, and Stripe states future invoices
+  change accordingly, taking effect at the next billing cycle with no proration.
+  (`docs.stripe.com/tax/subscriptions/update`)
+- **Paddle — the route Kd ruled at :17366 — is STRICTER and closest to his
+  instinct: it does not allow changing the country on an existing subscription,
+  for tax reasons.** Plausible's own billing docs (a real Paddle merchant) tell
+  customers to let the period run out, cancel, and resubscribe.
+  (`plausible.io/docs/billing`, `developer.paddle.com`)
+- **NEITHER freezes from day one.** That is the whole finding, and it is what
+  moved the ruling: before money has moved there is no invoice to protect, and a
+  gym that mistyped its country on the FIRST screen of signup — the screen that
+  decides which price book it is shown — would otherwise be stuck for ever.
+
+**THE TRIAL IS DELIBERATELY NOT A LOCK.** Kd's gym trial is card-less and 30
+days (:16548), so a `trialing` gym has paid nothing and has no invoice. Freezing
+there would trap the typo at exactly the moment before it starts to cost — the
+worst available instant — and it is the case the refinement exists to protect.
+Every other status locks, `canceled` and `expired` included, because a
+subscription that ended may still have raised invoices and over-locking is the
+safe direction.
+
+**WHY IT READS `subscriptions` AND NOT `invoices`:** an invoice cannot exist
+without a subscription (`invoices.subscription_id` is NOT NULL), and Part 5 §3's
+machine leaves `trialing` on the first payment — so the question is answerable
+from a column the billing card must maintain anyway, rather than from a table
+that card has to remember to write. That dependency is written onto the
+`OWED.md` line rather than left implicit.
+
+**THE CHECK IS INSIDE THE TRANSACTION AND UNDER THE ORG LOCK.** It is a
+check-then-act and the thing it guards is money: outside the lock, a
+subscription committing between the check and the UPDATE moves a paying gym's
+currency, which is the entire failure Kd named. Same lock and same order every
+other mutation in the module takes, so no new deadlock edge.
+
+**THE CONSEQUENCE IS RECORDED RATHER THAN DISCOVERED LATER: a paying gym that
+picked the wrong country cannot fix it itself.** That is the ADMIN PANEL's job,
+beside :19016's Kd-approved "mark this gym as paid" first slice, and it has its
+own ⚪ `OWED.md` line. Both providers make it a support action too, so the panel
+is not working around a limitation we invented. Bounded and currently empty —
+nothing inserts into `subscriptions`, so no gym can be in this state today.
+
+**AUDIT: two mutants, and the SECOND is the one worth having.** `O123` deletes
+the lock — a paying gym moves its own billing currency. **`O124` deletes the
+TRIAL CARVE-OUT**, so the lock fires too EARLY and a trialing gym is frozen.
+**A lock is a guard with two failure directions and a test that only checks it
+FIRES is satisfied by a door that is simply shut** — :7104's PG1 shape, and the
+reason the test carries a positive control (the same locked gym still renaming
+itself). Both RED.
+
+**PROVE, on the final bytes, all LOCAL Postgres: `orgs.routes` 117/117 (+1) ·
+`db.migration` 10/10 · both in ONE invocation 127/127 exit 0 · shared 51/51 ·
+tsc exit 0 · eslint clean on four files · SWEEP a stated SUBSET of 124: 13
+mutants · 13 RED · 0 ALIVE · 0 never ran**, controls GREEN first, restores
+sha256-verified.
+
+**Still nothing ticks: there is no screen, so no smoke; T3 is UNRUN.** The
+❓ currency line raised this morning is CLOSED by this ruling — struck and
+ticked, not deferred.

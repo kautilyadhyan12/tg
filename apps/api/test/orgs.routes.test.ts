@@ -4725,6 +4725,72 @@ d("orgs routes (real Postgres)", () => {
     expect(row.currency_display).toBe("EUR");
   });
 
+  /** KD RULING 2026-08-26 — THE COUNTRY FREEZES THE DAY THE GYM STARTS PAYING.
+   *
+   *  His words were *"a gym should not be able to change the country as it will
+   *  create problem of money"*; the lock landed at first payment rather than at
+   *  day one after he was shown that Stripe refuses a currency change once a
+   *  customer has been invoiced, and Paddle refuses a country change on a live
+   *  subscription — but neither freezes before any money has moved.
+   *
+   *  **THE CONTROL IS THE HALF THAT MATTERS: the same gym, in the same state,
+   *  can still change its NAME.** Without it this test is satisfied by a route
+   *  that refuses a paying gym everything, which would be a different (and
+   *  worse) product than the one Kd ruled for — and nothing else here could tell
+   *  the two apart. :7104's PG1 shape: a table of only-should-fail cases is
+   *  satisfied by a door that is simply shut. */
+  it("freezes the country once the gym is on a paid plan, and nothing else", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("edit-locked");
+    const org = await makeOrg(owner.cookies, "Orgs Test Edit Locked");
+
+    // BEFORE any subscription: the country moves, which is the whole reason the
+    // lock is a condition rather than a deleted field.
+    const open = await patch(`/v1/orgs/${org.org.id}`, { country: "US" }, { cookies: owner.cookies });
+    expect(open.statusCode).toBe(200);
+    expect((await readGymRow(org.org.id)).currency_display).toBe("USD");
+
+    await subscribeGym(org.org.id, CAP1_PLAN);
+    // `subscribeGym` inserts `trialing`, and a TRIAL IS NOT A LOCK — Kd's gym
+    // trial is card-less, so nothing has been paid and freezing here would trap
+    // the typo at the moment before it starts to cost.
+    const trialing = await patch(
+      `/v1/orgs/${org.org.id}`,
+      { country: "CA" },
+      { cookies: owner.cookies },
+    );
+    expect(trialing.statusCode, "a trialing gym may still change it").toBe(200);
+    expect((await readGymRow(org.org.id)).currency_display).toBe("CAD");
+
+    // Now it is genuinely paying.
+    await sql`
+      UPDATE subscriptions SET status = 'active'
+      WHERE owner_type = 'gym' AND owner_id = ${org.org.id}`;
+
+    const locked = await patch(
+      `/v1/orgs/${org.org.id}`,
+      { country: "IN" },
+      { cookies: owner.cookies },
+    );
+    expect(locked.statusCode).toBe(409);
+    expect((JSON.parse(locked.body) as { error: string }).error).toBe("country_locked");
+
+    const unmoved = await readGymRow(org.org.id);
+    expect(unmoved.country).toBe("CA");
+    expect(unmoved.currency_display).toBe("CAD");
+
+    // THE CONTROL — the lock is narrow. Everything else still edits.
+    const stillOpen = await patch(
+      `/v1/orgs/${org.org.id}`,
+      { name: "Orgs Test Edit Locked Renamed", city: "Silchar", timezone: "Asia/Tokyo" },
+      { cookies: owner.cookies },
+    );
+    expect(stillOpen.statusCode, "name/city/timezone stay editable").toBe(200);
+    const after = await readGymRow(org.org.id);
+    expect(after.name).toBe("Orgs Test Edit Locked Renamed");
+    expect(after.city).toBe("Silchar");
+    expect(after.timezone).toBe("Asia/Tokyo");
+  });
+
   /** A gym must not be able to declare its own money (R3.1, Kd ruling
    *  :10010/:10099) — and it is REFUSED rather than silently stripped, so an
    *  owner who tried finds out we decide it instead of watching it vanish. The

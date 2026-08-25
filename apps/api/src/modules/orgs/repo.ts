@@ -453,6 +453,7 @@ export interface OrgPatch {
 export type UpdateOrgOutcome =
   | { kind: "updated"; org: OrgRow; changed: readonly string[] }
   | { kind: "unchanged"; org: OrgRow }
+  | { kind: "country_locked" }
   | { kind: "not_found" };
 
 /** EDIT THE GYM'S OWN ROW (Kd's `org.manage`, 2026-08-26).
@@ -482,6 +483,44 @@ export async function updateOrg(
     await lockOrgRow(tx, input.gymId);
     const before = await getOrgById(tx, input.gymId);
     if (before === null) return { kind: "not_found" };
+
+    /** KD RULING 2026-08-26: **a gym's country freezes the day it starts
+     *  paying.** *"a gym should not be able to change the country as it will
+     *  create problem of money"* — his instinct, and both providers agree with
+     *  it. **Stripe refuses to change a customer's currency once they have been
+     *  invoiced even once**, and **Paddle — the route Kd ruled at :17366 —
+     *  refuses a COUNTRY change on a live subscription outright**, its own
+     *  answer being cancel-and-resubscribe. Neither freezes from day one, which
+     *  is why this is a condition and not a deleted field: before any money has
+     *  moved there is no invoice to protect, and a gym that mistyped its country
+     *  on the FIRST screen of signup — the screen that decides which price book
+     *  it is shown — would otherwise be stuck for ever.
+     *
+     *  **THE TRIAL IS DELIBERATELY NOT A LOCK.** Kd's gym trial is card-less and
+     *  30 days (:16548), so a `trialing` gym has paid nothing and has no invoice;
+     *  locking there would freeze the typo at exactly the moment before it starts
+     *  to cost — the worst possible instant. Every other status locks, including
+     *  `canceled` and `expired`, because a subscription that ended may still have
+     *  raised invoices and because over-locking is the safe direction.
+     *
+     *  It reads `subscriptions` rather than `invoices` on purpose: an invoice
+     *  cannot exist without one (`invoices.subscription_id` is NOT NULL), and
+     *  Part 5 §3's machine leaves `trialing` on the first payment, so this
+     *  question is answerable from a column the billing card must maintain
+     *  anyway rather than from a table that card has to remember to write.
+     *
+     *  **Inside the transaction and under the org lock** — this is a
+     *  check-then-act, and the thing it guards is money. Outside the lock a
+     *  subscription committing between the check and the UPDATE would move a
+     *  paying gym's currency, which is the entire failure Kd named. */
+    if ("country" in input.patch) {
+      const billed = await tx<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM subscriptions
+        WHERE owner_type = 'gym'
+          AND owner_id = ${input.gymId}
+          AND status <> 'trialing'`;
+      if ((billed[0]?.n ?? 0) > 0) return { kind: "country_locked" };
+    }
 
     // Compared against the CURRENT row rather than trusted from the request:
     // a screen sending back every field it drew is the normal case, so without

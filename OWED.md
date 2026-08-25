@@ -6151,19 +6151,37 @@ file and is stated so nobody reads these as lower priority than they are.
       country when an owner edits; each gym self-heals on its first save. **What
       it costs meanwhile:** the country box on that screen starts empty for an
       existing gym, which is true and not false — :5807 Low by its own test.
-- [ ] ❓ **CAN A GYM CHANGE THE CURRENCY IT IS BILLED IN ONCE IT IS ACTUALLY
-      PAYING? KD'S RULING NEEDED, AND THE SPEC HAS NO RULE FOR IT.**
-      `PATCH /v1/orgs/:gymId` (2026-08-26) lets an owner change the gym's country,
-      and the currency follows it — which is right and is what Kd asked for.
-      **It is SAFE TODAY and will not stay safe:** nothing inserts into
-      `subscriptions`, so no gym is on a paid plan and no invoice exists
-      (grep-verified twice, independently, at :12731). The moment billing ships,
-      moving a live gym from INR to EUR mid-subscription is a real money question
-      — does the current period reprice, does the next one, what happens to an
-      unpaid invoice raised in the old currency — and `05-part5-billing.md` names
-      none of it. **A chat must not answer it by inventing a rule** (R0.2).
-      **What unblocks it:** the billing card puts the options to Kd. Until then
-      the route is unchanged; the risk is a schedule risk, not a live defect.
+- [x] ~~❓ **CAN A GYM CHANGE THE CURRENCY IT IS BILLED IN ONCE IT IS ACTUALLY
+      PAYING?**~~ **CLOSED 2026-08-26 THE SAME DAY IT WAS RAISED — KD RULED, and
+      the ruling is BUILT, not deferred** (DECISIONS :19366 addendum, commit
+      below). **NO: a gym's country — and so the currency it is billed in —
+      FREEZES the day it goes on a paid plan.** `PATCH /v1/orgs/:gymId` returns
+      409 `country_locked` for any gym holding a subscription past `trialing`.
+      **He raised it himself** (*"a gym should not be able to change the country
+      as it will create problem of money"*), **asked for a recommendation rather
+      than compliance, and refined his own ruling on the evidence**: locking from
+      day one was his first instinct; the providers were checked and neither does
+      that. **Stripe refuses a currency change once a customer has been invoiced
+      once; Paddle — the route ruled at :17366 — refuses a COUNTRY change on a
+      live subscription outright, its answer being cancel-and-resubscribe. But
+      neither freezes before money has moved**, because a business that mistyped
+      its country at signup would be stuck for ever. **The card-less 30-day trial
+      (:16548) is deliberately NOT a lock** — it is the moment before the typo
+      starts to cost.
+      **What the billing card still inherits, and it is NOT a deferral:** the
+      guard reads `subscriptions.status`, so Part 5 §3's machine must leave
+      `trialing` on first payment for it to bite. That is already what §3
+      requires; it is written here so the billing card knows this guard depends
+      on it.
+- [ ] ⚪ **A GYM THAT PICKED THE WRONG COUNTRY AND IS ALREADY PAYING CANNOT FIX
+      IT ITSELF — and that is the deliberate consequence of the ruling above, not
+      an oversight.** The way out exists in principle (Kd approves every gym by
+      hand at this scale, :11072) and needs a tool: it belongs to the **ADMIN
+      PANEL's** first slices, beside "mark this gym as paid" (:19016, 🔴 line
+      above). Both providers make this a support action too — Paddle's own answer
+      is cancel-and-resubscribe — so the panel is not working around a limitation
+      we invented. **Bounded and currently empty: nothing inserts into
+      `subscriptions`, so no gym can be in this state today.**
 - [ ] 🟡 **THE CONSOLE IS BUILT ONCE — responsive, opened from inside the phone
       app.** Kd demanded phone management (*"main idea is convenience"*); Part 3
       §3.1 already chose responsive web for the same reason (*"owners live on

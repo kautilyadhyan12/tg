@@ -1454,6 +1454,22 @@ const MUTANTS = [
     expect: 'sets the currency from the gym',
   },
   {
+    id: 'O123',
+    target: 'repo',
+    why: "MONEY, AND IT IS KD'S OWN RULING OF 2026-08-26: the lock comes off, so a PAYING gym can move its own country and with it the currency its invoices are raised in. Both providers refuse this — Stripe will not change a customer's currency after the first invoice and Paddle will not change a country on a live subscription at all",
+    from: '    if ("country" in input.patch) {\n      const billed = await tx<{ n: number }[]>`',
+    to: '    if (false && "country" in input.patch) {\n      const billed = await tx<{ n: number }[]>`',
+    expect: 'freezes the country once the gym is on a paid plan',
+  },
+  {
+    id: 'O124',
+    target: 'repo',
+    why: "THE OTHER DIRECTION, and it is the half Kd's refinement bought: the trial carve-out goes, so a gym on its card-less 30-day trial is frozen too — the typo locks at exactly the moment before it starts to cost, which is what made 'lock it from day one' the worse answer. A lock that fires too early is invisible to a test that only checks it fires",
+    from: "          AND status <> 'trialing'`;",
+    to: '          AND status IS NOT NULL`;',
+    expect: 'freezes the country once the gym is on a paid plan',
+  },
+  {
     id: 'O121',
     target: 'shared',
     why: "THE NEW PRIVILEGE LEAVES THE OWNER'S TEMPLATE, so every gym created from now on has an owner who cannot edit their own gym — the ship-dead failure migration `0014`'s backfill exists to prevent, arriving through the OTHER door",

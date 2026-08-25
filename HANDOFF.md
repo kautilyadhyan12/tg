@@ -1,6 +1,46 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: ADDENDUM, same day — KD FREEZES A GYM'S COUNTRY ONCE IT IS PAYING.
+      DECISIONS :19560. **SUPERSEDES the block below's "country is editable"
+      half; everything else in it stands.** Still no screen, so no smoke; T3
+      UNRUN and its prompt file is written.
+
+  1. **THE RULE: a gym's country freezes the day it goes on a PAID plan** — 409
+     `country_locked` for any gym on a subscription past `trialing`. Name, city
+     and time zone stay editable, and the test proves that on the SAME locked
+     gym: a route that refused a paying gym everything would be a different
+     product and nothing else could tell them apart.
+  2. **THE TRIAL IS NOT A LOCK, deliberately.** The gym trial is card-less
+     (:16548), so a trialing gym has paid nothing — freezing there traps a
+     signup typo at the moment before it starts to cost. Mutant **O124** exists
+     for exactly this direction: a lock has TWO failure modes and a test that
+     only checks it FIRES is satisfied by a door that is simply shut.
+  3. **THE PROCESS FAILURE IS MINE AND WILL RECUR IF IT IS NOT READ.** Kd said
+     "a gym should not be able to change the country" and I started coding it.
+     He stopped me: *"wait men i just said an opinion i need your recommendation
+     as well."* **I took an OPINION for a RULING** — :17765's failure mirrored
+     (that was a chat putting its own call in his mouth). Same defect both
+     times: not reading the ATTRIBUTION. **A preference stated mid-flow earns a
+     recommendation with evidence, not a diff.**
+  4. **THE PROVIDER FACTS WERE WEB-SEARCHED, NOT RECALLED (V5), and they moved
+     the ruling.** Stripe locks a customer's CURRENCY once invoiced but leaves
+     the ADDRESS editable; Paddle (:17366's route) refuses a COUNTRY change on a
+     live subscription outright. **Neither freezes from day one** — which is why
+     the lock is a condition and not a deleted field.
+  5. **The guard reads `subscriptions.status`, so Part 5 §3's machine must leave
+     `trialing` on first payment for it to bite.** Already what §3 requires;
+     written on the OWED line so the billing card knows it is depended on.
+
+MEASURED (final bytes, LOCAL Postgres): orgs.routes 117/117 · db.migration 10/10
+  · both in ONE invocation 127/127 · shared 51/51 · tsc exit 0 · eslint clean ·
+  sweep a stated SUBSET of 124: 13 RED, 0 ALIVE, 0 never ran.
+
+NEXT: unchanged — T3 in a FRESH chat (`t3-gym-details-r1-PROMPT.md`), then the
+  WEB half, which carries the SMOKE.
+```
+
+```
 TASK: CARD 1.1 SERVER HALF — a gym can fix its own name, city, country and time
       zone. DECISIONS :19366. Migration `0014`, one new route, 8 new mutants.
       **NOTHING TICKS: there is no screen, so no smoke; T3 is UNRUN.**
