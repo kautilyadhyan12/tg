@@ -4277,6 +4277,30 @@ file and is stated so nobody reads these as lower priority than they are.
 
 ### Running: the Strava-style line is free, the route SUGGESTIONS are not
 
+- [ ] 🔴 **THE "POPULAR ROUTES" FEATURE MUST BE REDESIGNED BEFORE A LINE OF IT IS
+      WRITTEN — it walks into two LIVE Strava patents that run to DECEMBER 2034
+      (DECISIONS :18128 §1.3, researched 2026-08-25 at Kd's direct request).**
+      **Read before touching `saved_routes`, before any route discovery or
+      suggestion surface, and before writing a running store listing.**
+      :16924 item 4 asks for *"routes used by other users"*. **Pooling many
+      users' GPS onto a base map to derive popular ways to go is what
+      US 9,297,651 and US 9,778,053 claim in terms** — the heatmap/preference-map
+      family **Strava sued Garmin over on 30 Sep 2025.** Both expire 9 Dec 2034.
+
+      | Do NOT build | Build instead |
+      |---|---|
+      | a map computed automatically from everyone's activity | a route a runner **deliberately publishes** |
+      | "popular routes near you", derived | "routes people chose to share", a list |
+
+      **User-published content is not a derived preference map — and this ALSO
+      answers the 🔴 home-address line below. One change closes both.**
+      **SECOND STANDING RULE from the same research: never build "compare your
+      time on this stretch of road against everyone else"** — that is Strava's
+      segments patent **US 9,116,922, alive to 31 March 2031**.
+      **Territory capture is CLEAR and needs no change** (Microsoft's own
+      "Surround-and-Capture" patent lapsed; prior art to 2010) — :18128 §1.4.
+      **Not legal advice and Kd was told so; a freedom-to-operate opinion
+      (~$2–5k) is owed BEFORE US scale, not now.**
 - [ ] ⚪ **GPS TRACK-AND-DRAW — Kd's Strava-style blue line (DECISIONS :16548).**
       **The point a chat must not lose: this costs NOTHING, ever.** The line is
       the device's own GPS; no external call, no allowance, no bill. It is the
@@ -4359,6 +4383,27 @@ file and is stated so nobody reads these as lower priority than they are.
       videos is ten times 20 thirty-second ones.
       **Do not launch video without report-and-remove** — same surface as
       route sharing.
+- [ ] 🟡 **SHARING A STATS PHOTO TO THE GYM — RULED 2026-08-25 (DECISIONS
+      :18128 §4). THE LIFETIME IS THE ONE PART THAT IS NOT RULED — see the ❓
+      line; do not pick one.** A photo carrying the stats overlay and the gym's
+      logo can be shared **to the gym the member belongs to**. A section in the
+      **member dashboard** shows the shared photos. **Likes and reactions —
+      NO COMMENTS** (Kd, explicit). **Gym staff and owners get a similar
+      dashboard with different stats.** Users are **explicitly told** the photos
+      are deleted and told to download them.
+      **This is the surface `GYM-GLOBAL SHARING NEEDS REPORT-AND-REMOVE` below
+      was written for** — people post pictures of their bodies. Ship them
+      together. Part 3 §2.4's promise still binds: the gym sees this because the
+      member chose to share it, and nothing else.
+- [ ] 🟡 **APP-STORE BILLING COMPLIANCE — the risk that arrives BEFORE any patent
+      (DECISIONS :18128 §1.6).** **Read before writing any paywall or price
+      screen.** **Apple PULLED Cal AI in April 2026** — 15M downloads, ~$50M ARR
+      — for **deceptive billing design**: the weekly price shown more prominently
+      than the amount actually charged, plus bypassing in-app purchase. Restored
+      after fixes. **Free to get right, expensive to get wrong:** show the real
+      amount and the real period with equal weight, and do not route around
+      in-app purchase where it is required. Sits beside :17366's Paddle ruling —
+      **Paddle is the WEB route; the stores have their own rules.**
 - [ ] 🟡 **THE PHOTO + STATS EDITOR — KD RULED THE FULL BUILD 2026-08-25
       (DECISIONS :17902), OVERRULING THE CHAT'S "SHIP ONLY THE STICKER".**
       **Read before building share cards, photo posting, or anything that puts a
@@ -6205,6 +6250,47 @@ file and is stated so nobody reads these as lower priority than they are.
 
 ### Member-side gym surface
 
+- [ ] 🟡 **THE PACT — THE ONE FEATURE IN THIS PRODUCT NOBODY ELSE HAS, RULED IN
+      FULL 2026-08-25 (DECISIONS :18128 §3).** Kd: *"excellent idea i like it"*.
+      **Read the whole of :18128 §3 before writing a line of it — this summary is
+      a pointer, not the design.** Strangers are paired; the pact lives only
+      while everyone in it keeps showing up.
+      **Ruled:** pair **or squad up to 4** · random **within a MUTUAL gender
+      preference** · gym members choose own-gym or worldwide · **under-18s barred
+      entirely** · **7/30/90 days, all three at launch** · survival rule is
+      **never 3 days without training** and is never voted on · **one save per
+      pact, two per squad** · the shared goal comes from **both ranking a top 3,
+      best overlap, SPIN WHEEL on a tie** and is a **BONUS that can never kill the
+      pact** · **no free text ever** — one-tap compliments only, **no daily cap**
+      (Kd struck the chat's limit) · each sees the other's stats but **no photos
+      until the end** · **reveal is automatic AND both are told on day one, which
+      is where the consent lives** · leaving early keeps anonymity forever ·
+      voting extends/ends (unanimous) and removes a quiet squad member
+      (majority), **never the survival rule** · **no match ⇒ say so honestly,
+      hold them in the queue, notify, invite a friend.**
+      **BUILD PAIRS FIRST** (chat recommendation): four matching people is far
+      harder to find than two. Block and report on every screen.
+- [ ] 🔴 **RUN ROUTES MUST NEVER BE VISIBLE INSIDE A PACT — raised by the chat
+      2026-08-25 (DECISIONS :18128 §3.3), NOT a Kd ruling, and it should not need
+      one.** **Read with the Pact line above, before implementing "each sees the
+      other's stats".** That phrase would otherwise include a run map, and
+      `apps/api/src/db/schema/geo.ts:2` calls GPS polylines *"the most sensitive
+      data in the app"*. **A route that starts at a front door is a home address —
+      handed to a stranger, by the one feature that deliberately pairs strangers
+      by gender.** **Numbers yes, maps never** — not during the pact, and
+      arguably not after a reveal either. 🔴 because it is the feature being safe
+      or not.
+- [ ] 🟡 **A GYM GETS A PROFILE PAGE, AND A MAP OF GYMS COMES LATER (Kd ruling
+      2026-08-25, DECISIONS :18128 §2.3).** The page shows the facilities the gym
+      offers, visible to its members. **The MAP is explicitly deferred to "when
+      more gyms join"** — it is worthless at 20 gyms, the same reasoning that
+      puts nearby-gyms/day-passes last.
+- [ ] ⚪ **TWO SMALL IDEAS KD KEPT 2026-08-25 (DECISIONS :18128 §2.5).**
+      **(a) A live "X people are training right now" count** — no names, no
+      ranking, no competition; works at any size and costs almost nothing.
+      **(b) THE COMEBACK** — every app punishes a return by showing a lost
+      streak, so people never come back. Yours welcomes them instead. Churn is
+      the biggest enemy and nobody has tried being kind about it.
 - [ ] 🟡 **GYM BRANDING ON THE MEMBER'S HOME — "Welcome to {gym}" plus their
       logo.** Nearly free: the gym logo is already part of console settings
       (9 spec hits in Part 3). High perceived value for the cost.
@@ -6340,6 +6426,32 @@ file and is stated so nobody reads these as lower priority than they are.
 
 ## Open questions awaiting a Kd ruling (nothing built on these)
 
+- [ ] ❓ **HOW LONG DOES A PHOTO SHARED TO THE GYM LIVE? KD SAID ONE WEEK ON
+      2026-08-25 AND RULED ONE YEAR ON 2026-08-24. THE OLDER RULING STANDS UNTIL
+      HE SPEAKS (DECISIONS :18128 §4).** **Read before building the gym photo
+      feed or any retention sweep touching it — do NOT pick a lifetime.**
+      :17366's four-clock table reads **"A POSTED photo (stats burned in) —
+      1 year — warn at 11 months with a one-tap save"**, and **its recorded
+      reason is exactly this case**: *"One row and one lifetime would make a POST
+      vanish at day 7, and the user would read that as you deleting their post."*
+      He was shown the conflict and closed the laptop before answering.
+      **THE RECOMMENDATION ON THE TABLE, UNANSWERED: one week in the GYM FEED,
+      one year in the poster's OWN history** — the feed stays fresh, which is what
+      he asked for, and nobody's own picture is taken from them, which is what
+      :17366 protects. **Two clocks, which is :17366's own instrument.**
+      Money is NOT an argument here: :17366 measured posted photos at **$4.66/mo
+      forever at 500 gyms**.
+- [ ] ❓ **THE PACT NAMES ONLY TWO GENDERS AND THE DATABASE HOLDS FOUR
+      (DECISIONS :18128 §3.2).** Verified 2026-08-25:
+      `apps/api/src/db/schema/identity.ts:127,144` — `gender` is **nullable** with
+      CHECK `IN ('male','female','other','prefer_not_to_say')`. Kd's pairing
+      design names male and female only, so **a user who answered `other`,
+      `prefer_not_to_say`, or skipped it can neither state a preference nor be
+      preferred, and silently cannot use the feature.**
+      **Chat recommendation, unruled: they match with anyone who is open to
+      anyone. Do not lock a user out of a feature over a profile field.**
+      Also note the chat CLAIMED gender was not collected, and **Kd corrected it**
+      — V4: read the schema before asserting what the app stores.
 - [ ] ❓ **GYM BANDS 3–5 (USD) AFTER KD RAISED BANDS 1–2 — HE NAMED TWO NUMBERS
       AND ONLY TWO (DECISIONS :17902, 2026-08-25).** $30 → **$35** and $40 →
       **$50**; $69 / $99 / $129 were not mentioned and **are unchanged until he

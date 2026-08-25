@@ -1,6 +1,69 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: IP RESEARCH AT KD'S REQUEST + "THE PACT" DESIGNED IN FULL. No code.
+      DECISIONS :18128. Same session as :17902; read both.
+
+THE SEVEN THINGS A NEXT CHAT WILL OTHERWISE GET WRONG
+  1. **ONE FEATURE MUST CHANGE AND IT IS NOT OPTIONAL.** :16924's "routes used
+     by other users" is a POOLED preference map — exactly what Strava's
+     US 9,297,651 / US 9,778,053 claim, alive to **Dec 2034**, and the patents
+     it sued Garmin over. Build DELIBERATELY PUBLISHED routes instead. That
+     also closes the 🔴 home-address privacy line: one change, two problems.
+     Never build "compare your time on this stretch against everyone" either
+     (segments, US 9,116,922, to Mar 2031). 🔴 OWED line.
+  2. **TERRITORY CAPTURE IS CLEAR — do not re-open it.** Microsoft's own
+     "Surround-and-Capture" patent is EXPIRED for unpaid fees, QONQR's too,
+     prior art runs to Turf (2010) and Run An Empire (2015), and three apps
+     ship the mechanic unsued today. Copyright never covered mechanics (PUBG
+     sued Epic over battle royale and dropped it).
+  3. **THE CAMERA CANNOT WORK ON A BUSY GYM FLOOR. This is KD'S finding and it
+     reshapes the product** — the camera is a HOME feature, gym users log by
+     hand. Every camera-dependent gym idea is dead on arrival. It killed four
+     of my own suggestions in one message.
+  4. **EIGHT IDEAS ARE STRUCK. DO NOT RE-PROPOSE ANY OF THEM**: verified
+     "witnessed" leaderboard · rep-where-you-broke · gym-vs-gym city league ·
+     machine QR stickers · body map · off-peak shifting · anonymous in-gym
+     challenges · exercises-as-territory. **His generalisable reason: a public
+     ranking of GYMS is unfair, undecidable, and would make owners leave.**
+  5. **THE PACT IS THE ONE THAT SURVIVED AND IT IS FULLY DESIGNED** (:18128 §3).
+     Do not redesign it. Two things in it are NOT ruled and are flagged: run
+     routes must never be visible inside a pact (🔴, mine), and his design names
+     two genders where the database holds four (❓).
+  6. **I WAS WRONG ABOUT GENDER AND HE CORRECTED ME.** I said the app doesn't
+     collect it; `identity.ts:127,144` says it does, nullable, four values.
+     Second time this session that asserting-before-reading cost me (the first
+     was the seat cap). **Read the schema before claiming what the app stores.**
+  7. **THE PHOTO LIFETIME IS A LIVE CONFLICT — DO NOT PICK ONE.** He said ONE
+     WEEK today; he ruled ONE YEAR on 08-24, and :17366 records the reason
+     (a post vanishing at day 7 reads as you deleting it). He closed the laptop
+     before answering. **Older ruling stands.** ❓ OWED line carries the
+     recommendation: one week in the FEED, one year in the poster's own history.
+
+FILES CHANGED (4, all records)
+  docs  DECISIONS.md (:18128, new) · DECISIONS-INDEX.md (+1 line, §1) ·
+        OWED.md (+9 lines: 🔴 routes patent · 🔴 pact run-routes · 🟡 The Pact ·
+        🟡 gym profile+map · 🟡 gym photo feed · 🟡 app-store billing ·
+        ⚪ live count + comeback · 2× ❓) · HANDOFF.md
+
+MEASURED / SOURCED THIS SESSION
+  Patents read on Google Patents 2026-08-25 with assignee, expiry and status:
+  Strava 9116922 / 9297651 / 9778053 / 8718927 · Adidas 12239882 · Microsoft
+  8550909 (EXPIRED) · QONQR 9861889 (EXPIRED) · GTC Poplio 8795084 (active,
+  different mechanic) · Fitly 9349297 (EXPIRED). Prior art dates, the Garmin
+  suit and dismissal, the Cal AI App Store removal, and the ~$600k median
+  litigation cost are all in :18128 §1 with sources. DO NOT re-derive.
+  Gender schema verified by grep, after Kd corrected me.
+
+DEVIATION / SPEC GAP: none. Everything new here is an ADDITION the spec set does
+  not contemplate (The Pact, the gym photo feed, gym profiles) — treat it as
+  Kd-ruled product, not as a spec conflict.
+
+NEXT: nothing in flight. The 🔴 seed line from :17902 is still the cheapest real
+  work and still blocks every billing/trial/seat-cap card.
+```
+
+```
 TASK: KD RULINGS ONLY — no code. Prices, band boundaries, the FULL photo editor,
       and the trial's shape. DECISIONS :17902. Records commit; nothing built.
 

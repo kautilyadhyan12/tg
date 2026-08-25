@@ -42,6 +42,59 @@ mid-file: re-derive them with
 - **:1110** — 2026-07-26 — the hardcoded 100-XP-per-level curve must NEVER be
   copied into a client. The server sends `xpInLevel`/`xpForNext`/`progressPct`;
   clients render, never compute. (`xp.level + 1` survives as a label only.)
+- **:18128** — 2026-08-25 — **THE IP RESEARCH KD ASKED FOR AS HIS LAWYER, AND
+  "THE PACT" — the first feature in this product nobody else has.** Same session
+  as :17902. **Read before ANY running feature, before the photo/stats editor,
+  before a store listing, before ANY social or pairing feature, and before
+  proposing a "unique idea" — this session burned EIGHT and kept one.**
+  **COPYRIGHT IS NOT THE RISK: mechanics are unprotectable (PUBG sued Epic over
+  battle royale and DROPPED it). PATENTS ARE.** **STRAVA holds segments (US
+  9,116,922, to Mar 2031) and the heatmap/preference-map family (US 9,297,651 +
+  US 9,778,053, to Dec 2034) — the ones it sued Garmin over.** **THEREFORE ONE
+  FEATURE MUST CHANGE: :16924's "routes used by other users" is a POOLED
+  preference map and is what those two claim — build DELIBERATELY PUBLISHED
+  routes instead, which also answers the 🔴 home-address privacy line. One
+  change, two problems.** Never build "compare your time on this stretch against
+  everyone" either. **TERRITORY CAPTURE IS CLEAR AND THE EVIDENCE IS STRONG:
+  Microsoft's US 8,550,909 is literally "Surround-and-Capture" and is EXPIRED for
+  unpaid fees; QONQR's US 9,861,889 likewise; prior art runs to Turf (Sweden,
+  2010) and Run An Empire (2015), thirteen years before INTVL; three apps ship
+  the mechanic unsued today.** Meal scanning is crowded and safe (the closest
+  patent needs a weight-sensing food container and has lapsed; Cal AI has none).
+  **THE RISK THAT ACTUALLY ARRIVES FIRST IS APPLE, NOT A PATENT — Cal AI was
+  PULLED in April 2026 for deceptive billing design** — and proportion: defending
+  a patent suit runs ~$600k **for the plaintiff too**. **KD RULINGS: territory is
+  an INDIVIDUAL perk, gym-team territory DROPPED · the gym's name appears in
+  WORKOUT stats and NEVER in running stats · a gym gets a PROFILE page of its
+  facilities, a gym MAP later · the per-workout "card" is DROPPED (the stats
+  overlay is enough) · the live "training right now" count and THE COMEBACK are
+  kept.** **HIS OWN FINDING RESHAPES THE PRODUCT: THE CAMERA CANNOT WORK ON A
+  BUSY GYM FLOOR — it is a HOME feature, gym users log by hand, and every
+  camera-dependent gym idea is dead on arrival.** **EIGHT IDEAS ARE STRUCK AND
+  MUST NOT BE RE-PROPOSED** (verified "witnessed" leaderboard · rep-where-you-
+  broke · gym-vs-gym league · machine QR stickers · body map · off-peak shifting ·
+  anonymous in-gym challenges · exercises-as-territory) — **a public ranking of
+  GYMS is unfair, undecidable, and would make owners leave.** **THE PACT, designed
+  in full:** pair or squad of 4 · random within a **mutual** gender preference ·
+  gym members pick own-gym or worldwide · **under-18s barred entirely** · 7/30/90
+  days all at launch · **the survival rule is "never 3 days without training" and
+  is never voted on** · one save per pact, two per squad · the shared goal is
+  chosen by **ranking top 3, best overlap, SPIN WHEEL on a tie**, and is a BONUS
+  that can never kill the pact · **no free text ever**, only one-tap compliments
+  with **no daily cap (Kd struck it)** · each sees all the other's stats but no
+  photos until the end · **the reveal is automatic AND both are told on day one,
+  which is where the consent lives** · leaving early keeps anonymity forever.
+  **THE CHAT WAS WRONG ABOUT GENDER AND KD CORRECTED IT: it IS collected**
+  (`identity.ts:127,144`, nullable, `male|female|other|prefer_not_to_say`) —
+  **and that opens an UNRULED gap, since his design names only two of the four.**
+  **UNRULED AND URGENT: run routes must NEVER be visible inside a pact** — "all
+  their stats" would hand a stranger a home address, in the one feature that
+  pairs strangers by gender. **PHOTO SHARING TO THE GYM IS RULED** (feed in the
+  member dashboard, reactions but **NO comments**, staff/owner dashboard, users
+  told to download) **BUT ITS LIFETIME COLLIDES WITH :17366 — he said ONE WEEK
+  today and ruled ONE YEAR in July, and closed the laptop before answering, so
+  the OLDER RULING STANDS and neither may be built.** ❓ line; the standing
+  recommendation is one week in the FEED, one year in the owner's own history.
 - **:17902** — 2026-08-25 — **KD RAISES GYM BANDS 1–2 TO $35/$50, ROUNDS EVERY
   BAND BOUNDARY (0–300 / 301–500 / 501–1000 / 1001–1500 / 1501–2100), RULES THE
   FULL PHOTO EDITOR IN, AND FIXES THE TRIAL'S SHAPE.** Supersedes :17366's

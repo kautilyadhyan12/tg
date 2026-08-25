@@ -18124,3 +18124,231 @@ lines.**
 the spec's 7-day figure (Part 5 §6.1, Part 3 §4.0 step 2) is superseded. Quoted
 here because this entry's §2 reproduces that spec line verbatim and a chat could
 otherwise carry the 7 forward.
+
+## THE IP RESEARCH KD ASKED FOR AS HIS LAWYER, AND "THE PACT" — the first feature in this product nobody else has (2026-08-25, same session as :17902)
+
+**Read before building ANY running feature · before the photo/stats editor ·
+before writing a store listing · before ANY social or pairing feature · and
+before proposing a "unique idea" of your own — this session burned eight and
+kept one.** Continues :17902. No code changed; records only.
+
+### 0 · THE FRAME KD SET, AND IT BINDS
+
+*"i am a solo developer i dont have lawer , you are my lawyer … i can not afford
+lawsuit men i am poor niether can afford lawyer."* **He was told once, plainly,
+that a chat cannot be his lawyer and cannot carry liability — and then given the
+research anyway, because the research is most of what a lawyer would charge for.
+Do the same: never refuse him the work, never pretend the work is a legal
+opinion.** Everything in §1 was read from sources on 2026-08-25 and is cited so
+he never pays anyone to find it twice.
+
+### 1 · THE PATENT RESEARCH — what is dead, what is alive, and the one feature that must change
+
+**1.1 · COPYRIGHT IS NOT THE RISK AND NEVER WAS.** Copyright protects the
+expression — code, art, text, icons — never the idea, the feature or the game
+mechanic. **PUBG sued Epic in Seoul (Jan 2018) claiming Fortnite copied battle
+royale and DROPPED IT**; the commentary at the time — *trying to copyright a
+game mode is like trying to copyright Capture the Flag* — is the whole answer.
+**"It is their main selling point" is not a legal right.**
+
+**1.2 · STRAVA — a SMALL portfolio (11 filed, 10 granted), three that matter:**
+
+| Patent | Covers | Expires | Status |
+|---|---|---|---|
+| **US 9,116,922** | **Segments** — define a stretch, rank everyone's efforts on it | **31 Mar 2031** | Active |
+| **US 9,297,651** | **Heatmaps / preference map** — pool many users' GPS onto a base map's edges | **9 Dec 2034** | Active |
+| **US 9,778,053** | same family, broader continuation | **9 Dec 2034** | Active |
+| US 8,718,927 | GPS data repair | 7 Mar 2033 | Active |
+
+These are what Strava sued **Garmin** over on 30 Sep 2025, dismissed voluntarily
+21 days later **without prejudice** (:17902 §5 has the suit; this entry has the
+patents). Also alive: **Adidas AG's** location-aware fitness monitoring family
+(US 12,239,882, priority 2008, **expires 29 Sep 2029**).
+
+**1.3 · THE ONE FEATURE THAT MUST CHANGE — the popular-routes database.**
+:16924 item 4's *"routes used by other users"* is **pooling many users' GPS onto
+a map to derive popular ways to go**, which is what US 9,297,651 / US 9,778,053
+claim in terms, and they run to **December 2034**.
+**THE FIX, and it is small and BETTER:**
+
+| Do NOT build | Build instead |
+|---|---|
+| A map derived automatically from everyone's activity | A route a runner **deliberately publishes** |
+| "Popular routes near you", computed | "Routes people chose to share", a list |
+
+**User-published content is not a derived preference map.** It also answers the
+🔴 privacy line at `OWED.md` (a route starting at a front door is a home
+address) — **one change, two problems.** **Second standing rule from the same
+patent: never build "compare your time on this stretch of road against
+everyone"** — that is the segments patent, alive to March 2031.
+
+**1.4 · TERRITORY CAPTURE IS CLEAR, AND THE EVIDENCE IS STRONGER THAN EXPECTED.**
+
+| Patent | What | Status |
+|---|---|---|
+| **Microsoft US 8,550,909** | literally *"Surround-and-Capture"* — traverse a geometric boundary, capture the enclosed territory, opponents recapture by penetrating it | **EXPIRED — fee related** |
+| **QONQR US 9,861,889** | control real-world zones by GPS in a multiplayer game | **EXPIRED — fee related** |
+| GTC Poplio US 8,795,084 | territory control **by transmitting a location CODE** from a place | Active to Dec 2030 — **different mechanic, we use no codes** |
+
+**Microsoft patented almost exactly this mechanic and let it lapse.**
+**Prior art buries any later claim: Turf (Andrimon AB, Sweden) shipped GPS
+territory conquest in 2010; Run An Empire Kickstarted 2014 and launched 2015
+with territory "unclaimed or captured by others" taken by walking or running;
+INTVL arrived ~2023 — thirteen years late.** And **three apps ship this mechanic
+today unsued: RunStrict (hex tiles, 1,203 runners, 8 cities, season 3),
+TerraRun, and Capture (captureterritory.com)**, both of the latter using
+closed-loop polygons.
+**STATED LIMIT, honestly, to Kd: this searched GRANTED, PUBLISHED patents.
+Applications filed in roughly the last 18 months may not be public.** Given 2010
+prior art such an application is very unlikely to survive, but absence in this
+search is not proof of absence.
+
+**1.5 · MEAL PHOTO SCANNING IS CROWDED, WHICH MAKES IT SAFE.** The closest
+granted patent found — **Fitly US 9,349,297** — requires **a partitioned food
+container with weight sensors** as a structural reference, and is **EXPIRED for
+unpaid fees**. **No Cal AI patents found at all.**
+
+**1.6 · THE RISK THAT ACTUALLY ARRIVES FIRST IS NOT A PATENT — IT IS APPLE.**
+**In April 2026 Apple pulled Cal AI** — 15M downloads, ~$50M ARR — for
+**deceptive billing design**: weekly price shown more prominently than the
+amount actually billed, plus bypassing in-app purchase. It was restored after
+fixes. **Store rules will cost Kd money long before any patent does**, and this
+is free to get right: show the real price and the real period, plainly.
+
+**1.7 · PROPORTION, because he is frightened and the fear is out of scale.**
+Median cost of defending a patent suit is **~$600,000 — for the plaintiff too.**
+Nobody spends that on an app with 20 gyms. Strava sued **Garmin**, a
+multi-billion-dollar rival, and folded in three weeks. **The exposure begins when
+he is big, and by then he can afford the lawyer he cannot afford now.**
+
+**1.8 · THE FREE RULES HE CAN FOLLOW WITHOUT ANY LAWYER.** Never copy files
+(icons, screenshots, text, code, screen layouts) · **never use a competitor's
+name anywhere, store keywords included** · change the routes feature per 1.3 ·
+**keep the git history — it is dated, granular proof of independent creation and
+better evidence than most companies have** · search patents.google.com himself
+before building anything clever · buy a ~$2,000–5,000 freedom-to-operate opinion
+**when there is revenue**, before US scale, not now.
+
+### 2 · KD RULINGS ON THE PRODUCT
+
+**2.1 · TERRITORY CAPTURE IS AN INDIVIDUAL PERK. GYM-TEAM TERRITORY IS DROPPED**
+— his reversal of the chat's own suggestion, made one message after liking it:
+*"lets drop it i dont like it that is perk gym member gets indivisuly not
+representing gym"*.
+**2.2 · THE GYM'S NAME APPEARS IN WORKOUT STATS AND NEVER IN RUNNING STATS.**
+**2.3 · A GYM GETS A PROFILE PAGE** showing the facilities it offers, visible to
+its members; **a MAP of gyms comes later, when enough gyms have joined.**
+**2.4 · THE WORKOUT "CARD" IS DROPPED** — no generated artwork per session.
+*"i think card not needed just stats enough"*: the stats overlay from :17902's
+editor is the whole mechanism.
+**2.5 · KEPT from the idea round: the live "X people are training right now"
+count, and THE COMEBACK** (celebrate a return instead of punishing a lost
+streak).
+
+**2.6 · KD'S OWN FINDING, AND IT IS THE MOST IMPORTANT THING HE SAID ALL DAY:
+THE CAMERA DOES NOT WORK ON A BUSY GYM FLOOR.** *"camera tracking is feature
+that can not even work in gyms with multiople people user have to log manully
+anyway"*. No space, no way to prop a phone, strangers in frame. **CONSEQUENCE
+THAT RESHAPES THE PRODUCT: the camera is a HOME feature; in a gym people log by
+hand, and the gym must earn its keep some other way.** Every idea the chat
+offered before he said this assumed a working gym camera and was worthless.
+**A chat proposing a camera-dependent gym feature is ignoring a Kd ruling.**
+
+**2.7 · EIGHT IDEAS WERE PUT TO HIM AND KILLED. DO NOT RE-PROPOSE THEM:**
+the "witnessed" verified leaderboard · "the rep where you broke" · gym-vs-gym
+city league · QR/NFC stickers on gym machines · the body map that shows
+neglected muscles · off-peak crowd-shifting · "the room is playing" (anonymous
+live challenges inside a gym) · "hold the exercise" (58 exercises as contested
+territory). **His reasons, recorded because they generalise: a public ranking of
+GYMS is unfair, undecidable, and would make owners leave; and the camera one
+above.** **Recorded so the next chat spends its imagination somewhere new.**
+
+### 3 · THE PACT — the feature that survived, designed in full
+
+*"excellent idea i like it"*. A pact between strangers that lives only while
+everyone in it keeps showing up.
+
+| Element | Ruled |
+|---|---|
+| **Size** | a pair, **or a squad up to 4** |
+| **Who you get** | **random**, inside a mutual gender preference |
+| **Gender preference** | **must be MUTUAL** — A(m) wants f, B(f) wants m ⇒ pair. m-m and f-f allowed too |
+| **Gym members choose** | a stranger **in their own gym** OR **worldwide** |
+| **Non-gym members** | **CHAT ASSUMPTION, not ruled**: worldwide only — they have no gym to choose |
+| **Under 18** | **no access at all**; the option does not appear |
+| **Duration** | **7 / 30 / 90 days, all three AT LAUNCH** (Kd overruled the chat's "30 only") |
+| **The survival rule** | **never go more than 3 DAYS without training.** The app sets this; it is not negotiable and not voted on |
+| **The save** | **one per pact**; a squad gets **two**. Anyone may spend one to cover somebody about to break |
+| **What they chase** | **both rank their top 3 from a fixed list; the app takes the best overlap.** No overlap ⇒ **A SPIN WHEEL both watch land** (Kd: *"it will be like a spinn"*) |
+| **Status of that goal** | a **BONUS, never the survival condition** — a goal too hard for the weaker member must not be able to kill the pact |
+| **Talking** | **NO free text, ever.** A fixed list of one-tap **compliments**, positive only |
+| **Compliment limit** | **NONE — Kd struck the chat's daily cap** (*"should not limit"*) |
+| **What each sees** | **all of the other's stats and activity** — EXCEPT profile photo and any photo-with-stats, which appear only at the end |
+| **The reveal** | at the end of the chosen duration, **and both are told on DAY ONE that it will happen** |
+| **Leaving** | any time before the end: streak lost, **anonymity kept forever** |
+| **Voting** | **extend or end** (everyone must agree) · **remove a squad member who went quiet** (majority) · **a weekly focus** (bonus only). **Never on the survival rule.** For a PAIR there is no majority, so a disagreement goes to the spin, shown openly |
+| **No match found** | Kd's answer, and it is better than the chat's design change: **say so honestly** — new app, few users — **keep them in the queue, notify on a match, invite a friend** |
+
+**3.1 · WHY "TOLD ON DAY ONE" IS THE SAFETY MECHANISM, not a nicety.** The
+reveal is automatic on completion (Kd), which is only safe because **consent is
+given at the START**: knowing that finishing means being seen makes finishing
+the act of consent, and the exit before the end is the refusal. Copy exists in
+the chat log: *"Finish 30 days and you'll both see each other's name and photo.
+Stop before then and you stay strangers forever."* — **which is simultaneously
+the warning and the reason to finish.**
+
+**3.2 · GENDER IS ALREADY COLLECTED — the chat claimed otherwise and was WRONG,
+corrected by Kd, then verified.** `apps/api/src/db/schema/identity.ts:127,144`:
+`user_fitness_profiles.gender`, **nullable**, CHECK `IN ('male','female','other',
+'prefer_not_to_say')`. **THE GAP THIS OPENS AND THAT IS NOT RULED: Kd's design
+names only male and female.** Someone who answered `other`, `prefer_not_to_say`
+or left it null **cannot state a preference and cannot be preferred.**
+**Chat recommendation, unruled: they are matched with anyone who is open to
+anyone — do NOT lock a user out of a feature over a profile field.**
+
+**3.3 · THE CHAT'S CATCH THAT IS NOT YET RULED AND SHOULD BE READ AS URGENT:
+RUN ROUTES MUST NEVER BE VISIBLE INSIDE A PACT.** "All their stats" (3's table)
+would otherwise include a run map, and `apps/api/src/db/schema/geo.ts:2` calls
+GPS polylines *"the most sensitive data in the app"* — **a route starting at a
+front door is a stranger being handed a home address, by a feature that
+deliberately pairs strangers by gender.** **Numbers yes, maps never** — not
+during, and arguably not after a reveal.
+
+**3.4 · UNRULED CHAT RECOMMENDATIONS on The Pact:** let a person accept MORE
+THAN ONE duration (*"30 or 90, either is fine"*) so three durations do not
+fracture a small pool · **launch PAIRS first and open SQUADS when the user base
+can fill them** (4 matching people is far harder than 2) · block and report on
+every screen.
+
+**3.5 · THE HONEST NOTE THE CHAT PUT TO HIM AND HE DID NOT DISPUTE:** mutual
+gender preference + a reveal + messaging **is a dating mechanic**, and some
+people will use it that way. He had already closed the worst of it by barring
+under-18s.
+
+### 4 · PHOTO SHARING TO THE GYM — ruled, and it COLLIDES with :17366
+
+**RULED:** a photo carrying the stats overlay and the gym's logo can be **shared
+to the gym the member belongs to** · **a section in the member dashboard shows
+the shared photos** · **likes and reactions, but NO COMMENTS** · **gym staff and
+owners get a similar dashboard with different stats** · **users are explicitly
+told the photos are deleted and told to download them.**
+
+**⚠ THE COLLISION, UNRESOLVED — KD SAID "ONE WEEK" TODAY; HE RULED "ONE YEAR" AT
+:17366.** That entry's four-clock table reads **"A POSTED photo (stats burned
+in) — 1 year — warn at 11 months with a one-tap save"**, and its recorded reason
+is exactly this case: *"One row and one lifetime would make a POST vanish at day
+7, and the user would read that as you deleting their post."*
+**The chat put the conflict to him and he closed the laptop before answering, so
+NOTHING IS SETTLED and the older ruling still stands until he speaks.**
+**The chat's recommendation, on the table and unanswered: ONE WEEK IN THE GYM
+FEED, ONE YEAR IN THE OWNER'S OWN HISTORY** — the feed stays fresh, which is
+what he wants, and nobody's own picture is taken from them, which is what
+:17366 protects. **Two clocks again, which is that entry's own instrument.**
+❓ `OWED.md` line; **do not build either lifetime until he rules.**
+
+### 5 · WHAT A CHAT MUST NOT DO WITH THIS ENTRY
+
+Do not re-propose §2.7's eight ideas. Do not build a camera-dependent gym
+feature (§2.6). Do not build the pooled popular-routes map (§1.3). Do not pick a
+photo lifetime (§4). Do not treat §1 as legal advice or repeat it to Kd as
+though it were.
