@@ -127,9 +127,37 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
-- **:19129** — 2026-08-25 — **KD CAPS EVERY GYM TRIAL AT 300 MEMBERS — and his
-  own challenge to the cost number finds THE COACH ALLOWANCE WAS NEVER PRICED
-  INTO ANY BAND.** **SUPERSEDES :17902 §1d in part.** **Read before building the
+- **:19256** — 2026-08-26 — **CORRECTION TO :19129 — ITS COST ANALYSIS PRICED A
+  FEATURE KD HAD ALREADY KILLED.** **READ THIS BEFORE :19129.** The AI chat coach
+  was ruled DROPPED 2026-08-18 (:9604 §5, *"OFF, NOT DELETED"*) and confirmed
+  2026-08-24 (:16606 §9); :19129 §2 priced it anyway and declared every band
+  underwater. **§2's tables are VOID; §1 (the trial) and §3 (the breaker) stand.**
+  **Nothing was wrong with the documentation — it says so in SIX places across
+  four files**, and :9604 §5 even names *"the per-question Groq bill"* as what
+  retires. **THE INSTRUMENT FAILURE IS THE REUSABLE PART: the grounding rule was
+  obeyed** — §1 and §2 of this index read IN FULL — **and §4 was GREPPED for
+  `trial|seat cap|member count|300|band`. The ruling is in §4 and contains none
+  of those words. A grep is a hypothesis about vocabulary.** Worse: the chat had
+  read `seed.ts`'s live `coach: {day, 30}` and treated it as evidence the feature
+  existed — **but "OFF, NOT DELETED" leaves every seed value in place by design,
+  so the seed answers "30/day" forever.** **STANDING: before pricing any feature,
+  grep its NAME plus drop/struck/off — never the cost vocabulary.** Also: Kd's
+  *"what is this? a member also gets 30 coach messages a day"* was incredulity at
+  a dropped feature being billed, and **the chat explained what a chatbot is to
+  the person who designed the product** — *"are you dumb or blind"*. **A question
+  that sounds naive from a domain owner is a challenge to your premise.**
+  **REAL COSTS, coach removed:** scans only — $0.255/member/month on today's Qwen
+  constants, $0.024 after the Gemini swap. **The ratified book is correct only on
+  the far side of that swap, which is NOT BUILT** (`OWED.md:4225`): at the
+  ceiling on today's code, band 1 is $76.50 against $35. **THE ONE GENUINE
+  DEFECT IS IN THE CODE: the coach is ruled off and still WIRED ON eight days
+  later** — `apps/web/src/App.jsx:23,122` and `apps/api/src/app.ts:24`.
+- **:19129** — 2026-08-25 — **KD CAPS EVERY GYM TRIAL AT 300 MEMBERS.**
+  ⚠️ **ITS COACH COST ANALYSIS IS VOID — READ :19256 FIRST.** The trial ruling
+  below is unaffected; every figure about the coach is not.
+  ~~and his own challenge to the cost number finds THE COACH ALLOWANCE WAS NEVER
+  PRICED INTO ANY BAND~~ **— STRUCK: the coach was already dropped (:9604 §5).**
+  **SUPERSEDES :17902 §1d in part.** **Read before building the
   trial, the onboarding wizard or the seat cap · before quoting any gym margin ·
   and before setting any per-member allowance.**
   **THE RULING: no plan choice at signup · EVERY gym trials at the SAME limit,
@@ -148,23 +176,23 @@ mid-file: re-derive them with
   member using every feature to the fullest … always need to think about the
   worst case"*. **The omission is the coach at 30/day**, which
   `gymMemberEntitlements` inherits untouched from the paid consumer tier.
-  **COMPUTED: $0.705/member/month today ($0.474 after the Gemini swap), of which
-  the coach is 64% / 95%.** A full gym at its cap, everyone maxing out: band 1
-  $211 against $35 · band 3 $705 against $69 · band 5 $1,481 against $129 —
-  **EVERY BAND UNDERWATER AT THE CEILING.** The scans-only figures at :17427
-  reproduce exactly, which is how it was found: **every margin table on record
-  means SCANS when it says "AI cost".** **Kd already made this exact call once
-  for the other feature** (:17366 §2, 20 scans → 5, *"not finnacially possible"*)
-  and **nobody applied it to the more expensive one.** Realistic usage is fine
-  (~$26 against $69 at a 1,000-member gym) — **the exposure is a CEILING, not a
-  forecast**, but it is a ceiling Kd set himself and nothing stops a gym reaching
-  it. **§3 — THE SPEC'S BREAKER IS HALF-BUILT AND ENFORCES NOTHING:** v1 §9.3
+  ~~COMPUTED: $0.705/member/month today ($0.474 after the Gemini swap), of which
+  the coach is 64% / 95%. A full gym at its cap: band 1 $211 against $35 · band 3
+  $705 against $69 · band 5 $1,481 against $129 — EVERY BAND UNDERWATER AT THE
+  CEILING. Kd already made this exact call once for the other feature (:17366 §2,
+  20 scans → 5) and nobody applied it to the more expensive one.~~
+  **— ALL OF IT STRUCK BY :19256. THE COACH IS DROPPED; THERE IS NO SUCH BILL.**
+  Real figures, coach removed, are at :19256 §3. **§3 — THE SPEC'S BREAKER IS
+  HALF-BUILT AND ENFORCES NOTHING (this half STANDS, and is worse than written —
+  the one incrementing call site is inside the module being switched off):**
+  v1 §9.3
   promises an alert at ₹800/gym/month and soft-degrade past 3× the fee —
   *"bankruptcy-by-API-bill is now mathematically impossible"* — but
   `costs:gym:{id}:{month}` is incremented in **exactly one place**
   (`coach/service.ts:224`), **nothing reads it**, and scans and ORS never bump it
-  at all. **§4 — THE COACH ALLOWANCE WAS NOT CHANGED and 30/day STANDS**; he has
-  had no costed table of options and must not be treated as having declined one.
+  at all. ~~**§4 — THE COACH ALLOWANCE WAS NOT CHANGED and 30/day STANDS**; he
+  has had no costed table of options.~~ **— STRUCK by :19256: there is no
+  allowance to rule on, the feature is dropped.**
 - **:19016** — 2026-08-25 — **KD SETS THE BUILD ORDER FOR THE WHOLE PROJECT, AND
   ASKS FOR THE ADMIN PANEL THE SPEC HAS DESCRIBED ALL ALONG AND NOBODY EVER
   TRACKED.** **Read before proposing ANY next card, before sequencing work,

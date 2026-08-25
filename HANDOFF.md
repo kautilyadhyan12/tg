@@ -1,6 +1,32 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: CORRECTION — the previous block's cost analysis priced the AI chat coach,
+      WHICH KD DROPPED ON 2026-08-18. DECISIONS :19256. Records only, no code.
+
+  1. **READ :19256 BEFORE :19129.** The trial ruling (300 members, every gym)
+     STANDS. Every coach cost figure in :19129 §2 is VOID — struck in the index
+     and in OWED. The breaker finding (§3) stands and is worse than written.
+  2. **THE COACH IS DROPPED — :9604 §5, "OFF, NOT DELETED", confirmed :16606.**
+     It is in SIX places across four files. Nothing is wrong with the docs.
+  3. **THE TRAP THAT CAUGHT ME IS STILL ARMED.** `seed.ts` carries
+     `coach: {day, 30}` and always will — "OFF, NOT DELETED" leaves every seed
+     value in place BY DESIGN. **A live entitlement row is not evidence a
+     feature is live.** Before pricing ANY feature, grep its NAME plus
+     drop/struck/off — not the cost vocabulary. I grepped index §4 for
+     "trial|seat cap|member count|300|band"; the ruling is in §4 and has none of
+     those words. **A grep is a hypothesis about vocabulary.**
+  4. **THE COACH IS RULED OFF AND STILL WIRED ON** — `apps/web/src/App.jsx:23,122`
+     and `apps/api/src/app.ts:24`, eight days on. `OWED.md:4183`, unticked.
+     Whoever does it must ALSO move the `costs:gym` bump out of the coach module
+     (see item 1's breaker line) — remove the ROUTE, not the nav button.
+  5. **Kd asked "what is this? a member also gets 30 coach messages a day" and I
+     explained what a chatbot is to the man who designed it.** He was challenging
+     the premise. A naive-sounding question from the domain owner is not a
+     request for a definition.
+```
+
+```
 TASK: KD RE-RULED THE TRIAL — 300 members for every gym — and his challenge to
       the cost number found the coach allowance was never priced into any band.
       DECISIONS :19129. Records only, no code. **The next card is UNCHANGED:

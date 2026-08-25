@@ -4644,26 +4644,34 @@ file and is stated so nobody reads these as lower priority than they are.
       (the only other hits are a comment and `coach.chat.test.ts:281`), and
       **meal scans and ORS never bump it at all** — so even the counter that
       exists is incomplete. There is no alert and no soft-degrade.
+      **WORSE THAN FIRST WRITTEN (:19256 §5): that ONE incrementing call site is
+      inside the coach module, which is the module being switched off.** Once the
+      coach is unwired the counter is incremented **NOWHERE** and still read
+      nowhere — an instrument with no inputs and no readers. **Whoever unwires
+      the coach must move the `costs:gym` bump to nutrition and geo, or this line
+      silently gets worse rather than staying still.**
       🔴 because it is the instrument that BOUNDS the worst case whatever
       allowance is chosen, which makes it worth more than the allowance decision
       itself. Must be live before the first real gym starts a trial.
-- [ ] ❓ **THE GYM MEMBER'S COACH ALLOWANCE HAS NEVER BEEN PRICED — Kd has NOT
-      ruled and must not be recorded as having declined (DECISIONS :19129 §2).**
-      `gymMemberEntitlements` in `apps/api/src/db/seed.ts` spreads
-      `proEntitlements` changing `meal_scan` alone, so **`coach: {day, 30}` is
-      inherited untouched from the $10 consumer tier** and was never chosen for
-      the gym tier. **Computed: $0.705/member/month at the caps today ($0.474
-      after the Gemini swap), of which the coach is 64% / 95%** — a full gym at
-      its cap costs $211 (band 1, pays $35), $705 (band 3, pays $69), $1,481
-      (band 5, pays $129). **EVERY BAND IS UNDERWATER AT THE CEILING.**
-      **Every margin table on record means SCANS when it says "AI cost"** —
-      :17427's figures reproduce exactly, which is how the omission was found.
-      **Kd made this exact call once already for the other feature** (:17366 §2,
-      20 scans → 5, *"its beacuse not finnacially possible to give gym user 20
-      scans"*) and nobody applied it to the more expensive one.
-      Realistic usage is fine (~$26 against $69 at 1,000 members) — **the
-      exposure is a CEILING, not a forecast.** **OWED: bring Kd a costed table of
-      allowance options; he has not seen one.**
+- [x] ~~❓ **THE GYM MEMBER'S COACH ALLOWANCE HAS NEVER BEEN PRICED** — computed
+      $0.705/member/month, coach 64–95% of it, every band underwater at the
+      ceiling; owed Kd a costed table of allowance options.~~
+      **STRUCK 2026-08-26, NOT DONE — THE QUESTION NEVER EXISTED (DECISIONS
+      :19256).** The AI chat coach was ruled DROPPED on 2026-08-18 (:9604 §5,
+      *"OFF, NOT DELETED"*) and confirmed 2026-08-24 (:16606 §9). **There is no
+      allowance to rule on and no bill to price.** Kd caught it —
+      *"coach is fucking droped, is it fucking not mentioned in the fucking
+      documented"* — and **it was: in six places across four files.**
+      **KEPT AS A WARNING RATHER THAN DELETED, because the trap is still armed:**
+      `seed.ts` still carries `coach: {day, 30}` and always will, since
+      *"OFF, NOT DELETED"* leaves every seed value in place **by design**. **A
+      LIVE ENTITLEMENT ROW IS NOT EVIDENCE A FEATURE IS LIVE.** The next chat to
+      open the seed with a cost question will find the same number waiting.
+      **Before pricing any feature, grep its NAME plus drop/struck/off.**
+      The real per-member cost, coach removed, is at :19256 §3: scans only,
+      $0.255/month on today's Qwen constants and $0.024 after the Gemini swap —
+      **so the ratified book is right only on the far side of a swap that is not
+      built** (the unticked Gemini line above).
 - [ ] ⚪ **POSTGRES STAYS ON NEON — revisit above ~$150/month.** Measured
       2026-08-24: Neon Launch is **$32-91/mo** at 10,000 registered members and
       is the single largest infrastructure line ($62.82-$162.87 total, against

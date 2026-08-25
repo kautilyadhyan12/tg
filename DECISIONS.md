@@ -19252,3 +19252,113 @@ be treated as having declined one.** ❓ `OWED.md` line.
 
 Also untouched and still open from :17902 §6: bands 3–5 USD, the entire INR book,
 and the individual $10/$5 tier.
+
+## CORRECTION TO :19129 — ITS COST ANALYSIS PRICED A FEATURE KD HAD ALREADY KILLED, AND HE CAUGHT IT (2026-08-26)
+
+**:19129 §2's cost tables are VOID. Do not quote them. Do not quote the index
+line or the `OWED.md` line derived from them** — both are struck in this same
+commit. **§1 (the trial ruling) and §3 (the breaker) are UNAFFECTED and stand.**
+
+### 1 · WHAT HAPPENED
+
+:19129 §2 computed that the AI coach at 30 questions/day was 95% of a gym
+member's cost and put **every price band underwater** — $211 against $35 at band
+1, $705 against $69 at band 3. **The chat coach was ruled DROPPED on 2026-08-18
+and confirmed again on 2026-08-24. The bill does not exist.**
+
+Kd's words on being handed the analysis a second time: *"coach is fucking droped,
+is it fucking not mentioned in the fucking documented, is something fucking wrong
+with my documentation"*. **Nothing is wrong with the documentation. It says so in
+six places across four files:**
+
+| Where | What it says |
+|---|---|
+| `DECISIONS.md:9604` §5 | **"THE AI CHAT COACH IS SWITCHED OFF — OFF, NOT DELETED"** — *"i have decided to drop the chat bot from both web and mobile"* |
+| `DECISIONS.md:16606` §9 | *"The chat coach is dropped — confirms :9604 §5"* |
+| `DECISIONS.md:16806` | *"the chat coach dropped (:9604 §5)"* |
+| `OWED.md:4181` | heading: *"### The AI chat coach — switched OFF by Kd ruling"* |
+| `HANDOFF.md:739` | *"THE CHAT COACH WAS ALREADY RULED DROPPED on 2026-08-18 (:9604 §5)"* |
+| `DECISIONS-INDEX.md:1569` | *"the chat coach confirmed dropped"* |
+
+**:9604 §5 even names the retiring cost in its own words — *"WHAT RETIRES WITH
+IT: the per-question Groq bill"* — which is the exact bill :19129 spent two
+sections computing.**
+
+### 2 · HOW A GROUNDED CHAT MISSED IT — the instrument failure, which is the reusable part
+
+**The grounding rule was followed to the letter and still failed.** The chat read
+`DECISIONS-INDEX.md` §1 (standing rules) and §2 (open) IN FULL as CLAUDE.md
+requires, then **grepped §4 (web repoint cards) for `trial|seat cap|member
+count|300|band`** instead of reading it. **The ruling is in §4 and contains none
+of those words.** A grep is a hypothesis about vocabulary: it can only find what
+the searcher already suspects, and the searcher suspected a pricing question.
+
+**THE SHARPER HALF: the chat had the answer in its own hands twice and did not
+see it.** It read `seed.ts`'s `proEntitlements` — including `coach: {day, 30}` —
+and it read :17366 §2's entitlement discussion. **A live entitlement row is not
+evidence a feature is live**, because :9604 §5 is explicitly *"OFF, NOT DELETED"*:
+the ruling leaves every line of code and every seed value in place by design. So
+the seed will keep answering "30/day" to anyone who asks it, forever, and the
+seed is exactly where a cost question sends you.
+
+**STANDING LESSON: before pricing ANY feature, grep the record for that feature's
+NAME plus drop/struck/off — never for the cost vocabulary.** :2825's shape ("an
+index entry you skipped is not evidence of absence"), one level worse: here the
+index entry was not skipped, it was *searched with the wrong word*.
+
+**AND THE FAILURE WAS ESCALATING, NOT STATIC:** Kd asked *"what is this? a member
+also gets 30 coach messages a day"* — incredulity at a dropped feature being
+billed — and the chat **read it as a beginner asking what an AI coach is and
+explained the concept of a chatbot to the person who designed the product.** He
+answered *"are you dumb or blind"*. **A question that sounds naive from a domain
+owner is usually a challenge to your premise, not a request for a definition.**
+
+### 3 · WHAT THE COSTS ACTUALLY ARE, coach removed
+
+Scans are the only metered per-member cost left (ORS routes are priced `0n` in
+`geo/cost.ts`; the coach is off).
+
+| | per member / month |
+|---|---|
+| 5 scans/day at today's Qwen price ($0.0017, :347) | **$0.255** |
+| 5 scans/day after the Gemini swap ($0.000162, :17089) | **$0.024** |
+
+| Band | Members | Pays | Today (Qwen) | After the Gemini swap |
+|---|---|---|---|---|
+| 1 | 300 | $35 | $76.50 — **2.2× underwater** | $7.29 (4.8× margin) |
+| 3 | 1000 | $69 | $255.00 — **3.7× underwater** | $24.30 (2.8× margin) |
+| 5 | 2100 | $129 | $535.50 — **4.2× underwater** | $51.03 (2.5× margin) |
+
+**THE RESIDUAL FINDING, AND IT IS REAL:** the after-Gemini column reproduces
+:17427 exactly, so **the ratified price book is correct — but only on the far
+side of a swap that is NOT BUILT** (`OWED.md:4225`, unticked; the code still
+carries the Qwen constants at `nutrition/service.ts:24-25`). **At the ceiling, on
+today's code, every band is underwater on scans alone.** That is not a pricing
+error and needs no ruling from Kd — it is one more reason the Gemini adapter is
+the next money-relevant card. Realistic usage is unaffected either way.
+
+### 4 · THE ONE THING THAT IS GENUINELY WRONG, AND IT IS IN THE CODE
+
+**The coach is ruled OFF and is still WIRED ON, eight days later.** Verified:
+
+- `apps/web/src/App.jsx:23,122` — `import Coach from './pages/Coach'` and a live
+  `<AppLayout><Coach /></AppLayout>` route.
+- `apps/api/src/app.ts:24` — `registerCoachRoutes` still imported and registered.
+
+`OWED.md:4183`'s 🟡 line is unticked and carries the execution detail (**remove
+the ROUTE, not the nav button** — hiding the button ships the 772-line screen
+anyway). Nothing here is new work to discover; it is work to DO.
+
+### 5 · WHAT STANDS FROM :19129
+
+**§1 — the trial ruling — is untouched and remains in force:** no plan choice at
+signup, every gym trials at 300 members, subscribe by real member count
+afterwards. It was never dependent on the cost analysis.
+**§3 — the v1 §9.3 breaker enforces nothing — stands and is WORSE than written:**
+`costs:gym:{id}:{month}` was incremented in exactly one place,
+`coach/service.ts:224`, and that is the module being switched off. **Once the
+coach is unwired the counter is incremented NOWHERE and still read nowhere**, so
+the spec's *"bankruptcy-by-API-bill is now mathematically impossible"* describes
+an instrument with no inputs and no readers. Its 🔴 `OWED.md` line stands.
+**§4 — the coach-allowance question — is VOID and its ❓ line is struck.** There
+is no allowance to rule on.
