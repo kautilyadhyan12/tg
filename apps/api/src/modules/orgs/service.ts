@@ -28,6 +28,7 @@ import {
   removeOrgCodeResponseSchema,
   removeOrgStaffResponseSchema,
   rotateOrgCodeResponseSchema,
+  updateOrgResponseSchema,
 } from "./schemas.js";
 import type {
   AddOrgStaffRequest,
@@ -60,6 +61,8 @@ import type {
   RemoveOrgStaffResponse,
   RotateOrgCodeResponse,
   UpdateOrgCodeRequest,
+  UpdateOrgRequest,
+  UpdateOrgResponse,
   UpdateOrgStaffPrivilegesRequest,
   UpdateOrgStaffRequest,
 } from "./schemas.js";
@@ -101,6 +104,7 @@ function toOrgSummary(org: repo.OrgRow): OrgSummary {
     slug: org.slug,
     name: org.name,
     city: org.city,
+    country: org.country,
     orgType: org.orgType,
     timezone: org.timezone,
     locale: org.locale,
@@ -109,16 +113,28 @@ function toOrgSummary(org: repo.OrgRow): OrgSummary {
   };
 }
 
-export async function createOrg(
-  deps: OrgsDeps,
-  ownerUserId: string,
-  req: CreateOrgRequest,
-): Promise<CreateOrgResponse> {
-  // Kd ruling 2026-08-18: currency follows the gym's country, decided HERE and
-  // never accepted from the client. An unsupported country is refused outright
-  // — the alternative is a fallback currency, which means a gym in a country we
-  // have no prices for is quoted in somebody else's money.
-  const currencyDisplay = currencyForCountry(req.country);
+/** Kd ruling 2026-08-18: the currency follows the gym's country, is decided
+ *  HERE, and is never accepted from the client. An unsupported country is
+ *  refused outright — the alternative is a fallback currency, which means a gym
+ *  in a country we have no prices for is quoted in somebody else's money.
+ *
+ *  **One function for both doors.** Create and edit must give the identical
+ *  answer and the identical refusal: a country the wizard accepts and the
+ *  settings screen rejects (or the reverse) is two definitions of where we
+ *  operate, and the one that drifts is whichever is edited less. The sentence is
+ *  written once for the same reason. */
+/** One spelling of a country in the database, so `country === 'US'` is a
+ *  question with one answer. `currencyForCountry` already normalises before it
+ *  looks the country up, so without this the row could store `us` while the
+ *  currency was derived from `US` — and the column's own CHECK (two capitals)
+ *  would then refuse the write with a 500 rather than a sentence. Same shape as
+ *  `normaliseCode`, and for the same reason: normalise once, at the boundary. */
+function normaliseCountry(country: string): string {
+  return country.trim().toUpperCase();
+}
+
+function resolveCurrency(country: string): string {
+  const currencyDisplay = currencyForCountry(country);
   if (currencyDisplay === null) {
     throw new OrgsError(
       400,
@@ -126,6 +142,15 @@ export async function createOrg(
       "We're not open in that country yet. Right now we support the United States, India, Canada, the UK and countries using the euro.",
     );
   }
+  return currencyDisplay;
+}
+
+export async function createOrg(
+  deps: OrgsDeps,
+  ownerUserId: string,
+  req: CreateOrgRequest,
+): Promise<CreateOrgResponse> {
+  const currencyDisplay = resolveCurrency(req.country);
 
   const base = slugifyName(req.name);
 
@@ -140,6 +165,10 @@ export async function createOrg(
         slug: slugCandidate(base, suffix),
         name: req.name,
         city: req.city ?? null,
+        // STORED from 2026-08-26 on. It used to reach this function, become a
+        // currency and evaporate, so a gym could be edited into a country it
+        // could never be shown — the gap migration `0014` closes.
+        country: normaliseCountry(req.country),
         orgType: req.orgType,
         timezone: req.timezone,
         locale: req.locale,
@@ -172,6 +201,67 @@ export async function createOrg(
     "org_create_unavailable",
     "Could not create the gym just now. Please try again.",
   );
+}
+
+/** A GYM CAN FINALLY FIX ITS OWN DETAILS (Kd approved `org.manage` 2026-08-26).
+ *
+ *  Before this the row was insert-only after `createOrgAttempt`: a typo in the
+ *  name was on every screen for ever, and a gym set up in the wrong zone had its
+ *  day boundaries wrong for ever, because `gyms.timezone` is the only thing the
+ *  rollup worker consults when it decides where that gym's day ends (trap #8).
+ *
+ *  **The currency is DERIVED and moves only with the country** (R3.1, :10010).
+ *  It is not on the request schema at all, so a caller who sends one gets a 400
+ *  from `.strict()` rather than a silent strip — an owner who tried to choose
+ *  their own money learns that we decide it.
+ *
+ *  **The country is checked BEFORE the transaction opens**, so an unsupported
+ *  one costs no lock and, more importantly, leaves the row exactly as it was:
+ *  a refusal that had already written the name would be a half-applied save
+ *  nobody asked for.
+ *
+ *  Not audited as a membership change and no entitlement bust: nothing the §4.1
+ *  candidate query reads lives on this row (it joins `gym_members` through the
+ *  gym's live subscription), so nobody's entitlements move when a gym is
+ *  renamed. Verified rather than assumed, the way `removeOrgStaff` states it. */
+export async function updateOrg(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+  req: UpdateOrgRequest,
+): Promise<UpdateOrgResponse> {
+  await requirePrivilege(deps, gymId, userId, "org.manage");
+
+  const patch: repo.OrgPatch = {};
+  // `in`, not `!== undefined`: `city: null` is a real instruction ("clear it")
+  // and must reach the writer, while an absent `city` must leave it alone. The
+  // two are the same value in JS and different intentions on a PATCH.
+  if ("name" in req && req.name !== undefined) patch.name = req.name;
+  if ("city" in req) patch.city = req.city ?? null;
+  if ("timezone" in req && req.timezone !== undefined) patch.timezone = req.timezone;
+  if ("country" in req && req.country !== undefined) {
+    patch.country = normaliseCountry(req.country);
+    patch.currencyDisplay = resolveCurrency(req.country);
+  }
+
+  const outcome = await repo.updateOrg(deps.sql, { gymId, patch, actorUserId: userId });
+
+  switch (outcome.kind) {
+    // BOTH arms answer 200 with the row, and `unchanged` is not an error: the
+    // caller asked for a state and the state holds. Which call produced it is
+    // the audit log's business (:12227 L-3), and the audit log is exactly where
+    // a no-op is deliberately absent.
+    case "updated":
+    case "unchanged":
+      return updateOrgResponseSchema.parse({ org: toOrgSummary(outcome.org) });
+    case "not_found":
+      // Unreachable in practice — `requirePrivilege` has already read the org
+      // and 404'd a stranger — but a gym archived or deleted between that read
+      // and this write must not surface as a 500. The module's standing 404.
+      throw new OrgsError(404, "org_not_found", "Gym not found.");
+    default:
+      return assertNever(outcome);
+  }
 }
 
 export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgsResponse> {

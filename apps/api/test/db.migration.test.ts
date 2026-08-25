@@ -2,6 +2,7 @@
 // Requires DATABASE_URL pointing at a database that has had `pnpm --filter api
 // migrate` applied. Skips visibly when unset so unit CI stays green; the
 // migration CI job / local Neon-branch run is where this executes.
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { seed } from "../src/db/seed.js";
@@ -546,5 +547,145 @@ d("0001_init on a real database", () => {
     // this was not a hypothetical shape.
     const inCheck = [...def.matchAll(/'([^']*)'::text/g)].map((m) => m[1]).sort();
     expect(inCheck).toEqual([...ORG_PRIVILEGES].sort());
+  });
+
+  /** MIGRATION `0014`'s BACKFILL, and it is the one thing standing between the
+   *  gym-details card and shipping DEAD.
+   *
+   *  `privilegesFor` prefers the STORED set over the role template, so an owner
+   *  appointed before `org.manage` existed carries a set without it and is 403'd
+   *  on their own gym — and the "change everyone on this role too?" button that
+   *  would re-grant it belongs to a card that is not built. The template's own
+   *  half is pinned in `orgs.routes.test.ts`; this is the half that covers rows
+   *  that were already in the database when the migration landed.
+   *
+   *  **THE OBVIOUS VERSION OF THIS TEST CANNOT FAIL, and it was written and
+   *  measured before this one replaced it.** "No owner row is missing the
+   *  privilege" is a query that comes back empty on any database with no owner
+   *  rows — and the local docker Postgres this suite is meant to run against has
+   *  `owner_rows=0` (measured 2026-08-26). A green assertion over an empty set
+   *  is :5104 F5's shape and :18652's C/H-3 exactly: a verdict that depends on
+   *  which database you point it at is worse than a missing one.
+   *
+   *  **So the test BUILDS ITS OWN LEGACY ROW** (:18652's own fix for O111) — an
+   *  owner carrying the pre-`0014` six — and runs the backfill **read out of the
+   *  shipped migration file**, never a copy re-typed here. A guard that asserts
+   *  a hand-written copy of the thing it guards is the defect :12227 recorded;
+   *  reading the artifact is the same standard `pg_get_constraintdef` holds the
+   *  CHECK to one test above.
+   *
+   *  Rolled back, so nothing this test creates survives it. */
+  it("0014's backfill gives a pre-existing owner the new privilege", async () => {
+    const migration = await readFile(
+      new URL("../drizzle/0014_org_manage_and_country.sql", import.meta.url),
+      "utf8",
+    );
+    // The statement, taken whole out of the file. `--> statement-breakpoint` is
+    // drizzle's own separator, so each chunk is one statement exactly as the
+    // migrator ran it — leading `--` comments and all, which Postgres ignores.
+    //
+    // Matched on `array_append` rather than on the chunk STARTING with UPDATE:
+    // the statement is preceded by its own comment block, so the strict version
+    // found nothing and this test failed loudly on its first run. That failure
+    // is worth recording rather than tidying away — it is the proof that this
+    // test genuinely reads the shipped file, which is the whole reason it is
+    // written this way.
+    const chunks = migration.split("--> statement-breakpoint").map((s) => s.trim());
+    const matches = chunks.filter((s) => s.includes("array_append"));
+    const backfill = matches[0];
+    if (matches.length !== 1 || backfill === undefined || !backfill.includes("UPDATE")) {
+      throw new Error(
+        `0014 no longer contains exactly one backfill UPDATE (found ${String(matches.length)})`,
+      );
+    }
+
+    const legacySix = [
+      "codes.invite", "codes.manage", "members.confirm",
+      "members.read", "members.remove", "staff.manage",
+    ];
+
+    await sql
+      .begin(async (tx) => {
+        const [user] = await tx<{ id: string }[]>`
+          INSERT INTO users (display_name) VALUES ('zz-0014-legacy-owner') RETURNING id`;
+        const userId = user?.id;
+        if (userId === undefined) throw new Error("legacy-owner fixture insert failed");
+        const [gym] = await tx<{ id: string }[]>`
+          INSERT INTO gyms (slug, name, owner_user_id)
+          VALUES ('zz-0014-legacy', 'zz 0014 legacy', ${userId}) RETURNING id`;
+        const gymId = gym?.id;
+        if (gymId === undefined) throw new Error("legacy-owner gym insert failed");
+        await tx`
+          INSERT INTO gym_staff (gym_id, user_id, role, privileges)
+          VALUES (${gymId}, ${userId}, 'owner', ${legacySix})`;
+
+        // THE SUBJECT EXISTS AND IS IN THE STATE THE BACKFILL IS FOR. Without
+        // this the whole test could run against a row that already had the
+        // privilege and still go green.
+        const [before] = await tx<{ privileges: string[] }[]>`
+          SELECT privileges FROM gym_staff WHERE gym_id = ${gymId} AND user_id = ${userId}`;
+        expect(before?.privileges).not.toContain("org.manage");
+
+        await tx.unsafe(backfill);
+
+        const [after] = await tx<{ privileges: string[] }[]>`
+          SELECT privileges FROM gym_staff WHERE gym_id = ${gymId} AND user_id = ${userId}`;
+        expect(after?.privileges).toContain("org.manage");
+        // Nothing else moved — a backfill that rewrote the set instead of adding
+        // to it would take powers away from the very people it is repairing.
+        for (const p of legacySix) expect(after?.privileges).toContain(p);
+
+        throw new Error("ROLLBACK-0014-BACKFILL-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0014-BACKFILL-FIXTURE") return;
+        throw err;
+      });
+  });
+
+  /** `gyms.country` and its shape CHECK, proven by CAUSING it rather than by
+   *  reading the DDL back — the same standard `0013`'s CHECK is held to.
+   *
+   *  The constraint is SHAPE ONLY (two capitals) on purpose: whether we are OPEN
+   *  in a country is `supportedCountrySchema`'s answer, in code, and that list
+   *  grows as Kd opens markets. A copy of it in DDL would need a migration per
+   *  country and would go stale silently in between.
+   *
+   *  Inside a rolled-back transaction so the row never lands. */
+  it("0014's country column refuses anything that is not two capitals", async () => {
+    const refused: string[] = [];
+    for (const bad of ["us", "USA", "U", "u1", ""]) {
+      try {
+        await sql.begin(async (tx) => {
+          await tx`
+            INSERT INTO gyms (slug, name, country, owner_user_id)
+            VALUES (${`zz-country-check-${bad || "empty"}`}, 'zz country check', ${bad},
+                    (SELECT id FROM users LIMIT 1))`;
+          throw new Error("ROLLBACK-AFTER-UNEXPECTED-SUCCESS");
+        });
+      } catch (err) {
+        const code = typeof err === "object" && err !== null && "code" in err ? err.code : null;
+        if (code === "23514") refused.push(bad);
+      }
+    }
+    expect(refused).toEqual(["us", "USA", "U", "u1", ""]);
+
+    // POSITIVE CONTROL — without it a column that refused EVERYTHING would
+    // satisfy the loop above (:7104's PG1: a table of only-should-fail rows is
+    // satisfied by a constraint that passes nothing).
+    let accepted = false;
+    try {
+      await sql.begin(async (tx) => {
+        await tx`
+          INSERT INTO gyms (slug, name, country, owner_user_id)
+          VALUES ('zz-country-check-ok', 'zz country check ok', 'DE',
+                  (SELECT id FROM users LIMIT 1))`;
+        accepted = true;
+        throw new Error("ROLLBACK");
+      });
+    } catch {
+      /* rolled back on purpose */
+    }
+    expect(accepted).toBe(true);
   });
 });

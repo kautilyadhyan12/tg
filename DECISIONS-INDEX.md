@@ -127,6 +127,89 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:19366** — 2026-08-26 — **A GYM CAN FINALLY FIX ITS OWN DETAILS (server
+  half), AND THE COUNTRY THE WIZARD HAS ASKED FOR SINCE AUGUST WAS BEING THROWN
+  AWAY.** **Read before touching `PATCH /v1/orgs/:gymId`, before adding a
+  privilege to `ORG_PRIVILEGES`, before writing `gyms.country` or
+  `gyms.currency_display`, and before adding a mutant to a schema the create and
+  edit doors now SHARE.** Builds the 🟡 line raised at :14570; stage 1 of
+  :19016's order. **KD RULING, one word at the plan gate: a NEW privilege
+  `org.manage`, "edit gym details", OWNER ONLY** — the offered alternative
+  (reusing `staff.manage`, no migration) was recommended AGAINST on :13803's
+  precedent and he took the recommendation. **Implemented as owner-only BY
+  DEFAULT, which is what the recommendation said**: it is in
+  `ROLE_PRIVILEGES.owner` and in NEITHER `OWNER_ONLY_PRIVILEGES` nor
+  `LAST_OWNER_REQUIRED_PRIVILEGES`, so an owner may tick it across (:11429 rule
+  3) and cannot lock themselves out; a test drives the widening. §2.2 has no row
+  for it — an ADDITION with no governing § (:9809's class).
+  **THE FINDING: `gyms` had NO `country` COLUMN.** The wizard has collected it
+  since 2026-08-18, `createOrg` maps it to a currency and the answer evaporates —
+  so "change your country" would be a box that can be written and never read.
+  Migration `0014` adds it, **DELIBERATELY NOT BACK-FILLED**: USD/CAD/GBP/INR
+  each invert to exactly one row of `COUNTRY_CURRENCY` so a fill looks exact, but
+  **INR is also `currency_display`'s own DEFAULT**, so the fill would stamp `IN`
+  onto gyms that never chose it (EUR is ambiguous 20 ways regardless). NULL means
+  "we never asked" — :10010/:10099's refusal of exactly this inference. Own ⚪
+  line; each gym self-heals on its first save. The column's CHECK is SHAPE ONLY,
+  because the SUPPORTED list lives in code and grows.
+  **`0014` ALSO BACKFILLS THE NEW PRIVILEGE ONTO EVERY EXISTING OWNER, and that
+  is NOT what Kd ruled against at :15381.** The snapshot rule protects a decision
+  somebody MADE; nobody has ever decided anything about a privilege that does not
+  exist until the migration runs. Without it `privilegesFor` prefers the stored
+  set and **every existing owner is 403'd on their own gym** — the card ships
+  dead, since the button that would re-grant it belongs to the unbuilt
+  custom-names card. Same shape and same named R4.4 departure as `0013`'s.
+  **Decisions not to re-derive: PATCH not PUT** (absent ≠ null — omit `city` and
+  it is untouched, send null and it clears; C26's class, mutant **O119**) ·
+  **`.strict()` REFUSES `currencyDisplay`, `slug`, `orgType` and `locale` rather
+  than stripping them** (a refusal tells an owner we decide the money; a strip
+  lets them watch it vanish) · **the country is checked BEFORE the transaction**,
+  so a refusal leaves the row untouched rather than half-applied · **ONE
+  `resolveCurrency` for both doors**, which WIDENED O15's reach · **the country is
+  upper-cased once at the boundary** or the column's CHECK turns a lower-case
+  write into an unmapped 23514 · **a NO-OP writes NO audit row** (a console sends
+  back every field it drew) while still answering 200 (:12227 L-3) · **the lock
+  is for the AUDIT ROW, not the write** — :14174 L-4's "warranted by the
+  CONSEQUENCE", the consequence being the record of who changed a gym's billing
+  country · **the meta names WHICH fields moved and their BEFORE values**, with
+  `currencyDisplay` listed in its own right rather than inferred from `country`.
+  **THE AUDIT IS THE PART TO READ — THREE INSTRUMENT FINDINGS, ALL MINE.**
+  **(1) The first backfill test COULD NOT FAIL**: "no owner is missing it" comes
+  back empty on a database with no owner rows, and the local Postgres has
+  `owner_rows=0` — :5104 F5 and :18652's C/H-3 (*a verdict that depends on which
+  database you point it at is worse than a missing one*). Closed :18652's way,
+  **the test BUILDING ITS OWN LEGACY ROW** and running the backfill **read out of
+  the shipped migration file**, never a re-typed copy (:12227). **Its first run
+  FAILED on `startsWith("UPDATE")` — the statement is preceded by its comment
+  block — and that failure is the proof it reads the file.** **(2) TWO OF EIGHT
+  NEW MUTANTS WOULD HAVE COME BACK ALIVE, both holes in the TESTS: O120** named a
+  fixture whose country is already upper-case, **O114** (the gym id leaving the
+  edit's WHERE) named the authz test **whose every PATCH is refused before it
+  reaches the repo** — the FOURTH `gym_id` predicate on this table family to ship
+  unobserved (:14493 C/H-1, :15259 L-1). Closed with a successful owner edit plus
+  the other gym as control. **:11846's two halves, and it was the FILTER half
+  both times.** **(3) The whole-table pre-check ABORTED the sweep TWICE before a
+  byte was written**, both my own edits moving somebody else's anchor: O15's line
+  moved into `resolveCurrency` (re-anchored, **re-measured RED**), then O20's
+  timezone anchor matched TWICE because the edit schema repeats the create
+  schema's proof — caught by :15259 L-2's uniqueness guard. **Re-aiming O20 would
+  have been the WRONG fix** (:15770 — a mutant is a claim about ONE call site;
+  :14174 L-1's "a control that looks covered because a mutant was written for its
+  sibling"); O20 keeps the create door and **O122 is its sibling on the edit
+  door**, which matters more here because the route that could write a junk zone
+  is the one built to FIX one.
+  **PROVE, all LOCAL (:13659): `orgs.routes` 116/116 (+12) · `db.migration` 10/10
+  (+2) · both in ONE invocation 126/126 · shared 51/51 · four more suites 69/69 ·
+  tsc exit 0 AND PROVEN REAL by planting a type error · eslint clean on eight
+  files · SWEEP a stated SUBSET of 122: 11 mutants · 11 RED · 0 ALIVE · 0 never
+  ran, controls green first, restores sha256-verified, tree clean after · the
+  schema read back OUT of the database (0 owners missing it, 55 gyms, 0 with a
+  country). The FULL api suite is NOT quoted green — :13746's pre-existing flake.**
+  **NOTHING TICKS — no screen, so no smoke; T3 UNRUN.** Two new `OWED.md` lines:
+  existing gyms have no country recorded, and **whether a gym may change the
+  currency it is BILLED in once it is actually paying is Kd's to rule** — inert
+  today (nothing inserts into `subscriptions`), a real money question the moment
+  billing ships, and `05-part5-billing.md` names none of it.
 - **:19256** — 2026-08-26 — **CORRECTION TO :19129 — ITS COST ANALYSIS PRICED A
   FEATURE KD HAD ALREADY KILLED.** **READ THIS BEFORE :19129.** The AI chat coach
   was ruled DROPPED 2026-08-18 (:9604 §5, *"OFF, NOT DELETED"*) and confirmed

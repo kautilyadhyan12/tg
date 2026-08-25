@@ -6127,6 +6127,43 @@ file and is stated so nobody reads these as lower priority than they are.
       a separate and harder question. **Settings is the screen this belongs on and
       it now exists** (2026-08-22, DECISIONS :14570) — the screen is no longer the
       blocker, the route is.
+      **UPDATE 2026-08-26 — THE SERVER HALF IS BUILT AND THIS LINE STAYS OPEN.**
+      `PATCH /v1/orgs/:gymId` exists, gated on the `org.manage` privilege Kd
+      approved that day (migration `0014`); name, city, country and time zone are
+      all editable and the currency follows the country server-side. What holds
+      the line open is that **no screen calls it** — the same shape as :13803 and
+      :14262, where an endpoint with no caller ticks nothing. The web half is the
+      next card and carries the SMOKE. T3 is UNRUN.
+- [ ] ⚪ **EVERY GYM CREATED BEFORE 2026-08-26 HAS NO COUNTRY RECORDED, and no
+      honest backfill exists.** `gyms.country` arrived with migration `0014`;
+      before it the create wizard collected a country, the server mapped it to a
+      currency and threw the country away, so 55 rows on the local database (and
+      whatever Kd's Neon branch holds) read back NULL. **Deliberately NOT
+      back-filled and this is the citation:** USD/CAD/GBP/INR each invert to
+      exactly one row of `COUNTRY_CURRENCY`, so a fill looks exact — but `INR` is
+      also `currency_display`'s own DEFAULT, i.e. what a row carries when nobody
+      said anything, so the fill would stamp `IN` onto gyms that never chose it;
+      EUR is ambiguous twenty ways regardless. NULL means "we never asked", which
+      is the only claim true of every row, and :10010/:10099 refuse exactly this
+      class of inference about where a gym is.
+      **What closes it:** the Settings screen shows the currency (which is what
+      actually decides money and is correct on every row) and asks for the
+      country when an owner edits; each gym self-heals on its first save. **What
+      it costs meanwhile:** the country box on that screen starts empty for an
+      existing gym, which is true and not false — :5807 Low by its own test.
+- [ ] ❓ **CAN A GYM CHANGE THE CURRENCY IT IS BILLED IN ONCE IT IS ACTUALLY
+      PAYING? KD'S RULING NEEDED, AND THE SPEC HAS NO RULE FOR IT.**
+      `PATCH /v1/orgs/:gymId` (2026-08-26) lets an owner change the gym's country,
+      and the currency follows it — which is right and is what Kd asked for.
+      **It is SAFE TODAY and will not stay safe:** nothing inserts into
+      `subscriptions`, so no gym is on a paid plan and no invoice exists
+      (grep-verified twice, independently, at :12731). The moment billing ships,
+      moving a live gym from INR to EUR mid-subscription is a real money question
+      — does the current period reprice, does the next one, what happens to an
+      unpaid invoice raised in the old currency — and `05-part5-billing.md` names
+      none of it. **A chat must not answer it by inventing a rule** (R0.2).
+      **What unblocks it:** the billing card puts the options to Kd. Until then
+      the route is unchanged; the risk is a schedule risk, not a live defect.
 - [ ] 🟡 **THE CONSOLE IS BUILT ONCE — responsive, opened from inside the phone
       app.** Kd demanded phone management (*"main idea is convenience"*); Part 3
       §3.1 already chose responsive web for the same reason (*"owners live on

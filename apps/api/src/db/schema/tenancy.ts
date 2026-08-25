@@ -23,6 +23,24 @@ export const gyms = pgTable(
     slug: text("slug").unique().notNull(),
     name: text("name").notNull(),
     city: text("city"),
+    /** ISO 3166-1 alpha-2, and the one field the create wizard collected and
+     *  the server then DISCARDED (migration `0014` adds it).
+     *
+     *  It is stored because `currency_display` is derived FROM it (:10010) and a
+     *  derived value cannot answer "where is this gym" — EUR is twenty
+     *  countries. Without the column a console can show what a gym is billed in
+     *  and never what it asked for, so an owner correcting their country would
+     *  be typing into a box that reads back empty for ever.
+     *
+     *  NULLABLE because nothing honest can be back-filled: `INR` is this
+     *  column's neighbour's DEFAULT, so inverting the currency map would write
+     *  'IN' onto rows where nobody said anything. NULL means "we never asked".
+     *
+     *  The CHECK is SHAPE ONLY. Whether we are OPEN in a country is
+     *  `supportedCountrySchema`'s answer, in code, and it grows as Kd opens
+     *  markets — a copy of that list in DDL would be a second answer that goes
+     *  stale silently. */
+    country: text("country"),
     orgType: text("org_type").notNull().default("gym"),
     timezone: text("timezone").notNull().default("Asia/Kolkata"),
     locale: text("locale").notNull().default("en"),
@@ -40,6 +58,7 @@ export const gyms = pgTable(
   (t) => [
     check("gyms_org_type_check", sql`${t.orgType} IN ('gym','studio','clinic')`),
     check("gyms_status_check", sql`${t.status} IN ('active','archived')`),
+    check("gyms_country_check", sql`${t.country} IS NULL OR ${t.country} ~ '^[A-Z]{2}$'`),
   ],
 );
 
@@ -251,7 +270,7 @@ export const gymStaff = pgTable(
     check("gym_staff_role_check", sql`${t.role} IN ('owner','manager','trainer')`),
     check(
       "gym_staff_privileges_check",
-      sql`${t.privileges} IS NULL OR ${t.privileges} <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage']::text[]`,
+      sql`${t.privileges} IS NULL OR ${t.privileges} <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage','org.manage']::text[]`,
     ),
   ],
 );

@@ -24,6 +24,7 @@ import {
   orgParamsSchema,
   staffParamsSchema,
   updateOrgCodeRequestSchema,
+  updateOrgRequestSchema,
   updateOrgStaffPrivilegesRequestSchema,
   updateOrgStaffRequestSchema,
 } from "./schemas.js";
@@ -78,6 +79,23 @@ export function registerOrgRoutes(
     if (body === null) return;
     const created = await service.createOrg(orgDeps, requireUserId(req), body);
     return reply.status(201).send(created);
+  });
+
+  // EDIT THE GYM'S OWN DETAILS (Kd approved `org.manage`, 2026-08-26). It is a
+  // PATCH because an absent key and a null one mean different things here — omit
+  // `city` and it is untouched, send null and it is cleared — and a screen that
+  // edits one field must never be able to blank the three it did not draw.
+  //
+  // PATCH reaches a browser through a CORS preflight `fastify.inject` cannot
+  // exercise; `app.ts:111` already lists it (verified, not assumed), which is
+  // the check Card 4's dead-method bug exists to make people do.
+  app.patch("/v1/orgs/:gymId", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(updateOrgRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const updated = await service.updateOrg(orgDeps, requireUserId(req), params.gymId, body);
+    return reply.status(200).send(updated);
   });
 
   app.get("/v1/orgs/mine", { preHandler: [app.authenticate] }, async (req, reply) => {

@@ -262,8 +262,17 @@ const MUTANTS = [
     target: 'service',
     why: "MONEY / FALSE ON SCREEN: the currency stops following the gym's country and reverts to a default, so a US gym is set up in rupees — the exact thing Kd's 2026-08-18 ruling removed",
     expect: 'sets the currency from the gym',
-    from: '  const currencyDisplay = currencyForCountry(req.country);',
-    to: '  const currencyDisplay = "INR";',
+    // RE-ANCHORED 2026-08-26 and its REACH WIDENED. The gym-details card lifted
+    // this line out of `createOrg` into a shared `resolveCurrency`, so the
+    // whole-table pre-check aborted before a byte was written — the guard
+    // paying for itself again. The guarantee did not move, but ONE line now
+    // carries it for BOTH doors (create and edit), which is :13803's shape.
+    //
+    // The function signature is part of the anchor deliberately: O117 mutates
+    // the very next line of the same function, and two anchors that overlap on
+    // one line is how a mutant hits the right site only BY POSITION (:14493).
+    from: 'function resolveCurrency(country: string): string {\n  const currencyDisplay = currencyForCountry(country);',
+    to: 'function resolveCurrency(country: string): string {\n  const currencyDisplay = "INR";',
   },
   {
     id: 'O16',
@@ -307,10 +316,29 @@ const MUTANTS = [
   {
     id: 'O20',
     target: 'shared',
-    why: 'T3 L-3 RESTORED: any string is accepted as a time zone, so an org-day boundary is written from a name nothing can interpret later',
+    why: 'T3 L-3 RESTORED: any string is accepted as a time zone at CREATE, so an org-day boundary is written from a name nothing can interpret later',
     expect: 'rejects a malformed or over-specified create body',
-    from: '    timezone: z.string().trim().min(1).max(64).refine(isValidTimeZone, {\n      message: "not a known IANA time zone",\n    }),',
-    to: '    timezone: z.string().trim().min(1).max(64),',
+    // RE-ANCHORED 2026-08-26, on the `locale` line that follows it in the CREATE
+    // schema alone. The gym-details card gave the EDIT schema the identical
+    // three lines, so this anchor started matching TWICE and the uniqueness
+    // pre-check (:15259 L-2) aborted the sweep before a byte was written — the
+    // second time that guard has paid for itself on this card.
+    from: '    timezone: z.string().trim().min(1).max(64).refine(isValidTimeZone, {\n      message: "not a known IANA time zone",\n    }),\n    locale: z',
+    to: '    timezone: z.string().trim().min(1).max(64),\n    locale: z',
+  },
+  {
+    // O20'S SIBLING, and it exists because a mutant is a claim about ONE CALL
+    // SITE (:15770, :14840's own finding about its guard's filter). The edit
+    // door repeats the create door's timezone proof, so re-aiming O20 at the
+    // new copy would have left whichever one it stopped naming unguarded — and
+    // "a control that LOOKS covered because a mutant was written for its
+    // sibling" is :14174 L-1 verbatim.
+    id: 'O122',
+    target: 'shared',
+    why: 'ANY STRING IS ACCEPTED AS A TIME ZONE ON THE EDIT DOOR, so a gym that corrects its details writes a day boundary nothing can interpret — the permanent, invisible corruption trap #8 names, arriving through the route built to FIX a wrong zone',
+    expect: 'refuses a time zone that is not a real one',
+    from: '    timezone: z.string().trim().min(1).max(64).refine(isValidTimeZone, {\n      message: "not a known IANA time zone",\n    }),\n  })\n  .partial()',
+    to: '    timezone: z.string().trim().min(1).max(64),\n  })\n  .partial()',
   },
 
   // ── The console card's read endpoint, GET /v1/orgs/:gymId/codes ──────────
@@ -1356,6 +1384,82 @@ const MUTANTS = [
     from: '    priceMinor: 1000, // $10/mo',
     to: '    priceMinor: 699, // $10/mo',
     expect: SEED_FILTER,
+  },
+
+  // ---------------------------------------------------------------------------
+  // A GYM CAN FIX ITS OWN DETAILS (`PATCH /v1/orgs/:gymId`, Kd approved
+  // `org.manage` 2026-08-26). Every row below names ONE call site, because a
+  // mutant is a claim about a call site and not about a subject (:15770).
+  // ---------------------------------------------------------------------------
+  {
+    id: 'O114',
+    target: 'repo',
+    why: "TENANCY, R3.2: the gym id leaves the edit's WHERE, so ONE owner's save rewrites the name, city, country and billing currency of EVERY gym in the database. The cross-tenant case this repo has shipped untested four times on this very table (:15259 L-1)",
+    from: '      WHERE id = ${input.gymId}\n      RETURNING id, slug, name, city, country, org_type, timezone, locale,',
+    to: '      WHERE id IS NOT NULL\n      RETURNING id, slug, name, city, country, org_type, timezone, locale,',
+    expect: 'refuses everybody who is not this gym',
+  },
+  {
+    id: 'O115',
+    target: 'service',
+    why: "THE DOOR ITSELF: the privilege check comes off the edit route, so any trainer — and any member of any gym — can rename somebody else's gym and change the money it is billed in. `requirePrivilege` is what makes 404 and 403 mean what they mean here",
+    from: '  await requirePrivilege(deps, gymId, userId, "org.manage");\n\n  const patch: repo.OrgPatch = {};',
+    to: '  const patch: repo.OrgPatch = {};',
+    expect: 'refuses everybody who is not this gym',
+  },
+  {
+    id: 'O116',
+    target: 'service',
+    why: "MONEY, R3.1: the currency stops following the country and is left on whatever the gym was created with, so a gym that moves from India to Germany is still billed in rupees under a screen saying it is in Germany — the same fabrication in the opposite direction to :10596's preselected United States",
+    from: '    patch.currencyDisplay = resolveCurrency(req.country);',
+    to: '    patch.country = normaliseCountry(req.country);',
+    expect: 'changing the country moves the currency with it',
+  },
+  {
+    id: 'O117',
+    target: 'service',
+    why: "AN UNSUPPORTED COUNTRY STOPS BEING REFUSED and is given a fallback currency instead — the exact defect Kd's ruling removes, where a gym in Sydney is quoted in somebody else's money. It is checked BEFORE the transaction so the refusal leaves the row alone; this makes the refusal disappear entirely",
+    from: '  const currencyDisplay = currencyForCountry(country);\n  if (currencyDisplay === null) {',
+    to: '  const currencyDisplay = currencyForCountry(country) ?? "USD";\n  if (currencyDisplay === null) {',
+    expect: 'an unsupported country is refused and changes nothing',
+  },
+  {
+    id: 'O118',
+    target: 'repo',
+    why: "THE AUDIT LOG STOPS TELLING THE TRUTH: a no-op save writes a row claiming somebody changed something, so a log nobody can read a real event out of. It is the half of this card that only a comparison against the CURRENT row can carry — a console sends back every field it drew",
+    from: '    if (changed.length === 0) return { kind: "unchanged", org: before };',
+    to: '    if (changed.length === 0 && false) return { kind: "unchanged", org: before };',
+    expect: 'writes one audit entry per real change and none for a no-op',
+  },
+  {
+    id: 'O119',
+    target: 'repo',
+    why: "AN ABSENT KEY STARTS CLEARING THE COLUMN IT NEVER NAMED: a screen editing the gym's name blanks the city it did not display. The `in` check is the whole difference between a PATCH and a PUT, and C26 guards this exact class one component away on the join-code pause switch",
+    from: '        city = ${"city" in input.patch ? (input.patch.city ?? null) : before.city},',
+    to: '        city = ${input.patch.city ?? null},',
+    expect: 'an absent field is untouched and an explicit null clears the city',
+  },
+  {
+    id: 'O120',
+    target: 'service',
+    why: "THE COUNTRY IS STORED IN WHATEVER CASE IT ARRIVED IN, so `country === 'US'` becomes a question with two answers and the column's own CHECK refuses a lower-case write as an unmapped 23514 — a 500 where a gym owner should see their country saved",
+    from: '        country: normaliseCountry(req.country),',
+    to: '        country: req.country,',
+    // NOT the edit test, which is where this row was first aimed — that fixture
+    // creates its gym with an already-upper-case `IN`, so the mutation changed
+    // nothing observable and O120 came back ALIVE. The currency test is the one
+    // with a LOWER-CASE country in its table (`ie`), and it now asserts the
+    // stored country too. :11846's two halves: the anchor says what breaks, the
+    // FILTER says what should notice, and this row had the filter wrong.
+    expect: 'sets the currency from the gym',
+  },
+  {
+    id: 'O121',
+    target: 'shared',
+    why: "THE NEW PRIVILEGE LEAVES THE OWNER'S TEMPLATE, so every gym created from now on has an owner who cannot edit their own gym — the ship-dead failure migration `0014`'s backfill exists to prevent, arriving through the OTHER door",
+    from: '    "staff.manage",\n    "org.manage",\n  ],\n  manager:',
+    to: '    "staff.manage",\n  ],\n  manager:',
+    expect: "a brand-new owner's stored ticks include the new privilege",
   },
 ];
 

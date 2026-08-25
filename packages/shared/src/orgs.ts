@@ -175,6 +175,22 @@ export const orgSummarySchema = z.object({
   orgType: orgTypeSchema,
   timezone: z.string(),
   locale: z.string(),
+  /** WHERE THE GYM IS — ISO 3166-1 alpha-2, and `null` for every gym created
+   *  before migration `0014`, because the wizard collected it and the server
+   *  threw it away.
+   *
+   *  It is on the response because `currencyDisplay` cannot answer the question:
+   *  the map runs one way, and EUR is twenty countries. A console editing a
+   *  gym's country needs to know which one it holds now, or the box reads back
+   *  empty after every save.
+   *
+   *  **`.default(null)` for :12660's expand-then-contract reason**, and this one
+   *  is load-bearing rather than ceremonial: `orgsApi.js` treats a contract
+   *  mismatch as a hard failure and the console treats a failed read as an error
+   *  card, so a REQUIRED field would blank the whole gym list during any window
+   *  where the web is newer than the api. `null` is also a real answer here
+   *  ("nobody ever told us"), which is why it is not `.optional()` alone. */
+  country: z.string().nullable().default(null),
   /** Derived from the org's country, server-side (see COUNTRY_CURRENCY). It is
    *  in the response so a console never has to re-derive it — two places
    *  deciding what money a gym is in is two places to disagree. */
@@ -188,6 +204,68 @@ export const joinCodeSchema = z.object({
   label: z.string(),
 });
 export type JoinCode = z.infer<typeof joinCodeSchema>;
+
+/** EDIT THE GYM'S OWN DETAILS — `PATCH /v1/orgs/:gymId`, gated on `org.manage`.
+ *
+ *  Until this existed a gym's row was insert-only after `createOrgAttempt`
+ *  (nineteen routes in the module, not one of them a PATCH), so a typo in the
+ *  name was on every screen for ever and a gym set up in the wrong zone had its
+ *  day boundaries wrong for ever — `gyms.timezone` is the only thing the rollup
+ *  worker asks when it decides where a gym's day ends (playbook trap #8).
+ *
+ *  **PARTIAL, and an absent key is not the same as a null one.** Omit `city` and
+ *  it is left alone; send `city: null` and it is cleared. That distinction is
+ *  the whole reason this is a PATCH rather than a PUT — a screen that edits one
+ *  field must not be able to blank three others it never displayed (C26, and
+ *  :13920's pause switch for the same reason one component away).
+ *
+ *  **`.strict()`, so the fields NOT here are refused rather than ignored.**
+ *    - `currencyDisplay` — the server derives it from `country` and a
+ *      client-sent one is refused, exactly as at create (R3.1, :10010). Money a
+ *      caller can name is money a caller can choose.
+ *    - `slug` — minted once against `RESERVED_SLUGS`, and a gym named "New"
+ *      already collides with the console's own create form (:10596 L-2).
+ *      Renaming an address is a separate and harder question with its own line.
+ *    - `orgType` — changing a gym into a studio changes who may read the roster
+ *      (§2.3's trainer hold-back reads it), so it is an authorisation change
+ *      wearing a settings field's clothes.
+ *    - `locale` — a control with no effect; nothing reads the column and its own
+ *      `OWED.md` line says so. Offering it would be a box that does nothing.
+ *  A refusal is louder than a silent strip: an owner who typed a currency finds
+ *  out that we decide it, instead of watching their change vanish. */
+export const updateOrgRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    city: z.string().trim().max(120).nullable(),
+    /** ISO 3166-1 alpha-2. Shape only here — whether we are OPEN there is the
+     *  service's answer, so the refusal can be a sentence a gym owner
+     *  understands rather than an enum error. Identical to create's, on
+     *  purpose. */
+    country: z.string().trim().length(2),
+    /** PROVEN to name a real IANA zone, not merely bounded in length — the same
+     *  refine create uses. A junk zone written here is a permanent row, and the
+     *  rollup that eventually reads it cannot tell "Mars/Olympus" from a zone it
+     *  simply does not know. */
+    timezone: z.string().trim().min(1).max(64).refine(isValidTimeZone, {
+      message: "not a known IANA time zone",
+    }),
+  })
+  .partial()
+  .strict()
+  /** AN EMPTY PATCH IS A 400 (:13803's precedent, same module). A request that
+   *  asks for nothing is a client bug, and answering 200 to it teaches a screen
+   *  that its save worked when it never sent anything. */
+  .refine((body) => Object.keys(body).length > 0, {
+    message: "at least one field must be sent",
+  });
+export type UpdateOrgRequest = z.infer<typeof updateOrgRequestSchema>;
+
+/** Wrapped in `{ org }` rather than served bare, matching
+ *  `createOrgResponseSchema` — a bare object leaves no room for the next thing
+ *  this route has to say (a warning about the currency it just moved, say)
+ *  without breaking every reader. */
+export const updateOrgResponseSchema = z.object({ org: orgSummarySchema });
+export type UpdateOrgResponse = z.infer<typeof updateOrgResponseSchema>;
 
 export const createOrgResponseSchema = z.object({
   org: orgSummarySchema,
@@ -784,6 +862,7 @@ export const ORG_PRIVILEGES = [
   "members.confirm",
   "members.remove",
   "staff.manage",
+  "org.manage",
 ] as const;
 export const orgPrivilegeSchema = z.enum(ORG_PRIVILEGES);
 export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
@@ -841,7 +920,24 @@ export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
  *  no "view staff" row at all, so the choice was between owner-only and
  *  inventing a grant. Narrow is the reversible direction: widening it later is
  *  one tick under :11429 rule 3, whereas a manager who has been reading the
- *  staff list for a month cannot be un-shown it. */
+ *  staff list for a month cannot be un-shown it.
+ *
+ *  `org.manage` is "edit gym details" — the gym's own name, city, country and
+ *  time zone. **KD RULING 2026-08-26, owner-only BY DEFAULT**, given at the plan
+ *  gate against the cited alternative of reusing `staff.manage`; that
+ *  alternative needs no migration and was recommended AGAINST on :13803's
+ *  precedent, because two rows meaning different things get different
+ *  privileges. §2.2 has no row for it at all — the matrix predates a gym being
+ *  able to correct anything about itself — so it is an ADDITION (:9809's class),
+ *  landed on the owner's line because the fields it edits are the gym's
+ *  identity and its BILLING COUNTRY.
+ *
+ *  **"By default" is the whole of it: this is deliberately absent from
+ *  `OWNER_ONLY_PRIVILEGES` below**, so an owner who wants their manager to fix a
+ *  typo can tick it across (:11429 rule 3). It is absent from the api's
+ *  `LAST_OWNER_REQUIRED_PRIVILEGES` for the matching reason — a last owner
+ *  ticked down from it still holds `staff.manage` and can tick it straight back,
+ *  so there is no lockout to guard against. */
 export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>> = {
   owner: [
     "members.read",
@@ -850,6 +946,7 @@ export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>>
     "members.confirm",
     "members.remove",
     "staff.manage",
+    "org.manage",
   ],
   manager: ["members.read", "codes.invite", "codes.manage", "members.confirm", "members.remove"],
   trainer: ["members.read", "codes.invite"],

@@ -29,6 +29,9 @@ export interface OrgRow {
   slug: string;
   name: string;
   city: string | null;
+  /** ISO 3166-1 alpha-2, or `null` for a gym created before migration `0014`
+   *  wrote the column — the wizard asked and the server discarded the answer. */
+  country: string | null;
   orgType: OrgType;
   timezone: string;
   locale: string;
@@ -107,6 +110,7 @@ interface RawOrg {
   slug: string;
   name: string;
   city: string | null;
+  country: string | null;
   org_type: string;
   timezone: string;
   locale: string;
@@ -157,6 +161,7 @@ function toOrgRow(raw: RawOrg): OrgRow {
     slug: raw.slug,
     name: raw.name,
     city: raw.city,
+    country: raw.country,
     orgType: toOrgType(raw.org_type),
     timezone: raw.timezone,
     locale: raw.locale,
@@ -190,6 +195,10 @@ export interface CreateOrgInput {
   slug: string;
   name: string;
   city: string | null;
+  /** The country the wizard asked for, STORED from this card on. It used to
+   *  reach the service, become a currency and evaporate — so every gym created
+   *  before migration `0014` reads back `null` and no honest backfill exists. */
+  country: string;
   orgType: OrgType;
   timezone: string;
   locale: string;
@@ -223,12 +232,12 @@ export async function createOrgAttempt(
   try {
     return await sql.begin(async (tx) => {
       const orgRows = await tx<RawOrg[]>`
-        INSERT INTO gyms (slug, name, city, org_type, timezone, locale,
+        INSERT INTO gyms (slug, name, city, country, org_type, timezone, locale,
                           currency_display, owner_user_id)
-        VALUES (${input.slug}, ${input.name}, ${input.city}, ${input.orgType},
-                ${input.timezone}, ${input.locale}, ${input.currencyDisplay},
-                ${input.ownerUserId})
-        RETURNING id, slug, name, city, org_type, timezone, locale,
+        VALUES (${input.slug}, ${input.name}, ${input.city}, ${input.country},
+                ${input.orgType}, ${input.timezone}, ${input.locale},
+                ${input.currencyDisplay}, ${input.ownerUserId})
+        RETURNING id, slug, name, city, country, org_type, timezone, locale,
                   currency_display, status`;
       const rawOrg = orgRows[0];
       if (rawOrg === undefined) throw new Error("INSERT INTO gyms returned no row");
@@ -318,8 +327,8 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       joined_at: Date | null;
     })[]
   >`
-    SELECT g.id, g.slug, g.name, g.city, g.org_type, g.timezone, g.locale,
-           g.currency_display, g.status,
+    SELECT g.id, g.slug, g.name, g.city, g.country, g.org_type, g.timezone,
+           g.locale, g.currency_display, g.status,
            s.role AS staff_role,
            s.privileges,
            (m.id IS NOT NULL) AS is_member,
@@ -395,8 +404,8 @@ export async function listFormerOrgsForUser(
   const rows = await sql<(RawOrg & { removed_at: Date })[]>`
     SELECT * FROM (
       SELECT DISTINCT ON (m.gym_id)
-             g.id, g.slug, g.name, g.city, g.org_type, g.timezone, g.locale,
-             g.currency_display, g.status, m.removed_at
+             g.id, g.slug, g.name, g.city, g.country, g.org_type, g.timezone,
+             g.locale, g.currency_display, g.status, m.removed_at
       FROM gym_members m
       JOIN gyms g ON g.id = m.gym_id
       WHERE m.user_id = ${userId}
@@ -418,10 +427,124 @@ export async function listFormerOrgsForUser(
 
 export async function getOrgById(sql: SqlOrTx, gymId: string): Promise<OrgRow | null> {
   const rows = await sql<RawOrg[]>`
-    SELECT id, slug, name, city, org_type, timezone, locale, currency_display, status
+    SELECT id, slug, name, city, country, org_type, timezone, locale,
+           currency_display, status
     FROM gyms WHERE id = ${gymId}`;
   const row = rows[0];
   return row === undefined ? null : toOrgRow(row);
+}
+
+/** The gym's own editable details. **Only the keys that are PRESENT are
+ *  written** — an absent key leaves that column alone, while `city: null`
+ *  genuinely clears the city. A patch object cannot express that distinction
+ *  with `undefined` alone once it crosses into SQL, so the writer below checks
+ *  `in` rather than `!== undefined`. */
+export interface OrgPatch {
+  name?: string;
+  city?: string | null;
+  country?: string;
+  /** Never accepted from a caller — the service derives it from `country` and
+   *  always sets the two together, so this key is present exactly when
+   *  `country` is (R3.1, :10010). */
+  currencyDisplay?: string;
+  timezone?: string;
+}
+
+export type UpdateOrgOutcome =
+  | { kind: "updated"; org: OrgRow; changed: readonly string[] }
+  | { kind: "unchanged"; org: OrgRow }
+  | { kind: "not_found" };
+
+/** EDIT THE GYM'S OWN ROW (Kd's `org.manage`, 2026-08-26).
+ *
+ *  **The lock is taken for the AUDIT ROW, not for the write.** Two concurrent
+ *  edits of different columns are last-write-wins and need no lock; what needs
+ *  one is "did anything actually change", which is a read followed by a write
+ *  and would otherwise let two owners saving at once produce an audit trail
+ *  where one of them appears to have changed nothing. :14174 L-4's rule applied
+ *  in the direction it points — a lock is warranted by the CONSEQUENCE — and the
+ *  consequence here is the record of who changed a gym's billing country. It is
+ *  `lockOrgRow`, the same instrument and the same order (org row → child rows)
+ *  every other mutation in this module takes, so it adds no new deadlock edge.
+ *
+ *  **A NO-OP WRITES NOTHING AND SAYS SO.** Saving the same name twice must not
+ *  leave two rows in `audit_log` claiming two changes; a log that records
+ *  non-events is one nobody can read a real event out of.
+ *
+ *  `changed` names the columns that genuinely moved, so the service can put the
+ *  before/after of exactly those into the audit meta rather than a whole-row
+ *  snapshot nobody can diff. */
+export async function updateOrg(
+  sql: Sql,
+  input: { gymId: string; patch: OrgPatch; actorUserId: string },
+): Promise<UpdateOrgOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+    const before = await getOrgById(tx, input.gymId);
+    if (before === null) return { kind: "not_found" };
+
+    // Compared against the CURRENT row rather than trusted from the request:
+    // a screen sending back every field it drew is the normal case, so without
+    // this every save of an untouched form would write an audit row.
+    const changed: string[] = [];
+    if ("name" in input.patch && input.patch.name !== before.name) changed.push("name");
+    if ("city" in input.patch && (input.patch.city ?? null) !== before.city) changed.push("city");
+    if ("country" in input.patch && input.patch.country !== before.country) {
+      changed.push("country");
+      // The currency moves WITH the country and never on its own. It is listed
+      // separately because it is what a gym is BILLED in — a reader of the audit
+      // log asking "when did this gym's money change" must not have to know that
+      // a country implies one.
+      if (input.patch.currencyDisplay !== before.currencyDisplay) changed.push("currencyDisplay");
+    }
+    if ("timezone" in input.patch && input.patch.timezone !== before.timezone) {
+      changed.push("timezone");
+    }
+    if (changed.length === 0) return { kind: "unchanged", org: before };
+
+    // Written out column by column rather than assembled from a loop over the
+    // patch's keys: a dynamic identifier built from caller-controlled data is
+    // exactly what R3.8 forbids, and `coalesce` cannot express "clear the city"
+    // because null is a legitimate destination. Each `${}` is a VALUE.
+    const rows = await tx<RawOrg[]>`
+      UPDATE gyms SET
+        name = ${"name" in input.patch ? (input.patch.name ?? before.name) : before.name},
+        city = ${"city" in input.patch ? (input.patch.city ?? null) : before.city},
+        country = ${"country" in input.patch ? (input.patch.country ?? before.country) : before.country},
+        currency_display = ${
+          "country" in input.patch
+            ? (input.patch.currencyDisplay ?? before.currencyDisplay)
+            : before.currencyDisplay
+        },
+        timezone = ${"timezone" in input.patch ? (input.patch.timezone ?? before.timezone) : before.timezone}
+      WHERE id = ${input.gymId}
+      RETURNING id, slug, name, city, country, org_type, timezone, locale,
+                currency_display, status`;
+    const raw = rows[0];
+    if (raw === undefined) throw new Error("UPDATE gyms changed no row under the org lock");
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.updated",
+      targetType: "gyms",
+      targetId: input.gymId,
+      // WHICH FIELDS MOVED, and their before values. The after state is the row
+      // itself, so recording it twice would only create somewhere for the two to
+      // disagree. `null` is allowed in this meta for exactly the case it means
+      // here — a city that was not set, or a country nobody had ever recorded.
+      meta: {
+        changed,
+        name: changed.includes("name") ? before.name : null,
+        city: changed.includes("city") ? before.city : null,
+        country: changed.includes("country") ? before.country : null,
+        currencyDisplay: changed.includes("currencyDisplay") ? before.currencyDisplay : null,
+        timezone: changed.includes("timezone") ? before.timezone : null,
+      },
+    });
+
+    return { kind: "updated", org: toOrgRow(raw), changed };
+  });
 }
 
 /** A staff row's authority: the role it was appointed under, and the effective
@@ -562,7 +685,8 @@ export async function applyByCode(
 
   return await sql.begin(async (tx) => {
     const orgRows = await tx<RawOrg[]>`
-      SELECT id, slug, name, city, org_type, timezone, locale, currency_display, status
+      SELECT id, slug, name, city, country, org_type, timezone, locale,
+           currency_display, status
       FROM gyms WHERE id = ${found.gym_id}`;
     const rawOrg = orgRows[0];
     if (rawOrg === undefined) return { kind: "no_such_code" };
@@ -859,7 +983,8 @@ export async function confirmApplication(
     if (status !== "pending") return { kind: "not_pending", status };
 
     const orgRows = await tx<RawOrg[]>`
-      SELECT id, slug, name, city, org_type, timezone, locale, currency_display, status
+      SELECT id, slug, name, city, country, org_type, timezone, locale,
+           currency_display, status
       FROM gyms WHERE id = ${input.gymId} FOR UPDATE`;
     const rawOrg = orgRows[0];
     if (rawOrg === undefined) return { kind: "not_found" };
@@ -1111,6 +1236,7 @@ export async function listApplicationsForUser(
     slug: string;
     name: string;
     city: string | null;
+    country: string | null;
     org_type: string;
     timezone: string;
     locale: string;
@@ -1120,8 +1246,8 @@ export async function listApplicationsForUser(
   const rows = await sql<RawMyApplication[]>`
     SELECT a.id AS app_id, a.status AS app_status, a.applied_at, a.expires_at,
            a.decided_at, a.member_nudged_at,
-           g.id AS org_id, g.slug, g.name, g.city, g.org_type, g.timezone,
-           g.locale, g.currency_display, g.status AS org_status
+           g.id AS org_id, g.slug, g.name, g.city, g.country, g.org_type,
+           g.timezone, g.locale, g.currency_display, g.status AS org_status
     FROM gym_join_applications a
     JOIN gyms g ON g.id = a.gym_id
     WHERE a.user_id = ${userId}
@@ -1146,6 +1272,7 @@ export async function listApplicationsForUser(
       slug: r.slug,
       name: r.name,
       city: r.city,
+      country: r.country,
       org_type: r.org_type,
       timezone: r.timezone,
       locale: r.locale,

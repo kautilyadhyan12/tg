@@ -39,6 +39,8 @@ export {
   rotateOrgCodeResponseSchema,
   staffAssignableRoleSchema,
   updateOrgCodeRequestSchema,
+  updateOrgRequestSchema,
+  updateOrgResponseSchema,
   updateOrgStaffPrivilegesRequestSchema,
   updateOrgStaffRequestSchema,
 } from "@app/shared";
@@ -82,6 +84,8 @@ export type {
   RotateOrgCodeResponse,
   StaffAssignableRole,
   UpdateOrgCodeRequest,
+  UpdateOrgRequest,
+  UpdateOrgResponse,
   UpdateOrgStaffPrivilegesRequest,
   UpdateOrgStaffRequest,
 } from "@app/shared";

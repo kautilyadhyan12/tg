@@ -1,6 +1,63 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: CARD 1.1 SERVER HALF — a gym can fix its own name, city, country and time
+      zone. DECISIONS :19366. Migration `0014`, one new route, 8 new mutants.
+      **NOTHING TICKS: there is no screen, so no smoke; T3 is UNRUN.**
+
+WHAT SHIPPED
+  `PATCH /v1/orgs/:gymId`, gated on `org.manage` — the seventh privilege, Kd
+  approved it at the plan gate, owner-only BY DEFAULT (he can tick it across to
+  a manager; it is in neither OWNER_ONLY nor LAST_OWNER_REQUIRED). Migration
+  `0014` widens the privileges CHECK, backfills the new privilege onto every
+  existing owner, and adds `gyms.country`.
+
+THE FIVE THINGS A NEXT CHAT MUST NOT GET WRONG
+  1. **THE WEB HALF IS THE NEXT CARD AND CARRIES THE SMOKE.** The 🟡 OWED line
+     is UPDATED, not ticked — an endpoint with no caller ticks nothing
+     (:13803/:14262's precedent). T3 is the other gate and is UNRUN.
+  2. **`gyms.country` IS NULL FOR EVERY GYM CREATED BEFORE TODAY, ON PURPOSE.**
+     Do NOT "fix" it with a backfill from the currency: INR is also
+     `currency_display`'s own DEFAULT, so inverting the map stamps `IN` onto
+     gyms that never chose it. NULL means "we never asked". Own ⚪ line. The
+     screen must ASK, not assume — and the country box starts EMPTY for an
+     existing gym, which is true, not a defect.
+  3. **THE `0014` BACKFILL IS NOT A BREACH OF :15381's SNAPSHOT RULING** and the
+     entry says why in full: that ruling protects a decision somebody MADE, and
+     nobody has decided anything about a privilege that did not exist. Without
+     the backfill every existing owner is 403'd on their own gym.
+  4. **TWO OF MY EIGHT NEW MUTANTS WOULD HAVE COME BACK ALIVE and both were
+     holes in the TESTS.** O114 named a test whose every PATCH is REFUSED before
+     it reaches the repo, so the `gym_id` predicate was never executed — the
+     FOURTH such predicate on this table family to ship unobserved. If you add a
+     tenancy predicate here, the test that guards it must make a SUCCESSFUL call.
+  5. **THE CREATE AND EDIT DOORS NOW SHARE `resolveCurrency` AND REPEAT THE
+     TIMEZONE PROOF.** O15 was re-anchored and O20 got a SIBLING (O122) rather
+     than being re-aimed. A mutant is a claim about ONE call site.
+
+KD'S TWO NEW OWED LINES (both in this commit)
+  ⚪ existing gyms have no country recorded · ❓ **whether a gym may change the
+  currency it is BILLED in once it is actually paying is Kd's to rule** — inert
+  today (nothing inserts into `subscriptions`), a real money question the moment
+  billing ships, and Part 5 names none of it.
+
+MEASURED THIS SESSION (all LOCAL Postgres, :13659)
+  orgs.routes 116/116 (+12) · db.migration 10/10 (+2) · both in ONE invocation
+  126/126 · shared 51/51 · four more suites 69/69 · tsc exit 0 and PROVEN REAL
+  by planting a type error · eslint clean on eight files · sweep a stated SUBSET
+  of 122: 11 RED, 0 ALIVE, 0 never ran, tree clean after. Database read back
+  directly: country column present, both CHECKs deployed, 0 owners missing the
+  privilege, 55 gyms / 0 with a country.
+
+DEVIATION / SPEC GAP: none. §2.2 has no row for `org.manage` — recorded as an
+  ADDITION with no governing § (:9809's class), not invented silently.
+
+NEXT: T3 on this diff in a FRESH chat (prompt handed over with this block), then
+  the WEB half — the console's Settings screen gets a "Gym details" form, and it
+  carries the SMOKE.
+```
+
+```
 TASK: CORRECTION — the previous block's cost analysis priced the AI chat coach,
       WHICH KD DROPPED ON 2026-08-18. DECISIONS :19256. Records only, no code.
 

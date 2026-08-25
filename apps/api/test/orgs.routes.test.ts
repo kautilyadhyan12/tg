@@ -66,6 +66,8 @@ interface CreatedOrg {
     id: string;
     slug: string;
     name: string;
+    city: string | null;
+    country: string | null;
     orgType: string;
     timezone: string;
     currencyDisplay: string;
@@ -328,6 +330,9 @@ d("orgs routes (real Postgres)", () => {
     // T3 L-2: added the day removal shipped, because this list had already been
     // named in its own comment as the thing a new card forgets. Twice now.
     expect((await del(`/v1/orgs/${someGym}/codes/${someCode}`)).statusCode).toBe(401);
+    // The gym-details card's route, added in the same commit for the third
+    // time this list has been the thing a card forgot (L-1, then L-2).
+    expect((await patch(`/v1/orgs/${someGym}`, { name: "X" })).statusCode).toBe(401);
   });
 
   it("creates the org, its first code, the owner staff row and the owner's seat", { timeout: 30_000 }, async () => {
@@ -416,9 +421,18 @@ d("orgs routes (real Postgres)", () => {
       expect(created.org.currencyDisplay).toBe(currency);
       // The value is what the DATABASE holds, not just what the reply says —
       // the column default is still INR and must never be what lands.
-      const row = await sql<{ currency_display: string }[]>`
-        SELECT currency_display FROM gyms WHERE id = ${created.org.id}`;
+      const row = await sql<{ currency_display: string; country: string | null }[]>`
+        SELECT currency_display, country FROM gyms WHERE id = ${created.org.id}`;
       expect(row[0]?.currency_display).toBe(currency);
+      // THE COUNTRY IS STORED, AND STORED UPPER-CASE. Added with migration
+      // `0014`, which is when the wizard's answer stopped being thrown away.
+      //
+      // The `ie` row above is what gives this an observable subject: every other
+      // case is already upper-case, so without a lower-case country in this list
+      // the normalisation could be deleted and nothing would notice — measured,
+      // mutant O120 came back ALIVE against a fixture that only ever sent `IN`
+      // (:5104 F5's shape, caught by the sweep before the card shipped).
+      expect(row[0]?.country).toBe(country.toUpperCase());
     }
 
     // Australia, Poland and Switzerland are all real gyms in real countries we
@@ -4600,5 +4614,348 @@ d("orgs routes (real Postgres)", () => {
       cookies: owner.cookies,
     });
     expect(allowed.statusCode).toBe(200);
+  });
+
+  // ---------------------------------------------------------------------------
+  // A GYM CAN FIX ITS OWN DETAILS — `PATCH /v1/orgs/:gymId`, gated on the
+  // `org.manage` privilege Kd approved 2026-08-26.
+  // ---------------------------------------------------------------------------
+
+  /** Read the gym straight out of the database. Every assertion below about what
+   *  was STORED goes through here rather than through the response body, because
+   *  a route that echoes its own request back is a route that can pass this
+   *  suite while writing nothing (:18488's "read the table back OUT of the
+   *  database, not off the suite's word"). */
+  const readGymRow = async (gymId: string) => {
+    const rows = await sql<
+      { name: string; city: string | null; country: string | null; timezone: string; currency_display: string; slug: string }[]
+    >`SELECT name, city, country, timezone, currency_display, slug FROM gyms WHERE id = ${gymId}`;
+    const row = rows[0];
+    if (row === undefined) throw new Error("gym row vanished");
+    return row;
+  };
+
+  /** `at`, not `created_at` — `audit_log` has no such column, and ordering by it
+   *  is the exact slip :13803 recorded on this table. Made again here and caught
+   *  by running the test, which is the only thing that catches it: nothing in
+   *  tsc or eslint reads a SQL string. Ordered by `id` as the tie-break, because
+   *  two rows written in the same millisecond would otherwise come back in an
+   *  order the assertions below depend on and the database does not promise. */
+  const auditActions = async (gymId: string, action: string) =>
+    await sql<{ meta: Record<string, unknown> }[]>`
+      SELECT meta FROM audit_log WHERE gym_id = ${gymId} AND action = ${action}
+      ORDER BY at ASC, id ASC`;
+
+  it("an owner can change the gym's name, city and time zone", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("edit-happy");
+    const org = await makeOrg(owner.cookies, "Orgs Test Edit Happy");
+
+    const res = await patch(
+      `/v1/orgs/${org.org.id}`,
+      { name: "Orgs Test Edited Name", city: "Guwahati", timezone: "Asia/Tokyo" },
+      { cookies: owner.cookies },
+    );
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as { org: CreatedOrg["org"] };
+    expect(body.org.name).toBe("Orgs Test Edited Name");
+    expect(body.org.city).toBe("Guwahati");
+    expect(body.org.timezone).toBe("Asia/Tokyo");
+
+    const row = await readGymRow(org.org.id);
+    expect(row.name).toBe("Orgs Test Edited Name");
+    expect(row.city).toBe("Guwahati");
+    expect(row.timezone).toBe("Asia/Tokyo");
+  });
+
+  /** THE ADDRESS DOES NOT MOVE WHEN THE NAME DOES. The slug is minted once
+   *  against `RESERVED_SLUGS` and every link an owner has already handed out
+   *  points at it, so re-slugging on rename would break the gym's own posters
+   *  and QR codes silently. It is out of scope by ruling, and this is what stops
+   *  a later "improvement" quietly putting it back in. */
+  it("changing the name does NOT change the gym's web address", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("edit-slug");
+    const org = await makeOrg(owner.cookies, "Orgs Test Edit Slug");
+    expect(org.org.slug).toBe("orgs-test-edit-slug");
+
+    const res = await patch(
+      `/v1/orgs/${org.org.id}`,
+      { name: "Orgs Test Completely Different" },
+      { cookies: owner.cookies },
+    );
+    expect(res.statusCode).toBe(200);
+    expect((await readGymRow(org.org.id)).slug).toBe("orgs-test-edit-slug");
+  });
+
+  /** An ABSENT key leaves a column alone; an explicit `null` clears it. If those
+   *  two collapsed into one meaning, a screen editing the name would blank the
+   *  city it never displayed (C26's class, one route over). */
+  it("an absent field is untouched and an explicit null clears the city", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("edit-null");
+    const org = await makeOrg(owner.cookies, "Orgs Test Edit Null");
+    expect((await readGymRow(org.org.id)).city).toBe("Jorhat");
+
+    // Name only: the city must survive.
+    await patch(`/v1/orgs/${org.org.id}`, { name: "Orgs Test Edit Null 2" }, { cookies: owner.cookies });
+    expect((await readGymRow(org.org.id)).city).toBe("Jorhat");
+
+    // Explicit null: the city goes.
+    const cleared = await patch(`/v1/orgs/${org.org.id}`, { city: null }, { cookies: owner.cookies });
+    expect(cleared.statusCode).toBe(200);
+    expect((await readGymRow(org.org.id)).city).toBeNull();
+  });
+
+  it("changing the country moves the currency with it, and stores the country", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("edit-country");
+    const org = await makeOrg(owner.cookies, "Orgs Test Edit Country");
+    expect(org.org.currencyDisplay).toBe("INR");
+    // The country the WIZARD collected is now stored, where it used to be
+    // mapped to a currency and thrown away (migration `0014`).
+    expect(org.org.country).toBe("IN");
+
+    const res = await patch(`/v1/orgs/${org.org.id}`, { country: "de" }, { cookies: owner.cookies });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as { org: CreatedOrg["org"] };
+    expect(body.org.country).toBe("DE");
+    expect(body.org.currencyDisplay).toBe("EUR");
+
+    const row = await readGymRow(org.org.id);
+    // Upper-cased on the way in, or the column's own CHECK would refuse the
+    // write as a 500 and `country === 'DE'` would be a question with two answers.
+    expect(row.country).toBe("DE");
+    expect(row.currency_display).toBe("EUR");
+  });
+
+  /** A gym must not be able to declare its own money (R3.1, Kd ruling
+   *  :10010/:10099) — and it is REFUSED rather than silently stripped, so an
+   *  owner who tried finds out we decide it instead of watching it vanish. The
+   *  same `.strict()` refusal covers the three fields ruled out of scope. */
+  it("refuses a client-sent currency, and the fields ruled out of scope", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("edit-strict");
+    const org = await makeOrg(owner.cookies, "Orgs Test Edit Strict");
+
+    for (const body of [
+      { currencyDisplay: "USD" },
+      { slug: "something-else" },
+      { orgType: "studio" },
+      { locale: "en-GB" },
+      { name: "Fine", currencyDisplay: "USD" },
+    ]) {
+      expect(
+        (await patch(`/v1/orgs/${org.org.id}`, body, { cookies: owner.cookies })).statusCode,
+        JSON.stringify(body),
+      ).toBe(400);
+    }
+    // Nothing was half-applied by the last, partly-valid, body.
+    expect((await readGymRow(org.org.id)).name).toBe("Orgs Test Edit Strict");
+  });
+
+  /** THE REFUSAL LEAVES THE ROW ALONE. A country check that ran after the name
+   *  was written would be a half-applied save nobody asked for — the gym renamed
+   *  and still billed in the old money. */
+  it("an unsupported country is refused and changes nothing", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("edit-country-bad");
+    const org = await makeOrg(owner.cookies, "Orgs Test Edit Country Bad");
+
+    const res = await patch(
+      `/v1/orgs/${org.org.id}`,
+      { name: "Orgs Test Should Not Land", country: "AU" },
+      { cookies: owner.cookies },
+    );
+    expect(res.statusCode).toBe(400);
+    expect((JSON.parse(res.body) as { error: string }).error).toBe("country_unsupported");
+
+    const row = await readGymRow(org.org.id);
+    expect(row.name).toBe("Orgs Test Edit Country Bad");
+    expect(row.country).toBe("IN");
+    expect(row.currency_display).toBe("INR");
+    // Never a fallback currency — that is how a gym in Sydney gets quoted in
+    // rupees, which is the exact failure the ruling removes.
+    expect(row.currency_display).not.toBe("AUD");
+  });
+
+  /** `gyms.timezone` is the ONLY thing the rollup worker asks when it decides
+   *  where a gym's day ends (trap #8), so a string naming no real zone is
+   *  refused at the door rather than written permanently into a row nothing can
+   *  later interpret. Same list the create door refuses. */
+  it("refuses a time zone that is not a real one", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("edit-tz");
+    const org = await makeOrg(owner.cookies, "Orgs Test Edit Tz");
+
+    for (const timezone of ["Mars/Olympus", "Asia/Kolkatta", "not a zone", "UTC+5"]) {
+      expect(
+        (await patch(`/v1/orgs/${org.org.id}`, { timezone }, { cookies: owner.cookies })).statusCode,
+        timezone,
+      ).toBe(400);
+    }
+    expect((await readGymRow(org.org.id)).timezone).toBe("Asia/Kolkata");
+  });
+
+  it("an empty change is a 400", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("edit-empty");
+    const org = await makeOrg(owner.cookies, "Orgs Test Edit Empty");
+    expect((await patch(`/v1/orgs/${org.org.id}`, {}, { cookies: owner.cookies })).statusCode).toBe(400);
+  });
+
+  /** ONE ENTRY PER REAL CHANGE, AND NONE FOR A NO-OP. A console sending back
+   *  every field it drew is the normal case, so without the comparison every
+   *  save of an untouched form would leave a row claiming somebody changed
+   *  something — and a log that records non-events is one nobody can read a real
+   *  event out of. */
+  it("writes one audit entry per real change and none for a no-op", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("edit-audit");
+    const org = await makeOrg(owner.cookies, "Orgs Test Edit Audit");
+
+    // Sending the values it already holds.
+    const noop = await patch(
+      `/v1/orgs/${org.org.id}`,
+      { name: "Orgs Test Edit Audit", city: "Jorhat", country: "IN", timezone: "Asia/Kolkata" },
+      { cookies: owner.cookies },
+    );
+    expect(noop.statusCode).toBe(200);
+    expect(await auditActions(org.org.id, "org.updated")).toHaveLength(0);
+
+    const real = await patch(
+      `/v1/orgs/${org.org.id}`,
+      { name: "Orgs Test Edit Audit Two" },
+      { cookies: owner.cookies },
+    );
+    expect(real.statusCode).toBe(200);
+    const rows = await auditActions(org.org.id, "org.updated");
+    expect(rows).toHaveLength(1);
+    // WHICH fields moved, and their BEFORE values — the after state is the row
+    // itself, so recording it twice would only create somewhere for the two to
+    // disagree.
+    expect(rows[0]?.meta["changed"]).toEqual(["name"]);
+    expect(rows[0]?.meta["name"]).toBe("Orgs Test Edit Audit");
+    expect(rows[0]?.meta["timezone"]).toBeNull();
+
+    // A currency move is named in its own right, not left to be inferred from
+    // the country — a reader asking "when did this gym's money change" must not
+    // have to know that a country implies one.
+    await patch(`/v1/orgs/${org.org.id}`, { country: "US" }, { cookies: owner.cookies });
+    const after = await auditActions(org.org.id, "org.updated");
+    expect(after).toHaveLength(2);
+    expect(after[1]?.meta["changed"]).toEqual(["country", "currencyDisplay"]);
+    expect(after[1]?.meta["currencyDisplay"]).toBe("INR");
+  });
+
+  /** TENANCY (R3.2). A stranger and a plain member both get 404, never 403 — a
+   *  403 confirms the gym exists and turns a uuid into an enumeration oracle.
+   *  The staff roles get 403, because they already know it exists. */
+  it("refuses everybody who is not this gym's owner", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("edit-owner");
+    const stranger = await makeUser("edit-stranger");
+    const member = await makeUser("edit-member");
+    const trainer = await makeUser("edit-trainer");
+    const manager = await makeUser("edit-manager");
+    const org = await makeOrg(owner.cookies, "Orgs Test Edit Authz");
+
+    // A stranger who runs a DIFFERENT gym — the cross-tenant case, and it needs a
+    // second real gym rather than a fabricated uuid, because a fixture with one
+    // tenant in it cannot fail when a tenancy predicate is deleted (:10182 C/H-3).
+    const otherGym = await makeOrg(stranger.cookies, "Orgs Test Edit Other Gym");
+
+    for (const person of [stranger, member, trainer, manager]) {
+      if (person !== stranger) await joinAsMember(person.cookies, org, owner.cookies);
+    }
+    for (const [person, role] of [
+      [trainer, "trainer"],
+      [manager, "manager"],
+    ] as const) {
+      const local = role === "trainer" ? "edit-trainer" : "edit-manager";
+      const appointed = await post(
+        `/v1/orgs/${org.org.id}/staff`,
+        { email: `orgs-t-${local}@example.com`, role },
+        { cookies: owner.cookies },
+      );
+      expect(appointed.statusCode, role).toBe(201);
+      void person;
+    }
+
+    const attempt = (cookies: Record<string, string>) =>
+      patch(`/v1/orgs/${org.org.id}`, { name: "Orgs Test Hijacked" }, { cookies });
+
+    expect((await attempt(stranger.cookies)).statusCode, "stranger").toBe(404);
+    expect((await attempt(member.cookies)).statusCode, "plain member").toBe(404);
+    // Staff, so they know the gym exists: a genuine 403.
+    expect((await attempt(trainer.cookies)).statusCode, "trainer").toBe(403);
+    // A MANAGER is refused too, and that is the whole content of Kd's
+    // "owner only" — a manager holds every other privilege in this module.
+    expect((await attempt(manager.cookies)).statusCode, "manager").toBe(403);
+
+    expect((await readGymRow(org.org.id)).name).toBe("Orgs Test Edit Authz");
+
+    /** THE CROSS-TENANT CONTROL, and the refusals above are NOT it. Every PATCH
+     *  so far was rejected before it reached the repo, so the edit's own
+     *  `WHERE id = $1` was never executed — delete it and all of them still pass.
+     *  This is the fourth `gym_id` predicate on this family of tables to need
+     *  its own observer (:14493 C/H-1 wrote three of them; :15259 L-1 the
+     *  fourth), so it gets one here rather than being assumed.
+     *
+     *  A SUCCESSFUL edit by the rightful owner, then the other gym checked. */
+    const allowed = await patch(
+      `/v1/orgs/${org.org.id}`,
+      { name: "Orgs Test Edit Authz Renamed", city: "Dibrugarh" },
+      { cookies: owner.cookies },
+    );
+    expect(allowed.statusCode).toBe(200);
+    expect((await readGymRow(org.org.id)).name).toBe("Orgs Test Edit Authz Renamed");
+
+    const untouched = await readGymRow(otherGym.org.id);
+    expect(untouched.name).toBe("Orgs Test Edit Other Gym");
+    expect(untouched.city).toBe("Jorhat");
+  });
+
+  /** "Owner-only BY DEFAULT", not owner-only for ever (:11429 rule 3). The
+   *  privilege is deliberately absent from `OWNER_ONLY_PRIVILEGES`, so an owner
+   *  who wants their manager to fix a typo can tick it across — the reversible
+   *  direction. Without this test that distinction is a comment. */
+  it("an owner can tick the privilege across to a manager", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("edit-grant-owner");
+    const helper = await makeUser("edit-grant-helper");
+    const org = await makeOrg(owner.cookies, "Orgs Test Edit Grant");
+    await joinAsMember(helper.cookies, org, owner.cookies);
+    await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: "orgs-t-edit-grant-helper@example.com", role: "manager" },
+      { cookies: owner.cookies },
+    );
+
+    const before = await patch(
+      `/v1/orgs/${org.org.id}`,
+      { name: "Orgs Test Edit Grant X" },
+      { cookies: helper.cookies },
+    );
+    expect(before.statusCode).toBe(403);
+
+    const ticked = await put(
+      `/v1/orgs/${org.org.id}/staff/${helper.userId}/privileges`,
+      { privileges: ["members.read", "codes.invite", "org.manage"] },
+      { cookies: owner.cookies },
+    );
+    expect(ticked.statusCode).toBe(200);
+
+    const after = await patch(
+      `/v1/orgs/${org.org.id}`,
+      { name: "Orgs Test Edit Grant X" },
+      { cookies: helper.cookies },
+    );
+    expect(after.statusCode).toBe(200);
+    expect((await readGymRow(org.org.id)).name).toBe("Orgs Test Edit Grant X");
+  });
+
+  /** THE OWNER OF AN EXISTING GYM CAN REACH THIS AT ALL. `privilegesFor` prefers
+   *  the STORED set over the role template, so without migration `0014`'s
+   *  backfill every owner appointed before this card would be 403'd on their own
+   *  gym and the feature would ship dead. The owner row here is written by
+   *  `createOrgAttempt`, which reads the template — so this pins the template;
+   *  `db.migration.test.ts` pins the backfill of the rows that predate it. */
+  it("a brand-new owner's stored ticks include the new privilege", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("edit-ticks");
+    const org = await makeOrg(owner.cookies, "Orgs Test Edit Ticks");
+    const rows = await sql<{ privileges: string[] | null }[]>`
+      SELECT privileges FROM gym_staff
+      WHERE gym_id = ${org.org.id} AND user_id = ${owner.userId}`;
+    expect(rows[0]?.privileges).toContain("org.manage");
   });
 });
