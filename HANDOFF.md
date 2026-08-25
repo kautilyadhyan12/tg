@@ -58,9 +58,11 @@ THE NINE THINGS A NEXT CHAT WILL OTHERWISE GET WRONG
      numbers off a gym feed, unprompted. **Gym feed only when EVERY participant
      shares that gym** (my working rule, not his answer), and the audience is
      **the whole gym**, not just owner and staff. **Sharing is OPTIONAL —
-     finishing posts nothing.** Small unruled detail: one participant sharing
-     for the group vs all tapping yes (I recommend all). It inherits the
-     one-week clock, so a 90-day pact yields a picture gone in seven.
+     finishing posts nothing — and ALL PARTICIPANTS MUST TAP YES** (:18128
+     §6.3d; four in a squad = four yeses, one no and it never reaches the gym).
+     **Unanimity governs the GYM FEED only** — each person may still download it
+     and post it anywhere themselves. It inherits the one-week clock, so a
+     90-day pact yields a picture gone in seven.
 
 FILES CHANGED (4, all records)
   docs  DECISIONS.md (:18128, new) · DECISIONS-INDEX.md (+1 line, §1) ·

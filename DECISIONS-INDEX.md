@@ -119,9 +119,9 @@ mid-file: re-derive them with
   the single-person overlay; only the SOURCE is new (summing several people
   across running and workouts). Kd's clarification also removed every
   individual's figures from a gym feed, unprompted.** **§6.3c — SHARING IS
-  OPTIONAL; finishing posts nothing.** Unruled detail: whether ONE participant
-  may share for the group or ALL must agree (chat recommends all; a courtesy
-  question now, not a safety one). **It inherits the ONE-WEEK clock, so a 90-day
+  OPTIONAL; finishing posts nothing** — **and §6.3d: ALL PARTICIPANTS MUST TAP
+  YES.** One no and it never reaches the gym; **unanimity governs the GYM FEED
+  only**, each person may still download and post it themselves. **It inherits the ONE-WEEK clock, so a 90-day
   pact yields a picture gone in seven and the download warning matters MORE here
   than anywhere.**
   **Pool-fragmentation is on record and undisputed: four categories × four

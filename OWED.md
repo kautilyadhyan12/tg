@@ -6300,10 +6300,12 @@ file and is stated so nobody reads these as lower priority than they are.
       two-gym pact still gets the photo, just no gym feed. There **the owner,
       the staff AND every member of that gym** see it and encourage them (Kd,
       §6.3b — an earlier draft said only owner and staff).
-      **SHARING IS OPTIONAL — finishing a pact posts nothing (Kd, §6.3c).**
-      Unruled detail, small: whether ONE participant may share for the group or
-      **ALL must tap yes** (chat recommends all). A courtesy question now, not a
-      safety one, since totals-only removed the individual figures.
+      **SHARING IS OPTIONAL — finishing a pact posts nothing (Kd, §6.3c) — AND
+      ALL PARTICIPANTS MUST TAP YES (Kd, §6.3d).** Four in a squad means four
+      yeses; **one no and it does not reach the gym.** **What unanimity does NOT
+      block: each person may still download it and post it anywhere themselves.**
+      It governs the GYM FEED only, that being the audience nobody individually
+      chose.
       **The one thing not to discover late: it inherits the ONE-WEEK clock**, so
       a 90-day pact yields a picture gone in seven — **the download warning
       matters more here than anywhere else in the app.**

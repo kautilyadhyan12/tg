@@ -18446,13 +18446,12 @@ staff.
 ANSWERED and its recommendation is effectively ADOPTED.** *"its sharing of their
 achivement of working together they have the option to share or not share"*.
 **Nothing is posted by finishing; posting is a choice.**
-**ONE DETAIL LEFT UNSPECIFIED, and it is small: whether ONE participant may
-share for the group, or ALL must agree.** He said "they have the option",
-without splitting it. **Chat recommendation, unruled: ALL participants tap yes,
-because the picture carries everyone's achievement into a room of a hundred
-people.** The stake is now lower than when the concern was raised — **6.3a
-removed every individual figure from the image** — so this is a courtesy
-question, not a safety one.
+**6.3d · KD RULING, closing it the same day: ALL PARTICIPANTS MUST TAP YES.**
+*"all must tap yes"*. **One person cannot share the joint photo on behalf of the
+pact.** In a squad of four, four yeses. **A single no means it is not posted to
+the gym** — and note what that does NOT block: **each person may still download
+it and post it wherever they like themselves.** The unanimity governs the GYM
+FEED only, because that is the audience nobody individually chose.
 
 **TWO CONSEQUENCES A BUILDING CHAT MUST STILL CARRY:**
 1. **THE SOURCE IS NEW EVEN THOUGH THE LAYOUT IS NOT** — summing several
