@@ -21053,3 +21053,103 @@ One line, outside the card's files, approved before it was written (R1.1).
 **the surface all four Criticals lived on is exactly the one no smoke step
 covers** — moving between two gyms. The guard now watches the mechanism; no smoke
 step watches the journey.
+
+## THE INDEX'S POINTERS ARE CHECKED BY A MACHINE — 19 of 212 were wrong, 12 of them landing inside the decision BEFORE the one they named (2026-08-27)
+
+**Read before adding a pointer to `DECISIONS-INDEX.md`, before "fixing" a stale
+line number by hand, and before adding a guard whose subject is a document
+rather than code.** Kd asked whether the project was organised or a maze, was
+told the code is fine and the paperwork is the growth problem, and then asked
+what the line-number hazard's fix was and *"will it affect badly in correct
+desicion"*. He approved the work in one word after being shown the shape of it.
+
+### 1 · THE HAZARD WAS ALREADY DOCUMENTED AND NOTHING COULD DETECT IT
+
+`DECISIONS-INDEX.md` cites `DECISIONS.md` BY LINE NUMBER, and a line number moves
+the moment anything is inserted above it. **The index's own header already says
+so**, and tells the reader to re-derive numbers with `grep -n "^## "` — a file
+documenting a hazard it has no way to detect, relying on every future chat
+remembering. :10726 Low-1 had already recorded the consequence in its worst form:
+a citation went stale **inside the commit that moved it**, and **failed silently
+by landing on a real heading**, then moved twice more the same day.
+
+### 2 · MEASURED BEFORE A BYTE WAS CHANGED, AND IT WAS NOT THEORETICAL
+
+**212 bold pointers · 193 correct · 19 wrong.** Seven landed on the blank line
+above the right entry (harmless — a reader scrolls one line). **Twelve landed
+inside the decision BEFORE the one they named**, one 158 lines in, another 168.
+That is the shape that costs something: a chat jumps there, reads a real,
+coherent, adjacent ruling, and never learns it read the wrong one.
+
+### 3 · THE OBVIOUS REPAIR IS WRONG TWICE, AND THAT IS THE PART TO KEEP
+
+"Point at the next heading down" fixes 18 of the 19 and would have **damaged**
+the record twice if applied mechanically:
+
+- **`:1110` was never broken.** It aims deliberately at the `XPBar` bullet inside
+  the entry at `:1107` — the 100-XP-curve trap its index line is about. The
+  naive rule would have moved it into a *different* decision. It is now the sole
+  declared exception, with its reason beside it.
+- **`:17357` → `:17366`, not `:17359`.** The next heading down is a `###`
+  sub-section of the PREVIOUS decision. Corroborated rather than judged: the
+  index already cites `:17366` for that same ruling elsewhere.
+
+**Both were found only because the proposal printed the index text and the
+candidate heading side by side and they were read.** A correction is a claim
+(:8707) and a mechanical fix to a record is a claim about every line it touches.
+
+### 4 · THE GUARD, AND WHAT IT DELIBERATELY CANNOT DO
+
+`tools/check-decisions-index.mjs`, run from the ROOT `lint` script before turbo —
+`check-harnesses.mjs`'s reason (round 5, Low-6): a guard a warm cache can skip is
+not a guard. It lives under `tools/`, which that harness walk already covers, so
+it is parse-checked without anyone wiring it anywhere.
+
+Three arms, **all three proven by CAUSING them, exit codes read directly**:
+a broken pointer (proven on the real 19, exit 1) · a **spent exception** — an
+allow-list entry that now lands on a heading FAILS the run, so the list can only
+shrink and cannot go on excusing the next drift (:5104 F5) · **vacuity** — a
+reader finding no pointers or no headings is a failure, never a clean bill of
+health (:4855's "ALL MUTANTS CAUGHT" on a run where nothing executed).
+
+**IT PROVES A POINTER LANDS ON A HEADING. IT DOES NOT PROVE IT IS THE RIGHT
+HEADING.** The date cross-check narrows that and only where both sides state a
+date. **Its first draft was RED FOR THE WRONG REASON and that is recorded rather
+than quietly fixed**: it took the first date anywhere in a heading and called
+`:16548` broken, because that heading contains the prose *"open since
+2026-08-19"* while the entry is 2026-08-24 and the pointer was right all along.
+Dates are now read POSITIONALLY — leading `## YYYY-MM-DD —` or trailing
+`(YYYY-MM-DD)`, which between them carry 250 headings — and nothing is asserted
+anywhere else. :4718 F2: a guard red for the wrong reason certifies the wrong
+thing.
+
+### 5 · AN INSTRUMENT FAILURE OF MINE, IN THE SESSION THAT CITES IT
+
+Proving arms 2 and 3, **I piped the run through `tail` and read `$?`, which is
+`tail`'s exit code, not node's** — both arms reported `exit=0` while actually
+exiting 1. :5906's recorded shape, and the FIFTH occurrence in this repo
+(:9509, :10402, :15770, :16095). Caught by reading the output rather than the
+number, and re-measured with the exit code captured directly. **The verdicts
+stand; the first measurement of them did not.**
+
+### 6 · WHAT IS NOT COVERED, MEASURED NOT ESTIMATED
+
+The guard covers the index's **bold** pointers only. Inline `:NNNN` mentions in
+prose are commentary, not the map, and are unchecked: **2,927 occurrences across
+`DECISIONS-INDEX.md`, `DECISIONS.md`, `OWED.md`, `CLAUDE.md` and `HANDOFF.md`,
+265 distinct numbers, of which 74 do not land on a heading.** **That 74 is NOT a
+defect count — an unknown share are deliberate mid-entry pointers like `:1110`,
+and the classification has not been done.** Extending the guard before classifying
+them would ship a red gate nobody can clear. Own `OWED.md` line.
+
+**PROVE: `check-decisions-index` exit 0 — 212 pointers resolve (211 on a heading,
+1 deliberate mid-entry), 704 headings · the same run inside `pnpm -w lint`, after
+`check-harnesses: 24 scripts parse` · the index diff is 20 lines, each differing
+ONLY in its number, `git diff -U0` read line by line · the guard restored
+sha256-identical after each of the three proofs.** **`turbo run lint` is RED and
+it is PRE-EXISTING, measured not assumed**: `turbo run lint --filter=@app/config`
+fails identically with this change out of the chain — a global pnpm 11.18.0 on
+PATH shadows the pinned 9.15.4 inside turbo-spawned tasks. **The DoD lint box
+stays UNTICKED and this is why.** No app code, no schema, no migration, no
+dependency. Nothing about any decision's CONTENT changed — only 20 numbers that
+said where to find one.

@@ -501,6 +501,25 @@ defects, not missing API surfaces. Full record: DECISIONS :6062.
       person's entitlements before and after. **Do not hard-code the numbers into
       the client** (:1110's shape — the server sends, the client renders).
       Ties to the same card as the removal-reason column below.
+- [ ] ⚪ **INLINE `:NNNN` CROSS-REFERENCES ARE UNCHECKED — the new guard covers
+      the index's BOLD pointers only.** Created 2026-08-27 (DECISIONS :21057 §6).
+      `tools/check-decisions-index.mjs` proves every **bold** pointer in
+      `DECISIONS-INDEX.md` lands on the start of a decision, and it found 19 of
+      212 wrong. It deliberately ignores the `:NNNN` mentions that appear inside
+      prose, which are commentary rather than the map — but they drift by exactly
+      the same mechanism, and they are far more numerous. **Measured 2026-08-27,
+      not estimated: 2,927 occurrences across `DECISIONS-INDEX.md`,
+      `DECISIONS.md`, `OWED.md`, `CLAUDE.md` and `HANDOFF.md`; 265 distinct
+      numbers; 74 of those do not land on a heading.**
+      **⚠ THE 74 IS NOT A DEFECT COUNT AND MUST NOT BE QUOTED AS ONE.** An
+      unknown share are DELIBERATE mid-entry pointers — `:1110` is the worked
+      example, and the naive "point at the next heading" repair would have moved
+      it into a different ruling. **The classification has not been done, and it
+      is the whole cost of this item**: 74 numbers each read in context to decide
+      drifted-vs-deliberate. **Do NOT extend the guard before that** — turning
+      inline mentions on today ships a red gate nobody can clear, which is how a
+      guard gets disabled instead of fixed. Unblocked by the classification;
+      blocks nothing.
 - [ ] ⚪ **`gym_members` CANNOT SAY WHY A MEMBERSHIP ENDED, so a person who
       deleted their own account is told a GYM removed them.** Created 2026-08-20
       (DECISIONS :12731, T3 round 2 L2-2). The DPDP Day-0 cascade closes

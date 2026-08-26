@@ -127,6 +127,39 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:21057** — 2026-08-27 — **THIS FILE'S POINTERS ARE NOW CHECKED BY A MACHINE,
+  and 19 of 212 were wrong.** **Read before adding a pointer here, before
+  "fixing" a stale line number by hand, and before extending the guard to inline
+  mentions.** The hazard was already in this file's own header — it cites
+  `DECISIONS.md` BY LINE NUMBER and tells the reader to re-derive numbers by hand,
+  i.e. it documented something nothing could detect; :10726 Low-1 had recorded a
+  citation going stale **inside the commit that moved it** and **failing silently
+  by landing on a real heading**. **Measured before a byte changed: 212 pointers,
+  193 correct, 19 wrong — seven on the blank line above the right entry, TWELVE
+  inside the decision BEFORE the one they named, one 158 lines in and one 168.**
+  **THE PART TO KEEP IS THAT THE OBVIOUS REPAIR IS WRONG TWICE:** "point at the
+  next heading down" fixes 18 and would have DAMAGED the record for `:1110`
+  (a deliberate pointer at a bullet inside `:1107`, now the sole declared
+  exception) and for `:17357` (whose next heading is a `###` of the PREVIOUS
+  entry; true target `:17366`, corroborated by this file citing it elsewhere).
+  Both were caught only because the proposal printed the index text and the
+  candidate heading side by side. **The guard is `tools/check-decisions-index.mjs`
+  on the ROOT `lint` before turbo; three arms all proven by CAUSING them —
+  broken pointer, SPENT exception (an allow-list entry that starts landing on a
+  heading fails the run, so the list can only shrink), and vacuity.**
+  **IT PROVES A POINTER LANDS ON A HEADING, NEVER THAT IT IS THE RIGHT ONE** —
+  the date cross-check narrows that only where both sides state a date, and **its
+  first draft was RED FOR THE WRONG REASON**, calling `:16548` broken off the
+  prose *"open since 2026-08-19"* inside a heading dated 2026-08-24; dates are now
+  read POSITIONALLY only. **An instrument failure of mine in the same session:
+  I read `$?` through a `tail` pipe and both proofs reported exit 0 while exiting
+  1 — :5906's shape, fifth occurrence, re-measured directly.** **NOT COVERED and
+  measured rather than estimated: inline `:NNNN` mentions — 2,927 occurrences
+  across five files, 265 distinct, 74 not landing on a heading — and that 74 is
+  NOT a defect count, since an unknown share are deliberate like `:1110`.** Own
+  `OWED.md` line. **Nothing about any decision's CONTENT changed; 20 numbers that
+  said where to find one did.** `turbo run lint` is RED and PRE-EXISTING (a global
+  pnpm 11 shadowing the pinned 9.15.4), proven with this change out of the chain.
 - **:20986** — 2026-08-26 — **GYM DETAILS, WEB HALF, T3 ROUND 5 (diff-only):
   ZERO Critical/High — THE PACKET SHIPS.** Five rounds, but this one found no
   Critical, so **the hatch does NOT fire** and there is no redesign question. One
@@ -626,7 +659,7 @@ mid-file: re-derive them with
   measured for all three guards that carry one.**
   **THE SERVER HALF IS DONE. NOTHING TICKS — the `OWED.md` line names a SCREEN
   and there is none, so there is still no smoke.** The web half is next.
-- **:19799** — 2026-08-26 — **GYM DETAILS, T3 ROUND 2 (diff-only): ONE
+- **:19803** — 2026-08-26 — **GYM DETAILS, T3 ROUND 2 (diff-only): ONE
   Critical/High, AND IT IS NOT IN THE APP — THE HARNESS MASS-OVERWRITES EVERY
   GYM ROW UNDER A SUMMARY SAYING "restore verified byte-exact".** Reviews
   `da4a5ee`; the packet did NOT ship. Five Low, all fixed. **ESCAPE HATCH NOT
@@ -1504,7 +1537,7 @@ mid-file: re-derive them with
   draft of that test file FAILED for the finding's own reason: I wrote the case
   in UTC and the suite pins `Asia/Kolkata`.** Security pass clean; `gymIds`
   verified unreachable from HTTP by grep, not inference.
-- **:13174** — 2026-08-21 — **THE CLOCK'S SMOKE PASSED 10/10 — and the last run
+- **:13184** — 2026-08-21 — **THE CLOCK'S SMOKE PASSED 10/10 — and the last run
   accidentally became the best evidence in the card: the C/H-1 fix REFUSING to
   delete a real request, in Kd's own browser.** **Read before citing the clock as
   verified, before quoting these steps as covering the nightly worker, and before
@@ -1784,7 +1817,7 @@ mid-file: re-derive them with
   2026-08-06.** Everything else in :2365 stands, including the VISIBLE /
   NOT-VISIBLE tagging requirement. Its security/data-loss exception is a KD
   RULING at :5258 and binds.
-- **:5307** — 2026-08-06 — **KD RULING: THE STOPPING RULE IS STANDING, not
+- **:5308** — 2026-08-06 — **KD RULING: THE STOPPING RULE IS STANDING, not
   per-card.** **⚠️ SUPERSEDED ON AXIS THE SAME DAY by :5348 — read that first.**
   Its VISIBLE/NOT-VISIBLE test is replaced by Critical/High vs Low. **Its
   "everything found is still FIXED" half STANDS, word for word** — Kd said so
@@ -1805,7 +1838,7 @@ mid-file: re-derive them with
   itself — it surfaced only because Kd asked an operator question about the
   PROCESS. A rule nobody re-reads becomes whatever chats have been doing
   with it.**
-- **:5258** — 2026-08-06 — **KD RULING amending the stopping rule, and the drift
+- **:5259** — 2026-08-06 — **KD RULING amending the stopping rule, and the drift
   it exposed. This BINDS.** Kd first declined authorship, then reversed it
   deliberately — "if other chats give more importance to my rule then write as my
   rule" — having been told that a Kd ruling overrides a chat's fresh judgment and
@@ -1863,7 +1896,7 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
 - **:78** — Pending SPEC GAPs raised and not yet ruled on. **Read this section
   every session**; it is the only forward-looking part of the file.
 - **:592** — 2026-07-21 — OPEN QUESTION: privacy-law scope is wider than DPDP.
-- ~~**:5258** — OPEN: is the STOPPING RULE standing or per-card?~~ **CLOSED
+- ~~**:5259** — OPEN: is the STOPPING RULE standing or per-card?~~ **CLOSED
   2026-08-06 by Kd's ruling at :5307 — STANDING.** Left struck rather than
   deleted: it was open for less than a day, and the useful part is that it
   existed at all. Cards no longer record an apology for citing :2365.
@@ -2047,7 +2080,7 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   every console screen is written TWICE and STAYS twice — the ongoing half
   (every future change made in both places, forever) matters more than the
   build.** The SERVER is built once; :9604 §1's measurement holds.
-- **:17357** — 2026-08-24 — **KD RATIFIES THE WHOLE PRICE BOOK FOR THREE
+- **:17366** — 2026-08-24 — **KD RATIFIES THE WHOLE PRICE BOOK FOR THREE
   CONTINENTS, PADDLE BECOMES THE MONEY ROUTE, AND THE 5-vs-20 SCAN CLASH IS
   ANSWERED BY ARITHMETIC.** **Read before seeding ANY plan/price/quota, before
   the billing card, before quoting a payment provider, before planning photo or
@@ -2406,7 +2439,7 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   **no human has watched a power ticked ON reach a control** — recommended HOLD
   for the one-step re-smoke rather than tick over :5034's defect.
 
-- **:16095** — 2026-08-23 — **THE TICK BOXES, T3 ROUND 1: ONE Critical/High — a
+- **:16101** — 2026-08-23 — **THE TICK BOXES, T3 ROUND 1: ONE Critical/High — a
   power ticked ON for a TRAINER reached no control, because the console asked the
   JOB TITLE while the server asked the TICK. The packet did NOT ship this round.**
   Reviews `245632d` (:15770); smoke at :15927. Escape hatch NOT armed (:15673
@@ -2732,7 +2765,7 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   RULING: there is no screen, so an owner cannot reach any of it and there was no
   smoke to run; T3 is the only gate this packet can pass today.**
 
-- **:15259** — 2026-08-22 — **THE ROSTER BADGE, T3 ROUND 1: ZERO Critical/High —
+- **:15260** — 2026-08-22 — **THE ROSTER BADGE, T3 ROUND 1: ZERO Critical/High —
   THE PACKET SHIPS.** Reviews :15093 and :15187. Escape hatch NOT armed (:15007
   found zero). **Read before writing a `gym_id` predicate on `gym_members`,
   before writing "verified" about anything measured on a sample, before citing a
@@ -2784,7 +2817,7 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   never ran, exit 0**, with the whole-table pre-check running all 94 rows under the
   NEW uniqueness rule. **THE `OWED.md` ROSTER LINE TICKS ON THE COMMIT.**
 
-- **:15187** — 2026-08-22 — **THE ROSTER-BADGE SMOKE PASSES — on live data, and
+- **:15198** — 2026-08-22 — **THE ROSTER-BADGE SMOKE PASSES — on live data, and
   on bytes that were not yet committed.** Kd's REPORT (:4829) on :15093, his own
   gym on the Neon dev database, both servers started by the chat. **Read before
   citing the roster badge as verified, before quoting this pass as covering the
@@ -2862,7 +2895,7 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   (`RUNBOOK/smoke-roster-badge.md`, 8 steps) and T3 both UNRUN**; the `OWED.md`
   line is UPDATED, not ticked.
 
-- **:15007** — 2026-08-22 — **T3 ROUND 2 ON THE STAFF SCREEN (diff-only): ZERO
+- **:15010** — 2026-08-22 — **T3 ROUND 2 ON THE STAFF SCREEN (diff-only): ZERO
   Critical/High — THE PACKET SHIPS.** **Read before writing a guard whose only
   proof is that the code looks right, before mirroring one end of a bound, before
   inlining a predicate a sibling file already owns, and before writing
@@ -2903,7 +2936,7 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   and nudges are routeless and staff management ships only its ROLE half. What
   ticks is the console-screen line's Settings/Staff clause and nothing else.
 
-- **:14953** — 2026-08-22 — **THE RE-SMOKE PASSES ON THE SHIPPING BYTES — and Kd
+- **:14956** — 2026-08-22 — **THE RE-SMOKE PASSES ON THE SHIPPING BYTES — and Kd
   finds that the roster does not say who is FREE.** **Read before touching the
   Members roster's badge, before writing `gym_members.complimentary` anywhere, and
   before citing the staff smoke as complete.** Steps 9 and 11 run by a person on
@@ -4536,7 +4569,7 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   open question too: **the smoke pass STANDS, no re-run.** web 634/634 · sweep 64
   · 55 RED · 4 alive · 5 not applied (the pre-existing camera rows).
   `BACKLOG.md` L38–L41.
-- **:8610** — 2026-08-16 — **DUAL-WRITE, T3 ROUND 1: one Critical/High — the
+- **:8613** — 2026-08-16 — **DUAL-WRITE, T3 ROUND 1: one Critical/High — the
   Start button's only error message was DELETED and a comment left behind saying
   it still worked.** **Read before deleting a call that can REJECT, before
   trusting a `catch` to report a storage failure, and before editing inside a
@@ -4612,7 +4645,7 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   disproved sentence was about to be committed into DECISIONS alongside its own
   refutation. Five Lows fixed (BACKLOG L28–L32); the singular's siblings deferred
   as a CLASS with an `OWED.md` line.
-- **:8340** — 2026-08-15 — **DASHBOARD STATS, T3 ROUND 2: the STOP trigger fired
+- **:8343** — 2026-08-15 — **DASHBOARD STATS, T3 ROUND 2: the STOP trigger fired
   (two rounds, two Criticals, same three lines), Kd ruled for the REDESIGN, and
   the server now answers what the screen had been guessing.** **Read before
   writing any empty state.** Round 1's own fix told every BRAND-NEW account their
@@ -4773,7 +4806,7 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   is what a rename drops quietly. **NOT TICKED: Kd declined the DEMONSTRATION,
   which is not the same as waiving the smoke, and no chat widens a ruling for
   him.**
-- **:7730** — 2026-08-14 — **THE API HALF: the server stops GUESSING how long you
+- **:7739** — 2026-08-14 — **THE API HALF: the server stops GUESSING how long you
   exercised — the camera reports what it WATCHED and the bill follows it. And a
   PAUSE is billed as squatting, which the new field CANNOT see.** **Read before
   touching `kcalPointForSets*`, before adding a field to a §2.4 document, before
@@ -5239,7 +5272,7 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   true of six of ten tests, corrected in place; **the review's Low-1 was checked
   and does not reproduce.** web 523/523 · 7 mutants, 6 RED, 0 never ran, restores
   sha256-verified. **SMOKE STILL UNRUN — nothing ticked; round 2 is diff-only.**
-- **:6062** — 2026-08-07 — **THE CAMERA SMOKE STOPPED PART-WAY: real squats were
+- **:6074** — 2026-08-07 — **THE CAMERA SMOKE STOPPED PART-WAY: real squats were
   not counted, and the pose model counted FURNITURE.** **Read before touching rep
   counting, the pose provider, or anything that decides why a rep did not
   happen.** No code changed; Kd stopped the smoke and sent the work to its own
@@ -5352,7 +5385,7 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   on one completed run** · api 419/419 · web 506/506. **Carries Kd's L-7 ruling
   (LEAVE the plan window as a browse gate) and the condition he attached — which
   grants NOTHING about ownership.**
-- **:5543** — 2026-08-07 — **the summary SMOKE PASSED 8/8 — and the browser found
+- **:5551** — 2026-08-07 — **the summary SMOKE PASSED 8/8 — and the browser found
   TWO defects that 505 green tests could not.** **Read before writing a fixture
   for a NETWORK failure, and before trusting "the tests cover the offline path".**
   (1) Pasting another account's summary link said **"Your workout is saved and
@@ -5389,7 +5422,7 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   review/fix process (:5348), and the first permanent guard (rule 5). **Its harness
   failed twice at its own job — reading a PASSING suite as RED, and asking `git
   diff` a question git cannot answer — both toward a false ALARM.**
-- **:5199** — 2026-08-05 — **exercise library, T3 ROUND 2 (THE CAP) — CARD
+- **:5200** — 2026-08-05 — **exercise library, T3 ROUND 2 (THE CAP) — CARD
   CLOSED, 🔴 LINE TICKED.** 3 findings, ZERO visible. **Read before trusting any
   harness that reports its own restore, and before ticking an OWED line on a
   mutant that lives in another file.** **F1 is the FIFTH unearned harness pass
@@ -5411,7 +5444,7 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   **28/28 RED, 0 survived, 0 invalid — the full sweep run to completion for the
   first time — with all six targets then verified restored via `git diff HEAD`
   rather than on the harness's word.** 496/496, lint unchanged, build green.
-- **:5104** — 2026-08-05 — **exercise library, T3 ROUND 1: 7 findings, ZERO
+- **:5105** — 2026-08-05 — **exercise library, T3 ROUND 1: 7 findings, ZERO
   visible, all fixed — and the FIX FOR F5 SHIPPED UNPROTECTED.** **Read before
   ticking an OWED line, and before believing a fix is pinned by the test written
   with it.** **F1 has the teeth: the AI badge's I4 half was protected by
@@ -5440,7 +5473,7 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   round 2's F3 — true of my hand-rolled loop, false of the committed harness,
   which could not reach them at all.** 🔴 line does not tick here; round 2 is
   the cap.
-- **:5034** — 2026-08-05 — **exercise library: browser SMOKE PASSED 9/9 on
+- **:5041** — 2026-08-05 — **exercise library: browser SMOKE PASSED 9/9 on
   `b96c009` — and BOTH first-run failures were the SMOKE DOCUMENT's, not the
   card's.** **Read before writing the setup section of any smoke doc, and before
   reading a smoke failure as a card failure.** Recorded as Kd's REPORT, not a
@@ -5488,7 +5521,7 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   OWED lines that named this card**: the `|| DIFF_COLORS.beginner` one-of-N site,
   and the calendar's title-cased slugs. Lint went DOWN (2 errors → 1, measured
   against HEAD).
-- **:4855** — 2026-08-05 — **date-window card 2, T3 ROUND 2 (THE CAP) — CARD
+- **:4856** — 2026-08-05 — **date-window card 2, T3 ROUND 2 (THE CAP) — CARD
   CLOSED, 🔴 line TICKED.** 9 findings, ZERO user-visible. **Read before writing
   a test fixture, and before trusting any harness in this repo.**
   **THE ONE WITH TEETH IS NOT IN THE REVIEW: the harness printed "ALL MUTANTS
