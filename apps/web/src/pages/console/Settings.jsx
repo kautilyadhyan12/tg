@@ -102,8 +102,21 @@ export default function Settings() {
           **It is older than rounds 1 and 2 and was not caused by either fix** —
           round 1's work made it less bad, not worse. Kd ruled PATCH on the third
           firing of :5348's escape hatch, given that distinction (:14493: the
-          hatch counts ROUNDS, Kd rules on what the rounds FOUND). */}
-      {canEditGym ? <GymDetailsPanel key={org.id} org={org} privileges={privileges} /> : null}
+          hatch counts ROUNDS, Kd rules on what the rounds FOUND).
+
+          **T3 ROUND 4 — THE KEY MUST ALSO BE UNIQUE AMONG ITS SIBLINGS, and this
+          prefix is that.** Round 3 shipped the bare `org.id` on BOTH panels.
+          React builds its child map by key, so the second write wins and the
+          FIRST panel's fiber is dropped WITHOUT a deletion being scheduled — it
+          stayed in the document across the gym change, fully typeable, showing
+          gym A's name, city and zone under gym B's heading, with a live Save
+          that wrote to gym A and gave the owner no confirmation either way.
+          Worse than the defect it replaced, and React said so on every render:
+          "Encountered two children with the same key". Prefixing per panel keeps
+          round 3's guarantee and makes each key unique, which is the condition
+          that guarantee always depended on. Kd ruled PATCH on the fourth
+          firing. */}
+      {canEditGym ? <GymDetailsPanel key={`gym-${org.id}`} org={org} privileges={privileges} /> : null}
 
       {/* KEYED FOR THE SAME REASON, AND IT IS THE CLASS HALF OF THE FIX ABOVE.
           Found by probing for the sibling rather than by the review, which named
@@ -118,9 +131,15 @@ export default function Settings() {
           against a gym they do not staff.
 
           The effect already re-reads on `gymId`, which is why the wrong list is
-          temporary; the key is what stops it ever being shown. */}
+          temporary; the key is what stops it ever being shown.
+
+          PREFIXED for round 4's reason above. It was the SURVIVOR of the
+          duplicate pair purely because it is written second — nothing recorded
+          that dependency, and reordering these two blocks would have silently
+          handed the defect to this panel instead. The prefix removes the
+          ordering dependency along with the duplicate. */}
       {canEditStaff ? (
-        <StaffPanel key={org.id} gymId={org.id} privileges={privileges} orgType={org.orgType} />
+        <StaffPanel key={`staff-${org.id}`} gymId={org.id} privileges={privileges} orgType={org.orgType} />
       ) : null}
 
       {!canEditGym && !canEditStaff ? (

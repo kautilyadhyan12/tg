@@ -1,6 +1,67 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: GYM DETAILS (WEB HALF), T3 ROUND 4 (diff-only) — ONE Critical/High, IT IS
+      ROUND 3'S OWN FIX, THE HATCH FIRED A FOURTH TIME, KD RULED PATCH.
+      DECISIONS :20867. **Packet did NOT ship; a DIFF-ONLY ROUND 5 is the
+      remaining gate.**
+
+  1. ⚠️ **THE BLOCK BELOW (round 3) CONTAINS A FALSE FACT AT ITS ITEM 6. Read
+     item 3 here before you believe it.**
+  2. **C/H-1: ROUND 3 PUT THE SAME `key={org.id}` ON BOTH SIBLING PANELS**
+     (`Settings.jsx:106`, `:123`). React's child map keeps the LAST of a
+     duplicate pair, so the FIRST panel's fiber is dropped **without a deletion
+     being scheduled** — it stays in the document. A person saw
+     `Settings / Iron Palace` with an OPEN, typeable `Iron House` form under it
+     and a second empty `Gym details` heading; Save on the visible form PATCHed
+     **gym A** with **pre-move values**, with **no confirmation either way**, and
+     it never clears without a page reload. **Worse than what round 3 fixed.**
+     React printed `Encountered two children with the same key` on every render
+     and nobody was reading it. **Fix: prefix per panel** (`gym-…`/`staff-…`) —
+     keeps round 3's guarantee, and kills an unrecorded ORDERING dependency
+     (`StaffPanel` survived only because it is written second).
+  3. **CORRECTION — round 3's "test-env fact" is FALSE.** react-router 7 +
+     React 19 do NOT leave the outgoing route subtree in jsdom. Measured on the
+     same bytes: ONE `h1`, ONE subtitle, ONE Staff heading. The only duplicated
+     thing was the gym panel, duplicated by round 3's own `key`. **RULE EARNED:
+     a "test-environment quirk" is not a finding until it has been controlled
+     against the code under test — if the quirk vanishes when you fix your own
+     bug, it WAS your bug.**
+  4. **THE INSTRUMENT IS THE REAL DELIVERABLE.** Round 3's test took `last(...)`
+     of every query and opened the LAST heading — it looks past a stranded panel
+     **by construction**, so it passed on the shipped defect. It now COUNTS:
+     exactly one heading, one of each box holding gym B's value, one Save,
+     disabled. **It guards BOTH failure modes where the old one guarded
+     neither** — key DUPLICATED and key ABSENT.
+  5. **HATCH: FOURTH CONSECUTIVE ROUND, and this time the spiral condition was
+     MET** — `git show f1e995c:…/Settings.jsx` has no `key` on either line, so
+     round 3's fix created round 4's defect. Kd was told that in plain words and
+     ruled PATCH: a redesign would not have prevented it (a rebuilt screen with
+     two matching keys breaks identically).
+  6. **`apps/web` lint is RED at 73 problems AND WAS ALREADY RED AT EXACTLY 73
+     ON `97d1098`** (measured by stashing both changed files). Neither changed
+     file appears in the output. Pre-existing debt, untouched, NOT claimed clean
+     — do not read a green DoD lint box on this card.
+
+MEASURED (final bytes): web 1234/1234 exit 0 across 45 files ·
+  `settings.render.test.jsx` 115/115 · rule 3 measured BOTH ways (RED on shipped
+  bytes: `length of 1 but got 2`; RED with both keys removed — mutant **C84** —
+  `[ 'Iron House HQ' ]` vs `[ 'Iron Palace' ]`, staff guard red beside it) ·
+  `Settings.jsx` byte-compared against the pre-mutation copy (`317b4858…`) after
+  C84 was reverted. No server change, no `@app/shared` change, no migration, no
+  new dependency.
+
+FILES: apps/web/src/pages/console/Settings.jsx ·
+       apps/web/src/pages/console/settings.render.test.jsx ·
+       DECISIONS.md · DECISIONS-INDEX.md · BACKLOG.md · HANDOFF.md
+
+NEXT: T3 ROUND 5, diff-only, in a FRESH chat — cover ONLY the two changed files.
+      The smoke does not need re-running (no step moves between two gyms) — but
+      note that **the surface all four Criticals live on is exactly the one no
+      smoke step covers.**
+```
+
+```
 TASK: GYM DETAILS (WEB HALF), T3 ROUND 3 (diff-only) — ONE Critical/High, THE
       HATCH FIRED A THIRD TIME, KD RULED PATCH. DECISIONS :20712. **Packet did
       NOT ship; a DIFF-ONLY ROUND 4 is the remaining gate.**
@@ -26,10 +87,13 @@ TASK: GYM DETAILS (WEB HALF), T3 ROUND 3 (diff-only) — ONE Critical/High, THE
      zone missing, so round 2's whole variadic guarantee had no observer —
      measured, 1232/1232 green with it broken. :5104 F5 inside the test written
      to close round 2's own Critical (:12731).
-  6. **TEST-ENV FACT THAT WILL RECUR: react-router 7 + React 19 leave the
-     OUTGOING route subtree in jsdom**, so every query after a navigation
+  6. ⚠️ **FALSE — DO NOT USE. CORRECTED IN THE ROUND-4 BLOCK ABOVE (:20867).**
+     ~~TEST-ENV FACT THAT WILL RECUR: react-router 7 + React 19 leave the
+     OUTGOING route subtree in jsdom, so every query after a navigation
      matches twice (probed: `['Iron House HQ','Iron Palace']`). Take the LAST
-     match; a `getBy*` is red-for-the-wrong-reason.
+     match; a `getBy*` is red-for-the-wrong-reason.~~ The router duplicates
+     nothing; it was THIS round's own duplicate `key`, and "take the LAST match"
+     is what hid the resulting defect from this round's own test.
 
 MEASURED (final bytes): web 1234/1234 exit 0 across 45 files (+2) · build ✓ ·
   eslint clean on three files · `node --check` clean · SWEEP a stated SUBSET of

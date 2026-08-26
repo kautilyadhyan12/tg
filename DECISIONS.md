@@ -20794,7 +20794,17 @@ Closed by mocking a list containing NEITHER zone, so two are missing at once —
 **the only fixture shape that can tell the two implementations apart**, which is
 :4267 F2's class. Mutant **C83** could not have existed before that change.
 
-### THE TEST-ENVIRONMENT FINDING, WORTH RECORDING BECAUSE IT WILL RECUR
+### ~~THE TEST-ENVIRONMENT FINDING, WORTH RECORDING BECAUSE IT WILL RECUR~~ — FALSE, CORRECTED AT :20867
+
+> ⚠️ **EVERYTHING IN THIS SECTION IS WRONG AND IT COST A ROUND.** Measured on the
+> same bytes in round 4: **one `h1`, one subtitle, one Staff heading** after the
+> navigation — the route subtree is NOT duplicated. The only duplicated thing was
+> the gym panel, duplicated by **this round's own `key`**, which was put on both
+> siblings. "The departing tree a real browser removes" is the opposite of the
+> truth: React never scheduled its deletion, so no browser removes it. Taking the
+> LAST match is what let the resulting stranded panel pass this round's own test.
+> **Left standing rather than deleted, because the wrong diagnosis is the lesson.**
+> Full correction and the rule it earns: :20867.
 
 The C/H-1 test navigates, and under **react-router 7 + React 19 jsdom keeps the
 OUTGOING route subtree in the document**: probed directly, the two name boxes read
@@ -20853,3 +20863,122 @@ fixes touch. **ESCAPE-HATCH NOTE FOR ROUND 4: a Critical/High in this file or it
 mount site would be the FOURTH consecutive round**, and the argument that carried
 the last three PATCH rulings — *"this one was not caused by the previous fix"* —
 would have to be made again on its own evidence, not inherited.
+
+## GYM DETAILS, WEB HALF — T3 ROUND 4 (diff-only): ONE Critical/High, IT IS ROUND 3'S OWN FIX, THE HATCH FIRED A FOURTH TIME, KD RULED PATCH — and the recorded CAUSE of the round-3 test shape was FALSE, which is why round 4 existed (2026-08-26)
+
+Reviews `97d1098`. **The packet did NOT ship this round.** Three Low, logged in
+`BACKLOG.md`. Kd approved the finding list before a byte was written (*"go"*).
+
+**Read before putting a `key` on a console panel, before writing a test that
+takes `last(...)` of anything, and before trusting a recorded "test-environment
+fact" that was never controlled against the code under test.**
+
+### C/H-1 — TWO SIBLINGS, ONE `key`: ROUND 3'S FIX STRANDED THE PANEL IT WAS FIXING
+
+Round 3 put `key={org.id}` on **both** `GymDetailsPanel` and `StaffPanel` as
+siblings (`Settings.jsx:106`, `:123` on `97d1098`). React builds its child map by
+key and the **second write wins**, so the first panel's fiber is dropped **without
+a deletion ever being scheduled**. It stays in the document.
+
+**What a person saw:** the header reads `Settings / Iron Palace`, and directly
+under it an OPEN, fully typeable `Iron House` form — gym A's name, city, country
+and zone — followed by a second, empty `Gym details` heading. Typing in the
+visible form and pressing its Save sent a `PATCH` to **gym A**, carrying the
+values from **before** the move, with **no "Saved." and no spinner** either way,
+because that fiber never re-renders and its handler is a stale closure. It does
+not clear itself: React no longer tracks that DOM, so nothing removes it short of
+a page reload. **Worse than the defect it replaced** — round 3 traded *writing
+gym A's values to gym B* for *writing them to gym A under gym B's name, silently*.
+
+React said so on **every render**, in both this suite and the browser:
+`Encountered two children with the same key`. Nobody was reading it.
+
+**Not an IDOR** — round 3's reading stands unchanged: the server rightly
+authorises the write, and this is corruption inside the caller's own tenancy.
+
+**THE FIX IS THE PREFIX, and it keeps round 3's guarantee rather than replacing
+it:** `key={`gym-${org.id}`}` and `key={`staff-${org.id}`}`. Unique among
+siblings, which is the condition round 3's guarantee always depended on and never
+stated. It also removes an unrecorded **ordering** dependency: `StaffPanel`
+survived the duplicate pair *purely because it is written second*, so reordering
+those two blocks would have silently handed the defect to the staff list instead.
+
+### THE INSTRUMENT FINDING IS THE REAL ONE, AND IT IS WHY A DAY WENT
+
+**The round-3 test could not see round-3's own bug.** `carries NOTHING from one
+gym onto another, even mid-edit` took `last(...)` of every query and clicked the
+LAST `Gym details` heading open — a shape that looks **past the stranded panel by
+construction**. Measured: it passes on the shipped duplicate-key bytes.
+
+It did that on a **recorded cause that is false**, and the false line is the
+proximate reason C/H-1 shipped. See the correction block below.
+
+**Closed by counting instead of choosing.** The test now asserts **exactly one**
+`Gym details` heading, **exactly one** of each box with gym B's own value, and
+**exactly one** Save, disabled. Measured in both directions on this machine:
+
+- **RED on the shipped bytes** — `expected [ <button …>, …(1) ] to have a length
+  of 1 but got 2`, with React's duplicate-key warning printed for **both** gym
+  ids (so the duplicate is present on every render, not only after a navigation).
+- **RED with BOTH keys removed** (mutant **C84**) — `expected [ 'Iron House HQ' ]
+  to deeply equal [ 'Iron Palace' ]`, i.e. round 3's original defect, and
+  `carries NO staff list from one gym onto another` red beside it. So the
+  rewritten test guards **both** failure modes — key absent AND key duplicated —
+  where the old one guarded neither.
+- **GREEN on the fix**, 115/115 in the file, 1234/1234 across the web suite.
+
+### CORRECTION — THE "TEST-ENVIRONMENT FINDING" AT :20797 IS FALSE
+
+Round 3 recorded, and repeated into `DECISIONS-INDEX.md`, `HANDOFF.md` and its
+commit message: *"react-router 7 + React 19 leave the OUTGOING route subtree in
+jsdom, so every query after a navigation matches twice."*
+
+**It does not.** Measured on the same bytes: **one `h1`, one subtitle, one Staff
+heading** after the navigation. Nothing of the route subtree is duplicated. The
+**only** duplicated thing was the gym panel, and it was duplicated **by round 3's
+own `key`** — not by the router, not by React 19, not by jsdom.
+
+The sentence *"the first is the departing tree a real browser removes"* is the
+**opposite** of the truth: a real browser will not remove it, because React never
+scheduled its deletion. **A wrong diagnosis written into four documents turned a
+one-line bug into a fourth review round** — :5748's class (a false premise
+inherited by the next author) with the aggravating factor that this one was
+manufactured by the round that shipped the defect. **The rule this earns: a
+"test-environment quirk" is not a finding until it has been controlled against
+the code under test — if the quirk disappears when you fix your own bug, it was
+your bug.**
+
+### THE ESCAPE HATCH FIRED FOR THE FOURTH CONSECUTIVE ROUND
+
+Rounds 1 and 2 in `GymDetailsPanel.jsx`; rounds 3 and 4 at its mount site in
+`Settings.jsx`. :13336 judges the subsystem at FILE granularity, so :5348's
+trigger has now fired four rounds running. **The reviewer stopped without
+proposing a fix and refused to inherit the argument that carried the previous
+three PATCH rulings** — correctly: `git show f1e995c:…/Settings.jsx` has no `key`
+on either line, so **this defect was created by round 3's own fix**, the spiral
+the hatch exists to catch, and the second time in four rounds.
+
+**Kd ruled PATCH** on the one fact put to him in plain words: the bug is two
+siblings wearing the same name tag, the fix is two prefixes, and a redesign of
+the screen's mounting would not have prevented it — a rebuilt screen with two
+matching keys breaks identically. **Fifth firing, fifth PATCH ruling** (:6277,
+:9509, :14493, :20712). What he was told separates this from a bare "patch
+again": the round's real deliverable is the **instrument**, not the two prefixes.
+
+### PROVE — final bytes
+
+- **web 1234/1234 exit 0 across 45 files**; `settings.render.test.jsx` 115/115.
+- **RULE 3 MEASURED, both directions, both named above.** C84 applied and
+  reverted; `Settings.jsx` restored and **byte-compared** against the pre-mutation
+  copy (`317b4858…`), identical.
+- **`eslint .` on `apps/web` is RED at 73 problems (65 errors, 8 warnings) — and
+  it is RED at exactly 73 on `97d1098` too**, measured by stashing both changed
+  files and re-running. **Neither changed file appears in the output.** The web
+  package's lint debt is pre-existing and untouched by this round; it is not this
+  card's to fix and is not claimed as clean.
+- No server change, no `@app/shared` change, no migration, no new dependency.
+
+**NOTHING TICKS: a DIFF-ONLY ROUND 5 is the remaining gate.** The smoke still
+does not need re-running — no step moves between two gyms — but note the round-4
+reviewer's own observation, which stands: **the surface all four Criticals live on
+is precisely the one no smoke step covers.**

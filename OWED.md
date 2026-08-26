@@ -3839,6 +3839,10 @@ then; none may be hidden or reduced to close the gap.
       `Achievements.jsx:5` unused `ChevronRight`) are pre-existing on master and
       correctly untouched per R1.1. Either lint web and fix the 67, or change the
       DoD wording so the box stops asserting something nobody checked.
+      **RE-MEASURED 2026-08-26 (gym-details T3 round 4, :20867): it is now 73
+      problems — 65 errors, 8 warnings — and it was 73 on `97d1098` before that
+      round touched anything, so the debt GREW by 6 while every web card kept
+      ticking the box.** That growth is the argument for closing this item.
 - [ ] ⚪ **Two PostWorkout behaviours are render-test-proven but BROWSER-unreachable.**
       T3 round 3 F7 (2026-07-30). No rig state has `duration_minutes` present with
       `active_seconds` absent (the minutes-fallback arm, where "NaNh NaNm total"

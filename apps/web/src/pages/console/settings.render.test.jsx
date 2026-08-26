@@ -1522,30 +1522,34 @@ describe('when the gym changes underneath the form', () => {
     fireEvent.click(screen.getByText('jump'));
     await waitFor(() => expect(screen.getAllByText('Iron Palace').length).toBeGreaterThan(0));
 
-    // THE QUERIES TAKE THE LAST MATCH, AND THE REASON IS MEASURED RATHER THAN
-    // GUESSED. Under react-router 7 + React 19, jsdom keeps the OUTGOING route
-    // subtree in the document after this navigation, so every query matches
-    // twice — probed directly, the two name boxes read
-    // `['Iron House HQ', 'Iron Palace']`. The last is the panel that is actually
-    // mounted for gym B; the first is the departing tree a real browser removes.
-    // A plain `getBy*` fails on "found multiple elements", which is red for the
-    // wrong reason (:4718 F2) and says nothing about the fix.
+    // THE COUNT IS THE ASSERTION, and the round-4 finding is why. This test used
+    // to take the LAST match of every query, on a recorded cause that is simply
+    // false: "react-router 7 + React 19 leave the outgoing route subtree in
+    // jsdom, so every query matches twice". Nothing of the route subtree is
+    // duplicated — measured here, ONE `h1`, ONE subtitle, ONE Staff heading.
+    // What was duplicated was the gym panel alone, because round 3's fix gave
+    // BOTH panels the same `key`, and React keeps only the last of a duplicate
+    // pair in its child map — so the first panel's fiber is dropped without a
+    // deletion ever being scheduled, and it sits in the document, typeable, with
+    // a live Save button wired to the gym the owner has left.
     //
-    // **It still discriminates, which is the only thing that matters here:**
-    // without the `key` there is no second panel at all and the last match is
-    // gym A's typing, so this goes RED — measured before the fix, `expected
-    // 'Iron House HQ' to be 'Iron Palace'`.
-    const last = (nodes) => nodes[nodes.length - 1];
+    // Taking the last match looked straight past exactly that panel. So this
+    // test passed with the defect live, which is how a day went. It now counts:
+    // one heading, one of every box, one Save.
     const headings = screen.getAllByRole('button', { name: /^Gym details/ });
-    const live = last(headings);
-    if (live.getAttribute('aria-expanded') !== 'true') fireEvent.click(live);
+    expect(headings).toHaveLength(1);
+    if (headings[0].getAttribute('aria-expanded') !== 'true') fireEvent.click(headings[0]);
 
-    // GYM B'S OWN VALUES, none of gym A's.
-    expect(last(screen.getAllByLabelText('Gym name')).value).toBe('Iron Palace');
-    expect(last(screen.getAllByLabelText('City')).value).toBe('Dallas');
-    expect(last(screen.getAllByLabelText('Time zone')).value).toBe('Europe/Paris');
-    // And nothing to send, so the click that did the damage is not offered.
-    expect(last(screen.getAllByText('Save changes')).disabled).toBe(true);
+    // GYM B'S OWN VALUES, none of gym A's — and ONE box each, so a stranded
+    // panel still holding gym A's typing fails this rather than hiding behind it.
+    expect(screen.getAllByLabelText('Gym name').map((n) => n.value)).toEqual(['Iron Palace']);
+    expect(screen.getAllByLabelText('City').map((n) => n.value)).toEqual(['Dallas']);
+    expect(screen.getAllByLabelText('Time zone').map((n) => n.value)).toEqual(['Europe/Paris']);
+    // And nothing to send, so the click that did the damage is not offered —
+    // nor is a second one belonging to the gym they left.
+    const saves = screen.getAllByText('Save changes');
+    expect(saves).toHaveLength(1);
+    expect(saves[0].disabled).toBe(true);
   });
 
   /** THE SIBLING, found by probing for it rather than by the review — which

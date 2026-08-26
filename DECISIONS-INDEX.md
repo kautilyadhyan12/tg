@@ -127,6 +127,52 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:20867** — 2026-08-26 — **GYM DETAILS, WEB HALF, T3 ROUND 4 (diff-only): ONE
+  Critical/High — IT IS ROUND 3'S OWN FIX. THE HATCH FIRED A FOURTH TIME; KD
+  RULED PATCH.** Reviews `97d1098`; **the packet did NOT ship.** Three Low, in
+  `BACKLOG.md`. **Read before putting a `key` on a console panel, before writing
+  a test that takes `last(...)` of anything, and before trusting a recorded
+  "test-environment quirk" that was never controlled against the code under test.**
+  **C/H-1: ROUND 3 PUT THE SAME `key={org.id}` ON BOTH SIBLING PANELS.** React's
+  child map keeps the LAST of a duplicate pair, so the first panel's fiber is
+  dropped **without a deletion being scheduled** and stays in the document. A
+  person saw `Settings / Iron Palace` with an OPEN, typeable `Iron House` form
+  under it and a second empty `Gym details` heading; Save on the visible form
+  `PATCH`ed **gym A** with **pre-move values** and showed **no confirmation
+  either way** (stale closure, never re-renders, never clears without a reload).
+  **Worse than what round 3 fixed** — it traded *A's values onto B* for *A's
+  values onto A under B's name, silently*. React printed `Encountered two
+  children with the same key` on every render and nobody read it. **Not an
+  IDOR** (round 3's reading stands). **Fix: prefix per panel** —
+  `gym-${org.id}` / `staff-${org.id}` — which keeps round 3's guarantee and also
+  kills an unrecorded ORDERING dependency (`StaffPanel` survived *only* because
+  it is written second).
+  **⚠️ CORRECTION TO THE :20712 BLOCK BELOW: its "react-router 7 + React 19 leave
+  the OUTGOING route subtree in jsdom" IS FALSE.** Measured: one `h1`, one
+  subtitle, one Staff heading. Nothing of the route subtree duplicates — only the
+  gym panel, and only because of the duplicate `key`. **A wrong diagnosis written
+  into four documents turned a one-line bug into a fourth round.** **RULE EARNED:
+  a "test-environment quirk" is not a finding until it has been controlled
+  against the code under test — if the quirk disappears when you fix your own
+  bug, it WAS your bug.**
+  **THE INSTRUMENT FINDING IS THE REAL DELIVERABLE: the round-3 test could not
+  see round-3's bug**, because `last(...)` and "click the LAST heading open" look
+  past a stranded panel by construction — it passed on the shipped defect. Now it
+  **COUNTS**: exactly one heading, one of each box with gym B's value, one Save,
+  disabled. **Guards BOTH failure modes where the old one guarded neither** —
+  RED on the shipped bytes (`length of 1 but got 2`) and RED with both keys
+  removed (**C84**, `[ 'Iron House HQ' ]` vs `[ 'Iron Palace' ]`).
+  **PROVE: web 1234/1234 exit 0 across 45 files · 115/115 in the file · rule 3
+  measured BOTH ways with `Settings.jsx` byte-compared after C84 (`317b4858…`).
+  `eslint .` on `apps/web` is RED at 73 problems — and RED at exactly 73 on
+  `97d1098` too, with NEITHER changed file in the output: pre-existing debt,
+  untouched, not claimed clean.** No server, `@app/shared`, migration or
+  dependency change. **NOTHING TICKS: a DIFF-ONLY ROUND 5 is the remaining gate.
+  Fifth firing, fifth PATCH ruling** (:6277, :9509, :14493, :20712) — and the
+  hatch's own spiral condition was MET this time, stated to Kd rather than
+  argued around: `git show f1e995c` has no `key` on either line, so round 3's fix
+  created round 4's defect. **The surface all four Criticals live on is precisely
+  the one no smoke step covers.**
 - **:20712** — 2026-08-26 — **GYM DETAILS, WEB HALF, T3 ROUND 3 (diff-only): ONE
   Critical/High — GYM A'S TYPING FOLLOWED THE OWNER ONTO GYM B AND SAVE WROTE IT
   THERE. THE HATCH FIRED A THIRD TIME; KD RULED PATCH; the fix is a `key`.**
@@ -165,10 +211,12 @@ mid-file: re-derive them with
   guarantee broken.** :5104 F5 inside the test written to close round 2's own
   Critical/High (:12731 again). Fixed with a fixture where TWO are missing —
   :4267 F2's class — and **C83 could not have existed before that change**.
-  **TEST-ENVIRONMENT FINDING WORTH KEEPING: react-router 7 + React 19 leave the
+  ~~**TEST-ENVIRONMENT FINDING WORTH KEEPING: react-router 7 + React 19 leave the
   OUTGOING route subtree in jsdom**, so every query matches twice (probed:
   `['Iron House HQ', 'Iron Palace']`). Queries take the LAST match; a `getBy*`
-  fails red-for-the-wrong-reason (:4718 F2).
+  fails red-for-the-wrong-reason (:4718 F2).~~ **⚠️ FALSE — the router duplicates
+  NOTHING; it was this round's own duplicate `key`, and taking the LAST match is
+  what hid the resulting defect from this round's own test. Corrected :20867.**
   **PROVE: web 1234/1234 exit 0 (+2) · build ✓ · eslint clean on three files ·
   `node --check` clean · SWEEP a stated SUBSET of 105: C81/C82/C83/S15 — 4 RED, 0
   ALIVE. Rule 3 measured BOTH ways with `Settings.jsx` restored and
