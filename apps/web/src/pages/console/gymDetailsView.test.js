@@ -199,8 +199,8 @@ describe('what actually gets sent', () => {
   it('clears a city with null, and sets one that was never there', () => {
     expect(gymDetailsPatch({ ...gymDetailsDraft(ORG), city: '  ' }, ORG)).toEqual({ city: null });
     const noCity = { ...ORG, city: null };
-    expect(gymDetailsPatch({ ...gymDetailsDraft(noCity), city: 'Jorhat' }, noCity)).toEqual({
-      city: 'Jorhat',
+    expect(gymDetailsPatch({ ...gymDetailsDraft(noCity), city: 'Austin' }, noCity)).toEqual({
+      city: 'Austin',
     });
   });
 
@@ -234,12 +234,12 @@ describe('what actually gets sent', () => {
 
   it('sends several fields at once when several moved', () => {
     const patch = gymDetailsPatch(
-      { name: 'Iron House Two', city: 'Jorhat', country: 'IN', timezone: 'Asia/Kolkata' },
+      { name: 'Iron House Two', city: 'Dallas', country: 'IN', timezone: 'Asia/Kolkata' },
       ORG,
     );
     expect(patch).toEqual({
       name: 'Iron House Two',
-      city: 'Jorhat',
+      city: 'Dallas',
       country: 'IN',
       timezone: 'Asia/Kolkata',
     });

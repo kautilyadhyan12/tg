@@ -1,6 +1,53 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE GYM-DETAILS SMOKE — PASSED, and three findings that outlive it.
+      DECISIONS :20222 (addendum to :20075). **T3 IS NOW THE ONLY GATE LEFT on
+      the whole six-commit packet.**
+
+  1. **THE APP WAS DEAD BEFORE THE SHEET COULD START — :15927 RECURRING, THREE
+     DAYS LATER.** Migration `0014` had never been applied to the Neon dev
+     branch (13 of 14), so every gym read 500'd on `g.country` and an owner saw
+     "something went wrong" with no gyms. **Worse than the first time twice
+     over:** `/console` itself failed, so there was no "one broken screen" tell;
+     and **applying the migration was NOT enough** — `postgres.js` caches a
+     failed prepared statement per connection, so the api served the old error
+     against a fixed database **until it was restarted**. The boot-time refusal
+     :15927 recommended is now overdue and must cover the RESTART, not just the
+     apply. **Run the migration check before any browser smoke.**
+  2. **HIS FIRST "ALL PASSED" COVERED THREE STEPS NEVER CLICKED, AND THE
+     DATABASE IS WHAT CAUGHT IT** — one audit row where five were owed, the
+     three missing being rename/time-zone/city, i.e. every step that proves
+     saving works. Asked with both branches named (*did you click Save and see
+     "Saved.", or look and move on?*) he said *"i skipped now it is saved"*.
+     **:14745 earned twice: a global "all passed" does not cover a step whose
+     evidence is missing.** Read the rows, always.
+  3. **STEP 4 COULD NOT HAVE FAILED ON HIS GYM** — its zone was already in the
+     runtime's list, so the alias case (:10402) went unexercised and the pass is
+     NOT evidence about it. C56 carries it alone. Clearing a city was also never
+     done. Both named on the sheet and the OWED line rather than glossed.
+  4. **KD RESTATED THE MARKET, AND IT IS A RESTATEMENT NOT A RULING.** A sweep
+     replaced every "Jorhat" in 17 files including `CLAUDE.md` and four
+     `docs/spec/` files; he answered *"my market is usa not jorhat"*. **:9604
+     ruled US gyms on 2026-08-18 and :8808 already says "JORHAT IS THE PILOT,
+     NOT THE MARKET"** — recording it as new would be :17765's failure. **He put
+     the spec and CLAUDE.md back** once told the spec is the reference every
+     ruling cites. One replacement came out FALSE (`vitest.config.js`: "the
+     product's own market (Austin), +05:30, and no DST" above
+     `TZ = "Asia/Kolkata"`) and is corrected by explaining the REAL reason for
+     the pin — half-hour offset, no DST, **and no US zone has both**.
+
+MEASURED: web 1205/1205 exit 0 across 45 files, after everything · eslint's one
+  `'process' is not defined` on `vitest.config.js` PROVEN pre-existing by linting
+  the committed copy (line 17 → 26, identical error) · the smoke ran on `7236093`
+  with `git status` carrying no source change · five `org.updated` rows read back
+  out of the database, each naming exactly one field.
+
+NEXT: **T3 in a FRESH chat over the whole packet's web half.** Nothing else is
+  outstanding on this card.
+```
+
+```
 TASK: THE GYM DETAILS SCREEN — the web half, and the packet's FIRST screen.
       DECISIONS :20075. `PATCH /v1/orgs/:gymId` had shipped that morning with
       NO CALLER; Settings now carries a **Gym details** form (name · city ·

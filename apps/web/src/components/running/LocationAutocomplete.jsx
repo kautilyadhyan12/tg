@@ -133,7 +133,7 @@ export default function LocationAutocomplete({ onSelect }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => results.length && setOpen(true)}
-          placeholder="Search a place, e.g. Rowriah Jorhat"
+          placeholder="Search a place, e.g. Zilker Austin"
           className="flex-1 bg-transparent text-sm outline-none"
           style={{ color: '#fff' }}
         />

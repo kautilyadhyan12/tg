@@ -232,7 +232,7 @@ d("join-application sweep + nudge (real Postgres)", () => {
       "/v1/orgs",
       {
         name: `Sweep Test ${String(orgSeq++)} ${String(Date.now() % 100000)}`,
-        city: "Jorhat",
+        city: "Austin",
         country: "IN",
         timezone: "Asia/Kolkata",
       },

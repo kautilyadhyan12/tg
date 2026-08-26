@@ -6199,14 +6199,27 @@ file and is stated so nobody reads these as lower priority than they are.
       DOES NOT TICK** (DECISIONS :20075). Settings now carries a **Gym details**
       form: name, city, country and time zone, with the currency shown and not
       editable, sending only the fields that actually changed. **What holds it
-      open now is the GATES, not the code: the SMOKE
-      (`RUNBOOK/smoke-gym-details.md`, 9 steps) is UNRUN and T3 is UNRUN on any
-      of the six commits in this packet.** A passing smoke is not a review
-      (:14147) and neither has happened. **Its step 4 is the one that matters** —
-      the time-zone box must already show the gym's OWN zone when the screen
-      opens, because a picker without it would move a gym's day boundary on the
-      next save. **The slug is still deliberately NOT part of this** and the
-      currency is still never client-settable.
+      open now is the GATES, not the code.** **The slug is still deliberately NOT
+      part of this** and the currency is still never client-settable.
+      **UPDATE, SAME DAY AGAIN — THE SMOKE PASSED AND T3 IS NOW THE ONLY THING
+      HOLDING THIS LINE** (DECISIONS :20222). Kd ran it on the shipping bytes
+      (`7236093`, `git status` carrying no source change), and **the pass is
+      corroborated by the AUDIT ROWS rather than by the report**: five
+      `org.updated` rows, **each naming exactly ONE field**, and none mentioning
+      the country except the save that changed it — mutant C55's guarantee seen on
+      live data. **His FIRST "all passed" covered three steps that were never
+      clicked** and the database is what caught it (one row where five were owed);
+      asked with both branches named, he answered *"i skipped now it is saved"*
+      and ran them. **:14745 twice over.**
+      **THREE THINGS THE PASS DOES NOT COVER, and they belong to whoever ticks
+      this line:** clearing a city was never done (`city: null` is carried by C58
+      and no human) · **step 4 could not have failed on that gym**, whose zone was
+      already in the runtime's list, so the alias case it exists for was NOT
+      exercised (:15927's step-7 shape; the fixture it needs is a gym whose stored
+      zone the browser calls by its other name) · the currency lock stays
+      unreachable while nothing inserts into `subscriptions`.
+      **T3 IS UNRUN on all six commits in this packet** — a passing smoke is not
+      a review (:14147).
 - [ ] ⚪ **EVERY GYM CREATED BEFORE 2026-08-26 HAS NO COUNTRY RECORDED, and no
       honest backfill exists.** `gyms.country` arrived with migration `0014`;
       before it the create wizard collected a country, the server mapped it to a

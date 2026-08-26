@@ -4,7 +4,60 @@
 city, country and time zone from the Settings screen. Until today none of those
 could ever be changed after the gym was created.
 
-## RESULT — NOT YET RUN
+## RESULT — PASSED (Kd, 2026-08-26, on commit `7236093`)
+
+**"all passed", and this one is CORROBORATED BY THE ROWS rather than resting on
+the report** (:7929's rule — for anything a screen can only claim, design the
+sheet to produce the rows and let them carry it). Five `org.updated` audit rows
+reached the server, **each naming exactly ONE field**, which is the guarantee
+this whole card turns on:
+
+| time | `changed` |
+|---|---|
+| 08:01:24 | `["country"]` — from NULL to `US`, and `currency_display` came back `USD` |
+| 08:14:23 | `["name"]` |
+| 08:14:32 | `["name"]` (back again) |
+| 08:14:44 | `["timezone"]` |
+| 08:15:02 | `["city"]` |
+
+**Five saves, five single-field patches, and not one of them mentioned the
+country except the save that changed it.** That is C55 observed on live data
+instead of in a fixture — the thing that stops a rename refusing itself once a
+gym is paying.
+
+**THE FIRST RUN WAS A PARTIAL PASS REPORTED AS A WHOLE ONE, AND THE DATABASE IS
+WHAT CAUGHT IT.** "all passed" arrived with exactly ONE audit row in the entire
+history of the table — the country. Steps 3, 5 and 6 had been read rather than
+clicked. Asked which it was ("did you click Save, or look and move on?"), Kd
+answered *"i skipped now it is saved"* and ran them, producing the four rows
+above. **:14745's lesson holds and is now twice-proven: a global "all passed"
+does not cover a step whose evidence is missing, and naming the doubt is what
+produces the evidence.** Had the rows not been read, this sheet would carry a
+9/9 for a run that never exercised saving at all.
+
+**WHAT THIS PASS DOES NOT ESTABLISH — three things, stated rather than glossed:**
+
+- **CLEARING a city was never done.** The city went `ohio` → `new yprk`; the
+  box was never emptied. So `city: null` — the PATCH's whole point, mutant
+  C58 — is carried by tests and by no human.
+- **STEP 4 COULD NOT HAVE FAILED ON THIS GYM.** Its zone was
+  `America/New_York`, which this machine's `Intl.supportedValuesOf` already
+  lists, so the box would have shown it correctly whether or not
+  `timezoneChoices` injects a missing zone. **The alias case the step exists for
+  (:10402's measured `Asia/Kolkata` vs `Asia/Calcutta` gap) was NOT exercised**
+  — :15927's step-7 shape, a step whose fixture cannot produce the state it
+  claims to check. It is carried by C56 and its unit test alone. **A gym whose
+  stored zone the browser calls by its other name is the fixture this step
+  needs**, and that is what a future run should set up.
+- **The currency lock is still unreached**, as the sheet already says below.
+
+**THE GYM WAS LEFT MODIFIED** — city `new yprk`, zone `America/Mendoza` — i.e.
+its day currently ends on Argentine time. Recorded because the sheet's own last
+section asks for a restore and one did not happen; the same screen reverses it.
+
+**IT ALSO COULD NOT START UNTIL A MIGRATION WAS APPLIED BY HAND**, which is its
+own finding and is written up at DECISIONS :20075's addendum and on `OWED.md`'s
+migration-gap line. Read that before running any browser smoke.
 
 ---
 

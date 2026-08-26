@@ -269,29 +269,29 @@ d("geo routes + geocode cache (real Postgres, fake ORS)", () => {
       provider: "test-geocoder",
       resolve: () => {
         resolverCalls++;
-        return Promise.resolve("Jorhat, Assam");
+        return Promise.resolve("Austin, Texas");
       },
     };
     const lat = 1.2341;
     const lng = 5.6779; // round3 → 1.234 / 5.678
 
     // 1) Cold: resolver runs once, both layers populated.
-    expect(await geocode({ sql, redis }, lat, lng, resolver)).toBe("Jorhat, Assam");
+    expect(await geocode({ sql, redis }, lat, lng, resolver)).toBe("Austin, Texas");
     expect(resolverCalls).toBe(1);
-    expect(await redis.get(geoRedisKey(1.234, 5.678))).toBe("Jorhat, Assam");
+    expect(await redis.get(geoRedisKey(1.234, 5.678))).toBe("Austin, Texas");
     const [stored] = await sql<{ name: string; provider: string }[]>`
       SELECT name, provider FROM geo_cache WHERE lat3 = 1.234 AND lng3 = 5.678`;
-    expect(stored?.name).toBe("Jorhat, Assam");
+    expect(stored?.name).toBe("Austin, Texas");
     expect(stored?.provider).toBe("test-geocoder");
 
     // 2) Warm Redis hit: resolver NOT called again.
-    expect(await geocode({ sql, redis }, lat, lng, resolver)).toBe("Jorhat, Assam");
+    expect(await geocode({ sql, redis }, lat, lng, resolver)).toBe("Austin, Texas");
     expect(resolverCalls).toBe(1);
 
     // 3) Redis evicted but the Postgres floor holds: still no resolver call, Redis re-warmed.
     await redis.del(geoRedisKey(1.234, 5.678));
-    expect(await geocode({ sql, redis }, lat, lng, resolver)).toBe("Jorhat, Assam");
+    expect(await geocode({ sql, redis }, lat, lng, resolver)).toBe("Austin, Texas");
     expect(resolverCalls).toBe(1);
-    expect(await redis.get(geoRedisKey(1.234, 5.678))).toBe("Jorhat, Assam");
+    expect(await redis.get(geoRedisKey(1.234, 5.678))).toBe("Austin, Texas");
   }, 30_000);
 });

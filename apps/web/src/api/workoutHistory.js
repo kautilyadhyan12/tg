@@ -43,7 +43,7 @@
 // 3. DAY BUCKETING. The server used to decide which day a workout belonged to.
 //    Now this file does — for DISPLAY GROUPING IN THIS CALENDAR ONLY.
 //    `localDateKey` buckets by the viewer's LOCAL calendar day, which is what a
-//    calendar means: an 11pm workout in Jorhat belongs to that evening, not to
+//    calendar means: an 11pm workout in Austin belongs to that evening, not to
 //    the next UTC day. Streaks, "today" and every other day boundary stay
 //    SERVER-side on `users.timezone` (DECISIONS 2026-07-21; playbook trap #8).
 //    No day maths is moved into the client by this file.

@@ -255,7 +255,7 @@ describe('userService repoint (Card 6)', () => {
   // The web never captured a timezone, so users.timezone stayed null and every
   // user bucketed as UTC (DECISIONS 2026-07-11 P2.3 GAP-3) — streaks and
   // "today" rolling over at the wrong local hour for everyone outside UTC,
-  // which in a Jorhat pilot is everyone. Playbook trap #8.
+  // which in a gym pilot is everyone. Playbook trap #8.
   describe('timezoneUpdate', () => {
     it('returns the detected zone when the server has none', () => {
       expect(timezoneUpdate(null, 'Asia/Kolkata')).toBe('Asia/Kolkata');

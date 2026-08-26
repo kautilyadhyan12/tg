@@ -170,8 +170,57 @@ mid-file: re-derive them with
   migration; the api half NOT re-run and said so.
   **THE CURRENCY LOCK IS UNREACHABLE FROM A BROWSER** (nothing inserts into
   `subscriptions`) — the one thing on this screen no human can see, written into
-  the sheet as such. **NOTHING TICKS: SMOKE (`RUNBOOK/smoke-gym-details.md`, 9
-  steps) and T3 both UNRUN.**
+  the sheet as such. ~~**NOTHING TICKS: SMOKE and T3 both UNRUN.**~~
+  **— SUPERSEDED THE SAME DAY BY THE ADDENDUM AT :20222: THE SMOKE PASSED. T3
+  is now the only gate left.**
+  **ADDENDUM :20222 — THE SMOKE PASSED, THE ROWS CAUGHT A PARTIAL PASS REPORTED
+  AS A WHOLE ONE, AND THE APP WAS DEAD BEFORE THE SHEET COULD BEGIN.** **Read
+  before running ANY browser smoke, before quoting an "all passed", and before
+  assuming the database a browser reads is up to date.**
+  **(1) :15927 RECURRED AND IT IS WORSE THE SECOND TIME.** Migration `0014` had
+  never been applied to the Neon dev branch (13 of 14, measured), so
+  `listOrgsForUser` selecting `g.country` made every gym read a 500 and gym
+  creation fail — *"something went wrong", no gyms listed*. **`/console` itself
+  failed this time**, so there was no "one broken screen" tell, and **applying
+  the migration was NOT enough**: `postgres.js` caches a failed prepared
+  statement per connection, so the running api served the old error against a
+  fixed database until it was RESTARTED. Verified out of the database, not on the
+  migrator's word: 14 applied · both CHECKs read from `pg_get_constraintdef` · 3
+  owner rows, 0 missing the privilege · 108 gyms untouched · 0 with a country.
+  **The boot-time refusal is now overdue** — :5348 rule 5's own trigger.
+  **(2) THE FIRST "ALL PASSED" COVERED THREE STEPS NEVER CLICKED**, and the
+  DATABASE is what caught it: one audit row existed where five were owed, and the
+  three missing ones were rename/time-zone/city — *every step that proves saving
+  works at all*. Asked with both branches named (*did you click Save, or look and
+  move on?*), Kd answered *"i skipped now it is saved"*. **:14745 earned twice:
+  a global "all passed" does not cover a step whose evidence is missing, and
+  NAMING THE DOUBT produces it.** Final: **five saves, each naming exactly ONE
+  field, and none mentioning the country except the one that changed it — C55 on
+  live data.**
+  **NOT ESTABLISHED, unsoftened: clearing a city was never done** (C58 alone);
+  **step 4 COULD NOT HAVE FAILED on this gym** — its zone was already in the
+  runtime's list, so the alias case the step exists for was not exercised
+  (:15927's step-7 shape, C56 alone, and the fixture it needs is named); the
+  currency lock stays unreachable; the gym was left on Argentine time.
+  **(3) KD RESTATED THE MARKET — A RESTATEMENT, NOT A NEW RULING.** 34 lines
+  across 17 files swept *"Jorhat"* out of the repo including `CLAUDE.md` and four
+  `docs/spec/` files; asked, he answered *"my market is usa not jorhat"*.
+  **:9604 already ruled US gyms (2026-08-18) and :8808 already carries his own
+  sharper line, "JORHAT IS THE PILOT, NOT THE MARKET"** — so this is stale text
+  catching up, and recording it as a fresh ruling would be :17765's failure.
+  **The spec and `CLAUDE.md` were put back by him** once the cost was named (the
+  spec is the fixed reference every ruling is recorded AGAINST). **One
+  replacement came out FALSE and was corrected properly rather than
+  word-swapped**: `vitest.config.js` claimed *"the product's own market (Austin),
+  +05:30, and no DST"* above `TZ = "Asia/Kolkata"`. **The pin was never about the
+  market** — it earns its place on a half-hour offset and NO DST, and **no US
+  zone has both**. Two fixtures pairing a US city with `country: "IN"` are left
+  alone deliberately: the country is load-bearing (eight `INR` assertions), the
+  city is not.
+  **MEASURED after all of it: web 1205/1205 exit 0 across 45 files**; eslint's
+  one `'process' is not defined` on `vitest.config.js` PROVEN pre-existing by
+  linting the committed copy. **T3 IS NOW THE ONLY GATE LEFT** — a passing smoke
+  is not a review (:14147).
 - **:19366** — 2026-08-26 — **A GYM CAN FINALLY FIX ITS OWN DETAILS (server
   half), AND THE COUNTRY THE WIZARD HAS ASKED FOR SINCE AUGUST WAS BEING THROWN
   AWAY.** **Read before touching `PATCH /v1/orgs/:gymId`, before adding a

@@ -224,7 +224,7 @@ d("orgs routes (real Postgres)", () => {
   ): Promise<CreatedOrg> => {
     const res = await post(
       "/v1/orgs",
-      { name, city: "Jorhat", country: "IN", timezone: "Asia/Kolkata", ...extra },
+      { name, city: "Austin", country: "IN", timezone: "Asia/Kolkata", ...extra },
       { cookies },
     );
     expect(res.statusCode).toBe(201);
@@ -4697,11 +4697,11 @@ d("orgs routes (real Postgres)", () => {
   it("an absent field is untouched and an explicit null clears the city", { timeout: 30_000 }, async () => {
     const owner = await makeUser("edit-null");
     const org = await makeOrg(owner.cookies, "Orgs Test Edit Null");
-    expect((await readGymRow(org.org.id)).city).toBe("Jorhat");
+    expect((await readGymRow(org.org.id)).city).toBe("Austin");
 
     // Name only: the city must survive.
     await patch(`/v1/orgs/${org.org.id}`, { name: "Orgs Test Edit Null 2" }, { cookies: owner.cookies });
-    expect((await readGymRow(org.org.id)).city).toBe("Jorhat");
+    expect((await readGymRow(org.org.id)).city).toBe("Austin");
 
     // Explicit null: the city goes.
     const cleared = await patch(`/v1/orgs/${org.org.id}`, { city: null }, { cookies: owner.cookies });
@@ -5021,7 +5021,7 @@ d("orgs routes (real Postgres)", () => {
     // Sending the values it already holds.
     const noop = await patch(
       `/v1/orgs/${org.org.id}`,
-      { name: "Orgs Test Edit Audit", city: "Jorhat", country: "IN", timezone: "Asia/Kolkata" },
+      { name: "Orgs Test Edit Audit", city: "Austin", country: "IN", timezone: "Asia/Kolkata" },
       { cookies: owner.cookies },
     );
     expect(noop.statusCode).toBe(200);
@@ -5118,7 +5118,7 @@ d("orgs routes (real Postgres)", () => {
 
     const untouched = await readGymRow(otherGym.org.id);
     expect(untouched.name).toBe("Orgs Test Edit Other Gym");
-    expect(untouched.city).toBe("Jorhat");
+    expect(untouched.city).toBe("Austin");
   });
 
   /** "Owner-only BY DEFAULT", not owner-only for ever (:11429 rule 3). The

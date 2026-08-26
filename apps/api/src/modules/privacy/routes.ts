@@ -30,7 +30,7 @@ import { buildUserExport } from "./export.js";
  *  per-IP dimension, which on a gym's shared connection would throttle
  *  everyone behind one NAT address." The dual limiter counts `max`
  *  independently on EACH dimension, so an IP bucket of 3 caps a whole gym —
- *  and the Jorhat pilot is literally gyms on shared connections (P6). The
+ *  and the gym pilot is literally gyms on shared connections (P6). The
  *  precedent was inverted rather than quoted (V2); this now copies its
  *  actual shape, `coachRateCap`. */
 const EXPORT_MAX_PER_WINDOW = 3;

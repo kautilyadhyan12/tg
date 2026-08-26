@@ -10,10 +10,19 @@ import { defineConfig } from "vitest/config";
 //
 // Under UTC the local day and the UTC day are IDENTICAL BY DEFINITION, so no
 // fixture can tell the two implementations apart — this cannot be fixed in
-// test data, only by giving the run a zone with a real offset. Asia/Kolkata:
-// the product's own market (Jorhat), +05:30, and no DST, so a date fixture
-// cannot drift twice a year. Set here rather than in ci.yml so a local run and
-// a CI run answer the same question.
+// test data, only by giving the run a zone with a real offset.
+//
+// ASIA/KOLKATA IS CHOSEN FOR ITS CLOCK, NOT FOR THE MARKET — corrected
+// 2026-08-26, because the line here used to justify it as "the product's own
+// market" and Kd's market is the UNITED STATES (ruled 2026-08-18). Two
+// properties are what earn the pin, and no US zone has both: a **half-hour**
+// offset (+05:30), which catches a whole class of arithmetic that a whole-hour
+// zone lets through, and **no DST**, so a date fixture cannot drift twice a
+// year and turn this gate into a seasonal flake. A US zone would give up the
+// second one — America/Chicago moves twice a year — so pinning "our market"
+// here would make the suite worse, which is the point worth leaving behind.
+// Set here rather than in ci.yml so a local run and a CI run answer the same
+// question.
 process.env.TZ = "Asia/Kolkata";
 
 // The engine adapter and the pure API-layer tests take plain arrays/objects — no

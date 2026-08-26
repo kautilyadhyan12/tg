@@ -123,7 +123,7 @@ export const userService = {
 // The web never sent one, so `users.timezone` stayed null and the server
 // bucketed EVERY user as UTC (DECISIONS 2026-07-11 P2.3 GAP-3) — streaks and
 // "today" rolling over at the wrong local hour for anyone outside UTC, which
-// in a Jorhat pilot is everyone. Playbook trap #8 names this exact failure.
+// in a gym pilot is everyone. Playbook trap #8 names this exact failure.
 //
 // Day maths stays entirely server-side: the client reports WHERE it is and
 // never computes a day boundary itself.

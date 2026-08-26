@@ -61,7 +61,7 @@ export default function NewGym() {
   // T3 C/H-1 — NO PRESELECTED COUNTRY, and this is the whole ruling in one line.
   // It used to default to `'US'`. The field decides `currency_display`, the
   // server writes it once at creation, and there is no settings route to change
-  // it — so an owner in Jorhat who typed a name and pressed Create got a gym
+  // it — so an owner outside the US who typed a name and pressed Create got a gym
   // billed in US dollars, permanently, and was then told "set up in USD".
   // Kd's currency ruling refuses an unsupported country rather than giving it a
   // fallback (*"a fallback currency is how a gym in Sydney gets quoted in

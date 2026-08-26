@@ -20218,3 +20218,119 @@ the smoke sheet as such rather than left as a step that would silently pass.
 **NOTHING TICKS YET. The SMOKE (`RUNBOOK/smoke-gym-details.md`, 9 steps) and T3
 are both UNRUN.** Step 4 is the one that matters: the time-zone box must already
 be showing the gym's OWN zone when the screen opens.
+
+### ADDENDUM, same day — THE SMOKE PASSED, THE ROWS CAUGHT A PARTIAL PASS REPORTED AS A WHOLE ONE, AND THE APP WAS DEAD BEFORE IT COULD START
+
+**Read before running ANY browser smoke, before quoting an "all passed", and
+before assuming the database a browser reads is up to date.**
+
+#### 1 · THE APP WAS BROKEN BEFORE THE SHEET COULD BEGIN, AND IT IS :15927 RECURRING
+
+Kd signed in as a gym owner and got *"something went wrong"* with **no gyms
+listed**; creating a gym failed the same way. **Measured from the api log, not
+guessed:** `PostgresError: column g.country does not exist`, code `42703`, out of
+`listOrgsForUser`, every `/v1/orgs/mine` a 500, and `POST /v1/orgs` failing at
+the INSERT.
+
+**Migration `0014` had never been applied to the Neon dev branch** — 13 of 14
+applied, measured against the repo's own journal. **This is exactly the gap
+:15927 recorded three days earlier**: the api suite runs on a LOCAL Postgres
+(:13659), CI applies to its own ephemeral Neon *branch*, and **the one database a
+browser reads is applied to by hand and by nothing else.** Nobody did it when the
+server half shipped.
+
+**TWO WAYS IT WAS WORSE THAN THE FIRST TIME, and both belong to the fix.**
+(1) `/console` itself failed, so there was no "one broken screen" tell — the whole
+console was dark, which is what P2.8's cutover day looks like. (2) **Applying the
+migration was NOT enough**: `postgres.js` caches a failed prepared statement per
+connection (`cachedError` in the stack), so the running api went on serving the
+old error against a database that already had the column. **The process had to be
+restarted.** Nothing in the record said so, and a boot-time refusal — :15927's own
+recommendation, still unbuilt — would make it unnecessary by construction.
+
+Applied and **verified out of the database rather than on the migrator's word**:
+14 applied · `gyms.country` present with its deployed CHECK read from
+`pg_get_constraintdef` · `org.manage` in the privileges CHECK · **3 owner rows, 0
+still missing the privilege** · 108 gyms untouched · **0 carrying a country, the
+no-backfill decision confirmed in the data**. `OWED.md`'s migration-gap line
+carries the second occurrence and the restart requirement.
+
+#### 2 · THE SMOKE PASSED — AND THE FIRST "ALL PASSED" COVERED THREE STEPS THAT WERE NEVER CLICKED
+
+**The rows are the measurement; the report is a report** (:4829). Kd's first
+"all passed" arrived with **exactly ONE `org.updated` row in the entire history of
+the table** — the country. Steps 3, 5 and 6 — rename, time zone, city, i.e. *every
+step that proves saving works at all* — had been read rather than run.
+
+**He was asked which it was**, in one question with both branches named: *did you
+click Save and see "Saved.", or look and move on?* — because the first answer
+means a live defect worth stopping everything for, and the second does not.
+*"i skipped now it is saved"*, and the four missing rows appeared.
+
+**:14745 EARNED A SECOND TIME: a global "all passed" does not cover a step whose
+evidence is missing, and NAMING THE DOUBT is what produces the evidence.** Had the
+rows not been read, this card would carry a 9/9 for a run that never exercised a
+save.
+
+**FINAL STATE, five rows, each naming exactly ONE field**: `country` (NULL → `US`,
+`currency_display` back as `USD`) · `name` · `name` again · `timezone` · `city`.
+**Not one save mentioned the country except the one that changed it** — C55
+observed on live data rather than in a fixture, which is the guarantee that stops
+a rename refusing itself once a gym is paying.
+
+**WHAT IT DOES NOT ESTABLISH, and none of it is softened:**
+- **Clearing a city was never done** (`ohio` → `new yprk`, never empty), so
+  `city: null` is carried by C58 and no human.
+- **STEP 4 COULD NOT HAVE FAILED ON THIS GYM.** Its zone was `America/New_York`,
+  which this machine's `Intl.supportedValuesOf` already lists — so the box was
+  right whether or not `timezoneChoices` injects anything. **The alias case the
+  step exists for was not exercised**; :15927's step-7 shape exactly, a step whose
+  fixture cannot produce the state it claims to check. Carried by C56 alone. The
+  fixture it needs is a gym whose stored zone the browser calls by its other name.
+- **The currency lock stays unreachable** — nothing inserts into `subscriptions`.
+- **The gym was left modified** (`new yprk`, `America/Mendoza`), the sheet's own
+  restore step not run.
+
+#### 3 · KD RESTATED THE MARKET AND SWEPT "JORHAT" OUT OF THE REPO — A RESTATEMENT, NOT A NEW RULING
+
+Mid-session, 34 lines across 17 files changed with no commit: every *"Jorhat"* in
+the repo replaced by *Austin*, *Dallas*, *pilot* or *independent* — including
+`CLAUDE.md` and **four `docs/spec/` files**. Asked whether it was deliberate, Kd
+answered ***"my market is usa not jorhat"***.
+
+**It is not a new ruling and must not be recorded as one** (:17765 — a chat's
+inference laundered into his mouth is worse than a chat's own call). **:9604
+already ruled the market is US gyms on 2026-08-18**, and :8808 already carries his
+own sharper correction: ***"JORHAT IS THE PILOT, NOT THE MARKET"***. The sweep is
+stale text finally catching up with a four-month-old ruling.
+
+**THE SPEC AND `CLAUDE.md` WERE PUT BACK — by him, after the change was put to
+him with its cost.** The reason given, and it stands: `docs/spec/` is the fixed
+reference every ruling in this file is recorded *against*, so editing it in place
+makes past entries cite wording that no longer exists. The 11 files under `apps/`
+are kept.
+
+**ONE REPLACEMENT CAME OUT FALSE AND IS CORRECTED PROPERLY RATHER THAN
+WORD-SWAPPED.** `apps/web/vitest.config.js` read *"the product's own market
+(Austin), +05:30, and no DST"* — three lines above `TZ = "Asia/Kolkata"`. Austin
+is neither +05:30 nor free of DST, so the comment argued for the opposite of the
+line beneath it. **The pin was never about the market**: it earns its place on a
+HALF-HOUR offset (catching arithmetic a whole-hour zone lets through) and NO DST
+(so a date fixture cannot drift twice a year), and **no US zone has both** —
+`America/Chicago` moves twice a year. Rewritten to say that, with the reason a US
+zone would be worse left behind so nobody "fixes" it again.
+**Left alone deliberately:** two fixtures now pair a US city with `country: "IN"`.
+It reads oddly and it is not wrong — the country is load-bearing (eight tests
+assert `INR` off that helper) and the city is not, so changing it to match would
+break real assertions to tidy a string.
+
+**MEASURED after all of it: web 1205/1205 exit 0 across 45 files** · eslint on
+`vitest.config.js` is **1 error, `'process' is not defined`, PROVEN PRE-EXISTING**
+by linting the committed copy and watching the identical error move line 17 → 26.
+
+#### 4 · WHAT NOW HOLDS THE `OWED.md` LINE
+
+**T3, and nothing else.** Both of the card's gates were smoke and review; the
+smoke is met on the shipping bytes (`git status` carried no source change against
+`7236093` when it ran). **A passing smoke is not a review** (:14147) and no chat
+has reviewed any of the six commits in this packet.
