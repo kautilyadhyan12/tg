@@ -24,8 +24,16 @@ TASK: SETTINGS' SECTIONS COLLAPSE — Kd's call, made at the screen.
      Second **the FILTER** — it named a test driving `null`/`undefined`/a string
      and never an EMPTY ARRAY, the only input the mutation changes. **:11846's
      filter half, twice in one session.**
-  5. **THE SHEET GREW A STEP AND ITS OLD TICK DOES NOT COVER IT.** Step 1 is
-     rewritten and UNRUN on these bytes; steps 2–9 stand (:14840).
+  5. **THE SHEET GREW A STEP AND IT HAS NOW BEEN RUN.** Step 1 was rewritten
+     (tapping · closed headings · the count on a shut row) and **PASSED on
+     `428bbfb`** with the tree clean; steps 2–9 stand on `7236093`. **Two
+     commits, two runs, recorded as two** (:14840, :17647) — what carries 2–9
+     across the change is C67–C71 plus the 33 rewritten call sites.
+     **SO THE SMOKE IS COMPLETE AND T3 IS THE ONLY GATE LEFT.**
+  6. **STILL UNREACHED BY ANY HUMAN, and named rather than glossed:** a section
+     OPENING ITSELF when its read fails (needs the staff request blocked in
+     devtools — :589's method; carried by C68/C69 alone), and the currency lock
+     (nothing inserts into `subscriptions`).
 
 MEASURED (final bytes): web 1214/1214 exit 0 across 45 files (+9) · `vite build`
   exit 0 · eslint `--max-warnings=0` clean on four files · `node --check` clean ·

@@ -6,15 +6,27 @@ could ever be changed after the gym was created.
 
 ## RESULT — PASSED (Kd, 2026-08-26, on commit `7236093`)
 
-> ⚠️ **STEP 1 WAS REWRITTEN AFTER THAT PASS AND IS OWED A RE-RUN.** Kd asked for
-> the sections to collapse (*"i think there should be like drop down… other wise
-> it will be a really long list"*) and step 1 now checks the tapping, the closed
-> headings and the count that survives on a shut row — **none of which existed
-> when he ran this sheet.** Steps 2–9 are unchanged in what they ask and their
-> pass stands; **step 1 alone is UNRUN on the current bytes.** Stated rather than
-> merged into the pass below, because a sheet that quietly grows a step and keeps
-> its old tick is :14840's recorded defect — a smoke that does not carry the
-> shipping bytes.
+> **STEP 1 REWRITTEN AND RE-RUN — PASSED (Kd, 2026-08-26, on commit `428bbfb`,
+> `git status` empty at the time).** He asked for the sections to collapse
+> (*"i think there should be like drop down… other wise it will be a really long
+> list"*), so step 1 now checks the tapping, the closed headings and the staff
+> count that survives on a shut row — **none of which existed when he first ran
+> this sheet**, which is why it was carried as UNRUN rather than folded into the
+> pass below (:14840: a smoke that does not carry the shipping bytes).
+>
+> **Steps 2–9 are unchanged in what they ask and their pass stands on `7236093`;
+> step 1's pass is on `428bbfb`.** Two commits, two runs, stated as two rather
+> than merged into a single tick — the same care :17647 took, and for the same
+> reason: what changed between them is the SCREEN those steps are read from.
+> **What carries steps 2–9 across that change is mutants C67–C71 plus the 27
+> staff and 6 gym call sites rewritten to open a section the way a person does,
+> all green on the final bytes.**
+>
+> **NOT ESTABLISHED by step 1: the anti-silence rule.** A section opening ITSELF
+> when its data fails needs the staff read to fail in a browser, which the sheet
+> does not set up; it is carried by C68/C69 and their tests alone. **A step that
+> blocks `/v1/orgs/:gymId/staff` in devtools is what would close it** — the
+> nutrition card's own method (DECISIONS :589), and the honest way to see it.
 
 **"all passed", and this one is CORROBORATED BY THE ROWS rather than resting on
 the report** (:7929's rule — for anything a screen can only claim, design the

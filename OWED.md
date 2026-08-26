@@ -6222,11 +6222,20 @@ file and is stated so nobody reads these as lower priority than they are.
       a review (:14147).
       **UPDATE, SAME DAY — SETTINGS' SECTIONS NOW COLLAPSE** (Kd's call at the
       screen, DECISIONS :20338), so this line's screen is two tappable rows
-      rather than one long page. **It adds a gate rather than removing one:
-      STEP 1 of the sheet is rewritten and UNRUN** (the tapping, the closed
-      headings, and the staff count that survives on a shut row did not exist
-      when Kd ran it); **steps 2–9 are unchanged in what they ask and stand**.
-      So this line now waits on **T3 plus that one re-run step**.
+      rather than one long page. **Its rewritten STEP 1 was re-run and PASSED**
+      (Kd, on `428bbfb`, tree clean at the time) and steps 2–9 stand on
+      `7236093` — **two commits, two runs, recorded as two rather than merged
+      into one tick** (:17647's care; what carries 2–9 across the change is
+      mutants C67–C71 plus the 33 call sites rewritten to open a section the way
+      a person does).
+      **SO THIS LINE NOW WAITS ON T3 AND NOTHING ELSE.** Every step on the sheet
+      has been run by a person against the bytes it describes.
+      **One thing the smoke still cannot reach, beside the currency lock: a
+      section OPENING ITSELF when its data fails.** That needs the staff read to
+      fail in a browser and no step sets it up, so it is carried by C68/C69 and
+      their tests alone. **The way to close it is a devtools step blocking
+      `/v1/orgs/:gymId/staff`** — exactly how :589's nutrition failure path was
+      finally observed, and the same class of hole that sheet's own T3 named.
 - [ ] ⚪ **EVERY GYM CREATED BEFORE 2026-08-26 HAS NO COUNTRY RECORDED, and no
       honest backfill exists.** `gyms.country` arrived with migration `0014`;
       before it the create wizard collected a country, the server mapped it to a
