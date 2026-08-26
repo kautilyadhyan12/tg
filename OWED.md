@@ -5859,6 +5859,27 @@ file and is stated so nobody reads these as lower priority than they are.
       (every one is a `uq-gym-*` leak or a test leftover). Kd's Neon branch is
       NOT in this state — verified 108 rows, zero test names, his own gyms
       intact.
+      **ROUND 3 UPDATE — the "clean it and the next sweep exits 4" trap is
+      CLOSED, so this line is now only about the leak.** The reviewer measured
+      that a sweep containing O114 and a working guard were mutually exclusive:
+      exit 4 on a healthy table, blind on a flattened one, which meant cleaning
+      these rows guaranteed the next sweep would fail and re-flatten them. The
+      guard now ATTRIBUTES row changes to the mutant that made them and O114
+      declares `writesRows`, so its own damage is reported by name and is not an
+      alarm. **Cleaning the junk rows is now safe and is what this line asks
+      for.**
+- [ ] ⚪ **THE MUTATION HARNESS DIES ON A RAW NODE STACK WHEN A FILE WRITE HITS A
+      TRANSIENT WINDOWS SHARING VIOLATION.** Found out-of-diff by T3 round 3 and
+      **reproduced three times across two sessions**: `writeFileSync` on
+      `modules/orgs/repo.ts` raises `UNKNOWN (errno -4094)` immediately after the
+      previous mutant's restore, and the harness exits with a Node stack instead
+      of an `abort()`. **The tree was verifiably clean every time** — the open
+      FAILED, so nothing was written, and both exit handlers ran — but the
+      operator sees a crash with no "nothing was mutated, the tree is clean"
+      reassurance and no retry, which is indistinguishable from the harness
+      having wrecked something. Predates this card (`:2025`). **Fix: wrap the
+      mutation write in a short retry, then `abort()` with the usual
+      reassurance.** Cheap, and it belongs with the other harness Lows.
 - [ ] ⚪ **`GET /v1/orgs/:gymId/codes` IS CAPPED AT 100 AND HAS NO CURSOR**
       (T3 round 1 L-1, 2026-08-18). Added as a BOUND, not as pagination — it was
       the only list in the orgs module without one while `/mine` is capped and

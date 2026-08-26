@@ -1394,6 +1394,20 @@ const MUTANTS = [
   {
     id: 'O114',
     target: 'repo',
+    /** THE ONLY MUTANT IN THIS TABLE THAT WRITES ROWS THE ACTING TEST DID NOT
+     *  CREATE, and it does so BY DESIGN: removing the tenancy predicate is how
+     *  the predicate is proven load-bearing, and the route then commits against
+     *  every row in `gyms`.
+     *
+     *  Declared so the row guard can ATTRIBUTE that damage instead of treating
+     *  it as an alarm (round-3 Low-5) — before this, a sweep containing O114 and
+     *  a working guard were mutually exclusive: exit 4 on a healthy table, blind
+     *  on a flattened one. **Adding this flag to a mutant is a claim that it
+     *  mass-writes, and the sweep reports a declared mutant that moves nothing.**
+     *  The reviewer's enumeration found no other mutant in the table that
+     *  qualifies today: every sweep mutant keeps `AND ${inScope}`, and O42/O43,
+     *  O47, O97/O98 stay row- or user-scoped. */
+    writesRows: true,
     why: "TENANCY, R3.2: the gym id leaves the edit's WHERE, so ONE owner's save rewrites the name, city, country and billing currency of EVERY gym in the database. The cross-tenant case this repo has shipped untested four times on this very table (:15259 L-1)",
     from: '      WHERE id = ${input.gymId}\n      RETURNING id, slug, name, city, country, org_type, timezone, locale,',
     to: '      WHERE id IS NOT NULL\n      RETURNING id, slug, name, city, country, org_type, timezone, locale,',
@@ -1863,8 +1877,19 @@ const repairSeedDatabase = () => {
  *  (:18488's seed repair was the first, and its fix deliberately excluded every
  *  other target). Rather than enumerate which mutants can write — the judgement
  *  that was already wrong once and gets harder with every new write route —
- *  **this snapshots the rows and checks them, so a mutant that mass-writes is
- *  caught wherever it lives.** :5348 rule 5: fix the CLASS.
+ *  this snapshots the rows and checks them.
+ *
+ *  **WHAT IT ACTUALLY COVERS, stated narrowly because the first version of this
+ *  sentence claimed the CLASS and the code covers one table — round-3 Low-4.**
+ *  It watches `gyms` and the five columns the edit route writes (name, city,
+ *  country, currency_display, timezone). **A mutant that mass-writes
+ *  `gym_members`, `gym_staff`, `gym_codes`, `gym_join_applications`, or
+ *  `gyms.slug` / `.status` / `.owner_user_id` / `.removed_at` is INVISIBLE to
+ *  it.** No such mutant exists today — the reviewer enumerated every one whose
+ *  replacement text writes or neuters a predicate and found them all bounded —
+ *  so this is a limit to widen, not a live hole. **The trigger to widen it is
+ *  the next route that writes rows a caller does not own**; that is when the
+ *  cheap thing to do is add its table here.
  *
  *  **IT COMPARES ROWS THAT EXISTED BEFORE AND STILL EXIST AFTER.** Rows the
  *  suite CREATES are expected, rows its cleanup DELETES are expected; a
@@ -1928,48 +1953,91 @@ const gymFingerprint = () => {
   }
 };
 
-/** Taken BEFORE any mutation is written, for the same reason the anchor
- *  pre-check runs over the whole table first: a baseline taken after the damage
- *  is not a baseline. `null` means the probe could not run, and that is reported
- *  as "unverified" rather than quietly passing (:5906 — a check that cannot fail
- *  is worse than no check). */
+/** A BASELINE THAT COULD NOT BE TAKEN IS A FATAL, NOT A WARNING — round-3
+ *  Low-1. The first version printed one line and let the sweep complete
+ *  normally, and the summary said nothing about the check at all, so **a run
+ *  with the guard OFF was byte-identical in its summary to a run where it
+ *  passed.** That is exactly the mode that made v1 of this guard dead (:19799):
+ *  the warning was printed and nobody acted on it.
+ *
+ *  Its two siblings in this file already fail closed — `repairSeedDatabase`
+ *  exits 3 when it cannot verify, and the re-read below exits 4 — so the
+ *  asymmetry was undocumented as well as wrong. The probe needs only `node` and
+ *  `postgres` from `apps/api`, both of which must work for the suite to run at
+ *  all, so a failure here means something is broken enough to stop for. */
 const gymsBefore = gymFingerprint();
 if (gymsBefore === null) {
-  console.log('WARNING: could not fingerprint `gyms` — mass-write detection is OFF for this run.');
-} else {
-  console.log(`fingerprinted ${String(gymsBefore.size)} gym rows for mass-write detection`);
+  abort(
+    'could not fingerprint `gyms`, so mass-write detection would be OFF for this run.\n' +
+    '  A sweep whose damage-detector cannot run is one whose green summary means nothing\n' +
+    '  (:19799 — v1 of this guard printed a warning here and passed).\n' +
+    '  Nothing has been mutated. Check that the database is up and that `postgres`\n' +
+    '  resolves from apps/api.',
+  );
 }
+console.log(`fingerprinted ${String(gymsBefore.size)} gym rows for mass-write detection`);
 
+/** IS THE TABLE ALREADY UNIFORM? Every row carrying one fingerprint is the
+ *  signature of a mass-write that has ALREADY happened, and it is the state in
+ *  which this guard is blind — a repeat write of the same values changes
+ *  nothing. Round-3 Low-3: that caveat lived in a comment and in `OWED.md`,
+ *  neither of which is in front of the person reading the sweep output, so the
+ *  green line read as "O114 is safe". It now says so on the line itself. */
+const isUniform = (m) => m.size > 1 && new Set(m.values()).size === 1;
+
+/** ROWS ARE ATTRIBUTED TO THE MUTANT THAT MOVED THEM — round-3 Low-5, and it is
+ *  the finding that makes this guard usable rather than merely present.
+ *
+ *  **A sweep containing O114 and a working guard were mutually exclusive.**
+ *  O114 deletes the tenancy predicate ON PURPOSE — that is how it proves the
+ *  predicate is load-bearing — so on a healthy table it mass-writes every gym
+ *  and the guard fired, exiting 4 with no green line obtainable; on an already
+ *  flattened table it exited 0 and the guard was blind. **The round's own green
+ *  PROVE figure was therefore only obtainable because the table was already
+ *  destroyed**, and `OWED.md`'s remedy (clean the junk rows) guaranteed the next
+ *  sweep would exit 4 and re-flatten it. The reviewer measured all of that.
+ *
+ *  The fix is attribution: fingerprint around EACH mutant, so "O114 rewrote the
+ *  table" and "O119 rewrote the table" stop being the same event. A mutant that
+ *  declares `writesRows` is EXPECTED to move rows — reported loudly, by name,
+ *  with a count, and NOT an alarm. Any other mutant moving a row is the defect
+ *  this guard exists for and still exits 4.
+ *
+ *  **`writesRows` is a CLAIM about a mutant and is checked in both directions**:
+ *  a mutant that declares it and moves nothing is reported too, because a
+ *  declaration nobody can observe is how a guard quietly stops guarding. */
+const rowDamage = [];
 let gymsChecked = false;
 const verifyGymRows = () => {
-  if (gymsBefore === null || gymsChecked) return true;
+  if (gymsChecked) return true;
   gymsChecked = true;
   const after = gymFingerprint();
   if (after === null) {
     console.error('\nCOULD NOT RE-READ `gyms` — the mass-write check did NOT run. Verify the table by hand.');
     return false;
   }
-  const moved = [];
-  for (const [id, f] of gymsBefore) {
-    const now = after.get(id);
-    // Absent = the suite's cleanup deleted it, which is expected. Present and
-    // different = a row this sweep had no business touching was rewritten.
-    if (now !== undefined && now !== f) moved.push(id);
-  }
-  if (moved.length > 0) {
+  const unexpected = rowDamage.filter((d) => !d.expected);
+  if (unexpected.length > 0) {
     console.error(
-      `\nA MUTANT REWROTE ${String(moved.length)} GYM ROW(S) THAT EXISTED BEFORE THIS SWEEP.\n` +
-      `  The FILE restores above are byte-exact and say nothing about this — the\n` +
-      `  database was written through the real route while a mutation was live\n` +
-      `  (O114 deletes the tenancy predicate on purpose; that is its job).\n` +
-      `  First few: ${moved.slice(0, 5).join(', ')}\n` +
-      `  Nothing here can put them back — the audit log records only the one gym\n` +
+      `\nA MUTANT REWROTE GYM ROWS IT HAD NO BUSINESS TOUCHING.\n` +
+      unexpected.map((d) => `  ${d.id}: ${String(d.ids.length)} row(s) — ${d.ids.slice(0, 3).join(', ')}`).join('\n') +
+      `\n  The FILE restores above are byte-exact and say nothing about this — the\n` +
+      `  database was written through the real route while a mutation was live.\n` +
+      `  Nothing here can put them back: the audit log records only the one gym\n` +
       `  each call named. On a local database, re-seed:\n` +
       `  DATABASE_URL=<your url> corepack pnpm --filter api exec tsx src/db/seed.ts\n`,
     );
     return false;
   }
-  console.log(`gym rows verified — ${String(gymsBefore.size)} pre-existing rows unchanged`);
+  for (const d of rowDamage) {
+    console.log(
+      `${d.id} rewrote ${String(d.ids.length)} pre-existing gym row(s) — EXPECTED, it declares writesRows`,
+    );
+  }
+  const caveat = isUniform(after)
+    ? ' (table is UNIFORM — a REPEAT mass-write is invisible to this check; see OWED)'
+    : '';
+  console.log(`gym rows verified — no unattributed changes${caveat}`);
   return true;
 };
 
@@ -2012,6 +2080,10 @@ if (!seedHandlersRegistered) {
 }
 
 const results = [];
+/** Walks forward as each mutant is measured, so every mutant is compared
+ *  against the table as the PREVIOUS one left it. Without this, one declared
+ *  mass-write would make every mutant after it look guilty of the same rows. */
+let rowsAtLastCheck = gymsBefore;
 for (const m of SELECTED) {
   const target = TARGETS[m.target];
   const original = originals.get(m.target);
@@ -2037,6 +2109,31 @@ for (const m of SELECTED) {
     abort(`${m.id}: the restore did NOT reproduce the original bytes. The working tree is dirty — fix it before running anything else.`);
   }
   if (!tallied(out)) abort(`${m.id}: the run produced no test tally, so it proves nothing.`);
+
+  // ATTRIBUTION (round-3 Low-5): whose damage is this? Taken here, per mutant,
+  // because "some mutant in this sweep rewrote the table" is not an actionable
+  // report and cannot tell O114's own job from a defect.
+  const nowRows = gymFingerprint();
+  if (nowRows === null) {
+    abort(`${m.id}: could not re-read \`gyms\` to attribute row changes. The tree is restored; the database is not verified.`);
+  }
+  const movedIds = [];
+  for (const [id, f] of rowsAtLastCheck) {
+    const now = nowRows.get(id);
+    // Absent = the suite's cleanup deleted it, which is expected. Present and
+    // different = this mutant rewrote a row that existed before it ran.
+    if (now !== undefined && now !== f) movedIds.push(id);
+  }
+  if (movedIds.length > 0) {
+    rowDamage.push({ id: m.id, ids: movedIds, expected: m.writesRows === true });
+  } else if (m.writesRows === true) {
+    // A DECLARATION NOBODY CAN OBSERVE IS HOW A GUARD QUIETLY STOPS GUARDING
+    // (:5104 F5). Not fatal — an already-uniform table makes this the honest
+    // outcome, which is the very blindness this guard documents — but it is
+    // SAID, because on a healthy table it would mean the mutant stopped writing.
+    console.log(`${m.id} declares writesRows and moved no row (table already uniform, or it stopped writing)`);
+  }
+  rowsAtLastCheck = nowRows;
 
   const verdict = failed ? 'RED' : 'ALIVE';
   results.push({ ...m, verdict, ok: verdict === 'RED' });

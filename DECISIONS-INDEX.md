@@ -210,6 +210,60 @@ mid-file: re-derive them with
   currency it is BILLED in once it is actually paying is Kd's to rule.~~
   **— CLOSED THE SAME DAY BY KD; see the ADDENDUM at :19560, which SUPERSEDES
   this entry's "the country is freely editable" half.**
+- **:19960** — 2026-08-26 — **GYM DETAILS, T3 ROUND 3 (diff-only): ZERO
+  Critical/High — THE PACKET SHIPS, and three of the six Lows are my own
+  OVERCLAIMS ABOUT MY OWN GUARDS.** Reviews `076ed0a`; three rounds, 3 → 1 → 0.
+  **ESCAPE HATCH NOT ARMED and the reviewer said so unprompted** (round 2's
+  Critical was in the harness; this round found none there or anywhere).
+  **Read before writing a guard whose only proof is that the code looks right,
+  before asserting a user-visible string against the constant that PRODUCES it,
+  before adding a mutant that writes rows its test did not create, and before
+  writing "corrected at their source" about anything.**
+  **THE SHAPE OF THE ROUND IS THE PART TO KEEP: every one of the six is about an
+  INSTRUMENT, not the product** — the app diff reviewed was ten lines in one
+  file. Three are sentences I wrote about guards I had just built, each claiming
+  more than the guard did: *"bans the CLAIM"* (banned a substring), *"fix the
+  CLASS"* (covers one table), *"corrected at their source"* (nothing was edited).
+  **The guards were real and the claims about them were not** — three times in
+  one commit, written by the chat that had just recorded that shape twice.
+  **Low-1: a failed BEFORE-probe PASSED the sweep and the summary said nothing**,
+  so a run with detection OFF was byte-identical to one that passed — v1's own
+  dead mode (:19799), while its two siblings already exit 3 and 4. Now `abort()`,
+  proven by forcing it. **Low-2: the reviewer planted "…because your gym's
+  country is locked…" — the same falsehood in different words, to a gym with no
+  country — and the suite went GREEN. AND MY FIRST FIX WAS TAUTOLOGICAL**: a
+  golden string asserted against the EXPORTED CONSTANT, so his probe moved both
+  sides and passed again — **:3610 verbatim, incurred inside the fix written to
+  close "the assertion is weaker than its comment claims"**, caught by re-running
+  his probe before shipping. Now a LITERAL in the test. **Low-3: the green line
+  did not carry its own caveat** — :19799 named that hazard in those exact words
+  and the recording did not reach the line. **Low-4: "caught wherever it lives"
+  covers ONE table and five columns**; the reviewer enumerated every write-capable
+  mutant and found the hole not live, so it is a limit to widen with the next
+  route that writes rows a caller does not own. **Low-5 IS THE ONE THAT MADE THE
+  GUARD USABLE: a sweep containing O114 and a working guard were MUTUALLY
+  EXCLUSIVE** — exit 4 on a healthy table, blind on a flattened one — so **the
+  round's own green PROVE was only obtainable because the local table was already
+  destroyed**, and `OWED.md`'s own remedy guaranteed the next sweep would exit 4
+  and re-flatten it. Fixed by **ATTRIBUTION**: fingerprint around EACH mutant,
+  `writesRows: true` marks one expected to write, its damage is named rather than
+  alarmed, anything else still exits 4, **and the declaration is checked in BOTH
+  directions** (:5104 F5). Proven both ways on a HEALTHY table, and a 15-mutant
+  sweep including O114 now completes GREEN, which the previous version could not
+  do. **Low-6: "the four false claims corrected at their source" — not one was
+  edited** (`git show --numstat` = `16 0`); the sentences had become TRUE, which
+  is not the same as corrected — round 2's Low-4 recurring in the entry recording
+  it. Restated as **made true, not corrected**.
+  **CONFIRMED: security clean on every axis; the remote refusal proven by causing
+  it; the `.env`-divergence hole checked and shown NOT to exist** (no dotenv in
+  `apps/api`, vitest reads only `process.env`, `run()` inherits env); the
+  connection string never enters a command line (R3.10).
+  **PROVE: orgs.routes 119/119 · db.migration 10/10 · both in ONE invocation
+  129/129 · shared 51/51 · tsc + eslint + `node --check` clean · SWEEP a stated
+  SUBSET of 126 ON A HEALTHY TABLE: 15 RED, 0 ALIVE, 0 never ran, exit 0. Rule 3
+  measured for all three guards that carry one.**
+  **THE SERVER HALF IS DONE. NOTHING TICKS — the `OWED.md` line names a SCREEN
+  and there is none, so there is still no smoke.** The web half is next.
 - **:19799** — 2026-08-26 — **GYM DETAILS, T3 ROUND 2 (diff-only): ONE
   Critical/High, AND IT IS NOT IN THE APP — THE HARNESS MASS-OVERWRITES EVERY
   GYM ROW UNDER A SUMMARY SAYING "restore verified byte-exact".** Reviews
@@ -322,7 +376,8 @@ mid-file: re-derive them with
   than being undone (the reviewer's own recommendation, and right) · two tests
   rebuilt an email by hand, fixed at the SOURCE (`makeUser` returns it) not the
   call sites (:1239) · the 409 names a contact channel that does not exist yet,
-  recorded on the admin-panel line. **TWO TESTS LISTED AS UNABLE TO FAIL (rule
+  ~~recorded on the admin-panel line~~ **— FALSE WHEN WRITTEN (round 2's Low-4);
+  it reached that line only in the round-2 commit**. **TWO TESTS LISTED AS UNABLE TO FAIL (rule
   4):** the lock's own control (fixed here — that fix IS C/H-1's regression
   test) and the slug tripwire, **kept deliberately and named so nobody counts it
   as evidence about today's code.**

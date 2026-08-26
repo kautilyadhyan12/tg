@@ -19758,8 +19758,12 @@ edge. A one-sided lock is not a lock.
   that existed only because a loop was not using its own subject.
 - **The 409 points at a door that does not exist** ("contact us" — no email is
   sent and there is no contact page). Not a lie: Kd approves every gym by hand
-  (:11072) and both providers treat this as a support request. Named on the
-  admin-panel `OWED.md` line so the channel is written down when it exists.
+  (:11072) and both providers treat this as a support request. ~~Named on the
+  admin-panel `OWED.md` line so the channel is written down when it exists.~~
+  **— FALSE WHEN WRITTEN, struck by round 2's Low-4 and proven by
+  `git show da4a5ee --numstat -- OWED.md` (`22 0`, all of it the lock block).
+  Nothing reached that line until the round-2 commit, where it was written for
+  real.**
 
 ### THE TWO TESTS THE REVIEWER LISTED AS UNABLE TO FAIL (rule 4)
 
@@ -19910,7 +19914,13 @@ line saying so.
   `git show da4a5ee --numstat -- OWED.md` is `22 0`, and every one of those 22
   lines is the new lock block. **A claim of a fix is a claim** (V1 does not relax
   for bookkeeping). Now actually written onto that line, and the four claims
-  corrected at their source (:1173).
+  ~~corrected at their source (:1173).~~ **— ITSELF FALSE, and round 3's Low-6
+  caught it: not one of the three correctable sites was edited in that commit.
+  The sentences had become TRUE (the `OWED.md` write in the same commit made
+  them so), which is not the same as having been corrected — Low-4's own class
+  recurring inside the entry that records it, one round later. Struck, and the
+  three sites annotated for real this time: `DECISIONS.md:19759`,
+  `BACKLOG.md:1915` and this index's own line.**
 - **Low-5: the headline PROVE figure does not reproduce.** ":19656" claims
   `orgs.routes` **129/129 (+12)**; measured here **119/119 (+2)**. 129 is the
   COMBINED total, which the same line separately and correctly quotes — so the
@@ -19946,3 +19956,118 @@ green (:13746).
 
 **NOTHING TICKS — no screen, so no smoke, and a DIFF-ONLY ROUND 3 on these fixes
 is the remaining gate.**
+
+## GYM DETAILS, T3 ROUND 3 (diff-only): ZERO Critical/High — THE PACKET SHIPS, and three of the six Lows are my own overclaims about my own guards (2026-08-26)
+
+Reviews `076ed0a`. **THE PACKET SHIPS** (:5348 rule 1) after three rounds:
+3 Critical/High → 1 → 0. **ESCAPE HATCH NOT ARMED and the reviewer said so
+unprompted** — round 2's Critical was in `tools/mutate-orgs.mjs` and this round
+found none there or anywhere, so there is no two-round streak and no redesign
+question for Kd. Six Low, all fixed in this commit.
+
+**Read before writing a guard whose only proof is that the code looks right,
+before asserting a user-visible string against the constant that produces it,
+before adding a mutant that writes rows its test did not create, and before
+writing "corrected at their source" about anything.**
+
+### THE SHAPE OF THE ROUND, AND IT IS THE PART TO KEEP
+
+**Every one of the six is about an INSTRUMENT, not the product.** The app's diff
+in the commit reviewed was ten lines in one file. Three of the six are sentences
+I wrote about guards I had just built, each claiming more than the guard did:
+"bans the CLAIM" (it banned a substring), "fix the CLASS" (it covers one table),
+and "corrected at their source" (nothing was edited). **The guards were real and
+the claims about them were not** — which is this repo's most-recorded failure
+shape, arriving three times in one commit written by the chat that had just
+recorded it twice.
+
+### THE SIX
+
+**Low-1 — a failed BEFORE-probe passed the sweep and the summary said nothing.**
+Every failure mode of `gymFingerprint()` collapses to `null`; the baseline branch
+printed one WARNING and returned `true`, so **a run with detection OFF was
+byte-identical in its summary to one where it passed.** That is exactly what made
+v1 of this guard dead (:19799). Its two siblings already fail closed (exit 3,
+exit 4); only the baseline did not. **Now `abort()`** — proven by forcing the
+baseline to null, exit 2 before any mutation.
+
+**Low-2 — "bans the CLAIM" banned a substring, AND MY FIRST FIX FOR IT WAS
+TAUTOLOGICAL.** The reviewer planted *"…can't change because your gym's country
+is locked…"* — the same falsehood in different words, to a gym with no country —
+**and the suite went GREEN**. My fix made it a golden string asserted against the
+exported constant; **re-running his probe before shipping, both sides of the
+comparison moved together and it PASSED again.** :3610 verbatim: *a test whose
+inputs and its subject share a source proves only that the source is
+self-consistent* — incurred inside the fix written to close "the assertion is
+weaker than its comment claims". Now a **literal written out in the test**, with
+the reasoning stated honestly rather than dressed up as semantic: a lexical rule
+cannot express "makes no false claim about THIS gym"; equality can express
+"nobody reworded this without a human re-reading it against a gym that has none".
+Probe D re-measured RED.
+
+**Low-3 — the green line did not carry its own caveat.** `gym rows verified — 65
+pre-existing rows unchanged` was the whole of what a reader saw, while the
+limitation sat in a comment and an `OWED.md` line. **:19799 named that hazard in
+those exact words and the recording did not reach the line.** It does now.
+
+**Low-4 — "caught wherever it lives" covers one table and five columns.**
+`gym_members`, `gym_staff`, `gym_codes`, `gym_join_applications` and four other
+`gyms` columns are invisible to it. **The reviewer checked whether the hole is
+LIVE and it is not** — he enumerated every mutant whose replacement text writes or
+neuters a predicate and found them all bounded (the sweep mutants keep
+`AND ${inScope}`; O42/O43, O47, O97/O98 stay row- or user-scoped). Sentence
+narrowed, the blind tables named, and the trigger to widen it written down.
+
+**Low-5 IS THE ONE THAT MADE THE GUARD USABLE: a sweep containing O114 and a
+working guard were MUTUALLY EXCLUSIVE.** O114 mass-writes by design — that is how
+it proves the tenancy predicate is load-bearing — so the guard could not tell its
+job from a defect: **exit 4 on a healthy table with no green line obtainable,
+blind on a flattened one.** Measured consequence, and it is the sharp end: **the
+round's own green PROVE figure was only obtainable because the local table was
+already destroyed**, and `OWED.md`'s own remedy (clean the junk rows) guaranteed
+the next sweep would exit 4 and re-flatten them. Fixed by **ATTRIBUTION** —
+fingerprint around EACH mutant, so "O114 rewrote the table" and "O119 rewrote the
+table" stop being one event. `writesRows: true` marks a mutant expected to write;
+its damage is reported by name and count and is not an alarm, anything else still
+exits 4, **and the declaration is checked in BOTH directions** because a
+declaration nobody can observe is how a guard quietly stops guarding (:5104 F5).
+**Proven both ways on a HEALTHY table** (63 distinct names, restored for the
+purpose): declared ⇒ `O114 rewrote 63 pre-existing gym row(s) — EXPECTED`, exit
+0; declaration removed ⇒ `A MUTANT REWROTE GYM ROWS IT HAD NO BUSINESS TOUCHING
+— O114: 62 row(s)`, exit 4. **A 15-mutant sweep including O114 now completes green
+on a healthy table, which the previous version could not do.**
+
+**Low-6 — "the four false claims corrected at their source" and not one was
+edited.** `git show 076ed0a --numstat -- BACKLOG.md` is `16 0`, insertions only.
+No reader was misled about the contact channel, because that commit's `OWED.md`
+write made all three sentences TRUE — **but "corrected" is a claim about an edit
+that did not happen, which is round 2's Low-4 recurring inside the entry
+recording it.** The three sites are annotated for real now, each struck with its
+proof, and the claim restated: **made TRUE, not corrected.**
+
+### CONFIRMED RATHER THAN FOUND
+
+Security clean on every axis. **The remote refusal proven by causing it** against
+a Neon-shaped host (exit 2, opt-in unused), and **the `.env`-divergence hole
+checked explicitly and shown not to exist** — no dotenv anywhere in `apps/api`,
+`vitest.config.ts` reads only `process.env`, and `run()` spawns with inherited
+env, so the harness and the suite cannot see different databases. `isLocalHost`
+correct in both directions on its own self-check. **The connection string never
+enters a command line** — the probe reads `process.env` inside the child, so it
+is absent from any process list (R3.10). The fingerprint SQL is a fixed literal.
+Both claims about the guard's limitation independently verified.
+
+### PROVE — final bytes, LOCAL Postgres
+
+`orgs.routes` 119/119 · `db.migration` 10/10 · **both in ONE invocation 129/129
+exit 0** · shared 51/51 · tsc exit 0 · eslint clean at `--max-warnings=0` ·
+`node --check` clean · **SWEEP a stated SUBSET of 126, ON A HEALTHY TABLE: 15
+mutants · 15 RED · 0 ALIVE · 0 never ran, exit 0**, controls GREEN first,
+restores sha256-verified. **Rule 3 measured for all three guards that carry
+one**: the baseline abort by forcing it, the attribution by removing and
+restoring `writesRows`, the message by planting the reviewer's own probe-D
+wording. Every temporary source edit restored and sha256-verified; tree clean.
+
+**THE CARD'S SERVER HALF IS DONE. Nothing ticks yet** — the `OWED.md` line names
+a SCREEN and there is none, so there is still no smoke. The web half is the next
+card and carries it.

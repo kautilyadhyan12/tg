@@ -1,6 +1,52 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: GYM DETAILS, T3 ROUND 3 (diff-only) — ZERO Critical/High. **THE PACKET
+      SHIPS.** DECISIONS :19960. Three rounds: 3 → 1 → 0. Six Low, all fixed.
+      **ESCAPE HATCH NOT ARMED** (round 2's Critical was in the harness; this
+      round found none there or anywhere).
+
+  1. **THE SERVER HALF OF CARD 1.1 IS DONE. NOTHING TICKS** — the `OWED.md` line
+     names a SCREEN and there is none, so there is still no smoke. **The web
+     half is the next card and carries it.**
+  2. **EVERY ONE OF THE SIX LOWS WAS ABOUT AN INSTRUMENT, NOT THE PRODUCT** —
+     the app diff reviewed was ten lines in one file. **Three were sentences I
+     wrote about guards I had just built, each claiming more than the guard
+     did.** Read the entry for the shape; it recurred three times in one commit
+     written by the chat that had just recorded it twice.
+  3. **THE ONE TO READ IS Low-2, because my FIX for it was tautological.** The
+     reviewer proved the assertion passed a still-false message; I replaced it
+     with a golden string asserted against the EXPORTED CONSTANT — so re-running
+     his probe moved both sides and it passed AGAIN (:3610). It is a LITERAL in
+     the test now. **Do not "de-duplicate" it back to the constant.**
+  4. **THE HARNESS NOW ATTRIBUTES ROW DAMAGE TO THE MUTANT THAT CAUSED IT.**
+     `writesRows: true` on O114 says "this one mass-writes by design"; its damage
+     is named, anything else exits 4. Before this, **a sweep containing O114 and
+     a working guard were mutually exclusive**, which is why the previous round's
+     green figure was only obtainable on an already-destroyed table. A 15-mutant
+     sweep including O114 now completes GREEN on a healthy one.
+  5. **A failed baseline probe is now FATAL, not a warning** — the mode that made
+     v1 of that guard dead.
+  6. **STILL TRUE AND STILL THE LIMIT: the row guard watches `gyms` and five
+     columns.** `gym_members`, `gym_staff`, `gym_codes`,
+     `gym_join_applications` and four other `gyms` columns are invisible to it.
+     No mutant needs them today (enumerated). **The trigger to widen it is the
+     next route that writes rows a caller does not own.**
+
+MEASURED (final bytes, LOCAL): orgs.routes 119/119 · db.migration 10/10 · both
+  in ONE invocation 129/129 · shared 51/51 · tsc + eslint + `node --check` clean
+  · sweep a stated SUBSET of 126 ON A HEALTHY TABLE: 15 RED, 0 ALIVE, 0 never
+  ran, exit 0. Rule 3 measured for all three guards that carry one.
+
+NEXT: THE WEB HALF — the console's Settings screen gets a "Gym details" form,
+  and it carries the SMOKE. Two things it must get right: the country box starts
+  EMPTY for a gym created before today (that is TRUE, not a defect), and the
+  timezone picker must inject the browser's own zone (:10402 —
+  `Intl.supportedValuesOf` returns `Asia/Calcutta`, not `Asia/Kolkata`, on this
+  machine, so a picker built from it alone cannot offer Kd his own zone).
+```
+
+```
 TASK: GYM DETAILS, T3 ROUND 2 (diff-only) — ONE Critical/High, ALL FIXED.
       DECISIONS :19799. **The packet did NOT ship; a DIFF-ONLY ROUND 3 on these
       fixes is the remaining gate.** ESCAPE HATCH NOT ARMED — round 1's three

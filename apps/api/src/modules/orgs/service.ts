@@ -203,6 +203,28 @@ export async function createOrg(
   );
 }
 
+/** THE SENTENCE A GYM OWNER READS WHEN THE CURRENCY LOCK REFUSES THEM.
+ *
+ *  **EXPORTED SO A TEST CAN PIN IT EXACTLY — round-3 Low-2, and the reviewer
+ *  proved the previous guard was worth less than its comment claimed.** That
+ *  comment said the assertion "bans the CLAIM"; it banned one substring
+ *  (`/country is fixed/i`), and he planted *"…can't change because your gym's
+ *  country is locked…"* — telling one of the 59 gyms that have NO country that
+ *  its country is locked, C/H-2's exact falsehood — **and the suite went
+ *  GREEN**.
+ *
+ *  A lexical ban cannot express "makes no false claim about this gym"; the
+ *  honest instrument is a GOLDEN STRING. Asserting equality does not force
+ *  vaguer wording the way banning a substring does (:14840's lesson, which is
+ *  what the weaker version was reaching for) — it forces a DELIBERATE change:
+ *  reword this and the test goes red, and a human has to look at the new
+ *  sentence and decide whether it is true of a gym with no country. That is the
+ *  only check that actually applies here, and it is stated as such rather than
+ *  dressed up as semantic. */
+export const CURRENCY_LOCKED_MESSAGE =
+  "The currency your gym is billed in can't change while your gym has a subscription, " +
+  "and that country uses a different one. Contact us and we'll move it for you.";
+
 /** A GYM CAN FINALLY FIX ITS OWN DETAILS (Kd approved `org.manage` 2026-08-26).
  *
  *  Before this the row was insert-only after `createOrgAttempt`: a typo in the
@@ -274,11 +296,7 @@ export async function updateOrg(
       // paid plan, and the old sentence told those gyms they were on one. The
       // round that wrote it said its purpose was to make the refusal TRUE and
       // left this half carrying the pre-fix wording.
-      throw new OrgsError(
-        409,
-        "currency_locked",
-        "The currency your gym is billed in can't change while your gym has a subscription, and that country uses a different one. Contact us and we'll move it for you.",
-      );
+      throw new OrgsError(409, "currency_locked", CURRENCY_LOCKED_MESSAGE);
     case "not_found":
       // Unreachable in practice — `requirePrivilege` has already read the org
       // and 404'd a stranger — but a gym archived or deleted between that read

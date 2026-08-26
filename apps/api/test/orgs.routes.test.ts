@@ -4898,16 +4898,31 @@ d("orgs routes (real Postgres)", () => {
     // C/H-2 was raised for. A fix whose protection cannot fail is the same
     // defect with a comment on it (:5104 F5).
     //
-    // It asserts the PROMISE rather than the prose: the message must name the
-    // CURRENCY (true of every gym) and must NOT claim this gym has a country
-    // that is fixed (false of the 59 that have none). Banning the exact old
-    // string would force vaguer wording to satisfy a test (:14840's lesson);
-    // this bans the CLAIM.
-    expect(refusal.message).toMatch(/currency/i);
-    expect(refusal.message).not.toMatch(/country is fixed/i);
-    // Low-1's half: `canceled` and `expired` also lock, so the sentence must not
-    // tell those gyms they are on a paid plan.
-    expect(refusal.message).not.toMatch(/on a paid plan/i);
+    // **AND THE FIRST FIX FOR IT WAS WORTH LESS THAN ITS OWN COMMENT — round-3
+    // Low-2.** It claimed to ban the CLAIM and banned one substring; the
+    // reviewer planted "…because your gym's country is locked…" — the same
+    // falsehood in different words, to a gym that has no country — and the
+    // suite stayed GREEN.
+    //
+    // So it is a GOLDEN STRING now — **and it is a LITERAL WRITTEN OUT HERE, not
+    // the exported constant, because the first version of this fix asserted
+    // against `orgService.CURRENCY_LOCKED_MESSAGE` and was TAUTOLOGICAL.**
+    // Measured before shipping, by planting the reviewer's own probe-D wording
+    // ("…because your gym's country is locked…") into the constant: both sides
+    // of the comparison moved together and the test PASSED. :3610's lesson
+    // exactly — a test whose inputs and its subject share a source proves only
+    // that the source is self-consistent — arriving inside the fix written to
+    // close "the assertion is weaker than its comment claims".
+    //
+    // A lexical rule cannot express "makes no false claim about THIS gym"; a
+    // literal here can express "nobody changed this sentence without a human
+    // reading it again". This is the fixture where that reading matters — the
+    // gym has NO country — so a reworded message arrives red and whoever
+    // reworded it has to answer for it against a gym that has none.
+    expect(refusal.message).toBe(
+      "The currency your gym is billed in can't change while your gym has a subscription, " +
+        "and that country uses a different one. Contact us and we'll move it for you.",
+    );
     expect((await readGymRow(org.org.id)).country).toBeNull();
 
     // THE ONE THAT MUST BE ALLOWED: India is what it is already billed for, so
