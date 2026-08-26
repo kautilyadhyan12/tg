@@ -127,6 +127,44 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:20986** — 2026-08-26 — **GYM DETAILS, WEB HALF, T3 ROUND 5 (diff-only):
+  ZERO Critical/High — THE PACKET SHIPS.** Five rounds, but this one found no
+  Critical, so **the hatch does NOT fire** and there is no redesign question. One
+  Low, fixed, in `BACKLOG.md`. **Read before removing anything from
+  `apps/web/src/test-setup.js`, and before adding a `key` anywhere in the web app.**
+  **L-1 / :5348 rule 5 — THE CLASS HAD A CASE FIX AND NO GUARD.** React announces
+  this defect on every render (`Encountered two children with the same key`) and
+  it was ignored for FOUR ROUNDS while a green suite said "fine". The warning now
+  **FAILS THE RUN** via `setupFiles`. **Measured load-bearing INDEPENDENTLY of the
+  test written for it**: mutant **C85** (both keys back to bare `org.id` =
+  round 3's shipped bytes) reds `settings.render.test.jsx` across many tests on
+  the guard alone. **It found 6 real offences on arming**, all in
+  `activeWorkout.render.test.jsx`, whose `exercise()` helper hardcoded `id: 'e1'`
+  — a fixture manufacturing a defect the app cannot produce. **Blind spot stated,
+  not papered over:** a test that silences `console.error` with its own mock
+  disables the guard for its duration (one does — `xpDisplay.render.test.jsx:219`);
+  `OWED.md` line opened. **Second limit:** React de-dupes its own warnings, so
+  this is a FLOOR, not a census.
+  **THE OTHER KEY SITE, VERIFIED THEN DISARMED: `ActiveWorkout.jsx:1645`
+  (`key={ex.id || i}`).** Reviewer flagged it UNVERIFIED rather than asserting it
+  — round 4's earned rule, applied by round 5. **Verified it CANNOT fire today**:
+  `handleAddToWorkout` refuses a repeat by id (`ExerciseLibrary.jsx:290`) and
+  templates come from that same deduped list. **A landmine with nothing on it,
+  until the first feature that allows a repeat** (supersets, circuits, "3 rounds
+  of X"), when it would fail silently and identically to :20867. Kd was told
+  exactly that and ruled it be disarmed now; key combines id AND position, one
+  line, approved before written (R1.1).
+  **Round 4's certificate was INCOMPLETE and the reviewer closed the gap**: the
+  two single-key mutants (gym alone, staff alone) were not in it — **each is RED
+  on its own test**, so neither guarantee rides on the other.
+  **PROVE: web 1234/1234 exit 0 across 45 files WITH THE GUARD ARMED** (green on
+  merit, not by being inert) · C85 measured and reverted, `Settings.jsx`
+  byte-identical after · `eslint .` on `apps/web` RED at **exactly the same 73**
+  as before the round, so the four touched files add none — pre-existing debt,
+  untouched, NOT claimed clean. No server, `@app/shared`, migration or dependency
+  change. **CARRY FORWARD: the surface all four Criticals lived on — moving
+  between two gyms — is exactly the one NO SMOKE STEP COVERS. The guard watches
+  the mechanism; nothing watches the journey.**
 - **:20867** — 2026-08-26 — **GYM DETAILS, WEB HALF, T3 ROUND 4 (diff-only): ONE
   Critical/High — IT IS ROUND 3'S OWN FIX. THE HATCH FIRED A FOURTH TIME; KD
   RULED PATCH.** Reviews `97d1098`; **the packet did NOT ship.** Three Low, in

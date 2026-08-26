@@ -1642,7 +1642,15 @@ export default function ActiveWorkout() {
         <div className="flex gap-1">
           {exercises.map((ex, i) => (
             <div
-              key={ex.id || i}
+              // KEY COMBINES id AND POSITION so a repeated exercise cannot ever
+              // collide. It cannot today — the only add path refuses a repeat
+              // (`ExerciseLibrary.jsx:290`) — but `ex.id` alone is a landmine for
+              // the first feature that allows one (supersets, circuits, "3 rounds
+              // of X"), and the failure is silent: React drops one of the pair
+              // WITHOUT removing it from the screen. That is the defect that cost
+              // four review rounds on the console's Settings screen (:20867), so
+              // this site is disarmed while the shape of it is still fresh.
+              key={`${ex.id || 'ex'}-${i}`}
               className="h-1 flex-1 rounded-full transition-all duration-500"
               style={{
                 background: i < currentIndex

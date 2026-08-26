@@ -1,6 +1,65 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: GYM DETAILS (WEB HALF), T3 ROUND 5 (diff-only) — ZERO Critical/High.
+      **THE PACKET SHIPS.** DECISIONS :20986. Card closed after five rounds.
+
+  1. **THE HATCH DOES NOT FIRE.** Five rounds on one file, but this one found no
+     Critical, so there is no redesign question. :5348 rule 1: zero
+     Critical/High ⇒ ship.
+  2. **THE ROUND'S REAL OUTPUT IS A PERMANENT GUARD, NOT THE FIX.**
+     `apps/web/src/test-setup.js` FAILS THE RUN on React's `Encountered two
+     children with the same key` (:5348 rule 5). That warning is how this defect
+     announces itself on EVERY render, and it was read past for FOUR ROUNDS
+     while a green suite said "fine". **Do not delete it to make a suite pass** —
+     the file explains what it costs to ignore.
+  3. **IT IS LOAD-BEARING INDEPENDENTLY of the test written for the case**:
+     mutant **C85** (both keys back to bare `org.id` = round 3's shipped bytes)
+     reds `settings.render.test.jsx` across many tests on the guard ALONE.
+  4. **ARMING IT FOUND 6 REAL OFFENCES**, all in `activeWorkout.render.test.jsx`
+     — its `exercise()` helper hardcoded `id: 'e1'`, so every two-exercise
+     fixture handed `ActiveWorkout` two exercises with one id. **The fixture was
+     manufacturing a defect the app cannot produce** (`ExerciseLibrary.jsx:290`
+     refuses a repeat, *"Already in workout"*). Helper now issues a unique id.
+  5. **GUARD'S BLIND SPOT IS NAMED AND OWED**: a test that silences
+     `console.error` with its own mock disables it for that test's duration —
+     one does (`xpDisplay.render.test.jsx:219`). `OWED.md` line opened. Second
+     limit, deliberate: React de-dupes its own warnings, so the guard is a
+     FLOOR, not a census.
+  6. **`ActiveWorkout.jsx:1645` VERIFIED THEN DISARMED.** The reviewer flagged
+     `key={ex.id || i}` as possibly the same class and marked it UNVERIFIED
+     rather than asserting it — round 4's earned rule, applied one round later.
+     **It cannot fire today**: no workout can hold one exercise twice. It is a
+     landmine with nothing on it until the first feature that allows a repeat
+     (supersets, circuits, "3 rounds of X"), when it would fail SILENTLY and
+     identically to :20867. Kd was told that and ruled it be disarmed now: the
+     key combines id AND position. One line, outside the card's files, approved
+     before written (R1.1).
+  7. ⚠️ **CARRY THIS FORWARD: the surface all four Criticals lived on — an owner
+     moving between two gyms — is EXACTLY THE ONE NO SMOKE STEP COVERS.** The
+     guard watches the mechanism; nothing watches the journey. There is still no
+     in-app gym switcher, so the route is browser back/forward only.
+  8. **`apps/web` lint is RED at 73 and was RED at exactly 73 before this round**
+     — the four touched files add none. Pre-existing debt with its own OWED
+     item; the DoD "lint clean" box stays UNTICKED on this card.
+
+MEASURED (final bytes): **web 1234/1234 exit 0 across 45 files WITH THE GUARD
+  ARMED** — green on merit, not by being inert. C85 measured and reverted,
+  `Settings.jsx` byte-identical after. Round 4's certificate gap closed by the
+  reviewer: the two single-key mutants (gym alone, staff alone) are **each RED on
+  their own test**, so neither guarantee rides on the other. No server change, no
+  `@app/shared` change, no migration, no new dependency.
+
+FILES: apps/web/src/test-setup.js (new) · apps/web/vitest.config.js ·
+       apps/web/src/pages/ActiveWorkout.jsx ·
+       apps/web/src/pages/activeWorkout.render.test.jsx ·
+       DECISIONS.md · DECISIONS-INDEX.md · BACKLOG.md · OWED.md · HANDOFF.md
+
+NEXT: the gym-details web half is DONE. No round 6. Next card comes off the
+      queue in a fresh chat.
+```
+
+```
 TASK: GYM DETAILS (WEB HALF), T3 ROUND 4 (diff-only) — ONE Critical/High, IT IS
       ROUND 3'S OWN FIX, THE HATCH FIRED A FOURTH TIME, KD RULED PATCH.
       DECISIONS :20867. **Packet did NOT ship; a DIFF-ONLY ROUND 5 is the

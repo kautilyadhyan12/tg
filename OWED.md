@@ -7111,3 +7111,17 @@ file and is stated so nobody reads these as lower priority than they are.
       capture mechanism, and nobody is blocked (the file picker already works on
       desktop). A laptop webcam is a worse input to 2B's portion problem and
       would burn paid vision calls on poor photos.
+
+- [ ] ⚪ **The duplicate-key guard has one blind spot: a test that silences
+      `console.error` with its own mock.** `apps/web/src/test-setup.js` (added
+      2026-08-26, T3 round 5 L-1, :20986) fails the run on React's
+      `Encountered two children with the same key` — the class that cost four
+      review rounds on the console's Settings screen (:20867). A test that does
+      `vi.spyOn(console, 'error').mockImplementation(() => {})` replaces the
+      guard's wrapper for that test's duration, so an offence inside it is
+      unseen. **Exactly one test does this today: `xpDisplay.render.test.jsx:219`**,
+      and it silences deliberately, for a subject unrelated to keys. Not fixed in
+      round 5 because widening the guard means editing a test whose subject is
+      something else — a drive-by under R1.1. Close it either by having that test
+      silence only its own expected message, or by giving the guard a channel a
+      spy cannot replace.

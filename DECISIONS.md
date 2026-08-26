@@ -20982,3 +20982,74 @@ again": the round's real deliverable is the **instrument**, not the two prefixes
 does not need re-running — no step moves between two gyms — but note the round-4
 reviewer's own observation, which stands: **the surface all four Criticals live on
 is precisely the one no smoke step covers.**
+
+## GYM DETAILS, WEB HALF — T3 ROUND 5 (diff-only): ZERO Critical/High, THE PACKET SHIPS — and the round's real output is a PERMANENT GUARD for the class that cost the day (2026-08-26)
+
+Reviews `af27965`. **Zero Critical/High: the packet SHIPS** (:5348 rule 1). The
+hatch does NOT fire — five rounds, but this one found no Critical, so there is no
+redesign question to put to Kd. One Low, fixed here, logged in `BACKLOG.md`.
+
+The reviewer re-measured every claim round 4 made rather than trusting it —
+including the two single-key mutants round 4's own certificate did **not** carry
+(gym key removed alone, staff key removed alone: **each RED on its own test**, so
+neither guarantee is riding on the other) — and all of them held.
+
+### L-1 — THE CLASS HAD A CASE FIX AND NO GUARD (:5348 rule 5)
+
+`Encountered two children with the same key` is how React announces the defect
+that cost four rounds. It costs nothing to ignore, and **it was ignored for four
+rounds while a green suite said "fine"**. Round 4 fixed the case and wrote the
+test for that pair; nothing stopped the next pair.
+
+**`apps/web/src/test-setup.js` now FAILS THE RUN on that warning**, registered via
+`setupFiles`. Measured, both directions:
+
+- **The guard is load-bearing on the original defect, independently of the test
+  written for it** — mutant **C85** (both keys back to the bare `org.id`, i.e.
+  round 3's shipped bytes) turns `settings.render.test.jsx` red across MANY tests
+  on the guard alone, not just on round 4's counting assertion. `Settings.jsx`
+  restored and **byte-compared** afterwards, identical.
+- **It found six real offences on arming** — all in `activeWorkout.render.test.jsx`,
+  whose `exercise()` helper hardcoded `id: 'e1'`, so every two-exercise fixture
+  handed `ActiveWorkout` two exercises with one id. **The fixture was manufacturing
+  a defect the app cannot produce**: the only add path refuses a repeat
+  (`ExerciseLibrary.jsx:290`, *"Already in workout"*). Helper now issues a unique
+  id per call; no test read the literal value (grepped before changing).
+
+**Known blind spot, stated rather than papered over**: a test that replaces
+`console.error` with its own silent mock takes the guard out for that test's
+duration. Exactly one does today (`xpDisplay.render.test.jsx:219`). `OWED.md` line
+opened; not fixed here, because widening it means touching a test whose subject is
+something else. **Second limit, deliberate**: React de-duplicates its own
+warnings, so this is a FLOOR — every failure it reports is real, it does not
+promise to report every occurrence.
+
+### THE LANDMINE AT THE OTHER KEY SITE, DISARMED WHILE THE SHAPE WAS FRESH
+
+The reviewer flagged `ActiveWorkout.jsx:1645` (`key={ex.id || i}`) as possibly the
+same class, live, and marked it **UNVERIFIED** rather than asserting it — correct,
+and round 4's own earned rule applied to round 5's finding.
+
+**Verified: it cannot fire today.** `handleAddToWorkout` refuses a repeat by id,
+and templates are built from that same deduped list, so no workout can hold one
+exercise twice. **It is a landmine with nothing on it — until the first feature
+that allows a repeat** (supersets, circuits, "3 rounds of X"), at which point it
+fails silently and identically to :20867. Kd was told exactly that, in those
+terms, and ruled that it be disarmed now: the key combines id **and** position.
+One line, outside the card's files, approved before it was written (R1.1).
+
+### PROVE — final bytes
+
+- **web 1234/1234 exit 0 across 45 files WITH THE GUARD ARMED** — so the guard is
+  green on merit, not by being inert.
+- **C85 measured and reverted; `Settings.jsx` byte-identical afterwards.**
+- **`eslint .` on `apps/web` is RED at exactly 73 problems (65 errors, 8
+  warnings) — the same 73 as before this round**, so the four touched files add
+  none. Pre-existing debt, untouched, NOT claimed clean; `OWED.md`'s item carries
+  the re-measured figure.
+- No server change, no `@app/shared` change, no migration, no new dependency.
+
+**THE PACKET SHIPS.** Round 4's note stands and is the one thing to carry forward:
+**the surface all four Criticals lived on is exactly the one no smoke step
+covers** — moving between two gyms. The guard now watches the mechanism; no smoke
+step watches the journey.

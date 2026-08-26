@@ -212,8 +212,17 @@ import { peekQueue } from '../sync/syncQueue';
 const workoutFinished = async () =>
   waitFor(() => expect(getItem('active_session', null)).toBeNull());
 
+// EACH CALL GETS ITS OWN id, and that is a correctness fix rather than tidying.
+// It used to hardcode `e1`, so every test building a TWO-exercise workout handed
+// `ActiveWorkout` two exercises with the same id — six duplicate sibling keys
+// across this file, which the new guard in `src/test-setup.js` now fails the run
+// for (T3 round 5 L-1). The fixture was manufacturing a defect the app cannot
+// actually produce: the only way to add an exercise refuses a repeat
+// (`ExerciseLibrary.jsx:290`, *"Already in workout"*), so a real workout never
+// holds one id twice. No test reads the literal value — grepped before changing.
+let exerciseSeq = 0;
 const exercise = (over = {}) => ({
-  id: 'e1',
+  id: `e${(exerciseSeq += 1)}`,
   name: 'Push-ups',
   sets: 1,
   reps: 3,

@@ -43,11 +43,17 @@ process.env.TZ = "Asia/Kolkata";
 // component threw "React is not defined", i.e. the CLASSIC runtime, which is not
 // what vite.config.js builds the app with. Setting the transform here makes the
 // test build match the app build instead of leaving a dead plugin in the config.
+// `setupFiles` carries ONE guard and it is there for a measured reason: a
+// duplicate sibling `key` strands a live, stale component in the document, and
+// React only ever says so on stderr — which four review rounds read past. The
+// warning now fails the run. The full account is in the setup file itself; the
+// case it comes from is DECISIONS :20867.
 export default defineConfig({
   esbuild: { jsx: "automatic" },
   test: {
     environment: "node",
     environmentMatchGlobs: [["src/**/*.render.test.jsx", "jsdom"]],
     include: ["src/**/*.test.{js,jsx}"],
+    setupFiles: ["src/test-setup.js"],
   },
 });
