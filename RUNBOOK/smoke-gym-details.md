@@ -18,9 +18,13 @@ could ever be changed after the gym was created.
 > step 1's pass is on `428bbfb`.** Two commits, two runs, stated as two rather
 > than merged into a single tick — the same care :17647 took, and for the same
 > reason: what changed between them is the SCREEN those steps are read from.
-> **What carries steps 2–9 across that change is mutants C67–C71 plus the 27
-> staff and 6 gym call sites rewritten to open a section the way a person does,
-> all green on the final bytes.**
+> **What carries steps 2–9 across that change is mutants C67–C71 plus the 32
+> call sites rewritten to open a section the way a person does — 27 staff and 5
+> gym — all green on the final bytes.** *(This sentence read "27 staff and 6" and
+> was one of two copies that survived T3 round 1's own correction of the figure;
+> struck by round 2's Low-2. It carries the EVIDENCE that steps 2–9 still hold,
+> which is what makes a wrong count here worth correcting rather than shrugging
+> at.)*
 >
 > **NOT ESTABLISHED by step 1: the anti-silence rule.** A section opening ITSELF
 > when its data fails needs the staff read to fail in a browser, which the sheet

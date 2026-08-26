@@ -1045,9 +1045,15 @@ const MUTANTS = [
     target: 'gymview',
     suite: GYMVIEW_SUITE,
     why: "SAVES, and it is the worst thing this screen could do: the picker stops carrying the gym's OWN zone, so a runtime that calls that zone by its other alias offers a list without it and the box selects somebody else's. An owner who opened Settings to fix a typo in the name MOVES THE GYM'S DAY BOUNDARY by saving — `gyms.timezone` is the only thing the rollup worker consults, and :10402 measured the alias gap on this very machine",
+    // RE-ANCHORED 2026-08-26 by T3 round 2's C/H-1 fix, which made this function
+    // take as many zones as the caller needs present rather than exactly one.
+    // The whole-table pre-check ABORTED before a byte was written; re-measured
+    // RED rather than assumed. **C79 is its sibling at the CALL SITE** — this
+    // one says the helper injects, that one says the panel asks for the right
+    // zones, and round 2's Critical/High was entirely in the second (:15770).
     expect: 'OWN zone even when the runtime does not list it',
-    from: "  if (held !== '' && !zones.includes(held)) return [held, ...zones];",
-    to: "  if (held !== '' && zones.includes(held)) return [held, ...zones];",
+    from: "    if (held !== '' && !zones.includes(held) && !missing.includes(held)) missing.push(held);",
+    to: "    if (held !== '' && zones.includes(held) && !missing.includes(held)) missing.push(held);",
   },
   {
     id: 'C57',
@@ -1244,10 +1250,18 @@ const MUTANTS = [
     id: 'C74',
     target: 'gympanel',
     suite: SETTINGS_SUITE,
-    why: "SAVES: the time-zone list stops being built around the value the box is DISPLAYING, so following a change into a zone this runtime spells differently leaves the select with no matching option at all — C56's guarantee arriving one step too late, and the blank-or-first-in-the-list failure that silently moves a gym's day boundary",
-    expect: 'keeps the time-zone picker holding the zone it is displaying',
-    from: '  const zones = useMemo(() => timezoneChoices(detected, draft.timezone), [detected, draft.timezone]);',
-    to: "  const zones = useMemo(() => timezoneChoices(detected, ''), [detected]);",
+    // RE-ANCHORED AND RE-FILTERED BY ROUND 2, AND THE RE-FILTER IS THE POINT.
+    // Round 2's fix also asks the picker for the zone the GYM holds — which
+    // covers every UNTOUCHED form, because there the two are equal. So this
+    // mutant's old test could no longer see it, and re-anchoring alone would
+    // have left it ALIVE for a true reason (:11846: the anchor says what breaks,
+    // the FILTER says what should notice). The displayed zone earns its place in
+    // exactly one case and the new test drives it: a TOUCHED form, which does not
+    // follow, over a gym whose zone has moved on underneath it.
+    why: "SAVES: the picker stops being asked for the value the box is DISPLAYING, so a form somebody has typed in — which deliberately does not follow the gym — is left showing a zone that is no longer in the list, and the select falls to blank-or-first. Silently moving a gym's day boundary is the one permanent thing this screen must be incapable of",
+    expect: 'holds the zone the box is showing even when the gym has moved on',
+    from: '    () => timezoneChoices(detected, draft.timezone, org?.timezone),',
+    to: '    () => timezoneChoices(detected, org?.timezone),',
   },
   {
     // AIMED AT THE WRONG FIX I NEARLY SHIPPED, the way O126 is aimed at the
@@ -1288,6 +1302,31 @@ const MUTANTS = [
     expect: 'sends ONE request however many times the form is submitted',
     from: '    if (problem !== null || patch === null || saving) return;',
     to: '    if (problem !== null || patch === null) return;',
+  },
+
+  // ── T3 ROUND 2's TWO FIXES ───────────────────────────────────────────────
+  {
+    // C56'S SIBLING AT THE CALL SITE, and round 2's Critical/High lived entirely
+    // here rather than in the helper (:15770 — a mutant is a claim about ONE
+    // call site). C56 says "the helper injects a zone the runtime does not
+    // list"; this says "the panel asks it for the right zones", and round 1's
+    // fix satisfied the first while breaking the second.
+    id: 'C79',
+    target: 'gympanel',
+    suite: SETTINGS_SUITE,
+    why: "SAVES, and it is round 1's own fix doing it: the picker is asked only for the zone it is DISPLAYING, so the zone the gym actually HOLDS leaves the list the instant an owner selects anything else — with no way back short of leaving the screen. Measured on this machine: 418 zones enumerated, `Asia/Calcutta` present and `Asia/Kolkata` absent, plus Kiev/Kyiv, Rangoon/Yangon, Godthab/Nuuk. An owner who opens the dropdown to look has silently lost the ability to put their gym's day back",
+    expect: 'own zone selectable after the owner picks a different one',
+    from: '    () => timezoneChoices(detected, draft.timezone, org?.timezone),',
+    to: '    () => timezoneChoices(detected, draft.timezone),',
+  },
+  {
+    id: 'C80',
+    target: 'gympanel',
+    suite: SETTINGS_SUITE,
+    why: 'ON SCREEN AND FALSE (:5807), T3 round 2 Low-1: the follow block swaps what is in the boxes and leaves "Saved." standing, so a confirmation sits beside values the owner never saved — a claim about bytes that are no longer on screen, which is the rule this same file states for every keystroke',
+    expect: 'takes "Saved." down when the boxes are replaced',
+    from: '      setSaved(false);',
+    to: '      void 0;',
   },
 ];
 

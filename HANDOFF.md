@@ -1,6 +1,47 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: GYM DETAILS (WEB HALF), T3 ROUND 2 (diff-only) — ONE Critical/High, AND IT
+      IS ROUND 1'S OWN FIX. DECISIONS :20587. **Packet did NOT ship; a DIFF-ONLY
+      ROUND 3 is the remaining gate.**
+
+  1. **THE ESCAPE HATCH FIRED AND KD RULED PATCH — fourth firing, fourth patch
+     ruling.** Both rounds' Criticals are in `GymDetailsPanel.jsx` and :13336
+     judges the subsystem at FILE granularity. **The reviewer stopped without
+     proposing a fix, which is the rule working.** ⚠️ **A Critical in that file
+     in ROUND 3 would be the THIRD consecutive round — that goes to Kd as a
+     redesign question, not another patch.**
+  2. **C/H-1: round 1's fix took the gym's own zone OUT of the picker.** It
+     re-anchored the list to the DISPLAYED zone and made that the only thing it
+     follows, so the zone the gym HOLDS left the list the instant an owner
+     selected anything else, with no way back. Save instead of noticing and the
+     gym's day moves. **Measured both directions** (RED on `0638b46`, GREEN with
+     the pre-fix panel) and on real data: 418 zones, `Asia/Calcutta` present,
+     `Asia/Kolkata` absent. **A fix that trades one half of a guarantee for the
+     other is :6277's shape** — the helper is variadic now and BOTH are asked for.
+  3. **AND THE SECOND ARGUMENT IS NOT REDUNDANT — MEASURED, NOT ASSUMED.** Asking
+     only for the gym's zone covers every UNTOUCHED form; the displayed zone
+     earns its place in exactly one case (a TOUCHED form over a gym whose zone
+     moved on). Skipping that check would have been C71's mistake again.
+  4. **THE MUTANT WORK IS THE PART TO READ: C74's ANCHOR MOVED AND SO DID ITS
+     FILTER.** The fix covers C74's old test, so re-anchoring alone would have
+     left it ALIVE **for a true reason**. :11846's two halves — third time this
+     session, and the FILTER half every time.
+  5. **L-2 IS V1 ON THE ROUND'S OWN CORRECTION:** round 1's Low-4 fixed the
+     call-site figures in four documents *and said so*; two copies survived, in
+     `OWED.md` and the smoke sheet, **both the sentence carrying the evidence
+     that the smoke's steps 2–9 hold.** :5748 inside the round that recorded it.
+
+MEASURED (final bytes): web 1232/1232 exit 0 across 45 files (+6) · build ✓ ·
+  eslint clean on four files · `node --check` clean · SWEEP a stated SUBSET of
+  102: C56/C74/C79/C80 — 4 RED, 0 ALIVE, 0 never ran, exit 0. **Rule 3 measured:
+  both new render tests watched RED first, each failing on its own claim.** No
+  server change, no `@app/shared` change, no migration.
+
+NEXT: **DIFF-ONLY ROUND 3 in a fresh chat** over these fixes alone.
+```
+
+```
 TASK: GYM DETAILS (WEB HALF), T3 ROUND 1 — ONE Critical/High, ALL FIXED IN THE
       ROUND. DECISIONS :20440. **The packet did NOT ship; the DIFF-ONLY ROUND 2
       is the remaining gate.** ESCAPE HATCH NOT ARMED and the reviewer said so

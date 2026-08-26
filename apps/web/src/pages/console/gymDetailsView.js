@@ -103,13 +103,28 @@ export function sameGymDetails(a, b) {
  *  An empty result is a real answer and is passed straight through: the caller
  *  draws a plain text box, and the server proves whatever is typed names a real
  *  zone. A one-item picker holding only the gym's current zone would be worse
- *  than a text box, because it could not be changed. */
-export function timezoneChoices(detected, current) {
+ *  than a text box, because it could not be changed.
+ *
+ *  **IT TAKES AS MANY ZONES AS THE CALLER NEEDS PRESENT, and T3 round 2's
+ *  Critical/High is why.** It used to take exactly one, and round 1's own fix
+ *  spent that one on the zone the box is DISPLAYING — correct, and made the ONLY
+ *  thing it follows, so **the zone the gym actually HOLDS dropped out of the list
+ *  the moment the owner selected anything else**, with no way back short of
+ *  leaving the screen. A fix that trades one half of a guarantee for the other
+ *  half is the shape :6277 records; the answer is that both are wanted, so both
+ *  are asked for. */
+export function timezoneChoices(detected, ...wanted) {
   const zones = timezoneOptions(detected);
   if (zones.length === 0) return zones;
-  const held = typeof current === 'string' ? current.trim() : '';
-  if (held !== '' && !zones.includes(held)) return [held, ...zones];
-  return zones;
+  const missing = [];
+  for (const one of wanted) {
+    const held = typeof one === 'string' ? one.trim() : '';
+    // `missing` is checked as well as `zones` so that asking for the same zone
+    // twice — which the caller does whenever the box shows what the gym holds,
+    // i.e. most of the time — cannot put it in the list twice.
+    if (held !== '' && !zones.includes(held) && !missing.includes(held)) missing.push(held);
+  }
+  return missing.length === 0 ? zones : [...missing, ...zones];
 }
 
 /** WHAT IS WRONG WITH THIS FORM, IN WORDS, BEFORE THE SERVER IS ASKED.

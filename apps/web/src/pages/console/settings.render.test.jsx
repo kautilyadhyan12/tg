@@ -1441,6 +1441,87 @@ describe('when the gym changes underneath the form', () => {
     expect([...picker.options].some((o) => o.value === 'Asia/Kolkata')).toBe(true);
   });
 
+  /** T3 ROUND 2, C/H-1 — and it is round 1's OWN FIX doing it. Round 1 re-anchored
+   *  the picker to the zone the box is SHOWING, which was right and was made the
+   *  ONLY thing it follows — so the zone the gym actually HOLDS dropped out the
+   *  moment the owner selected anything else, with no way back short of leaving
+   *  the screen. It needs both.
+   *
+   *  The subject only exists for a gym whose stored zone this runtime spells
+   *  differently, which is not exotic: measured here, 418 zones listed,
+   *  `Asia/Calcutta` present and `Asia/Kolkata` absent — and the same for
+   *  Kiev/Kyiv, Rangoon/Yangon and Godthab/Nuuk. */
+  it('KEEPS the gym’s own zone selectable after the owner picks a different one', async () => {
+    orgService.getMine.mockResolvedValue({
+      data: { orgs: [{ ...ORG, timezone: 'Asia/Kolkata' }] },
+    });
+    await drawGym();
+    expect(screen.getByLabelText('Time zone').value).toBe('Asia/Kolkata');
+
+    fireEvent.change(screen.getByLabelText('Time zone'), { target: { value: 'Europe/Paris' } });
+    expect(screen.getByLabelText('Time zone').value).toBe('Europe/Paris');
+
+    // THE ASSERTION: the gym's own zone is still in the list. This runtime does
+    // not enumerate it, so it is there only because the picker injects it — and
+    // without it an owner who opened the dropdown to look has silently lost the
+    // ability to put their gym's day back where it was.
+    const options = [...screen.getByLabelText('Time zone').options].map((o) => o.value);
+    expect(options).toContain('Asia/Kolkata');
+    // Positive control: the one they picked is there too, so "inject everything"
+    // and "inject nothing" are both refused by this pair.
+    expect(options).toContain('Europe/Paris');
+  });
+
+  /** THE OTHER HALF OF THE PICKER RULE, and it is what stops the round-2 fix
+   *  making the round-1 one redundant. Asking only for the zone the GYM holds
+   *  covers every untouched form — the two are equal there — so the DISPLAYED
+   *  zone earns its place in exactly one case: the form is TOUCHED, so it does
+   *  not follow, and the gym's zone has moved on underneath it. The box is then
+   *  showing something the org row no longer holds. */
+  it('holds the zone the box is showing even when the gym has moved on', async () => {
+    orgService.getMine.mockResolvedValue({
+      data: { orgs: [{ ...ORG, timezone: 'Asia/Kolkata' }] },
+    });
+    await drawGym();
+    expect(screen.getByLabelText('Time zone').value).toBe('Asia/Kolkata');
+
+    // Touch the form, so it stops following.
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'My Own Typing' } });
+    orgService.getMine.mockResolvedValue({
+      data: { orgs: [{ ...ORG, timezone: 'Europe/Paris' }] },
+    });
+    fireEvent(window, new Event('focus'));
+    await waitFor(() => expect(orgService.getMine).toHaveBeenCalledTimes(2));
+
+    // The box still shows the gym's OLD zone, which this runtime does not
+    // enumerate — so it is in the list only because the picker was asked for it.
+    const picker = screen.getByLabelText('Time zone');
+    expect(picker.value).toBe('Asia/Kolkata');
+    expect([...picker.options].map((o) => o.value)).toContain('Asia/Kolkata');
+  });
+
+  /** T3 round 2, Low-1. The follow block swaps what is in the boxes and left
+   *  `saved` standing — so "Saved." could sit beside a form now showing somebody
+   *  else's values, a confirmation about bytes that are no longer on screen.
+   *  It is the rule this file states eleven lines further down, reached through a
+   *  door round 1 opened. */
+  it('takes "Saved." down when the boxes are replaced by somebody else’s change', async () => {
+    await drawGym();
+    const saved = { ...ORG, city: 'Dallas' };
+    orgService.updateOrg.mockResolvedValue({ data: { org: saved } });
+    orgService.getMine.mockResolvedValue({ data: { orgs: [saved] } });
+    fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Dallas' } });
+    fireEvent.click(screen.getByText('Save changes'));
+    await screen.findByText('Saved.');
+
+    // Now the other owner renames the gym and the window comes back.
+    orgService.getMine.mockResolvedValue({ data: { orgs: [renamedElsewhere] } });
+    fireEvent(window, new Event('focus'));
+
+    await waitFor(() => expect(screen.getByLabelText('Gym name').value).toBe('Iron Palace'));
+    expect(screen.queryByText('Saved.')).toBeNull();
+  });
+
   /** After a save, the boxes hold the SERVER's row — so the form must count that
    *  as its new starting point. Without it the form reads as touched for ever
    *  and stops following anything, which is C/H-1 again one save later. */

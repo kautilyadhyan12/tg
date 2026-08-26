@@ -123,6 +123,29 @@ describe('the time-zone list', () => {
     expect(zones).toContain('Asia/Calcutta');
   });
 
+  /** T3 ROUND 2's Critical/High, at the helper. It used to take exactly ONE
+   *  zone, and round 1's fix spent that one on the zone being displayed — so the
+   *  zone the gym HOLDS left the list the moment the owner picked anything else.
+   *  Both are wanted, so both are asked for. */
+  it('keeps EVERY zone it is asked for, not just the last one', () => {
+    vi.spyOn(Intl, 'supportedValuesOf').mockReturnValue(['Europe/Paris']);
+    const zones = timezoneChoices(null, 'Europe/Paris', 'Asia/Kolkata');
+    expect(zones).toContain('Asia/Kolkata');
+    expect(zones).toContain('Europe/Paris');
+  });
+
+  it('does not list the same zone twice when it is asked for twice', () => {
+    // The ordinary case: the box is showing exactly what the gym holds.
+    vi.spyOn(Intl, 'supportedValuesOf').mockReturnValue(['Europe/Paris']);
+    const zones = timezoneChoices(null, 'Asia/Kolkata', 'Asia/Kolkata');
+    expect(zones.filter((z) => z === 'Asia/Kolkata')).toHaveLength(1);
+  });
+
+  it('ignores a zone it is asked for that is not a string', () => {
+    vi.spyOn(Intl, 'supportedValuesOf').mockReturnValue(['Europe/Paris']);
+    expect(timezoneChoices(null, null, undefined, '  ')).toEqual(['Europe/Paris']);
+  });
+
   it('does not duplicate a zone the runtime already lists', () => {
     vi.spyOn(Intl, 'supportedValuesOf').mockReturnValue(['Asia/Calcutta', 'America/Chicago']);
     const zones = timezoneChoices(null, 'America/Chicago');

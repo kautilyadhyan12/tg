@@ -127,6 +127,54 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:20587** — 2026-08-26 — **GYM DETAILS, WEB HALF, T3 ROUND 2 (diff-only): ONE
+  Critical/High, IT IS ROUND 1'S OWN FIX, THE ESCAPE HATCH FIRED, AND KD RULED
+  PATCH.** Reviews `0638b46`; **the packet did NOT ship.** Two Low, both fixed.
+  **Read before touching `timezoneChoices`, before deciding what the picker is
+  asked to CONTAIN, and before correcting a figure in fewer than all its copies.**
+  **THE HATCH IS ARMED AND THE REVIEWER STOPPED WITHOUT PROPOSING A FIX, WHICH IS
+  THE RULE WORKING** — both rounds' Criticals are in `GymDetailsPanel.jsx` and
+  :13336 judges the subsystem at FILE granularity. **Fourth firing, fourth PATCH
+  ruling** (:6277, :9509, :14493). The distinction :14493 names was put to Kd:
+  round 1 found what the APP did wrong, round 2 what round 1's own FIX did wrong
+  (:6277) — **arguably a stronger case for the hatch than :14493's own.**
+  **C/H-1: round 1 re-anchored the picker to the DISPLAYED zone and made it the
+  ONLY thing the list follows — so the zone the gym HOLDS left the list the moment
+  an owner selected anything else, with no way back.** Save instead of noticing
+  and the gym's day moves: C56's guarantee narrowed on the axis round 1 was not
+  watching. **Measured in BOTH directions** (RED on `0638b46`, GREEN with the
+  pre-fix panel swapped in) and on this machine's real data — **418 zones,
+  `Asia/Calcutta` present, `Asia/Kolkata` absent**, plus Kiev/Kyiv,
+  Rangoon/Yangon, Godthab/Nuuk. **A fix that trades one half of a guarantee for
+  the other is :6277's shape**; the helper now takes as many zones as the caller
+  needs and the panel asks for BOTH. **The second is NOT redundant and that was
+  measured** — asking only for the gym's zone covers every UNTOUCHED form, so the
+  displayed one earns its place in exactly one case (a TOUCHED form over a gym
+  whose zone has moved on); without checking, it would have been C71 again.
+  **THE MUTANT WORK IS THE PART TO READ: C56 and C74 were both re-anchored by
+  this round's own fix, and C74's FILTER had to move too** — the fix covers its
+  old test, so re-anchoring alone would have left it ALIVE for a TRUE reason.
+  **:11846's two halves, third time this session, the filter half every time.**
+  **C79 is C56's sibling at the CALL SITE** (:15770) and round 2's Critical lived
+  entirely there.
+  **TWO LOW: L-1** "Saved." outlived the bytes it was about (the follow block
+  replaced the boxes and left it standing) — **severity disclosed** (:13552),
+  Low because nothing about the GYM is false, only a confirmation word is stale ·
+  **L-2 IS V1 ON THE ROUND'S OWN CORRECTION**: round 1's Low-4 fixed the
+  call-site figures in four documents *and said so*, **two copies survived** — in
+  `OWED.md` and the smoke sheet, **both the sentence carrying the evidence that
+  the smoke's steps 2–9 hold**. :5748's class inside the round whose own finding
+  that was; :19960's Low-6 shape.
+  **CONFIRMED: rule 3 CHECKED not taken** (the reviewer re-ran round 1's own
+  subset independently, 7 RED); **rule 4 — no liar among round 1's seven new
+  tests**, and the reason nothing could fail on C/H-1 is precise (the picker test
+  asserted only the DISPLAYED zone).
+  **PROVE: web 1232/1232 exit 0 (+6) · build ✓ · eslint clean on four files ·
+  `node --check` clean · SWEEP a stated SUBSET of 102: C56/C74/C79/C80, 4 RED, 0
+  ALIVE, 0 never ran. Rule 3 measured — both new render tests watched RED first,
+  each failing on its own claim.** **NOTHING TICKS: a DIFF-ONLY ROUND 3 is the
+  remaining gate, and a Critical there would be the THIRD consecutive round in one
+  file — a redesign question for Kd, not another patch.**
 - **:20440** — 2026-08-26 — **GYM DETAILS, WEB HALF, T3 ROUND 1: ONE
   Critical/High — the form never noticed the gym changing underneath it and
   OFFERED TO REVERT IT — and MY OWN FIRST FIX was wrong in a way only this card's

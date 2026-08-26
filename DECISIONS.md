@@ -20583,3 +20583,128 @@ C/H-1 and L-1**, and both now have tests that do.
 complete and does not need re-running — no step on it touches the surfaces these
 fixes changed, and the two that come closest (the sections opening, the save
 landing) are covered by C72–C78 on the shipping bytes.
+
+## GYM DETAILS, WEB HALF — T3 ROUND 2 (diff-only): ONE Critical/High, IT IS ROUND 1'S OWN FIX, THE ESCAPE HATCH FIRED, AND KD RULED PATCH (2026-08-26)
+
+Reviews `0638b46`. **The packet did NOT ship this round.** Two Low, both fixed
+here and logged in `BACKLOG.md`. Kd approved the finding list before a byte was
+written (*"fix all"*).
+
+**THE ESCAPE HATCH IS ARMED AND THE REVIEWER STOPPED WITHOUT PROPOSING A FIX,
+WHICH IS THE RULE WORKING.** Round 1's Critical/High and round 2's are both in
+`apps/web/src/components/console/GymDetailsPanel.jsx`, and :13336 judges the
+subsystem at FILE granularity — two consecutive rounds, so :5348's trigger fires
+and no chat may decide it. **KD RULED PATCH.** Fourth firing, fourth PATCH ruling
+(:6277, :9509, :14493).
+
+**The distinction :14493 says decides it was put to him rather than argued
+around:** round 1 found something the APP did wrong; round 2 found something
+round 1's own FIX did wrong (:6277's class) — **arguably a stronger case for the
+hatch than :14493's own**, where round 2 found only missing coverage on correct
+code. Against it, and what the ruling rests on: the file is one form with one
+job, the fix's core rule survived every path the reviewer attacked, and the
+remaining defect is one call's arguments.
+
+**Read before touching `timezoneChoices`, before deciding what the picker is
+asked to contain, and before correcting a figure in fewer than all of its
+copies.**
+
+### C/H-1 — ROUND 1'S FIX TOOK THE GYM'S OWN ZONE OUT OF THE LIST
+
+Round 1 re-anchored the picker to `draft.timezone`, the zone the box is
+DISPLAYING. That was right and it was made the **only** thing the list follows —
+so **the zone the gym actually HOLDS left the list the instant the owner selected
+anything else, with no way back short of leaving the screen.** If they save
+instead of noticing, the gym's day boundary moves: C56's own guarantee, *"the one
+way this screen could do permanent damage"*, narrowed on the axis round 1 was not
+looking at.
+
+**The subject is not exotic — it is Kd's own gym's shape.** Measured on this
+machine: **418 zones enumerated, `Asia/Calcutta` present and `Asia/Kolkata`
+absent**, and the same for `Europe/Kiev`/`Kyiv`, `Asia/Rangoon`/`Yangon`,
+`America/Godthab`/`Nuuk`. The reviewer measured it in **both directions** — RED on
+`0638b46`, GREEN on `a7c3ad2` with the pre-fix panel swapped in — so it is round
+1's fix that introduced it, not an older hole.
+
+**A FIX THAT TRADES ONE HALF OF A GUARANTEE FOR THE OTHER HALF IS :6277's SHAPE,
+and the answer is that both halves are wanted.** `timezoneChoices` now takes as
+many zones as the caller needs present, and the panel asks for **both** the zone
+the gym holds and the zone the box is showing.
+
+**THE SECOND ONE IS NOT REDUNDANT AND THAT WAS MEASURED RATHER THAN ASSUMED.**
+Asking only for the gym's zone covers every UNTOUCHED form — there the two are
+equal — so the displayed zone earns its place in exactly one case: **a form
+somebody has typed in, which deliberately does not follow, over a gym whose zone
+has moved on underneath it.** That is the case C74's new test drives. Without
+checking this, "one argument now covers the other" would have been the C71
+mistake again (two guards, either sufficient, neither falsifiable).
+
+### THE MUTANT WORK IS THE PART TO READ: AN ANCHOR MOVED, AND RE-ANCHORING ALONE WOULD HAVE LEFT IT ALIVE FOR A TRUE REASON
+
+**C56's anchor stopped matching** (the helper's body changed shape) and the
+whole-table pre-check ABORTED before a byte was written — re-anchored,
+**re-measured RED**.
+
+**C74's anchor moved too, and its FILTER had to move with it.** The round-2 fix
+also asks for the gym's zone, which covers C74's old test — an untouched form —
+so re-anchoring alone would have produced an ALIVE mutant whose honest reading is
+*"this guarantee has no test"*, when the truth is *"this test can no longer see
+it"*. **:11846's two halves, third time this session and the filter half every
+time.** Re-filtered onto the touched-form case, RED.
+
+**C79 is C56's sibling at the CALL SITE** (:15770): C56 says the helper injects a
+zone the runtime does not list, C79 says the panel asks it for the right ones —
+and **round 2's Critical/High lived entirely in the second**, which is why one
+mutant could not have caught it.
+
+### THE TWO LOW
+
+- **L-1 — "Saved." outlived the bytes it was about.** The follow block replaces
+  what is in the boxes and left `saved` standing, so a confirmation could sit
+  beside values the owner never saved. It is the rule the same file states eleven
+  lines further down, reached through a door round 1's fix opened. **Severity
+  disclosed rather than decided quietly** (:13552): weighed as C/H under :5807 and
+  landed Low, because every value on screen is the server's true current value and
+  Save is correctly disabled — what is stale is a confirmation word, not a fact
+  about the gym. Mutant **C80**.
+- **L-2 — V1 ON THE ROUND'S OWN CORRECTION, and this is the one to keep.** Round
+  1's Low-4 corrected *"33 call sites … 27 staff and 6 gym"* in four documents
+  **and the entry said so**; two copies survived, in `OWED.md` and the smoke
+  sheet — **and both are the sentence carrying the evidence that the smoke's steps
+  2–9 still hold across the collapse commit.** :5748's class (*the place a
+  correction is missed is the file you were not editing*) recurring **inside the
+  round whose own finding that was**, which is :19960's Low-6 exactly. Corrected,
+  struck rather than rewritten, and re-measured independently: 35 at `7236093`, 3
+  left alone as ABSENCE assertions, 32 converted — 27 staff, 5 gym.
+
+### CONFIRMED RATHER THAN FOUND
+
+**Rule 3 checked rather than taken:** the reviewer re-ran round 1's own subset
+independently — `C72…C78`, 7 RED, 0 ALIVE, all seven controls GREEN and tallied
+first — so the entry's claim holds. **Rule 4:** no liar among round 1's seven new
+tests; all seven have a mutant and all seven go RED. **What nothing added in round
+1 could fail on was C/H-1**, and the reason is precise: the picker test asserted
+only that the DISPLAYED zone is present and was structurally unable to see the
+stored one being dropped.
+
+### PROVE — final bytes
+
+- **web 1232/1232 exit 0 across 45 files** (+6 on 1226: two render cases for the
+  picker, one for the "Saved." rule, three unit cases for the variadic helper).
+- **RULE 3 MEASURED: both new render tests watched RED first**, each failing on
+  its own claim (`expected [ 'Africa/Abidjan', …(417) ] to include 'Asia/Kolkata'`
+  and `expected <span> to be null`) rather than on a missing element.
+- `vite build` exit 0 · `eslint --max-warnings=0` exit 0 on four changed files ·
+  `node --check` on the harness exit 0.
+- **MUTATION SWEEP, a stated SUBSET of 102: C56, C74, C79, C80 — 4 mutants · 4 RED
+  · 0 ALIVE · 0 never ran, exit 0**, controls GREEN and tallied first, restores
+  sha256-verified. C56 and C74 were both re-anchored by this round's own fix and
+  both re-measured rather than assumed.
+- No server change, no `@app/shared` change, no migration.
+
+**NOTHING TICKS: a DIFF-ONLY ROUND 3 is the remaining gate.** The smoke does not
+need re-running — no step touches the picker's contents once opened, and the two
+zones now asked for are covered by C56/C74/C79 on the shipping bytes.
+**ESCAPE-HATCH NOTE FOR ROUND 3: a Critical/High in `GymDetailsPanel.jsx` again
+would be the THIRD consecutive round in one file**, which is past what :5348
+describes and would go to Kd as a redesign question rather than another patch.

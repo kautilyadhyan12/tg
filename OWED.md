@@ -6226,8 +6226,11 @@ file and is stated so nobody reads these as lower priority than they are.
       (Kd, on `428bbfb`, tree clean at the time) and steps 2–9 stand on
       `7236093` — **two commits, two runs, recorded as two rather than merged
       into one tick** (:17647's care; what carries 2–9 across the change is
-      mutants C67–C71 plus the 33 call sites rewritten to open a section the way
-      a person does).
+      mutants C67–C71 plus the 32 call sites rewritten to open a section the way
+      a person does — 27 staff and 5 gym; **the "33 … and 6" this line carried
+      until T3 round 2's Low-2 counted an intermediate state nobody committed,
+      and it survived round 1's own correction of the other four copies**,
+      :5748's class in the file that was not being edited).
       **SO THIS LINE NOW WAITS ON T3 AND NOTHING ELSE.** Every step on the sheet
       has been run by a person against the bytes it describes.
       **UPDATE — T3 ROUND 1 RAN: ONE Critical/High, FIXED, and the packet did NOT
@@ -6237,6 +6240,17 @@ file and is stated so nobody reads these as lower priority than they are.
       be incapable of. Four Low, all fixed, in `BACKLOG.md`. **What holds this
       line now is the DIFF-ONLY ROUND 2** on those fixes; the smoke does not need
       re-running and :20440 says why.
+      **UPDATE — ROUND 2 RAN: ONE Critical/High, and it was ROUND 1'S OWN FIX**
+      (DECISIONS :20587). Round 1 anchored the time-zone list to the zone the box
+      is showing and made that the only thing it follows, so **the zone the gym
+      HOLDS left the list the moment an owner picked anything else** — the
+      permanent damage this screen must be incapable of, re-introduced by the fix
+      for it. **THE ESCAPE HATCH FIRED (both Criticals in one file) and KD RULED
+      PATCH** — fourth firing, fourth patch ruling. Two Low, fixed, in
+      `BACKLOG.md`; one of them is two surviving copies of round 1's own
+      corrected figure, **one of which was in THIS FILE**. **What holds this line
+      now is a DIFF-ONLY ROUND 3, and a Critical there would be the third
+      consecutive round in one file — a redesign question for Kd.**
       **One thing the smoke still cannot reach, beside the currency lock: a
       section OPENING ITSELF when its data fails.** That needs the staff read to
       fail in a browser and no step sets it up, so it is carried by C68/C69 and

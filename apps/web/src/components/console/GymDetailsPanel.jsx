@@ -106,14 +106,39 @@ export default function GymDetailsPanel({ org, privileges }) {
   if (!sameGymDetails(fresh, lastOrgSeen)) {
     const untouched = sameGymDetails(draft, lastOrgSeen);
     setLastOrgSeen(fresh);
-    if (untouched) setDraft(fresh);
+    if (untouched) {
+      setDraft(fresh);
+      // T3 round 2, Low-1. Replacing the boxes and leaving "Saved." standing is
+      // a confirmation about bytes that are no longer on screen — the rule
+      // `edit` states below, reached through the door round 1's fix opened. A
+      // refusal left over from a save is cleared for the same reason: it would
+      // read as a refusal of values the owner never sent.
+      setSaved(false);
+      setError(null);
+    }
   }
 
-  // THE LIST MUST HOLD THE VALUE THE BOX IS SHOWING, not the one it showed when
-  // the screen opened. Anchoring it to the initial zone was C56's guarantee
-  // arriving one step late: follow a change into a zone this runtime spells
-  // differently and the select would have no matching option at all.
-  const zones = useMemo(() => timezoneChoices(detected, draft.timezone), [detected, draft.timezone]);
+  // THE LIST MUST HOLD BOTH THE ZONE THE GYM HOLDS AND THE ZONE THE BOX IS
+  // SHOWING — T3 round 2's Critical/High, and round 1's own fix is what caused
+  // it.
+  //
+  // It was anchored to the zone the screen OPENED with, which meant following a
+  // change into a zone this runtime spells differently left the select with no
+  // matching option (C56 one step late). Round 1 re-anchored it to the DISPLAYED
+  // zone, which fixed that and **made the displayed zone the only thing it
+  // follows — so the moment an owner selected anything else, the zone their gym
+  // actually holds left the list and there was no way to put it back** without
+  // leaving the screen. Measured on this machine: 418 zones enumerated,
+  // `Asia/Calcutta` present and `Asia/Kolkata` absent, and the same for
+  // Kiev/Kyiv, Rangoon/Yangon, Godthab/Nuuk.
+  //
+  // Both are wanted, so both are asked for. `org.timezone` rather than
+  // `lastOrgSeen.timezone`: this is about what the SERVER holds right now, not
+  // about what the form has reacted to.
+  const zones = useMemo(
+    () => timezoneChoices(detected, draft.timezone, org?.timezone),
+    [detected, draft.timezone, org?.timezone],
+  );
 
   if (!allowed) return null;
 
