@@ -6220,6 +6220,13 @@ file and is stated so nobody reads these as lower priority than they are.
       unreachable while nothing inserts into `subscriptions`.
       **T3 IS UNRUN on all six commits in this packet** — a passing smoke is not
       a review (:14147).
+      **UPDATE, SAME DAY — SETTINGS' SECTIONS NOW COLLAPSE** (Kd's call at the
+      screen, DECISIONS :20338), so this line's screen is two tappable rows
+      rather than one long page. **It adds a gate rather than removing one:
+      STEP 1 of the sheet is rewritten and UNRUN** (the tapping, the closed
+      headings, and the staff count that survives on a shut row did not exist
+      when Kd ran it); **steps 2–9 are unchanged in what they ask and stand**.
+      So this line now waits on **T3 plus that one re-run step**.
 - [ ] ⚪ **EVERY GYM CREATED BEFORE 2026-08-26 HAS NO COUNTRY RECORDED, and no
       honest backfill exists.** `gyms.country` arrived with migration `0014`;
       before it the create wizard collected a country, the server mapped it to a

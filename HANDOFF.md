@@ -1,6 +1,44 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: SETTINGS' SECTIONS COLLAPSE — Kd's call, made at the screen.
+      DECISIONS :20338 (addendum 2 to :20075).
+
+  1. **CLOSED MEANS UNMOUNTED, NOT CSS-HIDDEN, AND THE CHEAPER OPTION WAS THE
+     DISHONEST ONE.** Hiding would have left all 33 existing call sites passing
+     against content no person can see. **27 staff and 6 gym call sites now open
+     the section the way a person does; no assertion moved** (:6008).
+  2. **`forceOpen` IS THE ANTI-SILENCE RULE (:12660).** `StaffPanel` reads the
+     staff list on mount whether its section is open or not, so a failure
+     arrives while nobody is looking — a shut row over an error card says
+     NOTHING. It opens itself and cannot be tapped shut over it. C68 at the
+     component, C69 at the call site (:15770). **`GymDetailsPanel` passes none
+     deliberately: it fetches nothing.**
+  3. **THE CLOSED HEADING KEEPS THE STAFF COUNT** — collapsing is only an
+     improvement while the shut row still answers the question (C70).
+  4. **THE ONE TO READ: C71 SURVIVED TWICE, FOR TWO DIFFERENT REASONS.** First
+     **no observable subject** — the panel's `!loading && !error` guard on the
+     count and `staffCountLabel([])`'s own null were two guards, either
+     sufficient, neither falsifiable (:12343's J11). Fixed **in the SOURCE so
+     one line does the work**, mutant moved to where the guarantee lives.
+     Second **the FILTER** — it named a test driving `null`/`undefined`/a string
+     and never an EMPTY ARRAY, the only input the mutation changes. **:11846's
+     filter half, twice in one session.**
+  5. **THE SHEET GREW A STEP AND ITS OLD TICK DOES NOT COVER IT.** Step 1 is
+     rewritten and UNRUN on these bytes; steps 2–9 stand (:14840).
+
+MEASURED (final bytes): web 1214/1214 exit 0 across 45 files (+9) · `vite build`
+  exit 0 · eslint `--max-warnings=0` clean on four files · `node --check` clean ·
+  SWEEP a stated SUBSET of 93: C67–C71, 5 mutants · 5 RED · 0 ALIVE · 0 never
+  ran, exit 0, controls GREEN and TALLIED first. **The two ALIVE runs are NOT
+  summed into that** (:5199) — different source, different filter. No server
+  change, no `@app/shared` change, no migration.
+
+NEXT: **T3 in a FRESH chat over the whole packet's web half**, plus Kd re-running
+  the sheet's step 1 alone (about two minutes).
+```
+
+```
 TASK: THE GYM-DETAILS SMOKE — PASSED, and three findings that outlive it.
       DECISIONS :20222 (addendum to :20075). **T3 IS NOW THE ONLY GATE LEFT on
       the whole six-commit packet.**

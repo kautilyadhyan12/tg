@@ -1,4 +1,5 @@
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { useId, useState } from 'react';
+import { Loader2, AlertTriangle, ChevronDown } from 'lucide-react';
 
 // The console's loading / failed states, in ONE place.
 //
@@ -55,5 +56,85 @@ export function ConsoleCard({ children, className = '' }) {
     >
       {children}
     </div>
+  );
+}
+
+/** A SETTINGS SECTION THAT OPENS WHEN YOU TAP IT — Kd's call, 2026-08-26, made
+ *  while looking at the screen: *"i think there should be like drop down when
+ *  click on them there is a drop down other wise it will be a really long
+ *  list"*.
+ *
+ *  **He is right and it gets worse, not better.** Settings carries two sections
+ *  today; Part 3 §4.7 puts FIVE on it (Profile · Codes · Privacy · Notifications
+ *  · Staff), and Staff alone grows a row per person with three controls each.
+ *  The screen he was looking at is the shortest it will ever be.
+ *
+ *  **THE HEADING KEEPS SAYING SOMETHING WHILE CLOSED.** The title, the sentence
+ *  under it and the `aside` (the staff count) all stay on screen — so a closed
+ *  screen reads as a short menu rather than a row of mystery boxes, and the one
+ *  number an owner glances at is still there without opening anything.
+ *
+ *  **CLOSED MEANS UNMOUNTED, NOT HIDDEN WITH CSS, AND THAT IS DELIBERATE.**
+ *  Hiding it would have left every existing test passing against content no
+ *  person can see — a suite that claims a user sees something while the screen
+ *  does not show it is the exact class this project keeps recording. The tests
+ *  changed instead, each one now opening the section the way a person does
+ *  (:6008's precedent for a control gaining a tap).
+ *
+ *  **`forceOpen` IS THE ANTI-SILENCE RULE and it is the reason this prop
+ *  exists.** A panel that fetches on mount can fail while closed — and a closed
+ *  row over an error card says NOTHING, which is worse than the error. :12660
+ *  is the citation: no reviewer, test or mutant flags an ABSENT sentence, a
+ *  person does. A section holding something the owner needs to see opens itself
+ *  and cannot be tapped shut over it. */
+export function ConsoleSection({ title, summary, aside, children, forceOpen = false }) {
+  const [open, setOpen] = useState(false);
+  const bodyId = useId();
+  const isOpen = open || forceOpen;
+
+  return (
+    <ConsoleCard>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={isOpen}
+        aria-controls={bodyId}
+        className="w-full text-left flex items-start justify-between gap-3"
+      >
+        <div className="min-w-0">
+          <div
+            className="text-xs uppercase tracking-wider"
+            style={{ color: 'rgba(255,255,255,0.35)' }}
+          >
+            {title}
+          </div>
+          {summary ? (
+            <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
+              {summary}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          {aside ? (
+            <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+              {aside}
+            </span>
+          ) : null}
+          <ChevronDown
+            className="w-4 h-4 transition-transform"
+            style={{
+              color: 'rgba(255,255,255,0.45)',
+              transform: isOpen ? 'rotate(180deg)' : 'none',
+            }}
+          />
+        </div>
+      </button>
+
+      {isOpen ? (
+        <div id={bodyId} className="mt-4">
+          {children}
+        </div>
+      ) : null}
+    </ConsoleCard>
   );
 }

@@ -111,6 +111,36 @@ const drawSettings = () =>
     </MemoryRouter>,
   );
 
+/** SETTINGS' SECTIONS ARE CLOSED UNTIL SOMEBODY TAPS THEM (Kd, 2026-08-26).
+ *
+ *  Every test below that reads INSIDE a section now opens it first, the way a
+ *  person does — **no assertion moved**, only the tap that used to be
+ *  unnecessary (:6008's precedent for a control gaining a question, and the
+ *  account of the change is in the entry rather than left for a reader to
+ *  notice).
+ *
+ *  **Collapsing UNMOUNTS rather than hiding with CSS, and that is why this
+ *  churn was accepted instead of avoided.** A `display:none` body would have
+ *  left all 33 call sites passing against content no person can see — a suite
+ *  claiming a user sees something the screen does not show, which is the class
+ *  this project has recorded most. The cheaper option was the dishonest one.
+ *
+ *  The heading's accessible name is title + summary + aside, so the anchor is
+ *  the START of it. */
+const openSection = async (title) => {
+  fireEvent.click(await screen.findByRole('button', { name: new RegExp(`^${title}`) }));
+};
+
+const drawStaff = async () => {
+  drawSettings();
+  await openSection('Staff');
+};
+
+const drawGym = async () => {
+  drawSettings();
+  await openSection('Gym details');
+};
+
 const drawShell = (path = '/console/iron-house') =>
   render(
     <MemoryRouter initialEntries={[path]}>
@@ -142,7 +172,7 @@ afterEach(() => {
 
 describe('who runs this gym', () => {
   it('lists everybody with their role and when they got the keys', async () => {
-    drawSettings();
+    await drawStaff();
     expect(await screen.findByText('Kd Owner')).toBeTruthy();
     const row = screen.getByTestId('staff-u2');
     expect(within(row).getByText('Rita Sen')).toBeTruthy();
@@ -154,14 +184,14 @@ describe('who runs this gym', () => {
     // `isYou` is computed server-side against the caller. The console once
     // inferred "(you)" from a seat being complimentary, which was true only
     // while one caller happened to behave a certain way.
-    drawSettings();
+    await drawStaff();
     expect(await screen.findByText('Kd Owner')).toBeTruthy();
     expect(within(screen.getByTestId('staff-u1')).getByText('(you)')).toBeTruthy();
     expect(within(screen.getByTestId('staff-u2')).queryByText('(you)')).toBeNull();
   });
 
   it('shows a staff row and NOTHING Part 3 §2.4 keeps from a gym', async () => {
-    drawSettings();
+    await drawStaff();
     expect(await screen.findByText('Rita Sen')).toBeTruthy();
     // The row is built field by field. This fails the moment somebody spreads
     // the person object onto it.
@@ -171,20 +201,20 @@ describe('who runs this gym', () => {
 
   it('leaves the email out when there is none, rather than printing a dash for it', async () => {
     orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, TRAINER] } });
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u3');
     expect(within(row).getByText(/Trainer/)).toBeTruthy();
     expect(within(row).queryByText(/—/)).toBeNull();
   });
 
   it('says how many people run the gym', async () => {
-    drawSettings();
+    await drawStaff();
     expect(await screen.findByText('2 people run this gym')).toBeTruthy();
   });
 
   it('NEVER draws a failed read as a gym with no staff — it says what went wrong, with a way out', async () => {
     orgService.getStaff.mockRejectedValue(offline());
-    drawSettings();
+    await drawStaff();
     expect(await screen.findByText(/Couldn't reach the server/i)).toBeTruthy();
     expect(screen.getByText('Try again')).toBeTruthy();
     // A gym always has an owner, so a staff list is never legitimately empty.
@@ -202,7 +232,7 @@ describe('who runs this gym', () => {
 
 describe("the owner's own row", () => {
   it('carries the reason instead of controls the server would refuse', async () => {
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u1');
     expect(within(row).getByText(/nobody in charge/i)).toBeTruthy();
     expect(within(row).queryByText('Remove')).toBeNull();
@@ -224,7 +254,7 @@ describe('changing what somebody can do', () => {
   };
 
   it('offers the OTHER role and sends exactly that', async () => {
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u2');
     clickThroughRoleChange(row);
     await waitFor(() => expect(orgService.updateStaffRole).toHaveBeenCalledTimes(1));
@@ -232,7 +262,7 @@ describe('changing what somebody can do', () => {
   });
 
   it('re-reads the list from the server afterwards rather than editing its own copy', async () => {
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u2');
     expect(orgService.getStaff).toHaveBeenCalledTimes(1);
     clickThroughRoleChange(row);
@@ -243,7 +273,7 @@ describe('changing what somebody can do', () => {
     orgService.updateStaffRole.mockRejectedValue(
       apiError(409, 'owner_role_locked', 'The gym’s owner keeps the owner role.'),
     );
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u2');
     clickThroughRoleChange(row);
     expect(await screen.findByText(/owner keeps the owner role/i)).toBeTruthy();
@@ -255,7 +285,7 @@ describe('changing what somebody can do', () => {
    *  and before this the tap was immediate — so an owner who had hand-tuned
    *  somebody's boxes lost that work with nothing on screen saying so. */
   it('ASKS before changing a role, and does nothing on the first tap', async () => {
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Make trainer'));
     expect(await within(row).findByText(/permissions become the defaults/i)).toBeTruthy();
@@ -268,7 +298,7 @@ describe('changing what somebody can do', () => {
    *  reset hands back MORE than they had. The banned phrasing is checked too,
    *  because it is the sentence a later edit will reach for. */
   it('says their permissions BECOME the new defaults, not that changes are lost', async () => {
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Make trainer'));
     const question = await within(row).findByText(/permissions become the defaults for the new role/i);
@@ -276,7 +306,7 @@ describe('changing what somebody can do', () => {
   });
 
   it('CANCEL on that question changes nothing and puts the button back', async () => {
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Make trainer'));
     fireEvent.click(within(row).getByText('Cancel'));
@@ -290,7 +320,7 @@ describe('changing what somebody can do', () => {
 
 describe('taking somebody’s keys back', () => {
   it('asks first, and offers BOTH outcomes rather than picking one', async () => {
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Remove'));
     expect(within(row).getByText(/Take Rita Sen's keys back\?/)).toBeTruthy();
@@ -302,7 +332,7 @@ describe('taking somebody’s keys back', () => {
   });
 
   it('says what each choice costs, including the fear it has to answer', async () => {
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Remove'));
     expect(within(row).getByText(/stay a member of your gym/i)).toBeTruthy();
@@ -315,7 +345,7 @@ describe('taking somebody’s keys back', () => {
    *  "Remove? / Keep". This is the test that would have caught the difference,
    *  and it did not exist: every test below simply clicked through. */
   it('does NOTHING until the last tap — picking an outcome only asks again', async () => {
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Remove'));
     fireEvent.click(within(row).getByText('Remove from the gym too'));
@@ -337,7 +367,7 @@ describe('taking somebody’s keys back', () => {
    *  titled "JUST THE KEYS ends the staff row", i.e. red for the wrong reason,
    *  which certifies the wrong assertion (:4718 F2). This one names the claim. */
   it('does NOTHING on the gentle arm either, until the last tap', async () => {
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Remove'));
     fireEvent.click(within(row).getByText('Just take the keys'));
@@ -347,7 +377,7 @@ describe('taking somebody’s keys back', () => {
   });
 
   it('JUST THE KEYS ends the staff row and leaves the membership alone', async () => {
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Remove'));
     fireEvent.click(within(row).getByText('Just take the keys'));
@@ -358,7 +388,7 @@ describe('taking somebody’s keys back', () => {
   });
 
   it('REMOVE FROM THE GYM TOO does both, keys FIRST — the server refuses the other order', async () => {
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Remove'));
     fireEvent.click(within(row).getByText('Remove from the gym too'));
@@ -376,7 +406,7 @@ describe('taking somebody’s keys back', () => {
 
   it('SAYS SO when the keys came back but the membership did not — it does not report a clean failure', async () => {
     orgService.removeMember.mockRejectedValue(offline());
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Remove'));
     fireEvent.click(within(row).getByText('Remove from the gym too'));
@@ -392,7 +422,7 @@ describe('taking somebody’s keys back', () => {
 
   it('reports a failed key removal without claiming anything about the membership', async () => {
     orgService.removeStaff.mockRejectedValue(offline());
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Remove'));
     fireEvent.click(within(row).getByText('Remove from the gym too'));
@@ -411,7 +441,7 @@ describe('taking somebody’s keys back', () => {
    *  nothing). */
   it('offers NO Try again over a half-done removal — retrying cannot finish it', async () => {
     orgService.removeMember.mockRejectedValue(offline());
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Remove'));
     fireEvent.click(within(row).getByText('Remove from the gym too'));
@@ -426,7 +456,7 @@ describe('taking somebody’s keys back', () => {
     orgService.updateStaffRole.mockRejectedValue(
       apiError(403, 'forbidden', "Your role doesn't allow that."),
     );
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Make trainer'));
     fireEvent.click(within(row).getByText('Make trainer'));
@@ -440,7 +470,7 @@ describe('taking somebody’s keys back', () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
     orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER] } });
     orgService.updateStaffRole.mockRejectedValue(offline());
-    drawSettings();
+    await drawStaff();
     const row2 = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row2).getByText('Make trainer'));
     fireEvent.click(within(row2).getByText('Make trainer'));
@@ -458,7 +488,7 @@ describe('taking somebody’s keys back', () => {
    *  puts the control back is its own defect — an owner stuck looking at a
    *  question they already dismissed. */
   it('CANCEL at the choosing stage fires nothing and restores the button', async () => {
-    drawSettings();
+    await drawStaff();
     const row = await screen.findByTestId('staff-u2');
     fireEvent.click(within(row).getByText('Remove'));
     expect(within(row).getByText(/Take Rita Sen's keys back\?/)).toBeTruthy();
@@ -475,7 +505,7 @@ describe('taking somebody’s keys back', () => {
 
 describe('adding somebody', () => {
   const openForm = async () => {
-    drawSettings();
+    await drawStaff();
     fireEvent.click(await screen.findByText('Add someone'));
   };
 
@@ -770,7 +800,7 @@ const MANAGER_TICKED = { ...MANAGER, privileges: ['members.read', 'codes.invite'
  *  mock is set by each test BEFORE this runs, which is why the render happens
  *  here rather than in `beforeEach`. */
 const openTicks = async (testId, label = 'What they can do') => {
-  drawSettings();
+  await drawStaff();
   const row = await screen.findByTestId(testId);
   fireEvent.click(within(row).getByText(label));
   return row;
@@ -1056,7 +1086,7 @@ describe('an older server that sends no permissions at all', () => {
 
 describe('the gym’s own details', () => {
   const openSettings = async () => {
-    drawSettings();
+    await drawGym();
     return screen.findByLabelText('Gym name');
   };
 
@@ -1291,7 +1321,7 @@ describe('a gym with no country on record', () => {
    *  here; what would be wrong is leaving it looking like something failed. */
   it('says so, names the money it IS billed in, and starts the box empty', async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [OLDER] } });
-    drawSettings();
+    await drawGym();
     await screen.findByLabelText('Gym name');
     expect(screen.getByText(/don't have your country on record/i)).toBeTruthy();
     expect(screen.getByText(/billed in USD/i)).toBeTruthy();
@@ -1300,7 +1330,7 @@ describe('a gym with no country on record', () => {
 
   it('heals itself on the first save, sending only the country', async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [OLDER] } });
-    drawSettings();
+    await drawGym();
     await screen.findByLabelText('Gym name');
     fireEvent.click(screen.getByLabelText('Country'));
     fireEvent.click(screen.getByText('United States'));
@@ -1312,19 +1342,122 @@ describe('a gym with no country on record', () => {
   /** THE CONTROL for the sentence above, and it is what stops "say it always"
    *  passing: a gym that HAS a country must not be told we do not have it. */
   it('is NOT said about a gym whose country we do hold', async () => {
-    drawSettings();
+    await drawGym();
     await screen.findByLabelText('Gym name');
     expect(screen.queryByText(/don't have your country on record/i)).toBeNull();
+  });
+});
+
+// ── The sections open when you tap them ─────────────────────────────────────
+//
+// Kd's call, made looking at the screen: "i think there should be like drop down
+// when click on them there is a drop down other wise it will be a really long
+// list". Settings carries two sections today and Part 3 §4.7 puts five on it, so
+// the screen he saw is the shortest it will ever be.
+//
+// What these pin is the three ways a collapsing screen lies: hiding something an
+// owner needed to see, hiding the fact that a section exists at all, and hiding
+// an error nobody asked for.
+
+describe('the settings sections', () => {
+  it('both start CLOSED, with their headings still saying what they are', async () => {
+    drawSettings();
+    // The headings are there — a closed screen is a menu, not a row of mystery
+    // boxes.
+    expect(await screen.findByRole('button', { name: /^Gym details/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Staff/ })).toBeTruthy();
+    // And what is inside them is not.
+    expect(screen.queryByLabelText('Gym name')).toBeNull();
+    expect(screen.queryByText('Kd Owner')).toBeNull();
+  });
+
+  it('says so in a way a screen reader can hear, not only by drawing an arrow', async () => {
+    drawSettings();
+    const heading = await screen.findByRole('button', { name: /^Gym details/ });
+    expect(heading.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(heading);
+    expect(heading.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('opens the one you tap and LEAVES THE OTHER ALONE', async () => {
+    await drawGym();
+    expect(screen.getByLabelText('Gym name')).toBeTruthy();
+    // Tapping one section must not open every section.
+    expect(screen.queryByText('Kd Owner')).toBeNull();
+  });
+
+  it('closes again on a second tap', async () => {
+    await drawGym();
+    expect(screen.getByLabelText('Gym name')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /^Gym details/ }));
+    expect(screen.queryByLabelText('Gym name')).toBeNull();
+  });
+
+  /** THE ONE NUMBER AN OWNER GLANCES AT STAYS ON THE CLOSED HEADING. Putting it
+   *  behind the tap would mean opening a section to learn something the heading
+   *  used to tell you — the change making the screen worse than the wall it
+   *  replaced. */
+  it('keeps the staff count readable while the section is shut', async () => {
+    drawSettings();
+    expect(await screen.findByText('2 people run this gym')).toBeTruthy();
+    expect(screen.queryByText('Kd Owner')).toBeNull();
+  });
+
+  /** THE ANTI-SILENCE RULE, and it is the reason `forceOpen` exists at all. The
+   *  staff list is read on mount whether the section is open or not, so a failed
+   *  read arrives while nobody is looking — and a closed row over an error card
+   *  says NOTHING, which is worse than the error (:12660: no reviewer, test or
+   *  mutant flags an ABSENT sentence; a person does). */
+  it('OPENS ITSELF when the staff list fails, rather than hiding the error', async () => {
+    orgService.getStaff.mockRejectedValue(offline());
+    drawSettings();
+    expect(await screen.findByText(/Couldn't reach the server/i)).toBeTruthy();
+    expect(screen.getByText('Try again')).toBeTruthy();
+  });
+
+  it('cannot be tapped shut over that error', async () => {
+    orgService.getStaff.mockRejectedValue(offline());
+    drawSettings();
+    await screen.findByText(/Couldn't reach the server/i);
+    fireEvent.click(screen.getByRole('button', { name: /^Staff/ }));
+    // Still there. A section holding something the owner has to see is not
+    // dismissible by the tap that would hide it.
+    expect(screen.getByText(/Couldn't reach the server/i)).toBeTruthy();
+  });
+
+  /** THE POSITIVE CONTROL for the two above, and without it "always open" would
+   *  satisfy them both. A healthy staff read must still start shut. */
+  it('does NOT open itself when the staff list reads fine', async () => {
+    drawSettings();
+    expect(await screen.findByText('2 people run this gym')).toBeTruthy();
+    expect(screen.queryByText('Kd Owner')).toBeNull();
+    expect(screen.queryByText('Try again')).toBeNull();
+  });
+
+  /** The count is withheld exactly where it always was. "0 people run this gym"
+   *  is never a true sentence about a gym — it always has its owner — so a
+   *  heading that printed one over a failed read would be the wrong number on
+   *  screen (:5807). */
+  it('says no number on the heading when the list could not be read', async () => {
+    orgService.getStaff.mockRejectedValue(offline());
+    drawSettings();
+    await screen.findByText(/Couldn't reach the server/i);
+    expect(screen.queryByText(/run this gym$/)).toBeNull();
   });
 });
 
 describe('who gets the gym-details form', () => {
   const managerWith = (privileges) => ({ ...ORG, staffRole: 'manager', privileges });
 
+  /** Renders RAW rather than through `drawGym`, because the claim is that there
+   *  is no section here to open — a helper that taps the heading would fail on
+   *  the missing heading rather than on the missing form, i.e. red for the wrong
+   *  reason (:4718 F2). Both are asserted: no heading, and no form behind it. */
   it('is not drawn for a manager who has not been given the power', async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [managerWith(ROLE_PRIVILEGES.manager)] } });
     drawSettings();
     expect(await screen.findByText(/Only the gym's owner can change these settings/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Gym details/ })).toBeNull();
     expect(screen.queryByLabelText('Gym name')).toBeNull();
   });
 
@@ -1337,7 +1470,7 @@ describe('who gets the gym-details form', () => {
     orgService.getMine.mockResolvedValue({
       data: { orgs: [managerWith([...ROLE_PRIVILEGES.manager, 'org.manage'])] },
     });
-    drawSettings();
+    await drawGym();
     expect(await screen.findByLabelText('Gym name')).toBeTruthy();
     // And the sentence that would now be FALSE about them is gone.
     expect(screen.queryByText(/Only the gym's owner can change these settings/i)).toBeNull();

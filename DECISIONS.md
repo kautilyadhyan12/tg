@@ -20334,3 +20334,93 @@ by linting the committed copy and watching the identical error move line 17 → 
 smoke is met on the shipping bytes (`git status` carried no source change against
 `7236093` when it ran). **A passing smoke is not a review** (:14147) and no chat
 has reviewed any of the six commits in this packet.
+
+### ADDENDUM 2 — SETTINGS' SECTIONS COLLAPSE (Kd's call, at the screen), AND A MUTANT SURVIVED TWICE FOR TWO DIFFERENT REASONS
+
+**Read before adding a section to the console's Settings screen, before giving
+`ConsoleSection` a default-open, before putting anything on a closed heading, and
+before writing a mutant whose subject is guarded in two places.**
+
+**KD'S CALL, made looking at the screen** — *"i think there should be like drop
+down when click on them there is a drop down other wise it will be a really long
+list"*. He is right and the screen he saw is the SHORTEST it will ever be: two
+sections today, **five in Part 3 §4.7** (Profile · Codes · Privacy ·
+Notifications · Staff), and Staff grows a row per person with three controls
+each. Approved at the plan gate with the four calls below stated in one line
+apiece.
+
+#### DECISIONS NOT TO RE-DERIVE
+
+- **CLOSED MEANS UNMOUNTED, NOT HIDDEN WITH CSS, AND THE CHEAPER OPTION WAS THE
+  DISHONEST ONE.** A `display:none` body would have left all 33 existing call
+  sites passing untouched — against content **no person can see**. A suite that
+  claims a user sees something the screen does not show is the class this project
+  has recorded more than any other, so the tests changed instead: **27 staff call
+  sites and 6 gym ones now open the section the way a person does**, no assertion
+  moved (:6008's precedent for a control gaining a tap, and its rule that the
+  account of the change goes in the entry).
+- **THE CLOSED HEADING KEEPS SAYING SOMETHING** — title, the sentence under it,
+  and the staff COUNT. Collapsing is only an improvement while the shut row still
+  answers the question the owner opened Settings with; a row that made you open a
+  section to learn what the heading used to tell you would be worse than the wall
+  it replaced (**C70**).
+- **`forceOpen` IS THE ANTI-SILENCE RULE.** `StaffPanel` reads the staff list on
+  mount whether its section is open or not, so a failed read arrives **while
+  nobody is looking** — and a closed row over an error card says NOTHING, which
+  is worse than the error. :12660 is the citation: no reviewer, test or mutant
+  flags an ABSENT sentence, a person does. A section holding something the owner
+  must see opens itself **and cannot be tapped shut over it**, asserted in both
+  directions (**C68** at the component, **C69** at the call site — a mutant is a
+  claim about ONE call site, :15770, and the component can be right while the
+  caller never uses it).
+- **`GymDetailsPanel` passes NO `forceOpen`, and that is reasoned rather than
+  forgotten:** it fetches nothing — every value comes from the org row the
+  console already holds — so it has no failure that can arrive unattended, and
+  both its error states are consequences of a SAVE, which needs the section open.
+- **Both start closed, and nothing is remembered between visits.** Settings is
+  not a screen anybody sits in.
+
+#### THE FINDING: C71 CAME BACK ALIVE TWICE, AND THE TWO CAUSES ARE DIFFERENT
+
+**FIRST SURVIVAL — the guarantee had no observable subject.** C71 deleted the
+panel's own `!state.loading && state.error === null ?` guard on the count, and
+changed **nothing observable**: on both of those paths `state.staff` is `[]`, and
+`staffCountLabel([])` already returns null. **Two guards, either one sufficient,
+therefore neither falsifiable** — :12343's J11 in as many words, and closed the
+way that entry closed it: **in the SOURCE, so ONE line does the work.** The panel
+now passes the label straight through and `staffCountLabel` owns the rule, where
+it already has its own test (:15007 round 2's L-1 added the empty-array arm for
+exactly this reason). **Not "keep the belt and braces and retire the mutant"** —
+:17676's standard is to delete the redundant statement, and here it also puts the
+mutant where the guarantee lives.
+
+**SECOND SURVIVAL — the FILTER, which is the half this repo keeps recording
+last.** Re-aimed at `staffCountLabel`'s `if (n === 0) return null;`, C71 was
+filtered on *"says NOTHING when the list could not be read"* — a test that drives
+`null`, `undefined` and a string, **and never an empty array**, which is the only
+input this mutation changes. So it came back ALIVE against a test structurally
+unable to see it. :11846's two halves — *the anchor says what breaks, the FILTER
+says what should notice* — and it was the filter half **both times this session**
+(the O114/O120 pair at :19366 was the same). Re-filtered on the empty-array
+test; RED.
+
+#### PROVE — final bytes
+
+- **web 1214/1214 exit 0 across 45 files** (+9 on the 1205 an hour earlier: eight
+  section tests plus the empty-list heading case).
+- `vite build` exit 0 · `eslint --max-warnings=0` exit 0 on four changed files ·
+  `node --check` on the harness exit 0.
+- **MUTATION SWEEP, a stated SUBSET of 93: C67–C71, 5 mutants · 5 RED · 0 ALIVE ·
+  0 never ran, exit 0.** Controls GREEN and TALLIED first; restores
+  sha256-verified. The two ALIVE runs above are **not summed into that figure**
+  (:5199) — they measured a different source and a different filter.
+- No server change, no `@app/shared` change, no migration.
+
+#### THE SMOKE SHEET GREW A STEP AND ITS OLD TICK DOES NOT COVER IT
+
+**Step 1 is rewritten and is UNRUN on these bytes** — it now checks the tapping,
+the closed headings and the count that survives on a shut row, none of which
+existed when Kd ran the sheet. **Steps 2–9 are unchanged in what they ask and
+their pass stands.** Said at the top of the sheet rather than folded into the
+result, because a sheet that quietly grows a step and keeps its tick is
+:14840's recorded defect: a smoke that does not carry the shipping bytes.

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import Select from '../common/Select';
-import { ConsoleCard, ConsoleFailed } from './ConsoleStates';
+import { ConsoleFailed, ConsoleSection } from './ConsoleStates';
 import { countryOptions, detectTimezone } from '../../pages/console/consoleView';
 import {
   canManageOrg,
@@ -153,17 +153,16 @@ export default function GymDetailsPanel({ org, privileges }) {
   };
 
   return (
-    <ConsoleCard className="flex flex-col gap-5">
-      <div>
-        <h2 className="text-lg font-semibold" style={{ color: '#fff' }}>
-          Gym details
-        </h2>
-        <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          Your members see your gym&apos;s name. The time zone decides when your gym&apos;s day
-          ends, so streaks and daily figures follow it.
-        </p>
-      </div>
-
+    /* CLOSED BY DEFAULT (Kd, 2026-08-26). No `forceOpen` here and that is not an
+       oversight: this panel fetches NOTHING — every value comes from the org row
+       the console already holds — so it has no failure that can arrive while
+       nobody is looking. Its two error states are both consequences of a SAVE,
+       which can only happen with the section open. `StaffPanel` is the opposite
+       case and passes the flag. */
+    <ConsoleSection
+      title="Gym details"
+      summary="Your gym's name, where it is, and the time zone its day ends on."
+    >
       <form onSubmit={save} className="flex flex-col gap-5">
         <Field label="Gym name">
           <input
@@ -282,6 +281,6 @@ export default function GymDetailsPanel({ org, privileges }) {
           ) : null}
         </div>
       </form>
-    </ConsoleCard>
+    </ConsoleSection>
   );
 }

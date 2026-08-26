@@ -79,6 +79,9 @@ const TARGETS = {
   // the panel decides WHEN and what happens afterwards.
   gymview: { file: resolve(ROOT, 'apps/web/src/pages/console/gymDetailsView.js') },
   gympanel: { file: resolve(ROOT, 'apps/web/src/components/console/GymDetailsPanel.jsx') },
+  // The console's shared chrome, and a target since 2026-08-26: `ConsoleSection`
+  // decides whether a whole section of Settings is on screen at all.
+  states: { file: resolve(ROOT, 'apps/web/src/components/console/ConsoleStates.jsx') },
   // CRLF — every anchor aimed at this file must be ONE line. A two-line anchor
   // written with `\n` matches nothing here and the mutant reports ALIVE, whose
   // honest reading is "this guarantee has no test" (:4267, four harnesses).
@@ -1144,6 +1147,77 @@ const MUTANTS = [
     expect: 'does NOT let a read started before the save answer it',
     from: '  forgetTheReadInTheAir(); // a read begun before the save cannot answer it',
     to: '  void forgetTheReadInTheAir;  // a read begun before the save cannot answer it',
+  },
+
+  // ── SETTINGS' SECTIONS OPEN WHEN YOU TAP THEM (2026-08-26, Kd's call) ────
+  //
+  // Five rows for one small control, and the reason is that a collapsing screen
+  // has exactly three ways to lie: it can refuse to collapse (the change buys
+  // nothing), it can hide something the owner needed to see, or it can hide a
+  // failure nobody asked for. Two of the five are the SAME guarantee at the
+  // component and at the call site, because a mutant is a claim about ONE call
+  // site (:15770).
+  {
+    id: 'C67',
+    target: 'states',
+    suite: SETTINGS_SUITE,
+    why: "THE CHANGE BUYS NOTHING: every section is permanently open, so Settings is the long list Kd asked to be rid of and the tap does nothing. Silent — the screen looks like it did before the card, which is exactly the kind of no-op a green suite would otherwise wave through",
+    expect: 'both start CLOSED',
+    from: '  const isOpen = open || forceOpen;',
+    to: '  const isOpen = true;',
+  },
+  {
+    id: 'C68',
+    target: 'states',
+    suite: SETTINGS_SUITE,
+    why: "SILENCE OVER A FAILURE (:12660): `forceOpen` is ignored, so a section whose data failed to load stays SHUT over its own error card. The staff list is read on mount whether the section is open or not, so the read fails while nobody is looking and the screen says NOTHING AT ALL — worse than the error, and the one thing no reviewer, test or mutant flags unless something is aimed at it",
+    expect: 'OPENS ITSELF when the staff list fails',
+    from: '  const isOpen = open || forceOpen;',
+    to: '  const isOpen = open;',
+  },
+  {
+    id: 'C69',
+    target: 'staffpanel',
+    suite: SETTINGS_SUITE,
+    why: 'C68 AT THE CALL SITE, and it fails the same way from the other end: the panel stops ASKING to be opened on a failure, so the component-level guard has nothing to act on. Kept separate from C68 because a mutant is a claim about one call site (:15770) — the component can be right while the caller never uses it',
+    expect: 'OPENS ITSELF when the staff list fails',
+    from: '      forceOpen={!state.loading && state.error !== null}',
+    to: '      forceOpen={false}',
+  },
+  {
+    id: 'C70',
+    target: 'staffpanel',
+    suite: SETTINGS_SUITE,
+    why: "THE CHANGE MAKES THE SCREEN WORSE THAN THE WALL IT REPLACED: the staff count comes off the closed heading, so an owner has to OPEN a section to learn something the heading used to tell them at a glance. Collapsing is only an improvement while the closed row still says something",
+    expect: 'keeps the staff count readable while the section is shut',
+    from: '      aside={countLabel}',
+    to: '      aside={null}',
+  },
+  {
+    // C71 WAS WRITTEN HERE FIRST AND CAME BACK ALIVE, and the survival was the
+    // finding rather than a missing test. It deleted the panel's own
+    // `!state.loading && state.error === null ?` guard on the count — and
+    // changed NOTHING observable, because on both of those paths `state.staff`
+    // is `[]` and `staffCountLabel([])` is already null. **Two guards, either
+    // one sufficient, therefore neither falsifiable** — :12343's J11 shape, and
+    // fixed the way that entry fixed it: in the SOURCE, so one line does the
+    // work. The panel now passes the label straight through and THIS is where
+    // the guarantee lives, so this is where its mutant belongs (:15770).
+    id: 'C71',
+    target: 'staffview',
+    suite: STAFF_VIEW_SUITE,
+    why: 'ON SCREEN AND FALSE (:5807): the empty-list guard goes, so a staff list that could not be read prints "0 people run this gym" on the Settings heading — never a true sentence about a gym, which always has its owner. It is one empty array away at any time, and since the sections collapse it is the ONLY thing the closed row says',
+    // AND THE FILTER WAS WRONG ON THE FIRST TRY, which is the half this repo
+    // keeps recording last (:11846 — the anchor says what breaks, the FILTER
+    // says what should notice). It named "says NOTHING when the list could not
+    // be read", which drives `null`/`undefined`/a string and never an EMPTY
+    // ARRAY — the only input this mutation changes — so it came back ALIVE a
+    // second time against a test that could not see it. The empty case has its
+    // own test, added by :15007's round 2 for this exact reason, and that is the
+    // one named here.
+    expect: 'says NOTHING for an EMPTY list either',
+    from: '  if (n === 0) return null;',
+    to: '  if (n === -1) return null;',
   },
 ];
 

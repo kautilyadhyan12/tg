@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Loader2, Plus, UserMinus } from 'lucide-react';
-import { ConsoleCard, ConsoleFailed, ConsoleLoading } from './ConsoleStates';
+import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 import { formatJoinedAt, roleLabel } from '../../pages/console/consoleView';
 import {
   STAFF_SEATS_NOTE,
@@ -791,21 +791,29 @@ export default function StaffPanel({ gymId, privileges, orgType }) {
   const countLabel = staffCountLabel(state.staff);
 
   return (
-    <ConsoleCard>
-      <div className="flex items-center justify-between gap-3 mb-1">
-        <div className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
-          Staff
-        </div>
-        {!state.loading && state.error === null ? (
-          <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
-            {countLabel}
-          </span>
-        ) : null}
-      </div>
-      <p className="text-sm mb-3" style={{ color: 'rgba(255,255,255,0.45)' }}>
-        Who can help you run this gym. {STAFF_SEATS_NOTE}
-      </p>
-
+    /* CLOSED BY DEFAULT (Kd, 2026-08-26) — and this panel is the one that NEEDS
+       `forceOpen`. It reads the staff list on mount whether the section is open
+       or not, so a failed read can arrive while nobody is looking; a closed row
+       over that error card would say nothing at all, which is worse than the
+       error and is the silence :12660 was ruled on. A failure opens the section
+       and keeps it open.
+       THE COUNT STAYS ON THE CLOSED HEADING because it is the one number an
+       owner glances at — and the withholding is `staffCountLabel`'s job, not
+       this line's. It was written here as `!state.loading && state.error ===
+       null ? countLabel : null` and mutant C71 came back ALIVE against it: on
+       both of those paths `state.staff` is `[]`, and `staffCountLabel([])` is
+       already null, so the condition could never change what reaches the screen.
+       **Two guards, either one sufficient, and therefore neither falsifiable —
+       :12343's J11 exactly, fixed the way that entry fixed it: in the SOURCE, so
+       ONE line does the work.** The guarantee ("0 people run this gym" is never
+       a true sentence about a gym) lives in `staffCountLabel`, which asserts the
+       empty case and now carries the mutant for it too. */
+    <ConsoleSection
+      title="Staff"
+      summary={`Who can help you run this gym. ${STAFF_SEATS_NOTE}`}
+      aside={countLabel}
+      forceOpen={!state.loading && state.error !== null}
+    >
       {state.loading ? <ConsoleLoading label="Loading who runs this gym…" /> : null}
 
       {!state.loading && state.error !== null ? (
@@ -863,6 +871,6 @@ export default function StaffPanel({ gymId, privileges, orgType }) {
           )}
         </div>
       ) : null}
-    </ConsoleCard>
+    </ConsoleSection>
   );
 }

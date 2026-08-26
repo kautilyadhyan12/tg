@@ -221,6 +221,38 @@ mid-file: re-derive them with
   one `'process' is not defined` on `vitest.config.js` PROVEN pre-existing by
   linting the committed copy. **T3 IS NOW THE ONLY GATE LEFT** — a passing smoke
   is not a review (:14147).
+  **ADDENDUM 2 :20338 — SETTINGS' SECTIONS COLLAPSE (Kd's call, at the screen),
+  AND A MUTANT SURVIVED TWICE FOR TWO DIFFERENT REASONS.** **Read before adding a
+  section to Settings, before giving `ConsoleSection` a default-open, before
+  putting anything on a closed heading, and before writing a mutant whose subject
+  is guarded in two places.** *"i think there should be like drop down… other
+  wise it will be a really long list"* — and the screen he saw is the SHORTEST it
+  will ever be (two sections today, **five in §4.7**).
+  **CLOSED MEANS UNMOUNTED, NOT CSS-HIDDEN, AND THE CHEAPER OPTION WAS THE
+  DISHONEST ONE**: hiding would have left all 33 call sites passing against
+  content no person can see. **27 staff and 6 gym call sites now open the section
+  the way a person does, no assertion moved** (:6008). **The closed heading keeps
+  the staff COUNT** — collapsing is only an improvement while the shut row still
+  answers the question (C70). **`forceOpen` is the anti-silence rule** (:12660):
+  `StaffPanel` reads on mount whether open or not, so a failure arrives while
+  nobody is looking and a shut row over an error card says NOTHING; it opens
+  itself and cannot be tapped shut over it (**C68** component, **C69** call site
+  — :15770). **`GymDetailsPanel` deliberately passes none**: it fetches nothing.
+  **THE FINDING IS C71 SURVIVING TWICE FOR TWO DIFFERENT REASONS.** First, **no
+  observable subject** — deleting the panel's `!loading && !error` guard on the
+  count changed nothing, because on both paths `staff` is `[]` and
+  `staffCountLabel([])` is already null. **Two guards, either sufficient, neither
+  falsifiable — :12343's J11, closed the same way: in the SOURCE, one line does
+  the work**, with the mutant moved to where the guarantee lives (:17676's
+  delete-the-redundant standard, not "keep both and retire the mutant"). Second,
+  **the FILTER** — re-aimed, it named a test driving `null`/`undefined`/a string
+  and **never an empty array**, the only input the mutation changes. **:11846's
+  two halves, and it was the filter half BOTH TIMES this session.**
+  **PROVE: web 1214/1214 exit 0 across 45 files (+9) · build ✓ · eslint clean on
+  four files · `node --check` clean · SWEEP a stated SUBSET of 93: C67–C71,
+  5 RED, 0 ALIVE, 0 never ran, exit 0** — the two ALIVE runs NOT summed in
+  (:5199). **THE SMOKE SHEET GREW A STEP AND ITS OLD TICK DOES NOT COVER IT:
+  step 1 is rewritten and UNRUN; steps 2–9 stand** (:14840).
 - **:19366** — 2026-08-26 — **A GYM CAN FINALLY FIX ITS OWN DETAILS (server
   half), AND THE COUNTRY THE WIZARD HAS ASKED FOR SINCE AUGUST WAS BEING THROWN
   AWAY.** **Read before touching `PATCH /v1/orgs/:gymId`, before adding a

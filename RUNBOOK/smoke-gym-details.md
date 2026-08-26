@@ -6,6 +6,16 @@ could ever be changed after the gym was created.
 
 ## RESULT — PASSED (Kd, 2026-08-26, on commit `7236093`)
 
+> ⚠️ **STEP 1 WAS REWRITTEN AFTER THAT PASS AND IS OWED A RE-RUN.** Kd asked for
+> the sections to collapse (*"i think there should be like drop down… other wise
+> it will be a really long list"*) and step 1 now checks the tapping, the closed
+> headings and the count that survives on a shut row — **none of which existed
+> when he ran this sheet.** Steps 2–9 are unchanged in what they ask and their
+> pass stands; **step 1 alone is UNRUN on the current bytes.** Stated rather than
+> merged into the pass below, because a sheet that quietly grows a step and keeps
+> its old tick is :14840's recorded defect — a smoke that does not carry the
+> shipping bytes.
+
 **"all passed", and this one is CORROBORATED BY THE ROWS rather than resting on
 the report** (:7929's rule — for anything a screen can only claim, design the
 sheet to produce the rows and let them carry it). Five `org.updated` audit rows
@@ -110,13 +120,23 @@ change it back.
 Go to **/console**, click your gym, then click **Settings** in the left rail (or
 the bottom bar on a narrow window).
 
-✅ **Expect:** a card headed **Gym details** with four boxes — **Gym name**,
-**City**, **Country** and **Time zone** — each already filled in with what your
-gym has now. Under the country box, a line saying which money your gym is billed
-in. Below the card, the **Staff** section you already know.
+✅ **Expect:** two closed rows — **Gym details** and **Staff** — each with a line
+underneath saying what it is, and the staff count (*"2 people run this gym"*)
+still readable on the Staff row **without opening it**.
 
-❌ **Failure:** no **Gym details** card, or the boxes are empty when your gym
-does have a name and a time zone.
+Click **Gym details**.
+
+✅ **Expect:** it opens, showing four boxes — **Gym name**, **City**, **Country**
+and **Time zone** — each already filled in with what your gym has now, and under
+the country box a line saying which money your gym is billed in. **Staff stays
+shut.**
+
+Click **Gym details** again.
+
+✅ **Expect:** it closes. Open it again before going on.
+
+❌ **Failure:** the sections are open from the start (the tap does nothing), or
+tapping one opens both, or the staff count is missing from the closed row.
 
 ---
 
