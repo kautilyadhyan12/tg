@@ -1,6 +1,48 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: GYM DETAILS (WEB HALF), T3 ROUND 3 (diff-only) — ONE Critical/High, THE
+      HATCH FIRED A THIRD TIME, KD RULED PATCH. DECISIONS :20712. **Packet did
+      NOT ship; a DIFF-ONLY ROUND 4 is the remaining gate.**
+
+  1. ⚠️ **THIRD CONSECUTIVE ROUND WITH A CRITICAL IN THIS ONE FILE. A FOURTH
+     goes to Kd as a redesign question** — and the argument that carried all
+     three PATCH rulings ("this one was not caused by the previous fix") must be
+     re-made on its own evidence, never inherited.
+  2. **C/H-1: GYM A'S TYPING FOLLOWED THE OWNER ONTO GYM B AND SAVE WROTE IT
+     THERE, time zone included.** `/console/:orgSlug/settings` is ONE route, so
+     moving between gyms does not remount, and a TOUCHED form deliberately does
+     not follow the prop. **Not an IDOR** — the server rightly authorises it;
+     this is corruption inside the caller's own tenancy. **Reachable only via
+     the browser's back/forward jump** (no in-app link exists, verified), which
+     means **the screen's correctness rested on the ABSENCE of a gym switcher.**
+  3. **THE FIX IS `key={org.id}` AND IT IS A CLASS FIX** (:1239): the panel
+     cannot carry ANY state across a gym change, including fields nobody has
+     added yet, without that future author knowing this happened.
+  4. **THE STAFF PANEL HAD IT TOO AND THE REVIEW DID NOT NAME IT** — found by
+     probing before calling the fix done. Worse than a stale list: a row's
+     controls act on the CURRENT gymId with the OLD person's id (C82).
+  5. **A TEST I WROTE IN ROUND 2 COULD NOT FAIL.** Its fixture left only ONE
+     zone missing, so round 2's whole variadic guarantee had no observer —
+     measured, 1232/1232 green with it broken. :5104 F5 inside the test written
+     to close round 2's own Critical (:12731).
+  6. **TEST-ENV FACT THAT WILL RECUR: react-router 7 + React 19 leave the
+     OUTGOING route subtree in jsdom**, so every query after a navigation
+     matches twice (probed: `['Iron House HQ','Iron Palace']`). Take the LAST
+     match; a `getBy*` is red-for-the-wrong-reason.
+
+MEASURED (final bytes): web 1234/1234 exit 0 across 45 files (+2) · build ✓ ·
+  eslint clean on three files · `node --check` clean · SWEEP a stated SUBSET of
+  105: C81/C82/C83/S15 — 4 RED, 0 ALIVE, 0 never ran, exit 0. **Rule 3 measured
+  BOTH ways**, `Settings.jsx` restored and sha256-verified (`031c3dc7…`). S15
+  re-anchored a THIRD time. No server change, no `@app/shared` change, no
+  migration.
+
+NEXT: **DIFF-ONLY ROUND 4 in a fresh chat.** The smoke does not need re-running —
+  no step moves between two gyms, which is the only surface these fixes touch.
+```
+
+```
 TASK: GYM DETAILS (WEB HALF), T3 ROUND 2 (diff-only) — ONE Critical/High, AND IT
       IS ROUND 1'S OWN FIX. DECISIONS :20587. **Packet did NOT ship; a DIFF-ONLY
       ROUND 3 is the remaining gate.**

@@ -11,7 +11,7 @@
 //   · the Settings tab exists for the owner and for nobody else.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ROLE_PRIVILEGES } from '@app/shared';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -1470,6 +1470,126 @@ describe('when the gym changes underneath the form', () => {
     // Positive control: the one they picked is there too, so "inject everything"
     // and "inject nothing" are both refused by this pair.
     expect(options).toContain('Europe/Paris');
+  });
+
+  /** T3 ROUND 3, C/H-1 — AND THIS ONE IS OLDER THAN ROUNDS 1 AND 2, not caused
+   *  by either of their fixes.
+   *
+   *  `/console/:orgSlug/settings` is ONE route, so moving between two gyms'
+   *  Settings changes the parameter and does NOT remount the panel — it keeps
+   *  its draft, and a TOUCHED form deliberately does not follow the prop (the
+   *  same-gym rule, which is correct). So gym A's typing sat under gym B, over
+   *  gym B's untouched city nobody had edited, and one click wrote all of it to
+   *  gym B's id, **time zone included**.
+   *
+   *  **Not an IDOR** — the server correctly authorises the write, because gym B
+   *  is a gym this owner manages. It is data corruption inside the caller's own
+   *  tenancy, which `requirePrivilege` cannot see and should not be expected to.
+   *
+   *  **KD RULED PATCH on the third firing of the escape hatch**, and the fix is
+   *  a `key`: the panel cannot carry ANY state across a gym change, for any
+   *  field, including fields nobody has added yet. A class fix rather than a
+   *  third patch of a case (:1239). */
+  it('carries NOTHING from one gym onto another, even mid-edit', async () => {
+    const gymB = {
+      ...ORG,
+      id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+      slug: 'iron-palace',
+      name: 'Iron Palace',
+      city: 'Dallas',
+      timezone: 'Europe/Paris',
+    };
+    orgService.getMine.mockResolvedValue({ data: { orgs: [ORG, gymB] } });
+
+    // ONE MemoryRouter, ONE navigation — the link is the instrument, not the
+    // subject. Re-rendering a fresh `MemoryRouter` would REMOUNT everything and
+    // pass whatever the panel did, which is red-for-the-wrong-reason (:4718 F2);
+    // a real location change inside one router is what leaves the shared route
+    // element in place, exactly as the browser's history jump does.
+    render(
+      <MemoryRouter initialEntries={['/console/iron-house/settings']}>
+        <Link to="/console/iron-palace/settings">jump</Link>
+        <Routes>
+          <Route path="/console/:orgSlug/settings" element={<Settings />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await openSection('Gym details');
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House HQ' } });
+
+    // The browser's own back/forward history jumps entries in one go — a single
+    // location change, with unsaved edits, for an owner with two gyms.
+    fireEvent.click(screen.getByText('jump'));
+    await waitFor(() => expect(screen.getAllByText('Iron Palace').length).toBeGreaterThan(0));
+
+    // THE QUERIES TAKE THE LAST MATCH, AND THE REASON IS MEASURED RATHER THAN
+    // GUESSED. Under react-router 7 + React 19, jsdom keeps the OUTGOING route
+    // subtree in the document after this navigation, so every query matches
+    // twice — probed directly, the two name boxes read
+    // `['Iron House HQ', 'Iron Palace']`. The last is the panel that is actually
+    // mounted for gym B; the first is the departing tree a real browser removes.
+    // A plain `getBy*` fails on "found multiple elements", which is red for the
+    // wrong reason (:4718 F2) and says nothing about the fix.
+    //
+    // **It still discriminates, which is the only thing that matters here:**
+    // without the `key` there is no second panel at all and the last match is
+    // gym A's typing, so this goes RED — measured before the fix, `expected
+    // 'Iron House HQ' to be 'Iron Palace'`.
+    const last = (nodes) => nodes[nodes.length - 1];
+    const headings = screen.getAllByRole('button', { name: /^Gym details/ });
+    const live = last(headings);
+    if (live.getAttribute('aria-expanded') !== 'true') fireEvent.click(live);
+
+    // GYM B'S OWN VALUES, none of gym A's.
+    expect(last(screen.getAllByLabelText('Gym name')).value).toBe('Iron Palace');
+    expect(last(screen.getAllByLabelText('City')).value).toBe('Dallas');
+    expect(last(screen.getAllByLabelText('Time zone')).value).toBe('Europe/Paris');
+    // And nothing to send, so the click that did the damage is not offered.
+    expect(last(screen.getAllByText('Save changes')).disabled).toBe(true);
+  });
+
+  /** THE SIBLING, found by probing for it rather than by the review — which
+   *  named only the gym-details form. `StaffPanel` keeps its own fetched list
+   *  and re-reads on `gymId`, so gym A's staff sat under gym B for as long as
+   *  gym B's read was in flight. **Worse than a stale list**: a row's controls
+   *  act on the CURRENT `gymId` with the OLD person's id, so a Remove aimed at
+   *  somebody visible would be sent against a gym they do not staff.
+   *  :1239 — fixing the instance and leaving the class is the recorded defect. */
+  it('carries NO staff list from one gym onto another', async () => {
+    const gymB = { ...ORG, id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', slug: 'iron-palace', name: 'Iron Palace' };
+    const staffB = { ...OWNER, userId: 'u9', displayName: 'Bravo Person' };
+    orgService.getMine.mockResolvedValue({ data: { orgs: [ORG, gymB] } });
+    orgService.getStaff.mockResolvedValueOnce({ data: { staff: [OWNER] } });
+
+    render(
+      <MemoryRouter initialEntries={['/console/iron-house/settings']}>
+        <Link to="/console/iron-palace/settings">jump</Link>
+        <Routes>
+          <Route path="/console/:orgSlug/settings" element={<Settings />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await openSection('Staff');
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+
+    // Gym B's read is still in flight — the window a person actually sees.
+    let landB;
+    orgService.getStaff.mockReturnValue(
+      new Promise((resolve) => {
+        landB = () => resolve({ data: { staff: [staffB] } });
+      }),
+    );
+    fireEvent.click(screen.getByText('jump'));
+    await waitFor(() => expect(screen.getByText('Iron Palace')).toBeTruthy());
+
+    const heading = screen.getByRole('button', { name: /^Staff/ });
+    if (heading.getAttribute('aria-expanded') !== 'true') fireEvent.click(heading);
+    expect(screen.queryByText('Kd Owner')).toBeNull();
+
+    // Positive control: gym B's own list does arrive, so "show nobody, ever"
+    // would not satisfy this.
+    landB();
+    expect(await screen.findByText('Bravo Person')).toBeTruthy();
   });
 
   /** THE OTHER HALF OF THE PICKER RULE, and it is what stops the round-2 fix

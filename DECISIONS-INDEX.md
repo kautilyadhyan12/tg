@@ -127,6 +127,55 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:20712** — 2026-08-26 — **GYM DETAILS, WEB HALF, T3 ROUND 3 (diff-only): ONE
+  Critical/High — GYM A'S TYPING FOLLOWED THE OWNER ONTO GYM B AND SAVE WROTE IT
+  THERE. THE HATCH FIRED A THIRD TIME; KD RULED PATCH; the fix is a `key`.**
+  Reviews `f1e995c`; **the packet did NOT ship.** Four Low. **Read before touching
+  `Settings.jsx`'s panel mounts, before giving a console panel state that outlives
+  the gym it is about, before writing a fixture in which the defect and the fix
+  are indistinguishable, and before trusting round 2's variadic guarantee to be
+  observed by anything.**
+  **THIRD CONSECUTIVE ROUND IN ONE FILE, and the reviewer STOPPED without
+  proposing a fix — the rule working**, unlike the last two firings. **KD RULED
+  PATCH on one fact put to him rather than argued around: rounds 1 and 2 were a
+  fix causing the NEXT round's defect (the spiral the hatch exists to catch) and
+  THIS ONE IS OLDER THAN ROUND 1** — round 1's work made it less bad, not worse.
+  Fourth firing, fourth PATCH ruling (:6277, :9509, :14493; the hatch counts
+  ROUNDS, Kd rules on what they FOUND). **And it is not a third patch of a case:
+  `key={org.id}` means the panel cannot carry ANY state across a gym change,
+  including fields nobody has added yet — :1239's "fix the class" in the only form
+  that satisfies it.**
+  **C/H-1: `/console/:orgSlug/settings` is ONE route, so moving between two gyms
+  does not remount.** A TOUCHED form deliberately does not follow the prop (round
+  1's rule, correct, kept), so gym A's typing sat under gym B **over gym B's own
+  untouched city**, and one Save wrote it all to gym B's id **including the time
+  zone**. **NOT an IDOR and the reviewer said so precisely** — the server rightly
+  authorises it; this is corruption inside the caller's own tenancy, which
+  `requirePrivilege` cannot see. **Reachability stated so Kd could overrule:** no
+  in-app link exists (verified — every reference uses the CURRENT slug), so it is
+  the browser's back/forward history jump. **The screen's correctness rested on
+  the ABSENCE of a gym switcher, not on anything it guaranteed.**
+  **THE SIBLING THE REVIEW DID NOT NAME, found by probing before calling the fix
+  done: `StaffPanel` had it too** — gym A's staff under gym B while B's read is in
+  flight, and worse than stale, since a row's controls act on the CURRENT gymId
+  with the OLD person's id (**C82**).
+  **THE INSTRUMENT FINDING IS MINE: a test I wrote in round 2 COULD NOT FAIL.** Its
+  fixture left only ONE zone missing, so a helper keeping just the last missing one
+  passed — **measured, the whole web suite 1232/1232 green with round 2's variadic
+  guarantee broken.** :5104 F5 inside the test written to close round 2's own
+  Critical/High (:12731 again). Fixed with a fixture where TWO are missing —
+  :4267 F2's class — and **C83 could not have existed before that change**.
+  **TEST-ENVIRONMENT FINDING WORTH KEEPING: react-router 7 + React 19 leave the
+  OUTGOING route subtree in jsdom**, so every query matches twice (probed:
+  `['Iron House HQ', 'Iron Palace']`). Queries take the LAST match; a `getBy*`
+  fails red-for-the-wrong-reason (:4718 F2).
+  **PROVE: web 1234/1234 exit 0 (+2) · build ✓ · eslint clean on three files ·
+  `node --check` clean · SWEEP a stated SUBSET of 105: C81/C82/C83/S15 — 4 RED, 0
+  ALIVE. Rule 3 measured BOTH ways with `Settings.jsx` restored and
+  sha256-verified. S15 re-anchored a THIRD time on this branch.** **NOTHING TICKS:
+  a DIFF-ONLY ROUND 4 is the remaining gate, and a Critical there would be the
+  FOURTH consecutive round — the "not caused by the previous fix" argument would
+  have to be re-made on its own evidence, never inherited.**
 - **:20587** — 2026-08-26 — **GYM DETAILS, WEB HALF, T3 ROUND 2 (diff-only): ONE
   Critical/High, IT IS ROUND 1'S OWN FIX, THE ESCAPE HATCH FIRED, AND KD RULED
   PATCH.** Reviews `0638b46`; **the packet did NOT ship.** Two Low, both fixed.

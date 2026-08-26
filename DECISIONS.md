@@ -20708,3 +20708,148 @@ zones now asked for are covered by C56/C74/C79 on the shipping bytes.
 **ESCAPE-HATCH NOTE FOR ROUND 3: a Critical/High in `GymDetailsPanel.jsx` again
 would be the THIRD consecutive round in one file**, which is past what :5348
 describes and would go to Kd as a redesign question rather than another patch.
+
+## GYM DETAILS, WEB HALF — T3 ROUND 3 (diff-only): ONE Critical/High, THE HATCH FIRED A THIRD TIME, KD RULED PATCH — and the fix is a `key`, which is a CLASS fix rather than a third patch (2026-08-26)
+
+Reviews `f1e995c`. **The packet did NOT ship this round.** Four Low, all fixed or
+recorded here and logged in `BACKLOG.md`. Kd approved the finding list before a
+byte was written (*"patch"*).
+
+**Read before touching `Settings.jsx`'s panel mounts, before giving a console
+panel state that outlives the gym it is about, before writing a fixture in which
+the defect and the fix are indistinguishable, and before trusting round 2's
+variadic guarantee to be observed by anything.**
+
+### THE ESCAPE HATCH FIRED FOR THE THIRD CONSECUTIVE ROUND AND THAT IS THE PART TO KEEP
+
+All three Criticals are in `apps/web/src/components/console/GymDetailsPanel.jsx`
+(round 3's is on its mount site in `Settings.jsx`, one line away). :13336 judges
+the subsystem at FILE granularity, so :5348's trigger fired for the third round
+running. **The reviewer stopped without proposing a fix and said so, which is the
+rule working** — the last two firings ended in a fix the reviewer had already
+half-written, and this one did not.
+
+**KD RULED PATCH, and the one fact that decided it was put to him rather than
+argued around: rounds 1 and 2 were a fix causing the NEXT round's defect — the
+spiral the hatch exists to catch — and this one is OLDER than round 1.** Round 1's
+work made it less bad, not worse. Fourth firing, fourth PATCH ruling (:6277,
+:9509, :14493). **The distinction is :14493's own: the hatch counts ROUNDS, Kd
+rules on what the rounds FOUND.**
+
+**And the fix is not a third patch of a case.** `key={org.id}` means React throws
+the panel away whenever the gym changes, so it cannot carry ANY state across —
+this draft, and every field anybody adds later, **without that future field's
+author having to know this ever happened.** That is :1239's "fix the class" in the
+only form that actually satisfies it.
+
+### C/H-1 — GYM A'S TYPING FOLLOWED THE OWNER ONTO GYM B, AND SAVE WROTE IT THERE
+
+`/console/:orgSlug/settings` is ONE route, so moving between two gyms' Settings
+changes the parameter and **does not remount anything**. The panel keeps its
+draft, and a TOUCHED form deliberately does not follow the prop (the same-gym
+rule from round 1, which is correct and stays). So gym A's typing sat under gym
+B, over **gym B's own untouched city nobody had edited**, and one click wrote all
+of it to gym B's id — **time zone included**, moving the day boundary of a gym
+the owner was not editing.
+
+**NOT AN IDOR, and the reviewer stated it precisely:** the server correctly
+authorises the write, because gym B is a gym this owner manages. It is data
+corruption inside the caller's own tenancy, which `requirePrivilege` cannot see
+and should not be expected to.
+
+**REACHABILITY, stated so Kd could overrule it:** there is no in-app link from one
+gym's Settings to another's — verified, every `settings` reference in `apps/web`
+uses the CURRENT `orgSlug`. The route is the browser's own back/forward history
+list (long-press Back), which jumps entries in one go: a single location change,
+with unsaved edits, for an owner with two gyms. Narrow, and it writes the wrong
+gym's day boundary. **Today the correctness of this screen rested on the ABSENCE
+of a gym switcher, not on anything the panel guaranteed** — which is the sentence
+that made it Critical/High rather than a curiosity.
+
+### THE SIBLING THE REVIEW DID NOT NAME, FOUND BY PROBING FOR IT
+
+`StaffPanel` has the identical defect and it was **measured, not assumed**: with
+gym B's staff read still in flight, gym A's staff rows were on screen under gym
+B's name. **Worse than a stale list** — a row's controls act on the CURRENT
+`gymId` with the OLD person's id, so a Remove aimed at somebody visible would be
+sent against a gym they do not staff. Keyed identically; mutant **C82**.
+
+Fixing the instance and leaving the class is what this repo has recorded at least
+five times (:1239), so the probe was run before the fix was called done, and the
+result is in the entry rather than in a follow-up round.
+
+### THE INSTRUMENT FINDING IS L-1 AND IT IS MINE: A TEST I WROTE LAST ROUND COULD NOT FAIL
+
+Round 2's `keeps EVERY zone it is asked for, not just the last one` mocked the
+runtime list as `['Europe/Paris']` and asked for `Europe/Paris` + `Asia/Kolkata` —
+so **only ONE zone was ever missing**, and a helper keeping just the last missing
+one passes it. **Measured: the entire web suite, 45 files, 1232/1232, exit 0, with
+round 2's whole variadic guarantee broken.** The shipped code was correct
+throughout; the coverage was absent — :5104 F5's shape, **inside the test written
+to close round 2's own Critical/High**, which is :12731's standing lesson (*a test
+written to close a finding is not audited by the review that asked for it*)
+earning itself again.
+
+Closed by mocking a list containing NEITHER zone, so two are missing at once —
+**the only fixture shape that can tell the two implementations apart**, which is
+:4267 F2's class. Mutant **C83** could not have existed before that change.
+
+### THE TEST-ENVIRONMENT FINDING, WORTH RECORDING BECAUSE IT WILL RECUR
+
+The C/H-1 test navigates, and under **react-router 7 + React 19 jsdom keeps the
+OUTGOING route subtree in the document**: probed directly, the two name boxes read
+`['Iron House HQ', 'Iron Palace']` — the departing tree and the live one. A plain
+`getBy*` therefore fails on *"found multiple elements"*, which is **red for the
+wrong reason** (:4718 F2) and says nothing about the fix. The queries take the
+LAST match, with the probe's own output written into the comment so the next
+author does not rediscover it. **It still discriminates**, which is the only thing
+that matters: without the `key` there is no second panel and the last match is gym
+A's typing.
+
+### THE OTHER THREE LOW
+
+- **L-2** — `setError(null)` in the follow block has no mutant of its own;
+  recorded as a named gap rather than closed with a second one, because the two
+  statements are one act and C80 already fails if the block stops running.
+- **L-3** — a comment falsified by round 1 and left standing for two rounds
+  (`timezoneChoices` "walks ~400 zones. Neither depends on anything that changes
+  while the form is open"). Every clause became false at round 1. Corrected
+  (:5748).
+- **L-4** — round 2's rule-3 certificate was INCOMPLETE, not false: *"both new
+  render tests watched RED first"* beside a PROVE line naming three render cases,
+  the third being the control that must be green. Same class as round 1's L-4 and
+  round 2's L-2 — a count stated without saying what it counts.
+
+### CONFIRMED RATHER THAN FOUND
+
+The reviewer re-ran round 2's own subset independently (**C56 · C74 · C79 · C80 →
+4 RED, 0 ALIVE**, controls green and tallied first) and re-measured the V1
+correction from round 2's L-2 (**32 removed · 27 `drawStaff` · 7 `drawGym` = 5
+conversions + 2 new; 12 remaining = 3 survivors + 9 new**), confirming no
+uncorrected copy of the old figure survives. **Security clean** — no new network
+call, input, route, query or dependency; `updateOrg(org.id, patch)` still takes
+the id from the caller's own parsed `/v1/orgs/mine` row.
+
+### PROVE — final bytes
+
+- **web 1234/1234 exit 0 across 45 files** (+2 on 1232).
+- **RULE 3 MEASURED, and both directions named**: with BOTH keys removed,
+  `carries NOTHING from one gym onto another` fails `expected 'Iron House HQ' to
+  be 'Iron Palace'` and `carries NO staff list from one gym onto another` fails on
+  gym A's row still being present. `Settings.jsx` restored and **sha256-verified
+  identical** (`031c3dc7…`) afterwards.
+- `vite build` exit 0 · `eslint --max-warnings=0` exit 0 on three changed files ·
+  `node --check` on the harness exit 0.
+- **MUTATION SWEEP, a stated SUBSET of 105: C81 · C82 · C83 · S15 — 4 mutants ·
+  4 RED · 0 ALIVE · 0 never ran, exit 0**, controls GREEN and tallied first,
+  restores sha256-verified. **S15 was re-anchored for the THIRD time on this
+  branch** (round 3's `key` sits on the line it names) and re-measured rather than
+  assumed; it and C81 share a line and guard different things.
+- No server change, no `@app/shared` change, no migration.
+
+**NOTHING TICKS: a DIFF-ONLY ROUND 4 is the remaining gate.** The smoke does not
+need re-running — no step moves between two gyms, which is the only surface these
+fixes touch. **ESCAPE-HATCH NOTE FOR ROUND 4: a Critical/High in this file or its
+mount site would be the FOURTH consecutive round**, and the argument that carried
+the last three PATCH rulings — *"this one was not caused by the previous fix"* —
+would have to be made again on its own evidence, not inherited.

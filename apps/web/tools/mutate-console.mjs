@@ -659,8 +659,14 @@ const MUTANTS = [
     // ABORTED the sweep before a byte was written — seventh time on this branch
     // that guard has paid for itself — and the mutant was re-measured RED rather
     // than assumed to still work.
-    from: '<StaffPanel gymId={org.id} privileges={privileges} orgType={org.orgType} />',
-    to: '<StaffPanel gymId={org.id} privileges={privileges} />',
+    // RE-ANCHORED AGAIN 2026-08-26 by round 3's `key` fix, which is on this same
+    // line. Third time this mutant's anchor has moved on this branch; the
+    // whole-table pre-check ABORTED before a byte was written each time, and it
+    // is re-measured RED rather than assumed. **C81 is its neighbour on the same
+    // line and they guard different things** — this one that the ORG TYPE
+    // reaches the panel, C81 that the panel is thrown away when the gym changes.
+    from: '<StaffPanel key={org.id} gymId={org.id} privileges={privileges} orgType={org.orgType} />',
+    to: '<StaffPanel key={org.id} gymId={org.id} privileges={privileges} />',
   },
   {
     // KD FOUND THIS ONE IN A BROWSER, WHICH IS WHY IT IS HERE. The control used
@@ -1327,6 +1333,45 @@ const MUTANTS = [
     expect: 'takes "Saved." down when the boxes are replaced',
     from: '      setSaved(false);',
     to: '      void 0;',
+  },
+
+  // ── T3 ROUND 3's FIXES ───────────────────────────────────────────────────
+  {
+    id: 'C81',
+    target: 'settings',
+    suite: SETTINGS_SUITE,
+    why: "DATA CORRUPTION ON THE WRONG GYM: the gym-details panel is no longer thrown away when the gym changes, so it keeps a TOUCHED draft across a move between two gyms' Settings — `/console/:orgSlug/settings` is ONE route and does not remount. Gym A's typing then sits under gym B, over gym B's own untouched city, and one Save writes all of it to gym B's id INCLUDING THE TIME ZONE, moving the day boundary of a gym the owner was not editing. Not an IDOR — the server rightly authorises it, because gym B is a gym this owner manages",
+    expect: 'carries NOTHING from one gym onto another',
+    from: '      {canEditGym ? <GymDetailsPanel key={org.id} org={org} privileges={privileges} /> : null}',
+    to: '      {canEditGym ? <GymDetailsPanel org={org} privileges={privileges} /> : null}',
+  },
+  {
+    // THE CLASS HALF, and it was found by probing for the sibling rather than by
+    // the review — which named only the gym-details panel. :1239: fixing the
+    // instance and leaving the class is what this repo has recorded five times.
+    id: 'C82',
+    target: 'settings',
+    suite: SETTINGS_SUITE,
+    why: "ON SCREEN AND FALSE (:5807) ON A DIFFERENT GYM: the staff panel keeps its fetched list across a gym change, so gym A's staff rows sit under gym B for as long as gym B's read is in flight. Worse than a stale list — a row's controls act on the CURRENT `gymId` with the OLD person's id, so a Remove aimed at somebody visible is sent against a gym they do not staff",
+    expect: 'carries NO staff list from one gym onto another',
+    from: '        <StaffPanel key={org.id} gymId={org.id} privileges={privileges} orgType={org.orgType} />',
+    to: '        <StaffPanel gymId={org.id} privileges={privileges} orgType={org.orgType} />',
+  },
+  {
+    // ROUND 3's Low-1: the test this mutant belongs to COULD NOT FAIL until this
+    // round fixed its fixture. It mocked the runtime list as `['Europe/Paris']`
+    // and asked for `Europe/Paris` + `Asia/Kolkata`, so only ONE zone was ever
+    // missing — and a helper keeping just the last missing one passed. Measured:
+    // the whole web suite, 1232/1232, stayed green with round 2's variadic
+    // guarantee broken. Two simultaneously-missing zones is the only shape that
+    // tells the two implementations apart (:4267 F2's class).
+    id: 'C83',
+    target: 'gymview',
+    suite: GYMVIEW_SUITE,
+    why: "SAVES: the picker keeps only the LAST zone it was asked for, so whenever the gym's stored zone and the zone on screen are BOTH ones this runtime does not enumerate, one of them silently leaves the list — and round 2's whole variadic guarantee, which exists to stop a gym's day boundary moving, is back to the single-zone behaviour it was written to replace",
+    expect: 'keeps EVERY zone it is asked for',
+    from: '  return missing.length === 0 ? zones : [...missing, ...zones];',
+    to: '  return missing.length === 0 ? zones : [missing[missing.length - 1], ...zones];',
   },
 ];
 

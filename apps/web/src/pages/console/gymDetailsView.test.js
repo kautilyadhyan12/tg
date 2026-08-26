@@ -128,10 +128,20 @@ describe('the time-zone list', () => {
    *  zone the gym HOLDS left the list the moment the owner picked anything else.
    *  Both are wanted, so both are asked for. */
   it('keeps EVERY zone it is asked for, not just the last one', () => {
-    vi.spyOn(Intl, 'supportedValuesOf').mockReturnValue(['Europe/Paris']);
-    const zones = timezoneChoices(null, 'Europe/Paris', 'Asia/Kolkata');
+    // THE MOCK MUST LIST NEITHER, and T3 round 3's Low-1 is why. The first
+    // version of this test listed `Europe/Paris` and asked for it alongside
+    // `Asia/Kolkata`, so only ONE zone was ever missing — and a helper that kept
+    // just the last missing one passed it. **Measured: the whole web suite,
+    // 1232/1232, stayed green with round 2's variadic guarantee broken.** Two
+    // simultaneously-missing zones is the only shape that can tell the two
+    // implementations apart (:4267 F2's class — a fixture under which the
+    // defect and the fix are indistinguishable).
+    vi.spyOn(Intl, 'supportedValuesOf').mockReturnValue(['America/Chicago']);
+    const zones = timezoneChoices(null, 'Europe/Kiev', 'Asia/Kolkata');
     expect(zones).toContain('Asia/Kolkata');
-    expect(zones).toContain('Europe/Paris');
+    expect(zones).toContain('Europe/Kiev');
+    // And the runtime's own list survives underneath both.
+    expect(zones).toContain('America/Chicago');
   });
 
   it('does not list the same zone twice when it is asked for twice', () => {

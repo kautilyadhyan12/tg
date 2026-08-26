@@ -83,10 +83,44 @@ export default function Settings() {
         </p>
       </div>
 
-      {canEditGym ? <GymDetailsPanel org={org} privileges={privileges} /> : null}
+      {/* `key` IS THE WHOLE FIX FOR T3 ROUND 3's C/H-1, and it is a CLASS fix
+          rather than a third patch of a case (:1239).
 
+          `/console/:orgSlug/settings` is ONE route, so moving between two gyms'
+          Settings changes the parameter WITHOUT remounting anything — and the
+          panel deliberately does not follow the prop once somebody has typed
+          (the same-gym rule, which is correct and stays). So gym A's typing sat
+          under gym B, over gym B's own untouched city, and one Save wrote all of
+          it to gym B's id **including the time zone**, moving the day boundary
+          of a gym the owner was not editing.
+
+          Keying on the gym id means React throws the panel away and builds a new
+          one whenever the gym changes, so it cannot carry ANY state across —
+          this draft, and every field anybody adds later, without that future
+          field's author having to know this ever happened.
+
+          **It is older than rounds 1 and 2 and was not caused by either fix** —
+          round 1's work made it less bad, not worse. Kd ruled PATCH on the third
+          firing of :5348's escape hatch, given that distinction (:14493: the
+          hatch counts ROUNDS, Kd rules on what the rounds FOUND). */}
+      {canEditGym ? <GymDetailsPanel key={org.id} org={org} privileges={privileges} /> : null}
+
+      {/* KEYED FOR THE SAME REASON, AND IT IS THE CLASS HALF OF THE FIX ABOVE.
+          Found by probing for the sibling rather than by the review, which named
+          only `GymDetailsPanel` — :1239's rule is that fixing the instance and
+          leaving the class is the recorded defect, and this repo has recorded it
+          at least five times.
+
+          MEASURED, not assumed: with gym B's staff read still in flight, gym A's
+          staff rows were on screen under gym B's name. It is worse than a stale
+          list, because the row's controls act on the CURRENT `gymId` with the OLD
+          person's id — so a Remove aimed at somebody visible would be sent
+          against a gym they do not staff.
+
+          The effect already re-reads on `gymId`, which is why the wrong list is
+          temporary; the key is what stops it ever being shown. */}
       {canEditStaff ? (
-        <StaffPanel gymId={org.id} privileges={privileges} orgType={org.orgType} />
+        <StaffPanel key={org.id} gymId={org.id} privileges={privileges} orgType={org.orgType} />
       ) : null}
 
       {!canEditGym && !canEditStaff ? (

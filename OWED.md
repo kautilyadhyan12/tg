@@ -6248,9 +6248,21 @@ file and is stated so nobody reads these as lower priority than they are.
       for it. **THE ESCAPE HATCH FIRED (both Criticals in one file) and KD RULED
       PATCH** — fourth firing, fourth patch ruling. Two Low, fixed, in
       `BACKLOG.md`; one of them is two surviving copies of round 1's own
-      corrected figure, **one of which was in THIS FILE**. **What holds this line
-      now is a DIFF-ONLY ROUND 3, and a Critical there would be the third
-      consecutive round in one file — a redesign question for Kd.**
+      corrected figure, **one of which was in THIS FILE**.
+      **UPDATE — ROUND 3 RAN: ONE Critical/High, THE HATCH FIRED A THIRD TIME,
+      AND KD RULED PATCH** (DECISIONS :20712). **Gym A's typing followed the
+      owner onto gym B and Save wrote it there, time zone included** — on a gym
+      they were not editing. The reviewer stopped without proposing a fix, and
+      the ruling rests on one fact: rounds 1 and 2 were a fix causing the next
+      round's defect, **this one is older than round 1**. The fix is
+      `key={org.id}` on both panels, which is a CLASS fix — the panel cannot
+      carry state across a gym change for any field, including ones nobody has
+      added yet. **The Staff panel had it too and the review did not name it;
+      found by probing (:1239).** Four Low, incl. **a test I wrote in round 2
+      that could not fail**. **What holds this line now is a DIFF-ONLY ROUND 4,
+      and a Critical there would be the FOURTH consecutive round in one file —
+      the "not caused by the previous fix" argument would have to be re-made on
+      its own evidence rather than inherited.**
       **One thing the smoke still cannot reach, beside the currency lock: a
       section OPENING ITSELF when its data fails.** That needs the staff read to
       fail in a browser and no step sets it up, so it is carried by C68/C69 and
