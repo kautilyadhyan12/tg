@@ -193,8 +193,42 @@ export function ensureConsoleOrgs() {
  *  it was heard" used to say. It is now one request PER PRESS, which is what a
  *  retry means. */
 export function refreshConsoleOrgs() {
-  forgetTheReadInTheAir();
+  forgetTheReadInTheAir(); // one request PER PRESS, and it must be a fresh one
   void load({ background: false });
+}
+
+/** THE CONSOLE CHANGED SOMETHING ABOUT A GYM AND THE KEPT ANSWER IS NOW STALE —
+ *  today that is the Settings screen saving the gym's own details.
+ *
+ *  It is `refreshConsoleOrgs` WITHOUT THE SPINNER, and both halves of that are
+ *  deliberate.
+ *
+ *  **Background, because nobody is waiting on this read.** A foreground refresh
+ *  publishes `loading`, and every screen reading the store draws its spinner —
+ *  so saving a gym's name would blank the very screen the owner is looking at,
+ *  taking the Staff section and its open controls down with it. Rule 1 above
+ *  says the spinner belongs to somebody who is waiting ON PURPOSE, and after a
+ *  save the thing they asked for has already happened: the save's own response
+ *  is what the form shows back. This read exists so the SHELL's gym name and
+ *  "Your gyms" agree with it.
+ *
+ *  **It still forgets the read in the air, for C51/C53's reason.** A background
+ *  re-check begun a moment BEFORE the save cannot know about the save, so
+ *  sharing it would put the OLD name back on screen a second after the new one
+ *  was stored — the "brand-new gym does not exist" defect wearing a rename's
+ *  clothes. `load`'s own `++generation` then stops the forgotten read publishing
+ *  when it lands.
+ *
+ *  A failure changes nothing on screen (rule 2), which is right here: the save
+ *  LANDED, and blanking a console over a follow-up read would report a failure
+ *  that did not happen. */
+export function refreshConsoleOrgsAfterChange() {
+  forgetTheReadInTheAir(); // a read begun before the save cannot answer it
+  // The trailing note is not decoration: `void load({ background: true });` is
+  // also the last line of `consoleOrgsRegainedFocus`, and an anchor that matches
+  // twice lands on whichever comes first — so a mutant aimed at THIS guarantee
+  // would be evidence about a different one (:15259 L-2's uniqueness guard).
+  void load({ background: true }); // nobody is waiting on this read
 }
 
 /** Written out as a named step rather than two inline assignments so that ONE

@@ -52,6 +52,7 @@ const API_SUITE = 'src/api/orgsApi.test.js';
 const STAFF_VIEW_SUITE = 'src/pages/console/staffView.test.js';
 const SETTINGS_SUITE = 'src/pages/console/settings.render.test.jsx';
 const STORE_SUITE = 'src/pages/console/consoleOrgs.test.js';
+const GYMVIEW_SUITE = 'src/pages/console/gymDetailsView.test.js';
 
 const TARGETS = {
   view: { file: resolve(ROOT, 'apps/web/src/pages/console/consoleView.js') },
@@ -72,6 +73,12 @@ const TARGETS = {
   orghook: { file: resolve(ROOT, 'apps/web/src/pages/console/useConsoleOrg.js') },
   staffpanel: { file: resolve(ROOT, 'apps/web/src/components/console/StaffPanel.jsx') },
   settings: { file: resolve(ROOT, 'apps/web/src/pages/console/Settings.jsx') },
+  // The gym-details form, added 2026-08-26 with the web half of
+  // `PATCH /v1/orgs/:gymId`. TWO targets for one feature, because a mutant is a
+  // claim about ONE call site (:15770): the view file decides WHAT is sent and
+  // the panel decides WHEN and what happens afterwards.
+  gymview: { file: resolve(ROOT, 'apps/web/src/pages/console/gymDetailsView.js') },
+  gympanel: { file: resolve(ROOT, 'apps/web/src/components/console/GymDetailsPanel.jsx') },
   // CRLF — every anchor aimed at this file must be ONE line. A two-line anchor
   // written with `\n` matches nothing here and the mutant reports ALIVE, whose
   // honest reading is "this guarantee has no test" (:4267, four harnesses).
@@ -643,8 +650,14 @@ const MUTANTS = [
     suite: SETTINGS_SUITE,
     why: 'FALSE ON SCREEN, THROUGH A DROPPED PROP: the Staff panel is never told what kind of org this is, so `staffRoleChoices` falls to its refusing default and every GYM owner is told their trainer cannot see the member list — a correct helper bypassed entirely by the screen that renders it',
     expect: 'tells a GYM owner their trainer CAN see it',
-    from: '<StaffPanel gymId={org.id} privileges={viewerPrivileges(org)} orgType={org.orgType} />',
-    to: '<StaffPanel gymId={org.id} privileges={viewerPrivileges(org)} />',
+    // RE-ANCHORED 2026-08-26 (gym-details card). `Settings.jsx` now resolves
+    // `viewerPrivileges(org)` ONCE into a local, because two sections read it,
+    // so the old inline call is gone from this line. The whole-table pre-check
+    // ABORTED the sweep before a byte was written — seventh time on this branch
+    // that guard has paid for itself — and the mutant was re-measured RED rather
+    // than assumed to still work.
+    from: '<StaffPanel gymId={org.id} privileges={privileges} orgType={org.orgType} />',
+    to: '<StaffPanel gymId={org.id} privileges={privileges} />',
   },
   {
     // KD FOUND THIS ONE IN A BROWSER, WHICH IS WHY IT IS HERE. The control used
@@ -702,7 +715,14 @@ const MUTANTS = [
     suite: SETTINGS_SUITE,
     why: 'A TAB THAT ANSWERS NOTHING: Settings is drawn for every role, so a manager and a trainer get a nav item whose only screen tells them they may not be there',
     expect: 'is NOT drawn for a manager',
-    from: '        ...(canManageStaff(viewerPrivileges(org))',
+    // RE-ANCHORED 2026-08-26 (gym-details card): the tab's condition became
+    // `settingsIsReachable`, because Settings grew a second section gated on a
+    // second privilege. The whole-table pre-check ABORTED before a byte was
+    // written; re-measured RED rather than assumed. **It stays aimed at "drawn
+    // for EVERYBODY" and C63 is its sibling aimed at "drawn for too FEW"** — a
+    // gate has two failure directions and a mutant that only opens it is
+    // satisfied by a door that is simply shut (:7104's PG1).
+    from: '        ...(settingsIsReachable(viewerPrivileges(org))',
     to: '        ...(true',
   },
   {
@@ -972,9 +992,17 @@ const MUTANTS = [
     // Both aborts are the pre-check doing its job — a no-op mutation would
     // otherwise have reported ALIVE, i.e. "this guarantee has no test".
     why: "ON SCREEN AND FALSE (:5807), C51's other half and the reason `NewGym` calling refresh is not the whole fix: a read asked for ON PURPOSE waits on one that was already in the air. A background re-check begun a moment BEFORE a gym was created cannot know about that gym, so the owner is told their brand-new gym does not exist — the same defect as C51, moved from certain to occasional, which is the version nobody would reproduce",
+    // RE-ANCHORED 2026-08-26, ON THE SAME CALL SITE — not re-aimed at another
+    // one. `refreshConsoleOrgsAfterChange` calls `forgetTheReadInTheAir` too, so
+    // this anchor started matching TWICE and the uniqueness guard aborted the
+    // sweep. **The pre-check counts SUBSTRINGS, so a trailing note on the other
+    // line alone did not disambiguate** — the shorter line is contained in the
+    // longer one. Both call sites now carry their own note, which is a fact
+    // about the SOURCE (:17676: when no single line expresses a guarantee, that
+    // is what has to change). C66 is this mutant's sibling on the save path.
     expect: 'never answers a person who asked ON PURPOSE',
-    from: '  forgetTheReadInTheAir();',
-    to: '  void forgetTheReadInTheAir;',
+    from: '  forgetTheReadInTheAir(); // one request PER PRESS, and it must be a fresh one',
+    to: '  void forgetTheReadInTheAir; // one request PER PRESS, and it must be a fresh one',
   },
   {
     id: 'C54',
@@ -990,6 +1018,132 @@ const MUTANTS = [
     expect: 'lets the window coming back JOIN a read',
     from: '  inFlightUserId = forUserId;',
     to: '  inFlightUserId = null;',
+  },
+
+  // ── A GYM CAN FIX ITS OWN DETAILS (2026-08-26, the web half) ─────────────
+  //
+  // The route shipped that morning with no caller. What this form can do wrong
+  // is 4a's own columns twice over: move a gym's day boundary by accident
+  // (SAVES — `gyms.timezone` is what the rollup worker asks and it is written
+  // once), and put a PAYING gym's currency on the table every time somebody
+  // corrects a typo (MONEY). Wording, layout and the two hint sentences are
+  // deliberately NOT mutated.
+  {
+    id: 'C55',
+    target: 'gymview',
+    suite: GYMVIEW_SUITE,
+    why: "MONEY, and it is round 1's C/H-1 arriving from the client side: the form stops sending a DIFF and puts the country on the wire whenever it has one. A gym on a subscription is refused with 409 `currency_locked` the moment the country it sends resolves to a different currency, so every rename by a paying gym becomes a refusal — and the server's own first version refused a whole save merely for MENTIONING the country (:19656)",
+    expect: 'renames a gym WITHOUT mentioning its country',
+    from: "  if (country !== '' && country !== storedCountry) patch.country = country;",
+    to: "  if (country !== '') patch.country = country;",
+  },
+  {
+    id: 'C56',
+    target: 'gymview',
+    suite: GYMVIEW_SUITE,
+    why: "SAVES, and it is the worst thing this screen could do: the picker stops carrying the gym's OWN zone, so a runtime that calls that zone by its other alias offers a list without it and the box selects somebody else's. An owner who opened Settings to fix a typo in the name MOVES THE GYM'S DAY BOUNDARY by saving — `gyms.timezone` is the only thing the rollup worker consults, and :10402 measured the alias gap on this very machine",
+    expect: 'OWN zone even when the runtime does not list it',
+    from: "  if (held !== '' && !zones.includes(held)) return [held, ...zones];",
+    to: "  if (held !== '' && zones.includes(held)) return [held, ...zones];",
+  },
+  {
+    id: 'C57',
+    target: 'gymview',
+    suite: GYMVIEW_SUITE,
+    why: "ON SCREEN AND FALSE (:5807) through a 500: the country stops being upper-cased, so a lower-case code fails the column's own CHECK as a 23514 — the server answers an error where an owner should see their country saved. It also makes `us` read as a change from `US`, which sends a country nobody altered straight into the currency lock",
+    expect: 'upper-cases the country',
+    from: "  const country = (draft?.country ?? '').trim().toUpperCase();",
+    to: "  const country = (draft?.country ?? '').trim();",
+  },
+  {
+    id: 'C58',
+    target: 'gymview',
+    suite: GYMVIEW_SUITE,
+    why: "DATA: clearing the city sends an empty STRING instead of `null`, so the gym's city becomes `''` rather than nothing. The column is nullable and every reader treats null as absent; an empty string is a value that reads as absent everywhere except where somebody counts it",
+    expect: 'clears a city with null',
+    from: "  const nextCity = typedCity === '' ? null : typedCity;",
+    to: '  const nextCity = typedCity;',
+  },
+  {
+    id: 'C59',
+    target: 'gymview',
+    suite: GYMVIEW_SUITE,
+    why: 'ON SCREEN AND FALSE (:5807): the comparison stops trimming while the server still trims on the way in, so a trailing space typed into the name box lights Save up for a save that stores nothing — a button promising a change the database will not make, and a "Saved." over bytes that never moved',
+    expect: 'treats a trailing space as no change',
+    from: "  const name = (draft?.name ?? '').trim();",
+    to: "  const name = (draft?.name ?? '');",
+  },
+  {
+    id: 'C60',
+    target: 'gymview',
+    suite: GYMVIEW_SUITE,
+    why: "OWNERSHIP: the form's gate asks for `staff.manage` instead of the privilege Kd ruled for this. It was offered as the cheap option at the plan gate and recommended AGAINST on :13803's precedent — two rows that mean different things get different privileges, or one tick silently widens the other's power. Under this, everybody who can manage staff can also change the gym's billing country",
+    expect: 'is NOT satisfied by the power to manage staff',
+    from: "  return Array.isArray(privileges) && privileges.includes('org.manage');",
+    to: "  return Array.isArray(privileges) && privileges.includes('staff.manage');",
+  },
+  {
+    id: 'C61',
+    target: 'gympanel',
+    suite: SETTINGS_SUITE,
+    why: "ON SCREEN AND FALSE (:5807), C51's shape one card later: the console is never told the gym changed, so the shell's rail, \"Your gyms\" and the Overview header all keep the OLD name until the next window focus — the app showing an owner a name it has itself just been told is wrong",
+    expect: 'makes the rest of the console re-read the gym after a save',
+    from: '      refreshConsoleOrgsAfterChange();',
+    to: '      void refreshConsoleOrgsAfterChange;',
+  },
+  {
+    id: 'C62',
+    target: 'orgstore',
+    suite: STORE_SUITE,
+    why: 'BLOCKED FROM FINISHING: the re-read after a save publishes `loading`, so saving a gym\'s name blanks the very screen the owner is looking at — Settings goes to "Loading your gym…" and takes the Staff section, its open tick boxes and any half-finished removal down with it, over a read nobody is waiting for',
+    expect: 'NEVER publishes a spinner',
+    from: '  void load({ background: true }); // nobody is waiting on this read',
+    to: '  void load({ background: false }); // nobody is waiting on this read',
+  },
+  {
+    id: 'C63',
+    target: 'layout',
+    suite: SETTINGS_SUITE,
+    why: "ON SCREEN AND FALSE (:5807) plus BLOCKED FROM FINISHING: the Settings tab narrows back to staff-management alone, so a manager an owner has ticked `org.manage` across to holds a real power with NO TAB anywhere — and typing the address lands them on \"Only the gym's owner can change these settings\", which is untrue about them. :16095's Critical/High, where the console asked the job title while the server asked the tick",
+    expect: 'gives that manager the Settings TAB',
+    from: '  return canManageStaff(privileges) || canManageOrg(privileges);',
+    to: '  return canManageStaff(privileges);',
+  },
+  {
+    id: 'C64',
+    target: 'gympanel',
+    suite: SETTINGS_SUITE,
+    why: 'ON SCREEN AND FALSE (:5807): every gym is told we do not have its country on record, including the ones whose country we hold and are billing on. The sentence exists for the pre-`0014` rows where it is TRUE; said to everybody it is a claim about the database that is wrong for every gym created since',
+    expect: 'is NOT said about a gym whose country we do hold',
+    from: "  const countryOnRecord = typeof org?.country === 'string' && org.country.trim() !== '';",
+    to: '  const countryOnRecord = false;',
+  },
+  {
+    id: 'C65',
+    target: 'gympanel',
+    suite: SETTINGS_SUITE,
+    why: "BLOCKED FROM FINISHING, and this is the defect the card's own tests found before a reviewer could: the sentence explaining an empty name is never computed, so an owner who clears the name box sees a dead Save button and NO reason for it. There is nothing to SEND about a cleared name, so the patch is empty and the button is correctly disabled — which is exactly why the explanation cannot live on the click",
+    expect: 'says an empty name is wrong straight away',
+    from: '  const problem = gymDetailsProblem(draft);',
+    to: '  const problem = null;',
+  },
+  {
+    // C53'S SIBLING, AND WRITING IT WAS THE POINT (:19366's O20/O122, :15770).
+    // `refreshConsoleOrgsAfterChange` calls `forgetTheReadInTheAir` too, so
+    // C53's one-line anchor started matching TWICE and the uniqueness guard
+    // (:15259 L-2) ABORTED the sweep before a byte was written. **Re-aiming C53
+    // at the new copy would have been the wrong fix**: a mutant is a claim about
+    // ONE call site, and a control that looks covered because a mutant was
+    // written for its sibling is :14174 L-1 verbatim. C53 keeps the Try-again /
+    // create-a-gym path; this one is the save path, and the two lines now differ
+    // by a trailing note so each can be named.
+    id: 'C66',
+    target: 'orgstore',
+    suite: STORE_SUITE,
+    why: "ON SCREEN AND FALSE (:5807): the re-read after a save WAITS ON a read that was already in the air — one begun a moment before the save, which cannot know about it. So a second after storing the new name the console publishes the OLD one, and the owner watches their save undo itself. C53's defect at the save door instead of the create door",
+    expect: 'does NOT let a read started before the save answer it',
+    from: '  forgetTheReadInTheAir(); // a read begun before the save cannot answer it',
+    to: '  void forgetTheReadInTheAir;  // a read begun before the save cannot answer it',
   },
 ];
 

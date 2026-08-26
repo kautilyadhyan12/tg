@@ -162,6 +162,28 @@ describe('orgService endpoints', () => {
     expect(seen[0].params).toEqual({ limit: 50, cursor: '2026-08-18T00:00:00.000Z|abc' });
   });
 
+  /** THE METHOD IS PART OF THE ASSERTION. `PATCH` on a cross-origin request
+   *  sends a CORS preflight, which `fastify.inject` never exercises — the shape
+   *  that made Card 4's DELETE dead app-wide behind 250 green tests. */
+  it('edits a gym with PATCH on its own address, and sends ONLY the patch', async () => {
+    const seen = recordRequests(authApi);
+    await orgService.updateOrg('gym-1', { name: 'Iron House Two' });
+
+    expect(seen[0]).toMatchObject({ url: '/v1/orgs/gym-1', method: 'patch' });
+    // The body is `.strict()` and PARTIAL: an absent key is left alone, an extra
+    // key is a 400. `currencyDisplay` is the one that must never be here — the
+    // server derives the currency from the country, exactly as at create.
+    expect(JSON.parse(seen[0].data)).toEqual({ name: 'Iron House Two' });
+  });
+
+  it('sends `city: null` through as a real instruction to clear it', async () => {
+    const seen = recordRequests(authApi);
+    await orgService.updateOrg('gym-1', { city: null });
+    // `null` and absent are different intentions on a PATCH and the same value
+    // in JS, so this pins that a cleared city actually reaches the wire.
+    expect(JSON.parse(seen[0].data)).toEqual({ city: null });
+  });
+
   it('hits the join-door surface: apply, my requests, the queue, the two taps and remove', async () => {
     const seen = recordRequests(authApi);
     await orgService.join({ code: 'K7QM2X' });

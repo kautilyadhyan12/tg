@@ -20,6 +20,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
     ...actual,
     orgService: {
       getMine: vi.fn(),
+      updateOrg: vi.fn(),
       getStaff: vi.fn(),
       addStaff: vi.fn(),
       updateStaffRole: vi.fn(),
@@ -51,6 +52,9 @@ const ORG = {
   slug: 'iron-house',
   name: 'Iron House',
   city: 'Austin',
+  // `country` arrived with migration `0014`; `myOrgSchema` defaults it to null,
+  // so every row the console holds carries the key one way or the other.
+  country: 'US',
   orgType: 'gym',
   timezone: 'America/Chicago',
   locale: 'en',
@@ -121,6 +125,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   resetConsoleOrgs();
   orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
+  orgService.updateOrg.mockResolvedValue({ data: { org: ORG } });
   orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER] } });
   orgService.addStaff.mockResolvedValue({ data: { staff: TRAINER } });
   orgService.updateStaffRole.mockResolvedValue({ data: { staff: MANAGER } });
@@ -1038,6 +1043,321 @@ describe('an older server that sends no permissions at all', () => {
     expect(within(row).getByLabelText(/See the member list/i).checked).toBe(true);
     expect(within(row).getByLabelText(/Remove members/i).checked).toBe(true);
     expect(within(row).getByLabelText(/Let people into the gym/i).checked).toBe(true);
+  });
+});
+
+// ── The gym's own details ───────────────────────────────────────────────────
+//
+// `PATCH /v1/orgs/:gymId` shipped on 2026-08-26 with NO CALLER. This is the
+// caller. `gymDetailsView.test.js` proves the rules; these prove the screen
+// obeys them, and three things beyond that: what actually goes on the wire, that
+// the rest of the console follows a save, and that an unrecorded country is
+// SAID rather than left as a box that looks broken.
+
+describe('the gym’s own details', () => {
+  const openSettings = async () => {
+    drawSettings();
+    return screen.findByLabelText('Gym name');
+  };
+
+  it('opens with what the gym holds, in every box', async () => {
+    await openSettings();
+    expect(screen.getByLabelText('Gym name').value).toBe('Iron House');
+    expect(screen.getByLabelText('City').value).toBe('Austin');
+    expect(screen.getByLabelText('Country').textContent).toContain('United States');
+    expect(screen.getByLabelText('Time zone').value).toBe('America/Chicago');
+  });
+
+  it('names the money the gym is billed in, and says we decide it', async () => {
+    await openSettings();
+    expect(screen.getByText(/billed in USD/i)).toBeTruthy();
+    expect(screen.getByText(/can't set it here/i)).toBeTruthy();
+  });
+
+  it('asks the server NOTHING until something actually changes', async () => {
+    await openSettings();
+    expect(screen.getByText('Save changes').disabled).toBe(true);
+    fireEvent.click(screen.getByText('Save changes'));
+    expect(orgService.updateOrg).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House Two' } });
+    expect(screen.getByText('Save changes').disabled).toBe(false);
+  });
+
+  it('goes quiet again if the owner un-does their own change', async () => {
+    await openSettings();
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House Two' } });
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
+    expect(screen.getByText('Save changes').disabled).toBe(true);
+  });
+
+  /** THE ONE WITH TEETH, at the screen. A gym on a subscription is refused with
+   *  409 `currency_locked` when the country it sends resolves to a different
+   *  currency — and the server's first version refused a whole save merely for
+   *  MENTIONING the country (:19656 C/H-1). A settings form that restated every
+   *  box it drew would put a paying gym's money on the table every time somebody
+   *  fixed a typo in the name. */
+  it('sends ONLY the name when only the name changed — no country on the wire', async () => {
+    await openSettings();
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House Two' } });
+    fireEvent.click(screen.getByText('Save changes'));
+    await waitFor(() => expect(orgService.updateOrg).toHaveBeenCalledTimes(1));
+    expect(orgService.updateOrg).toHaveBeenCalledWith(ORG.id, { name: 'Iron House Two' });
+  });
+
+  it('sends the country when somebody picks a different one', async () => {
+    await openSettings();
+    fireEvent.click(screen.getByLabelText('Country'));
+    fireEvent.click(screen.getByText('India'));
+    fireEvent.click(screen.getByText('Save changes'));
+    await waitFor(() => expect(orgService.updateOrg).toHaveBeenCalledTimes(1));
+    expect(orgService.updateOrg).toHaveBeenCalledWith(ORG.id, { country: 'IN' });
+  });
+
+  it('sends a time-zone change on its own', async () => {
+    await openSettings();
+    fireEvent.change(screen.getByLabelText('Time zone'), { target: { value: 'Europe/Paris' } });
+    fireEvent.click(screen.getByText('Save changes'));
+    await waitFor(() => expect(orgService.updateOrg).toHaveBeenCalledTimes(1));
+    expect(orgService.updateOrg).toHaveBeenCalledWith(ORG.id, { timezone: 'Europe/Paris' });
+  });
+
+  it('clears a city with null rather than an empty string', async () => {
+    await openSettings();
+    fireEvent.change(screen.getByLabelText('City'), { target: { value: '' } });
+    fireEvent.click(screen.getByText('Save changes'));
+    await waitFor(() => expect(orgService.updateOrg).toHaveBeenCalledTimes(1));
+    expect(orgService.updateOrg).toHaveBeenCalledWith(ORG.id, { city: null });
+  });
+
+  /** THE PICKER MUST CONTAIN THE GYM'S OWN ZONE, or opening Settings to fix a
+   *  name moves the gym's day boundary by saving. Measured, not defensive
+   *  (:10402): which member of an alias pair a runtime calls canonical is not
+   *  predictable, and the row holds whatever was stored the day it was made. */
+  it('offers the gym’s OWN time zone even when this runtime does not list it', async () => {
+    const listed = Intl.supportedValuesOf('timeZone').filter((z) => z !== 'America/Chicago');
+    vi.spyOn(Intl, 'supportedValuesOf').mockReturnValue(listed);
+    await openSettings();
+    const picker = screen.getByLabelText('Time zone');
+    expect(picker.value).toBe('America/Chicago');
+    expect(
+      [...picker.options].some((o) => o.value === 'America/Chicago'),
+    ).toBe(true);
+    vi.restoreAllMocks();
+  });
+
+  /** THE FIRST VERSION OF THIS SCREEN COULD NOT SHOW THIS SENTENCE AT ALL and
+   *  this test is what found it. An emptied name produces no patch — there is
+   *  nothing to SEND about a name that was cleared — so Save was disabled, the
+   *  click did nothing, and the check that lived on submit was unreachable in the
+   *  one case it existed for: an owner looking at an empty box and a dead button,
+   *  told nothing. The sentence is now derived from the draft, so it appears the
+   *  moment the box is emptied. */
+  it('says an empty name is wrong straight away, and asks the server nothing', async () => {
+    await openSettings();
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: '   ' } });
+    expect(await screen.findByText(/needs a name/i)).toBeTruthy();
+    // Not the server's raw `name: too_small`, which is what `errorText` prints
+    // verbatim when the request is allowed to go.
+    expect(screen.queryByText(/too_small/)).toBeNull();
+    expect(screen.getByText('Save changes').disabled).toBe(true);
+    fireEvent.click(screen.getByText('Save changes'));
+    expect(orgService.updateOrg).not.toHaveBeenCalled();
+  });
+
+  it('takes the sentence away again when the name comes back', async () => {
+    await openSettings();
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: '' } });
+    await screen.findByText(/needs a name/i);
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House Two' } });
+    expect(screen.queryByText(/needs a name/i)).toBeNull();
+    expect(screen.getByText('Save changes').disabled).toBe(false);
+  });
+
+  it('says Saved, and puts the SERVER’s row back in the boxes', async () => {
+    await openSettings();
+    // The row the server says it stored — and the console's next read of "which
+    // gyms do I run" agrees with it, which is what actually happens. Both are
+    // set AFTER the screen has opened, or the form would start on the saved row
+    // and there would be nothing to change.
+    const saved = { ...ORG, name: 'Iron House Two' };
+    orgService.updateOrg.mockResolvedValue({ data: { org: saved } });
+    orgService.getMine.mockResolvedValue({ data: { orgs: [saved] } });
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House Two' } });
+    fireEvent.click(screen.getByText('Save changes'));
+    expect(await screen.findByText('Saved.')).toBeTruthy();
+    expect(screen.getByLabelText('Gym name').value).toBe('Iron House Two');
+    // And nothing is left to send, so the button goes quiet again.
+    await waitFor(() => expect(screen.getByText('Save changes').disabled).toBe(true));
+  });
+
+  /** The boxes show what the SERVER stored, not what was typed — the country is
+   *  the field where those differ, because it is normalised at the boundary. */
+  it('shows the server’s version of a value, not the draft’s', async () => {
+    await openSettings();
+    const saved = { ...ORG, country: 'IN', currencyDisplay: 'INR' };
+    orgService.updateOrg.mockResolvedValue({ data: { org: saved } });
+    orgService.getMine.mockResolvedValue({ data: { orgs: [saved] } });
+    fireEvent.click(screen.getByLabelText('Country'));
+    fireEvent.click(screen.getByText('India'));
+    fireEvent.click(screen.getByText('Save changes'));
+    await screen.findByText('Saved.');
+    // The money line follows the row the server sent back, so an owner sees the
+    // consequence of the change they just made.
+    await waitFor(() => expect(screen.getByText(/billed in INR/i)).toBeTruthy());
+  });
+
+  /** Without this the shell's gym name, "Your gyms" and the Overview header all
+   *  keep the OLD name until the next window focus — the console telling an
+   *  owner something it has itself just been told is untrue. */
+  it('makes the rest of the console re-read the gym after a save', async () => {
+    await openSettings();
+    expect(orgService.getMine).toHaveBeenCalledTimes(1);
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House Two' } });
+    fireEvent.click(screen.getByText('Save changes'));
+    await waitFor(() => expect(orgService.getMine).toHaveBeenCalledTimes(2));
+  });
+
+  /** And it re-reads QUIETLY. A foreground refresh publishes `loading`, which
+   *  would blank this very screen and take the Staff section with it. */
+  it('does NOT blank the screen while that re-read happens', async () => {
+    let answer;
+    orgService.updateOrg.mockResolvedValue({
+      data: { org: { ...ORG, name: 'Iron House Two' } },
+    });
+    orgService.getMine.mockReturnValueOnce(Promise.resolve({ data: { orgs: [ORG] } }));
+    orgService.getMine.mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+    );
+    await openSettings();
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House Two' } });
+    fireEvent.click(screen.getByText('Save changes'));
+    await waitFor(() => expect(orgService.getMine).toHaveBeenCalledTimes(2));
+    // The read is still in the air and the form is still on screen with the
+    // saved values in it.
+    expect(screen.getByLabelText('Gym name').value).toBe('Iron House Two');
+    expect(screen.queryByText('Loading your gym…')).toBeNull();
+    answer({ data: { orgs: [ORG] } });
+  });
+
+  it("shows the SERVER's own sentence when it refuses, and keeps what was typed", async () => {
+    orgService.updateOrg.mockRejectedValue(
+      apiError(
+        409,
+        'currency_locked',
+        "The currency your gym is billed in can't change while your gym has a subscription, and that country uses a different one. Contact us and we'll move it for you.",
+      ),
+    );
+    await openSettings();
+    fireEvent.click(screen.getByLabelText('Country'));
+    fireEvent.click(screen.getByText('India'));
+    fireEvent.click(screen.getByText('Save changes'));
+    expect(await screen.findByText(/currency your gym is billed in can't change/i)).toBeTruthy();
+    // Nothing is retyped, and the choice they made is still theirs.
+    expect(screen.getByLabelText('Country').textContent).toContain('India');
+    expect(screen.getByText('Save changes')).toBeTruthy();
+  });
+
+  /** NO Try again: Save is still on screen and IS the retry. For the currency
+   *  lock a second button would promise something that cannot work however many
+   *  times it is pressed. */
+  it('offers no Try again beside a refusal — the Save button is the retry', async () => {
+    orgService.updateOrg.mockRejectedValue(offline());
+    await openSettings();
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House Two' } });
+    fireEvent.click(screen.getByText('Save changes'));
+    expect(await screen.findByText(/Couldn't reach the server/i)).toBeTruthy();
+    expect(screen.queryByText('Try again')).toBeNull();
+  });
+
+  it('clears a refusal as soon as the owner edits again', async () => {
+    orgService.updateOrg.mockRejectedValue(offline());
+    await openSettings();
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House Two' } });
+    fireEvent.click(screen.getByText('Save changes'));
+    await screen.findByText(/Couldn't reach the server/i);
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House Three' } });
+    expect(screen.queryByText(/Couldn't reach the server/i)).toBeNull();
+  });
+});
+
+describe('a gym with no country on record', () => {
+  const OLDER = { ...ORG, country: null };
+
+  /** Every gym created before migration `0014` — the wizard asked, the server
+   *  turned the answer into a currency and did not keep it. An empty box is TRUE
+   *  here; what would be wrong is leaving it looking like something failed. */
+  it('says so, names the money it IS billed in, and starts the box empty', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [OLDER] } });
+    drawSettings();
+    await screen.findByLabelText('Gym name');
+    expect(screen.getByText(/don't have your country on record/i)).toBeTruthy();
+    expect(screen.getByText(/billed in USD/i)).toBeTruthy();
+    expect(screen.getByLabelText('Country').textContent).toContain('Choose a country');
+  });
+
+  it('heals itself on the first save, sending only the country', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [OLDER] } });
+    drawSettings();
+    await screen.findByLabelText('Gym name');
+    fireEvent.click(screen.getByLabelText('Country'));
+    fireEvent.click(screen.getByText('United States'));
+    fireEvent.click(screen.getByText('Save changes'));
+    await waitFor(() => expect(orgService.updateOrg).toHaveBeenCalledTimes(1));
+    expect(orgService.updateOrg).toHaveBeenCalledWith(ORG.id, { country: 'US' });
+  });
+
+  /** THE CONTROL for the sentence above, and it is what stops "say it always"
+   *  passing: a gym that HAS a country must not be told we do not have it. */
+  it('is NOT said about a gym whose country we do hold', async () => {
+    drawSettings();
+    await screen.findByLabelText('Gym name');
+    expect(screen.queryByText(/don't have your country on record/i)).toBeNull();
+  });
+});
+
+describe('who gets the gym-details form', () => {
+  const managerWith = (privileges) => ({ ...ORG, staffRole: 'manager', privileges });
+
+  it('is not drawn for a manager who has not been given the power', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [managerWith(ROLE_PRIVILEGES.manager)] } });
+    drawSettings();
+    expect(await screen.findByText(/Only the gym's owner can change these settings/i)).toBeTruthy();
+    expect(screen.queryByLabelText('Gym name')).toBeNull();
+  });
+
+  /** KD'S RULING IS "OWNER ONLY BY DEFAULT", not owner-only by construction: the
+   *  privilege is in neither the owner-only nor the last-owner list, so an owner
+   *  may tick it across (:11429 rule 3). A screen gating on the ROLE NAME would
+   *  leave that manager holding a power with no control anywhere — :16095's
+   *  Critical/High exactly. */
+  it('IS drawn for a manager the owner ticked it across to', async () => {
+    orgService.getMine.mockResolvedValue({
+      data: { orgs: [managerWith([...ROLE_PRIVILEGES.manager, 'org.manage'])] },
+    });
+    drawSettings();
+    expect(await screen.findByLabelText('Gym name')).toBeTruthy();
+    // And the sentence that would now be FALSE about them is gone.
+    expect(screen.queryByText(/Only the gym's owner can change these settings/i)).toBeNull();
+    // Staff is a different power and they still do not have it.
+    expect(orgService.getStaff).not.toHaveBeenCalled();
+  });
+
+  it('gives that manager the Settings TAB, or the power has no door', async () => {
+    orgService.getMine.mockResolvedValue({
+      data: { orgs: [managerWith([...ROLE_PRIVILEGES.manager, 'org.manage'])] },
+    });
+    drawShell();
+    await waitFor(() => expect(screen.getAllByText('Settings').length).toBeGreaterThan(0));
+  });
+
+  it('still keeps the tab from a manager holding neither power', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [managerWith(ROLE_PRIVILEGES.manager)] } });
+    drawShell();
+    await waitFor(() => expect(screen.getAllByText('Members').length).toBeGreaterThan(0));
+    expect(screen.queryByText('Settings')).toBeNull();
   });
 });
 

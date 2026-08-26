@@ -20071,3 +20071,150 @@ wording. Every temporary source edit restored and sha256-verified; tree clean.
 **THE CARD'S SERVER HALF IS DONE. Nothing ticks yet** — the `OWED.md` line names
 a SCREEN and there is none, so there is still no smoke. The web half is the next
 card and carries it.
+
+## THE GYM DETAILS SCREEN — an owner can finally fix their own gym, and the card's own test found the one thing a person could not have been told (2026-08-26)
+
+**Read before touching `apps/web/src/components/console/GymDetailsPanel.jsx`,
+`gymDetailsView.js`, `ConsoleLayout`'s Settings condition, or anything that calls
+`PATCH /v1/orgs/:gymId` from a client — and before adding a second caller of the
+console's kept gym list.**
+
+Web half of :19366 / :19560 / :19656 / :19799 / :19960. The route shipped that
+morning with **no caller**, which is exactly why `OWED.md`'s line stayed open —
+an endpoint nobody can reach ticks nothing (:13803, :14262, :11846's shape).
+**THIS CARD CARRIES THE SMOKE FOR THE WHOLE PACKET**, which has had none.
+
+### WHAT AN OWNER GETS
+
+A **Gym details** card at the top of Settings: name, city, country, time zone,
+each pre-filled with what the gym holds, and the currency the gym is billed in
+shown but not editable. Save is off until something moves.
+
+### DECISIONS NOT TO RE-DERIVE
+
+- **THE FORM SENDS A DIFF, NOT THE WHOLE ROW, AND THE COUNTRY IS WHY.** A gym on
+  a subscription is refused 409 `currency_locked` when the country it sends
+  resolves to a DIFFERENT currency. A settings form that restated every box it
+  drew would put a paying gym's money on the table every time somebody corrected
+  a typo — and the server's own first version refused the whole save merely for
+  MENTIONING the country (:19656 C/H-1). The guard was fixed; the client still
+  has no business sending a field nobody touched. Mutant **C55**.
+- **EVERYTHING IS COMPARED TRIMMED**, because the server trims on the way in.
+  Otherwise a trailing space is a change this screen believes in and the database
+  does not, so Save lights up for a save that stores nothing and then says
+  "Saved." over bytes that never moved (**C59**).
+- **AN EMPTY COUNTRY IS LEFT OUT, NEVER SENT AS an empty string** (the field is
+  `.length(2)`, so an empty string is a 400) — and **the country is upper-cased**,
+  matching the server's own boundary, or the column's CHECK turns a lower-case
+  write into a 23514, i.e. a 500 where an owner should see their country saved
+  (**C57**).
+- **`city: null` CLEARS, an absent key LEAVES ALONE** — the PATCH's whole point,
+  spelled out in one place (**C58**).
+- **THE TIME-ZONE PICKER ALWAYS CONTAINS THE GYM'S OWN ZONE.** This is the one
+  way this screen could do permanent damage and it is why the helper has a test
+  rather than being a line in a component: `gyms.timezone` is the only thing the
+  rollup worker consults when it decides where a gym's day ends (trap #8), and a
+  picker missing the gym's zone selects a different one THE MOMENT IT IS DRAWN —
+  so an owner who opened Settings to fix a name would move their gym's day by
+  saving. **Measured, not defensive** (:10402): on this machine
+  `Intl.supportedValuesOf('timeZone')` holds `Asia/Calcutta` and not
+  `Asia/Kolkata`, while Chrome reports `Asia/Calcutta` from `resolvedOptions()`.
+  `timezoneChoices` reuses `timezoneOptions` rather than re-reading `Intl` — one
+  place decides how this app enumerates zones — and an EMPTY list is passed
+  through as a real answer, because a one-item picker holding only the gym's
+  current zone would be worse than the text box it falls back to (**C56**).
+- **THE DRAFT IS NOT RE-SYNCED FROM THE PROP.** The kept answer is re-read on
+  every window focus, so syncing would replace an owner's typing while they were
+  mid-edit. What the live prop IS used for is the comparison, so the patch is
+  always the difference against the freshest thing the server has said.
+- **THE SERVER'S OWN ROW GOES BACK INTO THE BOXES after a save**, never the
+  draft: it is the normalised one, and it is what makes Save go quiet afterwards.
+- **THE REST OF THE CONSOLE FOLLOWS, QUIETLY.** `refreshConsoleOrgsAfterChange`
+  is `refreshConsoleOrgs` WITHOUT the spinner. Without any refresh the shell, the
+  gym screen and "Your gyms" keep the OLD name until the next focus event — C51's
+  shape one card later (**C61**). Without the *quiet* half, a foreground read
+  publishes `loading` and **blanks the very screen the owner is looking at**,
+  taking the Staff section and its open controls with it (**C62**). It still
+  forgets the read in the air, because one begun a moment before the save cannot
+  answer it (**C66**).
+- **NO "Try again" BESIDE A REFUSAL.** The Save button is the retry, it is still
+  on screen and everything typed is still in the boxes; for the currency lock a
+  second button would promise something that cannot work however often it is
+  pressed. The server's own sentence is printed verbatim.
+- **THE SETTINGS TAB WIDENS, AND IT IS THE DAY `ConsoleLayout`'s OWN COMMENT
+  PREDICTED.** That file said the condition was `canManageStaff` so that "it
+  widens by itself the day Settings grows a section their role can use". Kd's
+  ruling is *owner-only BY DEFAULT* — `org.manage` is in neither
+  `OWNER_ONLY_PRIVILEGES` nor `LAST_OWNER_REQUIRED_PRIVILEGES`, so an owner may
+  tick it across (:11429 rule 3). Left as it was, that manager would hold a real
+  power with NO TAB, and typing the address would land them on *"Only the gym's
+  owner can change these settings"* — **false about them** (:5807). Now
+  `settingsIsReachable`, one named line so a mutant can point at it (**C63**),
+  with **S9 kept aimed at the opposite failure direction** — a gate has two, and
+  a mutant that only opens it is satisfied by a door that is simply shut
+  (:7104's PG1).
+- **THE UNRECORDED COUNTRY IS SAID, NOT LEFT AS AN EMPTY BOX.** Every gym created
+  before `0014` has none. The sentence is true of exactly those rows and is
+  guarded in BOTH directions — a gym whose country we hold must not be told we do
+  not have it (**C64**).
+
+### THE FINDING IS THE CARD'S OWN TEST CATCHING A DEFECT NO PERSON COULD HAVE REPORTED
+
+**The "your gym needs a name" sentence was set ON SUBMIT, and submit was
+unreachable for the one case it existed for.** An emptied name produces NO
+patch — there is nothing to SEND about a name that was cleared — so Save was
+correctly disabled, the click did nothing, and an owner staring at an empty box
+and a dead button was **told nothing at all**. Not a false sentence: an ABSENT
+one, which is :12660's class (*"no reviewer, test or mutant flags an absent
+sentence — the USER did"*), except that this time the test written for it found
+it first, before the smoke. Fixed by DERIVING the sentence from the draft, so it
+appears the moment the box is emptied and no click is needed to earn it. Mutant
+**C65** is aimed at the derivation, and its `why` records why the check cannot
+live on the click.
+
+### THE INSTRUMENTS ABORTED THE SWEEP THREE TIMES BEFORE A BYTE WAS WRITTEN, AND ALL THREE WERE MINE
+
+1. **S15's anchor** named `privileges={viewerPrivileges(org)}`; `Settings.jsx`
+   now resolves that ONCE into a local because two sections read it.
+   Re-anchored, **re-measured RED**.
+2. **S9's anchor** named `canManageStaff(viewerPrivileges(org))`, which became
+   `settingsIsReachable`. Re-anchored, **re-measured RED**.
+3. **C53's anchor started matching TWICE**, because
+   `refreshConsoleOrgsAfterChange` calls `forgetTheReadInTheAir` too — the
+   uniqueness guard :15259 L-2 added, firing on this branch again.
+   **Re-aiming C53 at the new copy would have been the WRONG fix** (:15770,
+   :14174 L-1: a mutant is a claim about ONE call site, and a control that looks
+   covered because a mutant was written for its sibling is the recorded defect).
+   C53 keeps the Try-again / create-a-gym path and **C66 is its sibling on the
+   save path**. **AND THE FIRST ATTEMPT AT DISAMBIGUATION FAILED, which is worth
+   more than the fix:** giving only the NEW line a trailing note left the check
+   still counting 2, because **the pre-check counts SUBSTRINGS and the shorter
+   line is contained in the longer one**. Both call sites now carry their own
+   note — a fact about the SOURCE, which is :17676's own remedy in as many words.
+
+### PROVE — all on the final bytes
+
+- **web 1205/1205 exit 0 across 45 files**, against :17676's recorded 1149
+  baseline, i.e. **+56**: 25 in the new `gymDetailsView.test.js` and 31 added to
+  three existing suites (`git diff` counted, not estimated).
+- `vite build` exit 0 · `eslint --max-warnings=0` exit 0 on **ten** changed files
+  · `node --check apps/web/tools/mutate-console.mjs` exit 0.
+- **MUTATION SWEEP, a stated SUBSET of 88: 15 mutants · 15 RED · 0 ALIVE · 0
+  never ran, exit 0** — C55–C66 new, plus S9, S15 and C53 re-anchored and
+  re-measured. Every control GREEN and TALLIED through the same path first;
+  restores sha256-verified after every mutant; `git status` carries no mutation
+  afterwards. **NOT a full sweep and the harness prints so.**
+- **No api change, no `@app/shared` change, no migration.** The api half is NOT
+  re-run and that is stated rather than implied (:10726).
+
+### WHAT THIS CARD CANNOT SHOW A PERSON, STATED RATHER THAN GLOSSED
+
+**The currency lock's refusal is unreachable from a browser.** Nothing in this
+product inserts into `subscriptions`, so no gym is on one and the 409 cannot be
+produced by clicking. It is carried by the server's tests and by the harness
+alone — the one thing on this screen no human has seen, and it is written into
+the smoke sheet as such rather than left as a step that would silently pass.
+
+**NOTHING TICKS YET. The SMOKE (`RUNBOOK/smoke-gym-details.md`, 9 steps) and T3
+are both UNRUN.** Step 4 is the one that matters: the time-zone box must already
+be showing the gym's OWN zone when the screen opens.

@@ -127,6 +127,51 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:20075** — 2026-08-26 — **THE GYM DETAILS SCREEN (web half): an owner can
+  finally fix their own gym — and the card's own test found a defect NO PERSON
+  could have reported.** Web half of :19366/:19560/:19656/:19799/:19960; the
+  route had shipped that morning with **no caller**. **Read before touching
+  `GymDetailsPanel.jsx`, `gymDetailsView.js`, `ConsoleLayout`'s Settings
+  condition, before calling `PATCH /v1/orgs/:gymId` from any client, and before
+  adding a second caller of the console's kept gym list.**
+  **THE FORM SENDS A DIFF, NOT THE WHOLE ROW, AND THE COUNTRY IS WHY**: a paying
+  gym is refused 409 `currency_locked` when the country resolves to a different
+  currency, so a form restating every box would put its money on the table every
+  time somebody fixed a typo (C55). Trimmed comparisons, because the server trims
+  (C59) · an empty country LEFT OUT not sent as `''`, and upper-cased or the
+  column's CHECK is a 23514 (C57) · `city: null` clears, absent leaves alone
+  (C58).
+  **THE TIME-ZONE PICKER ALWAYS CONTAINS THE GYM'S OWN ZONE — the one way this
+  screen could do permanent damage.** A picker missing it selects another zone
+  the moment it is drawn, so opening Settings to fix a NAME would move the gym's
+  day (trap #8). Measured, not defensive (:10402). Empty list passes through as a
+  real answer (C56).
+  **THE REST OF THE CONSOLE FOLLOWS, QUIETLY**:
+  `refreshConsoleOrgsAfterChange` is `refreshConsoleOrgs` WITHOUT the spinner —
+  no refresh at all leaves the old name everywhere (C61), a FOREGROUND one blanks
+  the very screen the owner is saving on (C62), and it still forgets the read in
+  the air (C66). **The Settings TAB widens to `settingsIsReachable`** — the day
+  `ConsoleLayout`'s own comment predicted, since `org.manage` may be ticked
+  across; otherwise that manager holds a power with no tab and is told something
+  false (C63, S9 kept aimed the other way).
+  **THE FINDING: the "your gym needs a name" sentence was set ON SUBMIT and
+  submit was UNREACHABLE for the one case it existed for** — a cleared name
+  produces no patch, so Save was correctly disabled and an owner saw a dead
+  button with no reason. An ABSENT sentence, :12660's class, except the card's own
+  test found it first. Now DERIVED (C65).
+  **THREE SWEEP ABORTS, ALL MINE, none reaching a byte**: S15 and S9 re-anchored
+  and re-measured RED; **C53's anchor matched TWICE and re-aiming it would have
+  been the wrong fix** (:15770/:14174 L-1) — C66 is its sibling on the save path.
+  **And the first disambiguation FAILED because the pre-check counts SUBSTRINGS**,
+  so both call sites now carry their own note (:17676's remedy).
+  **PROVE: web 1205/1205 exit 0 across 45 files (+56 on :17676's 1149) · build ✓
+  · eslint clean on ten files · `node --check` clean · SWEEP a stated SUBSET of
+  88: 15 RED, 0 ALIVE, 0 never ran, exit 0.** No api change, no shared change, no
+  migration; the api half NOT re-run and said so.
+  **THE CURRENCY LOCK IS UNREACHABLE FROM A BROWSER** (nothing inserts into
+  `subscriptions`) — the one thing on this screen no human can see, written into
+  the sheet as such. **NOTHING TICKS: SMOKE (`RUNBOOK/smoke-gym-details.md`, 9
+  steps) and T3 both UNRUN.**
 - **:19366** — 2026-08-26 — **A GYM CAN FINALLY FIX ITS OWN DETAILS (server
   half), AND THE COUNTRY THE WIZARD HAS ASKED FOR SINCE AUGUST WAS BEING THROWN
   AWAY.** **Read before touching `PATCH /v1/orgs/:gymId`, before adding a

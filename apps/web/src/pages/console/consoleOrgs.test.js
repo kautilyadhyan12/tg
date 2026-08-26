@@ -19,6 +19,7 @@ const {
   consoleOrgsSnapshot,
   ensureConsoleOrgs,
   refreshConsoleOrgs,
+  refreshConsoleOrgsAfterChange,
   resetConsoleOrgs,
   subscribeConsoleOrgs,
 } = await import('./consoleOrgs');
@@ -163,6 +164,76 @@ describe('re-checking in the background', () => {
     expect(consoleOrgsSnapshot()).toMatchObject({ status: 'ready', orgs: [ORG] });
     expect(seen).not.toContain('failed');
     stop();
+  });
+});
+
+describe('the console changing a gym from the inside', () => {
+  /** The Settings screen saving the gym's own details. It is
+   *  `refreshConsoleOrgs` WITHOUT the spinner, and both halves matter. */
+  it('re-reads so the shell’s gym name follows a rename', async () => {
+    ensureConsoleOrgs();
+    await settled();
+
+    const renamed = { ...ORG, name: 'Iron House Two' };
+    orgService.getMine.mockResolvedValue(answer([renamed]));
+    refreshConsoleOrgsAfterChange();
+    await settled();
+
+    expect(consoleOrgsSnapshot().orgs).toEqual([renamed]);
+  });
+
+  it('NEVER publishes a spinner — the screen doing the saving must not blank', async () => {
+    const seen = [];
+    const stop = subscribeConsoleOrgs(() => seen.push(consoleOrgsSnapshot().status));
+    ensureConsoleOrgs();
+    await settled();
+    seen.length = 0;
+
+    refreshConsoleOrgsAfterChange();
+    await settled();
+
+    // A `loading` here would take the Settings screen — and the Staff section
+    // open inside it — down over a read nobody is waiting for.
+    expect(seen).not.toContain('loading');
+    stop();
+  });
+
+  /** C51/C53's shape: a read started BEFORE the save cannot know about the save,
+   *  so sharing it would put the OLD name back on screen a second after the new
+   *  one was stored. */
+  it('does NOT let a read started before the save answer it', async () => {
+    ensureConsoleOrgs();
+    await settled();
+
+    let landStale;
+    orgService.getMine.mockReturnValueOnce(
+      new Promise((resolve) => {
+        landStale = () => resolve(answer([ORG]));
+      }),
+    );
+    consoleOrgsRegainedFocus();
+
+    const renamed = { ...ORG, name: 'Iron House Two' };
+    orgService.getMine.mockResolvedValue(answer([renamed]));
+    refreshConsoleOrgsAfterChange();
+    landStale();
+    await settled();
+
+    expect(orgService.getMine).toHaveBeenCalledTimes(3);
+    expect(consoleOrgsSnapshot().orgs).toEqual([renamed]);
+  });
+
+  /** The save LANDED. Reporting a follow-up read's failure would tell an owner
+   *  their change did not happen when it did. */
+  it('leaves the screen alone when that read fails', async () => {
+    ensureConsoleOrgs();
+    await settled();
+
+    orgService.getMine.mockRejectedValue(offline());
+    refreshConsoleOrgsAfterChange();
+    await settled();
+
+    expect(consoleOrgsSnapshot()).toMatchObject({ status: 'ready', orgs: [ORG] });
   });
 });
 

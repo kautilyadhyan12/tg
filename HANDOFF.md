@@ -1,6 +1,51 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE GYM DETAILS SCREEN — the web half, and the packet's FIRST screen.
+      DECISIONS :20075. `PATCH /v1/orgs/:gymId` had shipped that morning with
+      NO CALLER; Settings now carries a **Gym details** form (name · city ·
+      country · time zone, currency shown and not editable).
+
+  1. **NOTHING TICKS AND THE REASON CHANGED.** The `OWED.md` line named a SCREEN
+     and there now is one — what holds it open is the GATES:
+     **`RUNBOOK/smoke-gym-details.md` (9 steps) is UNRUN and T3 is UNRUN on all
+     six commits in this packet.** A passing smoke is not a review, and neither
+     has happened.
+  2. **THE FORM SENDS A DIFF, NOT THE WHOLE ROW, AND THAT IS THE MONEY
+     DECISION.** A paying gym is refused 409 when the country it sends resolves
+     to a different currency, so a form restating every box would turn a rename
+     into a refusal for exactly the gyms that pay us. Do not "simplify" it into
+     sending the whole form. Mutant C55.
+  3. **THE TIME-ZONE PICKER IS THE ONE WAY THIS SCREEN COULD DO PERMANENT
+     DAMAGE** — it must always contain the gym's OWN zone, or opening Settings
+     to fix a NAME moves the gym's day boundary on the next save (:10402's
+     measured alias gap). C56, and smoke step 4 is the human check.
+  4. **THE FINDING IS THE CARD'S OWN TEST CATCHING AN ABSENT SENTENCE.** "Your
+     gym needs a name" was set ON SUBMIT and submit is unreachable for the case
+     it exists for — a cleared name produces no patch, so Save is correctly
+     disabled and the owner saw a dead button with no reason. Now DERIVED (C65).
+  5. **THREE SWEEP ABORTS, ALL MINE, none reaching a byte.** S15 and S9
+     re-anchored (my Settings/Layout edits moved them), re-measured RED; **C53's
+     anchor matched TWICE and re-aiming it would have been the WRONG fix** —
+     C66 is its sibling. **The first disambiguation failed because the pre-check
+     counts SUBSTRINGS**, so both call sites now carry their own trailing note.
+  6. **THE CURRENCY LOCK CANNOT BE REACHED FROM A BROWSER** — nothing inserts
+     into `subscriptions`. It is the one thing on this screen no human can see,
+     and the sheet says so rather than carrying a step that would silently pass.
+
+MEASURED (final bytes): web 1205/1205 exit 0 across 45 files (+56 on :17676's
+  1149 — 25 new file, 31 into three existing suites, `git diff` counted) ·
+  `vite build` exit 0 · eslint `--max-warnings=0` clean on ten files ·
+  `node --check` on the harness clean · SWEEP a stated SUBSET of 88: 15 mutants ·
+  15 RED · 0 ALIVE · 0 never ran, exit 0, controls GREEN and TALLIED first,
+  restores sha256-verified, tree clean of mutations after. No api change, no
+  `@app/shared` change, no migration; the api half NOT re-run and said so.
+
+NEXT: **Kd runs `RUNBOOK/smoke-gym-details.md`**, then T3 in a FRESH chat over
+  the whole packet's web half. Step 4 of the sheet is the one that matters.
+```
+
+```
 TASK: GYM DETAILS, T3 ROUND 3 (diff-only) — ZERO Critical/High. **THE PACKET
       SHIPS.** DECISIONS :19960. Three rounds: 3 → 1 → 0. Six Low, all fixed.
       **ESCAPE HATCH NOT ARMED** (round 2's Critical was in the harness; this

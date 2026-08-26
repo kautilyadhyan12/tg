@@ -6195,6 +6195,18 @@ file and is stated so nobody reads these as lower priority than they are.
       the line open is that **no screen calls it** — the same shape as :13803 and
       :14262, where an endpoint with no caller ticks nothing. The web half is the
       next card and carries the SMOKE. T3 is UNRUN.
+      **UPDATE 2026-08-26, SAME DAY — THE SCREEN IS BUILT AND THIS LINE STILL
+      DOES NOT TICK** (DECISIONS :20075). Settings now carries a **Gym details**
+      form: name, city, country and time zone, with the currency shown and not
+      editable, sending only the fields that actually changed. **What holds it
+      open now is the GATES, not the code: the SMOKE
+      (`RUNBOOK/smoke-gym-details.md`, 9 steps) is UNRUN and T3 is UNRUN on any
+      of the six commits in this packet.** A passing smoke is not a review
+      (:14147) and neither has happened. **Its step 4 is the one that matters** —
+      the time-zone box must already show the gym's OWN zone when the screen
+      opens, because a picker without it would move a gym's day boundary on the
+      next save. **The slug is still deliberately NOT part of this** and the
+      currency is still never client-settable.
 - [ ] ⚪ **EVERY GYM CREATED BEFORE 2026-08-26 HAS NO COUNTRY RECORDED, and no
       honest backfill exists.** `gyms.country` arrived with migration `0014`;
       before it the create wizard collected a country, the server mapped it to a
@@ -6212,6 +6224,16 @@ file and is stated so nobody reads these as lower priority than they are.
       country when an owner edits; each gym self-heals on its first save. **What
       it costs meanwhile:** the country box on that screen starts empty for an
       existing gym, which is true and not false — :5807 Low by its own test.
+      **UPDATE 2026-08-26 — THE SCREEN THAT CLOSES THIS EXISTS NOW** (DECISIONS
+      :20075), **and the line stays open because the ROWS have not moved.** The
+      form starts the country box empty on such a gym and **says so in words**
+      ("we don't have your country on record — this gym was set up before we
+      started keeping it"), with the currency it IS billed in named beside it, so
+      the empty box does not read as something that failed to load. That sentence
+      is guarded in both directions (mutant **C64**): a gym whose country we hold
+      must never be told we do not have it. **This ticks when the rows do** —
+      each gym on its owner's first save — and there is still no honest backfill
+      to hurry it.
 - [x] ~~❓ **CAN A GYM CHANGE THE CURRENCY IT IS BILLED IN ONCE IT IS ACTUALLY
       PAYING?**~~ **CLOSED 2026-08-26 THE SAME DAY IT WAS RAISED — KD RULED, and
       the ruling is BUILT, not deferred** (DECISIONS :19366 addendum, commit

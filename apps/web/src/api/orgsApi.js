@@ -25,6 +25,7 @@ import {
   removeMemberResponseSchema,
   removeOrgStaffResponseSchema,
   rotateOrgCodeResponseSchema,
+  updateOrgResponseSchema,
 } from '@app/shared';
 import authApi from './authApi';
 
@@ -69,6 +70,31 @@ export const orgService = {
    *  row carrying `staffRole` (null = member only) and `isMember`. Capped at
    *  100 server-side; it does not paginate. */
   getMine: () => readThrough(myOrgsResponseSchema, 'your gyms', authApi.get('/v1/orgs/mine')),
+
+  /** PATCH /v1/orgs/:gymId — the gym's own details: name, city, country, time
+   *  zone. Gated on `org.manage`, the privilege Kd approved on 2026-08-26 and
+   *  which an owner holds by default.
+   *
+   *  **SEND ONLY WHAT CHANGED, and for the country that is not tidiness.** An
+   *  absent key is left alone; `city: null` clears it. A gym already on a
+   *  subscription is refused with 409 `currency_locked` when the country it
+   *  sends resolves to a DIFFERENT currency — so a form that restated every box
+   *  it drew would turn a rename into a refusal for exactly the gyms that pay
+   *  us. That is round 1's C/H-1 arriving from the client side instead of the
+   *  server's, and `gymDetailsPatch` is where the diff is computed.
+   *
+   *  **`currencyDisplay` is not sendable at all**: the server derives it from
+   *  the country and the body is `.strict()`, so a client-declared currency is a
+   *  400 rather than a field quietly ignored (R3.1, exactly as at create).
+   *
+   *  **An empty patch is a 400 server-side** and this screen never sends one —
+   *  Save is off until something moves.
+   *
+   *  **Not retried** (R10.2): there is no Idempotency-Key here, and nothing in
+   *  `authApi` adds a network-failure retry. Pressing Save again is the retry,
+   *  and it is a person doing it. */
+  updateOrg: (gymId, patch) =>
+    readThrough(updateOrgResponseSchema, 'that change', authApi.patch(`/v1/orgs/${gymId}`, patch)),
 
   /** GET /v1/orgs/:gymId/members — Part 3 §2.4's roster and nothing else:
    *  display name, join date, the label of the code they came in through, and
