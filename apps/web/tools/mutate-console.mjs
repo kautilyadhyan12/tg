@@ -1219,6 +1219,76 @@ const MUTANTS = [
     from: '  if (n === 0) return null;',
     to: '  if (n === -1) return null;',
   },
+
+  // ── T3 ROUND 1'S FIVE FIXES, each restored so its test is MEASURED red
+  //    rather than asserted to be (:5348 rule 3) ─────────────────────────────
+  {
+    id: 'C72',
+    target: 'gympanel',
+    suite: SETTINGS_SUITE,
+    why: "C/H-1 RESTORED: the form stops following the gym row, so a rename made in another tab (or by the other owner at a shared front desk) leaves these boxes holding the OLD name and time zone under a heading two lines up showing the NEW one — and Save, which compares against the LIVE row, switches itself on with no keystroke and offers to put the stale values back. `gyms.timezone` is the only thing the rollup worker consults, so that revert MOVES THE GYM'S DAY",
+    expect: 'FOLLOWS the gym while the form is untouched',
+    from: '  if (!sameGymDetails(fresh, lastOrgSeen)) {',
+    to: '  if (false) {',
+  },
+  {
+    id: 'C73',
+    target: 'gympanel',
+    suite: SETTINGS_SUITE,
+    why: "THE OTHER DIRECTION, AND IT IS DATA LOSS: the untouched test is deleted, so the form follows the row ALWAYS — and the kept answer is re-read on every window focus, so an owner who alt-tabs mid-edit comes back to their typing REPLACED by the stored values. A gate has two failure directions and C72 alone is satisfied by a form that clobbers everything (:7104's PG1)",
+    expect: 'LEAVES A TOUCHED FORM ALONE',
+    from: '    const untouched = sameGymDetails(draft, lastOrgSeen);',
+    to: '    const untouched = true;',
+  },
+  {
+    id: 'C74',
+    target: 'gympanel',
+    suite: SETTINGS_SUITE,
+    why: "SAVES: the time-zone list stops being built around the value the box is DISPLAYING, so following a change into a zone this runtime spells differently leaves the select with no matching option at all — C56's guarantee arriving one step too late, and the blank-or-first-in-the-list failure that silently moves a gym's day boundary",
+    expect: 'keeps the time-zone picker holding the zone it is displaying',
+    from: '  const zones = useMemo(() => timezoneChoices(detected, draft.timezone), [detected, draft.timezone]);',
+    to: "  const zones = useMemo(() => timezoneChoices(detected, ''), [detected]);",
+  },
+  {
+    // AIMED AT THE WRONG FIX I NEARLY SHIPPED, the way O126 is aimed at the
+    // reviewer's rejected one-liner (:19656). The first version of C/H-1's fix
+    // moved `lastOrgSeen` here too; this restores that, and the test it breaks
+    // is the one that held a re-read open and caught it.
+    id: 'C75',
+    target: 'gympanel',
+    suite: SETTINGS_SUITE,
+    why: "ON SCREEN AND FALSE (:5807): the save also moves the row the form is judged against, so for as long as the follow-up read is in flight the STALE prop drags the freshly-saved values back to the pre-save ones — and if that read then FAILS, the store keeps its old answer by design and the boxes show the pre-save row FOR EVER over a save that landed",
+    expect: 'does NOT blank the screen while that re-read happens',
+    from: '      setDraft(gymDetailsDraft(res.data?.org));',
+    to: '      setDraft(gymDetailsDraft(res.data?.org));\n      setLastOrgSeen(gymDetailsDraft(res.data?.org));',
+  },
+  {
+    id: 'C76',
+    target: 'states',
+    suite: SETTINGS_SUITE,
+    why: 'BLOCKED FROM FINISHING (T3 Low-1): the latch goes, so pressing **Try again** clears the error, which clears `forceOpen`, which SHUTS THE SECTION UNDER THE CLICK — spinner included, since the loading arm lives in the body that was just unmounted. Everything vanishes and the button reads as broken',
+    expect: 'STAYS OPEN through a Try again',
+    from: '  if (forceOpen && !open) setOpen(true);',
+    to: '  if (false) setOpen(true);',
+  },
+  {
+    id: 'C77',
+    target: 'states',
+    suite: SETTINGS_SUITE,
+    why: 'ACCESSIBILITY (T3 Low-3): a closed row points `aria-controls` at a body that has been UNMOUNTED, so a screen reader is promised an element to move to and there is none. Closed means gone here, not hidden, which is what makes the dangling reference real rather than pedantic',
+    expect: 'points at its body only while the body exists',
+    from: '        aria-controls={isOpen ? bodyId : undefined}',
+    to: '        aria-controls={bodyId}',
+  },
+  {
+    id: 'C78',
+    target: 'gympanel',
+    suite: SETTINGS_SUITE,
+    why: 'TWO REQUESTS FOR ONE ACT (T3 Low-2): the in-flight guard goes and ENTER submits the form without going through the disabled button, so two quick presses send two saves. Harmless in itself — PATCH, idempotent, and a no-op writes no audit row — and still the app asking twice for something a person asked once',
+    expect: 'sends ONE request however many times the form is submitted',
+    from: '    if (problem !== null || patch === null || saving) return;',
+    to: '    if (problem !== null || patch === null) return;',
+  },
 ];
 
 const abort = (msg) => {

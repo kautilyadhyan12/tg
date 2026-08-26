@@ -20352,13 +20352,25 @@ apiece.
 #### DECISIONS NOT TO RE-DERIVE
 
 - **CLOSED MEANS UNMOUNTED, NOT HIDDEN WITH CSS, AND THE CHEAPER OPTION WAS THE
-  DISHONEST ONE.** A `display:none` body would have left all 33 existing call
+  DISHONEST ONE.** A `display:none` body would have left ~~all 33~~ **32** call
   sites passing untouched — against content **no person can see**. A suite that
   claims a user sees something the screen does not show is the class this project
   has recorded more than any other, so the tests changed instead: **27 staff call
-  sites and 6 gym ones now open the section the way a person does**, no assertion
-  moved (:6008's precedent for a control gaining a tap, and its rule that the
-  account of the change goes in the entry).
+  sites and ~~6~~ 5 gym ones now open the section the way a person does**, no
+  assertion moved (:6008's precedent for a control gaining a tap, and its rule
+  that the account of the change goes in the entry).
+  **THE TWO FIGURES ARE STRUCK BY T3 ROUND 1's Low-4 AND THE CORRECTION IS
+  MEASURED, NOT RE-ESTIMATED** (V1, on my own bookkeeping): `7236093` held **35**
+  `drawSettings();` call sites; **3 were correctly left alone because they assert
+  ABSENCE**; 32 were converted. The rewrite script converted 6 gym sites and one
+  of those — the manager who is drawn no section at all — **was reverted by hand
+  minutes later**, which is where the off-by-one came from and why 33 and 6 were
+  both a count of an intermediate state nobody ever committed. The **7**
+  `drawGym()` uses in the file today are those 5 plus **2 tests written new in the
+  same commit**. The `27` was right. **The commit message carries the old
+  figures and cannot be edited; this is the correction of record** (:5748 — a
+  correction belongs where the false claim is, and where it cannot be, it is
+  struck in the place that can be read).
 - **THE CLOSED HEADING KEEPS SAYING SOMETHING** — title, the sentence under it,
   and the staff COUNT. Collapsing is only an improvement while the shut row still
   answers the question the owner opened Settings with; a row that made you open a
@@ -20424,3 +20436,150 @@ existed when Kd ran the sheet. **Steps 2–9 are unchanged in what they ask and
 their pass stands.** Said at the top of the sheet rather than folded into the
 result, because a sheet that quietly grows a step and keeps its tick is
 :14840's recorded defect: a smoke that does not carry the shipping bytes.
+
+## GYM DETAILS, WEB HALF — T3 ROUND 1: ONE Critical/High, and my own FIRST FIX FOR IT was wrong in a way only this card's own test could see (2026-08-26)
+
+Reviews `7236093` / `2a2f581` / `428bbfb`. **The packet did NOT ship this round.**
+Four Low, all fixed in the same commit and logged in `BACKLOG.md`. Kd approved the
+finding list before a byte was written (*"fix all"*).
+
+**ESCAPE HATCH NOT ARMED**, and the reviewer reasoned it out unprompted: this is
+round 1 for the web half, and the server half's Criticals were in `modules/orgs`
+and in `tools/mutate-orgs.mjs` — neither of which this round touches, so there is
+no two-round streak in any subsystem.
+
+**Read before touching `GymDetailsPanel`'s draft state, before deriving a form's
+values from a prop that a background read can move, before deriving `forceOpen`
+from a condition a retry CLEARS, and before quoting this card's call-site counts.**
+
+### C/H-1 — THE FORM NEVER NOTICED THE GYM CHANGING UNDERNEATH IT, AND OFFERED TO REVERT IT
+
+**Measured by the reviewer against the real components, then reproduced here.**
+Leave Settings open, rename the gym somewhere else — a second tab, or the other
+owner at a shared front desk — and come back:
+
+| | |
+|---|---|
+| Gym name box | `Iron House` — **stale** |
+| Time zone box | `America/Chicago` — **stale** |
+| The page subtitle two lines above | **`Iron Palace`** — fresh |
+| Save changes | **enabled, with no keystroke** |
+| one click sends | `{"name":"Iron House","timezone":"America/Chicago"}` |
+
+**Two different names for one gym on one screen, and a Save nobody asked for that
+puts somebody else's change back.** Reachable with no exotic setup:
+`consoleOrgs` re-reads on `focus`/`visibilitychange` **by design**, and that
+file's own header names the case (*"a gym's front desk is a SHARED BROWSER"*).
+Two tabs of one owner is enough.
+
+**IT CARRIES THE TIME ZONE, WHICH IS WHY IT IS CRITICAL/HIGH RATHER THAN
+UNTIDY.** `gyms.timezone` is the only thing the rollup worker consults when it
+decides where a gym's day ends (trap #8), so the revert moves the gym's day —
+**the one permanent thing :20075 says this screen must be incapable of**, arriving
+through a door no mutant was aimed at.
+
+**THE RECORDED REASON FOR NOT SYNCING WAS RIGHT AND IS NOT UNDONE.** A re-read
+must never replace what somebody is halfway through typing. **What it missed is
+that it applied to a form NOBODY HAD TOUCHED** — a guard written for one case and
+applied to both, which is :1239's class from the side where the exception is the
+common case. Fixed by following the row only while the boxes still match what
+they were filled from; `sameGymDetails` is a comparison rather than a flag,
+because a flag has to be cleared by every edit path and goes stale the day
+somebody adds a fifth box.
+
+**AND THE PICKER HAD TO FOLLOW TOO, which the review did not name and the fix
+would have been half-done without.** `timezoneChoices` was anchored to the zone
+the screen OPENED with, so following a change into a zone this runtime spells
+differently would leave the select with **no matching option at all** — C56's
+guarantee arriving one step too late. It is now built around the value the box is
+DISPLAYING, which subsumes the original rule. Mutant **C74**.
+
+### THE FINDING IS THAT MY FIRST FIX FOR C/H-1 WAS WRONG, AND THE CARD'S OWN TEST CAUGHT IT
+
+The first version compared the draft against the **current** row: follow it
+whenever the draft still equals it. That looks equivalent to what shipped and is
+not. **For a moment after a save the prop is BEHIND the truth** — the quiet
+re-read has not landed — so the rule dragged the freshly-saved values back to the
+pre-save ones. And the store's rule 2 keeps its old answer when a background read
+FAILS, so on a dropped connection **the boxes would have shown the pre-save row
+for ever over a save that landed** (:5807, and worse than the defect being fixed).
+
+**What caught it was `does NOT blank the screen while that re-read happens`** —
+the test this card wrote a day earlier for a different reason, which holds that
+re-read open on purpose. :6277's class (*a fix aimed at one finding creating
+another*) and the reason a fix round re-runs the whole suite rather than the new
+tests.
+
+The rule that shipped reacts to **the prop CHANGING**, not to the draft
+differing from it: `lastOrgSeen` is the row the prop last held, a save moves only
+the draft, and the re-read arriving with our own change is therefore read as *the
+prop catching up* rather than as somebody else's edit. **Mutant C75 is aimed
+squarely at the version I nearly shipped**, the way O126 is aimed at the
+reviewer's rejected one-liner (:19656).
+
+### THE FOUR LOW, all fixed (`BACKLOG.md`)
+
+- **L-1 — pressing "Try again" shut the Staff section under the click.**
+  `forceOpen` was derived from a live error and `retry` clears the error before
+  the read lands, so the section collapsed **taking the spinner with it** (the
+  loading arm lives in the body that had just been unmounted). Fixed by LATCHING:
+  the force survives its own cause going away, and **both halves are kept and
+  tested** — while the error is live it still cannot be tapped shut, afterwards it
+  closes like any section. **The reviewer disclosed the severity call rather than
+  making it quietly** (:13552): weighed as C/H under :5807 and landed Low, because
+  the closed heading is TRUE and one tap re-opens. **C76.**
+- **L-2 — two submits, two requests.** The guard checked `problem` and `patch`
+  and not `saving`, in the handler whose own comment reasons about the Enter key.
+  **C78.**
+- **L-3 — `aria-controls` dangled on every closed row**, because closed means
+  UNMOUNTED here. **C77.**
+- **L-4 IS MINE AND IS V1 ON MY OWN BOOKKEEPING:** *"all 33 call sites … 27 staff
+  and 6 gym"*. Measured: **35** existed, **3** correctly left alone because they
+  assert ABSENCE, **32** converted — 27 staff and **5** gym. The sixth gym
+  conversion was reverted by hand minutes later, so 33 and 6 were **a count of an
+  intermediate state nobody ever committed**. Corrected in four documents, struck
+  rather than silently rewritten; **the commit message carries the old figures and
+  cannot be edited, so the entry is the correction of record** (:5748).
+
+### CONFIRMED RATHER THAN FOUND, and worth as much
+
+**Security clean on every axis**, re-derived rather than read: the form asks for
+the POWER (`org.manage`) and never the role name; `updateOrg` addresses the gym by
+the id from the caller's own parsed `/v1/orgs/mine` row, never from a URL or a
+param; `currencyDisplay` is display-only and `.strict()` refuses it server-side;
+the response is parsed through its schema and a mismatch raises a flagged contract
+error; **the only retry in `authApi` is the single 401-refresh replay, verified in
+the file rather than taken from the comment**; no `console.*`, no logged ids or
+bodies; no SQL and no server change.
+
+**The three things he was asked to attack all held**: the diff-not-the-whole-row
+rule (at the helper AND at the screen), the time-zone picker's own guarantee, and
+the 33-call-site sweep — *"every converted site keeps its assertions verbatim; the
+only assertion added anywhere is an extra `queryByRole`"*. **He also mutated the
+new section tests himself** — forcing `isOpen = true` turned 6 of 9 red, which
+disproved his own suspicion that *"leaves the other alone"* was passing on an
+unresolved staff read.
+
+**RULE 4:** no liar found among the new tests. **What nothing could fail on was
+C/H-1 and L-1**, and both now have tests that do.
+
+### PROVE — final bytes
+
+- **web 1226/1226 exit 0 across 45 files** (+12 on 1214: five for C/H-1, three
+  for the Lows, three for `sameGymDetails`, one for the picker).
+- **RULE 3 MEASURED, not asserted: the C/H-1 tests were watched RED first — 4
+  failed, 1 passed**, and the one that passed is the control (*a touched form is
+  left alone*), which is exactly the split a correct fix must produce.
+- `vite build` exit 0 · `eslint --max-warnings=0` exit 0 on five changed files ·
+  `node --check` on the harness exit 0.
+- **MUTATION SWEEP, a stated SUBSET of 100: C72–C78, 7 mutants · 7 RED · 0 ALIVE ·
+  0 never ran, exit 0**, controls GREEN and TALLIED first, restores
+  sha256-verified. **C73 is C72's opposite direction** — a form that follows
+  ALWAYS clobbers an owner's typing, and a table holding only C72 would be
+  satisfied by it (:7104's PG1).
+- No server change, no `@app/shared` change, no migration.
+
+**NOTHING TICKS: the DIFF-ONLY ROUND 2 is the remaining gate.** The smoke is
+complete and does not need re-running — no step on it touches the surfaces these
+fixes changed, and the two that come closest (the sections opening, the save
+landing) are covered by C72–C78 on the shipping bytes.

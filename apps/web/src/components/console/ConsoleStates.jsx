@@ -92,13 +92,30 @@ export function ConsoleSection({ title, summary, aside, children, forceOpen = fa
   const bodyId = useId();
   const isOpen = open || forceOpen;
 
+  // ONCE FORCED OPEN, IT STAYS OPEN — T3 round 1, Low-1, and the one line that
+  // makes `forceOpen` survive the thing it exists for. Pressing **Try again**
+  // clears the error, which cleared `forceOpen`, which SHUT THE SECTION UNDER
+  // THE CLICK — spinner and all, since the loading arm lives in the body that
+  // had just been unmounted. An owner saw the whole thing vanish and read it as
+  // a broken button.
+  //
+  // Latching into `open` fixes it without giving up the guarantee: while the
+  // error is live `forceOpen` still holds it open against a tap (so it cannot be
+  // dismissed over something the owner has to see), and afterwards the section
+  // is simply open, closable like any other.
+  if (forceOpen && !open) setOpen(true);
+
   return (
     <ConsoleCard>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={isOpen}
-        aria-controls={bodyId}
+        /* T3 round 1, Low-3. Closed means UNMOUNTED here, so pointing at the
+           body's id while it does not exist is a dangling reference on every
+           shut row — the attribute promises a screen reader an element it can
+           move to and there is none. */
+        aria-controls={isOpen ? bodyId : undefined}
         className="w-full text-left flex items-start justify-between gap-3"
       >
         <div className="min-w-0">

@@ -8,6 +8,7 @@ import {
   gymDetailsDraft,
   gymDetailsPatch,
   gymDetailsProblem,
+  sameGymDetails,
   timezoneChoices,
 } from '../../pages/console/gymDetailsView';
 import { refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
@@ -64,20 +65,55 @@ export default function GymDetailsPanel({ org, privileges }) {
   // row this panel was FIRST given, which is the value the boxes are showing.
   const countries = useMemo(() => countryOptions(), []);
   const detected = useMemo(() => detectTimezone(), []);
-  const [initialZone] = useState(() => (typeof org?.timezone === 'string' ? org.timezone : ''));
-  const zones = useMemo(() => timezoneChoices(detected, initialZone), [detected, initialZone]);
 
-  // THE DRAFT IS NOT RE-SYNCED FROM THE PROP, and that is deliberate. The kept
-  // answer is re-read whenever the window comes back to the front, so an owner
-  // who alt-tabs mid-edit would otherwise watch their typing be replaced by the
-  // stored values. What the prop IS used for, live, is the comparison below:
-  // the patch is always the difference against the freshest thing the server has
-  // said, so a save sends what genuinely differs now rather than what differed
-  // when the screen opened.
-  const [draft, setDraft] = useState(() => gymDetailsDraft(org));
+  // THE DRAFT FOLLOWS THE GYM WHILE NOBODY HAS TOUCHED IT, AND ONLY THEN —
+  // T3 round 1, C/H-1.
+  //
+  // It used to be seeded once and never look at the prop again, on the reasoning
+  // (still right, still here) that the kept answer is re-read on every window
+  // focus and must never replace what somebody is halfway through typing. What
+  // that missed is that it applied to a form NOBODY HAD TOUCHED: a rename made
+  // in a second tab left these boxes holding the old name and time zone under a
+  // heading two lines up showing the new one, switched Save on with no
+  // keystroke, and offered to put the stale values back. `gyms.timezone` is the
+  // only thing the rollup worker consults, so that revert moves the gym's day —
+  // the one permanent thing this screen is meant to be incapable of.
+  //
+  // **IT REACTS TO THE GYM ROW CHANGING, NOT TO THE DRAFT DIFFERING FROM IT, and
+  // the first version of this fix got that wrong.** Comparing the draft against
+  // the CURRENT row looks equivalent and is not: for a moment after a save the
+  // prop is BEHIND the truth (the quiet re-read has not landed), so that rule
+  // dragged the freshly-saved values back to the pre-save ones — and if the
+  // re-read then failed, rule 2 of the store keeps the old answer and the boxes
+  // would have shown the pre-save row FOR EVER over a save that landed. Caught
+  // by this card's own "does not blank the screen" test, which holds that
+  // re-read open on purpose.
+  //
+  // So `lastOrgSeen` is the row the PROP last held, "untouched" is the draft
+  // still matching it, and a save moves only the draft — leaving `lastOrgSeen`
+  // where it is, so the re-read arriving with our own change is correctly read
+  // as "the prop caught up" rather than as somebody else's edit.
+  const [lastOrgSeen, setLastOrgSeen] = useState(() => gymDetailsDraft(org));
+  const [draft, setDraft] = useState(lastOrgSeen);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [saved, setSaved] = useState(false);
+
+  // Adjusting state while rendering — React's own pattern for "a prop moved and
+  // some state derived from it should move too". No effect, so there is no frame
+  // in which the boxes and the heading above them disagree.
+  const fresh = gymDetailsDraft(org);
+  if (!sameGymDetails(fresh, lastOrgSeen)) {
+    const untouched = sameGymDetails(draft, lastOrgSeen);
+    setLastOrgSeen(fresh);
+    if (untouched) setDraft(fresh);
+  }
+
+  // THE LIST MUST HOLD THE VALUE THE BOX IS SHOWING, not the one it showed when
+  // the screen opened. Anchoring it to the initial zone was C56's guarantee
+  // arriving one step late: follow a change into a zone this runtime spells
+  // differently and the select would have no matching option at all.
+  const zones = useMemo(() => timezoneChoices(detected, draft.timezone), [detected, draft.timezone]);
 
   if (!allowed) return null;
 
@@ -117,7 +153,11 @@ export default function GymDetailsPanel({ org, privileges }) {
     // whether a disabled default button stops that. The bounds mirrored in
     // `gymDetailsProblem` are the ones the server answers with a raw
     // `name: too_small`, which `errorText` would print at a gym owner verbatim.
-    if (problem !== null || patch === null) return;
+    // `saving` is in here for T3 round 1's Low-2: the button is disabled while a
+    // save is in flight, but ENTER submits a form without going through the
+    // button, so two quick presses sent two requests for one act. Harmless
+    // (PATCH, idempotent, and a no-op writes no audit row) and still two.
+    if (problem !== null || patch === null || saving) return;
     setSaving(true);
     setError(null);
     try {
@@ -126,6 +166,11 @@ export default function GymDetailsPanel({ org, privileges }) {
       // the one that has been normalised — a country typed in any case comes
       // back upper-cased — and it is what makes Save go quiet afterwards: the
       // draft and the row now agree, so the diff is empty.
+      //
+      // **ONLY THE DRAFT MOVES.** `lastOrgSeen` deliberately stays where it is:
+      // it tracks the PROP, the prop has not changed yet, and the quiet re-read
+      // that follows will bring it level. Moving it here is what made the first
+      // version of this fix revert the boxes to the pre-save row.
       setDraft(gymDetailsDraft(res.data?.org));
       setSaved(true);
       // AND THE REST OF THE CONSOLE FOLLOWS. The shell's gym name, "Your gyms"

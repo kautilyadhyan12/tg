@@ -6230,6 +6230,13 @@ file and is stated so nobody reads these as lower priority than they are.
       a person does).
       **SO THIS LINE NOW WAITS ON T3 AND NOTHING ELSE.** Every step on the sheet
       has been run by a person against the bytes it describes.
+      **UPDATE — T3 ROUND 1 RAN: ONE Critical/High, FIXED, and the packet did NOT
+      ship this round** (DECISIONS :20440). The form never noticed the gym
+      changing underneath it and **offered to revert somebody else's change,
+      time zone included** — the one permanent thing this screen was supposed to
+      be incapable of. Four Low, all fixed, in `BACKLOG.md`. **What holds this
+      line now is the DIFF-ONLY ROUND 2** on those fixes; the smoke does not need
+      re-running and :20440 says why.
       **One thing the smoke still cannot reach, beside the currency lock: a
       section OPENING ITSELF when its data fails.** That needs the staff read to
       fail in a browser and no step sets it up, so it is carried by C68/C69 and

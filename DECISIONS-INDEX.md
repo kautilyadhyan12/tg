@@ -127,6 +127,55 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:20440** — 2026-08-26 — **GYM DETAILS, WEB HALF, T3 ROUND 1: ONE
+  Critical/High — the form never noticed the gym changing underneath it and
+  OFFERED TO REVERT IT — and MY OWN FIRST FIX was wrong in a way only this card's
+  own test could see.** Reviews `7236093`/`2a2f581`/`428bbfb`; **the packet did
+  NOT ship this round.** Four Low, all fixed, in `BACKLOG.md`; Kd approved the
+  list first (*"fix all"*). **ESCAPE HATCH NOT ARMED and the reviewer said so
+  unprompted** — round 1 for the web half, and the server half's Criticals were in
+  `modules/orgs` and its harness, neither touched here.
+  **Read before touching `GymDetailsPanel`'s draft state, before deriving a form's
+  values from a prop a background read can move, before deriving `forceOpen` from
+  a condition a retry CLEARS, and before quoting this card's call-site counts.**
+  **C/H-1: two different names for one gym on one screen, and a Save nobody asked
+  for.** The draft was seeded once and never followed the row, while the subtitle
+  two lines above reads it live — so a rename in a second tab left the boxes stale,
+  switched Save on with no keystroke, and sent the OLD values back on one click.
+  Reachable with no exotic setup (`consoleOrgs` re-reads on focus BY DESIGN, and
+  its own header names the shared front desk). **It carries the TIME ZONE, so the
+  revert moves the gym's day — the one permanent thing :20075 says this screen
+  must be incapable of.** The recorded reason for not syncing was RIGHT and is not
+  undone; what it missed is that it applied to a form NOBODY HAD TOUCHED.
+  **The picker had to follow too** — anchored to the zone the screen OPENED with,
+  it would have had no matching option after a change (C56 one step late, **C74**).
+  **THE FINDING IS THAT MY FIRST FIX WAS WRONG.** Comparing the draft against the
+  CURRENT row looks equivalent and is not: for a moment after a save the prop is
+  BEHIND the truth, so it dragged freshly-saved values back — and since the store
+  keeps its old answer when a background read FAILS, a dropped connection would
+  have shown the pre-save row FOR EVER over a save that landed. **Caught by this
+  card's own "does NOT blank the screen" test, written a day earlier for another
+  reason** (:6277's class). The rule that shipped reacts to the prop CHANGING;
+  **C75 is aimed at the version I nearly shipped** (O126's shape).
+  **FOUR LOW: L-1** Try again SHUT the Staff section under the click (`forceOpen`
+  derived from an error the retry clears), fixed by LATCHING with both halves
+  still tested — **severity disclosed rather than decided quietly** (:13552) ·
+  **L-2** two submits, two requests (Enter bypasses the disabled button) ·
+  **L-3** `aria-controls` dangling on every closed row · **L-4 IS V1 ON MY OWN
+  BOOKKEEPING** — "33 call sites … 27 staff and 6 gym" measured as **32 · 27 · 5**;
+  the sixth was reverted by hand minutes later, so the figures counted **an
+  intermediate state nobody committed.**
+  **CONFIRMED: security clean on every axis, re-derived not read** — the power not
+  the role name, the gym id from the caller's own parsed row, `.strict()` refusing
+  a client currency, the ONLY retry being the 401 replay (checked in `authApi`
+  rather than in its comment). All three things he was asked to attack held, and
+  **he mutated the new section tests himself** (forcing `isOpen = true` turned 6 of
+  9 red, disproving his own suspicion).
+  **PROVE: web 1226/1226 exit 0 (+12) · build ✓ · eslint clean on five files ·
+  `node --check` clean · SWEEP a stated SUBSET of 100: C72–C78, 7 RED, 0 ALIVE, 0
+  never ran. RULE 3 MEASURED — the C/H-1 tests watched RED first, 4 failed / 1
+  passed, the pass being the control.** **NOTHING TICKS: the DIFF-ONLY ROUND 2 is
+  the remaining gate**; the smoke does not need re-running and the entry says why.
 - **:20075** — 2026-08-26 — **THE GYM DETAILS SCREEN (web half): an owner can
   finally fix their own gym — and the card's own test found a defect NO PERSON
   could have reported.** Web half of :19366/:19560/:19656/:19799/:19960; the
@@ -229,9 +278,13 @@ mid-file: re-derive them with
   wise it will be a really long list"* — and the screen he saw is the SHORTEST it
   will ever be (two sections today, **five in §4.7**).
   **CLOSED MEANS UNMOUNTED, NOT CSS-HIDDEN, AND THE CHEAPER OPTION WAS THE
-  DISHONEST ONE**: hiding would have left all 33 call sites passing against
-  content no person can see. **27 staff and 6 gym call sites now open the section
-  the way a person does, no assertion moved** (:6008). **The closed heading keeps
+  DISHONEST ONE**: hiding would have left ~~33~~ **32** call sites passing
+  against content no person can see. **27 staff and ~~6~~ 5 gym call sites now
+  open the section the way a person does, no assertion moved** (:6008).
+  **Both figures struck by T3 round 1's Low-4 and re-measured** (V1): 35 existed,
+  3 assert ABSENCE and were rightly left, 32 converted; the 6th gym conversion was
+  reverted by hand minutes later, so 33/6 counted an intermediate state nobody
+  committed. **The closed heading keeps
   the staff COUNT** — collapsing is only an improvement while the shut row still
   answers the question (C70). **`forceOpen` is the anti-silence rule** (:12660):
   `StaffPanel` reads on mount whether open or not, so a failure arrives while

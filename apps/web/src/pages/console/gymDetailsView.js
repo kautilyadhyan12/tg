@@ -52,6 +52,32 @@ export function gymDetailsDraft(org) {
   };
 }
 
+/** ARE THESE THE SAME FOUR BOXES? — the "has anybody typed here yet" test.
+ *
+ *  **T3 round 1 C/H-1 is what this exists for.** The form was seeded from the
+ *  gym row once and never followed it again, on the reasoning that a re-read
+ *  must not replace what somebody is halfway through typing. That reasoning is
+ *  right and is unchanged; what it missed is that it applied to a form NOBODY
+ *  HAD TOUCHED, so a rename made in another tab left these boxes holding the old
+ *  name and time zone under a heading showing the new one — and Save, which
+ *  compares the draft against the LIVE row, switched itself on and offered to
+ *  put the old values back. On the time zone that is the permanent damage this
+ *  screen is supposed to be incapable of.
+ *
+ *  So "pristine" is a comparison, not a flag: the panel keeps the draft it was
+ *  last filled from and follows the gym only while the two still match. A flag
+ *  would have to be cleared by every edit path and would go stale the day
+ *  somebody adds a fifth box (:1239 — the class, not the case). */
+export function sameGymDetails(a, b) {
+  if (!a || !b) return false;
+  return (
+    a.name === b.name &&
+    a.city === b.city &&
+    a.country === b.country &&
+    a.timezone === b.timezone
+  );
+}
+
 /** THE TIME-ZONE PICKER, WITH THE GYM'S OWN ZONE GUARANTEED TO BE IN IT.
  *
  *  This is the one way this form could do permanent damage, so it is a helper

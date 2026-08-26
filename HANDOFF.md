@@ -1,13 +1,58 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: GYM DETAILS (WEB HALF), T3 ROUND 1 — ONE Critical/High, ALL FIXED IN THE
+      ROUND. DECISIONS :20440. **The packet did NOT ship; the DIFF-ONLY ROUND 2
+      is the remaining gate.** ESCAPE HATCH NOT ARMED and the reviewer said so
+      unprompted. Kd approved the finding list first ("fix all").
+
+  1. **C/H-1: THE FORM NEVER NOTICED THE GYM CHANGING UNDERNEATH IT.** Seeded
+     once, never followed the row, while the subtitle two lines above reads it
+     live — so a rename in a second tab left the boxes stale, switched Save on
+     with NO keystroke, and sent the OLD values back on one click. **It carries
+     the TIME ZONE, so that revert moves the gym's day.** Reachable with no
+     exotic setup: the store re-reads on window focus BY DESIGN.
+  2. **THE ONE TO READ: MY FIRST FIX FOR IT WAS WRONG.** Comparing the draft
+     against the CURRENT row looks equivalent and is not — for a moment after a
+     save the prop is BEHIND the truth, so it dragged freshly-saved values back,
+     and on a failed background read (the store keeps its old answer by design)
+     the boxes would have shown the pre-save row FOR EVER over a save that
+     landed. **Caught by this card's own "does NOT blank the screen" test,
+     written a day earlier for a different reason** (:6277). The shipped rule
+     reacts to the PROP CHANGING; **C75 encodes the version I nearly shipped.**
+  3. **THE PICKER HAD TO FOLLOW TOO and the review did not name it** — anchored
+     to the zone the screen OPENED with, it would have had no matching option
+     after following a change. C56's guarantee one step late (C74).
+  4. **L-4 is V1 on my own bookkeeping**: "33 call sites … 27 staff and 6 gym"
+     is **32 · 27 · 5** — the sixth was reverted by hand minutes later, so the
+     figures counted an intermediate state nobody committed. Corrected in four
+     documents; the commit message cannot be edited and the entry says so.
+  5. **L-1 is worth knowing before deriving `forceOpen` from anything a retry
+     clears**: Try again SHUT the Staff section under the click, spinner and
+     all. Latched, with both halves still tested.
+
+MEASURED (final bytes): web 1226/1226 exit 0 across 45 files (+12) · build ✓ ·
+  eslint `--max-warnings=0` clean on five files · `node --check` clean · SWEEP a
+  stated SUBSET of 100: C72–C78, 7 mutants · 7 RED · 0 ALIVE · 0 never ran,
+  exit 0. **RULE 3 MEASURED — the C/H-1 tests watched RED FIRST (4 failed, 1
+  passed, the pass being the control).** No server change, no `@app/shared`
+  change, no migration.
+
+NEXT: **DIFF-ONLY ROUND 2 in a fresh chat**, over these fixes and the surfaces
+  they touch — no fresh full pass. The smoke does NOT need re-running; :20440
+  states the reason.
+```
+
+```
 TASK: SETTINGS' SECTIONS COLLAPSE — Kd's call, made at the screen.
       DECISIONS :20338 (addendum 2 to :20075).
 
   1. **CLOSED MEANS UNMOUNTED, NOT CSS-HIDDEN, AND THE CHEAPER OPTION WAS THE
-     DISHONEST ONE.** Hiding would have left all 33 existing call sites passing
-     against content no person can see. **27 staff and 6 gym call sites now open
-     the section the way a person does; no assertion moved** (:6008).
+     DISHONEST ONE.** Hiding would have left **32** call sites passing against
+     content no person can see. **27 staff and 5 gym call sites now open the
+     section the way a person does; no assertion moved** (:6008). *(Said 33/6
+     first — struck by T3 round 1's Low-4 and re-measured: the 6th gym
+     conversion was reverted by hand minutes later.)*
   2. **`forceOpen` IS THE ANTI-SILENCE RULE (:12660).** `StaffPanel` reads the
      staff list on mount whether its section is open or not, so a failure
      arrives while nobody is looking — a shut row over an error card says

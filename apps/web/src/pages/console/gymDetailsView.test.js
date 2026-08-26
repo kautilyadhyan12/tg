@@ -10,6 +10,7 @@ import {
   gymDetailsDraft,
   gymDetailsPatch,
   gymDetailsProblem,
+  sameGymDetails,
   timezoneChoices,
 } from './gymDetailsView';
 
@@ -75,6 +76,34 @@ describe('the boxes the form opens with', () => {
     // implementation that blanked everything would not satisfy this.
     expect(draft.name).toBe('Iron House');
     expect(draft.timezone).toBe('America/Chicago');
+  });
+});
+
+describe('has anybody typed in this form yet', () => {
+  /** T3 round 1 C/H-1's instrument. The screen follows the gym row only while
+   *  these four boxes still match what they were filled from — so a rename made
+   *  in another tab reaches an untouched form, and never reaches one somebody is
+   *  halfway through. */
+  it('says yes to the same four boxes', () => {
+    expect(sameGymDetails(gymDetailsDraft(ORG), gymDetailsDraft(ORG))).toBe(true);
+  });
+
+  it('notices EVERY field, not just the name', () => {
+    const base = gymDetailsDraft(ORG);
+    // One per box, because a comparison that checked three of four would let the
+    // fourth go stale under a heading showing the new value — and the time zone
+    // is the one that moves a gym's day.
+    expect(sameGymDetails(base, { ...base, name: 'Other' })).toBe(false);
+    expect(sameGymDetails(base, { ...base, city: 'Other' })).toBe(false);
+    expect(sameGymDetails(base, { ...base, country: 'IN' })).toBe(false);
+    expect(sameGymDetails(base, { ...base, timezone: 'Europe/Paris' })).toBe(false);
+  });
+
+  /** Nothing is not the same as something. Answering true here would make an
+   *  unreadable row look untouched and hand it to the boxes. */
+  it('says no when either side is missing', () => {
+    expect(sameGymDetails(null, gymDetailsDraft(ORG))).toBe(false);
+    expect(sameGymDetails(gymDetailsDraft(ORG), undefined)).toBe(false);
   });
 });
 

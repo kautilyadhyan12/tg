@@ -121,7 +121,7 @@ const drawSettings = () =>
  *
  *  **Collapsing UNMOUNTS rather than hiding with CSS, and that is why this
  *  churn was accepted instead of avoided.** A `display:none` body would have
- *  left all 33 call sites passing against content no person can see — a suite
+ *  left 32 call sites passing against content no person can see — a suite
  *  claiming a user sees something the screen does not show, which is the class
  *  this project has recorded most. The cheaper option was the dishonest one.
  *
@@ -1302,6 +1302,19 @@ describe('the gym’s own details', () => {
     expect(screen.queryByText('Try again')).toBeNull();
   });
 
+  /** T3 round 1, Low-2. The button is disabled while a save is in flight, but
+   *  ENTER submits a form without going through the button — so two quick
+   *  presses were two requests for one act. */
+  it('sends ONE request however many times the form is submitted', async () => {
+    await openSettings();
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House Two' } });
+    const form = screen.getByLabelText('Gym name').closest('form');
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    await waitFor(() => expect(orgService.updateOrg).toHaveBeenCalled());
+    expect(orgService.updateOrg).toHaveBeenCalledTimes(1);
+  });
+
   it('clears a refusal as soon as the owner edits again', async () => {
     orgService.updateOrg.mockRejectedValue(offline());
     await openSettings();
@@ -1345,6 +1358,104 @@ describe('a gym with no country on record', () => {
     await drawGym();
     await screen.findByLabelText('Gym name');
     expect(screen.queryByText(/don't have your country on record/i)).toBeNull();
+  });
+});
+
+// ── When the gym changes underneath the form ────────────────────────────────
+//
+// T3 ROUND 1, C/H-1. The draft was seeded ONCE and never followed the org row
+// again, while the page subtitle two lines above it reads that row live — so a
+// rename made somewhere else (a second tab, the other owner at the front desk)
+// left the boxes showing the OLD name and time zone under a heading showing the
+// new one, switched Save on with no keystroke, and sent the stale values back
+// on one click. The time zone is what makes it Critical/High rather than untidy:
+// it is the only thing the rollup worker consults, so the revert moves the gym's
+// day.
+//
+// THE RECORDED REASON FOR NOT SYNCING WAS RIGHT AND IS NOT UNDONE — a re-read
+// must never replace what somebody is halfway through typing. What was wrong is
+// that it was applied to a form nobody had touched. Both halves are pinned here.
+
+describe('when the gym changes underneath the form', () => {
+  const renamedElsewhere = {
+    ...ORG,
+    name: 'Iron Palace',
+    city: 'Dallas',
+    timezone: 'Europe/Paris',
+  };
+
+  it('FOLLOWS the gym while the form is untouched, and stays quiet', async () => {
+    await drawGym();
+    expect(screen.getByLabelText('Gym name').value).toBe('Iron House');
+
+    orgService.getMine.mockResolvedValue({ data: { orgs: [renamedElsewhere] } });
+    fireEvent(window, new Event('focus'));
+
+    await waitFor(() => expect(screen.getByLabelText('Gym name').value).toBe('Iron Palace'));
+    expect(screen.getByLabelText('City').value).toBe('Dallas');
+    expect(screen.getByLabelText('Time zone').value).toBe('Europe/Paris');
+    // AND THE BUTTON IS THE HALF WITH TEETH: a Save offering itself over values
+    // nobody typed is the click that reverts somebody else's change.
+    expect(screen.getByText('Save changes').disabled).toBe(true);
+  });
+
+  it('never sends the stale values back', async () => {
+    await drawGym();
+    orgService.getMine.mockResolvedValue({ data: { orgs: [renamedElsewhere] } });
+    fireEvent(window, new Event('focus'));
+    await waitFor(() => expect(screen.getByLabelText('Gym name').value).toBe('Iron Palace'));
+
+    fireEvent.click(screen.getByText('Save changes'));
+    expect(orgService.updateOrg).not.toHaveBeenCalled();
+  });
+
+  /** THE OTHER HALF, AND IT IS WHY THIS IS NOT SIMPLY "SYNC FROM THE PROP".
+   *  The kept answer is re-read on every window focus, so an owner who alt-tabs
+   *  mid-edit must come back to their own typing, not to the stored values. */
+  it('LEAVES A TOUCHED FORM ALONE, even when the gym has moved', async () => {
+    await drawGym();
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'My Own Typing' } });
+
+    orgService.getMine.mockResolvedValue({ data: { orgs: [renamedElsewhere] } });
+    fireEvent(window, new Event('focus'));
+
+    // Give the re-read time to land and be ignored.
+    await waitFor(() => expect(orgService.getMine).toHaveBeenCalledTimes(2));
+    expect(screen.getByLabelText('Gym name').value).toBe('My Own Typing');
+  });
+
+  /** The picker must contain whatever the box is SHOWING, not merely whatever it
+   *  showed when the screen opened — otherwise following a change into a zone
+   *  this runtime spells differently would leave the select with no matching
+   *  option, which is the blank-or-first-in-the-list failure C56 exists for,
+   *  arriving one step later. */
+  it('keeps the time-zone picker holding the zone it is displaying', async () => {
+    await drawGym();
+    orgService.getMine.mockResolvedValue({
+      data: { orgs: [{ ...ORG, timezone: 'Asia/Kolkata' }] },
+    });
+    fireEvent(window, new Event('focus'));
+
+    await waitFor(() => expect(screen.getByLabelText('Time zone').value).toBe('Asia/Kolkata'));
+    const picker = screen.getByLabelText('Time zone');
+    expect([...picker.options].some((o) => o.value === 'Asia/Kolkata')).toBe(true);
+  });
+
+  /** After a save, the boxes hold the SERVER's row — so the form must count that
+   *  as its new starting point. Without it the form reads as touched for ever
+   *  and stops following anything, which is C/H-1 again one save later. */
+  it('goes on following after a save', async () => {
+    await drawGym();
+    const saved = { ...ORG, name: 'Iron House Two' };
+    orgService.updateOrg.mockResolvedValue({ data: { org: saved } });
+    orgService.getMine.mockResolvedValue({ data: { orgs: [saved] } });
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House Two' } });
+    fireEvent.click(screen.getByText('Save changes'));
+    await screen.findByText('Saved.');
+
+    orgService.getMine.mockResolvedValue({ data: { orgs: [renamedElsewhere] } });
+    fireEvent(window, new Event('focus'));
+    await waitFor(() => expect(screen.getByLabelText('Gym name').value).toBe('Iron Palace'));
   });
 });
 
@@ -1443,6 +1554,42 @@ describe('the settings sections', () => {
     drawSettings();
     await screen.findByText(/Couldn't reach the server/i);
     expect(screen.queryByText(/run this gym$/)).toBeNull();
+  });
+
+  /** T3 ROUND 1, Low-1. Pressing **Try again** cleared the error, which cleared
+   *  `forceOpen`, which SHUT THE SECTION UNDER THE CLICK — spinner included,
+   *  since the loading arm lives inside the body that had just been unmounted.
+   *  An owner saw everything vanish and read it as a broken button. */
+  it('STAYS OPEN through a Try again, rather than shutting under the click', async () => {
+    orgService.getStaff.mockRejectedValueOnce(offline());
+    drawSettings();
+    fireEvent.click(await screen.findByText('Try again'));
+    // The list comes back and it is ON SCREEN — the section did not close
+    // between the error going away and the answer arriving.
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+  });
+
+  /** And it is then an ordinary open section again: the force is spent, so an
+   *  owner can shut it. Without this, "latch it open" would quietly become
+   *  "never closes", which is a different defect wearing the fix's clothes. */
+  it('can be closed again once the error is gone', async () => {
+    orgService.getStaff.mockRejectedValueOnce(offline());
+    drawSettings();
+    fireEvent.click(await screen.findByText('Try again'));
+    await screen.findByText('Kd Owner');
+    fireEvent.click(screen.getByRole('button', { name: /^Staff/ }));
+    expect(screen.queryByText('Kd Owner')).toBeNull();
+  });
+
+  /** T3 round 1, Low-3. Closed means UNMOUNTED, so pointing at the body's id
+   *  while it does not exist promises a screen reader an element to move to and
+   *  there is none. */
+  it('points at its body only while the body exists', async () => {
+    drawSettings();
+    const heading = await screen.findByRole('button', { name: /^Gym details/ });
+    expect(heading.getAttribute('aria-controls')).toBeNull();
+    fireEvent.click(heading);
+    expect(heading.getAttribute('aria-controls')).not.toBeNull();
   });
 });
 
