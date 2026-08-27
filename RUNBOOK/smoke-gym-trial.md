@@ -12,34 +12,44 @@ see how many of their gym's places are taken.
 second account that is a member of your gym — the same pair you used for the
 staff and join-code sheets).
 
-## BEFORE YOU START — please read, this one bites
+## BEFORE YOU START — done for you on 2026-08-27, kept here for the next run
 
-**Your test database is out of date, and if you skip this the very first step
-fails for a reason that has nothing to do with what we built.** The price list on
-it is the old one, and the newest database change has never been applied there. A
-gym in the United States would be told *"We're not open for business in your
-country yet"*, which reads like the app is broken when it is really just a stale
-copy.
+**The test database was out of date and it has been fixed.** If you are reading
+this on a later day, check it again — this has now bitten three times.
 
-This has now happened three times on this project, so it is written here rather
-than left to be rediscovered.
+Measured before: **14 of 15 database changes applied**, and the price list was the
+old all-India one with **no United States prices at all**, so a US gym would have
+been told *"We're not open for business in your country yet"* — which reads like a
+broken app when it is really a stale copy.
 
-Run these two, in this order, from the project folder. Tell me if either one
-prints an error and stop there:
+Measured after: **15 of 15 applied · 10 live plans (5 US, 5 India), 300/500/1000/
+1500/2100 places, 30-day trial · the 6 old rows retired · every gym owner carries
+the new billing permission.**
+
+The two commands, if this is ever needed again (in this order, then RESTART the
+API — it remembers the old shape of the database otherwise):
 
 ```
 pnpm --filter api exec drizzle-kit migrate
 pnpm --filter api exec tsx src/db/seed.ts
 ```
 
-Then start the two servers (same as always — ask me and I will start them for
-you):
+## WHICH ACCOUNTS TO USE — measured 2026-08-27, not guessed
 
-* the API
-* the web app
+A sheet written imagining accounts that do not exist is how four steps went wrong
+last time, so here is what is actually in the database:
 
-**If the API was already running, stop it and start it again after the two
-commands above.** It remembers the old shape of the database otherwise.
+| Account | Gyms it owns | Used a trial? | On a plan? |
+|---|---|---|---|
+| `ow…@example.com` | **Smoke Test Gym** (`/smoke-test-gym`) **and owner** (`/owner`) | no | no |
+| `kd…@example.com` | **iron man** (`/iron-man`) | no | no |
+| `us…@example.com` | none — a **trainer** on the *owner* gym | — | — |
+
+**USE THE `ow…` ACCOUNT.** It is the only one that owns TWO gyms, which is what
+step 7 needs — so you will not have to create a throwaway gym.
+
+**Nobody has used a trial and no gym is on a plan**, so every step below starts
+from the state it expects.
 
 ---
 
@@ -115,12 +125,13 @@ That is deliberate — your gym's billing is not your members' business.
 
 ## Step 7 — one trial per person, not one per gym
 
-Sign back in as the OWNER. Go to **Gym console → Your gyms → New gym** and create
-a second gym (any name, country **United States**).
+Sign back in as the OWNER. Go to **Gym console → Your gyms** and open your OTHER
+gym — the one you did NOT start the trial on. (On the `ow…` account that is
+whichever of **Smoke Test Gym** / **owner** you left alone in step 2.)
 
-Open that new gym and look for the trial card.
+Look for the trial card.
 
-✅ It is there — a brand-new gym is on no plan.
+✅ It is there — a gym on no plan still offers the button.
 
 Press **Start your 30-day free trial**.
 
@@ -150,10 +161,16 @@ trial"** card (staff may know what the gym is on).
 
 ✅ There is **no button** anywhere offering to start, change or end a plan.
 
-## Step 9 — tidy up
+## Step 9 — the gym you did not touch is still untouched
 
-Sign back in as the owner and delete or ignore the second gym from step 7 — it is
-only a test gym. Nothing to check here.
+Still on the second gym from step 7:
+
+✅ Its card still says **"Start your 30-day free trial"** — the refusal did not
+half-start anything.
+
+✅ There is **no strip** across the top on this gym.
+
+Nothing to tidy up: both gyms already existed.
 
 ---
 
