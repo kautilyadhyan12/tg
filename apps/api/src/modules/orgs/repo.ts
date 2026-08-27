@@ -1030,13 +1030,37 @@ export type StartTrialOutcome =
   | { kind: "started"; subscription: GymSubscriptionRow }
   | { kind: "already_subscribed"; subscription: GymSubscriptionRow }
   | { kind: "trial_already_used" }
-  | { kind: "no_plan"; currency: string }
+  // No `currency` on this arm: it carried one for four commits and no caller
+  // ever read it (T3 round 1, Low-7). An unread field on a typed outcome reads
+  // as a fact somebody uses.
+  | { kind: "no_plan" }
   | { kind: "org_archived" }
   | { kind: "not_found" };
 
 /** THE GYM STARTS ITS OWN 30-DAY TRIAL — the first statement in this product
- *  that has ever written `subscriptions`, and the reason three built-but-inert
- *  features (the seat cap, the trial clock, §4.2's banner) come alive.
+ *  that has ever written `subscriptions`, and the reason the seat cap stops being
+ *  correct-but-inert.
+ *
+ *  **NOTHING ENDS A TRIAL, AND UNTIL SOMETHING DOES, THIS WRITES A GYM A
+ *  PERMANENT FREE PLAN.** T3 round 1's C/H-1, measured not reasoned: this INSERT
+ *  is the ONLY writer of `subscriptions` in the API, there is no `UPDATE
+ *  subscriptions` anywhere, no sweep and no worker moves `trialing` → `expired`,
+ *  and `trial_ends_at` is written here and read by nothing that acts on it. The
+ *  entitlement resolver counts `trialing` as granting, so a gym that taps the
+ *  button keeps gym-tier entitlements for its members for ever, free, with no
+ *  human in the loop — and the human who used to be in the loop was the approval
+ *  gate removed in this same commit.
+ *
+ *  **THE SWEEP IS NOT TO BE BUILT HERE.** Expiry and dunning are P3.8 and R1.1
+ *  forbids pulling them forward; what this card owed was the written record of
+ *  the exposure, which it did not have and now has (`OWED.md`, the trial-expiry
+ *  line). **Whoever builds that sweep: `updateOrg`'s currency lock at :571 asks
+ *  `status <> 'trialing'` and therefore never engages today either — it starts
+ *  working the moment trials can end, so it has never actually run in anger.**
+ *
+ *  The other two features this card's commit message claimed to wake are NOT
+ *  awake: the clock is inert (above) and §4.2's banner is not built at all
+ *  (`Overview.jsx:32` says so in its own comment). One of three, stated as three.
  *
  *  **THE LOCK IS FIRST AND IT IS A REQUIREMENT, NOT A PREFERENCE.** T3 round 1's
  *  C/H-3 on the gym-details card found that `updateOrg`'s currency guard is a
@@ -1067,8 +1091,24 @@ export type StartTrialOutcome =
  *  rows are never deleted (R4.3), so an expired trial is still evidence one
  *  happened. The spec's stronger form matches on owner email/phone across
  *  ACCOUNTS; this matches on the account, which is the same thing here because
- *  `users.email` is unique — a second trial costs a second email address, which
- *  §12 itself calls "a soft gate that costs honest users nothing". */
+ *  `users.email` is unique while the account lives.
+ *
+ *  **WHAT A SECOND TRIAL ACTUALLY COSTS, corrected at T3 round 1 (Low-2) — the
+ *  earlier claim here was "a second email address" and that was FALSE.** The
+ *  Day-14 DPDP purge sets `users.email = NULL` (`privacy/repo.ts:130`), so
+ *  deleting the account RELEASES the address: the same person can re-register the
+ *  same email, receive a new `users.id`, and this gate — which matches on
+ *  `gyms.owner_user_id` — cannot see that they are the same person. So the price
+ *  is a second email address **OR** deleting the account and waiting out fourteen
+ *  days, losing everything in it. Both are soft gates of exactly the kind §12
+ *  describes ("a soft gate that costs honest users nothing"), and the second is
+ *  strictly the worse deal for an abuser — which is why the gate is as strong as
+ *  §12 asks even though the sentence describing it was wrong.
+ *
+ *  **The structural note, because it is the part that will bite: the evidence is
+ *  anchored on the gym row's CURRENT owner, not on the subscription.** Nothing
+ *  transfers or deletes a gym today, so the anchor holds. The first feature that
+ *  does either silently erases and misattributes trial history. */
 export async function startGymTrial(
   sql: Sql,
   input: { gymId: string; actorUserId: string },
@@ -1137,13 +1177,13 @@ export async function startGymTrial(
       ORDER BY seat_cap ASC NULLS LAST, price_minor ASC
       LIMIT 1`;
     const plan = planRows[0];
-    if (plan === undefined) return { kind: "no_plan", currency: gym.currency_display };
+    if (plan === undefined) return { kind: "no_plan" };
 
-    const inserted = await tx<{ status: string; trial_ends_at: Date | null }[]>`
+    const inserted = await tx<{ id: string; status: string; trial_ends_at: Date | null }[]>`
       INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, trial_ends_at, provider)
       VALUES ('gym', ${input.gymId}, ${plan.id}, 'trialing',
               now() + ${plan.trial_days} * INTERVAL '1 day', 'none')
-      RETURNING status, trial_ends_at`;
+      RETURNING id, status, trial_ends_at`;
     const row = inserted[0];
     if (row === undefined) throw new Error("subscription insert returned no row");
 
@@ -1158,7 +1198,11 @@ export async function startGymTrial(
       gymId: input.gymId,
       action: "org.trial_started",
       targetType: "subscription",
-      targetId: input.gymId,
+      // THE SUBSCRIPTION'S OWN ID, not the gym's (T3 round 1, Low-6). A row
+      // saying `targetType: 'subscription'` while carrying a gym id cannot be
+      // joined to the subscription it is about, and P3's Done gate asks that any
+      // subscription's life be narratable from `audit_log` alone.
+      targetId: row.id,
       // The two facts a person reading this row later actually wants: when it
       // runs out, and how many members it admits. `seatCap` is null for a
       // capless tier and is recorded as null rather than as the string "null" —

@@ -5250,8 +5250,8 @@ d("orgs routes (real Postgres)", () => {
   // are what stand between that sentence and a gate that is not really there.
 
   const readSubs = async (gymId: string) =>
-    await sql<{ status: string; provider: string; trial_ends_at: Date | null }[]>`
-      SELECT status, provider, trial_ends_at FROM subscriptions
+    await sql<{ id: string; status: string; provider: string; trial_ends_at: Date | null }[]>`
+      SELECT id, status, provider, trial_ends_at FROM subscriptions
       WHERE owner_type = 'gym' AND owner_id = ${gymId}`;
 
   interface TrialBody {
@@ -5296,11 +5296,21 @@ d("orgs routes (real Postgres)", () => {
     expect(subs[0]?.status).toBe("trialing");
     expect(subs[0]?.provider).toBe("none");
 
-    const audit = await sql<{ action: string; meta: Record<string, unknown> }[]>`
-      SELECT action, meta FROM audit_log
+    const audit = await sql<
+      { action: string; target_id: string | null; meta: Record<string, unknown> }[]
+    >`
+      SELECT action, target_id, meta FROM audit_log
       WHERE gym_id = ${org.org.id} AND action = 'org.trial_started'`;
     expect(audit).toHaveLength(1);
     expect(audit[0]?.meta["seatCap"]).toBe("300");
+    // THE ROW POINTS AT THE SUBSCRIPTION IT NAMES (T3 round 1, Low-6). It said
+    // `targetType: 'subscription'` while carrying the GYM's id, so it could not
+    // be joined to the thing it was about — and P3's Done gate asks that any
+    // subscription's life be narratable from `audit_log` alone. The `not.toBe`
+    // is the half that matters: the two ids are both uuids on the same row, so
+    // an assertion that only checked the shape would pass on the old value.
+    expect(audit[0]?.target_id).toBe(subs[0]?.id);
+    expect(audit[0]?.target_id).not.toBe(org.org.id);
   });
 
   /** THE PROMISE THE WHOLE CARD IS FOR: the gym starts paying (in trial), and its

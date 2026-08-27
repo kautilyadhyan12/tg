@@ -127,9 +127,47 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:21353** — 2026-08-27 — **THE SELF-SERVE TRIAL, T3 ROUND 1: ONE Critical/High,
+  the packet does NOT ship — NOTHING ENDS A TRIAL, and it was tracked nowhere.**
+  **Read before building trial expiry, before quoting the 30-day clock or §4.2's
+  banner as live, before writing a deferral into prose instead of `OWED.md`, and
+  before reporting as a fact a consequence that was written at PLAN time.**
+  **Measured, not reasoned:** `subscriptions` has ONE writer in the whole API (the
+  trial `INSERT`), `UPDATE subscriptions` appears **nowhere**, no sweep or worker
+  moves `trialing` → `expired`, and `trial_ends_at` is read by nothing that acts on
+  it — while `entitlements/repo.ts:19,24` counts `trialing` as granting. **So a gym
+  that taps the button keeps gym-tier features for its members for ever, free, with
+  no human in the loop — and the human who used to be that loop was the approval
+  gate removed in the same commit.** **The fix is a DOCUMENT, not a sweep:** expiry
+  is P3.8 and R1.1 forbids pulling it forward; what was owed was the 🔴 `OWED.md`
+  line in the deferring commit, which is now written. **Fell out of the same
+  measurement:** `updateOrg`'s currency lock asks `status <> 'trialing'`
+  (`orgs/repo.ts:571`) and therefore **has never engaged and cannot until trials
+  end.**
+  **THE OVERCLAIM AND ITS ORIGIN.** *"The seat cap, the 30-day clock and §4.2's
+  banner stop being correct-but-inert"* was **one of three, stated as three**, in
+  four places. Traced to **:19016**, whose stage-ordering consequence line is where it was written
+  of Kd's stage ordering and travelled unchallenged into a heading, a `HANDOFF`
+  block and a commit message. All four sites struck and corrected in place.
+  **RULE EARNED: a consequence predicted at plan time is a PREDICTION and needs its
+  own measurement before it may be reported as a fact.**
+  **RULE 4's HIGHEST-VALUE CATCH:** migration `0015`'s backfill — whose own SQL
+  comment says *"Without this line the card ships DEAD"* — **had no test and could
+  not fail**, because every owner row on a fresh database comes from the role
+  template and no test had a pre-`0015` subject. Now guarded on `0014`'s shape plus
+  a non-owner control, with **three mutants RED** (delete the UPDATE · drop
+  `WHERE role = 'owner'` · `array_append` → wholesale overwrite). **Rule 4a applied
+  as written:** database mutants went to the ownership/privilege guarantees and
+  nowhere else. **Eight Low, ALL FIXED** (rule 1) and logged in `BACKLOG.md`; three
+  were false statements in the source, incl. **`trialEndsAt` documented "null when
+  this is not a trial"** when nothing clears it — and the next card renders it.
+  **L-4 arrived TRUNCATED and was RE-DERIVED rather than guessed**, and is declared
+  as a re-derivation. **The Critical/High fix carries no test and that is stated
+  plainly: it is a document.** Round 2 is diff-only.
 - **:21157** — 2026-08-27 — **KD OPENS THE TRIAL TO SELF-SERVE, AND THE FIRST
-  `subscriptions` ROW IN THIS PRODUCT'S HISTORY GETS WRITTEN — the seat cap, the
-  30-day clock and §4.2's banner stop being inert.** **Read before touching
+  `subscriptions` ROW IN THIS PRODUCT'S HISTORY GETS WRITTEN — ~~the seat cap, the
+  30-day clock and §4.2's banner stop being inert~~ THE SEAT CAP DOES; the other
+  two do NOT (corrected by T3 round 1, the entry below).** **Read before touching
   `startGymTrial`, before writing `subscriptions` from a SECOND place, before
   adding a privilege to `ORG_PRIVILEGES`, before calling the seat cap inert, and
   before proposing an approval step for gyms.**

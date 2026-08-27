@@ -4670,6 +4670,59 @@ file and is stated so nobody reads these as lower priority than they are.
       Subscribing early is the escape hatch and is a conversion.
       ~~**(a)** pick the plan FROM their stated member count~~ **— DEAD with the
       plan-pick it existed to make harmless.**
+- [ ] 🔴 **NOTHING ENDS A TRIAL. A GYM THAT TAPS THE BUTTON HAS GYM-TIER FEATURES
+      FOR EVER, FREE — raised by T3 round 1 on `a313861` and NOT tracked anywhere
+      until this line (2026-08-27).** The self-serve trial writes a `trialing`
+      subscription with a `trial_ends_at` thirty days out, that date passes, and
+      **nothing in the product notices**.
+      **Measured, not reasoned, at the time of writing:** `subscriptions` has
+      exactly ONE writer in the whole API — the `INSERT` in `startGymTrial` — and
+      `grep -rn "UPDATE subscriptions" apps/api/src apps/api/scripts` returns
+      **nothing**. No sweep, no worker, no route moves `trialing` → `expired`; the
+      only scheduled sweep that exists is the join-application one. `trial_ends_at`
+      is written and read by **nothing that acts on it**. The entitlement resolver
+      counts `trialing` as granting (`entitlements/repo.ts:19,24`), so the gym's
+      members keep 5 meal scans a day against free's 2, indefinitely, **with no
+      human in the loop — and the human who used to be the loop was the approval
+      gate removed in that same commit** (:21157 §1).
+      **THIS IS NOT A REQUEST TO BUILD THE SWEEP NOW.** Expiry and dunning are
+      **P3.8** and R1.1 forbids pulling them forward; what was owed on 2026-08-27
+      was this line, in the commit that created the exposure, and it was missing —
+      the deferral rule's own failure mode, in the commit that recorded three other
+      gaps correctly.
+      **TICKS WHEN** a `trialing` subscription whose `trial_ends_at` has passed
+      becomes `expired` on a schedule, with a fake-clock test walking the timeline
+      (R6.4) — i.e. with the P3.8 card, or earlier if the app goes on the internet
+      first. **The trigger is the same as the cost breaker's two lines below: this
+      cannot be live-with-real-gyms and unbuilt at the same time.**
+      **TWO THINGS FOR WHOEVER BUILDS IT, both measured here so nobody re-derives
+      them in a panic:** (1) `updateOrg`'s currency lock asks `status <> 'trialing'`
+      (`orgs/repo.ts:571`), so **it has never engaged and never can until trials
+      end** — it starts working the day this is built, having never run in anger;
+      (2) the seat-cap line further down this file already says its gap covers
+      *"every gym whose trial has ended"*, which is a sentence written on the
+      assumption that trials end. Today that set is empty.
+- [ ] 🟡 **`DECISIONS-INDEX.md` HAS OUTGROWN THE READ-PATH IT WAS CREATED TO BE —
+      raised by T3 round 1, 2026-08-27, and it is the 2026-07-30 amendment's own
+      wall reached a second time.** Measured this session: **6,096 lines** (`wc -l`),
+      which CLAUDE.md's grounding rule requires be read **IN FULL every session,
+      whatever the task**. That rule exists because DECISIONS.md hit 2,396 lines /
+      ~135k tokens and a chat obeying it literally spent half its working memory
+      before doing any work. **The index is now roughly 195k tokens and cannot be
+      read in one sitting either**, so the rule as written is once again asking for
+      something impossible — and the honest consequence is that chats will start
+      skipping part of it silently, which is :18830's lesson exactly (an undeclared
+      shortcut becomes what every later chat does).
+      **The round-1 reviewer declared its own shortcut rather than hiding it** —
+      read §1, §2, §3 and §5–7 in full plus four named entries in the DECISIONS.md
+      original, and enumerated §4 (≈4,000 lines) by entry HEADER only. That is the
+      right behaviour under a broken rule and is not a fix.
+      **This line does NOT propose the fix — that is Kd's ruling to make**, and the
+      shape of it matters more than the size: §4 (`WEB REPOINT CARDS`) is two thirds
+      of the file and is where the growth is. Splitting by phase, or an index-of-the-
+      index, or a per-card index living beside the card, are all live options and
+      none has been costed. **What is NOT an option is leaving the rule saying "in
+      full" while every chat quietly does something else.**
 - [ ] 🔴 **THE v1 §9.3 COST BREAKER IS HALF-BUILT AND ENFORCES NOTHING — measured
       2026-08-25 (DECISIONS :19129 §3).** `00-architecture-v1.md:651` promises an
       alert at **₹800/gym/month** and soft-degrade past **3× the gym's fee**, in

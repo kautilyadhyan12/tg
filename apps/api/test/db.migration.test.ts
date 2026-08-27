@@ -643,6 +643,95 @@ d("0001_init on a real database", () => {
       });
   });
 
+  /** MIGRATION `0015`'s BACKFILL, and it had NO GUARD AT ALL until T3 round 1
+   *  (Low-1) — which is the highest-value item that round found.
+   *
+   *  **Measured before this test was written: delete `0015`'s UPDATE entirely and
+   *  every suite stays green.** On a fresh database every owner row is written by
+   *  `createOrg` from the role template, which already carries `billing.manage`,
+   *  so no test anywhere has a PRE-`0015` subject. `O134` mutates the template,
+   *  not the migration. The card's own SQL comment says *"Without this line the
+   *  card ships DEAD"* — a claim nothing could falsify, which is exactly the
+   *  shape rule 4 exists to catch.
+   *
+   *  Same construction as `0014`'s, deliberately: build the legacy row rather
+   *  than hope one exists (:18652's fix for O111), and run the statement **read
+   *  out of the shipped migration file** rather than a copy re-typed here
+   *  (:12227). Rolled back, so nothing it creates survives it. */
+  it("0015's backfill gives a pre-existing owner the billing privilege", async () => {
+    const migration = await readFile(
+      new URL("../drizzle/0015_billing_manage_and_provider_none.sql", import.meta.url),
+      "utf8",
+    );
+    const chunks = migration.split("--> statement-breakpoint").map((s) => s.trim());
+    const matches = chunks.filter((s) => s.includes("array_append"));
+    const backfill = matches[0];
+    if (matches.length !== 1 || backfill === undefined || !backfill.includes("UPDATE")) {
+      throw new Error(
+        `0015 no longer contains exactly one backfill UPDATE (found ${String(matches.length)})`,
+      );
+    }
+
+    // The seven an owner carried after `0014` and before `0015` — every
+    // ORG_PRIVILEGE except the one this migration mints.
+    const legacySeven = ORG_PRIVILEGES.filter((p) => p !== "billing.manage");
+    expect(legacySeven).toHaveLength(ORG_PRIVILEGES.length - 1);
+
+    await sql
+      .begin(async (tx) => {
+        const [user] = await tx<{ id: string }[]>`
+          INSERT INTO users (display_name) VALUES ('zz-0015-legacy-owner') RETURNING id`;
+        const userId = user?.id;
+        if (userId === undefined) throw new Error("legacy-owner fixture insert failed");
+        const [gym] = await tx<{ id: string }[]>`
+          INSERT INTO gyms (slug, name, owner_user_id)
+          VALUES ('zz-0015-legacy', 'zz 0015 legacy', ${userId}) RETURNING id`;
+        const gymId = gym?.id;
+        if (gymId === undefined) throw new Error("legacy-owner gym insert failed");
+        await tx`
+          INSERT INTO gym_staff (gym_id, user_id, role, privileges)
+          VALUES (${gymId}, ${userId}, 'owner', ${[...legacySeven]})`;
+
+        // THE SUBJECT IS IN THE STATE THE BACKFILL IS FOR — without this the
+        // test could run against a row that already had it and still go green.
+        const [before] = await tx<{ privileges: string[] }[]>`
+          SELECT privileges FROM gym_staff WHERE gym_id = ${gymId} AND user_id = ${userId}`;
+        expect(before?.privileges).not.toContain("billing.manage");
+
+        await tx.unsafe(backfill);
+
+        const [after] = await tx<{ privileges: string[] }[]>`
+          SELECT privileges FROM gym_staff WHERE gym_id = ${gymId} AND user_id = ${userId}`;
+        expect(after?.privileges).toContain("billing.manage");
+        // Nothing else moved. A backfill that REPLACED the set instead of
+        // appending would strip seven powers off the very owners it repairs —
+        // and the gym's last owner losing `staff.manage` is a lockout.
+        for (const p of legacySeven) expect(after?.privileges).toContain(p);
+
+        // A NON-OWNER IS UNTOUCHED. The statement's `role = 'owner'` is the
+        // whole of its blast radius, and without this a backfill that dropped
+        // that clause — handing every receptionist the billing tick — passes
+        // every assertion above.
+        const [staffUser] = await tx<{ id: string }[]>`
+          INSERT INTO users (display_name) VALUES ('zz-0015-legacy-manager') RETURNING id`;
+        const staffId = staffUser?.id;
+        if (staffId === undefined) throw new Error("legacy-manager fixture insert failed");
+        await tx`
+          INSERT INTO gym_staff (gym_id, user_id, role, privileges)
+          VALUES (${gymId}, ${staffId}, 'manager', ${[...legacySeven]})`;
+        await tx.unsafe(backfill);
+        const [manager] = await tx<{ privileges: string[] }[]>`
+          SELECT privileges FROM gym_staff WHERE gym_id = ${gymId} AND user_id = ${staffId}`;
+        expect(manager?.privileges).not.toContain("billing.manage");
+
+        throw new Error("ROLLBACK-0015-BACKFILL-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0015-BACKFILL-FIXTURE") return;
+        throw err;
+      });
+  });
+
   /** `gyms.country` and its shape CHECK, proven by CAUSING it rather than by
    *  reading the DDL back — the same standard `0013`'s CHECK is held to.
    *

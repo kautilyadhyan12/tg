@@ -2029,3 +2029,43 @@ hold one exercise twice. It is a landmine with nothing on it until the first
 feature that allows a repeat, when it would fail *silently and identically* to
 :20867. Kd was given exactly that and ruled it be disarmed now: the key combines
 id and position. One line, outside the card's files, approved before written.
+
+## The gym's self-serve trial (SERVER half), T3 round 1 — ONE Critical/High, packet did NOT ship (2026-08-27)
+
+Reviews `a313861` (`DECISIONS.md`'s round-1 entry, :21353). **The escape hatch is
+NOT armed** and the reviewer said so unprompted: round 1 for this card, and the
+previous Criticals on this branch were in the web console — a different subsystem.
+The Critical/High (nothing ends a trial, tracked nowhere) is in `DECISIONS.md` and
+now has its own 🔴 `OWED.md` line. **All eight Low are FIXED in the same round**
+(:5348 rule 1 — a Low buys no round and is still fixed); they are logged here.
+
+**L-4 arrived TRUNCATED in the paste and could not be read.** Rather than guess at
+it, the same surfaces were re-read and what was found there is recorded below as a
+RE-DERIVATION, not as the reviewer's finding. If the original L-4 was something
+else, it is still outstanding and nobody knows it — the one honest thing to say.
+
+| # | Finding | Fix |
+|---|---|---|
+| L-1 | **Migration `0015`'s backfill had no test and COULD NOT FAIL** — the highest-value item in the round. Its own SQL comment says *"Without this line the card ships DEAD"*, and nothing could falsify that: on a fresh database every owner row is written by `createOrg` from the role template, which already carries `billing.manage`, so **no test anywhere had a pre-`0015` subject**. `O134` mutates the template, not the migration. `0014`'s backfill got a dedicated test at :19366; `0015`'s got none. | `db.migration.test.ts` gains one built on `0014`'s shape — construct the legacy owner row, run the statement **read out of the shipped migration file**, roll back — **plus a non-owner control `0014` never had**. Three mutants RED: delete the `UPDATE` (*"found 0"*), drop `WHERE role = 'owner'` (*"expected [ Array(8) ] to not include 'billing.manage'"*), `array_append` → wholesale `ARRAY[...]` (*"expected [ 'billing.manage' ] to include 'members.read'"*). |
+| L-2 | **A false claim in the repo about the strength of its own gate.** `startGymTrial`'s docblock said *"a second trial costs a second email address"*. It does not: the Day-14 DPDP purge sets `users.email = NULL` (`privacy/repo.ts:130`), so deleting the account **releases** the address — the same person re-registers it, gets a new `users.id`, and the gate (which matches on `gyms.owner_user_id`) cannot see them. | Rewritten to what is true: a second address **or** deleting the account and waiting out fourteen days, losing everything in it. **The gate is still as strong as §12 asks** — the second route is strictly the worse deal for an abuser — so only the sentence was wrong. The structural hazard is now stated too: the evidence is anchored on the gym's CURRENT owner, so the first feature that transfers or deletes a gym silently erases and misattributes trial history. |
+| L-3 | **The `last_owner_locked` 409 named the wrong power.** *"has to keep the ability to manage staff"* — but `LAST_OWNER_REQUIRED_PRIVILEGES` covers `staff.manage` **and** `billing.manage`, and this card's own test drives the billing case, where staff management was kept and billing is what is missing. An owner would be told they were refused over a power they still held. | Message names both abilities. **Not** threaded through as "which one is missing": that needs a new field on a typed outcome union at two call sites, and the message can be made true without it — recorded here so the more specific version is a known option rather than an oversight. |
+| L-4 | **RE-DERIVED, see the note above.** `packages/shared/src/orgs.ts` carried **two adjacent docblocks**: `/** WHAT THE GYM IS ON … */` — which describes `orgSubscriptionSchema` — sat immediately above `orgSubscriptionStatusSchema`, documenting the symbol one line below the one it was attached to. Shipped that way for four commits. | Moved onto the schema it describes, with a one-line note saying where it had been. |
+| L-5 | **`trialEndsAt` was documented as something it will stop being, on the field the very next card renders.** *"ISO instant, or null when this is not a trial"* — but nothing clears the column when a subscription leaves `trialing`, so once billing exists a PAYING gym answers with the date its old trial ran out: a past date under a field promising null. Unreachable today, **which is the danger and not the comfort**. | Doc rewritten to say what the field is (the trial's end, whenever there was one) and to say **gate on `status`, never on this being null**. |
+| L-6 | **The trial's audit row could not be joined to the subscription it named.** `targetType: "subscription"` carrying `targetId: input.gymId`. P3's Done gate asks that any subscription's life be narratable from `audit_log` alone. | `RETURNING id` on the `INSERT`; `targetId: row.id`. **Given a mutant despite being Low**, because it is a claim a phase gate rests on: flipping it back to `input.gymId` reds the trial test. The assertion carries `not.toBe(gymId)` beside `toBe(subscriptionId)` — both are uuids on the same row, so a shape-only check would have passed on the old value. |
+| L-7 | **A dead field on a typed outcome.** `{ kind: "no_plan"; currency: string }` — the service's `case "no_plan"` ignores it and no other caller exists. An unread field reads as a fact somebody uses. | Dropped, with the reason on the line. No test read it. |
+| L-8 | **A docblock asserting who is looking at the screen, contradicted by the card's own test.** The entitlement-bust note said *"the owner is member #1 of their own gym … so they are the one person looking at a screen when this returns"*. `billing.manage` is a TICK, and the test `a manager is refused the trial until the owner ticks billing across` makes a manager the actor — in which case the manager is busted and the owner waits out the TTL. | Rewritten to say the CALLER, with the manager case named. **The 60-second R6.5 guarantee holds either way** — only the sentence was wrong. |
+
+**Not a finding — carried out of the round anyway.** The reviewer flagged that
+`DECISIONS-INDEX.md` (6,096 lines) can no longer be read in full in one session,
+which is the 2026-07-30 amendment's own wall reached by the instrument that
+escaped it, **and declared its own grounding shortcut rather than hiding it**.
+That is the right behaviour under a broken rule and is not a fix. It now has a 🟡
+`OWED.md` line; the shape of the repair is Kd's ruling, not a chat's.
+
+**Also carried out: gap (a) of the card's own three understated one direction.**
+The record says the stale dev branch would hand a gym *"a 25-seat, 7-day plan"* —
+true of an INR gym. :17902 measured that same seed as carrying **zero USD org
+rows**, so a US gym there is **refused outright** with *"We're not open for
+business in your country yet"*. That is the symptom Kd's browser will hit on the
+web half, and it reads as the app being broken. Corrected in `DECISIONS.md` §5;
+no code change (R1.1), and the dev branch is his data and was not touched.

@@ -651,10 +651,18 @@ export async function startOrgTrial(
     case "started":
       /** THE CALLER'S OWN CACHED ANSWER IS BUSTED; EVERYBODY ELSE'S EXPIRES.
        *
-       *  The owner is member #1 of their own gym (§4.0 step 6), so they are the
-       *  one person looking at a screen when this returns — and a stale 60-second
-       *  answer there would show the gym still on the free tier immediately after
-       *  they upgraded it (:5807 on the screen that just acted).
+       *  The caller is the person looking at a screen when this returns, and a
+       *  stale 60-second answer there would show the gym still on the free tier
+       *  immediately after they upgraded it (:5807 on the screen that just acted).
+       *
+       *  **The caller is USUALLY the owner but need not be** — corrected at T3
+       *  round 1 (Low-8), where the earlier version of this note asserted "the
+       *  owner is member #1 of their own gym, so they are the one person looking
+       *  at a screen". `billing.manage` is a TICK, so an owner can hand it to a
+       *  manager, and this module's own test drives exactly that. When a manager
+       *  taps the button it is the MANAGER's cached answer that is cleared and the
+       *  owner who waits out the TTL. The 60-second guarantee below holds either
+       *  way; only the sentence was wrong.
        *
        *  **The other members are covered by the cache's own TTL and that is the
        *  guarantee, not an oversight.** R6.5 asks that every bust trigger flip
@@ -1449,10 +1457,15 @@ export async function updateOrgStaffPrivileges(
         "Managing staff stays with the gym's owner. You can give this person any of the other permissions.",
       );
     case "last_owner_locked":
+      // NAMES BOTH ABILITIES, because the guard covers both and this message
+      // named one (T3 round 1, Low-3). `LAST_OWNER_REQUIRED_PRIVILEGES` is
+      // staff.manage AND billing.manage, and this module's own test drives the
+      // billing case — where the old wording told an owner they were being
+      // refused over staff management they had in fact kept.
       throw new OrgsError(
         409,
         "last_owner_locked",
-        "A gym's last owner has to keep the ability to manage staff, or nobody could ever hand it out again.",
+        "A gym's last owner has to keep both staff management and billing — otherwise nobody could hand those out again, and nobody could pay.",
       );
     default:
       return assertNever(outcome);

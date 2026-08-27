@@ -298,18 +298,6 @@ export const createOrgResponseSchema = z.object({
 });
 export type CreateOrgResponse = z.infer<typeof createOrgResponseSchema>;
 
-/** WHAT THE GYM IS ON — the three facts a console can render without knowing
- *  anything about how we bill (R3.1: the server decides, the client draws).
- *
- *  **Deliberately NOT the plan's code, price or name.** A screen that knows it is
- *  on `org_b1_us_m` is a screen one step from doing money arithmetic, which R10.4
- *  forbids, and the code is an internal key with no user meaning. What a person
- *  actually asks is *"how long have I got"* and *"how many members can I have"* —
- *  which is `trialEndsAt` and `seatCap`, both computed here.
- *
- *  `seatCap` is nullable because `plans.seat_cap` is: a capless tier is a real
- *  shape in the price book. `trialEndsAt` is null on a plan that is not a trial.
- *  Neither absence may be rendered as a number (:5807). */
 /** Part 4 §3.3's own CHECK, as a parser. The repo parses the column through this
  *  rather than casting it, for the reason `orgStatusSchema` exists: a value the
  *  database grew and the code has never heard of must fail loudly at the
@@ -323,9 +311,33 @@ export const orgSubscriptionStatusSchema = z.enum([
 ]);
 export type OrgSubscriptionStatus = z.infer<typeof orgSubscriptionStatusSchema>;
 
+/** WHAT THE GYM IS ON — the three facts a console can render without knowing
+ *  anything about how we bill (R3.1: the server decides, the client draws).
+ *
+ *  (This block sat above `orgSubscriptionStatusSchema` for four commits,
+ *  documenting a symbol one line below the one it describes — T3 round 1, Low-4.)
+ *
+ *  **Deliberately NOT the plan's code, price or name.** A screen that knows it is
+ *  on `org_b1_us_m` is a screen one step from doing money arithmetic, which R10.4
+ *  forbids, and the code is an internal key with no user meaning. What a person
+ *  actually asks is *"how long have I got"* and *"how many members can I have"* —
+ *  which is `trialEndsAt` and `seatCap`, both computed here.
+ *
+ *  `seatCap` is nullable because `plans.seat_cap` is: a capless tier is a real
+ *  shape in the price book. Neither absence may be rendered as a number
+ *  (:5807). */
 export const orgSubscriptionSchema = z.object({
   status: orgSubscriptionStatusSchema,
-  /** ISO instant, or null when this is not a trial. */
+  /** WHEN THE TRIAL ENDS OR ENDED — null only when this subscription never had
+   *  a trial at all.
+   *
+   *  **NOT "null when this is not a trial", which is what this line said until
+   *  T3 round 1 (Low-5).** Nothing clears the column when a subscription leaves
+   *  `trialing`, so once billing exists a PAYING gym answers with the date its
+   *  old trial ran out — a past date under a field the client had been promised
+   *  would be null. **Gate on `status`, never on this being null.** Unreachable
+   *  today only because no subscription has ever left `trialing`; the screen that
+   *  renders this field is the very next card. */
   trialEndsAt: z.string().nullable(),
   /** Live members this plan admits, or null for a capless tier. */
   seatCap: z.number().int().positive().nullable(),

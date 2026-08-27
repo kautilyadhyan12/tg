@@ -19079,9 +19079,9 @@ to him — park them until stage 8 · build a small "mark this gym as paid" tool
 move real payments earlier (recommended against, and the reason given: it is the
 biggest and riskiest work in the project and his own record says the first 4-5
 gyms are hand-invoiced). **He chose the admin tool.**
-**Consequence, stated: only the Billing TAB now waits for stage 8. The seat cap,
-the trial and the banner all become live in stage 1** — correct-but-inert
-becomes correct-and-working, with no payment provider involved.
+**Consequence, stated: only the Billing TAB waits for stage 8. ~~The seat cap, the
+trial and the banner all become live in stage 1~~ — STRUCK 2026-08-27: ONLY THE SEAT
+CAP DID, and this PLAN-time prediction was reported as FACT for three commits (T3 round 1, at the end of this file).**
 
 ### 5 · THE ADMIN PANEL — HIS QUESTION, AND A FINDING THAT IS THE DEFERRAL RULE'S OWN FAILURE MODE
 
@@ -21154,7 +21154,17 @@ stays UNTICKED and this is why.** No app code, no schema, no migration, no
 dependency. Nothing about any decision's CONTENT changed — only 20 numbers that
 said where to find one.
 
-## KD OPENS THE TRIAL TO SELF-SERVE AND THE FIRST SUBSCRIPTION ROW IN THE PRODUCT'S HISTORY GETS WRITTEN — three built-but-inert features wake up, and the abuse gate he removed is replaced by one that needs no human (2026-08-27)
+## KD OPENS THE TRIAL TO SELF-SERVE AND THE FIRST SUBSCRIPTION ROW IN THE PRODUCT'S HISTORY GETS WRITTEN — ~~three built-but-inert features wake up~~ ONE DOES, and the abuse gate he removed is replaced by one that needs no human (2026-08-27)
+
+> **CORRECTED 2026-08-27 BY T3 ROUND 1's C/H-1 — the struck words above were
+> FALSE and are kept rather than deleted, because the overclaim is the lesson.**
+> Of the three features this entry said woke up, **only the seat cap did.** The
+> 30-day clock is written and read by nothing that acts on it — **nothing in the
+> product ends a trial** — and §4.2's banner is not built at all (`Overview.jsx:32`
+> says so in its own comment). One of three, stated as three, in the heading, in
+> §3, in `HANDOFF.md` and in the commit message. The exposure now has its own 🔴
+> `OWED.md` line, which is what should have shipped in the same commit. Full
+> round-1 entry at the end of this file.
 
 **Read before touching `startGymTrial`, before writing `subscriptions` from any
 second place, before adding a privilege to `ORG_PRIVILEGES`, before quoting the
@@ -21326,3 +21336,139 @@ BOX on the Staff screen — `PRIVILEGE_COPY` holds six of eight — so an owner 
 delegate either through the product even though the server allows it. **Not a
 data-loss risk**: `unknownPrivileges` carries them through a save untouched and
 says so on screen, a guard whose own comment predicted a billing tick.
+
+**A FOURTH GAP, MISSED HERE AND FOUND BY T3 ROUND 1 — it is the one that mattered
+and it had no `OWED.md` line: NOTHING ENDS A TRIAL.** Three gaps were recorded
+carefully and the largest was not among them. It now has a 🔴 line of its own; see
+the round-1 entry at the end of this file for the measurement.
+
+**AND A CORRECTION TO GAP (a), which understated one direction.** This entry and
+`HANDOFF.md` say the dev branch's stale book means the trial "would pick a 25-seat
+plan there". True of an INR gym. :17902 measured that same seed as carrying **zero
+USD org rows**, so on that database a US gym is not given a small plan — it is
+**refused outright** with *"We're not open for business in your country yet"*. That
+is the symptom Kd's own browser will hit on the web half, and it reads as the app
+being broken rather than as a stale fixture.
+
+## THE GYM'S SELF-SERVE TRIAL (SERVER HALF) — T3 ROUND 1: ONE Critical/High, the packet does NOT ship — nothing ends a trial, and three documents said the clock had woken up (2026-08-27)
+
+**Read before building trial expiry, before quoting the 30-day clock or §4.2's
+banner as live, before writing a deferral into prose instead of `OWED.md`, and
+before stating at report time a consequence that was written at plan time.**
+
+Reviews `a313861` in a fresh chat (T3, Part I §7c). **ONE Critical/High, eight
+Low.** The escape hatch is NOT armed and the reviewer said so unprompted: this is
+round 1 for this card, and the previous Criticals on this branch were in the web
+console, a different subsystem. **No smoke to cite, and the reviewer VERIFIED that
+rather than assumed it** — there is no screen yet.
+
+### 1 · THE CRITICAL/HIGH: NOTHING ENDS A TRIAL, AND IT WAS TRACKED NOWHERE
+
+**The code is right and the record was wrong, which is why the fix is a document
+and not a sweep.** Deferring expiry to P3.8 is correct — R1.1 forbids pulling it
+forward. What the deferral rule requires is the `OWED.md` line **in the commit
+that defers it**, and `a313861` recorded three other gaps carefully while missing
+this one. It now has a 🔴 line.
+
+**Re-measured in the fix session rather than taken from the review** (V4 applies
+to a reviewer as much as to a kickoff prompt):
+
+| Claim | Command | Result |
+|---|---|---|
+| One writer of `subscriptions` | `grep -rn "subscriptions" apps/api/src --include=*.ts` filtered to writes | **one `INSERT`**, `orgs/repo.ts` |
+| Nothing updates it | `grep -rn "UPDATE subscriptions" apps/api/src apps/api/scripts` | **no output** |
+| No sweep moves `trialing` → `expired` | worker registrations in `worker.ts` | rollups + the **join-application** sweep, nothing else |
+| A trial still grants | `entitlements/repo.ts:19,24` | `status IN ('trialing','active','past_due')` |
+
+So the first gym to tap Start trial keeps gym-tier entitlements for its members
+for ever, free — **and the human who used to stand in that path was the approval
+gate removed in the same commit** (§1 of :21157). `trial_ends_at` is written and
+read by nothing that acts on it.
+
+**A second fact fell out of the same measurement and is on the `OWED.md` line:**
+`updateOrg`'s currency lock asks `status <> 'trialing'` (`orgs/repo.ts:571`), so
+**it has never engaged and cannot until trials end.** It starts working the day
+the sweep lands, having never once run in anger.
+
+### 2 · THE OVERCLAIM, AND WHERE IT CAME FROM
+
+`a313861` said in three places that *"the seat cap, the 30-day clock and §4.2's
+banner stop being correct-but-inert"*. **One of three.** The clock is inert
+(above); the banner is not built — `Overview.jsx:32` says so in its own comment,
+and `HANDOFF.md`'s own NEXT line schedules it for the web half.
+
+**Traced to its origin rather than just corrected**: the sentence was written at
+:19083 as a PLAN-time consequence of Kd's stage ordering (*"the seat cap, the
+trial and the banner all become live in stage 1"*), and travelled unchallenged
+into the card's heading, its `HANDOFF` block and its commit message. **Nobody
+re-measured it at report time.** All four sites are now struck and corrected in
+place, kept rather than deleted. **The rule this earns: a consequence predicted
+at plan time is a PREDICTION, and it needs its own measurement before it may be
+reported as a fact.** That is :19656's "a deferral that also predicts its own
+future is making two claims" pointed at a card's own status line.
+
+### 3 · THE EIGHT LOW, ALL FIXED THIS ROUND (rule 1: a Low buys no round, and is still fixed)
+
+Logged in `BACKLOG.md` with their fixes. Three are worth naming here because they
+are false statements in the source rather than style: the repo claimed **"a second
+trial costs a second email address"** when the Day-14 purge NULLs `users.email` and
+releases it (the gate is still as strong as §12 asks — the price is a second
+address **or** deleting the account and losing everything, which is the worse deal
+— but the sentence was wrong); **`trialEndsAt` was documented "null when this is
+not a trial"** when nothing clears the column, so a paying gym will one day answer
+with a past date under a field promising null, and **the very next card renders
+that field**; and the **`last_owner_locked` 409 named staff management** while this
+card's own test drives the billing case, telling an owner they were refused over a
+power they had kept.
+
+**L-4 arrived TRUNCATED in the paste and could not be read.** Rather than guess,
+the same surfaces were re-read: `packages/shared/src/orgs.ts` carried **two
+adjacent docblocks**, the first describing `orgSubscriptionSchema` but attached to
+`orgSubscriptionStatusSchema` one line above it. Fixed as L-4 and declared as a
+re-derivation, not as the reviewer's finding.
+
+### 4 · RULE 3 AND RULE 4 — WHAT CARRIES A TEST NOW, AND WHAT WAS MEASURED RED
+
+**The Critical/High fix carries no test, and that is stated rather than dressed
+up: it is a document.** There is no code change to guard.
+
+**The round's highest-value item was rule 4's, and it was the reviewer's L-1**:
+migration `0015`'s backfill — the statement whose own SQL comment says *"Without
+this line the card ships DEAD"* — **had no test and no mutant**, and could not
+fail, because on a fresh database every owner row is written from the role
+template and no test anywhere had a pre-`0015` subject. It now has one, built on
+`0014`'s shape (construct the legacy row; run the statement **read out of the
+shipped file**; roll back), plus a non-owner control the `0014` test never had.
+
+**Three mutants, all RED, measured on local Postgres (:13659):**
+
+| Mutant | Change | Result |
+|---|---|---|
+| M1 | delete the backfill `UPDATE` | RED — *"0015 no longer contains exactly one backfill UPDATE (found 0)"* |
+| M2 | drop `WHERE role = 'owner'` | RED — *"expected [ Array(8) ] to not include 'billing.manage'"* (the non-owner control) |
+| M3 | `array_append` → wholesale `ARRAY[...]` | RED — *"expected [ 'billing.manage' ] to include 'members.read'"* |
+
+**The audit-row fix (L-6) also earned a mutant** even though it is Low, because it
+is a claim the P3 Done gate depends on: `targetId: row.id` → `input.gymId` reds the
+trial test on the id comparison. The assertion carries `not.toBe(gymId)` beside
+`toBe(subscriptionId)` deliberately — both are uuids on the same row, so a
+shape-only check would have passed on the old value.
+
+**Rule 4a was applied as written**: the database mutants went to the ownership and
+privilege guarantees and nowhere else. Wording, comments and the ported constant
+tables were fixed without one.
+
+### 5 · A PROCESS FINDING THE ROUND RAISED, NOW ON `OWED.md`
+
+`DECISIONS-INDEX.md` is **6,096 lines** and CLAUDE.md requires it be read IN FULL
+every session. That is the same wall the 2026-07-30 amendment was written to
+escape, reached by the instrument that escaped it. **The reviewer declared its own
+shortcut rather than hiding it** (§1, §2, §3, §5–7 in full plus four named entries;
+§4 enumerated by header) — the right behaviour under a broken rule, and not a fix.
+The line does not propose one: the shape is Kd's to rule on.
+
+### 6 · WHAT THIS ROUND DID NOT DO
+
+**No sweep was built** (R1.1 — P3.8's work). **No screen exists, so no smoke**;
+that is unchanged from the card. **Nothing new ticks.** The packet does not ship on
+round 1's own verdict; round 2 is diff-only over these fixes.

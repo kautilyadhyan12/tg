@@ -1,9 +1,90 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE GYM'S SELF-SERVE TRIAL (server half) — T3 ROUND 1 FIXES. ONE
+      Critical/High, EIGHT Low, all fixed. Reviews `a313861`. DECISIONS :21353.
+      The packet does NOT ship on round 1's verdict; round 2 is DIFF-ONLY.
+
+  1. **THE CRITICAL/HIGH IS A DOCUMENT, NOT A SWEEP, AND THAT IS DELIBERATE.**
+     NOTHING ENDS A TRIAL: one `INSERT` writes `subscriptions`, `UPDATE
+     subscriptions` appears NOWHERE, no worker moves `trialing` → `expired`, and
+     `trial_ends_at` is read by nothing that acts on it — while the entitlement
+     resolver counts `trialing` as granting. **A gym that taps the button keeps
+     gym-tier features for its members for ever, free.** Expiry is **P3.8** and
+     R1.1 forbids pulling it forward; what was owed was the 🔴 `OWED.md` line in
+     the deferring commit. **Do not build the sweep as a "fix round".**
+  2. ⚠️ **`updateOrg`'s CURRENCY LOCK HAS NEVER ENGAGED AND CANNOT UNTIL TRIALS
+     END** — it asks `status <> 'trialing'` (`orgs/repo.ts:571`). It starts
+     working the day the sweep lands, having never run in anger. Whoever builds
+     P3.8 owns that first live exercise.
+  3. **THE OVERCLAIM IS CORRECTED IN FOUR PLACES** (this block, the :21157
+     heading, its §5, and :19083 where it originated as a PLAN-time prediction).
+     **RULE EARNED: a consequence predicted at plan time is a PREDICTION and needs
+     its own measurement before it may be reported as a fact.**
+  4. **RULE 4's CATCH — migration `0015`'s backfill had NO TEST and COULD NOT
+     FAIL.** Its own SQL comment says "Without this line the card ships DEAD";
+     every owner row on a fresh database comes from the role template, so no test
+     had a pre-`0015` subject. Now guarded on `0014`'s shape **plus a non-owner
+     control `0014` never had**. Three mutants RED (delete the UPDATE · drop
+     `WHERE role='owner'` · `array_append` → wholesale overwrite).
+  5. **L-4 ARRIVED TRUNCATED IN THE PASTE.** Re-derived from the same surfaces
+     rather than guessed — two adjacent docblocks in `packages/shared/src/orgs.ts`,
+     the first documenting a symbol one line below the one it was attached to —
+     and declared as a re-derivation, not as the reviewer's finding.
+  6. **THE INDEX BROKE AND THE FIX WAS TO STOP MOVING LINES, NOT TO REWRITE 138
+     CITATIONS.** An in-place 9-line correction at :19083 shifted 15 index
+     pointers (`tools/check-decisions-index.mjs` caught all of them) and would
+     have staled ~138 `:NNNN` citations across 18 files. Rewritten
+     **line-count-neutral**; checker back to 215/215. **Editing DECISIONS.md in
+     place is line-count-sensitive — treat inserting lines above existing entries
+     as a change with a blast radius.**
+
+MEASURED, all LOCAL (:13659): **full api suite 621/621 in 345.8 s, 44 files, no
+  flake** (this is the whole suite with the fixes in, not a scoped run) ·
+  `db.migration` **11/11** (was 10) · scoped `orgs.routes -t` green after each
+  mutant restore · `tsc --noEmit` exit 0 on api AND shared · `eslint
+  --max-warnings=0` clean on api and shared · `check-decisions-index` **215
+  pointers resolve, 0 broken** (baseline at HEAD re-measured first: 214/214, so
+  every break was mine) · `gitleaks` **3**, all the same false positive
+  (`kcalPointForSetsV2`/`V3` matching `generic-api-key`), **all in COMMITTED
+  history and none in this diff**.
+
+⚠️ **A SMALL RECORD CORRECTION, in the round whose subject is record accuracy:**
+  the previous block says *"gitleaks finds 2, both pre-existing false positives in
+  `HANDOFF.md` from 2026-08-11"*. Measured today it is **3**, and **the third is in
+  `OWED.md:6758`, introduced by `a313861` itself** — the commit that reported the
+  count as 2. Same harmless rule and same string; only the count and the
+  "pre-existing" were wrong. Still on its own ⚪ line, still unfixed here (R1.1).
+
+FILES: apps/api/src/modules/orgs/repo.ts · apps/api/src/modules/orgs/service.ts ·
+       apps/api/test/db.migration.test.ts · apps/api/test/orgs.routes.test.ts ·
+       packages/shared/src/orgs.ts · DECISIONS.md · DECISIONS-INDEX.md ·
+       HANDOFF.md · OWED.md · BACKLOG.md
+
+STILL NOTHING TICKS. **NO SCREEN, THEREFORE NO SMOKE** — unchanged from the card.
+  The migration file itself is BYTE-UNCHANGED (mutants applied and restored;
+  `git status` clean on `apps/api/drizzle/`).
+
+⚠️ TWO NEW `OWED.md` LINES: **(a)** 🔴 nothing ends a trial (above); **(b)** 🟡
+  `DECISIONS-INDEX.md` is 6,096 lines and CLAUDE.md requires it be read IN FULL
+  every session — the 2026-07-30 amendment's own wall, reached by the instrument
+  that escaped it. **The reviewer declared its own shortcut rather than hiding it;
+  the fix is Kd's ruling, not a chat's.**
+
+NEXT: T3 ROUND 2, DIFF-ONLY, in a FRESH chat — only these fixes and the surfaces
+      they touch. Then the WEB half (button, §4.2 banner, seat meter), which
+      carries the SMOKE and which renders `trialEndsAt` — the field whose contract
+      L-5 just corrected.
+```
+
+```
 TASK: A GYM STARTS ITS OWN 30-DAY TRIAL (server half) — the FIRST `subscriptions`
-      row this product has ever written, and three built-but-inert features wake
-      up. DECISIONS :21157. Stage 1 of Kd's build order (:19016).
+      row this product has ever written, and ~~three built-but-inert features wake
+      up~~ ONE DOES. DECISIONS :21157. Stage 1 of Kd's build order (:19016).
+      ⚠️ CORRECTED 2026-08-27 BY T3 ROUND 1 (:21353): only the SEAT CAP woke. The
+      30-day clock is read by nothing that acts on it — NOTHING ENDS A TRIAL, now
+      a 🔴 `OWED.md` line — and §4.2's banner is not built (`Overview.jsx:32` says
+      so itself). One of three, stated as three.
 
   1. **KD REVERSED :11072 RULING 1 — no approval step.** *"a gym can start on own
      without my approval but i will have the power of removing them or pausing
