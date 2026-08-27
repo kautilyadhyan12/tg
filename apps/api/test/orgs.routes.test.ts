@@ -5669,6 +5669,38 @@ d("orgs routes (real Postgres)", () => {
     const org = await makeOrg(owner.cookies, "Orgs Test Mine Anchor", { country: "US" });
     await subscribeGym(org.org.id, CAP1_PLAN); // seat_cap = 1
 
+    /** ANOTHER GYM ENTIRELY, WITH A MEMBER THIS COUNT MUST NOT SEE — and it is
+     *  built FIRST so every `seatsUsed` reading below is taken with a foreign
+     *  row already sitting in `gym_members`.
+     *
+     *  **Without it the whole test passes with the cross-gym predicate DELETED.**
+     *  `seats_used` is a correlated subquery whose only tenancy is
+     *  `sm.gym_id = g.id`; drop that and it counts every qualifying membership in
+     *  the table. On a database holding nothing but this test's own rows the two
+     *  answers are IDENTICAL, so the mutant survives — and on the dev machine it
+     *  dies only because 78 unrelated rows happen to be there. :18652's C/H-3 in
+     *  as many words: *a mutant whose verdict depends on which database you point
+     *  it at is worse than a missing one.*
+     *
+     *  It is the FOURTH `gym_id` predicate on this table family to ship with no
+     *  observer (:14493 C/H-1, :15260 L-1, :19366's O114), which is why the
+     *  fixture goes here rather than into a test of its own: this is the test
+     *  that owns the rule, and every assertion it makes is now cross-tenant.
+     *
+     *  A SEPARATE OWNER, so it is a genuinely foreign tenant rather than a second
+     *  gym of the same person — the shape the roster's own cross-gym fixture
+     *  uses. The member is live, NOT complimentary and NOT staff, i.e. exactly
+     *  the row this count is looking for. */
+    const otherOwner = await makeUser("mine-anchor-xo");
+    const otherMember = await makeUser("mine-anchor-xm");
+    const otherOrg = await makeOrg(otherOwner.cookies, "Orgs Test Mine Anchor Other", { country: "US" });
+    await joinAsMember(otherMember.cookies, otherOrg, otherOwner.cookies);
+    // The control on the control: that gym really does have somebody in it, so a
+    // count that reached across would have something to reach for.
+    expect((await mineRow(otherOwner.cookies, otherOrg.org.id)).seatsUsed).toBe(1);
+    // …and this gym still has nobody, with that row already in the table.
+    expect((await mineRow(owner.cookies, org.org.id)).seatsUsed).toBe(0);
+
     // One paying member fills the gym.
     await joinAsMember(first.cookies, org, owner.cookies);
     expect((await mineRow(owner.cookies, org.org.id)).seatsUsed).toBe(1);

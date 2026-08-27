@@ -223,8 +223,20 @@ export default function Overview() {
           the second — a code handed out by a gym on no plan admits members who
           get nothing extra for being there. Draws nothing at all for anybody
           without `billing.manage`, and needs no read of its own: the plan and
-          the places used both arrive on the org row this screen already has. */}
-      <TrialCard org={org} />
+          the places used both arrive on the org row this screen already has.
+
+          KEYED ON THE GYM, AND THAT IS NOT A DETAIL — it is :20712's fix
+          applied to the fourth component to need it. `/console/:orgSlug` is ONE
+          route, so walking from gym A to gym B does not remount anything here;
+          without this key the card's `justStarted` (the server's own answer to
+          the button, deliberately held) followed the owner onto the next gym and
+          printed "Free trial · 0 of 300 places used" over a gym on NOTHING,
+          while hiding the button that would have started that gym's own trial.
+          Measured, both ways, before this line was written.
+
+          The key rather than a `useEffect` that clears the state, for :20712's
+          reason: it covers state nobody has added yet. */}
+      <TrialCard key={org.id} org={org} />
 
       {/* ── The join code pane, on its own outcome ─────────────────────── */}
       {codes.loading ? <ConsoleLoading label="Loading…" /> : null}

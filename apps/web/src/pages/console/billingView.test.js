@@ -22,6 +22,7 @@ import {
   dismissBanner,
   hasLivePlan,
   isTrialing,
+  seatLineText,
   seatMeter,
   trialDaysLeft,
   trialEndDateLabel,
@@ -158,6 +159,63 @@ describe('seatMeter', () => {
     ).toBeNull(); // capless band
     expect(seatMeter(trialing(20, { seatsUsed: null }))).toBeNull(); // not told
     expect(seatMeter(undefined)).toBeNull();
+  });
+
+  it('refuses a cap of zero or less rather than drawing a meter over it', () => {
+    // PLANTED FIXTURES, because the contract forbids this shape: `seatCap` is
+    // `z.number().int().positive().nullable()` and every console read is parsed
+    // through it, so a finite cap at or below zero cannot arrive from today's
+    // server. The `cap <= 0` clause was therefore a guard nothing could
+    // falsify — the same shape C88 was deleted for one round earlier, in this
+    // very function.
+    //
+    // IT IS KEPT RATHER THAN DELETED, and the difference from C88 is the whole
+    // reason: C88's `typeof` line was LOGICALLY subsumed by the `Number.isFinite`
+    // below it, so it decided nothing. `cap <= 0` is not subsumed by anything —
+    // `Number.isFinite(0)` is true — and it is unreachable only because a schema
+    // in another package says so. That is defence in depth against a contract
+    // changing out from under this file, so it takes C91's resolution from the
+    // same round: keep the guard, plant the fixture that makes it observable.
+    //
+    // Without it: `{ used: 0, cap: 0, pressure: true, full: true }`, i.e. "0 of 0
+    // places used — your gym is full, so nobody else can join yet" over a gym
+    // nothing is limiting.
+    const capped = (seatCap, seatsUsed) =>
+      gym({ subscription: { status: 'trialing', trialEndsAt: inDays(20), seatCap }, seatsUsed });
+    expect(seatMeter(capped(0, 0))).toBeNull();
+    expect(seatMeter(capped(-5, 2))).toBeNull();
+  });
+});
+
+describe('seatLineText', () => {
+  // §4.3's meter sentence had THREE homes — the banner in this file, the
+  // Overview's trial card and the Members header — and the full-gym clause was
+  // spelled out twice with nothing keeping the copies equal. This is the one
+  // owner; these are what notice if a copy comes back.
+  it('is the sentence itself, asserted as a literal', () => {
+    // A LITERAL rather than a comparison against the function that produces it.
+    // An assertion made only against its own source moves whenever the source
+    // does and proves nothing — :19960's tautological-golden-string finding,
+    // which cost that round a second fix.
+    expect(seatLineText(seatMeter(trialing(20, { seatsUsed: 42 })))).toBe('42 of 300 places used.');
+    expect(seatLineText(seatMeter(trialing(20, { seatsUsed: 300 })))).toBe(
+      '300 of 300 places used — your gym is full, so nobody else can join yet.',
+    );
+  });
+
+  it('hands every caller nothing to draw when there is no meter', () => {
+    // Null in, null out, so a gym with no meter draws no line rather than each
+    // of the three callers being handed an empty string to render.
+    expect(seatLineText(null)).toBeNull();
+    expect(seatLineText(undefined)).toBeNull();
+  });
+
+  it('is exactly what the banner says, so the strip and the roster cannot disagree', () => {
+    // The banner is a READER of that sentence, not its author. Re-inline a copy
+    // here that drifts by one word and this fails; re-inline an identical copy
+    // and nothing is lost, which is the honest limit of what this can catch.
+    const full = trialing(20, { seatsUsed: 300 });
+    expect(bannerFor(full, NOW)?.text).toBe(seatLineText(seatMeter(full)));
   });
 });
 

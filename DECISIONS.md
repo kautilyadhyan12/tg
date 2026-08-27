@@ -21893,3 +21893,135 @@ change; the api suites were not re-run and this says so (:10726).
 
 **T3 IS THE ONLY GATE LEFT, and the rewritten step 6 is owed a person.** A passing
 smoke is not a review (:14147).
+
+## THE GYM TRIAL (WEB HALF) — T3 ROUND 1: TWO Critical/High, the packet does NOT ship — the trial card carried one gym's plan onto another, and the seat meter's cross-gym rule turned out to be guarded by 78 stray rows (2026-08-28)
+
+**Read before adding ANY state to a console panel, before writing a `gym_id`
+predicate in `listOrgsForUser`, before quoting a mutant as evidence without
+naming the database it ran against, and before writing the meter's sentence
+anywhere for a fourth time.**
+
+Reviews `c749d2e` (the web half at :21580, its smoke at :21751). **Escape hatch
+NOT armed**: the previous round on this packet (:21487) found zero Critical/High,
+and the last web-console round (:20986) found zero — no two-round streak, so
+there is no redesign question for Kd. **Kd approved the finding list before a
+byte was written** (*"fix all"*), per :5348's "no code changes without listed
+findings and Kd's approval".
+
+**BOTH CRITICALS WERE VERIFIED HERE RATHER THAN TAKEN ON THE REVIEW'S WORD** (S5:
+inherited work is unverified work), and one of them only survived that check
+because it was re-measured on a different database.
+
+### C/H-1 — the trial card carried gym A's plan onto gym B, and hid gym B's own button
+
+`justStarted` is component state and `/console/:orgSlug` is ONE route, so walking
+between two gyms does not remount. **Measured in jsdom before any fix**, two gyms
+both on no plan, trial started on A then navigate to B:
+
+    plan card on gym B:   FREE TRIAL SHOWN
+    start button on B:    0
+    seat line on gym B:   0 of 300 places used
+
+Every one of those is false about gym B, and the third is a cap it does not have.
+**The half that BLOCKS somebody rather than merely misinforming them is the
+button**: gym B's trial could not be started at all. It also contradicted the
+banner on the same screen, which reads `org.subscription` and correctly drew
+nothing — two surfaces disagreeing about one gym.
+
+**THIS IS THE FOURTH APPEARANCE OF ONE CLASS** — :20712, :20867, :20986 and this
+— *a console panel holding state that outlives the gym it is about*. Fixed the
+way :20712 fixed it, with a `key`, because that covers state nobody has added
+yet. **:20986's duplicate-key guard could not see it**: that guard catches two
+children sharing a key, and nothing there can see a key that is ABSENT.
+
+### C/H-2 — the seat meter's cross-gym predicate had no observer, and its mutant lied
+
+`seats_used` is a correlated subquery whose only tenancy is `sm.gym_id = g.id`.
+**O136 has pointed at that line since :21580 with a correct anchor and a correct
+filter, and it still proved nothing**: the anchor test built ONE gym, so the
+correlated count and a whole-table count return the same number.
+
+**Measured on a throwaway database** (`aihg_t3probe`, migrated + seeded, 0 gyms
+and 0 `gym_members` rows verified before the run):
+
+| run | result |
+|---|---|
+| control, anchor test alone | GREEN |
+| O136 applied, anchor test alone | **GREEN — the mutant survives** |
+
+On the dev database the same mutant reports RED, and the failure prints
+`expected 79 to be 1` — **78 unrelated rows, not the guarantee.** :18652's C/H-3
+verbatim (*a mutant whose verdict depends on which database you point it at is
+worse than a missing one*), and the more dangerous direction of it: the accident
+pointed the FLATTERING way, so nobody had reason to look.
+
+Closed by giving the anchor test a **second gym under a separate owner, with its
+own live, non-complimentary, non-staff member, built before any assertion** — so
+all four `seatsUsed` readings in that test are now taken across a tenant
+boundary. Re-measured on the same clean database: control GREEN, mutant **RED at
+`expected 1 to be +0`**, which is the new assertion and not a leftover row.
+**That is the proof the FIXTURE carries it.** It is the fourth `gym_id` predicate
+on this table family to ship unobserved (:14493 C/H-1, :15260 L-1, :19366's O114).
+
+### The three Lows, all fixed (:5348 rule 1), logged in `BACKLOG.md`
+
+**L-1** — a banner dismissed on one gym silenced the other's for the day
+(`closedAt` is gym-agnostic and short-circuits ahead of the per-gym stored
+record). Same class as C/H-1, same one-line fix. Low because only `trial_info` is
+dismissible, so nothing false is drawn and the amber state is untouched.
+
+**L-2** — `cap <= 0` in `seatMeter` could not fail: `seatCap` is
+`.positive().nullable()` and every console read is `readThrough`-parsed. **KEPT
+rather than deleted, and the difference from C88 is the whole reason**: C88's
+`typeof` line was LOGICALLY subsumed by the `Number.isFinite` below it, so it
+decided nothing; `cap <= 0` is subsumed by nothing (`Number.isFinite(0)` is true)
+and is unreachable only because a schema in another package says so. That is
+defence in depth against a contract moving, so it takes **C91's resolution from
+the previous round — keep the guard, plant the fixture that makes it
+observable** — plus mutant **C92**, which deletes only that clause.
+
+**L-3** — the meter's sentence had THREE homes (this banner, the trial card, the
+Members header) with the full-gym clause written out twice and nothing keeping
+the copies equal. One owner now, `seatLineText`, with the sentence asserted as a
+LITERAL rather than against its own source (:19960's tautological-golden-string
+finding). **Visible consequence, stated not slipped past: the trailing full stop
+now appears on all three surfaces**; two of them had none.
+
+### The permanent guard — :5348 rule 5, and the gap :20986 named itself
+
+Four Criticals on one journey and nothing watched it. `gymSwitch.render.test.jsx`
+asks ONE question of the console — *do something on gym A, walk to gym B, is
+anything on screen still about gym A?* — and **adding a console panel means
+adding a case there.** Four tests, each measured RED against the pre-fix source
+and GREEN after (rule 3), with the two keys restored and sha256-verified between.
+
+**THE GUARD'S FIRST FINDING WAS AGAINST ITS OWN AUTHOR.** My first "walk back to
+gym A" control asserted that the card's HELD answer survives the round trip. It
+does not and must not — the key exists precisely so a panel keeps nothing across
+a gym change, and `justStarted` is a one-second bridge until the background
+re-read lands, not a store. **Asserting otherwise would have pinned the defect**
+(:5104 F5's shape, in a test written the same hour). Rewritten to drive the real
+sequence, where the re-read lands and the plan becomes a fact on the org row.
+
+### Instruments
+
+**`git checkout --` re-materialised `Overview.jsx` LF to CRLF**, which git reports
+as clean and which breaks every two-line anchor in the web harness — :17676's
+recorded hazard, incurred again. Restored to LF and sha-verified against the
+pre-probe reading. **And a hand-applied mutation of `orgs/repo.ts` matched
+nothing twice** because that file is CRLF while my anchor used a bare newline;
+the harness converts anchors per file and was never at fault. `cat -A` printed no
+carriage-return marker and was misleading — `repr()` is what settled it.
+
+**PROVE, all measured on the final bytes: web 1290/1290 exit 0 across 48 files
+(+8) · `orgs.routes` + `db.migration` 145/145 LOCAL · shared 51/51 · tsc exit 0
+on api and shared · eslint `--max-warnings=0` clean on all eight changed files ·
+`vite build` exit 0 · `node --check` clean on both harnesses ·
+`check-decisions-index` 218 resolve.** Sweeps, both stated SUBSETS: **web
+C92–C95 (new) 4 RED 0 ALIVE and C86–C91 re-run 6 RED 0 ALIVE, 10 of 115**; **api
+O135–O138, 4 of 138, 4 RED 0 ALIVE.** Controls GREEN first on every filter,
+restores byte-exact after each.
+
+**NOTHING TICKS: a DIFF-ONLY ROUND 2 is the remaining gate.** No migration, no
+dependency, no server behaviour change — the API diff is a test fixture and a
+mutant's comment.

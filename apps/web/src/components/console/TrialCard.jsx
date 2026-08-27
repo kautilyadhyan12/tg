@@ -6,6 +6,7 @@ import { refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
 import {
   canManageBilling,
   isTrialing,
+  seatLineText,
   seatMeter,
   trialEndDateLabel,
 } from '../../pages/console/billingView';
@@ -44,13 +45,14 @@ import { viewerPrivileges } from '../../pages/console/consoleView';
 // "one per person, not one per gym" stops of their own accord.
 
 /** `used of cap places used`, or null when there is no meter to draw. The
- *  numbers are the server's — the same count the seat cap refuses joins by. */
+ *  numbers are the server's — the same count the seat cap refuses joins by, and
+ *  the WORDS are `seatLineText`'s, which is the only place they are written. */
 function SeatLine({ org }) {
   const meter = seatMeter(org);
   if (meter === null) return null;
   return (
     <div className="text-sm mt-1" style={{ color: meter.pressure ? '#FF8A1F' : 'rgba(255,255,255,0.45)' }}>
-      {meter.used} of {meter.cap} places used
+      {seatLineText(meter)}
     </div>
   );
 }

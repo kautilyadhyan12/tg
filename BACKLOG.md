@@ -2136,3 +2136,28 @@ both correctly excluded, which is the one number on this screen that could
 silently be counted the wrong way — and the **one-trial-per-person refusal fired
 on a second real gym owned by the same person**, which is the gate that replaced
 Kd approving every gym by hand.
+
+---
+
+## THE GYM TRIAL, WEB HALF — T3 ROUND 1, 2026-08-28 (`c749d2e`)
+
+**Three Low, all fixed in the round** (:5348 rule 1 — the gate changes the
+SCHEDULE, never the bar). The round's two Critical/High are not here: they are
+fixed, and they held the packet. DECISIONS :21897.
+
+**The shape worth keeping: two of the three are guards and sentences that could
+not fail** — one clause nothing could falsify, and one sentence with three homes
+and no owner. Neither was a defect in what the app DID.
+
+| # | Finding | Fix |
+|---|---|---|
+| L-1 | **A banner dismissed on one gym silenced the OTHER gym's for the day.** `closedAt` exists only to re-render on the press, it is gym-agnostic, and it short-circuits ahead of the per-gym stored record — so an owner of two gyms who put one notice away lost the other one too. **Low, and the line is worth reading**: only `trial_info` is dismissible, so nothing FALSE is drawn (:5807's test is "on screen AND wrong") and the amber `trial_urgent` state, which is the one that matters, is not dismissible at all and is untouched. What is lost is a notice, not a truth. | The same one-line class fix as the round's C/H-1: `key={org?.id ?? 'no-gym'}` on `<ConsoleBanner>`. `'no-gym'` rather than a bare `org?.id`, because `undefined` reads to React as "no key" and would have restored the bug for anyone navigating out through the gym list. Mutant **C94**, RED. |
+| L-2 | **`cap <= 0` in `seatMeter` could not fail.** `seatCap` is `z.number().int().positive().nullable()` and every console read is `readThrough`-parsed, so a finite cap at or below zero cannot arrive from today's server. Same unfalsifiable shape C88 was deleted for **one round earlier, in the same function**. | **KEPT, not deleted, and the distinction is the whole point.** C88's `typeof` line was LOGICALLY subsumed by the `Number.isFinite` below it — it decided nothing, so deleting it lost nothing. `cap <= 0` is subsumed by **nothing** (`Number.isFinite(0)` is true); it is unreachable only because a schema in ANOTHER PACKAGE says so, which makes it defence in depth against a contract moving rather than dead code. So it takes **C91's resolution from the previous round — keep the guard, plant the fixture that makes it observable** — with a test driving `seatCap: 0` and `-5`, and mutant **C92** deleting only that clause. Without it: `{ used: 0, cap: 0, pressure: true, full: true }`, i.e. *"0 of 0 places used — your gym is full"* at a gym nothing limits. |
+| L-3 | **The seat meter's sentence had THREE homes and the full-gym clause had TWO copies** — `billingView`'s banner, the Overview's trial card, and the Members header — with nothing keeping them equal. The banner overhead and the line directly under it could drift into saying different things about the same gym on the same screen. :14493's Low-2 in copy rather than in SQL. | One owner: `seatLineText`, read by all three. Asserted as a **LITERAL** in the test rather than against the function that produces it — :19960's tautological-golden-string finding, which cost that round a second fix. Mutant **C95** drops the full-gym arm. **Visible consequence, stated rather than slipped past: the trailing full stop now appears on all three surfaces**; two of them had none, and unifying the sentence is what makes one owner possible. **What C95 cannot see, said plainly: somebody re-inlining an IDENTICAL copy at a call site.** |
+
+**Not scored, and worth more than any of the three: the permanent guard.**
+`gymSwitch.render.test.jsx` now asks one question of the whole console — do
+something on gym A, walk to gym B, is anything on screen still about gym A? Four
+Critical/High findings have lived on that journey (:20712, :20867, :20986 and
+this round's C/H-1) and nothing watched it. **Adding a console panel means adding
+a case there.**

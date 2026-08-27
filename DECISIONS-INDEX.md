@@ -127,6 +127,69 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:21897** — 2026-08-28 — **THE GYM TRIAL, WEB HALF, T3 ROUND 1: TWO
+  Critical/High, the packet does NOT ship — one gym's trial appeared on ANOTHER
+  gym and hid that gym's own button, and the seat meter's cross-gym rule was
+  guarded by 78 stray rows.** Reviews `c749d2e`. **Escape hatch NOT armed**
+  (:21487 and :20986 both found zero). Kd approved the finding list first
+  (*"fix all"*). **Read before adding ANY state to a console panel, before
+  writing a `gym_id` predicate in `listOrgsForUser`, before quoting a mutant
+  without naming the database it ran against, and before writing the seat
+  meter's sentence anywhere for a fourth time.**
+  **C/H-1 IS THE FOURTH APPEARANCE OF ONE CLASS** (:20712, :20867, :20986) — a
+  console panel holding state that outlives the gym it is about. `justStarted`
+  is component state and `/console/:orgSlug` is ONE route, so measured in jsdom:
+  gym B, on NOTHING, read **"Free trial" · "0 of 300 places used" · ZERO start
+  buttons** — the third being a cap it does not have and the last **BLOCKING
+  the owner from starting gym B's trial at all**, while the banner beside it
+  correctly drew nothing. Fixed with a `key`, :20712's fix, because it covers
+  state nobody has added yet. **:20986's duplicate-key guard could not see it —
+  that guard catches two children SHARING a key and nothing there can see a key
+  that is ABSENT.**
+  **C/H-2 IS A MUTANT THAT LIED, AND IT LIED THE FLATTERING WAY.** O136's anchor
+  and filter were both right from the day it was written and it still proved
+  nothing: the anchor test built ONE gym, so a correlated count and a whole-table
+  count return the same number. **Measured on a throwaway database (0 gyms, 0
+  members): control GREEN, O136 GREEN — the mutant SURVIVES.** On the dev machine
+  it reports RED at `expected 79 to be 1`, i.e. on **78 unrelated rows, not the
+  guarantee** — :18652's C/H-3 verbatim. Closed with a SECOND GYM under a
+  separate owner carrying its own live, non-complimentary, non-staff member,
+  built before any assertion, so all four `seatsUsed` readings are cross-tenant;
+  re-measured clean, **RED at `expected 1 to be +0`**, which is the new assertion
+  and proves the FIXTURE carries it. Fourth `gym_id` predicate on this table
+  family to ship unobserved (:14493 C/H-1, :15260 L-1, :19366's O114).
+  **THREE LOW, ALL FIXED. L-1** a dismissal on one gym silenced the other's
+  (same class, same key). **L-2 `cap <= 0` KEPT, NOT DELETED, and the distinction
+  binds**: C88's `typeof` line was LOGICALLY subsumed by the `Number.isFinite`
+  under it; `cap <= 0` is subsumed by nothing and is unreachable only because a
+  schema in ANOTHER PACKAGE says so — defence in depth, so it takes C91's
+  resolution (keep the guard, plant the fixture) plus mutant **C92**. **L-3** the
+  meter's sentence had three homes and the full-gym clause two copies; one owner
+  now (`seatLineText`), asserted as a LITERAL not against its own source
+  (:19960). **Visible: the trailing full stop now appears on all three surfaces.**
+  **THE PERMANENT GUARD IS THE DELIVERABLE (:5348 rule 5) and it closes the gap
+  :20986 named itself** — *"the guard watches the mechanism; nothing watches the
+  journey"*. `gymSwitch.render.test.jsx` asks one question of the whole console:
+  do something on gym A, walk to gym B, is anything on screen still about gym A?
+  **ADDING A CONSOLE PANEL MEANS ADDING A CASE THERE.**
+  **THE GUARD'S FIRST FINDING WAS AGAINST ITS OWN AUTHOR:** my "walk back" control
+  asserted that the card's HELD answer survives the round trip. It does not and
+  must not — the key exists so a panel keeps NOTHING across a gym change — so the
+  first draft would have **pinned the defect** (:5104 F5, in a test written the
+  same hour). Rewritten to drive the real sequence.
+  **INSTRUMENTS: `git checkout --` re-materialised `Overview.jsx` LF → CRLF**,
+  which git calls clean and which breaks every two-line anchor in the web harness
+  (:17676 again); and a hand-applied mutation of `orgs/repo.ts` matched nothing
+  twice because that file is CRLF — **the harness converts anchors per file and
+  was never at fault, and `cat -A` printed no marker while `repr()` settled it.**
+  **PROVE: web 1290/1290 exit 0 across 48 files (+8) · `orgs.routes` +
+  `db.migration` 145/145 LOCAL · shared 51/51 · tsc exit 0 on api and shared ·
+  eslint `--max-warnings=0` clean on all eight changed files · `vite build`
+  exit 0 · `node --check` clean on both harnesses · `check-decisions-index` 218
+  resolve.** Sweeps, both stated SUBSETS: **web C92–C95 new 4 RED + C86–C91
+  re-run 6 RED, 10 of 115, 0 ALIVE**; **api O135–O138, 4 of 138, 4 RED 0 ALIVE.**
+  **NOTHING TICKS — a DIFF-ONLY ROUND 2 is the remaining gate.** No migration, no
+  dependency, no server behaviour change.
 - **:21751** — 2026-08-27 — **THE TRIAL'S SMOKE PASSES 9/9 — AND KD WITHDRAWS ONE
   OF THE NINE HIMSELF, because the step could not fail.** Kd's REPORT (:4829) on
   `be21bd0`. **Read before citing the trial as verified, before quoting this pass

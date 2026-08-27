@@ -191,8 +191,18 @@ export default function ConsoleLayout({ children }) {
             here and not on the Overview. It draws nothing at all until the gym
             is on a plan, and nothing on `/console` or `/console/new`, where
             there is no gym to be about (`org` is null and the machine's first
-            question is what the gym is on). */}
-        <ConsoleBanner org={org} />
+            question is what the gym is on).
+
+            KEYED ON THE GYM for the same reason `Overview` keys the trial card:
+            this shell does NOT remount when an owner walks from gym A to gym B,
+            so the banner's `closedAt` — set purely to re-render on the press —
+            outlived the gym it was about, and one dismissal silenced the other
+            gym's banner for the rest of the day. Measured. `'no-gym'` covers
+            `/console` and `/console/new`, where there is no gym and the banner
+            draws nothing anyway; a bare `org?.id` would be `undefined` there,
+            which React accepts as "no key" and would quietly restore the bug for
+            anyone navigating out through the gym list. */}
+        <ConsoleBanner key={org?.id ?? 'no-gym'} org={org} />
         {children}
       </main>
 

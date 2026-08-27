@@ -1619,6 +1619,24 @@ const MUTANTS = [
     id: 'O136',
     target: 'repo',
     why: 'OWNERSHIP: the seat meter stops counting its own gym, so every gym on a plan is shown the number of paying members in the WHOLE DATABASE — a cross-tenant count on screen, and one that would read "full" at every gym at once',
+    // ITS FIXTURE WAS ADDED AFTER THE FACT, AND UNTIL THEN THIS ROW WAS A LIE.
+    //
+    // The anchor and the filter were both right from the day it was written, and
+    // it still proved nothing: the named test built ONE gym, so the correlated
+    // count and a whole-table count returned the same number and the mutation
+    // changed nothing observable. It reported RED on the dev machine ONLY
+    // because 78 unrelated `gym_members` rows happened to be sitting there —
+    // measured ALIVE on a throwaway database with nothing else in it.
+    //
+    // :18652's C/H-3 exactly (*a mutant whose verdict depends on which database
+    // you point it at is worse than a missing one*), and :12343's standing
+    // lesson from the other side: when a mutant SURVIVES, ask whether the
+    // guarantee is observable before assuming the test is missing. Here it did
+    // not survive, which is worse — the accident pointed the flattering way.
+    //
+    // Closed by giving the anchor test a SECOND GYM with its own live,
+    // non-complimentary, non-staff member, built before any assertion, so every
+    // `seatsUsed` reading in that test is now taken across a tenant boundary.
     expect: 'seat meter counts the same people',
     from: '             WHERE sm.gym_id = g.id\n               AND sm.removed_at IS NULL',
     to: '             WHERE sm.removed_at IS NULL',

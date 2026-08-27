@@ -1,6 +1,84 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE GYM TRIAL, WEB HALF — T3 ROUND 1 AND ITS FIX ROUND. TWO Critical/High,
+      THE PACKET DOES NOT SHIP. DECISIONS :21897. Kd approved the finding list
+      before a byte was written ("fix all").
+
+  1. **C/H-1 — ONE GYM'S TRIAL APPEARED ON ANOTHER GYM AND HID THAT GYM'S OWN
+     BUTTON.** `justStarted` is component state and `/console/:orgSlug` is ONE
+     route, so walking between gyms does not remount. Measured in jsdom: gym B,
+     on NOTHING, read **"Free trial" · "0 of 300 places used" · ZERO start
+     buttons** — the last one BLOCKING gym B's trial entirely, while the banner
+     beside it correctly drew nothing. **FOURTH appearance of one class**
+     (:20712, :20867, :20986): a console panel holding state that outlives the
+     gym it is about. Fixed with a `key`. **:20986's duplicate-key guard could
+     not see it — it catches two children SHARING a key, never one that is
+     ABSENT.**
+  2. **C/H-2 — A MUTANT THAT LIED, AND IT LIED THE FLATTERING WAY.** O136's
+     anchor and filter were right from the day they were written and still
+     proved nothing: the anchor test built ONE gym, so a correlated count and a
+     whole-table count agree. **On a throwaway database (0 gyms, 0 members) the
+     mutant SURVIVES**; on the dev machine it reds at `expected 79 to be 1`, i.e.
+     on **78 unrelated rows**. :18652's C/H-3 verbatim. Closed with a SECOND GYM
+     under a separate owner carrying a live, non-complimentary, non-staff member,
+     built before any assertion — re-measured clean, **RED at `expected 1 to be
+     +0`**, the new assertion, which is the proof the FIXTURE carries it.
+  3. **THREE LOW, ALL FIXED.** A dismissal on one gym silenced the other's ·
+     `cap <= 0` could not fail and is **KEPT not deleted** (unlike C88 it is
+     subsumed by nothing — defence in depth, so C91's keep-and-plant resolution
+     plus mutant C92) · the meter's sentence had three homes and two copies of
+     the full-gym clause, now one owner (`seatLineText`). **Visible: a trailing
+     full stop now appears on all three surfaces.**
+  4. **THE PERMANENT GUARD IS THE DELIVERABLE** (:5348 rule 5), and it closes the
+     gap :20986 named itself — *"the guard watches the mechanism; nothing watches
+     the journey"*. `gymSwitch.render.test.jsx` asks ONE question of the whole
+     console: do something on gym A, walk to gym B, is anything still about gym
+     A? **ADDING A CONSOLE PANEL MEANS ADDING A CASE THERE.**
+  5. ⚠️ **THE GUARD'S FIRST FINDING WAS AGAINST ITS OWN AUTHOR.** My "walk back"
+     control asserted the card's HELD answer survives the round trip. It does not
+     and must not — the key exists so a panel keeps NOTHING across a gym change —
+     so the first draft would have **pinned the defect** (:5104 F5, in a test
+     written the same hour). Rewritten to drive the real sequence.
+  6. ⚠️ **INSTRUMENTS: `git checkout --` re-materialised `Overview.jsx` LF →
+     CRLF**, which git reports as CLEAN and which breaks every two-line anchor in
+     the web harness (:17676 again) — restored to LF and sha-verified. And a
+     hand-applied mutation of `orgs/repo.ts` matched nothing TWICE because that
+     file is CRLF; **the harness converts anchors per file and was never at
+     fault**, `cat -A` printed no marker and misled, `repr()` settled it.
+
+MEASURED on final bytes: **web 1290/1290 exit 0 across 48 files (+8) ·
+  `orgs.routes` + `db.migration` 145/145 LOCAL · shared 51/51 · tsc exit 0 on api
+  and shared · eslint `--max-warnings=0` clean on all eight changed files · `vite
+  build` exit 0 · `node --check` clean on both harnesses · `check-decisions-index`
+  219 resolve.** Sweeps, both stated SUBSETS: **web C92–C95 new 4 RED + C86–C91
+  re-run 6 RED, 10 of 115, 0 ALIVE**; **api O135–O138, 4 of 138, 4 RED 0 ALIVE.**
+  Rule 3 measured BOTH ways — all four guard tests watched RED against the
+  restored pre-fix source, keys sha256-verified after. NO migration, NO
+  dependency, NO server behaviour change (the api diff is a test fixture and a
+  mutant's comment).
+
+FILES: apps/web/src/pages/console/Overview.jsx ·
+       apps/web/src/components/console/ConsoleLayout.jsx ·
+       apps/web/src/components/console/TrialCard.jsx ·
+       apps/web/src/pages/console/Members.jsx ·
+       apps/web/src/pages/console/billingView.js · billingView.test.js ·
+       apps/web/src/pages/console/gymSwitch.render.test.jsx (new) ·
+       apps/web/tools/mutate-console.mjs · apps/api/test/orgs.routes.test.ts ·
+       apps/api/tools/mutate-orgs.mjs · DECISIONS.md · DECISIONS-INDEX.md ·
+       BACKLOG.md · HANDOFF.md
+
+TICKS: **NOTHING.** No `OWED.md` line moves — nothing was deferred this round.
+
+NEXT: **A DIFF-ONLY ROUND 2 is the only remaining gate** (:5348 rule 2), covering
+      the fixes and the surfaces they touch and NOT a fresh full pass. The smoke
+      does not need re-running: no server behaviour changed and the one visible
+      difference is a full stop. **A Critical there would be the SECOND
+      consecutive round on `apps/web`'s console — the escape hatch, and Kd's call,
+      not a chat's.**
+```
+
+```
 TASK: THE TRIAL'S SMOKE — PASSED 9/9 (Kd, on `be21bd0`), **and he withdrew one of
       the nine himself.** DECISIONS :21751.
 

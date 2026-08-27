@@ -13,7 +13,7 @@ import {
   memberCountLabel,
   seatIsFree,
 } from './consoleView';
-import { seatMeter } from './billingView';
+import { seatLineText, seatMeter } from './billingView';
 
 // The roster — Part 3 §4.3's Members screen, holding EXACTLY to §2.4's
 // visibility boundary.
@@ -317,8 +317,11 @@ export default function Members() {
                290 days a gym is nowhere near its limit. */
             style={{ color: meter.pressure ? '#FF8A1F' : 'rgba(255,255,255,0.45)' }}
           >
-            {meter.used} of {meter.cap} places used
-            {meter.full ? ' — your gym is full, so nobody else can join yet.' : ''}
+            {/* The words are `seatLineText`'s. This header used to spell the
+                full-gym clause out itself, which meant the banner overhead and
+                the line under it were two copies of one sentence with nothing
+                keeping them equal. */}
+            {seatLineText(meter)}
           </p>
         ) : null}
       </div>

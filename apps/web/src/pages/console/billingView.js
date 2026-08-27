@@ -141,6 +141,28 @@ export function seatMeter(org) {
   };
 }
 
+/** THE SEAT METER'S SENTENCE, AND THE ONLY PLACE IT IS WRITTEN.
+ *
+ *  It had three homes — this file's banner, the Overview's trial card and the
+ *  Members header — and the full-gym clause was spelled out twice with nothing
+ *  anchoring the copies. Two of the three could drift into saying different
+ *  things about the same gym on the same screen, which is :14493's Low-2 in
+ *  copy rather than in SQL. The prefix was a third copy of the same shape.
+ *
+ *  Null in, null out, so every caller keeps drawing nothing for a gym with no
+ *  meter rather than being handed an empty string to render.
+ *
+ *  **The trailing full stop now appears on all three surfaces.** Two of them
+ *  had none; unifying the sentence is what makes one owner possible, and a
+ *  meter that reads "42 of 300 places used." on the roster and in the banner
+ *  is the same true sentence in both places. */
+export function seatLineText(meter) {
+  if (meter === null || meter === undefined) return null;
+  return meter.full
+    ? `${meter.used} of ${meter.cap} places used — your gym is full, so nobody else can join yet.`
+    : `${meter.used} of ${meter.cap} places used.`;
+}
+
 /** Part 3 §4.2, the persistent slot above every console screen. One banner or
  *  none.
  *
@@ -204,9 +226,9 @@ export function bannerFor(org, now = Date.now()) {
     return {
       key: 'seat_pressure',
       tone: 'warn',
-      text: meter.full
-        ? `${meter.used} of ${meter.cap} places used — your gym is full, so nobody else can join yet.`
-        : `${meter.used} of ${meter.cap} places used.`,
+      // The sentence comes from `seatLineText` — the banner is one of its three
+      // readers, not its author.
+      text: seatLineText(meter),
       dismissible: false,
     };
   }

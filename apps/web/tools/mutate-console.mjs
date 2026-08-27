@@ -55,6 +55,10 @@ const STORE_SUITE = 'src/pages/console/consoleOrgs.test.js';
 const GYMVIEW_SUITE = 'src/pages/console/gymDetailsView.test.js';
 const BILLING_VIEW_SUITE = 'src/pages/console/billingView.test.js';
 const TRIAL_SUITE = 'src/pages/console/trial.render.test.jsx';
+/** The class guard: one gym, then the other, asking whether anything on screen
+ *  is still about the first. Four Critical/High findings have lived on that
+ *  journey and nothing watched it until 2026-08-28. */
+const GYM_SWITCH_SUITE = 'src/pages/console/gymSwitch.render.test.jsx';
 
 const TARGETS = {
   view: { file: resolve(ROOT, 'apps/web/src/pages/console/consoleView.js') },
@@ -1471,6 +1475,63 @@ const MUTANTS = [
     expect: 'with a dismissal already stored against it',
     from: '    banner.dismissible &&\n    gymId !== null &&',
     to: '    gymId !== null &&',
+  },
+
+  // ── WALKING BETWEEN TWO GYMS (C92–C95) ────────────────────────────────────
+  //
+  // C93 and C94 are the fifth and sixth `key` this console has needed for one
+  // class — a panel holding state across a gym change — and the first two aimed
+  // at the JOURNEY rather than at a component. Their suite is
+  // `gymSwitch.render.test.jsx`, which exists for that class alone.
+  //
+  // **EVERY FILTER HERE IS ASCII ON PURPOSE.** The harness refuses a non-ASCII
+  // `-t` (:10402), and the test names in that file carry curly apostrophes, so
+  // each `expect` is an ASCII SUBSTRING of the name rather than the name.
+  {
+    id: 'C92',
+    target: 'billingview',
+    suite: BILLING_VIEW_SUITE,
+    why: 'FALSE ON SCREEN: a cap of zero stops being refused, so a gym whose plan admits nobody reads "0 of 0 places used — your gym is full" — a meter drawn over a number nobody computed, and the `full` arm firing at a gym that has no limit at all',
+    // C88 above mutates this SAME line wholesale; this one deletes ONLY the
+    // `cap <= 0` clause, which is the half nothing could falsify. The two are
+    // different claims about one line, which is why both exist: C88 asks
+    // whether the guard runs, C92 asks whether this part of it decides anything.
+    expect: 'refuses a cap of zero or less',
+    from: '  if (!Number.isFinite(cap) || !Number.isFinite(used) || cap <= 0) return null;',
+    to: '  if (!Number.isFinite(cap) || !Number.isFinite(used)) return null;',
+  },
+  {
+    id: 'C93',
+    target: 'overview',
+    suite: GYM_SWITCH_SUITE,
+    why: 'FALSE ON SCREEN AND A BLOCKED OWNER: the trial card stops being keyed to its gym, so an owner who starts a trial on one gym and opens another is shown "Free trial" and a seat meter over a gym on NOTHING — and the button that would start that gym\'s own trial is gone, so it cannot be started at all',
+    expect: 'does not carry gym A',
+    from: '      <TrialCard key={org.id} org={org} />',
+    to: '      <TrialCard org={org} />',
+  },
+  {
+    id: 'C94',
+    target: 'layout',
+    suite: GYM_SWITCH_SUITE,
+    // ONE LINE, because `ConsoleLayout.jsx` is CRLF — see this file's own note
+    // on the `layout` target.
+    why: "SILENCE WHERE IT MATTERS: the banner stops being keyed to its gym, so dismissing one gym's trial notice for the day also silences the OTHER gym's — a deadline an owner is never shown, on a surface whose whole purpose is to reach them before their members lose the gym's features",
+    expect: 'does not let a banner dismissed on gym A',
+    from: "        <ConsoleBanner key={org?.id ?? 'no-gym'} org={org} />",
+    to: '        <ConsoleBanner org={org} />',
+  },
+  {
+    id: 'C95',
+    target: 'billingview',
+    suite: BILLING_VIEW_SUITE,
+    why: 'FALSE ON SCREEN: the meter\'s sentence stops saying a full gym is full, so the banner and the roster header both report "300 of 300 places used." while the door is turning people away and nothing on screen says why — the screen and the door disagreeing, which is the defect the seat meter exists to prevent',
+    // Aimed at the FULL arm because that is the clause this round de-duplicated:
+    // it was written out twice, in this file and in `Members.jsx`, with nothing
+    // keeping the copies equal. What this CANNOT see is somebody re-inlining an
+    // IDENTICAL copy at a call site — stated rather than implied.
+    expect: 'is the sentence itself, asserted as a literal',
+    from: '    ? `${meter.used} of ${meter.cap} places used — your gym is full, so nobody else can join yet.`',
+    to: '    ? `${meter.used} of ${meter.cap} places used.`',
   },
 ];
 
