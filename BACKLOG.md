@@ -2151,7 +2151,7 @@ and no owner. Neither was a defect in what the app DID.
 
 | # | Finding | Fix |
 |---|---|---|
-| L-1 | **A banner dismissed on one gym silenced the OTHER gym's for the day.** `closedAt` exists only to re-render on the press, it is gym-agnostic, and it short-circuits ahead of the per-gym stored record — so an owner of two gyms who put one notice away lost the other one too. **Low, and the line is worth reading**: only `trial_info` is dismissible, so nothing FALSE is drawn (:5807's test is "on screen AND wrong") and the amber `trial_urgent` state, which is the one that matters, is not dismissible at all and is untouched. What is lost is a notice, not a truth. | The same one-line class fix as the round's C/H-1: `key={org?.id ?? 'no-gym'}` on `<ConsoleBanner>`. `'no-gym'` rather than a bare `org?.id`, because `undefined` reads to React as "no key" and would have restored the bug for anyone navigating out through the gym list. Mutant **C94**, RED. |
+| L-1 | **A banner dismissed on one gym silenced the OTHER gym's for the day.** `closedAt` exists only to re-render on the press, it is gym-agnostic, and it short-circuits ahead of the per-gym stored record — so an owner of two gyms who put one notice away lost the other one too. **Low, and the line is worth reading**: only `trial_info` is dismissible, so nothing FALSE is drawn (:5807's test is "on screen AND wrong") and the amber `trial_urgent` state, which is the one that matters, is not dismissible at all and is untouched. What is lost is a notice, not a truth. | The same one-line class fix as the round's C/H-1: `key={org?.id ?? 'no-gym'}` on `<ConsoleBanner>`. `'no-gym'` rather than a bare `org?.id`. **The reason given here was wrong and is corrected in round 2** — it claimed `undefined` "would have restored the bug for anyone navigating out through the gym list", and that journey was then measured with a bare `org?.id`: it draws correctly, because React reads `'A-id'` → `undefined` → `'B-id'` as two remounts. The control (no key at all) leaked, so the probe could fail. `?? 'no-gym'` is explicitness, not a guard. Mutant **C94**, RED. |
 | L-2 | **`cap <= 0` in `seatMeter` could not fail.** `seatCap` is `z.number().int().positive().nullable()` and every console read is `readThrough`-parsed, so a finite cap at or below zero cannot arrive from today's server. Same unfalsifiable shape C88 was deleted for **one round earlier, in the same function**. | **KEPT, not deleted, and the distinction is the whole point.** C88's `typeof` line was LOGICALLY subsumed by the `Number.isFinite` below it — it decided nothing, so deleting it lost nothing. `cap <= 0` is subsumed by **nothing** (`Number.isFinite(0)` is true); it is unreachable only because a schema in ANOTHER PACKAGE says so, which makes it defence in depth against a contract moving rather than dead code. So it takes **C91's resolution from the previous round — keep the guard, plant the fixture that makes it observable** — with a test driving `seatCap: 0` and `-5`, and mutant **C92** deleting only that clause. Without it: `{ used: 0, cap: 0, pressure: true, full: true }`, i.e. *"0 of 0 places used — your gym is full"* at a gym nothing limits. |
 | L-3 | **The seat meter's sentence had THREE homes and the full-gym clause had TWO copies** — `billingView`'s banner, the Overview's trial card, and the Members header — with nothing keeping them equal. The banner overhead and the line directly under it could drift into saying different things about the same gym on the same screen. :14493's Low-2 in copy rather than in SQL. | One owner: `seatLineText`, read by all three. Asserted as a **LITERAL** in the test rather than against the function that produces it — :19960's tautological-golden-string finding, which cost that round a second fix. Mutant **C95** drops the full-gym arm. **Visible consequence, stated rather than slipped past: the trailing full stop now appears on all three surfaces**; two of them had none, and unifying the sentence is what makes one owner possible. **What C95 cannot see, said plainly: somebody re-inlining an IDENTICAL copy at a call site.** |
 
@@ -2161,3 +2161,53 @@ something on gym A, walk to gym B, is anything on screen still about gym A? Four
 Critical/High findings have lived on that journey (:20712, :20867, :20986 and
 this round's C/H-1) and nothing watched it. **Adding a console panel means adding
 a case there.**
+
+**ROUND 2 FOUND THAT GUARD GREEN OVER A BROKEN SCREEN.** It was blind for two
+reasons and only one of them was obvious. Recorded here because the paragraph
+above oversold it: see the round 2 section below.
+
+---
+
+## THE GYM TRIAL, WEB HALF — T3 ROUND 2, 2026-08-28
+
+**One Low, fixed in the round.** The round's Critical/High is not here: it armed
+the :5348 escape hatch, **Kd ruled REDESIGN** (the first such ruling — the four
+previous firings all went to PATCH), and it held the packet. DECISIONS entry to
+follow with the round's commit.
+
+**⚠️ THE C/H WAS NOT USER-REACHABLE, AND THAT WAS FOUND ONLY WHILE WRITING THE
+SMOKE — after the ruling.** The console offers no gym switcher: every path
+between two gyms goes through "Your gyms", which unmounts the screen and clears
+its state on the way past. Measured on the real journey with the real list and
+rail link — gym A's join code appears **x0** under gym B **both with the fix and
+without it**. Under :5807 1a the finding therefore fails the "on screen AND
+wrong" test, so **it should not have been tagged Critical/High and the escape
+hatch should not have fired on it**. The state leakage is real and sits in the
+screens; it needs a direct gym-to-gym link to become visible.
+
+**Recorded here rather than quietly dropped, because the ruling it produced was
+Kd's and was made on a summary that told him a user sees this.** He was told the
+correction, with the option to revert, and the fix stands by his decision. The
+process lesson is the reviewer's severity tag and my own repetition of it: BOTH
+of us reasoned from what the component does, and neither asked whether the app
+draws a path to it. **"Can a user get here?" is a question the severity gate
+needs and does not currently ask.**
+
+| # | Finding | Fix |
+|---|---|---|
+| L-1 | **A comment stated a false measurement as fact** (V1/V5). `ConsoleLayout`'s banner-key comment, and its copy in this file at L-1 above, both said a bare `org?.id` "would quietly restore the bug for anyone navigating out through the gym list". Measured on that exact journey: it does not — React reads `'A-id'` → `undefined` → `'B-id'` as two remounts. **Low because nothing a user sees is wrong**; it is the next reader who is misled, and misled by something wearing the word "Measured". | Both homes corrected, not deleted (:5748), each carrying what was actually measured AND its control (no key at all → the journey leaks, so the probe could fail). The `?? 'no-gym'` code is unchanged and is now described as what it is: explicitness, not a guard. |
+
+**The lesson this round is worth keeping, and it is about the guard, not the
+bug.** Round 1's guard could not see round 2's Critical for TWO reasons:
+
+1. **Both gyms were handed the same fake data**, so "still about gym A" was not a
+   thing any assertion could say. This one is obvious in hindsight.
+2. **And the fake answers arrived instantly.** `mockResolvedValue` settles in a
+   microtask, which React has already flushed by the time `findBy*` returns — so
+   the stale window is zero frames wide. **Measured: a probe with per-gym data
+   and instant answers is GREEN on the broken screen.** Only holding gym B's read
+   open — the way a ~200 ms request does — makes the defect visible.
+
+Fixing only (1) would have produced a second guard that passes over the same
+broken app. **Anything added to that file copies both halves: different data per
+gym, and the second gym's read held.**

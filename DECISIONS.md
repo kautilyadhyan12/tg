@@ -22025,3 +22025,119 @@ restores byte-exact after each.
 **NOTHING TICKS: a DIFF-ONLY ROUND 2 is the remaining gate.** No migration, no
 dependency, no server behaviour change — the API diff is a test fixture and a
 mutant's comment.
+
+## THE GYM TRIAL, WEB HALF — T3 ROUND 2: THE ESCAPE HATCH FIRED, KD RULED **REDESIGN** (the first), AND THE C/H TURNED OUT NOT TO BE REACHABLE (2026-08-28)
+
+Reviews `e7e3d02`. **The packet did NOT ship this round.** One Critical/High, one
+Low; the Low is fixed here and logged in `BACKLOG.md`. Kd approved the plan before
+a byte was written, then ruled twice more as the facts changed.
+
+**Read before adding a gym switcher, before keying anything in the console,
+before tagging a finding Critical/High on what a COMPONENT does, and before
+writing a smoke step for a journey you have not confirmed the app draws.**
+
+### The ruling: REDESIGN, and it is the first time the hatch has not gone to PATCH
+
+Round 1's C/H and round 2's are both in `apps/web/src/pages/console/Overview.jsx`,
+and :13336 judges the subsystem at FILE granularity, so :5348's trigger fired.
+The reviewer stopped without proposing a fix, which is the rule working. **Four
+previous firings all went to PATCH (:6277, :9509, :14493, :20587); this one did
+not**, and the distinction Kd was given: every previous fix for THIS class was a
+`key` on the one component just caught (:20712, :20867, :20986, `TrialCard`), so
+the guarantee lived in the memory of whoever added the next panel — and five
+times out of six it was not remembered.
+
+**The redesign is one line**, and that was said to him plainly rather than dressed
+up: `ConsoleLayout` wraps `{children}` in `<Fragment key={`screen:${orgSlug ??
+'no-gym'}`}>`. Every console screen is drawn through that one `main`, so a gym
+change rebuilds whatever is inside it and a screen added later cannot opt out.
+Keyed on the SLUG, not the org row: the slug is what changed, it comes off the
+address bar, and it is correct on the new gym's first render — whereas `org`
+arrives early and is exactly what makes stale panels look authoritative.
+
+### THE C/H IS NOT REACHABLE BY A USER, AND THAT WAS FOUND AFTER THE RULING
+
+**Found while writing the smoke sheet, which is the only reason it was found at
+all.** The console offers no gym switcher: every path between two gyms goes
+through "Your gyms" (`/console`), which puts `ConsoleHome` into the slot the
+screen occupied — a different component type in the same position, i.e. an
+UNMOUNT — so the state is cleared on the way past.
+
+**Measured on the real journey, through the real `ConsoleHome` and the real rail
+link, both directions: gym A's join code appears x0 under gym B WITH the fix and
+x0 WITHOUT it.** Under :5807 1a ("on screen AND wrong") the finding therefore
+fails the Critical/High test, **so it should not have been tagged C/H and the
+hatch should not have fired on it.**
+
+**Kd was told this before anything was committed, with the option to revert, and
+ruled KEEP.** The fix stands by that ruling, not by the finding's tag.
+
+**The process lesson, and it is not the reviewer's alone — I repeated the error
+to Kd in plainer words, which is worse.** Both of us reasoned from what the
+COMPONENT does under a gym change and neither asked whether the app draws a path
+to it. The severity gate asks "is it on screen and wrong"; it does not ask **"can
+a user get here?"**, and on this card that was the whole question. Recorded as an
+open question rather than a rule, because rule changes are Kd's (`OWED.md`).
+
+### THE GUARD FROM ROUND 1 WAS GREEN OVER THE BROKEN SCREEN, FOR TWO REASONS
+
+`gymSwitch.render.test.jsx` was round 1's :5348-rule-5 permanent guard. It could
+not see round 2's defect, and only one of the two reasons is the obvious one:
+
+1. **Both gyms were handed the same fake data**, so "still about gym A" was not a
+   thing any assertion could say. This is the reviewer's finding.
+2. **And the fake answers arrived instantly.** `mockResolvedValue` settles in a
+   microtask, already flushed by the time `findBy*` returns, so the stale window
+   is zero frames wide. **Measured: a probe with per-gym data and instant answers
+   is GREEN on the unfixed code.** Only holding gym B's read open — as a ~200 ms
+   request does — makes it visible.
+
+**Fixing only (1) would have produced a second guard that passes over the same
+broken app.** Anything added to that file copies both halves. The file's header
+now also states, measured, that the journey it guards is one the app does not yet
+offer — so it can never be read as evidence that a user was shown another gym's
+data.
+
+### :20986's DUPLICATE-KEY GUARD CAUGHT THIS ROUND'S FIX, NOT ITS BUG
+
+Written first as `key={orgSlug ?? 'no-gym'}`, the wrapper collided with
+`ConsoleBanner`'s own `?? 'no-gym'` one line above — **two siblings holding one
+key on `/console` and `/console/new`, which is React dropping one without a
+word.** The suite went red immediately. **Second time that instrument has caught
+the fix for this class rather than the class itself.** Hence the `screen:` prefix,
+which cannot collide with the banner or with any gym id.
+
+### L-1 — a comment stated a false measurement as fact (V1/V5)
+
+`ConsoleLayout`'s banner-key comment, and its copy in `BACKLOG.md`, both said a
+bare `org?.id` "would quietly restore the bug for anyone navigating out through
+the gym list". **Measured on that exact journey: it does not** — React reads
+`'A-id'` → `undefined` → `'B-id'` as two remounts. **The control ran alongside:
+with NO key the journey DOES leak**, so the probe could fail and did not. Both
+homes corrected rather than deleted (:5748); `?? 'no-gym'` stays and is now
+described as what it is — explicitness, not a guard.
+
+### Instruments
+
+**A `sha256sum -c` restore check failed on `ConsoleLayout.jsx` after two `sed`
+round trips while `git diff` showed the file exactly as intended.** The diff was
+taken as authoritative and the checksum discarded rather than quoted — an
+unexplained instrument is not evidence in either direction, and claiming
+"byte-verified" off it would have been false. The mutation result it was guarding
+was re-established the honest way: the suite green on the restored bytes.
+
+**PROVE, on the final bytes: web 1292/1292 exit 0 across 48 files (+2) · eslint
+clean on both changed files (`--max-warnings` default; the package's 73
+pre-existing problems are in other files and my two report exit 0) · `vite build`
+exit 0.** Rule 3, measured both ways: the two new cases were watched RED against
+the pre-fix source, each on its own claim (join code `expected 2 to be 0`, roster
+`expected <div> to be null`), and RED again as a mutant on the SHIPPING bytes with
+the wrapper's key stripped.
+
+**NOTHING TICKS: a DIFF-ONLY ROUND 3 is the remaining gate.** No migration, no
+dependency, no server change — the diff is one React key, two test cases, and
+three corrected comments.
+
+**NO SMOKE SHEET, AND THAT IS A FINDING NOT AN OMISSION.** The journey does not
+exist in the app, so every step would pass whatever the code did — the exact
+shape Kd withdrew his own step 6 for on 2026-08-27. A sheet was not written.

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { NavLink, Link, useParams, useNavigate } from 'react-router-dom';
 import { Building2, Users, Settings, ChevronLeft, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -197,13 +197,86 @@ export default function ConsoleLayout({ children }) {
             this shell does NOT remount when an owner walks from gym A to gym B,
             so the banner's `closedAt` — set purely to re-render on the press —
             outlived the gym it was about, and one dismissal silenced the other
-            gym's banner for the rest of the day. Measured. `'no-gym'` covers
-            `/console` and `/console/new`, where there is no gym and the banner
-            draws nothing anyway; a bare `org?.id` would be `undefined` there,
-            which React accepts as "no key" and would quietly restore the bug for
-            anyone navigating out through the gym list. */}
+            gym's banner for the rest of the day. Measured.
+
+            `'no-gym'` covers `/console` and `/console/new`, where there is no
+            gym and the banner draws nothing anyway. **IT IS EXPLICITNESS, NOT A
+            GUARD — this comment claimed otherwise and the claim was false.** It
+            said a bare `org?.id` "would quietly restore the bug for anyone
+            navigating out through the gym list". Measured on that exact journey
+            (gym A → the gym list → gym B), with a bare `org?.id`: gym B's banner
+            draws correctly, because React reads `'A-id'` → `undefined` →
+            `'B-id'` as two remounts, and the `undefined` leg is one of them.
+            The control ran alongside it — with NO key at all the same journey
+            DOES leak, so the instrument could fail and did not.
+
+            Corrected rather than deleted (:5748): a false measurement in a
+            comment is worse than no comment, because the next person reads it
+            as evidence. The `?? 'no-gym'` stays — it says what the key is on
+            those two routes instead of leaving a reader to work out what React
+            does with `undefined`. */}
         <ConsoleBanner key={org?.id ?? 'no-gym'} org={org} />
-        {children}
+
+        {/* ── THE GYM CHANGE, HANDLED ONCE, FOR EVERY CONSOLE SCREEN ────────
+            Kd's ruling, 2026-08-28: the escape hatch fired on the FIFTH
+            appearance of one class and he ruled REDESIGN rather than a fifth
+            patch. This line is that redesign, and it is deliberately small.
+
+            THE CLASS: `/console/:orgSlug` is ONE route and `/console/:orgSlug/
+            members` is another, so walking from gym A to gym B re-renders the
+            screen but does NOT remount it. Any answer a screen is holding —
+            join codes, a roster, a member count, a started trial, a dismissed
+            banner — outlives the gym it was about, while the gym's NAME comes
+            off a row already in hand. The result is gym B's heading over gym
+            A's data, and it is not a flicker: it lasts the whole round trip.
+            Round 2 measured it at its worst — gym A's join code drawn twice
+            under "Gym B" WITH A LIVE COPY BUTTON, and gym A's roster with live
+            Remove buttons. A code copied there admits somebody to the wrong gym.
+
+            **AND IT IS NOT REACHABLE BY A USER TODAY — measured, and said here
+            because the sentence above reads as if it were.** The console offers
+            no gym switcher: every path between two gyms goes through "Your
+            gyms", which swaps `ConsoleHome` into the slot the screen was in, and
+            a different component type in the same position is an UNMOUNT. The
+            state is cleared on the way past. Measured on that real journey with
+            the real list and rail link: gym A's code appears x0 under gym B both
+            with this fix and without it. The leak is real in the screens and
+            needs only a direct link to become visible — which a gym switcher is.
+
+            So this line is bought cheaply BEFORE the feature that would expose
+            it, not after. It is not repairing damage a user has seen.
+
+            WHY HERE AND NOT IN THE SCREENS: the four fixes before this one were
+            each a `key` on the one component that had just been caught
+            (:20712, :20867, :20986, `TrialCard` below), which puts the
+            guarantee in the memory of whoever adds the next panel. Five times
+            out of six it was not remembered. Every console screen is drawn
+            through this one `main`, so the invariant is stated once, here, and
+            a screen added later cannot opt out of it or forget it.
+
+            KEYED ON THE SLUG, NOT THE GYM ROW: the slug is what actually
+            changed, it comes straight off the address bar, and it is correct
+            on the very first render of the new gym — whereas `org` is resolved
+            from a list and is the thing that arrives EARLY and makes the stale
+            panels look authoritative. `'no-gym'` covers `/console` and
+            `/console/new`, which have no slug.
+
+            THE COST, accepted in the ruling: switching gym shows each screen's
+            own "Loading…" for one round trip instead of the previous gym's
+            details. That is the screen telling the truth about what it knows.
+
+            THE `screen:` PREFIX IS LOAD-BEARING AND THE GUARD PROVED IT. Written
+            first as `orgSlug ?? 'no-gym'`, this collided with the banner's own
+            `?? 'no-gym'` one line above — two SIBLINGS holding the same key on
+            `/console` and `/console/new`, which is React dropping one of them
+            without a word. :20986's duplicate-key guard failed the suite on it
+            immediately, which is the second time that instrument has caught the
+            fix for this class rather than the class itself. The prefix makes a
+            collision impossible against the banner and against any gym id.
+
+            The per-panel keys above and below are now redundant and are LEFT
+            ALONE — a fix round carries only its fix (:5348 rule 6). */}
+        <Fragment key={`screen:${orgSlug ?? 'no-gym'}`}>{children}</Fragment>
       </main>
 
       {/* ── Mobile tab bar ────────────────────────────────────────────────── */}

@@ -7115,6 +7115,34 @@ file and is stated so nobody reads these as lower priority than they are.
 
 ## Open questions awaiting a Kd ruling (nothing built on these)
 
+- [ ] ❓ **THE SEVERITY GATE NEVER ASKS "CAN A USER GET HERE?" — and on
+      2026-08-28 that cost a Critical/High tag, an escape-hatch firing and a
+      ruling from Kd, all on a defect no user could reach. RAISED 2026-08-28
+      (DECISIONS :22029), HIS TO SETTLE.**
+      **What happened, measured:** the console's stale-state defect was tagged
+      Critical/High and armed :5348's hatch. Kd ruled REDESIGN. **Then, while
+      writing the smoke sheet, the journey turned out not to exist** — the
+      console has no gym switcher, every path between two gyms goes through
+      "Your gyms", and that unmounts the screen. Gym A's join code appears **x0**
+      under gym B with the fix and **x0** without it. He was told before anything
+      was committed and ruled **KEEP** the fix.
+      **Why the gate did not catch it:** :5807 1a asks whether a user could see
+      something FALSE. Both the reviewer and this chat answered that from what
+      the COMPONENT does under a gym change, and the component does show gym A's
+      code. **Neither asked whether the app draws a path to that state**, which
+      was the whole question.
+      **THE QUESTION, in one line: should a Critical/High tag require naming the
+      journey a user takes to reach it?** Recommended YES and cheap — one clause
+      in the T3 prompt asking the reviewer to name the clicks, which also makes
+      the smoke sheet fall out of the review for free. **The cost of NOT doing
+      it is not a missed bug — it is Kd being asked to rule on something that
+      was not happening**, and rulings are the scarcest thing on this project.
+      **Against it:** an unreachable leak is still real (this one needed only a
+      link to become visible), so the answer must not become "unreachable ⇒
+      ignore it". The tag would change, not the fix.
+      **A chat must not resolve this on its own** — it changes :5348/:5807, which
+      are his.
+
 - [ ] ❓ **CANADA, THE UK AND THE EURO AREA CANNOT START A TRIAL AT ALL, because
       the app and Kd's own ratified price book disagree about what they pay in —
       RAISED 2026-08-27 (DECISIONS :21157), HIS TO SETTLE.**

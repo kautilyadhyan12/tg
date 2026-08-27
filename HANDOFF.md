@@ -1,6 +1,62 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE GYM TRIAL, WEB HALF — T3 ROUND 2 AND ITS FIX ROUND. ONE Critical/High,
+      ONE Low, THE PACKET DOES NOT SHIP. DECISIONS :22029.
+      Kd ruled twice: REDESIGN (the escape hatch), then KEEP (after the
+      reachability correction). Plan approved before a byte was written.
+
+  1. **THE ESCAPE HATCH FIRED AND KD RULED REDESIGN — the FIRST time it has not
+     gone to PATCH** (:6277, :9509, :14493, :20587 all went to patch). Round 1's
+     C/H and round 2's are both in `Overview.jsx`; :13336 judges the subsystem at
+     FILE granularity. The reviewer stopped without proposing a fix.
+  2. **THE REDESIGN IS ONE LINE.** `ConsoleLayout` wraps `{children}` in a
+     `<Fragment>` keyed on `` `screen:${orgSlug ?? 'no-gym'}` ``. Every console
+     screen is drawn through that one `main`, so a gym change rebuilds the screen
+     and a panel added later cannot opt out. It replaces four per-component `key`
+     patches. **Keyed on the SLUG, not the org row** — the slug is what changed
+     and is right on the new gym's first render; `org` arrives early and is what
+     makes stale panels look authoritative. **The `screen:` prefix is
+     load-bearing**: the first version collided with `ConsoleBanner`'s own
+     `'no-gym'` and :20986's duplicate-key guard failed the suite instantly.
+  3. **THE C/H IS NOT USER-REACHABLE, FOUND ONLY WHILE WRITING THE SMOKE.** No
+     gym switcher exists; every path between two gyms goes through "Your gyms",
+     which UNMOUNTS the screen. **Measured on the real journey: gym A's join code
+     x0 under gym B WITH the fix and x0 WITHOUT it.** Fails :5807 1a, so it
+     should not have been tagged C/H and the hatch should not have fired. Kd was
+     told before any commit and ruled KEEP. **Open question in `OWED.md`: the
+     severity gate never asks "can a user get here?".**
+  4. **THE ROUND-1 GUARD WAS GREEN OVER THE BROKEN SCREEN, for TWO reasons.**
+     Both gyms got identical fixtures (the obvious one) **AND the answers
+     resolved in a microtask, so the stale window was zero frames wide** — a
+     probe with per-gym data and instant answers is GREEN on the unfixed code.
+     Gym B's read is now HELD OPEN. **Anything added to that file copies both
+     halves.**
+  5. **L-1: a comment stated a false measurement as fact.** A bare `org?.id` does
+     NOT restore the banner bug — React reads 'A-id' → undefined → 'B-id' as two
+     remounts; the control with NO key leaks, so the probe could fail. Corrected
+     in both homes (:5748), code unchanged.
+
+FILES: apps/web/src/components/console/ConsoleLayout.jsx (the key + two comment
+       corrections) · apps/web/src/pages/console/gymSwitch.render.test.jsx (two
+       cases + the reachability header) · BACKLOG.md · DECISIONS.md ·
+       DECISIONS-INDEX.md · OWED.md
+
+PROVE: web 1292/1292 exit 0 across 48 files (+2) · eslint exit 0 on both changed
+       files · vite build exit 0 · check-decisions-index 220 resolve. Rule 3 both
+       ways: the two cases RED against the pre-fix source (each on its own claim)
+       and RED again as a mutant on the SHIPPING bytes with the key stripped.
+
+OPEN:  **NOTHING TICKS — a DIFF-ONLY ROUND 3 is the remaining gate.**
+       **NO SMOKE SHEET, and that is a finding not an omission**: the journey is
+       not in the app, so every step would pass whatever the code did — the shape
+       Kd withdrew his own step 6 for on 2026-08-27.
+
+NEXT:  T3 round 3 (diff-only) in a FRESH chat, then the packet ships if it finds
+       zero Critical/High.
+```
+
+```
 TASK: THE GYM TRIAL, WEB HALF — T3 ROUND 1 AND ITS FIX ROUND. TWO Critical/High,
       THE PACKET DOES NOT SHIP. DECISIONS :21897. Kd approved the finding list
       before a byte was written ("fix all").

@@ -127,6 +127,33 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:22029** — 2026-08-28 — **THE GYM TRIAL, WEB HALF, T3 ROUND 2: THE ESCAPE
+  HATCH FIRED, KD RULED REDESIGN (the FIRST — four previous firings all went to
+  PATCH: :6277, :9509, :14493, :20587), AND THE C/H THEN TURNED OUT NOT TO BE
+  USER-REACHABLE.** Reviews `e7e3d02`; the packet did NOT ship. One Low, fixed,
+  in `BACKLOG.md`. **The redesign is ONE line** — `ConsoleLayout` keys
+  `{children}` on the SLUG, so a gym change rebuilds every console screen and a
+  panel added later cannot opt out; it replaces four per-component `key` patches
+  (:20712, :20867, :20986, `TrialCard`).
+  **THE CORRECTION MATTERS MORE THAN THE FIX: the console offers no gym
+  switcher, every path between two gyms goes through "Your gyms", and that
+  UNMOUNTS the screen — measured on the real journey, gym A's join code appears
+  x0 under gym B WITH the fix and x0 WITHOUT it.** So the finding fails :5807
+  1a's "on screen AND wrong" test, should not have been tagged C/H, and the hatch
+  should not have fired. **Kd was told before anything was committed and ruled
+  KEEP.** Open question raised, not a rule: the severity gate never asks **"can a
+  user get here?"**.
+  **The round-1 guard was GREEN over the broken screen for TWO reasons and only
+  one was obvious** — identical fixtures for both gyms, AND answers that resolve
+  in a microtask, so the stale window is zero frames wide. Fixing only the first
+  would have shipped a second guard that passes over the same broken app.
+  **:20986's duplicate-key guard caught this round's FIX** (the wrapper's first
+  key collided with `ConsoleBanner`'s `'no-gym'`), hence the `screen:` prefix.
+  **No smoke sheet exists and that is a finding**: the journey is not in the app,
+  so every step would pass regardless.
+  **Read before adding a gym switcher, before keying anything in the console,
+  before tagging a finding C/H on what a COMPONENT does, and before writing a
+  smoke step for a journey you have not confirmed the app draws.**
 - **:21897** — 2026-08-28 — **THE GYM TRIAL, WEB HALF, T3 ROUND 1: TWO
   Critical/High, the packet does NOT ship — one gym's trial appeared on ANOTHER
   gym and hid that gym's own button, and the seat meter's cross-gym rule was
