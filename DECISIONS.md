@@ -21819,11 +21819,35 @@ stopping for: the trial belongs to the GYM, and what is capped at one is the
 PERSON's allowance of them. A line naming only the person invites an owner to read
 it as a limit on individual app users, which is a different product rule.
 
-Reworded to name both halves **in the server's own words** — *"One trial per
+~~Reworded to name both halves **in the server's own words** — *"One trial per
 person, not per gym — if you run a second gym, it won't get its own."* — so the
 sentence an owner reads before pressing and the sentence they read if refused are
-now the same sentence and cannot drift apart. Copy only; rule 4a never mutates
-wording.
+now the same sentence and cannot drift apart.~~
+
+**— SUPERSEDED THE SAME DAY: KD RULED THE LINE OUT ALTOGETHER.** Shown the
+reworded version he answered ***"nothing need to mention keep blank"***. The line
+is DELETED, not reworded, and this paragraph is struck rather than rewritten
+because the two-step shape is the record: a sentence he questioned was made more
+accurate, and he then decided the accurate version was not worth saying at all.
+
+**Nothing is lost, which is why it is a fair call and not a removal to argue
+with.** The rule is still ENFORCED (one trial per owner, ever) and still
+EXPLAINED at the only moment it affects anybody — the 409's *"You've already used
+your free trial. It's one per person, not one per gym."*, which the card prints in
+the server's own words. What is gone is a caveat put to every owner about a
+situation almost none of them will meet. **The no-removal rule's authorised path**
+(:10182's precedent): an explicit Kd ruling, made against a stated cost. Do not
+re-add it as an improvement. Copy only; rule 4a never mutates wording.
+
+**AND A SECOND JARGON FINDING FROM THE SAME MESSAGE, MINE, ABOUT THE SHEET.** The
+rewritten step 6 told him to *"use the normal app, not the console"* and he
+answered ***"what console men i am using in web"***. He is right twice over: it is
+ALL ONE WEBSITE, so "not the console" reads as though there were a second
+application — and `user@example.com` staffs nothing, so that account has no gym
+console to avoid in the first place. The step now says so in plain words and names
+the **"I'm a member"** door instead. **Part 0.5's K1 inside a RUNBOOK, which
+:12343 already ruled these sheets are held to** — a smoke sheet describes what a
+BEGINNER SEES, never what a thing is called internally.
 
 ### 4 · WHAT THE RUN NEEDED FIRST, AND IT WAS NOT NOTHING
 

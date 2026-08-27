@@ -135,26 +135,25 @@ export default function TrialCard({ org }) {
       <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>
         Your members get the gym&apos;s features for 30 days. No card needed.
       </p>
-      {/* One trial per PERSON, said before it is pressed rather than in the
-          refusal afterwards — an owner about to make a second gym "to get
-          another month" should learn it now, and it is what makes the refusal
-          feel like a rule rather than a fault.
+      {/* THERE IS DELIBERATELY NO "one trial per person" LINE HERE — KD RULED IT
+          OUT, 2026-08-27, at the smoke.
 
-          **KD'S SMOKE, 2026-08-27: "One free trial per person." READ AS THE
-          WRONG THING.** His words: *"what is this free trial is given to gym i
-          think it need to be mentioned"* — and he is right. The trial belongs to
-          the GYM; what is limited to one is the PERSON's allowance of them. A
-          line naming only the person invites an owner to read it as a limit on
-          individual app users, which is a different product rule.
+          It shipped as *"One free trial per person."*; he asked *"what is this
+          free trial is given to gym i think it need to be mentioned"*, it was
+          reworded to name both halves, and he then ruled the whole line out:
+          ***"nothing need to mention keep blank"***.
 
-          Nothing here was false, so it is a wording fix and not a correction —
-          but it now names BOTH halves, and it does so in the same words as the
-          server's own refusal ("It's one per person, not one per gym"), so the
-          sentence an owner reads before pressing and the sentence they read if
-          refused are the same sentence. */}
-      <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
-        One trial per person, not per gym — if you run a second gym, it won&apos;t get its own.
-      </p>
+          **Nothing is lost by removing it and that is why it is a fair call.**
+          The rule is still ENFORCED (one trial per owner, ever — Part 5 §12,
+          `startGymTrial`) and it is still EXPLAINED at the only moment it
+          affects anybody: the 409 says *"You've already used your free trial.
+          It's one per person, not one per gym."* in the server's own words, and
+          the card prints that sentence. What is gone is a caveat offered to
+          every owner about a situation almost none of them will meet.
+
+          **Do not re-add it as an improvement.** It is a Kd ruling on his own
+          product's wording, not an oversight (the no-removal rule's authorised
+          path — an explicit ruling against a cited cost, :10182's precedent). */}
       {error !== null ? (
         <p className="text-sm mt-3" style={{ color: '#ef4444' }}>
           {error}

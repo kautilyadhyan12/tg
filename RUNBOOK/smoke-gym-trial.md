@@ -168,8 +168,13 @@ to the very response the MEMBER app reads to draw its gym card. If that response
 stopped matching its contract, the client treats it as a hard failure and the
 card vanishes — so a member's gym card is the visible tripwire on the change.
 
+**Plain words first, because the old version of this line was jargon and Kd said
+so: it is ALL ONE WEBSITE.** "Gym console" is just the part of it for running a
+gym, and `user@example.com` does not run one — so that account has no gym console
+at all and there is nothing to avoid. At the sign-in screen it takes the **"I'm a
+member"** door and lands on the ordinary member screens.
+
 Sign out. Sign in as **`user@example.com`** — a plain member of the *owner* gym.
-Open the app normally (the member side, not the console).
 
 ✅ The app loads and behaves exactly as it did before.
 
