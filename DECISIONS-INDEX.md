@@ -152,7 +152,10 @@ mid-file: re-derive them with
   reads the same gym as member AND owner, **the owner half being the control**; a
   browser cannot go there and the sheet now says so. **The rewritten step 6 is
   falsifiable — the new fields ride on the response the MEMBER app draws its gym
-  card from, so a contract break makes that card VANISH — and is UNRUN.**
+  card from, so a contract break makes that card VANISH — and it WAS RUN AND
+  PASSED the same day on `10a47e8`: the card still named the gym.** **Both versions
+  produced a ✅ from the same person on the same afternoon; the first was satisfied
+  by any app at all. A ✅ is worth exactly what its step could have failed on.**
   **SECOND FINDING, also his, also Low: a TRUE sentence that read as a different
   rule** — *"One free trial per person"* invites an owner to read it as a limit on
   individual app users; the trial belongs to the GYM and only the ALLOWANCE is per

@@ -21804,11 +21804,19 @@ anything.** There is no member screen that would render the answer either way, s
 this is not a gap in the sheet's diligence; it is a fact about the surface, and
 the sheet now says so instead of collecting a ✅ that means nothing.
 
-**The rewritten step 6 is falsifiable and is UNRUN.** The two new fields ride on
-the very response the MEMBER app reads to draw its gym card, and `orgsApi.js`
-treats a contract mismatch as a hard failure — so a broken contract makes that
-card VANISH. A member's gym card is therefore the visible tripwire on this change,
-and that is what step 6 now checks.
+**The rewritten step 6 is falsifiable and ~~is UNRUN~~ WAS RUN AND PASSED the same
+day** (Kd, on `10a47e8`). The two new fields ride on the very response the MEMBER
+app reads to draw its gym card, and `orgsApi.js` treats a contract mismatch as a
+hard failure — so a broken contract makes that card VANISH. A member's gym card is
+therefore the visible tripwire on this change, and that is what step 6 now checks:
+a plain member signed in through the "I'm a member" door, the app behaved as
+before, and **the card still named the *owner* gym.**
+
+**The difference between the two versions of this step is the whole lesson.** Both
+produced a ✅ from the same person on the same afternoon. The first was satisfied
+by any app at all, including one leaking the plan; the second can only be
+satisfied by a response that still matches its contract. **A ✅ is worth exactly
+what its step could have failed on.**
 
 ### 3 · THE OTHER FINDING: A TRUE SENTENCE THAT READ AS A DIFFERENT RULE
 

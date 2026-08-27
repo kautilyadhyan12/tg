@@ -16,10 +16,17 @@ one-trial-per-person refusal fired on a second gym owned by the same person**,
 with no Try again beside it and nothing half-started · and a TRAINER sees the
 plan but no button anywhere.
 
-**⚠️ STEP 6's PASS IS WITHDRAWN AND KD IS THE ONE WHO WITHDREW IT.** As written it
-could not fail — see the step itself. Its ✅ is not evidence of anything and must
-not be counted; the privacy guarantee it claimed to check is carried by an
-automated test with the owner as its control. **The rewritten step 6 is UNRUN.**
+**⚠️ STEP 6's ORIGINAL PASS IS WITHDRAWN AND KD IS THE ONE WHO WITHDREW IT.** As
+written it could not fail — see the step itself. That ✅ is not evidence of
+anything and must not be counted; the privacy guarantee it claimed to check is
+carried by an automated test with the owner as its control.
+
+**THE REWRITTEN STEP 6 WAS RUN AND PASSED — Kd, 2026-08-27, on `10a47e8`.** A
+plain member signed in through the "I'm a member" door, the app behaved as before,
+and **the gym card still named the *owner* gym**. That is the real risk this card
+carried for members — two fields were added to the very response that card is
+drawn from, and a broken contract makes it VANISH — so unlike the version it
+replaced, this ✅ is evidence about something.
 
 **Two findings from this run, both his, both Low (nothing on screen was false):**
 the "One free trial per person" line read as a limit on individual app users

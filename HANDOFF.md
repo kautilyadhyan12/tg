@@ -13,7 +13,11 @@ TASK: THE TRIAL'S SMOKE — PASSED 9/9 (Kd, on `be21bd0`), **and he withdrew one
      withholding it. :16095 L-3, third occurrence, **first found by the operator
      rather than a reviewer.** Do NOT count it as evidence. The guarantee lives
      in the API test reading the same gym as member AND owner, the owner half
-     being the CONTROL. **The rewritten step 6 is falsifiable and UNRUN.**
+     being the CONTROL. **The rewritten step 6 is falsifiable and WAS RUN AND
+     PASSED on `10a47e8`** — a plain member's gym card still named the gym, which
+     is the visible tripwire on the two new fields. **Both versions produced a ✅
+     from the same person on the same afternoon; a ✅ is worth exactly what its
+     step could have failed on.**
   2. **WHAT THE BROWSER DID SETTLE, and nothing else could:** the meter read
      **1 of 300 and not 3** on live data (owner's comped seat and the trainer's
      free seat both excluded — the one number here that could be counted wrong),
