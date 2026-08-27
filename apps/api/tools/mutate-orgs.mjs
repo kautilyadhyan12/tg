@@ -167,9 +167,17 @@ const MUTANTS = [
     // came back ALIVE, correctly reporting that neither arm was covered by it.
     // O36 is the confirm arm; this row keeps the apply arm and points at the
     // test written for it.
+    // RE-ANCHORED 2026-08-27, and NOT allow-listed: the trial card added a
+    // SECOND `await bustEntitlements(deps.redis, userId);` at six-space indent,
+    // so the one-line anchor started matching twice and the whole-table
+    // pre-check ABORTED before a byte was written (:15260 L-2's guard, working).
+    // Widened to include the `already_member` case label above it, which is
+    // unique to the apply path — a mutant is a claim about ONE call site
+    // (:15770), so re-aiming it at whichever line came first would have been the
+    // wrong fix. The trial site gets its OWN row, O133.
     expect: 'busts a stale cache',
-    from: '      await bustEntitlements(deps.redis, userId);',
-    to: '      await Promise.resolve();',
+    from: '    case "already_member": {\n      await bustEntitlements(deps.redis, userId);',
+    to: '    case "already_member": {\n      await Promise.resolve();',
   },
   {
     id: 'O7',
@@ -1511,9 +1519,87 @@ const MUTANTS = [
     id: 'O121',
     target: 'shared',
     why: "THE NEW PRIVILEGE LEAVES THE OWNER'S TEMPLATE, so every gym created from now on has an owner who cannot edit their own gym — the ship-dead failure migration `0014`'s backfill exists to prevent, arriving through the OTHER door",
-    from: '    "staff.manage",\n    "org.manage",\n  ],\n  manager:',
-    to: '    "staff.manage",\n  ],\n  manager:',
+    // RE-ANCHORED 2026-08-27: the trial card added `billing.manage` after
+    // `org.manage` in the owner's template, so this anchor matched NOTHING and
+    // the whole-table pre-check ABORTED before a byte was written — a no-op
+    // mutation would otherwise report ALIVE, whose honest reading is "this
+    // guarantee has no test" (:10726's guard). Same guarantee, same target, and
+    // the new privilege gets its own SIBLING at O134 rather than being folded in
+    // here: a mutant is a claim about ONE line (:15770).
+    from: '    "org.manage",\n    "billing.manage",\n  ],\n  manager:',
+    to: '    "billing.manage",\n  ],\n  manager:',
     expect: "a brand-new owner's stored ticks include the new privilege",
+  },
+  {
+    id: 'O127',
+    target: 'repo',
+    // THE MUTANT FOR THE `OWED.md` LINE THIS CARD EXISTS TO CLOSE. Its anchor is
+    // a one-liner only because the source names the guarantee on that line —
+    // `await lockOrgRow(tx, input.gymId);` appears five times in this file, and a
+    // two-line anchor is the CRLF hazard :17676 counted 99 of.
+    why: "MONEY: the subscription writer stops locking the gym row, so a trial committing between updateOrg's currency SELECT and its UPDATE is missed and a now-paying gym's billing currency moves — :19656 C/H-3, whose closing half was written onto this card as a requirement",
+    expect: 'two simultaneous trial starts produce exactly one subscription',
+    from: '    await lockOrgRow(tx, input.gymId); // subscription-writer lock, :19656 C/H-3\n',
+    to: '\n',
+  },
+  {
+    id: 'O128',
+    target: 'repo',
+    why: "ABUSE: the one-trial-per-owner gate disappears, so a fraudster makes a fresh gym every month for a fresh 30 days — the exact chain Kd's approval step used to close and this rule replaced (Part 5 §12)",
+    expect: 'one free trial per owner, ever',
+    // Deleted rather than inverted, matching the deletion idiom the rest of this
+    // table uses: inverting it would also red the happy-path test, and a mutant
+    // that reds everything says less about which guarantee it broke.
+    from: '    if (used[0] !== undefined) return { kind: "trial_already_used" };\n',
+    to: '\n',
+  },
+  {
+    id: 'O129',
+    target: 'repo',
+    why: 'NUMBER A USER SEES: the trial resolves to the BIGGEST band instead of the smallest, so every gym trials at 2,100 members instead of the 300 Kd ruled (:19129) — and the screen shows them that number',
+    expect: 'gets the 300-seat band',
+    from: '      ORDER BY seat_cap ASC NULLS LAST, price_minor ASC',
+    to: '      ORDER BY seat_cap DESC NULLS LAST, price_minor ASC',
+  },
+  {
+    id: 'O130',
+    target: 'repo',
+    why: "NUMBER A USER SEES: a plan carrying no trial becomes eligible, so the trial lands on a row whose trial_days is 0 — a trial that ended the instant it began, carrying that plan's seat cap",
+    expect: 'gets the 300-seat band',
+    from: '        AND trial_days > 0\n',
+    to: '\n',
+  },
+  {
+    id: 'O131',
+    target: 'repo',
+    why: "OWNERSHIP: the live-subscription check stops naming the gym, so one gym reads ANOTHER gym's subscription and is told it is already subscribed — a gym silently denied its own trial because a stranger has one",
+    expect: 'gets the 300-seat band',
+    from: "      WHERE s.owner_type = 'gym' AND s.owner_id = ${input.gymId}\n        AND s.status IN ('trialing','active','past_due')`;",
+    to: "      WHERE s.owner_type = 'gym'\n        AND s.status IN ('trialing','active','past_due')`;",
+  },
+  {
+    id: 'O132',
+    target: 'repo',
+    why: "MONEY: the trial stops matching the gym's own currency, so a gym in a country we do not price is put on somebody else's money instead of being told we are not open — :10010's standing refusal of a fallback currency, which is how a Canadian gym gets quoted in rupees",
+    expect: 'no price book is refused',
+    from: '        AND currency = ${gym.currency_display}\n',
+    to: '\n',
+  },
+  {
+    id: 'O133',
+    target: 'service',
+    why: "FALSE ON SCREEN: starting the trial stops shaking loose the owner's own cached entitlements, so the person who just upgraded their gym is shown the free tier's limits for up to a minute on the screen they acted on",
+    expect: 'members get the gym plan the moment the trial starts',
+    from: '      await bustEntitlements(deps.redis, userId);\n      return startOrgTrialResponseSchema.parse({',
+    to: '      await Promise.resolve();\n      return startOrgTrialResponseSchema.parse({',
+  },
+  {
+    id: 'O134',
+    target: 'shared',
+    why: "SHIP-DEAD: the BILLING privilege leaves the owner's template, so every gym created from now on has an owner who is 403'd on their own trial button — O121's failure through the door this card opened, and the reason migration `0015` backfills the tick onto existing owners",
+    expect: 'gets the 300-seat band',
+    from: '    "org.manage",\n    "billing.manage",\n  ],\n  manager:',
+    to: '    "org.manage",\n  ],\n  manager:',
   },
 ];
 

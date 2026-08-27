@@ -1,6 +1,97 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: A GYM STARTS ITS OWN 30-DAY TRIAL (server half) — the FIRST `subscriptions`
+      row this product has ever written, and three built-but-inert features wake
+      up. DECISIONS :21157. Stage 1 of Kd's build order (:19016).
+
+  1. **KD REVERSED :11072 RULING 1 — no approval step.** *"a gym can start on own
+     without my approval but i will have the power of removing them or pausing
+     their use if i find them to be fraud"*. What replaces the gate is **ONE
+     TRIAL PER OWNER, EVER** (Part 5 §12), in the repo, guarded by **O128**.
+     **Do not re-propose an approval step.**
+  2. ⚠️ **THE SUSPEND/REMOVE HALF HE ASKED FOR IN EXCHANGE IS NOT BUILT.** It is
+     now the admin panel's FIRST SLICE (its 🔴 `OWED.md` line was rewritten).
+     Until it exists a fraudulent gym can be stopped only by hand in the database.
+  3. **HIS COST QUESTION WAS ANSWERED WITH MEASUREMENTS AND THEY ARE ON THE
+     BREAKER'S OWN LINE** — the approval gate never protected him from an API
+     bill; a gym multiplies a fake account's damage **2.5×, not 1000×**; the thing
+     that would protect him is the v1 §9.3 ceiling, which **has one writer (the
+     switched-off coach) and no reader**. Its deadline is now **before the app is
+     on the internet**. **A cannot precede B and that was measured**: the ceiling
+     meters per GYM against 3× the gym's fee, and 1 of 120 cost rows carries a
+     `gym_id` at all.
+  4. **`billing.manage` IS A NEW PRIVILEGE (migration `0015`)** — §2.2's own
+     owner-only Billing row, a SEPARATE tick from `org.manage` (:13803), gating
+     the route because :11429's seam forbids a route checking a role NAME.
+     **It joins `LAST_OWNER_REQUIRED_PRIVILEGES`, which CLOSES the long-standing
+     "the guard covers one of :11429 rule 2's two doors" line.**
+  5. **`0015` ALSO WIDENS `subscriptions.provider` TO PART 5 §0 ADDENDUM A'S LIST
+     VERBATIM** (adds `'none'` = card-less trial). **Only that one line of the
+     addendum** — `pending_plan_id`, `billing_profiles`, `invoice_counters` and
+     `pilot_codes` belong to the card that reads them (R1.1).
+  6. **THE 🔴 LOCK REQUIREMENT FROM :19656 C/H-3 IS DISCHARGED AND TICKED**:
+     `lockOrgRow` is the first statement in `startGymTrial`. **The requirement
+     does not expire — any SECOND writer of `subscriptions` must take it too**,
+     and `O127` plus a two-client concurrency test is what keeps this one honest.
+     **A 23505 is deliberately NOT caught** (it would hide a writer that skipped
+     the lock).
+  7. **THE TRIAL BAND IS A QUERY, NOT THE NUMBER 300**: lowest-capped active
+     monthly plan in the gym's currency, `NULLS LAST` load-bearing (a capless tier
+     would otherwise BE the trial). :19129's ruling survives a re-priced book.
+  8. **AUDIT — four of six findings are INSTRUMENTS.** A shared-test fixture used
+     `billing.manage` as its stand-in for "a privilege that does not exist yet"
+     and **this card minted it** (fixed as a CLASS with a synthetic token) · two
+     LOCKOUT tests went red and **the guard was right** (controls given both keys,
+     never loosened) · `node --check` caught a raw newline in a mutant string
+     (:13336's guard) · **my own edits drifted O6 and O121 and the whole-table
+     pre-check ABORTED both times before a byte was written** — neither
+     allow-listed, neither re-aimed at whichever line came first (:15770), each
+     given a sibling (O133/O134).
+
+MEASURED, all LOCAL (:13659): **`orgs.routes` 130/130 (+10) · `db.migration` 10/10
+  · four more suites 45/45 · shared 51/51 · web 1234/1234 UNCHANGED · tsc exit 0
+  AND PROVEN REAL by planting a type error · eslint clean at `--max-warnings=0` on
+  nine files · SWEEP a stated SUBSET of 134: 10 mutants · 10 RED · 0 ALIVE · 0
+  never ran**, controls GREEN first, restores sha256-verified, gym rows
+  fingerprinted with no unattributed changes. Both new constraints read back out
+  of `pg_get_constraintdef` AFTER migrating (:20222's lesson). `gitleaks` finds 2,
+  **both pre-existing false positives in `HANDOFF.md` from 2026-08-11** — own ⚪
+  line; nothing in this diff.
+
+FILES: apps/api/drizzle/0015_billing_manage_and_provider_none.sql (new) ·
+       apps/api/drizzle/meta/_journal.json · apps/api/src/db/schema/money.ts ·
+       apps/api/src/db/schema/tenancy.ts · apps/api/src/modules/orgs/repo.ts ·
+       apps/api/src/modules/orgs/service.ts · apps/api/src/modules/orgs/routes.ts ·
+       apps/api/src/modules/orgs/schemas.ts · apps/api/test/orgs.routes.test.ts ·
+       apps/api/tools/mutate-orgs.mjs · packages/shared/src/orgs.ts ·
+       packages/shared/test/schemas.test.ts · DECISIONS.md · DECISIONS-INDEX.md ·
+       OWED.md · HANDOFF.md
+
+NOTHING TICKS BUT THE LOCK LINE. **NO SCREEN, THEREFORE NO SMOKE**
+  (:11846/:13803's precedent) and **T3 IS UNRUN** — a diff-only review in a FRESH
+  chat is the remaining gate.
+
+⚠️ THREE THINGS THE NEXT CHAT MUST NOT REDISCOVER THE HARD WAY:
+  (a) **The Neon dev branch Kd's browser reads still holds the PRE-:18488 price
+      book and does NOT have `0015`.** On that database the trial would hand a gym
+      a 25-seat, 7-day plan. The local Postgres IS correct, so **every green figure
+      above says nothing about what his browser would do** (:20222's exact shape).
+      Two commands fix it and **neither may be run without asking him** — it is
+      his data.
+  (b) **Canada, the UK and the euro area cannot trial at all** — the app stamps
+      them CAD/GBP/EUR and the book is USD+INR, while :17366 ratifies "US · CANADA
+      · EUROPE, one USD book". **❓ line, Kd's to settle, recommendation on record.
+      Do not resolve it in a chat** (:16702).
+  (c) **Neither `org.manage` nor `billing.manage` has a tick box** on the Staff
+      screen, so neither can be delegated through the product. No data loss —
+      `unknownPrivileges` carries them through a save.
+
+NEXT: the WEB half — the "Start your 30-day free trial" button on the console,
+      §4.2's banner, and the seat meter. It carries the SMOKE.
+```
+
+```
 TASK: GYM DETAILS (WEB HALF), T3 ROUND 5 (diff-only) — ZERO Critical/High.
       **THE PACKET SHIPS.** DECISIONS :20986. Card closed after five rounds.
 

@@ -370,6 +370,20 @@ describe("workout sync payload (v1 §5.3)", () => {
  *  server is the authority on its own vocabulary and the database CHECK agrees
  *  with it. */
 describe("privileges a newer server knows and this build does not", () => {
+  /** THE FIXTURE HAD TO STOP BEING A REAL-LOOKING NAME, and the reason is that
+   *  it stopped being unreal. This block used `billing.manage` as its stand-in
+   *  for "a privilege a newer server knows" — and on 2026-08-27 the trial card
+   *  added exactly that privilege, so the write test below started FAILING for
+   *  the best possible reason: the future it was imagining arrived.
+   *
+   *  A synthetic token that no vocabulary can ever mint fixes the CLASS rather
+   *  than this instance (:1239). The next plausible name — `reports.read`,
+   *  `announcements.write` — would put the same trap back one card later, and
+   *  the failure would again look like a bug in the parser rather than a stale
+   *  fixture. Named once and used in all three tests so a future privilege
+   *  cannot half-update it. */
+  const UNKNOWN_PRIVILEGE = "zz.privilege.from.a.newer.server";
+
   const staffRow = {
     userId: "11111111-1111-4111-8111-111111111111",
     displayName: "Rita",
@@ -386,14 +400,14 @@ describe("privileges a newer server knows and this build does not", () => {
     expect(known.success).toBe(true);
 
     const newer = orgStaffResponseSchema.safeParse({
-      staff: [{ ...staffRow, privileges: ["members.read", "billing.manage"] }],
+      staff: [{ ...staffRow, privileges: ["members.read", UNKNOWN_PRIVILEGE] }],
     });
     expect(newer.success).toBe(true);
     // Carried through UNCHANGED — the screen filters to what it has words for
     // and puts the rest back on save. Dropping it here would silently strip a
     // permission from the next person who pressed Save.
     if (newer.success) {
-      expect(newer.data.staff[0]?.privileges).toEqual(["members.read", "billing.manage"]);
+      expect(newer.data.staff[0]?.privileges).toEqual(["members.read", UNKNOWN_PRIVILEGE]);
     }
   });
 
@@ -420,7 +434,7 @@ describe("privileges a newer server knows and this build does not", () => {
           currencyDisplay: "INR",
           status: "active",
           staffRole: "manager",
-          privileges: ["members.read", "billing.manage"],
+          privileges: ["members.read", UNKNOWN_PRIVILEGE],
           isMember: true,
           joinedAt: null,
         },
@@ -429,7 +443,7 @@ describe("privileges a newer server knows and this build does not", () => {
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) {
-      expect(parsed.data.orgs[0]?.privileges).toEqual(["members.read", "billing.manage"]);
+      expect(parsed.data.orgs[0]?.privileges).toEqual(["members.read", UNKNOWN_PRIVILEGE]);
     }
   });
 
@@ -443,8 +457,16 @@ describe("privileges a newer server knows and this build does not", () => {
     expect(ok.success).toBe(true);
 
     const bad = updateOrgStaffPrivilegesRequestSchema.safeParse({
-      privileges: ["members.read", "billing.manage"],
+      privileges: ["members.read", UNKNOWN_PRIVILEGE],
     });
     expect(bad.success).toBe(false);
+
+    // AND the real newest privilege IS accepted, which is what stops this test
+    // passing against a schema frozen at whatever the vocabulary was the day it
+    // was written — the failure mode the fixture rename above was a symptom of.
+    const newest = updateOrgStaffPrivilegesRequestSchema.safeParse({
+      privileges: ["members.read", "billing.manage"],
+    });
+    expect(newest.success).toBe(true);
   });
 });

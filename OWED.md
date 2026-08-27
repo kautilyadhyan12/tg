@@ -4687,7 +4687,29 @@ file and is stated so nobody reads these as lower priority than they are.
       silently gets worse rather than staying still.**
       🔴 because it is the instrument that BOUNDS the worst case whatever
       allowance is chosen, which makes it worth more than the allowance decision
-      itself. Must be live before the first real gym starts a trial.
+      itself. ~~Must be live before the first real gym starts a trial.~~
+      **DEADLINE SHARPENED 2026-08-27 (DECISIONS :21157), AND THE TRIGGER MOVED:
+      it must be live BEFORE THE APP IS ON THE INTERNET, not before the first
+      trial** — because gyms now start their own trials with no human in the way,
+      so "the first gym" is no longer a moment anybody schedules.
+      **KD RAISED THIS HIMSELF and the answer is on record**: *"what if a hacker
+      hack my app and create a million gym or user and add million user and uses
+      all fetaures aggresively that way a broke like me will have to pay millions
+      of dollar in api and server money which i dont have"*. **The measurement he
+      was given, so nobody re-derives it in a panic: the exposure is per ACCOUNT
+      and is bounded by the daily quota, which IS built** — free 2 scans/day, gym
+      member 5 — so at the measured **$0.00212/scan** (:9944) a maxed fake account
+      costs **$0.127/month** free and **$0.318** inside a gym. **A gym multiplies
+      the damage by 2.5, not by a thousand, and the approval gate he removed was
+      never what stood between him and that bill — THIS LINE IS.**
+      **WHY IT WAS NOT BUILT FIRST, measured and put to him rather than assumed:
+      this breaker cannot precede a gym having a plan.** It meters per GYM against
+      3× *the gym's fee*, and spend reaches a gym only through `getLiveGymId`,
+      which inner-joins a LIVE subscription — measured 2026-08-27, **1 of 120
+      `api_cost_events` rows carries a `gym_id` at all**, total spend ever is
+      **≈5 cents**, and nothing is deployed (`apps/web/.env` → `localhost:3000`).
+      Building the meter first means building it against nothing and testing it
+      against nothing. He chose B on that evidence.
 - [x] ~~❓ **THE GYM MEMBER'S COACH ALLOWANCE HAS NEVER BEEN PRICED** — computed
       $0.705/member/month, coach 64–95% of it, every band underwater at the
       ceiling; owed Kd a costed table of allowance options.~~
@@ -4884,7 +4906,19 @@ file and is stated so nobody reads these as lower priority than they are.
       other four console sections have their own lines. **And smoke and T3 are
       both UNRUN as this is written.**
 - [ ] 🟡 **A GYM WITH NO SUBSCRIPTION HAS NO SEAT LIMIT — deferred with the org
-      slice, 2026-08-18 (DECISIONS :10010).** The seat check itself is BUILT and
+      slice, 2026-08-18 (DECISIONS :10010).**
+      **NARROWED 2026-08-27, NOT CLOSED (DECISIONS :21157), and the difference
+      matters.** A gym can now put itself on a plan — `POST /v1/orgs/:gymId/trial`
+      writes a `trialing` subscription on the lowest-capped band in its currency
+      (300 members, Kd's :19129 ruling) — so **the cap is live and biting for any
+      gym that has started its trial**, proven end to end by a test that fills a
+      one-seat plan and watches the next applicant refused. **What is still open is
+      the gym that has NOT started one**, which is every gym until its owner taps
+      the button and every gym whose trial has ended: `seatCapFor` still resolves
+      to null and nothing limits the roster. **Do NOT close this with a default
+      cap** — the original reasoning stands, and it is now sharper, because a gym
+      sitting between trials is exactly where an uncapped roster is worth money to
+      somebody. The seat check itself is BUILT and
       correct: it reads the cap off the gym's live subscription's plan
       (`trialing|active|past_due`, §4.1's own status set), counts live
       non-complimentary members, and refuses the join at the cap — proven by a
@@ -5784,8 +5818,30 @@ file and is stated so nobody reads these as lower priority than they are.
       rather than only by this line — his "most-used routes" IS the candidate
       cache, and it is the cheapest feature on his list because it reads our own
       database and makes no external call at all.**
-- [ ] 🟡 **GYM PLAN/TRIAL ACTIVATION SITS BEHIND KD'S APPROVAL — ruled
-      2026-08-19 (DECISIONS :11072), binds the BILLING card.** The hazard pair
+- [x] ~~🟡 **GYM PLAN/TRIAL ACTIVATION SITS BEHIND KD'S APPROVAL — ruled
+      2026-08-19 (DECISIONS :11072), binds the BILLING card.**~~
+      **STRUCK 2026-08-27 BY KD, WHO REVERSED HIS OWN RULING (DECISIONS :21157).**
+      *"i think that should not happen a gym can start on own without my approval
+      but i will have the power of removing them or pausing their use if i find
+      them to be fraud"*. **A gym now starts its own 30-day trial: there is no
+      approval step and none is to be re-proposed.** What replaces it is not
+      nothing — **ONE TRIAL PER OWNER, EVER** (Part 5 §12's own *"allowed once"*),
+      enforced in `startGymTrial` and guarded by mutant **O128**.
+      **BOTH HAZARDS THIS GATE EXISTED FOR WERE RE-MEASURED BEFORE HE RULED, and
+      that is the part to keep rather than the reversal itself.** *Friend-pooling
+      is already dead and his own ruling killed it*: `gymMemberEntitlements` is
+      `proEntitlements` with ONE key changed (5 meal scans/day vs 20, :17366 §2),
+      so five people splitting band 1 buy a WORSE product than the $10 individual
+      plan, each — the arithmetic that made pooling attractive at :11023's prices
+      no longer holds. *Trial-chaining is the one that survived*, and it is what
+      the one-trial-per-owner rule closes, with no human and no waiting.
+      **THE SUSPEND/REMOVE HALF HE ASKED FOR IN THE SAME BREATH IS NOT BUILT** and
+      is now the admin panel's first slice — see the line directly below, which is
+      where that half is tracked.
+      **Everything :10959 settled stays settled** (an unpaid gym grants its members
+      nothing) and needs no re-derivation.
+      ~~ORIGINAL TEXT BELOW, kept because the hazard analysis in it is still the
+      best statement of what the gate was for:~~ The hazard pair
       this answers was raised by Kd the same day (:11023, tracked nowhere
       before): friends pooling a cheap gym tier undercut the $5 consumer
       price, and card-less gym trials (P3.6) invite a fresh-gym-per-month free
@@ -5835,7 +5891,21 @@ file and is stated so nobody reads these as lower priority than they are.
       is the ONE surface exempt from :17765's "same features in both places"
       ruling, because that ruling governs the GYM'S console, a different
       audience entirely.**
-      **FIRST SLICE, approved by Kd 2026-08-25: "mark this gym as paid"** — it
+      **THE FIRST SLICE CHANGED SHAPE ON 2026-08-27 (DECISIONS :21157) and it is
+      now SUSPEND / REMOVE A GYM, not "mark this gym as paid".** Kd reversed the
+      approval gate the same day — *"a gym can start on own without my approval
+      but i will have the power of removing them or pausing their use if i find
+      them to be fraud"* — so the trial no longer waits for him and **the half he
+      asked for in exchange is the half that is missing.** Until it exists a gym
+      he believes is fraudulent can be stopped only by hand in the database.
+      `gyms.status` (`active|archived`) and `gyms.archived_at` already exist since
+      `0001_init` and the trial route already refuses an archived gym with 409
+      `org_archived` (tested), so the SERVER half of "suspend" is a one-column
+      write; what is missing is the surface and the authenticated identity to
+      perform it from. **"Mark this gym as paid" is still wanted and still owed** —
+      it is what a hand-invoiced gym needs once its trial ends — but it is no
+      longer the thing standing between a gym and its first 30 days.
+      **ORIGINAL FIRST SLICE, approved by Kd 2026-08-25: "mark this gym as paid"** — it
       writes the `subscriptions` row a hand-invoiced gym needs, which turns the
       seat cap, the 30-day trial and §4.2's banner from correct-but-inert into
       live, with no payment provider involved. Carries :11072's approval gate
@@ -6350,9 +6420,27 @@ file and is stated so nobody reads these as lower priority than they are.
       `trialing` on first payment for it to bite. That is already what §3
       requires; it is written here so the billing card knows this guard depends
       on it.
-- [ ] 🔴 **THE CURRENCY LOCK IS A CHECK-THEN-ACT AND THE BILLING CARD MUST CLOSE
-      IT: whatever creates a gym subscription MUST take `lockOrgRow` on that gym
-      first.** Found by T3 round 1 (C/H-3) on 2026-08-26, and **the note in the
+- [x] 🔴 **DONE 2026-08-27 (DECISIONS :21157) — THE CURRENCY LOCK'S CHECK-THEN-ACT
+      IS CLOSED, BY THE FIRST CARD THAT COULD CLOSE IT.** `startGymTrial` is the
+      product's first and only writer of `subscriptions`, and `lockOrgRow` is the
+      FIRST statement in its transaction — the same lock and the same order
+      (org row → child rows) `updateOrg` already takes, so the two serialise: a
+      trial starting while an owner saves the settings form either commits before
+      that guard's SELECT or waits behind its UPDATE, and never lands between them.
+      **Proven by a two-client concurrency test and by mutant `O127`** (delete the
+      lock and the test goes red), because `buildApp` pools at `max: 1` and two
+      `app.inject` calls would be serialised by the CLIENT — a test that cannot
+      fail (this file's own header lesson).
+      **THE REQUIREMENT DOES NOT EXPIRE WITH THIS TICK, and here is where it now
+      lives: any SECOND writer of `subscriptions` must take the same lock first.**
+      The repo's docblock says so at the statement, `O127` fails the sweep if this
+      writer stops, and the billing card inherits both. **A 23505 from
+      `subs_one_live_uq` is deliberately NOT caught** — it cannot happen while
+      every writer takes the lock, so swallowing it would hide the one symptom of a
+      writer that skipped it (R1.3's fail-loudly, pointed at our own future code).
+      ~~ORIGINAL TEXT:~~ **THE CURRENCY LOCK IS A CHECK-THEN-ACT AND THE BILLING
+      CARD MUST CLOSE IT: whatever creates a gym subscription MUST take
+      `lockOrgRow` on that gym first.** Found by T3 round 1 (C/H-3) on 2026-08-26, and **the note in the
       code used to claim the guard was already safe — that claim is now
       corrected in place** (:5748: a false record is worse than a missing one,
       because the next card builds on it).
@@ -6625,6 +6713,59 @@ file and is stated so nobody reads these as lower priority than they are.
       open. Still nobody near it; still ⚪. **The fix is the cursor, or a
       `GET /v1/orgs/by-slug/:slug`, and whoever picks one owes this line.**
 
+- [ ] 🟡 **THE DATABASE KD'S BROWSER READS STILL HOLDS THE PRE-RATIFICATION PRICE
+      BOOK, AND MIGRATION `0015` IS NOT APPLIED TO IT — third recurrence of
+      :15927/:20222, found 2026-08-27 (DECISIONS :21157).** Measured on the Neon
+      dev branch that day: **six `org_*` rows from before :17366, all still
+      `active = true`, at the OLD prices with caps 25–400 — and NONE of the ten
+      ratified band rows.** The seed was corrected in code on 2026-08-25
+      (`e894eef`) and never run there.
+      **WHY IT BITES NOW rather than being untidy:** the trial picks the
+      lowest-capped active org plan in the gym's currency, so on that database a
+      gym would be handed **`org_micro`, a 25-seat plan with a 7-day trial**,
+      instead of the 300-seat 30-day band Kd ruled. The local Postgres the suite
+      runs against IS correct (verified the same day: ten bands, cap 300, 30 days),
+      **so every green test in this card says nothing about what his browser would
+      do** — which is exactly the shape :20222 recorded.
+      **Two commands close it** (`drizzle-kit migrate` then the seed, both against
+      that branch) and neither may be run without asking him first: it is his data.
+      **The standing fix is still the boot-time refusal** the :20222 addendum
+      called overdue — nothing in this repo notices a database that is behind.
+- [ ] 🟡 **`org.manage` AND `billing.manage` HAVE NO TICK BOX, so an owner cannot
+      delegate either through the product — found 2026-08-27, grep-verified
+      untracked before adding (DECISIONS :21157).** `PRIVILEGE_COPY` in
+      `apps/web/src/pages/console/staffView.js` holds **six** entries and
+      `ORG_PRIVILEGES` now holds **eight**; the two missing ones are "edit gym
+      details" (shipped 2026-08-26) and "manage billing" (shipped today).
+      `PRIVILEGE_ORDER` is derived from that list, so a privilege absent from it is
+      simply not drawn.
+      **THE CONSEQUENCE IS A RULING THAT CANNOT BE PERFORMED, not a cosmetic gap.**
+      Both privileges are deliberately absent from `OWNER_ONLY_PRIVILEGES`
+      precisely so an owner CAN tick them across (:11429 rule 3 — *"ticks may
+      widen, not just narrow"*), and the server honours it — proven by a test in
+      which a manager is refused the trial, is ticked `billing.manage` by the
+      owner, and then succeeds. **Only the screen cannot ask for it.**
+      **NOT a data-loss risk, and this was checked rather than assumed:**
+      `unknownPrivileges` collects ticks the build has no words for, carries them
+      through a save UNCHANGED and says so on screen — a guard whose own comment
+      predicted a billing tick by name. So an owner saving a staff row does not
+      silently strip either privilege.
+      Closed by the same web card that draws the trial button, which is the next
+      one; two rows in one array plus their words.
+- [ ] ⚪ **`gitleaks detect` OVER FULL HISTORY EXITS NON-ZERO ON TWO FALSE
+      POSITIVES IN `HANDOFF.md`, and they are not in `.gitleaksignore` — measured
+      2026-08-27.** Both are the `generic-api-key` rule firing on the prose
+      *"API half: `kcalPointForSetsV3`"* in handoff blocks from commits
+      `9b54454a` and `84ff14d7` (2026-08-11): an 18-character "secret" that is a
+      TypeScript function name. **Verified non-secrets before writing this line,
+      and no value is reproduced here (R3.10).**
+      Fix is two pinned fingerprints in `.gitleaksignore` beside the P2.1 entries
+      already there, whose header sets the standard this must meet — *"Pinned
+      false positives ONLY … Never add a real-secret fingerprint here"*.
+      ⚪ because nothing is exposed; it matters because **a scanner that is
+      routinely red is a scanner nobody reads**, and R3.6 puts gitleaks in CI and
+      in the pre-commit hook that :3813's line says has never existed either.
+
 ### Member-side gym surface
 
 - [ ] 🟡 **THE PACT — THE ONE FEATURE IN THIS PRODUCT NOBODY ELSE HAS, RULED IN
@@ -6840,6 +6981,29 @@ file and is stated so nobody reads these as lower priority than they are.
       real gym asks for them.
 
 ## Open questions awaiting a Kd ruling (nothing built on these)
+
+- [ ] ❓ **CANADA, THE UK AND THE EURO AREA CANNOT START A TRIAL AT ALL, because
+      the app and Kd's own ratified price book disagree about what they pay in —
+      RAISED 2026-08-27 (DECISIONS :21157), HIS TO SETTLE.**
+      **The disagreement, both sides measured:** `COUNTRY_CURRENCY` in
+      `@app/shared` maps **CA → CAD, GB → GBP and all twenty euro-area countries →
+      EUR** (written 2026-08-18 at :10010, from his *"usa india candan and europe"*
+      ruling), while the seeded price book has **USD and INR rows only** — and
+      :17366 ratifies the book as **"US · CANADA · EUROPE, one USD book"**. So the
+      currency the app stamps on a Canadian gym is a currency no plan exists in.
+      **What happens today:** the gym is created normally and the trial answers 409
+      `no_plan_for_currency` with *"We're not open for business in your country
+      yet"*. **That is deliberate and is the safe direction** — :10010's standing
+      rule refuses a fallback currency, because a fallback is how a Canadian gym
+      gets quoted in rupees — but it is not what he ratified.
+      **THE QUESTION, in one line: should Canada, the UK and the euro area be
+      billed in US dollars, as the ratified book says?** Recommended YES, because
+      it is what :17366 already says and it needs no new prices; the alternative is
+      three more currency books he has never priced. **A chat must not resolve this
+      on its own** — :16702's fabricated ruling is what happens when one does.
+      Whichever way it goes, the fix is small: either `COUNTRY_CURRENCY` maps those
+      countries to USD, or the seed grows CAD/GBP/EUR books. **Until he rules, the
+      refusal stays and no fallback is invented.**
 
 - [x] ~~❓ **HOW LONG DOES A PHOTO SHARED TO THE GYM LIVE?**~~ **CLOSED
       2026-08-25 by Kd: ONE WEEK, both copies, gone (DECISIONS :18128 §6.1,

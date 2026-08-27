@@ -21153,3 +21153,176 @@ PATH shadows the pinned 9.15.4 inside turbo-spawned tasks. **The DoD lint box
 stays UNTICKED and this is why.** No app code, no schema, no migration, no
 dependency. Nothing about any decision's CONTENT changed — only 20 numbers that
 said where to find one.
+
+## KD OPENS THE TRIAL TO SELF-SERVE AND THE FIRST SUBSCRIPTION ROW IN THE PRODUCT'S HISTORY GETS WRITTEN — three built-but-inert features wake up, and the abuse gate he removed is replaced by one that needs no human (2026-08-27)
+
+**Read before touching `startGymTrial`, before writing `subscriptions` from any
+second place, before adding a privilege to `ORG_PRIVILEGES`, before quoting the
+seat cap as inert, and before proposing an approval step for gyms.**
+
+### 1 · KD REVERSES :11072 RULING 1, AND THE REVERSAL WAS MEASURED BEFORE IT WAS MADE
+
+Asked whether a gym can start its own trial, he was told the record's answer —
+*"you approve; a gym cannot start its own trial"* (:11072 ruling 1, 2026-08-19).
+He overruled it: *"i think that should not happen a gym can start on own without
+my approval but i will have the power of removing them or pausing their use if i
+find them to be fraud"*.
+
+**HE THEN ASKED THE RIGHT QUESTION AND IT IS THE PART TO KEEP:** *"will the new
+thing solve it or not, what if a hacker hack my app and create a million gym or
+user and add million user and uses all fetaures aggresively that way a broke like
+me will have to pay millions of dollar in api and server money which i dont
+have"*. The answer given, measured rather than reasoned:
+
+**THE APPROVAL GATE NEVER PROTECTED HIM FROM THAT, AND REMOVING IT COSTS 2.5×,
+NOT 1000×.** The exposure is per ACCOUNT and is bounded by the daily quota, which
+IS built and enforced: a free account gets `meal_scan` 2/day (`seed.ts`), a gym's
+member 5/day. At the measured cost of **$0.00212/scan** (:9944, re-derived from
+`api_cost_events`, 18 real scans) a maxed-out fake account costs **$0.127/month**
+free and **$0.318/month** inside a gym. A million of them is ~$127k either way;
+the gym multiplies it by 2.5.
+
+**WHAT DOES NOT EXIST IS THE SPEND CEILING, AND THAT IS THE REAL HOLE.** v1 §9.3
+promises an alert at ₹800/gym/month and soft-degrade past 3× the gym's fee, and
+says in as many words that *"bankruptcy-by-API-bill is now mathematically
+impossible"*. **Measured: `costs:gym:{id}:{month}` is incremented in exactly ONE
+place (`coach/service.ts:224` — the coach Kd switched off) and read NOWHERE;
+scans and ORS never touch it.** :19129 §3 recorded this and it is unchanged. Own
+`OWED.md` line **with a deadline**: before the app is on the internet.
+
+**THE OTHER TWO MEASUREMENTS THAT SETTLED IT.** (a) **Friend-pooling is already
+dead and Kd's own ruling killed it**: `gymMemberEntitlements` is
+`proEntitlements` with ONE key changed (5 scans/day vs 20, :17366 §2), so five
+people splitting band 1 buy a WORSE product than the $10 individual plan, each.
+(b) **Trial-chaining is what survived**, and it is closed by Part 5 §12's own
+rule — *"allowed once"* — rather than by a human.
+
+### 2 · WHY THE SPEND CEILING IS NOT BUILT FIRST, AND IT IS A DEPENDENCY NOT A PREFERENCE
+
+Kd asked which to build and said *"say properly not guessing"*. Answer: **B, and
+A cannot precede it.** Three measurements:
+
+1. **Nobody can reach the app.** `apps/web/.env` points at `localhost:3000`;
+   putting a server online is stage 8 of his own order (:19016). Total recorded
+   spend across every AI call the product has ever made: **51,493 µUSD ≈ 5 cents**
+   (`api_cost_events`, read this session).
+2. **The ceiling's unit of measurement does not exist yet.** It meters per GYM per
+   month against 3× *the gym's fee*, and spend is attributed to a gym only through
+   `getLiveGymId`, which INNER-joins a live subscription. Measured: of 120 cost
+   rows, **exactly one** carries a `gym_id` at all. Building the meter first means
+   building it against nothing and testing it against nothing.
+3. **No real gym has a plan.** 108 gyms on the dev branch; 2 subscriptions, both
+   test fixtures (`P24 Gym`, `P25b Gym`, `provider='pilot'`, newest 2026-08-19).
+
+### 3 · WHAT SHIPPED
+
+`POST /v1/orgs/:gymId/trial`. Migration **`0015`**: `billing.manage` added to the
+`gym_staff` privileges CHECK and backfilled onto every owner; the
+`subscriptions.provider` CHECK widened to Part 5 §0 addendum A's list **verbatim**
+(`'none','pilot','razorpay','stripe','revenuecat'`) — **only that one line of the
+addendum**, because `pending_plan_id`, `billing_profiles`, `invoice_counters` and
+`pilot_codes` belong to the card that reads them (R1.1). Kd reviewed the SQL first
+(T5), and the three constraint names and the backfill's 3-row target were verified
+out of `pg_constraint` before he was asked.
+
+**Decisions not to re-derive.** **`billing.manage`, never `role === "owner"`** —
+:11429's seam warns that *"a new route checking a role NAME re-opens it"* and
+:15534's C/H-1 is the cost; §2.2's Billing row (`03-part3:99`, *"✔ | — | —"*) is
+why it DEFAULTS to the owner alone, and it is a tick so an owner whose office
+manager handles invoices can hand it over · **it is a SEPARATE tick from
+`org.manage`** on :13803's precedent — one edits a detail, the other starts a
+clock, caps the roster and freezes the billing country · **it IS in
+`LAST_OWNER_REQUIRED_PRIVILEGES`, closing an `OWED.md` line rather than opening
+one**: :11429 rule 2 has always named TWO lockout doors and the guard covered one
+because billing had no tick, and the asymmetry with `org.manage` is real (an owner
+ticked out of `org.manage` still holds `staff.manage` and can tick it back; a gym
+whose last owner cannot reach billing cannot PAY) · **the trial band is the
+LOWEST-capped active monthly plan in the gym's own currency, not a literal 300** —
+the seed's own comment says `seat_cap` IS the band boundary, so :19129's ruling
+survives a re-priced book, and `NULLS LAST` is load-bearing because Postgres sorts
+NULLs FIRST on ASC and a capless tier would otherwise become the trial · **one
+trial per OWNER, not per gym** (a gym is free to make, so per-gym is no gate), and
+subscription rows are never deleted (R4.3) so an expired trial is still evidence
+· **`already_subscribed` is a success arm**, the same instinct as `already_member`
+· **a gym in a currency the book does not cover is REFUSED, never given a fallback**
+(:10010's standing rule).
+
+**THE `OWED.md` 🔴 THIS CARD EXISTS TO CLOSE:** :19656 C/H-3 left `updateOrg`'s
+currency guard a check-then-act and wrote the closing half as a requirement on
+whichever card first inserts a gym subscription — *"whatever creates a gym
+subscription MUST take `lockOrgRow` on that gym first"*. It does, first statement
+in the transaction, same lock and same order every mutation in the module uses, so
+the two serialise. **The partial unique index is deliberately NOT caught**: a
+23505 there cannot happen while every writer takes the lock, so swallowing it
+would hide the only symptom of a future writer that skipped it.
+
+### 4 · THE AUDIT, AND FOUR OF ITS SIX FINDINGS ARE INSTRUMENTS
+
+**PROVE, all LOCAL (:13659): `orgs.routes` 130/130 (+10) · `db.migration` 10/10 ·
+`entitlements.routes`/`entitlements.unit`/`orgs.sweep`/`catalog.seed` 45/45 ·
+shared 51/51 · web 1234/1234 unchanged · tsc exit 0 AND PROVEN REAL by planting a
+type error · eslint clean at `--max-warnings=0` on nine files · SWEEP a stated
+SUBSET of 134: 10 mutants · 10 RED · 0 ALIVE · 0 never ran, controls GREEN first,
+restores sha256-verified, gym rows fingerprinted with no unattributed changes.**
+Both new constraints read back OUT of the database via `pg_get_constraintdef`
+after migrating, not taken on the migrator's word (:20222's lesson).
+
+**(1) A TEST FIXTURE WENT STALE BECAUSE THE FUTURE ARRIVED.** `schemas.test.ts`
+used `billing.manage` as its stand-in for *"a privilege a newer server knows and
+this build does not"* — and this card minted it, so the write test correctly went
+RED. Fixed as a CLASS (:1239): a synthetic `zz.privilege.from.a.newer.server` no
+vocabulary can ever mint, named once and used in all three tests. The next
+plausible name would have put the same trap back one card later. A positive
+control was added beside it asserting the REAL newest privilege is accepted, so
+the pair cannot pass against a schema frozen at whatever the vocabulary was.
+
+**(2) TWO LOCKOUT TESTS WENT RED AND THE GUARD WAS RIGHT.** Their controls handed
+a remaining owner `["members.read","staff.manage"]` — no billing — which is now
+exactly the lockout the new entry prevents. **Fixed by giving the controls both
+keys, never by loosening the guard** (Part 0 rule 3), and the rule-3 regression
+that fails without the one-line change is its own test: the last owner ticked out
+of billing alone is refused, and their trial button still works afterwards.
+
+**(3) `node --check` CAUGHT A RAW NEWLINE INSIDE A MUTANT STRING** — :13336's
+permanent guard firing on the exact class it was built for, before any sweep ran.
+
+**(4) MY OWN EDITS DRIFTED TWO MUTANT ANCHORS AND THE WHOLE-TABLE PRE-CHECK
+ABORTED BOTH TIMES BEFORE A BYTE WAS WRITTEN.** `O6` began matching twice (the
+trial's `bustEntitlements` call is identical to the apply path's at the same
+indent) and `O121` matched nothing (`billing.manage` landed between its two anchor
+lines). **Neither was allow-listed and neither was re-aimed at whichever line came
+first** (:15770 — a mutant is a claim about ONE call site): O6 was widened onto the
+`already_member` case label unique to the apply path, O121 re-anchored on the
+current text, and each got a SIBLING for the new site (**O133**, **O134**).
+
+**(5) THE LOCK LINE WAS MADE UNIQUE IN THE SOURCE ON PURPOSE.**
+`await lockOrgRow(tx, input.gymId);` appears five times in the repo, so only a
+two-line anchor could aim at this one — and two-line anchors are the CRLF hazard
+:17676 counted 99 of. Naming the guarantee on the line is that finding's own
+remedy: one line carries it and it is greppable.
+
+**(6) MY FIRST DRAFT OF THE SEAT-CAP TEST ASSERTED THE WRONG ERROR NAME**
+(`seat_cap` where the confirm route answers `seat_cap_reached`) — red about its own
+vocabulary while the behaviour it exists for was correct. Read out of the route
+rather than guessed the second time.
+
+### 5 · WHAT THIS DOES NOT DO, STATED RATHER THAN LEFT TO BE DISCOVERED
+
+**NO SCREEN, THEREFORE NO SMOKE** (:11846/:13803's precedent) — the button is the
+web half. **T3 UNRUN.** **Nothing ticks except the lock requirement.**
+
+**THREE GAPS FOUND AND NOT FIXED (R1.1), each with its own `OWED.md` line:**
+**(a)** the dev branch Kd's browser reads still holds the PRE-:18488 price book —
+six retired INR rows still `active`, none of the ten ratified bands — so the trial
+would pick a 25-seat plan there; `0015` is unapplied there too. :15927/:20222 for
+the third time, and the boot-time refusal is still the standing fix.
+**(b) THREE OF FIVE MARKETS CANNOT TRIAL AT ALL:** `COUNTRY_CURRENCY` gives Canada
+CAD, the UK GBP and the euro area EUR, and the seeded book has USD and INR only —
+while :17366 ratifies *"US · CANADA · EUROPE, one USD book"*. **The app and the
+ratified book disagree and it is Kd's to settle**; until then the refusal is
+honest and no fallback currency is invented.
+**(c)** neither `org.manage` (shipped 2026-08-26) nor `billing.manage` has a TICK
+BOX on the Staff screen — `PRIVILEGE_COPY` holds six of eight — so an owner cannot
+delegate either through the product even though the server allows it. **Not a
+data-loss risk**: `unknownPrivileges` carries them through a save untouched and
+says so on screen, a guard whose own comment predicted a billing tick.

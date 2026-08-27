@@ -98,6 +98,47 @@ export function registerOrgRoutes(
     return reply.status(200).send(updated);
   });
 
+  /** START THE GYM'S OWN 30-DAY TRIAL — Kd ruling 2026-08-27, which REVERSES
+   *  :11072 ruling 1 ("a gym's paid plan or TRIAL activates only after Kd
+   *  approves the gym"): *"a gym can start on own without my approval but i will
+   *  have the power of removing them or pausing their use if i find them to be
+   *  fraud"*. What used to be his manual gate is now one trial per owner, ever,
+   *  enforced in the repo.
+   *
+   *  **RATE-LIMITED, and the reason is new today.** Before the ruling this door
+   *  did not exist and the only way onto a plan was Kd. It is now reachable by
+   *  anybody who has just made an account and a gym, and every call takes
+   *  `lockOrgRow` — so an unlimited version lets one script hold gym-row locks
+   *  against the owners actually using them. The numbers follow the apply route's
+   *  own reasoning: an honest owner starts a trial ONCE in the gym's life, so
+   *  10/hour per account is already far past generous, while the per-IP figure
+   *  stays loose because a gym's whole front desk can share one address. No §
+   *  governs either; both are chosen and recorded in DECISIONS with the pair
+   *  above. */
+  const trialLimit = createDualRateLimit({
+    name: "orgs_trial",
+    max: 10,
+    ipMax: 60,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+
+  app.post(
+    "/v1/orgs/:gymId/trial",
+    { preHandler: [app.authenticate, trialLimit] },
+    async (req, reply) => {
+      const params = parseOr400(orgParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const started = await service.startOrgTrial(orgDeps, requireUserId(req), params.gymId);
+      // ONE status code for both arms, and the body's `outcome` is what says
+      // which happened — the same shape `/v1/orgs/join` uses. A 201-vs-200 split
+      // would be a SECOND answer to that question, in a channel the typed client
+      // does not read, and the two could disagree.
+      return reply.status(200).send(started);
+    },
+  );
+
   app.get("/v1/orgs/mine", { preHandler: [app.authenticate] }, async (req, reply) => {
     const orgs = await service.listMyOrgs(orgDeps, requireUserId(req));
     return reply.status(200).send(orgs);

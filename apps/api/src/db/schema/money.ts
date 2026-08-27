@@ -65,9 +65,12 @@ export const subscriptions = pgTable(
       "subscriptions_status_check",
       sql`${t.status} IN ('trialing','active','past_due','canceled','expired')`,
     ),
+    // `none` = card-less trial, nobody is charging this owner (Part 5 §6.1, and
+    // the value list is §0 addendum A's verbatim). Widened by `0015`; the rest
+    // of that addendum belongs to the billing card that reads it.
     check(
       "subscriptions_provider_check",
-      sql`${t.provider} IN ('razorpay','stripe','revenuecat','pilot')`,
+      sql`${t.provider} IN ('none','pilot','razorpay','stripe','revenuecat')`,
     ),
     // Exactly one live sub per owner — double-charging is unrepresentable.
     uniqueIndex("subs_one_live_uq")

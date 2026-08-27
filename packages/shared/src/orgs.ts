@@ -298,6 +298,58 @@ export const createOrgResponseSchema = z.object({
 });
 export type CreateOrgResponse = z.infer<typeof createOrgResponseSchema>;
 
+/** WHAT THE GYM IS ON — the three facts a console can render without knowing
+ *  anything about how we bill (R3.1: the server decides, the client draws).
+ *
+ *  **Deliberately NOT the plan's code, price or name.** A screen that knows it is
+ *  on `org_b1_us_m` is a screen one step from doing money arithmetic, which R10.4
+ *  forbids, and the code is an internal key with no user meaning. What a person
+ *  actually asks is *"how long have I got"* and *"how many members can I have"* —
+ *  which is `trialEndsAt` and `seatCap`, both computed here.
+ *
+ *  `seatCap` is nullable because `plans.seat_cap` is: a capless tier is a real
+ *  shape in the price book. `trialEndsAt` is null on a plan that is not a trial.
+ *  Neither absence may be rendered as a number (:5807). */
+/** Part 4 §3.3's own CHECK, as a parser. The repo parses the column through this
+ *  rather than casting it, for the reason `orgStatusSchema` exists: a value the
+ *  database grew and the code has never heard of must fail loudly at the
+ *  boundary, not flow into a `switch` that silently does nothing (R2.3). */
+export const orgSubscriptionStatusSchema = z.enum([
+  "trialing",
+  "active",
+  "past_due",
+  "canceled",
+  "expired",
+]);
+export type OrgSubscriptionStatus = z.infer<typeof orgSubscriptionStatusSchema>;
+
+export const orgSubscriptionSchema = z.object({
+  status: orgSubscriptionStatusSchema,
+  /** ISO instant, or null when this is not a trial. */
+  trialEndsAt: z.string().nullable(),
+  /** Live members this plan admits, or null for a capless tier. */
+  seatCap: z.number().int().positive().nullable(),
+});
+export type OrgSubscription = z.infer<typeof orgSubscriptionSchema>;
+
+/** Starting the gym's own 30-day trial.
+ *
+ *  **`already_subscribed` is a SUCCESS arm, not an error**, and it is the same
+ *  instinct as `already_member` and `already_confirmed` one file over: an owner
+ *  pressing a button twice is a person pressing a button twice. The caller asked
+ *  for the gym to be on a plan and the gym is on a plan, so it answers with the
+ *  state rather than with a complaint. Which press created it is the audit log's
+ *  business (:12227 L-3).
+ *
+ *  The two REFUSALS are not arms here — they are 409s with their own outcome
+ *  names (`trial_already_used`, `no_plan_for_currency`), because neither leaves
+ *  the gym in a state there is anything to report about. */
+export const startOrgTrialResponseSchema = z.discriminatedUnion("outcome", [
+  z.object({ outcome: z.literal("started"), subscription: orgSubscriptionSchema }),
+  z.object({ outcome: z.literal("already_subscribed"), subscription: orgSubscriptionSchema }),
+]);
+export type StartOrgTrialResponse = z.infer<typeof startOrgTrialResponseSchema>;
+
 /** One join code as the CONSOLE reads it back — Part 3 §3.3's `GET /codes`,
  *  the read half of its `GET/POST/PATCH /codes` surface.
  *
@@ -886,6 +938,7 @@ export const ORG_PRIVILEGES = [
   "members.remove",
   "staff.manage",
   "org.manage",
+  "billing.manage",
 ] as const;
 export const orgPrivilegeSchema = z.enum(ORG_PRIVILEGES);
 export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
@@ -960,7 +1013,30 @@ export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
  *  typo can tick it across (:11429 rule 3). It is absent from the api's
  *  `LAST_OWNER_REQUIRED_PRIVILEGES` for the matching reason — a last owner
  *  ticked down from it still holds `staff.manage` and can tick it straight back,
- *  so there is no lockout to guard against. */
+ *  so there is no lockout to guard against.
+ *
+ *  `billing.manage` is "start, change or end the gym's subscription" — and
+ *  unlike `org.manage` it is NOT an addition: §2.2 has the row already, and it is
+ *  the strictest one in the matrix (*"Billing (view, upgrade, payment method,
+ *  cancel) | ✔ | — | —"*, `03-part3-org-console.md:99`). The owner, nobody else.
+ *
+ *  **It is a SEPARATE tick from `org.manage` on :13803's precedent**, not merged
+ *  into it: `org.manage` edits a detail, this one starts a 30-day clock, caps the
+ *  roster at the plan's seat cap and freezes the gym's billing country
+ *  (:19560). Merging them would mean an owner who ticked "let my manager fix our
+ *  address" had also handed over the money.
+ *
+ *  **Owner-only by DEFAULT, like `org.manage`: deliberately absent from
+ *  `OWNER_ONLY_PRIVILEGES`**, so an owner whose office manager handles invoices
+ *  can tick it across (:11429 rule 3). **But it IS in the api's
+ *  `LAST_OWNER_REQUIRED_PRIVILEGES`, and that closes an `OWED.md` line rather
+ *  than opening one** — :11429 rule 2 names TWO lockout doors, *"ticking away the
+ *  last owner's billing/staff-management is the same lockout by another door"*,
+ *  and the guard has only ever covered `staff.manage` because billing had no tick
+ *  to cover. The asymmetry with `org.manage` is real and is the reason: an owner
+ *  ticked down from `org.manage` still holds `staff.manage` and can tick it
+ *  straight back, but a gym whose last owner cannot reach billing cannot PAY, and
+ *  nothing inside the gym repairs that. */
 export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>> = {
   owner: [
     "members.read",
@@ -970,6 +1046,7 @@ export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>>
     "members.remove",
     "staff.manage",
     "org.manage",
+    "billing.manage",
   ],
   manager: ["members.read", "codes.invite", "codes.manage", "members.confirm", "members.remove"],
   trainer: ["members.read", "codes.invite"],

@@ -270,7 +270,7 @@ export const gymStaff = pgTable(
     check("gym_staff_role_check", sql`${t.role} IN ('owner','manager','trainer')`),
     check(
       "gym_staff_privileges_check",
-      sql`${t.privileges} IS NULL OR ${t.privileges} <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage','org.manage']::text[]`,
+      sql`${t.privileges} IS NULL OR ${t.privileges} <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage','org.manage','billing.manage']::text[]`,
     ),
   ],
 );

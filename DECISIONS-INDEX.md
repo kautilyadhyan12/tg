@@ -127,6 +127,80 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:21157** — 2026-08-27 — **KD OPENS THE TRIAL TO SELF-SERVE, AND THE FIRST
+  `subscriptions` ROW IN THIS PRODUCT'S HISTORY GETS WRITTEN — the seat cap, the
+  30-day clock and §4.2's banner stop being inert.** **Read before touching
+  `startGymTrial`, before writing `subscriptions` from a SECOND place, before
+  adding a privilege to `ORG_PRIVILEGES`, before calling the seat cap inert, and
+  before proposing an approval step for gyms.**
+  **REVERSES :11072 RULING 1** (*"a gym's paid plan or TRIAL activates only after
+  Kd approves the gym"*): *"a gym can start on own without my approval but i will
+  have the power of removing them or pausing their use if i find them to be
+  fraud"*. **The reversal was MEASURED before it was made, and the measurement is
+  the part to keep: the approval gate never protected him from the bill he was
+  afraid of.** Exposure is per ACCOUNT and bounded by the daily quota, which IS
+  built — free 2 scans/day, gym member 5 — so at the measured **$0.00212/scan**
+  (:9944) a maxed fake account costs **$0.127/month** free and **$0.318** inside a
+  gym: **the gym multiplies the damage by 2.5, not by a thousand.**
+  **WHAT IS MISSING IS THE SPEND CEILING AND IT IS NOT BUILT** — v1 §9.3 promises
+  an alert and a soft-degrade and says *"bankruptcy-by-API-bill is now
+  mathematically impossible"*, while `costs:gym:{id}:{month}` has ONE writer (the
+  switched-off coach) and NO reader; own `OWED.md` line **with a deadline: before
+  the app is on the internet.** **KD ASKED WHICH TO BUILD FIRST AND THE ANSWER WAS
+  A DEPENDENCY, NOT A PREFERENCE:** the ceiling meters per GYM against 3× *the
+  gym's fee* and spend reaches a gym only through a live subscription — measured,
+  **1 of 120 cost rows carries a `gym_id` at all**, nobody can reach the app
+  (`localhost:3000`; server-live is stage 8), and total spend ever is **≈5 cents**.
+  **The two abuses the gate existed for both moved:** friend-pooling is already
+  dead by Kd's own 5-vs-20 ruling (a gym member gets a WORSE product than the $10
+  plan), and trial-chaining is closed by Part 5 §12's *"allowed once"* — **one
+  trial per OWNER, ever**, not per gym.
+  **SHIPPED:** `POST /v1/orgs/:gymId/trial`; migration **`0015`** adds
+  `billing.manage` (backfilled onto every owner) and widens
+  `subscriptions.provider` to Part 5 §0 addendum A's list VERBATIM — **only that
+  one line of the addendum** (R1.1). **`billing.manage`, never `role === "owner"`**
+  (:11429's seam; :15534's C/H-1 is the cost), a SEPARATE tick from `org.manage`
+  on :13803's precedent, **and it joins `LAST_OWNER_REQUIRED_PRIVILEGES`, closing
+  an `OWED.md` line rather than opening one** — :11429 rule 2 named two lockout
+  doors and the guard covered one. **The trial band is the LOWEST-capped active
+  monthly plan in the gym's currency, not a literal 300**, so :19129's ruling
+  survives a re-priced book; `NULLS LAST` is load-bearing (a capless tier would
+  otherwise BE the trial).
+  **THE 🔴 IT CLOSES: :19656 C/H-3's requirement** — *"whatever creates a gym
+  subscription MUST take `lockOrgRow` on that gym first"* — first statement in the
+  transaction, with **O127** and a two-client concurrency test as the guard. The
+  partial unique index is deliberately NOT caught: a 23505 cannot happen while
+  every writer takes the lock, so swallowing it would hide a future writer that
+  skipped it.
+  **AUDIT — four of six findings are INSTRUMENTS. (1) A FIXTURE WENT STALE BECAUSE
+  THE FUTURE ARRIVED**: `schemas.test.ts` used `billing.manage` as its stand-in for
+  *"a privilege a newer server knows"* and this card minted it; fixed as a CLASS
+  with a synthetic token no vocabulary can mint, plus a positive control asserting
+  the REAL newest privilege parses. **(2) TWO LOCKOUT TESTS WENT RED AND THE GUARD
+  WAS RIGHT** — their controls left an owner without billing, which is the lockout;
+  fixed by giving the controls both keys, NOT by loosening the guard, and the
+  rule-3 regression is its own test. **(3) `node --check` caught a raw newline in a
+  mutant string** (:13336's guard, on its own class). **(4) MY EDITS DRIFTED TWO
+  ANCHORS AND THE PRE-CHECK ABORTED BOTH TIMES before a byte was written** — O6
+  matched twice, O121 matched nothing; **neither allow-listed, neither re-aimed at
+  whichever line came first** (:15770), each given a SIBLING (**O133**, **O134**).
+  **(5) The lock line was made unique IN THE SOURCE** because two-line anchors are
+  :17676's 99-strong CRLF hazard.
+  **PROVE, all LOCAL: `orgs.routes` 130/130 (+10) · `db.migration` 10/10 · four
+  more suites 45/45 · shared 51/51 · web 1234/1234 unchanged · tsc exit 0 and
+  PROVEN REAL by planting a type error · eslint clean on nine files · SWEEP a
+  stated SUBSET of 134: 10 RED, 0 ALIVE, 0 never ran.** Both constraints read back
+  out of `pg_get_constraintdef` after migrating (:20222's lesson).
+  **NOTHING TICKS BUT THE LOCK LINE — no screen, so NO SMOKE; T3 UNRUN.** Three
+  gaps found and not fixed, each with an `OWED.md` line: **the dev branch Kd's
+  browser reads still holds the PRE-:18488 price book and lacks `0015`** (third
+  recurrence of :15927); **Canada, the UK and the euro area cannot trial at all**,
+  because `COUNTRY_CURRENCY` gives them CAD/GBP/EUR and the book is USD+INR while
+  :17366 ratifies *"US · CANADA · EUROPE, one USD book"* — **the app and the
+  ratified book disagree and it is Kd's to settle**; and **neither `org.manage` nor
+  `billing.manage` has a TICK BOX** on the Staff screen, so neither can be
+  delegated through the product (no data loss — `unknownPrivileges` carries them
+  through a save, a guard whose own comment predicted a billing tick).
 - **:21057** — 2026-08-27 — **THIS FILE'S POINTERS ARE NOW CHECKED BY A MACHINE,
   and 19 of 212 were wrong.** **Read before adding a pointer here, before
   "fixing" a stale line number by hand, and before extending the guard to inline

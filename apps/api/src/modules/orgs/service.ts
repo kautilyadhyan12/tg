@@ -28,6 +28,7 @@ import {
   removeOrgCodeResponseSchema,
   removeOrgStaffResponseSchema,
   rotateOrgCodeResponseSchema,
+  startOrgTrialResponseSchema,
   updateOrgResponseSchema,
 } from "./schemas.js";
 import type {
@@ -54,12 +55,14 @@ import type {
   OrgStaff,
   OrgStaffMutationResponse,
   OrgStaffResponse,
+  OrgSubscription,
   OrgSummary,
   RejectApplicationResponse,
   RemoveMemberResponse,
   RemoveOrgCodeResponse,
   RemoveOrgStaffResponse,
   RotateOrgCodeResponse,
+  StartOrgTrialResponse,
   UpdateOrgCodeRequest,
   UpdateOrgRequest,
   UpdateOrgResponse,
@@ -603,6 +606,115 @@ async function requirePrivilege(
     throw new OrgsError(403, "forbidden", "Your role doesn't allow that.");
   }
   return { org, role: authority.role };
+}
+
+/** START THE GYM'S OWN 30-DAY TRIAL.
+ *
+ *  **KD RULING 2026-08-27, reversing :11072 ruling 1: a gym starts its own trial,
+ *  with no approval step.** *"a gym can start on own without my approval but i
+ *  will have the power of removing them or pausing their use if i find them to be
+ *  fraud"*. The gate that ruling replaced was aimed at two abuses and the
+ *  measurement moved BOTH of them before he decided:
+ *
+ *  **Friend-pooling is no longer worth doing** and Kd's own 5-vs-20 ruling is
+ *  what killed it (:17366 §2). A gym's member gets 5 meal scans a day; a paid
+ *  individual gets 20 and everything else is identical (`gymMemberEntitlements`
+ *  is `proEntitlements` with ONE key changed). So five people splitting band 1
+ *  buy a WORSE product than the individual plan, each.
+ *
+ *  **Trial-chaining is what survived, and it is closed in the repo rather than
+ *  here** — one trial per owner ever, Part 5 §12's own rule. That is the piece
+ *  doing the work the approval gate used to do.
+ *
+ *  **What is NOT closed by any of this, and must not be read as closed: an API
+ *  spend ceiling.** v1 §9.3 promises an alert and a soft-degrade past 3× the
+ *  gym's fee and calls bankruptcy-by-API-bill "mathematically impossible"; it is
+ *  not built (the counter has one writer, the switched-off coach, and no reader).
+ *  Kd was shown that measurement when he made this ruling and it has its own
+ *  `OWED.md` line with a deadline — before the app is on the internet.
+ *
+ *  **`billing.manage`, not `role === "owner"`.** :11429's seam says no route
+ *  checks a role NAME and warns that a new one doing so re-opens it; :15534's
+ *  C/H-1 is what that costs. §2.2's Billing row is owner-only, which is why the
+ *  privilege DEFAULTS to the owner alone — but it is a tick, so an owner whose
+ *  office manager handles invoices can hand it over. */
+export async function startOrgTrial(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+): Promise<StartOrgTrialResponse> {
+  await requirePrivilege(deps, gymId, userId, "billing.manage");
+
+  const outcome = await repo.startGymTrial(deps.sql, { gymId, actorUserId: userId });
+
+  switch (outcome.kind) {
+    case "started":
+      /** THE CALLER'S OWN CACHED ANSWER IS BUSTED; EVERYBODY ELSE'S EXPIRES.
+       *
+       *  The owner is member #1 of their own gym (§4.0 step 6), so they are the
+       *  one person looking at a screen when this returns — and a stale 60-second
+       *  answer there would show the gym still on the free tier immediately after
+       *  they upgraded it (:5807 on the screen that just acted).
+       *
+       *  **The other members are covered by the cache's own TTL and that is the
+       *  guarantee, not an oversight.** R6.5 asks that every bust trigger flip
+       *  within 60s; `getEntitlements` caches for exactly 60s, so it does. A
+       *  fan-out deleting one key per member would be a second mechanism for the
+       *  same promise, and on a 300-seat trial it is 300 deletes to save at most
+       *  a minute for people who are not looking. */
+      await bustEntitlements(deps.redis, userId);
+      return startOrgTrialResponseSchema.parse({
+        outcome: "started",
+        subscription: toOrgSubscription(outcome.subscription),
+      });
+    case "already_subscribed":
+      // No bust: nothing changed, so there is nothing stale to clear.
+      return startOrgTrialResponseSchema.parse({
+        outcome: "already_subscribed",
+        subscription: toOrgSubscription(outcome.subscription),
+      });
+    case "trial_already_used":
+      // Names the rule and the ONE fact that makes it feel fair rather than
+      // arbitrary — it is per person, not per gym, so "make another gym" is
+      // visibly not the answer. No contact channel is named because there is
+      // none yet, and :19656's Low-3 is the precedent for not inventing one.
+      throw new OrgsError(
+        409,
+        "trial_already_used",
+        "You've already used your free trial. It's one per person, not one per gym.",
+      );
+    case "no_plan":
+      // TRUE AND SPECIFIC, because the alternative is a person concluding the
+      // app is broken. This fires for a gym in Canada, the UK or the euro area:
+      // `COUNTRY_CURRENCY` gives them CAD/GBP/EUR and the seeded price book has
+      // only USD and INR, while Kd's ratified book says "US · Canada · Europe,
+      // one USD book" (:17366). The app and the book disagree; that is a live
+      // `OWED.md` line and Kd's to settle, and until he does the honest answer
+      // is that we are not open yet — never a fallback currency, which is
+      // :10010's standing rule about how a Canadian gym gets quoted in rupees.
+      throw new OrgsError(
+        409,
+        "no_plan_for_currency",
+        "We're not open for business in your country yet, so there's no plan to start.",
+      );
+    case "org_archived":
+      throw new OrgsError(409, "org_archived", "This gym is archived.");
+    case "not_found":
+      // Unreachable in practice — `requirePrivilege` has already read the org and
+      // 404'd a stranger — but a gym archived or deleted between that read and
+      // this write must not surface as a 500. The module's standing 404.
+      throw new OrgsError(404, "org_not_found", "Gym not found.");
+    default:
+      return assertNever(outcome);
+  }
+}
+
+function toOrgSubscription(row: repo.GymSubscriptionRow): OrgSubscription {
+  return {
+    status: row.status,
+    trialEndsAt: row.trialEndsAt?.toISOString() ?? null,
+    seatCap: row.seatCap,
+  };
 }
 
 export async function listOrgMembers(
@@ -1264,7 +1376,18 @@ export async function updateOrgStaffRole(
  *  billing surface in the product. The day one is added to `ORG_PRIVILEGES` it
  *  belongs here in the same commit; `OWED.md` carries that line so it is not
  *  remembered by luck. */
-const LAST_OWNER_REQUIRED_PRIVILEGES: readonly OrgPrivilege[] = ["staff.manage"];
+/** **`billing.manage` JOINS `staff.manage` HERE AND THAT CLOSES AN `OWED.md`
+ *  LINE.** :11429 rule 2 has always named TWO lockout doors — *"ticking away the
+ *  last owner's billing/staff-management is the same lockout by another door"* —
+ *  and this guard has only ever covered one of them, because billing had no tick
+ *  to cover. The trial card gives it one.
+ *
+ *  **It is deliberately NOT symmetrical with `org.manage`, and the asymmetry is
+ *  the whole argument.** An owner ticked down from `org.manage` still holds
+ *  `staff.manage`, so they can tick it straight back — nothing is lost. A gym
+ *  whose last owner cannot reach billing cannot PAY, and no control inside the
+ *  gym repairs that; the way out would be the admin panel, which is not built. */
+const LAST_OWNER_REQUIRED_PRIVILEGES: readonly OrgPrivilege[] = ["staff.manage", "billing.manage"];
 
 /** PRIVILEGES ONLY AN OWNER'S ROW MAY CARRY — §2.2's owner-alone rows, and the
  *  enforcement of :11429 rule 1 ("only an OWNER may change anybody's ticks; this

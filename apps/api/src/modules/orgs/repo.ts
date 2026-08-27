@@ -18,9 +18,16 @@ import {
   orgApplicationStatusSchema,
   orgRoleSchema,
   orgStatusSchema,
+  orgSubscriptionStatusSchema,
   orgTypeSchema,
 } from "@app/shared";
-import type { OrgApplicationStatus, OrgRole, OrgStatus, OrgType } from "@app/shared";
+import type {
+  OrgApplicationStatus,
+  OrgRole,
+  OrgStatus,
+  OrgSubscriptionStatus,
+  OrgType,
+} from "@app/shared";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -1011,6 +1018,173 @@ async function seatCapFor(tx: TransactionSql, gymId: string): Promise<number | n
     WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
       AND s.status IN ('trialing','active','past_due')`;
   return rows[0]?.seat_cap ?? null;
+}
+
+export interface GymSubscriptionRow {
+  status: OrgSubscriptionStatus;
+  trialEndsAt: Date | null;
+  seatCap: number | null;
+}
+
+export type StartTrialOutcome =
+  | { kind: "started"; subscription: GymSubscriptionRow }
+  | { kind: "already_subscribed"; subscription: GymSubscriptionRow }
+  | { kind: "trial_already_used" }
+  | { kind: "no_plan"; currency: string }
+  | { kind: "org_archived" }
+  | { kind: "not_found" };
+
+/** THE GYM STARTS ITS OWN 30-DAY TRIAL — the first statement in this product
+ *  that has ever written `subscriptions`, and the reason three built-but-inert
+ *  features (the seat cap, the trial clock, §4.2's banner) come alive.
+ *
+ *  **THE LOCK IS FIRST AND IT IS A REQUIREMENT, NOT A PREFERENCE.** T3 round 1's
+ *  C/H-3 on the gym-details card found that `updateOrg`'s currency guard is a
+ *  check-then-act: it asks "is this gym paying?" while holding only the GYM
+ *  row's lock, which cannot lock a subscription that does not exist yet. Its
+ *  `OWED.md` line names the closing half as a requirement on whichever card
+ *  first inserts a gym subscription, in these words — *"whatever creates a gym
+ *  subscription MUST take `lockOrgRow` on that gym first"*. This is that card and
+ *  this is that line. Taking the same lock in the same order (org row → child
+ *  rows) means the two serialise: a trial starting while an owner saves the
+ *  settings form either commits before the guard's SELECT or waits behind its
+ *  UPDATE, and never lands in between.
+ *
+ *  **The partial unique index `subs_one_live_uq` is the database's last word and
+ *  is deliberately NOT caught here.** A 23505 from the INSERT below cannot happen
+ *  while every writer takes this lock — the check three statements up would have
+ *  seen the row — so swallowing it would hide the only symptom of the exact
+ *  defect the OWED line exists to prevent: a second writer that skipped the lock.
+ *  Letting it throw is R1.3's "fail loudly" pointed at our own future code.
+ *
+ *  **`already_subscribed` is not an error** (see the response schema): a double
+ *  tap is a person, and the caller asked for a state that holds.
+ *
+ *  **ONE TRIAL PER OWNER, EVER — Part 5 §12's own rule** (*"trial re-abuse (org
+ *  deletes, re-signs for another 7 days): allowed once"*), and it is what makes
+ *  self-serve trials safe without an approval step. It asks about the OWNER, not
+ *  the gym: a gym is free to make, so per-gym would be no gate at all. Subscription
+ *  rows are never deleted (R4.3), so an expired trial is still evidence one
+ *  happened. The spec's stronger form matches on owner email/phone across
+ *  ACCOUNTS; this matches on the account, which is the same thing here because
+ *  `users.email` is unique — a second trial costs a second email address, which
+ *  §12 itself calls "a soft gate that costs honest users nothing". */
+export async function startGymTrial(
+  sql: Sql,
+  input: { gymId: string; actorUserId: string },
+): Promise<StartTrialOutcome> {
+  return await sql.begin(async (tx) => {
+    // The trailing note is not decoration: `await lockOrgRow(tx, input.gymId);`
+    // appears five times in this file, so without something on the line only a
+    // two-line anchor could aim a mutant at THIS one — and a two-line anchor is
+    // the CRLF hazard :17676 counted 99 of. Naming the guarantee in the source
+    // is that finding's own remedy: one line carries it, and it is greppable.
+    await lockOrgRow(tx, input.gymId); // subscription-writer lock, :19656 C/H-3
+
+    const gymRows = await tx<{ status: string; currency_display: string; owner_user_id: string }[]>`
+      SELECT status, currency_display, owner_user_id FROM gyms WHERE id = ${input.gymId}`;
+    const gym = gymRows[0];
+    if (gym === undefined) return { kind: "not_found" };
+    if (toOrgStatus(gym.status) === "archived") return { kind: "org_archived" };
+
+    // §4.1's live set, the same three statuses `seatCapFor` and `getCandidates`
+    // treat as granting. Written out rather than shared as a fragment: R3.8
+    // forbids the shared-`sql` shape, and :14493 Low-2 is what happens when two
+    // readers of one rule drift.
+    const live = await tx<{ status: string; trial_ends_at: Date | null; seat_cap: number | null }[]>`
+      SELECT s.status, s.trial_ends_at, p.seat_cap
+      FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+      WHERE s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
+        AND s.status IN ('trialing','active','past_due')`;
+    const existing = live[0];
+    if (existing !== undefined) {
+      return { kind: "already_subscribed", subscription: toGymSubscription(existing) };
+    }
+
+    const used = await tx<{ one: number }[]>`
+      SELECT 1 AS one
+      FROM subscriptions s JOIN gyms g ON g.id = s.owner_id
+      WHERE s.owner_type = 'gym'
+        AND g.owner_user_id = ${gym.owner_user_id}
+        AND s.trial_ends_at IS NOT NULL
+      LIMIT 1`;
+    if (used[0] !== undefined) return { kind: "trial_already_used" };
+
+    /** THE TRIAL BAND IS THE SMALLEST ONE, WHICH IS KD'S RULING EXPRESSED AS A
+     *  QUERY RATHER THAN AS A NUMBER. :19129: *"no plan choice at signup · EVERY
+     *  gym trials at the SAME limit, 300 members · the gym subscribes to its real
+     *  band AFTER the trial"*. The seed's own comment says `seat_cap` **is** the
+     *  band boundary, so "band 1" and "the lowest cap" are the same row — and
+     *  ordering by it means the ruling survives a re-priced book without anybody
+     *  remembering to edit a 300 here (Part 0 rule 4: the number lives in the
+     *  seed, quoted, never recalled in code).
+     *
+     *  `NULLS LAST` is load-bearing: `seat_cap` is nullable for a capless tier,
+     *  and in Postgres NULLs sort FIRST on ASC — so without it the trial would
+     *  hand every new gym the uncapped plan, which is the opposite of a cap.
+     *
+     *  `trial_days > 0` means a book with no trial-bearing plan answers "no plan"
+     *  instead of writing a trial that ended the instant it began. `interval =
+     *  'month'` keeps a yearly row from being read as a band. */
+    const planRows = await tx<{ id: string; seat_cap: number | null; trial_days: number }[]>`
+      SELECT id, seat_cap, trial_days
+      FROM plans
+      WHERE audience = 'org'
+        AND currency = ${gym.currency_display}
+        AND active = true
+        AND interval = 'month'
+        AND trial_days > 0
+      ORDER BY seat_cap ASC NULLS LAST, price_minor ASC
+      LIMIT 1`;
+    const plan = planRows[0];
+    if (plan === undefined) return { kind: "no_plan", currency: gym.currency_display };
+
+    const inserted = await tx<{ status: string; trial_ends_at: Date | null }[]>`
+      INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, trial_ends_at, provider)
+      VALUES ('gym', ${input.gymId}, ${plan.id}, 'trialing',
+              now() + ${plan.trial_days} * INTERVAL '1 day', 'none')
+      RETURNING status, trial_ends_at`;
+    const row = inserted[0];
+    if (row === undefined) throw new Error("subscription insert returned no row");
+
+    const subscription = toGymSubscription({
+      status: row.status,
+      trial_ends_at: row.trial_ends_at,
+      seat_cap: plan.seat_cap,
+    });
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.trial_started",
+      targetType: "subscription",
+      targetId: input.gymId,
+      // The two facts a person reading this row later actually wants: when it
+      // runs out, and how many members it admits. `seatCap` is null for a
+      // capless tier and is recorded as null rather than as the string "null" —
+      // `insertAudit`'s one allowance, and this is a value that genuinely does
+      // not exist rather than one nobody looked up.
+      meta: {
+        trialEndsAt: subscription.trialEndsAt?.toISOString() ?? null,
+        seatCap: subscription.seatCap === null ? null : String(subscription.seatCap),
+        currency: gym.currency_display,
+      },
+    });
+
+    return { kind: "started", subscription };
+  });
+}
+
+function toGymSubscription(raw: {
+  status: string;
+  trial_ends_at: Date | null;
+  seat_cap: number | null;
+}): GymSubscriptionRow {
+  return {
+    status: orgSubscriptionStatusSchema.parse(raw.status),
+    trialEndsAt: raw.trial_ends_at,
+    seatCap: raw.seat_cap,
+  };
 }
 
 export type DecideOutcome =
