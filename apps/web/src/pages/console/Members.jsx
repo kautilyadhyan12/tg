@@ -13,6 +13,7 @@ import {
   memberCountLabel,
   seatIsFree,
 } from './consoleView';
+import { seatMeter } from './billingView';
 
 // The roster — Part 3 §4.3's Members screen, holding EXACTLY to §2.4's
 // visibility boundary.
@@ -35,8 +36,17 @@ import {
 // weight, no meals, no coach conversations, no run routes — and no workout
 // figures either, since the columns §4.3 lists (last active, workouts 30d,
 // average form 30d, streak) come from `org_member_stats`, a view that does not
-// exist. The seat meter in §4.3's header needs a plan's seat cap, and no gym
-// has a subscription, so a meter here would be drawn over a null.
+// exist.
+//
+// **§4.3's SEAT METER IS HERE NOW, and this comment used to explain why it was
+// not.** It said the meter "needs a plan's seat cap, and no gym has a
+// subscription, so a meter here would be drawn over a null" — true until
+// 2026-08-27, when a gym gained the ability to start its own trial. A gym on no
+// plan is still uncapped and still gets no meter, which is the same null handled
+// the same way; what changed is that a gym CAN now be on a plan. The numerator
+// is the server's exact count, never the length of the page below it: this list
+// is fifty rows at a time, so `items.length` would read "50 of 300" at a gym of
+// six hundred.
 //
 // Search, the group filter, remove/restore and CSV export are §4.3 features
 // with no routes behind them yet; each has its own owed line.
@@ -281,6 +291,11 @@ export default function Members() {
   }
 
   const countLabel = memberCountLabel({ items: state.items, nextCursor: state.nextCursor });
+  // §4.3's header meter. Null for a gym on no plan and for a capless band — both
+  // are real states, and neither may be drawn as "0 of 0" (:5807). It does NOT
+  // wait on the roster read: the numbers come off the org row, so a gym whose
+  // member list failed to load still shows how full it is.
+  const meter = seatMeter(org);
 
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-4">
@@ -291,6 +306,19 @@ export default function Members() {
         {!state.loading && state.error === null ? (
           <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
             {org.name} · {countLabel}
+          </p>
+        ) : null}
+        {meter !== null ? (
+          <p
+            data-testid="seat-meter"
+            className="text-sm mt-1 font-medium"
+            /* §4.2's own threshold: amber at 90 % of cap. Below it the meter is
+               a fact, not a warning, and colouring it would cry wolf for the
+               290 days a gym is nowhere near its limit. */
+            style={{ color: meter.pressure ? '#FF8A1F' : 'rgba(255,255,255,0.45)' }}
+          >
+            {meter.used} of {meter.cap} places used
+            {meter.full ? ' — your gym is full, so nobody else can join yet.' : ''}
           </p>
         ) : null}
       </div>

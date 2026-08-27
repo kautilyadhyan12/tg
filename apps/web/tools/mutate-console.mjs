@@ -53,6 +53,8 @@ const STAFF_VIEW_SUITE = 'src/pages/console/staffView.test.js';
 const SETTINGS_SUITE = 'src/pages/console/settings.render.test.jsx';
 const STORE_SUITE = 'src/pages/console/consoleOrgs.test.js';
 const GYMVIEW_SUITE = 'src/pages/console/gymDetailsView.test.js';
+const BILLING_VIEW_SUITE = 'src/pages/console/billingView.test.js';
+const TRIAL_SUITE = 'src/pages/console/trial.render.test.jsx';
 
 const TARGETS = {
   view: { file: resolve(ROOT, 'apps/web/src/pages/console/consoleView.js') },
@@ -86,6 +88,14 @@ const TARGETS = {
   // written with `\n` matches nothing here and the mutant reports ALIVE, whose
   // honest reading is "this guarantee has no test" (:4267, four harnesses).
   layout: { file: resolve(ROOT, 'apps/web/src/components/console/ConsoleLayout.jsx') },
+  // The trial, the banner and the meter, added 2026-08-27 with the web half of
+  // `POST /v1/orgs/:gymId/trial`. THREE targets for one feature, because a
+  // mutant is a claim about ONE call site (:15770): the view file decides WHICH
+  // state a gym is in, the card decides what happens when the button is
+  // pressed, and the banner decides whether the answer reaches a screen at all.
+  billingview: { file: resolve(ROOT, 'apps/web/src/pages/console/billingView.js') },
+  trialcard: { file: resolve(ROOT, 'apps/web/src/components/console/TrialCard.jsx') },
+  banner: { file: resolve(ROOT, 'apps/web/src/components/console/ConsoleBanner.jsx') },
 };
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
@@ -662,11 +672,24 @@ const MUTANTS = [
     // RE-ANCHORED AGAIN 2026-08-26 by round 3's `key` fix, which is on this same
     // line. Third time this mutant's anchor has moved on this branch; the
     // whole-table pre-check ABORTED before a byte was written each time, and it
-    // is re-measured RED rather than assumed. **C81 is its neighbour on the same
+    // is re-measured RED rather than assumed. **C82 is its neighbour on the same
     // line and they guard different things** — this one that the ORG TYPE
-    // reaches the panel, C81 that the panel is thrown away when the gym changes.
-    from: '<StaffPanel key={org.id} gymId={org.id} privileges={privileges} orgType={org.orgType} />',
-    to: '<StaffPanel key={org.id} gymId={org.id} privileges={privileges} />',
+    // reaches the panel, C82 that the panel is thrown away when the gym changes.
+    // (That sentence named C81 until 2026-08-27; C81 is the same guarantee on
+    // the GYM-DETAILS panel one line above, not on this one.)
+    //
+    // RE-ANCHORED A FOURTH TIME 2026-08-27, AND THIS ONE WAS NOT CAUGHT AT THE
+    // TIME. Round 4's fix (`af27965`) prefixed both panel keys — `staff-${…}`
+    // and `gym-${…}` — which moved this anchor, C81's and C82's all at once, and
+    // none of the three was re-aimed. Measured on the trial card, with
+    // `Settings.jsx` byte-identical to HEAD: all THREE matched ZERO times, so
+    // the whole-table pre-check has been aborting every sweep since, and the
+    // guarantees these carry — including round 3's own Critical/High — have had
+    // no mutant behind them for two commits. Round 5 shipped on a SUBSET run,
+    // which is why nothing noticed. Re-aimed at the SAME call sites, never at
+    // whichever line looked closest (:15770), and each re-measured RED.
+    from: '<StaffPanel key={`staff-${org.id}`} gymId={org.id} privileges={privileges} orgType={org.orgType} />',
+    to: '<StaffPanel key={`staff-${org.id}`} gymId={org.id} privileges={privileges} />',
   },
   {
     // KD FOUND THIS ONE IN A BROWSER, WHICH IS WHY IT IS HERE. The control used
@@ -1342,7 +1365,10 @@ const MUTANTS = [
     suite: SETTINGS_SUITE,
     why: "DATA CORRUPTION ON THE WRONG GYM: the gym-details panel is no longer thrown away when the gym changes, so it keeps a TOUCHED draft across a move between two gyms' Settings — `/console/:orgSlug/settings` is ONE route and does not remount. Gym A's typing then sits under gym B, over gym B's own untouched city, and one Save writes all of it to gym B's id INCLUDING THE TIME ZONE, moving the day boundary of a gym the owner was not editing. Not an IDOR — the server rightly authorises it, because gym B is a gym this owner manages",
     expect: 'carries NOTHING from one gym onto another',
-    from: '      {canEditGym ? <GymDetailsPanel key={org.id} org={org} privileges={privileges} /> : null}',
+    // RE-ANCHORED 2026-08-27 — round 4's key PREFIX moved this line and nothing
+    // re-aimed it; measured matching zero times. See S15's note for the full
+    // account: three anchors moved in one commit and all three were missed.
+    from: '      {canEditGym ? <GymDetailsPanel key={`gym-${org.id}`} org={org} privileges={privileges} /> : null}',
     to: '      {canEditGym ? <GymDetailsPanel org={org} privileges={privileges} /> : null}',
   },
   {
@@ -1354,7 +1380,10 @@ const MUTANTS = [
     suite: SETTINGS_SUITE,
     why: "ON SCREEN AND FALSE (:5807) ON A DIFFERENT GYM: the staff panel keeps its fetched list across a gym change, so gym A's staff rows sit under gym B for as long as gym B's read is in flight. Worse than a stale list — a row's controls act on the CURRENT `gymId` with the OLD person's id, so a Remove aimed at somebody visible is sent against a gym they do not staff",
     expect: 'carries NO staff list from one gym onto another',
-    from: '        <StaffPanel key={org.id} gymId={org.id} privileges={privileges} orgType={org.orgType} />',
+    // RE-ANCHORED 2026-08-27 for the same reason as S15 and C81 — round 4's key
+    // prefix, three anchors, none re-aimed. The prefix is part of the anchor on
+    // purpose: it is the very thing this mutant deletes.
+    from: '        <StaffPanel key={`staff-${org.id}`} gymId={org.id} privileges={privileges} orgType={org.orgType} />',
     to: '        <StaffPanel gymId={org.id} privileges={privileges} orgType={org.orgType} />',
   },
   {
@@ -1372,6 +1401,76 @@ const MUTANTS = [
     expect: 'keeps EVERY zone it is asked for',
     from: '  return missing.length === 0 ? zones : [...missing, ...zones];',
     to: '  return missing.length === 0 ? zones : [missing[missing.length - 1], ...zones];',
+  },
+  // ── THE TRIAL, THE BANNER AND THE SEAT METER (C86–C91) ────────────────────
+  //
+  // Every row here is 4a's "numbers a user sees" or "can another person see it",
+  // and each one is a sentence or a figure this console would print while being
+  // wrong about it — which :5807 calls Critical/High on sight.
+  {
+    id: 'C86',
+    target: 'billingview',
+    suite: BILLING_VIEW_SUITE,
+    why: "FALSE ON SCREEN: the banner asks whether a trial END DATE exists instead of whether the gym is TRIALLING. `trial_ends_at` is never cleared when a subscription leaves that status, so a gym that has been PAYING for a year is shown a countdown off the date its old trial ran out — the exact misread the shared schema warns about in as many words",
+    expect: 'asks the STATUS, not whether an end date exists',
+    from: "  return org?.subscription?.status === 'trialing';",
+    to: '  return org?.subscription?.trialEndsAt != null;',
+  },
+  {
+    id: 'C87',
+    target: 'billingview',
+    suite: BILLING_VIEW_SUITE,
+    why: 'FALSE ON SCREEN: the trial countdown floors elapsed milliseconds instead of comparing local calendar days, so "3 days left" appears at 3 days and 1 hour and the amber notice arrives a DAY LATE — the defect four review rounds found in four separate functions of `joinClock.js`, arriving in the first file to be written after that rule',
+    expect: 'does not round a few hours up into a whole day',
+    from: '  return calendarDaysBetween(now, at.getTime());',
+    to: '  return Math.floor((at.getTime() - now) / 86400000);',
+  },
+  {
+    id: 'C88',
+    target: 'billingview',
+    suite: BILLING_VIEW_SUITE,
+    why: 'FALSE ON SCREEN: an unknown seat cap becomes a zero, so a gym on no plan and a capless band both read "0 of 0 places used" — a meter drawn over a number nobody computed, at a gym nothing is actually limiting',
+    expect: 'is null for every unknown',
+    // RE-AIMED before it ever shipped. Its first anchor was a `typeof` guard
+    // sitting ABOVE the finite check, and it came back ALIVE because the two
+    // covered the same case — so the mutation changed nothing observable and
+    // said nothing about the guarantee. The redundant line was deleted from the
+    // SOURCE (:17676) and this now points at the one line that decides.
+    from: '  if (!Number.isFinite(cap) || !Number.isFinite(used) || cap <= 0) return null;',
+    to: '  if (false) return null;',
+  },
+  {
+    id: 'C89',
+    target: 'trialcard',
+    suite: TRIAL_SUITE,
+    why: "PRIVILEGE: the trial button is drawn for anybody who can reach the console, so a TRAINER is offered a control the server answers 403 to — §2.2's Billing row is the owner's alone by default, and a greyed or dead control over a live refusal is the defect that row's own rules warn about",
+    expect: 'not drawn at all for somebody without the billing tick',
+    from: '  if (!canManageBilling(viewerPrivileges(org))) return null;',
+    to: '  if (false) return null;',
+  },
+  {
+    id: 'C90',
+    target: 'trialcard',
+    suite: TRIAL_SUITE,
+    why: "FALSE ON SCREEN AFTER A SUCCESSFUL ACTION: the card stops holding the server's own answer and waits for the shared gym list instead. That list keeps its PREVIOUS answer when a background re-read fails, so an owner who has just started a trial is offered \"Start your 30-day free trial\" again over a gym that is already trialling — the screen contradicting an action that succeeded",
+    expect: 'SURVIVES the background refresh',
+    from: '  const subscription = org?.subscription ?? justStarted;',
+    to: '  const subscription = org?.subscription ?? null;',
+  },
+  {
+    id: 'C91',
+    target: 'banner',
+    suite: TRIAL_SUITE,
+    why: "SILENCE WHERE IT MATTERS MOST: the banner honours a dismissal on EVERY state rather than only the dismissible one, so the amber \"your trial ends on the 3rd\" notice can be closed and stays closed — §4.2 makes that state not dismissible precisely because it is the last thing an owner sees before their members lose the gym's features",
+    // RE-FILTERED before it ever shipped. It first named the test that checks
+    // the amber banner has no dismiss BUTTON — which nothing stores a dismissal
+    // for, so the mutation had no observable subject and came back ALIVE against
+    // correct code. :11846's two halves, and it was the FILTER half again: the
+    // anchor said what breaks, and the filter named a test that could not
+    // notice. Now pointed at the test that PLANTS the record.
+    expect: 'with a dismissal already stored against it',
+    from: '    banner.dismissible &&\n    gymId !== null &&',
+    to: '    gymId !== null &&',
   },
 ];
 

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NavLink, Link, useParams, useNavigate } from 'react-router-dom';
 import { Building2, Users, Settings, ChevronLeft, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import ConsoleBanner from './ConsoleBanner';
 import { useConsoleOrg } from '../../pages/console/useConsoleOrg';
 import { canManageStaff } from '../../pages/console/staffView';
 import { canManageOrg } from '../../pages/console/gymDetailsView';
@@ -186,6 +187,12 @@ export default function ConsoleLayout({ children }) {
             {signingOut ? 'Signing out…' : 'Sign out'}
           </button>
         </div>
+        {/* §4.2's persistent slot — "sits above all screens", which is why it is
+            here and not on the Overview. It draws nothing at all until the gym
+            is on a plan, and nothing on `/console` or `/console/new`, where
+            there is no gym to be about (`org` is null and the machine's first
+            question is what the gym is on). */}
+        <ConsoleBanner org={org} />
         {children}
       </main>
 

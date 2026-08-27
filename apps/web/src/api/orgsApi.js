@@ -25,6 +25,7 @@ import {
   removeMemberResponseSchema,
   removeOrgStaffResponseSchema,
   rotateOrgCodeResponseSchema,
+  startOrgTrialResponseSchema,
   updateOrgResponseSchema,
 } from '@app/shared';
 import authApi from './authApi';
@@ -95,6 +96,33 @@ export const orgService = {
    *  and it is a person doing it. */
   updateOrg: (gymId, patch) =>
     readThrough(updateOrgResponseSchema, 'that change', authApi.patch(`/v1/orgs/${gymId}`, patch)),
+
+  /** POST /v1/orgs/:gymId/trial — the gym starts its own 30-day free trial.
+   *
+   *  Kd ruling 2026-08-27, which reversed his own approval step: a gym starts on
+   *  its own, and what replaces the gate is one trial per OWNER, ever. Gated on
+   *  `billing.manage`, which every owner holds by default and may tick across.
+   *
+   *  **`{}` is load-bearing, not decoration**: the route takes no body and
+   *  Fastify refuses a request that declares JSON and carries nothing — the same
+   *  reason the two confirm-queue taps send it.
+   *
+   *  **Safe under `authApi`'s 401 replay, and it is the server that makes it
+   *  so** (R10.2). A second call cannot mint a second subscription: the write
+   *  takes the gym row's lock, sees the row the first call inserted, and answers
+   *  `already_subscribed` — a SUCCESS arm carrying the state, not a complaint.
+   *  Nothing here adds a network-failure retry, and nothing may: without that
+   *  server-side idempotence a retry would be a POST with no Idempotency-Key.
+   *
+   *  Two refusals arrive as 409s with their own sentences — the owner has
+   *  already used their one trial, or their country has no price book yet — and
+   *  the screen prints the server's words rather than inventing any. */
+  startTrial: (gymId) =>
+    readThrough(
+      startOrgTrialResponseSchema,
+      'your free trial',
+      authApi.post(`/v1/orgs/${gymId}/trial`, {}),
+    ),
 
   /** GET /v1/orgs/:gymId/members — Part 3 §2.4's roster and nothing else:
    *  display name, join date, the label of the code they came in through, and

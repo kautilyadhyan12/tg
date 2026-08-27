@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Users, ChevronRight } from 'lucide-react';
 import JoinCodeCard from '../../components/console/JoinCodeCard';
 import JoinCodesPanel from '../../components/console/JoinCodesPanel';
+import TrialCard from '../../components/console/TrialCard';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { orgService, errorText, isRetryable } from '../../api/orgsApi';
 import { useAuth } from '../../context/AuthContext';
@@ -29,8 +30,19 @@ import {
 // outright. They have their own owed line; this screen shows what is TRUE
 // today: who the gym is, the code that lets people in, and how many are in.
 //
-// The §4.2 banner slot is absent for the same reason — its states are read off
-// `subscriptions`, and billing does not exist.
+// THE §4.2 BANNER USED TO BE ABSENT FOR THE SAME REASON AND IS NOT ANY MORE.
+// This comment said "its states are read off `subscriptions`, and billing does
+// not exist" — which was true when it was written and stopped being true on
+// 2026-08-27, when a gym gained the ability to start its own trial and wrote the
+// first `subscriptions` row in the product's history. Billing still does not
+// exist; the STATE does, `/v1/orgs/mine` now carries it, and the banner lives in
+// `ConsoleLayout` because §4.2 puts its slot above every console screen rather
+// than on this one. Corrected here rather than only where it was noticed
+// (:5748): this is the file somebody opens to ask why the console shows no
+// banner.
+//
+// The KPI tiles above are untouched by any of that — `org_daily_stats` and its
+// two siblings still do not exist.
 
 /* ROUND 2 Low-4's "would pressing Try again change anything?" predicate MOVED to
    `orgsApi.js` beside `errorStatus` (T3 round 2 L-5). It was private here, the
@@ -205,6 +217,14 @@ export default function Overview() {
           {orgTypeLabel(org.orgType)}
         </p>
       </div>
+
+      {/* THE PLAN, ABOVE THE JOIN CODE AND BELOW THE GYM'S NAME. It is the
+          first thing an owner of a brand-new gym has to do and the join code is
+          the second — a code handed out by a gym on no plan admits members who
+          get nothing extra for being there. Draws nothing at all for anybody
+          without `billing.manage`, and needs no read of its own: the plan and
+          the places used both arrive on the org row this screen already has. */}
+      <TrialCard org={org} />
 
       {/* ── The join code pane, on its own outcome ─────────────────────── */}
       {codes.loading ? <ConsoleLoading label="Loading…" /> : null}

@@ -542,6 +542,56 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  staffs nothing has no powers here, and that must not read as "fall back to
    *  a role you do not hold". */
   privileges: z.array(z.string()).optional(),
+  /** WHAT THE GYM IS ON — the fact §4.2's banner is a state machine over, and
+   *  until this field existed the console had no way to ask for it.
+   *
+   *  `orgSubscriptionSchema` left the server in exactly ONE place before this:
+   *  the response to the button that STARTS a trial. So a console could learn a
+   *  gym was trialling only in the second after somebody pressed something, and
+   *  a reload forgot it — which is why `Overview.jsx` carried a comment saying
+   *  the banner slot was absent because "its states are read off `subscriptions`
+   *  and billing does not exist". Billing still does not exist; the *state* does,
+   *  and this is the read that serves it.
+   *
+   *  **NULL HAS THREE CAUSES AND THEY DELIBERATELY RENDER THE SAME.** The gym is
+   *  on nothing · the caller is not STAFF here (see below) · the api predates
+   *  this field and `.default(null)` filled it in. All three mean the console
+   *  knows of no plan, and the only honest thing to draw for an unknown state is
+   *  nothing at all (:5807). A client that branched on which of the three it was
+   *  would be claiming to know something it does not.
+   *
+   *  **A PLAIN MEMBER IS TOLD NOTHING, and that is a §2.4 decision rather than a
+   *  convenience.** This response is read by the member app as well as the
+   *  console — it is where "You're a member of Iron House" comes from — and when
+   *  a gym's trial runs out is the gym's business, not its members'. The console
+   *  filters to `staffRole != null` before drawing anything, so nothing is lost.
+   *
+   *  **`.default(null)` rather than `.optional()`, for the reason `country`
+   *  carries three fields up**: `orgsApi.js` treats a contract mismatch as a hard
+   *  failure and the console treats that as an error card, so a REQUIRED field
+   *  would blank the whole gym list during any window where the web is newer than
+   *  the api. Absent collapses into the same null every other unknown does. */
+  subscription: orgSubscriptionSchema.nullable().default(null),
+  /** LIVE MEMBERS OCCUPYING ONE OF THE GYM'S PAID PLACES — the numerator of
+   *  §4.3's seat meter, and of §4.2's "87/100 seats" row.
+   *
+   *  **It is NOT the length of a roster page and must never be replaced by one.**
+   *  The roster is cursor-paginated fifty at a time, so `items.length` says "50
+   *  seats used" at a gym of six hundred; `memberCountLabel` prints `50+` for
+   *  exactly that reason. A meter needs an exact count over the whole gym, which
+   *  only the server can take.
+   *
+   *  **Counted by the rule the SEAT CAP itself counts by** — live, not
+   *  complimentary, and not staff — so the meter and the door cannot disagree
+   *  about who costs money. That rule is written out in three places now
+   *  (`claimSeat`, `listMembers`, `listOrgsForUser`); a shared `sql` fragment is
+   *  R3.8's forbidden shape, and what stops the copies drifting is a test that
+   *  drives the meter and the refusal on ONE fixture (:14013's precedent).
+   *
+   *  Null for a non-staff caller and for an api too old to say, exactly as
+   *  `subscription` above. Never rendered as a zero: "0 of 300 seats" and "we
+   *  could not ask" are different sentences. */
+  seatsUsed: z.number().int().nonnegative().nullable().default(null),
   isMember: z.boolean(),
   joinedAt: z.string().nullable(),
 });

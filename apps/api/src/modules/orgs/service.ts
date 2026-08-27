@@ -341,6 +341,22 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
       // "this api is too old to say" and the client falls back to the role's
       // defaults, which for a non-staff member would be nonsense.
       privileges: r.staffRole === null ? [] : [...privilegesFor(r.staffRole, r.privileges)],
+      // WHAT THE GYM IS ON, AND HOW FULL IT IS — §4.2's banner and §4.3's seat
+      // meter, which had no read to come from until this card. Both are STAFF
+      // FACTS and this is the one line that decides that.
+      //
+      // A plain member reads this same response — it is where "You're a member
+      // of Iron House" comes from — and when a gym's trial runs out is the
+      // gym's business, not its members' (§2.4's boundary applied in the other
+      // direction to the roster's). Null rather than absent, so a non-staff
+      // caller, a gym on no plan and an api too old to answer all arrive at the
+      // client as the same "we know of no plan", which is the only state the
+      // console may honestly draw nothing for.
+      subscription:
+        r.staffRole === null || r.subscription === null
+          ? null
+          : toOrgSubscription(r.subscription),
+      seatsUsed: r.staffRole === null ? null : r.seatsUsed,
       isMember: r.isMember,
       joinedAt: r.joinedAt === null ? null : r.joinedAt.toISOString(),
     })),

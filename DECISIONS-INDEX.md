@@ -127,6 +127,64 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:21580** — 2026-08-27 — **THE GYM TRIAL REACHES A SCREEN — the button, §4.2's
+  banner and §4.3's seat meter — and THREE CONSOLE MUTANTS TURN OUT TO HAVE HAD NO
+  ANCHOR SINCE ROUND 4.** Web half of :21157/:21353/:21487. **Read before touching
+  `billingView.js`, before adding a state to §4.2's banner, before drawing any
+  number against a seat cap, before adding a field to `/v1/orgs/mine`, and before
+  quoting a web sweep run since `af27965`.**
+  **IT NEEDED A SERVER CHANGE and that was the plan gate's whole subject:
+  `orgSubscriptionSchema` left the server in exactly ONE place — the reply to the
+  button that starts a trial** — so a console could know a gym was trialling only
+  in the second after somebody pressed something, and a reload forgot it.
+  `/v1/orgs/mine` now carries `subscription` and `seatsUsed`, both
+  `.nullable().default(null)`, **no migration**.
+  **NULL HAS THREE CAUSES AND THEY RENDER THE SAME** (no plan · not staff · an api
+  too old), because the only honest thing to draw for an unknown state is nothing.
+  **A PLAIN MEMBER IS TOLD NOTHING — §2.4 in the direction the roster tests do not
+  cover — with the OWNER as the control on the same gym.** **`seatsUsed` is the
+  SERVER's exact count**, never a roster page's length (fifty rows would read "50
+  of 300" at a gym of six hundred), counted by the rule the cap refuses by; the
+  three copies of that rule are anchored by **one test driving the METER and the
+  DOOR across a transition** — appointing a full gym's only payer as staff frees
+  their place, so the meter falls 1 → 0 as the door stops refusing.
+  **THE BANNER SHIPS ITS STATES AND NOT ITS BUTTONS**: all four of §4.2's CTAs open
+  a Billing screen that does not exist, which is :19016's own sequencing; a test
+  asserts the shape is exactly `{key, tone, text, dismissible}` so a `cta` cannot
+  arrive unnoticed. **IT NEVER SAYS A TRIAL HAS ENDED** (nothing ends one) and
+  **GATES ON `status`, NEVER ON `trialEndsAt` BEING NULL** — :21353's Low-5, which
+  now has a test and a mutant rather than a comment. §4.2's expired/grace row and
+  the read-only console **cannot be built from this read at all** (it serves only
+  the LIVE statuses, so an ended plan and a gym that never started one are
+  identical) — own `OWED.md` line, and the P3.8 card must also rewrite the
+  past-the-date copy, which is written onto that 🔴 line with a grep.
+  **THE ORDER IS A DECISION §4.2 DOES NOT MAKE**: `past_due` → `trial_urgent` →
+  `seat_pressure` → `trial_info`.
+  **THE AUDIT'S FINDING IS NOT IN THIS CARD'S CODE: S15, C81 and C82 all matched
+  ZERO times**, measured with `Settings.jsx` byte-identical to HEAD. Round 4's
+  `af27965` prefixed both panel keys and moved all three anchors at once; **round 5
+  shipped on a SUBSET run, which is why nothing noticed**, so round 3's own
+  Critical/High has had no mutant behind it for two commits. Re-aimed at the SAME
+  call sites and each re-measured RED. **Reusable: a subset sweep does not exercise
+  the whole-table pre-check, so a card running only its own rows cannot discover
+  that everybody else's have rotted.**
+  **TWO OF SIX NEW WEB MUTANTS CAME BACK ALIVE AND BOTH WERE REAL** — C88 was my
+  own redundant guard (`typeof` above `Number.isFinite`, neither falsifiable),
+  **deleted from the SOURCE** and the mutant moved onto the line that decides;
+  **C91 was the FILTER half** (it named a test that never stores a dismissal), and
+  the guard STAYS as defence in depth with a planted fixture. **O138 survived on
+  the server for the same reason one layer down** — the only comped row this suite
+  could make is the OWNER's, who is also staff, so the clause was excluded twice;
+  closed with a comped member who is not staff plus a positive control.
+  **INSTRUMENT SLIP, MINE: a wrong `DATABASE_URL` aborts identically to a bad
+  filter** (:16221 again) and I read `$?` through a `tail` pipe (:5906).
+  **PROVE, all LOCAL: `orgs.routes` 134/134 (+4) · `db.migration` 11/11 · shared
+  51/51 · web 1282/1282 exit 0 across 47 files (+48) · tsc exit 0 on api and shared
+  · eslint clean on thirteen files · build exit 0 · api sweep a stated SUBSET 4 of
+  138, 4 RED 0 ALIVE · web sweep a stated SUBSET 6 of 111, 6 RED 0 ALIVE · the
+  three re-anchored 3 RED.** **SMOKE WRITTEN AND UNRUN, T3 UNRUN — and the smoke
+  cannot start until the dev branch is migrated and re-seeded** (:21157 gap (a),
+  third recurrence of :15927: a US gym is refused outright there).
 - **:21487** — 2026-08-27 — **THE SELF-SERVE TRIAL, T3 ROUND 2 (diff-only): ZERO
   Critical/High, THE PACKET SHIPS — and three of the six Lows are defects in round
   1's OWN corrections.** **Read before trusting a round's "measured" paragraph,

@@ -5541,4 +5541,169 @@ d("orgs routes (real Postgres)", () => {
     }
     expect(await readSubs(org.org.id)).toHaveLength(1);
   });
+
+  // ── WHAT THE CONSOLE IS TOLD ABOUT THE PLAN ────────────────────────────────
+  //
+  // `/v1/orgs/mine` now carries the gym's live subscription and how many of its
+  // places are taken — the two facts Part 3 §4.2's banner and §4.3's seat meter
+  // are drawn from. Before this the whole of `orgSubscriptionSchema` left the
+  // server in exactly one place, the reply to the button that starts a trial, so
+  // a console could know a gym was trialling only in the second after somebody
+  // pressed something and a reload forgot it.
+
+  interface MineRow {
+    id: string;
+    staffRole: string | null;
+    subscription: { status: string; trialEndsAt: string | null; seatCap: number | null } | null;
+    seatsUsed: number | null;
+  }
+
+  const mineRow = async (cookies: Record<string, string>, gymId: string): Promise<MineRow> => {
+    const res = await get("/v1/orgs/mine", { cookies });
+    expect(res.statusCode).toBe(200);
+    const row = (JSON.parse(res.body) as { orgs: MineRow[] }).orgs.find((o) => o.id === gymId);
+    if (row === undefined) throw new Error(`gym ${gymId} missing from /orgs/mine`);
+    return row;
+  };
+
+  it("tells the console the gym is on no plan, and how full it is anyway", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("mine-noplan");
+    const guest = await makeUser("mine-noplan-g");
+    const org = await makeOrg(owner.cookies, "Orgs Test Mine NoPlan", { country: "US" });
+
+    const empty = await mineRow(owner.cookies, org.org.id);
+    // Null and not an invented shape: a gym on nothing has no status, no end
+    // date and no cap, and the console draws no banner and no meter for it.
+    expect(empty.subscription).toBeNull();
+    // The count is still a real answer — it is the gym's own roster, not a fact
+    // about a plan. The owner's §4.0-step-6 seat is complimentary and excluded,
+    // so a gym with only its owner in it has ZERO places taken.
+    expect(empty.seatsUsed).toBe(0);
+
+    // POSITIVE CONTROL, so "0" is not simply what this reader always says.
+    await joinAsMember(guest.cookies, org, owner.cookies);
+    expect((await mineRow(owner.cookies, org.org.id)).seatsUsed).toBe(1);
+
+    /** THE COMPED MEMBER WHO IS NOT STAFF, and this fixture exists because
+     *  MUTANT O138 SURVIVED WITHOUT IT.
+     *
+     *  The count excludes complimentary places AND staff, and the only
+     *  complimentary row this suite could otherwise produce is the OWNER's —
+     *  who is also staff, so they are excluded TWICE and deleting either clause
+     *  changes nothing observable. Two guards, either sufficient, neither
+     *  falsifiable: :12343's J11 and :15093's O92, the second of which closed
+     *  it on this very rule at the roster's copy.
+     *
+     *  Written straight into the row because nothing in the product comps a
+     *  member yet — the flag means "did not JOIN" and only `createOrgAttempt`
+     *  sets it. The subject is the READER, not how the row got there. */
+    await sql`UPDATE gym_members SET complimentary = true
+              WHERE gym_id = ${org.org.id} AND user_id = ${guest.userId}`;
+    expect((await mineRow(owner.cookies, org.org.id)).seatsUsed).toBe(0);
+  });
+
+  it("carries the trial the moment it starts", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("mine-trial");
+    const org = await makeOrg(owner.cookies, "Orgs Test Mine Trial", { country: "US" });
+    expect(await mineRow(owner.cookies, org.org.id)).toHaveProperty("subscription", null);
+
+    expect(
+      (await post(`/v1/orgs/${org.org.id}/trial`, {}, { cookies: owner.cookies })).statusCode,
+    ).toBe(200);
+
+    const row = await mineRow(owner.cookies, org.org.id);
+    expect(row.subscription?.status).toBe("trialing");
+    // The REAL band off the seeded book, the same 300 the trial response
+    // asserts — the two readers must not be able to disagree about the cap.
+    expect(row.subscription?.seatCap).toBe(300);
+    expect(row.subscription?.trialEndsAt).not.toBeNull();
+  });
+
+  /** §2.4's boundary, applied in the direction the roster tests do not cover:
+   *  when a gym's trial runs out is the GYM's business, not its members'.
+   *
+   *  **The owner is the control and is what stops this passing by nulling
+   *  everybody.** Both callers read the same gym on the same live trial through
+   *  the same response shape; one is told and one is not, and only the staff row
+   *  may carry it. */
+  it("tells a plain member NOTHING about the gym's plan", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("mine-priv-o");
+    const member = await makeUser("mine-priv-m");
+    const org = await makeOrg(owner.cookies, "Orgs Test Mine Priv", { country: "US" });
+    expect(
+      (await post(`/v1/orgs/${org.org.id}/trial`, {}, { cookies: owner.cookies })).statusCode,
+    ).toBe(200);
+    await joinAsMember(member.cookies, org, owner.cookies);
+
+    const theirs = await mineRow(member.cookies, org.org.id);
+    expect(theirs.staffRole).toBeNull();
+    expect(theirs.subscription).toBeNull();
+    expect(theirs.seatsUsed).toBeNull();
+
+    const ours = await mineRow(owner.cookies, org.org.id);
+    expect(ours.staffRole).toBe("owner");
+    expect(ours.subscription?.status).toBe("trialing");
+    expect(ours.seatsUsed).toBe(1);
+  });
+
+  /** THE ANCHOR BETWEEN THE METER AND THE DOOR, and the reason it is one test
+   *  rather than two.
+   *
+   *  The count "live, not complimentary, not staff" is now written out in THREE
+   *  places — `claimSeat`, `listMembers` and `listOrgsForUser`. A shared `sql`
+   *  fragment is R3.8's forbidden shape, so the copies are deliberate; what stops
+   *  them drifting is a test that drives BOTH ENDS on ONE fixture (:14013's
+   *  six-site precedent, :14493's Low-2 for what drift costs).
+   *
+   *  **It is driven across a TRANSITION rather than asserted once**, which is
+   *  what makes it able to fail: appointing the gym's only paying member as staff
+   *  frees their place, so the meter must fall from 1 to 0 in the same breath as
+   *  the door goes from refusing to admitting. A meter whose copy of the rule
+   *  forgot the staff clause would sit at 1 while the door let somebody in — the
+   *  screen and the door disagreeing about who costs money, which is exactly the
+   *  defect Kd found on the roster badge (:14953). */
+  it("the seat meter counts the same people the seat cap refuses by", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("mine-anchor-o");
+    const first = await makeUser("mine-anchor-1");
+    const second = await makeUser("mine-anchor-2");
+    const org = await makeOrg(owner.cookies, "Orgs Test Mine Anchor", { country: "US" });
+    await subscribeGym(org.org.id, CAP1_PLAN); // seat_cap = 1
+
+    // One paying member fills the gym.
+    await joinAsMember(first.cookies, org, owner.cookies);
+    expect((await mineRow(owner.cookies, org.org.id)).seatsUsed).toBe(1);
+
+    // THE DOOR AGREES: the next applicant meets the cap.
+    const blockedId = await applyWithCode(second.cookies, org.joinCode.code);
+    const blocked = await post(
+      `/v1/orgs/${org.org.id}/applications/${blockedId}/confirm`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(blocked.statusCode).toBe(409);
+    expect((JSON.parse(blocked.body) as { error: string }).error).toBe("seat_cap_reached");
+
+    // Kd's "yes staff seats free" (:14262): handing that member the keys frees
+    // the place they were occupying.
+    expect(
+      (
+        await post(
+          `/v1/orgs/${org.org.id}/staff`,
+          { email: first.email, role: "trainer" },
+          { cookies: owner.cookies },
+        )
+      ).statusCode,
+    ).toBe(201);
+
+    // BOTH ENDS MOVE TOGETHER. The meter falls…
+    expect((await mineRow(owner.cookies, org.org.id)).seatsUsed).toBe(0);
+    // …and the door opens for the applicant it just refused.
+    const admitted = await post(
+      `/v1/orgs/${org.org.id}/applications/${blockedId}/confirm`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(admitted.statusCode).toBe(200);
+    expect((await mineRow(owner.cookies, org.org.id)).seatsUsed).toBe(1);
+  });
 });

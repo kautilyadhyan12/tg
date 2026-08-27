@@ -1601,6 +1601,44 @@ const MUTANTS = [
     from: '    "org.manage",\n    "billing.manage",\n  ],\n  manager:',
     to: '    "org.manage",\n  ],\n  manager:',
   },
+  // ── WHAT THE CONSOLE IS TOLD ABOUT THE PLAN (O135–O138) ───────────────────
+  //
+  // The web half put a banner and a seat meter on screen, and both are drawn
+  // from two new fields on `/v1/orgs/mine`. Both sit squarely in 4a's "always
+  // mutated" column: one is OWNERSHIP (who may learn a gym's billing state) and
+  // the other is a NUMBER A USER SEES.
+  {
+    id: 'O135',
+    target: 'service',
+    why: "PRIVACY: the gym's plan stops being staff-only, so every ordinary MEMBER of a gym is told what it is on and when its trial runs out — a fact §2.4 keeps on the gym's side of the boundary, served to everybody who ever typed a join code",
+    expect: 'tells a plain member NOTHING',
+    from: '        r.staffRole === null || r.subscription === null\n          ? null\n          : toOrgSubscription(r.subscription),\n      seatsUsed: r.staffRole === null ? null : r.seatsUsed,',
+    to: '        r.subscription === null ? null : toOrgSubscription(r.subscription),\n      seatsUsed: r.seatsUsed,',
+  },
+  {
+    id: 'O136',
+    target: 'repo',
+    why: 'OWNERSHIP: the seat meter stops counting its own gym, so every gym on a plan is shown the number of paying members in the WHOLE DATABASE — a cross-tenant count on screen, and one that would read "full" at every gym at once',
+    expect: 'seat meter counts the same people',
+    from: '             WHERE sm.gym_id = g.id\n               AND sm.removed_at IS NULL',
+    to: '             WHERE sm.removed_at IS NULL',
+  },
+  {
+    id: 'O137',
+    target: 'repo',
+    why: 'FALSE ON SCREEN: the meter stops excluding STAFF, so it counts places the seat cap does not charge for — the screen and the door disagreeing about who costs money, which is exactly the defect Kd found on the roster badge, and a gym reads "300 of 300, full" while the door is still admitting people',
+    expect: 'seat meter counts the same people',
+    from: '               AND NOT EXISTS (\n                 SELECT 1 FROM gym_staff ss\n                 WHERE ss.gym_id = sm.gym_id AND ss.user_id = sm.user_id)',
+    to: '               AND true',
+  },
+  {
+    id: 'O138',
+    target: 'repo',
+    why: "FALSE ON SCREEN: the meter counts COMPLIMENTARY places, so the owner's own §4.0-step-6 seat is billed to them — every brand-new gym opens its console reading \"1 place used\" before a single member has joined",
+    expect: 'on no plan, and how full it is anyway',
+    from: '               AND sm.complimentary = false\n',
+    to: '\n',
+  },
 ];
 
 /** ANCHORS ARE CONVERTED TO THE FILE'S OWN LINE ENDINGS, and the file is never

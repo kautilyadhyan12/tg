@@ -1,6 +1,79 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE GYM TRIAL, WEB HALF — the button, §4.2's banner, §4.3's seat meter.
+      Web half of :21157/:21353/:21487. DECISIONS :21580.
+
+  1. **IT WAS NOT WEB-ONLY, AND THAT IS THE part to carry.**
+     `orgSubscriptionSchema` left the server in exactly ONE place — the reply to
+     the button that starts a trial — so a console could know a gym was trialling
+     only in the second after somebody pressed something, and a reload forgot it.
+     `/v1/orgs/mine` now carries **`subscription`** and **`seatsUsed`**, both
+     `.nullable().default(null)`. **NO MIGRATION.**
+  2. **NULL HAS THREE CAUSES AND THEY RENDER THE SAME** — no plan · not staff ·
+     an api too old. Do not branch on which. **A plain MEMBER is told nothing**
+     (§2.4), with the owner as the control on the same gym.
+  3. **`seatsUsed` IS THE SERVER'S EXACT COUNT, never a roster page's length.**
+     Its rule now exists in THREE places (`claimSeat`, `listMembers`,
+     `listOrgsForUser`) and is anchored by ONE test driving the METER and the
+     DOOR across a transition — appointing a full gym's only payer as staff frees
+     the place, so the meter falls 1 → 0 as the door stops refusing.
+  4. **THE BANNER SHIPS ITS STATES AND NOT ITS BUTTONS** (all four of §4.2's CTAs
+     open a Billing screen that does not exist — :19016's sequencing), **never
+     says a trial has ENDED** (nothing ends one), and **gates on `status`, never
+     on `trialEndsAt` being null** — :21353's Low-5, now with a test and a mutant.
+     §4.2's expired/grace row is UNBUILDABLE from this read and has its own
+     `OWED.md` line; the P3.8 card must also rewrite the past-the-date copy.
+  5. ⚠️ **THREE CONSOLE MUTANTS HAVE HAD NO ANCHOR SINCE ROUND 4 — S15, C81 and
+     C82 all matched ZERO times**, measured with `Settings.jsx` byte-identical to
+     HEAD. `af27965`'s key PREFIX moved all three at once and round 5 shipped on
+     a SUBSET run, so nothing noticed. Re-aimed at the same call sites, each
+     re-measured RED. **A subset sweep does not exercise the whole-table
+     pre-check, so a card running only its own rows cannot discover that
+     everybody else's have rotted.**
+  6. **TWO of six new web mutants came back ALIVE and both were real**: C88 was my
+     own redundant guard (deleted from the SOURCE, mutant moved onto the line that
+     decides) and C91 was the FILTER half (:11846 again). **O138 survived on the
+     server the same way** — the only comped row this suite can make is the
+     OWNER's, who is also staff, so the clause was excluded twice.
+
+MEASURED, all LOCAL (:13659): **`orgs.routes` 134/134 (+4) · `db.migration` 11/11
+  · shared 51/51 · web 1282/1282 exit 0 across 47 files (+48) · tsc exit 0 on api
+  and shared · eslint `--max-warnings=0` clean on 3 server + 10 web files · `vite
+  build` exit 0 · `node --check` clean on both harnesses · `check-decisions-index`
+  217 resolve, 0 broken · gitleaks 3, all PRE-EXISTING in committed history and
+  none in this diff.** Sweeps, both stated SUBSETS: **api O135–O138, 4 of 138 — 4
+  RED 0 ALIVE**; **web C86–C91, 6 of 111 — 6 RED 0 ALIVE**; **S15/C81/C82
+  re-anchored, 3 RED.** Every harness exit code read directly, never through a
+  pipe (:5906 — I incurred it once this session and re-measured).
+
+FILES: packages/shared/src/orgs.ts · apps/api/src/modules/orgs/repo.ts ·
+       apps/api/src/modules/orgs/service.ts · apps/api/test/orgs.routes.test.ts ·
+       apps/api/tools/mutate-orgs.mjs · apps/web/src/api/orgsApi.js ·
+       apps/web/src/utils/joinClock.js · apps/web/src/pages/console/billingView.js
+       (new) · billingView.test.js (new) · trial.render.test.jsx (new) ·
+       apps/web/src/components/console/TrialCard.jsx (new) · ConsoleBanner.jsx
+       (new) · ConsoleLayout.jsx · Overview.jsx · Members.jsx ·
+       apps/web/tools/mutate-console.mjs · RUNBOOK/smoke-gym-trial.md (new) ·
+       DECISIONS.md · DECISIONS-INDEX.md · HANDOFF.md · OWED.md
+
+TICKS: `OWED.md`'s **30-day gym trial** line. Three other lines AMENDED not ticked
+  (the trial's shape — its 90 %-of-cap warning is now built; the Members screen —
+  the seat meter is struck from its list; the trial-expiry 🔴 — it now names the
+  copy the sweep must rewrite).
+
+⚠️ **NOTHING ELSE TICKS: the SMOKE (`RUNBOOK/smoke-gym-trial.md`, 9 steps) and T3
+  are BOTH UNRUN.** **The smoke cannot start until the dev branch is migrated and
+  re-seeded** — :21157 gap (a), third recurrence of :15927: that database holds
+  the pre-:18488 price book and no `0015`, so a US gym is refused outright with
+  *"We're not open for business in your country yet"*, which reads as the app
+  being broken. The sheet's prerequisites say so and give the two commands.
+
+NEXT: T3 (diff-only is NOT right here — this is round 1 on a new packet), then
+      Kd's smoke.
+```
+
+```
 TASK: THE GYM'S SELF-SERVE TRIAL (server half) — T3 ROUND 2 (diff-only).
       **ZERO Critical/High. THE PACKET SHIPS.** Reviews `215882c`.
       DECISIONS :21487. Six Low, ALL FIXED here + two rule-4 items.

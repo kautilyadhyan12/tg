@@ -4631,11 +4631,24 @@ file and is stated so nobody reads these as lower priority than they are.
 
 ### The 20-gym pilot and what it costs to run
 
-- [ ] 🟡 **THE 30-DAY GYM TRIAL (ruled 2026-08-24, DECISIONS :16548). It is
-      billing-card work and it does not exist.** Card-less
-      (`provider='none'`, Part 5 §6), so it sits behind :11072's Kd-approval
-      gate — no self-serve path may mint a live gym trial, which is what stops
-      the fresh-gym-per-month free ride.
+- [x] 🟡 **~~THE 30-DAY GYM TRIAL (ruled 2026-08-24, DECISIONS :16548). It is
+      billing-card work and it does not exist.~~ — DONE 2026-08-27.** The server
+      half shipped that morning (`a313861`, DECISIONS :21157) and the web half —
+      the button, §4.2's banner and §4.3's seat meter — the same day. A gym owner
+      can now start their own 30-day trial from the console, see how long is
+      left on every console screen, and see how many of their places are taken.
+      **Card-less (`provider='none'`, Part 5 §6) as ruled, and 30 days as
+      ruled.**
+      ~~so it sits behind :11072's Kd-approval gate — no self-serve path may mint
+      a live gym trial, which is what stops the fresh-gym-per-month free ride.~~
+      **— STRUCK: KD REVERSED THAT GATE on 2026-08-27** (*"a gym can start on own
+      without my approval but i will have the power of removing them or pausing
+      their use if i find them to be fraud"*). What stops the fresh-gym-per-month
+      ride now is **one trial per OWNER, ever** (Part 5 §12), enforced in the
+      repo and tested across an EXPIRED first trial — not a human.
+      **WHAT THIS TICK DOES NOT COVER, each with its own line below: nothing ENDS
+      a trial** (🔴, and it is the big one) · §4.2's CTAs and its expired/grace
+      arm · the member-side "this gym is full" sentence.
       **⚠ THERE IS NO "FIRST 20 GYMS FREE" PROGRAMME AND THERE NEVER WAS —
       DECISIONS :16702.** An earlier version of this line carried one. Kd wrote
       *"initially 20 gyms free trisl then subscription"*, meaning **he will
@@ -4646,8 +4659,19 @@ file and is stated so nobody reads these as lower priority than they are.
       no code at all.** No pilot cohort, no counter, no seed row. Kept as a
       warning rather than deleted, because the invented version was specific
       enough to look buildable.
-- [ ] 🟡 **THE TRIAL'S SHAPE IS RULED AND NONE OF IT IS BUILT — Kd 2026-08-25,
-      RE-RULED THE SAME DAY (DECISIONS :19129, superseding :17902 §1d in part).**
+- [ ] 🟡 **THE TRIAL'S SHAPE IS RULED AND ~~NONE~~ MOST OF IT IS BUILT — Kd
+      2026-08-25, RE-RULED THE SAME DAY (DECISIONS :19129, superseding :17902 §1d
+      in part).**
+      **UPDATED 2026-08-27, NOT TICKED.** Built since: no card · no plan choice ·
+      the same limit for every gym, read off the lowest-capped band rather than a
+      literal 300 · the seat cap biting · **and (b) below, the 90 %-of-cap warning
+      — §4.2's banner is now on every console screen and its seat-pressure row is
+      live.** **What still holds this line open is (c): the REFUSED MEMBER's
+      sentence.** A member who applies to a full gym is turned away by the
+      confirm route with `seat_cap_reached`, and the console owner sees it — but
+      the member-side wording Kd asked for (*"This gym is full — ask at the front
+      desk"*) is not written anywhere a member reads. Nor is the end-of-trial
+      prompt to subscribe, which waits on billing.
       Sits with the 30-day trial line above; that line owns the LENGTH, this one
       owns the SHAPE.
       **Ruled, current:** no card or bank details · **NO plan choice at signup** ·
@@ -4703,6 +4727,15 @@ file and is stated so nobody reads these as lower priority than they are.
       (R6.4) — i.e. with the P3.8 card, or earlier if the app goes on the internet
       first. **The trigger is the same as the cost breaker's two lines below: this
       cannot be live-with-real-gyms and unbuilt at the same time.**
+      **A THIRD THING, ADDED BY THE WEB HALF 2026-08-27 — THERE IS NOW A SCREEN
+      THAT HAS TO LIE ABOUT THIS, and it does not.** §4.2's banner ships with its
+      trial countdown, and past the end date it reads *"Your trial is past its end
+      date. Your members keep your gym's features while it is still running."*
+      That sentence is TRUE only because nothing ends a trial, and it is
+      deliberately not *"your trial has ended"* for that reason. **Whoever builds
+      the sweep must change that copy in the same card**, or the console will be
+      telling owners their trial is merely overdue on the day it actually stops.
+      Grep `past its end date` in `apps/web/src/pages/console/billingView.js`.
       **TWO THINGS FOR WHOEVER BUILDS IT, both measured here so nobody re-derives
       them in a panic:** (1) `updateOrg`'s currency lock asks `status <> 'trialing'`
       (`orgs/repo.ts:571`), so **it has never engaged and cannot while every
@@ -4716,6 +4749,33 @@ file and is stated so nobody reads these as lower priority than they are.
       (2) the seat-cap line further down this file already says its gap covers
       *"every gym whose trial has ended"*, which is a sentence written on the
       assumption that trials end. Today that set is empty.
+- [ ] 🟡 **§4.2's BANNER SHIPS ITS STATES WITHOUT ITS BUTTONS, AND WITHOUT THE
+      EXPIRED/GRACE ARM — deferred by the web half of the trial, 2026-08-27.**
+      **Read before adding anything to `billingView.js`'s `bannerFor`.**
+      §4.2's table pairs every state with a CTA — *Add payment* · *Choose plan* ·
+      *Reactivate* · *Upgrade tier* — and **every one of them opens a Billing
+      screen that does not exist**, which is Kd's own sequencing (:19016: *"only
+      the Billing TAB now waits for stage 8, while the seat cap, the trial and the
+      banner go live in stage 1"*). So the states ship and the buttons do not, and
+      each sentence is written to be complete without one. A test asserts the
+      banner returns exactly `{key, tone, text, dismissible}`, so adding a `cta`
+      is a deliberate act rather than something a later card slips in.
+      **THE SECOND HALF IS NOT A CHOICE AND IS THE ONE TO READ: two of §4.2's six
+      rows CANNOT BE BUILT YET.** "Trial expired → grace" and the read-only
+      console it specifies both need a trial to have ENDED, and nothing ends one
+      (the 🔴 line above). Worse, they are unreachable from this data by
+      construction: the read serves only the LIVE statuses
+      (`trialing`/`active`/`past_due`, §4.1's own set, the same set `seatCapFor`
+      and `getCandidates` use), so an ended plan and a gym that never started one
+      come back identically as `subscription: null`. **Widening that lateral to
+      "the live one, else the most recent" is the change whoever builds expiry
+      will need**, and it is a decision about what "the gym's subscription" means
+      to four readers, not a one-line edit — which is why it was not made here.
+      **TICKS WHEN** an ended trial produces a banner that says so and the console
+      goes read-only except Billing, per §4.2 — i.e. with the P3.8 expiry card.
+      **`past_due` IS built** and is reachable the day anything writes that
+      status; it carries no promise about retrying, because v1 §10's dunning is
+      unbuilt and there is nowhere to update a card.
 - [ ] 🟡 **`DECISIONS-INDEX.md` HAS OUTGROWN THE READ-PATH IT WAS CREATED TO BE —
       raised by T3 round 1, 2026-08-27, and it is the 2026-07-30 amendment's own
       wall reached a second time.** Measured this session: **6,096 lines** (`wc -l`),
@@ -5150,10 +5210,16 @@ file and is stated so nobody reads these as lower priority than they are.
       closed row — it is a decision between reopening that row and inserting a
       new membership, and the two disagree about `joined_at`, which is what
       every membership-interval reader is scoped by (§2.1).
-- [ ] 🟡 **THE MEMBERS SCREEN'S REAL CONTENTS ARE NOT SERVED: seat meter, last
+- [ ] 🟡 **THE MEMBERS SCREEN'S REAL CONTENTS ARE NOT SERVED: ~~seat meter,~~ last
       active, workouts 30d, avg form 30d, streak, search, group filter.** Part 3
       §4.3 specifies all of them and §3.2 says they come from `org_member_stats`
-      — a view that does not exist. The roster route serves identity, join date,
+      — a view that does not exist.
+      **THE SEAT METER IS STRUCK FROM THIS LIST — BUILT 2026-08-27, and it never
+      needed `org_member_stats`**, which is why it could come first: it is a
+      count over `gym_members` against the plan's `seat_cap`, both of which
+      exist. `/v1/orgs/mine` now serves the exact count and the cap, and the
+      Members header draws `X of Y places used`, amber at §4.2's 90 %. Everything
+      else on this line still waits on the view. The roster route serves identity, join date,
       group label and the complimentary flag, which is what Part 3 §2.4's
       boundary allows without touching workout tables. **A field added to that
       response without re-reading §2.4 is how the org-visibility promise gets

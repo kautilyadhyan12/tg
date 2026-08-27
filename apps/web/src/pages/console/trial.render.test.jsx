@@ -1,0 +1,418 @@
+// The trial, the banner and the seat meter, ON SCREEN.
+//
+// `billingView.test.js` next door proves the arithmetic. This proves the three
+// surfaces are REACHABLE and draw it — which is a separate claim, and the one
+// this project has been burned by: :12518's L-1 found that nothing asserted a
+// card's own components could be reached at all, so deleting the route left 857
+// tests green while the feature vanished.
+//
+// The two guarantees here that no pure test can make:
+//
+//   1. **A successful start survives a failed refresh.** Starting a trial kicks
+//      a BACKGROUND re-read of the console's gym list, and the store keeps its
+//      previous answer when that read fails (:20440). Without the response being
+//      held, the screen would go back to offering "Start your 30-day free trial"
+//      to a gym that is now trialling — the screen saying something false about
+//      an action that just succeeded. The test drives exactly that: the list
+//      never changes its answer, and the card must flip anyway.
+//
+//   2. **A permanent refusal offers no Try again.** Two of the three failures
+//      are for ever (one trial per person; no price book for that country) and
+//      `isRetryable` treats only a 403 as permanent, so the shared error card
+//      would have put a button under both.
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+
+vi.mock('../../api/orgsApi', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    orgService: {
+      getMine: vi.fn(),
+      getMembers: vi.fn(),
+      getCodes: vi.fn(),
+      getApplications: vi.fn(),
+      startTrial: vi.fn(),
+    },
+  };
+});
+
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'u1' }, logout: vi.fn() }),
+}));
+
+const { orgService } = await import('../../api/orgsApi');
+const { resetConsoleOrgs } = await import('./consoleOrgs');
+const { setCurrentUserId } = await import('../../utils/storage');
+const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
+const Overview = (await import('./Overview')).default;
+const Members = (await import('./Members')).default;
+
+// ── Fixtures ────────────────────────────────────────────────────────────────
+
+const GYM_ID = '11111111-1111-1111-1111-111111111111';
+
+/** An owner's row as `/v1/orgs/mine` now serves it. `privileges` is spelled out
+ *  rather than left absent: this screen's gate reads the effective set, and a
+ *  fixture that relied on the role fallback would stop testing the tick the day
+ *  somebody narrows the fallback. */
+const ORG = {
+  id: GYM_ID,
+  slug: 'iron-house',
+  name: 'Iron House',
+  city: 'Austin',
+  country: 'US',
+  orgType: 'gym',
+  timezone: 'America/Chicago',
+  locale: 'en',
+  currencyDisplay: 'USD',
+  status: 'active',
+  staffRole: 'owner',
+  privileges: [
+    'members.read',
+    'codes.invite',
+    'codes.manage',
+    'members.confirm',
+    'members.remove',
+    'staff.manage',
+    'org.manage',
+    'billing.manage',
+  ],
+  subscription: null,
+  seatsUsed: 0,
+  isMember: true,
+  joinedAt: '2026-08-18T09:00:00.000Z',
+};
+
+/** The same gym read by somebody who may run the roster and NOT the money —
+ *  §2.2's Billing row is the owner's alone by default. */
+const MANAGER_ORG = {
+  ...ORG,
+  staffRole: 'manager',
+  privileges: ['members.read', 'codes.invite', 'members.confirm', 'members.remove'],
+};
+
+const daysFromNow = (n) => new Date(Date.now() + n * 86_400_000).toISOString();
+
+const onTrial = (over = {}) => ({
+  ...ORG,
+  subscription: { status: 'trialing', trialEndsAt: daysFromNow(27), seatCap: 300 },
+  seatsUsed: 12,
+  ...over,
+});
+
+const ownerSeat = {
+  userId: 'u1',
+  displayName: 'Kd Owner',
+  joinedAt: '2026-08-18T09:00:00.000Z',
+  groupLabel: 'Front Desk',
+  complimentary: true,
+  takesSeat: false,
+};
+
+const mineIs = (...orgs) => ({ data: { orgs, formerOrgs: [] } });
+
+/** Everything the Overview reads besides the org row. Fixed and boring — this
+ *  file is not about the join code or the roster. */
+function quietTheRestOfTheScreen() {
+  orgService.getCodes.mockResolvedValue({
+    data: { codes: [{ code: 'K7QM2X', label: 'Front Desk', paused: false, expiresAt: null, maxUses: null, joined: 0 }] },
+  });
+  orgService.getMembers.mockResolvedValue({ data: { items: [ownerSeat], nextCursor: null } });
+  orgService.getApplications.mockResolvedValue({ data: { items: [], nextCursor: null, pendingCount: 0 } });
+}
+
+/** The console as a person meets it: the shell (which owns §4.2's slot) with a
+ *  screen inside it. Rendering the screen alone would test the card and the
+ *  meter and silently skip the banner, which is the surface with the most
+ *  copy on it. */
+function renderConsole(Screen, path = `/console/iron-house`) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route
+          path="/console/:orgSlug"
+          element={
+            <ConsoleLayout>
+              <Screen />
+            </ConsoleLayout>
+          }
+        />
+        <Route
+          path="/console/:orgSlug/members"
+          element={
+            <ConsoleLayout>
+              <Screen />
+            </ConsoleLayout>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+beforeEach(() => {
+  resetConsoleOrgs();
+  localStorage.clear();
+  setCurrentUserId('u1');
+  vi.clearAllMocks();
+  quietTheRestOfTheScreen();
+});
+
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+  setCurrentUserId(null);
+});
+
+// ── The button ──────────────────────────────────────────────────────────────
+
+describe('starting the trial', () => {
+  it('offers the trial to an owner whose gym is on no plan', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(ORG));
+    renderConsole(Overview);
+
+    expect(await screen.findByRole('button', { name: /start your 30-day free trial/i })).toBeTruthy();
+    // It must not promise a number nobody has been told yet: the seat cap comes
+    // off the price book and the server picks the band.
+    expect(screen.queryByText(/300/)).toBeNull();
+    // And no banner, because there is no plan for §4.2 to have a state about.
+    expect(screen.queryByTestId('console-banner')).toBeNull();
+  });
+
+  it('is not drawn at all for somebody without the billing tick', async () => {
+    // §2.2's Billing row. A manager who may run the roster sees no billing card
+    // — not a disabled one, which is the defect §2.2's own rules warn about.
+    orgService.getMine.mockResolvedValue(mineIs(MANAGER_ORG));
+    renderConsole(Overview);
+
+    await screen.findByText('Iron House');
+    expect(screen.queryByRole('button', { name: /free trial/i })).toBeNull();
+    expect(screen.queryByText(/start your 30-day free trial/i)).toBeNull();
+  });
+
+  it('calls the server once and shows the plan afterwards', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(ORG));
+    orgService.startTrial.mockResolvedValue({
+      data: {
+        outcome: 'started',
+        subscription: { status: 'trialing', trialEndsAt: daysFromNow(30), seatCap: 300 },
+      },
+    });
+    renderConsole(Overview);
+
+    fireEvent.click(await screen.findByRole('button', { name: /start your 30-day free trial/i }));
+
+    await waitFor(() => expect(screen.getByText('Free trial')).toBeTruthy());
+    expect(orgService.startTrial).toHaveBeenCalledTimes(1);
+    expect(orgService.startTrial).toHaveBeenCalledWith(GYM_ID);
+    // The cap the SERVER sent, now that there is one to state.
+    expect(screen.getByText(/0 of 300 places used/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /start your 30-day free trial/i })).toBeNull();
+  });
+
+  it('SURVIVES the background refresh never answering with the new state', async () => {
+    // Guarantee 1 at the top of this file. `getMine` keeps returning a gym on no
+    // plan — which is what a failed or stale re-read looks like from here — and
+    // the screen must still show the trial it just started, because the server
+    // said so in the reply to the press.
+    orgService.getMine.mockResolvedValue(mineIs(ORG));
+    orgService.startTrial.mockResolvedValue({
+      data: {
+        outcome: 'started',
+        subscription: { status: 'trialing', trialEndsAt: daysFromNow(30), seatCap: 300 },
+      },
+    });
+    renderConsole(Overview);
+
+    fireEvent.click(await screen.findByRole('button', { name: /start your 30-day free trial/i }));
+    await waitFor(() => expect(screen.getByText('Free trial')).toBeTruthy());
+
+    // Still the stale answer on the wire, and still the true thing on screen.
+    expect((await orgService.getMine.mock.results[0].value).data.orgs[0].subscription).toBeNull();
+    expect(screen.queryByRole('button', { name: /start your 30-day free trial/i })).toBeNull();
+  });
+
+  it('prints the server’s refusal and offers no Try again', async () => {
+    // Guarantee 2. One trial per person is permanent; a retry button beside it
+    // would promise that pressing again might work.
+    orgService.getMine.mockResolvedValue(mineIs(ORG));
+    orgService.startTrial.mockRejectedValue({
+      response: {
+        status: 409,
+        data: {
+          error: 'trial_already_used',
+          message: "You've already used your free trial. It's one per person, not one per gym.",
+        },
+      },
+    });
+    renderConsole(Overview);
+
+    fireEvent.click(await screen.findByRole('button', { name: /start your 30-day free trial/i }));
+
+    await waitFor(() => expect(screen.getByText(/one per person, not one per gym/i)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: /try again/i })).toBeNull();
+  });
+
+  it('shows a trial already running, with its end date, and no button', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(onTrial()));
+    renderConsole(Overview);
+
+    expect(await screen.findByText('Free trial')).toBeTruthy();
+    expect(screen.getByText(/^Ends /)).toBeTruthy();
+    expect(screen.getByText(/12 of 300 places used/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /start your 30-day free trial/i })).toBeNull();
+  });
+
+  it('does NOT print an end date for a gym that is past its trial', async () => {
+    // `trialEndsAt` is never cleared, so a paying gym answers with the date its
+    // old trial ran out. A card keying on the field rather than the status
+    // would put a stale date under a live plan.
+    orgService.getMine.mockResolvedValue(
+      mineIs({
+        ...ORG,
+        subscription: { status: 'active', trialEndsAt: daysFromNow(-200), seatCap: 300 },
+        seatsUsed: 40,
+      }),
+    );
+    renderConsole(Overview);
+
+    expect(await screen.findByText('On a plan')).toBeTruthy();
+    expect(screen.queryByText(/^Ends /)).toBeNull();
+    expect(screen.queryByText(/free trial/i)).toBeNull();
+  });
+});
+
+// ── §4.2's banner ───────────────────────────────────────────────────────────
+
+describe('the banner above every console screen', () => {
+  it('counts the trial down and can be put away until tomorrow', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(onTrial()));
+    renderConsole(Overview);
+
+    const banner = await screen.findByTestId('console-banner');
+    expect(banner.textContent).toMatch(/27 days left/);
+
+    fireEvent.click(screen.getByRole('button', { name: /dismiss until tomorrow/i }));
+    await waitFor(() => expect(screen.queryByTestId('console-banner')).toBeNull());
+  });
+
+  it('stays away across a fresh mount on the same day', async () => {
+    // The press writes to per-user storage, which is what makes the dismissal
+    // survive moving between console screens rather than only surviving a
+    // re-render.
+    orgService.getMine.mockResolvedValue(mineIs(onTrial()));
+    renderConsole(Overview);
+    fireEvent.click(await screen.findByRole('button', { name: /dismiss until tomorrow/i }));
+    await waitFor(() => expect(screen.queryByTestId('console-banner')).toBeNull());
+
+    cleanup();
+    renderConsole(Overview);
+    await screen.findByText('Iron House');
+    expect(screen.queryByTestId('console-banner')).toBeNull();
+  });
+
+  it('cannot be dismissed once the trial is nearly over', async () => {
+    // §4.2: "amber, not dismissible".
+    orgService.getMine.mockResolvedValue(
+      mineIs(onTrial({ subscription: { status: 'trialing', trialEndsAt: daysFromNow(2), seatCap: 300 } })),
+    );
+    renderConsole(Overview);
+
+    const banner = await screen.findByTestId('console-banner');
+    expect(banner.textContent).toMatch(/Trial ends/);
+    expect(screen.queryByRole('button', { name: /dismiss until tomorrow/i })).toBeNull();
+  });
+
+  it('shows the amber notice even with a dismissal already stored against it', async () => {
+    // MUTANT C91 SURVIVED WITHOUT THIS TEST, and the survival was the finding:
+    // the "is this banner dismissible at all" guard could be deleted with the
+    // suite green, because no test ever put a dismissal in front of a
+    // non-dismissible banner. Nothing in the product can WRITE that record —
+    // the button is the only writer and it is not drawn here — so the subject
+    // has to be planted, exactly as :15093 closed O92 with a fixture the
+    // product does not produce.
+    //
+    // The guard stays and is defence in depth, not decoration: storage is data
+    // from a previous session and a previous VERSION of this app, and §4.2 says
+    // this state is not dismissible full stop — not "unless something in the
+    // browser says otherwise".
+    localStorage.setItem(
+      `user_u1_console_banner_dismissed_${GYM_ID}`,
+      JSON.stringify({ key: 'trial_urgent', at: Date.now() }),
+    );
+    orgService.getMine.mockResolvedValue(
+      mineIs(onTrial({ subscription: { status: 'trialing', trialEndsAt: daysFromNow(2), seatCap: 300 } })),
+    );
+    renderConsole(Overview);
+
+    expect((await screen.findByTestId('console-banner')).textContent).toMatch(/Trial ends/);
+  });
+
+  it('appears on the MEMBERS screen too, not only on the gym screen', async () => {
+    // "sits above all screens" — the reason it lives in the shell. A banner on
+    // the Overview alone would miss the owner who is standing on the roster.
+    orgService.getMine.mockResolvedValue(mineIs(onTrial()));
+    renderConsole(Members, '/console/iron-house/members');
+
+    expect((await screen.findByTestId('console-banner')).textContent).toMatch(/27 days left/);
+  });
+
+  it('says nothing at all for a gym on no plan', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(ORG));
+    renderConsole(Overview);
+    await screen.findByText('Iron House');
+    expect(screen.queryByTestId('console-banner')).toBeNull();
+  });
+});
+
+// ── §4.3's seat meter ───────────────────────────────────────────────────────
+
+describe('the seat meter', () => {
+  it('reports the server’s count against the cap', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(onTrial({ seatsUsed: 42 })));
+    renderConsole(Members, '/console/iron-house/members');
+
+    expect((await screen.findByTestId('seat-meter')).textContent).toMatch(/42 of 300 places used/);
+  });
+
+  it('is NOT the length of the roster page', async () => {
+    // The meter's whole reason for existing on the server. The page below holds
+    // one row; the gym holds 280. `items.length` would read "1 of 300".
+    orgService.getMine.mockResolvedValue(mineIs(onTrial({ seatsUsed: 280 })));
+    renderConsole(Members, '/console/iron-house/members');
+
+    expect((await screen.findByTestId('seat-meter')).textContent).toMatch(/280 of 300/);
+  });
+
+  it('says why nobody else can join once the gym is full', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(onTrial({ seatsUsed: 300 })));
+    renderConsole(Members, '/console/iron-house/members');
+
+    expect((await screen.findByTestId('seat-meter')).textContent).toMatch(/full/i);
+  });
+
+  it('draws no meter at all for a gym on no plan', async () => {
+    // Nothing caps it, so there is no denominator — and "0 of 0" is a number
+    // nobody computed.
+    orgService.getMine.mockResolvedValue(mineIs(ORG));
+    renderConsole(Members, '/console/iron-house/members');
+
+    // The HEADING, not the text: "Members" is also the shell's nav tab, twice
+    // over (rail and phone bar), so a bare text query is ambiguous and fails for
+    // a reason that has nothing to do with the meter.
+    await screen.findByRole('heading', { name: 'Members' });
+    expect(screen.queryByTestId('seat-meter')).toBeNull();
+  });
+
+  it('survives the roster failing to load', async () => {
+    // The numbers come off the org row, so how full a gym is does not depend on
+    // the member list arriving.
+    orgService.getMine.mockResolvedValue(mineIs(onTrial({ seatsUsed: 42 })));
+    orgService.getMembers.mockRejectedValue(new Error('network'));
+    renderConsole(Members, '/console/iron-house/members');
+
+    expect((await screen.findByTestId('seat-meter')).textContent).toMatch(/42 of 300/);
+  });
+});

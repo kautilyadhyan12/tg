@@ -84,8 +84,23 @@ function elapsedDays(fromIso, now) {
 }
 
 /** Calendar days between two instants, in the viewer's zone. Negative when the
- *  first is earlier. Null if either is unreadable. */
-function calendarDaysBetween(fromMs, toMs) {
+ *  first is earlier. Null if either is unreadable.
+ *
+ *  **EXPORTED, and the export is the rule holding rather than leaking.** The
+ *  rule at the top of this file says every day word in it goes through
+ *  `localDayIndex`, "enforced by there being nowhere else to do it" — and the
+ *  gym console's trial countdown ("Trial — 27 days left", amber at three) is a
+ *  day count by exactly the reasoning written above for `expiresInLabel`: a
+ *  countdown to a dated deadline is a calendar count wearing a duration's
+ *  grammar. Writing a second one in `billingView.js` would re-open the class
+ *  four review rounds closed, in the file furthest from this warning. So the
+ *  console imports THIS, and there is still exactly one place a day comparison
+ *  happens.
+ *
+ *  It is the only export here that is not a sentence, and callers outside this
+ *  file must keep it that way: take the NUMBER and write your own words. A
+ *  console banner and a join request do not share a vocabulary. */
+export function calendarDaysBetween(fromMs, toMs) {
   if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return null;
   return localDayIndex(toMs) - localDayIndex(fromMs);
 }

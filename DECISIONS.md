@@ -21576,3 +21576,174 @@ on the internet first"* is enforced by a human reading a file. **Identical shape
 the cost-breaker line**, which is the argument for solving both once rather than
 either twice. Put to Kd as a before-you-go-online decision; no chat may invent the
 mechanism.
+
+## THE GYM TRIAL REACHES A SCREEN — the button, §4.2's banner and §4.3's seat meter — and three console mutants turn out to have had no anchor since round 4 (2026-08-27)
+
+**Read before touching `billingView.js`, before adding a state to §4.2's banner,
+before drawing any number against a seat cap, before adding a field to
+`/v1/orgs/mine`, and before quoting a web sweep run since `af27965`.**
+
+Web half of :21157/:21353/:21487. The route `POST /v1/orgs/:gymId/trial` had been
+live and curl-reachable by any gym owner since that morning **with no screen
+calling it** (:21487 recorded exactly that as the whole blast radius of the
+trial-expiry hole). This is the screen.
+
+### 1 · IT NEEDED A SERVER CHANGE, AND THAT WAS THE ONE THING THE PLAN GATE TURNED ON
+
+**`orgSubscriptionSchema` left the server in exactly ONE place: the reply to the
+button that starts a trial.** So a console could learn a gym was trialling only in
+the second after somebody pressed something, and a reload forgot it — which is why
+`Overview.jsx` had carried a comment since :10402 saying the banner slot was absent
+because *"its states are read off `subscriptions`, and billing does not exist"*.
+Billing still does not exist. The STATE does, since :21157 wrote the first
+`subscriptions` row in the product's history, and `/v1/orgs/mine` now carries it.
+
+**Two fields, both `.nullable().default(null)`** for the reason `country` carries
+three fields up (:12660's expand-then-contract, and `orgsApi.js` treats a contract
+mismatch as a hard failure — a REQUIRED field would blank the whole gym list during
+any web-newer-than-api window). **No migration; both are reads of columns that
+already existed.**
+
+**`subscription` — NULL HAS THREE CAUSES AND THEY DELIBERATELY RENDER THE SAME:**
+the gym is on nothing · the caller is not staff · the api is older than the bundle.
+All three mean "we know of no plan", and the only honest thing to draw for an
+unknown state is nothing (:5807). A client branching on which of the three would be
+claiming to know something it does not.
+
+**A PLAIN MEMBER IS TOLD NOTHING, and that is §2.4 applied in the direction the
+roster tests do not cover.** The member app reads this same response — it is where
+*"You're a member of Iron House"* comes from — and when a gym's trial runs out is
+the gym's business, not its members'. One line in `listMyOrgs` decides it, beside
+the line that decides `privileges`, and **the owner is the control in the test**:
+both callers read the same gym on the same live trial through the same shape, and
+only the staff row carries it.
+
+**`seatsUsed` is the meter's numerator and is the SERVER's exact count.** The
+roster is cursor-paginated fifty at a time, so `items.length` reads *"50 of 300"*
+at a gym of six hundred — `memberCountLabel` already prints `50+` for that reason.
+The count rule ("live, not complimentary, not staff") is now written out in THREE
+places (`claimSeat`, `listMembers`, `listOrgsForUser`): a shared `sql` fragment is
+R3.8's forbidden shape, so **what stops them drifting is one test driving the METER
+and the DOOR across a transition** — appointing a full gym's only paying member as
+staff must free their place, so the meter falls 1 → 0 in the same breath as the
+door goes from `seat_cap_reached` to admitting. :14013's six-site precedent;
+:14493 Low-2 is what drift costs.
+
+### 2 · WHAT THE SCREENS SAY, AND THE THREE THINGS THEY REFUSE TO SAY
+
+The banner lives in `ConsoleLayout`, because §4.2 puts its slot *"above all
+screens"* — a trial ending is not a fact about the Overview, and the owner who
+needs it may be standing on the roster.
+
+**(a) NO BUTTON GOES ANYWHERE, so none is drawn.** §4.2 pairs every state with a
+CTA and all four open a Billing screen that does not exist — **Kd's own
+sequencing** (:19016: *"only the Billing TAB now waits for stage 8, while the seat
+cap, the trial and the banner go live in stage 1"*). Each sentence is written
+complete without one, and a test asserts the banner returns exactly
+`{key, tone, text, dismissible}` so a `cta` cannot arrive unnoticed. Own `OWED.md`
+line, together with §4.2's two rows that CANNOT be built — "trial expired → grace"
+and the read-only console — which need a trial to have ended.
+
+**(b) IT NEVER SAYS A TRIAL HAS ENDED.** Nothing ends one (:21353's Critical/High).
+Past the end date it reads *"Your trial is past its end date. Your members keep
+your gym's features while it is still running"* — true precisely because nothing
+ends it, and **whoever builds the P3.8 sweep must change that copy in the same
+card**, which is now written onto that 🔴 line with the grep to find it.
+
+**(c) IT GATES ON `status`, NEVER ON `trialEndsAt` BEING NULL** — :21353's Low-5,
+written into the shared schema in as many words. Nothing clears the column when a
+subscription leaves `trialing`, so a paying gym answers with the date its OLD trial
+ran out; a reader keying on "is that field set" would put a countdown under a live
+plan. **Unreachable today only because nothing leaves `trialing`, which is exactly
+why it has a test and a mutant rather than a comment.**
+
+**Decisions not to re-derive.** The banner's ORDER is a decision §4.2 does not make
+— its table lists states without saying which wins when two hold at once, and a
+gym three days from the end of its trial can also be at 95 % of its seats. One slot,
+one answer: **`past_due` → `trial_urgent` → `seat_pressure` → `trial_info`**, the
+rule being "the soonest thing the owner can do nothing about later" · **the trial
+card is not drawn at all for somebody without `billing.manage`**, and it asks the
+POWER through `viewerPrivileges` (absent ⇒ the role's defaults, :16101) rather than
+`staffRole === 'owner'`, which is :15534 C/H-1's shape · **the card holds the
+server's own answer after a successful press**, because the background re-read can
+fail and the store then keeps its previous answer (:20440) — without that, an owner
+who just started a trial is offered the button again over a gym that is now
+trialling · **no "Try again" beside a refusal**: two of the three failures are
+permanent and `isRetryable` treats only a 403 as permanent, so the shared error card
+would have promised a retry that cannot work; the BUTTON is the retry · **the client
+prints no seat number before the server sends one** — every gym trials at the same
+limit (:19129) but the band is read off the price book, and a "300" written into a
+component is Part 0 rule 4's recalled number · **dismissal is per gym, per local
+day, through `utils/storage.js`** so a gym's shared front-desk browser cannot carry
+one person's dismissal into the next person's session (:618 T3 F1) · **the day count
+imports `calendarDaysBetween` from `joinClock.js`** rather than rewriting it, so
+this repo still has exactly ONE place a day comparison happens — the rule four
+review rounds arrived at (:13432), which would otherwise have been re-opened in the
+file furthest from its warning.
+
+### 3 · THE AUDIT — AND THE FINDING IS NOT IN THIS CARD'S CODE
+
+**THREE CONSOLE MUTANTS HAVE HAD NO ANCHOR SINCE ROUND 4, AND NO WHOLE-TABLE WEB
+SWEEP HAS BEEN POSSIBLE SINCE.** The first run of this card's own sweep ABORTED on
+S15. Measured, with `Settings.jsx` byte-identical to HEAD (`git diff` empty, so the
+drift cannot be mine): **S15, C81 and C82 all matched ZERO times.** Round 4's fix
+(`af27965`) prefixed both panel keys — `staff-${…}` and `gym-${…}` — which moved
+all three anchors at once, and none was re-aimed. **Round 5 shipped on a SUBSET run
+(C85), which is why nothing noticed.** So the guarantees these carry — including
+round 3's own Critical/High, gym A's typing following an owner onto gym B — have
+had no mutant behind them for two commits. Re-aimed at the SAME call sites, never
+at whichever line looked closest (:15770), and **each re-measured RED**.
+**The reusable part: a subset sweep does not exercise the whole-table pre-check,
+so a card that only runs its own rows cannot discover that everybody else's have
+rotted.**
+
+**MY OWN INSTRUMENT SLIP, and it is the recorded one:** the first sweep attempt
+aborted with *"that filter matches no test"* and I read it as a bad filter. It was
+a **wrong DATABASE_URL** — password authentication failed, all 134 tests skipped,
+identical symptom. :16221's exact finding (*"I declared the api harness broken and
+it is NOT; the database had gone down and produces the identical symptom"*), and
+**a diagnosis is a claim that takes V1's evidence like any other.** In the same
+command I read `$?` through a `tail` pipe and printed `EXIT=0` for a run that had
+aborted — :5906's shape, and every figure below is read from the harness directly.
+
+**TWO OF MY SIX NEW MUTANTS CAME BACK ALIVE AND BOTH WERE REAL.**
+**C88 was my own redundancy**: `seatMeter` checked `typeof x !== 'number'` and then
+`Number.isFinite` underneath it — two guards, either sufficient, neither
+falsifiable, so a mutation of the first changed nothing observable against
+perfectly correct code. `Number.isFinite` does not coerce and already answers false
+for null, undefined, a string and NaN, so the typeof line was doing nothing at all.
+**Deleted from the SOURCE and the mutant moved onto the line that decides**
+(:17676's standard, :12343's J11 before it — when a mutant survives, ask whether
+the guarantee is OBSERVABLE before assuming the test is missing).
+**C91 was the FILTER half.** It named the test that checks the amber banner has no
+dismiss BUTTON — but nothing in that test ever stores a dismissal, so the guard it
+deletes had no subject. **:11846's two halves, and it is the filter half this repo
+keeps recording last.** The guard STAYS and is defence in depth (storage is data
+from a previous session and a previous version, and §4.2 says that state is not
+dismissible full stop); what it needed was a fixture the product cannot produce —
+a stored dismissal planted under the urgent key — which is how :15093 closed O92.
+
+**O138 survived on the server for the same reason as C88, one layer down**: the
+only complimentary row this suite could produce is the OWNER's, who is ALSO staff,
+so the count excludes them TWICE and deleting either clause changed nothing.
+Closed the way the door closed it (:15093's O92 verbatim) — a comped member who is
+not staff — with a positive control beside it so "0" is not simply what that reader
+always says.
+
+**PROVE, all LOCAL (:13659): `orgs.routes` 134/134 (+4) · `db.migration` 11/11 ·
+shared 51/51 · web 1282/1282 exit 0 across 47 files (+48) · `tsc --noEmit` exit 0
+on api and on shared · eslint `--max-warnings=0` clean on three server files and
+ten web files · `vite build` exit 0 · `node --check` clean on both harnesses.
+SWEEPS, both stated SUBSETS: api O135–O138, 4 of 138 — 4 RED, 0 ALIVE, 0 never
+ran; web C86–C91, 6 of 111 — 6 RED, 0 ALIVE, 0 never ran; plus S15/C81/C82
+re-anchored and re-measured, 3 RED. Every harness exit code read directly, never
+through a pipe. Restores sha256-verified after every mutant; gym rows
+fingerprinted with no unattributed changes.**
+
+**NOTHING TICKS BEYOND THE TRIAL LINE ITSELF: the SMOKE is written and UNRUN, and
+T3 is UNRUN.** ⚠️ **The smoke will fail at step 1 unless the dev branch is migrated
+and re-seeded** — :21157's own gap (a), third recurrence of :15927: that database
+still holds the pre-:18488 price book and has no `0015`, so a US gym is refused
+outright with *"We're not open for business in your country yet"*, which reads as
+the app being broken rather than as a stale fixture. The sheet says so in its
+prerequisites.

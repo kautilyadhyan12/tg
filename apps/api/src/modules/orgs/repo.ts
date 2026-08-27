@@ -54,6 +54,14 @@ export interface MyOrgRow extends OrgRow {
    *  apart, exactly as it does for `getStaffAuthority`. Never interpreted here
    *  (T3 round 1 C/H-1). */
   privileges: string[] | null;
+  /** The gym's live subscription, or null when it has none. Read for EVERY row
+   *  and withheld from non-staff callers by the service, in the same place and
+   *  for the same reason `privileges` is interpreted there — one function
+   *  decides who is told what about a gym. */
+  subscription: GymSubscriptionRow | null;
+  /** Live members occupying a paid place, by `claimSeat`'s own rule. Always a
+   *  number here; the service nulls it for a caller who is not staff. */
+  seatsUsed: number;
   isMember: boolean;
   joinedAt: Date | null;
 }
@@ -332,6 +340,10 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       privileges: string[] | null;
       is_member: boolean;
       joined_at: Date | null;
+      sub_status: string | null;
+      sub_trial_ends_at: Date | null;
+      sub_seat_cap: number | null;
+      seats_used: number;
     })[]
   >`
     SELECT g.id, g.slug, g.name, g.city, g.country, g.org_type, g.timezone,
@@ -339,11 +351,53 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            s.role AS staff_role,
            s.privileges,
            (m.id IS NOT NULL) AS is_member,
-           m.joined_at
+           m.joined_at,
+           sub.status AS sub_status,
+           sub.trial_ends_at AS sub_trial_ends_at,
+           sub.seat_cap AS sub_seat_cap,
+           -- THE SEAT METER'S NUMERATOR, and the three conditions are
+           -- claimSeat's own, written out for the third time on purpose.
+           --
+           -- NO BACKTICKS ANYWHERE IN THIS TEMPLATE. One ends the literal and
+           -- turns a documented query into a run of parse errors — :12227's
+           -- own slip, incurred again while writing this block.
+           --
+           -- A shared sql fragment is R3.8's forbidden shape and :14493's Low-2
+           -- is what happens when two readers of one rule drift, so the copies
+           -- are anchored by a test that drives the METER and the REFUSAL on one
+           -- fixture (:14013's six-site precedent). Editing this without editing
+           -- claimSeat puts the screen and the door back into disagreement about
+           -- who costs a gym money — which is the defect Kd found on the roster
+           -- badge (:14953) arriving at the meter instead.
+           --
+           -- complimentary = false excludes the owner's §4.0-step-6 seat; the
+           -- NOT EXISTS excludes staff, free since Kd's "yes staff seats free"
+           -- ruling (:14262). Correlated per gym and the outer query is capped
+           -- at MY_ORGS_LIMIT, so the fan-out is bounded by that.
+           (SELECT count(*)::int FROM gym_members sm
+             WHERE sm.gym_id = g.id
+               AND sm.removed_at IS NULL
+               AND sm.complimentary = false
+               AND NOT EXISTS (
+                 SELECT 1 FROM gym_staff ss
+                 WHERE ss.gym_id = sm.gym_id AND ss.user_id = sm.user_id)
+           ) AS seats_used
     FROM gyms g
     LEFT JOIN gym_staff s ON s.gym_id = g.id AND s.user_id = ${userId}
     LEFT JOIN gym_members m ON m.gym_id = g.id AND m.user_id = ${userId}
                            AND m.removed_at IS NULL
+    -- §4.1's live set, the same three statuses seatCapFor, startGymTrial and
+    -- getCandidates treat as granting — so past_due still counts during v1
+    -- §10's grace. subs_one_live_uq already permits only one such row per gym;
+    -- the LIMIT is what makes that a property of the QUERY rather than a fact
+    -- this reader inherits from an index it does not name.
+    LEFT JOIN LATERAL (
+      SELECT su.status, su.trial_ends_at, p.seat_cap
+      FROM subscriptions su JOIN plans p ON p.id = su.plan_id
+      WHERE su.owner_type = 'gym' AND su.owner_id = g.id
+        AND su.status IN ('trialing','active','past_due')
+      LIMIT 1
+    ) sub ON true
     WHERE s.user_id IS NOT NULL OR m.id IS NOT NULL
     ORDER BY g.created_at DESC, g.id DESC
     LIMIT ${MY_ORGS_LIMIT}`;
@@ -351,6 +405,15 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
     ...toOrgRow(r),
     staffRole: r.staff_role === null ? null : toOrgRole(r.staff_role),
     privileges: r.privileges,
+    subscription:
+      r.sub_status === null
+        ? null
+        : toGymSubscription({
+            status: r.sub_status,
+            trial_ends_at: r.sub_trial_ends_at,
+            seat_cap: r.sub_seat_cap,
+          }),
+    seatsUsed: r.seats_used,
     isMember: r.is_member,
     joinedAt: r.joined_at,
   }));
