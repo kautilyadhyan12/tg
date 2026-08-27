@@ -127,6 +127,38 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:21487** — 2026-08-27 — **THE SELF-SERVE TRIAL, T3 ROUND 2 (diff-only): ZERO
+  Critical/High, THE PACKET SHIPS — and three of the six Lows are defects in round
+  1's OWN corrections.** **Read before trusting a round's "measured" paragraph,
+  before quoting `LAST_OWNER_REQUIRED_PRIVILEGES`' justification, and before
+  assuming the currency lock wakes with the expiry sweep.**
+  **THE SHAPE IS THE POINT: a round whose whole subject was "false sentences
+  reported as measured" introduced three more**, all caught by re-measuring rather
+  than re-reading. **A correction is new prose, and new prose gets no evidence
+  unless somebody asks it for some** — :19656's asymmetry, one level up.
+  **THE ONE THAT WOULD HAVE OUTLIVED EVERYTHING:** the last-owner 409 claimed
+  *"nobody could pay"*, but `OWNER_ONLY_PRIVILEGES` is `["staff.manage"]` alone and
+  the ticks route does not exclude self-targeting, so **a last owner keeps
+  `staff.manage` by this guard's own guarantee and can tick billing straight back**.
+  The same argument was the guard's stated JUSTIFICATION in `service.ts` and in
+  `0015`'s SQL. **The guard STAYS and its behaviour is untouched** — over-locking is
+  the safe direction and :11429 rule 2 names both doors — **but it is DEFENCE IN
+  DEPTH, not the only thing between a gym and an unpayable invoice.**
+  **WHAT THE WRONG WORKER LIST HID, worth more than the error:** `worker.ts`
+  registers TWO schedulers on the `rollups` QUEUE (`dpdp.purge`, `orgs.join_sweep`)
+  and there is no rollup JOB — **so trial expiry is a third `upsertJobScheduler`
+  call, not greenfield.** And the currency lock wakes on `status <> 'trialing'`,
+  which a CHECKOUT writing `active` satisfies too — **its first run in anger may
+  belong to whoever builds billing, not the sweep.**
+  **RULE 4:** a web test **stubbed a hard-coded copy of the server's sentence and
+  asserted that same copy**, so it stayed green when the wording changed and could
+  not have noticed; its stub is now an arbitrary marker that makes no claim about
+  the API at all. The `0015` test now ASSERTS the idempotence it was exercising.
+  Both mutant-proven. **RULE 3:** round 1's C/H fix carries no test (it is a
+  document) and round 2 accepted that **after checking whether anything buildable
+  was dodged** — the only in-code alternative is forbidden by R4.5.
+  **OPEN, not closed by a chat:** the trial-expiry line has **no automated
+  trigger**; same shape as the cost breaker, and Kd's to rule on together.
 - **:21353** — 2026-08-27 — **THE SELF-SERVE TRIAL, T3 ROUND 1: ONE Critical/High,
   the packet does NOT ship — NOTHING ENDS A TRIAL, and it was tracked nowhere.**
   **Read before building trial expiry, before quoting the 30-day clock or §4.2's
@@ -146,9 +178,12 @@ mid-file: re-derive them with
   end.**
   **THE OVERCLAIM AND ITS ORIGIN.** *"The seat cap, the 30-day clock and §4.2's
   banner stop being correct-but-inert"* was **one of three, stated as three**, in
-  four places. Traced to **:19016**, whose stage-ordering consequence line is where it was written
-  of Kd's stage ordering and travelled unchallenged into a heading, a `HANDOFF`
-  block and a commit message. All four sites struck and corrected in place.
+  four places. Traced to **:19016** — specifically its stage-ordering consequence
+  line, DECISIONS.md line 19083, where it was written as a PLAN-time prediction and
+  from which it travelled unchallenged into a heading, a `HANDOFF` block and a
+  commit message. All four sites struck and corrected in place. (Line 19083 is
+  cited unbolded on purpose: it is mid-entry, and a bold pointer there would be a
+  break this file's own checker is right to refuse.)
   **RULE EARNED: a consequence predicted at plan time is a PREDICTION and needs its
   own measurement before it may be reported as a fact.**
   **RULE 4's HIGHEST-VALUE CATCH:** migration `0015`'s backfill — whose own SQL

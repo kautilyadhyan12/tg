@@ -923,21 +923,34 @@ describe('when the server refuses a permission change', () => {
     expect(await screen.findByText(/Managing staff stays with the gym owner/i)).toBeTruthy();
   });
 
-  it('says something TRUE about the last owner, not "something went wrong"', async () => {
+  /** THIS TEST'S SUBJECT IS PASS-THROUGH, NOT THE SENTENCE — and until T3 round 2
+   *  its assertion said the opposite (rule 4's list, item 1).
+   *
+   *  It stubbed a hard-coded COPY of the server's sentence and then asserted that
+   *  same copy came out, matching on the words "the ability to manage staff". The
+   *  server's sentence changed when `billing.manage` joined the last-owner guard;
+   *  **this test stayed green and structurally could not have noticed**, because
+   *  both halves of it are its own fixture. Its name promises something TRUE is
+   *  shown; what it can actually prove is that whatever the server said is what
+   *  the person reads.
+   *
+   *  So the sentence is now an ARBITRARY marker, deliberately not a copy of any
+   *  real server string — nothing here can drift out of step with the API again,
+   *  because there is no longer a claim about what the API says. The API's own
+   *  wording is asserted where it is produced (`orgs.routes.test.ts`), which is
+   *  the only place that assertion can be honest. */
+  it('shows the server\'s own last-owner sentence rather than "something went wrong"', async () => {
     orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
+    const SERVER_SAID = 'ZZ-MARKER: the gym would be left unable to do something it needs.';
     orgService.updateStaffPrivileges.mockRejectedValue(
-      apiError(
-        409,
-        'last_owner_locked',
-        'A gym last owner has to keep the ability to manage staff, or nobody could ever hand it out again.',
-      ),
+      apiError(409, 'last_owner_locked', SERVER_SAID),
     );
     const row = await openTicks('staff-u2');
     fireEvent.click(within(row).getByLabelText(/Remove members/i));
     fireEvent.click(within(row).getByText('Save permissions'));
-    expect(
-      await screen.findByText(/last owner has to keep the ability to manage staff/i),
-    ).toBeTruthy();
+    expect(await screen.findByText(SERVER_SAID)).toBeTruthy();
+    // AND NOT the generic fallback, which is the failure this guards against.
+    expect(screen.queryByText(/something went wrong/i)).toBeNull();
   });
 
   it('KEEPS the boxes open with the edit still in them, so nothing is retyped', async () => {

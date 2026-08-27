@@ -724,6 +724,18 @@ d("0001_init on a real database", () => {
           SELECT privileges FROM gym_staff WHERE gym_id = ${gymId} AND user_id = ${staffId}`;
         expect(manager?.privileges).not.toContain("billing.manage");
 
+        // AND THE OWNER ROW IS UNCHANGED BY THE SECOND RUN — the migration's own
+        // "idempotent by its own WHERE" claim. The run above is the second one,
+        // so this test already EXERCISED idempotency and never asserted it
+        // (T3 round 2, rule 4's list, item 3): without this, a backfill that
+        // appended a DUPLICATE on every run would pass everything above.
+        const [ownerAfterSecond] = await tx<{ privileges: string[] }[]>`
+          SELECT privileges FROM gym_staff WHERE gym_id = ${gymId} AND user_id = ${userId}`;
+        expect(ownerAfterSecond?.privileges).toEqual(after?.privileges);
+        expect(
+          ownerAfterSecond?.privileges.filter((p) => p === "billing.manage"),
+        ).toHaveLength(1);
+
         throw new Error("ROLLBACK-0015-BACKFILL-FIXTURE");
       })
       .catch((err: unknown) => {

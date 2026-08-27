@@ -2069,3 +2069,43 @@ rows**, so a US gym there is **refused outright** with *"We're not open for
 business in your country yet"*. That is the symptom Kd's browser will hit on the
 web half, and it reads as the app being broken. Corrected in `DECISIONS.md` §5;
 no code change (R1.1), and the dev branch is his data and was not touched.
+
+## The gym's self-serve trial (SERVER half), T3 round 2 (diff-only) — ZERO Critical/High, THE PACKET SHIPS (2026-08-27)
+
+Reviews `215882c` (`DECISIONS.md`'s round-1 entry, :21353). **The hatch does NOT
+fire**: round 1's single Critical/High was in the RECORD, not a subsystem, so there
+are no Criticals two rounds running. **Six Low, all fixed here** (:5348 rule 1 — a
+Low buys no round and is still fixed), plus two items from the round's rule-4 list.
+
+**Three of the six are defects in round 1's own fixes.** That is the shape worth
+keeping: a round that corrects false sentences introduced three more, and the
+reviewer caught them by re-measuring rather than by reading what round 1 claimed.
+
+| # | Finding | Fix |
+|---|---|---|
+| L-1 | **The C/H document's own "measured, not reasoned" table was WRONG, in the paragraph labelled measured.** It said the scheduled work is *"rollups + the join-application sweep, nothing else"*. `rollups` is the QUEUE's name and **no rollup job is registered at all**, while the **DPDP purge** — which is — was omitted. `worker.ts` registers exactly two schedulers: `dpdp.purge` `0 3 * * *` (:68) and `orgs.join_sweep` `30 3 * * *` (:100). Conclusion unaffected (round 2 re-derived it independently), but this is the round whose entire subject is a claim reported as measured. | All three sites corrected — `OWED.md`, `DECISIONS.md` :21353 §1 (the wrong row struck and explained rather than quietly amended), `HANDOFF.md` item 1. **The correction carries what the wrong list hid and is worth more than the error: trial expiry needs NO new infrastructure** — queue, worker process and daily-pattern precedent are already there, two lines below the join sweep. |
+| L-2 | **Round 1's replacement 409 was a differently-wrong sentence.** *"…otherwise nobody could hand those out again, and nobody could pay"* — but `OWNER_ONLY_PRIVILEGES` is `["staff.manage"]` alone, so `billing.manage` is not owner-only, and `updateOrgStaffPrivileges` does not exclude self-targeting. **A last owner keeping `staff.manage` — which this very guard guarantees they keep — can tick billing straight back onto their own row.** Recoverable, exactly like `org.manage`. | Causal clause dropped: *"…has to keep both staff management and billing, so somebody in the gym can always hand out the keys and pay."* **Fixed as a CLASS, not a case:** the same self-refuting argument was the stated JUSTIFICATION for the guard at `service.ts`'s `LAST_OWNER_REQUIRED_PRIVILEGES` docblock, and it is rewritten on the reason that actually holds — over-locking is the safe direction and :11429 rule 2 names both doors, so this is **defence in depth, not the only thing between the gym and an unpayable invoice**. The guard's BEHAVIOUR is untouched (R1.1 / rule 6). |
+| L-3 | **The corrected sentence had stale copies in the web.** `orgsApi.js` and `StaffPanel.jsx` both quoted the OLD server wording. No user impact — the panel prints `errorText` from the server, never a copy — but it is round 1's own lesson recurring one file over, and no sweep for copies had been done. | Both updated. `StaffPanel.jsx`'s note now records that **the drift happened to that very comment**, which is the paragraph's own rule vindicated by its own staleness. |
+| L-4 | **A false statement 630 lines above the writer that falsified it, in the file this round re-measured.** `repo.ts`'s currency-guard note still read *"Unreachable today — nothing in the product inserts into `subscriptions`, grep-verified"* — untrue since `a313861`. **Round 1 quoted this exact guard twice and did not notice.** | Rewritten: the requirement is DISCHARGED (`startGymTrial` is the one writer and takes `lockOrgRow` first), **and it does not expire with the discharge — it binds every future writer**. The identical sentence in `0015`'s SQL is left alone: a shipped forward-only migration, correct at write time, and the reviewer agreed it is not a finding. |
+| L-5 | **The line-count-neutral rewrite left a garbled sentence in the index** — two phrasings merged into something ungrammatical — and dropped the `:19083` reference every other document uses, so a chat reading the index alone could not find the struck line. `check-decisions-index` cannot see this (`:19016` resolves correctly), so nothing automated would ever catch it. | Rewritten to parse, with **line 19083 cited UNBOLDED on purpose** — the checker's pointer regex is `**:NNNN**`, and a bold pointer at a mid-entry line is a break the checker is right to refuse. The reason is stated in the entry so the next author does not "fix" it into a break. |
+| L-6 | **The currency lock's wake-up trigger named the wrong card.** *"starts working the day the sweep lands"* — but the condition is `status <> 'trialing'`, which a CHECKOUT writing `active` (P3.4/P3.5) satisfies just as well as an expiry sweep (P3.8), and checkout may land first. | Corrected in all three sites (`OWED.md`, `repo.ts`'s `startGymTrial` docblock, `HANDOFF.md` item 2): it wakes **the day a subscription first LEAVES `trialing`, whichever of billing or expiry lands first** — so the first live exercise of this guard may belong to neither of the people currently expecting it. |
+
+**Rule-4 list — two of the three acted on, one accepted as-is.**
+
+| Item | Action |
+|---|---|
+| `settings.render.test.jsx` — *"says something TRUE about the last owner"* stubbed a hard-coded COPY of the server's sentence and asserted that same copy, so **it stayed green when the server's wording changed and structurally could not have noticed** | **FIXED.** The stub is now an arbitrary `ZZ-MARKER` string that is deliberately not any real server text, so the test can never drift out of step with the API again — because it no longer makes a claim about what the API says. Renamed to what it actually proves (pass-through), and given a negative assertion that the generic fallback is absent. **Mutant: swallow `errorText` in `savePrivileges` → RED**, on this test and three others. |
+| The `0015` test never re-asserted the OWNER row after the second backfill run, so *"idempotent by its own WHERE"* was exercised but not asserted | **FIXED.** Asserts the owner's set is unchanged by the second run and that `billing.manage` appears exactly once. **Mutant: delete the `NOT (privileges @> …)` clause → RED** (*"expected [ Array(9) ] to deeply equal [ Array(8) ]"*). |
+| M1 is a file-shape guard keyed on the literal token `array_append`, so a semantically identical rewrite would also red it | **ACCEPTED, not fixed.** `0015` is shipped and forward-only, so the statement cannot legitimately be rewritten; M2/M3/M4 are the behavioural guards. Recorded so nobody reads M1 as more than it is. |
+
+**Carried out of the round, not a finding.** `POST /v1/orgs/:gymId/trial` is live and
+reachable with `curl` by any gym owner even though **no screen calls it**
+(`grep -rn "/trial" apps/web/src` → nothing). That is the whole of the Critical/High's
+blast radius today, and it is already named on the trial-expiry `OWED.md` line.
+
+**Kd's to weigh, deliberately NOT actioned by a chat.** The trial-expiry `OWED.md`
+line has **no automated trigger**: nothing goes red if the app reaches the internet
+with expiry unbuilt — its *"or earlier if the app goes on the internet first"* is
+enforced by a human reading a file. **Identical shape to the cost-breaker line two
+entries below it**, which is the argument for solving both once rather than either
+twice. Put to Kd 2026-08-27 as a "before you go online" decision, not a today one.

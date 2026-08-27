@@ -4678,8 +4678,16 @@ file and is stated so nobody reads these as lower priority than they are.
       **Measured, not reasoned, at the time of writing:** `subscriptions` has
       exactly ONE writer in the whole API — the `INSERT` in `startGymTrial` — and
       `grep -rn "UPDATE subscriptions" apps/api/src apps/api/scripts` returns
-      **nothing**. No sweep, no worker, no route moves `trialing` → `expired`; the
-      only scheduled sweep that exists is the join-application one. `trial_ends_at`
+      **nothing**. No sweep, no worker, no route moves `trialing` → `expired`.
+      **The scheduled work that DOES exist, enumerated correctly at T3 round 2's
+      Low-1 — the first version of this line got its own list wrong:**
+      `apps/api/src/worker.ts` registers exactly **two** job schedulers, both on
+      the `rollups` QUEUE — **`dpdp.purge` at `0 3 * * *`** (:68) and
+      **`orgs.join_sweep` at `30 3 * * *`** (:100). There is no rollup JOB;
+      `rollups` is the queue's name. **The useful consequence, which the wrong
+      list hid: whoever builds trial expiry does not need new infrastructure** —
+      the queue, the worker process and the daily-pattern precedent are already
+      there, two lines below the join sweep. `trial_ends_at`
       is written and read by **nothing that acts on it**. The entitlement resolver
       counts `trialing` as granting (`entitlements/repo.ts:19,24`), so the gym's
       members keep 5 meal scans a day against free's 2, indefinitely, **with no
@@ -4697,8 +4705,14 @@ file and is stated so nobody reads these as lower priority than they are.
       cannot be live-with-real-gyms and unbuilt at the same time.**
       **TWO THINGS FOR WHOEVER BUILDS IT, both measured here so nobody re-derives
       them in a panic:** (1) `updateOrg`'s currency lock asks `status <> 'trialing'`
-      (`orgs/repo.ts:571`), so **it has never engaged and never can until trials
-      end** — it starts working the day this is built, having never run in anger;
+      (`orgs/repo.ts:571`), so **it has never engaged and cannot while every
+      subscription in existence is a trial** — it starts working **the day a gym's
+      subscription first leaves `trialing`, whichever of billing (P3.4/P3.5, a
+      checkout writing `active`) or expiry (P3.8) lands first**, having never run
+      in anger. **Round 2's Low-6 corrected this**: the first version named the
+      expiry sweep as the trigger, but `<> 'trialing'` is equally satisfied by
+      `active`, so the first live exercise of this guard may belong to whoever
+      builds checkout, not to whoever builds the sweep;
       (2) the seat-cap line further down this file already says its gap covers
       *"every gym whose trial has ended"*, which is a sentence written on the
       assumption that trials end. Today that set is empty.

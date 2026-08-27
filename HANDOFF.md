@@ -1,6 +1,70 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE GYM'S SELF-SERVE TRIAL (server half) — T3 ROUND 2 (diff-only).
+      **ZERO Critical/High. THE PACKET SHIPS.** Reviews `215882c`.
+      DECISIONS :21487. Six Low, ALL FIXED here + two rule-4 items.
+
+  1. **HATCH NOT ARMED** — round 1's single C/H was in the RECORD, not a
+     subsystem, so there are no Criticals two rounds running. No redesign question.
+  2. ⚠️ **THREE OF THE SIX LOWS WERE DEFECTS IN ROUND 1's OWN CORRECTIONS**, and
+     that is the thing to carry forward: a round whose subject was "false sentences
+     reported as measured" produced three more. **A correction is new prose, and
+     new prose gets no evidence unless somebody asks it for some.** Hold a fix
+     round's own claims to the standard its findings were held to.
+  3. **THE LAST-OWNER GUARD'S JUSTIFICATION WAS SELF-REFUTING and is rewritten.**
+     `OWNER_ONLY_PRIVILEGES` is `["staff.manage"]` ALONE, and the ticks route does
+     not exclude self-targeting — so a last owner keeps `staff.manage` by this
+     guard's own guarantee and **can tick `billing.manage` straight back onto their
+     own row.** "Nobody could pay" was false. **The guard STAYS, behaviour
+     UNTOUCHED** (over-locking is the safe direction; :11429 rule 2 names both
+     doors) — it is **defence in depth**, not the last line. Do not "simplify" it
+     by removing `billing.manage` from `LAST_OWNER_REQUIRED_PRIVILEGES`.
+  4. **TRIAL EXPIRY IS NOT GREENFIELD** — `worker.ts` already registers TWO
+     schedulers on the `rollups` QUEUE (`dpdp.purge` :68, `orgs.join_sweep` :100)
+     and there is **no rollup JOB**. P3.8's sweep is a third `upsertJobScheduler`
+     call in a file that already has the pattern.
+  5. **THE CURRENCY LOCK'S FIRST LIVE RUN MAY NOT BE THE SWEEP'S.** It asks
+     `status <> 'trialing'`, which a CHECKOUT writing `active` (P3.4/P3.5)
+     satisfies as well as expiry (P3.8) — whichever lands first owns it.
+  6. **A WEB TEST WAS ASSERTING ITS OWN FIXTURE.** `settings.render.test.jsx`
+     stubbed a hard-coded copy of the server's 409 sentence and asserted that same
+     copy — green through a real wording change, structurally unable to notice.
+     Its stub is now an arbitrary marker making NO claim about the API. **Pattern
+     to watch for elsewhere: a test whose stub and whose assertion are both its
+     own fixture proves only that the plumbing runs.**
+
+MEASURED, all LOCAL (:13659): **api 621/621 (44 files) · web 1234/1234 (45 files)
+  · `db.migration` 11/11 · tsc exit 0 (api) · eslint `--max-warnings=0` clean on
+  api and on the three touched web files · `check-decisions-index` 215 resolve, 0
+  broken.** Mutants this round, each applied and RESTORED, tree verified clean:
+  **drop `0015`'s idempotence clause → RED** ("Array(9) to deeply equal Array(8)")
+  · **swallow `errorText` in `savePrivileges` → RED** (4 tests). The migration file
+  is BYTE-UNCHANGED.
+
+FILES: apps/api/src/modules/orgs/repo.ts · apps/api/src/modules/orgs/service.ts ·
+       apps/api/test/db.migration.test.ts · apps/web/src/api/orgsApi.js ·
+       apps/web/src/components/console/StaffPanel.jsx ·
+       apps/web/src/pages/console/settings.render.test.jsx · DECISIONS.md ·
+       DECISIONS-INDEX.md · HANDOFF.md · OWED.md · BACKLOG.md
+
+STILL NOTHING TICKS beyond round 1's state. **NO SCREEN, THEREFORE NO SMOKE.**
+  ⚠️ `POST /v1/orgs/:gymId/trial` is LIVE and curl-reachable by any gym owner with
+  **no screen calling it** (`grep -rn "/trial" apps/web/src` → nothing). That is
+  the whole blast radius of the trial-expiry hole today.
+
+❓ **KD'S, PUT TO HIM AND NOT ANSWERED BY A CHAT:** the trial-expiry `OWED.md` line
+  has **no automated trigger** — nothing goes red if the app reaches the internet
+  with expiry unbuilt; "before the app is on the internet" is enforced by a human
+  reading a file. **Same shape as the cost-breaker line**, which is the argument
+  for solving both once. A before-you-go-online decision, not a today one.
+
+NEXT: the WEB half — "Start your 30-day free trial", §4.2's banner, the seat meter.
+      It carries the SMOKE, and it renders `trialEndsAt`, whose contract round 1's
+      L-5 corrected: **gate on `status`, never on that field being null.**
+```
+
+```
 TASK: THE GYM'S SELF-SERVE TRIAL (server half) — T3 ROUND 1 FIXES. ONE
       Critical/High, EIGHT Low, all fixed. Reviews `a313861`. DECISIONS :21353.
       The packet does NOT ship on round 1's verdict; round 2 is DIFF-ONLY.
@@ -13,10 +77,18 @@ TASK: THE GYM'S SELF-SERVE TRIAL (server half) — T3 ROUND 1 FIXES. ONE
      gym-tier features for its members for ever, free.** Expiry is **P3.8** and
      R1.1 forbids pulling it forward; what was owed was the 🔴 `OWED.md` line in
      the deferring commit. **Do not build the sweep as a "fix round".**
-  2. ⚠️ **`updateOrg`'s CURRENCY LOCK HAS NEVER ENGAGED AND CANNOT UNTIL TRIALS
-     END** — it asks `status <> 'trialing'` (`orgs/repo.ts:571`). It starts
-     working the day the sweep lands, having never run in anger. Whoever builds
-     P3.8 owns that first live exercise.
+     ⚠️ **THE SCHEDULED WORK THAT EXISTS, ENUMERATED CORRECTLY (round 2's Low-1
+     corrected this block's first version):** `worker.ts` registers exactly TWO
+     schedulers, both on the `rollups` QUEUE — `dpdp.purge` `0 3 * * *` (:68) and
+     `orgs.join_sweep` `30 3 * * *` (:100). **There is no rollup JOB.** So the
+     expiry sweep needs NO new infrastructure — queue, worker and daily-pattern
+     precedent are already there.
+  2. ⚠️ **`updateOrg`'s CURRENCY LOCK HAS NEVER ENGAGED** — it asks `status <>
+     'trialing'` (`orgs/repo.ts:571`) and every subscription in existence is a
+     trial. **It wakes the day one first LEAVES `trialing`, which a CHECKOUT
+     writing `active` (P3.4/P3.5) does as well as an expiry sweep (P3.8) —
+     whichever lands first owns that first live exercise** (round 2's Low-6; the
+     first version of this item named the sweep alone).
   3. **THE OVERCLAIM IS CORRECTED IN FOUR PLACES** (this block, the :21157
      heading, its §5, and :19083 where it originated as a PLAN-time prediction).
      **RULE EARNED: a consequence predicted at plan time is a PREDICTION and needs

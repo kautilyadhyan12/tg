@@ -551,13 +551,20 @@ export async function updateOrg(
      *  SUFFICIENT ON ITS OWN — T3 C/H-3, and this note used to claim otherwise.**
      *  `lockOrgRow` locks the GYM row; it cannot lock a subscription that does
      *  not exist yet, so one committing between this SELECT and the UPDATE below
-     *  is missed and a now-paying gym's currency moves. **Unreachable today —
-     *  nothing in the product inserts into `subscriptions`, grep-verified — and
-     *  live the day the billing card ships.** The closing half is therefore a
-     *  REQUIREMENT on that card rather than something this one can build:
-     *  **whatever creates a gym subscription must take `lockOrgRow` on the same
-     *  gym first**, which is the lock and the order every mutation in this module
-     *  already uses, so the two serialise. Own `OWED.md` line. **Do not read this
+     *  is missed and a now-paying gym's currency moves.
+     *
+     *  **THE REQUIREMENT IS NOW DISCHARGED, and this note said otherwise for a
+     *  commit — T3 round 2, Low-4.** It read *"Unreachable today — nothing in the
+     *  product inserts into `subscriptions`, grep-verified — and live the day the
+     *  billing card ships"*, which stopped being true when `startGymTrial` landed
+     *  630 lines below it in this same file. **The race is genuinely closed**:
+     *  `subscriptions` has exactly one writer, `startGymTrial`, and it takes
+     *  `lockOrgRow` on the same gym as its FIRST statement, so a trial either
+     *  commits before this guard's SELECT or waits behind its UPDATE.
+     *  **The requirement does not expire with the discharge — it binds every
+     *  FUTURE writer**: whatever else creates a gym subscription must take
+     *  `lockOrgRow` on that gym first, which is the lock and the order every
+     *  mutation in this module already uses. Own `OWED.md` line. **Do not read this
      *  guard as complete.** */
     const movesMoney =
       "country" in input.patch &&
@@ -1054,9 +1061,13 @@ export type StartTrialOutcome =
  *  **THE SWEEP IS NOT TO BE BUILT HERE.** Expiry and dunning are P3.8 and R1.1
  *  forbids pulling them forward; what this card owed was the written record of
  *  the exposure, which it did not have and now has (`OWED.md`, the trial-expiry
- *  line). **Whoever builds that sweep: `updateOrg`'s currency lock at :571 asks
- *  `status <> 'trialing'` and therefore never engages today either — it starts
- *  working the moment trials can end, so it has never actually run in anger.**
+ *  line). **A guard nobody has ever exercised sits beside this:** `updateOrg`'s
+ *  currency lock at :571 asks `status <> 'trialing'`, so while every subscription
+ *  in existence is a trial it never engages. **It wakes the day a gym's
+ *  subscription first LEAVES `trialing` — which a CHECKOUT writing `active`
+ *  (P3.4/P3.5) does just as well as an expiry sweep (P3.8), whichever lands
+ *  first.** (T3 round 2, Low-6, correcting this note's first version, which named
+ *  the sweep alone.) Either way its first run in anger belongs to another card.
  *
  *  The other two features this card's commit message claimed to wake are NOT
  *  awake: the clock is inert (above) and §4.2's banner is not built at all

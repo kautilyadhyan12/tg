@@ -652,9 +652,16 @@ export default function StaffPanel({ gymId, privileges, orgType }) {
    *
    *  **The two refusals only this route gives are shown in the SERVER's own
    *  words**: `owner_only_privilege` ("Managing staff stays with the gym's
-   *  owner…") and `last_owner_locked` ("A gym's last owner has to keep the
-   *  ability to manage staff…"). Both are already sentences a person can read,
-   *  and re-wording them here is how the screen and the door drift apart.
+   *  owner…") and `last_owner_locked` ("A gym's last owner has to keep both
+   *  staff management and billing…"). Both are already sentences a person can
+   *  read, and re-wording them here is how the screen and the door drift apart.
+   *
+   *  **That drift is not hypothetical — it happened to this very comment.** The
+   *  server's sentence changed when `billing.manage` joined the guard, and this
+   *  block went on quoting the old one until T3 round 2 (Low-3). **Nothing a user
+   *  sees was affected, precisely because the panel prints `errorText` from the
+   *  server rather than a copy** — which is the rule this paragraph exists to
+   *  state, vindicated by its own comment going stale.
    *
    *  **No Try again** (the rule the add form and the half-done removal already
    *  follow): `retry` re-reads the LIST, which cannot save anything, and both

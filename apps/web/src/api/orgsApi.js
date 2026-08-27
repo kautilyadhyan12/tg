@@ -320,7 +320,9 @@ export const orgService = {
    *    · `owner_only_privilege` — managing staff cannot be given to anybody but
    *      the owner (:11429 rule 1, and :15534 C/H-1 is what happens without it);
    *    · `last_owner_locked` — the last owner cannot be ticked out of managing
-   *      staff, or nobody inside the gym could ever hand it out again.
+   *      staff OR of billing, so somebody in the gym can always hand out the keys
+   *      and pay. (Billing joined that guard with the trial card; this comment
+   *      quoted the one-power version until T3 round 2's Low-3.)
    *  The screen does not OFFER the box that causes the first (R3.3: hiding is
    *  not the enforcement — the 409 is, and it is still handled here). */
   updateStaffPrivileges: (gymId, userId, body) =>

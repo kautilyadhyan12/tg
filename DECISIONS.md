@@ -21377,13 +21377,24 @@ to a reviewer as much as to a kickoff prompt):
 |---|---|---|
 | One writer of `subscriptions` | `grep -rn "subscriptions" apps/api/src --include=*.ts` filtered to writes | **one `INSERT`**, `orgs/repo.ts` |
 | Nothing updates it | `grep -rn "UPDATE subscriptions" apps/api/src apps/api/scripts` | **no output** |
-| No sweep moves `trialing` → `expired` | worker registrations in `worker.ts` | rollups + the **join-application** sweep, nothing else |
+| No sweep moves `trialing` → `expired` | worker registrations in `worker.ts` | **two** schedulers, both on the `rollups` QUEUE — `dpdp.purge` (:68) and `orgs.join_sweep` (:100); neither touches subscriptions |
 | A trial still grants | `entitlements/repo.ts:19,24` | `status IN ('trialing','active','past_due')` |
 
 So the first gym to tap Start trial keeps gym-tier entitlements for its members
 for ever, free — **and the human who used to stand in that path was the approval
 gate removed in the same commit** (§1 of :21157). `trial_ends_at` is written and
 read by nothing that acts on it.
+
+**THE TABLE'S THIRD ROW WAS WRONG WHEN FIRST WRITTEN, AND ROUND 2 CAUGHT IT
+(Low-1) — it is corrected above rather than quietly amended, because this is the
+round whose whole subject is a claim reported as measured.** It said *"rollups +
+the join-application sweep, nothing else"*: `rollups` is the QUEUE's name and no
+rollup job is registered at all, while the **DPDP purge**, which is registered, was
+omitted. **The conclusion is untouched** — neither scheduler goes near
+`subscriptions`, and round 2 re-derived that independently. **What the wrong list
+hid is worth more than the error: trial expiry needs no new infrastructure.** The
+queue, the worker process and the daily-pattern precedent are already in
+`worker.ts`, two lines below the join sweep.
 
 **A second fact fell out of the same measurement and is on the `OWED.md` line:**
 `updateOrg`'s currency lock asks `status <> 'trialing'` (`orgs/repo.ts:571`), so
@@ -21472,3 +21483,96 @@ The line does not propose one: the shape is Kd's to rule on.
 **No sweep was built** (R1.1 — P3.8's work). **No screen exists, so no smoke**;
 that is unchanged from the card. **Nothing new ticks.** The packet does not ship on
 round 1's own verdict; round 2 is diff-only over these fixes.
+
+## THE GYM'S SELF-SERVE TRIAL (SERVER HALF) — T3 ROUND 2 (diff-only): ZERO Critical/High, THE PACKET SHIPS — and three of the six Lows are defects in round 1's own corrections (2026-08-27)
+
+**Read before trusting a round's "measured" paragraph, before quoting
+`LAST_OWNER_REQUIRED_PRIVILEGES`' justification, and before assuming the currency
+lock wakes with the expiry sweep.**
+
+Reviews `215882c`. **ZERO Critical/High ⇒ the packet SHIPS** (:5348 rule 1). **The
+hatch does NOT fire**: round 1's single Critical/High was in the RECORD, not in a
+subsystem, so there are no Criticals two rounds running. Six Low, **all fixed in
+this commit** and logged in `BACKLOG.md`, plus two of the round's three rule-4
+items.
+
+### 1 · THE SHAPE OF THE ROUND, WHICH IS THE PART TO KEEP
+
+**A round whose entire subject was "false sentences reported as measured"
+introduced three more of them.** L-1 mis-enumerated the worker's own schedulers
+inside the paragraph labelled *measured, not reasoned*; L-2's replacement 409 was
+false in its second clause; L-6 named the wrong card as a guard's trigger. **All
+three were caught by re-measuring, not by re-reading** — round 2 ran the greps
+itself and disagreed with what round 1 wrote.
+
+**The lesson is not "be more careful".** It is that a correction is new prose, and
+new prose gets no evidence unless somebody asks it for some — the same asymmetry
+:19656 recorded for deferrals that predict their own future, one level up. **A fix
+round's own claims need the standard its findings were held to.**
+
+### 2 · THE ONE THAT WOULD HAVE OUTLIVED EVERYTHING (L-2)
+
+The 409 said a locked-out last owner means *"nobody could pay"*. False:
+`OWNER_ONLY_PRIVILEGES` is `["staff.manage"]` alone, so `billing.manage` is not
+owner-only, and `updateOrgStaffPrivileges` does not exclude self-targeting — **a
+last owner keeps `staff.manage` by this guard's own guarantee and can tick billing
+straight back onto their own row.**
+
+**The same argument was the guard's stated JUSTIFICATION**, in `service.ts`'s
+docblock and in `0015`'s SQL: *"an owner ticked down from `org.manage` still holds
+`staff.manage`, so they can tick it straight back … a gym whose last owner cannot
+reach billing cannot PAY."* The second half is refuted by the first half, applied
+to `billing.manage`.
+
+**Fixed as a class: the guard STAYS and its behaviour is untouched** (over-locking
+is the safe direction; :11429 rule 2 names both doors, so both should ask the same
+question), **but it is now recorded as DEFENCE IN DEPTH rather than as the only
+thing between a gym and an unpayable invoice** — which is what the old sentence
+claimed and what nothing in the code supported. The shipped `0015` comment is left
+alone: forward-only, correct at write time, and round 2 agreed it is not a finding.
+
+### 3 · WHAT L-1's WRONG LIST WAS HIDING, WHICH IS WORTH MORE THAN THE ERROR
+
+`worker.ts` registers **two** job schedulers, both on the `rollups` QUEUE —
+`dpdp.purge` `0 3 * * *` (:68) and `orgs.join_sweep` `30 3 * * *` (:100). There is
+no rollup JOB. **So trial expiry needs no new infrastructure**: the queue, the
+worker process and the daily-pattern precedent are already there, two lines below
+the join sweep. The wrong enumeration made P3.8 look like greenfield when it is a
+third `upsertJobScheduler` call.
+
+**And L-6 moves who owns that work.** The currency lock asks `status <> 'trialing'`,
+which a CHECKOUT writing `active` (P3.4/P3.5) satisfies exactly as well as an
+expiry sweep — **so the guard's first run in anger may belong to whoever builds
+billing, not to whoever builds the sweep.** Recorded at all three sites.
+
+### 4 · RULE 4 AND RULE 3
+
+**Two of three rule-4 items fixed, both with mutants.**
+`settings.render.test.jsx`'s last-owner test **stubbed a hard-coded copy of the
+server's sentence and asserted that same copy** — so when the server's wording
+changed in `215882c` it stayed green and *structurally could not have noticed*. Its
+stub is now an arbitrary marker string that is deliberately not any real server
+text: **it can never drift out of step with the API again, because it no longer
+makes a claim about what the API says.** Renamed to what it proves (pass-through).
+Mutant — swallow `errorText` in `savePrivileges` — reds it and three others.
+The `0015` test now ASSERTS the idempotence it was already exercising; mutant —
+delete the `NOT (privileges @> …)` clause — reds it. **M1 accepted as a file-shape
+guard and recorded as no more than that.**
+
+**Rule 3: round 1's Critical/High fix carried no test and round 2 accepted that
+with its own reasoning rather than on our say-so** — it checked whether anything
+buildable had been dodged and found the only in-code alternative (narrowing the
+§4.1 candidate query with `trial_ends_at > now()`) is forbidden by R4.5, which
+makes the deferral genuine. **Round 2 also checked the opposite direction** — that
+nothing was UNDER-claimed to look better — and confirmed the seat cap genuinely
+woke, the clock genuinely is inert, and `Overview.jsx:32` genuinely says the §4.2
+banner slot is absent.
+
+### 5 · OPEN, AND DELIBERATELY NOT CLOSED BY A CHAT
+
+**The trial-expiry `OWED.md` line has no automated trigger.** Nothing goes red if
+the app reaches the internet with expiry unbuilt; its *"or earlier if the app goes
+on the internet first"* is enforced by a human reading a file. **Identical shape to
+the cost-breaker line**, which is the argument for solving both once rather than
+either twice. Put to Kd as a before-you-go-online decision; no chat may invent the
+mechanism.

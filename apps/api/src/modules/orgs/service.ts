@@ -1390,11 +1390,25 @@ export async function updateOrgStaffRole(
  *  and this guard has only ever covered one of them, because billing had no tick
  *  to cover. The trial card gives it one.
  *
- *  **It is deliberately NOT symmetrical with `org.manage`, and the asymmetry is
- *  the whole argument.** An owner ticked down from `org.manage` still holds
- *  `staff.manage`, so they can tick it straight back — nothing is lost. A gym
- *  whose last owner cannot reach billing cannot PAY, and no control inside the
- *  gym repairs that; the way out would be the admin panel, which is not built. */
+ *  **THE ASYMMETRY-WITH-`org.manage` ARGUMENT THAT USED TO SIT HERE WAS
+ *  SELF-REFUTING, and T3 round 2 (Low-2) is what caught it.** It read: an owner
+ *  ticked down from `org.manage` still holds `staff.manage` and can tick it
+ *  straight back, whereas *"a gym whose last owner cannot reach billing cannot
+ *  PAY, and no control inside the gym repairs that"*. **The second half is false
+ *  by the first half's own reasoning.** `billing.manage` is NOT in
+ *  `OWNER_ONLY_PRIVILEGES` (that list is `["staff.manage"]` alone) and
+ *  `updateOrgStaffPrivileges` does not exclude self-targeting — so a last owner
+ *  ticked out of billing still holds `staff.manage`, **which this very guard
+ *  guarantees they keep**, and can tick billing back onto their own row. It is
+ *  recoverable, exactly like `org.manage`.
+ *
+ *  **The guard stays, on the reason that actually holds: over-locking is the safe
+ *  direction, and :11429 rule 2 names BOTH doors, so both doors should ask the
+ *  same question.** Refusing costs an owner one save they can make differently;
+ *  allowing it costs a window in which the gym cannot pay until somebody notices
+ *  and repairs it by hand. **This is defence in depth, not the only thing between
+ *  the gym and an unpayable invoice** — which is what the old sentence claimed,
+ *  and which nothing in the code supported. */
 const LAST_OWNER_REQUIRED_PRIVILEGES: readonly OrgPrivilege[] = ["staff.manage", "billing.manage"];
 
 /** PRIVILEGES ONLY AN OWNER'S ROW MAY CARRY — §2.2's owner-alone rows, and the
@@ -1462,10 +1476,19 @@ export async function updateOrgStaffPrivileges(
       // staff.manage AND billing.manage, and this module's own test drives the
       // billing case — where the old wording told an owner they were being
       // refused over staff management they had in fact kept.
+      //
+      // NO CAUSAL CLAUSE (T3 round 2, Low-2). Round 1's replacement ended
+      // "...otherwise nobody could hand those out again, and nobody could pay",
+      // and the second half was FALSE: `billing.manage` is not in
+      // OWNER_ONLY_PRIVILEGES and this route does not exclude self-targeting, so
+      // a last owner keeping `staff.manage` — which this same guard guarantees
+      // they keep — could tick billing straight back onto their own row. A
+      // refusal states the rule; it does not need to argue for it, and an
+      // argument is the part that goes stale.
       throw new OrgsError(
         409,
         "last_owner_locked",
-        "A gym's last owner has to keep both staff management and billing — otherwise nobody could hand those out again, and nobody could pay.",
+        "A gym's last owner has to keep both staff management and billing, so somebody in the gym can always hand out the keys and pay.",
       );
     default:
       return assertNever(outcome);
