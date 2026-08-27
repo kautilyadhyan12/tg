@@ -39,23 +39,31 @@ pnpm --filter api exec tsx src/db/seed.ts
 A sheet written imagining accounts that do not exist is how four steps went wrong
 last time, so here is what is actually in the database:
 
-| Account | Gyms it owns | Used a trial? | On a plan? |
-|---|---|---|---|
-| `ow…@example.com` | **Smoke Test Gym** (`/smoke-test-gym`) **and owner** (`/owner`) | no | no |
-| `kd…@example.com` | **iron man** (`/iron-man`) | no | no |
-| `us…@example.com` | none — a **trainer** on the *owner* gym | — | — |
+| Account | What it is | Where |
+|---|---|---|
+| `owner@example.com` | **owner** | of BOTH **owner** (`/owner`) and **Smoke Test Gym** (`/smoke-test-gym`) |
+| `user2@example.com` | **trainer** (staff) | on the **owner** gym |
+| `user@example.com` | **plain member** (not staff) | on the **owner** gym |
+| `kd@example.com` | owner | of **iron man** (`/iron-man`) — not used by this sheet |
 
-**USE THE `ow…` ACCOUNT.** It is the only one that owns TWO gyms, which is what
-step 7 needs — so you will not have to create a throwaway gym.
+**Every step below needs NO setup.** All three accounts and both gyms already
+exist, in exactly the shape the steps want:
 
-**Nobody has used a trial and no gym is on a plan**, so every step below starts
-from the state it expects.
+* **Start the trial on the `owner` gym**, not on Smoke Test Gym. It is the one
+  that already has a trainer AND a plain member on it, which steps 6 and 8 need.
+* **Smoke Test Gym is for step 7** — the same person owns it, so it is where the
+  one-trial-per-person refusal shows up.
+* **Nobody has used a trial and no gym is on a plan.**
+
+**The gym has ONE person taking a place**, measured: the owner's own seat is
+complimentary and staff seats are free, so of the three people on the `owner`
+gym only `user@example.com` occupies one. That is why step 2 expects **1**.
 
 ---
 
 ## Step 1 — the offer is on your gym's screen
 
-Sign in as the OWNER, go to **Gym console → your gym**.
+Sign in as `owner@example.com`, go to **Gym console → owner** (`/console/owner`).
 
 ✅ Near the top you see a card headed **"Start your 30-day free trial"**, with the
 line *"Your members get the gym's features for 30 days. No card needed."* and
@@ -73,8 +81,10 @@ Press **Start your 30-day free trial**.
 ✅ The card changes to **"Plan — Free trial"**, with **"Ends"** and a date about a
 month from today.
 
-✅ Under that: **"0 of 300 places used"** (or however many members you already
-have, out of 300).
+✅ Under that: **"1 of 300 places used"** — one, not three. The owner's own seat
+is complimentary and staff seats are free, so only `user@example.com` occupies a
+place. If it says 3, the meter is counting people the gym is not charged for and
+that is a failure worth writing down.
 
 ✅ A strip appears across the top of the screen saying **"Free trial — 30 days
 left."** (29 is also correct depending on the hour.)
@@ -117,17 +127,16 @@ Now press **F5** to reload the page.
 (You cannot reach the button any more, which is itself correct — so this step is
 about the SECOND account.)
 
-Sign out. Sign in as your **second account**, the one that is a member of your gym
-but does not run it. Open the app normally (the member side, not the console).
+Sign out. Sign in as **`user@example.com`** — a plain member of the *owner* gym
+who does not run it. Open the app normally (the member side, not the console).
 
 ✅ Nothing anywhere tells this person your gym is on a trial, or when it ends.
 That is deliberate — your gym's billing is not your members' business.
 
 ## Step 7 — one trial per person, not one per gym
 
-Sign back in as the OWNER. Go to **Gym console → Your gyms** and open your OTHER
-gym — the one you did NOT start the trial on. (On the `ow…` account that is
-whichever of **Smoke Test Gym** / **owner** you left alone in step 2.)
+Sign back in as `owner@example.com`. Go to **Gym console → Your gyms** and open
+**Smoke Test Gym** — the other gym the same person owns.
 
 Look for the trial card.
 
@@ -149,10 +158,11 @@ lets you start a second trial, that is a real failure — write it down.
 
 ## Step 8 — a helper cannot touch the money
 
-Still as the owner, on your FIRST gym (the one on trial), go to **Settings →
-Staff** and make your second account a **Manager** if it is not one already.
+**No setup needed** — `user2@example.com` is already a trainer on the *owner*
+gym, and a trainer is the smallest amount of authority there is, which makes it
+the strongest version of this check.
 
-Sign out, sign in as the second account, and open **Gym console → the gym**.
+Sign out, sign in as **`user2@example.com`**, and open **Gym console → owner**.
 
 ✅ They see the gym, the join code and the members.
 
