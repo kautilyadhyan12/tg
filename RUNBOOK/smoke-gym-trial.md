@@ -4,7 +4,29 @@
 trial from the console, see how many days are left on every console screen, and
 see how many of their gym's places are taken.
 
-## RESULT — UNRUN
+## RESULT — PASSED 9/9 2026-08-27 (Kd), on commit `be21bd0` — **step 6 struck, see below**
+
+**Kd reported "all passed" against the nine numbered steps, each with its own
+✅-expectation.** What it settles, and these are the ones only a browser could:
+the trial button starts a trial and the card turns into the plan · **the meter
+read 1 of 300 and not 3**, so the owner's complimentary seat and the trainer's
+free seat are both correctly excluded on live data · the strip follows you from
+the gym screen to Members · dismissing it survives a navigation AND an F5 · **the
+one-trial-per-person refusal fired on a second gym owned by the same person**,
+with no Try again beside it and nothing half-started · and a TRAINER sees the
+plan but no button anywhere.
+
+**⚠️ STEP 6's PASS IS WITHDRAWN AND KD IS THE ONE WHO WITHDREW IT.** As written it
+could not fail — see the step itself. Its ✅ is not evidence of anything and must
+not be counted; the privacy guarantee it claimed to check is carried by an
+automated test with the owner as its control. **The rewritten step 6 is UNRUN.**
+
+**Two findings from this run, both his, both Low (nothing on screen was false):**
+the "One free trial per person" line read as a limit on individual app users
+rather than on gym owners, and is reworded; and step 6 above. Logged in
+`BACKLOG.md`.
+
+**T3 IS STILL OWED.** A passing smoke is not a review.
 
 ---
 
@@ -122,16 +144,41 @@ Now press **F5** to reload the page.
 
 ✅ Still gone.
 
-## Step 6 — pressing the button twice is not a problem
+## Step 6 — a member's app still works
 
-(You cannot reach the button any more, which is itself correct — so this step is
-about the SECOND account.)
+**REWRITTEN 2026-08-27, AND KD IS WHY. The first version of this step could not
+fail.** It said *"nothing anywhere tells this person your gym is on a trial"*,
+and he answered: *"nothing anywhere is mentioned now and also nothing anywhere
+was mentioned before as well it is exactly as it was."* Exactly — **no member
+screen mentions billing at all, before or after**, so a ✅ there was satisfied by
+the app leaking the data just as happily as by the app withholding it. A step
+that cannot observe its own subject is a test that cannot fail, which this
+project has now recorded three times.
 
-Sign out. Sign in as **`user@example.com`** — a plain member of the *owner* gym
-who does not run it. Open the app normally (the member side, not the console).
+**Where that guarantee actually lives:** an automated test asks the server for
+the same gym twice, as the member and as the owner, and requires that the OWNER
+is told the plan and the MEMBER is told nothing. The owner half is the control —
+without it the test would pass on a server that told nobody anything. **A browser
+cannot check this**, because there is no member screen that would render the
+answer either way, and the honest thing is to say so rather than to collect a ✅
+that means nothing.
 
-✅ Nothing anywhere tells this person your gym is on a trial, or when it ends.
-That is deliberate — your gym's billing is not your members' business.
+**What a browser CAN check, and it is worth a step:** this card added two fields
+to the very response the MEMBER app reads to draw its gym card. If that response
+stopped matching its contract, the client treats it as a hard failure and the
+card vanishes — so a member's gym card is the visible tripwire on the change.
+
+Sign out. Sign in as **`user@example.com`** — a plain member of the *owner* gym.
+Open the app normally (the member side, not the console).
+
+✅ The app loads and behaves exactly as it did before.
+
+✅ Wherever the app tells you which gym you belong to, it **still says you are a
+member of the *owner* gym**. It must not have gone blank, vanished, or turned
+into an error.
+
+❌ If the gym card is missing or shows an error, stop — that is the new fields
+breaking the member app, and it is the one thing this step exists to catch.
 
 ## Step 7 — one trial per person, not one per gym
 

@@ -1,6 +1,51 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE TRIAL'S SMOKE — PASSED 9/9 (Kd, on `be21bd0`), **and he withdrew one of
+      the nine himself.** DECISIONS :21751.
+
+  1. **STEP 6's PASS IS WITHDRAWN AND IT IS THE FINDING.** It asked that "nothing
+     anywhere tells this person your gym is on a trial"; he passed it and then
+     said why it was worthless — *"nothing anywhere is mentioned now and also
+     nothing anywhere was mentioned before as well it is exactly as it was."*
+     **No member screen mentions billing in EITHER direction**, so that ✅ was
+     satisfied by a server LEAKING the plan exactly as happily as by one
+     withholding it. :16095 L-3, third occurrence, **first found by the operator
+     rather than a reviewer.** Do NOT count it as evidence. The guarantee lives
+     in the API test reading the same gym as member AND owner, the owner half
+     being the CONTROL. **The rewritten step 6 is falsifiable and UNRUN.**
+  2. **WHAT THE BROWSER DID SETTLE, and nothing else could:** the meter read
+     **1 of 300 and not 3** on live data (owner's comped seat and the trainer's
+     free seat both excluded — the one number here that could be counted wrong),
+     and **the one-trial-per-OWNER gate fired on a second REAL gym**, with
+     nothing half-started. Both previously fixture-only.
+  3. **SECOND FINDING, his, Low: a TRUE sentence reading as a different rule.**
+     "One free trial per person" invites an owner to read it as a limit on
+     individual app users. Reworded in the server's own words so the promise and
+     the refusal are one sentence.
+  4. ⚠️ **THE DEV BRANCH NEEDED FIXING FIRST AND A STALE SERVER WAS RUNNING.**
+     14 of 15 migrations and a price book with ZERO USD rows (:15927, third
+     recurrence — a US gym is refused outright), and a process on 3000 answering
+     `/health` 200 with OLDER code (:20222). Both fixed, verified out of the
+     database and by pid start time.
+  5. **THE SHEET'S SETUP WAS MEASURED AND IT CHANGED TWO STEPS BEFORE HE RAN
+     THEM** — step 6's obvious second account is STAFF, who are told the plan BY
+     DESIGN, so it would have failed on a correct app.
+
+MEASURED on the reworded bytes: **`trial.render` + `billingView` 48/48 exit 0 ·
+  eslint clean on `TrialCard.jsx` · `check-decisions-index` 218 resolve, 0
+  broken.** No server change, no migration, no dependency change; the api suites
+  were NOT re-run and this says so (:10726).
+
+FILES: apps/web/src/components/console/TrialCard.jsx ·
+       RUNBOOK/smoke-gym-trial.md · DECISIONS.md · DECISIONS-INDEX.md ·
+       BACKLOG.md · HANDOFF.md
+
+NEXT: **T3 is the only gate left** (round 1, a full pass — not diff-only), plus a
+      person on the rewritten step 6.
+```
+
+```
 TASK: THE GYM TRIAL, WEB HALF — the button, §4.2's banner, §4.3's seat meter.
       Web half of :21157/:21353/:21487. DECISIONS :21580.
 

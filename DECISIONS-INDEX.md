@@ -127,6 +127,49 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:21751** — 2026-08-27 — **THE TRIAL'S SMOKE PASSES 9/9 — AND KD WITHDRAWS ONE
+  OF THE NINE HIMSELF, because the step could not fail.** Kd's REPORT (:4829) on
+  `be21bd0`. **Read before citing the trial as verified, before quoting this pass
+  as covering what a MEMBER is told, and before writing any smoke step whose ✅ is
+  "nothing appears".**
+  **WHAT ONLY A BROWSER COULD SETTLE: the meter read 1 of 300 AND NOT 3 on live
+  data** — the owner's complimentary seat and the trainer's free seat both
+  correctly excluded, which is the one number on that screen that could silently
+  be counted wrong, and the sheet named `3` as the failure to write down — **and
+  the one-trial-per-OWNER gate fired on a second REAL gym**, the thing that
+  replaced Kd approving every gym by hand, previously exercised only by fixtures;
+  nothing half-started. Also: the strip follows the owner between screens, its
+  dismissal survives an F5, and a TRAINER sees the plan and no button.
+  **THE FINDING IS THAT ONE OF MY STEPS COULD NOT FAIL AND HE FOUND IT.** Step 6
+  asked that *"nothing anywhere tells this person your gym is on a trial"*; he
+  passed it and then said why it was worthless — *"nothing anywhere is mentioned
+  now and also nothing anywhere was mentioned before as well it is exactly as it
+  was."* **No member screen mentions billing in either direction, so that ✅ was
+  satisfied by a server LEAKING the plan exactly as happily as by one withholding
+  it.** :16095 L-3's class, **third occurrence and the first found by the operator
+  rather than a reviewer**. **Its pass is WITHDRAWN in all four places** (:5748
+  applied to a ✅ instead of a sentence). The guarantee lives in the API test that
+  reads the same gym as member AND owner, **the owner half being the control**; a
+  browser cannot go there and the sheet now says so. **The rewritten step 6 is
+  falsifiable — the new fields ride on the response the MEMBER app draws its gym
+  card from, so a contract break makes that card VANISH — and is UNRUN.**
+  **SECOND FINDING, also his, also Low: a TRUE sentence that read as a different
+  rule** — *"One free trial per person"* invites an owner to read it as a limit on
+  individual app users; the trial belongs to the GYM and only the ALLOWANCE is per
+  person. Reworded in the server's own words so the promise and the refusal are
+  the same sentence.
+  **THE RUN NEEDED THE DEV BRANCH FIXED FIRST: 14 of 15 migrations and a price
+  book with ZERO USD rows** (third recurrence of :15927 — a US gym would have been
+  refused outright), **and a process was already on 3000 answering `/health` 200
+  with older code** (:20222's trap). Restarted; new pid 21:02:08 against a newest
+  server-file change of 20:00:25. Verified after out of the database: 15
+  migrations · 10 active org plans · `provider` CHECK carrying `'none'` · 3 owner
+  rows, 0 missing `billing.manage`.
+  **THE SHEET'S SETUP WAS MEASURED AND IT CHANGED TWO STEPS BEFORE HE RAN THEM** —
+  step 6's obvious "second account" is STAFF, who are told the plan BY DESIGN, so
+  it would have failed on a correct app; step 8's manager no longer needs
+  appointing because a TRAINER already exists and is the stronger check. **T3 is
+  the only gate left.**
 - **:21580** — 2026-08-27 — **THE GYM TRIAL REACHES A SCREEN — the button, §4.2's
   banner and §4.3's seat meter — and THREE CONSOLE MUTANTS TURN OUT TO HAVE HAD NO
   ANCHOR SINCE ROUND 4.** Web half of :21157/:21353/:21487. **Read before touching

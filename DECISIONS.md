@@ -21747,3 +21747,117 @@ still holds the pre-:18488 price book and has no `0015`, so a US gym is refused
 outright with *"We're not open for business in your country yet"*, which reads as
 the app being broken rather than as a stale fixture. The sheet says so in its
 prerequisites.
+
+## THE TRIAL'S SMOKE PASSES 9/9 — AND KD WITHDRAWS ONE OF THE NINE HIMSELF, because the step could not fail (2026-08-27)
+
+**Read before citing the trial as verified, before quoting this pass as covering
+what a MEMBER is told, and before writing a smoke step whose ✅ is "nothing
+appears".** Kd's REPORT (:4829) on `be21bd0`, run against the Neon dev branch
+after it was migrated and re-seeded, with both servers started by the chat.
+
+### 1 · WHAT THE BROWSER SETTLED THAT NOTHING ELSE COULD
+
+*"all passed"* against nine numbered steps, each with its own ✅-expectation.
+The two with the most in them:
+
+**THE METER READ 1 OF 300 AND NOT 3, ON LIVE DATA.** The `owner` gym carries three
+people — the owner, a trainer and a plain member — and only one of them occupies a
+paid place, because the owner's §4.0-step-6 seat is complimentary and Kd's own
+*"yes staff seats free"* ruling (:14262) excludes the trainer. **That number is the
+one thing on this screen that could silently be counted the wrong way**, it is
+computed by a rule now written out in THREE places, and the sheet named `3` as the
+failure to write down. It read 1.
+
+**THE ONE-TRIAL-PER-OWNER GATE FIRED ON A SECOND REAL GYM.** This is what replaced
+Kd approving every gym by hand (:21157 §1), and until now it had only ever been
+exercised by a fixture. He started a trial on `owner`, opened `Smoke Test Gym` —
+a different gym, same owner — and was refused with *"It's one per person, not one
+per gym."*, no Try again beside it, and **nothing half-started**: step 9 confirmed
+the second gym still offers its button and carries no banner.
+
+Also settled, none of it reachable from a test: the strip follows the owner from
+the gym screen to Members · dismissing it survives a navigation AND an F5 · a
+TRAINER sees the plan and no button anywhere.
+
+### 2 · THE FINDING IS THAT ONE OF MY STEPS COULD NOT FAIL, AND HE FOUND IT
+
+Step 6 asked that *"nothing anywhere tells this person your gym is on a trial"*.
+He passed it and then said why it was worthless: ***"nothing anywhere is mentioned
+now and also nothing anywhere was mentioned before as well it is exactly as it
+was."***
+
+He is right. **No member screen mentions billing at all, in either direction**, so
+that ✅ was satisfied by a server LEAKING the plan exactly as happily as by one
+withholding it. :16095 L-3's class — a step whose ✅ is satisfied by the very
+defect it exists to catch — **third recorded occurrence, and the first found by
+the operator rather than by a reviewer.**
+
+**ITS PASS IS WITHDRAWN IN ALL FOUR PLACES** (the sheet's RESULT block, the step,
+this entry, `HANDOFF.md`) rather than left standing while a footnote disagrees
+with it — :5748's rule, applied to a ✅ instead of to a sentence.
+
+**Where the guarantee actually lives, and why a browser cannot go there.** The
+API test asks for the SAME gym twice, as the member and as the owner, and requires
+that the owner is told the plan and the member is told nothing — **the owner half
+is the control, and without it the test would pass on a server that told nobody
+anything.** There is no member screen that would render the answer either way, so
+this is not a gap in the sheet's diligence; it is a fact about the surface, and
+the sheet now says so instead of collecting a ✅ that means nothing.
+
+**The rewritten step 6 is falsifiable and is UNRUN.** The two new fields ride on
+the very response the MEMBER app reads to draw its gym card, and `orgsApi.js`
+treats a contract mismatch as a hard failure — so a broken contract makes that
+card VANISH. A member's gym card is therefore the visible tripwire on this change,
+and that is what step 6 now checks.
+
+### 3 · THE OTHER FINDING: A TRUE SENTENCE THAT READ AS A DIFFERENT RULE
+
+*"One free trial per person."* — his question was *"what is this free trial is
+given to gym i think it need to be mentioned"*. **Nothing about it was false**, so
+it is Low under :5807's test ("on screen AND wrong"), and it was still worth
+stopping for: the trial belongs to the GYM, and what is capped at one is the
+PERSON's allowance of them. A line naming only the person invites an owner to read
+it as a limit on individual app users, which is a different product rule.
+
+Reworded to name both halves **in the server's own words** — *"One trial per
+person, not per gym — if you run a second gym, it won't get its own."* — so the
+sentence an owner reads before pressing and the sentence they read if refused are
+now the same sentence and cannot drift apart. Copy only; rule 4a never mutates
+wording.
+
+### 4 · WHAT THE RUN NEEDED FIRST, AND IT WAS NOT NOTHING
+
+**The dev branch was two things out of date and both would have failed step 1 for
+the wrong reason.** Measured before: **14 of 15 migrations**, and the plans table
+held the pre-:18488 book — six INR rows, 7-day trials, **zero USD rows** — so a US
+gym would have been refused outright with *"We're not open for business in your
+country yet"*. The `subscriptions.provider` CHECK also lacked `'none'`, the value
+the trial INSERT writes, so the button could not have worked at all. Third
+recurrence of :15927; the boot-time refusal is still the standing fix and is still
+not built.
+
+**AND A PROCESS WAS ALREADY LISTENING ON 3000, ANSWERING `/health` 200 WITH OLDER
+CODE.** :20222's exact trap — applying the migration is not enough, because the
+running api serves the old shape. Killed and restarted; **the new pid started
+21:02:08 against a newest server-file change of 20:00:25**, so it cannot have been
+serving stale code. Verified after: 15 migrations · 10 active org plans, 5 USD and
+5 INR at 300/500/1000/1500/2100 with 30-day trials · the six pre-ruling rows
+retired, not deleted · `provider` CHECK carrying `'none'` · 3 owner rows, 0 missing
+`billing.manage` — all read back OUT of the database.
+
+**THE SHEET'S SETUP WAS MEASURED, NOT IMAGINED, AND IT CHANGED TWO STEPS BEFORE HE
+RAN THEM** (:15927's own lesson: one wrong premise about a fixture produced four
+wrong steps). Reading the live memberships showed the `owner` gym already carries
+all three roles the sheet needs, so **step 6's "second account" — which would
+obviously have been `user2` — is STAFF, who are told the plan by design**, and the
+step would have failed on a correct app. It now names `user@example.com`, a plain
+member. Step 8 asked Kd to appoint a Manager first; `user2` is already a TRAINER,
+which needs no setup and is the stronger check, a trainer being the smallest
+authority there is.
+
+**PROVE on the reworded bytes: `trial.render` + `billingView` 48/48 exit 0 ·
+eslint clean on `TrialCard.jsx`.** No server change, no migration, no dependency
+change; the api suites were not re-run and this says so (:10726).
+
+**T3 IS THE ONLY GATE LEFT, and the rewritten step 6 is owed a person.** A passing
+smoke is not a review (:14147).

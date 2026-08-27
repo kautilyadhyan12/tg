@@ -2109,3 +2109,29 @@ with expiry unbuilt — its *"or earlier if the app goes on the internet first"*
 enforced by a human reading a file. **Identical shape to the cost-breaker line two
 entries below it**, which is the argument for solving both once rather than either
 twice. Put to Kd 2026-08-27 as a "before you go online" decision, not a today one.
+
+---
+
+## THE GYM TRIAL, WEB HALF — KD'S SMOKE, 2026-08-27 (`be21bd0`)
+
+**9/9 reported passed, and BOTH findings are his.** Neither is a defect in what
+the app DOES — nothing on screen was false — so both are Low under the severity
+gate, and both are fixed here (rule 1: the schedule changes, never the bar).
+
+**The shape worth keeping: a person using the product found something no test,
+no mutant and no reviewer could have.** One is a sentence that is true and reads
+as a different rule; the other is a step of MINE that could not fail. This is the
+fourth time on this branch that only Kd's browser produced a finding.
+
+| # | Finding | Fix |
+|---|---|---|
+| L-1 | **"One free trial per person." read as the wrong rule.** His words: *"what is this free trial is given to gym i think it need to be mentioned"*. The trial belongs to the GYM; what is capped at one is the PERSON's allowance of them. A line naming only the person invites an owner to read it as a limit on individual app users — a different product rule entirely. **True, therefore Low** (:5807's test is "on screen AND wrong"), and confusing enough that he stopped to ask. | Reworded to name both halves, **in the server's own words**: *"One trial per person, not per gym — if you run a second gym, it won't get its own."* The sentence an owner reads BEFORE pressing is now the same sentence they read if they are refused (`"It's one per person, not one per gym."`), so the promise and the refusal cannot drift apart. Copy only — rule 4a never mutates wording. |
+| L-2 | **MY SMOKE STEP 6 COULD NOT FAIL, and he is the one who noticed.** It asked that *"nothing anywhere tells this person your gym is on a trial"*; he answered *"nothing anywhere is mentioned now and also nothing anywhere was mentioned before as well it is exactly as it was."* Correct — **no member screen mentions billing at all, in either direction**, so the ✅ was satisfied by a server LEAKING the plan exactly as happily as by one withholding it. :16095 L-3's class (a step whose ✅ is satisfied by the defect it exists to catch), third recorded occurrence. | **Its pass is WITHDRAWN in all four places** (the sheet's RESULT block, the step, DECISIONS, HANDOFF) rather than quietly left standing. The privacy guarantee is carried by the API test that asks for the same gym as the member AND as the owner, **the owner half being the control** — without it the test would pass on a server that told nobody anything. **A browser cannot check this and the sheet now says so**, instead of collecting a ✅ that means nothing. Step 6 is rewritten into something falsifiable: the two new fields ride on the response the MEMBER app reads to draw its gym card, and a contract break makes that card VANISH — so a member's gym card is the visible tripwire on this change. **The new step 6 is UNRUN.** |
+
+**What step 6's withdrawal does NOT cost.** The eight other steps stand, and the
+two with the most in them are untouched by it: the meter read **1 of 300 and not
+3** on live data — the owner's complimentary seat and the trainer's free seat
+both correctly excluded, which is the one number on this screen that could
+silently be counted the wrong way — and the **one-trial-per-person refusal fired
+on a second real gym owned by the same person**, which is the gate that replaced
+Kd approving every gym by hand.

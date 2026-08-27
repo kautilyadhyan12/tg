@@ -138,9 +138,22 @@ export default function TrialCard({ org }) {
       {/* One trial per PERSON, said before it is pressed rather than in the
           refusal afterwards — an owner about to make a second gym "to get
           another month" should learn it now, and it is what makes the refusal
-          feel like a rule rather than a fault. */}
+          feel like a rule rather than a fault.
+
+          **KD'S SMOKE, 2026-08-27: "One free trial per person." READ AS THE
+          WRONG THING.** His words: *"what is this free trial is given to gym i
+          think it need to be mentioned"* — and he is right. The trial belongs to
+          the GYM; what is limited to one is the PERSON's allowance of them. A
+          line naming only the person invites an owner to read it as a limit on
+          individual app users, which is a different product rule.
+
+          Nothing here was false, so it is a wording fix and not a correction —
+          but it now names BOTH halves, and it does so in the same words as the
+          server's own refusal ("It's one per person, not one per gym"), so the
+          sentence an owner reads before pressing and the sentence they read if
+          refused are the same sentence. */}
       <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
-        One free trial per person.
+        One trial per person, not per gym — if you run a second gym, it won&apos;t get its own.
       </p>
       {error !== null ? (
         <p className="text-sm mt-3" style={{ color: '#ef4444' }}>
