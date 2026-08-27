@@ -1,6 +1,56 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE GYM TRIAL, WEB HALF — T3 ROUND 3 (diff-only). ZERO Critical/High.
+      **THE PACKET SHIPS.** DECISIONS :22145. One Low, fixed in the round;
+      Kd approved the finding list first ("go").
+
+  1. **THE ESCAPE-HATCH STREAK IS BROKEN.** Rounds 1 and 2 both put a Critical in
+     `Overview.jsx`; round 3 finds none anywhere, so :5348's same-subsystem
+     trigger does not fire. **Round 2's redesign held under a review that went
+     looking for holes in it** — including the mutant that matters: `TrialCard`'s
+     key removed with the Fragment key intact leaves every case GREEN, i.e. the
+     shared key now carries what the per-component keys used to.
+  2. **L-1 — THE FIX'S OWN COMMENT PROMISED AN INVARIANT NOTHING ENFORCED.** "A
+     screen added later cannot opt out" is true only because `App.jsx` wraps all
+     five `/console` routes in `ConsoleLayout` BY HAND. A sixth without it loses
+     the guarantee silently, and the guard file could not see it — its cases
+     declare their own route table, so it is structurally blind to `App.jsx`
+     drifting. Closed with a SOURCE assertion over `App.jsx` (the
+     `joinGym.render.test.jsx:317` pattern) **plus a control that at least five
+     routes are found at all** (:7104's PG1). Measured RED by dropping the
+     Settings wrapper: `'/console/:orgSlug/settings → NOT WRAPPED'`.
+  3. **THE ROUND'S LESSON: the fix was correct and its DESCRIPTION was the
+     defect.** Round 2's Low was a comment stating a false measurement; this one
+     states a true guarantee while omitting the condition it rests on. Same
+     failure — prose outrunning what the code holds — and both were caught by a
+     reviewer re-measuring a sentence instead of reading it.
+  4. **Also corrected, raised as a NOTE not a finding:** the "THE COST … each
+     screen's own Loading…" paragraph described a cost no user pays today, two
+     paragraphs after the text saying the journey does not exist. Fixed on the
+     same principle rather than left because nobody scored it.
+  5. **INSTRUMENT — `fileURLToPath(new URL(rel, import.meta.url))` THROWS HERE.**
+     "The URL must be of scheme file" in `gymSwitch.render.test.jsx`, because its
+     top-level `await import` makes it a module vite-node serves over http. Vite's
+     `?raw` import is used instead and is the better instrument regardless.
+
+FILES: apps/web/src/components/console/ConsoleLayout.jsx (two comment
+       corrections, no code change) · apps/web/src/pages/console/
+       gymSwitch.render.test.jsx (the route-wrapping guard + its control) ·
+       BACKLOG.md · DECISIONS.md · DECISIONS-INDEX.md
+
+PROVE: web 1294/1294 exit 0 across 48 files (+2) · eslint exit 0 on both changed
+       files · vite build exit 0 · check-decisions-index resolves. `App.jsx` was
+       mutated and restored, diff empty afterwards.
+
+OPEN:  **`OWED.md`: should a Critical/High tag have to name the journey a user
+       takes to reach it?** Raised by round 2, still Kd's to settle. This review
+       answered it in practice by measuring reachability before tagging.
+
+NEXT:  The packet ships. No further review round is owed on it.
+```
+
+```
 TASK: THE GYM TRIAL, WEB HALF — T3 ROUND 2 AND ITS FIX ROUND. ONE Critical/High,
       ONE Low, THE PACKET DOES NOT SHIP. DECISIONS :22029.
       Kd ruled twice: REDESIGN (the escape hatch), then KEEP (after the

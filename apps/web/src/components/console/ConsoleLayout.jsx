@@ -252,7 +252,12 @@ export default function ConsoleLayout({ children }) {
             guarantee in the memory of whoever adds the next panel. Five times
             out of six it was not remembered. Every console screen is drawn
             through this one `main`, so the invariant is stated once, here, and
-            a screen added later cannot opt out of it or forget it.
+            a screen added later cannot opt out of it or forget it —
+            **PROVIDED it is still wrapped in this shell, which `App.jsx` does
+            BY HAND for each route and which nothing enforced until round 3.**
+            `gymSwitch.render.test.jsx` now reads `App.jsx` and fails if any
+            `/console` route is drawn outside `ConsoleLayout`; without that,
+            this paragraph was a promise resting on somebody remembering.
 
             KEYED ON THE SLUG, NOT THE GYM ROW: the slug is what actually
             changed, it comes straight off the address bar, and it is correct
@@ -261,9 +266,13 @@ export default function ConsoleLayout({ children }) {
             panels look authoritative. `'no-gym'` covers `/console` and
             `/console/new`, which have no slug.
 
-            THE COST, accepted in the ruling: switching gym shows each screen's
-            own "Loading…" for one round trip instead of the previous gym's
-            details. That is the screen telling the truth about what it knows.
+            THE COST, accepted in the ruling — AND NOBODY PAYS IT TODAY, which
+            the ruling did not know and this paragraph used to imply otherwise.
+            When a gym switcher exists, switching gym will show each screen's own
+            "Loading…" for one round trip instead of the previous gym's details;
+            that is the screen telling the truth about what it knows. On the only
+            journey the console currently draws, the screen already remounts
+            going past "Your gyms", so this key changes nothing a user sees.
 
             THE `screen:` PREFIX IS LOAD-BEARING AND THE GUARD PROVED IT. Written
             first as `orgSlug ?? 'no-gym'`, this collided with the banner's own

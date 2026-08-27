@@ -39,6 +39,11 @@
 // The duplicate-key guard armed at :20986 (`test-setup.js`) is a different
 // instrument and does not overlap: it catches two children sharing a key, which
 // is what round 3's fix caused. Nothing there can see a key that is ABSENT.
+// The route table as TEXT. `?raw` rather than `readFileSync(fileURLToPath(...))`,
+// which is `joinGym.render.test.jsx`'s instrument and throws "The URL must be of
+// scheme file" here — this file's top-level `await import` makes it a module
+// vite-node serves over http, so `import.meta.url` is not a file URL.
+import appSource from '../../App.jsx?raw';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, Link } from 'react-router-dom';
@@ -427,5 +432,48 @@ describe('walking from one gym to another', () => {
     releaseBMembers(B_ROSTER);
     await waitFor(() => expect(screen.getByText(/^Gym B ·/)).toBeTruthy());
     expect(screen.queryByText('Alice Anderson')).toBeNull();
+  });
+});
+
+// ── THE INVARIANT'S ONE WEAK POINT ─────────────────────────────────────────
+//
+// T3 round 3, L-1. The comment beside the fix says a console screen added later
+// "cannot opt out of it or forget it". **That is true only because every console
+// route is wrapped in `ConsoleLayout`, and NOTHING ENFORCED THAT.** `App.jsx`
+// wraps all five by hand; a sixth added without the wrapper would silently lose
+// the guarantee, and no test could see it — the cases above declare their own
+// route table, so they are structurally blind to `App.jsx` drifting.
+//
+// A SOURCE assertion, and the limits are the ones `joinGym.render.test.jsx:310`
+// already states: it proves the routes still NAME the wrapper, not that they
+// render. It catches the failure that would actually happen — somebody adding a
+// screen and not knowing this file exists.
+describe('every console route is wrapped, or the fix above is optional', () => {
+  // Comments stripped first, or a commented-out route would count as wiring —
+  // `joinGym.render.test.jsx:318`'s round-2 lesson, which cost that file a
+  // finding when a trailing `// <GymMembershipCard />` satisfied its regex.
+  const stripComments = (raw) =>
+    raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '$1');
+
+  /** Each `<Route …>` in App.jsx whose path is a console path, as source text
+   *  running up to the next route. */
+  const consoleRoutes = () =>
+    stripComments(appSource)
+      .split('<Route')
+      .filter((chunk) => /path=(["'])\/console(\/[^"']*)?\1/.test(chunk));
+
+  it('finds the console routes at all (the control)', () => {
+    // Without this, a regex that stopped matching would leave the case below
+    // asserting nothing over an empty list and passing for ever (:7104's PG1).
+    expect(consoleRoutes().length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('draws every one of them inside ConsoleLayout', () => {
+    for (const chunk of consoleRoutes()) {
+      const path = /path=(["'])(\/console(?:\/[^"']*)?)\1/.exec(chunk)?.[2];
+      expect(`${path} → ${/<ConsoleLayout\b/.test(chunk) ? 'wrapped' : 'NOT WRAPPED'}`).toBe(
+        `${path} → wrapped`,
+      );
+    }
   });
 });

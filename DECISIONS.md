@@ -22141,3 +22141,73 @@ three corrected comments.
 **NO SMOKE SHEET, AND THAT IS A FINDING NOT AN OMISSION.** The journey does not
 exist in the app, so every step would pass whatever the code did — the exact
 shape Kd withdrew his own step 6 for on 2026-08-27. A sheet was not written.
+
+## THE GYM TRIAL, WEB HALF — T3 ROUND 3 (diff-only): ZERO Critical/High, THE PACKET SHIPS (2026-08-28)
+
+Reviews `13fec81`. **One Low, fixed in the round and logged in `BACKLOG.md`.**
+Kd approved the finding list before a byte was written (*"go"*).
+
+**THE ESCAPE-HATCH STREAK IS BROKEN.** Rounds 1 and 2 both put a Critical in
+`apps/web/src/pages/console/Overview.jsx`; round 3 finds none anywhere, so
+:5348's same-subsystem trigger does not fire and there is no redesign question.
+**The redesign Kd ruled in round 2 held under a review that went looking for
+holes in it.**
+
+**Read before adding a `/console` route, and before reaching for
+`fileURLToPath(new URL(…, import.meta.url))` in a web test.**
+
+### L-1 — the fix's own comment promised an invariant that nothing enforced
+
+The round-2 comment said a console screen added later *"cannot opt out of it or
+forget it"*. That is true only because every `/console` route is wrapped in
+`ConsoleLayout` — which `App.jsx` does **by hand, five times**. A sixth route
+added without the wrapper loses the guarantee silently, and **no test could see
+it**: every case in `gymSwitch.render.test.jsx` declares its own route table, so
+the file is structurally blind to `App.jsx` drifting underneath it.
+
+**The shape is worth naming because it is the round's whole lesson: the fix was
+correct and its DESCRIPTION was the defect.** Round 2's Low was a comment stating
+a false measurement; this is a comment stating a true guarantee while omitting
+the condition it rests on. Both are the same failure — prose that outruns what
+the code actually holds — and both were caught by a reviewer re-measuring a
+sentence rather than reading it.
+
+Closed with a SOURCE assertion over `App.jsx` in the repo's existing pattern
+(`joinGym.render.test.jsx:317`), **plus a control asserting at least five console
+routes are found at all** — without it a regex that stopped matching would assert
+nothing over an empty list and pass for ever (:7104's PG1). Comments are stripped
+first, `joinGym`'s own round-2 lesson. **Measured RED**: dropping the wrapper from
+the Settings route fails with `'/console/:orgSlug/settings → NOT WRAPPED'`, which
+names the offending route rather than a boolean.
+
+### Also corrected — raised as a note, not a finding, and fixed anyway
+
+The `THE COST …` paragraph described the switching-gym "Loading…" as a cost paid
+today, two paragraphs after the text establishing that the journey does not
+exist. **Same class as round 2's Low** — true in the abstract, false about the
+present — so it is fixed on the same principle rather than left because nobody
+scored it. :5348 rule 1's schedule/bar distinction, applied to something that was
+not even on the schedule.
+
+### Instrument — `import.meta.url` is not a file URL in this file
+
+`readFileSync(fileURLToPath(new URL(rel, import.meta.url)))` is this repo's
+established way to read source from a test (`joinGym.render.test.jsx:324`) and it
+**throws "The URL must be of scheme file"** in `gymSwitch.render.test.jsx`. The
+difference is that file's top-level `await import`, which makes it a module
+vite-node serves over http. Vite's `?raw` import replaces it and is the better
+instrument here regardless — no path arithmetic, and it fails at collection if
+the file moves.
+
+**PROVE, on the final bytes: web 1294/1294 exit 0 across 48 files (+2) · eslint
+exit 0 on both changed files · `vite build` exit 0 · check-decisions-index
+resolves.** Rule 3: the new guard measured RED with the Settings wrapper dropped
+and GREEN restored, `App.jsx` diff empty afterwards. The reviewer's own rule-4
+sweep found no liar among the touched files, across four mutants — including the
+one that matters for this round's design: **`TrialCard`'s key removed with the
+Fragment key intact leaves all cases GREEN, i.e. the shared key now carries the
+guarantee the per-component keys used to.**
+
+**THE PACKET SHIPS.** No migration, no dependency, no server change. The
+`OWED.md` open question — should a Critical/High tag have to name the journey a
+user takes to reach it — remains open and is Kd's.

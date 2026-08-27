@@ -2211,3 +2211,30 @@ bug.** Round 1's guard could not see round 2's Critical for TWO reasons:
 Fixing only (1) would have produced a second guard that passes over the same
 broken app. **Anything added to that file copies both halves: different data per
 gym, and the second gym's read held.**
+
+---
+
+## THE GYM TRIAL, WEB HALF — T3 ROUND 3 (diff-only), 2026-08-28
+
+**ZERO Critical/High — THE PACKET SHIPS.** Reviews `13fec81`. One Low, fixed
+here. **The escape-hatch streak is broken**: rounds 1 and 2 both put a Critical
+in `Overview.jsx`; round 3 finds none anywhere.
+
+| # | Finding | Fix |
+|---|---|---|
+| L-1 | **The fix's own comment promised an invariant nothing enforced.** It said a console screen added later "cannot opt out of it or forget it" — true only because every `/console` route is wrapped in `ConsoleLayout`, which `App.jsx` does BY HAND five times. **A sixth route added without the wrapper would silently lose the guarantee**, and no test could see it: the cases in `gymSwitch.render.test.jsx` declare their own route table, so they are structurally blind to `App.jsx` drifting. | A SOURCE assertion reading `App.jsx`, in the repo's existing pattern (`joinGym.render.test.jsx:317`), failing if any `/console` route is drawn outside `ConsoleLayout` — **with a control asserting at least five routes are found at all**, or a regex that stopped matching would assert nothing over an empty list for ever (:7104's PG1). Comments stripped first, `joinGym`'s own round-2 lesson. **Measured RED**: dropping the wrapper from the Settings route fails with `'/console/:orgSlug/settings → NOT WRAPPED'`. The comment now states the dependency instead of assuming it. |
+
+**Also corrected, raised by the reviewer as a note rather than a finding and
+worth more than its billing:** the "THE COST … each screen's own Loading… for one
+round trip" paragraph described a cost **no user pays today**, two paragraphs
+after the text saying the journey does not exist. Same class as round 2's Low —
+a comment true in the abstract and false about the present — so it is fixed on
+the same principle rather than left because nobody scored it.
+
+**The instrument note, because it will bite the next person.**
+`readFileSync(fileURLToPath(new URL(rel, import.meta.url)))` is this repo's
+established way to read source in a test, and it throws **"The URL must be of
+scheme file"** in `gymSwitch.render.test.jsx`: that file's top-level
+`await import` makes it a module vite-node serves over http, so `import.meta.url`
+is not a file URL. Vite's `?raw` import is used instead and is the better
+instrument here anyway.

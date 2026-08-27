@@ -127,6 +127,25 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:22145** — 2026-08-28 — **THE GYM TRIAL, WEB HALF, T3 ROUND 3 (diff-only):
+  ZERO Critical/High — THE PACKET SHIPS.** Reviews `13fec81`. One Low, fixed.
+  **The escape-hatch streak is broken** (rounds 1 and 2 both put a Critical in
+  `Overview.jsx`; round 3 finds none), so round 2's redesign held under a review
+  looking for holes in it.
+  **L-1 — the fix's own comment promised an invariant nothing enforced**: "a
+  screen added later cannot opt out" is true only because `App.jsx` wraps all
+  five `/console` routes in `ConsoleLayout` BY HAND, and a sixth without it would
+  lose the guarantee silently — invisible to a guard file that declares its own
+  route table. Closed with a SOURCE assertion over `App.jsx` plus a control that
+  at least five routes are found (:7104's PG1), measured RED by dropping the
+  Settings wrapper. **The round's lesson: the fix was correct and its
+  DESCRIPTION was the defect** — round 2's Low was a comment stating a false
+  measurement, this one states a true guarantee while omitting its condition.
+  **Instrument: `fileURLToPath(new URL(…, import.meta.url))` throws "The URL must
+  be of scheme file"** in a test file with top-level `await import` (vite-node
+  serves it over http); use vite's `?raw`.
+  **Read before adding a `/console` route, and before reading source from a web
+  test.**
 - **:22029** — 2026-08-28 — **THE GYM TRIAL, WEB HALF, T3 ROUND 2: THE ESCAPE
   HATCH FIRED, KD RULED REDESIGN (the FIRST — four previous firings all went to
   PATCH: :6277, :9509, :14493, :20587), AND THE C/H THEN TURNED OUT NOT TO BE
