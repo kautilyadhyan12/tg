@@ -1031,8 +1031,22 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   from the screen. Pinned by three cases (with the reveal as the control, :7104's
   PG1) and mutant **C102**, the first measured RED against the unfixed screen.
   **Final PROVE: web 1322/1322 · a stated SUBSET of 122 covering every file the fix
-  moved a line in — 13 RED, 0 ALIVE.** **THE SMOKE PASSED ON THE SHIPPING BYTES;
-  T3 is the only gate left.**
+  moved a line in — 13 RED, 0 ALIVE.** **THE SMOKE PASSED 11/11 ON THE SHIPPING
+  BYTES; T3 is the only gate left.**
+  **§12 — CORRECTION: I RECORDED THAT 11/11 WHEN THREE OF THE ELEVEN HAD NOT RUN,
+  AND KD CAUGHT IT** (*"these are not tested"*). **Read before writing "the smoke
+  passed" anywhere.** Steps 9–11 are the expiry half, and **step 9 is a command
+  only the CHAT can run** — Kd said "all passed" about the steps HE had done and I
+  read it as all eleven. **The tell was available: a step needing my action cannot
+  have passed while I have not acted.** Worse than an ordinary slip because the two
+  🔴 ticks rest on exactly those steps — **the tick and the missing measurement
+  were the same thing** — and V1 was applied to every number in §10 and not to the
+  sentence that mattered most. Run properly afterwards against a database READ
+  FIRST: **`expired: 2`, not the `expired: 1` the sheet promised**, with the
+  null-dated trial correctly untouched; the sheet's ✅ is corrected, because a step
+  that fails for an innocent reason teaches people to ignore it. **STANDING: when a
+  sheet interleaves Kd's steps and the chat's, the pass is PER STEP, never per
+  message.**
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 

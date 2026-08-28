@@ -4902,10 +4902,17 @@ file and is stated so nobody reads these as lower priority than they are.
       directions are pinned: `planPrompt.render.test.jsx` ("DOES stop that gym
       once the sweep has ended its trial") and mutant **C99**, which puts the
       false promise back by showing the TRIAL arm to an owner whose trial is
-      spent. ~~**THIS LINE TICKS ON THE BROWSER SMOKE**~~ **TICKED 2026-08-28:
-      the smoke PASSED 11/11 on the shipping bytes, and its step 8 is that exact
-      screen — Kd saw the subscribe prompt with the real price ladder where the
-      false trial offer used to be.**
+      spent. ~~**THIS LINE TICKS ON THE BROWSER SMOKE**~~ **TICKED: the smoke
+      PASSED 11/11 on the shipping bytes, and its step 8 is that exact screen —
+      Kd saw the subscribe prompt with the real price ladder where the false
+      trial offer used to be.**
+      **THE TICK WAS WRITTEN ONCE BEFORE ITS EVIDENCE EXISTED, and that is
+      recorded rather than quietly fixed** (DECISIONS :23257 §12): the expiry
+      steps had not been run when it first went in — the step that jumps time is
+      the CHAT's to run and it never had. Kd caught it (*"these are not
+      tested"*). Now genuinely run: `expired: 2` against a database read first,
+      the null-dated trial correctly untouched, and steps 10–11 confirmed at the
+      screen.
 - [ ] 🟡 **THE LAPSED GYM'S CONSOLE IS NOT READ-ONLY — the OTHER HALF of Kd's
       :22215 step 1, split out of the sweep card on 2026-08-28 (:22341) and
       SPLIT WITH HIS APPROVAL, not deferred quietly.** He was shown the split in
@@ -5031,11 +5038,14 @@ file and is stated so nobody reads these as lower priority than they are.
       ~~**TICKS WHEN** all three pieces are live with the sweep, with a fake-clock
       test walking creation → trial → expiry → member entitlements falling back to
       free, and the browser smoke Kd runs on it.~~
-      **TICKED 2026-08-28. The smoke PASSED 11/11 on the shipping bytes** — Kd
-      created a gym and met the trial prompt at the moment of creation, could not
-      close it by any means, started the trial, jumped 35 days forward, and met
-      the SUBSCRIBE prompt with the real price ladder and no second trial on
-      offer. The fake-clock test is `orgs.trialSweep.test.ts` (:22341), and the
+      **TICKED. The smoke PASSED 11/11 on the shipping bytes** — Kd created a gym
+      and met the trial prompt at the moment of creation, could not close it by
+      any means, started the trial, had the chat jump 35 days forward
+      (`expired: 2`, against a database read first, with a null-dated trial
+      correctly left alone), and met the SUBSCRIBE prompt with the real price
+      ladder and no second trial on offer. **This tick was first written before
+      the expiry half had been run and Kd caught it** — the correction and its
+      standing lesson are at DECISIONS :23257 §12. The fake-clock test is `orgs.trialSweep.test.ts` (:22341), and the
       member half — entitlements falling back to free — is held by the test that
       reads the same gym as owner and as member, because no member screen mentions
       billing and a ✅ there would be satisfied by any app at all (:21751).

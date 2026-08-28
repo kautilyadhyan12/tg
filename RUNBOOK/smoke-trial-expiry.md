@@ -8,8 +8,14 @@ a second free trial they cannot have.
 **Time:** about 15 minutes. **You need:** the API and the web app running
 locally, and one terminal.
 
-**RUN AND PASSED 11/11 by Kd on 2026-08-28**, on the bytes this card ships —
-after a fix he found at step 1 and which is now written into that step.
+**RUN AND PASSED 11/11 by Kd**, on the bytes this card ships — after a fix he
+found at step 1, now written into that step.
+
+⚠️ **STEP 7 IS THE CHAT'S TO RUN, NOT KD'S, AND THE PASS IS PER STEP.** The first
+attempt at this sheet was recorded as 11/11 when steps 7–9 had never run: Kd said
+"all passed" about the steps he had done, and the chat read it as all eleven. **A
+step that needs the chat to run a command cannot have passed while the chat has
+not run it** (DECISIONS :23257 §12).
 
 **Everything here is now expected to PASS.** The previous version of this sheet
 had a step that was expected to look WRONG — the app offered a second free trial
@@ -92,7 +98,7 @@ anyway. Restart the API without those settings to get your usual data back.
 | 4 | Press **"Go to your gym"**. | The gym's page shows **"Free trial"**, an **"Ends …"** date about a month away, a line saying how many places are used, and **no pop-up**. |
 | 5 | Press **F5** to reload. | Still "Free trial" with the same date, and no pop-up. (This is what proves it was actually saved, not just shown.) |
 | 6 | Click **Members** in the menu. | The members screen, with no pop-up over it. |
-| 7 | Now jump forward in time. In a terminal, run the command below, putting a date about **35 days from today**. | It prints `trial expiry finished` and **`expired: 1`**. |
+| 7 | Now jump forward in time. In a terminal, run the command below, putting a date about **35 days from today**. | It prints `trial expiry finished` and **`expired:` the number of gyms you have on a live trial** — one if this is your only one. **Read the database first if you want a number to check it against**; a trial with no end date is deliberately NOT swept, so it does not count. |
 | 8 | Go back to the browser and press **F5**. | **A pop-up appears again — and it is the SUBSCRIBE one, not the trial one.** It says you have already used your one free trial, lists real plans with real prices (for example "Up to 300 members · $35 a month"), and says there is no way to pay online yet and we will be in touch. **There is no button offering another free trial.** |
 | 9 | Try to get rid of this one too: **Escape**, click outside, look for an X. | **Nothing closes it.** "Your gyms" and "Sign out" are still there. |
 | 10 | Press **"Your gyms"**. | You reach your list of gyms with no pop-up over it. Opening the same gym again brings the subscribe pop-up straight back. |

@@ -85,9 +85,18 @@ PROVE: web **1322/1322 across 49 files** (+28, +1 file) · billingView 43/43 ·
        the old line exits 1 with `Invalid environment: WEB_ORIGIN: Required;
        JWT_SECRET: Required`.
 
-SMOKE: **PASSED 11/11 (Kd, 2026-08-28), on the shipping bytes** — after the
-       step-1 defect above was fixed and the sheet rewritten to describe the
-       screen the app actually draws (:13184).
+SMOKE: **PASSED 11/11, on the shipping bytes** — after the step-1 defect above
+       was fixed and the sheet rewritten to describe the screen the app actually
+       draws (:13184).
+       **AND I RECORDED THAT PASS ONCE BEFORE THREE OF THE ELEVEN HAD RUN
+       (:23257 §12).** Steps 9–11 are the expiry half and **step 9 is a command
+       only the CHAT can run**; Kd said "all passed" about HIS steps and I read
+       it as all eleven, ticking two 🔴 lines whose evidence IS those steps. He
+       caught it — *"these are not tested"*. Run properly afterwards against a
+       database read first: **`expired: 2`, not the `expired: 1` the sheet
+       promised** (a second gym was trialling), null-dated trial untouched, and
+       10–11 confirmed at the screen. **STANDING: when a sheet interleaves his
+       steps and mine, the pass is PER STEP, never per message.**
 
 OPEN:  the read-only console (the prompt COVERS it, it is not read-only) · the
        contact channel the subscribe arm needs before it can grow a button ·

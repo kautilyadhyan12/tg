@@ -21,11 +21,11 @@ ruling that declares no trigger at all, by pointer and title, so that gap is
 visible rather than silent. This file also says NOTHING about supersession —
 `DECISIONS-INDEX.md` and the original are still the authority on that.
 
-**Coverage, measured at build time:** 316 rulings · 178 declare a trigger (633 phrases) · 138 declare none · 0 could not be parsed.
+**Coverage, measured at build time:** 317 rulings · 179 declare a trigger (634 phrases) · 138 declare none · 0 could not be parsed.
 
 ---
 
-## 1 · TRIGGERS — 633 phrases, alphabetical
+## 1 · TRIGGERS — 634 phrases, alphabetical
 
 Read this section in full. Each line is: *what you are about to do* → *the
 ruling that binds it*.
@@ -578,6 +578,7 @@ ruling that binds it*.
 - writing "(BACKLOG.md)" into an entry → **:15010** · T3 ROUND 2 ON THE STAFF SCREEN (diff-only): ZERO CRITICAL/HIGH — THE PA…
 - writing "corrected at their source" about anything → **:19960** · GYM DETAILS, T3 ROUND 3 (diff-only): ZERO Critical/High — THE PACKET SH…
 - writing "instead of the button" into any smoke sheet → **:13184** · THE CLOCK'S SMOKE PASSED 10/10, and the last run accidentally became th…
+- writing "the smoke passed" anywhere → **:23535** · 12. CORRECTION, SAME SESSION — I RECORDED AN 11/11 PASS WHEN THREE OF T…
 - writing "the suite proves X" about any green suite → **:4556** · date-window T3 round 2 (THE CAP): 5 findings, none visible,
 - writing "verified" about anything measured on a sample → **:15260** · THE ROSTER BADGE, T3 ROUND 1: ZERO CRITICAL/HIGH — THE PACKET SHIPS (20…
 - writing `complimentary` → **:14262** · A GYM CAN FINALLY HAVE MORE THAN ONE PERSON RUNNING IT (server half) —…
