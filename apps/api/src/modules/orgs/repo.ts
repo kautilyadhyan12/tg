@@ -620,10 +620,24 @@ export async function updateOrg(
      *  commit — T3 round 2, Low-4.** It read *"Unreachable today — nothing in the
      *  product inserts into `subscriptions`, grep-verified — and live the day the
      *  billing card ships"*, which stopped being true when `startGymTrial` landed
-     *  630 lines below it in this same file. **The race is genuinely closed**:
-     *  `subscriptions` has exactly one writer, `startGymTrial`, and it takes
-     *  `lockOrgRow` on the same gym as its FIRST statement, so a trial either
-     *  commits before this guard's SELECT or waits behind its UPDATE.
+     *  630 lines below it in this same file. **The CREATION race is genuinely
+     *  closed**: the only statement that CREATES a gym subscription is
+     *  `startGymTrial`, and it takes `lockOrgRow` on the same gym as its FIRST
+     *  statement, so a trial either commits before this guard's SELECT or waits
+     *  behind its UPDATE.
+     *
+     *  **THERE ARE NOW TWO WRITERS OF `subscriptions`, NOT ONE — this sentence
+     *  said "exactly one" for a commit (T3 round 1 on the sweep, L-3).**
+     *  `trialSweep.ts` is the second and it takes NO lock, deliberately: it only
+     *  ENDS a trial, and :19656 C/H-3 binds whatever CREATES one. **The residual
+     *  race is named rather than restructured for, because it is Low and the
+     *  restructuring is worse:** the sweep can commit `expired` between this
+     *  SELECT and the UPDATE below, letting a country change through on a gym that
+     *  lapsed in that instant. Sub-second, once per gym ever, on a gym with no
+     *  live subscription and no invoice — and the direction of the error is that
+     *  somebody edits their own address a moment before a freeze Kd imposed for
+     *  gyms that have PAID (:22341 §3). Serialising a nightly set-based sweep
+     *  against every owner's typing to close it would cost more than it buys.
      *  **The requirement does not expire with the discharge — it binds every
      *  FUTURE writer**: whatever else creates a gym subscription must take
      *  `lockOrgRow` on that gym first, which is the lock and the order every
@@ -1111,26 +1125,30 @@ export type StartTrialOutcome =
  *  that has ever written `subscriptions`, and the reason the seat cap stops being
  *  correct-but-inert.
  *
- *  **NOTHING ENDS A TRIAL, AND UNTIL SOMETHING DOES, THIS WRITES A GYM A
- *  PERMANENT FREE PLAN.** T3 round 1's C/H-1, measured not reasoned: this INSERT
- *  is the ONLY writer of `subscriptions` in the API, there is no `UPDATE
- *  subscriptions` anywhere, no sweep and no worker moves `trialing` → `expired`,
- *  and `trial_ends_at` is written here and read by nothing that acts on it. The
- *  entitlement resolver counts `trialing` as granting, so a gym that taps the
- *  button keeps gym-tier entitlements for its members for ever, free, with no
- *  human in the loop — and the human who used to be in the loop was the approval
- *  gate removed in this same commit.
+ *  ~~**NOTHING ENDS A TRIAL, AND UNTIL SOMETHING DOES, THIS WRITES A GYM A
+ *  PERMANENT FREE PLAN.**~~ **— CLOSED 2026-08-28 BY THIS FILE'S SIBLING
+ *  `trialSweep.ts` AND THE NIGHTLY `orgs.trial_expiry` JOB (DECISIONS :22341,
+ *  Kd's ruling :22215 step 1).** A gym subscription still `trialing` past its
+ *  `trial_ends_at` is moved to `expired`, so its members fall back to the free
+ *  app within the resolver's 60-second cache window.
  *
- *  **THE SWEEP IS NOT TO BE BUILT HERE.** Expiry and dunning are P3.8 and R1.1
- *  forbids pulling them forward; what this card owed was the written record of
- *  the exposure, which it did not have and now has (`OWED.md`, the trial-expiry
- *  line). **A guard nobody has ever exercised sits beside this:** `updateOrg`'s
- *  currency lock at :571 asks `status <> 'trialing'`, so while every subscription
- *  in existence is a trial it never engages. **It wakes the day a gym's
- *  subscription first LEAVES `trialing` — which a CHECKOUT writing `active`
- *  (P3.4/P3.5) does just as well as an expiry sweep (P3.8), whichever lands
- *  first.** (T3 round 2, Low-6, correcting this note's first version, which named
- *  the sweep alone.) Either way its first run in anger belongs to another card.
+ *  **The struck sentence is kept because the ORIGINAL MEASUREMENT still explains
+ *  this INSERT's shape** (T3 round 1's C/H-1): for its whole life until that day
+ *  this was the ONLY writer of `subscriptions` in the API, there was no `UPDATE
+ *  subscriptions` anywhere, and `trial_ends_at` was written here and read by
+ *  nothing that acted on it. **There are now TWO writers, and the second only
+ *  ever ENDS a trial** — it never inserts, never touches `active`/`past_due`, and
+ *  filters `owner_type = 'gym'`. A THIRD writer is billing's, and it is unbuilt.
+ *
+ *  **THE GUARD BESIDE THIS HAS NOW WOKEN, AND THE PREDICTION ABOUT IT WAS
+ *  WRONG.** `updateOrg`'s currency lock at :571 asks `status <> 'trialing'`, so
+ *  while every subscription in existence was a trial it never engaged. T3 round 2
+ *  Low-6 predicted its first firing could belong to a CHECKOUT writing `active`
+ *  (P3.4/P3.5) just as easily as to the sweep. **Measured: the sweep got there
+ *  first — the first row it ever sees is the first this lock has ever had an
+ *  opinion about** (:22341 §3). Kd ruled the resulting behaviour deliberately: a
+ *  gym that trialled and never paid **stays frozen**, and what is owed is the
+ *  contact channel, not a wider lock.
  *
  *  The other two features this card's commit message claimed to wake are NOT
  *  awake: the clock is inert (above) and §4.2's banner is not built at all

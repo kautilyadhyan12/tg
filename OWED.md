@@ -4741,6 +4741,13 @@ file and is stated so nobody reads these as lower priority than they are.
       asserted: 9/9 in `test/orgs.trialSweep.test.ts` local, six new mutants
       O139–O144 all RED, and the job watched routing through a real worker to the
       real handler** (`job.started orgs.trial_expiry` → `orgs.trial_sweep.finished`).
+      **T3 ROUND 1 IS CLOSED — ZERO Critical/High, the packet SHIPS (:22782).**
+      Seven Low, all fixed in the round, logged in `BACKLOG.md`. **Its
+      highest-value finding was not in the sweep at all: the SMOKE SHEET'S ONLY
+      COMMAND COULD NOT RUN, and both obvious repairs were wrong** — one of them
+      badly enough to end every live gym trial on the Neon branch Kd's browser
+      reads. Fixed; the sheet now runs the whole smoke on local Postgres.
+      **THE SMOKE IS THE ONLY GATE LEFT AND IS RUNNABLE FOR THE FIRST TIME.**
       **WHAT THIS LINE DID NOT CLOSE, each now its own line below: the read-only
       console**, the consumer trial (`owner_type = 'user'`), and the fact that
       **nothing in the suite covers the worker's job ROUTING** — that was verified

@@ -22778,3 +22778,142 @@ disappears.** The T3 on `a8b2e98` reviews a FROZEN commit and can run any time;
 card removes, so that sheet must be re-run AFTER this card, not before** — a
 sheet whose ✅ describes a screen that no longer exists is :14840's stale-step
 shape.
+
+## 2026-08-28 — THE GYM TRIAL EXPIRY SWEEP, T3 ROUND 1: ZERO Critical/High, THE PACKET SHIPS — and the round's real finding is that the smoke sheet's only command could not run, while its obvious repair would have ended every trial in Kd's own database
+
+**Read before running any tool from `apps/api/tools/`, before writing a command
+into a smoke sheet, before adding a mutant that makes the suite WRITE, before
+trusting the mass-write detector's green line, and before quoting a test's
+docstring as evidence of what it covers.** Reviews `a8b2e98` (:22341).
+
+### 1. THE VERDICT
+
+**ZERO Critical/High ⇒ the packet SHIPS** (:5348 rule 1). **Escape hatch does not
+fire** — round 1 on the server half, no Critical anywhere, and the reviewer said
+so unprompted. **Seven Low, ALL FIXED in the round** and logged in `BACKLOG.md`;
+Kd approved the list before a byte changed (*"fix all"*).
+
+**CONFIRMED rather than found, and worth as much as the findings**: the UPDATE's
+WHERE cannot reach a paying gym and cannot escape its scope (the reviewer
+measured the scope predicate against real Postgres — `null` → all rows, `[]` → 0,
+unknown id → 0, i.e. **it fails closed**); the expiry cannot survive a failed
+audit write; every `${}` is a value, no `sql.raw`, no dynamic identifier; the four
+declared non-decisions in the file's header hold as arguments, not just as
+assertions. `audit_log` carries no FKs, so no per-row poison can abort a nightly
+run. **The reviewer re-ran the suite independently (9/9) and reproduced the
+`catalog.seed` flake split exactly, confirming the card's 631/634 was honest and
+correctly not quoted green.**
+
+### 2. THE SHAPE OF THE ROUND: SIX OF SEVEN ARE FALSE SENTENCES THIS CARD CREATED
+
+Five comments were TRUE when written and this commit made them lies —
+`startGymTrial`'s *"NOTHING ENDS A TRIAL"*, its prediction that the currency lock
+would wake elsewhere, *"`subscriptions` has exactly one writer"*, the detector's
+*"no such mutant exists today"*, and the refusal message's damage list.
+
+**This is :13552's recorded pattern — "the code moves and the sentences about it
+do not" — and it is the predictable aftermath of any card that closes a
+long-standing hole.** The hole's description is written in many places precisely
+BECAUSE it was long-standing. **Standing consequence: a card that closes a
+documented gap should grep for the gap's own description before it ships**, and
+this one did not.
+
+**L-2 is the sharpest instance and is :5748 verbatim:** :22341 §3 recorded that
+the currency-lock prediction had been wrong — **and corrected the ENTRY while
+leaving the SOURCE saying the old thing.** The place a correction is missed is the
+file you were not editing, inside the commit that made the correction.
+
+### 3. L-5 — THE GUARD WAS BLIND TO THE TABLE THIS CARD WRITES, AND ITS OWN DOC HAD NAMED THE TRIGGER
+
+`O142` deletes the trial sweep's scope predicate, so while it is live the suite
+**expires every live gym trial in the database**. The mass-write detector
+fingerprints `gyms` (:19803 C/H-1) and therefore printed *"gym rows verified — no
+unattributed changes"* over exactly that.
+
+**The part to keep is that the guard's own documentation predicted this and
+nobody acted on it.** It read *"the trigger to widen it is the next route that
+writes rows a caller does not own"* followed by *"no such mutant exists today"*.
+**O142 became that mutant in the same commit that added it.** A limit that names
+its own trigger still needs a human to notice the trigger firing — **the honest
+discipline is to widen the guard in the commit that adds the writer, not to write
+a better sentence about the limit.**
+
+**FIXED AND PROVEN BOTH WAYS ON A PLANTED CANARY** (a trialing gym whose trial
+ended five days ago, built for this and removed after):
+
+| | rows watched | what the guard said | what happened to the canary |
+|---|---|---|---|
+| pre-fix (`gyms` only) | 83 | *"no unattributed changes"* | `trialing` → **`expired`** |
+| post-fix (+ `subscriptions`) | 246 | **`O142 rewrote 1 pre-existing row(s) — EXPECTED, it declares writesRows` · `sub:f19930aa…`** | `trialing` → `expired` |
+
+`subscriptions` (status, plan_id, trial_ends_at) is fingerprinted in the SAME
+query and round trip, keyed `gym:` / `sub:` so ids cannot collide and the report
+names which table moved. O142 declares `writesRows: true`, **checked in both
+directions**, and the green line now names both tables — the previous wording
+named a narrower subject than the run touched, which is the failure the guard
+exists to prevent.
+
+### 4. L-7 — THE SMOKE COULD NOT BE RUN, AND BOTH OBVIOUS REPAIRS ARE WRONG
+
+**Verified by running the sheet's command verbatim**: it prints `Missing env:
+DATABASE_URL. (secrets never printed)` and exits 1. Steps 5–7 were unperformable,
+in a sheet already handed to Kd.
+
+**REPAIR 1, WRONG AND DANGEROUS: `--env-file=.env`.** That is this repo's
+documented way to run api tooling, and `apps/api/.env` points at **the shared Neon
+branch where Kd's own gyms live**, with `NODE_ENV=development` — so
+`trial-sweep.ts`'s production refusal would NOT fire. A `--now` 35 days out would
+**end every live gym trial on that database in one run**, dropping all those gyms'
+members to the free tier, with no dry run (by design) and no undo. **Measured
+there before any of this: exactly three live gym subscriptions, one of them Kd's
+own real trial from the 2026-08-27 smoke.**
+
+**REPAIR 2, WRONG AND MORE CONFUSING: point only the SWEEP at local.** The browser
+talks to the API, which reads `.env`, so the gym Kd creates would live on Neon
+while the sweep read an empty local table — `expired: 0` and a step 7 showing
+nothing, **for no visible reason**. A smoke that fails silently in the middle is
+worse than one that fails at the first command.
+
+**SHIPPED: the WHOLE smoke runs on local Postgres.** A new setup section names the
+database, explains both wrong repairs, and states the two expected consequences
+(his existing gyms are absent; restart without the prefix to get them back).
+Local verified able to host it — **15 migrations, USD and INR books, the 300-cap
+band present** — and the corrected command run to exit 0.
+
+**THE STANDING LESSON IS ABOUT SHEETS, NOT ABOUT THIS TOOL: a command written
+into a smoke sheet is CODE THAT KD WILL RUN, and it takes the same evidence as
+code** (V1). This one was never executed before being handed over. The tool's
+three guards remain untested, which matches `tools/orgs-sweep.ts` and is not a
+deviation — but **this tool's blast radius is larger by its own header's
+admission**, and that asymmetry is now on the record.
+
+### 5. RULE 4 — ONE GREEN LIAR, MEASURED TWICE
+
+`"a subscription with no end date is left alone"` claimed in its docstring to
+pin the date comparison against a `>=`. **Flip `<=` to `>=` and that test stays
+GREEN while seven of the other eight go red** — a NULL row is excluded by a NULL
+comparison in EITHER direction, so the mutation has no observable subject in that
+fixture. Reproduced independently before accepting it.
+
+**The TEST is unchanged and correct; the CLAIM about it was the defect.** The
+docstring now says it pins NULL-handling only and names O141 and the two
+thirty-day arms as the direction's real owners. :19960's shape — three sentences
+claiming more than their guards delivered — recurring in the first round of the
+next card.
+
+**Rule 3: N/A, no Critical/High.** Every guarantee in the new file is
+mutation-pinned except the two deliberately unmutated filters (justified in
+source) and the worker's job routing (declared, hand-verified, own `OWED.md`
+line).
+
+### 6. PROVE, AFTER THE FIXES
+
+**All LOCAL** (`localhost:5433`): `orgs.trialSweep` **9/9 exit 0** · `tsc
+--noEmit` exit 0 · `eslint --max-warnings=0` exit 0 on three changed files ·
+`node --check` on the harness · `check-harnesses` 25 scripts · **SWEEP a stated
+SUBSET of 144: O139–O144, 6 RED, 0 ALIVE, 0 never ran**, controls GREEN first,
+restores sha256-verified, **244 gym + subscription rows fingerprinted and no
+unattributed changes**. The canary proof of L-5 is the table in §3.
+
+**THE GATE THAT IS NOW OPEN: the SMOKE, and it is runnable for the first time.**
+T3 is closed at round 1.

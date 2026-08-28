@@ -341,7 +341,19 @@ d("gym trial expiry sweep (real Postgres)", () => {
   /** A subscription with no end date is not a trial that has ended — it is a
    *  row nothing has promised anything about. The comparison in the statement
    *  already filters it (NULL is not `<=` anything), and this pins that so a
-   *  future `coalesce` or a `>=` cannot quietly start reaping them. */
+   *  future `coalesce(trial_ends_at, …)` cannot quietly start reaping them.
+   *
+   *  **IT PINS NULL-HANDLING AND NOTHING ELSE, AND THIS DOCSTRING CLAIMED MORE
+   *  FOR A COMMIT (T3 round 1, L-4).** It said the test also stopped `<=`
+   *  becoming `>=`. **Measured by the reviewer and reproduced here: flip the
+   *  comparison and this test stays GREEN while seven of the other eight go
+   *  red** — because a NULL row is excluded by a NULL comparison in EITHER
+   *  direction, so the mutation has no observable subject in this fixture.
+   *  **The DIRECTION is O141's guarantee, and the two arms above own it**
+   *  ("thirty days later" / "still inside its thirty days"). A test's docstring
+   *  is a claim about coverage and takes the same evidence as the code it
+   *  describes (:19960's shape — three sentences claiming more than their guards
+   *  delivered, in one commit). */
   test("a subscription with no end date is left alone", async () => {
     const org = await makeOrg(owner().cookies);
     await putSubscription(org.org.id, "trialing", null);

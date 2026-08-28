@@ -1,6 +1,75 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE GYM TRIAL EXPIRY SWEEP — T3 ROUND 1 AND ITS FIX ROUND. ZERO
+      Critical/High, SEVEN Low, THE PACKET SHIPS. DECISIONS :22782.
+      Kd approved the finding list first ("fix all").
+
+  1. **ESCAPE HATCH NOT ARMED** — round 1 on the server half, no Critical
+     anywhere; the reviewer said so unprompted. Confirmed rather than found, and
+     worth as much: the WHERE cannot reach a paying gym or escape its scope
+     (**measured on real Postgres — null → all rows, [] → 0, unknown id → 0, it
+     FAILS CLOSED**), the expiry cannot survive a failed audit write, SQL safety
+     clean, and the four declared non-decisions hold as arguments.
+  2. **SIX OF SEVEN LOWS ARE FALSE SENTENCES THIS CARD CREATED** — comments true
+     when written and made lies by the commit ("NOTHING ENDS A TRIAL", "exactly
+     one writer", "no such mutant exists today"). :13552's pattern. **L-2 is
+     :5748 verbatim: :22341 §3 corrected a wrong prediction in the ENTRY and left
+     the SOURCE saying the old thing.** STANDING: a card that closes a documented
+     gap should grep for the gap's own description before it ships.
+  3. **L-5 — THE MASS-WRITE DETECTOR WAS BLIND TO THE TABLE THIS CARD WRITES, AND
+     ITS OWN DOC HAD NAMED THE TRIGGER** ("the next route that writes rows a
+     caller does not own" … "no such mutant exists today" — O142 became it in the
+     same commit). **PROVEN BOTH WAYS ON A PLANTED CANARY: pre-fix 83 rows
+     watched, "no unattributed changes", canary went trialing → expired;
+     post-fix 246 rows, `O142 rewrote 1 pre-existing row(s) — EXPECTED, it
+     declares writesRows`, naming sub:f19930aa….** `subscriptions` (status,
+     plan_id, trial_ends_at) now fingerprinted in the SAME query, keyed gym:/sub:.
+  4. **L-7 — THE SMOKE SHEET'S ONLY COMMAND COULD NOT RUN, AND BOTH OBVIOUS
+     REPAIRS ARE WRONG.** Verified verbatim: "Missing env: DATABASE_URL", exit 1,
+     so steps 5–7 were unperformable in a sheet already handed to Kd.
+     `--env-file=.env` points at the shared NEON branch with
+     NODE_ENV=development, so the tool's production refusal would NOT fire and a
+     --now would end EVERY live gym trial there (**measured: 3 live gym subs, one
+     Kd's own real trial**). Pointing only the SWEEP at local is worse — the
+     browser writes to Neon, so step 5 reports expired: 0 FOR NO VISIBLE REASON.
+     **Shipped: the WHOLE smoke runs on local Postgres**, with a setup section
+     naming the database and explaining both wrong repairs.
+     **STANDING: a command in a smoke sheet is CODE KD WILL RUN and takes the
+     same evidence as code (V1). This one was never executed before hand-over.**
+  5. **RULE 4 — ONE GREEN LIAR, and the TEST was fine while its DOCSTRING was the
+     defect.** Flip `<=` to `>=` and the NULL-handling test stays GREEN while
+     seven of the other eight go red — a NULL row is excluded in EITHER
+     direction. Reproduced independently before accepting the finding.
+     Rule 3: N/A, no Critical/High.
+
+FILES: apps/api/src/modules/orgs/repo.ts (three comment corrections, no code
+       change) · apps/api/test/orgs.trialSweep.test.ts (docstring) ·
+       apps/api/tools/mutate-orgs.mjs (fingerprint widened, O142 writesRows,
+       refusal message, doc block) · RUNBOOK/smoke-trial-expiry.md ·
+       BACKLOG.md · DECISIONS.md · DECISIONS-INDEX.md · DECISIONS-TRIGGERS.md ·
+       OWED.md
+
+PROVE, all LOCAL after the fixes: orgs.trialSweep **9/9 exit 0** · tsc --noEmit
+       exit 0 · eslint --max-warnings=0 exit 0 on three files · node --check on
+       the harness · check-harnesses 25 · check-decisions-index 226 ·
+       check-decisions-triggers 617 triggers from 175 of 313 rulings · **SWEEP a
+       stated SUBSET of 144: O139–O144, 6 RED, 0 ALIVE, 0 never ran**, controls
+       GREEN first, restores sha256-verified, 244 gym+subscription rows
+       fingerprinted with no unattributed changes. Canary planted and removed;
+       tool restored and re-parsed.
+
+OPEN:  unchanged — the read-only console, the consumer trial's own expiry, and
+       the worker's job ROUTING having no test (hand-verified once, own line).
+
+NEXT:  **THE SMOKE, and it is runnable for the first time**
+       (RUNBOOK/smoke-trial-expiry.md — read its new S3 first; the whole run is
+       on LOCAL Postgres, not the Neon branch). Then Kd's step 2, the forced
+       trial MODAL (:22697).
+```
+
+
+```
 TASK: ADDENDUM to the read-path card, same session. DECISIONS :22640.
       Kd asked "can a new chat still skip something?" — CHECKING it rather than
       answering it found a third of the coverage missing.

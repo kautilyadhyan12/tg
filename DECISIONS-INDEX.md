@@ -736,6 +736,43 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   forced trial prompt → subscribe prompt → real payment. **NOT ruled:** the
   read-only window's length (§4.2's 14 days stands), second-trial copy, prices
   above 2100 members. Paddle (:17357) remains unbuilt and unauthorised by this.
+- **:22782** — 2026-08-28 — **THE GYM TRIAL EXPIRY SWEEP, T3 ROUND 1: ZERO
+  Critical/High, THE PACKET SHIPS — and the round's real finding is that the
+  SMOKE SHEET'S ONLY COMMAND COULD NOT RUN, while its obvious repair would have
+  ended every trial in Kd's own database.** Reviews `a8b2e98` (:22341). **Escape
+  hatch NOT armed** (round 1, no Critical anywhere; the reviewer said so
+  unprompted). Seven Low, all fixed, in `BACKLOG.md`; Kd approved the list first
+  (*"fix all"*). **Read before running any tool from `apps/api/tools/`, before
+  writing a command into a smoke sheet, before adding a mutant that makes the
+  suite WRITE, before trusting the mass-write detector's green line, and before
+  quoting a test's docstring as evidence of what it covers.**
+  **SIX OF SEVEN ARE FALSE SENTENCES THIS CARD CREATED** — comments true when
+  written and made lies by the commit (*"NOTHING ENDS A TRIAL"*, *"exactly one
+  writer"*, *"no such mutant exists today"*). :13552's pattern, and **L-2 is
+  :5748 verbatim: :22341 §3 corrected the prediction in the ENTRY and left the
+  SOURCE saying the old thing.** **Standing: a card that closes a documented gap
+  should grep for the gap's own description before it ships.**
+  **L-5 — THE MASS-WRITE DETECTOR WAS BLIND TO THE TABLE THIS CARD WRITES AND ITS
+  OWN DOC HAD NAMED THE TRIGGER** (*"the next route that writes rows a caller does
+  not own"* … *"no such mutant exists today"* — O142 became it in the same
+  commit). **Proven both ways on a planted canary: pre-fix, 83 rows watched and
+  "no unattributed changes" while the canary went `trialing` → `expired`;
+  post-fix, 246 rows and `O142 rewrote 1 pre-existing row(s)` naming
+  `sub:f19930aa…`.** `subscriptions` now fingerprinted in the same query.
+  **L-7 — BOTH OBVIOUS REPAIRS OF THE BROKEN SMOKE COMMAND ARE WRONG.**
+  `--env-file=.env` points at the shared Neon branch (`NODE_ENV=development`, so
+  the production refusal will NOT fire) and would end every live gym trial there
+  — **measured: three live gym subscriptions, one Kd's own real trial**; pointing
+  only the SWEEP at local is worse, since the browser writes to Neon and step 5
+  would report `expired: 0` **for no visible reason**. Shipped: the WHOLE smoke
+  runs on local Postgres. **Standing: a command in a smoke sheet is CODE KD WILL
+  RUN and takes the same evidence as code (V1) — this one was never executed
+  before being handed over.**
+  **RULE 4 — ONE GREEN LIAR, and the TEST was fine while its DOCSTRING was the
+  defect**: flip `<=` to `>=` and the NULL-handling test stays GREEN while seven
+  of eight go red. **PROVE after fixes, all LOCAL: 9/9 · tsc exit 0 · eslint clean
+  on three files · sweep a stated SUBSET 6 of 144, 6 RED 0 ALIVE.** **THE SMOKE IS
+  NOW RUNNABLE FOR THE FIRST TIME and is the only gate left.**
 - **:22697** — 2026-08-28 — **KD RULES THE SECOND-GYM ARM OF THE FORCED PROMPT,
   AND CORRECTS THE SHAPE OF THE WHOLE THING AT A SCREEN: IT IS A MODAL, NOT A
   BUTTON.** **Read before building the forced trial prompt or the subscribe

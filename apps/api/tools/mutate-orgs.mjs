@@ -1714,13 +1714,18 @@ const MUTANTS = [
     id: 'O142',
     target: 'trialSweep',
     suite: TRIAL_SWEEP_SUITE,
-    // **THIS MUTANT MAKES THE SUITE WRITE ROWS IT DOES NOT OWN, and the
-    // harness's mass-write detector CANNOT SEE IT.** That guard fingerprints
-    // `gyms` (:19803 C/H-1); this statement writes `subscriptions`. What stops
-    // it reaching Kd's database is the blanket remote refusal above, which is
-    // why that refusal is a blanket one and not a per-target enumeration. Run
-    // locally it ends every live trial in the local database; the damage is one
-    // re-seed, and it is declared here rather than discovered.
+    // **THIS MUTANT MAKES THE SUITE WRITE ROWS IT DOES NOT OWN.** Run locally it
+    // ends every live gym trial in the database; the damage is one re-seed, and
+    // it was declared here rather than discovered.
+    //
+    // **AND THE DETECTOR COULD NOT SEE IT UNTIL T3 ROUND 1 (L-5).** That guard
+    // fingerprinted `gyms` alone (:19803 C/H-1) while this statement writes
+    // `subscriptions`, so a sweep containing this row printed *"gym rows
+    // verified — no unattributed changes"* over a mass expiry. Both tables are
+    // fingerprinted now, and `writesRows` below is what tells the guard this
+    // one's damage is EXPECTED — **checked in both directions, so declaring it
+    // and moving nothing is reported too.**
+    writesRows: true,
     why: "OWNERSHIP/MONEY: the scope predicate stops being a predicate, so any bounded run reaches EVERY gym in the table. In production the nightly job is unbounded anyway — what this breaks is the smoke instrument, where `tools/trial-sweep.ts --now` would end every gym's trial at once instead of the one being demonstrated",
     expect: 'ends only the gyms it was given',
     from: '        AND (${scope}::uuid[] IS NULL OR owner_id = ANY(${scope}::uuid[]))\n',
@@ -1894,9 +1899,11 @@ if (!DB_IS_LOCAL) {
       `  That is very likely the Neon branch Kd's own gyms and browser smokes read.\n` +
       `  Nothing has been run.\n\n` +
       `  A repo-target mutant can rewrite EVERY ROW in \`gyms\` (O114 deletes the\n` +
-      `  tenancy predicate on purpose — that is how it proves the predicate is real),\n` +
-      `  and a seed mutant writes prices nobody ruled. Neither is undone by the\n` +
-      `  byte-exact FILE restore this harness reports.\n\n` +
+      `  tenancy predicate on purpose — that is how it proves the predicate is real);\n` +
+      `  O142 deletes the trial sweep's scope predicate, so it ENDS EVERY LIVE GYM\n` +
+      `  TRIAL in the database, dropping every one of those gyms' members to the\n` +
+      `  free tier; and a seed mutant writes prices nobody ruled. None of it is\n` +
+      `  undone by the byte-exact FILE restore this harness reports.\n\n` +
       `  Use the local database instead:\n` +
       `    docker compose -f infra/docker-compose.dev.yml up -d postgres redis\n` +
       `    DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg' node apps/api/tools/mutate-orgs.mjs\n\n` +
@@ -2110,15 +2117,22 @@ const repairSeedDatabase = () => {
  *
  *  **WHAT IT ACTUALLY COVERS, stated narrowly because the first version of this
  *  sentence claimed the CLASS and the code covers one table — round-3 Low-4.**
- *  It watches `gyms` and the five columns the edit route writes (name, city,
- *  country, currency_display, timezone). **A mutant that mass-writes
- *  `gym_members`, `gym_staff`, `gym_codes`, `gym_join_applications`, or
- *  `gyms.slug` / `.status` / `.owner_user_id` / `.removed_at` is INVISIBLE to
- *  it.** No such mutant exists today — the reviewer enumerated every one whose
- *  replacement text writes or neuters a predicate and found them all bounded —
- *  so this is a limit to widen, not a live hole. **The trigger to widen it is
- *  the next route that writes rows a caller does not own**; that is when the
- *  cheap thing to do is add its table here.
+ *  It watches `gyms` (name, city, country, currency_display, timezone) **and,
+ *  since 2026-08-28, `subscriptions` (status, plan_id, trial_ends_at)**. **A
+ *  mutant that mass-writes `gym_members`, `gym_staff`, `gym_codes`,
+ *  `gym_join_applications`, or `gyms.slug` / `.status` / `.owner_user_id` /
+ *  `.removed_at` is still INVISIBLE to it.**
+ *
+ *  **THE PREDICTION IN THIS PARAGRAPH CAME TRUE AND THE PARAGRAPH WAS NOT
+ *  UPDATED — that is T3 round 1 on the trial sweep, L-5.** It said *"the trigger
+ *  to widen it is the next route that writes rows a caller does not own"* and
+ *  then *"no such mutant exists today"*. `O142` became that mutant in the same
+ *  commit that added it, nobody widened the guard, and a sweep containing it
+ *  printed *"gym rows verified — no unattributed changes"* while the suite
+ *  expired every live gym trial in the database. **A limit that names its own
+ *  trigger still needs somebody to notice the trigger firing; the honest fix is
+ *  to widen the guard in the commit that adds the writer, not to write a better
+ *  sentence about it.**
  *
  *  **IT COMPARES ROWS THAT EXISTED BEFORE AND STILL EXIST AFTER.** Rows the
  *  suite CREATES are expected, rows its cleanup DELETES are expected; a
@@ -2147,10 +2161,31 @@ const repairSeedDatabase = () => {
  *  the local `gyms` table is uniform, this guard is blind until it is cleaned;**
  *  `OWED.md` carries that state and the cleanup. */
 const gymFingerprint = () => {
+  // **`subscriptions` JOINED THE WATCH ON 2026-08-28 (T3 round 1 on the trial
+  // sweep, L-5), AND THE DOC ABOVE PREDICTED THE TRIGGER EXACTLY:** *"the next
+  // route that writes rows a caller does not own … that is when the cheap thing
+  // to do is add its table here."* `O142` deletes the trial sweep's scope
+  // predicate, so while it is live the suite expires EVERY live gym trial in the
+  // database — and this guard, watching `gyms` alone, printed *"gym rows
+  // verified — no unattributed changes"* over exactly that. **True about what it
+  // checked and silent about what was written**, which is :5199/:4855 F1's shape
+  // and the same defect :19803 found here the first time.
+  //
+  // The two tables are fingerprinted in ONE query and one round trip, keyed by a
+  // prefixed id so a collision between a gym id and a subscription id is
+  // impossible and the report can name which table moved.
   const sql =
-    'SELECT id::text, coalesce(name,\'\') || \'|\' || coalesce(city,\'\') || \'|\' || ' +
-    'coalesce(country,\'\') || \'|\' || coalesce(currency_display,\'\') || \'|\' || ' +
-    'coalesce(timezone,\'\') AS f FROM gyms';
+    'SELECT \'gym:\' || id::text AS id, coalesce(name,\'\') || \'|\' || ' +
+    'coalesce(city,\'\') || \'|\' || coalesce(country,\'\') || \'|\' || ' +
+    'coalesce(currency_display,\'\') || \'|\' || coalesce(timezone,\'\') AS f ' +
+    'FROM gyms ' +
+    'UNION ALL ' +
+    // status and trial_ends_at are the two columns the sweep writes and reads;
+    // plan_id is here because a future writer moving a gym between bands is the
+    // same class of damage and costs nothing to watch.
+    'SELECT \'sub:\' || id::text AS id, coalesce(status,\'\') || \'|\' || ' +
+    'coalesce(plan_id::text,\'\') || \'|\' || ' +
+    'coalesce(trial_ends_at::text,\'\') AS f FROM subscriptions';
   // Plain `node` with cwd = apps/api, NOT `pnpm exec tsx`: measured 2026-08-26,
   // `pnpm --filter api exec tsx` reports "Command tsx not found" from the repo
   // root, and the first version of this probe therefore returned null on every
@@ -2204,7 +2239,9 @@ if (gymsBefore === null) {
     '  resolves from apps/api.',
   );
 }
-console.log(`fingerprinted ${String(gymsBefore.size)} gym rows for mass-write detection`);
+console.log(
+  `fingerprinted ${String(gymsBefore.size)} gym + subscription rows for mass-write detection`,
+);
 
 /** IS THE TABLE ALREADY UNIFORM? Every row carrying one fingerprint is the
  *  signature of a mass-write that has ALREADY happened, and it is the state in
@@ -2248,7 +2285,7 @@ const verifyGymRows = () => {
   const unexpected = rowDamage.filter((d) => !d.expected);
   if (unexpected.length > 0) {
     console.error(
-      `\nA MUTANT REWROTE GYM ROWS IT HAD NO BUSINESS TOUCHING.\n` +
+      `\nA MUTANT REWROTE ROWS IT HAD NO BUSINESS TOUCHING.\n` +
       unexpected.map((d) => `  ${d.id}: ${String(d.ids.length)} row(s) — ${d.ids.slice(0, 3).join(', ')}`).join('\n') +
       `\n  The FILE restores above are byte-exact and say nothing about this — the\n` +
       `  database was written through the real route while a mutation was live.\n` +
@@ -2260,13 +2297,18 @@ const verifyGymRows = () => {
   }
   for (const d of rowDamage) {
     console.log(
-      `${d.id} rewrote ${String(d.ids.length)} pre-existing gym row(s) — EXPECTED, it declares writesRows`,
+      `${d.id} rewrote ${String(d.ids.length)} pre-existing row(s) — EXPECTED, it declares writesRows\n` +
+        `  ${d.ids.slice(0, 4).join(', ')}${d.ids.length > 4 ? ", …" : ""}`,
     );
   }
   const caveat = isUniform(after)
     ? ' (table is UNIFORM — a REPEAT mass-write is invisible to this check; see OWED)'
     : '';
-  console.log(`gym rows verified — no unattributed changes${caveat}`);
+  // **NAMES BOTH TABLES.** The previous wording said "gym rows verified" while
+  // `subscriptions` was being rewritten underneath it (T3 round 1 on the trial
+  // sweep, L-5). A green line naming a narrower subject than the run touched is
+  // the exact failure this guard exists to prevent.
+  console.log(`gyms + subscriptions verified — no unattributed changes${caveat}`);
   return true;
 };
 

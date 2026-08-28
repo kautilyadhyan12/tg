@@ -2238,3 +2238,88 @@ scheme file"** in `gymSwitch.render.test.jsx`: that file's top-level
 `await import` makes it a module vite-node serves over http, so `import.meta.url`
 is not a file URL. Vite's `?raw` import is used instead and is the better
 instrument here anyway.
+
+### The gym trial expiry sweep — T3 round 1, 2026-08-28 (reviews `a8b2e98`)
+
+**ZERO Critical/High — the packet SHIPS** (:5348 rule 1). Escape hatch does not
+fire: round 1 on the server half, no Critical anywhere. Seven Low, **all fixed in
+the round** (rule 1 as Kd corrected it), Kd approved the list first (*"fix all"*).
+Full entry at `DECISIONS.md:22341`; the round's own record at the addendum there.
+
+**The shape of the round: six of the seven are FALSE SENTENCES, and this card is
+what falsified five of them.** The comments were true when written and the commit
+made them lies — the predictable aftermath of a card that closes a long-standing
+hole, and :13552's recorded pattern ("the code moves and the sentences about it
+do not"). None of them changes what the sweep does.
+
+- [x] **L-1 · `startGymTrial`'s header still said "NOTHING ENDS A TRIAL … keeps
+      gym-tier entitlements for its members for ever, free".** This commit is
+      exactly what made that false, and it is the first thing a chat reads before
+      touching the trial. Struck and rewritten to name `trialSweep.ts` and the
+      nightly `orgs.trial_expiry` job; **the original measurement is KEPT under
+      the strike because it still explains the INSERT's shape.**
+      (`repo.ts:1114-1122`, fixed this round.)
+- [x] **L-2 · the same header predicted the currency lock's first firing would
+      belong "to another card", "whichever lands first".** :22341 §3 recorded the
+      prediction as WRONG — the sweep got there first — **and the entry was
+      corrected while the source was not** (:5748 exactly: the place a correction
+      is missed is the file you were not editing). Corrected in place.
+      (`repo.ts:1129-1133`.)
+- [x] **L-3 · "`subscriptions` has exactly one writer, `startGymTrial`" — there
+      are now two.** In the note discharging :19656 C/H-3's lock requirement, so a
+      reader could conclude the requirement covers a writer it does not.
+      Corrected, **and the residual race it papered over is now NAMED rather than
+      restructured for**: the sweep can commit `expired` between `updateOrg`'s
+      SELECT and UPDATE, letting a country change through on a gym that lapsed in
+      that instant. Sub-second, once per gym ever, no live subscription and no
+      invoice — Low, and serialising a nightly set-based sweep against every
+      owner's typing would cost more than it buys. (`repo.ts:623-625`.)
+- [x] **L-4 · A TEST WHOSE DOCSTRING CLAIMED MORE THAN THE TEST DELIVERS —
+      rule 4's catch, and MEASURED both by the reviewer and independently by me.**
+      "a subscription with no end date is left alone" claimed it also pinned the
+      date comparison against a `>=`. **Flip `<=` to `>=` and that test stays
+      GREEN while seven of the other eight go red** — a NULL row is excluded in
+      EITHER direction, so the mutation has no observable subject in that fixture.
+      The docstring now says it pins NULL-handling only and names O141 and the two
+      thirty-day arms as the direction's real owners. **The test is unchanged; the
+      claim about it was the defect.** (`test/orgs.trialSweep.test.ts:342-344`.)
+- [x] **L-5 · THE MASS-WRITE DETECTOR WAS BLIND TO THE TABLE THIS CARD WRITES,
+      AND ITS OWN DOC HAD NAMED THE TRIGGER.** The guard fingerprints `gyms`
+      (:19803 C/H-1); `O142` deletes the trial sweep's scope predicate, so while
+      it is live the suite expires **every live gym trial in the database** — and
+      the run printed *"gym rows verified — no unattributed changes"* over exactly
+      that. The doc block said *"the trigger to widen it is the next route that
+      writes rows a caller does not own"* and then *"no such mutant exists
+      today"*; O142 became that mutant in the same commit that added it and nobody
+      widened the guard.
+      **Fixed: `subscriptions` (status, plan_id, trial_ends_at) joined the
+      fingerprint in the same query, O142 declares `writesRows: true`, and the
+      green line names both tables.** **PROVEN BOTH WAYS ON A PLANTED CANARY** (a
+      trialing gym whose trial ended five days ago): **pre-fix, 83 rows watched →
+      "no unattributed changes" while the canary went `trialing` → `expired`;
+      post-fix, 246 rows watched → `O142 rewrote 1 pre-existing row(s) — EXPECTED,
+      it declares writesRows` naming `sub:f19930aa…`.** Canary removed, tool
+      restored and re-parsed. (`tools/mutate-orgs.mjs`.)
+- [x] **L-6 · the remote-database refusal justified itself on an incomplete list
+      of damage.** It named `gyms` mass-writes and seed prices; it did not mention
+      that O142 ends every live gym trial and drops those gyms' members to the
+      free tier. **The refusal is the documented opt-in gate, so an operator
+      weighing it was reading a shorter list than the truth.** The trial damage is
+      now spelled out in the message. (`tools/mutate-orgs.mjs:1893-1904`.)
+- [x] **L-7 · THE SMOKE SHEET'S ONLY COMMAND DID NOT RUN, AND THE OBVIOUS REPAIR
+      WAS THE DANGEROUS ONE.** Verified by running it verbatim: `corepack pnpm
+      --filter api exec tsx tools/trial-sweep.ts --now=…` prints `Missing env:
+      DATABASE_URL. (secrets never printed)` and exits 1, so steps 5–7 could not be
+      performed at all. **The natural fix — `--env-file=.env` — points at the
+      shared Neon branch where Kd's own gyms live, with `NODE_ENV=development` so
+      the tool's production refusal would not fire, and would end EVERY live gym
+      trial there in one run with no dry run and no undo.**
+      **And pointing only the SWEEP at local is wrong too, more confusingly:** the
+      browser talks to the API, so the gym would live on Neon while the sweep read
+      an empty local table — `expired: 0` and a step 7 that shows nothing, for no
+      visible reason. **Fixed by running the WHOLE smoke on local Postgres**: a new
+      setup section names the database and explains both wrong repairs, and the
+      step-5 command carries the URL on the line where it can be read before
+      pressing enter. Local verified able to host it (15 migrations, USD and INR
+      books, 300-cap band) and the corrected command run to exit 0.
+      (`RUNBOOK/smoke-trial-expiry.md`.)

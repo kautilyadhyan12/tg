@@ -29,6 +29,40 @@ show "something went wrong", the migrations have not been applied — that has
 caught us twice (:15927, :20222) and the fix is to migrate and **restart the API
 process**, because a running server caches the old failure.
 
+**S3 — THIS WHOLE SMOKE RUNS ON THE LOCAL DATABASE, AND THAT IS THE ONE
+INSTRUCTION HERE THAT PREVENTS REAL DAMAGE.**
+
+Step 5 jumps time forward, and **whatever database it points at, it ends EVERY
+live gym trial in that database at once** — no dry run (by design), no undo.
+
+`apps/api/.env` points at the **shared Neon branch where Kd's own gyms live**,
+and its `NODE_ENV` is `development`, so **the tool's production refusal will not
+save you there.** The obvious repair for the "Missing env: DATABASE_URL" error —
+adding `--env-file=.env` — is therefore the WRONG one, and it is wrong in a way
+that looks right.
+
+**Pointing only the SWEEP at local is also wrong**, and more confusingly so: the
+browser talks to the API, so the gym you create would live on Neon while the
+sweep looked at an empty local table. Step 5 would report `expired: 0` and step 7
+would show nothing, for no visible reason.
+
+**So start the API against the local database for this smoke**, which makes every
+part of the run agree:
+
+```
+cd apps/api
+DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg' node --import tsx src/index.ts
+```
+
+Two consequences, both expected: **your existing gyms will not be there** (this is
+a different, local database — it is already migrated and seeded, with the same
+USD and INR price books), and you will need the brand-new account step 1 asks for
+anyway. Restart the API without that prefix to get your usual data back.
+
+*(Found by T3 round 1 on this card, L-7: the sheet's first version failed with
+"Missing env" so steps 5–7 could not run at all — and the natural repair was the
+dangerous one.)*
+
 ---
 
 ## The run
@@ -44,10 +78,19 @@ process**, because a running server caches the old failure.
 | 7 | Run the same command from step 5 a second time. | `expired: 0`. Nothing happens twice — which is what makes it safe for the machine to retry. |
 
 ```
-corepack pnpm --filter api exec tsx tools/trial-sweep.ts --now=2026-10-02T10:00:00Z
+cd apps/api
+DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg' node --import tsx tools/trial-sweep.ts --now=2026-10-02T10:00:00Z
 ```
 
 *(Change the date to about 35 days from whenever you run this.)*
+
+**Why it is written this way, and why the shorter version in the first draft of
+this sheet does not work.** `corepack pnpm --filter api exec tsx …` prints
+`Missing env: DATABASE_URL. (secrets never printed)` and exits 1 — the tool parses
+only the environment it needs (R2.3) and nothing loads `.env` for it. Naming the
+database on the line is both the fix and the safety rail: it is the one place
+where the database this run will change is written down where you can read it
+before pressing enter.
 
 ---
 
