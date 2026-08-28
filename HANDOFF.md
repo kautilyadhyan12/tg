@@ -1,6 +1,69 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: TRIALS ACTUALLY END — step 1 of Kd's four-step order (:22215 §5).
+      The first `UPDATE subscriptions` in this product's history.
+      DECISIONS :22341. Plan approved and the card SPLIT at the plan gate.
+
+  1. **`modules/orgs/trialSweep.ts`** — `expireLapsedGymTrials`. A gym
+     subscription still `trialing` past its `trial_ends_at` becomes `expired`,
+     **in ONE transaction with its audit row** (:13075 C/H-2 built in from the
+     first commit rather than learned again). Third `upsertJobScheduler` on the
+     existing `rollups` queue at `0 4 * * *`. `tools/trial-sweep.ts` is the
+     by-hand runner with `--now`. **NO MIGRATION** — `'expired'` has been in the
+     CHECK since `0001_init`.
+  2. **THE MEMBERS NEEDED NO CODE.** `entitlements/repo.ts:23-25` already joins
+     on the granting set, so the row leaving it IS the mechanism. Kd's arm A,
+     delivered by a filter that was already there.
+  3. **FOUR CALLS, ALL IN THE SOURCE:** `trialing` only (dunning is P3.8) ·
+     `owner_type='gym'` only (R6.2 keeps consumer transitions in Part 5 §3's
+     machine — own OWED line, deliberately NOT mutated, no observable subject) ·
+     **no cache bust — the 60 s TTL IS R6.5's bound**, and `startGymTrial` busts
+     the actor only · no `lockOrgRow` (:19656 C/H-3 binds CREATORS, not enders).
+  4. **KD RULING: a lapsed-trial gym's country STAYS FROZEN.** Recommended
+     against and overruled — *"No, keep it frozen."* Do not widen
+     `updateOrg`'s `status <> 'trialing'` without a fresh ruling; what is owed is
+     the CONTACT CHANNEL. **:19560's carve-out fires for the first time, and its
+     round-2 Low-6 prediction was WRONG** — it guessed checkout would trigger it.
+  5. **THE CARD WAS SPLIT AND THE SPLIT WAS HIS.** The read-only console is step
+     1's other half; own line, first piece named (`/v1/orgs/mine` serves only
+     LIVE statuses — :21580's own gap).
+  6. **THE FINDING THIS CARD PRODUCED AGAINST ITSELF, reported not fixed:** a
+     gym whose trial ended reads back `subscription: null`, identical to a gym
+     that never trialled, so `TrialCard.jsx:106` OFFERS THE TRIAL AGAIN over a
+     button that 409s. :5807 1a on both arms. **Unreachable until this card,
+     which is the danger not the comfort.** First reachable ~2026-09-26. 🔴 line.
+
+FILES: apps/api/src/modules/orgs/trialSweep.ts (new) · apps/api/tools/
+       trial-sweep.ts (new) · apps/api/test/orgs.trialSweep.test.ts (new) ·
+       RUNBOOK/smoke-trial-expiry.md (new) · apps/api/src/worker.ts ·
+       apps/api/tools/mutate-orgs.mjs · apps/api/src/modules/orgs/repo.ts
+       (one comment made true) · DECISIONS.md · DECISIONS-INDEX.md · OWED.md
+
+PROVE (all LOCAL, localhost:5433): orgs.trialSweep **9/9 exit 0** in 15.7 s ·
+       full api **631/634**, the three being `catalog.seed`'s documented
+       pre-existing flake, NOT quoted green · tsc exit 0 **and PROVEN REAL by
+       planting a type error** · eslint --max-warnings=0 exit 0 on five files ·
+       node --check on the harness · check-harnesses 24 · check-decisions-index
+       223 · **SWEEP a stated SUBSET of 144: O139–O144, 6 RED, 0 ALIVE, 0 never
+       ran**, controls GREEN first, restores sha256-verified, 81 gym rows
+       unmoved. **O142 declares a hazard the harness cannot see** (it writes
+       `subscriptions`; the mass-write detector fingerprints `gyms`).
+       **BY HAND, once, and it is a measurement not a guard:** a real worker
+       against real Redis+Postgres routed `orgs.trial_expiry` to
+       `orgs.trial_sweep.finished` in 70 ms. Nothing in the suite imports
+       `worker.ts`; own OWED line.
+
+OPEN:  **The index has grown into the problem it was built to solve.**
+       `DECISIONS-INDEX.md` is ~123k tokens — the size DECISIONS.md had when
+       reading it in full was ruled impossible on 2026-07-30. §1/§2 were read in
+       full; §§3–7 were GREPPED, declared rather than hidden. Kd's to rule on.
+
+NEXT:  SMOKE (`RUNBOOK/smoke-trial-expiry.md`, 7 steps, step 6 EXPECTED to look
+       wrong) and T3 are both UNRUN. Then Kd's step 2 — the forced trial prompt.
+```
+
+```
 TASK: THE GYM TRIAL, WEB HALF — T3 ROUND 3 (diff-only). ZERO Critical/High.
       **THE PACKET SHIPS.** DECISIONS :22145. One Low, fixed in the round;
       Kd approved the finding list first ("go").

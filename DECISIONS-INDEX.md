@@ -482,8 +482,10 @@ mid-file: re-derive them with
   browser reads still holds the PRE-:18488 price book and lacks `0015`** (third
   recurrence of :15927); **Canada, the UK and the euro area cannot trial at all**,
   because `COUNTRY_CURRENCY` gives them CAD/GBP/EUR and the book is USD+INR while
-  :17366 ratifies *"US · CANADA · EUROPE, one USD book"* — **the app and the
-  ratified book disagree and it is Kd's to settle**; and **neither `org.manage` nor
+  :17366 ratifies *"US · CANADA · EUROPE, one USD book"* — ~~**the app and the
+  ratified book disagree and it is Kd's to settle**~~ **SETTLED 2026-08-28 at
+  :22215 — those three are billed in US DOLLARS; the fix is `COUNTRY_CURRENCY`,
+  not three new price books**; and **neither `org.manage` nor
   `billing.manage` has a TICK BOX** on the Staff screen, so neither can be
   delegated through the product (no data loss — `unknownPrivileges` carries them
   through a save, a guard whose own comment predicted a billing tick).
@@ -2250,6 +2252,64 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   #29 has been open on it since Card 1, so CI has gated every push all along.
   **Standing lesson: an index entry you skipped is not evidence of absence** — the
   ruling was at an entry the index named and the chat chose not to open.
+- **:22215** — 2026-08-28 — **KD RULING: A GYM WITHOUT A LIVE PLAN GETS NOTHING.**
+  **Read before planning the trial-expiry card, any console paywall or price
+  screen, or anything touching `COUNTRY_CURRENCY`.** The trial is FORCED and
+  unskippable at gym creation; at its end an unskippable SUBSCRIBE prompt appears
+  and the console is unusable except the pay path. **A lapsed gym's members fall
+  back to the FREE app — arm A, chosen against a locked-out arm put beside it —
+  never locked out** (agrees with Part 3 §4.2). **Canada, the UK and the euro area
+  are billed in US DOLLARS**, settling :21157's gap; the no-fallback-currency rule
+  (:10010) is untouched. Measured in the entry, not quoted: the gym half of the
+  entitlement UNION requires a live subscription, so **a gym that never trialled
+  grants its members nothing** (Kd's first question — no defect); and there is
+  **exactly one `INSERT INTO subscriptions` and no `UPDATE` anywhere**, so a trial
+  never ends and `'trialing'` grants for ever. Build order agreed: expiry job →
+  forced trial prompt → subscribe prompt → real payment. **NOT ruled:** the
+  read-only window's length (§4.2's 14 days stands), second-trial copy, prices
+  above 2100 members. Paddle (:17357) remains unbuilt and unauthorised by this.
+- **:22341** — 2026-08-28 — **TRIALS ACTUALLY END — the first `UPDATE
+  subscriptions` in this product's history — AND KD RULES A LAPSED-TRIAL GYM'S
+  COUNTRY STAYS FROZEN, overruling the card's own recommendation.** Step 1 of
+  :22215 §5. **Read before touching `trialSweep.ts`, before adding a job to the
+  `rollups` queue, before widening `updateOrg`'s currency lock, and before
+  building the read-only console or either prompt.** A gym subscription still
+  `trialing` past `trial_ends_at` becomes `expired`, in ONE transaction with its
+  audit row, on a third scheduler on the existing queue; **no migration**.
+  **The members needed no code** — `entitlements/repo.ts`'s granting-set filter
+  already delivers Kd's arm A. **Four calls made in the source**: `trialing`
+  only (dunning is P3.8) · `owner_type='gym'` only (R6.2 keeps consumer
+  transitions in Part 5 §3's machine) · **no cache bust, the 60 s TTL IS the
+  R6.5 bound**, and `startGymTrial` busts the actor only · no `lockOrgRow`
+  (:19656 C/H-3 binds CREATORS).
+  **KD RULING: *"No, keep it frozen."*** A gym that trialled and never paid
+  cannot fix its country once the sweep runs, at the moment it is asked to pay.
+  Recommended against, overruled; **do not widen the lock without a fresh
+  ruling** — what is owed is the CONTACT CHANNEL, not a code change.
+  **:19560's carve-out fires for the first time and its round-2 Low-6 prediction
+  was WRONG** — it guessed checkout would trigger it; the sweep got there first.
+  **THE CARD WAS SPLIT AND THE SPLIT WAS HIS**: the read-only console is step 1's
+  other half, its own line, and its first piece is that `/v1/orgs/mine` serves
+  only LIVE statuses (:21580's gap).
+  **AUDIT: O139–O144, 6 RED, 0 ALIVE. O140 is this card's own hole put back**
+  (`expired` → `past_due` — the trial "ends" into the granting set and every
+  member keeps 5 scans for ever while the run reports a number). **O142 declares
+  a hazard the harness CANNOT SEE**: it makes the suite write `subscriptions`,
+  and :19803's mass-write detector fingerprints `gyms` — the blanket remote
+  refusal is what stands between it and Kd's database.
+  **PROVE, all LOCAL: `orgs.trialSweep` 9/9 exit 0 · full api 631/634, the three
+  being `catalog.seed`'s documented flake and NOT quoted green · tsc exit 0 and
+  PROVEN REAL by planting a type error · eslint clean on five files ·
+  check-harnesses 24 · check-decisions-index 222 · sweep a stated SUBSET 6 of
+  144.**
+  **THE GAP NAMED RATHER THAN PAPERED OVER: three jobs now share one queue and
+  are told apart by NAME ALONE, and nothing in the suite imports `worker.ts`.**
+  Verified BY HAND once — a real worker, a real enqueue, `orgs.trial_expiry`
+  routed to `orgs.trial_sweep.finished` in 70 ms — **which is a measurement, not
+  a guard**; own ⚪ line. **Grounding departure declared: index §§3–7 were
+  GREPPED not read, because this file is now ~123k tokens — the size that made
+  DECISIONS.md unreadable on 2026-07-30. The instrument has grown into the
+  problem it was built to solve; raised to Kd.** SMOKE and T3 both UNRUN.
 
 ## 2 · OPEN — awaiting Kd. Check before proposing anything nearby.
 

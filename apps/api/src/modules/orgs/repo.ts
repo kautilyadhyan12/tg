@@ -2915,9 +2915,10 @@ export async function removeStaff(
 export async function insertAudit(
   tx: TransactionSql,
   entry: {
-    /** NULL means NOBODY DID THIS — the expiry sweep is the only writer that
-     *  passes one, and it passes null because no human decided. The column has
-     *  always been nullable (Part 4 §3.6); what changed on 2026-08-20 is that
+    /** NULL means NOBODY DID THIS — the two SWEEPS are the writers that pass
+     *  one (`sweep.ts`'s join expiry since 2026-08-20, `trialSweep.ts`'s trial
+     *  expiry since 2026-08-28), and they pass null because no human decided.
+     *  The column has always been nullable (Part 4 §3.6); what changed is that
      *  something finally acts without an actor. Recording a system action under
      *  some stand-in user id would be the more convenient lie. */
     actorUserId: string | null;

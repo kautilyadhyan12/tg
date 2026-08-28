@@ -22211,3 +22211,285 @@ guarantee the per-component keys used to.**
 **THE PACKET SHIPS.** No migration, no dependency, no server change. The
 `OWED.md` open question — should a Critical/High tag have to name the journey a
 user takes to reach it — remains open and is Kd's.
+
+## 2026-08-28 — KD RULING: A GYM WITHOUT A LIVE PLAN GETS NOTHING. The trial is forced at gym creation, the subscribe prompt at its end cannot be skipped, members of a lapsed gym fall back to the FREE app, and Canada/the UK/the euro area are billed in US DOLLARS
+
+**Read before planning the trial-expiry card, any paywall or price screen on the
+console, or anything that touches `COUNTRY_CURRENCY`.** Kd ruled this in response
+to a measured report, not to a proposal: he asked what a gym's members can do when
+the gym has never subscribed, and what they can do after a trial ends. The first
+answer was reassuring, the second was the hole he suspected, and the ruling below
+is his answer to it.
+
+**His words, in order:**
+1. *"i think whenver a gym is created there is trial pop up and they can not skip
+   that after the trail ends there is subscription plan pop up they can not skip
+   it"*
+2. *"after gyms trial ends gyms needs to subscribe other wise no acess also for
+   the members of the gyms"*
+3. *"I recommend A. The member did nothing wrong ok"* — choosing, from two options
+   put to him in one line each, the arm where a lapsed gym's members drop to the
+   FREE app rather than being locked out of the product.
+4. *"A forced trial pop-up traps gyms in Canada, the UK and Europe. they also pays
+   in dollar"* — closing the open question at `OWED.md`'s Canada/UK/euro line.
+
+### 1. WHAT IS ALREADY TRUE, MEASURED THIS SESSION (V1 — every claim carries the read)
+
+- **A gym with NO subscription grants its members nothing, so sharing a join code
+  before starting a trial is safe.** `modules/entitlements/repo.ts:12-26` is Part 4
+  §4.1's canonical SQL: the gym half of the UNION joins `subscriptions` on
+  `status IN ('trialing','active','past_due')`, so a gym with no row contributes no
+  candidate and the member resolves to `free`. **This was Kd's first question and
+  the answer is that no defect exists there.**
+- **The seat cap is enforced at the moment somebody joins, and never recounted.**
+  `modules/orgs/repo.ts:993-1048` (`claimSeat`) is the only reader of
+  `seatCapFor`, and nothing re-runs it. Combined with the uncapped-without-a-plan
+  deferral, a gym may accumulate an unlimited roster while on no plan and then
+  start a trial with every one of those people already inside a 300-seat band. Not
+  a defect the ruling creates; it is what the ruling makes worth money. **Its own
+  `OWED.md` line was added with this entry, grep-verified untracked before writing
+  (`grep -niE "recount|re-count|never re-?checked|only at join"` over `OWED.md` and
+  `BACKLOG.md`: no hits).**
+
+### 2. THE HOLE KD FOUND, RE-MEASURED RATHER THAN QUOTED FROM THE OWED LINE
+
+`grep -rn "UPDATE subscriptions|INSERT INTO subscriptions" apps/api/src` excluding
+tests returns **exactly one hit**: the INSERT at `modules/orgs/repo.ts:1257`. There
+is no UPDATE anywhere in the product. `trial_ends_at` is written there and read
+only to be DISPLAYED (`repo.ts:356`, `:395`, `:1209`; `service.ts:739`) — nothing
+acts on it. `'trialing'` is in the granting status set at
+`entitlements/repo.ts:24`, so **thirty days after the button is tapped every member
+of that gym still holds gym-tier entitlements, free, for ever.**
+
+Cost, derived from the recorded unit price rather than invented: `DECISIONS:9965`
+prices one meal scan at **$0.00212**; a gym member's allowance is **5 scans/day**
+(`db/seed.ts:54-57`), so a fully-using member is **$0.318/month** and a 300-member
+dead-trial gym is **~$95/month** at absolute maximum use. **UNVERIFIED against
+today's provider:** that per-scan figure predates the ruled Gemini swap, and real
+usage is far below maximum. The direction, not the magnitude, is the point.
+
+### 3. THE RULING
+
+1. **A gym on no live plan has no console and no member benefits.** The existing
+   entitlement behaviour already delivers the member half; what is owed is the
+   console half and the thing that makes a trial END.
+2. **The trial is forced at gym creation** — a prompt the owner cannot skip. It
+   costs them nothing (no card, 30 days, the smallest band) and it removes the
+   state where a gym exists, hands out codes, and nobody can tell whether it is a
+   customer.
+3. **At the end of the trial a subscribe prompt appears and cannot be skipped.**
+   The console is unusable except the pay path until the gym subscribes.
+4. **THE MEMBERS OF A LAPSED GYM FALL BACK TO THE FREE APP — arm A, ruled
+   explicitly.** They keep their own history and the free product; they lose the
+   gym extras (5 → 2 meal scans/day, unlimited → 90 days of history, all → T1
+   exercises, global leaderboards, watermark-free shares). **They are NOT locked
+   out of the app.** The option to lock them out was put to him in one line beside
+   this one and he chose this one, on the reason quoted above. This agrees with
+   Part 3 §4.2 (*"member entitlements degrade to `free` immediately; data is never
+   deleted"*) and with the win-back funnel that §4.2 and v1 §8 both build on.
+5. **Canada, the UK and the euro area are billed in US dollars.** This closes the
+   open question raised at `:21157` and matches :17366's own ratified book
+   (*"US · CANADA · EUROPE, one USD book"*). The fix is `COUNTRY_CURRENCY` in
+   `packages/shared/src/orgs.ts:88-96` mapping CA/GB/the twenty euro-area countries
+   to `USD`; the alternative — three more price books he has never priced — is
+   dead. **The standing no-fallback-currency rule (:10010) is untouched: a country
+   that is not in the map is still refused outright, never given somebody else's
+   money.**
+
+### 4. WHY THE CURRENCY LINE IS PART OF THIS RULING AND NOT A SEPARATE ONE
+
+A forced, unskippable trial prompt turns the currency gap from a shrug into a
+**brick wall at signup**: a Canadian, British or euro-area gym can be created today
+and its trial answers 409 `no_plan_for_currency` (`orgs/service.ts:710-723`). With a
+prompt that cannot be skipped, that gym is stranded on a screen whose only button
+fails. Kd was shown that consequence and ruled the currency in the same breath.
+
+### 5. BUILD ORDER (agreed in the same message, sizes stated to him)
+
+| Step | What | Note |
+|---|---|---|
+| 1 | Trials actually end: a scheduled job flips `trialing` → `expired` past `trial_ends_at`; members drop to free automatically (the resolver needs no change); console read-only except billing | small — this alone closes the money hole |
+| 2 | Forced trial prompt at gym creation | tiny |
+| 3 | Forced subscribe prompt at expiry; says "contact us" until a payment route exists | tiny |
+| 4 | A real way to pay (Paddle, or PayPal invoice + the admin panel's "mark this gym as paid") | the big one, unchanged |
+
+Step 1 belongs on the SAME worker that already runs the join-application sweep
+(`worker.ts:144`), for the reason that file already records: one scheduler shell,
+no second mechanism. Step 3 has a dependency Kd was told about in plain words —
+**the "contact us" sentence has nowhere to go**, which is the contact-channel item
+already owed beside the admin panel.
+
+### 6. WHAT WAS NOT RULED, AND MUST NOT BE INVENTED
+
+- **How long the console stays read-only before it archives.** Part 3 §4.2 says 14
+  days then archived-but-restorable; that spec line stands and was not re-ratified
+  here. Do not shorten or lengthen it without asking.
+- **Whether a second trial is ever granted.** One trial per OWNER, ever
+  (`repo.ts:1218-1225`) is untouched; a person creating a second gym must be shown
+  the SUBSCRIBE prompt, not a trial prompt that cannot succeed. Named to him as
+  point 2 of three and not disputed, but the copy is unwritten.
+- **Prices for the dollar book above 2100 members**, and the INR book's own
+  revision — both still open at `OWED.md`.
+- **No payment provider work is authorised by this entry.** Paddle remains ruled
+  (:17357) and unbuilt.
+
+**One thing that does NOT need re-deciding, so nobody re-opens it:** paying from
+inside the phone app. :17765 already rules that the pay button opens a browser and
+that Apple 3.1.3(c) exempts software sold to organisations. The forced subscribe
+prompt inherits that ruling unchanged.
+
+## 2026-08-28 — TRIALS ACTUALLY END: the first `UPDATE subscriptions` this product has ever had, and Kd rules that a lapsed-trial gym's country stays frozen
+
+**Read before touching `modules/orgs/trialSweep.ts`, before adding a job to the
+`rollups` queue, before widening `updateOrg`'s currency lock, and before building
+the read-only console or either unskippable prompt.** Step 1 of the four-step
+order Kd set the same day at :22215 §5. Plan approved before a byte was written;
+the card was split at the plan gate with his agreement, and the currency question
+was put to him in the same message.
+
+### 1. WHAT SHIPS
+
+`modules/orgs/trialSweep.ts` — `expireLapsedGymTrials` — moves a gym subscription
+still marked `trialing` past its own `trial_ends_at` to `expired`, **in one
+transaction with its `audit_log` row**. It is registered as a third
+`upsertJobScheduler` on the existing `rollups` queue at `0 4 * * *`, and
+`tools/trial-sweep.ts` runs it by hand with the `--now` instrument the thirty-day
+clock makes necessary. **No migration**: `'expired'` has been in
+`subscriptions_status_check` since `0001_init`.
+
+**THE MEMBERS NEEDED NO CODE, WHICH IS THE RULING WORKING.**
+`entitlements/repo.ts:23-25` joins on `status IN ('trialing','active','past_due')`,
+so the row leaving that set is the whole mechanism — Kd's arm A (*"The member did
+nothing wrong"*) delivered by a filter that was already there.
+
+### 2. THE FOUR CALLS MADE IN THE SOURCE, SO NOBODY RE-DERIVES THEM
+
+1. **`status = 'trialing'` only.** Dunning and paid-plan expiry are Part 5 §8 /
+   P3.8 and R1.1 forbids pulling them forward. Without this filter the job cancels
+   every gym that CONVERTS from a trial, because a converted gym keeps its old
+   `trial_ends_at`. Mutant **O139**.
+2. **`owner_type = 'gym'` only.** The consumer trial (:16548) is unbuilt and R6.2
+   puts every consumer transition through Part 5 §3's single pure machine; a
+   second writer invented in a sweep is exactly that rule's subject. Own OWED
+   line. **Deliberately NOT mutated** — no observable subject today (:12343's
+   shape), and a row that could only ever be ALIVE does not belong in a table
+   whose header says none is expected alive.
+3. **No entitlement cache bust, stated in the file rather than left looking like
+   an oversight.** `getEntitlements` caches per user for 60 s
+   (`entitlements/service.ts:17`), which is the bound R6.5 asks for, met by the
+   TTL alone. `startGymTrial` sets the precedent in the same direction: it busts
+   the ACTOR only, so a gym's existing members already ride that window when a
+   trial STARTS.
+4. **No `lockOrgRow`.** :19656 C/H-3 binds whatever CREATES a gym subscription;
+   this only ENDS one, and every ordering lands in the same place —
+   `startGymTrial` refuses a second trial on `trial_ends_at IS NOT NULL`
+   REGARDLESS of status, and `subs_one_live_uq` refuses a second live row anyway.
+   `sweep.ts` sets the precedent for a set-based sweep not taking a per-gym lock.
+
+### 3. KD RULING — A LAPSED-TRIAL GYM'S COUNTRY STAYS FROZEN
+
+The card recommended AGAINST this and he overruled it. Put to him in one line
+each: the currency lock asks `status <> 'trialing'` (`orgs/repo.ts:641`), so the
+day trials start ending, a gym that trialled and **never paid a penny** can no
+longer correct its country — at the exact moment it is asked to subscribe.
+:19560's reasoning for locking every non-trial status covers a gym that PAID.
+**His ruling: *"No, keep it frozen."*** The code is therefore correct as it stands
+and **must not be widened without a fresh ruling**.
+
+**What that leaves owed is the escape hatch, not the rule** — such a gym has to
+reach a human, and `PATCH /v1/orgs/:gymId`'s 409 already says *"Contact us"* to
+nowhere. Own line; it is a second caller for the contact channel owed beside the
+admin panel. **Bounded today and growing**: no gym has lapsed yet, and the first
+will thirty days after the first trial started.
+
+**:19560's own carve-out is now live for the first time.** That entry recorded the
+lock as unreachable because nothing had ever left `trialing`; round 2's Low-6 then
+predicted its first firing might belong to checkout rather than to the sweep.
+**The prediction was wrong and the sweep got there first** — recorded because
+:21353's earned rule says a consequence written at plan time is a prediction until
+something measures it.
+
+### 4. THE CARD WAS SPLIT, AND THE SPLIT WAS HIS
+
+:22215 §5's step 1 names two things: the job, and the console going read-only
+except the pay path. The second touches every console screen and would put the
+diff far past Part I §1's ceiling. He was shown the split in one line and chose
+the job alone — **so the read-only console is a SPLIT, not a deferral discovered
+later**, and it has its own line naming its first piece (`/v1/orgs/mine` serves
+only LIVE statuses, so an ended plan and a gym that never started one are
+identical to a console — :21580's own recorded gap).
+
+### 5. THE AUDIT (rule 4/4a) — SIX MUTANTS, ALL RED, AND ONE ROW DECLARES ITS OWN BLAST RADIUS
+
+New `trialSweep` target and `TRIAL_SWEEP_SUITE` in `mutate-orgs.mjs`.
+**O139** the trial filter · **O140 IS THIS CARD'S OWN HOLE PUT BACK** (`expired` →
+`past_due`, so the trial "ends" into a status still in the granting set and every
+member keeps 5 scans a day for ever, with a run reporting a number and an audit
+row saying it happened) · **O141** the comparison inverted, cutting a gym off on
+day one and running a finished one for ever · **O142** the scope predicate ·
+**O143** the audit row never written · **O144** the UPDATE back onto the pool,
+which is :13075's C/H-2 on `sweep.ts` aimed at its twin before it can ship a
+second time.
+
+**O142 DECLARES A HAZARD THE HARNESS CANNOT SEE, and it is written into the row
+rather than discovered.** While it is live the suite writes `subscriptions` rows
+it does not own — and :19803's mass-write detector fingerprints **`gyms`**, so it
+is structurally blind to this. What keeps it off Kd's database is the BLANKET
+remote refusal, which is precisely why :19803 abandoned per-target enumeration.
+
+### 6. PROVE — every figure naming what it ran against
+
+**LOCAL** (`localhost:5433`, `test:local`): `orgs.trialSweep` **9/9 exit 0** in
+15.7 s · full api suite **631/634**, the three failures being `catalog.seed`'s
+documented pre-existing global-count flake (CLAUDE.md Appendix) and **not quoted
+as green** · `tsc --noEmit` exit 0 on api **and PROVEN REAL by planting a type
+error in the new file** (TS2322, then removed and re-run clean) · `eslint
+--max-warnings=0` exit 0 on all five changed files · `node --check` on the
+harness · `check-harnesses` 24 scripts · `check-decisions-index` 222 pointers
+resolve · **SWEEP a stated SUBSET of 144: O139–O144, 6 RED, 0 ALIVE, 0 never
+ran**, controls GREEN first, restores sha256-verified, 81 gym rows fingerprinted
+and unmoved.
+
+**THE THING NO TEST COVERS, VERIFIED BY HAND AND SAID TO BE A ONE-OFF:** three
+jobs now share the `rollups` queue and are told apart by NAME ALONE, and nothing
+in the suite imports `worker.ts`. The worker was booted against real local Redis
+and Postgres, `orgs.trial_expiry` enqueued onto the real queue, and the routing
+watched end to end — `job.started orgs.trial_expiry` → `orgs.trial_sweep.finished`
+→ `job.finished`, 70 ms. **That is a measurement, not a guard**; own OWED line.
+The dangerous direction is named in the guard's own comment: a name added to the
+list without its branch falls through and runs the PURGE under the trial's name.
+
+### 7. THE FINDING THIS CARD PRODUCED AGAINST ITSELF — and it is NOT fixed here
+
+**A gym whose trial has ended is offered the trial again, and the button cannot
+succeed.** `listOrgsForUser`'s LATERAL serves only the LIVE statuses
+(`orgs/repo.ts:398`), so `expired` reads back as `subscription: null` — **byte for
+byte what a gym that never trialled looks like** — and `TrialCard.jsx:106`
+branches on exactly that, printing *"Start your 30-day free trial · No card
+needed."* over a live button whose tap is a 409 `trial_already_used`.
+**:5807 rule 1a on both arms: a promise that is not true, and a person blocked
+from finishing what the screen offers.**
+
+**IT WAS UNREACHABLE UNTIL THIS CARD, WHICH IS THE DANGER AND NOT THE COMFORT**
+(:19656 C/H-3's own words). Nothing had ever left `trialing`, so no screen had
+ever drawn this state; the sweep is what draws it. **First reachable about
+2026-09-26** — thirty days after the first real trial started.
+
+**IT IS REPORTED, NOT FIXED, AND THAT IS THE PROCESS RATHER THAN A SHRUG.** :5348
+forbids code changes without listed findings and Kd's approval, the fix is a
+SCREEN and its copy is his, and the fix is precisely the read-only console card's
+first piece (widen `/v1/orgs/mine` past the live statuses — :21580's recorded
+gap). Own 🔴 `OWED.md` line, put to him with the card rather than after it.
+
+### 8. GROUNDING — ONE DEPARTURE, DECLARED
+
+`DECISIONS-INDEX.md` §1 and §2 were read IN FULL, plus :22215 in the DECISIONS.md
+original and every file the task touches. **§§3–7 of the index were GREPPED, not
+read, and that is a departure from CLAUDE.md's "read the ENTIRE index".** The
+reason is the amendment's own: the index is now **492 KB / ~123k tokens**,
+which is the size DECISIONS.md had reached (~135k) when reading it in full was
+ruled impossible on 2026-07-30. **The instrument has grown into the problem it was
+built to solve, and it is Kd's to rule on, not a chat's** — own line raised to him
+in the report.
+
+**NOTHING TICKS BEYOND THE SWEEP'S OWN LINE. SMOKE UNRUN, T3 UNRUN.**

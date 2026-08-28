@@ -68,6 +68,14 @@ const TARGETS = {
   // every one of them needs the injected clock the routes suite never touches.
   // Rows aimed here carry `suite: SWEEP_SUITE`.
   sweep: { file: resolve(ROOT, 'apps/api/src/modules/orgs/sweep.ts') },
+  // TRIALS ACTUALLY END (Kd ruling :22215 step 1). Its own file and its own
+  // suite for the same reason the clock has one: every guarantee here is about
+  // TIME and needs the injected clock the routes suite never touches. It also
+  // sits in rule 4a's MONEY column without argument — until this file existed a
+  // gym's members kept gym-tier entitlements free for ever, and what these rows
+  // break is the thing that stops that. Rows aimed here carry
+  // `suite: TRIAL_SWEEP_SUITE`.
+  trialSweep: { file: resolve(ROOT, 'apps/api/src/modules/orgs/trialSweep.ts') },
   // THE PRICE BOOK. It is not in `modules/orgs`, but it is where a gym's price
   // AND its member limit actually come from — `seatCapFor` reads
   // `plans.seat_cap` through the gym's live subscription, so the same number
@@ -83,6 +91,12 @@ const TARGETS = {
  *  nothing to break, and reports a RED that has nothing to do with the mutation
  *  — the "red for the wrong reason" shape recorded at :4718 F2. */
 const SWEEP_SUITE = 'test/orgs.sweep.test.ts';
+
+/** The trial expiry's guarantees live in their own suite, for the same reason
+ *  and with the same failure mode: a `trialSweep` row that forgot this would run
+ *  the routes suite, which never moves a clock, and report a RED that has
+ *  nothing to do with the mutation (:4718 F2). */
+const TRIAL_SWEEP_SUITE = 'test/orgs.trialSweep.test.ts';
 
 /** The price book's guarantees live in the migration suite, for the same reason
  *  the clock's live in the sweep suite: that is the only file that seeds and
@@ -1656,6 +1670,79 @@ const MUTANTS = [
     expect: 'on no plan, and how full it is anyway',
     from: '               AND sm.complimentary = false\n',
     to: '\n',
+  },
+
+  // ── TRIALS ACTUALLY END (Kd ruling :22215 step 1) ──────────────────────────
+  //
+  // Every row below is in rule 4a's MONEY column, and O140 is the one that
+  // re-creates the exact hole this card was built to close.
+  //
+  // Deliberately NOT mutated, per the same rule: the `owner_type = 'gym'`
+  // filter. Nothing in the product inserts a `user` subscription, so the
+  // mutation has NO OBSERVABLE SUBJECT and would come back ALIVE for a true
+  // reason — :12343's shape, and adding it would put a permanently-alive row in
+  // a table whose header says no mutant is expected alive. It earns a mutant on
+  // the day consumer trials ship, which is what its `OWED.md` line is for.
+  {
+    id: 'O139',
+    target: 'trialSweep',
+    suite: TRIAL_SWEEP_SUITE,
+    why: "MONEY: the job stops asking whether the subscription is a TRIAL, so it cancels gyms that are PAYING — every gym that converts from a trial keeps its old `trial_ends_at`, so the first run after conversion ends the plan they are being charged for. Dunning is P3.8's and this job must not be able to reach it",
+    expect: 'a gym that pays is never touched',
+    from: "        AND status = 'trialing'\n",
+    to: '\n',
+  },
+  {
+    id: 'O140',
+    target: 'trialSweep',
+    suite: TRIAL_SWEEP_SUITE,
+    why: "MONEY, AND IT IS THIS CARD'S OWN HOLE PUT BACK: the trial 'ends' into a status that is still in the granting set, so `getCandidates` keeps handing every member of that gym its 5 meal scans a day for ever — the run reports a number, the audit row says it happened, and nothing actually changed for anybody",
+    expect: 'members lose the gym grant',
+    from: "      SET status = 'expired'",
+    to: "      SET status = 'past_due'",
+  },
+  {
+    id: 'O141',
+    target: 'trialSweep',
+    suite: TRIAL_SWEEP_SUITE,
+    why: 'ON SCREEN AND FALSE: the comparison inverts, so a gym is cut off on day one of its thirty and a gym that is genuinely finished runs for ever — the promise Kd sells the trial on, broken in both directions at once',
+    expect: 'still inside its thirty days',
+    from: '        AND trial_ends_at <= ${now}',
+    to: '        AND trial_ends_at > ${now}',
+  },
+  {
+    id: 'O142',
+    target: 'trialSweep',
+    suite: TRIAL_SWEEP_SUITE,
+    // **THIS MUTANT MAKES THE SUITE WRITE ROWS IT DOES NOT OWN, and the
+    // harness's mass-write detector CANNOT SEE IT.** That guard fingerprints
+    // `gyms` (:19803 C/H-1); this statement writes `subscriptions`. What stops
+    // it reaching Kd's database is the blanket remote refusal above, which is
+    // why that refusal is a blanket one and not a per-target enumeration. Run
+    // locally it ends every live trial in the local database; the damage is one
+    // re-seed, and it is declared here rather than discovered.
+    why: "OWNERSHIP/MONEY: the scope predicate stops being a predicate, so any bounded run reaches EVERY gym in the table. In production the nightly job is unbounded anyway — what this breaks is the smoke instrument, where `tools/trial-sweep.ts --now` would end every gym's trial at once instead of the one being demonstrated",
+    expect: 'ends only the gyms it was given',
+    from: '        AND (${scope}::uuid[] IS NULL OR owner_id = ANY(${scope}::uuid[]))\n',
+    to: '\n',
+  },
+  {
+    id: 'O143',
+    target: 'trialSweep',
+    suite: TRIAL_SWEEP_SUITE,
+    why: "SAVES: the audit row is never written, so the ONLY record of why a gym's console changed overnight does not exist. Part 3 §3.3 requires every mutating call to write one, and this is the mutation an owner is most likely to ring up about",
+    expect: 'records who did it',
+    from: '    for (const row of rows) {',
+    to: '    for (const row of rows.slice(0, 0)) {',
+  },
+  {
+    id: 'O144',
+    target: 'trialSweep',
+    suite: TRIAL_SWEEP_SUITE,
+    why: "SAVES: the UPDATE moves back onto the pool and out of the transaction, so a failure between the expiry and its audit leaves the rows already expired with NO audit row ever written — the retry matches nothing (`status = 'trialing'` is gone) and the trail is unrecoverable. This is :13075's C/H-2 on `sweep.ts`, aimed at its twin before it can be shipped a second time",
+    expect: 'rolls the expiry back',
+    from: '    const rows = await tx<Row[]>`',
+    to: '    const rows = await deps.sql<Row[]>`',
   },
 ];
 

@@ -24,6 +24,7 @@ import pino from "pino";
 import postgres from "postgres";
 import { loadConfig } from "./config.js";
 import { sweepJoinApplications } from "./modules/orgs/sweep.js";
+import { expireLapsedGymTrials } from "./modules/orgs/trialSweep.js";
 import { purgeDueUsers } from "./modules/privacy/purge.js";
 
 const config = loadConfig(process.env);
@@ -52,6 +53,7 @@ if (redisUrl === undefined) {
 export const ROLLUPS_QUEUE = "rollups";
 export const DPDP_PURGE_JOB = "dpdp.purge";
 export const ORGS_SWEEP_JOB = "orgs.join_sweep";
+export const ORGS_TRIAL_SWEEP_JOB = "orgs.trial_expiry";
 
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const sql = postgres(config.DATABASE_URL, { prepare: false, max: 2 });
@@ -117,6 +119,38 @@ try {
   process.exit(1);
 }
 
+// Trials actually end (Kd ruling :22215 step 1). 04:00 UTC — a third distinct
+// minute for the third schedule, for the reason the block above already gives:
+// one worker process runs all three, and stacking them makes a slow job look
+// like a late one in the logs. The hour is operational, not a correctness
+// choice; `trial_ends_at` is an absolute instant, so — unlike streaks — this
+// needs no org-local day maths (trap #8).
+//
+// A DAILY CADENCE AGAINST A 30-DAY CLOCK, said out loud: a gym therefore keeps
+// its trial for up to 24 hours past its end date. On a month that is under 4%,
+// it errs in the generous direction (nobody is cut off EARLY), and running it
+// hourly would buy precision nobody asked for on a thirty-day promise.
+try {
+  await queue.upsertJobScheduler(
+    ORGS_TRIAL_SWEEP_JOB,
+    { pattern: "0 4 * * *" },
+    {
+      name: ORGS_TRIAL_SWEEP_JOB,
+      opts: {
+        // R3.5: the statement is set-based and its WHERE excludes the state it
+        // produces, so a retry is a no-op.
+        attempts: 3,
+        backoff: { type: "exponential", delay: 60_000 },
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 200 },
+      },
+    },
+  );
+} catch (err) {
+  log.fatal({ err }, "failed to register the trial-expiry schedule");
+  process.exit(1);
+}
+
 const worker = new Worker(
   ROLLUPS_QUEUE,
   async (job) => {
@@ -127,7 +161,16 @@ const worker = new Worker(
     // puts it on the failed set instead, where the DLQ tail and the
     // `worker.on("failed")` handler can see it — silent job death is
     // exactly what R8.3 forbids.
-    if (job.name !== DPDP_PURGE_JOB && job.name !== ORGS_SWEEP_JOB) {
+    //
+    // **THIS LIST AND THE BRANCHES BELOW MUST MOVE TOGETHER.** Adding a job name
+    // here without its branch is the dangerous direction: it would fall through
+    // to the purge handler and run the WRONG job under the right name. Adding
+    // the branch without the name is the safe direction — this throws.
+    if (
+      job.name !== DPDP_PURGE_JOB &&
+      job.name !== ORGS_SWEEP_JOB &&
+      job.name !== ORGS_TRIAL_SWEEP_JOB
+    ) {
       throw new Error(`unknown job on ${ROLLUPS_QUEUE}: ${job.name}`);
     }
     // R8.3: every background job logs start/finish/duration.
@@ -144,6 +187,21 @@ const worker = new Worker(
       const swept = await sweepJoinApplications({ sql, log });
       log.info(
         { ...swept, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
+        "job finished",
+      );
+      return;
+    }
+
+    // Returns here for the same reason the sweep above does: there is no
+    // partial-success condition. One statement and its audit rows are one
+    // transaction, so the run either applied or raised — and a raise is already
+    // an unhandled rejection that lands the job on the failed set. There is no
+    // "succeeded but not really" state for the purge's certification check
+    // below to have an opinion about.
+    if (job.name === ORGS_TRIAL_SWEEP_JOB) {
+      const ended = await expireLapsedGymTrials({ sql, log });
+      log.info(
+        { ...ended, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
         "job finished",
       );
       return;
