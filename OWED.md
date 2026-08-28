@@ -5005,6 +5005,27 @@ file and is stated so nobody reads these as lower priority than they are.
       **TICKS WHEN** all three pieces are live with the sweep, with a fake-clock
       test walking creation → trial → expiry → member entitlements falling back to
       free, and the browser smoke Kd runs on it.
+- [ ] 🟡 **THE PRICE LIST CAN ANSWER 200 WITH AN EMPTY LIST, AND NOTHING REFUSES
+      — raised by T3 round 1 on the forced prompt's server half, 2026-08-28
+      (DECISIONS :22921), and DEFERRED TO THE MODAL CARD RATHER THAN GUESSED AT.**
+      `GET /v1/orgs/:gymId/plans` reads `gyms.currency_display`, a STORED column,
+      while the guard that proves every currency has a book walks
+      `currencyForCountry` — the MAP. A gym still carrying a currency the book has
+      since stopped listing therefore gets `{plans: []}` and a 200.
+      **Bounded and currently EMPTY on the shared branch, and it cannot grow**:
+      `updateOrg` recomputes through the same map, so only rows predating a map
+      change can disagree, and there are none there (one on the local database,
+      created by this card's own smoke). That is why it is Low and not a hole.
+      **WHY IT IS NOT FIXED HERE: the choice is the modal's, not this card's.**
+      The options are a typed refusal in the service the way
+      `no_plan_for_currency` already answers one function over, or a screen that
+      says something true about an empty list. **An unskippable prompt is what
+      turns a 200-with-nothing into a person staring at a wall (:22215 §4)**, so
+      the card that builds the prompt is the card that must decide — R1.1 forbids
+      this one pulling it forward, and :19656's Low-3 is the precedent for not
+      inventing a channel.
+      **TICKS WHEN** the subscribe prompt ships with a decided answer for a gym
+      whose currency has no book.
 - [ ] 🟡 **THE SEAT CAP IS CHECKED WHEN SOMEBODY JOINS AND IS NEVER RE-COUNTED, so
       a gym can carry more members than its plan admits — found 2026-08-28 while
       answering Kd's question about unsubscribed gyms; grep-verified untracked

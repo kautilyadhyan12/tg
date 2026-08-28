@@ -1173,6 +1173,21 @@ export interface OrgPlanRow {
   seatCap: number | null;
 }
 
+/** A BOUND ON A LIST READ, ADDED BY T3 ROUND 1's Low-7 — :10596's L-1 is the
+ *  precedent and the trigger ("the codes list had no bound, the only list in
+ *  the module without one").
+ *
+ *  **The mitigation that precedent did not have is real and is why this is a
+ *  ceiling rather than a cursor:** `plans` is OPERATOR-SEEDED. No user path
+ *  writes it, so it cannot grow behind a request the way a roster or a code
+ *  list can. What this stops is a re-priced book quietly serving fifty rows to
+ *  a prompt designed for five.
+ *
+ *  Ten today (five USD, five INR) across BOTH currencies, so 50 is a ceiling
+ *  nothing approaches by accident and a number a re-priced book would have to
+ *  set out to exceed. No § governs it; it is chosen and recorded here. */
+export const ORG_PLANS_LIMIT = 50;
+
 /** THE GYM'S PRICE LIST — every plan it could subscribe to today, in its own
  *  currency. Kd's ruling of 2026-08-28 (:22697): the owner of a second gym,
  *  whose one free trial is spent, is shown *"the real plans at their real
@@ -1224,7 +1239,8 @@ export async function listOrgPlansForCurrency(
       AND currency = ${currency}
       AND active = true -- a retired band must never be quoted to a buyer
       AND interval = 'month'
-    ORDER BY seat_cap ASC NULLS LAST, price_minor ASC`;
+    ORDER BY seat_cap ASC NULLS LAST, price_minor ASC -- the ladder Kd priced
+    LIMIT ${ORG_PLANS_LIMIT}`;
   return rows.map((r) => ({
     code: r.code,
     priceMinor: r.price_minor,

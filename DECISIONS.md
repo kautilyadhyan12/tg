@@ -23124,3 +23124,132 @@ about the shared branch and Neon still has none.
 **NOTHING TICKS BUT THE CURRENCY LINE; T3 UNRUN.** The modal, the button's
 removal and the re-run of the expiry smoke are the next card — and that smoke must
 run AFTER it (:22697 §5), which is why it was not run today.
+
+## 2026-08-28 — THE FORCED PROMPT'S SERVER HALF, T3 ROUND 1: ZERO Critical/High, THE PACKET SHIPS — eight Low, one of which would have reddened CI, and two more the FIX ROUND broke in its own instruments
+
+**Read before scoping any exact-list assertion in a suite that shares a
+database, before hoisting an expression a mutant anchors on, before adding a
+`LIMIT` or a trailing clause to a mutated SQL line, and before granting a field
+on `/v1/orgs/mine` to "any staff".** Reviews `9d5a327` (:22921).
+
+### 1. THE VERDICT
+
+**Zero Critical/High. Eight Low, all fixed in one round.** Kd approved the list
+before a byte changed (*"fix all"*). **Escape hatch NOT armed** — round 1, no
+Critical anywhere, and the reviewer said so unprompted.
+
+**The three claims the card made were each attacked and each held**: a Canadian
+gym really can buy something now; the price string is built without the rounding
+errors money code gets wrong; and the console can finally tell "never trialled"
+from "trial over". The reviewer verified `ownerTrialUsed` and `startGymTrial`'s
+`used` query agree unconditionally (same three conditions, both anchored on
+`gyms.owner_user_id`, which is NOT NULL — measured), that `formatPriceMinor`
+throws nothing reachable, and that the `en-US` pin is load-bearing (`de-DE`
+produces `1.234 €.50`).
+
+### 2. THE ONE THAT MATTERED, AND IT IS A MISTAKE OF MINE
+
+**Low-1: the exact USD ladder raced a sibling suite, and it would have turned CI
+red.** `orgs.routes.test.ts` inserts `zz_orgs_cap1` for the whole of its run —
+audience `org`, **USD**, monthly, active, one seat, price zero — and four suites
+share one database. My comment said *"the USD book is touched by nothing"*.
+**I had checked the OTHER fixture plan in that file, found CAD, and generalised
+from one to both.** Scoped runs passed 10/10 all day; the pair in one invocation
+gave `[1,300,500,1000,1500,2100]` and `['$0','$35',…]`.
+
+**IT IS :18830's Low-1 RECURRING THREE DAYS AFTER IT WAS FIXED THERE**, in a file
+written by someone who had read that entry the same session. Reproduced before
+fixing, scoped every exact assertion to the seeded `org_` prefix, and
+**re-measured in ONE invocation TWICE — 146/146, 146/146** — because :18830 also
+says a race that passes once is not evidence.
+
+### 3. THE FIX ROUND BROKE TWO OF ITS OWN INSTRUMENTS, AND BOTH ABORTED RATHER THAN LYING
+
+**This is the part worth keeping, because in both cases the harness refused to
+run instead of quietly reporting a pass.**
+
+**O105 lost its anchor to my own fix.** Narrowing `ownerTrialUsed` (Low-8) meant
+two fields needed the same privileges array, so the expression was hoisted into a
+`const` — and O105 anchored on the object-property line that no longer contained
+the call. The whole-table pre-check ABORTED the sweep. Re-anchored at the **SAME
+call site**, never at whichever line looked closest (:15770). **:21580 is what
+this prevents: three console mutants sat with no anchor for two commits because a
+subset run never exercises the whole-table check.**
+
+**O147 broke TWICE in one session.** Low-7's `LIMIT` pushed its anchor off the end
+of the statement (matched nothing); dropping the closing backtick then made it
+match `startGymTrial`'s deeper-indented `ORDER BY` as a **SUBSTRING** (matched
+twice). **That is the identical trap O148 hit in the same file the same day** —
+six spaces against four, one contained in the other. Both remedied :21157's way,
+by making the line unique IN THE SOURCE with a trailing comment, rather than with
+a two-line anchor (:17676's 99-strong CRLF hazard).
+
+**Standing, and it is narrow enough to act on: adding a `LIMIT`, a trailing
+clause or a hoisted `const` moves anchors that nothing in the diff mentions. Run
+the WHOLE-TABLE sweep after a fix round, never the subset.**
+
+### 4. THE OTHER SIX
+
+**Low-2** — *"NO SUPPORTED COUNTRY CAN REACH THIS ANY MORE"* on the `no_plan`
+refusal was false: the map is consulted at CREATION, so a gym made in Canada
+before the ruling keeps CAD and still lands there. Nothing real is stranded (zero
+on the shared branch); the sentence was simply wrong, which is :22782's own
+standing rule catching this card the way that card caught the last one.
+
+**Low-3** — the no-backfill measurement **went stale inside its own commit and
+counted the wrong column**: it counted `country` when the hazard is
+`currency_display`, and this card's own browser smoke created the very gym it
+said did not exist. Re-measured with the disagreement query the comment itself
+names — **shared 0, local 1**. The conclusion held; the evidence for it did not.
+
+**Low-4** — the empty-list guard does not cover the route's input: the walk goes
+through the MAP, the route reads the STORED column. Claim corrected; **whether
+the service should REFUSE is left to the modal card with its own `OWED.md` line**,
+because an unskippable prompt is what turns a 200-with-nothing into a wall.
+
+**Low-5** — `/v1/orgs/:gymId/plans` missing from *"every route requires
+authentication"*. :12227's trigger verbatim, and the second time that list has
+trailed the module.
+
+**Low-6** — the formatter's fractional branch had **no observer**: every one of
+Kd's ten prices is whole, so `${head}.${frac}` was never exercised and a mutant
+forcing `isWhole` true stayed GREEN. Given a subject (a `$34.99` fixture, USD and
+`trial_days = 0` so it can neither pollute the ladders nor become a trial band)
+and a mutant (**O153**). **The reviewer asked :21580's C88 question first and
+answered it: the guarantee IS observable, so the test was missing rather than the
+guard being inert** — and it named `interval = 'month'` as the opposite case,
+unobservable by construction, telling us NOT to write a mutant for it.
+
+**Low-7** — `listOrgPlansForCurrency` had no bound (:10596's L-1). Capped at 50,
+with the mitigation that precedent lacked stated in the source: `plans` is
+operator-seeded and cannot grow behind a request.
+
+**Low-8** — `ownerTrialUsed` was granted to any staff. **It looked consistent
+with `subscription` and `seatsUsed` and that was the wrong comparison: those are
+facts about THIS GYM, this is a fact about a PERSON** and follows the owner
+across gyms the reader has nothing to do with. Narrowed to `billing.manage`,
+matching the gate on `/plans` beside it and the ruling at :22921 §1. **Its test's
+subject is a TRAINER, not a member** — the only caller that can tell the old gate
+from the new one, since a trainer still receives everything else on the row.
+
+### 5. RULE 4 AND RULE 3
+
+**No green liars.** Two guarantees had no observer rather than a lying one:
+Low-6, now fixed, and `interval = 'month'`, which is unobservable by construction
+(all ten org rows are monthly) and is deliberately left unmutated. **Rule 3 is
+N/A — zero Critical/High.**
+
+### 6. PROVE — after the fixes, every figure naming what it ran against
+
+**ALL LOCAL** (`localhost:5433`): `orgs.plans` **12/12** (+2) · **`orgs.plans` +
+`orgs.routes` in ONE invocation, TWICE: 146/146 and 146/146** — the Low-1 fix's
+own evidence · `orgs.trialSweep` + `db.migration` 20/20 · shared 51/51 · web
+**1294/1294 across 48 files** · `tsc --noEmit` exit 0 on api and shared · `eslint
+--max-warnings=0` clean on six api files and one shared file · `node --check` on
+the harness · `check-harnesses` 25 · **SWEEP a stated SUBSET of 153: O105 and
+O145–O153, 10 RED, 0 ALIVE, 0 never ran**, nine controls GREEN first, restores
+sha256-verified, **250 gym + subscription rows fingerprinted with no unattributed
+changes**.
+
+**THE PACKET SHIPS. T3 is closed at round 1.** Nothing new ticks: the modal, the
+Overview button's removal and the re-run of the expiry smoke remain the next card.

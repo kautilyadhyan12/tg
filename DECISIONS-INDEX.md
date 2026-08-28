@@ -896,6 +896,60 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   that session; restarted, verified through the live api first, round 2 PASSED.
   **NOTHING TICKS BUT THE CURRENCY LINE; T3 UNRUN.**
 
+- **:23128** — 2026-08-28 — **THE FORCED PROMPT'S SERVER HALF, T3 ROUND 1: ZERO
+  Critical/High, THE PACKET SHIPS** — eight Low, one of which would have reddened
+  CI, and two more the FIX ROUND broke in its own instruments. Reviews `9d5a327`
+  (:22921). Escape hatch NOT armed (round 1, no Critical anywhere; the reviewer
+  said so unprompted). Kd approved the list first (*"fix all"*); all eight fixed
+  in one round, logged in `BACKLOG.md`.
+  **Read before scoping any exact-list assertion in a suite that shares a
+  database, before hoisting an expression a mutant anchors on, before adding a
+  `LIMIT` or a trailing clause to a mutated SQL line, and before granting a field
+  on `/v1/orgs/mine` to "any staff".**
+  **LOW-1 IS MINE AND IT WOULD HAVE TURNED CI RED**: the exact USD ladder raced
+  `orgs.routes.test.ts`, which inserts a **USD** fixture plan for its whole run.
+  My comment said *"the USD book is touched by nothing"* — **I checked the OTHER
+  fixture's currency, found CAD, and generalised from one to both.** :18830's
+  Low-1 recurring three days after it was fixed there. Reproduced, scoped to the
+  seeded `org_` prefix, **re-measured in ONE invocation TWICE (146/146, 146/146)**
+  because that entry also says a race passing once is not evidence.
+  **THE FIX ROUND BROKE TWO OF ITS OWN INSTRUMENTS AND BOTH ABORTED RATHER THAN
+  LYING.** Hoisting an expression for Low-8 moved **O105**'s anchor (re-anchored
+  at the SAME call site, :15770 — this is the rot :21580 recorded); **O147** then
+  broke twice, once when a new `LIMIT` pushed its anchor off the end and once when
+  the shortened anchor matched `startGymTrial`'s deeper-indented copy as a
+  SUBSTRING — **the identical trap O148 hit in the same file the same day.** Both
+  fixed :21157's way, by making the line unique IN THE SOURCE. **Standing: adding
+  a `LIMIT`, a trailing clause or a hoisted `const` moves anchors nothing in the
+  diff mentions — run the WHOLE-TABLE sweep after a fix round, never the subset.**
+  **THE OTHER SIX:** a false *"no supported country can reach this"* sentence
+  (the map is read at CREATION, so a pre-ruling Canadian gym still lands there) ·
+  a no-backfill measurement that **went stale inside its own commit and counted
+  the wrong column** (`country`, not `currency_display`; this card's own smoke
+  created the gym it said did not exist — re-measured shared 0, local 1) · an
+  empty-list guard that walks the MAP while the route reads the STORED column
+  (claim corrected; the REFUSAL decision deferred to the modal card with its own
+  `OWED.md` line) · the new route missing from *"every route requires
+  authentication"* (:12227's trigger verbatim) · the formatter's fractional branch
+  having **no observer** — every one of Kd's ten prices is whole, so a mutant
+  forcing `isWhole` true stayed GREEN; given a `$34.99` fixture and **O153**, and
+  the reviewer asked :21580's C88 question FIRST and answered it (observable ⇒ the
+  test was missing, unlike C88) · and no `LIMIT` on the plans read (:10596's L-1),
+  capped at 50 with the mitigation that precedent lacked.
+  **LOW-8 IS THE ONE TO REMEMBER: `ownerTrialUsed` looked consistent beside
+  `subscription` and `seatsUsed`, and that was the WRONG COMPARISON — those are
+  facts about THIS GYM, this is a fact about a PERSON** and follows the owner
+  across gyms the reader has nothing to do with. Narrowed to `billing.manage`
+  (**O152**), with a TRAINER as its test's subject because a trainer is the only
+  caller that can tell the old gate from the new one.
+  **RULE 4: no green liars.** `interval = 'month'` is unobservable by
+  construction and is deliberately left unmutated. **Rule 3 N/A.**
+  **PROVE after the fixes, all LOCAL: `orgs.plans` 12/12 · the racing PAIR
+  146/146 TWICE · trialSweep+migration 20/20 · shared 51/51 · web 1294/1294 · tsc
+  exit 0 · eslint clean on seven files · SWEEP a stated SUBSET of 153: O105 +
+  O145–O153, 10 RED, 0 ALIVE**, nine controls GREEN first, 250 rows fingerprinted
+  with no unattributed changes.
+
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 
 **NOT read every session. Read an entry here when your task touches what it is

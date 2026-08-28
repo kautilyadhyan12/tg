@@ -109,13 +109,38 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
     await sql`DELETE FROM users WHERE email LIKE 'orgplans-t-%@example.com'`;
   };
 
+  /** A PRICE WITH MINOR UNITS, WHICH THE REAL BOOK DOES NOT HAVE — added by T3
+   *  round 1's Low-6.
+   *
+   *  Every one of Kd's ten org prices is a whole number of dollars or rupees, so
+   *  `formatPriceMinor`'s fractional half (`${head}.${frac}`) had NO OBSERVER: a
+   *  mutant forcing `isWhole` true stayed green, and O151 pins only the whole
+   *  branch. The code was correct — verified by hand — but "correct and
+   *  unwatched" is what rule 4 exists to find.
+   *
+   *  **USD and `trial_days = 0`, both deliberate.** USD because the seeded-book
+   *  filter above already excludes any `zz_` code from the exact ladders, so this
+   *  row cannot pollute them; `trial_days = 0` because `startGymTrial` picks the
+   *  LOWEST-capped plan carrying a trial, and a 42-seat row with a trial would
+   *  quietly become the band every US gym trials on — breaking the 300-seat
+   *  assertion in a sibling suite. `CAP1_PLAN` next door is 0 for the same
+   *  reason. */
+  const FRACTIONAL_PLAN = "zz_plans_frac";
+
   beforeAll(async () => {
     await cleanup();
+    await sql`
+      INSERT INTO plans (code, audience, name_key, price_minor, currency, interval,
+                         seat_cap, trial_days, rank, entitlements, member_entitlements)
+      VALUES (${FRACTIONAL_PLAN}, 'org', ${"plan." + FRACTIONAL_PLAN}, 3499, 'USD', 'month',
+              42, 0, 10, '{}'::jsonb, '{}'::jsonb)
+      ON CONFLICT (code) DO UPDATE SET active = true, price_minor = 3499`;
     app = await buildApp(loadConfig(baseEnv));
   }, HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanup();
+    await sql`DELETE FROM plans WHERE code = ${FRACTIONAL_PLAN}`;
     await app?.close();
     await sql.end();
   }, HOOK_TIMEOUT_MS);
@@ -182,6 +207,30 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
     return (JSON.parse(res.body) as { plans: PlanOffer[] }).plans;
   };
 
+  /** THE SEEDED BOOK ONLY — and this exists because T3 round 1's Low-1 caught an
+   *  exact-list assertion racing a sibling suite, which is :18830's Low-1
+   *  recurring three days after it was fixed there.
+   *
+   *  `orgs.routes.test.ts` inserts `zz_orgs_cap1` for the whole of its run:
+   *  audience `org`, **USD**, monthly, active, one seat, price zero. It is a
+   *  perfectly legitimate row and the ROUTE IS RIGHT TO RETURN IT — four suites
+   *  share one database, so the exact ladder below was asserting over a table a
+   *  neighbour was writing to. Measured before the fix: scoped 10/10, but
+   *  `orgs.plans` and `orgs.routes` in ONE invocation gave
+   *  `[1,300,500,1000,1500,2100]` and `['$0','$35',…]`. CI runs the whole suite
+   *  in one invocation, so this reddened the gate.
+   *
+   *  **THE COMMENT THIS REPLACES SAID "the USD book is touched by nothing" — I
+   *  checked the OTHER fixture plan's currency, found CAD, and assumed both were.**
+   *  A fixture two hundred lines from the assertion it breaks is exactly what a
+   *  shared database costs.
+   *
+   *  `org_` is the seeded book's own prefix and no fixture uses it (they are all
+   *  `zz_`), so this scopes to the rows Kd actually priced. **Absence checks are
+   *  deliberately NOT scoped through this** — a retired band appearing is a
+   *  defect whoever put it there. */
+  const seededBook = (plans: PlanOffer[]) => plans.filter((p) => p.code.startsWith("org_"));
+
   const readMyOrg = async (gymId: string, cookies: Record<string, string>): Promise<MyOrg> => {
     const res = await get("/v1/orgs/mine", cookies);
     expect(res.statusCode).toBe(200);
@@ -212,18 +261,18 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       const org = await makeOrg(owner.cookies, "US");
       expect(org.org.currencyDisplay).toBe("USD");
 
-      const plans = await readPlans(org.org.id, owner.cookies);
+      const book = seededBook(await readPlans(org.org.id, owner.cookies));
 
-      expect(plans.map((p) => p.seatCap)).toEqual([300, 500, 1000, 1500, 2100]);
-      expect(plans.map((p) => p.priceLabel)).toEqual(["$35", "$50", "$69", "$99", "$129"]);
-      expect(plans.map((p) => p.code)).toEqual([
+      expect(book.map((p) => p.seatCap)).toEqual([300, 500, 1000, 1500, 2100]);
+      expect(book.map((p) => p.priceLabel)).toEqual(["$35", "$50", "$69", "$99", "$129"]);
+      expect(book.map((p) => p.code)).toEqual([
         "org_b1_us_m",
         "org_b2_us_m",
         "org_b3_us_m",
         "org_b4_us_m",
         "org_b5_us_m",
       ]);
-      for (const p of plans) {
+      for (const p of book) {
         expect(p.currency).toBe("USD");
         expect(p.interval).toBe("month");
       }
@@ -232,7 +281,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       // design rather than an oversight: one money field, already a sentence, so
       // there is nothing on a screen to divide by 100 (R10.4). A field added
       // later without reading that comment turns this red.
-      expect(Object.keys(plans[0] ?? {}).sort()).toEqual([
+      expect(Object.keys(book[0] ?? {}).sort()).toEqual([
         "code",
         "currency",
         "interval",
@@ -257,15 +306,16 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       expect(org.org.currencyDisplay).toBe("INR");
 
       const plans = await readPlans(org.org.id, owner.cookies);
-      expect(plans.length).toBeGreaterThan(0);
-      for (const p of plans) {
+      const book = seededBook(plans);
+      expect(book.length).toBeGreaterThan(0);
+      for (const p of book) {
         expect(p.currency).toBe("INR");
         expect(p.priceLabel.startsWith("₹")).toBe(true);
       }
       // The ratified INR band 1 is ₹1,500 (:18488's book, `seed.ts`). Named
       // rather than range-checked: a formatter that dropped the thousands
       // separator or the minor units would still be "greater than zero".
-      expect(plans.find((p) => p.code === "org_b1_in_m")?.priceLabel).toBe("₹1,500");
+      expect(book.find((p) => p.code === "org_b1_in_m")?.priceLabel).toBe("₹1,500");
 
       /** A RETIRED BAND IS NEVER QUOTED TO A BUYER — and this assertion exists
        *  because MUTANT O148 SURVIVED WITHOUT IT.
@@ -301,6 +351,40 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
         SELECT code, active FROM plans WHERE code = ANY(${retired})`;
       expect(rows).toHaveLength(retired.length);
       for (const r of rows) expect(r.active, `${r.code} must be a retired row`).toBe(false);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** A PRICE WITH PENNIES PRINTS ITS PENNIES — T3 round 1's Low-6, the branch
+   *  that had no observer.
+   *
+   *  `$34.99` is the whole subject: it proves the decimal point lands in the
+   *  right place AND that the minor digits survive, which a whole-number price
+   *  can never show. The obvious version of this formatter — a fixed
+   *  `maximumFractionDigits: 2` — returns `$1,234.5` for 123450, so the trailing
+   *  digit is a real defect this asserts against, not a hypothetical.
+   *
+   *  Read through the ROUTE rather than by calling the formatter, because the
+   *  formatter is module-private and what matters is the string a screen would
+   *  actually be handed. */
+  it(
+    "prints the minor units when a price has them",
+    async () => {
+      const owner = await makeUser("frac");
+      const org = await makeOrg(owner.cookies, "US");
+
+      const plans = await readPlans(org.org.id, owner.cookies);
+      const frac = plans.find((p) => p.code === FRACTIONAL_PLAN);
+      expect(frac?.priceLabel, "a price with pennies must show them").toBe("$34.99");
+      expect(frac?.seatCap).toBe(42);
+
+      // AND THE WHOLE-NUMBER BRANCH BESIDE IT, in the same read — so the two
+      // halves are compared against each other rather than each being asserted
+      // alone. `$35` and `$34.99` are one penny apart and format differently.
+      expect(
+        seededBook(plans).find((p) => p.code === "org_b1_us_m")?.priceLabel,
+        "and a whole price must NOT grow a .00",
+      ).toBe("$35");
     },
     TEST_TIMEOUT_MS,
   );
@@ -417,7 +501,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       expect(body.outcome).toBe("started");
       expect(body.subscription.seatCap).toBe(300);
 
-      expect((await readPlans(org.org.id, owner.cookies)).map((p) => p.priceLabel)).toEqual([
+      expect(seededBook(await readPlans(org.org.id, owner.cookies)).map((p) => p.priceLabel)).toEqual([
         "$35",
         "$50",
         "$69",
@@ -554,6 +638,46 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       const asOwner = await readMyOrg(org.org.id, owner.cookies);
       expect(asOwner.ownerTrialUsed, "the same gym, read by staff").toBe(true);
       expect(asOwner.subscription?.status).toBe("trialing");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /** A TRAINER IS TOLD NOTHING ABOUT THE OWNER'S TRIAL EITHER — T3 round 1's
+   *  Low-8, which narrowed this field from "any staff" to `billing.manage`.
+   *
+   *  **THE TRAINER IS THE POINT, and it is a sharper subject than the plain
+   *  member above.** A member is outside the console entirely; a trainer is
+   *  staff, and gets `subscription` and `seatsUsed` on this very response. So
+   *  this is the only assertion that can tell the OLD gate (`staffRole !== null`)
+   *  from the NEW one — under the old rule the trainer would read `true` here
+   *  while everything else about the row stayed identical.
+   *
+   *  The reason it is narrow: `ownerTrialUsed` is a fact about a PERSON and not
+   *  about this gym, so it follows the owner across gyms the reader has nothing
+   *  to do with. And :22921 §1 rules the prompt it feeds stops only somebody who
+   *  can pay, so anyone else being told is a fact with no consumer. */
+  it(
+    "a trainer is told nothing about the owner's trial, though the gym's plan is theirs to see",
+    async () => {
+      const owner = await makeUser("arm-trainer-owner");
+      const trainer = await makeUser("arm-trainer");
+      const org = await makeOrg(owner.cookies, "US");
+
+      expect((await post(`/v1/orgs/${org.org.id}/trial`, {}, owner.cookies)).statusCode).toBe(200);
+
+      await sql`
+        INSERT INTO gym_staff (gym_id, user_id, role)
+        VALUES (${org.org.id}, ${trainer.userId}, 'trainer')`;
+
+      const asTrainer = await readMyOrg(org.org.id, trainer.cookies);
+      expect(asTrainer.ownerTrialUsed, "not theirs to know").toBeNull();
+      // THE CONTROL, and it is what stops this passing on a trainer who simply
+      // cannot see the gym at all: they are staff, so the gym's own plan still
+      // reaches them on the same response.
+      expect(asTrainer.subscription?.status, "but the gym's plan still does").toBe("trialing");
+
+      const asOwner = await readMyOrg(org.org.id, owner.cookies);
+      expect(asOwner.ownerTrialUsed, "the same gym, read by whoever can pay").toBe(true);
     },
     TEST_TIMEOUT_MS,
   );

@@ -130,12 +130,23 @@ export const SUPPORTED_COUNTRIES = supportedCountrySchema.options;
  *  creation and recomputed by `updateOrg` ONLY when the country itself changes
  *  — so a gym that stays put keeps the currency it was created with, for ever,
  *  and `startGymTrial` matches plans on that stored column and not on this map.
- *  **No backfill ships with today's change because there was nothing to
- *  backfill: measured 2026-08-28 on BOTH databases, zero gyms in Canada, the UK
- *  or the euro area** (local: 63 IN + 19 with no country; shared branch: 105 and
- *  2 with no country, 2 US). **A future re-ruling of this map will not be so
- *  lucky, and it owes a backfill in its own card** — the giveaway is any gym
- *  whose `currency_display` disagrees with `currencyForCountry(country)`. */
+ *
+ *  **No backfill shipped with the 2026-08-28 change, because on the database
+ *  that matters there was nothing to backfill.** Measured by the query this
+ *  hazard is actually about — gyms whose `currency_display` disagrees with
+ *  `currencyForCountry(country)` — **shared branch: 0. Local: 1.**
+ *
+ *  **THE FIRST VERSION OF THIS PARAGRAPH COUNTED THE WRONG COLUMN AND WENT
+ *  STALE INSIDE ITS OWN COMMIT** (T3 round 1, Low-3). It counted `country`
+ *  rather than `currency_display`, and quoted a local figure that this card's
+ *  own browser smoke invalidated an hour later by creating a Canadian gym while
+ *  the api was still serving the old map. That gym is the local `1`. **The
+ *  conclusion did not move — the shared branch still has none — but a
+ *  measurement that its own session falsifies is worth recording as one.**
+ *
+ *  **A future re-ruling of this map will not be so lucky and owes a backfill in
+ *  its own card.** Run the disagreement query above first; do not infer it from
+ *  a count of countries. */
 export const COUNTRY_CURRENCY: Readonly<Record<SupportedCountry, string>> = {
   US: "USD",
   IN: "INR",
@@ -468,13 +479,28 @@ export type OrgPlanOffer = z.infer<typeof orgPlanOfferSchema>;
  *  precedent: a top-level array is the one JSON shape that cannot grow a field
  *  later without breaking every reader.
  *
- *  **AN EMPTY LIST IS A REAL ANSWER AND IT IS A BRICK WALL**, which is why it
- *  is guarded outside this file rather than papered over inside it. It means the
- *  gym's currency has no active monthly plan, and behind an unskippable prompt
- *  that is a gym stranded with nothing to buy — :22215 §4's exact shape, and
- *  what the CA/GB/euro-area currency ruling was made to prevent.
- *  `orgs.plans.test.ts` walks EVERY supported country and fails if one of them
- *  reaches an empty list, so this cannot arrive unnoticed. */
+ *  **AN EMPTY LIST IS A REAL ANSWER AND IT IS A BRICK WALL.** It means the gym's
+ *  currency has no active monthly plan, and behind an unskippable prompt that is
+ *  a gym stranded with nothing to buy — :22215 §4's exact shape, and what the
+ *  CA/GB/euro-area currency ruling was made to prevent.
+ *
+ *  **WHAT GUARDS IT, STATED PRECISELY, BECAUSE THIS SENTENCE OVERCLAIMED ONCE**
+ *  (T3 round 1, Low-4). `orgs.plans.test.ts` walks every supported country
+ *  through `currencyForCountry` and fails if one of them reaches an empty book.
+ *  **That covers the MAP. The route reads `gyms.currency_display`, which is a
+ *  STORED COLUMN the map only writes at creation** — so a gym still carrying a
+ *  currency the book has since dropped is outside the walk, and gets `{plans:
+ *  []}` with a 200. The old wording said the walk made an empty list impossible;
+ *  it makes it impossible for a gym created TODAY, which is a different claim
+ *  and is :15010/:19960's "a guard whose only proof is that the code looks
+ *  right".
+ *
+ *  Bounded rather than closed: the disagreeing set is empty on the shared branch
+ *  and cannot grow, because `updateOrg` recomputes through the same map. **The
+ *  card that builds the subscribe prompt is what turns this from a 200 with an
+ *  empty list into somebody staring at a wall, and it should decide there
+ *  whether the SERVICE ought to refuse instead** — the way `no_plan_for_currency`
+ *  already does one function over. Not decided here (R1.1). */
 export const orgPlansResponseSchema = z.object({
   plans: z.array(orgPlanOfferSchema),
 });

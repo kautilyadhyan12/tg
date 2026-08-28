@@ -327,6 +327,14 @@ d("orgs routes (real Postgres)", () => {
     expect(
       (await post("/v1/orgs/11111111-1111-1111-1111-111111111111/trial", {})).statusCode,
     ).toBe(401);
+    // ADDED BY T3 ROUND 1's Low-5 ON THE PRICE-LIST CARD, and it is the SECOND
+    // time this list has been caught trailing the module — :12227's L-1 below is
+    // the first, and its own comment predicted the class without preventing it.
+    // The route was guarded from the day it shipped; what was missing is the
+    // line that notices if it ever stops being.
+    expect(
+      (await get("/v1/orgs/11111111-1111-1111-1111-111111111111/plans")).statusCode,
+    ).toBe(401);
     // T3 L-1: this test named FIVE of the module's NINE routes and none of the
     // four the waiting-room card added — proven by deleting `app.authenticate`
     // from the confirm route and watching it stay GREEN. It was Low rather than

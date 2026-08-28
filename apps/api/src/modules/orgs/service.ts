@@ -330,7 +330,12 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
     former: await repo.listFormerOrgsForUser(tx, userId),
   }));
   return myOrgsResponseSchema.parse({
-    orgs: rows.map((r) => ({
+    orgs: rows.map((r) => {
+      // COMPUTED ONCE PER ROW because two fields below now need it, and calling
+      // `privilegesFor` twice would be two chances for them to disagree about
+      // what one staff row means.
+      const privileges = r.staffRole === null ? [] : [...privilegesFor(r.staffRole, r.privileges)];
+      return {
       ...toOrgSummary(r),
       staffRole: r.staffRole,
       // WHAT THIS CALLER MAY DO HERE, so the console can stop deciding on the
@@ -342,7 +347,7 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
       // A caller who staffs nothing gets `[]`, not the absent field: absent means
       // "this api is too old to say" and the client falls back to the role's
       // defaults, which for a non-staff member would be nonsense.
-      privileges: r.staffRole === null ? [] : [...privilegesFor(r.staffRole, r.privileges)],
+      privileges,
       // WHAT THE GYM IS ON, AND HOW FULL IT IS — §4.2's banner and §4.3's seat
       // meter, which had no read to come from until this card. Both are STAFF
       // FACTS and this is the one line that decides that.
@@ -360,20 +365,31 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
           : toOrgSubscription(r.subscription),
       seatsUsed: r.staffRole === null ? null : r.seatsUsed,
       // WHETHER THIS GYM'S OWNER HAS ALREADY SPENT THEIR ONE FREE TRIAL — the
-      // fact that decides which face the unskippable prompt shows (:22697), and
-      // withheld on the SAME line as the two above because it is the same
-      // boundary: what a gym is on, how full it is, and whether it has had its
-      // free go are all the gym's business and not its members'.
+      // fact that decides which face the unskippable prompt shows (:22697).
+      //
+      // **`billing.manage`, NOT `staffRole !== null` — NARROWED BY T3 ROUND 1's
+      // Low-8, and the reasoning is the part to keep.** It first shipped on the
+      // same line as `subscription` and `seatsUsed`, which looked consistent and
+      // was the wrong comparison: **those are facts about THIS GYM, and this is a
+      // fact about a PERSON.** It spans gyms the reader has no relationship with,
+      // so a trainer at gym B would learn that their employer had trialled
+      // somewhere else entirely. One bit about their own employer — genuinely not
+      // a breach, which is why the reviewer graded it Low — but there is no
+      // reason to send it, and :22921 §1 rules that the prompt this feeds stops
+      // ONLY somebody holding `billing.manage`. Least privilege: the field and
+      // the screen that consumes it now have the same gate, which is also the
+      // gate on `/plans` beside it.
       //
       // NULL HERE MEANS "WE DID NOT ASK", AND THE PROMPT MUST TREAT IT THAT WAY.
       // For every other field on this response an unknown state costs a screen a
       // sentence; for this one it decides whether a person is sealed out of
       // their own console, so the honest failure is to draw NOTHING rather than
       // to guess an arm. The client requires a definite boolean before it blocks.
-      ownerTrialUsed: r.staffRole === null ? null : r.ownerTrialUsed,
+      ownerTrialUsed: privileges.includes("billing.manage") ? r.ownerTrialUsed : null,
       isMember: r.isMember,
       joinedAt: r.joinedAt === null ? null : r.joinedAt.toISOString(),
-    })),
+      };
+    }),
     formerOrgs: former.map((f) => ({
       ...toOrgSummary(f.org),
       removedAt: f.removedAt.toISOString(),
@@ -725,20 +741,27 @@ export async function startOrgTrial(
       // TRUE AND SPECIFIC, because the alternative is a person concluding the
       // app is broken.
       //
-      // **NO SUPPORTED COUNTRY CAN REACH THIS ANY MORE, AND THAT IS THE POINT
-      // OF KEEPING IT.** Until 2026-08-28 it fired for Canada, the UK and the
-      // twenty euro-area countries: `COUNTRY_CURRENCY` gave them CAD/GBP/EUR
-      // while the seeded book held USD and INR, so a real gym could be created
-      // and then refused its own trial. Kd settled that by ruling all three onto
-      // US dollars (:22215 §3.5) — the fix was the MAP, never three price books
-      // he has never priced — and `orgs.plans.test.ts` now walks every supported
-      // country and fails if one of them has no active monthly org plan.
+      // **NO NEWLY CREATED GYM CAN REACH THIS, AND A GYM CREATED BEFORE
+      // 2026-08-28 STILL CAN — the distinction matters and an earlier version of
+      // this comment collapsed it** (T3 round 1, Low-2). Until that day the arm
+      // fired for Canada, the UK and the twenty euro-area countries:
+      // `COUNTRY_CURRENCY` gave them CAD/GBP/EUR while the seeded book held USD
+      // and INR, so a real gym could be created and then refused its own trial.
+      // Kd settled it by ruling all three onto US dollars (:22215 §3.5) — the fix
+      // was the MAP, never three price books he has never priced.
       //
-      // So this arm is now unreachable from the country picker and is retained
-      // as the guard it always was: :10010's standing rule that a currency we do
-      // not sell in is REFUSED rather than quietly served somebody else's money.
-      // The day the supported list widens, this is what catches a country added
-      // without prices — which is exactly how the gap above was created.
+      // **BUT THE MAP IS CONSULTED AT CREATION, NOT AT READ.**
+      // `gyms.currency_display` is written once and recomputed only when the
+      // country CHANGES, so a gym that was created in Canada before the ruling
+      // still carries CAD and still lands here. Measured: zero such gyms on the
+      // shared branch, so nothing real is stranded; the local database has one,
+      // created by this card's own smoke before the api was restarted.
+      //
+      // Retained as the guard it always was — :10010's standing rule that a
+      // currency we do not sell in is REFUSED rather than quietly served
+      // somebody else's money. It now covers two populations rather than one:
+      // any country added to the supported list without prices, and any gym
+      // still carrying a currency the book has since stopped listing.
       throw new OrgsError(
         409,
         "no_plan_for_currency",

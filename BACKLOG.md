@@ -36,6 +36,68 @@ side a finding falls on, it is Critical/High.
 
 ## Log
 
+### The forced prompt's SERVER half — T3 round 1, 2026-08-28 (DECISIONS :22921)
+
+Reviews `9d5a327`. **ZERO Critical/High, EIGHT Low.** Escape hatch NOT armed —
+round 1, no Critical anywhere, stated unprompted by the reviewer. Kd approved the
+list before any code changed (*"fix all"*). All eight fixed in one round.
+
+- [x] The exact USD ladder raced `orgs.routes.test.ts` — that suite inserts
+      `zz_orgs_cap1` (org, **USD**, monthly, active, one seat, price 0) for its
+      whole run, and four suites share one database. **This one reddened CI**,
+      which runs everything in one invocation. **:18830's Low-1 recurring three
+      days after it was fixed there.** My comment said *"the USD book is touched
+      by nothing"* — I checked the OTHER fixture plan's currency, found CAD, and
+      assumed both were. Reproduced before fixing (`[1,300,…]`, `['$0','$35',…]`),
+      fixed by scoping every exact assertion to the seeded `org_` prefix, and
+      **re-measured in ONE invocation TWICE: 146/146, 146/146** (:18830: a race
+      that passes once is not evidence) — found T3 round 1, fixed this round
+- [x] *"NO SUPPORTED COUNTRY CAN REACH THIS ANY MORE"* on the `no_plan` refusal
+      was false — a gym created before 2026-08-28 in Canada or Britain keeps its
+      old currency and still reaches it. Zero such gyms on the shared branch, so
+      nothing real is stranded; the sentence was simply wrong and the next reader
+      would have believed it — found T3 round 1, fixed this round
+- [x] The no-backfill measurement went stale inside its own commit AND counted
+      the wrong column — it counted `country` when the hazard is
+      `currency_display`, and this card's own smoke created the very gym it said
+      did not exist. Re-measured with the disagreement query the comment itself
+      names: **shared 0, local 1** — found T3 round 1, fixed this round
+- [x] The empty-price-list guard did not cover the route's input: the walk goes
+      through `currencyForCountry` (the MAP) while the route reads
+      `gyms.currency_display` (a STORED column). :15010/:19960's *"a guard whose
+      only proof is that the code looks right"*. Claim corrected to say what the
+      walk actually covers; **whether the SERVICE should refuse instead is left
+      to the modal card and has its own `OWED.md` line** — found T3 round 1,
+      fixed this round
+- [x] `/v1/orgs/:gymId/plans` was missing from *"every route requires
+      authentication"* — the route was guarded, the coverage was not. :12227's
+      trigger verbatim, and the second time that list has trailed the module —
+      found T3 round 1, fixed this round
+- [x] The formatter's fractional branch had no observer: every one of Kd's ten
+      prices is whole, so `${head}.${frac}` was never exercised and a mutant
+      forcing `isWhole` true stayed GREEN. Gave it a subject (a `$34.99` fixture
+      plan) and a mutant (**O153**) — found T3 round 1, fixed this round
+- [x] `listOrgPlansForCurrency` had no `LIMIT` — :10596's L-1 precedent. Bounded
+      at 50 with the mitigation stated (the table is operator-seeded and cannot
+      grow behind a request) — found T3 round 1, fixed this round
+- [x] `ownerTrialUsed` was granted to any staff, though it is a fact about a
+      PERSON that spans gyms the reader has no relationship with, and the prompt
+      it feeds stops only `billing.manage`. Narrowed to `billing.manage`, with a
+      test whose subject is a TRAINER (the only caller that can tell the old gate
+      from the new one) and mutant **O152** — found T3 round 1, fixed this round
+
+**TWO CASUALTIES OF THE FIX ROUND ITSELF, both caught by the harness refusing to
+run rather than by anybody noticing.** Hoisting the privileges expression for the
+last fix moved **O105**'s anchor, and the whole-table pre-check ABORTED the sweep
+— re-anchored at the SAME call site, never at whichever line looked closest
+(:15770), which is the rot :21580 recorded when three console mutants died
+silently through two commits. Then **O147** broke twice in one session: the new
+`LIMIT` pushed its anchor off the end, and dropping the backtick made it match
+`startGymTrial`'s deeper-indented copy as a SUBSTRING — the identical trap O148
+hit in the same file the same day. Both remedied :21157's way, by making the line
+unique in the SOURCE rather than with a two-line anchor (:17676's CRLF hazard).
+
+
 ### Post-workout summary repoint (card 1 of the workout core loop), 2026-08-06
 
 The first card run under the fixed review/fix process. Its own test audit

@@ -1320,8 +1320,19 @@ const MUTANTS = [
     id: 'O105',
     target: 'service',
     why: "THE ROUND-1 CRITICAL AT ITS ROOT: `/v1/orgs/mine` serves the ROLE's template instead of the caller's stored set, so a trainer an owner ticked `codes.manage` onto reads back the plain trainer defaults — the console then gates its controls on a set the server does not enforce, and the tick reaches no button anywhere. The screen and the door answering differently about the SAME person",
-    from: '      privileges: r.staffRole === null ? [] : [...privilegesFor(r.staffRole, r.privileges)],',
-    to: '      privileges: r.staffRole === null ? [] : [...privilegesFor(r.staffRole, null)],',
+    // RE-ANCHORED 2026-08-28, TARGET AND MUTATION UNCHANGED. The fix round for
+    // T3 Low-8 hoisted this expression into a `const privileges = …` above the
+    // object literal, because `ownerTrialUsed` now needs the same answer and
+    // computing it twice is two chances to disagree. The old anchor was the
+    // OBJECT PROPERTY line, which no longer contains the call.
+    //
+    // **Aimed at the SAME call site, never at whichever line looked closest
+    // (:15770), and the whole-table pre-check is what caught it** — it ABORTED
+    // the fix round's sweep rather than letting this row quietly match nothing,
+    // which is the failure :21580 recorded when three console mutants rotted
+    // through two commits unnoticed.
+    from: '      const privileges = r.staffRole === null ? [] : [...privilegesFor(r.staffRole, r.privileges)];',
+    to: '      const privileges = r.staffRole === null ? [] : [...privilegesFor(r.staffRole, null)];',
     expect: 'tells a caller what they may DO here, not just what they are called',
   },
 
@@ -1790,8 +1801,20 @@ const MUTANTS = [
     suite: PLANS_SUITE,
     why: "ON SCREEN AND FALSE: the ladder inverts, so the FIRST plan a gym owner reads is the 2,100-seat band at $129 rather than the $35 entry price. Nothing on the screen says the list is descending, so the honest reading of the top row — 'this is what it costs' — is wrong by a factor of nearly four",
     expect: 'cheapest band first',
-    from: '    ORDER BY seat_cap ASC NULLS LAST, price_minor ASC`;',
-    to: '    ORDER BY seat_cap DESC NULLS LAST, price_minor DESC`;',
+    // RE-ANCHORED TWICE IN THE FIX ROUND, and both failures were the harness
+    // refusing to let a bad anchor through silently.
+    //
+    // (1) Low-7 added `LIMIT ${ORG_PLANS_LIMIT}` on the next line, so the old
+    //     anchor — which ended at the closing backtick — matched NOTHING.
+    // (2) Dropping the backtick made it match TWICE: `startGymTrial` orders by
+    //     the same rule with deeper indentation, and the four-space version is a
+    //     SUBSTRING of the six-space one. That is the identical trap O148 hit,
+    //     in the same file, in the same session.
+    //
+    // Remedy both times is :21157's, not a two-line anchor (:17676's CRLF
+    // hazard): the line was made unique IN THE SOURCE with a trailing comment.
+    from: '    ORDER BY seat_cap ASC NULLS LAST, price_minor ASC -- the ladder Kd priced',
+    to: '    ORDER BY seat_cap DESC NULLS LAST, price_minor DESC -- the ladder Kd priced',
   },
   {
     id: 'O148',
@@ -1845,6 +1868,31 @@ const MUTANTS = [
     expect: 'at the ratified prices',
     from: '  const whole = digits === 0 ? raw : raw.slice(0, raw.length - digits);',
     to: '  const whole = digits === 0 ? raw : raw.slice(0, raw.length - digits + 1);',
+  },
+  {
+    id: 'O152',
+    target: 'service',
+    suite: PLANS_SUITE,
+    // ADDED IN THE FIX ROUND (T3 round 1, Low-8). The reviewer noted the
+    // withholding line had no mutant while :5857 rule 4a puts OWNERSHIP in the
+    // always-mutated column. The narrowing and its guard land together.
+    why: "OWNERSHIP: the field widens back to every staff member, so a TRAINER at one gym is told whether their employer has spent a free trial — a fact about a PERSON that follows the owner across gyms the reader has no relationship with. Not a breach (one bit, about their own employer) but it has no consumer: :22921 §1 rules the prompt this feeds stops only somebody holding `billing.manage`",
+    expect: 'a trainer is told nothing',
+    from: 'privileges.includes("billing.manage") ? r.ownerTrialUsed : null',
+    to: 'r.staffRole !== null ? r.ownerTrialUsed : null',
+  },
+  {
+    id: 'O153',
+    target: 'service',
+    suite: PLANS_SUITE,
+    // ADDED IN THE FIX ROUND (T3 round 1, Low-6): the fractional half of the
+    // formatter had NO OBSERVER — a mutant forcing `isWhole` true stayed GREEN,
+    // and O151 pins only the whole branch. The fixture that gives it a subject
+    // and the mutant that watches it ship together.
+    why: "MONEY: every price loses its minor units, so a $34.99 band prints as $34 — a gym is quoted a penny less than it will be charged, and the whole-number bands look identical either way, which is exactly why this went unwatched until a fractional fixture existed",
+    expect: 'prints the minor units',
+    from: '  const isWhole = !/[1-9]/.test(frac);',
+    to: '  const isWhole = true;',
   },
 ];
 

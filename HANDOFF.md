@@ -1,6 +1,89 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE FORCED PROMPT'S SERVER HALF — T3 ROUND 1 AND ITS FIX ROUND. ZERO
+      Critical/High, EIGHT Low, THE PACKET SHIPS. DECISIONS :23128.
+      Reviews 9d5a327 (:22921). Kd approved the list first ("fix all").
+
+  1. **ESCAPE HATCH NOT ARMED** — round 1, no Critical anywhere; the reviewer
+     said so unprompted, and verified all three of the card's claims by attack:
+     `ownerTrialUsed` and `startGymTrial`'s `used` query agree unconditionally
+     (both anchored on `gyms.owner_user_id`, NOT NULL — measured), the formatter
+     throws nothing reachable, and the `en-US` pin is real (`de-DE` gives
+     `1.234 €.50`).
+  2. **LOW-1 IS MINE AND WOULD HAVE REDDENED CI.** The exact USD ladder raced
+     `orgs.routes.test.ts`, which inserts a **USD** fixture plan for its whole
+     run. My comment said "the USD book is touched by nothing" — I checked the
+     OTHER fixture's currency, found CAD, and generalised from one to both.
+     :18830's Low-1 recurring three days on. Reproduced first, scoped to the
+     seeded `org_` prefix, **re-measured in ONE invocation TWICE (146/146,
+     146/146)** because that entry says a race passing once is not evidence.
+  3. **THE FIX ROUND BROKE TWO OF ITS OWN INSTRUMENTS, AND BOTH ABORTED RATHER
+     THAN LYING.** Hoisting an expression for Low-8 moved **O105**'s anchor;
+     **O147** then broke twice — a new `LIMIT` pushed its anchor off the end, and
+     the shortened anchor matched `startGymTrial`'s deeper-indented `ORDER BY` as
+     a SUBSTRING, the identical trap O148 hit in the same file the same day.
+     Re-anchored at the SAME call sites (:15770) and made unique IN THE SOURCE
+     (:21157), never with a two-line anchor (:17676).
+     **STANDING: a `LIMIT`, a trailing clause or a hoisted `const` moves anchors
+     nothing in the diff mentions. Run the WHOLE-TABLE sweep after a fix round,
+     never the subset — that pre-check is the only thing that catches it.**
+  4. **LOW-8 IS THE ONE TO REMEMBER.** `ownerTrialUsed` looked consistent beside
+     `subscription` and `seatsUsed` and that was the WRONG COMPARISON: those are
+     facts about THIS GYM, this is a fact about a PERSON, and it follows the
+     owner across gyms the reader has nothing to do with. Narrowed to
+     `billing.manage` (O152); its test's subject is a TRAINER, the only caller
+     that can tell the old gate from the new one.
+  5. **LOW-6 — a branch with NO OBSERVER, and the C88 question was asked first.**
+     Every one of Kd's ten prices is whole, so the formatter's fractional half
+     was never exercised and a mutant forcing `isWhole` true stayed GREEN. Given
+     a `$34.99` fixture (USD, `trial_days = 0`, so it can neither pollute the
+     ladders nor become a trial band) and mutant O153. The reviewer named
+     `interval = 'month'` as the OPPOSITE case — unobservable by construction —
+     and told us not to write a mutant for it.
+  6. **ONE DEFERRAL, WITH ITS OWED LINE IN THIS COMMIT:** the price list can
+     answer 200 with an empty list for a gym carrying a currency the book has
+     dropped. Bounded, empty on the shared branch, and cannot grow. The REFUSAL
+     decision belongs to the modal card, because a prompt that cannot be skipped
+     is what turns it into a wall (:22215 §4).
+
+FILES: apps/api/src/modules/orgs/{repo,service}.ts ·
+       apps/api/test/{orgs.plans,orgs.routes}.test.ts ·
+       apps/api/tools/mutate-orgs.mjs · packages/shared/src/orgs.ts ·
+       BACKLOG.md · OWED.md · DECISIONS.md · DECISIONS-INDEX.md ·
+       DECISIONS-TRIGGERS.md
+
+PROVE, after the fixes, all LOCAL: orgs.plans **12/12** · **orgs.plans +
+       orgs.routes in ONE invocation TWICE, 146/146 and 146/146** (Low-1's own
+       evidence) · trialSweep + db.migration 20/20 · shared 51/51 · web
+       **1294/1294 across 48 files** · tsc exit 0 on api and shared · eslint
+       --max-warnings=0 clean on seven files · node --check on the harness ·
+       check-harnesses 25 · check-decisions-index 228 · check-decisions-triggers
+       626 from 177 of 315 · **SWEEP a stated SUBSET of 153: O105 + O145–O153,
+       10 RED, 0 ALIVE, 0 never ran**, nine controls GREEN first, restores
+       sha256-verified, 250 gym+subscription rows fingerprinted, no unattributed
+       changes.
+
+OPEN:  the read-only console · the consumer trial's own expiry · the worker's
+       job routing having no test · the new empty-price-list line — unchanged
+       otherwise.
+
+NEXT:  **THE MODAL (web half).** Three things in one card: the unskippable
+       pop-up with its two arms, the REMOVAL of the Overview's pre-trial button
+       (Kd ruled it 2026-08-28, :22921 §1), and a RE-RUN of
+       RUNBOOK/smoke-trial-expiry.md — which must run AFTER this card, not
+       before (:22697 §5), since three of its seven steps describe the button the
+       modal replaces. **That sheet's S3 api-start command is BROKEN and
+       unfixed** — verified: `Invalid environment: WEB_ORIGIN: Required;
+       JWT_SECRET: Required`, exit 1. Working form is the same line plus
+       `WEB_ORIGIN='http://localhost:5173'` and a dev `JWT_SECRET`; do NOT
+       "repair" it with `--env-file=.env`, which is L-7's dangerous direction.
+       **And restart the api after any change before smoking** — this session
+       lost a smoke round to a process serving the old code.
+```
+
+
+```
 TASK: THE FORCED PROMPT'S SERVER HALF — the price list, the arm selector, and
       the CA/GB/euro-area currency. DECISIONS :22921. Step 2 of :22215 §5,
       split at the plan gate with Kd's approval; the MODAL is the next card.
