@@ -22549,9 +22549,10 @@ them, so they were findable only by reading everything.
 
 - §1 · **411 trigger phrases, alphabetical, every one copied VERBATIM** →
   pointer + title.
-- §2 · **the 177 rulings that declare NO trigger**, by pointer and title, so a
-  blank search reads as *"nothing declared itself"* and never *"nothing binds
-  me"*.
+- §2 · **the ~~177~~ 138 rulings that declare NO trigger**, by pointer and title,
+  so a blank search reads as *"nothing declared itself"* and never *"nothing
+  binds me"*. (Figures struck and corrected by §8 below, measured the same
+  session.)
 - 630 lines / ~75 KB. Rebuilt and **staleness-checked on the ROOT `lint`**
   (`--check`), beside `check-decisions-index.mjs`, before turbo — T3 round 5
   Low-6's rule that a guard a warm cache can skip is not a guard.
@@ -22570,17 +22571,20 @@ reads: `DECISIONS-TRIGGERS.md` in full + index §1 and §2 in full + every
 
 The whole risk of (b) is filing something as history that still binds. So the
 partition was checked against the generated file **first**: **all 36 moved
-entries are surfaced by a file that IS read every session — 30 by a trigger
-phrase in §1, six by title and pointer in §2. Zero hidden.**
+entries are surfaced by a file that IS read every session — ~~30 by a trigger
+phrase in §1, six by title and pointer in §2~~ **ALL 36 BY A TRIGGER PHRASE
+after §8's improvement**. Zero hidden.**
 
 And the move itself was made under a **line-multiset invariant**: the script
 compared every line of §1 before against §1 + §1B after and **refused to write if
 they differed**. It matched exactly, so relocation is provably all that happened.
 
-**The six weaker ones are NAMED, not glossed** (`:20986`, `:14174`, `:14147`,
+~~**The six weaker ones are NAMED, not glossed** (`:20986`, `:14174`, `:14147`,
 `:14013`, `:12832`, `:12731`): a title in a gap list is weaker than a trigger,
 and they are the ones to give a `Read before …` sentence next time anybody is in
-them.
+them.~~ **— CLOSED BY §8 THE SAME SESSION: all six turned out to declare a
+trigger in their INDEX LINE, and the generator was not reading it. Naming them
+is what made them findable.**
 
 ### 5. THE DEFECT THE TOOL FOUND IN ITSELF, WHICH IS THE PART TO KEEP
 
@@ -22603,8 +22607,8 @@ if moved. The safety check for one part of the card audited the other part.
 
 ### 6. WHAT THIS CANNOT DO, WRITTEN INTO THE GENERATED FILE ITSELF
 
-**A trigger list NARROWS a search and can NEVER CLEAR one.** 177 of 307 rulings
-declare no trigger. It says nothing about supersession. It is a POINTER, never a
+**A trigger list NARROWS a search and can NEVER CLEAR one.** ~~177 of 307~~
+**138 of 310** rulings declare no trigger (§8). It says nothing about supersession. It is a POINTER, never a
 citation (V2). All of that is in the file's own header, in bold, because the
 failure mode is a chat concluding "no match, therefore nothing binds me" — which
 is :19256 restated, and the reason §2 exists at all.
@@ -22632,3 +22636,60 @@ stashed out — **identical failure on the clean tree**. Not this card's.
 
 **NOTHING ELSE TICKS.** The trial-expiry card's SMOKE and T3 are still UNRUN and
 are the next thing, by Kd's own sequencing above.
+
+### 8. ADDENDUM, SAME SESSION — KD ASKED THE OBVIOUS QUESTION, CHECKING IT RATHER THAN ANSWERING IT FOUND A THIRD OF THE COVERAGE MISSING
+
+**Read before answering any "is it safe now?" question about an instrument, and
+before assuming a generated file's INPUT list is complete.**
+
+Kd asked: *"ok so a new chat can get the details and everything and not skip
+anything like before right ?"* — a question whose easy answer is "yes", and
+whose honest answer needed a measurement. **The measurement failed.**
+
+**WHAT IT FOUND: the generator read `DECISIONS.md` and NOT `DECISIONS-INDEX.md`,
+and 39 rulings declare a trigger ONLY in their index line.** `:20986` is the
+example that exposed it — its index line says *"Read before removing anything
+from `apps/web/src/test-setup.js`"*, its `DECISIONS.md` entry says no such thing,
+and the first build therefore filed a live guard under *"declares no trigger"*.
+
+**The cause is structural rather than careless, which is why it is written down:
+an index line is authored by a chat that is thinking about who needs to FIND the
+ruling** — that is the job of writing a pointer — **so it often states the
+binding more sharply than the entry it points at.** Harvesting one file and not
+the other threw that away. The fix reads both and merges; the POINTER still goes
+to `DECISIONS.md`, and the original is still the only thing that may be cited
+(V2). What is borrowed is the question *"does this bind my task"*, never the
+answer.
+
+**MEASURED, BEFORE AND AFTER, ON THE HARDEST VERSION OF KD'S QUESTION** — not
+"is every ruling listed" (it always was) but *"how many are reachable by
+something better than a title in a gap list"*:
+
+| | before | after |
+|---|---|---|
+| trigger phrases | 418 | **605** |
+| rulings declaring one | 133 | **172** |
+| strongly surfaced (phrase, or a full §1 line) | 155 | **192** |
+| reachable only by a title | 156 | **119** |
+| **Kd rulings** reachable only by a title | 26 | **16** |
+| the 36 moved card records, reachable by a PHRASE | 30 | **36 — all of them** |
+
+**§4's six named weak entries are CLOSED, and the way they closed is the
+lesson.** `:20986`, `:14174`, `:14147`, `:14013`, `:12832`, `:12731` were listed
+in §4 as reachable only by a gap-list title, with the remark that they should be
+given a `Read before …` sentence some day. **Every one of them already had one —
+in its index line.** Naming them is what made the hole findable: a vague "some
+entries are weaker" would have hidden it for ever. **:12660's standing shape,
+inverted — there, only a human at a screen could see an absent sentence; here,
+only writing the absence down made the present one visible.**
+
+**THE PATTERN, AND IT IS THE THIRD TIME ON THIS CARD:** the first build lost
+seven `###` addenda (§5), then mis-attributed a child's clause to its parent
+(§5), and now this. **All three were found by checking the tool's OUTPUT against
+another file, and none by reading the tool.** A generator's defects live in what
+it never looked at, and reading its code cannot reveal an input nobody listed.
+
+**WHAT IS STILL TRUE AND MUST NOT BE READ AS CLOSED:** 138 rulings declare no
+trigger at all, 16 of them Kd's. The limit in §6 stands word for word — **a
+trigger list NARROWS a search and can NEVER CLEAR one** — and the honest summary
+of this addendum is that the floor rose, not that the gap shut.

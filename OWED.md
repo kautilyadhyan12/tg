@@ -3515,24 +3515,30 @@ then; none may be hidden or reduced to close the gap.
       obeying the grounding rule spent its working memory before doing any work.
       One did, that morning, and declared the departure instead of hiding it.
       **Fixed by (a) `DECISIONS-TRIGGERS.md`, GENERATED from the `Read before …`
-      sentences 123 rulings already carried** (418 phrases, verbatim, plus a §2
-      naming every ruling that declares none; staleness-checked on the root
-      `lint`), and **(b) moving §1's 1,631 lines of finished card history to a new
-      §1B**, byte for byte. **Always-read: ~6,500 → ~1,427 lines.** Kd's condition
-      was *"does not get summarised things instead of details"* and it is met:
-      nothing was shortened, reworded or deleted. **36 of 36 moved entries were
-      proven still surfaced by an always-read file BEFORE anything moved.**
-- [ ] ⚪ **SIX CARD RECORDS ARE REACHABLE ONLY BY A TITLE IN A GAP LIST — they
-      need a `Read before …` sentence (raised 2026-08-28 with the fix that made
-      them visible, DECISIONS :22497 §4).** `:20986` · `:14174` · `:14147` ·
-      `:14013` · `:12832` · `:12731`. Every other entry moved to
-      `DECISIONS-INDEX.md` §1B carries a trigger phrase that points at it; these
-      six appear only in `DECISIONS-TRIGGERS.md` §2, by title and pointer. **That
-      is weaker and is written down rather than glossed.** The fix is one sentence
-      added to each entry in `DECISIONS.md` and a rebuild — cheap, and best done
-      by whoever is next inside one of them for another reason.
-- [ ] ⚪ **177 OF 310 RULINGS DECLARE NO TRIGGER, so the trigger file NARROWS a
-      search and can never CLEAR one (recorded 2026-08-28, DECISIONS :22497 §6).**
+      sentences the rulings already carried — in `DECISIONS.md` AND in their index
+      lines** (**607 phrases from 173 of 311 rulings**, verbatim, plus a §2 naming
+      every ruling that declares none; staleness-checked on the root `lint`), and
+      **(b) moving §1's 1,631 lines of finished card history to a new §1B**, byte
+      for byte. **Always-read: ~6,500 → ~1,427 lines.** Kd's condition was *"does
+      not get summarised things instead of details"* and it is met: nothing was
+      shortened, reworded or deleted. **36 of 36 moved entries were proven still
+      surfaced by an always-read file BEFORE anything moved, and after :22640 all
+      36 are reachable by a trigger PHRASE rather than by a title.**
+- [x] ✅ **DONE 2026-08-28, THE SAME SESSION IT WAS RAISED — and how it closed is
+      worth more than the fix (DECISIONS :22640).**
+      ~~SIX CARD RECORDS ARE REACHABLE ONLY BY A TITLE IN A GAP LIST — they need a
+      `Read before …` sentence.~~ `:20986` · `:14174` · `:14147` · `:14013` ·
+      `:12832` · `:12731`. **Every one of them ALREADY HAD one — in its
+      `DECISIONS-INDEX.md` line — and the generator was only reading
+      `DECISIONS.md`.** Kd asked whether a new chat could still skip something;
+      checking rather than answering found the defect. **It was not six entries'
+      problem, it was 39: coverage went 418 → 607 trigger phrases, 133 → 173
+      rulings, and the Kd rulings reachable only by a title fell 26 → 16.**
+      **The lesson is that naming them is what closed them** — a vague "some
+      entries are weaker" would have hidden this for ever.
+- [ ] ⚪ **~~177 OF 310~~ 138 OF 311 RULINGS DECLARE NO TRIGGER (16 of them Kd's),
+      so the trigger file NARROWS a search and can never CLEAR one (recorded
+      2026-08-28, DECISIONS :22497 §6; figure re-measured at :22640).**
       This is a standing property, not a bug, and it is stated in bold in the
       generated file's own header — but it is the thing most likely to bite:
       **:19256 is the measured cost of a chat concluding "no match, therefore

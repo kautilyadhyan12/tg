@@ -1,6 +1,57 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: ADDENDUM to the read-path card, same session. DECISIONS :22640.
+      Kd asked "can a new chat still skip something?" — CHECKING it rather than
+      answering it found a third of the coverage missing.
+
+  1. **THE GENERATOR READ `DECISIONS.md` AND NOT `DECISIONS-INDEX.md`, and 39
+     rulings declare a trigger ONLY in their index line.** `:20986` is the tell:
+     its index line says *"Read before removing anything from
+     `apps/web/src/test-setup.js`"*, its entry says no such thing, so a live
+     guard was filed under "declares no trigger".
+  2. **Structural, not careless, which is why it is recorded:** an index line is
+     written by a chat thinking about who needs to FIND the ruling, so it often
+     states the binding more sharply than the entry does. Both files are now
+     harvested and merged. **The POINTER still goes to `DECISIONS.md` and the
+     original is still the only citable thing (V2)** — what is borrowed is the
+     question "does this bind me", never the answer.
+  3. **MEASURED BEFORE/AFTER on the hardest reading of Kd's question** — not "is
+     every ruling listed" (it always was) but "how many are reachable by
+     something better than a title": trigger phrases **418 → 607** · rulings
+     declaring one **133 → 173** · strongly surfaced **155 → 192** · reachable
+     only by a title **156 → 119** · **Kd rulings** only by a title **26 → 16** ·
+     the 36 moved card records reachable by a PHRASE **30 → 36, all of them**.
+  4. **§4's six named weak entries are CLOSED, and the way they closed is the
+     lesson: every one ALREADY had a trigger, in its index line.** Naming them is
+     what made the hole findable — a vague "some are weaker" would have hidden it
+     for ever. :12660's shape inverted: there only a human could see an ABSENT
+     sentence; here only writing the absence down revealed the PRESENT one.
+  5. **THIRD TIME ON THIS CARD, and it is now a rule:** lost `###` addenda,
+     mis-attributed child clauses, and this. **All three were found by checking
+     the tool's OUTPUT against another file; none by reading the tool.** A
+     generator's defects live in what it never looked at.
+
+FILES: tools/build-decisions-triggers.mjs · DECISIONS-TRIGGERS.md (regenerated) ·
+       DECISIONS.md (§8 addendum; four figures struck and corrected in place) ·
+       DECISIONS-INDEX.md · CLAUDE.md · OWED.md (one line TICKS, one re-measured)
+
+PROVE: check-decisions-triggers **607 triggers from 173 of 311 rulings, 138
+       declaring none** · check-decisions-index **224 pointers resolve** ·
+       check-harnesses 25 scripts · node --check clean · the staleness guard
+       proven to FIRE by tampering with the generated file (exit 1), then clean
+       after restore (exit 0).
+
+OPEN:  **138 rulings still declare no trigger, 16 of them Kd's.** The limit is
+       unchanged and stated in the generated file's own header: **a trigger list
+       NARROWS a search and can NEVER CLEAR one.** The floor rose; the gap did
+       not shut.
+
+NEXT:  Unchanged — the trial-expiry card's SMOKE and T3, both UNRUN.
+```
+
+
+```
 TASK: THE DECISION RECORD'S READ PATH, SPLIT A THIRD TIME. Kd-ruled and
       Kd-sequenced. DECISIONS :22497. Nothing summarised — that was his
       condition and it is the whole design.

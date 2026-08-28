@@ -750,14 +750,15 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   **KD'S CONDITION SHAPED THE ANSWER** — *"does not get summarised things instead
   of details"* — so **nothing was summarised, shortened, reworded or deleted**;
   only how a chat FINDS a ruling changed. **(a) `DECISIONS-TRIGGERS.md` is
-  generated** from the `Read before …` sentences 123 rulings already wrote about
-  themselves — 418 phrases, verbatim, plus a §2 naming every ruling that declares
-  none; staleness-checked on the ROOT `lint`. **(b) §1's 1,631 lines of finished
+  generated** from the `Read before …` sentences the rulings already wrote about
+  themselves **in `DECISIONS.md` AND in their index lines** — 607 phrases,
+  verbatim, plus a §2 naming every ruling that declares none; staleness-checked
+  on the ROOT `lint`. **(b) §1's 1,631 lines of finished
   card history moved, byte for byte, to §1B.** Always-read went **~6,500 → ~1,427
   lines**.
   **THE SAFETY PROOF RAN BEFORE A LINE MOVED: all 36 moved entries are surfaced
-  by an always-read file — 30 by a trigger, 6 by title and pointer — ZERO
-  hidden**, and the move itself was made under a line-multiset invariant that
+  by an always-read file — **all 36 by a trigger phrase** — ZERO hidden**
+  (:22640 lifted the last six by teaching the generator to read index lines too), and the move itself was made under a line-multiset invariant that
   refused to write if anything differed.
   **THE TOOL FOUND A DEFECT IN ITSELF and it is the part to keep:** the first
   generator walked only `##`, losing **seven `###` addenda that declare their own
@@ -767,8 +768,9 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   only their own spans. **Found by checking the tool's OUTPUT against this file,
   not by reading the tool.**
   **THE LIMIT, in the generated file's own header: a trigger list NARROWS a
-  search and can NEVER CLEAR one** — 177 of 310 declare no trigger, and :19256 is
-  the recorded cost of forgetting it. `turbo run lint` RED is PRE-EXISTING and
+  search and can NEVER CLEAR one** — **138 of 311 declare no trigger, 16 of them
+  Kd's** (:22640: the floor rose, the gap did not shut) — and :19256 is the
+  recorded cost of forgetting it. `turbo run lint` RED is PRE-EXISTING and
   was re-proven on a stashed tree (:21057's global-pnpm shadowing).
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
@@ -786,11 +788,12 @@ was written to fix, recurring one level up.
 
 **THE SAFETY PROOF, RUN BEFORE A LINE WAS MOVED AND NOT ASSERTED AFTERWARDS:**
 every one of the 36 entries below is surfaced by a file that IS read every
-session — **30 by a trigger phrase in `DECISIONS-TRIGGERS.md` §1, and the other
-six (`:20986`, `:14174`, `:14147`, `:14013`, `:12832`, `:12731`) by title and
-pointer in that file's §2.** Zero were hidden. **Those six are the ones to give a
-`Read before …` sentence when somebody next touches them** — a title in a gap
-list is weaker than a trigger, and that is stated rather than glossed.
+session — **every one of them by a trigger phrase in `DECISIONS-TRIGGERS.md`
+§1.** Zero were hidden. It was 30-by-phrase and six-by-title-only when first
+measured; **naming those six by name is what exposed the generator's own defect
+(:22640) — all six declared a trigger in their INDEX LINE, which it was not
+reading.** A title in a gap list is weaker than a trigger, and **138 rulings are
+still in that position**, so this is a floor that rose, not a gap that shut.
 
 - **:22145** — 2026-08-28 — **THE GYM TRIAL, WEB HALF, T3 ROUND 3 (diff-only):
   ZERO Critical/High — THE PACKET SHIPS.** Reviews `13fec81`. One Low, fixed.

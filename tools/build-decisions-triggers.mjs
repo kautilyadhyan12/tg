@@ -56,6 +56,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ORIGINAL = "DECISIONS.md";
+const INDEX = "DECISIONS-INDEX.md";
 const OUTPUT = "DECISIONS-TRIGGERS.md";
 
 const fail = (msg) => {
@@ -117,9 +118,11 @@ const flatten = (s) =>
 
 const clip = (s, n) => (s.length <= n ? s : `${s.slice(0, n - 1).trimEnd()}…`);
 
-/** Extract the trigger phrases declared in one span of the file. */
-const triggersIn = (from, to) => {
-  const body = lines.slice(from, to).join(" ").replace(/\s+/g, " ");
+/** Extract the trigger phrases declared in one piece of prose. Shared by the
+ *  original and the index, so the two can never drift into parsing the same
+ *  sentence differently. */
+const triggersIn0 = (text) => {
+  const body = text.replace(/\s+/g, " ");
   const at = body.indexOf("**Read ");
   if (at < 0) return { triggers: [], unparsed: false };
   const close = body.indexOf(".**", at);
@@ -149,6 +152,9 @@ const triggersIn = (from, to) => {
     return { triggers, unparsed: false };
   }
 };
+
+/** The same, over a span of `DECISIONS.md`. */
+const triggersIn = (from, to) => triggersIn0(lines.slice(from, to).join(" "));
 
 /** The first `### ` at or after `from` and before `to`, or `to`. */
 const nextSubAfter = (from, to) => {
@@ -193,6 +199,58 @@ for (let i = 0; i < headIdx.length; i += 1) {
       unparsed: sub.unparsed,
     });
   }
+}
+
+/** **THE INDEX IS HARVESTED TOO, AND IT IS NOT REDUNDANT — MEASURED, 39 RULINGS
+ *  CARRY A TRIGGER THERE THAT THE ORIGINAL DOES NOT.** Found by asking the
+ *  honest version of Kd's question ("can a new chat still skip something?")
+ *  rather than the flattering one, and checking. `:20986` is the example that
+ *  exposed it: its index line says *"Read before removing anything from
+ *  `apps/web/src/test-setup.js`"* and its `DECISIONS.md` entry says no such
+ *  thing, so the first build filed a live guard under "declares no trigger".
+ *
+ *  Index lines are authored prose like any other, and a chat writing one often
+ *  states the binding more sharply than the entry did — it is writing the
+ *  pointer, so it is thinking about who needs to find it. **The POINTER still
+ *  goes to `DECISIONS.md` and the original is still the only thing you may
+ *  cite** (V2): what is borrowed here is the question "does this bind my task",
+ *  never the answer. */
+const indexLines = readFileSync(join(ROOT, INDEX), "utf8").split(/\r?\n/);
+const byPointer = new Map(entries.map((e) => [e.pointer, e]));
+{
+  let cur = null;
+  const flush = () => {
+    if (cur === null) return;
+    const m = /^- \*\*(?:DECISIONS\.md)?:?(\d+)\*\*/.exec(cur[0]);
+    if (m !== null) {
+      const pointer = Number(m[1]);
+      const { triggers } = triggersIn0(cur.join(" "));
+      if (triggers.length > 0) {
+        let e = byPointer.get(pointer);
+        if (e === undefined) {
+          // A pointer the walk above never produced — `:1110` aims at a bullet
+          // INSIDE an entry on purpose, and `check-decisions-index.mjs` carries
+          // it as its one declared exception. Keep it rather than drop it: the
+          // index is the authority on where it points.
+          e = { pointer, date: null, title: "(pointer into an entry — see the index)", triggers: [], unparsed: false };
+          entries.push(e);
+          byPointer.set(pointer, e);
+        }
+        for (const t of triggers) if (!e.triggers.includes(t)) e.triggers.push(t);
+      }
+    }
+    cur = null;
+  };
+  for (const l of indexLines) {
+    if (/^- \*\*/.test(l)) {
+      flush();
+      cur = [l];
+    } else if (cur !== null) {
+      if (/^#{2,3} /.test(l)) flush();
+      else cur.push(l);
+    }
+  }
+  flush();
 }
 
 const withTriggers = entries.filter((e) => e.triggers.length > 0);

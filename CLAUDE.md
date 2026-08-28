@@ -106,12 +106,14 @@ not get summarised things instead of details"*. **So nothing was summarised,
 shortened, reworded or deleted.** Two things changed:
 
 1. **`DECISIONS-TRIGGERS.md` is GENERATED** by `tools/build-decisions-triggers.mjs`
-   from the `**Read before …**` sentences **123 rulings already wrote about
-   themselves**. It harvests a convention this repo invented and never collected.
-   §1 is *"before you do this, read that"*, **every phrase copied verbatim**; §2
-   lists every ruling declaring no trigger, by pointer and title. Rebuilt and
-   staleness-checked on the ROOT `lint`, so a ruling added without rebuilding
-   cannot merge.
+   from the `**Read before …**` sentences **the rulings already wrote about
+   themselves — in `DECISIONS.md` AND in their `DECISIONS-INDEX.md` lines, and
+   reading only the first was a defect that cost a third of the coverage**
+   (:22640). It harvests a convention this repo invented and never collected.
+   §1 is *"before you do this, read that"* — **607 phrases from 173 of 311
+   rulings, every one copied verbatim**; §2 lists every ruling declaring no
+   trigger, by pointer and title. Rebuilt and staleness-checked on the ROOT
+   `lint`, so a ruling added without rebuilding cannot merge.
 2. **`DECISIONS-INDEX.md` §1 was split.** It said *"always relevant"* and held
    2,245 lines, of which **1,631 were finished card records** — T3 rounds, PROVE
    figures, "the packet ships". Those moved, unchanged, to a new **§1B · CARD
@@ -122,12 +124,14 @@ shortened, reworded or deleted.** Two things changed:
 LOST** — it moved from "read all of this every time" to "you are pointed at the
 full original of anything that binds you". **THE SAFETY PROOF WAS RUN BEFORE A
 LINE WAS MOVED, not asserted after**: all 36 moved entries are surfaced by an
-always-read file — 30 by a trigger phrase, 6 by title and pointer in the trigger
-file's §2 — **zero hidden**.
+always-read file — **every one of them by a trigger phrase** — **zero hidden**.
+(Measured 30-by-phrase and 6-by-title-only at first; :22640 found the generator
+was not reading index lines, and closing that lifted all six.)
 
 **THE ONE THING THAT CAN STILL GO WRONG, AND IT IS NAMED IN THE GENERATED FILE
-ITSELF: a trigger list NARROWS a search and can never CLEAR one.** 177 of 307
-rulings declare no trigger. **:19256 is the recorded cost of forgetting that** —
+ITSELF: a trigger list NARROWS a search and can never CLEAR one.** **138 of 311
+rulings declare no trigger, 16 of them Kd's** (:22640 — the floor rose, the gap
+did not shut). **:19256 is the recorded cost of forgetting that** —
 a chat grepped `trial|seat cap|300|band`, the governing ruling contained none of
 those words, and a settled question went back to Kd. *No match is "nothing
 declared itself", never "nothing binds me".* When in doubt, grep the index and
@@ -136,10 +140,10 @@ open the entry.
 **MAINTENANCE, and it is the deferral rule's discipline applied twice over.**
 Every commit adding a `##` heading to `DECISIONS.md` still adds its
 `DECISIONS-INDEX.md` line in the SAME commit — **and should give the entry a
-`**Read before …**` sentence**, because that sentence is now the thing that makes
-a ruling findable. An entry without one is reachable only through a title in a
-gap list. The six card records already in that position (`:20986`, `:14174`,
-`:14147`, `:14013`, `:12832`, `:12731`) are named in §1B rather than glossed.
+`**Read before …**` sentence** — in the entry, in its index line, or both,
+because the generator reads both — **because that sentence is now the thing that
+makes a ruling findable.** An entry without one anywhere is reachable only
+through a title in a gap list, and 138 are in exactly that position.
 
 
 # AI Home Gym — Implementation Playbook for Opus 4.8
