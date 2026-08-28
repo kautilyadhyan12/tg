@@ -70,6 +70,19 @@ export interface MyOrgRow extends OrgRow {
    *  the service nulls it for a caller who is not staff, as it does the two
    *  fields above. */
   ownerTrialUsed: boolean;
+  /** IS THIS GYM'S CONSOLE READ-ONLY — i.e. will every write route refuse it.
+   *  Derived from the SAME lateral `subscription` comes out of, so this reader
+   *  cannot disagree with itself about what a live plan is. Always a boolean
+   *  here; the service nulls it for a caller who is not staff, as it does the
+   *  three fields above.
+   *
+   *  **The other reader of this rule is `gymHasLivePlan` below, and what stops
+   *  the two drifting is a TEST rather than a shared fragment** (R3.8 forbids
+   *  the fragment; :14493's Low-2 is what drift costs). That test drives this
+   *  FIELD and a refused WRITE across one gym's transition from trialling to
+   *  expired — :21580's seat-meter precedent, the same instrument for the same
+   *  hazard. */
+  consoleReadOnly: boolean;
   isMember: boolean;
   joinedAt: Date | null;
 }
@@ -460,6 +473,20 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
           }),
     seatsUsed: r.seats_used,
     ownerTrialUsed: r.owner_trial_used,
+    // THE CONSOLE IS READ-ONLY EXACTLY WHEN THIS GYM HAS NO LIVE PLAN — Part 3
+    // §4.2, and Kd's ruling of 2026-08-29 that it stops every member of staff.
+    //
+    // Read off the LATERAL rather than by a second query, so this response
+    // cannot say "you may change things" beside a `subscription: null` that says
+    // the gym is on nothing. It is one bit of the same row.
+    //
+    // NOT `subscription === null` AT THE CLIENT, which is the same arithmetic
+    // and a different guarantee: that null also covers "the caller is not staff"
+    // and "the api is too old", and a lock-out driven by an unknown is C97's
+    // defect. The service nulls this for a non-staff caller and the shared
+    // schema defaults it to null for an old api, so a definite `true` is the
+    // only thing that ever greys a control out.
+    consoleReadOnly: r.sub_status === null,
     isMember: r.is_member,
     joinedAt: r.joined_at,
   }));
@@ -1157,6 +1184,47 @@ async function seatCapFor(tx: TransactionSql, gymId: string): Promise<number | n
     WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
       AND s.status IN ('trialing','active','past_due')`;
   return rows[0]?.seat_cap ?? null;
+}
+
+/** DOES THIS GYM HAVE A LIVE PLAN — the one question Part 3 §4.2's read-only
+ *  console turns on, and the enforcement half of Kd's ruling of 2026-08-29.
+ *
+ *  **It is §4.1's three granting statuses and nothing else**, the same set
+ *  `seatCapFor` directly above, `startGymTrial`, `listOrgsForUser`'s lateral and
+ *  `entitlements/repo.ts` all treat as live — so a gym whose members are getting
+ *  gym-tier features is exactly a gym whose console still works, and the two
+ *  cannot come apart. `past_due` counts, because v1 §10's grace is a paying gym
+ *  having a bad week rather than a lapsed one.
+ *
+ *  **IT ASKS THE STATUS AND NEVER A DATE** (:21580 rule (c)). Nothing clears
+ *  `trial_ends_at` when a subscription leaves `trialing`, so a reader keying on
+ *  "has the trial end date passed" would seal a PAYING gym out of its own console
+ *  the day billing exists. It also means this needs no notion of the 14-day
+ *  window: §4.2's read-only period and the archived state after it BOTH have no
+ *  live plan, so both refuse here, and the 14 days only decides when `gyms.status`
+ *  flips — a separate card with its own line.
+ *
+ *  **A THIRD COPY OF ONE RULE, PINNED BY A TEST AND NOT BY A SHARED FRAGMENT.**
+ *  R3.8 forbids interpolating a shared `sql` fragment, and :14493's Low-2 is what
+ *  two readers of one rule cost when they drift. What holds this to
+ *  `listOrgsForUser`'s `consoleReadOnly` is a test driving the FIELD and this
+ *  REFUSAL across one gym's transition from trialling to expired — :14013's
+ *  six-site precedent, and the instrument :21580 used for the seat meter.
+ *
+ *  Takes `SqlOrTx` so a future caller can run it inside a write's own
+ *  transaction; today's caller is the service's gate, which runs it before one.
+ */
+export async function gymHasLivePlan(sql: SqlOrTx, gymId: string): Promise<boolean> {
+  const rows = await sql<{ live: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1 FROM subscriptions s
+      WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
+        AND s.status IN ('trialing','active','past_due') -- read-only gate, §4.1's live set
+    ) AS live`;
+  // A missing row is impossible — `SELECT EXISTS` always returns one — but the
+  // fallback is `false`, i.e. read-only, because refusing a write we cannot
+  // justify is the safe direction and granting one is not.
+  return rows[0]?.live ?? false;
 }
 
 export interface GymSubscriptionRow {

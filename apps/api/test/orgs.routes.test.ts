@@ -65,6 +65,26 @@ const CAP1_PLAN = "zz_orgs_cap1";
  *  a currency nobody is billed in, and now it has to admit it. */
 const TRIAL_CAD_PLAN = "zz_orgs_trial_cad";
 
+/** THE PLAN `makeOrg` PUTS EVERY GYM ON, so a fixture gym has a WORKING console.
+ *
+ *  It exists because of Kd's read-only ruling (2026-08-29): a gym with no live
+ *  plan now refuses every write, so a helper that created a gym and left it on
+ *  nothing was building a gym whose roster, codes, staff and settings all answer
+ *  409 — and 84 of this file's 134 tests went red on exactly that.
+ *
+ *  **The fixture changed because the PRODUCT did, and this is the honest
+ *  direction.** A real gym is created and immediately meets an unskippable
+ *  prompt that starts its trial (:22215 §3.2), so "a gym exists" and "a gym is on
+ *  a plan" are one step in the app and are now one step here. A test wanting the
+ *  other state says `{ plan: null }` and means it.
+ *
+ *  **The cap is deliberately huge** so this plan can never be what makes a seat
+ *  test pass or fail — `CAP1_PLAN` is still the only one-seat plan, and a test
+ *  that wants the cap to bite still says so. **INR** matches `makeOrg`'s own
+ *  default country, and **no `trial_days`** keeps it invisible to the trial
+ *  query, so the 300-seat band test still measures the real book. */
+const LIVE_PLAN = "zz_orgs_live";
+
 type App = Awaited<ReturnType<typeof buildApp>>;
 
 let ipCounter = 0;
@@ -120,7 +140,7 @@ d("orgs routes (real Postgres)", () => {
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
     await sql`DELETE FROM gyms WHERE id IN (${mine})`;
     await sql`DELETE FROM users WHERE email LIKE 'orgs-t-%@example.com'`;
-    await sql`DELETE FROM plans WHERE code IN (${CAP1_PLAN}, ${TRIAL_CAD_PLAN})`;
+    await sql`DELETE FROM plans WHERE code IN (${CAP1_PLAN}, ${TRIAL_CAD_PLAN}, ${LIVE_PLAN})`;
   };
 
   const post = (
@@ -230,18 +250,33 @@ d("orgs routes (real Postgres)", () => {
     return { userId, email, cookies: cookieMap(login) };
   };
 
+  /** Create a gym AND put it on a plan, because since Kd's read-only ruling
+   *  (2026-08-29) a gym on no plan has a console that refuses every write.
+   *
+   *  **`plan: null` IS THE OPT-OUT AND IT IS EXPLICIT ON PURPOSE.** The hazard a
+   *  defaulting fixture carries is :23578's — an org that quietly stops meaning
+   *  what a test thinks it means — so the tests that want a gym with NO plan
+   *  (every trial test, and everything asserting what an unsubscribed console is
+   *  told) say so in one word at the call site rather than relying on the absence
+   *  of a subscribe line three helpers away.
+   *
+   *  `plan` also names a DIFFERENT band for the seat-cap tests, which used to
+   *  call `subscribeGym` afterwards; that still works — see `subscribeGym`. */
   const makeOrg = async (
     cookies: Record<string, string>,
     name: string,
-    extra: { orgType?: string; country?: string } = {},
+    extra: { orgType?: string; country?: string; plan?: string | null } = {},
   ): Promise<CreatedOrg> => {
+    const { plan, ...body } = extra;
     const res = await post(
       "/v1/orgs",
-      { name, city: "Austin", country: "IN", timezone: "Asia/Kolkata", ...extra },
+      { name, city: "Austin", country: "IN", timezone: "Asia/Kolkata", ...body },
       { cookies },
     );
     expect(res.statusCode).toBe(201);
-    return JSON.parse(res.body) as CreatedOrg;
+    const created = JSON.parse(res.body) as CreatedOrg;
+    if (plan !== null) await subscribeGym(created.org.id, plan ?? LIVE_PLAN);
+    return created;
   };
 
   /** Apply with a code and return the application id.
@@ -281,9 +316,60 @@ d("orgs routes (real Postgres)", () => {
     return applicationId;
   };
 
-  /** Give a gym a live subscription on a named plan (P2.4 GAP-5's precedent:
-   *  pre-billing tests insert `provider='pilot'` rows directly). */
+  /** Put a gym on EXACTLY this plan (P2.4 GAP-5's precedent: pre-billing tests
+   *  insert `provider='pilot'` rows directly).
+   *
+   *  **IT REPLACES rather than adds, and that is what keeps the fifteen existing
+   *  call sites working unchanged.** `makeOrg` now attaches `LIVE_PLAN` to every
+   *  gym, so a test that wants a one-seat band would otherwise insert a SECOND
+   *  live row and hit `subs_one_live_uq` — a 23505 far from its cause. Deleting
+   *  first makes the helper's name true: after it, this gym is on this plan and
+   *  no other.
+   *
+   *  It clears `trial_ends_at` with the row, which matters and is wanted: a
+   *  fixture subscription is not a spent trial, so `ownerTrialUsed` stays false
+   *  and the unskippable prompt's arm is decided by the tests that actually drive
+   *  the trial door. */
+  /** TAKE A GYM OFF ITS PLAN — the state Kd's read-only ruling is about.
+   *
+   *  It removes the row rather than moving it to `expired`, so the gym looks
+   *  like one that never subscribed at all: `trial_ends_at` goes with it, which
+   *  keeps one-trial-per-owner out of the way of tests whose subject is the
+   *  trial DOOR. A test that specifically wants a SPENT trial says
+   *  `UPDATE subscriptions SET status = 'expired'` in as many words, as the
+   *  trial-chaining test already does.
+   *
+   *  Used where a test needs BOTH a working console (to build a fixture through
+   *  the real routes) and a lapsed one (its actual subject) — build first, lapse
+   *  second, which is also the order a real gym lives in. */
+  const lapseGym = async (gymId: string) => {
+    await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gymId}`;
+  };
+
+  /** END A GYM'S TRIAL THE WAY THE 04:00 SWEEP ENDS IT — the row stays and its
+   *  status becomes `expired`.
+   *
+   *  **IT IS NOT INTERCHANGEABLE WITH `lapseGym` ABOVE AND A MUTANT PROVED IT.**
+   *  O155 widens the read-only gate's status set to include `expired`, and it
+   *  came back ALIVE against a test that reached "no plan" by DELETING the row:
+   *  with no row at all, `EXISTS` is false whatever statuses the query lists, so
+   *  the widened set was invisible. The two helpers are the two states a gym
+   *  actually arrives in — never subscribed, and trial over — and the second is
+   *  the one Kd's ruling is about, so the headline refusal test uses this one.
+   *  :21580's C91 and :22921's O148, which is the half this repo keeps recording
+   *  last: the mutant was right and the test it was pointed at could not see it. */
+  const expireGym = async (gymId: string) => {
+    const updated = await sql`
+      UPDATE subscriptions SET status = 'expired'
+      WHERE owner_type = 'gym' AND owner_id = ${gymId} RETURNING id`;
+    // A silent no-op here would leave a gym on a LIVE plan while the test
+    // believed it lapsed, which reads as the gate failing rather than as the
+    // fixture failing.
+    expect(updated.length, "expireGym found no subscription to expire").toBe(1);
+  };
+
   const subscribeGym = async (gymId: string, planCode: string) => {
+    await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gymId}`;
     await sql`
       INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider)
       VALUES ('gym', ${gymId}, (SELECT id FROM plans WHERE code = ${planCode}), 'trialing', 'pilot')`;
@@ -305,6 +391,14 @@ d("orgs routes (real Postgres)", () => {
                          seat_cap, trial_days, rank, entitlements, member_entitlements)
       VALUES (${TRIAL_CAD_PLAN}, 'org', ${"plan." + TRIAL_CAD_PLAN}, 0, 'CAD', 'month',
               1, 30, 10, '{}'::jsonb, '{}'::jsonb)`;
+    // The band every fixture gym sits on so its console WORKS — see `LIVE_PLAN`.
+    // Cap 1000 so it can never decide a seat test; no trial days so the trial
+    // query cannot see it.
+    await sql`
+      INSERT INTO plans (code, audience, name_key, price_minor, currency, interval,
+                         seat_cap, trial_days, rank, entitlements, member_entitlements)
+      VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'INR', 'month',
+              1000, 0, 10, '{}'::jsonb, '{}'::jsonb)`;
     app = await buildApp(loadConfig(baseEnv));
   }, 120_000);
 
@@ -1420,6 +1514,11 @@ d("orgs routes (real Postgres)", () => {
     // hand-inserted clinic is not staff of it and gets the stranger's 404.
     await sql`
       INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${gymId}, ${owner.userId}, 'owner')`;
+    // …and the PLAN that `makeOrg` attaches, for the same kind of reason: since
+    // Kd's read-only ruling (2026-08-29) a gym on no live plan refuses every
+    // write, so without this the confirm below is a 409 and the consent gate —
+    // the actual subject of this test — is never reached.
+    await subscribeGym(gymId, LIVE_PLAN);
 
     const refused = await post(
       "/v1/orgs/join",
@@ -1751,6 +1850,11 @@ d("orgs routes (real Postgres)", () => {
     const member = await makeUser("stale-member");
     const org = await makeOrg(owner.cookies, "Orgs Test Stale");
     await joinAsMember(member.cookies, org, owner.cookies);
+    // THE GYM THEN LAPSES, which is why the confirm above ran on a plan and this
+    // does not. Since Kd's read-only ruling a gym on nothing cannot confirm
+    // anybody, so "member of a gym with no subscription" can only be reached in
+    // the order a real gym reaches it: join first, lapse second.
+    await lapseGym(org.org.id);
 
     // Cache the FREE answer while the gym has no subscription. Without this
     // read there is nothing stale to shake loose and the assertion below is
@@ -5320,7 +5424,7 @@ d("orgs routes (real Postgres)", () => {
    *  database's, not this process's. */
   it("an owner starts the gym's 30-day trial and gets the 300-seat band", { timeout: 30_000 }, async () => {
     const owner = await makeUser("trial-ok");
-    const org = await makeOrg(owner.cookies, "Orgs Test Trial Ok", { country: "US" });
+    const org = await makeOrg(owner.cookies, "Orgs Test Trial Ok", { country: "US", plan: null });
 
     const res = await post(`/v1/orgs/${org.org.id}/trial`, {}, { cookies: owner.cookies });
     expect(res.statusCode).toBe(200);
@@ -5376,7 +5480,7 @@ d("orgs routes (real Postgres)", () => {
    *  table, so it is the answer a screen would actually be given. */
   it("members get the gym plan the moment the trial starts", { timeout: 60_000 }, async () => {
     const owner = await makeUser("trial-ents");
-    const org = await makeOrg(owner.cookies, "Orgs Test Trial Ents", { country: "US" });
+    const org = await makeOrg(owner.cookies, "Orgs Test Trial Ents", { country: "US", plan: null });
 
     const before = await get("/v1/entitlements/me", { cookies: owner.cookies });
     expect(before.statusCode).toBe(200);
@@ -5398,7 +5502,7 @@ d("orgs routes (real Postgres)", () => {
    *  SECOND row was written would be the worst of both. */
   it("a second tap on Start trial changes nothing", { timeout: 30_000 }, async () => {
     const owner = await makeUser("trial-twice");
-    const org = await makeOrg(owner.cookies, "Orgs Test Trial Twice", { country: "US" });
+    const org = await makeOrg(owner.cookies, "Orgs Test Trial Twice", { country: "US", plan: null });
 
     const first = await post(`/v1/orgs/${org.org.id}/trial`, {}, { cookies: owner.cookies });
     expect((JSON.parse(first.body) as TrialBody).outcome).toBe("started");
@@ -5422,7 +5526,7 @@ d("orgs routes (real Postgres)", () => {
    *  lapsed trial actually leaves behind, and the refusal has to survive it. */
   it("one free trial per owner, ever — even after the first has expired", { timeout: 60_000 }, async () => {
     const owner = await makeUser("trial-chain");
-    const gymA = await makeOrg(owner.cookies, "Orgs Test Trial Chain A", { country: "US" });
+    const gymA = await makeOrg(owner.cookies, "Orgs Test Trial Chain A", { country: "US", plan: null });
     expect(
       (await post(`/v1/orgs/${gymA.org.id}/trial`, {}, { cookies: owner.cookies })).statusCode,
     ).toBe(200);
@@ -5430,7 +5534,7 @@ d("orgs routes (real Postgres)", () => {
     await sql`UPDATE subscriptions SET status = 'expired'
               WHERE owner_type = 'gym' AND owner_id = ${gymA.org.id}`;
 
-    const gymB = await makeOrg(owner.cookies, "Orgs Test Trial Chain B", { country: "US" });
+    const gymB = await makeOrg(owner.cookies, "Orgs Test Trial Chain B", { country: "US", plan: null });
     const res = await post(`/v1/orgs/${gymB.org.id}/trial`, {}, { cookies: owner.cookies });
     expect(res.statusCode).toBe(409);
     expect((JSON.parse(res.body) as { error: string }).error).toBe("trial_already_used");
@@ -5447,7 +5551,7 @@ d("orgs routes (real Postgres)", () => {
    *  applicant is refused BY THE CAP. */
   it("starting the trial makes the seat cap bite", { timeout: 60_000 }, async () => {
     const owner = await makeUser("trial-cap");
-    const org = await makeOrg(owner.cookies, "Orgs Test Trial Cap", { country: "CA" });
+    const org = await makeOrg(owner.cookies, "Orgs Test Trial Cap", { country: "CA", plan: null });
 
     // THE CURRENCY IS SET DIRECTLY, AND IT HAS TO BE SINCE 2026-08-28. Creating
     // the gym in Canada used to leave it on CAD, which is the currency the
@@ -5506,7 +5610,7 @@ d("orgs routes (real Postgres)", () => {
    *  further re-ruling of the map. */
   it("a gym in a currency with no price book is refused, not guessed at", { timeout: 30_000 }, async () => {
     const owner = await makeUser("trial-nocur");
-    const org = await makeOrg(owner.cookies, "Orgs Test Trial NoCur", { country: "GB" });
+    const org = await makeOrg(owner.cookies, "Orgs Test Trial NoCur", { country: "GB", plan: null });
     expect(org.org.currencyDisplay, "the UK is billed in dollars since :22215").toBe("USD");
 
     // GBP has no plan rows at all — checked here rather than assumed, because
@@ -5524,7 +5628,7 @@ d("orgs routes (real Postgres)", () => {
 
   it("an archived gym cannot start a trial", { timeout: 30_000 }, async () => {
     const owner = await makeUser("trial-arch");
-    const org = await makeOrg(owner.cookies, "Orgs Test Trial Arch", { country: "US" });
+    const org = await makeOrg(owner.cookies, "Orgs Test Trial Arch", { country: "US", plan: null });
     await sql`UPDATE gyms SET status = 'archived' WHERE id = ${org.org.id}`;
 
     const res = await post(`/v1/orgs/${org.org.id}/trial`, {}, { cookies: owner.cookies });
@@ -5541,8 +5645,8 @@ d("orgs routes (real Postgres)", () => {
   it("another gym's owner cannot start this gym's trial", { timeout: 60_000 }, async () => {
     const ownerA = await makeUser("trial-x-a");
     const ownerB = await makeUser("trial-x-b");
-    const gymA = await makeOrg(ownerA.cookies, "Orgs Test Trial X A", { country: "US" });
-    await makeOrg(ownerB.cookies, "Orgs Test Trial X B", { country: "US" });
+    const gymA = await makeOrg(ownerA.cookies, "Orgs Test Trial X A", { country: "US", plan: null });
+    await makeOrg(ownerB.cookies, "Orgs Test Trial X B", { country: "US", plan: null });
 
     const stranger = await post(`/v1/orgs/${gymA.org.id}/trial`, {}, { cookies: ownerB.cookies });
     expect(stranger.statusCode).toBe(404);
@@ -5562,6 +5666,11 @@ d("orgs routes (real Postgres)", () => {
   it("a manager is refused the trial until the owner ticks billing across", { timeout: 60_000 }, async () => {
     const owner = await makeUser("trial-priv-o");
     const helper = await makeUser("trial-priv-m");
+    // ON A PLAN FOR THE SETUP, OFF IT FOR THE SUBJECT, and that order is forced
+    // by Kd's read-only ruling (2026-08-29): confirming a member, appointing a
+    // manager and ticking a privilege are all WRITES, so they need a gym with a
+    // live plan — while the trial door needs one without. A real gym meets them
+    // in exactly this order, so the fixture does too.
     const org = await makeOrg(owner.cookies, "Orgs Test Trial Priv", { country: "US" });
     await joinAsMember(helper.cookies, org, owner.cookies);
     const appointed = await post(
@@ -5573,7 +5682,9 @@ d("orgs routes (real Postgres)", () => {
 
     const refused = await post(`/v1/orgs/${org.org.id}/trial`, {}, { cookies: helper.cookies });
     expect(refused.statusCode).toBe(403);
-    expect(await readSubs(org.org.id)).toHaveLength(0);
+    // The refusal wrote NOTHING — the one row here is the fixture's own, and it
+    // is the same claim the old `toHaveLength(0)` made before this gym had one.
+    expect(await readSubs(org.org.id)).toHaveLength(1);
 
     const ticked = await put(
       `/v1/orgs/${org.org.id}/staff/${helper.userId}/privileges`,
@@ -5581,6 +5692,9 @@ d("orgs routes (real Postgres)", () => {
       { cookies: owner.cookies },
     );
     expect(ticked.statusCode).toBe(200);
+
+    await lapseGym(org.org.id);
+    expect(await readSubs(org.org.id)).toHaveLength(0);
 
     const allowed = await post(`/v1/orgs/${org.org.id}/trial`, {}, { cookies: helper.cookies });
     expect(allowed.statusCode).toBe(200);
@@ -5602,7 +5716,7 @@ d("orgs routes (real Postgres)", () => {
    *  transaction waits, sees the first's row, and answers `already_subscribed`. */
   it("two simultaneous trial starts produce exactly one subscription", { timeout: 60_000 }, async () => {
     const owner = await makeUser("trial-race");
-    const org = await makeOrg(owner.cookies, "Orgs Test Trial Race", { country: "US" });
+    const org = await makeOrg(owner.cookies, "Orgs Test Trial Race", { country: "US", plan: null });
 
     const a = postgres(url ?? "", { prepare: false, max: 1 });
     const b = postgres(url ?? "", { prepare: false, max: 1 });
@@ -5633,6 +5747,7 @@ d("orgs routes (real Postgres)", () => {
     staffRole: string | null;
     subscription: { status: string; trialEndsAt: string | null; seatCap: number | null } | null;
     seatsUsed: number | null;
+    consoleReadOnly: boolean | null;
   }
 
   const mineRow = async (cookies: Record<string, string>, gymId: string): Promise<MineRow> => {
@@ -5646,9 +5761,13 @@ d("orgs routes (real Postgres)", () => {
   it("tells the console the gym is on no plan, and how full it is anyway", { timeout: 60_000 }, async () => {
     const owner = await makeUser("mine-noplan");
     const guest = await makeUser("mine-noplan-g");
-    const org = await makeOrg(owner.cookies, "Orgs Test Mine NoPlan", { country: "US" });
-
-    const empty = await mineRow(owner.cookies, org.org.id);
+    // A gym that never subscribed and has nobody in it. It needs no lapsing
+    // because nothing is ever written to it — which is also why it is a SECOND
+    // gym: since Kd's read-only ruling (2026-08-29) the roster below can only be
+    // built while a plan is live, so the two halves of this test now want two
+    // different gyms rather than one gym at two moments.
+    const bare = await makeOrg(owner.cookies, "Orgs Test Mine Bare", { country: "US", plan: null });
+    const empty = await mineRow(owner.cookies, bare.org.id);
     // Null and not an invented shape: a gym on nothing has no status, no end
     // date and no cap, and the console draws no banner and no meter for it.
     expect(empty.subscription).toBeNull();
@@ -5657,9 +5776,15 @@ d("orgs routes (real Postgres)", () => {
     // so a gym with only its owner in it has ZERO places taken.
     expect(empty.seatsUsed).toBe(0);
 
-    // POSITIVE CONTROL, so "0" is not simply what this reader always says.
+    // POSITIVE CONTROL, so "0" is not simply what this reader always says — and
+    // it is measured on a gym that has LAPSED, which is the state this test is
+    // named for: the count survives the plan going away.
+    const org = await makeOrg(owner.cookies, "Orgs Test Mine NoPlan", { country: "US" });
     await joinAsMember(guest.cookies, org, owner.cookies);
-    expect((await mineRow(owner.cookies, org.org.id)).seatsUsed).toBe(1);
+    await lapseGym(org.org.id);
+    const lapsed = await mineRow(owner.cookies, org.org.id);
+    expect(lapsed.subscription).toBeNull();
+    expect(lapsed.seatsUsed).toBe(1);
 
     /** THE COMPED MEMBER WHO IS NOT STAFF, and this fixture exists because
      *  MUTANT O138 SURVIVED WITHOUT IT.
@@ -5681,7 +5806,7 @@ d("orgs routes (real Postgres)", () => {
 
   it("carries the trial the moment it starts", { timeout: 30_000 }, async () => {
     const owner = await makeUser("mine-trial");
-    const org = await makeOrg(owner.cookies, "Orgs Test Mine Trial", { country: "US" });
+    const org = await makeOrg(owner.cookies, "Orgs Test Mine Trial", { country: "US", plan: null });
     expect(await mineRow(owner.cookies, org.org.id)).toHaveProperty("subscription", null);
 
     expect(
@@ -5814,5 +5939,251 @@ d("orgs routes (real Postgres)", () => {
     );
     expect(admitted.statusCode).toBe(200);
     expect((await mineRow(owner.cookies, org.org.id)).seatsUsed).toBe(1);
+  });
+
+  // ══ PART 3 §4.2's READ-ONLY CONSOLE — Kd's ruling of 2026-08-29 ═════════════
+  //
+  // *"the console stays read-only 14 days, then archived"*, and Kd ruled that it
+  // stops EVERY member of staff rather than only whoever can pay: `billing.manage`
+  // is a TICK, so a gate that stopped only its holders would be no gate at all —
+  // an owner appoints a manager without it and the lapsed gym carries on issuing
+  // codes and admitting members through that login.
+  //
+  // The 14 days is NOT here and is not owed here: read-only and archived-but-
+  // restorable BOTH have no live plan, so both refuse below, and the 14 days only
+  // decides when `gyms.status` flips. That is a separate card with its own line.
+
+  /** A gym with a live plan and everything a write needs: a member on the roster,
+   *  a pending applicant, a manager, and a code. Returned so a test can lapse it
+   *  and then drive every door. */
+  const lapsableGym = async (tag: string) => {
+    const owner = await makeUser(`ro-o-${tag}`);
+    const member = await makeUser(`ro-m-${tag}`);
+    const waiting = await makeUser(`ro-w-${tag}`);
+    const org = await makeOrg(owner.cookies, `Orgs Test ReadOnly ${tag}`);
+    await joinAsMember(member.cookies, org, owner.cookies);
+    const pendingId = await applyWithCode(waiting.cookies, org.joinCode.code);
+    const appointed = await post(
+      `/v1/orgs/${org.org.id}/staff`,
+      { email: member.email, role: "manager" },
+      { cookies: owner.cookies },
+    );
+    expect(appointed.statusCode).toBe(201);
+    return { owner, member, waiting, org, pendingId, gymId: org.org.id, joinCode: org.joinCode.code };
+  };
+
+  /** EVERY WRITE THE CONSOLE HAS, as `{ name, run }`. Written out rather than
+   *  derived, for the reason the "every route requires authentication" test at the
+   *  top of this file was twice caught trailing the module (:12227's L-1, then
+   *  :23128's Low-5): a list is a CLAIM, and a route added without a line here is
+   *  a route nobody notices going ungated. */
+  const consoleWrites = (
+    g: Awaited<ReturnType<typeof lapsableGym>>,
+    cookies: Record<string, string>,
+  ) => {
+    const id = g.gymId;
+    const code = g.joinCode;
+    return [
+      { name: "PATCH /v1/orgs/:gymId", run: () => patch(`/v1/orgs/${id}`, { name: "Renamed" }, { cookies }) },
+      { name: "POST /codes", run: () => post(`/v1/orgs/${id}/codes`, {}, { cookies }) },
+      { name: "PATCH /codes/:code", run: () => patch(`/v1/orgs/${id}/codes/${code}`, { paused: true }, { cookies }) },
+      { name: "POST /codes/:code/rotate", run: () => post(`/v1/orgs/${id}/codes/${code}/rotate`, {}, { cookies }) },
+      { name: "DELETE /codes/:code", run: () => del(`/v1/orgs/${id}/codes/${code}`, { cookies }) },
+      { name: "POST /applications/:id/confirm", run: () => post(`/v1/orgs/${id}/applications/${g.pendingId}/confirm`, {}, { cookies }) },
+      { name: "POST /applications/:id/reject", run: () => post(`/v1/orgs/${id}/applications/${g.pendingId}/reject`, {}, { cookies }) },
+      { name: "DELETE /members/:userId", run: () => del(`/v1/orgs/${id}/members/${g.member.userId}`, { cookies }) },
+      { name: "POST /staff", run: () => post(`/v1/orgs/${id}/staff`, { email: g.waiting.email, role: "trainer" }, { cookies }) },
+      { name: "PATCH /staff/:userId", run: () => patch(`/v1/orgs/${id}/staff/${g.member.userId}`, { role: "trainer" }, { cookies }) },
+      { name: "PUT /staff/:userId/privileges", run: () => put(`/v1/orgs/${id}/staff/${g.member.userId}/privileges`, { privileges: ["members.read"] }, { cookies }) },
+      { name: "DELETE /staff/:userId", run: () => del(`/v1/orgs/${id}/staff/${g.member.userId}`, { cookies }) },
+    ];
+  };
+
+  it("a gym with no plan refuses every console write, for the OWNER", { timeout: 120_000 }, async () => {
+    const g = await lapsableGym("owner");
+    // THE TRIAL ENDS THE WAY THE SWEEP ENDS IT — an `expired` row, not a deleted
+    // one. Mutant O155 is why: reached by deleting the row, this test could not
+    // see the gate's status set widen to admit `expired`.
+    await expireGym(g.gymId);
+
+    for (const w of consoleWrites(g, g.owner.cookies)) {
+      const res = await w.run();
+      expect(res.statusCode, `${w.name} should refuse a gym whose trial ended`).toBe(409);
+      expect(
+        (JSON.parse(res.body) as { error: string }).error,
+        `${w.name} should refuse with the read-only reason`,
+      ).toBe("gym_not_on_plan");
+    }
+
+    // …AND THE OTHER STATE A GYM ARRIVES IN — one that never subscribed at all.
+    // Both are "no live plan" and both refuse; they differ only in whether a row
+    // exists, which is exactly the difference O155 exploits.
+    const never = await lapsableGym("never");
+    await lapseGym(never.gymId);
+    const res = await patch(`/v1/orgs/${never.gymId}`, { name: "Renamed" }, { cookies: never.owner.cookies });
+    expect(res.statusCode, "a gym that never subscribed is read-only too").toBe(409);
+    expect((JSON.parse(res.body) as { error: string }).error).toBe("gym_not_on_plan");
+  });
+
+  /** THE HALF THAT IS KD'S RULING RATHER THAN THE SPEC'S. `billing.manage` is
+   *  the owner's alone by default, so this manager cannot pay — and is stopped
+   *  anyway. Without this case the gate could be narrowed to the payer and every
+   *  other test here would still pass. */
+  it("a gym with no plan refuses every console write for a MANAGER too, who cannot pay", { timeout: 120_000 }, async () => {
+    const g = await lapsableGym("mgr");
+    // Prove the premise rather than assuming it: this manager is genuinely
+    // without the billing tick, so "stopped anyway" means something.
+    const trial = await post(`/v1/orgs/${g.gymId}/trial`, {}, { cookies: g.member.cookies });
+    expect(trial.statusCode, "the manager must not be able to pay").toBe(403);
+
+    await lapseGym(g.gymId);
+    for (const w of consoleWrites(g, g.member.cookies)) {
+      // The manager holds `members.*` and `codes.*` but not `staff.manage` or
+      // `org.manage`, so the staff and details doors answer 403 BEFORE the plan
+      // is ever consulted — which is the information boundary, not a gap.
+      const res = await w.run();
+      expect([403, 409], `${w.name} must not succeed for a lapsed gym`).toContain(res.statusCode);
+    }
+    // …and the ones they DO hold are refused for the plan reason specifically.
+    const codes = await post(`/v1/orgs/${g.gymId}/codes`, {}, { cookies: g.member.cookies });
+    expect(codes.statusCode).toBe(409);
+    expect((JSON.parse(codes.body) as { error: string }).error).toBe("gym_not_on_plan");
+  });
+
+  /** THE CONTROL, and :7104's PG1 is why it is not optional: every assertion
+   *  above is satisfied by a door that is simply shut for everybody, and a gate
+   *  hard-wired to refuse would pass both tests above.
+   *
+   *  **IT ASSERTS "NEVER REFUSED FOR THE PLAN" RATHER THAN "ALL TWELVE RETURN
+   *  200", and that is a deliberate weakening of the wrong assertion.** The
+   *  twelve run in sequence against ONE gym and legitimately interfere — rotating
+   *  a code retires it, so deleting it afterwards is a different answer;
+   *  confirming an application makes rejecting the same one a conflict. Demanding
+   *  200 from all twelve would pin an ORDER nobody chose, and would go red for
+   *  reasons that have nothing to do with this card. What matters here is
+   *  precisely that `gym_not_on_plan` never appears — the two spot-checks below
+   *  keep a real success in the test as well. */
+  it("none of the twelve is refused for the plan while the gym is on one", { timeout: 120_000 }, async () => {
+    const g = await lapsableGym("live");
+    for (const w of consoleWrites(g, g.owner.cookies)) {
+      const res = await w.run();
+      const error = res.statusCode >= 400 ? (JSON.parse(res.body) as { error: string }).error : null;
+      expect(error, `${w.name} must not cite the plan on a gym that has one`).not.toBe(
+        "gym_not_on_plan",
+      );
+    }
+
+    // Two that CANNOT be disturbed by the sequence above, asserted as real
+    // successes so this test still proves the doors open at all.
+    const fresh = await lapsableGym("live2");
+    expect(
+      (await patch(`/v1/orgs/${fresh.gymId}`, { name: "Renamed" }, { cookies: fresh.owner.cookies }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await post(`/v1/orgs/${fresh.gymId}/codes`, {}, { cookies: fresh.owner.cookies }))
+        .statusCode,
+    ).toBe(201);
+  });
+
+  it("READS and the pay path keep working on a gym with no plan — it is read-ONLY", { timeout: 90_000 }, async () => {
+    const g = await lapsableGym("reads");
+    await lapseGym(g.gymId);
+    const c = { cookies: g.owner.cookies };
+    expect((await get(`/v1/orgs/${g.gymId}/members`, c)).statusCode, "roster").toBe(200);
+    expect((await get(`/v1/orgs/${g.gymId}/codes`, c)).statusCode, "codes").toBe(200);
+    expect((await get(`/v1/orgs/${g.gymId}/staff`, c)).statusCode, "staff").toBe(200);
+    expect((await get(`/v1/orgs/${g.gymId}/applications`, c)).statusCode, "queue").toBe(200);
+    expect((await get("/v1/orgs/mine", c)).statusCode, "the gym list").toBe(200);
+    // THE PAY PATH IS THE ONE WRITE THAT SURVIVES. Gating the way OUT of the
+    // state on being out of the state is :22215 §4's brick wall.
+    expect((await get(`/v1/orgs/${g.gymId}/plans`, c)).statusCode, "the price list").toBe(200);
+    const started = await post(`/v1/orgs/${g.gymId}/trial`, {}, { cookies: g.owner.cookies });
+    expect(started.statusCode, "the trial door").toBe(200);
+    expect((JSON.parse(started.body) as TrialBody).outcome).toBe("started");
+  });
+
+  /** THE ORDER OF THE TWO CHECKS IS AN INFORMATION BOUNDARY, so it is tested as
+   *  one. Reversed, the 409 would tell any signed-in stranger holding a uuid
+   *  which gyms have stopped paying. */
+  it("a stranger still gets 404 and a trainer still gets 403 on a lapsed gym — never the 409", { timeout: 90_000 }, async () => {
+    const g = await lapsableGym("order");
+    const stranger = await makeUser("ro-stranger");
+    await makeOrg(stranger.cookies, "Orgs Test ReadOnly Stranger", { plan: null });
+    await lapseGym(g.gymId);
+
+    const outsider = await patch(`/v1/orgs/${g.gymId}`, { name: "Nope" }, { cookies: stranger.cookies });
+    expect(outsider.statusCode, "a stranger learns nothing about this gym").toBe(404);
+    expect((JSON.parse(outsider.body) as { error: string }).error).toBe("org_not_found");
+
+    // A trainer of THIS gym: inside it, but without `org.manage`.
+    const trainer = await makeUser("ro-trainer");
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${g.gymId}, ${trainer.userId}, 'trainer')`;
+    const refused = await patch(`/v1/orgs/${g.gymId}`, { name: "Nope" }, { cookies: trainer.cookies });
+    expect(refused.statusCode, "the privilege answers before the plan does").toBe(403);
+    expect((JSON.parse(refused.body) as { error: string }).error).toBe("forbidden");
+  });
+
+  /** THE ANTI-DRIFT INSTRUMENT, and it is the reason this card needs no shared
+   *  `sql` fragment (R3.8 forbids one; :14493's Low-2 is what drift costs).
+   *
+   *  "Does this gym have a live plan" is now written out in FOUR places — the
+   *  lateral `consoleReadOnly` is read off, `gymHasLivePlan` behind the write
+   *  gate, `seatCapFor`, and `startGymTrial`. What holds the first two together
+   *  is this: ONE gym crossing ONE transition, with the FIELD and the REFUSAL
+   *  both measured on each side. :14013's six-site precedent, and the instrument
+   *  :21580 used for the seat meter.
+   *
+   *  It crosses the transition the way the PRODUCT does — the 04:00 sweep's own
+   *  `UPDATE … SET status = 'expired'` — rather than by deleting the row, so an
+   *  `expired` row really is read as "no live plan" by both readers. */
+  it("the console's read-only flag and the write refusal move together across a trial ending", { timeout: 120_000 }, async () => {
+    const g = await lapsableGym("drift");
+
+    // ── While the trial is live: the field says writable, and a write works.
+    const live = await mineRow(g.owner.cookies, g.gymId);
+    expect(live.consoleReadOnly, "a gym on a live plan is not read-only").toBe(false);
+    expect(live.subscription?.status).toBe("trialing");
+    const allowed = await post(`/v1/orgs/${g.gymId}/codes`, {}, { cookies: g.owner.cookies });
+    expect(allowed.statusCode, "a live gym may create a code").toBe(201);
+
+    // ── The trial ends exactly as the sweep ends it.
+    await sql`UPDATE subscriptions SET status = 'expired'
+              WHERE owner_type = 'gym' AND owner_id = ${g.gymId}`;
+
+    // ── The field flips…
+    const lapsed = await mineRow(g.owner.cookies, g.gymId);
+    expect(lapsed.consoleReadOnly, "an expired plan is a read-only console").toBe(true);
+    expect(lapsed.subscription, "and the gym reads as on no plan").toBeNull();
+    // …and the SAME write the same owner just made is refused.
+    const refused = await post(`/v1/orgs/${g.gymId}/codes`, {}, { cookies: g.owner.cookies });
+    expect(refused.statusCode, "the door closes in the same breath").toBe(409);
+    expect((JSON.parse(refused.body) as { error: string }).error).toBe("gym_not_on_plan");
+  });
+
+  it("tells a trainer the console is read-only, and a plain member nothing at all", { timeout: 90_000 }, async () => {
+    const g = await lapsableGym("who");
+    const trainer = await makeUser("ro-who-trainer");
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${g.gymId}, ${trainer.userId}, 'trainer')`;
+    await lapseGym(g.gymId);
+
+    // A TRAINER IS TOLD, and that is Kd's ruling reaching the wire: their buttons
+    // stop working, so they are owed the sentence saying why. It parts company
+    // here with `ownerTrialUsed`, which is `billing.manage` only.
+    const seen = await mineRow(trainer.cookies, g.gymId);
+    expect(seen.consoleReadOnly).toBe(true);
+    expect(seen.staffRole).toBe("trainer");
+
+    // A PLAIN MEMBER IS TOLD NOTHING — §2.4's boundary, the same one that
+    // withholds `subscription` and `seatsUsed`. Null is "we did not ask".
+    const plain = await makeUser("ro-who-member");
+    // They are a member, not staff: reuse the gym's live plan to get them in,
+    // then lapse it again.
+    await subscribeGym(g.gymId, LIVE_PLAN);
+    await joinAsMember(plain.cookies, g.org, g.owner.cookies);
+    await lapseGym(g.gymId);
+    const asMember = await mineRow(plain.cookies, g.gymId);
+    expect(asMember.staffRole).toBeNull();
+    expect(asMember.consoleReadOnly).toBeNull();
   });
 });

@@ -1,6 +1,71 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE LAPSED GYM'S CONSOLE GOES READ-ONLY — SERVER HALF. DECISIONS :23711.
+      The other half of :22215 §5 step 1, split off the sweep card at :22341 §4.
+
+  1. **KD RULED THE ONE OPEN QUESTION: it stops EVERY member of staff**, not
+     only whoever can pay. The reason the alternative lost is the part to keep —
+     `billing.manage` is a TICK, so a gate on its holders alone is no gate: an
+     owner appoints a manager without it and the lapsed gym carries on issuing
+     codes and admitting members. It differs from :22921 §1's prompt ruling
+     because read-only SEALS NOBODY OUT; staff still see everything.
+  2. **TWELVE write functions now take `requireWritablePrivilege` → 409
+     `gym_not_on_plan`.** Reads and the pay path are deliberately NOT gated and
+     that direction is mutated (O159, O160) — §4.2 says read-ONLY, and gating
+     the way out of the state on being out of it is :22215 §4's brick wall.
+     **Privilege is checked FIRST**: reversed, the 409 would tell any stranger
+     with a uuid which gyms stopped paying (O158).
+  3. **`consoleReadOnly` on `/v1/orgs/mine`** — staff-only but EVERY staff role
+     (unlike `ownerTrialUsed`, which :23128 narrowed to `billing.manage`
+     because it is a fact about a PERSON). Three-state; **null is "we could not
+     ask", never "locked"** (C97). The subscription LATERAL was NOT widened
+     (:22921, :12731) — the OWED line predicting it would be is superseded.
+  4. **O155 SURVIVED AND IT WAS THE FILTER HALF AGAIN.** The headline test
+     reached "no plan" by DELETING the row, so a status set widened to admit
+     `expired` was structurally invisible. **A gym lapses in TWO ways and they
+     are not one state** — `lapseGym` (never subscribed) and `expireGym` (the
+     sweep ran) are now separate fixtures and the headline test uses the second.
+  5. **FIVE mutants drifted onto the renamed gate; the whole-table pre-check
+     caught every one before a byte was written.** Re-aimed at the SAME call
+     sites, each re-measured RED. **And O79's `expect` filter had NEVER matched
+     a test** ("four staff routes" vs a test saying five) — inert, not passing,
+     pre-existing; fixed only because this card re-aimed that row.
+  6. **THE FIXTURE CHANGED BECAUSE THE PRODUCT DID: 84 of 134 tests went red.**
+     `makeOrg` now attaches a plan; `{ plan: null }` is an explicit opt-out at
+     fifteen call sites (:23578's stale-fixture lesson).
+
+FILES: packages/shared/src/orgs.ts · apps/api/src/modules/orgs/{repo.ts,
+       service.ts} · apps/api/test/{orgs.routes.test.ts,orgs.sweep.test.ts} ·
+       apps/api/tools/mutate-orgs.mjs · DECISIONS.md · DECISIONS-INDEX.md ·
+       DECISIONS-TRIGGERS.md · OWED.md · HANDOFF.md
+
+PROVE: all LOCAL — `orgs.routes` **141/141** (+7) · `orgs.sweep` 18/18 · api
+       **651/653**, the two failures PRE-EXISTING (see OPEN) and NOT quoted as
+       green · shared 51/51 · web **1327/1327 unchanged** · tsc exit 0 on api
+       and shared, **PROVEN REAL** by planting TS2322 and restoring sha256-exact
+       · eslint clean on five files · node --check on the harness ·
+       check-harnesses 25 · check-decisions-index 231 · check-decisions-triggers
+       643 from 181 of 319 · **two stated SUBSETS of 160: O154–O160 7 RED 0
+       ALIVE; O59/O70/O79/O100/O115 5 RED 0 ALIVE**, controls GREEN first, 262
+       rows fingerprinted, restores sha256-verified after every mutant.
+
+OPEN:  **`orgs.unit.test.ts` has been RED since the currency card and CI with
+       it** — it demands CAD/GBP where :22215 §3.5 ruled USD; proven
+       pre-existing at HEAD, 🔴 OWED line, NOT fixed here (R1.1) · a lapsed gym
+       cannot confirm anybody, so applicants wait 14 days for nothing (⚪) ·
+       C68's redundancy · the contact channel · the consumer trial's expiry ·
+       the worker's job routing having no test.
+
+NEXT:  **T3 on this diff, in a FRESH chat** — then the WEB half (disable every
+       refused control with a true sentence; §4.2's "trial expired" banner state
+       is buildable now that a trial can end), then the 14-day archive. NO SMOKE
+       on this card and that was checked rather than asserted: nothing is drawn
+       yet. Kd's API is pointed at the LOCAL practice database from the last
+       smoke — ask him which he wants before the web half's smoke.
+```
+
+```
 TASK: THE FORCED PROMPT'S WEB HALF — T3 ROUND 1 AND ITS FIX ROUND. ZERO
       Critical/High, SIX Low, THE PACKET SHIPS. DECISIONS :23578.
       Reviews 99687c5 + 3891acc (:23257). Kd approved the list first ("fix all").

@@ -771,6 +771,52 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  console, so the client requires a definite answer before it blocks
    *  anything. */
   ownerTrialUsed: z.boolean().nullable().default(null),
+  /** IS THIS GYM'S CONSOLE READ-ONLY RIGHT NOW — Part 3 §4.2's *"the console
+   *  stays read-only 14 days, then archived"*, and Kd's ruling of 2026-08-29
+   *  that it stops **every member of staff**, not only whoever can pay.
+   *
+   *  **TRUE MEANS THE SERVER WILL REFUSE EVERY WRITE ON THIS GYM.** It is the
+   *  same answer `requireWritablePrivilege` reaches on the way into the twelve
+   *  routes that change something — join codes, letting people in, the roster,
+   *  the staff list, the gym's own details — so the console can grey out a
+   *  control instead of drawing one whose every press is a 409.
+   *
+   *  **HIDING IS NOT THE ENFORCEMENT AND THIS FIELD IS NOT PRETENDING TO BE**
+   *  (R3.3). The refusal is server-side and fires whatever the caller believes;
+   *  a client that never read this field would still be unable to change
+   *  anything. What it buys is a screen that says something TRUE about why.
+   *
+   *  **IT EXISTS RATHER THAN BEING DERIVED FROM `subscription === null`, AND
+   *  THE REASON IS THE ONE THING TO READ TWICE.** That null has three causes and
+   *  they are deliberately indistinguishable (the field above says so in as many
+   *  words): the gym is on nothing · the caller is not staff · the api predates
+   *  the field. Two of those are "we could not ask". **A field a console cannot
+   *  be sure of must never drive a lock-out** — the rule the unskippable prompt
+   *  is built on (mutant C97), where guessing wrong seals a person out of their
+   *  own console. So the definite answer gets its own three-state field:
+   *  `true`/`false` are the server's own computation, and **`null` means "we
+   *  could not ask", never "locked"**. An older api sends nothing,
+   *  `.default(null)` fills it in, and the console greys out nothing at all —
+   *  which is safe precisely because the server is the enforcement.
+   *
+   *  **IT DOES NOT WIDEN THE SUBSCRIPTION LATERAL, WHICH WAS THE OTHER ROUTE AND
+   *  IS THE WRONG ONE** — `subs_one_live_uq` is a PARTIAL index over the three
+   *  live statuses, which is what makes that read's `LIMIT 1` well-defined
+   *  (:22921, :12731's trap from the other side). This is a separate boolean
+   *  asking a separate question, exactly as `ownerTrialUsed` is.
+   *
+   *  **IT GATES ON STATUS AND NEVER ON A DATE** (:21580 rule (c)): "does this gym
+   *  have a live plan", not "how long ago did its trial end". Nothing clears
+   *  `trial_ends_at`, so a reader keying on the date would make a PAYING gym
+   *  read-only the day billing exists.
+   *
+   *  **STAFF ONLY, BUT EVERY STAFF ROLE — and that is where it parts company with
+   *  `ownerTrialUsed` above.** That field is gated on `billing.manage`, because
+   *  the prompt it feeds stops only whoever can pay (:22921 §1). This one is told
+   *  to a trainer as well, because Kd ruled the read-only console applies to
+   *  everybody: a trainer whose buttons no longer work is owed the sentence
+   *  saying why. A plain member is told nothing, on §2.4's boundary. */
+  consoleReadOnly: z.boolean().nullable().default(null),
   isMember: z.boolean(),
   joinedAt: z.string().nullable(),
 });

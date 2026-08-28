@@ -150,6 +150,10 @@ d("join-application sweep + nudge (real Postgres)", () => {
     await sql`DELETE FROM gym_join_applications WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM audit_log WHERE gym_id IN (${mine})`;
+    // The plan `makeOrg` attaches so this suite's confirms and rejects are not
+    // refused by the read-only console (Kd, 2026-08-29). Before `gyms`, because
+    // `subscriptions.owner_id` points at one.
+    await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
     await sql`DELETE FROM gyms WHERE id IN (${mine})`;
     await sql`DELETE FROM users WHERE email LIKE 'sweep-t-%@example.com'`;
   };
@@ -239,7 +243,23 @@ d("join-application sweep + nudge (real Postgres)", () => {
       cookies,
     );
     expect(res.statusCode).toBe(201);
-    return JSON.parse(res.body) as CreatedOrg;
+    const created = JSON.parse(res.body) as CreatedOrg;
+    // PUT IT ON A PLAN, because since Kd's read-only ruling (2026-08-29) a gym
+    // with no live subscription refuses every console write — and confirming and
+    // rejecting applications, which is most of this suite's fixture-building,
+    // are two of them. A real gym is on a plan by the time anybody is waiting at
+    // its door (the forced trial, :22215 §3.2), so this is the honest fixture
+    // rather than a way round the gate.
+    //
+    // A SEEDED band rather than a fixture plan: this suite has no seat-cap test
+    // for `org_b1_in_m`'s 300 places to interfere with, and one less row to seed
+    // and clean up. `provider='pilot'` is P2.4 GAP-5's precedent for pre-billing
+    // rows.
+    await sql`
+      INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider)
+      VALUES ('gym', ${created.org.id},
+              (SELECT id FROM plans WHERE code = 'org_b1_in_m'), 'trialing', 'pilot')`;
+    return created;
   };
 
   const applyWithCode = async (cookies: Record<string, string>, code: string) => {

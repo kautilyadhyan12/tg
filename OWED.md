@@ -4931,6 +4931,74 @@ file and is stated so nobody reads these as lower priority than they are.
       **AND IT IS THE PREREQUISITE FOR THE SUBSCRIBE PROMPT** on the 🔴 line
       below — an unskippable prompt over a console that still works is not a
       prompt, it is a dialog somebody closes.
+      **THE SERVER HALF IS DONE 2026-08-29 (DECISIONS :23711) AND THIS LINE STILL
+      DOES NOT TICK, because nothing a person can SEE has changed yet.** Twelve
+      write doors now answer 409 `gym_not_on_plan` for a gym with no live plan —
+      the gym's own details, all four code doors, confirm, reject, remove member
+      and all four staff doors — while every READ and the pay path keep working,
+      which is what makes it read-ONLY. **Kd ruled the scope: it stops EVERY
+      member of staff, not only whoever can pay** (`billing.manage` is a tick, so
+      a gate on its holders alone is no gate — an owner would simply act through
+      a manager). **`/v1/orgs/mine` gained `consoleReadOnly`**, three-state and
+      staff-only, so the screens can grey the right controls out; `null` means
+      "we could not ask" and locks nothing (C97's rule).
+      **THE LATERAL WAS NOT WIDENED after all, and the note above predicting it
+      would be is superseded**: a separate field asks the separate question, for
+      :22921's reason (`subs_one_live_uq` is a PARTIAL index over the three live
+      statuses, which is what makes that read's `LIMIT 1` well-defined).
+      **WHAT IS LEFT ON THIS LINE IS THE SCREENS:** every control the server now
+      refuses is still drawn live, so a lapsed gym's staff meet a button whose
+      press is a 409 with no sentence saying why. Nothing is deleted to fix that
+      — the controls are DISABLED with a true sentence (the no-removal rule), and
+      §4.2's "trial expired" banner state, which :21580 recorded as unbuildable
+      because no trial could end, is buildable now.
+- [ ] 🟡 **THE LAPSED GYM'S CONSOLE IS NOT ARCHIVED AFTER 14 DAYS — the third
+      step of Kd's :22215 §5 step 1, split off at the plan gate on 2026-08-29
+      (:23711) and shown to him in one line, not deferred quietly.**
+      Part 3 §4.2: *"the console stays read-only 14 days, then archived
+      (restorable by reactivating)"*. **The 14 days is the SPEC's number and was
+      NOT re-ratified** (:22215 §6) — do not shorten or lengthen it without
+      asking.
+      **NOTHING IS BLOCKED BY ITS ABSENCE, and that is why it could be split:**
+      read-only and archived BOTH mean "no live plan", so the write gate built at
+      :23711 already refuses both, and `gyms.status` already permits
+      `'active','archived'` since `0001_init` with `org_archived` refusals
+      already wired in three places. **What is missing is the WRITER** — nothing
+      in the product ever sets `archived` — and the restore half.
+      **The dependency to settle first: 14 days from WHAT.** There is no
+      `expired_at` column; `trial_ends_at` is the only date on the row, and it is
+      the trial's end rather than the sweep's run. Whoever builds this decides
+      that with a ruling or a column, and must not infer it.
+- [ ] 🔴 **`orgs.unit.test.ts` HAS BEEN RED SINCE THE CURRENCY CARD, AND CI WITH
+      IT — found 2026-08-29 (:23711 §6a) by a card that had nothing to do with
+      it.** Two assertions demand `currencyForCountry("CA") === "CAD"` and
+      `("GB") === "GBP"`, while Kd ruled at :22215 §3.5 — and :22921 §2(c) built
+      — CA, GB and the euro area onto **USD**.
+      **PROVEN PRE-EXISTING RATHER THAN ASSUMED:** at HEAD the map already reads
+      `CA: "USD"` and the test already reads `"CAD"`, so it was red before this
+      card touched anything. **Neither :22921's PROVE nor :23128's ran that
+      file**, which is how a card shipped leaving CI red — and is :22782's
+      standing rule ("a card that closes a documented gap should grep for the
+      gap's own description before it ships") failing on its own author.
+      **THE TEST IS WHAT IS WRONG, not the map**, and the fix is two lines. NOT
+      taken at :23711 because it encodes a Kd ruling and belongs to the card that
+      made it false (R1.1) — but it is 🔴 because a red suite is a broken gate for
+      everybody, not only for its owner.
+- [ ] ⚪ **A LAPSED GYM CANNOT CONFIRM ANYBODY, SO PEOPLE CAN STILL APPLY TO IT
+      AND WAIT FOR NOTHING — recorded 2026-08-29 (:23711 §6b) as a consequence
+      the read-only card CREATES, rather than found later.**
+      `POST /v1/orgs/join` is a MEMBER door and is deliberately not gated by the
+      read-only rule, so somebody typing a lapsed gym's code still joins a queue
+      whose confirm button now answers 409. The application expires by itself
+      after 14 days (`APPLICATION_TTL_DAYS`), so it resolves rather than
+      festering, and the applicant's screen says they are waiting — which is
+      TRUE, so it is not :5807's class.
+      **TWO SEPARATE THINGS ARE OWED and they are not the same size.** The
+      console's own waiting queue should SAY that nobody can be let in until the
+      gym is on a plan — that is the web half's job and costs a sentence. Whether
+      the join DOOR itself should refuse is a product question with its own copy
+      and Kd's ruling, and it touches a surface with heavy rulings behind it
+      (:11072, :11385, :12343).
 - [ ] ⚪ **A CONSUMER TRIAL WILL NEVER END, FOR THE SAME REASON A GYM'S ONE DID
       NOT — recorded 2026-08-28 (:22341) so the class is visible rather than
       re-created.** `trialSweep.ts` filters `owner_type = 'gym'` deliberately:

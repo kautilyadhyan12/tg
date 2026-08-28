@@ -23707,3 +23707,205 @@ line** · restores sha256-verified after every mutant.
 
 **THE PACKET SHIPS. T3 closed at round 1.** The smoke is done (11/11, :23257 §11
 and §12); nothing new ticks.
+
+## 2026-08-29 — THE LAPSED GYM'S CONSOLE GOES READ-ONLY (server half): twelve write doors refuse a gym with no plan, Kd rules it stops EVERY member of staff, and a surviving mutant proves the two ways a gym lapses are not one state
+
+**Read before adding any write route to the orgs module, before gating anything
+on whether a gym has a live plan, before reaching a lapsed gym through a test
+fixture, before adding a field to `/v1/orgs/mine`, and before deleting a
+subscription row to mean "this gym lapsed".**
+
+The other half of :22215 §5 step 1, split out of the expiry sweep on 2026-08-28
+with Kd's agreement (:22341 §4) rather than deferred quietly, and carried on its
+own `OWED.md` line since. Split again at the plan gate the way :22341 and :22921
+were: this is the SERVER half, the screens are the next card, and the 14-day
+archive is the one after that.
+
+### 1. KD'S RULING — IT STOPS EVERY MEMBER OF STAFF, NOT ONLY WHOEVER CAN PAY
+
+Put to him as the card's one open question, in one line each way with a
+recommendation, because :22921 §1 rules only that the unskippable PROMPT stops
+`billing.manage` — a ruling about the prompt, which does not answer this. He
+chose **everyone**.
+
+**THE REASON THE ALTERNATIVE WAS RECOMMENDED AGAINST IS THE PART TO KEEP:
+`billing.manage` is a TICK, so a gate that stopped only its holders would be no
+gate at all.** An owner appoints a manager without it and the lapsed gym carries
+on issuing join codes and admitting members through that login — measured, not
+supposed: `ROLE_PRIVILEGES.manager` holds `codes.manage`, `members.confirm` and
+`members.remove` by default. It would have been a screen-deep rule wearing a
+server's clothes, which is R3.3 inverted.
+
+**Nobody is sealed out by it, which is what makes it a different question from
+the prompt's.** :22921 §1 refused to block a trainer because a trainer cannot pay
+and would have been left at a brick wall. Read-only walls nobody in: every staff
+member still SEES everything, and what stops is changing it.
+
+### 2. WHAT SHIPS
+
+**(a) `requireWritablePrivilege` in `modules/orgs/service.ts`** — the existing
+privilege gate, plus §4.2's read-only console — on **exactly twelve** write
+functions: `updateOrg` · the four code doors · confirm and reject · remove member
+· the four staff doors. Refusal is a typed **409 `gym_not_on_plan`** with one
+sentence written once: *"This gym needs a plan before anything here can be
+changed."* Complete without a button, because there is nowhere to send anybody
+(Paddle unbuilt, the admin tool unbuilt, the contact channel owed), and a
+sentence promising a next step would be a promise with no code behind it
+(:5807). Not *"ask your gym's owner"*: the reader may BE the owner.
+
+**THE ORDER OF THE TWO CHECKS IS AN INFORMATION BOUNDARY AND HAS ITS OWN TEST AND
+MUTANT.** Privilege first, so a stranger keeps `requirePrivilege`'s 404 and a
+staffer without the tick keeps its 403; only a caller who would otherwise have
+been allowed reaches the 409. **Reversed, this module would tell any signed-in
+stranger holding a uuid which gyms have stopped paying** — which is precisely
+what that 404 exists to prevent, in `requirePrivilege`'s own words. Mutant
+**O158** performs the reversal.
+
+**THE READS AND THE PAY PATH ARE DELIBERATELY NOT GATED**, and that direction is
+mutated too (**O159**, **O160**). §4.2 says read-ONLY: the roster, the codes, the
+staff list, the waiting queue and the price list all keep answering, and
+`startOrgTrial` keeps working because gating the way OUT of the state on being
+out of the state is :22215 §4's brick wall built by hand.
+
+**(b) `repo.gymHasLivePlan`** — §4.1's three granting statuses, the set
+`seatCapFor`, `startGymTrial`, `listOrgsForUser`'s lateral and
+`entitlements/repo.ts` already share, so a gym whose members are getting gym-tier
+features is exactly a gym whose console still works. **It asks the STATUS and
+never a date** (:21580 rule (c)): nothing clears `trial_ends_at`, so a reader
+keying on the date would seal a PAYING gym out the day billing exists. It also
+means the 14 days costs this card nothing — read-only and archived-but-restorable
+BOTH have no live plan, so both refuse here, and the 14 days only decides when
+`gyms.status` flips.
+
+**(c) `consoleReadOnly` on `/v1/orgs/mine`**, staff-only, three-state. **It is NOT
+`subscription === null` read at the client, and that is the one thing to read
+twice.** That null has three causes the contract deliberately renders alike — on
+nothing · not staff · api too old — and two of them are *"we could not ask"*.
+**A field a console cannot be sure of must never drive a lock-out** (C97's rule,
+built for the unskippable prompt). So the definite answer gets its own field:
+`true`/`false` are the server's computation, **`null` means "we could not ask",
+never "locked"**, and an older api greys nothing out — safe precisely because the
+server is the enforcement, not the field.
+
+**IT DOES NOT WIDEN THE SUBSCRIPTION LATERAL**, which was the other route and is
+the wrong one for :22921's reason: `subs_one_live_uq` is a PARTIAL index over the
+three live statuses, and that is what makes the lateral's `LIMIT 1` well-defined
+(:12731's trap from the other side). A separate boolean asks the separate
+question, exactly as `ownerTrialUsed` does. It is read off that same lateral —
+one bit of the same row — so the response cannot say "you may change things"
+beside a `subscription: null`.
+
+**STAFF, BUT EVERY STAFF ROLE — and that is where it parts from `ownerTrialUsed`
+one line above it**, which :23128's Low-8 narrowed to `billing.manage` because it
+is a fact about a PERSON. This is a fact about THIS GYM, like `subscription` and
+`seatsUsed`, and a trainer whose buttons stop working is owed the sentence saying
+why (:12660 on silence). A plain member is told nothing (§2.4). Mutant **O157**.
+
+**No migration.** Every column already existed.
+
+### 3. THE AUDIT (rule 4/4a) — SEVEN NEW MUTANTS, FIVE RE-AIMED, AND ONE SURVIVED FOR THE REASON THIS REPO KEEPS RECORDING LAST
+
+Every row sits in 4a's always-mutated columns without argument — this decides
+whether a gym that is not a customer can go on admitting members — and this card
+changes SERVER behaviour, so database mutants are in scope. **Three of the seven
+run in the opposite direction on purpose**: a gate that refuses too much is not a
+safer gate, it is a console taken away from a paying gym (:7104's PG1).
+
+**O155 SURVIVED, AND IT WAS THE FILTER HALF AGAIN.** It widens the gate's status
+set to admit `expired`. The headline refusal test reached "no plan" by DELETING
+the subscription row — and with no row at all `EXISTS` is false whatever statuses
+the query lists, so **the widened set was structurally invisible to it.**
+:11846's pair, :21580's C91, :22921's O148: the FILTER half is the one this repo
+keeps recording last, and the C88 question was asked first — the guarantee IS
+observable, so the test was pointed at the wrong state rather than missing.
+
+**THE FIX IS A DISTINCTION THE CARD NEEDED ANYWAY: a gym lapses in TWO ways and
+they are not one state.** `lapseGym` (the row is gone — never subscribed) and
+`expireGym` (the row says `expired` — the 04:00 sweep ran) are now separate
+fixtures with the reason written between them, the headline test uses the SECOND
+because that is the state Kd's ruling is about, and it asserts the first as well.
+Re-measured RED.
+
+**FIVE EXISTING MUTANTS DRIFTED ONTO THE RENAMED GATE AND THE WHOLE-TABLE
+PRE-CHECK CAUGHT ALL OF THEM BEFORE A BYTE WAS WRITTEN** — O59, O70, O79, O100,
+O115. Re-aimed at the SAME call sites (:15770), each keeping
+`requireWritablePrivilege` on BOTH sides so the row still mutates the PRIVILEGE
+alone and not the new gate as well, and **each re-measured RED**. This is
+:23128's standing rule earning itself again: a rename moves anchors nothing in
+the diff mentions.
+
+**AND THE PRE-CHECK FOUND A SIXTH THING THAT IS NOT MINE — O79's `expect` FILTER
+HAS NEVER MATCHED A TEST.** It named *"refused all four staff routes"*; the test
+has said **five** since the privileges route was added beside the other four.
+Verified against HEAD, so it predates this card. **The mutant was not passing, it
+was inert** — the control ABORTS on a filter that matches nothing, and because
+every api sweep is a stated SUBSET (:22921, :23128), no run has included O79
+since. Fixed here rather than reported, and the reason is narrow: **this card
+re-aimed that row, so it owes it a RED measurement, and the measurement is
+impossible while the filter is dead.** First measured RED in this run.
+
+### 4. THE FIXTURE CHANGED BECAUSE THE PRODUCT DID, AND 84 TESTS SAID SO
+
+`orgs.routes.test.ts` created gyms on no plan and then wrote to them, so the
+first run after the gate landed was **84 failed / 50 passed of 134**. Almost
+every one went through `joinAsMember`, which CONFIRMS.
+
+**The fixture that changed is the one that creates the gym, because "a gym
+exists" and "a gym is on a plan" are now one step in the app** — a real gym meets
+an unskippable prompt that starts its trial (:22215 §3.2). `makeOrg` attaches a
+plan; **`{ plan: null }` is an explicit opt-out at fifteen call sites**, written
+at the call site rather than left implicit, because :23578's lesson is a fixture
+that quietly stops meaning what a test thinks it means. `subscribeGym` REPLACES
+rather than adds, which is what keeps its fifteen existing call sites working
+against `subs_one_live_uq`.
+
+**Three tests needed BOTH states and now walk the real journey**: build the
+roster while the plan is live, lapse, then assert — which is the order a gym
+actually lives in. `orgs.sweep.test.ts` took the same change for the same reason.
+
+**THE HAZARD THIS CREATES IS WRITTEN DOWN RATHER THAN LEFT IMPLICIT:** a gym on a
+plan is now the fixture DEFAULT, so a future test wanting a lapsed gym and
+forgetting to say so tests the wrong thing silently. What stands against that is
+the opt-out being a word at the call site and the two lapse helpers being named
+for the two states.
+
+### 5. PROVE — every figure naming what it ran against
+
+**ALL LOCAL** (`localhost:5433`, `test:local` — :13659): `orgs.routes`
+**141/141** (+7, from 134) · `orgs.sweep` 18/18 · full api suite **651 passed /
+653**, the two failures being the PRE-EXISTING `orgs.unit` currency assertions
+described in §6 and **not quoted as green** · shared **51/51** · web **1327/1327
+across 49 files, unchanged** · `tsc --noEmit` exit 0 on api and shared **and
+PROVEN REAL by planting a type error** (TS2322, restored and verified
+sha256-identical, re-run clean) · `eslint --max-warnings=0` exit 0 on four api
+files and one shared file · `node --check` on the harness · **SWEEPS, both stated
+SUBSETS of 160: O154–O160, 7 RED 0 ALIVE 0 never ran; and the five re-aims
+O59/O70/O79/O100/O115, 5 RED 0 ALIVE** — every control GREEN and tallying first,
+restores sha256-verified after every mutant, 262 gym + subscription rows
+fingerprinted with no unattributed changes.
+
+**NO SMOKE, AND THIS TIME THAT CLAIM WAS CHECKED RATHER THAN ASSERTED**
+(:22921 §7 is the recorded cost of asserting it): this card draws nothing and
+changes no sentence any screen already renders. Every refusal it adds is
+reachable only through a control the console has not yet disabled — which is the
+WEB half, the next card, and where the smoke belongs. **T3 UNRUN.**
+
+### 6. TWO THINGS FOUND AND NOT FIXED, BOTH WITH THEIR OWN `OWED.md` LINES
+
+**(a) `orgs.unit.test.ts` HAS BEEN RED SINCE THE CURRENCY CARD, AND CI WITH IT.**
+It asserts `currencyForCountry("CA") === "CAD"` and `("GB") === "GBP"`, while
+:22215 §3.5 ruled — and :22921 §2(c) built — CA/GB/the euro area onto **USD**.
+**Proven pre-existing rather than assumed**: at HEAD the map already reads
+`CA: "USD"` and the test already reads `"CAD"`. Neither :22921's PROVE nor
+:23128's ran that file, so nobody saw it. **The TEST is what is wrong**, and the
+fix is two lines — but it encodes a Kd ruling and belongs to the card that made
+it false, not to this one (R1.1). Own line.
+
+**(b) A LAPSED GYM CANNOT CONFIRM ANYBODY, SO PEOPLE CAN STILL APPLY TO IT AND
+WAIT FOR NOTHING.** `POST /v1/orgs/join` is a MEMBER door and is not gated here,
+so an applicant to a lapsed gym joins a queue nobody can clear; the application
+expires by itself after 14 days (`APPLICATION_TTL_DAYS`). Graded as a dead end
+that resolves itself rather than a false sentence — the applicant's screen says
+they are waiting, and they are. **The console's own queue is where this should be
+said out loud**, which is the web half's job, and whether the join door itself
+should refuse is a separate question with its own copy. Own line.

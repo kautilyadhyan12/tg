@@ -1092,6 +1092,52 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   and **C68, not this card's, with its own ⚪ `OWED.md` line**. **T3 closed at
   round 1; the smoke is done 11/11.**
 
+- **:23711** — 2026-08-29 — **THE LAPSED GYM'S CONSOLE GOES READ-ONLY (server
+  half): twelve write doors refuse a gym with no plan, and KD RULED IT STOPS
+  EVERY MEMBER OF STAFF rather than only whoever can pay.** The other half of
+  :22215 §5 step 1, split out of the expiry sweep with his agreement (:22341 §4);
+  the screens are the next card and the 14-day archive the one after.
+  **Read before adding any write route to the orgs module, before gating anything
+  on whether a gym has a live plan, before reaching a lapsed gym through a test
+  fixture, before adding a field to `/v1/orgs/mine`, and before deleting a
+  subscription row to mean "this gym lapsed".**
+  **THE RULING'S REASON IS THE PART TO KEEP: `billing.manage` is a TICK**, so a
+  gate stopping only its holders would be no gate at all — an owner appoints a
+  manager without it and the lapsed gym carries on issuing codes and admitting
+  members through that login (`ROLE_PRIVILEGES.manager` holds `codes.manage`,
+  `members.confirm`, `members.remove`). It differs from :22921 §1's prompt ruling
+  because read-only **seals nobody out**: staff still see everything.
+  **SHIPPED:** `requireWritablePrivilege` on exactly twelve write functions, a
+  typed **409 `gym_not_on_plan`** · `repo.gymHasLivePlan` reading §4.1's three
+  granting statuses, **asking the STATUS and never a date** (:21580 rule (c)), so
+  the 14 days costs this card nothing — read-only and archived BOTH have no live
+  plan · **`consoleReadOnly` on `/v1/orgs/mine`**, staff-only but EVERY staff
+  role, three-state, **`null` = "we could not ask", never "locked"** (C97's rule;
+  it exists precisely because `subscription === null` has three causes and two of
+  them are ignorance). **The subscription LATERAL is NOT widened** (:22921,
+  :12731). **The check ORDER is an information boundary** — privilege first, so a
+  stranger keeps the 404 and never learns which gyms stopped paying (mutant
+  **O158**). **Reads and the pay path are deliberately NOT gated** (**O159**,
+  **O160**). No migration.
+  **AUDIT: seven new (O154–O160), five re-aimed (O59/O70/O79/O100/O115), and
+  O155 SURVIVED — the FILTER half again** (:11846's pair, :21580's C91, :22921's
+  O148): the headline test reached "no plan" by DELETING the row, so a widened
+  status set was structurally invisible. Fixed by splitting the fixture into
+  **`lapseGym` (never subscribed) and `expireGym` (the sweep ran)** — two states,
+  not one. **O79's `expect` filter had NEVER matched a test** ("four staff routes"
+  against a test that says five), so it was inert rather than passing;
+  pre-existing, fixed here only because this card re-aimed it.
+  **THE FIXTURE CHANGED BECAUSE THE PRODUCT DID: 84 of 134 tests went red**, and
+  `makeOrg` now attaches a plan with **`{ plan: null }` as an explicit opt-out**.
+  **PROVE all LOCAL: `orgs.routes` 141/141 · api 651/653 — the two failures
+  PRE-EXISTING and not quoted as green · shared 51/51 · web 1327/1327 unchanged ·
+  tsc PROVEN REAL · two stated SUBSETS of 160: 7 RED and 5 RED, 0 ALIVE.**
+  **No smoke (checked, not asserted — nothing is drawn yet); T3 UNRUN.**
+  **Two findings NOT fixed, each with an `OWED.md` line: `orgs.unit.test.ts` has
+  been RED since the currency card** (it demands CAD/GBP where :22215 §3.5 ruled
+  USD — proven pre-existing at HEAD), **and a lapsed gym cannot confirm anybody**,
+  so applicants wait 14 days for nothing.
+
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 
 **NOT read every session. Read an entry here when your task touches what it is

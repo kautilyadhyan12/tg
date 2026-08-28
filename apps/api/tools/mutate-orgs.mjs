@@ -810,8 +810,8 @@ const MUTANTS = [
     id: 'O59',
     target: 'service',
     why: "PRIVILEGE: code management drops to the INVITE tick, which §2.2 grants all three roles — so a trainer, who may hand out a poster, can switch the gym's door off instead",
-    from: '  await requirePrivilege(deps, gymId, userId, "codes.manage");\n  const expiresAt = assertFutureExpiry(req.expiresAt);',
-    to: '  await requirePrivilege(deps, gymId, userId, "codes.invite");\n  const expiresAt = assertFutureExpiry(req.expiresAt);',
+    from: '  await requireWritablePrivilege(deps, gymId, userId, "codes.manage");\n  const expiresAt = assertFutureExpiry(req.expiresAt);',
+    to: '  await requireWritablePrivilege(deps, gymId, userId, "codes.invite");\n  const expiresAt = assertFutureExpiry(req.expiresAt);',
     expect: 'refuses a TRAINER',
   },
   {
@@ -925,8 +925,8 @@ const MUTANTS = [
     id: 'O70',
     target: 'service',
     why: "PRIVILEGE: tidying a code away drops to the INVITE tick, which §2.2 grants all three roles — so a trainer can make a gym's codes disappear from the owner's screen",
-    from: '  await requirePrivilege(deps, gymId, userId, "codes.manage");\n\n  const outcome = await repo.removeCode(deps.sql, {',
-    to: '  await requirePrivilege(deps, gymId, userId, "codes.invite");\n\n  const outcome = await repo.removeCode(deps.sql, {',
+    from: '  await requireWritablePrivilege(deps, gymId, userId, "codes.manage");\n\n  const outcome = await repo.removeCode(deps.sql, {',
+    to: '  await requireWritablePrivilege(deps, gymId, userId, "codes.invite");\n\n  const outcome = await repo.removeCode(deps.sql, {',
     expect: 'refuses a TRAINER',
   },
 
@@ -1024,9 +1024,18 @@ const MUTANTS = [
     id: 'O79',
     target: 'service',
     why: "OWNERSHIP: staff management drops to the members tick, which §2.2 grants all three roles — so a TRAINER can appoint themselves manager, or take the owner's keys",
-    from: '  await requirePrivilege(deps, gymId, userId, "staff.manage");\n\n  const outcome = await repo.addStaff(deps.sql, {',
-    to: '  await requirePrivilege(deps, gymId, userId, "members.read");\n\n  const outcome = await repo.addStaff(deps.sql, {',
-    expect: 'refused all four staff routes',
+    from: '  await requireWritablePrivilege(deps, gymId, userId, "staff.manage");\n\n  const outcome = await repo.addStaff(deps.sql, {',
+    to: '  await requireWritablePrivilege(deps, gymId, userId, "members.read");\n\n  const outcome = await repo.addStaff(deps.sql, {',
+    // STALE FILTER, FOUND 2026-08-29 WHILE RE-AIMING THIS ROW and fixed because
+    // the re-aim is unmeasurable without it. It named "four staff routes"; the
+    // test has said FIVE since the privileges route was added beside the other
+    // four, so this control ABORTED every run that included O79 — and because
+    // every api sweep is a stated SUBSET, no run has included it since. The
+    // mutant has therefore been inert, not passing: :21580's three anchorless
+    // console mutants, arriving through the FILTER half rather than the anchor
+    // half (:11846's pair, and it is the filter half this repo keeps recording
+    // last). Measured RED after the fix.
+    expect: 'refused all five staff routes',
   },
   {
     id: 'O80',
@@ -1299,8 +1308,8 @@ const MUTANTS = [
     // guard that EXISTS, which is the lesson :14745 recorded when Kd's browser
     // found what no mutant could.
     why: "THE ROUTE'S GATE: changing somebody's ticks stops needing `staff.manage` and accepts `members.read`, which every trainer holds — so any staff member reaches the route at all. Necessary and NOT sufficient on its own: what stops a granted manager escalating is O102's refusal, not this gate",
-    from: '  await requirePrivilege(deps, gymId, userId, "staff.manage");\n\n  const outcome = await repo.setStaffPrivileges(deps.sql, {',
-    to: '  await requirePrivilege(deps, gymId, userId, "members.read");\n\n  const outcome = await repo.setStaffPrivileges(deps.sql, {',
+    from: '  await requireWritablePrivilege(deps, gymId, userId, "staff.manage");\n\n  const outcome = await repo.setStaffPrivileges(deps.sql, {',
+    to: '  await requireWritablePrivilege(deps, gymId, userId, "members.read");\n\n  const outcome = await repo.setStaffPrivileges(deps.sql, {',
     expect: 'refused all five staff routes with 403',
   },
   {
@@ -1457,7 +1466,7 @@ const MUTANTS = [
     id: 'O115',
     target: 'service',
     why: "THE DOOR ITSELF: the privilege check comes off the edit route, so any trainer — and any member of any gym — can rename somebody else's gym and change the money it is billed in. `requirePrivilege` is what makes 404 and 403 mean what they mean here",
-    from: '  await requirePrivilege(deps, gymId, userId, "org.manage");\n\n  const patch: repo.OrgPatch = {};',
+    from: '  await requireWritablePrivilege(deps, gymId, userId, "org.manage");\n\n  const patch: repo.OrgPatch = {};',
     to: '  const patch: repo.OrgPatch = {};',
     expect: 'refuses everybody who is not this gym',
   },
@@ -1893,6 +1902,70 @@ const MUTANTS = [
     expect: 'prints the minor units',
     from: '  const isWhole = !/[1-9]/.test(frac);',
     to: '  const isWhole = true;',
+  },
+
+  // ══ PART 3 §4.2's READ-ONLY CONSOLE — Kd's ruling 2026-08-29 ═══════════════
+  //
+  // Every row here sits in :5857 rule 4a's ALWAYS-MUTATED columns without
+  // argument: this is what decides whether a gym that is not a customer can go
+  // on issuing join codes, admitting members and changing its own record, and
+  // three of the six run in the OPPOSITE direction — a gate that refuses too
+  // much is not a safer gate, it is a console taken away from a paying gym.
+  {
+    id: 'O154',
+    target: 'service',
+    why: "THE WHOLE CARD, DELETED: the refusal never fires, so a gym whose trial ended keeps a fully working console — it issues join codes, confirms new members and edits its own details while granting those members nothing. That is the state Kd's ruling exists to remove, and the one the money hole was measured in (:22215 §2)",
+    expect: 'refuses every console write',
+    from: '    throw new OrgsError(409, "gym_not_on_plan", GYM_NOT_ON_PLAN_MESSAGE);',
+    to: '    void GYM_NOT_ON_PLAN_MESSAGE;',
+  },
+  {
+    id: 'O155',
+    target: 'repo',
+    why: "THE GATE'S READER WIDENED TO THE ENDED STATUSES, so an `expired` subscription counts as live and a lapsed gym writes freely. It is the same defect as O154 arriving through the reader rather than the gate — and it is the shape :12731 warns about from the other side, a status set quietly growing past §4.1's three",
+    expect: 'refuses every console write',
+    from: "        AND s.status IN ('trialing','active','past_due') -- read-only gate, §4.1's live set",
+    to: "        AND s.status IN ('trialing','active','past_due','expired','canceled')",
+  },
+  {
+    id: 'O156',
+    target: 'repo',
+    why: "ON SCREEN AND FALSE: the console is told it may change things while the server refuses every attempt. The screen then draws live buttons whose every press is a 409 — a person blocked from finishing something with no sentence saying why, which is :5807 1a on both of its halves",
+    expect: 'read-only flag and the write refusal move together',
+    from: '    consoleReadOnly: r.sub_status === null,',
+    to: '    consoleReadOnly: false,',
+  },
+  {
+    id: 'O157',
+    target: 'service',
+    why: "§2.4's BOUNDARY: a plain member of the gym is told whether its console is locked. When a gym stops paying is the gym's business and not its members' — the same rule that withholds `subscription` and `seatsUsed` one line up, and the boundary :23128's Low-8 got wrong once already in the other direction",
+    expect: 'a plain member nothing at all',
+    from: '      consoleReadOnly: r.staffRole === null ? null : r.consoleReadOnly,',
+    to: '      consoleReadOnly: r.consoleReadOnly,',
+  },
+  {
+    id: 'O158',
+    target: 'service',
+    why: "AN INFORMATION BOUNDARY REVERSED: the plan is checked BEFORE the privilege, so any signed-in stranger holding a uuid learns which gyms have stopped paying — a 409 where the module's standing answer is 404. `requirePrivilege`'s own comment says why that 404 exists (a 403 confirms the gym exists and lets anybody enumerate gyms); this turns the new refusal into exactly that leak",
+    expect: 'a stranger still gets 404',
+    from: '  const authorised = await requirePrivilege(deps, gymId, userId, privilege);',
+    to: '  if (!(await repo.gymHasLivePlan(deps.sql, gymId))) throw new OrgsError(409, "gym_not_on_plan", GYM_NOT_ON_PLAN_MESSAGE);\n  const authorised = await requirePrivilege(deps, gymId, userId, privilege);',
+  },
+  {
+    id: 'O159',
+    target: 'service',
+    why: "READ-ONLY BECOMES SHUT, which is the direction a guard is never tested in unless somebody writes it down (:7104's PG1). The roster is refused to a gym that has lapsed, so an owner cannot even SEE who is in their gym while being asked to pay for it — §4.2 says read-ONLY, and Kd's arm A keeps a lapsed gym's people and their data exactly where they are",
+    expect: 'READS and the pay path keep working',
+    from: '  const { org, role } = await requirePrivilege(deps, gymId, userId, "members.read");',
+    to: '  const { org, role } = await requireWritablePrivilege(deps, gymId, userId, "members.read");',
+  },
+  {
+    id: 'O160',
+    target: 'service',
+    why: "THE WAY OUT IS GATED ON BEING OUT: the trial door itself refuses a gym with no plan, so the one action left to a lapsed gym is the one it cannot take. That is :22215 §4's brick wall built by hand — the console says subscribe, and subscribing is refused because the gym has not subscribed",
+    expect: 'READS and the pay path keep working',
+    from: '  await requirePrivilege(deps, gymId, userId, "billing.manage");',
+    to: '  await requireWritablePrivilege(deps, gymId, userId, "billing.manage");',
   },
 ];
 

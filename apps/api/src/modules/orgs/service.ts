@@ -257,7 +257,7 @@ export async function updateOrg(
   gymId: string,
   req: UpdateOrgRequest,
 ): Promise<UpdateOrgResponse> {
-  await requirePrivilege(deps, gymId, userId, "org.manage");
+  await requireWritablePrivilege(deps, gymId, userId, "org.manage");
 
   const patch: repo.OrgPatch = {};
   // `in`, not `!== undefined`: `city: null` is a real instruction ("clear it")
@@ -386,6 +386,26 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
       // their own console, so the honest failure is to draw NOTHING rather than
       // to guess an arm. The client requires a definite boolean before it blocks.
       ownerTrialUsed: privileges.includes("billing.manage") ? r.ownerTrialUsed : null,
+      // IS THIS GYM'S CONSOLE READ-ONLY — Part 3 §4.2, and Kd's ruling of
+      // 2026-08-29 that it stops EVERY member of staff rather than only whoever
+      // can pay. It is the answer `requireWritablePrivilege` reaches, sent ahead
+      // of the press so a screen can grey a control out instead of drawing one
+      // whose every tap is a 409.
+      //
+      // **STAFF, NOT `billing.manage` — and the contrast with the line directly
+      // above is the whole of Kd's ruling.** `ownerTrialUsed` feeds the prompt,
+      // which stops only whoever can pay (:22921 §1), so it is narrowed to that
+      // tick. This one is told to a TRAINER too: their buttons stop working, and
+      // a control that fails with no sentence beside it is the silence :12660
+      // ruled on. Same boundary as `subscription` and `seatsUsed`, because like
+      // them it is a fact about THIS GYM and not about a person (:23128's Low-8,
+      // which is the comparison that was got wrong once already).
+      //
+      // Null for a non-staff caller, and the shared schema defaults it to null
+      // for an api too old to send it. **Null is "we could not ask" and never
+      // "locked"** — C97's rule, and the reason this is a field of its own rather
+      // than `subscription === null` read at the client.
+      consoleReadOnly: r.staffRole === null ? null : r.consoleReadOnly,
       isMember: r.isMember,
       joinedAt: r.joinedAt === null ? null : r.joinedAt.toISOString(),
       };
@@ -652,6 +672,69 @@ async function requirePrivilege(
     throw new OrgsError(403, "forbidden", "Your role doesn't allow that.");
   }
   return { org, role: authority.role };
+}
+
+/** THE SENTENCE A REFUSED WRITE CARRIES, and it is written once because twelve
+ *  routes say it.
+ *
+ *  **It is complete without a button**, which is `billingView.js`'s rule 1
+ *  applied to a server message: there is nowhere to send anybody yet (Paddle is
+ *  unbuilt, the admin "mark this gym as paid" tool is unbuilt, the contact
+ *  channel is owed), so a sentence promising a next step would be a promise with
+ *  no code behind it (:5807).
+ *
+ *  **It is TRUE FOR EVERY STAFF ROLE, which is what Kd's ruling required of it.**
+ *  A trainer reading it cannot subscribe, so it does not tell them to; it says
+ *  what is wrong and what has to change. "Ask your gym's owner" was the other
+ *  wording and is not used: the person reading it may BE the owner. */
+const GYM_NOT_ON_PLAN_MESSAGE = "This gym needs a plan before anything here can be changed.";
+
+/** AUTHORISE A WRITE — the privilege check above, plus Part 3 §4.2's read-only
+ *  console.
+ *
+ *  **KD RULING 2026-08-29: a gym with no live plan is read-only for EVERY member
+ *  of staff, not only for whoever can pay.** Put to him with the alternative in
+ *  one line each. The reason the alternative was recommended against is the one
+ *  to keep: `billing.manage` is a TICK, so a gate that stopped only its holders
+ *  would be no gate at all — an owner appoints a manager without it and the
+ *  lapsed gym carries on issuing join codes and admitting members through that
+ *  login. It would have been a screen-deep rule wearing a server's clothes.
+ *
+ *  **THE ORDER OF THE TWO CHECKS IS DELIBERATE AND IS AN INFORMATION BOUNDARY.**
+ *  Privilege first, so a stranger still gets `requirePrivilege`'s 404 and learns
+ *  nothing about whether the gym exists, let alone whether it is paying; a
+ *  staffer without the tick still gets its 403. Only somebody who would otherwise
+ *  have been allowed reaches the 409 — which is the only caller the sentence is
+ *  true and useful for. Reversed, this route would tell any signed-in stranger
+ *  with a uuid which gyms have lapsed.
+ *
+ *  **THE READS ARE DELIBERATELY NOT GATED**, because §4.2 says read-ONLY: the
+ *  roster, the codes, the staff list, the waiting queue and the price list all
+ *  keep answering. Nothing is hidden from a gym because it stopped paying — what
+ *  stops is changing things. **And the PAY PATH is not gated either**
+ *  (`startOrgTrial`, `listOrgPlans`): gating the way out of the state on being
+ *  out of the state is the brick wall :22215 §4 exists to remove.
+ *
+ *  **IT IS A CHECK-THEN-ACT AND TAKES NO LOCK, WHICH IS A DECISION.** A trial
+ *  could start or expire between this read and the write it guards. :19560 puts
+ *  the currency lock inside the transaction under `lockOrgRow` because that one
+ *  guards MONEY and a write landing on the wrong side moves a paying gym's
+ *  currency; this guards neither money nor anybody else's data, and both
+ *  orderings are states the gym legitimately passes through seconds apart — a
+ *  write admitted as a trial expires is one the owner could have made a second
+ *  earlier. Widening it to a lock would serialise every console write in a gym
+ *  for a guarantee nobody can observe. */
+async function requireWritablePrivilege(
+  deps: OrgsDeps,
+  gymId: string,
+  userId: string,
+  privilege: OrgPrivilege,
+): Promise<{ org: repo.OrgRow; role: OrgRole }> {
+  const authorised = await requirePrivilege(deps, gymId, userId, privilege);
+  if (!(await repo.gymHasLivePlan(deps.sql, gymId))) {
+    throw new OrgsError(409, "gym_not_on_plan", GYM_NOT_ON_PLAN_MESSAGE);
+  }
+  return authorised;
 }
 
 /** START THE GYM'S OWN 30-DAY TRIAL.
@@ -1036,7 +1119,7 @@ export async function createOrgCode(
   gymId: string,
   req: CreateOrgCodeRequest,
 ): Promise<OrgCodeMutationResponse> {
-  await requirePrivilege(deps, gymId, userId, "codes.manage");
+  await requireWritablePrivilege(deps, gymId, userId, "codes.manage");
   const expiresAt = assertFutureExpiry(req.expiresAt);
 
   const outcome = await mintCode(deps, (code) =>
@@ -1075,7 +1158,7 @@ export async function updateOrgCode(
   code: string,
   req: UpdateOrgCodeRequest,
 ): Promise<OrgCodeMutationResponse> {
-  await requirePrivilege(deps, gymId, userId, "codes.manage");
+  await requireWritablePrivilege(deps, gymId, userId, "codes.manage");
 
   // Only an expiry the caller actually SENT is checked. `expiresAt: null`
   // ("never expires") is a legitimate change and must not be run past the
@@ -1122,7 +1205,7 @@ export async function rotateOrgCode(
   gymId: string,
   code: string,
 ): Promise<RotateOrgCodeResponse> {
-  await requirePrivilege(deps, gymId, userId, "codes.manage");
+  await requireWritablePrivilege(deps, gymId, userId, "codes.manage");
 
   const outcome = await mintCode(deps, (newCode) =>
     repo.rotateCode(deps.sql, {
@@ -1168,7 +1251,7 @@ export async function removeOrgCode(
   gymId: string,
   code: string,
 ): Promise<RemoveOrgCodeResponse> {
-  await requirePrivilege(deps, gymId, userId, "codes.manage");
+  await requireWritablePrivilege(deps, gymId, userId, "codes.manage");
 
   const outcome = await repo.removeCode(deps.sql, {
     gymId,
@@ -1243,7 +1326,7 @@ export async function confirmOrgApplication(
   gymId: string,
   applicationId: string,
 ): Promise<ConfirmApplicationResponse> {
-  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
 
   const outcome = await repo.confirmApplication(deps.sql, {
     gymId,
@@ -1306,7 +1389,7 @@ export async function rejectOrgApplication(
   gymId: string,
   applicationId: string,
 ): Promise<RejectApplicationResponse> {
-  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
 
   const outcome = await repo.rejectApplication(deps.sql, {
     gymId,
@@ -1369,7 +1452,7 @@ export async function removeOrgMember(
   gymId: string,
   targetUserId: string,
 ): Promise<RemoveMemberResponse> {
-  await requirePrivilege(deps, gymId, userId, "members.remove");
+  await requireWritablePrivilege(deps, gymId, userId, "members.remove");
 
   const outcome = await repo.removeMember(deps.sql, {
     gymId,
@@ -1447,7 +1530,7 @@ export async function addOrgStaff(
   gymId: string,
   input: AddOrgStaffRequest,
 ): Promise<OrgStaffMutationResponse> {
-  await requirePrivilege(deps, gymId, userId, "staff.manage");
+  await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
 
   const outcome = await repo.addStaff(deps.sql, {
     gymId,
@@ -1492,7 +1575,7 @@ export async function updateOrgStaffRole(
   targetUserId: string,
   input: UpdateOrgStaffRequest,
 ): Promise<OrgStaffMutationResponse> {
-  await requirePrivilege(deps, gymId, userId, "staff.manage");
+  await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
 
   const outcome = await repo.updateStaffRole(deps.sql, {
     gymId,
@@ -1609,7 +1692,7 @@ export async function updateOrgStaffPrivileges(
   targetUserId: string,
   input: UpdateOrgStaffPrivilegesRequest,
 ): Promise<OrgStaffMutationResponse> {
-  await requirePrivilege(deps, gymId, userId, "staff.manage");
+  await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
 
   const outcome = await repo.setStaffPrivileges(deps.sql, {
     gymId,
@@ -1676,7 +1759,7 @@ export async function removeOrgStaff(
   gymId: string,
   targetUserId: string,
 ): Promise<RemoveOrgStaffResponse> {
-  await requirePrivilege(deps, gymId, userId, "staff.manage");
+  await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
 
   const outcome = await repo.removeStaff(deps.sql, {
     gymId,
