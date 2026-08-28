@@ -22,6 +22,9 @@ import {
   dismissBanner,
   hasLivePlan,
   isTrialing,
+  planPriceText,
+  planPromptFor,
+  planSeatLabel,
   seatLineText,
   seatMeter,
   trialDaysLeft,
@@ -87,6 +90,93 @@ describe('hasLivePlan / isTrialing', () => {
     });
     expect(isTrialing(paying)).toBe(false);
     expect(isTrialing(trialing(10))).toBe(true);
+  });
+});
+
+// ── WHICH FACE THE UNSKIPPABLE PROMPT SHOWS ────────────────────────────────
+//
+// Every case here is a Kd ruling rather than a preference, and TWO of them are
+// about NOT drawing a prompt that cannot be closed. Read the function's own
+// header before changing any expectation in this block.
+describe('planPromptFor', () => {
+  it('offers the trial to an owner who has never used one', () => {
+    expect(planPromptFor(gym({ ownerTrialUsed: false }))).toBe('trial');
+  });
+
+  it('offers the PLANS to an owner whose one trial is spent', () => {
+    // Kd, :22697: a second gym's owner is shown "the real plans at their real
+    // prices" — never a button whose only possible answer is a 409.
+    expect(planPromptFor(gym({ ownerTrialUsed: true }))).toBe('subscribe');
+  });
+
+  it('draws NOTHING for a gym that is already on a plan', () => {
+    // And it decides that on the STATUS. Both rows below carry a trial end date
+    // in the past; both are live plans, and a prompt over either would lock a
+    // paying gym out of its own console.
+    expect(
+      planPromptFor(
+        gym({
+          ownerTrialUsed: true,
+          subscription: { status: 'trialing', trialEndsAt: inDays(-1), seatCap: 300 },
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      planPromptFor(
+        gym({
+          ownerTrialUsed: true,
+          subscription: { status: 'active', trialEndsAt: inDays(-200), seatCap: 300 },
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it('draws NOTHING for somebody who cannot pay', () => {
+    // Kd, :22921 §1: the prompt stops only whoever holds `billing.manage`. A
+    // trainer or manager without it uses the console as normal, because
+    // blocking somebody who cannot subscribe is a brick wall pointed at the
+    // wrong person.
+    const trainer = gym({ ownerTrialUsed: false, staffRole: 'trainer', privileges: ['members.read'] });
+    expect(planPromptFor(trainer)).toBeNull();
+  });
+
+  it('draws NOTHING when the server did not say whether the trial is spent', () => {
+    // THE ONE THAT SEALS SOMEBODY OUT IF IT GOES WRONG. `ownerTrialUsed` is
+    // `.nullable().default(null)` — null is "we could not ask" (a non-staff
+    // caller, or an api older than this bundle), never "no". A prompt that
+    // cannot be closed must never be drawn on a guess.
+    expect(planPromptFor(gym({ ownerTrialUsed: null }))).toBeNull();
+    expect(planPromptFor(gym())).toBeNull();
+    expect(planPromptFor(gym({ ownerTrialUsed: 'yes' }))).toBeNull();
+    expect(planPromptFor(undefined)).toBeNull();
+  });
+});
+
+describe('the price list’s words', () => {
+  it('names a plan by the only human fact its row carries', () => {
+    expect(planSeatLabel(300)).toBe('Up to 300 members');
+  });
+
+  it('says a capless band has no limit rather than a limit of zero', () => {
+    // :5807 — "0 members" is a number nobody computed, printed against a plan
+    // that limits nobody.
+    expect(planSeatLabel(null)).toBe('No member limit');
+    expect(planSeatLabel(undefined)).toBe('No member limit');
+    expect(planSeatLabel(0)).toBe('No member limit');
+  });
+
+  it('prints the server’s own price string and says how often it is charged', () => {
+    expect(planPriceText({ priceLabel: '$35', interval: 'month' })).toBe('$35 a month');
+    expect(planPriceText({ priceLabel: '₹1,500', interval: 'month' })).toBe('₹1,500 a month');
+    // The interval is PRINTED, not assumed: a yearly row must not read as a
+    // monthly one the day an annual tier is seeded.
+    expect(planPriceText({ priceLabel: '$390', interval: 'year' })).toBe('$390 a year');
+  });
+
+  it('draws no row at all for a plan with no price string', () => {
+    expect(planPriceText({ priceLabel: '', interval: 'month' })).toBeNull();
+    expect(planPriceText({ interval: 'month' })).toBeNull();
+    expect(planPriceText(undefined)).toBeNull();
   });
 });
 

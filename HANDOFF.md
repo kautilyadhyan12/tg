@@ -1,6 +1,106 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE FORCED PROMPT REACHES A SCREEN — the modal that cannot be closed, the
+      Overview's trial button deleted, and the expiry smoke rewritten.
+      DECISIONS :23257. Step 3 of :22215 §5; the visible half of :22697.
+
+  1. **THE MODAL IS DRAWN FROM `ConsoleLayout`, NOT THE OVERVIEW**, beside
+     §4.2's banner: a prompt mounted on ONE screen is one an owner walks around
+     by typing an address. Two arms (never trialled → the trial; spent → the
+     real plans + "we'll be in touch", no button). **"Cannot be closed" is
+     entirely ABSENCES** — no X, no `keydown`, no backdrop `onClick`, no
+     dismissal flag — so it is asserted from OUTSIDE (Escape, backdrop click, a
+     query for any close-named control) and **C101 inserts a "Close" button**.
+     **It is NOT the enforcement** (R3.3): a gym on no plan grants its members
+     nothing whether it is on screen or not.
+  2. **KD RULED THE WAY OUT: "Your gyms" AND Sign out**, against sign-out alone
+     — an owner of two gyms would otherwise be stuck on the lapsed one with no
+     pay path to escape through. Neither exit is a way past.
+  3. **TWO CALLS DEFERRED TO THIS CARD BY NAME, BOTH MADE.** The empty price
+     book (:23128 Low-4) is answered by **the SCREEN saying something true**,
+     not a service refusal — behind an unclosable prompt a 409 is a dead end
+     dressed as a failure; its OWED line TICKS. And the subscribe arm has **no
+     button**, because one would either do nothing or promise a message nothing
+     can send (:5807) — :22697 §4 and :22215 §5 step 3 rule what it SAYS.
+  4. **THE HELD ANSWER MOVED OUT OF A COMPONENT AND INTO THE STORE**
+     (`applyStartedTrial`). `justStarted` died when the shell-mounted prompt
+     unmounted, so a failed re-read would have put an UNCLOSABLE prompt back
+     over a trialling gym. Rule 4 still wins on a successful re-read; this
+     protects the window where it FAILS (rule 2).
+  5. **C93's OLD SUBJECT NO LONGER EXISTS AND THAT IS WHY IT MOVED.**
+     `TrialCard`'s key protected state the card no longer holds, so mutating it
+     would have come back ALIVE against correct code (C88's shape). :17676 —
+     ask whether the guarantee is OBSERVABLE before assuming a test is missing;
+     this one MOVED, to the prompt's own key. **One surviving test was fixed
+     before it could lie**: its fixture had no subscription, so deleting the
+     privilege gate left it GREEN.
+  6. **THE WHOLE-TABLE SWEEP FOUND A LIVE MUTANT THAT IS NOT THIS CARD'S —
+     C68, in `ConsoleStates.jsx`.** Measured three ways: `|| forceOpen` alone
+     removed → GREEN, the `setOpen` latch alone removed → GREEN, **both removed
+     → RED**. A redundant pair, so neither half is falsifiable (C88's shape);
+     the product is correct, it takes a ⚪ OWED line, and the one-line fix is
+     NOT taken (R1.1 — another card's file). **Why it hid: the guards were not
+     written together, and every web sweep since has been a stated SUBSET — a
+     subset exercises the whole-table ANCHOR pre-check but never RUNS other
+     rows, and a no-op mutation is invisible to any pre-check.**
+  7. **THREE STALE "nothing ends a trial" SENTENCES** in `billingView.js`, made
+     false by the sweep card the same day and fixed here (:22782's rule). The
+     banner's COPY is unchanged and still true; its REASON was not.
+  8. **THE SMOKE PASSED 11/11 — AND KD FOUND A DEFECT AT STEP 1 THAT NOTHING
+     ELSE HAD.** *"i cretaed gym but this one shows then i click only after that
+     pop shows this is wrong wtf"*. `/console/new`'s success screen has no gym
+     in its address, so the shell's prompt drew nothing there and **a new
+     owner's FIRST sight was their join code, for a gym on no plan — the exact
+     state :22215 exists to remove, as the happy path.** Fixed by drawing the
+     prompt OVER that screen; **nothing removed, the code is revealed when the
+     trial starts.** The gym is read **from the store by id, never from the
+     create response** (no `ownerTrialUsed` there). Sign-out moved into
+     `useConsoleSignOut` — one implementation for three surfaces (:1239).
+     **Everything green said the card was done** (1319 tests, a whole-table
+     sweep, a review packet already written) **and only a person creating a gym
+     could see it** (:12832). **My own half: the sheet's step 1 said "you land
+     on its console", which is not what the app does** — a step written from the
+     design rather than from the screen.
+
+FILES: apps/web/src/components/console/{PlanModal.jsx (new),ConsoleLayout.jsx,
+       TrialCard.jsx} · apps/web/src/pages/console/{billingView.js,Overview.jsx,
+       consoleOrgs.js,NewGym.jsx,consoleSignOut.js (new),
+       planPrompt.render.test.jsx (new),trial.render.test.jsx,
+       gymSwitch.render.test.jsx,billingView.test.js} ·
+       apps/web/src/api/orgsApi.js · apps/web/tools/mutate-console.mjs ·
+       RUNBOOK/smoke-trial-expiry.md · OWED.md · DECISIONS.md ·
+       DECISIONS-INDEX.md · DECISIONS-TRIGGERS.md
+
+PROVE: web **1322/1322 across 49 files** (+28, +1 file) · billingView 43/43 ·
+       the console suites 476/476 · eslint --max-warnings=0 exit 0 on fourteen
+       files · `vite build` exit 0 · node --check on the harness ·
+       check-harnesses 25 · check-decisions-index 229 · check-decisions-triggers
+       633 from 178 of 316 · **WHOLE-TABLE SWEEP of 121: 120 RED, 1 ALIVE (C68,
+       pre-existing, item 6), 0 never ran**, every control GREEN and tallying
+       first, restores sha256-verified · **then, after the smoke fix, a stated
+       SUBSET of 122 — C12,C13,C51,C52,C93,C94,C96–C102: 13 RED, 0 ALIVE**,
+       chosen to cover every file that fix moved a line in. **The smoke sheet's
+       API command was RUN, not assumed**: `{"status":"ok"}` on /health, while
+       the old line exits 1 with `Invalid environment: WEB_ORIGIN: Required;
+       JWT_SECRET: Required`.
+
+SMOKE: **PASSED 11/11 (Kd, 2026-08-28), on the shipping bytes** — after the
+       step-1 defect above was fixed and the sheet rewritten to describe the
+       screen the app actually draws (:13184).
+
+OPEN:  the read-only console (the prompt COVERS it, it is not read-only) · the
+       contact channel the subscribe arm needs before it can grow a button ·
+       C68's redundancy · the consumer trial's own expiry · the worker's job
+       routing having no test.
+
+NEXT:  **T3 on this diff — it is the only gate left.** The smoke is DONE and
+       both 🔴 lines ticked on it. **Kd's API is currently pointed at the LOCAL
+       database** (the smoke's own requirement); restarting it without that
+       prefix returns him to the shared Neon branch and his own gyms.
+```
+
+```
 TASK: THE FORCED PROMPT'S SERVER HALF — T3 ROUND 1 AND ITS FIX ROUND. ZERO
       Critical/High, EIGHT Low, THE PACKET SHIPS. DECISIONS :23128.
       Reviews 9d5a327 (:22921). Kd approved the list first ("fix all").

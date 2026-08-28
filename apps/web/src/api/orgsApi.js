@@ -19,6 +19,7 @@ import {
   orgCodeMutationResponseSchema,
   orgCodesResponseSchema,
   orgMemberPageSchema,
+  orgPlansResponseSchema,
   orgStaffMutationResponseSchema,
   orgStaffResponseSchema,
   rejectApplicationResponseSchema,
@@ -123,6 +124,26 @@ export const orgService = {
       'your free trial',
       authApi.post(`/v1/orgs/${gymId}/trial`, {}),
     ),
+
+  /** GET /v1/orgs/:gymId/plans — what this gym could subscribe to, in this
+   *  gym's own currency. The subscribe arm of the unskippable prompt draws it
+   *  (Kd ruling 2026-08-28: *"the real plans at their real prices"*).
+   *
+   *  **SCOPED TO THE GYM, AND THE CLIENT NEVER NAMES A CURRENCY.** There is no
+   *  `/v1/plans` to call and there deliberately never was: a client-sent
+   *  currency is R3.1's own example of a value the server must not take from the
+   *  caller, and it is how a gym ends up quoted in the wrong money. Naming the
+   *  gym makes the server read the currency off the gym's row, and the route is
+   *  tenant-scoped for free — a stranger is 404'd before a price is fetched.
+   *
+   *  Gated on `billing.manage` server-side, the same privilege as the trial
+   *  door, so only whoever may put the gym on a plan is told what a plan costs.
+   *
+   *  **`priceLabel` IS THE SERVER'S OWN STRING and the response carries no
+   *  minor-unit integer at all** — there is nothing here for a screen to divide
+   *  by 100 (R10.4). */
+  getPlans: (gymId) =>
+    readThrough(orgPlansResponseSchema, "your gym's plans", authApi.get(`/v1/orgs/${gymId}/plans`)),
 
   /** GET /v1/orgs/:gymId/members — Part 3 §2.4's roster and nothing else:
    *  display name, join date, the label of the code they came in through, and

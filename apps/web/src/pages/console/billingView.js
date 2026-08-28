@@ -13,14 +13,28 @@
 // written to be complete without them. A greyed or dead button is the defect
 // §2.2's own rules warn about; an absent one states nothing.
 //
-// **2. IT NEVER SAYS A TRIAL HAS ENDED, because nothing ends one.** :21353's
-// Critical/High, measured: `subscriptions` has one writer in the whole API, no
-// sweep or worker moves `trialing` → `expired`, and `trial_ends_at` is read by
-// nothing that acts on it. Expiry is P3.8. The read this file draws from returns
-// only the LIVE statuses (`trialing`/`active`/`past_due`, §4.1's own set), so an
-// ended plan and a gym that never started one arrive here identically — which is
-// honest today and is exactly why the "trial expired → grace" row of §4.2 is a
-// deferral with its own `OWED.md` line rather than an arm below.
+// **2. IT NEVER SAYS A TRIAL HAS ENDED — and the REASON changed on 2026-08-28,
+// while the behaviour did not.** This said *"because nothing ends one"*, which
+// was :21353's measured Critical/High and stopped being true the same day the
+// expiry sweep shipped (:22341): a worker now moves `trialing` → `expired` at
+// 04:00. Corrected here rather than only where it was noticed (:5748) — a stale
+// reason is worse than none, because the next reader takes it as evidence.
+//
+// **What is still true is that this file never announces an ended trial, for a
+// different reason: by the time one has ended there is nothing here to draw.**
+// The read this file draws from serves only the LIVE statuses
+// (`trialing`/`active`/`past_due`, §4.1's own set), so once the sweep moves the
+// row the gym arrives with `subscription: null` and every function below answers
+// "no plan" — no banner, no meter, no card. **The owner is not told nothing:
+// they meet the unskippable prompt** (`PlanModal`, Kd's ruling :22215/:22697),
+// which is the surface that says the gym needs a plan. §4.2's "trial expired →
+// grace" row and the read-only console are still deferrals with their own
+// `OWED.md` lines.
+//
+// **AND "an ended plan and a gym that never started one arrive here
+// identically" IS NO LONGER TRUE EITHER.** That identity was :22341 §7's
+// finding, and `/v1/orgs/mine` now carries `ownerTrialUsed` to break it
+// (:22921) — which is the whole reason `planPromptFor` below can pick an arm.
 //
 // **3. IT GATES ON `status`, NEVER ON `trialEndsAt` BEING NULL.** That is
 // :21353's Low-5, written into the shared schema in as many words: nothing
@@ -30,6 +44,7 @@
 // Unreachable today only because nothing leaves `trialing`; pinned by a test.
 import { calendarDaysBetween } from '../../utils/joinClock';
 import { getItem, setItem } from '../../utils/storage';
+import { viewerPrivileges } from './consoleView';
 
 /** Part 3 §2.2's Billing row is `✔ | — | —` — the owner's alone by default.
  *
@@ -73,10 +88,12 @@ export function isTrialing(org) {
  *  — a false promise about a deadline, which is where this project draws
  *  Critical (:13281).
  *
- *  **Negative is returned rather than clamped.** The date can be in the past —
- *  nothing ends a trial, so a gym sits past its own end date indefinitely — and
- *  a caller that wants to say something about that case needs to be able to see
- *  it. `bannerFor` below is what decides the words. */
+ *  **Negative is returned rather than clamped**, and the window it covers is now
+ *  BOUNDED where it once was not. This said "nothing ends a trial, so a gym sits
+ *  past its own end date indefinitely"; since 2026-08-28 the 04:00 sweep ends one
+ *  (:22341), so a gym is past its end date only until that job next runs. The
+ *  case is smaller and it is not gone, so the negative is still returned and
+ *  `bannerFor` below still decides the words. */
 export function trialDaysLeft(trialEndsAt, now = Date.now()) {
   const at = new Date(trialEndsAt ?? '');
   if (Number.isNaN(at.getTime()) || !Number.isFinite(now)) return null;
@@ -210,10 +227,15 @@ export function bannerFor(org, now = Date.now()) {
       // gym owner reading an invented product name learns nothing.
       //
       // PAST THE DATE IS ITS OWN SENTENCE and it is deliberately not "your trial
-      // has ended": nothing ends a trial (rule 2 at the top), so the gym is
-      // still `trialing` and its members still have the features. Saying it had
-      // ended would be false in the direction that costs a gym its members'
-      // trust the day it turns out to be wrong.
+      // has ended". **The sentence is unchanged and its reason is not** (rule 2
+      // at the top): it used to be that nothing ended a trial, and since
+      // 2026-08-28 the sweep does — but this branch is reached only while the
+      // row still says `trialing`, i.e. in the window between the end date and
+      // the next 04:00 run, and in that window the gym's members really do still
+      // have the features. Once the sweep moves the row there is no live
+      // subscription, so this function draws nothing and the owner meets the
+      // unskippable prompt instead. Saying it had ended HERE would be false in
+      // the direction that costs a gym its members' trust.
       const text =
         days < 0
           ? "Your trial is past its end date. Your members keep your gym's features while it is still running."
@@ -257,6 +279,86 @@ export function bannerFor(org, now = Date.now()) {
   }
 
   return null;
+}
+
+/** WHICH FACE THE UNSKIPPABLE PROMPT SHOWS THIS GYM, OR `null` FOR NO PROMPT AT
+ *  ALL — Kd's ruling of 2026-08-28 (:22215, :22697): *"whenver a gym is created
+ *  there is trial pop up and they can not skip that after the trail ends there
+ *  is subscription plan pop up they can not skip it"*, and the correction that
+ *  settled its shape — *"a pop up in the middle of the screen is needed for free
+ *  trial not a button"*.
+ *
+ *  Three answers, and every one of the four lines below is a ruling rather than
+ *  a preference:
+ *
+ *  **`null` FOR ANYBODY WHO CANNOT PAY.** Kd ruled 2026-08-28 (:22921 §1) that
+ *  the prompt stops only whoever holds `billing.manage` — a trainer or manager
+ *  without it uses the console as normal. Blocking somebody who has no way to
+ *  subscribe is :22215 §4's brick wall pointed at the wrong person. It asks the
+ *  POWER through `viewerPrivileges` and never `staffRole === 'owner'`, which is
+ *  :15534 C/H-1's shape and the seam `canManageBilling` already sits on.
+ *
+ *  **`null` FOR A GYM ON A LIVE PLAN, DECIDED BY STATUS AND NEVER BY A DATE.**
+ *  `hasLivePlan` reads `subscription`, which the server builds from §4.1's three
+ *  granting statuses only — so a trialling gym is past this line and a gym whose
+ *  trial the 04:00 sweep has ended is not. That is :21580's rule (c) and it is
+ *  also the whole answer to :22697 §4's second open question (what a gym sees
+ *  between its trial ending and the sweep running): until the row moves, the gym
+ *  still has its console, and §4.2's banner already says the trial is past its
+ *  end date. **A reader keying on `trialEndsAt` instead would seal a PAYING gym
+ *  out of its own console the day billing exists.**
+ *
+ *  **`'trial'` vs `'subscribe'` IS `ownerTrialUsed` AND NOTHING ELSE.** One
+ *  trial per OWNER ever (Part 5 §12), so the owner of a second gym is shown the
+ *  real plans rather than a button that can only answer 409 — Kd's ruling at
+ *  :22697 §1, *"they will be showed subscription option that they can take and
+ *  say that they alreday ahd a free trial"*.
+ *
+ *  **AND `null` FOR ANY OTHER VALUE, WHICH IS THE MOST IMPORTANT LINE HERE.**
+ *  `ownerTrialUsed` is `.nullable().default(null)`: null means *"we could not
+ *  ask"* — a non-staff caller, or an api older than this bundle — never "no".
+ *  For every other field on that row an unknown state costs a sentence; behind a
+ *  prompt that cannot be closed it would seal a person out of their own console
+ *  over a field their server is simply too old to send. **So the test is for the
+ *  two definite answers, and everything else draws nothing at all.** */
+export function planPromptFor(org) {
+  if (!canManageBilling(viewerPrivileges(org))) return null;
+  if (hasLivePlan(org)) return null;
+  if (org?.ownerTrialUsed === false) return 'trial';
+  if (org?.ownerTrialUsed === true) return 'subscribe';
+  return null;
+}
+
+/** HOW MANY MEMBERS ONE PLAN ADMITS, as a sentence.
+ *
+ *  **The plan is identified by its seat cap because that is the only human fact
+ *  its row carries** — `plans.name_key` holds `plan.org_b1_us_m` and this
+ *  product has no translation table to resolve it against, so a name here would
+ *  be a chat naming Kd's products (the shared schema says so in as many words).
+ *
+ *  **A null cap is a WORD and never a zero** (:5807): `plans.seat_cap` is
+ *  nullable and a capless tier is a real shape in the price book, so "0 members"
+ *  would be a number nobody computed printed against a plan that limits nobody. */
+export function planSeatLabel(seatCap) {
+  if (!Number.isFinite(seatCap) || seatCap <= 0) return 'No member limit';
+  return `Up to ${seatCap} members`;
+}
+
+/** THE PRICE, AS THE SERVER WROTE IT, PLUS HOW OFTEN IT IS CHARGED.
+ *
+ *  `priceLabel` arrives already formatted and is the ONLY money field on the
+ *  wire — there is deliberately no minor-unit integer beside it, so there is
+ *  nothing here to divide by 100 (R10.4, R6.1). This function does no
+ *  arithmetic; it puts two server facts in one sentence.
+ *
+ *  Every org row in today's book is monthly, and the list route filters to
+ *  `interval = 'month'` for that reason — but the interval is PRINTED rather
+ *  than assumed, because a price whose period is silent means something
+ *  different the day an annual tier is seeded. */
+export function planPriceText(plan) {
+  const price = typeof plan?.priceLabel === 'string' ? plan.priceLabel : null;
+  if (price === null || price === '') return null;
+  return plan?.interval === 'year' ? `${price} a year` : `${price} a month`;
 }
 
 /** WHERE A DISMISSAL IS REMEMBERED.

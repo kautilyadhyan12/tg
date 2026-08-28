@@ -1,9 +1,10 @@
-import { Fragment, useState } from 'react';
-import { NavLink, Link, useParams, useNavigate } from 'react-router-dom';
+import { Fragment } from 'react';
+import { NavLink, Link, useParams } from 'react-router-dom';
 import { Building2, Users, Settings, ChevronLeft, LogOut } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
 import ConsoleBanner from './ConsoleBanner';
+import PlanModal from './PlanModal';
 import { useConsoleOrg } from '../../pages/console/useConsoleOrg';
+import { useConsoleSignOut } from '../../pages/console/consoleSignOut';
 import { canManageStaff } from '../../pages/console/staffView';
 import { canManageOrg } from '../../pages/console/gymDetailsView';
 import { viewerPrivileges } from '../../pages/console/consoleView';
@@ -90,8 +91,6 @@ function navStyle(active) {
 
 export default function ConsoleLayout({ children }) {
   const { orgSlug } = useParams();
-  const { logout }  = useAuth();
-  const navigate    = useNavigate();
   // Asks nothing when there is no gym in the address (`/console`,
   // `/console/new`) — the hook returns early there. A failure is not handled
   // here on purpose: the screen inside reads the same list and owns the error
@@ -103,13 +102,12 @@ export default function ConsoleLayout({ children }) {
   // wraps its sign-out in `triggerTransition`, which covers the wait with an
   // overlay; this shell has no overlay, so without a pending state a press on a
   // slow connection looks like a dead button and invites a second press.
-  const [signingOut, setSigningOut] = useState(false);
-
-  const handleSignOut = async () => {
-    setSigningOut(true);
-    await logout();
-    navigate('/login');
-  };
+  //
+  // MOVED INTO A HOOK 2026-08-28, unchanged in behaviour: the unskippable prompt
+  // needs the same button (the rail and the tab bar are BEHIND its overlay), and
+  // the gym-created screen draws that prompt outside this shell altogether.
+  // Three copies of a sign-out is :1239's shape; one implementation is not.
+  const { signingOut, signOut: handleSignOut } = useConsoleSignOut();
 
   // Nav only exists inside a gym. On "your gyms" and the create form there is
   // nothing to navigate between, so the rail carries the brand and the way OUT
@@ -287,6 +285,34 @@ export default function ConsoleLayout({ children }) {
             ALONE — a fix round carries only its fix (:5348 rule 6). */}
         <Fragment key={`screen:${orgSlug ?? 'no-gym'}`}>{children}</Fragment>
       </main>
+
+      {/* ── THE PROMPT AN OWNER CANNOT SKIP — Kd's ruling (:22215, :22697) ───
+          It is drawn HERE, from the shell, for §4.2's own reason about the
+          banner: a prompt mounted on the Overview would leave the roster and
+          Settings reachable by typing an address, which is a prompt somebody
+          walks around rather than one they cannot skip. It draws nothing on
+          `/console` and `/console/new`, where there is no gym to be about —
+          which is also what makes "Your gyms" inside it a real exit rather than
+          a way past.
+
+          IT DECIDES NOTHING ITSELF: `planPromptFor` answers null for anybody
+          without `billing.manage` (Kd, :22921 §1 — a trainer uses the console
+          as normal), null for a gym on a live plan, and null for the api being
+          too old to say whether this owner's trial is spent.
+
+          KEYED, AND THE PREFIX IS LOAD-BEARING for the reason the wrapper above
+          records: `ConsoleBanner` one line up already keys on `org?.id ??
+          'no-gym'`, and two siblings holding the same key is React dropping one
+          without a word (:20986's guard caught exactly that on the wrapper's
+          own first draft). It needs a key at all because it holds state — a
+          fetched price list, and the fact that the server has refused a trial —
+          and this shell does not remount between two gyms. */}
+      <PlanModal
+        key={`plan-modal:${org?.id ?? 'no-gym'}`}
+        org={org}
+        onSignOut={handleSignOut}
+        signingOut={signingOut}
+      />
 
       {/* ── Mobile tab bar ────────────────────────────────────────────────── */}
       {tabs.length > 0 ? (

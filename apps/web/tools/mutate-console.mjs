@@ -55,6 +55,9 @@ const STORE_SUITE = 'src/pages/console/consoleOrgs.test.js';
 const GYMVIEW_SUITE = 'src/pages/console/gymDetailsView.test.js';
 const BILLING_VIEW_SUITE = 'src/pages/console/billingView.test.js';
 const TRIAL_SUITE = 'src/pages/console/trial.render.test.jsx';
+/** The prompt an owner cannot skip (Kd, :22215/:22697), added 2026-08-28 with
+ *  the modal that replaced the Overview's trial button. */
+const PROMPT_SUITE = 'src/pages/console/planPrompt.render.test.jsx';
 /** The class guard: one gym, then the other, asking whether anything on screen
  *  is still about the first. Four Critical/High findings have lived on that
  *  journey and nothing watched it until 2026-08-28. */
@@ -100,6 +103,12 @@ const TARGETS = {
   billingview: { file: resolve(ROOT, 'apps/web/src/pages/console/billingView.js') },
   trialcard: { file: resolve(ROOT, 'apps/web/src/components/console/TrialCard.jsx') },
   banner: { file: resolve(ROOT, 'apps/web/src/components/console/ConsoleBanner.jsx') },
+  // THE PROMPT AN OWNER CANNOT SKIP, added 2026-08-28 (Kd, :22215/:22697). It is
+  // the console's highest-stakes surface in BOTH directions and the mutants
+  // below say so: it must appear for a gym with no plan, and it must NOT appear
+  // over anybody it would seal out of their own console. CRLF, like every file
+  // here — one-line anchors only.
+  planmodal: { file: resolve(ROOT, 'apps/web/src/components/console/PlanModal.jsx') },
 };
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
@@ -1454,12 +1463,21 @@ const MUTANTS = [
   },
   {
     id: 'C90',
-    target: 'trialcard',
-    suite: TRIAL_SUITE,
-    why: "FALSE ON SCREEN AFTER A SUCCESSFUL ACTION: the card stops holding the server's own answer and waits for the shared gym list instead. That list keeps its PREVIOUS answer when a background re-read fails, so an owner who has just started a trial is offered \"Start your 30-day free trial\" again over a gym that is already trialling — the screen contradicting an action that succeeded",
-    expect: 'SURVIVES the background refresh',
-    from: '  const subscription = org?.subscription ?? justStarted;',
-    to: '  const subscription = org?.subscription ?? null;',
+    target: 'orgstore',
+    suite: PROMPT_SUITE,
+    // RE-AIMED 2026-08-28, AT THE SAME GUARANTEE IN ITS NEW HOME (:13336's
+    // instruction, :15770's standard). It used to anchor on `TrialCard`'s
+    // `justStarted` — the server's own answer to the Overview's trial button,
+    // held against a failed re-read. Kd ruled that button deleted (:22921 §1)
+    // and the fact moved into the store, because the prompt that now starts a
+    // trial UNMOUNTS when an owner walks out through "Your gyms", so a fact kept
+    // in the component would not survive the journey. The guarantee is
+    // unchanged and the stakes went UP: it is no longer a card saying the wrong
+    // thing, it is an unclosable prompt reappearing over a gym that is trialling.
+    why: "SEALED OUT AFTER A SUCCESSFUL ACTION: the server's own answer to the trial press stops being written into the kept gym row, so a background re-read that FAILS leaves the console believing the gym is still on nothing — and the prompt that cannot be closed comes straight back over a gym that IS trialling, with its own button the only way out",
+    expect: 'STAYS GONE when the background re-read never confirms it',
+    from: '    orgs: state.orgs.map((o) => (o?.id === gymId ? { ...o, subscription } : o)),',
+    to: '    orgs: state.orgs,',
   },
   {
     id: 'C91',
@@ -1502,12 +1520,25 @@ const MUTANTS = [
   },
   {
     id: 'C93',
-    target: 'overview',
+    target: 'layout',
     suite: GYM_SWITCH_SUITE,
-    why: 'FALSE ON SCREEN AND A BLOCKED OWNER: the trial card stops being keyed to its gym, so an owner who starts a trial on one gym and opens another is shown "Free trial" and a seat meter over a gym on NOTHING — and the button that would start that gym\'s own trial is gone, so it cannot be started at all',
-    expect: 'does not carry gym A',
-    from: '      <TrialCard key={org.id} org={org} />',
-    to: '      <TrialCard org={org} />',
+    // RE-AIMED 2026-08-28, AND THE OLD SUBJECT NO LONGER EXISTS — which is why
+    // it moved rather than being deleted. It anchored on `<TrialCard key={org.id}
+    // …>`, whose key protected the card's `justStarted` state; Kd's ruling
+    // (:22921 §1) removed the button and with it every piece of state that card
+    // held, so mutating that key now changes nothing observable and the mutant
+    // would come back ALIVE against perfectly correct code — C88's shape.
+    // :17676's standard is to ask whether the guarantee is OBSERVABLE before
+    // assuming a test is missing: this one MOVED, to the console's newest
+    // stateful panel. The key on the card stays (a fix round carries only its
+    // fix, :5348 rule 6) and is now belt-and-braces, which `Overview.jsx` says.
+    why: "MONEY ON SCREEN THAT IS NOT ABOUT THE GYM NAMED ABOVE IT: the unskippable prompt stops being keyed to its gym, and the shell does not remount between two gyms — so an owner walking from gym A to gym B sees gym B's prompt still holding GYM A'S PRICE LIST while gym B's own read is in flight",
+    // ASCII and unique among this file's test names — "does not show gym A"
+    // alone would match three of them (:10402's non-ASCII rule, :14840's
+    // filter-half rule).
+    expect: 'prices under gym B',
+    from: '        key={`plan-modal:${org?.id ?? \'no-gym\'}`}',
+    to: '        key="plan-modal"',
   },
   {
     id: 'C94',
@@ -1532,6 +1563,100 @@ const MUTANTS = [
     expect: 'is the sentence itself, asserted as a literal',
     from: '    ? `${meter.used} of ${meter.cap} places used — your gym is full, so nobody else can join yet.`',
     to: '    ? `${meter.used} of ${meter.cap} places used.`',
+  },
+
+  // ── THE PROMPT AN OWNER CANNOT SKIP (C96–C101) ────────────────────────────
+  //
+  // Kd's ruling of 2026-08-28 (:22215, :22697), and the first surface in this
+  // console that can lock somebody out of their own gym. **The rows below run in
+  // BOTH directions on purpose**, because this component has two opposite
+  // failures and only one of them looks like a bug from the inside:
+  //
+  //   · IT FAILS TO APPEAR — a gym goes on using a console it has not paid for,
+  //     which is the hole the ruling exists to close (C98's opposite, C99).
+  //   · IT APPEARS OVER THE WRONG PERSON — a trainer who cannot pay, a paying
+  //     gym, or an owner whose server is simply too old to say whether their
+  //     trial is spent. **That is somebody SEALED OUT of their own console with
+  //     no way past**, and it is why `planPromptFor` draws nothing on an unknown
+  //     (C96, C97, C98).
+  //
+  // A guard whose only failure mode ever tested is "it did not fire" is
+  // satisfied by a door that is permanently shut (:7104's PG1), and behind an
+  // unclosable prompt that door is somebody's business.
+  {
+    id: 'C96',
+    target: 'billingview',
+    suite: PROMPT_SUITE,
+    why: "SEALED OUT: the prompt stops asking whether the viewer can pay, so a TRAINER who opens the console meets a prompt they cannot close, whose only button is a trial the server answers 403 to — Kd ruled 2026-08-28 that it stops only whoever holds `billing.manage`, because blocking somebody who cannot subscribe is a brick wall aimed at the wrong person",
+    expect: 'does not stop a trainer',
+    from: '  if (!canManageBilling(viewerPrivileges(org))) return null;',
+    to: '  if (false) return null;',
+  },
+  {
+    id: 'C97',
+    target: 'billingview',
+    suite: PROMPT_SUITE,
+    why: "SEALED OUT ON A GUESS, AND THIS IS THE ONE THE SCHEMA WARNS ABOUT IN AS MANY WORDS: `ownerTrialUsed` null means \"we could not ask\" — a non-staff caller, or an api older than this bundle — and treating it as \"has not trialled\" draws an unclosable prompt over an owner during any web-newer-than-api deploy",
+    expect: 'never said whether the trial is spent',
+    from: "  if (org?.ownerTrialUsed === false) return 'trial';",
+    to: "  if (org?.ownerTrialUsed !== true) return 'trial';",
+  },
+  {
+    id: 'C98',
+    target: 'billingview',
+    suite: PROMPT_SUITE,
+    why: 'SEALED OUT OF A CONSOLE THEY PAY FOR: the prompt stops checking whether the gym is on a live plan, so a trialling — and one day a PAYING — gym is covered by a prompt demanding it subscribe, with no way to dismiss it',
+    expect: 'does not stop a gym that is already trialling',
+    from: '  if (hasLivePlan(org)) return null;',
+    to: '  if (false) return null;',
+  },
+  {
+    id: 'C99',
+    target: 'billingview',
+    suite: PROMPT_SUITE,
+    why: "BLOCKED WITH A BUTTON THAT CANNOT WORK: an owner whose one free trial is spent is shown the TRIAL arm instead of the price list, so the only control on an unclosable prompt is one the server answers 409 `trial_already_used` to — the exact false promise :22341 §7 reported and this card closes",
+    expect: 'once the sweep has ended its trial',
+    from: "  if (org?.ownerTrialUsed === true) return 'subscribe';",
+    to: "  if (org?.ownerTrialUsed === true) return 'trial';",
+  },
+  {
+    id: 'C100',
+    target: 'planmodal',
+    suite: PROMPT_SUITE,
+    why: 'FALSE ON SCREEN: a price read that FAILED is drawn as an empty price book, so a gym owner whose connection blipped is told this product has no plans for their gym — the empty-vs-failed defect this console has already shipped once, arriving on the one screen a gym owner cannot leave',
+    expect: 'does NOT draw a failed price read',
+    from: '            {!plans.loading && plans.error === null && plans.list !== null ? (',
+    to: '            {!plans.loading && (plans.list ?? []).length === 0 ? (',
+  },
+  {
+    id: 'C101',
+    target: 'planmodal',
+    suite: PROMPT_SUITE,
+    // WHAT THIS PROVES, STATED NARROWLY BECAUSE IT IS EASY TO OVERCLAIM: that
+    // the suite NOTICES A CLOSE CONTROL APPEARING on this prompt. It does not
+    // prove the prompt is unclosable in general — "cannot be closed" is a set of
+    // ABSENCES (no X, no Escape handler, no click-outside), and an absence has
+    // no line to mutate. The Escape and backdrop halves are driven directly by
+    // the test instead. This is the half a future edit is most likely to add
+    // back, because a dialog with a close button looks like good manners.
+    why: "THE RULING UNDONE IN ONE LINE: a close control appears on the prompt Kd ruled unskippable, so the owner it exists for taps it away and goes on using a console for a gym that is not a customer — the dismissible card he rejected, wearing the modal's clothes",
+    expect: 'CANNOT BE CLOSED',
+    from: "        <h2 id={titleId} className=\"text-xl font-bold\" style={{ color: '#fff' }}>",
+    to: "        <button type=\"button\" onClick={() => setBusy(false)}>Close</button><h2 id={titleId} className=\"text-xl font-bold\" style={{ color: '#fff' }}>",
+  },
+  {
+    id: 'C102',
+    target: 'newgym',
+    suite: PROMPT_SUITE,
+    // KD FOUND THIS ONE IN A BROWSER, at the smoke, and no test existed for it
+    // — the defect was that the prompt arrived one CLICK too late. :5348 rule 5
+    // says a class found by a person gets an automated check, and rule 3 says a
+    // fix ships with a test that fails without it. Both are this row and the
+    // case it names, measured RED against the unfixed screen before shipping.
+    why: "A GYM ON NO PLAN HANDS OUT ITS JOIN CODE: the unskippable prompt stops covering the screen a gym is CREATED on, so the first thing a new owner sees is their code under \"Give this code to your members\" — the exact state :22215 exists to remove — and the prompt only arrives after they click through to the gym",
+    expect: 'is COVERED by the prompt',
+    from: '        <PlanModal org={createdOrg} onSignOut={signOut} signingOut={signingOut} />',
+    to: '',
   },
 ];
 

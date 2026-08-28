@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import Select from '../../components/common/Select';
 import JoinCodeCard from '../../components/console/JoinCodeCard';
+import PlanModal from '../../components/console/PlanModal';
 import { ConsoleCard, ConsoleFailed } from '../../components/console/ConsoleStates';
 import { orgService, errorText } from '../../api/orgsApi';
-import { refreshConsoleOrgs } from './consoleOrgs';
+import { consoleOrgsSnapshot, refreshConsoleOrgs, subscribeConsoleOrgs } from './consoleOrgs';
+import { useConsoleSignOut } from './consoleSignOut';
 import { ORG_TYPE_CHOICES, countryOptions, detectTimezone, timezoneOptions } from './consoleView';
 
 // Part 3 §4.0's onboarding wizard, reduced to the steps that have a server
@@ -79,6 +81,24 @@ export default function NewGym() {
   const [error, setError] = useState(null);
   const [created, setCreated] = useState(null);
 
+  /** THE BRAND-NEW GYM AS THE SERVER DESCRIBES IT, for the unskippable prompt
+   *  that now covers the code screen.
+   *
+   *  **The create response is deliberately NOT used for this.** It carries the
+   *  org and the join code and nothing else — no `ownerTrialUsed`, no
+   *  privileges — and a prompt that cannot be closed must never be drawn on a
+   *  field that was never sent (the shared schema says so in as many words). So
+   *  it is read from the kept answer `refreshConsoleOrgs()` fetches on the line
+   *  after the gym is made, by id. Before that read lands there is no row and
+   *  the prompt draws nothing, which is the same safe direction. */
+  const snapshot = useSyncExternalStore(subscribeConsoleOrgs, consoleOrgsSnapshot);
+  const createdOrg =
+    created === null || snapshot.status !== 'ready'
+      ? null
+      : (snapshot.orgs ?? []).find((o) => o?.id === created.org.id) ?? null;
+
+  const { signingOut, signOut } = useConsoleSignOut();
+
   const canSubmit = name.trim() !== '' && country !== '' && timezone.trim() !== '' && !submitting;
 
   const submit = async (e) => {
@@ -126,6 +146,29 @@ export default function NewGym() {
   if (created !== null) {
     return (
       <div className="max-w-2xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-5">
+        {/* THE PROMPT COVERS THIS SCREEN, AND KD FOUND THE DEFECT THAT MADE IT
+            NECESSARY — 2026-08-28, at the smoke: *"i cretaed gym but this one
+            shows then i click only after that pop shows this is wrong wtf"*.
+
+            **He is right, and it is his ruling rather than a preference.**
+            :22215 puts the prompt at the moment a gym is CREATED, and this
+            screen is that moment — it was handing out the JOIN CODE, under
+            "Give this code to your members", for a gym on no plan. That is the
+            exact state the ruling exists to remove, and the prompt arriving one
+            click LATER made the wrong thing the first thing a new owner sees.
+
+            **NOTHING IS REMOVED — the code screen stays and is simply behind
+            the prompt**, which is the honest order: start the trial, then hand
+            out the code. It reveals itself the moment the trial starts, because
+            the gym then has a plan and `planPromptFor` stops asking for one.
+
+            IT IS DRAWN HERE RATHER THAN BY THE SHELL because `/console/new` has
+            no gym in its address, so `ConsoleLayout`'s copy resolves no org and
+            correctly draws nothing there. This one is handed the gym that was
+            just created — read from the SHARED STORE by id, never from the
+            create response, because that response carries no `ownerTrialUsed`
+            and a prompt that cannot be closed must never be drawn on a guess. */}
+        <PlanModal org={createdOrg} onSignOut={signOut} signingOut={signingOut} />
         <div>
           <h1 className="text-2xl font-bold" style={{ color: '#fff' }}>
             {created.org.name} is ready

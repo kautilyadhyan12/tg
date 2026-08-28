@@ -57,6 +57,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getMembers: vi.fn(),
       getCodes: vi.fn(),
       getApplications: vi.fn(),
+      getPlans: vi.fn(),
       startTrial: vi.fn(),
     },
   };
@@ -99,6 +100,13 @@ const owner = {
   ],
   subscription: null,
   seatsUsed: 0,
+  /** Neither gym has trialled, so both meet the TRIAL arm of the unskippable
+   *  prompt — which is what makes "did gym A's answer follow me to gym B?" a
+   *  question this file can still ask after the Overview's button was deleted
+   *  (:22921 §1). A row without this field draws no prompt at all (null is "we
+   *  could not ask"), and every case below would then be asserting about a
+   *  screen that has nothing on it. */
+  ownerTrialUsed: false,
   isMember: true,
   joinedAt: '2026-08-18T09:00:00.000Z',
 };
@@ -227,6 +235,11 @@ beforeEach(() => {
   });
   orgService.getMembers.mockResolvedValue({ data: { items: [], nextCursor: null } });
   orgService.getApplications.mockResolvedValue({ data: { items: [], nextCursor: null, pendingCount: 0 } });
+  orgService.getPlans.mockResolvedValue({
+    data: {
+      plans: [{ code: 'org_b1_us_m', priceLabel: '$35', currency: 'USD', interval: 'month', seatCap: 300 }],
+    },
+  });
 });
 
 afterEach(() => {
@@ -237,13 +250,27 @@ afterEach(() => {
 
 describe('walking from one gym to another', () => {
   it('does not carry gym A’s new trial onto gym B', async () => {
-    // THE C/H THIS FILE WAS OPENED FOR. `justStarted` holds the server's own
-    // answer to the button — deliberately, so a failed background re-read cannot
-    // put "Start your free trial" back over a gym that is now trialling. Held
-    // across a gym change it becomes the opposite defect: gym B, on NOTHING,
-    // showed "Free trial", a seat meter reading a cap it does not have, and NO
-    // start button — so its trial could not be started at all.
-    orgService.getMine.mockResolvedValue({ data: { orgs: [GYM_A, GYM_B], formerOrgs: [] } });
+    // THE C/H THIS FILE WAS OPENED FOR, re-expressed for the screen that
+    // replaced the button. The trial is now started from the unskippable prompt
+    // (:22921 §1) and its answer is written into the shared store rather than
+    // held in a component — so the question this case asks is unchanged: after
+    // gym A gets a plan, is anything on gym B still about gym A?
+    //
+    // The failure it guards against is what the old card did: gym B, on
+    // NOTHING, showing "Free trial" and a seat meter reading a cap it does not
+    // have, with no way to start its own trial at all.
+    orgService.getMine.mockResolvedValueOnce({ data: { orgs: [GYM_A, GYM_B], formerOrgs: [] } });
+    // The re-read after the press finds A trialling — and B's own owner row now
+    // says the one free trial is spent, which is what the server would say.
+    const A_TRIALLING = {
+      ...GYM_A,
+      ownerTrialUsed: true,
+      subscription: { status: 'trialing', trialEndsAt: daysFromNow(30), seatCap: 300 },
+      seatsUsed: 0,
+    };
+    orgService.getMine.mockResolvedValue({
+      data: { orgs: [A_TRIALLING, { ...GYM_B, ownerTrialUsed: true }], formerOrgs: [] },
+    });
     orgService.startTrial.mockResolvedValue({
       data: {
         outcome: 'started',
@@ -257,12 +284,62 @@ describe('walking from one gym to another', () => {
 
     await walkTo('B');
 
-    // Gym B is on no plan, so it says so by saying nothing about a plan…
+    // Gym B is on no plan, so nothing on screen says it is on one…
     expect(screen.queryByText('Free trial')).toBeNull();
     expect(screen.queryByText(/places used/)).toBeNull();
-    // …and — the half that BLOCKS somebody rather than merely misinforming them
-    // — it offers its own trial.
-    expect(screen.getAllByRole('button', { name: /start your 30-day free trial/i })).toHaveLength(1);
+    // …and gym B gets its OWN prompt, about gym B: the trial is spent now, so
+    // the honest arm is the price list rather than a button that would 409.
+    expect(await screen.findByTestId('plan-modal')).toBeTruthy();
+    expect(screen.getByText(/already used your one free trial/i)).toBeTruthy();
+  });
+
+  it('does not show gym A’s prices under gym B’s prompt', async () => {
+    // THE PROMPT IS THE CONSOLE'S NEWEST STATEFUL PANEL, so it is the newest
+    // member of this class: it holds a fetched price list, and the shell it is
+    // drawn from does not remount between two gyms. Without its own key, gym B's
+    // prompt opens showing GYM A'S PRICES — a number on screen that is not about
+    // the gym named above it, which is money as well as :5807.
+    //
+    // Both halves of this file's method are copied, as its header requires:
+    // different data per gym, and gym B's read HELD OPEN, because an instant
+    // answer closes the stale window before an assertion can see it.
+    const spentOnBoth = [
+      { ...GYM_A, ownerTrialUsed: true },
+      { ...GYM_B, ownerTrialUsed: true },
+    ];
+    orgService.getMine.mockResolvedValue({ data: { orgs: spentOnBoth, formerOrgs: [] } });
+    let releaseBPlans;
+    orgService.getPlans.mockImplementation((gymId) =>
+      gymId === A_ID
+        ? Promise.resolve({
+            data: {
+              plans: [
+                { code: 'org_b1_us_m', priceLabel: '$35', currency: 'USD', interval: 'month', seatCap: 300 },
+              ],
+            },
+          })
+        : new Promise((resolve) => {
+            releaseBPlans = resolve;
+          }),
+    );
+
+    renderConsole();
+    expect(await screen.findByText('$35 a month')).toBeTruthy();
+
+    await walkTo('B');
+
+    // Gym B has answered nothing yet, so the prompt says nothing about a price.
+    expect(screen.queryByText('$35 a month')).toBeNull();
+    expect(screen.queryByTestId('plan-list')).toBeNull();
+
+    // THE CONTROL (:7104's PG1): gym B's own answer still lands, so this cannot
+    // pass on a prompt that has merely stopped showing prices.
+    releaseBPlans({
+      data: {
+        plans: [{ code: 'org_b2_us_m', priceLabel: '$50', currency: 'USD', interval: 'month', seatCap: 500 }],
+      },
+    });
+    expect(await screen.findByText('$50 a month')).toBeTruthy();
   });
 
   it('still shows gym A’s trial when the owner walks back to it', async () => {

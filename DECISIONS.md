@@ -23253,3 +23253,281 @@ changes**.
 
 **THE PACKET SHIPS. T3 is closed at round 1.** Nothing new ticks: the modal, the
 Overview button's removal and the re-run of the expiry smoke remain the next card.
+
+## 2026-08-28 — THE FORCED PROMPT REACHES A SCREEN: a modal that cannot be closed, the Overview's trial button deleted on Kd's ruling, and the empty price book answered rather than inherited
+
+**Read before touching `PlanModal.jsx`, `planPromptFor`, `applyStartedTrial` or
+`useConsoleSignOut`, before adding any console surface that can BLOCK somebody,
+before putting a control on the Overview's plan card, before adding a screen a
+gym reaches BEFORE its console, before writing a prompt whose only exit is
+sign-out, and before quoting the trial-expiry smoke sheet.**
+
+Step 3 of :22215 §5 and the visible half of :22697. The server half landed the
+same day (:22921) and its T3 is closed (:23128), so everything this card needed
+already existed: `ownerTrialUsed` to pick the arm, `GET /v1/orgs/:gymId/plans` to
+draw the prices, and the CA/GB/euro-area currency fix so a Canadian gym is not
+stranded on a prompt whose only button 409s.
+
+### 1. WHAT SHIPS, AND WHERE IT IS DRAWN
+
+**`PlanModal`, mounted in `ConsoleLayout` beside §4.2's banner** — not on the
+Overview. The banner lives there because §4.2 puts its slot *"above all
+screens"*; the prompt lives there because **a prompt mounted on one screen is a
+prompt somebody walks around by typing an address**, and Kd's ruling is that it
+cannot be skipped. It draws nothing on `/console` and `/console/new`, which is
+also what makes "Your gyms" inside it a real exit rather than a way past.
+
+**Two arms, both Kd's.** Never trialled → the 30-day free trial, with the button
+that used to sit on the Overview. Trial spent → the real plans at their real
+prices (`Up to 300 members · $35 a month`), the line saying the free trial is
+used, and **no button**, because there is nowhere to send anybody.
+
+**IT CANNOT BE CLOSED, AND EVERY PART OF THAT IS AN ABSENCE** — no X, no
+`keydown` listener, no `onClick` on the backdrop, no dismissal flag anywhere. An
+absence has no line to mutate, so it is asserted from the OUTSIDE instead: the
+test presses Escape, clicks the backdrop, and queries for a control named
+close/dismiss/not-now/later/skip. **C101 is the half that can be added back by
+accident** — it inserts a "Close" button and the suite goes RED — because a
+dialog with a close button looks like good manners to whoever writes it next.
+
+**IT IS NOT THE ENFORCEMENT AND MUST NEVER BE READ AS ONE** (R3.3). A gym on no
+plan grants its members nothing whether this modal is on screen or picked out of
+the DOM: the gym half of the entitlement UNION requires a live subscription
+(:22215 §1, measured there). What the modal does is stop an owner USING a console
+for a gym that is not a customer, and put the one thing they can do in front of
+them.
+
+### 2. KD RULED THE WAY OUT, AND IT WAS THE ONLY QUESTION PUT TO HIM
+
+Two arms in one line each: the prompt offers **"Your gyms" and Sign out**, or
+**Sign out alone**. He chose the first. The reason it was worth asking rather
+than deciding: an owner of two gyms who opens the lapsed one would otherwise be
+stuck on it **with no pay path in the product to get themselves out**, and the
+rail and tab bar that normally carry both links are behind the overlay. Neither
+exit is a way past — this gym's console stays shut either way.
+
+### 3. THE TWO CALLS THIS CARD HAD TO MAKE, BOTH DEFERRED TO IT BY NAME
+
+**(a) THE EMPTY PRICE BOOK — `OWED.md`'s own line, raised at :23128 Low-4.**
+`GET /v1/orgs/:gymId/plans` reads `gyms.currency_display`, a STORED column, while
+the guard proving every currency has a book walks `currencyForCountry`, the MAP.
+A gym still carrying a currency the book has since dropped therefore gets a 200
+and an empty list. The two options were named there: a typed refusal in the
+service the way `no_plan_for_currency` answers one function over, or a screen
+that says something true.
+
+**RULED HERE: the SCREEN says the true thing.** *"We don't have plans listed in
+your gym's currency yet"*, above the same "we'll be in touch" line the arm always
+ends on. **The refusal was rejected for a reason specific to this surface: behind
+a prompt that cannot be closed, a 409 is an error card with no way forward — a
+dead end dressed as a failure**, where the sentence keeps the one route the arm
+already offers. It also needs no server change (R1.1).
+
+**(b) THE SUBSCRIBE ARM HAS NO BUTTON, AND THAT IS THE RULING BUILT RATHER THAN
+SOFTENED.** :22697 §4 says the arm *"ships saying we will be in touch"* and
+:22215 §5 step 3 says *"contact us"* — both about what it SAYS. A button under
+that sentence would either do nothing when pressed, which is the dead control
+`billingView.js`'s own rule 1 refuses, **or promise a message this product has no
+way to send** (Paddle unbuilt, the admin "mark as paid" tool unbuilt, the contact
+channel owed) — a promise with no code behind it, which is where this project
+draws Critical (:5807). So it is a SENTENCE. **If Kd wants a button there it is
+his call, and it needs a channel first.**
+
+### 4. THE OVERVIEW'S PRE-TRIAL BUTTON IS DELETED, AND THE AUTHORISATION IS THE POINT
+
+Kd ruled it on 2026-08-28 (:22921 §1, ruling 2), put to him as an explicit option
+with its cost stated (:10182's precedent) — **because *"a pop up … not a button"*
+rules the SHAPE and does not by itself license deleting a control.** The plan
+card STAYS for a gym that IS trialling: "Free trial", the end date, the seat
+meter. What goes is the pre-trial arm alone: the button, its copy, its error
+line, and `justStarted`.
+
+**Nothing is lost, which is what makes it a fair removal**: the trial is still
+started, by an owner who cannot miss the offer instead of one who has to notice a
+card, and one-trial-per-owner is untouched on the server.
+
+### 5. THE HELD ANSWER MOVED OUT OF A COMPONENT AND INTO THE STORE — the one piece of design this card added
+
+`TrialCard` held `justStarted`: the server's own reply to the press, kept because
+the background re-read can fail and the store then keeps its previous answer
+(:20440). **Held in a component that lives in the SHELL, that answer dies the
+moment the owner walks out through "Your gyms" — and a failed re-read would then
+put an UNCLOSABLE prompt back over a gym that is already trialling.** The old
+defect was a card saying the wrong thing; the new one seals somebody out.
+
+So `consoleOrgs.js` gains **`applyStartedTrial(gymId, subscription)`**: it writes
+the server's own answer onto that gym's kept row and invents nothing — no status,
+no date, no seat cap derived anywhere. **Rule 4 still wins**, so a successful
+re-read replaces it moments later with the server's truth; what it protects is
+the window where that read FAILS (rule 2 keeps the kept answer). It is ignored
+unless the store holds a READY answer stamped for the person now signed in
+(rule 3, the shared-front-desk hazard). **Both readers are now correct across the
+journey: the prompt stays gone, and the Overview's plan card still says "Free
+trial".**
+
+### 6. THE AUDIT (rule 4/4a) — SIX NEW MUTANTS, TWO RE-AIMED, AND THE RE-AIMS ARE THE INTERESTING HALF
+
+Every row sits in 4a's expensive columns: this is the first console surface that
+can BLOCK a person, and the second that puts money on screen. **No database
+mutant — this card changes no server behaviour** (4a: a web-only card audits in
+minutes).
+
+**THE ROWS RUN IN BOTH DIRECTIONS ON PURPOSE**, because this component has two
+opposite failures and only one of them looks like a bug from the inside: it fails
+to appear (a gym keeps a console it has not paid for — C99), or it appears over
+the wrong person (**somebody sealed out of their own console** — C96 a trainer,
+C97 an unknown `ownerTrialUsed`, C98 a gym already on a plan). A guard whose only
+tested failure is "it did not fire" is satisfied by a door that is permanently
+shut (:7104's PG1), and behind an unclosable prompt that door is somebody's
+business.
+
+**C90 RE-AIMED AT THE SAME GUARANTEE IN ITS NEW HOME** (:13336's instruction,
+:15770's standard — the same call site, never whichever line looked closest): it
+anchored on `justStarted`, and follows the fact into `applyStartedTrial`.
+**C93's OLD SUBJECT NO LONGER EXISTS, and that is why it moved rather than being
+deleted.** It anchored on `<TrialCard key={org.id}>`, whose key protected state
+the card no longer holds — mutating it now changes nothing observable and it
+would have come back ALIVE against correct code, which is C88's shape exactly.
+**:17676's standard is to ask whether the guarantee is OBSERVABLE before assuming
+a test is missing**: this one MOVED, to the prompt's own key. The card's key stays
+and is now belt-and-braces, and `Overview.jsx` says so in as many words rather
+than leaving a reader to infer it.
+
+**AND THE PROMPT NEEDED A KEY AT ALL FOR :20986's REASON, WITH ITS PREFIX
+LOAD-BEARING:** `ConsoleBanner` one line above already keys on `org?.id ??
+'no-gym'`, and two siblings holding one key is React dropping one without a word.
+`plan-modal:` cannot collide with it or with any gym id.
+
+**ONE TEST WAS FIXED BEFORE IT COULD LIE.** The surviving *"not drawn for
+somebody without the billing tick"* case had a fixture with `subscription: null`
+— and a card on no plan draws nothing whatever the viewer's privileges, so
+**deleting the privilege gate entirely would have left it GREEN** (C88's
+redundancy, one component over). Its subject is now a MANAGER on a TRIALLING gym,
+where the privilege check is the only thing that can hide the card.
+
+### 7. THREE STALE SENTENCES IN `billingView.js`, FIXED RATHER THAN STEPPED OVER
+
+:22782's standing rule applied — *a card that closes a documented gap should grep
+for the gap's own description before it ships* — and it caught sentences the
+SWEEP card made false the same day and did not fix. All three said **"nothing
+ends a trial"**: the file's own rule 2, `trialDaysLeft`'s "indefinitely", and the
+banner's reason for not saying a trial has ended. **The banner's COPY is
+unchanged and still true** — that branch is reached only while the row still says
+`trialing`, i.e. between the end date and the next 04:00 run, and in that window
+the members really do still have the features. What changed is the REASON, which
+is what the next reader takes as evidence (:5748). Rule 2 also claimed an ended
+plan and a gym that never trialled *"arrive here identically"*; `ownerTrialUsed`
+is what broke that identity, and it is the reason `planPromptFor` can pick an arm
+at all.
+
+### 8. ONE THING ANSWERED WITHOUT A RULING, SO NOBODY RE-ASKS IT
+
+**What a gym sees between its trial ending and the sweep running** — :22697 §4's
+second open question — costs nothing new, because **the prompt keys on STATUS and
+never on the date** (:21580's rule (c), :22921 §5). Until the 04:00 job moves the
+row the gym is still `trialing`, still has its console, and §4.2's banner already
+says the trial is past its end date. Both directions have a test.
+
+### 9. THE WHOLE-TABLE SWEEP FOUND A LIVE MUTANT THAT IS NOT THIS CARD'S, AND FINDING IT IS THE ARGUMENT FOR RUNNING THE WHOLE TABLE
+
+**121 mutants, 120 RED, 1 ALIVE — `C68`, in `ConsoleStates.jsx`, a file this card
+never touched.** It claims that `ConsoleSection` opens itself over its own error
+card (:12660's anti-silence rule), and it survived.
+
+**MEASURED THREE WAYS RATHER THAN REASONED ABOUT**, on the same one-test filter:
+delete `|| forceOpen` from `const isOpen = open || forceOpen;` → **GREEN** (that
+is C68) · delete the latch `if (forceOpen && !open) setOpen(true);` → **GREEN** ·
+delete **BOTH** → **RED**. So the guarantee is real, the test is not a liar, and
+the two lines are a redundant pair — **either one alone satisfies it, so neither
+is falsifiable and a mutant aimed at one says nothing.** C88's shape exactly.
+**Nothing a user can see is wrong**, so it takes a ⚪ `OWED.md` line rather than
+holding the packet, and **the one-line fix is deliberately NOT taken here
+(R1.1)**: the file belongs to the Settings card, and the latch it would touch
+exists because of a Critical that card's own T3 found.
+
+**WHY IT WAS INVISIBLE UNTIL TODAY IS THE PART TO KEEP: the two guards were not
+written together** — the latch came later and made the other half redundant —
+**and every web sweep since has been a stated SUBSET.** A subset run still
+exercises the whole-table ANCHOR pre-check, which is what :21580's three
+anchorless mutants needed; **it never RUNS anybody else's rows, and a no-op
+mutation is invisible to any pre-check.** :23128's standing rule says run the
+whole table after a fix round; this card is the evidence that a BUILD wants it
+too, and it cost 25 minutes on a web-only sweep.
+
+### 10. PROVE — every figure naming what it ran against
+
+**Web only; no server change, so no database mutant and no api suite (4a).**
+`billingView` **43/43** (+14) · the three console render files **42/42** · the
+whole web suite **1319/1319 across 49 files** (+25 tests, +1 file, from
+1294/1294 across 48) · `eslint --max-warnings=0` exit 0 on **eleven** files ·
+`vite build` exit 0 · `node --check` on the harness · `check-decisions-index`
+**229 pointers resolve** · `check-decisions-triggers` **631 triggers from 178 of
+316 rulings**, this entry's five among them · **WHOLE-TABLE SWEEP of 121: 120
+RED, 1 ALIVE (C68, §9), 0 never ran**, every control GREEN and tallying first,
+restores sha256-verified after every mutant.
+
+**THE SMOKE SHEET'S OWN COMMAND WAS RUN, NOT ASSUMED** (:22782's standing rule —
+a command in a smoke sheet is code Kd will run and takes V1's evidence). The old
+line exits 1 with `Invalid environment: WEB_ORIGIN: Required; JWT_SECRET:
+Required`; the new one boots and answers `{"status":"ok"}` on `/health`. **And it
+produced a warning worth writing into the sheet: with an API already on port
+3000 the command exits with `EADDRINUSE` and leaves you smoking the OLD server**
+— which is :15927's stale-process trap arriving through a different door, and
+this card hit it while proving the line.
+
+### 11. THE SMOKE PASSED 11/11 — AND KD FOUND A DEFECT AT STEP 1 THAT NO TEST, REVIEWER OR MUTANT HAD
+
+**His words:** *"i cretaed gym but this one shows then i click only after that pop
+shows this is wrong wtf"*. **He is right, and it is his own ruling being enforced
+against my build rather than a preference.**
+
+**THE DEFECT.** `/console/new`'s success screen — *"{gym} is ready"*, the join
+code, *"Give this code to your members"* — has no gym in its address, so
+`ConsoleLayout`'s prompt resolved no org and correctly drew nothing. The prompt
+therefore arrived one CLICK later, on the gym screen. **So the first thing a new
+owner saw was their join code, for a gym on no plan — the exact state :22215
+exists to remove ("a gym exists, hands out codes, and nobody can tell whether it
+is a customer"), presented as the happy path.**
+
+**THE FIX REMOVES NOTHING.** The code screen stays and is simply BEHIND the
+prompt; it reveals itself the moment the trial starts, because the gym then has a
+plan. That is the honest order — start the trial, then hand out the code — and it
+is a better screen than either half was alone. `NewGym` draws the prompt itself,
+reading the new gym **from the shared store by id, never from the create
+response**, because that response carries no `ownerTrialUsed` and a prompt that
+cannot be closed must never be drawn on a field that was never sent. Sign-out
+moved into `useConsoleSignOut` so the shell, the prompt and this screen share ONE
+implementation rather than three (:1239's shape).
+
+**WHY IT MATTERS BEYOND THE FIX: everything green said the card was done.** 1319
+tests, eleven lint-clean files, a whole-table sweep of 121 with one known ALIVE,
+and a review packet already written. **The screen was still wrong, and only a
+person creating a gym could see it** — :12832's standing lesson and the argument
+for the SMOKE gate, recurring on the card whose whole subject is what an owner
+sees first. **The other half is mine to own: I wrote the sheet's step 1 as "the
+gym is created, you land on its console", which is not what the app does** — a
+smoke step written from the design rather than from the screen, and it would have
+passed while describing the wrong journey if he had read it less carefully than
+he did.
+
+**PINNED BOTH WAYS, because a defect a browser found gets a guard (:5348 rule 5)
+and a fix gets a test that fails without it (rule 3):** three cases in
+`planPrompt.render.test.jsx` — the prompt covers the create screen, the code is
+REVEALED once the trial starts (the control, :7104's PG1: without it the case is
+satisfied by a prompt that never leaves), and nothing is drawn before the store
+has the gym — plus mutant **C102**, which deletes the prompt from that screen.
+The first case was measured RED against the unfixed screen before shipping.
+
+**THE SHEET NOW DESCRIBES THE SCREEN THE APP DRAWS** (:13184's rule), step 1
+naming the "is ready" screen explicitly and saying what it means if the code is
+ever visible with no prompt over it.
+
+**PROVE after the fix: web 1322/1322 across 49 files** (+3) · eslint clean on the
+four files it touched · **a stated SUBSET of 122 — C12, C13, C51, C52, C93, C94,
+C96–C102: 13 RED, 0 ALIVE, 0 never ran**, every control GREEN first, chosen to
+cover every file the fix moved a line in.
+
+**THE SMOKE PASSED 11/11 ON THE SHIPPING BYTES.** Two `OWED.md` lines tick on it:
+the 🔴 false-promise sentence and the 🔴 unskippable-prompt line. The
+empty-price-book line ticks on §3a's decision. **T3 is UNRUN and is the only gate
+left.**

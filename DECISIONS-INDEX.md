@@ -950,6 +950,90 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   O145–O153, 10 RED, 0 ALIVE**, nine controls GREEN first, 250 rows fingerprinted
   with no unattributed changes.
 
+- **:23257** — 2026-08-28 — **THE FORCED PROMPT REACHES A SCREEN: a modal that
+  cannot be closed, the Overview's trial button deleted on Kd's ruling, and the
+  empty price book answered rather than inherited.** Step 3 of :22215 §5 and the
+  visible half of :22697; the server half (:22921) and its T3 (:23128) are what
+  made it buildable.
+  **Read before touching `PlanModal.jsx`, `planPromptFor`, `applyStartedTrial` or
+  `useConsoleSignOut`, before adding any console surface that can BLOCK somebody,
+  before putting a control on the Overview's plan card, before adding a screen a
+  gym reaches BEFORE its console, before writing a prompt whose only exit is
+  sign-out, and before quoting the trial-expiry smoke sheet.**
+  **`PlanModal` is drawn from `ConsoleLayout`, beside §4.2's banner** — a prompt
+  mounted on ONE screen is one somebody walks around by typing an address. Two
+  arms: never trialled → the 30-day trial (the button that used to sit on the
+  Overview); trial spent → the real plans at their real prices, the line saying
+  the trial is used, and **no button**, because there is nowhere to send anybody.
+  **"Cannot be closed" is entirely ABSENCES** — no X, no `keydown`, no backdrop
+  `onClick`, no dismissal flag — so it is asserted from the OUTSIDE (Escape, a
+  backdrop click, a query for any close-named control) and **C101 inserts a
+  "Close" button**, which is the half a later edit adds back because it looks
+  like good manners. **IT IS NOT THE ENFORCEMENT** (R3.3): a gym on no plan
+  grants its members nothing whether the modal is on screen or not.
+  **KD RULED THE WAY OUT — "Your gyms" AND Sign out**, against sign-out alone,
+  because an owner of two gyms would otherwise be stuck on the lapsed one with no
+  pay path to escape through; neither exit is a way past.
+  **TWO CALLS DEFERRED TO THIS CARD BY NAME AND MADE HERE: (a) the empty price
+  book** (:23128 Low-4 — the route reads a STORED currency column while the guard
+  walks the MAP) is answered by **the SCREEN saying something true**, not a
+  service refusal, because behind an unclosable prompt a 409 is a dead end
+  dressed as a failure; **(b) the subscribe arm has NO BUTTON** — :22697 §4 and
+  :22215 §5 step 3 rule what it SAYS, and a button would either do nothing or
+  promise a message nothing can send (:5807).
+  **THE HELD ANSWER MOVED OUT OF A COMPONENT INTO THE STORE**
+  (`applyStartedTrial`): `justStarted` died when the shell-mounted prompt
+  unmounted, so a failed re-read would have put an UNCLOSABLE prompt back over a
+  trialling gym. Rule 4 still wins on a successful re-read; this protects the
+  window where it FAILS.
+  **AUDIT: six new mutants, TWO RE-AIMED, and the re-aims are the half to read.**
+  Rows run in BOTH directions — the prompt failing to appear, and the prompt
+  appearing over somebody it seals out (C96 a trainer, C97 an unknown
+  `ownerTrialUsed`, C98 a gym already on a plan). **C93's old subject no longer
+  exists** — `TrialCard`'s key protected state the card no longer holds, so
+  mutating it would have come back ALIVE against correct code (C88's shape); the
+  guarantee MOVED to the prompt's own key rather than the mutant being deleted.
+  **One surviving test was fixed before it could lie**: its fixture had no
+  subscription, so deleting the privilege gate left it GREEN.
+  **Three stale "nothing ends a trial" sentences in `billingView.js`**, made
+  false by the sweep card the same day, corrected rather than stepped over — the
+  banner's COPY is unchanged and still true; its REASON was not.
+  **§9 — THE WHOLE-TABLE SWEEP FOUND A LIVE MUTANT THAT IS NOT THIS CARD'S, AND
+  THAT IS THE ARGUMENT FOR RUNNING THE WHOLE TABLE.** 121 mutants, 120 RED, **1
+  ALIVE — C68, in `ConsoleStates.jsx`**, untouched here. Measured three ways: each
+  of `|| forceOpen` and the `setOpen` latch alone keeps the test GREEN, **both
+  removed goes RED** — a redundant pair, so neither is falsifiable (C88's shape).
+  Product correct, ⚪ `OWED.md` line, one-line fix NOT taken (R1.1 — another
+  card's file, and the latch has a Critical's history). **Why it hid: the guards
+  were not written together and every web sweep since has been a stated SUBSET —
+  a subset exercises the whole-table ANCHOR pre-check but never RUNS other rows,
+  and a no-op mutation is invisible to any pre-check.**
+  **PROVE (web only): 1319/1319 across 49 files · eslint clean on eleven files ·
+  `vite build` exit 0 · index 229 · triggers 631 from 178 of 316 · the sweep
+  above.** **The smoke sheet's API command was RUN** — `{"status":"ok"}` — and
+  the old one exits 1 on `WEB_ORIGIN`/`JWT_SECRET`; it also gained an `EADDRINUSE`
+  warning, :15927's stale-process trap through a different door.
+  **§11 — THE SMOKE PASSED 11/11 AND KD FOUND A DEFECT AT STEP 1 THAT NO TEST,
+  REVIEWER OR MUTANT HAD.** *"i cretaed gym but this one shows then i click only
+  after that pop shows this is wrong wtf"* — `/console/new`'s success screen has
+  no gym in its address, so the shell's prompt drew nothing there and **the first
+  thing a new owner saw was their join code, for a gym on no plan: the exact state
+  :22215 exists to remove, presented as the happy path.** Fixed by drawing the
+  prompt OVER that screen — **nothing removed, the code is revealed the moment the
+  trial starts**, which is the honest order. The gym is read **from the store by
+  id, never from the create response** (no `ownerTrialUsed` there, and the prompt
+  must never draw on a field that was never sent); sign-out moved into
+  `useConsoleSignOut` so three surfaces share ONE implementation (:1239).
+  **Everything green said the card was done** — 1319 tests, a whole-table sweep, a
+  review packet already written — **and only a person creating a gym could see it**
+  (:12832). **My own half: the sheet's step 1 said "you land on its console",
+  which is not what the app does** — a step written from the design rather than
+  from the screen. Pinned by three cases (with the reveal as the control, :7104's
+  PG1) and mutant **C102**, the first measured RED against the unfixed screen.
+  **Final PROVE: web 1322/1322 · a stated SUBSET of 122 covering every file the fix
+  moved a line in — 13 RED, 0 ALIVE.** **THE SMOKE PASSED ON THE SHIPPING BYTES;
+  T3 is the only gate left.**
+
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 
 **NOT read every session. Read an entry here when your task touches what it is

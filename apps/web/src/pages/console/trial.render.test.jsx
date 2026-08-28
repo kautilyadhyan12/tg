@@ -6,20 +6,18 @@
 // card's own components could be reached at all, so deleting the route left 857
 // tests green while the feature vanished.
 //
-// The two guarantees here that no pure test can make:
+// **THE TRIAL IS NO LONGER STARTED FROM THIS SCREEN, AND THAT IS A KD RULING**
+// (:22921 §1, 2026-08-28): the Overview's pre-trial button is deleted and the
+// unskippable prompt in `ConsoleLayout` is the only way a trial starts. The
+// cases that pressed that button — a successful start surviving a failed
+// refresh, and a permanent refusal offering no Try again — moved WITH it, to
+// `planPrompt.render.test.jsx`, along with the guarantee they carried. Nothing
+// was dropped in the move; the first of the two is now a promise about the
+// shared store rather than about a component, which is where the fact lives.
 //
-//   1. **A successful start survives a failed refresh.** Starting a trial kicks
-//      a BACKGROUND re-read of the console's gym list, and the store keeps its
-//      previous answer when that read fails (:20440). Without the response being
-//      held, the screen would go back to offering "Start your 30-day free trial"
-//      to a gym that is now trialling — the screen saying something false about
-//      an action that just succeeded. The test drives exactly that: the list
-//      never changes its answer, and the card must flip anyway.
-//
-//   2. **A permanent refusal offers no Try again.** Two of the three failures
-//      are for ever (one trial per person; no price book for that country) and
-//      `isRetryable` treats only a 403 as permanent, so the shared error card
-//      would have put a button under both.
+// What this file still proves about the card: it states the plan for a gym that
+// HAS one, it says nothing at all for a gym that does not, and it is drawn only
+// for somebody who may manage billing.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -168,15 +166,18 @@ afterEach(() => {
 
 // ── The button ──────────────────────────────────────────────────────────────
 
-describe('starting the trial', () => {
-  it('offers the trial to an owner whose gym is on no plan', async () => {
+describe('the plan card', () => {
+  it('draws nothing at all for a gym on no plan', async () => {
+    // The card is silent here, and the owner is not: the unskippable prompt is
+    // over this whole screen. There is deliberately no second way to start a
+    // trial (:22921 §1) — a card offering one is the dismissible control that
+    // ruling replaced.
     orgService.getMine.mockResolvedValue(mineIs(ORG));
     renderConsole(Overview);
 
-    expect(await screen.findByRole('button', { name: /start your 30-day free trial/i })).toBeTruthy();
-    // It must not promise a number nobody has been told yet: the seat cap comes
-    // off the price book and the server picks the band.
-    expect(screen.queryByText(/300/)).toBeNull();
+    await screen.findByText('Iron House');
+    expect(screen.queryByText('Plan')).toBeNull();
+    expect(screen.queryByRole('button', { name: /start your 30-day free trial/i })).toBeNull();
     // And no banner, because there is no plan for §4.2 to have a state about.
     expect(screen.queryByTestId('console-banner')).toBeNull();
   });
@@ -184,78 +185,29 @@ describe('starting the trial', () => {
   it('is not drawn at all for somebody without the billing tick', async () => {
     // §2.2's Billing row. A manager who may run the roster sees no billing card
     // — not a disabled one, which is the defect §2.2's own rules warn about.
-    orgService.getMine.mockResolvedValue(mineIs(MANAGER_ORG));
+    //
+    // **THE GYM IS ON A TRIAL ON PURPOSE, and without that this test would pass
+    // for the wrong reason.** A gym on no plan draws no card whatever the
+    // viewer's privileges, so a fixture with `subscription: null` is satisfied
+    // by a card with NO privilege gate at all — C88's redundancy shape, one
+    // component over. Trialling, the privilege check is the only thing that can
+    // hide it.
+    orgService.getMine.mockResolvedValue(
+      mineIs({
+        ...MANAGER_ORG,
+        subscription: { status: 'trialing', trialEndsAt: daysFromNow(27), seatCap: 300 },
+        seatsUsed: 12,
+      }),
+    );
     renderConsole(Overview);
 
     await screen.findByText('Iron House');
-    expect(screen.queryByRole('button', { name: /free trial/i })).toBeNull();
-    expect(screen.queryByText(/start your 30-day free trial/i)).toBeNull();
+    expect(screen.queryByText('Plan')).toBeNull();
+    expect(screen.queryByText('Free trial')).toBeNull();
+    expect(screen.queryByText(/places used/)).toBeNull();
   });
 
-  it('calls the server once and shows the plan afterwards', async () => {
-    orgService.getMine.mockResolvedValue(mineIs(ORG));
-    orgService.startTrial.mockResolvedValue({
-      data: {
-        outcome: 'started',
-        subscription: { status: 'trialing', trialEndsAt: daysFromNow(30), seatCap: 300 },
-      },
-    });
-    renderConsole(Overview);
-
-    fireEvent.click(await screen.findByRole('button', { name: /start your 30-day free trial/i }));
-
-    await waitFor(() => expect(screen.getByText('Free trial')).toBeTruthy());
-    expect(orgService.startTrial).toHaveBeenCalledTimes(1);
-    expect(orgService.startTrial).toHaveBeenCalledWith(GYM_ID);
-    // The cap the SERVER sent, now that there is one to state.
-    expect(screen.getByText(/0 of 300 places used/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /start your 30-day free trial/i })).toBeNull();
-  });
-
-  it('SURVIVES the background refresh never answering with the new state', async () => {
-    // Guarantee 1 at the top of this file. `getMine` keeps returning a gym on no
-    // plan — which is what a failed or stale re-read looks like from here — and
-    // the screen must still show the trial it just started, because the server
-    // said so in the reply to the press.
-    orgService.getMine.mockResolvedValue(mineIs(ORG));
-    orgService.startTrial.mockResolvedValue({
-      data: {
-        outcome: 'started',
-        subscription: { status: 'trialing', trialEndsAt: daysFromNow(30), seatCap: 300 },
-      },
-    });
-    renderConsole(Overview);
-
-    fireEvent.click(await screen.findByRole('button', { name: /start your 30-day free trial/i }));
-    await waitFor(() => expect(screen.getByText('Free trial')).toBeTruthy());
-
-    // Still the stale answer on the wire, and still the true thing on screen.
-    expect((await orgService.getMine.mock.results[0].value).data.orgs[0].subscription).toBeNull();
-    expect(screen.queryByRole('button', { name: /start your 30-day free trial/i })).toBeNull();
-  });
-
-  it('prints the server’s refusal and offers no Try again', async () => {
-    // Guarantee 2. One trial per person is permanent; a retry button beside it
-    // would promise that pressing again might work.
-    orgService.getMine.mockResolvedValue(mineIs(ORG));
-    orgService.startTrial.mockRejectedValue({
-      response: {
-        status: 409,
-        data: {
-          error: 'trial_already_used',
-          message: "You've already used your free trial. It's one per person, not one per gym.",
-        },
-      },
-    });
-    renderConsole(Overview);
-
-    fireEvent.click(await screen.findByRole('button', { name: /start your 30-day free trial/i }));
-
-    await waitFor(() => expect(screen.getByText(/one per person, not one per gym/i)).toBeTruthy());
-    expect(screen.queryByRole('button', { name: /try again/i })).toBeNull();
-  });
-
-  it('shows a trial already running, with its end date, and no button', async () => {
+  it('shows a trial already running, with its end date and its meter', async () => {
     orgService.getMine.mockResolvedValue(mineIs(onTrial()));
     renderConsole(Overview);
 

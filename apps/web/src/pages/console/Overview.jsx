@@ -218,24 +218,30 @@ export default function Overview() {
         </p>
       </div>
 
-      {/* THE PLAN, ABOVE THE JOIN CODE AND BELOW THE GYM'S NAME. It is the
-          first thing an owner of a brand-new gym has to do and the join code is
-          the second — a code handed out by a gym on no plan admits members who
-          get nothing extra for being there. Draws nothing at all for anybody
-          without `billing.manage`, and needs no read of its own: the plan and
-          the places used both arrive on the org row this screen already has.
+      {/* THE PLAN, ABOVE THE JOIN CODE AND BELOW THE GYM'S NAME — what the gym
+          is on, and how many places are used. A code handed out by a gym on no
+          plan admits members who get nothing extra for being there, so the plan
+          is stated first. Draws nothing at all for anybody without
+          `billing.manage`, nothing for a gym on no plan, and needs no read of
+          its own: both facts arrive on the org row this screen already has.
 
-          KEYED ON THE GYM, AND THAT IS NOT A DETAIL — it is :20712's fix
-          applied to the fourth component to need it. `/console/:orgSlug` is ONE
-          route, so walking from gym A to gym B does not remount anything here;
-          without this key the card's `justStarted` (the server's own answer to
-          the button, deliberately held) followed the owner onto the next gym and
-          printed "Free trial · 0 of 300 places used" over a gym on NOTHING,
-          while hiding the button that would have started that gym's own trial.
-          Measured, both ways, before this line was written.
+          THE CARD NO LONGER STARTS A TRIAL — Kd's ruling of 2026-08-28 (:22921
+          §1). The pre-trial button is deleted and the unskippable prompt in
+          `ConsoleLayout` is the only way a trial starts. A gym on no plan draws
+          nothing here because that owner is looking at the prompt, over this
+          whole screen.
 
-          The key rather than a `useEffect` that clears the state, for :20712's
-          reason: it covers state nobody has added yet. */}
+          THE KEY IS KEPT AND IS NOW BELT-AND-BRACES, which is a change of
+          status worth writing down rather than leaving to be inferred. It was
+          :20712's fix applied to the fourth component to need it: this card held
+          `justStarted` — the server's own answer to its button — and
+          `/console/:orgSlug` is ONE route, so walking from gym A to gym B does
+          not remount anything here and that answer followed the owner onto the
+          next gym. **The card holds no state at all any more**: the fact moved
+          into `consoleOrgs.js`, which is keyed by gym id by construction, and
+          the shell wraps every screen in a keyed Fragment as well (:22029, Kd's
+          redesign ruling). Left alone rather than deleted, on the same reasoning
+          that left the other per-panel keys standing. */}
       <TrialCard key={org.id} org={org} />
 
       {/* ── The join code pane, on its own outcome ─────────────────────── */}

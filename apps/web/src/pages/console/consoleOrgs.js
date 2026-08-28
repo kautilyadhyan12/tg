@@ -231,6 +231,45 @@ export function refreshConsoleOrgsAfterChange() {
   void load({ background: true }); // nobody is waiting on this read
 }
 
+/** A TRIAL JUST STARTED, AND THE SERVER'S OWN ANSWER GOES INTO THE KEPT ROW
+ *  BEFORE THE RE-READ CONFIRMS IT.
+ *
+ *  **This is `TrialCard`'s `justStarted` moved out of a component and into the
+ *  one place that answers "what is this gym on?", and the move is what the modal
+ *  card forced.** Held in a component, that answer lived exactly as long as the
+ *  component: the unskippable prompt is drawn from the shell and unmounts when
+ *  the owner walks out through "Your gyms", so a background re-read that failed
+ *  would put the prompt straight back over a gym that IS now trialling — and it
+ *  cannot be closed. The plan card on the Overview is a second reader of the
+ *  same fact and would have gone blank in the same window.
+ *
+ *  **WHY IT IS NEEDED AT ALL:** the re-read below it is a BACKGROUND read, and
+ *  rule 2 above says a failed background read changes nothing on screen. That
+ *  rule is right and stays — but it means the console can be left holding
+ *  `subscription: null` for a gym the server has just told us is trialling.
+ *  This writes the fact we were told, so the screens say the true thing whether
+ *  or not the follow-up read arrives.
+ *
+ *  **IT PATCHES ONE GYM AND INVENTS NOTHING.** The subscription is the server's
+ *  own response to the press, copied verbatim onto that gym's row; every other
+ *  field and every other gym is untouched, and a successful re-read replaces the
+ *  whole answer moments later (rule 4). Nothing here derives a status, a date or
+ *  a seat cap.
+ *
+ *  Ignored unless the store holds a READY answer stamped for the person now
+ *  signed in — rule 3, and the same shared-front-desk hazard: an answer patched
+ *  into somebody else's kept row is the one thing worse than a stale one. */
+export function applyStartedTrial(gymId, subscription) {
+  if (typeof gymId !== 'string' || gymId === '' || subscription == null) return;
+  const forUserId = getUserId();
+  if (state.status !== 'ready' || state.forUserId !== forUserId) return;
+  if (!Array.isArray(state.orgs)) return;
+  publish({
+    ...state,
+    orgs: state.orgs.map((o) => (o?.id === gymId ? { ...o, subscription } : o)),
+  });
+}
+
 /** Written out as a named step rather than two inline assignments so that ONE
  *  line names this guarantee and a mutant can point at it (C53). `resetConsoleOrgs`
  *  deliberately does NOT call it — it also has to bump the generation, because

@@ -4851,11 +4851,12 @@ file and is stated so nobody reads these as lower priority than they are.
       mistyped its country at signup and let its trial lapse is stuck with no
       route to anybody** — bounded today (no gym has lapsed yet) and growing from
       thirty days after the first trial started.
-- [ ] 🔴 **A GYM WHOSE TRIAL HAS ENDED IS OFFERED THE TRIAL AGAIN, AND THE BUTTON
+- [x] 🔴 **A GYM WHOSE TRIAL HAS ENDED IS OFFERED THE TRIAL AGAIN, AND THE BUTTON
       CANNOT SUCCEED — a FALSE PROMISE ON SCREEN that the expiry sweep makes
       REACHABLE FOR THE FIRST TIME (found 2026-08-28 by the card that creates it,
       :22341; NOT shipped past Kd silently — it is the finding put to him with the
-      card).**
+      card).** **CLOSED 2026-08-28 by the modal card (DECISIONS :23257), smoke
+      PASSED 11/11.**
       **Measured, not reasoned.** `listOrgsForUser`'s LATERAL serves only
       `status IN ('trialing','active','past_due')` (`orgs/repo.ts:398`), so the
       moment the sweep writes `expired` the console reads `subscription: null` —
@@ -4891,8 +4892,20 @@ file and is stated so nobody reads these as lower priority than they are.
       and is RED.
       **WHAT IS LEFT IS EXACTLY THE SENTENCE**: `TrialCard`'s pre-trial branch is
       what the modal replaces, and Kd ruled on 2026-08-28 that the button goes when
-      it does. **Until that card ships, this defect is still on screen** — first
-      reachable about 2026-09-26, unchanged by today's work.
+      it does. ~~**Until that card ships, this defect is still on screen** — first
+      reachable about 2026-09-26, unchanged by today's work.~~
+      **THE SENTENCE IS GONE 2026-08-28 (DECISIONS :23257).** `TrialCard`'s
+      pre-trial branch is deleted on Kd's ruling, so a gym whose trial has ended
+      draws no plan card at all; its owner meets the SUBSCRIBE arm of the
+      unskippable prompt — the real plans, the line saying the free trial is
+      spent, and **no button offering a trial the server would refuse**. Both
+      directions are pinned: `planPrompt.render.test.jsx` ("DOES stop that gym
+      once the sweep has ended its trial") and mutant **C99**, which puts the
+      false promise back by showing the TRIAL arm to an owner whose trial is
+      spent. ~~**THIS LINE TICKS ON THE BROWSER SMOKE**~~ **TICKED 2026-08-28:
+      the smoke PASSED 11/11 on the shipping bytes, and its step 8 is that exact
+      screen — Kd saw the subscribe prompt with the real price ladder where the
+      false trial offer used to be.**
 - [ ] 🟡 **THE LAPSED GYM'S CONSOLE IS NOT READ-ONLY — the OTHER HALF of Kd's
       :22215 step 1, split out of the sweep card on 2026-08-28 (:22341) and
       SPLIT WITH HIS APPROVAL, not deferred quietly.** He was shown the split in
@@ -4936,7 +4949,7 @@ file and is stated so nobody reads these as lower priority than they are.
       that on the next change. `worker.ts` is an entrypoint with top-level
       `await` and live Redis/Postgres connections, so testing it is its own small
       card, not a line in this one.
-- [ ] 🔴 **THE TRIAL PROMPT AND THE SUBSCRIBE PROMPT ARE BOTH UNSKIPPABLE, AND A
+- [x] 🔴 **THE TRIAL PROMPT AND THE SUBSCRIBE PROMPT ARE BOTH UNSKIPPABLE, AND A
       GYM WITHOUT A LIVE PLAN HAS NO CONSOLE — KD RULED IT 2026-08-28 (DECISIONS
       :22215).** His words: *"whenver a gym is created there is trial pop up and
       they can not skip that after the trail ends there is subscription plan pop up
@@ -5002,12 +5015,53 @@ file and is stated so nobody reads these as lower priority than they are.
       between a trial ending and the 04:00 sweep costs nothing new, because the
       modal keys on STATUS and never on the date (:21580's rule (c)).
 
-      **TICKS WHEN** all three pieces are live with the sweep, with a fake-clock
+      **THE MODAL SHIPPED 2026-08-28 (DECISIONS :23257) AND THIS LINE STILL DOES
+      NOT TICK — the smoke is the gate and it has not been run.** What is built:
+      `PlanModal`, drawn from `ConsoleLayout` so it covers EVERY console screen
+      rather than one an owner can walk around by typing an address · **both arms**
+      (never trialled → the trial; trial spent → the real plans, the line saying it
+      is used, and no button) · **no X, no Escape, no click-outside**, asserted
+      from the outside because all three are absences · the Overview's pre-trial
+      button DELETED on Kd's ruling · and the two exits he chose, "Your gyms" and
+      Sign out, neither of which is a way past.
+      **WHAT IS STILL NOT BUILT, and neither is this line's to close:** the
+      console is COVERED by the prompt but not READ-ONLY (its own 🟡 line above),
+      and the subscribe arm still has nowhere to send anybody, so it says we will
+      be in touch — which needs the CONTACT CHANNEL owed beside the admin panel.
+      ~~**TICKS WHEN** all three pieces are live with the sweep, with a fake-clock
       test walking creation → trial → expiry → member entitlements falling back to
-      free, and the browser smoke Kd runs on it.
-- [ ] 🟡 **THE PRICE LIST CAN ANSWER 200 WITH AN EMPTY LIST, AND NOTHING REFUSES
+      free, and the browser smoke Kd runs on it.~~
+      **TICKED 2026-08-28. The smoke PASSED 11/11 on the shipping bytes** — Kd
+      created a gym and met the trial prompt at the moment of creation, could not
+      close it by any means, started the trial, jumped 35 days forward, and met
+      the SUBSCRIBE prompt with the real price ladder and no second trial on
+      offer. The fake-clock test is `orgs.trialSweep.test.ts` (:22341), and the
+      member half — entitlements falling back to free — is held by the test that
+      reads the same gym as owner and as member, because no member screen mentions
+      billing and a ✅ there would be satisfied by any app at all (:21751).
+      **KD FOUND A DEFECT AT STEP 1 AND IT WAS FIXED BEFORE THE TICK:** the prompt
+      did not cover the gym-created screen, so a new owner's FIRST sight was their
+      join code for a gym on no plan. Now covered; the code appears once the trial
+      starts (DECISIONS :23257 §11, mutant C102).
+      **WHAT THIS TICK DOES NOT COVER, so nobody reads it as more than it is:** the
+      lapsed gym's console is COVERED by the prompt but is not READ-ONLY (its own
+      🟡 line above), the subscribe arm still has nowhere to send anybody (the
+      contact channel), and nobody can actually pay (Paddle, unbuilt and
+      unauthorised).
+- [x] 🟡 **THE PRICE LIST CAN ANSWER 200 WITH AN EMPTY LIST, AND NOTHING REFUSES
       — raised by T3 round 1 on the forced prompt's server half, 2026-08-28
       (DECISIONS :22921), and DEFERRED TO THE MODAL CARD RATHER THAN GUESSED AT.**
+      **DECIDED AND BUILT 2026-08-28 IN THE MODAL CARD, exactly where this line
+      said it belonged (DECISIONS :23257 §3a). THE SCREEN SAYS SOMETHING TRUE:**
+      *"We don't have plans listed in your gym's currency yet"*, above the same
+      "we'll be in touch" line that arm always ends on. **The service refusal —
+      the other option named below — was REJECTED for a reason specific to this
+      surface: behind a prompt that cannot be closed, a 409 is an error card with
+      no way forward, a dead end dressed as a failure**, while the sentence keeps
+      the one route the arm already offers. No server change was needed (R1.1).
+      Covered by `planPrompt.render.test.jsx` ("says something TRUE when the price
+      book has nothing in the gym's currency") and by mutant **C100**, which
+      proves a FAILED read is never drawn as an empty book.
       `GET /v1/orgs/:gymId/plans` reads `gyms.currency_display`, a STORED column,
       while the guard that proves every currency has a book walks
       `currencyForCountry` — the MAP. A gym still carrying a currency the book has
@@ -5026,6 +5080,37 @@ file and is stated so nobody reads these as lower priority than they are.
       inventing a channel.
       **TICKS WHEN** the subscribe prompt ships with a decided answer for a gym
       whose currency has no book.
+- [ ] ⚪ **MUTANT C68 IS ALIVE AND THE PRODUCT IS FINE — `ConsoleSection` GUARDS
+      ITS OPEN-ON-FAILURE RULE TWICE, so neither guard is falsifiable on its own.
+      Found 2026-08-28 by the WHOLE-TABLE web sweep on the modal card (DECISIONS
+      :23257), in a file that card never touched.**
+      **MEASURED THREE WAYS RATHER THAN REASONED ABOUT**, on
+      `settings.render.test.jsx -t "OPENS ITSELF when the staff list fails"`:
+      delete `|| forceOpen` from `const isOpen = open || forceOpen;` → **GREEN**
+      (this is C68, and why it survived) · delete the latch
+      `if (forceOpen && !open) setOpen(true);` → **GREEN** · delete **BOTH** →
+      **RED**. So the guarantee is real and observable, the test is not a liar,
+      and the two lines are a redundant pair — either one alone satisfies it.
+      **NOTHING A USER CAN SEE IS WRONG**, which is why this is ⚪ and not a
+      blocker: a section holding an error still opens itself.
+      **IT IS C88's SHAPE EXACTLY** (:21580) — two guards, either sufficient,
+      neither falsifiable — and the recorded remedy for that shape is to delete
+      the redundancy from the SOURCE and move the mutant onto the line that
+      decides (:17676's standard). **The fix is one line and it is NOT taken here
+      (R1.1): this card owns neither `ConsoleStates.jsx` nor the Settings
+      screen**, and the latch exists because of a Critical found at that card's
+      own T3 round 1 (Try again cleared `forceOpen` and shut the section under
+      the click) — a line with that history is not a drive-by edit.
+      **WHY IT WAS INVISIBLE UNTIL NOW, and it is the reusable part: the two
+      guards were not written together.** The latch was added later, which made
+      the `|| forceOpen` half redundant, and **every web sweep since has been a
+      stated SUBSET** — a subset run exercises the whole-table ANCHOR pre-check
+      but never actually runs everybody else's mutants. :21580 recorded the same
+      class from the other side (three console mutants sat with no anchor for two
+      commits). **A no-op mutation cannot be caught by any pre-check; only
+      running it finds it.**
+      **TICKS WHEN** the redundancy is removed from `ConsoleStates.jsx` and C68
+      is re-aimed at the surviving line and re-measured RED.
 - [ ] 🟡 **THE SEAT CAP IS CHECKED WHEN SOMEBODY JOINS AND IS NEVER RE-COUNTED, so
       a gym can carry more members than its plan admits — found 2026-08-28 while
       answering Kd's question about unsubscribed gyms; grep-verified untracked
