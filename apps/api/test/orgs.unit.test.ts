@@ -75,17 +75,40 @@ describe("normaliseCode", () => {
 });
 
 describe("currencyForCountry (Kd ruling 2026-08-18 — currency follows location)", () => {
-  it("maps the four places we are open in", () => {
+  /** CORRECTED 2026-08-29 (DECISIONS :23711 §6a). These two cases asserted
+   *  `CA → CAD` and `DE → EUR`, and had been RED since 2026-08-28 — with CI —
+   *  because Kd ruled the other way and the card that built his ruling never ran
+   *  this file. **The ruling is what is right and the test was what was stale**:
+   *  :22215 §3.5, *"Canada, the UK and the euro area are billed in US
+   *  dollars"*, built at :22921 §2(c).
+   *
+   *  **`DE` was stale too and nothing could see it**, because the `CA`
+   *  assertion three lines above it failed first and stopped the case — which
+   *  is why the suite reported two failures for what were three.
+   *
+   *  The reason the ruling went that way is worth keeping here, because it is
+   *  what makes these numbers look wrong at a glance: the alternative was three
+   *  more price books Kd has never priced, and a forced unskippable prompt over
+   *  a gym whose only button answers `no_plan_for_currency` — a brick wall at
+   *  signup for every Canadian, British and euro-area gym (:22215 §4). */
+  it("bills the US, Canada, the UK and the euro area in ONE dollar book", () => {
     expect(currencyForCountry("US")).toBe("USD");
-    expect(currencyForCountry("IN")).toBe("INR");
-    expect(currencyForCountry("CA")).toBe("CAD");
-    expect(currencyForCountry("DE")).toBe("EUR");
+    expect(currencyForCountry("CA")).toBe("USD");
+    expect(currencyForCountry("GB")).toBe("USD");
+    expect(currencyForCountry("DE")).toBe("USD");
+    // …and a spread of the euro area rather than the one country somebody
+    // happened to type: twenty of these share a line in the map, so a single
+    // example proves only that the line exists.
+    expect(currencyForCountry("FR")).toBe("USD");
+    expect(currencyForCountry("IE")).toBe("USD");
+    expect(currencyForCountry("ES")).toBe("USD");
   });
 
-  it("puts the UK on the pound, not the euro", () => {
-    // "Europe" is not one currency, and a UK gym quoted in euros is a false
-    // number in front of a paying customer.
-    expect(currencyForCountry("GB")).toBe("GBP");
+  it("keeps India on rupees — the dollar book is a RULING, not a default", () => {
+    // THE POSITIVE CONTROL, and it is the whole reason the case above is safe
+    // to write as a row of USDs: without it, a map that answered "USD" to
+    // absolutely everything would pass every assertion up there.
+    expect(currencyForCountry("IN")).toBe("INR");
   });
 
   it("returns null for a country we are not open in — never a fallback", () => {

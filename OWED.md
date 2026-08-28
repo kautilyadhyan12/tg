@@ -4969,9 +4969,15 @@ file and is stated so nobody reads these as lower priority than they are.
       `expired_at` column; `trial_ends_at` is the only date on the row, and it is
       the trial's end rather than the sweep's run. Whoever builds this decides
       that with a ruling or a column, and must not infer it.
-- [ ] 🔴 **`orgs.unit.test.ts` HAS BEEN RED SINCE THE CURRENCY CARD, AND CI WITH
+- [x] 🔴 **`orgs.unit.test.ts` HAS BEEN RED SINCE THE CURRENCY CARD, AND CI WITH
       IT — found 2026-08-29 (:23711 §6a) by a card that had nothing to do with
-      it.** Two assertions demand `currencyForCountry("CA") === "CAD"` and
+      it.** **DONE 2026-08-29 on Kd's say-so** (*"yes"*), in its own commit —
+      *"The currency test stops contradicting Kd's own ruling"* — and the fix is
+      described below the original note. **Named by SUBJECT rather than by hash
+      deliberately: the first draft of this line carried a hash invented before
+      the commit existed** (V1 — a number with no command behind it), and a hash
+      written INSIDE the commit it names cannot be right anyway, because writing
+      it changes it. Two assertions demanded `currencyForCountry("CA") === "CAD"` and
       `("GB") === "GBP"`, while Kd ruled at :22215 §3.5 — and :22921 §2(c) built
       — CA, GB and the euro area onto **USD**.
       **PROVEN PRE-EXISTING RATHER THAN ASSUMED:** at HEAD the map already reads
@@ -4984,6 +4990,20 @@ file and is stated so nobody reads these as lower priority than they are.
       taken at :23711 because it encodes a Kd ruling and belongs to the card that
       made it false (R1.1) — but it is 🔴 because a red suite is a broken gate for
       everybody, not only for its owner.
+      **WHAT THE FIX FOUND: it was THREE stale assertions, not two, and nothing
+      could see the third.** `DE → EUR` sat three lines below `CA → CAD` in the
+      same case, so the CA failure stopped the case before reaching it and the
+      suite reported two failures for what were three. **A case that asserts a
+      row of related facts hides every one after the first that breaks** — which
+      is why the replacement spreads the euro area over three countries instead
+      of trusting the one somebody happened to type.
+      **PINNED BOTH WAYS (rule 4), because a test rewritten to match the code is
+      the easiest kind of green liar to ship:** `CA: "USD"` → `"CAD"` in the map
+      goes RED (exit 1, one case), and `IN: "INR"` → `"USD"` goes RED (exit 1,
+      two cases). The second is the POSITIVE CONTROL and it is the load-bearing
+      one — without India on rupees, a map answering "USD" to everything would
+      satisfy every assertion in the rewritten case. Restore verified
+      sha256-identical, and the restored file re-run green (exit 0).
 - [ ] ⚪ **A LAPSED GYM CANNOT CONFIRM ANYBODY, SO PEOPLE CAN STILL APPLY TO IT
       AND WAIT FOR NOTHING — recorded 2026-08-29 (:23711 §6b) as a consequence
       the read-only card CREATES, rather than found later.**
