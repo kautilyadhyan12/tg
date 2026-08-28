@@ -842,6 +842,60 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   recorded cost of forgetting it. `turbo run lint` RED is PRE-EXISTING and
   was re-proven on a stashed tree (:21057's global-pnpm shadowing).
 
+- **:22921** — 2026-08-28 — **THE FORCED PROMPT'S SERVER HALF: the first price
+  this product has ever served, an owner's spent trial made visible, and Canada,
+  the UK and the euro area finally able to buy anything.** Step 2 of :22215 §5,
+  split at the plan gate the way :22341 was; the MODAL is the next card.
+  **Read before building either unskippable prompt, before adding a pricing
+  endpoint or a second reader of `plans`, before touching `COUNTRY_CURRENCY` or
+  `listOrgPlansForCurrency`, before writing any money string for a screen, and
+  before assuming `subscription: null` means a gym never trialled.**
+  **TWO KD RULINGS, each put to him with a recommendation and its cost:** the
+  prompt **stops only whoever can pay** (a trainer without `billing.manage` uses
+  the console as normal — blocking someone who cannot pay is :22215 §4's brick
+  wall aimed at the wrong person), settling the first of :22697 §4's open
+  questions; and **the Overview's pre-trial BUTTON goes**, the plan card staying
+  for a gym that IS trialling — put as an explicit option because *"a pop up …
+  not a button"* rules the SHAPE and does not by itself authorise deleting a
+  control (:10182's precedent). **The deletion happens in the WEB card.**
+  **SHIPPED, three pieces:** `ownerTrialUsed` on `/v1/orgs/mine` (the arm
+  selector — **widening the subscription LATERAL was the other route and is
+  WRONG**, because `subs_one_live_uq` is PARTIAL over the three live statuses and
+  that is what makes its `LIMIT 1` well-defined: :12731's trap from the other
+  side; it tests `trial_ends_at IS NOT NULL` and **never a status**, staff-only,
+  and **null must never draw the modal**) · **`GET /v1/orgs/:gymId/plans`, the
+  first price ever to leave this server** — gym-scoped so the SERVER reads the
+  currency (R3.1) and the route is tenant-scoped for free, `priceLabel` and
+  **deliberately no minor-unit integer**, no display name because
+  `plans.name_key` has no translation table to resolve · and **`COUNTRY_CURRENCY`
+  → USD for CA/GB/the euro area**, Kd's :22215 §3.5 ruling finally built, with the
+  supported-country ENUM untouched (:10010 is a different question).
+  **NO FLOAT TOUCHES THE MONEY**: the integer goes through `Intl` as a `bigint`
+  and the minor digits are appended as text, because `/100` breaks R6.1 and the
+  ES2023 string overload is untyped under this repo's ES2022 `lib` — which is
+  also why the locale is PINNED to `en-US`. A fixed `maximumFractionDigits: 2`
+  returns `$1,234.5` for 123450, measured.
+  **NO BACKFILL, MEASURED NOT HOPED**: `currency_display` is recomputed only when
+  the country changes, and there are **zero CA/GB/euro-area gyms on either
+  database**. The trap is written into the map's own comment.
+  **AUDIT: seven mutants, and O148 SURVIVED TWICE — once for each half of
+  :11846's pair.** The TEST half (every retired band is INR, and the only exact
+  list was the USD one), then the FILTER half (:21580's C91 verbatim — it still
+  named the USD test after the assertion moved to the rupee one). The C88
+  question was asked first and the guarantee IS observable, unlike :21580's C88.
+  **PROVE, all LOCAL: `orgs.plans` 10/10 (new) · `orgs.routes` 134/134 ·
+  `orgs.trialSweep` 9/9 · `db.migration` 10/10 · shared 51/51 · web 1294/1294 ·
+  tsc exit 0 and PROVEN REAL by planting a type error · eslint clean on seven
+  files · SWEEP a stated SUBSET of 151: O145–O151, 7 RED, 0 ALIVE.**
+  **SMOKE RUN AND PASSED, AND KD'S QUESTION IS WHAT PRODUCED IT**: the report
+  said "no screen, so no smoke", he asked *"do i not need to perform smoke test
+  ?"*, and checking found the currency ON SCREEN in three places. **A card with
+  no new screen is not a card with nothing a user can see.** Round 1 failed on a
+  STALE API PROCESS serving the old map ("set up in CAD") — `smoke-trial-expiry
+  .md`'s own S2 warning (:15927, :20222), incurred by the chat that had read it
+  that session; restarted, verified through the live api first, round 2 PASSED.
+  **NOTHING TICKS BUT THE CURRENCY LINE; T3 UNRUN.**
+
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 
 **NOT read every session. Read an entry here when your task touches what it is

@@ -20,6 +20,7 @@ import {
   orgStatusSchema,
   orgSubscriptionStatusSchema,
   orgTypeSchema,
+  planIntervalSchema,
 } from "@app/shared";
 import type {
   OrgApplicationStatus,
@@ -27,6 +28,7 @@ import type {
   OrgStatus,
   OrgSubscriptionStatus,
   OrgType,
+  PlanInterval,
 } from "@app/shared";
 
 type SqlOrTx = Sql | TransactionSql;
@@ -62,6 +64,12 @@ export interface MyOrgRow extends OrgRow {
   /** Live members occupying a paid place, by `claimSeat`'s own rule. Always a
    *  number here; the service nulls it for a caller who is not staff. */
   seatsUsed: number;
+  /** Has the OWNER OF THIS GYM already spent their one free trial, ever —
+   *  `startGymTrial`'s own refusal condition, asked ahead of the press so a
+   *  screen can stop offering what the door will refuse. Always a boolean here;
+   *  the service nulls it for a caller who is not staff, as it does the two
+   *  fields above. */
+  ownerTrialUsed: boolean;
   isMember: boolean;
   joinedAt: Date | null;
 }
@@ -344,6 +352,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       sub_trial_ends_at: Date | null;
       sub_seat_cap: number | null;
       seats_used: number;
+      owner_trial_used: boolean;
     })[]
   >`
     SELECT g.id, g.slug, g.name, g.city, g.country, g.org_type, g.timezone,
@@ -381,7 +390,43 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
                AND NOT EXISTS (
                  SELECT 1 FROM gym_staff ss
                  WHERE ss.gym_id = sm.gym_id AND ss.user_id = sm.user_id)
-           ) AS seats_used
+           ) AS seats_used,
+           -- HAS THIS GYM'S OWNER ALREADY SPENT THEIR ONE FREE TRIAL — the arm
+           -- selector for the unskippable prompt (:22697), and the SECOND COPY
+           -- of a rule whose first copy is the "used" query inside
+           -- startGymTrial, far below in this same file.
+           --
+           -- NO BACKTICKS HERE EITHER, and I incurred that slip AGAIN writing
+           -- this block — the third recorded time in this one template (:12227,
+           -- then the seat meter above, now here). One backtick ends the literal
+           -- and the rest of the query becomes a run of parse errors. The
+           -- warning fifty lines up did not stop it happening; typecheck did.
+           --
+           -- IT IS THE SAME THREE CONDITIONS DELIBERATELY, and they are the
+           -- door's rather than a paraphrase of it: gym-owned subscriptions,
+           -- anchored on THIS gym's owner_user_id, evidenced by trial_ends_at
+           -- being set. A screen fed anything looser offers a trial the door
+           -- then refuses, which is :22341 §7's defect with the sign flipped.
+           --
+           -- IT TESTS trial_ends_at AND NEVER A STATUS, which is the line to
+           -- read twice. The evidence has to SURVIVE the trial ending, so it
+           -- cannot key on trialing; and nothing in the product ever clears that
+           -- column (the shared schema says so in as many words), which is
+           -- precisely what makes it durable proof that a trial once existed.
+           -- An expired row, a canceled one and a gym that converted to paying
+           -- all still carry it.
+           --
+           -- R3.8 forbids sharing this as an sql fragment and :14493's Low-2 is
+           -- what two readers of one rule cost when they drift, so what holds
+           -- the copies together is a test driving THIS FIELD and THAT REFUSAL
+           -- on one fixture — :14013's six-site precedent, the same instrument
+           -- the seat meter above is pinned by.
+           EXISTS (
+             SELECT 1 FROM subscriptions ts JOIN gyms tg ON tg.id = ts.owner_id
+             WHERE ts.owner_type = 'gym'
+               AND tg.owner_user_id = g.owner_user_id
+               AND ts.trial_ends_at IS NOT NULL
+           ) AS owner_trial_used
     FROM gyms g
     LEFT JOIN gym_staff s ON s.gym_id = g.id AND s.user_id = ${userId}
     LEFT JOIN gym_members m ON m.gym_id = g.id AND m.user_id = ${userId}
@@ -414,6 +459,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
             seat_cap: r.sub_seat_cap,
           }),
     seatsUsed: r.seats_used,
+    ownerTrialUsed: r.owner_trial_used,
     isMember: r.is_member,
     joinedAt: r.joined_at,
   }));
@@ -605,8 +651,17 @@ export async function updateOrg(
      *  So the question is the CURRENCY's, which is what the ruling was always
      *  about: unchanged country ⇒ unchanged currency ⇒ allowed · an unrecorded
      *  country recorded as the one it is ALREADY billed for ⇒ allowed, and the
-     *  gym finally has its country ⇒ closes C/H-2 · France → Germany ⇒ both EUR
+     *  gym finally has its country ⇒ closes C/H-2 · Canada → Germany ⇒ both USD
      *  ⇒ allowed, address updated, money untouched · India → Germany ⇒ REFUSED.
+     *
+     *  **THAT THIRD EXAMPLE READ "France → Germany ⇒ both EUR" UNTIL
+     *  2026-08-28**, when Kd ruled Canada, the UK and the euro area onto US
+     *  dollars (:22215 §3.5). The example was still TRUE — France and Germany do
+     *  still share a currency in this map — but it had stopped being the
+     *  interesting case, because after that ruling the pairs that share a
+     *  currency are almost all of them. Corrected here rather than only in the
+     *  test that drives it (:5748), and the test now drives Canada → Germany so
+     *  the two agree.
      *  It also makes the refusal TRUE: the old sentence told a gym with no
      *  country that its country was fixed (:5807).
      *
@@ -1108,6 +1163,75 @@ export interface GymSubscriptionRow {
   status: OrgSubscriptionStatus;
   trialEndsAt: Date | null;
   seatCap: number | null;
+}
+
+export interface OrgPlanRow {
+  code: string;
+  priceMinor: number;
+  currency: string;
+  interval: PlanInterval;
+  seatCap: number | null;
+}
+
+/** THE GYM'S PRICE LIST — every plan it could subscribe to today, in its own
+ *  currency. Kd's ruling of 2026-08-28 (:22697): the owner of a second gym,
+ *  whose one free trial is spent, is shown *"the real plans at their real
+ *  prices"*.
+ *
+ *  **THE FILTERS ARE `startGymTrial`'S OWN, MINUS ONE, and the omission is the
+ *  only interesting line here.** That query adds `trial_days > 0` because a
+ *  trial needs a plan that grants one; a PRICE LIST must not, or a perfectly
+ *  buyable plan would be invisible for the sole reason that it does not come
+ *  with a free month. (Moot on today's book — all ten org rows carry 30 — which
+ *  is exactly why it is written down rather than left to be inferred from a
+ *  passing test.)
+ *
+ *  **`interval = 'month'` IS INHERITED DELIBERATELY.** The book is monthly
+ *  throughout (verified: ten org rows, all `month`), and a yearly row appearing
+ *  in this list would sit beside monthly ones with nothing on screen saying so —
+ *  a price that means something different from its neighbours, which is :5807's
+ *  false-on-screen shape. The day an annual tier is seeded, this list needs a
+ *  design and not just a wider WHERE.
+ *
+ *  **THE ORDER IS THE TRIAL BAND'S ORDER, `seat_cap ASC NULLS LAST`**, so the
+ *  smallest gym's plan is first and the list reads as the ladder Kd priced
+ *  (:17902's boundaries). `NULLS LAST` is load-bearing for the same reason it is
+ *  in `startGymTrial`: Postgres sorts NULLs FIRST on ASC, so without it a
+ *  capless tier would head the list as though it were the cheapest entry point.
+ *  **`rank` is NOT used and cannot be: measured, all five USD rows carry rank
+ *  10**, so ordering by it would leave the ladder in whatever order the seed
+ *  happened to insert.
+ *
+ *  Not tenant-scoped and does not need to be: a price book is the same for
+ *  everyone in a currency. The CALLER is scoped — the service refuses anybody
+ *  without `billing.manage` on the gym whose currency this is. */
+export async function listOrgPlansForCurrency(
+  sql: SqlOrTx,
+  currency: string,
+): Promise<OrgPlanRow[]> {
+  const rows = await sql<
+    {
+      code: string;
+      price_minor: number;
+      currency: string;
+      interval: string;
+      seat_cap: number | null;
+    }[]
+  >`
+    SELECT code, price_minor, currency, interval, seat_cap
+    FROM plans
+    WHERE audience = 'org'
+      AND currency = ${currency}
+      AND active = true -- a retired band must never be quoted to a buyer
+      AND interval = 'month'
+    ORDER BY seat_cap ASC NULLS LAST, price_minor ASC`;
+  return rows.map((r) => ({
+    code: r.code,
+    priceMinor: r.price_minor,
+    currency: r.currency,
+    interval: planIntervalSchema.parse(r.interval),
+    seatCap: r.seat_cap,
+  }));
 }
 
 export type StartTrialOutcome =

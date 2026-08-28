@@ -55,7 +55,14 @@ const CAP1_PLAN = "zz_orgs_cap1";
  *  cover. Both halves are deliberate: `trial_days > 0` is what makes it eligible
  *  for the trial at all (`CAP1_PLAN` has none and is invisible to that query),
  *  and CAD keeps it out of the way of the USD and INR bands, so the "300-seat
- *  band" test still measures the REAL book rather than this fixture. */
+ *  band" test still measures the REAL book rather than this fixture.
+ *
+ *  **SINCE 2026-08-28 NO COUNTRY REACHES IT BY ITSELF.** Kd's currency ruling
+ *  (:22215 §3.5) put Canada on US dollars, so a gym created with `country: "CA"`
+ *  is now USD and this plan is invisible to it. The two tests that need it say
+ *  `UPDATE gyms SET currency_display = 'CAD'` in as many words. That is the
+ *  fixture becoming honest rather than breaking: it was always pretending to be
+ *  a currency nobody is billed in, and now it has to admit it. */
 const TRIAL_CAD_PLAN = "zz_orgs_trial_cad";
 
 type App = Awaited<ReturnType<typeof buildApp>>;
@@ -431,13 +438,24 @@ d("orgs routes (real Postgres)", () => {
 
   it("sets the currency from the gym's country, and refuses a country we are not open in", { timeout: 60_000 }, async () => {
     const { cookies } = await makeUser("currency");
+    // CANADA, THE UK AND THE EURO AREA ARE BILLED IN US DOLLARS — Kd's ruling of
+    // 2026-08-28 (:22215 §3.5), and this table is what pins it. It read
+    // CA→CAD, GB→GBP, DE/IE→EUR until that day, which is why a Canadian gym
+    // could be created and then refused its own trial: the book has USD and INR
+    // rows only. His words: *"A forced trial pop-up traps gyms in Canada, the UK
+    // and Europe. they also pays in dollar"*.
+    //
+    // **THE ROWS STAY IN THE LIST RATHER THAN COLLAPSING TO TWO**, even though
+    // four of them now assert the same string. They are the countries the
+    // ruling is ABOUT, and a table that dropped them would pass just as
+    // happily with the old map restored for Canada.
     for (const [country, currency] of [
       ["US", "USD"],
       ["IN", "INR"],
-      ["CA", "CAD"],
-      ["GB", "GBP"],
-      ["DE", "EUR"],
-      ["ie", "EUR"], // lower case is accepted; the poster/keyboard does not care
+      ["CA", "USD"],
+      ["GB", "USD"],
+      ["DE", "USD"],
+      ["ie", "USD"], // lower case is accepted; the poster/keyboard does not care
     ] as const) {
       const created = await makeOrg(cookies, `Orgs Test Money ${country}`, { country });
       expect(created.org.currencyDisplay).toBe(currency);
@@ -4786,17 +4804,22 @@ d("orgs routes (real Postgres)", () => {
     // mapped to a currency and thrown away (migration `0014`).
     expect(org.org.country).toBe("IN");
 
+    // GERMANY IS BILLED IN US DOLLARS SINCE 2026-08-28 (:22215 §3.5), so the
+    // currency this move lands on is USD and not EUR. The subject is unchanged
+    // and is still worth its own test: the currency FOLLOWS the country and is
+    // never sent by the client (R3.1). India → Germany still crosses two
+    // currencies, which is what keeps that observable.
     const res = await patch(`/v1/orgs/${org.org.id}`, { country: "de" }, { cookies: owner.cookies });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { org: CreatedOrg["org"] };
     expect(body.org.country).toBe("DE");
-    expect(body.org.currencyDisplay).toBe("EUR");
+    expect(body.org.currencyDisplay).toBe("USD");
 
     const row = await readGymRow(org.org.id);
     // Upper-cased on the way in, or the column's own CHECK would refuse the
     // write as a 500 and `country === 'DE'` would be a question with two answers.
     expect(row.country).toBe("DE");
-    expect(row.currency_display).toBe("EUR");
+    expect(row.currency_display).toBe("USD");
   });
 
   /** KD RULING 2026-08-26 — THE COUNTRY FREEZES THE DAY THE GYM STARTS PAYING.
@@ -4827,13 +4850,22 @@ d("orgs routes (real Postgres)", () => {
     // `subscribeGym` inserts `trialing`, and a TRIAL IS NOT A LOCK — Kd's gym
     // trial is card-less, so nothing has been paid and freezing here would trap
     // the typo at the moment before it starts to cost.
+    //
+    // **IT MOVES US → IN, AND SINCE 2026-08-28 IT HAS TO.** This step used to
+    // go US → CA, which crossed USD → CAD and so actually reached the lock's
+    // condition. Kd's currency ruling made Canada USD, and the guard only looks
+    // at a change when `currencyDisplay` MOVES — so on the old countries this
+    // step would now skip the lock entirely and pass without proving the
+    // carve-out at all. It would still be green, and mutant O124 (delete the
+    // trial carve-out so the lock fires too early) would have survived it.
+    // India is picked because it is the one currency left that differs.
     const trialing = await patch(
       `/v1/orgs/${org.org.id}`,
-      { country: "CA" },
+      { country: "IN" },
       { cookies: owner.cookies },
     );
     expect(trialing.statusCode, "a trialing gym may still change it").toBe(200);
-    expect((await readGymRow(org.org.id)).currency_display).toBe("CAD");
+    expect((await readGymRow(org.org.id)).currency_display).toBe("INR");
 
     // Now it is genuinely paying.
     await sql`
@@ -4842,15 +4874,15 @@ d("orgs routes (real Postgres)", () => {
 
     const locked = await patch(
       `/v1/orgs/${org.org.id}`,
-      { country: "IN" },
+      { country: "US" },
       { cookies: owner.cookies },
     );
     expect(locked.statusCode).toBe(409);
     expect((JSON.parse(locked.body) as { error: string }).error).toBe("currency_locked");
 
     const unmoved = await readGymRow(org.org.id);
-    expect(unmoved.country).toBe("CA");
-    expect(unmoved.currency_display).toBe("CAD");
+    expect(unmoved.country).toBe("IN");
+    expect(unmoved.currency_display).toBe("INR");
 
     // THE CONTROL — the lock is narrow. Everything else still edits.
     //
@@ -4866,7 +4898,7 @@ d("orgs routes (real Postgres)", () => {
       {
         name: "Orgs Test Edit Locked Renamed",
         city: "Silchar",
-        country: "CA", // unchanged — exactly what a filled-in form sends back
+        country: "IN", // unchanged — exactly what a filled-in form sends back
         timezone: "Asia/Tokyo",
       },
       { cookies: owner.cookies },
@@ -4876,21 +4908,28 @@ d("orgs routes (real Postgres)", () => {
     expect(after.name).toBe("Orgs Test Edit Locked Renamed");
     expect(after.city).toBe("Silchar");
     expect(after.timezone).toBe("Asia/Tokyo");
-    expect(after.country).toBe("CA");
-    expect(after.currency_display).toBe("CAD");
+    expect(after.country).toBe("IN");
+    expect(after.currency_display).toBe("INR");
 
     // A DIFFERENT COUNTRY ON THE SAME CURRENCY IS ALSO FINE — the rule is about
-    // the money, not the address. Both euro, so nothing about the billing moves.
-    await sql`UPDATE gyms SET country = 'FR', currency_display = 'EUR' WHERE id = ${org.org.id}`;
+    // the money, not the address.
+    //
+    // **THIS LEG GOT STRONGER ON 2026-08-28 RATHER THAN WEAKER.** It used to
+    // drive France → Germany, two countries that shared the euro; it now drives
+    // CANADA → GERMANY, which share a currency only BECAUSE of Kd's ruling. So
+    // the carve-out and the ruling are now pinned by the same three lines, and
+    // a revert of the currency map turns this leg red instead of leaving it
+    // quietly passing on a euro pair nobody bills in.
+    await sql`UPDATE gyms SET country = 'CA', currency_display = 'USD' WHERE id = ${org.org.id}`;
     const sameCurrency = await patch(
       `/v1/orgs/${org.org.id}`,
       { country: "DE" },
       { cookies: owner.cookies },
     );
-    expect(sameCurrency.statusCode, "France to Germany keeps EUR").toBe(200);
+    expect(sameCurrency.statusCode, "Canada to Germany keeps USD").toBe(200);
     const moved = await readGymRow(org.org.id);
     expect(moved.country).toBe("DE");
-    expect(moved.currency_display).toBe("EUR");
+    expect(moved.currency_display).toBe("USD");
   });
 
   /** T3 ROUND 1 Low — THE SAFETY NET THE `.default(null)` LOOSENED, made
@@ -5402,6 +5441,19 @@ d("orgs routes (real Postgres)", () => {
     const owner = await makeUser("trial-cap");
     const org = await makeOrg(owner.cookies, "Orgs Test Trial Cap", { country: "CA" });
 
+    // THE CURRENCY IS SET DIRECTLY, AND IT HAS TO BE SINCE 2026-08-28. Creating
+    // the gym in Canada used to leave it on CAD, which is the currency the
+    // one-seat fixture plan sits in; Kd's ruling maps Canada to USD, so on the
+    // country alone this gym would now be handed the REAL 300-seat band and two
+    // members would never reach the cap — the test would pass while proving
+    // nothing about it.
+    //
+    // No supported country is billed in CAD any more, deliberately (that is the
+    // brick wall the ruling removes), so the only way to a gym in a currency the
+    // real book does not cover is to say so. The subject here is the CAP, not
+    // the country map, and the fixture plan is arranged for exactly this.
+    await sql`UPDATE gyms SET currency_display = 'CAD' WHERE id = ${org.org.id}`;
+
     const started = await post(`/v1/orgs/${org.org.id}/trial`, {}, { cookies: owner.cookies });
     expect(started.statusCode).toBe(200);
     expect((JSON.parse(started.body) as TrialBody).subscription.seatCap).toBe(1);
@@ -5428,16 +5480,33 @@ d("orgs routes (real Postgres)", () => {
   });
 
   /** A GYM IN A CURRENCY THE PRICE BOOK DOES NOT COVER IS TOLD SO, and is not
-   *  quietly put on somebody else's money. `COUNTRY_CURRENCY` maps GB to GBP and
-   *  the seeded book has USD and INR only — so this fires today for the UK,
-   *  Canada and all twenty euro-area countries. Kd's ratified book says
-   *  "US · Canada · Europe, one USD book" (:17366), so the app and the book
-   *  disagree; that is a live `OWED.md` line and his to settle. Until then the
-   *  honest answer is that we are not open — never a fallback currency (:10010). */
+   *  quietly put on somebody else's money — :10010's standing no-fallback rule.
+   *
+   *  **NO COUNTRY REACHES THIS STATE ANY MORE, AND THE GUARANTEE STILL STANDS.**
+   *  Until 2026-08-28 this was driven through the UK, because `COUNTRY_CURRENCY`
+   *  mapped GB to GBP while the seeded book held USD and INR only. Kd closed
+   *  that gap by ruling Canada, the UK and the euro area onto US dollars
+   *  (:22215 §3.5), and `orgs.plans.test.ts` now fails if any supported country
+   *  can reach an empty book at all — so the country that used to prove this
+   *  cannot.
+   *
+   *  **The test is kept and re-pointed rather than deleted**, which is the
+   *  no-removal rule applied to a guarantee: the refusal is what stops a future
+   *  currency being quietly billed in somebody else's money, and it is now
+   *  driven at the mechanism instead of through a country that happened to
+   *  expose it. That is a stronger subject, not a weaker one — it survives any
+   *  further re-ruling of the map. */
   it("a gym in a currency with no price book is refused, not guessed at", { timeout: 30_000 }, async () => {
     const owner = await makeUser("trial-nocur");
     const org = await makeOrg(owner.cookies, "Orgs Test Trial NoCur", { country: "GB" });
-    expect(org.org.currencyDisplay).toBe("GBP");
+    expect(org.org.currencyDisplay, "the UK is billed in dollars since :22215").toBe("USD");
+
+    // GBP has no plan rows at all — checked here rather than assumed, because
+    // this test is worthless if the currency it picks turns out to be seeded.
+    const gbp = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM plans WHERE currency = 'GBP'`;
+    expect(gbp[0]?.n, "GBP must have no price book for this test to mean anything").toBe(0);
+    await sql`UPDATE gyms SET currency_display = 'GBP' WHERE id = ${org.org.id}`;
 
     const res = await post(`/v1/orgs/${org.org.id}/trial`, {}, { cookies: owner.cookies });
     expect(res.statusCode).toBe(409);

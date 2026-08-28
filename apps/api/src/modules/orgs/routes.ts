@@ -139,6 +139,26 @@ export function registerOrgRoutes(
     },
   );
 
+  /** THE GYM'S PRICE LIST — what the unskippable subscribe prompt draws when the
+   *  owner's one free trial is spent (Kd ruling 2026-08-28, :22697).
+   *
+   *  **SCOPED TO A GYM RATHER THAN GLOBAL, AND THAT IS THE WHOLE SECURITY
+   *  DESIGN.** A bare `/v1/plans` would have to be told which currency to answer
+   *  in, and a client-sent currency is R3.1's own example of a value the server
+   *  must never take from the caller — it is how a gym ends up quoted in the
+   *  wrong money. Naming the gym means the SERVER reads the currency off the
+   *  gym's own row, and it makes the route tenant-scoped for free: the service's
+   *  `requirePrivilege` 404s a stranger before a price is fetched.
+   *
+   *  No body and no query to parse — the gym id is the whole input, through the
+   *  same `orgParamsSchema` every other route in this file uses. */
+  app.get("/v1/orgs/:gymId/plans", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const plans = await service.listOrgPlans(orgDeps, requireUserId(req), params.gymId);
+    return reply.status(200).send(plans);
+  });
+
   app.get("/v1/orgs/mine", { preHandler: [app.authenticate] }, async (req, reply) => {
     const orgs = await service.listMyOrgs(orgDeps, requireUserId(req));
     return reply.status(200).send(orgs);

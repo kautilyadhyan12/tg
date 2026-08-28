@@ -68,7 +68,16 @@ export const JOIN_CODE_LENGTH = 6;
  *  states run their own money (Poland, Sweden, Denmark, Switzerland, Norway,
  *  Czechia, Hungary, Romania) — each of those is an unsupported country today,
  *  deliberately, because guessing euros for them would be the exact falsehood
- *  this ruling removes. */
+ *  this ruling removes.
+ *
+ *  **THAT PARAGRAPH STILL GOVERNS THIS LIST EVEN THOUGH IT NO LONGER GOVERNS
+ *  THE CURRENCY** (:22215 §3.5 bills CA/GB/the euro area in USD — see the map
+ *  below). It reads as if the euro-area enumeration existed to get the CURRENCY
+ *  right, and half of it did; the other half is which countries we are open in
+ *  at all, which is :10010's *"usa india candan and europe"* and is untouched.
+ *  **So Poland and Sweden stay OUT** — not because we would have to guess their
+ *  money, but because Kd has never said we sell there. Widening this enum is a
+ *  ruling, not a consequence of the currency change. */
 export const supportedCountrySchema = z.enum([
   "US", "IN", "CA", "GB",
   // Euro area.
@@ -84,15 +93,57 @@ export type SupportedCountry = z.infer<typeof supportedCountrySchema>;
 export const SUPPORTED_COUNTRIES = supportedCountrySchema.options;
 
 /** Typed as a total Record, so TypeScript refuses to compile a country added
- *  to the schema above without a currency here. */
+ *  to the schema above without a currency here.
+ *
+ *  **CANADA, THE UK AND THE EURO AREA ARE BILLED IN US DOLLARS — KD RULING
+ *  2026-08-28 (:22215 §3.5), and it is what :17366 had already ratified:
+ *  *"US · CANADA · EUROPE, one USD book"*.** His words, given while ruling the
+ *  forced trial prompt in the same message: *"A forced trial pop-up traps gyms
+ *  in Canada, the UK and Europe. they also pays in dollar"*.
+ *
+ *  **THIS WAS CAD/GBP/EUR UNTIL TODAY AND IT WAS A BRICK WALL, WHICH IS WHY THE
+ *  RULING ARRIVED ATTACHED TO THE PROMPT RATHER THAN ON ITS OWN.** The seeded
+ *  price book has USD and INR rows ONLY, so `startGymTrial` found no plan for a
+ *  Canadian gym's currency and answered 409 `no_plan_for_currency` — *"We're not
+ *  open for business in your country yet"*. Survivable while the trial was a
+ *  button somebody could ignore. **With a prompt that cannot be skipped it
+ *  strands that gym on a screen whose only button fails**, which is :22215 §4 in
+ *  as many words.
+ *
+ *  **THE ALTERNATIVE IS DEAD, NOT DEFERRED**: three more price books (CAD, GBP,
+ *  EUR) he has never priced. Inventing them is Part 0 rule 4's forbidden shape.
+ *
+ *  **:10010's NO-FALLBACK RULE IS UNTOUCHED AND THIS IS NOT AN EXCEPTION TO IT.**
+ *  That rule forbids handing an unsupported country SOMEBODY ELSE'S money by
+ *  default; a country absent from the enum above is still refused outright by
+ *  `currencyForCountry` returning null. What changed is the ruled price of a
+ *  SUPPORTED country, which is Kd's to set — not a fallback this function
+ *  reaches for when it does not know.
+ *
+ *  A country whose currency is here still needs PLANS in that currency, and
+ *  nothing in this file can guarantee that. `orgs.plans.test.ts` walks every
+ *  supported country and fails if one of them has no active monthly org plan —
+ *  which is the check that would have caught this map before it became a wall.
+ *
+ *  **CHANGING A ROW HERE DOES NOT MOVE THE GYMS ALREADY STORED UNDER IT, AND
+ *  THAT IS THE TRAP IN THIS FILE.** `gyms.currency_display` is written once at
+ *  creation and recomputed by `updateOrg` ONLY when the country itself changes
+ *  — so a gym that stays put keeps the currency it was created with, for ever,
+ *  and `startGymTrial` matches plans on that stored column and not on this map.
+ *  **No backfill ships with today's change because there was nothing to
+ *  backfill: measured 2026-08-28 on BOTH databases, zero gyms in Canada, the UK
+ *  or the euro area** (local: 63 IN + 19 with no country; shared branch: 105 and
+ *  2 with no country, 2 US). **A future re-ruling of this map will not be so
+ *  lucky, and it owes a backfill in its own card** — the giveaway is any gym
+ *  whose `currency_display` disagrees with `currencyForCountry(country)`. */
 export const COUNTRY_CURRENCY: Readonly<Record<SupportedCountry, string>> = {
   US: "USD",
   IN: "INR",
-  CA: "CAD",
-  GB: "GBP",
-  AT: "EUR", BE: "EUR", HR: "EUR", CY: "EUR", EE: "EUR", FI: "EUR", FR: "EUR",
-  DE: "EUR", GR: "EUR", IE: "EUR", IT: "EUR", LV: "EUR", LT: "EUR", LU: "EUR",
-  MT: "EUR", NL: "EUR", PT: "EUR", SK: "EUR", SI: "EUR", ES: "EUR",
+  CA: "USD",
+  GB: "USD",
+  AT: "USD", BE: "USD", HR: "USD", CY: "USD", EE: "USD", FI: "USD", FR: "USD",
+  DE: "USD", GR: "USD", IE: "USD", IT: "USD", LV: "USD", LT: "USD", LU: "USD",
+  MT: "USD", NL: "USD", PT: "USD", SK: "USD", SI: "USD", ES: "USD",
 };
 
 /** null = we are not open in that country yet. Never a fallback currency:
@@ -362,6 +413,73 @@ export const startOrgTrialResponseSchema = z.discriminatedUnion("outcome", [
 ]);
 export type StartOrgTrialResponse = z.infer<typeof startOrgTrialResponseSchema>;
 
+/** ONE PLAN A GYM COULD BUY, as the subscribe prompt draws it — Kd's ruling of
+ *  2026-08-28 (:22697): a second gym's owner, whose one trial is spent, is shown
+ *  *"the real plans at their real prices"*.
+ *
+ *  **THIS IS THE FIRST TIME A PRICE HAS LEFT THIS SERVER.** Grep-verified before
+ *  it was written: there was no plans or pricing endpoint anywhere in the api
+ *  (:22697 §3.2), while the book itself has been seeded and live since :18488.
+ *
+ *  **IT DOES NOT CONTRADICT `orgSubscriptionSchema`'S REFUSAL TO CARRY A PRICE,
+ *  and the difference is the whole design.** That schema deliberately withholds
+ *  the plan's code, price and name because a console that knows what it is ON
+ *  is one step from doing money arithmetic about it (R10.4). This schema is not
+ *  about what a gym is on — it is a PRICE LIST, and a price list with no prices
+ *  is not one. What both obey is the same rule: the client never computes a
+ *  money value, it only draws one the server computed.
+ *
+ *  **`priceLabel` IS FORMATTED BY THE SERVER, ON PURPOSE, AND IT IS THE ONLY
+ *  MONEY FIELD.** The minor-unit integer is deliberately NOT sent beside it.
+ *  Sending both would put a second source of the same number on the wire, and
+ *  the client dividing by 100 to render it is exactly the arithmetic R10.4 and
+ *  R6.1 exist to keep away from a screen — plus the divisor is not even
+ *  constant across currencies. One field, already a sentence.
+ *
+ *  **NO DISPLAY NAME, BECAUSE THE DATABASE HAS NONE.** `plans.name_key` holds a
+ *  translation key (`plan.org_b1_us_m`) and this product has no translation
+ *  table to resolve it against — verified, not assumed. Inventing "Band 1" or
+ *  "Starter" here would be a chat naming Kd's products (R0.2), so the plan is
+ *  identified by the only human fact the row actually carries: how many members
+ *  it admits. `seatCap` is that number, and it is null for a capless tier, which
+ *  a screen must render as a word and never as a zero (:5807).
+ *
+ *  `code` is the row's identity — a stable key for a list, and what a checkout
+ *  will one day have to name. It is NOT for display; it means nothing to a
+ *  person. */
+/** Part 4 §3.3's `plans_interval_check`, as a parser — `orgStatusSchema`'s own
+ *  reason: a value the database grew and this code has never heard of must fail
+ *  loudly at the boundary rather than flow into a screen as an unknown word. */
+export const planIntervalSchema = z.enum(["month", "year"]);
+export type PlanInterval = z.infer<typeof planIntervalSchema>;
+
+export const orgPlanOfferSchema = z.object({
+  code: z.string().min(1),
+  priceLabel: z.string().min(1),
+  currency: z.string().min(1),
+  interval: planIntervalSchema,
+  seatCap: z.number().int().positive().nullable(),
+});
+export type OrgPlanOffer = z.infer<typeof orgPlanOfferSchema>;
+
+/** The gym's own price list, in the gym's own currency.
+ *
+ *  **AN OBJECT RATHER THAN A BARE ARRAY**, on `myOrgsResponseSchema`'s
+ *  precedent: a top-level array is the one JSON shape that cannot grow a field
+ *  later without breaking every reader.
+ *
+ *  **AN EMPTY LIST IS A REAL ANSWER AND IT IS A BRICK WALL**, which is why it
+ *  is guarded outside this file rather than papered over inside it. It means the
+ *  gym's currency has no active monthly plan, and behind an unskippable prompt
+ *  that is a gym stranded with nothing to buy — :22215 §4's exact shape, and
+ *  what the CA/GB/euro-area currency ruling was made to prevent.
+ *  `orgs.plans.test.ts` walks EVERY supported country and fails if one of them
+ *  reaches an empty list, so this cannot arrive unnoticed. */
+export const orgPlansResponseSchema = z.object({
+  plans: z.array(orgPlanOfferSchema),
+});
+export type OrgPlansResponse = z.infer<typeof orgPlansResponseSchema>;
+
 /** One join code as the CONSOLE reads it back — Part 3 §3.3's `GET /codes`,
  *  the read half of its `GET/POST/PATCH /codes` surface.
  *
@@ -592,6 +710,41 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  `subscription` above. Never rendered as a zero: "0 of 300 seats" and "we
    *  could not ask" are different sentences. */
   seatsUsed: z.number().int().nonnegative().nullable().default(null),
+  /** HAS THIS GYM'S OWNER ALREADY SPENT THEIR ONE FREE TRIAL, EVER — the single
+   *  fact that picks which arm the unskippable prompt shows (:22697).
+   *
+   *  **IT EXISTS BECAUSE `subscription` CANNOT ANSWER IT AND MUST NOT BE MADE
+   *  TO.** That field is the gym's LIVE plan and its LATERAL serves §4.1's three
+   *  granting statuses only, so a gym whose trial ENDED and a gym that never
+   *  started one are the same `null` — byte for byte. That identity is what put
+   *  *"Start your 30-day free trial"* over a button answering 409
+   *  `trial_already_used` (:22341 §7, the finding the sweep card reported
+   *  against itself), and it is what the expiry smoke's step 6 was staged over.
+   *
+   *  **WIDENING THE SUBSCRIPTION LATERAL WAS THE OTHER WAY AND IT IS THE WRONG
+   *  ONE.** `subs_one_live_uq` is a PARTIAL index over exactly those three
+   *  statuses, so it is the reason that `LIMIT 1` returns a well-defined row.
+   *  Add `expired` and `canceled` to the set and a gym may have many matching
+   *  rows with nothing choosing between them — the `LIMIT 1` becomes arbitrary
+   *  (:12731's "a partial unique index means one row" trap, from the other side).
+   *  A separate boolean asks the separate question instead.
+   *
+   *  **IT IS ANCHORED ON THE GYM'S OWNER, NOT ON THE CALLER, and that is what
+   *  makes it a per-gym fact rather than a per-person one.** The rule is one
+   *  trial per OWNER ever (Part 5 §12), and `startGymTrial` reads the evidence
+   *  off `gyms.owner_user_id` of the gym being started — so a manager holding
+   *  `billing.manage` on somebody else's gym is told about THAT owner's trial
+   *  history, which is exactly the answer that predicts whether their press
+   *  would succeed.
+   *
+   *  **STAFF ONLY, and null is "we could not ask", never "no".** A plain member
+   *  is told nothing, on the same §2.4 boundary that withholds `subscription`
+   *  and `seatsUsed` from them. `.default(null)` carries an api older than this
+   *  bundle. **A prompt that cannot be closed must never be drawn on a null** —
+   *  the cost of guessing wrong here is a person sealed out of their own
+   *  console, so the client requires a definite answer before it blocks
+   *  anything. */
+  ownerTrialUsed: z.boolean().nullable().default(null),
   isMember: z.boolean(),
   joinedAt: z.string().nullable(),
 });

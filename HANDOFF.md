@@ -1,6 +1,95 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE FORCED PROMPT'S SERVER HALF — the price list, the arm selector, and
+      the CA/GB/euro-area currency. DECISIONS :22921. Step 2 of :22215 §5,
+      split at the plan gate with Kd's approval; the MODAL is the next card.
+
+  1. **KD RULED TWO THINGS, each put to him with a recommendation and its cost.**
+     (a) The prompt **stops only whoever can pay** — a trainer without
+     `billing.manage` uses the console as normal, because blocking someone who
+     CANNOT pay is :22215 §4's brick wall aimed at the wrong person. Closes the
+     first of :22697 §4's open questions. (b) **The Overview's pre-trial BUTTON
+     goes** when the modal ships; the plan card STAYS for a gym that IS trialling.
+     Put as an explicit option (:10182) because *"a pop up … not a button"* rules
+     the SHAPE and does not by itself authorise deleting a control.
+     **The removal belongs to the WEB card, not this one.**
+  2. **`ownerTrialUsed` CLOSES :22341 §7 ON THE SERVER.** `subscription: null` is
+     byte-identical for "never trialled" and "trial ended", which is what put a
+     live trial button over a 409. **The LATERAL was deliberately NOT widened**:
+     `subs_one_live_uq` is PARTIAL over the three live statuses and that is what
+     makes its `LIMIT 1` well-defined — :12731's trap from the other side. It
+     tests `trial_ends_at IS NOT NULL` and NEVER a status; staff-only; and **null
+     must never draw the modal** (an unknown state there seals a person out).
+  3. **`GET /v1/orgs/:gymId/plans` — the first price this product has ever
+     served.** Gym-scoped so the SERVER reads the currency (R3.1) and the route is
+     tenant-scoped for free. `priceLabel` and **no minor-unit integer** (R10.4);
+     no display name because `plans.name_key` has no translation table.
+     **No float touches the money** — the integer goes through `Intl` as a
+     `bigint`, because `/100` breaks R6.1 and the ES2023 string overload is
+     untyped under ES2022 `lib`. Locale PINNED to en-US as a consequence.
+  4. **`COUNTRY_CURRENCY` → USD for CA/GB/euro area** (Kd :22215 §3.5, never
+     built). **No backfill needed and it is MEASURED: zero such gyms on either
+     database.** The stale-row trap is written into the map's own comment.
+  5. **O148 SURVIVED TWICE — once for each half of :11846's pair.** The TEST half
+     (every retired band is INR; the only exact list was USD), then the FILTER
+     half — it still named the USD test after the fix moved to the rupee one,
+     which is :21580's C91 verbatim. The C88 question was asked FIRST and the
+     guarantee is genuinely observable.
+  6. **FOUR STALE SENTENCES fixed before shipping** (:22782's standing rule): the
+     `no_plan` refusal calling the currency gap "Kd's to settle", `updateOrg`'s
+     "France → Germany ⇒ both EUR", the CAD fixture header, and a test driving
+     the no-price-book refusal through the UK. **The refusal is KEPT and
+     re-pointed at the mechanism**, never deleted.
+
+FILES: packages/shared/src/orgs.ts · apps/api/src/modules/orgs/{repo,service,
+       routes,schemas}.ts · apps/api/test/orgs.plans.test.ts (new) ·
+       apps/api/test/orgs.routes.test.ts · apps/api/tools/mutate-orgs.mjs ·
+       DECISIONS.md · DECISIONS-INDEX.md · DECISIONS-TRIGGERS.md · OWED.md
+
+PROVE, all LOCAL (localhost:5433): orgs.plans **10/10 (new)** · orgs.routes
+       **134/134** · orgs.trialSweep 9/9 · db.migration 10/10 · shared 51/51 ·
+       web **1294/1294 across 48 files** · tsc exit 0 on api and shared **and
+       PROVEN REAL by planting a type error** (TS7006, restored sha256-identical)
+       · eslint --max-warnings=0 on seven files · node --check on the harness ·
+       check-harnesses 25 · check-decisions-index 227 · check-decisions-triggers
+       622 from 176 of 314 · **SWEEP a stated SUBSET of 151: O145–O151, 7 RED,
+       0 ALIVE, 0 never ran**, controls GREEN first, restores sha256-verified,
+       244 gym+subscription rows fingerprinted, no unattributed changes.
+
+SMOKE: **RUN AND PASSED, and Kd's question is what produced it.** I first told
+       him there was nothing to smoke ("no screen"); he asked *"do i not need to
+       perform smoke test ?"* and CHECKING found the currency on screen in three
+       places. **A card with no new screen is not a card with nothing a user can
+       see.** It also gave the ruling a browser subject that is NOT the trial
+       button, which :22697 forbids putting him in front of again.
+       **Round 1 FAILED on my setup, not the code** — "set up in CAD", because
+       the api process predated the currency edit and served the old map from
+       memory. That is `smoke-trial-expiry.md`'s own S2 warning (:15927, :20222),
+       incurred by the chat that had read that sheet the same session. Restarted,
+       **verified through the live api before sending him back**, round 2 PASSED:
+       *"Your gym is set up in USD."*
+       **Artefact: the LOCAL database now holds a CAD gym** from round 1, which
+       keeps CAD for ever. Harmless, and it is the stale-row class observed rather
+       than reasoned about; the shared branch still has none.
+
+OPEN:  the read-only console · the consumer trial's own expiry · the worker's
+       job routing having no test — all unchanged.
+
+NEXT:  **THE MODAL (web half)**, which carries three things: the unskippable
+       pop-up with its two arms, the REMOVAL of the Overview's pre-trial button
+       (Kd ruled it 2026-08-28), and then a RE-RUN of
+       RUNBOOK/smoke-trial-expiry.md — that sheet must run AFTER this card, not
+       before (:22697 §5), and three of its seven steps describe the button the
+       modal replaces. **Its S3 API-start command is BROKEN and unfixed** —
+       verified this session: `Invalid environment: WEB_ORIGIN: Required;
+       JWT_SECRET: Required`, exit 1. The working form is the same line plus
+       `WEB_ORIGIN='http://localhost:5173'` and a dev `JWT_SECRET`; do not
+       "repair" it with `--env-file=.env`, which is L-7's dangerous direction.
+```
+
+
+```
 TASK: THE GYM TRIAL EXPIRY SWEEP — T3 ROUND 1 AND ITS FIX ROUND. ZERO
       Critical/High, SEVEN Low, THE PACKET SHIPS. DECISIONS :22782.
       Kd approved the finding list first ("fix all").

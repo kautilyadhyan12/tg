@@ -98,6 +98,13 @@ const SWEEP_SUITE = 'test/orgs.sweep.test.ts';
  *  nothing to do with the mutation (:4718 F2). */
 const TRIAL_SWEEP_SUITE = 'test/orgs.trialSweep.test.ts';
 
+/** The price list and the trial-arm selector have their own suite, for the same
+ *  reason and with the same failure mode as the two above: a row that forgot
+ *  this would run the routes suite, which asserts no price and reads no
+ *  `ownerTrialUsed`, and report a RED that has nothing to do with the mutation
+ *  (:4718 F2). */
+const PLANS_SUITE = 'test/orgs.plans.test.ts';
+
 /** The price book's guarantees live in the migration suite, for the same reason
  *  the clock's live in the sweep suite: that is the only file that seeds and
  *  then READS BACK. A `seed` row that forgot this would run the routes suite,
@@ -1748,6 +1755,96 @@ const MUTANTS = [
     expect: 'rolls the expiry back',
     from: '    const rows = await tx<Row[]>`',
     to: '    const rows = await deps.sql<Row[]>`',
+  },
+
+  // ── THE PRICE LIST AND THE TRIAL-ARM SELECTOR (Kd :22215 §3.5, :22697) ──────
+  //
+  // Every row below sits in :5857 rule 4a's expensive columns without argument:
+  // MONEY and NUMBERS A USER SEES (this is the first card that puts a price on a
+  // screen at all) and OWNERSHIP (a route that answers about a named gym).
+  //
+  // They carry `suite: PLANS_SUITE` for the reason the sweep rows carry theirs
+  // — a row that forgot it would run the routes suite, which asserts no price,
+  // and report a RED that means nothing (:4718 F2).
+  {
+    id: 'O145',
+    target: 'shared',
+    suite: PLANS_SUITE,
+    why: "MONEY, AND IT IS THE BRICK WALL PUT BACK: Canada returns to CAD, which the seeded book has no rows for, so a Canadian gym is created and then refused its own trial with 'We're not open for business in your country yet'. Kd ruled the dollar precisely because an unskippable prompt turns that into a gym stranded on a screen whose only button fails (:22215 §4)",
+    expect: 'starts its trial on the dollar book',
+    from: '  CA: "USD",',
+    to: '  CA: "CAD",',
+  },
+  {
+    id: 'O146',
+    target: 'service',
+    suite: PLANS_SUITE,
+    why: "OWNERSHIP: the price list drops to a privilege every TRAINER holds, so anybody the gym has hired can read what the gym is quoted. It is the same seam :15534's C/H-1 was, and Kd's ruling of 2026-08-28 is that this prompt stops only the person who can actually pay",
+    expect: 'a trainer is refused the price list',
+    from: 'const { org } = await requirePrivilege(deps, gymId, userId, "billing.manage");',
+    to: 'const { org } = await requirePrivilege(deps, gymId, userId, "members.read");',
+  },
+  {
+    id: 'O147',
+    target: 'repo',
+    suite: PLANS_SUITE,
+    why: "ON SCREEN AND FALSE: the ladder inverts, so the FIRST plan a gym owner reads is the 2,100-seat band at $129 rather than the $35 entry price. Nothing on the screen says the list is descending, so the honest reading of the top row — 'this is what it costs' — is wrong by a factor of nearly four",
+    expect: 'cheapest band first',
+    from: '    ORDER BY seat_cap ASC NULLS LAST, price_minor ASC`;',
+    to: '    ORDER BY seat_cap DESC NULLS LAST, price_minor DESC`;',
+  },
+  {
+    id: 'O148',
+    target: 'repo',
+    suite: PLANS_SUITE,
+    // The anchor carries its own trailing comment because `AND active = true`
+    // also appears inside `startGymTrial` and one is a SUBSTRING of the other
+    // (six spaces against eight). A two-line anchor is :17676's 99-strong CRLF
+    // hazard, so the line was made unique IN THE SOURCE instead — :21157's
+    // remedy, and never re-aimed at whichever line came first (:15770).
+    why: "MONEY: retired bands come back into the list, so a buyer is quoted the PRE-:18488 price book beside the ruled one — the ₹999 micro tier and the 25-seat caps Kd re-priced. A person choosing a plan from that list is choosing a price we do not sell at",
+    // **THE FILTER IS THE RUPEE TEST AND IT HAS TO BE — THIS ROW SURVIVED TWICE
+    // BEFORE IT WAS RIGHT, ONCE FOR EACH HALF (:11846's two halves).**
+    //
+    // First run: it named the USD test, and the guarantee is INVISIBLE there —
+    // every retired row in the book is INR, so deleting `active = true` changes
+    // nothing a dollar gym can see. That was the TEST half, and the fix was an
+    // assertion listing the five retired INR codes.
+    //
+    // Second run: it STILL survived, because the filter still named the USD
+    // test while the new assertion lives in the rupee one. That is :21580's C91
+    // verbatim — a mutant pointed at a test that never exercises its subject —
+    // and it is the half this repo keeps recording last.
+    expect: 'quotes an Indian gym in rupees',
+    from: '      AND active = true -- a retired band must never be quoted to a buyer\n',
+    to: '\n',
+  },
+  {
+    id: 'O149',
+    target: 'repo',
+    suite: PLANS_SUITE,
+    why: "MONEY: the currency filter goes, so every gym is shown every book at once — an Indian gym reads dollar prices next to its rupee ones with nothing saying which it would be charged in. This is :10010's no-fallback rule failing in the loudest possible direction",
+    expect: 'quotes an Indian gym in rupees',
+    from: '      AND currency = ${currency}\n',
+    to: '\n',
+  },
+  {
+    id: 'O150',
+    target: 'repo',
+    suite: PLANS_SUITE,
+    why: "ON SCREEN AND FALSE, AND IT IS :22341 §7 PUT BACK: the evidence keys on the STATUS instead of the durable column, so the moment a trial expires the owner reads as never having trialled. That is exactly the state that printed 'Start your 30-day free trial' over a button which could only answer 409 — the defect this whole card exists to remove, and the reason the source says IT TESTS trial_ends_at AND NEVER A STATUS",
+    expect: 'still reports the owner',
+    from: "               AND ts.trial_ends_at IS NOT NULL",
+    to: "               AND ts.status = 'trialing'",
+  },
+  {
+    id: 'O151',
+    target: 'service',
+    suite: PLANS_SUITE,
+    why: "MONEY, BY A FACTOR OF TEN: the decimal point moves one place, so the $35 band prints as $350 and the ₹1,500 one as ₹15,000. The formatter is the ONLY money field on the wire — the shared schema deliberately sends no minor-unit integer beside it — so there is nothing else on the screen for a reader to check it against",
+    expect: 'at the ratified prices',
+    from: '  const whole = digits === 0 ? raw : raw.slice(0, raw.length - digits);',
+    to: '  const whole = digits === 0 ? raw : raw.slice(0, raw.length - digits + 1);',
   },
 ];
 

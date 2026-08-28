@@ -21,6 +21,7 @@ import {
   orgCodeMutationResponseSchema,
   orgCodesResponseSchema,
   orgMemberPageSchema,
+  orgPlansResponseSchema,
   orgStaffMutationResponseSchema,
   orgStaffResponseSchema,
   rejectApplicationResponseSchema,
@@ -50,6 +51,7 @@ import type {
   OrgCodesResponse,
   OrgMemberListQuery,
   OrgMemberPage,
+  OrgPlansResponse,
   OrgPrivilege,
   OrgRole,
   OrgStaff,
@@ -357,6 +359,18 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
           ? null
           : toOrgSubscription(r.subscription),
       seatsUsed: r.staffRole === null ? null : r.seatsUsed,
+      // WHETHER THIS GYM'S OWNER HAS ALREADY SPENT THEIR ONE FREE TRIAL — the
+      // fact that decides which face the unskippable prompt shows (:22697), and
+      // withheld on the SAME line as the two above because it is the same
+      // boundary: what a gym is on, how full it is, and whether it has had its
+      // free go are all the gym's business and not its members'.
+      //
+      // NULL HERE MEANS "WE DID NOT ASK", AND THE PROMPT MUST TREAT IT THAT WAY.
+      // For every other field on this response an unknown state costs a screen a
+      // sentence; for this one it decides whether a person is sealed out of
+      // their own console, so the honest failure is to draw NOTHING rather than
+      // to guess an arm. The client requires a definite boolean before it blocks.
+      ownerTrialUsed: r.staffRole === null ? null : r.ownerTrialUsed,
       isMember: r.isMember,
       joinedAt: r.joinedAt === null ? null : r.joinedAt.toISOString(),
     })),
@@ -709,13 +723,22 @@ export async function startOrgTrial(
       );
     case "no_plan":
       // TRUE AND SPECIFIC, because the alternative is a person concluding the
-      // app is broken. This fires for a gym in Canada, the UK or the euro area:
-      // `COUNTRY_CURRENCY` gives them CAD/GBP/EUR and the seeded price book has
-      // only USD and INR, while Kd's ratified book says "US · Canada · Europe,
-      // one USD book" (:17366). The app and the book disagree; that is a live
-      // `OWED.md` line and Kd's to settle, and until he does the honest answer
-      // is that we are not open yet — never a fallback currency, which is
-      // :10010's standing rule about how a Canadian gym gets quoted in rupees.
+      // app is broken.
+      //
+      // **NO SUPPORTED COUNTRY CAN REACH THIS ANY MORE, AND THAT IS THE POINT
+      // OF KEEPING IT.** Until 2026-08-28 it fired for Canada, the UK and the
+      // twenty euro-area countries: `COUNTRY_CURRENCY` gave them CAD/GBP/EUR
+      // while the seeded book held USD and INR, so a real gym could be created
+      // and then refused its own trial. Kd settled that by ruling all three onto
+      // US dollars (:22215 §3.5) — the fix was the MAP, never three price books
+      // he has never priced — and `orgs.plans.test.ts` now walks every supported
+      // country and fails if one of them has no active monthly org plan.
+      //
+      // So this arm is now unreachable from the country picker and is retained
+      // as the guard it always was: :10010's standing rule that a currency we do
+      // not sell in is REFUSED rather than quietly served somebody else's money.
+      // The day the supported list widens, this is what catches a country added
+      // without prices — which is exactly how the gap above was created.
       throw new OrgsError(
         409,
         "no_plan_for_currency",
@@ -739,6 +762,109 @@ function toOrgSubscription(row: repo.GymSubscriptionRow): OrgSubscription {
     trialEndsAt: row.trialEndsAt?.toISOString() ?? null,
     seatCap: row.seatCap,
   };
+}
+
+/** MINOR UNITS → THE SENTENCE A PERSON READS. `3500` and `USD` become `$35`.
+ *
+ *  **THE SERVER FORMATS MONEY SO THAT NO CLIENT HAS TO** (R10.4). The shared
+ *  schema sends this string and deliberately never sends the integer beside it,
+ *  so there is nothing on a screen to divide.
+ *
+ *  **NOT ONE FLOAT IN HERE, AND THAT IS THE POINT RATHER THAN FUSSINESS.** The
+ *  obvious version is `format(priceMinor / 100)`, which breaks R6.1's "floats
+ *  never touch money" and, worse, hardcodes a divisor that is simply WRONG for
+ *  currencies we have said we will reach later — the yen has no minor unit at
+ *  all and the dinar has three. So the decimal is built by moving the point with
+ *  STRING operations, and how far to move it is asked of Intl rather than
+ *  assumed (verified on this Node: USD 2, INR 2, JPY 0, KWD 3).
+ *
+ *  **THE TRAILING-ZERO BRANCH IS A REAL DEFECT AVOIDED, NOT A FLOURISH.** With a
+ *  fixed `maximumFractionDigits: 2` this returns `$1,234.5` for 123450 —
+ *  measured, not feared. Whole amounts print with no decimals (`$35`, which is
+ *  how Kd's book is written) and anything else prints the currency's full
+ *  digits (`$34.99`). Whether the amount is whole is decided by looking at the
+ *  digits, so that answer carries no float either.
+ *
+ *  **THE WHOLE PART GOES THROUGH Intl AS A `bigint`, AND THAT IS THE LINE THAT
+ *  KEEPS R6.1.** The natural spelling is `format(priceMinor / 100)` and the
+ *  next-most-natural is `format("35.00")` — Intl accepts a decimal STRING at
+ *  runtime (verified) but only from ES2023, and this repo's `lib` is ES2022, so
+ *  the typed alternatives were a float or an `as` cast. Both are banned here
+ *  (R6.1, R2.2) and neither is worth a repo-wide `lib` bump for one call, so the
+ *  integer is handed over as a `bigint` — exact, typed since ES2022 — and the
+ *  minor digits are appended as text.
+ *
+ *  **THAT APPEND IS WHY THE LOCALE IS PINNED TO `en-US` AND MUST STAY PINNED.**
+ *  In en-US the symbol leads (`$1,234` + `.50`); in a locale where it trails,
+ *  appending would produce `1 234 €,50`. The pin is already deliberate — this
+ *  product has no i18n and `plans.name_key` has no translation table to resolve
+ *  against — and this function is now a second reason it cannot quietly become
+ *  the caller's locale.
+ *
+ *  Measured on this Node across every shape that matters: `$35` · `$129` ·
+ *  `$1,234.50` · `$34.99` · `₹1,500` · `₹8,500` · `¥1,234` (no minor unit) ·
+ *  `KWD 1,234.567` (three of them). */
+function formatPriceMinor(priceMinor: number, currency: string): string {
+  const digits = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+  }).resolvedOptions().maximumFractionDigits;
+  if (digits === undefined) {
+    // Cannot happen for `style: "currency"`, and it is thrown rather than
+    // defaulted to 2 on purpose: a guessed divisor is how the yen prints a
+    // hundredth of its real price. R1.3 — fail loudly, never fake it.
+    throw new Error(`Intl reported no minor-unit digits for currency ${currency}`);
+  }
+  const negative = priceMinor < 0;
+  const raw = String(Math.abs(priceMinor)).padStart(digits + 1, "0");
+  const whole = digits === 0 ? raw : raw.slice(0, raw.length - digits);
+  const frac = digits === 0 ? "" : raw.slice(raw.length - digits);
+  const isWhole = !/[1-9]/.test(frac);
+  const head = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(BigInt(negative ? `-${whole}` : whole));
+  return isWhole ? head : `${head}.${frac}`;
+}
+
+/** THE GYM'S PRICE LIST — what the unskippable subscribe prompt draws when the
+ *  owner's one free trial is spent (Kd ruling 2026-08-28, :22697: *"they will be
+ *  showed subscription option that they can take and say that they alreday ahd a
+ *  free trial"*).
+ *
+ *  **`billing.manage`, NOT `role === "owner"`** — :11429's seam, the same
+ *  privilege `startOrgTrial` above asks for, and for the same reason: only
+ *  whoever may put the gym on a plan is shown what a plan costs. It also matches
+ *  Kd's ruling of today that the prompt stops only the person who can pay, so a
+ *  trainer never meets a price list they cannot act on.
+ *
+ *  **THE CURRENCY IS THE GYM'S, READ FROM THE GYM, AND IS NEVER A PARAMETER.**
+ *  R3.1: a client-sent currency is at best a display hint and at worst a gym
+ *  quoted in the wrong money. `requirePrivilege` has already fetched the org, so
+ *  this costs no second read.
+ *
+ *  **NO RATE LIMIT OF ITS OWN, unlike the trial door beside it.** That one is
+ *  limited because every call takes `lockOrgRow` and writes; this is a read of
+ *  five seeded rows behind authentication and a privilege check, under the
+ *  global floor. Recorded because the neighbour having one invites the question. */
+export async function listOrgPlans(
+  deps: OrgsDeps,
+  userId: string,
+  gymId: string,
+): Promise<OrgPlansResponse> {
+  const { org } = await requirePrivilege(deps, gymId, userId, "billing.manage");
+  const rows = await repo.listOrgPlansForCurrency(deps.sql, org.currencyDisplay);
+  return orgPlansResponseSchema.parse({
+    plans: rows.map((p) => ({
+      code: p.code,
+      priceLabel: formatPriceMinor(p.priceMinor, p.currency),
+      currency: p.currency,
+      interval: p.interval,
+      seatCap: p.seatCap,
+    })),
+  });
 }
 
 export async function listOrgMembers(

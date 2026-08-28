@@ -4877,6 +4877,22 @@ file and is stated so nobody reads these as lower priority than they are.
       that never started one) and let `TrialCard` say the trial has ended and
       point at the pay path instead of offering a trial that will be refused.
       **A chat must not do it unasked** — it is a screen, and the copy is Kd's.
+      **THE SERVER HALF IS DONE 2026-08-28 (DECISIONS :22921) AND THIS LINE STILL
+      DOES NOT TICK, because the FALSE SENTENCE IS ON A SCREEN and the screen is
+      unchanged.** `/v1/orgs/mine` now carries `ownerTrialUsed`, so a console CAN
+      finally tell "this owner never trialled" from "their trial is over" — the
+      exact blindness measured above. **The fix took the other route, deliberately:
+      the LATERAL was NOT widened to serve ended statuses**, because
+      `subs_one_live_uq` is a partial index over the three live ones and that is
+      what makes its `LIMIT 1` well-defined; widening it gives a gym many matching
+      rows with nothing choosing between them (:12731's trap from the other side).
+      A separate boolean asks the separate question, and mutant **O150** puts this
+      defect back — the evidence keyed on status instead of the durable column —
+      and is RED.
+      **WHAT IS LEFT IS EXACTLY THE SENTENCE**: `TrialCard`'s pre-trial branch is
+      what the modal replaces, and Kd ruled on 2026-08-28 that the button goes when
+      it does. **Until that card ships, this defect is still on screen** — first
+      reachable about 2026-09-26, unchanged by today's work.
 - [ ] 🟡 **THE LAPSED GYM'S CONSOLE IS NOT READ-ONLY — the OTHER HALF of Kd's
       :22215 step 1, split out of the sweep card on 2026-08-28 (:22341) and
       SPLIT WITH HIS APPROVAL, not deferred quietly.** He was shown the split in
@@ -4969,6 +4985,23 @@ file and is stated so nobody reads these as lower priority than they are.
       unbuilt (:17357), the admin "mark as paid" tool is unbuilt, and the contact
       channel is owed. Kd was told this before ruling. Until one exists it says we
       will be in touch, which is :22215 §5 step 3's own sequencing.
+      **THE SERVER HALF LANDED 2026-08-28 (DECISIONS :22921) AND THIS LINE DOES
+      NOT TICK.** Three of the blockers above are gone: the console can now tell
+      "never trialled" from "trial ended" (`ownerTrialUsed` on `/v1/orgs/mine`),
+      there IS a pricing endpoint (`GET /v1/orgs/:gymId/plans`, the first price
+      ever served by this product), and the CA/GB/euro-area currency line above is
+      ticked. **What remains is the MODAL itself and it is the whole visible half.**
+      **TWO KD RULINGS THE SAME DAY, both now settled and not to be re-asked:**
+      the prompt stops **only whoever can pay** (a trainer without `billing.manage`
+      is unaffected — :22697 §4's first open question, closed); and the Overview's
+      **pre-trial BUTTON is removed** when the modal ships, the plan card staying
+      for a gym that IS trialling. **The button's removal belongs to the WEB card,
+      not to the server one, and is authorised by that ruling rather than by a
+      chat's reading of "a pop up not a button".**
+      **:22697 §4's SECOND open question is answered without a ruling**: the gap
+      between a trial ending and the 04:00 sweep costs nothing new, because the
+      modal keys on STATUS and never on the date (:21580's rule (c)).
+
       **TICKS WHEN** all three pieces are live with the sweep, with a fake-clock
       test walking creation → trial → expiry → member entitlements falling back to
       free, and the browser smoke Kd runs on it.
@@ -7384,7 +7417,7 @@ file and is stated so nobody reads these as lower priority than they are.
       **A chat must not resolve this on its own** — it changes :5348/:5807, which
       are his.
 
-- [ ] 🟡 **~~❓~~ CANADA, THE UK AND THE EURO AREA CANNOT START A TRIAL AT ALL, because
+- [x] 🟡 **~~❓~~ CANADA, THE UK AND THE EURO AREA CANNOT START A TRIAL AT ALL, because
       the app and Kd's own ratified price book disagree about what they pay in —
       RAISED 2026-08-27 (DECISIONS :21157), ~~HIS TO SETTLE~~ **SETTLED 2026-08-28
       (DECISIONS :22215): THEY PAY IN US DOLLARS.** His words, given while ruling
@@ -7397,6 +7430,23 @@ file and is stated so nobody reads these as lower priority than they are.
       the forced-trial card, because that card is what turns this from a shrug into
       a brick wall at signup.** The no-fallback rule (:10010) is untouched: a
       country not in the map is still refused outright.
+      **DONE 2026-08-28 — the forced prompt's SERVER half (DECISIONS :22921).**
+      `COUNTRY_CURRENCY` now maps `CA`, `GB` and the twenty euro-area countries to
+      `USD`, with the country→currency table asserting all six rows and a Canadian
+      gym starting its trial on the dollar band end to end (`orgs.plans.test.ts`).
+      **It shipped in the same card as the price list, exactly as this line asked,
+      because that card is what turns the gap into a wall.**
+      **THE PERMANENT GUARD IS WORTH MORE THAN THE FIX** (:5348 rule 5): a test
+      walks EVERY supported country and fails if one of them reaches an empty price
+      book, so the next country added without prices is caught here rather than by
+      its owner. This gap lived for eleven days and it took Kd noticing.
+      **NO BACKFILL WAS NEEDED AND THAT IS MEASURED, NOT ASSUMED**: `currency_display`
+      is recomputed only when a gym's country changes, so a stale CAD row would keep
+      it for ever — there are zero CA/GB/euro-area gyms on either database. The trap
+      is recorded in the map's own comment for whoever re-rules it.
+      **The `no_plan_for_currency` refusal is KEPT, re-pointed at the mechanism**
+      rather than deleted, so it still guards :10010 for any future currency.
+
       **The reasoning that produced the question, kept because it is the reasoning
       behind the answer:**
       **The disagreement, both sides measured:** `COUNTRY_CURRENCY` in

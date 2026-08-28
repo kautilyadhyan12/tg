@@ -22917,3 +22917,210 @@ unattributed changes**. The canary proof of L-5 is the table in §3.
 
 **THE GATE THAT IS NOW OPEN: the SMOKE, and it is runnable for the first time.**
 T3 is closed at round 1.
+
+## 2026-08-28 — THE FORCED PROMPT'S SERVER HALF: the first price this product has ever served, an owner's spent trial made visible, and Canada/the UK/the euro area finally able to buy anything
+
+**Read before building either unskippable prompt, before adding a pricing
+endpoint or a second reader of `plans`, before touching `COUNTRY_CURRENCY` or
+`listOrgPlansForCurrency`, before writing any money string for a screen, and
+before assuming `subscription: null` means a gym never trialled.**
+
+Step 2 of :22215 §5's four-step order, split at the plan gate the way :22341 was:
+this is the SERVER half, and the MODAL itself is the next card. Kd approved the
+split, the scope and the two rulings below before a byte was written.
+
+### 1. KD RULED TWO THINGS THE MODAL COULD NOT BE BUILT WITHOUT
+
+Both were named as unruled at :22697 §4 and put to him as one question each, with
+a recommendation and its consequence:
+
+1. **THE PROMPT STOPS ONLY WHOEVER CAN PAY.** A trainer or manager without
+   `billing.manage` uses the console as normal. Recommended on the ground that a
+   trainer cannot pay, so blocking them seals them out with no way forward — the
+   brick wall :22215 §4 exists to remove, pointed at the wrong person. This
+   settles the first of :22697 §4's two open questions.
+2. **THE OVERVIEW'S TRIAL BUTTON GOES.** The modal becomes the only way a trial
+   starts. **The plan card STAYS for a gym that IS trialling** — "Free trial", the
+   end date, the seat meter — so what goes is the pre-trial button alone. Put to
+   him as an explicit option with its cost stated (the no-removal rule's
+   authorised path, :10182's precedent), because *"a pop up … not a button"*
+   (:22697 §2) rules the SHAPE and does not by itself authorise deleting a
+   control. **The deletion happens in the WEB card, not here.**
+
+### 2. WHAT SHIPS, AND WHY IT IS THREE THINGS RATHER THAN ONE
+
+**(a) `ownerTrialUsed` on `/v1/orgs/mine`.** Has this gym's OWNER already spent
+their one free trial, ever. It is the arm selector, and without it the modal
+cannot pick a face: `listOrgsForUser`'s LATERAL serves §4.1's three live statuses
+only, so a gym whose trial ENDED and a gym that never started one are the same
+`subscription: null` — byte for byte. **That identity is :22341 §7's finding**,
+the one the expiry card reported against itself, and this closes it on the server.
+
+**WIDENING THAT LATERAL WAS THE OTHER ROUTE AND IT IS THE WRONG ONE.**
+`subs_one_live_uq` is a PARTIAL index over exactly those three statuses, which is
+what makes its `LIMIT 1` well-defined; adding `expired` and `canceled` gives a gym
+many matching rows with nothing choosing between them — :12731's "a partial unique
+index means one row" trap, from the other side. A separate boolean asks the
+separate question.
+
+**It tests `trial_ends_at IS NOT NULL` and never a STATUS**, because the evidence
+must survive the trial ending and nothing ever clears that column. Staff-only and
+`.nullable().default(null)`, on the §2.4 boundary that already withholds
+`subscription` and `seatsUsed` — and **null must never draw the modal**: for every
+other field an unknown state costs a sentence, for this one it decides whether a
+person is sealed out of their own console.
+
+**(b) `GET /v1/orgs/:gymId/plans`** — the first time a price has left this server
+(:22697 §3.2, grep-verified again here). **Gym-scoped and not a global
+`/v1/plans`**: a global route would have to be TOLD a currency, and a client-sent
+currency is R3.1's own example of what the server must never take from the caller.
+Naming the gym makes the server read the currency off the gym's row and makes the
+route tenant-scoped for free. `billing.manage`, the same privilege the trial door
+beside it asks, which is ruling 1 above expressed as authz.
+
+**THE SHAPE CARRIES `priceLabel` AND DELIBERATELY NO MINOR-UNIT INTEGER.** One
+money field, already a sentence, so there is nothing on a screen to divide by 100
+(R10.4). **No display name either, because the database has none** — `name_key`
+holds `plan.org_b1_us_m` and this product has no translation table to resolve it
+against, so inventing "Starter" would be a chat naming Kd's products. The plan is
+identified by the only human fact its row carries: how many members it admits.
+
+**NOT ONE FLOAT TOUCHES THE MONEY, and the how is worth keeping.** The natural
+`format(priceMinor / 100)` breaks R6.1 and hardcodes a divisor that is simply
+wrong for currencies we have said we will reach later; the natural repair,
+`format("35.00")`, is an ES2023 string overload this repo's ES2022 `lib` does not
+type, leaving a float or an `as` cast. The integer goes through `Intl` as a
+**`bigint`** instead and the minor digits are appended as text — which is also why
+the locale is PINNED to `en-US` and must stay pinned. **The trailing-zero branch
+is a measured defect avoided, not a flourish: a fixed `maximumFractionDigits: 2`
+returns `$1,234.5` for 123450.** Verified across `$35 · $129 · $1,234.50 · $34.99
+· ₹1,500 · ₹8,500 · ¥1,234 · KWD 1,234.567`.
+
+**(c) `COUNTRY_CURRENCY` maps CA, GB and the twenty euro-area countries to USD**
+— Kd's ruling at :22215 §3.5, which had never been built. It ships HERE because
+an unskippable prompt is what turns that gap from a shrug into a gym stranded at
+signup. **The supported-country ENUM is untouched: Poland and Sweden stay out
+because Kd has never said we sell there, which is :10010 and is a different
+question from what a supported country pays in.**
+
+**NO BACKFILL, AND THAT IS MEASURED RATHER THAN HOPED.** `gyms.currency_display`
+is written at creation and recomputed only when the country CHANGES, so a stale
+CAD gym would keep it for ever — **measured 2026-08-28 on BOTH databases: zero
+gyms in Canada, the UK or the euro area** (local 63 IN + 19 no-country; shared
+branch 105 no-country INR, 2 no-country USD, 2 US). The trap is written into the
+map's own comment for whoever re-rules it next.
+
+### 3. THE AUDIT (rule 4/4a) — SEVEN MUTANTS, AND ONE OF THEM SURVIVED TWICE
+
+Every row sits in 4a's expensive columns without argument: this is the first card
+that puts a PRICE on a screen, and the route answers about a named gym.
+**O145** the currency map reverted, which is the brick wall put back · **O146**
+the price list dropped to a privilege every trainer holds · **O147** the ladder
+inverted, so the first band a buyer reads is $129 · **O148** `active = true`
+deleted, so retired bands are quoted · **O149** the currency filter deleted ·
+**O150 IS :22341 §7 PUT BACK** — the evidence keyed on STATUS, so an expired trial
+reads as never trialled · **O151** the decimal point moved one place, so $35
+prints as $350.
+
+**O148 SURVIVED TWICE, ONCE FOR EACH HALF OF :11846's PAIR, AND THAT IS THE PART
+TO KEEP.** First run: the TEST half — every retired row in the book is INR and the
+only exact list asserted anywhere was the USD one, so deleting `active = true`
+changed nothing a dollar gym could see. **The C88 question was asked first (is the
+guarantee OBSERVABLE?) and the answer was yes**, unlike :21580's C88 where the
+guard itself turned out to be inert; so the fix was an assertion naming the five
+retired INR codes, with a control proving they still EXIST and are inactive
+(:15093's O92 shape). Second run: it STILL survived, because the mutant's FILTER
+still named the USD test while the new assertion lives in the rupee one —
+**:21580's C91 verbatim, and the filter half is the one this repo keeps recording
+last.** `org_micro` is deliberately absent from that list: `db.migration.test.ts`
+reactivates exactly that row mid-run, and naming it would be a race against a
+sibling suite.
+
+**A SEVENTH ANCHOR HAD TO BE MADE UNIQUE IN THE SOURCE.** `AND active = true`
+appears twice in `repo.ts` and one is a SUBSTRING of the other (six spaces against
+eight), so a two-line anchor was the alternative — :17676's 99-strong CRLF hazard.
+The line carries a trailing comment instead, which is :21157's remedy, and it was
+never re-aimed at whichever line came first (:15770).
+
+**AND I INCURRED :12227's BACKTICK SLIP AGAIN**, in the same template that already
+warns about it twice — a third time. One backtick inside the `sql` literal turned
+the query into a run of parse errors. The warning fifty lines above did not stop
+it; **typecheck did**, which is the honest lesson: the guard that works here is a
+compiler, not a comment.
+
+### 4. FOUR STALE SENTENCES THIS CARD HAD TO FIX BEFORE IT COULD SHIP
+
+:22782's standing rule — *a card that closes a documented gap should grep for the
+gap's own description before it ships* — applied, and it found four. The `no_plan`
+refusal still said the app and the book disagree and that it is *"Kd's to settle"*
+(he settled it) · `updateOrg`'s lock note still illustrated with *"France →
+Germany ⇒ both EUR"* · the CAD fixture plan's header still implied a country could
+reach it · and the test asserting a currency with no price book was driven through
+the UK, which is now a dollar country. **Every one was TRUE when written.**
+
+**The refusal itself is KEPT and re-pointed rather than deleted** (the no-removal
+rule applied to a guarantee): no supported country can reach it any more, so it is
+now driven at the mechanism, which survives any further re-ruling of the map. Its
+replacement guard is stronger than the sentence it lost — **`orgs.plans.test.ts`
+walks the WHOLE supported list and fails if any country reaches an empty book**,
+which is :5348 rule 5 over the class that produced the ruling in the first place.
+The gap it closes existed for eleven days and it took Kd noticing.
+
+### 5. ONE CALL MADE IN THE SOURCE, SO NOBODY RE-DERIVES IT
+
+**What a gym sees between its trial ending and the sweep running** — :22697 §4's
+second open question — **is answered by the modal keying on STATUS and never on
+the date.** That is :21580's rule (c), already in the shared schema in as many
+words, so the window costs nothing new: until the 04:00 sweep moves the row the
+gym is still `trialing` and still has its console, and §4.2's banner already says
+the trial is past its end date. **It is not a fresh ruling and does not need one.**
+
+### 6. PROVE — every figure naming what it ran against
+
+**ALL LOCAL** (`localhost:5433`, `test:local` — :13659): `orgs.plans` **10/10 (new
+file)** · `orgs.routes` **134/134** · `orgs.trialSweep` 9/9 · `db.migration` 10/10
+· shared **51/51** · web **1294/1294 across 48 files** · `tsc --noEmit` exit 0 on
+api and on shared **and PROVEN REAL by planting a type error** (TS7006, then
+restored and re-run clean, sha256-verified identical) · `eslint --max-warnings=0`
+exit 0 on six api files and one shared file · `node --check` on the harness ·
+`check-harnesses` 25 scripts · **SWEEP a stated SUBSET of 151: O145–O151, 7 RED, 0
+ALIVE, 0 never ran**, controls GREEN first, restores sha256-verified, **244 gym +
+subscription rows fingerprinted with no unattributed changes**.
+
+### 7. THE SMOKE — RUN, PASSED, AND KD'S QUESTION IS WHAT PRODUCED IT
+
+**I FIRST TOLD KD THERE WAS NOTHING TO SMOKE, AND THAT WAS WRONG.** The report
+said "no screen, so no smoke", reasoning from the fact that this card draws
+nothing new. He asked *"do i not need to perform smoke test ?"* — and checking
+rather than repeating the answer found the currency ON SCREEN IN THREE PLACES
+(`GymDetailsPanel.jsx:282`, `NewGym.jsx:134`, `Overview.jsx:331`, all *"billed
+in {currencyDisplay}"*). **A card with no new screen is not the same as a card
+with nothing a user can see**, and that distinction is the reusable part: the
+SMOKE gate asks whether behaviour a person can observe changed, not whether a
+component was added.
+
+**IT ALSO GAVE THE RULING A BROWSER SUBJECT THAT IS NOT THE TRIAL BUTTON** —
+which matters, because :22697 forbids putting Kd in front of that button again.
+Creating a gym in Canada and reading its currency proves the ruling reached a
+screen without touching the control he has objected to.
+
+**ROUND 1 FAILED AND IT WAS MY SETUP, NOT THE CODE: "Your gym is set up in
+CAD."** The api process had been started BEFORE the currency edit and was serving
+the old map from memory. **This is `smoke-trial-expiry.md`'s own S2 warning
+(:15927, :20222) — "restart the API process, because a running server caches the
+old failure" — incurred by the chat that had read that sheet the same session.**
+Fixed by restarting and **verified through the live api BEFORE sending him back**
+(`POST /v1/orgs` with `country: CA` → `currencyDisplay: USD`), rather than asking
+him to try again and hope.
+**ROUND 2 PASSED**: *"Your gym is set up in USD."*
+
+**AND THE FAILED ROUND LEFT A REAL ARTEFACT WORTH NAMING: the local database now
+holds a CAD gym**, created by the old code during round 1, which will keep CAD
+for ever and cannot start a trial. Harmless (it is the practice database) and it
+is §2(c)'s stale-row class OBSERVED rather than reasoned about — the production
+conclusion is unchanged, because the measurement that skipped the backfill was
+about the shared branch and Neon still has none.
+
+**NOTHING TICKS BUT THE CURRENCY LINE; T3 UNRUN.** The modal, the button's
+removal and the re-run of the expiry smoke are the next card — and that smoke must
+run AFTER it (:22697 §5), which is why it was not run today.
