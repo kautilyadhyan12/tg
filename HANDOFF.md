@@ -1,6 +1,71 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE DECISION RECORD'S READ PATH, SPLIT A THIRD TIME. Kd-ruled and
+      Kd-sequenced. DECISIONS :22497. Nothing summarised — that was his
+      condition and it is the whole design.
+
+  1. **THE INDEX HIT THE WALL IT WAS BUILT TO PREVENT.** `DECISIONS-INDEX.md`
+     measured **492 KB / 6,500 lines / ~123k tokens** — the size that made
+     `DECISIONS.md` unreadable on 2026-07-30. The 2026-07-30 amendment assumed it
+     would stay one line per ruling; chats wrote case reports into it. **That the
+     instrument reproduced the disease is the finding: whatever replaces an index
+     must be GENERATED or it ends here again.**
+  2. **KD'S CONDITION RULED OUT THE OBVIOUS FIX** — *"does not get summarised
+     things instead of details"*. So nothing was shortened, reworded or deleted.
+     Only how a chat FINDS a ruling changed.
+  3. **(a) `DECISIONS-TRIGGERS.md`, GENERATED** by
+     `tools/build-decisions-triggers.mjs` from the `**Read before …**` sentences
+     **123 rulings already wrote about themselves** — a convention this repo
+     invented and never collected. §1 = 418 phrases, VERBATIM, → pointer + title.
+     §2 = the 177 rulings declaring none, by pointer and title. 630 lines.
+     `--check` on the ROOT `lint`, so a ruling added without a rebuild cannot
+     merge.
+  4. **(b) `DECISIONS-INDEX.md` §1 SPLIT.** It said "always relevant" and held
+     2,245 lines, **1,631 of them finished card records**. Moved byte for byte to
+     a new **§1B · CARD HISTORY**, read on §§3–7's terms. §1 keeps 32 entries.
+     **Always-read: ~6,500 → ~1,427 lines.** `CLAUDE.md` grounding item (3)
+     rewritten to match, with an AMENDMENT 2026-08-28 block.
+  5. **THE SAFETY PROOF RAN BEFORE A LINE MOVED, not after: 36 of 36 moved
+     entries are surfaced by an always-read file — 30 by a trigger phrase, 6 by
+     title in §2. ZERO hidden.** The move itself ran under a line-multiset
+     invariant that refused to write if anything differed.
+  6. **THE TOOL FOUND A DEFECT IN ITSELF AND IT IS THE PART TO KEEP.** The first
+     generator walked only `##` and **lost seven `###` addenda that declare their
+     own trigger — including `:19560`, which this same chat had cited as binding
+     four hours earlier.** Worse, it MIS-ATTRIBUTED a child's clause to its parent
+     when the parent had none — a trigger pointing at the wrong line number,
+     :10726's silent shape. Parent and child now read only their own spans.
+     387 → 418 triggers. **Found by checking the tool's OUTPUT against the index,
+     not by reading the tool** — the safety check for part (b) audited part (a).
+
+FILES: DECISIONS-TRIGGERS.md (new, GENERATED — do not hand-edit) ·
+       tools/build-decisions-triggers.mjs (new) · DECISIONS-INDEX.md (§1 split,
+       header rewritten) · CLAUDE.md (grounding item 3 + AMENDMENT 2026-08-28) ·
+       package.json (lint gains --check, with its _why) · DECISIONS.md · OWED.md
+
+PROVE: check-decisions-index **224 pointers resolve** (unchanged — this card
+       moved lines inside the INDEX and never touched a `DECISIONS.md` line
+       number) · check-decisions-triggers up to date, **418 triggers from 133 of
+       310 rulings** · check-harnesses **25 scripts** (the new tool picked up with
+       NO edit to that guard) · node --check clean · package.json re-parsed as
+       JSON after editing · line-multiset invariant matched exactly.
+       **`turbo run lint` RED is PRE-EXISTING and was PROVEN, not inherited:**
+       re-measured with this card's four files stashed out — identical failure
+       (:21057's global-pnpm shadowing).
+
+OPEN:  **A trigger list NARROWS a search and can NEVER CLEAR one** — 177 of 310
+       declare none, and :19256 is the recorded cost of forgetting it. Own OWED
+       line, plus one naming the six card records reachable only by a gap-list
+       title (`:20986`, `:14174`, `:14147`, `:14013`, `:12832`, `:12731`).
+
+NEXT:  **The trial-expiry card's SMOKE (`RUNBOOK/smoke-trial-expiry.md`, 7 steps,
+       step 6 EXPECTED to look wrong) and its T3 are still UNRUN** — Kd chose to
+       do this first (*"will run the smoke and reciew later first lets do this
+       begin"*), so they are outstanding by his sequencing, not by oversight.
+```
+
+```
 TASK: TRIALS ACTUALLY END — step 1 of Kd's four-step order (:22215 §5).
       The first `UPDATE subscriptions` in this product's history.
       DECISIONS :22341. Plan approved and the card SPLIT at the plan gate.

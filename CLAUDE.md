@@ -51,10 +51,11 @@ forgotten about silently".)
 **GROUNDING BEFORE EVERY DECISION AND EVERY RECOMMENDATION — NO EXCEPTIONS.
 Before proposing, recommending, planning, or deciding ANYTHING, the chat MUST
 have read, IN THIS SESSION: (1) the spec §§ the task touches, (2) this file's
-rules for the domain, (3) **the ENTIRE `DECISIONS-INDEX.md`, plus every
-DECISIONS.md entry it points to that the task touches, plus that index's §1
-(standing rules) and §2 (open questions) in the DECISIONS.md original — always,
-whatever the task** (amended 2026-07-30; see below), (4) HANDOFF.md's top block, and
+rules for the domain, (3) **`DECISIONS-TRIGGERS.md` IN FULL, plus
+`DECISIONS-INDEX.md` §1 (standing rules) and §2 (open questions) IN FULL, plus
+every DECISIONS.md entry those three send you to — opened IN FULL, always,
+whatever the task** (amended 2026-07-30 and again 2026-08-28; see below),
+(4) HANDOFF.md's top block, and
 (5) RUNBOOK/cutover.md's prerequisites when the work affects the migration.
 Reading the spec but skipping DECISIONS.md is NOT grounded — DECISIONS.md IS
 the operator's case law and it OVERRIDES a chat's fresh judgment every time.
@@ -87,6 +88,58 @@ record itself. This is the second time a DECISIONS.md read-path has been split
 for exactly this reason: `OWED.md` exists because the file could not answer "what
 is still to do?", and this exists because it can no longer answer "what has
 already been decided?".
+
+**AMENDMENT 2026-08-28 — THE INDEX HIT THE SAME WALL, AND THE FIX SUMMARISES
+NOTHING.** The 2026-07-30 amendment above assumed the index would stay "one line
+per ruling". It did not: chats wrote whole case reports into it, and **measured
+2026-08-28 before anything changed, `DECISIONS-INDEX.md` was ~492 KB / ~123k
+tokens — the same size that made `DECISIONS.md` unreadable.** A chat hit it that
+day, could not read the file it was ordered to read, **declared the departure
+instead of hiding it**, and Kd ruled the fix. **Read the amendment above again
+before judging this one: it is the identical failure, one level up, which is
+itself the finding — an instrument that grows the way the thing it indexes grows
+will always end here.**
+
+**KD'S CONDITION CAME FIRST AND SHAPED THE ANSWER**, in his own words: the fix
+must be one *"that will not affect the decision making of the new chats and does
+not get summarised things instead of details"*. **So nothing was summarised,
+shortened, reworded or deleted.** Two things changed:
+
+1. **`DECISIONS-TRIGGERS.md` is GENERATED** by `tools/build-decisions-triggers.mjs`
+   from the `**Read before …**` sentences **123 rulings already wrote about
+   themselves**. It harvests a convention this repo invented and never collected.
+   §1 is *"before you do this, read that"*, **every phrase copied verbatim**; §2
+   lists every ruling declaring no trigger, by pointer and title. Rebuilt and
+   staleness-checked on the ROOT `lint`, so a ruling added without rebuilding
+   cannot merge.
+2. **`DECISIONS-INDEX.md` §1 was split.** It said *"always relevant"* and held
+   2,245 lines, of which **1,631 were finished card records** — T3 rounds, PROVE
+   figures, "the packet ships". Those moved, unchanged, to a new **§1B · CARD
+   HISTORY**, read on the same terms §§3–7 always were: when your task touches
+   them.
+
+**Always-read went from ~6,500 lines to ~1,427, and NOT ONE WORD OF DETAIL WAS
+LOST** — it moved from "read all of this every time" to "you are pointed at the
+full original of anything that binds you". **THE SAFETY PROOF WAS RUN BEFORE A
+LINE WAS MOVED, not asserted after**: all 36 moved entries are surfaced by an
+always-read file — 30 by a trigger phrase, 6 by title and pointer in the trigger
+file's §2 — **zero hidden**.
+
+**THE ONE THING THAT CAN STILL GO WRONG, AND IT IS NAMED IN THE GENERATED FILE
+ITSELF: a trigger list NARROWS a search and can never CLEAR one.** 177 of 307
+rulings declare no trigger. **:19256 is the recorded cost of forgetting that** —
+a chat grepped `trial|seat cap|300|band`, the governing ruling contained none of
+those words, and a settled question went back to Kd. *No match is "nothing
+declared itself", never "nothing binds me".* When in doubt, grep the index and
+open the entry.
+
+**MAINTENANCE, and it is the deferral rule's discipline applied twice over.**
+Every commit adding a `##` heading to `DECISIONS.md` still adds its
+`DECISIONS-INDEX.md` line in the SAME commit — **and should give the entry a
+`**Read before …**` sentence**, because that sentence is now the thing that makes
+a ruling findable. An entry without one is reachable only through a title in a
+gap list. The six card records already in that position (`:20986`, `:14174`,
+`:14147`, `:14013`, `:12832`, `:12731`) are named in §1B rather than glossed.
 
 
 # AI Home Gym — Implementation Playbook for Opus 4.8

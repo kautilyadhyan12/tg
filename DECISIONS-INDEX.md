@@ -1,12 +1,47 @@
 # DECISIONS-INDEX.md — the map of DECISIONS.md
 
-**Read this file in full. Then open only the DECISIONS.md entries your task
-touches.** That is the grounding requirement now (CLAUDE.md, amended
-2026-07-30). Reading all of DECISIONS.md is no longer possible in one session:
-it is 2,396 lines / ~135k tokens, so a chat that read it would have no room left
-to work. This index exists for the same reason `OWED.md` does — DECISIONS.md
-could not answer "what is still to do?", so OWED.md was created; it can no
-longer answer "what has already been decided?", so this was.
+## THE READ PATH — this is the whole grounding requirement
+
+**EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
+
+1. **`DECISIONS-TRIGGERS.md`** — generated, ~630 lines. §1 is *"before you do
+   this, read that"*, harvested verbatim from the rulings' own `Read before …`
+   sentences. §2 lists every ruling that declares no trigger, by pointer and
+   title, so a blank search is visibly *"nothing declared itself"* and never
+   *"nothing binds me"*.
+2. **§1 below — STANDING RULES.** ~680 lines.
+3. **§2 below — OPEN.** The only forward-looking part of this file.
+
+**THEN open, IN FULL, every `DECISIONS.md` entry those three send you to.** That
+is where the detail lives and it is the only thing you may cite.
+
+**§1B and §§3–7 are NOT read every session** — open an entry there when your task
+touches what it is about, or when the trigger file points at it.
+
+### Why this file was split again, on 2026-08-28
+
+**The instrument grew into the problem it was built to solve.** This index was
+created 2026-07-30 because `DECISIONS.md` had passed ~135k tokens and a chat
+obeying *"read it all"* had no room left to work. Chats then wrote whole case
+reports into the index, and **measured 2026-08-28 it was ~492 KB / ~123k tokens
+— the same wall, one level up.** A chat hit it that day, declared the departure
+rather than hiding it, and Kd ruled the fix.
+
+**Nothing was summarised — that was his condition, in his words:** *"will not
+affect the decision making of the new chats and does not get summarised things
+instead of details"*. **No line here was shortened, reworded or deleted.** Two
+things changed: **1,631 lines of finished card history moved out of "always
+relevant" into §1B**, and the `Read before …` sentences the rulings already
+carried are now **collected** into `DECISIONS-TRIGGERS.md` instead of being
+findable only by reading everything. **Before moving a line, every moved entry
+was checked to still be surfaced by an always-read file — 36 of 36, zero
+hidden.** Always-read went from ~6,400 lines to ~1,360.
+
+**The old instruction is kept below because it is still true of the ORIGINAL**,
+and because the reason this file exists has not changed — `OWED.md` was created
+when `DECISIONS.md` could not answer *"what is still to do?"*; this was created
+when it could not answer *"what has already been decided?"*; the trigger file
+was created when this one could not answer *"which of these binds ME?"*.
 
 **Nothing in DECISIONS.md is deleted, moved or rewritten.** It stays the
 append-only record and remains the authority. This file only points at it. If
@@ -24,7 +59,7 @@ mid-file: re-derive them with
 
 ---
 
-## 1 · STANDING RULES — these constrain future work. Always relevant.
+## 1 · STANDING RULES — these constrain future work. READ IN FULL, EVERY SESSION.
 
 - **DECISIONS.md:270** — 2026-07-14 — argon2id rehash-on-login: the P2.1 GAP-1
   deferral, **owed before P2.8**.
@@ -127,6 +162,636 @@ mid-file: re-derive them with
   **Pool-fragmentation is on record and undisputed: four categories × four
   preferences × three durations × gym/worldwide, and the small categories wait
   longest — the users the ruling exists to include.**
+- **:21157** — 2026-08-27 — **KD OPENS THE TRIAL TO SELF-SERVE, AND THE FIRST
+  `subscriptions` ROW IN THIS PRODUCT'S HISTORY GETS WRITTEN — ~~the seat cap, the
+  30-day clock and §4.2's banner stop being inert~~ THE SEAT CAP DOES; the other
+  two do NOT (corrected by T3 round 1, the entry below).** **Read before touching
+  `startGymTrial`, before writing `subscriptions` from a SECOND place, before
+  adding a privilege to `ORG_PRIVILEGES`, before calling the seat cap inert, and
+  before proposing an approval step for gyms.**
+  **REVERSES :11072 RULING 1** (*"a gym's paid plan or TRIAL activates only after
+  Kd approves the gym"*): *"a gym can start on own without my approval but i will
+  have the power of removing them or pausing their use if i find them to be
+  fraud"*. **The reversal was MEASURED before it was made, and the measurement is
+  the part to keep: the approval gate never protected him from the bill he was
+  afraid of.** Exposure is per ACCOUNT and bounded by the daily quota, which IS
+  built — free 2 scans/day, gym member 5 — so at the measured **$0.00212/scan**
+  (:9944) a maxed fake account costs **$0.127/month** free and **$0.318** inside a
+  gym: **the gym multiplies the damage by 2.5, not by a thousand.**
+  **WHAT IS MISSING IS THE SPEND CEILING AND IT IS NOT BUILT** — v1 §9.3 promises
+  an alert and a soft-degrade and says *"bankruptcy-by-API-bill is now
+  mathematically impossible"*, while `costs:gym:{id}:{month}` has ONE writer (the
+  switched-off coach) and NO reader; own `OWED.md` line **with a deadline: before
+  the app is on the internet.** **KD ASKED WHICH TO BUILD FIRST AND THE ANSWER WAS
+  A DEPENDENCY, NOT A PREFERENCE:** the ceiling meters per GYM against 3× *the
+  gym's fee* and spend reaches a gym only through a live subscription — measured,
+  **1 of 120 cost rows carries a `gym_id` at all**, nobody can reach the app
+  (`localhost:3000`; server-live is stage 8), and total spend ever is **≈5 cents**.
+  **The two abuses the gate existed for both moved:** friend-pooling is already
+  dead by Kd's own 5-vs-20 ruling (a gym member gets a WORSE product than the $10
+  plan), and trial-chaining is closed by Part 5 §12's *"allowed once"* — **one
+  trial per OWNER, ever**, not per gym.
+  **SHIPPED:** `POST /v1/orgs/:gymId/trial`; migration **`0015`** adds
+  `billing.manage` (backfilled onto every owner) and widens
+  `subscriptions.provider` to Part 5 §0 addendum A's list VERBATIM — **only that
+  one line of the addendum** (R1.1). **`billing.manage`, never `role === "owner"`**
+  (:11429's seam; :15534's C/H-1 is the cost), a SEPARATE tick from `org.manage`
+  on :13803's precedent, **and it joins `LAST_OWNER_REQUIRED_PRIVILEGES`, closing
+  an `OWED.md` line rather than opening one** — :11429 rule 2 named two lockout
+  doors and the guard covered one. **The trial band is the LOWEST-capped active
+  monthly plan in the gym's currency, not a literal 300**, so :19129's ruling
+  survives a re-priced book; `NULLS LAST` is load-bearing (a capless tier would
+  otherwise BE the trial).
+  **THE 🔴 IT CLOSES: :19656 C/H-3's requirement** — *"whatever creates a gym
+  subscription MUST take `lockOrgRow` on that gym first"* — first statement in the
+  transaction, with **O127** and a two-client concurrency test as the guard. The
+  partial unique index is deliberately NOT caught: a 23505 cannot happen while
+  every writer takes the lock, so swallowing it would hide a future writer that
+  skipped it.
+  **AUDIT — four of six findings are INSTRUMENTS. (1) A FIXTURE WENT STALE BECAUSE
+  THE FUTURE ARRIVED**: `schemas.test.ts` used `billing.manage` as its stand-in for
+  *"a privilege a newer server knows"* and this card minted it; fixed as a CLASS
+  with a synthetic token no vocabulary can mint, plus a positive control asserting
+  the REAL newest privilege parses. **(2) TWO LOCKOUT TESTS WENT RED AND THE GUARD
+  WAS RIGHT** — their controls left an owner without billing, which is the lockout;
+  fixed by giving the controls both keys, NOT by loosening the guard, and the
+  rule-3 regression is its own test. **(3) `node --check` caught a raw newline in a
+  mutant string** (:13336's guard, on its own class). **(4) MY EDITS DRIFTED TWO
+  ANCHORS AND THE PRE-CHECK ABORTED BOTH TIMES before a byte was written** — O6
+  matched twice, O121 matched nothing; **neither allow-listed, neither re-aimed at
+  whichever line came first** (:15770), each given a SIBLING (**O133**, **O134**).
+  **(5) The lock line was made unique IN THE SOURCE** because two-line anchors are
+  :17676's 99-strong CRLF hazard.
+  **PROVE, all LOCAL: `orgs.routes` 130/130 (+10) · `db.migration` 10/10 · four
+  more suites 45/45 · shared 51/51 · web 1234/1234 unchanged · tsc exit 0 and
+  PROVEN REAL by planting a type error · eslint clean on nine files · SWEEP a
+  stated SUBSET of 134: 10 RED, 0 ALIVE, 0 never ran.** Both constraints read back
+  out of `pg_get_constraintdef` after migrating (:20222's lesson).
+  **NOTHING TICKS BUT THE LOCK LINE — no screen, so NO SMOKE; T3 UNRUN.** Three
+  gaps found and not fixed, each with an `OWED.md` line: **the dev branch Kd's
+  browser reads still holds the PRE-:18488 price book and lacks `0015`** (third
+  recurrence of :15927); **Canada, the UK and the euro area cannot trial at all**,
+  because `COUNTRY_CURRENCY` gives them CAD/GBP/EUR and the book is USD+INR while
+  :17366 ratifies *"US · CANADA · EUROPE, one USD book"* — ~~**the app and the
+  ratified book disagree and it is Kd's to settle**~~ **SETTLED 2026-08-28 at
+  :22215 — those three are billed in US DOLLARS; the fix is `COUNTRY_CURRENCY`,
+  not three new price books**; and **neither `org.manage` nor
+  `billing.manage` has a TICK BOX** on the Staff screen, so neither can be
+  delegated through the product (no data loss — `unknownPrivileges` carries them
+  through a save, a guard whose own comment predicted a billing tick).
+- **:19560** — 2026-08-26 — **ADDENDUM to :19366 — KD FREEZES A GYM'S COUNTRY
+  ONCE IT IS PAYING, AND STOPPED ME IMPLEMENTING AN OPINION AS A RULING.**
+  **Read before touching the country on any org route, before writing anything
+  that changes `currency_display`, and before building the billing card.**
+  **SUPERSEDES :19366's "the country is freely editable" half**; everything else
+  there stands. **RULED: a gym's country — and so the currency it is billed in —
+  freezes the day it goes on a paid plan**; `PATCH /v1/orgs/:gymId` answers 409
+  `country_locked` for any gym on a subscription past `trialing`. Name, city and
+  time zone stay editable, **with the control driven on the same locked gym**,
+  because a route that refused a paying gym EVERYTHING would be a different
+  product and nothing else in the suite could tell them apart (:7104's PG1).
+  **THE PROCESS FAILURE IS MINE AND IS THE PART TO KEEP: he said *"a gym should
+  not be able to change the country"*, I started implementing it, and he stopped
+  me — *"wait men i just said an opinion i need your recommendation as well is it
+  correct decision what do production grade applications do?"*. I had taken an
+  OPINION for a RULING.** That is :17765's failure MIRRORED — there a chat
+  laundered its own call into his mouth, here I promoted his musing to law —
+  **and both are one defect: not reading the ATTRIBUTION of a statement.** The
+  tell was available: no option list, no gate. **When he states a preference
+  mid-flow, the response is a recommendation with evidence, not a diff.**
+  **THE EVIDENCE WAS WEB-SEARCHED, NOT RECALLED (V5), because "what do production
+  applications do" is exactly what model memory answers confidently and wrongly:
+  Stripe LOCKS a customer's currency once they have been invoiced** (dashboard
+  dropdown disabled; API *"Can't combine currencies on a single customer"*;
+  workaround = new customer or cancel-and-resubscribe) **while leaving the
+  ADDRESS editable — updating the country is the documented way to fix a tax
+  location, changing future invoices at the next cycle with no proration. Paddle,
+  the route ruled at :17366, is STRICTER and closest to Kd's instinct: it refuses
+  a COUNTRY change on an existing subscription outright, for tax reasons, and its
+  own answer is cancel-and-resubscribe. BUT NEITHER FREEZES FROM DAY ONE** — that
+  is the finding that moved the ruling, since before money moves there is no
+  invoice to protect and a gym that mistyped its country on the FIRST screen of
+  signup would be stuck for ever.
+  **THE CARD-LESS 30-DAY TRIAL (:16548) IS DELIBERATELY NOT A LOCK** — a
+  `trialing` gym has paid nothing, so freezing there traps the typo at the moment
+  before it starts to cost. Every other status locks, `canceled` and `expired`
+  included, because an ended subscription may still have raised invoices and
+  over-locking is the safe direction. **It reads `subscriptions.status`, not
+  `invoices`**: an invoice cannot exist without a subscription
+  (`invoices.subscription_id` NOT NULL) and Part 5 §3's machine leaves `trialing`
+  on first payment, so the question is answerable from a column the billing card
+  must maintain anyway — **that dependency is written onto the `OWED.md` line
+  rather than left implicit.** **The check is INSIDE the transaction and under
+  the org lock**: it is a check-then-act guarding money, and outside the lock a
+  subscription committing between check and UPDATE moves a paying gym's currency.
+  **CONSEQUENCE RECORDED, NOT DISCOVERED LATER: a paying gym that picked the
+  wrong country cannot fix it itself** — the ADMIN PANEL's job beside :19016's
+  "mark this gym as paid", own ⚪ line, and both providers make it a support
+  action too. Bounded and currently empty (nothing inserts into `subscriptions`).
+  **AUDIT — two mutants, and the SECOND is the one worth having: O123 deletes the
+  lock; O124 deletes the TRIAL CARVE-OUT so the lock fires too EARLY. A lock has
+  TWO failure directions and a test that only checks it FIRES is satisfied by a
+  door that is simply shut** (:7104's PG1). Both RED.
+  **PROVE, final bytes, LOCAL: orgs.routes 117/117 (+1) · db.migration 10/10 ·
+  both in ONE invocation 127/127 · shared 51/51 · tsc exit 0 · eslint clean on
+  four files · SWEEP a stated SUBSET of 124: 13 RED, 0 ALIVE, 0 never ran.**
+  **Nothing ticks — no screen, no smoke, T3 UNRUN.** The ❓ currency line raised
+  that morning is CLOSED by this ruling, struck and ticked rather than deferred.
+- **:19256** — 2026-08-26 — **CORRECTION TO :19129 — ITS COST ANALYSIS PRICED A
+  FEATURE KD HAD ALREADY KILLED.** **READ THIS BEFORE :19129.** The AI chat coach
+  was ruled DROPPED 2026-08-18 (:9604 §5, *"OFF, NOT DELETED"*) and confirmed
+  2026-08-24 (:16606 §9); :19129 §2 priced it anyway and declared every band
+  underwater. **§2's tables are VOID; §1 (the trial) and §3 (the breaker) stand.**
+  **Nothing was wrong with the documentation — it says so in SIX places across
+  four files**, and :9604 §5 even names *"the per-question Groq bill"* as what
+  retires. **THE INSTRUMENT FAILURE IS THE REUSABLE PART: the grounding rule was
+  obeyed** — §1 and §2 of this index read IN FULL — **and §4 was GREPPED for
+  `trial|seat cap|member count|300|band`. The ruling is in §4 and contains none
+  of those words. A grep is a hypothesis about vocabulary.** Worse: the chat had
+  read `seed.ts`'s live `coach: {day, 30}` and treated it as evidence the feature
+  existed — **but "OFF, NOT DELETED" leaves every seed value in place by design,
+  so the seed answers "30/day" forever.** **STANDING: before pricing any feature,
+  grep its NAME plus drop/struck/off — never the cost vocabulary.** Also: Kd's
+  *"what is this? a member also gets 30 coach messages a day"* was incredulity at
+  a dropped feature being billed, and **the chat explained what a chatbot is to
+  the person who designed the product** — *"are you dumb or blind"*. **A question
+  that sounds naive from a domain owner is a challenge to your premise.**
+  **REAL COSTS, coach removed:** scans only — $0.255/member/month on today's Qwen
+  constants, $0.024 after the Gemini swap. **The ratified book is correct only on
+  the far side of that swap, which is NOT BUILT** (`OWED.md:4225`): at the
+  ceiling on today's code, band 1 is $76.50 against $35. **THE ONE GENUINE
+  DEFECT IS IN THE CODE: the coach is ruled off and still WIRED ON eight days
+  later** — `apps/web/src/App.jsx:23,122` and `apps/api/src/app.ts:24`.
+- **:19129** — 2026-08-25 — **KD CAPS EVERY GYM TRIAL AT 300 MEMBERS.**
+  ⚠️ **ITS COACH COST ANALYSIS IS VOID — READ :19256 FIRST.** The trial ruling
+  below is unaffected; every figure about the coach is not.
+  ~~and his own challenge to the cost number finds THE COACH ALLOWANCE WAS NEVER
+  PRICED INTO ANY BAND~~ **— STRUCK: the coach was already dropped (:9604 §5).**
+  **SUPERSEDES :17902 §1d in part.** **Read before building the
+  trial, the onboarding wizard or the seat cap · before quoting any gym margin ·
+  and before setting any per-member allowance.**
+  **THE RULING: no plan choice at signup · EVERY gym trials at the SAME limit,
+  300 members · the gym subscribes to its real band AFTER the trial.** Unchanged
+  and NOT superseded: no card, 30 days (:16548), the subscribe prompt, and
+  :11083's Kd-approval gate. **DEAD: "the gym picks WHICH PLAN it is trialling"
+  and "that plan is FIXED for the whole trial", plus :17902 §3's recommendation
+  4, which existed only to make the fixed plan harmless.** :17902 §3's
+  recommendations 2/3/5 (the 90% banner · *"This gym is full — ask at the front
+  desk"* · subscribing early as the escape hatch) **matter MORE now**, the wall
+  being certain for every gym above 300 rather than only for one that picked
+  badly. He confirmed knowing an 800-member gym gets only 300 through the door.
+  **THE CHAT RECOMMENDED AGAINST THE CAP, WAS OVERRULED, AND THE OVERRULE WAS
+  RIGHT — this is the part to read.** The recommendation rested on ~2.4¢/member/
+  month, which counted **MEAL SCANS ONLY**. Kd answered *"a 1000 member gym all
+  member using every feature to the fullest … always need to think about the
+  worst case"*. **The omission is the coach at 30/day**, which
+  `gymMemberEntitlements` inherits untouched from the paid consumer tier.
+  ~~COMPUTED: $0.705/member/month today ($0.474 after the Gemini swap), of which
+  the coach is 64% / 95%. A full gym at its cap: band 1 $211 against $35 · band 3
+  $705 against $69 · band 5 $1,481 against $129 — EVERY BAND UNDERWATER AT THE
+  CEILING. Kd already made this exact call once for the other feature (:17366 §2,
+  20 scans → 5) and nobody applied it to the more expensive one.~~
+  **— ALL OF IT STRUCK BY :19256. THE COACH IS DROPPED; THERE IS NO SUCH BILL.**
+  Real figures, coach removed, are at :19256 §3. **§3 — THE SPEC'S BREAKER IS
+  HALF-BUILT AND ENFORCES NOTHING (this half STANDS, and is worse than written —
+  the one incrementing call site is inside the module being switched off):**
+  v1 §9.3
+  promises an alert at ₹800/gym/month and soft-degrade past 3× the fee —
+  *"bankruptcy-by-API-bill is now mathematically impossible"* — but
+  `costs:gym:{id}:{month}` is incremented in **exactly one place**
+  (`coach/service.ts:224`), **nothing reads it**, and scans and ORS never bump it
+  at all. ~~**§4 — THE COACH ALLOWANCE WAS NOT CHANGED and 30/day STANDS**; he
+  has had no costed table of options.~~ **— STRUCK by :19256: there is no
+  allowance to rule on, the feature is dropped.**
+- **:19016** — 2026-08-25 — **KD SETS THE BUILD ORDER FOR THE WHOLE PROJECT, AND
+  ASKS FOR THE ADMIN PANEL THE SPEC HAS DESCRIBED ALL ALONG AND NOBODY EVER
+  TRACKED.** **Read before proposing ANY next card, before sequencing work,
+  before telling Kd how much is left, and before building any operator tool.**
+  **THE ORDER, HIS, UNPROMPTED, NOT A CHAT'S TO RE-SEQUENCE: gym → gym members →
+  exercises 4-58 → reference video → the rest of the web → Android → iOS →
+  server live + payments → what is left → full review and test → publish.**
+  **HE ALSO CORRECTED A DRIFT AND IT BINDS** — asked "what next", the chat
+  offered CAMERA work and he answered *"we were doing the gym part and all of
+  sudden going to camera wtf lets first finsih the fucking gym"*. **Continuity
+  of thread beats severity ranking when picking a card**, unless something
+  actually blocks. **THE HONEST SIZE, MEASURED AND GIVEN TO HIM: 248 unticked
+  items** (🔴 23 · 🟡 135 · ⚪ 75 · ❓ 15); gym console 56 · old-backend screens
+  51 · improvements 30 · camera 17 · running 16 · open questions 16 ·
+  member-side 13 · legal 9 · engine debt 7. **No mobile app exists; 3 of 58
+  exercises have rules; 57 of 58 are camera-graded.** **FOUR CONFLICTS INSIDE
+  HIS OWN ORDER, put to him rather than solved quietly: every gym screen is
+  built THREE times** (:17765, his accepted cost) · **no email is ever sent** and
+  gym features need it · **paperwork has lead time and costs nothing to start**
+  (Udyam, Apple/Google programmes, Paddle) so start now rather than at stage 8 ·
+  **exercises 4-58 need ~330 recordings FROM HIM**, the biggest cost of his own
+  time in the project. **KD RULING: the four money-dependent gym items get a
+  "mark this gym as paid" ADMIN TOOL rather than a deferral** — three options
+  were put to him and moving real payments earlier was recommended AGAINST;
+  **consequence, only the Billing TAB now waits for stage 8, while the seat cap,
+  the trial and the banner go live in stage 1.** **THE ADMIN PANEL — HIS
+  QUESTION ANSWERED BOTH WAYS: yes build it, the SPEC has specified it in FIVE
+  PLACES across four files all along** (`03-part3:60` *"the separate admin
+  panel … not in this console"*, `v1:480`, `v1:570`, `part8:97`, `part8:243`,
+  `part5:404`) — **and NO, it does not endanger store review, because it must
+  never be inside a phone app**; review sees the submitted binary, and that is
+  also the SECURITY answer. **It is the ONE surface exempt from :17765's "same
+  features in both places", which governs the GYM'S console.** **THE FINDING IS
+  OURS AND IS THE DEFERRAL RULE'S OWN FAILURE MODE: the panel appears in
+  `OWED.md` and this index ZERO times.** **AND A CORRECTION OF MINE, MADE TO KD
+  IN THE SAME BREATH: I said the `admin` role "does not exist in the code",
+  which misleads** — `packages/shared/src/orgs.ts:37-38` deliberately excludes it
+  from the ORG enum and names the separate surface. **So it is not an oversight
+  of judgement but of TRACKING, which is sharper: a code comment naming a
+  surface is not an `OWED.md` line.** Now a 🔴 line, 🔴 because :11072's
+  approval gate is a ruling with NO PATH to perform it and Part 8 puts DPDP, ban
+  and breakglass tooling there. **First slice, Kd-approved: "mark this gym as
+  paid".** No estimate in days was made; do not quote one from here.
+- **:17902** — 2026-08-25 — **KD RAISES GYM BANDS 1–2 TO $35/$50, ROUNDS EVERY
+  BAND BOUNDARY (0–300 / 301–500 / 501–1000 / 1001–1500 / 1501–2100), RULES THE
+  FULL PHOTO EDITOR IN, AND FIXES THE TRIAL'S SHAPE.** Supersedes :17366's
+  band-1/2 USD prices and **all boundaries in BOTH books**. **Read before seeding
+  any plan or price, before touching `apps/api/src/db/seed.ts`, before building
+  the onboarding wizard or the trial, before building photo sharing, and before
+  answering Kd on whether the business works.** **BANDS 3–5, the ENTIRE INR BOOK,
+  and the $10/$5 individual tier are UNRULED — he named TWO numbers, and scaling
+  the rest by the same ~17% is INVENTING A RULING**
+  (:17366 §0's own lesson, from the session one day earlier). ❓ `OWED.md` lines.
+  **THE EDITOR IS FULL** — crop, resize, brightness/contrast/grayscale, limited
+  fonts, undo/redo, a movable/resizable stats overlay — **overruling the chat's
+  recommendation to ship only the sticker + drag/resize because Instagram does
+  the rest free**; the stats are never typed, they come from the real workout.
+  **THE TRIAL: no card · the gym picks WHICH PLAN it trials at signup · that plan
+  is FIXED for the whole trial · that plan's member cap is enforced.** He proposed
+  mid-trial plan changes and **reversed it himself one message later** — a chat
+  reading only the first message builds the wrong thing. **The trial LENGTH is
+  NOT touched and is NOT open: 30 DAYS per :16548, superseding the spec's 7 —
+  this entry quotes the spec's "7-day" line verbatim and a chat must not carry
+  it forward.** The chat also recommended pilot codes for the first 20 gyms
+  **and struck it before committing against :16702** (one trial, every gym, "the
+  first 20" is a sales target with no code); **only its reason survives — never
+  discount the list price to win the first 20.** **THE CHAT WAS WRONG
+  ONCE AND THE CORRECTION IS THE USEFUL PART: it advised against blocking members
+  at the seat cap, then measured that `apps/api/src/modules/orgs/repo.ts:763`
+  ALREADY refuses them, that v1 §9.2 calls gym plans "seat-capped in code", and
+  that Part 3 §4.0 step 2 is already the member-count slider Kd had just
+  re-derived** — a recommendation formed without reading the built code is a
+  guess (V4). **MEASURED, NOW A 🔴 `OWED.md` LINE: the plans seed has ZERO USD
+  org rows and its six INR rows carry the PRE-:17366 book** (₹999–₹4,999, caps
+  25–400) — **:17366 ratified a price book against a seed nobody re-read**, and
+  the `seat_cap` values ARE the boundaries this ruling moves. Carries the market
+  research so no chat re-derives it: rival gym software $99–599/mo **plus $81–97
+  for a plain branded app that does none of this** · the bundle a member gets
+  free retails at **$47.97/mo**, so a 200-member gym at $35 pays 17.5¢/member ·
+  **incumbents charge $12–20 because acquiring one payer costs $20–80 in ADS, not
+  because serving them costs anything — Kd's cost through a gym is ≈$0, and THAT
+  is the moat, not the technology** · $500k ≈ 300 gyms + 3,000 individuals ⇒
+  ~$283k after tax solo · **20 gyms worst-case costs ~$257/mo and leaves ~$398 —
+  proof, not income** · Paddle's flat 50¢ is 6.4% on a $35 gym and **10% on a $10
+  consumer** · **the ClassPass/Mindbody scar is the true shape of his "will gyms
+  think I'm using them" fear, and he sells a $10 consumer tier so an owner WILL
+  ask** · honest odds given as judgement: $500k ≈ 1-in-4/5 over 3–4 years,
+  $50–150k considerably likelier, and Gymdesk took **four years** to
+  product-market fit in this exact market.
+- **:8808** — 2026-08-16 — **WEARABLES: both directions are possible, they are
+  ONE integration rather than two, and the cost is a MOBILE APP rather than
+  money.** **NO DECISION WAS MADE — Kd asked whether it is possible and costly
+  and said expressly he is not asking to build it now.** The spec already
+  schedules it (`02-part2b-trust-layer.md:169`, §2.4 Roadmap — wearable HR
+  upgrades the calorie method at Part 6, MET staying the universal fallback).
+  **Read before proposing wearable work, before quoting any platform's API terms
+  FROM THIS ENTRY (they are marked UNVERIFIED — model knowledge, not a source
+  read), and before building a second running-import path.** Writing our workout
+  out and reading their run in share one permission and one channel; platforms
+  charge nothing per user and the payload is trivial, but the phone health stores
+  are reachable only from a NATIVE app (live HR needs a watch app too), so it
+  cannot precede P5. Recommended AGAINST the paid per-user aggregators.
+  **Two things worth more than the technical answer: write OUT before reading IN**
+  (closing the user's rings is cheaper and more loved than ingesting their data),
+  and ~~the pilot audience is Jorhat…~~ **STRUCK by Kd the same day — "my target
+  is all over world including assam that is jorhat". JORHAT IS THE PILOT, NOT THE
+  MARKET**, and Part 3 §6.3 (*Worldwide*) already said so; on a worldwide target
+  the value is HIGHER than the struck claim, not lower. **Standing lesson: a fact
+  about the PILOT is not a fact about the USERS** (:4355's shape). **Hazard
+  recorded early:
+  we already have GPS running, so an imported watch run can DOUBLE the same run
+  unless dedupe is in that card's definition.** Health data lands inside the open
+  privacy question at :592. Tracked NOWHERE before today (grep-verified); now has
+  a ⚪ `OWED.md` line.
+- **:13746** — 2026-08-21 — **ADDENDUM to :13659: I raised the worker cap on a
+  guess, the measurement killed it, and what it uncovered is worth more than what
+  it was aiming at.** **Read WITH :13659 — it CORRECTS two of that entry's
+  claims.** (1) **The conditional worker cap is REVERTED**: the full suite flakes
+  on a local database at 4 workers TOO, so the cap was never what stood between
+  this suite and green. (2) **"api 536/536 in 51 s" was true of a RUN, not the
+  SUITE** — five full local runs went 536, 535, 532, 535, 536, and the gate
+  figure is withdrawn. **:13247's own Low-3 recurring, in the session that fixed
+  it, quoted by the chat that wrote the fix.** **What the failed attempt FOUND is
+  the point: NINE test files call `seed()` against one shared database while two
+  assert exact GLOBAL counts** — pinned, not guessed (those two pass together 3/3
+  and alone 2/2, failing only inside the full run). **PRE-EXISTING; Neon's latency
+  was HIDING it** by spreading the suites out, so the fast database made it
+  visible rather than causing it. **A SCOPED run — one file or a `-t` filter,
+  i.e. what a mutation sweep runs — is unaffected**, so the audit instrument is
+  untouched. Caught only because Kd asked whether local testing could harm
+  quality, which meant running the suite more than once: **a number quoted from
+  one run is a coin toss with a citation.** OWED line added; the fix is isolating
+  the seed-asserting suites, never a worker count.
+- **:13659** — 2026-08-21 — **THE TESTS STOP TRAVELLING TO SINGAPORE: a local
+  Postgres for the suite and the mutation sweep, and :5857's UNVERIFIED saving is
+  now MEASURED.** **Read before running a mutation sweep, before quoting a
+  suite's duration, before touching `vitest.config.ts`'s worker cap, and before
+  assuming the Neon branch is the only database available.** Kd asked for it
+  directly after five review rounds whose audit cost was dominated by a database
+  in `ap-southeast-1`. **Measured, same machine same day: round-trip `select 1`
+  202.9 ms → 2.7 ms · `orgs.sweep` (18 tests) 158.2 s → 10.8 s (14.7×) · two org
+  suites DID NOT FINISH in 10 min on Neon vs 77 s local · whole api suite 536
+  tests in 51 s local.** **The did-not-finish row is a LOWER BOUND, written as
+  one, and NO full-suite Neon figure exists so none may be quoted.** The governing
+  row is the second — **a sweep runs a suite once PER MUTANT**, so the clock
+  card's six DB mutants were ~16 min of Singapore against ~1 min local, matching
+  :5857's own ~18 min. **It was WIRING, not building**: `docker-compose.dev.yml`
+  has run `pgvector/pgvector:pg16` on port 5433 since the deploy-infra card —
+  migrate, seed, 536/536, 47 tables, all three extensions verified. **The native
+  PostgreSQL 18 already on the dev machine was REJECTED on evidence** (the schema
+  needs `vector`, a third-party build on Windows; the compose image bundles it,
+  and port 5433 means they never collide). Three small pieces: a `test:local`
+  script that **refuses** a missing/empty/unseeded database with the fixing
+  command — **both refusals proven by causing them** · ~~the 4-worker cap is now conditional~~ **— TRIED AT 8 AND
+  DISPROVEN THE SAME DAY: the full suite flakes at 4 TOO, so the cap was never
+  the thing standing between this suite and green. Reverted; do not re-try.
+  What the attempt uncovered is better than what it was aiming at — NINE test
+  files call `seed()` against one shared database while two assert exact GLOBAL
+  counts, a PRE-EXISTING race Neon's latency was HIDING (five full local runs:
+  536, 535, 532, 535, 536). A scoped run — one file or a `-t` filter, i.e. what
+  a sweep does — is unaffected. Own OWED line** · the sweep harness now **prints its database, host
+  only never the url** (R3.10). **The guard built that same morning paid for
+  itself**: the new script landed in `apps/api/scripts`, the directory round 5's
+  Low-5 added to the walk, so it was parse-checked with no edit to the guard —
+  which is the only thing covering that directory, eslint and tsc both being blind
+  to it. **STILL OPEN and not smuggled into "done": the severity class per mutant**
+  (:5857 rule 4a item 1) is untouched.
+- **:12660** — 2026-08-20 — **KD RULING: A REMOVED MEMBER MUST BE TOLD —
+  silence was the other half of the bug.** **Read before touching
+  `/v1/orgs/mine`, `gymStatusRows`, or any copy about a membership ending.**
+  **CORRECTS a choice Kd made four hours earlier** and that should never have
+  been offered to him: when :12518 C/H-1 found the app calling a removed member a
+  stranger, "say nothing" was put to him as an equal option and he took it —
+  **fixing a false sentence by removing the sentence is a quieter defect, not a
+  fix.** His wording ("should say they were rejected") was CORRECTED before
+  building and he was told why: they were let IN and then taken OUT, so refusal
+  copy would be a second untruth. Built sentence: **"You're no longer a member of
+  {gym}"**, plus the two true things people fear losing (all training data is
+  still theirs; the free app remains). **No Try again link.** The fact lives in a
+  SEPARATE `formerOrgs` list on `/v1/orgs/mine`, never a row in `orgs`, because
+  **the console reads the same response** and a removed gym in `orgs` would enter
+  a console list whose every read the server 404s. 14-day window
+  (`DECIDED_VISIBLE_DAYS`); withheld once the person REJOINS. **`.default([])` in
+  the shared contract is deliberate** — `orgsApi.js` treats a contract mismatch
+  as a hard failure and the card treats a failed read as silence, so a REQUIRED
+  field would destroy the whole gym card during any web-newer-than-API window to
+  add one sentence (R4.4's expand-then-contract, applied to a response). **Rank:
+  `removed` is BOTTOM (0), below `refused`** — recency, not importance, and it
+  holds ONLY while :12518's server fix keeps withholding a superseded refusal.
+  Both server tests watched RED against mutants, restored and verified.
+  **The lesson is mine: round 1 caught the app saying something FALSE and could
+  not catch it saying NOTHING, because no reviewer, test or mutant flags an
+  ABSENT sentence — the USER did.** Second finding on this card that only a human
+  at a screen produced, and the argument for the SMOKE gate existing.
+- **:12600** — 2026-08-20 — **KD RULINGS on an outside architecture review:
+  PER-SEAT PRICING = NO, PHONE OTP = NO, STRIPE = YES.** All three struck or
+  confirmed in one message. **Read before proposing any seat-based price, any
+  phone/SMS verification, or any payment provider substitution.** Per-seat and
+  phone OTP are STRUCK items (:456's precedent) — **no `OWED.md` line, nothing to
+  build, do not re-propose.** The consequence of striking per-seat that a later
+  chat must ACCEPT rather than re-argue: **roster hygiene is ours to enforce
+  technically, not the gym's to enforce commercially.** Stripe merely CONFIRMS
+  Part 5 §4, **but the ruling does not dispose of the factual risk** — the claim
+  that new Stripe signups are closed to India-based founders is **UNVERIFIED**
+  and obliges a CHECK before P3.5, never a chat's silent substitution of another
+  provider; own ⚪ `OWED.md` line. **Standing lesson: an outside answer is
+  GROUNDED before it is relayed** — this one was ~60% already built or already
+  ruled here (computed entitlements, the pending-then-confirm join door, seat
+  accounting, server-side gating, history surviving removal), and relaying it
+  unchecked would have reopened three built things and one Kd ruling as if they
+  were open questions.
+- **:8771** — 2026-08-16 — **KD RULING: users NEVER add their own exercises —
+  the catalog is CLOSED, deliberately.** A struck item, not a deferral (:456's
+  precedent); no `OWED.md` line, nothing to build. **Read before proposing a
+  custom-exercise feature, before adding any WRITE route under `/v1/exercises`,
+  and before letting a user type a free-text exercise name anywhere it can reach
+  a saved workout.** Already true in code and verified rather than assumed —
+  the exercises module exposes exactly two routes, both `GET`. **The reason is
+  that counting and scoring are not free**: every row carries family, tier, MET
+  and tracking mode, and a camera-graded one carries hand-ported thresholds
+  (R5.4), so a user-typed row is either uncountable or scored against numbers
+  nobody chose — R0.2/R5.6. **Consequence: no USER path can produce an
+  unresolvable exercise name**, which bounds (but does not close) the same day's
+  `syncClient` guard hazard. **Does NOT restrict growing the catalog** — that is
+  P4's production line, one reviewed row plus a re-seed, and Kd asked expressly.
+- **:5857** — 2026-08-07 — **KD RULING: the TEST AUDIT is SCOPED BY SEVERITY, not
+  applied uniformly.** Calibrates :5348's rule 4; **does NOT weaken it — the audit
+  stays mandatory.** Slow database-backed mutants are spent ONLY on what rules
+  1/1a call Critical/High (ownership · numbers a user sees · anything that
+  saves/syncs/queues · money), **never** on wording, ported constant tables,
+  comments, naming or layout; **database mutants run only on cards that change
+  SERVER behaviour**; and the sweep should point at a LOCAL Postgres when the card
+  allows. **Measured cause:** the summary card's audit took ~40 min, ~18 of it six
+  DB mutants each re-running the whole suite against a Neon instance in another
+  country — giving the same ~3 minutes to a meal-threshold boundary as to "can a
+  stranger read your workout", while everything it actually caught sat in the
+  Critical/High rows. **The real argument is alignment:** the audit's cost now
+  follows the same axis as the severity gate, where before the gate and the
+  instrument graded risk differently. **UNVERIFIED and owed a measurement:** the
+  local-Postgres saving is untimed — quote no number until it is. The tool has no
+  severity classes and no local-DB switch yet; own `OWED.md` line.
+  `CLAUDE.md` Part I §2.5 rule 4a.
+- **:5807** — 2026-08-07 — **KD AMENDMENT to the severity gate: WHAT A USER CAN
+  SEE AND IS FALSE IS CRITICAL/HIGH.** ADDS to :5348's rule 1, replaces nothing
+  ("add it but don't delete previous rules"). A finding is Critical/High if a user
+  could see something **FALSE** — a wrong number, a wrong state, a promise that is
+  not true — **or** is blocked from finishing something. **Cosmetic-but-TRUE stays
+  Low** (spelling, wording, naming, layout). **The test is not "is it on screen",
+  it is "is it on screen AND wrong".** Prompted by the two defects at :5618 that
+  fell through the original list — "+60 XP" when 50 was awarded, and "31s" above
+  "1 min total" with a tooltip explaining rest that never happened. **NOT the old
+  VISIBLE/NOT-VISIBLE stopping rule returning**: that decided TICKING, this decides
+  CLASSIFICATION. Carries the standing point Kd's question produced: **reviews were
+  never the protection** — both of that card's visible defects were found by his
+  BROWSER and by a SURVIVING MUTANT, and what is most likely to bite after deploy
+  is on `OWED.md` and invisible to any review. `CLAUDE.md` Part I §2.5 rule 1a.
+- **:5348** — 2026-08-06 — **KD RULING: THE FIXED REVIEW/FIX PROCESS. Read this
+  BEFORE running or closing any review round — it changes when a packet ships.**
+  Six standing rules: a **SEVERITY GATE** (Critical/High = security, data loss,
+  privacy, money, broken core flows; everything else is Low) where a packet ships
+  on **ZERO Critical/High in a round** and a Low finding **never buys another
+  round** · **diff-only re-reviews** · a **regression test with every
+  Critical/High fix** · a **test audit** (break what each test claims to check;
+  tests that stay green are liars) · **permanent guards** for recurring bug
+  classes · **minimal fix diffs**. **Escape hatch: two consecutive rounds with
+  Criticals in the same subsystem ⇒ stop patching, flag to Kd, that subsystem gets
+  a REDESIGN.** Findings are listed and approved BEFORE any code changes, fix
+  rounds included. **Supersedes the two-round cap (:2866) as the stopping
+  condition** — rounds now end on an outcome, not a count — and **supersedes the
+  VISIBLE/NOT-VISIBLE axis of :5307/:2365**, replacing it with Critical/High vs
+  Low. **NOTHING IS RELAXED: every finding is still FIXED before the packet
+  closes, whatever its severity** — Kd corrected a draft of the entry that said
+  otherwise, and the correction is recorded inside it. **`OWED.md` is UNCHANGED**
+  and stays the authority for every deferral; `BACKLOG.md` is a LOG of Low
+  findings and their fixes, never a second deferral list.
+- **:2365** — 2026-07-29 — **THE STOPPING RULE** (per-card, XP display): a
+  finding blocks a 🔴 tick only if a user could see it on screen. Everything
+  else is fixed but holds nothing. Precedent: PostWorkout, :1678.
+  **⚠️ SUPERSEDED ON SCOPE by :5307 and ON AXIS by :5348 — read both first.** Its closing paragraph
+  ("does NOT apply to any OTHER card … never a general licence to stop
+  reviewing") no longer holds: **Kd ruled the stopping rule STANDING on
+  2026-08-06.** Everything else in :2365 stands, including the VISIBLE /
+  NOT-VISIBLE tagging requirement. Its security/data-loss exception is a KD
+  RULING at :5258 and binds.
+- **:5308** — 2026-08-06 — **KD RULING: THE STOPPING RULE IS STANDING, not
+  per-card.** **⚠️ SUPERSEDED ON AXIS THE SAME DAY by :5348 — read that first.**
+  Its VISIBLE/NOT-VISIBLE test is replaced by Critical/High vs Low. **Its
+  "everything found is still FIXED" half STANDS, word for word** — Kd said so
+  explicitly when correcting a draft that had it reversed. Settles the question
+  :5258 opened. Applies to EVERY card
+  automatically; a finding blocks completion only if a user could see it, EXCEPT
+  security and data-loss findings (:5258), which block regardless.
+  **EVERYTHING FOUND IS STILL FIXED before the card closes, whatever its
+  severity — the rule governs TICKING, never fixing.** Supersedes :2365 ON SCOPE
+  ONLY. The case AGAINST is recorded in the entry and Kd was shown it before
+  ruling: :2365 was per-card because it answered ONE card's measured
+  fact-pattern (eleven rounds of diminishing returns), and generalising hands
+  that leniency to cards that have not earned it — bounded by the fact that a
+  non-visible finding is still fixed, so what generalising costs is the right to
+  hold a card OPEN over one. **What limits review effort is the two-round cap
+  (:2866), not this.** **The lesson: four cards applied a per-card ruling as
+  standing, and the chat that noticed had written it into two review prompts
+  itself — it surfaced only because Kd asked an operator question about the
+  PROCESS. A rule nobody re-reads becomes whatever chats have been doing
+  with it.**
+- **:5259** — 2026-08-06 — **KD RULING amending the stopping rule, and the drift
+  it exposed. This BINDS.** Kd first declined authorship, then reversed it
+  deliberately — "if other chats give more importance to my rule then write as my
+  rule" — having been told that a Kd ruling overrides a chat's fresh judgment and
+  may not be re-litigated on a chat's opinion. The wording is a chat's draft; the
+  RULING is his. **The ruling:
+  security and data-loss findings block a 🔴 tick REGARDLESS of visibility** — a
+  cross-account leak or a silently dropped write is invisible to its victim by
+  construction, so visibility is the wrong test for those two classes; the cap
+  does not close a card over one. Written BEFORE the workout-loop card because
+  that is the first card since the rule existed to touch other people's data.
+  **The drift is the larger finding and is NOT settled**: the per-card rule has
+  been used as standing for four cards, written into both exercise-library
+  review prompts by the chat that then closed the card. **Cost so far, measured:
+  nothing** — every finding was fixed or given an OWED line; the rule only ever
+  decided TICKING. Record-integrity failure, not a quality hole.
+- **:2692** — 2026-07-30 — **THE CAP** (per-card, PostWorkout summary reader):
+  round 3 is the last review round, ruled BEFORE it ran. Zero VISIBLE ⇒ the card
+  closes and ticks; a VISIBLE finding is fixed and the card closes ON that fix.
+  Round 3 exists for ONE reason — round 2 fixed the mutation harness and that fix
+  is unaudited, so every "21 RED" figure rests on it.
+- **:2158** — 2026-07-29 — **THE CAP** (per-card, XP display): round 11 was the
+  last review round; no round 12. Includes the recorded lesson that **eleven
+  rounds was a fault of the CARD's scope, not the code** — a repoint touching
+  more than one screen's payload is more than one card.
+- **:2398** — 2026-07-30 — **this file's READ PATH is split** and this index is
+  the instrument: grounding = this index IN FULL + §1/§2 read in the DECISIONS.md
+  ORIGINAL + the entries the task touches (CLAUDE.md:51-89). Coverage
+  command-verified the same day: 97 headings, 72 cited by exact line, 25 inside
+  declared ranges, **none unmapped**. The index is a POINTER — cite DECISIONS.md,
+  never this file.
+
+Standing rules that live in CLAUDE.md, not here — the no-removal rule, the
+deferral rule (every deferral gets an OWED.md line in the same commit), the
+grounding rule, Part I.5 verification doctrine, Part I.6 session start.
+
+- **:2866** — 2026-08-01 — **Kd RULING: finish the CODE first, buy the server
+  later.** P2.8 splits into a CODE half (every screen off the old backend,
+  verifiable locally — proceeds now) and a DEPLOY half (VPS, secrets, backup
+  drill, the DPDP worker actually running — deferred to the deployment moment).
+  Carries the agreed card ORDER for the rest of the repoint, and a **standing
+  two-round review cap set BEFORE each card runs** rather than after a bad
+  fact-pattern — **the CAP is SUPERSEDED by :5348 (2026-08-06): a packet now ships
+  on ZERO Critical/High findings in a round, not on a round count. Everything else
+  in this entry stands.** **The DPDP Day-14 worker must be live before the first
+  real SIGNUP, not merely before the first deploy.**
+- **:2825** — 2026-07-31 — two false claims about CI and the branch strategy,
+  corrected. **`web-repoint` is a Kd-RULED long-lived branch (:280) that merges at
+  the P2.8 cutover — it is not an oversight, do not propose merging it early.** PR
+  #29 has been open on it since Card 1, so CI has gated every push all along.
+  **Standing lesson: an index entry you skipped is not evidence of absence** — the
+  ruling was at an entry the index named and the chat chose not to open.
+- **:22215** — 2026-08-28 — **KD RULING: A GYM WITHOUT A LIVE PLAN GETS NOTHING.**
+  **Read before planning the trial-expiry card, any console paywall or price
+  screen, or anything touching `COUNTRY_CURRENCY`.** The trial is FORCED and
+  unskippable at gym creation; at its end an unskippable SUBSCRIBE prompt appears
+  and the console is unusable except the pay path. **A lapsed gym's members fall
+  back to the FREE app — arm A, chosen against a locked-out arm put beside it —
+  never locked out** (agrees with Part 3 §4.2). **Canada, the UK and the euro area
+  are billed in US DOLLARS**, settling :21157's gap; the no-fallback-currency rule
+  (:10010) is untouched. Measured in the entry, not quoted: the gym half of the
+  entitlement UNION requires a live subscription, so **a gym that never trialled
+  grants its members nothing** (Kd's first question — no defect); and there is
+  **exactly one `INSERT INTO subscriptions` and no `UPDATE` anywhere**, so a trial
+  never ends and `'trialing'` grants for ever. Build order agreed: expiry job →
+  forced trial prompt → subscribe prompt → real payment. **NOT ruled:** the
+  read-only window's length (§4.2's 14 days stands), second-trial copy, prices
+  above 2100 members. Paddle (:17357) remains unbuilt and unauthorised by this.
+- **:22497** — 2026-08-28 — **THIS FILE HIT THE WALL IT WAS BUILT TO PREVENT, AND
+  KD RULED THE FIX. Read before changing the grounding rule, before adding a
+  section here, before editing `tools/build-decisions-triggers.mjs`, before
+  deciding where a new ruling's index line goes, and before proposing any
+  "cleanup" of the decision record.** Measured before anything changed: **492 KB
+  / 6,500 lines / ~123k tokens — the same size that made `DECISIONS.md`
+  unreadable on 2026-07-30.** The 2026-07-30 amendment assumed this file would
+  stay one line per ruling; chats wrote case reports into it instead. **That the
+  instrument reproduced the disease is the finding: any index that grows the way
+  the thing it indexes grows ends here, so whatever replaces it must be
+  GENERATED.**
+  **KD'S CONDITION SHAPED THE ANSWER** — *"does not get summarised things instead
+  of details"* — so **nothing was summarised, shortened, reworded or deleted**;
+  only how a chat FINDS a ruling changed. **(a) `DECISIONS-TRIGGERS.md` is
+  generated** from the `Read before …` sentences 123 rulings already wrote about
+  themselves — 418 phrases, verbatim, plus a §2 naming every ruling that declares
+  none; staleness-checked on the ROOT `lint`. **(b) §1's 1,631 lines of finished
+  card history moved, byte for byte, to §1B.** Always-read went **~6,500 → ~1,427
+  lines**.
+  **THE SAFETY PROOF RAN BEFORE A LINE MOVED: all 36 moved entries are surfaced
+  by an always-read file — 30 by a trigger, 6 by title and pointer — ZERO
+  hidden**, and the move itself was made under a line-multiset invariant that
+  refused to write if anything differed.
+  **THE TOOL FOUND A DEFECT IN ITSELF and it is the part to keep:** the first
+  generator walked only `##`, losing **seven `###` addenda that declare their own
+  trigger — including `:19560`, which the same chat had cited as binding four
+  hours earlier** — and, worse, mis-attributing a child's clause to its parent
+  when the parent had none (:10726's silent shape). Parent and child now read
+  only their own spans. **Found by checking the tool's OUTPUT against this file,
+  not by reading the tool.**
+  **THE LIMIT, in the generated file's own header: a trigger list NARROWS a
+  search and can NEVER CLEAR one** — 177 of 310 declare no trigger, and :19256 is
+  the recorded cost of forgetting it. `turbo run lint` RED is PRE-EXISTING and
+  was re-proven on a stashed tree (:21057's global-pnpm shadowing).
+
+## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
+
+**NOT read every session. Read an entry here when your task touches what it is
+about** — the same terms §§2–7 have always been on. Nothing was shortened,
+reworded or deleted to put it here; these are the identical lines, filed where
+the read-path rule already sent them.
+
+**WHY THEY MOVED (2026-08-28, Kd-approved).** §1 said *"always relevant"* and had
+become 2,245 lines, of which **1,600+ were finished card records** — T3 rounds,
+PROVE figures, "the packet ships". A chat obeying the grounding rule read all of
+it before doing any work, which is the exact failure the 2026-07-30 amendment
+was written to fix, recurring one level up.
+
+**THE SAFETY PROOF, RUN BEFORE A LINE WAS MOVED AND NOT ASSERTED AFTERWARDS:**
+every one of the 36 entries below is surfaced by a file that IS read every
+session — **30 by a trigger phrase in `DECISIONS-TRIGGERS.md` §1, and the other
+six (`:20986`, `:14174`, `:14147`, `:14013`, `:12832`, `:12731`) by title and
+pointer in that file's §2.** Zero were hidden. **Those six are the ones to give a
+`Read before …` sentence when somebody next touches them** — a title in a gap
+list is weaker than a trigger, and that is stated rather than glossed.
+
 - **:22145** — 2026-08-28 — **THE GYM TRIAL, WEB HALF, T3 ROUND 3 (diff-only):
   ZERO Critical/High — THE PACKET SHIPS.** Reviews `13fec81`. One Low, fixed.
   **The escape-hatch streak is broken** (rounds 1 and 2 both put a Critical in
@@ -412,83 +1077,6 @@ mid-file: re-derive them with
   **L-4 arrived TRUNCATED and was RE-DERIVED rather than guessed**, and is declared
   as a re-derivation. **The Critical/High fix carries no test and that is stated
   plainly: it is a document.** Round 2 is diff-only.
-- **:21157** — 2026-08-27 — **KD OPENS THE TRIAL TO SELF-SERVE, AND THE FIRST
-  `subscriptions` ROW IN THIS PRODUCT'S HISTORY GETS WRITTEN — ~~the seat cap, the
-  30-day clock and §4.2's banner stop being inert~~ THE SEAT CAP DOES; the other
-  two do NOT (corrected by T3 round 1, the entry below).** **Read before touching
-  `startGymTrial`, before writing `subscriptions` from a SECOND place, before
-  adding a privilege to `ORG_PRIVILEGES`, before calling the seat cap inert, and
-  before proposing an approval step for gyms.**
-  **REVERSES :11072 RULING 1** (*"a gym's paid plan or TRIAL activates only after
-  Kd approves the gym"*): *"a gym can start on own without my approval but i will
-  have the power of removing them or pausing their use if i find them to be
-  fraud"*. **The reversal was MEASURED before it was made, and the measurement is
-  the part to keep: the approval gate never protected him from the bill he was
-  afraid of.** Exposure is per ACCOUNT and bounded by the daily quota, which IS
-  built — free 2 scans/day, gym member 5 — so at the measured **$0.00212/scan**
-  (:9944) a maxed fake account costs **$0.127/month** free and **$0.318** inside a
-  gym: **the gym multiplies the damage by 2.5, not by a thousand.**
-  **WHAT IS MISSING IS THE SPEND CEILING AND IT IS NOT BUILT** — v1 §9.3 promises
-  an alert and a soft-degrade and says *"bankruptcy-by-API-bill is now
-  mathematically impossible"*, while `costs:gym:{id}:{month}` has ONE writer (the
-  switched-off coach) and NO reader; own `OWED.md` line **with a deadline: before
-  the app is on the internet.** **KD ASKED WHICH TO BUILD FIRST AND THE ANSWER WAS
-  A DEPENDENCY, NOT A PREFERENCE:** the ceiling meters per GYM against 3× *the
-  gym's fee* and spend reaches a gym only through a live subscription — measured,
-  **1 of 120 cost rows carries a `gym_id` at all**, nobody can reach the app
-  (`localhost:3000`; server-live is stage 8), and total spend ever is **≈5 cents**.
-  **The two abuses the gate existed for both moved:** friend-pooling is already
-  dead by Kd's own 5-vs-20 ruling (a gym member gets a WORSE product than the $10
-  plan), and trial-chaining is closed by Part 5 §12's *"allowed once"* — **one
-  trial per OWNER, ever**, not per gym.
-  **SHIPPED:** `POST /v1/orgs/:gymId/trial`; migration **`0015`** adds
-  `billing.manage` (backfilled onto every owner) and widens
-  `subscriptions.provider` to Part 5 §0 addendum A's list VERBATIM — **only that
-  one line of the addendum** (R1.1). **`billing.manage`, never `role === "owner"`**
-  (:11429's seam; :15534's C/H-1 is the cost), a SEPARATE tick from `org.manage`
-  on :13803's precedent, **and it joins `LAST_OWNER_REQUIRED_PRIVILEGES`, closing
-  an `OWED.md` line rather than opening one** — :11429 rule 2 named two lockout
-  doors and the guard covered one. **The trial band is the LOWEST-capped active
-  monthly plan in the gym's currency, not a literal 300**, so :19129's ruling
-  survives a re-priced book; `NULLS LAST` is load-bearing (a capless tier would
-  otherwise BE the trial).
-  **THE 🔴 IT CLOSES: :19656 C/H-3's requirement** — *"whatever creates a gym
-  subscription MUST take `lockOrgRow` on that gym first"* — first statement in the
-  transaction, with **O127** and a two-client concurrency test as the guard. The
-  partial unique index is deliberately NOT caught: a 23505 cannot happen while
-  every writer takes the lock, so swallowing it would hide a future writer that
-  skipped it.
-  **AUDIT — four of six findings are INSTRUMENTS. (1) A FIXTURE WENT STALE BECAUSE
-  THE FUTURE ARRIVED**: `schemas.test.ts` used `billing.manage` as its stand-in for
-  *"a privilege a newer server knows"* and this card minted it; fixed as a CLASS
-  with a synthetic token no vocabulary can mint, plus a positive control asserting
-  the REAL newest privilege parses. **(2) TWO LOCKOUT TESTS WENT RED AND THE GUARD
-  WAS RIGHT** — their controls left an owner without billing, which is the lockout;
-  fixed by giving the controls both keys, NOT by loosening the guard, and the
-  rule-3 regression is its own test. **(3) `node --check` caught a raw newline in a
-  mutant string** (:13336's guard, on its own class). **(4) MY EDITS DRIFTED TWO
-  ANCHORS AND THE PRE-CHECK ABORTED BOTH TIMES before a byte was written** — O6
-  matched twice, O121 matched nothing; **neither allow-listed, neither re-aimed at
-  whichever line came first** (:15770), each given a SIBLING (**O133**, **O134**).
-  **(5) The lock line was made unique IN THE SOURCE** because two-line anchors are
-  :17676's 99-strong CRLF hazard.
-  **PROVE, all LOCAL: `orgs.routes` 130/130 (+10) · `db.migration` 10/10 · four
-  more suites 45/45 · shared 51/51 · web 1234/1234 unchanged · tsc exit 0 and
-  PROVEN REAL by planting a type error · eslint clean on nine files · SWEEP a
-  stated SUBSET of 134: 10 RED, 0 ALIVE, 0 never ran.** Both constraints read back
-  out of `pg_get_constraintdef` after migrating (:20222's lesson).
-  **NOTHING TICKS BUT THE LOCK LINE — no screen, so NO SMOKE; T3 UNRUN.** Three
-  gaps found and not fixed, each with an `OWED.md` line: **the dev branch Kd's
-  browser reads still holds the PRE-:18488 price book and lacks `0015`** (third
-  recurrence of :15927); **Canada, the UK and the euro area cannot trial at all**,
-  because `COUNTRY_CURRENCY` gives them CAD/GBP/EUR and the book is USD+INR while
-  :17366 ratifies *"US · CANADA · EUROPE, one USD book"* — ~~**the app and the
-  ratified book disagree and it is Kd's to settle**~~ **SETTLED 2026-08-28 at
-  :22215 — those three are billed in US DOLLARS; the fix is `COUNTRY_CURRENCY`,
-  not three new price books**; and **neither `org.manage` nor
-  `billing.manage` has a TICK BOX** on the Staff screen, so neither can be
-  delegated through the product (no data loss — `unknownPrivileges` carries them
-  through a save, a guard whose own comment predicted a billing tick).
 - **:21057** — 2026-08-27 — **THIS FILE'S POINTERS ARE NOW CHECKED BY A MACHINE,
   and 19 of 212 were wrong.** **Read before adding a pointer here, before
   "fixing" a stale line number by hand, and before extending the guard to inline
@@ -1146,173 +1734,6 @@ mid-file: re-derive them with
   both in ONE invocation 129/129 · shared 51/51 · tsc exit 0 · eslint clean ·
   SWEEP a stated SUBSET of 126: 15 RED, 0 ALIVE, 0 never ran.** **NOTHING TICKS
   — no screen, no smoke, and the DIFF-ONLY RE-REVIEW is the remaining gate.**
-- **:19560** — 2026-08-26 — **ADDENDUM to :19366 — KD FREEZES A GYM'S COUNTRY
-  ONCE IT IS PAYING, AND STOPPED ME IMPLEMENTING AN OPINION AS A RULING.**
-  **Read before touching the country on any org route, before writing anything
-  that changes `currency_display`, and before building the billing card.**
-  **SUPERSEDES :19366's "the country is freely editable" half**; everything else
-  there stands. **RULED: a gym's country — and so the currency it is billed in —
-  freezes the day it goes on a paid plan**; `PATCH /v1/orgs/:gymId` answers 409
-  `country_locked` for any gym on a subscription past `trialing`. Name, city and
-  time zone stay editable, **with the control driven on the same locked gym**,
-  because a route that refused a paying gym EVERYTHING would be a different
-  product and nothing else in the suite could tell them apart (:7104's PG1).
-  **THE PROCESS FAILURE IS MINE AND IS THE PART TO KEEP: he said *"a gym should
-  not be able to change the country"*, I started implementing it, and he stopped
-  me — *"wait men i just said an opinion i need your recommendation as well is it
-  correct decision what do production grade applications do?"*. I had taken an
-  OPINION for a RULING.** That is :17765's failure MIRRORED — there a chat
-  laundered its own call into his mouth, here I promoted his musing to law —
-  **and both are one defect: not reading the ATTRIBUTION of a statement.** The
-  tell was available: no option list, no gate. **When he states a preference
-  mid-flow, the response is a recommendation with evidence, not a diff.**
-  **THE EVIDENCE WAS WEB-SEARCHED, NOT RECALLED (V5), because "what do production
-  applications do" is exactly what model memory answers confidently and wrongly:
-  Stripe LOCKS a customer's currency once they have been invoiced** (dashboard
-  dropdown disabled; API *"Can't combine currencies on a single customer"*;
-  workaround = new customer or cancel-and-resubscribe) **while leaving the
-  ADDRESS editable — updating the country is the documented way to fix a tax
-  location, changing future invoices at the next cycle with no proration. Paddle,
-  the route ruled at :17366, is STRICTER and closest to Kd's instinct: it refuses
-  a COUNTRY change on an existing subscription outright, for tax reasons, and its
-  own answer is cancel-and-resubscribe. BUT NEITHER FREEZES FROM DAY ONE** — that
-  is the finding that moved the ruling, since before money moves there is no
-  invoice to protect and a gym that mistyped its country on the FIRST screen of
-  signup would be stuck for ever.
-  **THE CARD-LESS 30-DAY TRIAL (:16548) IS DELIBERATELY NOT A LOCK** — a
-  `trialing` gym has paid nothing, so freezing there traps the typo at the moment
-  before it starts to cost. Every other status locks, `canceled` and `expired`
-  included, because an ended subscription may still have raised invoices and
-  over-locking is the safe direction. **It reads `subscriptions.status`, not
-  `invoices`**: an invoice cannot exist without a subscription
-  (`invoices.subscription_id` NOT NULL) and Part 5 §3's machine leaves `trialing`
-  on first payment, so the question is answerable from a column the billing card
-  must maintain anyway — **that dependency is written onto the `OWED.md` line
-  rather than left implicit.** **The check is INSIDE the transaction and under
-  the org lock**: it is a check-then-act guarding money, and outside the lock a
-  subscription committing between check and UPDATE moves a paying gym's currency.
-  **CONSEQUENCE RECORDED, NOT DISCOVERED LATER: a paying gym that picked the
-  wrong country cannot fix it itself** — the ADMIN PANEL's job beside :19016's
-  "mark this gym as paid", own ⚪ line, and both providers make it a support
-  action too. Bounded and currently empty (nothing inserts into `subscriptions`).
-  **AUDIT — two mutants, and the SECOND is the one worth having: O123 deletes the
-  lock; O124 deletes the TRIAL CARVE-OUT so the lock fires too EARLY. A lock has
-  TWO failure directions and a test that only checks it FIRES is satisfied by a
-  door that is simply shut** (:7104's PG1). Both RED.
-  **PROVE, final bytes, LOCAL: orgs.routes 117/117 (+1) · db.migration 10/10 ·
-  both in ONE invocation 127/127 · shared 51/51 · tsc exit 0 · eslint clean on
-  four files · SWEEP a stated SUBSET of 124: 13 RED, 0 ALIVE, 0 never ran.**
-  **Nothing ticks — no screen, no smoke, T3 UNRUN.** The ❓ currency line raised
-  that morning is CLOSED by this ruling, struck and ticked rather than deferred.
-- **:19256** — 2026-08-26 — **CORRECTION TO :19129 — ITS COST ANALYSIS PRICED A
-  FEATURE KD HAD ALREADY KILLED.** **READ THIS BEFORE :19129.** The AI chat coach
-  was ruled DROPPED 2026-08-18 (:9604 §5, *"OFF, NOT DELETED"*) and confirmed
-  2026-08-24 (:16606 §9); :19129 §2 priced it anyway and declared every band
-  underwater. **§2's tables are VOID; §1 (the trial) and §3 (the breaker) stand.**
-  **Nothing was wrong with the documentation — it says so in SIX places across
-  four files**, and :9604 §5 even names *"the per-question Groq bill"* as what
-  retires. **THE INSTRUMENT FAILURE IS THE REUSABLE PART: the grounding rule was
-  obeyed** — §1 and §2 of this index read IN FULL — **and §4 was GREPPED for
-  `trial|seat cap|member count|300|band`. The ruling is in §4 and contains none
-  of those words. A grep is a hypothesis about vocabulary.** Worse: the chat had
-  read `seed.ts`'s live `coach: {day, 30}` and treated it as evidence the feature
-  existed — **but "OFF, NOT DELETED" leaves every seed value in place by design,
-  so the seed answers "30/day" forever.** **STANDING: before pricing any feature,
-  grep its NAME plus drop/struck/off — never the cost vocabulary.** Also: Kd's
-  *"what is this? a member also gets 30 coach messages a day"* was incredulity at
-  a dropped feature being billed, and **the chat explained what a chatbot is to
-  the person who designed the product** — *"are you dumb or blind"*. **A question
-  that sounds naive from a domain owner is a challenge to your premise.**
-  **REAL COSTS, coach removed:** scans only — $0.255/member/month on today's Qwen
-  constants, $0.024 after the Gemini swap. **The ratified book is correct only on
-  the far side of that swap, which is NOT BUILT** (`OWED.md:4225`): at the
-  ceiling on today's code, band 1 is $76.50 against $35. **THE ONE GENUINE
-  DEFECT IS IN THE CODE: the coach is ruled off and still WIRED ON eight days
-  later** — `apps/web/src/App.jsx:23,122` and `apps/api/src/app.ts:24`.
-- **:19129** — 2026-08-25 — **KD CAPS EVERY GYM TRIAL AT 300 MEMBERS.**
-  ⚠️ **ITS COACH COST ANALYSIS IS VOID — READ :19256 FIRST.** The trial ruling
-  below is unaffected; every figure about the coach is not.
-  ~~and his own challenge to the cost number finds THE COACH ALLOWANCE WAS NEVER
-  PRICED INTO ANY BAND~~ **— STRUCK: the coach was already dropped (:9604 §5).**
-  **SUPERSEDES :17902 §1d in part.** **Read before building the
-  trial, the onboarding wizard or the seat cap · before quoting any gym margin ·
-  and before setting any per-member allowance.**
-  **THE RULING: no plan choice at signup · EVERY gym trials at the SAME limit,
-  300 members · the gym subscribes to its real band AFTER the trial.** Unchanged
-  and NOT superseded: no card, 30 days (:16548), the subscribe prompt, and
-  :11083's Kd-approval gate. **DEAD: "the gym picks WHICH PLAN it is trialling"
-  and "that plan is FIXED for the whole trial", plus :17902 §3's recommendation
-  4, which existed only to make the fixed plan harmless.** :17902 §3's
-  recommendations 2/3/5 (the 90% banner · *"This gym is full — ask at the front
-  desk"* · subscribing early as the escape hatch) **matter MORE now**, the wall
-  being certain for every gym above 300 rather than only for one that picked
-  badly. He confirmed knowing an 800-member gym gets only 300 through the door.
-  **THE CHAT RECOMMENDED AGAINST THE CAP, WAS OVERRULED, AND THE OVERRULE WAS
-  RIGHT — this is the part to read.** The recommendation rested on ~2.4¢/member/
-  month, which counted **MEAL SCANS ONLY**. Kd answered *"a 1000 member gym all
-  member using every feature to the fullest … always need to think about the
-  worst case"*. **The omission is the coach at 30/day**, which
-  `gymMemberEntitlements` inherits untouched from the paid consumer tier.
-  ~~COMPUTED: $0.705/member/month today ($0.474 after the Gemini swap), of which
-  the coach is 64% / 95%. A full gym at its cap: band 1 $211 against $35 · band 3
-  $705 against $69 · band 5 $1,481 against $129 — EVERY BAND UNDERWATER AT THE
-  CEILING. Kd already made this exact call once for the other feature (:17366 §2,
-  20 scans → 5) and nobody applied it to the more expensive one.~~
-  **— ALL OF IT STRUCK BY :19256. THE COACH IS DROPPED; THERE IS NO SUCH BILL.**
-  Real figures, coach removed, are at :19256 §3. **§3 — THE SPEC'S BREAKER IS
-  HALF-BUILT AND ENFORCES NOTHING (this half STANDS, and is worse than written —
-  the one incrementing call site is inside the module being switched off):**
-  v1 §9.3
-  promises an alert at ₹800/gym/month and soft-degrade past 3× the fee —
-  *"bankruptcy-by-API-bill is now mathematically impossible"* — but
-  `costs:gym:{id}:{month}` is incremented in **exactly one place**
-  (`coach/service.ts:224`), **nothing reads it**, and scans and ORS never bump it
-  at all. ~~**§4 — THE COACH ALLOWANCE WAS NOT CHANGED and 30/day STANDS**; he
-  has had no costed table of options.~~ **— STRUCK by :19256: there is no
-  allowance to rule on, the feature is dropped.**
-- **:19016** — 2026-08-25 — **KD SETS THE BUILD ORDER FOR THE WHOLE PROJECT, AND
-  ASKS FOR THE ADMIN PANEL THE SPEC HAS DESCRIBED ALL ALONG AND NOBODY EVER
-  TRACKED.** **Read before proposing ANY next card, before sequencing work,
-  before telling Kd how much is left, and before building any operator tool.**
-  **THE ORDER, HIS, UNPROMPTED, NOT A CHAT'S TO RE-SEQUENCE: gym → gym members →
-  exercises 4-58 → reference video → the rest of the web → Android → iOS →
-  server live + payments → what is left → full review and test → publish.**
-  **HE ALSO CORRECTED A DRIFT AND IT BINDS** — asked "what next", the chat
-  offered CAMERA work and he answered *"we were doing the gym part and all of
-  sudden going to camera wtf lets first finsih the fucking gym"*. **Continuity
-  of thread beats severity ranking when picking a card**, unless something
-  actually blocks. **THE HONEST SIZE, MEASURED AND GIVEN TO HIM: 248 unticked
-  items** (🔴 23 · 🟡 135 · ⚪ 75 · ❓ 15); gym console 56 · old-backend screens
-  51 · improvements 30 · camera 17 · running 16 · open questions 16 ·
-  member-side 13 · legal 9 · engine debt 7. **No mobile app exists; 3 of 58
-  exercises have rules; 57 of 58 are camera-graded.** **FOUR CONFLICTS INSIDE
-  HIS OWN ORDER, put to him rather than solved quietly: every gym screen is
-  built THREE times** (:17765, his accepted cost) · **no email is ever sent** and
-  gym features need it · **paperwork has lead time and costs nothing to start**
-  (Udyam, Apple/Google programmes, Paddle) so start now rather than at stage 8 ·
-  **exercises 4-58 need ~330 recordings FROM HIM**, the biggest cost of his own
-  time in the project. **KD RULING: the four money-dependent gym items get a
-  "mark this gym as paid" ADMIN TOOL rather than a deferral** — three options
-  were put to him and moving real payments earlier was recommended AGAINST;
-  **consequence, only the Billing TAB now waits for stage 8, while the seat cap,
-  the trial and the banner go live in stage 1.** **THE ADMIN PANEL — HIS
-  QUESTION ANSWERED BOTH WAYS: yes build it, the SPEC has specified it in FIVE
-  PLACES across four files all along** (`03-part3:60` *"the separate admin
-  panel … not in this console"*, `v1:480`, `v1:570`, `part8:97`, `part8:243`,
-  `part5:404`) — **and NO, it does not endanger store review, because it must
-  never be inside a phone app**; review sees the submitted binary, and that is
-  also the SECURITY answer. **It is the ONE surface exempt from :17765's "same
-  features in both places", which governs the GYM'S console.** **THE FINDING IS
-  OURS AND IS THE DEFERRAL RULE'S OWN FAILURE MODE: the panel appears in
-  `OWED.md` and this index ZERO times.** **AND A CORRECTION OF MINE, MADE TO KD
-  IN THE SAME BREATH: I said the `admin` role "does not exist in the code",
-  which misleads** — `packages/shared/src/orgs.ts:37-38` deliberately excludes it
-  from the ORG enum and names the separate surface. **So it is not an oversight
-  of judgement but of TRACKING, which is sharper: a code comment naming a
-  surface is not an `OWED.md` line.** Now a 🔴 line, 🔴 because :11072's
-  approval gate is a ruling with NO PATH to perform it and Part 8 puts DPDP, ban
-  and breakglass tooling there. **First slice, Kd-approved: "mark this gym as
-  paid".** No estimate in days was made; do not quote one from here.
 - **:18830** — 2026-08-25 — **THE PLANS SEED, T3 ROUND 2 (diff-only): ZERO
   Critical/High — THE PACKET SHIPS. The review was WRONG about one thing, and
   finding out WHY exposed a stale line in THIS FILE that had already turned a
@@ -1485,77 +1906,6 @@ mid-file: re-derive them with
   **NOTHING IS ON A PLAN — nothing inserts into `subscriptions`, so every cap
   here is correct in the book and inert in the app; no screen, therefore NO
   SMOKE, and T3 is UNRUN.**
-- **:17902** — 2026-08-25 — **KD RAISES GYM BANDS 1–2 TO $35/$50, ROUNDS EVERY
-  BAND BOUNDARY (0–300 / 301–500 / 501–1000 / 1001–1500 / 1501–2100), RULES THE
-  FULL PHOTO EDITOR IN, AND FIXES THE TRIAL'S SHAPE.** Supersedes :17366's
-  band-1/2 USD prices and **all boundaries in BOTH books**. **Read before seeding
-  any plan or price, before touching `apps/api/src/db/seed.ts`, before building
-  the onboarding wizard or the trial, before building photo sharing, and before
-  answering Kd on whether the business works.** **BANDS 3–5, the ENTIRE INR BOOK,
-  and the $10/$5 individual tier are UNRULED — he named TWO numbers, and scaling
-  the rest by the same ~17% is INVENTING A RULING**
-  (:17366 §0's own lesson, from the session one day earlier). ❓ `OWED.md` lines.
-  **THE EDITOR IS FULL** — crop, resize, brightness/contrast/grayscale, limited
-  fonts, undo/redo, a movable/resizable stats overlay — **overruling the chat's
-  recommendation to ship only the sticker + drag/resize because Instagram does
-  the rest free**; the stats are never typed, they come from the real workout.
-  **THE TRIAL: no card · the gym picks WHICH PLAN it trials at signup · that plan
-  is FIXED for the whole trial · that plan's member cap is enforced.** He proposed
-  mid-trial plan changes and **reversed it himself one message later** — a chat
-  reading only the first message builds the wrong thing. **The trial LENGTH is
-  NOT touched and is NOT open: 30 DAYS per :16548, superseding the spec's 7 —
-  this entry quotes the spec's "7-day" line verbatim and a chat must not carry
-  it forward.** The chat also recommended pilot codes for the first 20 gyms
-  **and struck it before committing against :16702** (one trial, every gym, "the
-  first 20" is a sales target with no code); **only its reason survives — never
-  discount the list price to win the first 20.** **THE CHAT WAS WRONG
-  ONCE AND THE CORRECTION IS THE USEFUL PART: it advised against blocking members
-  at the seat cap, then measured that `apps/api/src/modules/orgs/repo.ts:763`
-  ALREADY refuses them, that v1 §9.2 calls gym plans "seat-capped in code", and
-  that Part 3 §4.0 step 2 is already the member-count slider Kd had just
-  re-derived** — a recommendation formed without reading the built code is a
-  guess (V4). **MEASURED, NOW A 🔴 `OWED.md` LINE: the plans seed has ZERO USD
-  org rows and its six INR rows carry the PRE-:17366 book** (₹999–₹4,999, caps
-  25–400) — **:17366 ratified a price book against a seed nobody re-read**, and
-  the `seat_cap` values ARE the boundaries this ruling moves. Carries the market
-  research so no chat re-derives it: rival gym software $99–599/mo **plus $81–97
-  for a plain branded app that does none of this** · the bundle a member gets
-  free retails at **$47.97/mo**, so a 200-member gym at $35 pays 17.5¢/member ·
-  **incumbents charge $12–20 because acquiring one payer costs $20–80 in ADS, not
-  because serving them costs anything — Kd's cost through a gym is ≈$0, and THAT
-  is the moat, not the technology** · $500k ≈ 300 gyms + 3,000 individuals ⇒
-  ~$283k after tax solo · **20 gyms worst-case costs ~$257/mo and leaves ~$398 —
-  proof, not income** · Paddle's flat 50¢ is 6.4% on a $35 gym and **10% on a $10
-  consumer** · **the ClassPass/Mindbody scar is the true shape of his "will gyms
-  think I'm using them" fear, and he sells a $10 consumer tier so an owner WILL
-  ask** · honest odds given as judgement: $500k ≈ 1-in-4/5 over 3–4 years,
-  $50–150k considerably likelier, and Gymdesk took **four years** to
-  product-market fit in this exact market.
-- **:8808** — 2026-08-16 — **WEARABLES: both directions are possible, they are
-  ONE integration rather than two, and the cost is a MOBILE APP rather than
-  money.** **NO DECISION WAS MADE — Kd asked whether it is possible and costly
-  and said expressly he is not asking to build it now.** The spec already
-  schedules it (`02-part2b-trust-layer.md:169`, §2.4 Roadmap — wearable HR
-  upgrades the calorie method at Part 6, MET staying the universal fallback).
-  **Read before proposing wearable work, before quoting any platform's API terms
-  FROM THIS ENTRY (they are marked UNVERIFIED — model knowledge, not a source
-  read), and before building a second running-import path.** Writing our workout
-  out and reading their run in share one permission and one channel; platforms
-  charge nothing per user and the payload is trivial, but the phone health stores
-  are reachable only from a NATIVE app (live HR needs a watch app too), so it
-  cannot precede P5. Recommended AGAINST the paid per-user aggregators.
-  **Two things worth more than the technical answer: write OUT before reading IN**
-  (closing the user's rings is cheaper and more loved than ingesting their data),
-  and ~~the pilot audience is Jorhat…~~ **STRUCK by Kd the same day — "my target
-  is all over world including assam that is jorhat". JORHAT IS THE PILOT, NOT THE
-  MARKET**, and Part 3 §6.3 (*Worldwide*) already said so; on a worldwide target
-  the value is HIGHER than the struck claim, not lower. **Standing lesson: a fact
-  about the PILOT is not a fact about the USERS** (:4355's shape). **Hazard
-  recorded early:
-  we already have GPS running, so an imported watch run can DOUBLE the same run
-  unless dedupe is in that card's definition.** Health data lands inside the open
-  privacy question at :592. Tracked NOWHERE before today (grep-verified); now has
-  a ⚪ `OWED.md` line.
 - **:13920** — 2026-08-21 — **THE JOIN-CODE SCREEN — and Kd's no-names ruling
   CLOSES a line he opened two days earlier.** Web half of :13803. **Read before
   touching `JoinCodesPanel`, `codesView.js`, the Overview's code panes, or the
@@ -1710,59 +2060,6 @@ mid-file: re-derive them with
   carries the SMOKE, T3 UNRUN. **OWED: a code can be turned off but never
   DELETED** — the 100 cap counts retired codes, and a delete has to rule on
   `gym_members.code_id`, the group attribution every membership carries.
-- **:13746** — 2026-08-21 — **ADDENDUM to :13659: I raised the worker cap on a
-  guess, the measurement killed it, and what it uncovered is worth more than what
-  it was aiming at.** **Read WITH :13659 — it CORRECTS two of that entry's
-  claims.** (1) **The conditional worker cap is REVERTED**: the full suite flakes
-  on a local database at 4 workers TOO, so the cap was never what stood between
-  this suite and green. (2) **"api 536/536 in 51 s" was true of a RUN, not the
-  SUITE** — five full local runs went 536, 535, 532, 535, 536, and the gate
-  figure is withdrawn. **:13247's own Low-3 recurring, in the session that fixed
-  it, quoted by the chat that wrote the fix.** **What the failed attempt FOUND is
-  the point: NINE test files call `seed()` against one shared database while two
-  assert exact GLOBAL counts** — pinned, not guessed (those two pass together 3/3
-  and alone 2/2, failing only inside the full run). **PRE-EXISTING; Neon's latency
-  was HIDING it** by spreading the suites out, so the fast database made it
-  visible rather than causing it. **A SCOPED run — one file or a `-t` filter,
-  i.e. what a mutation sweep runs — is unaffected**, so the audit instrument is
-  untouched. Caught only because Kd asked whether local testing could harm
-  quality, which meant running the suite more than once: **a number quoted from
-  one run is a coin toss with a citation.** OWED line added; the fix is isolating
-  the seed-asserting suites, never a worker count.
-- **:13659** — 2026-08-21 — **THE TESTS STOP TRAVELLING TO SINGAPORE: a local
-  Postgres for the suite and the mutation sweep, and :5857's UNVERIFIED saving is
-  now MEASURED.** **Read before running a mutation sweep, before quoting a
-  suite's duration, before touching `vitest.config.ts`'s worker cap, and before
-  assuming the Neon branch is the only database available.** Kd asked for it
-  directly after five review rounds whose audit cost was dominated by a database
-  in `ap-southeast-1`. **Measured, same machine same day: round-trip `select 1`
-  202.9 ms → 2.7 ms · `orgs.sweep` (18 tests) 158.2 s → 10.8 s (14.7×) · two org
-  suites DID NOT FINISH in 10 min on Neon vs 77 s local · whole api suite 536
-  tests in 51 s local.** **The did-not-finish row is a LOWER BOUND, written as
-  one, and NO full-suite Neon figure exists so none may be quoted.** The governing
-  row is the second — **a sweep runs a suite once PER MUTANT**, so the clock
-  card's six DB mutants were ~16 min of Singapore against ~1 min local, matching
-  :5857's own ~18 min. **It was WIRING, not building**: `docker-compose.dev.yml`
-  has run `pgvector/pgvector:pg16` on port 5433 since the deploy-infra card —
-  migrate, seed, 536/536, 47 tables, all three extensions verified. **The native
-  PostgreSQL 18 already on the dev machine was REJECTED on evidence** (the schema
-  needs `vector`, a third-party build on Windows; the compose image bundles it,
-  and port 5433 means they never collide). Three small pieces: a `test:local`
-  script that **refuses** a missing/empty/unseeded database with the fixing
-  command — **both refusals proven by causing them** · ~~the 4-worker cap is now conditional~~ **— TRIED AT 8 AND
-  DISPROVEN THE SAME DAY: the full suite flakes at 4 TOO, so the cap was never
-  the thing standing between this suite and green. Reverted; do not re-try.
-  What the attempt uncovered is better than what it was aiming at — NINE test
-  files call `seed()` against one shared database while two assert exact GLOBAL
-  counts, a PRE-EXISTING race Neon's latency was HIDING (five full local runs:
-  536, 535, 532, 535, 536). A scoped run — one file or a `-t` filter, i.e. what
-  a sweep does — is unaffected. Own OWED line** · the sweep harness now **prints its database, host
-  only never the url** (R3.10). **The guard built that same morning paid for
-  itself**: the new script landed in `apps/api/scripts`, the directory round 5's
-  Low-5 added to the walk, so it was parse-checked with no edit to the guard —
-  which is the only thing covering that directory, eslint and tsc both being blind
-  to it. **STILL OPEN and not smuggled into "done": the severity class per mutant**
-  (:5857 rule 4a item 1) is untouched.
 - **:13552** — 2026-08-21 — **THE CLOCK, T3 ROUND 5: ZERO Critical/High — THE
   PACKET SHIPS, five rounds closed, and `OWED.md`'s clock line TICKS.** **Read
   before adding a day word to `joinClock.js`, before deleting the floor under its
@@ -2062,212 +2359,6 @@ mid-file: re-derive them with
   length while its test proved nothing. **Mutate the test you just wrote, in the
   round you write it.** Also corrects a reporting claim of mine: round 1 said
   eslint was "clean on every changed file" and it was not.
-- **:12660** — 2026-08-20 — **KD RULING: A REMOVED MEMBER MUST BE TOLD —
-  silence was the other half of the bug.** **Read before touching
-  `/v1/orgs/mine`, `gymStatusRows`, or any copy about a membership ending.**
-  **CORRECTS a choice Kd made four hours earlier** and that should never have
-  been offered to him: when :12518 C/H-1 found the app calling a removed member a
-  stranger, "say nothing" was put to him as an equal option and he took it —
-  **fixing a false sentence by removing the sentence is a quieter defect, not a
-  fix.** His wording ("should say they were rejected") was CORRECTED before
-  building and he was told why: they were let IN and then taken OUT, so refusal
-  copy would be a second untruth. Built sentence: **"You're no longer a member of
-  {gym}"**, plus the two true things people fear losing (all training data is
-  still theirs; the free app remains). **No Try again link.** The fact lives in a
-  SEPARATE `formerOrgs` list on `/v1/orgs/mine`, never a row in `orgs`, because
-  **the console reads the same response** and a removed gym in `orgs` would enter
-  a console list whose every read the server 404s. 14-day window
-  (`DECIDED_VISIBLE_DAYS`); withheld once the person REJOINS. **`.default([])` in
-  the shared contract is deliberate** — `orgsApi.js` treats a contract mismatch
-  as a hard failure and the card treats a failed read as silence, so a REQUIRED
-  field would destroy the whole gym card during any web-newer-than-API window to
-  add one sentence (R4.4's expand-then-contract, applied to a response). **Rank:
-  `removed` is BOTTOM (0), below `refused`** — recency, not importance, and it
-  holds ONLY while :12518's server fix keeps withholding a superseded refusal.
-  Both server tests watched RED against mutants, restored and verified.
-  **The lesson is mine: round 1 caught the app saying something FALSE and could
-  not catch it saying NOTHING, because no reviewer, test or mutant flags an
-  ABSENT sentence — the USER did.** Second finding on this card that only a human
-  at a screen produced, and the argument for the SMOKE gate existing.
-- **:12600** — 2026-08-20 — **KD RULINGS on an outside architecture review:
-  PER-SEAT PRICING = NO, PHONE OTP = NO, STRIPE = YES.** All three struck or
-  confirmed in one message. **Read before proposing any seat-based price, any
-  phone/SMS verification, or any payment provider substitution.** Per-seat and
-  phone OTP are STRUCK items (:456's precedent) — **no `OWED.md` line, nothing to
-  build, do not re-propose.** The consequence of striking per-seat that a later
-  chat must ACCEPT rather than re-argue: **roster hygiene is ours to enforce
-  technically, not the gym's to enforce commercially.** Stripe merely CONFIRMS
-  Part 5 §4, **but the ruling does not dispose of the factual risk** — the claim
-  that new Stripe signups are closed to India-based founders is **UNVERIFIED**
-  and obliges a CHECK before P3.5, never a chat's silent substitution of another
-  provider; own ⚪ `OWED.md` line. **Standing lesson: an outside answer is
-  GROUNDED before it is relayed** — this one was ~60% already built or already
-  ruled here (computed entitlements, the pending-then-confirm join door, seat
-  accounting, server-side gating, history surviving removal), and relaying it
-  unchecked would have reopened three built things and one Kd ruling as if they
-  were open questions.
-- **:8771** — 2026-08-16 — **KD RULING: users NEVER add their own exercises —
-  the catalog is CLOSED, deliberately.** A struck item, not a deferral (:456's
-  precedent); no `OWED.md` line, nothing to build. **Read before proposing a
-  custom-exercise feature, before adding any WRITE route under `/v1/exercises`,
-  and before letting a user type a free-text exercise name anywhere it can reach
-  a saved workout.** Already true in code and verified rather than assumed —
-  the exercises module exposes exactly two routes, both `GET`. **The reason is
-  that counting and scoring are not free**: every row carries family, tier, MET
-  and tracking mode, and a camera-graded one carries hand-ported thresholds
-  (R5.4), so a user-typed row is either uncountable or scored against numbers
-  nobody chose — R0.2/R5.6. **Consequence: no USER path can produce an
-  unresolvable exercise name**, which bounds (but does not close) the same day's
-  `syncClient` guard hazard. **Does NOT restrict growing the catalog** — that is
-  P4's production line, one reviewed row plus a re-seed, and Kd asked expressly.
-- **:5857** — 2026-08-07 — **KD RULING: the TEST AUDIT is SCOPED BY SEVERITY, not
-  applied uniformly.** Calibrates :5348's rule 4; **does NOT weaken it — the audit
-  stays mandatory.** Slow database-backed mutants are spent ONLY on what rules
-  1/1a call Critical/High (ownership · numbers a user sees · anything that
-  saves/syncs/queues · money), **never** on wording, ported constant tables,
-  comments, naming or layout; **database mutants run only on cards that change
-  SERVER behaviour**; and the sweep should point at a LOCAL Postgres when the card
-  allows. **Measured cause:** the summary card's audit took ~40 min, ~18 of it six
-  DB mutants each re-running the whole suite against a Neon instance in another
-  country — giving the same ~3 minutes to a meal-threshold boundary as to "can a
-  stranger read your workout", while everything it actually caught sat in the
-  Critical/High rows. **The real argument is alignment:** the audit's cost now
-  follows the same axis as the severity gate, where before the gate and the
-  instrument graded risk differently. **UNVERIFIED and owed a measurement:** the
-  local-Postgres saving is untimed — quote no number until it is. The tool has no
-  severity classes and no local-DB switch yet; own `OWED.md` line.
-  `CLAUDE.md` Part I §2.5 rule 4a.
-- **:5807** — 2026-08-07 — **KD AMENDMENT to the severity gate: WHAT A USER CAN
-  SEE AND IS FALSE IS CRITICAL/HIGH.** ADDS to :5348's rule 1, replaces nothing
-  ("add it but don't delete previous rules"). A finding is Critical/High if a user
-  could see something **FALSE** — a wrong number, a wrong state, a promise that is
-  not true — **or** is blocked from finishing something. **Cosmetic-but-TRUE stays
-  Low** (spelling, wording, naming, layout). **The test is not "is it on screen",
-  it is "is it on screen AND wrong".** Prompted by the two defects at :5618 that
-  fell through the original list — "+60 XP" when 50 was awarded, and "31s" above
-  "1 min total" with a tooltip explaining rest that never happened. **NOT the old
-  VISIBLE/NOT-VISIBLE stopping rule returning**: that decided TICKING, this decides
-  CLASSIFICATION. Carries the standing point Kd's question produced: **reviews were
-  never the protection** — both of that card's visible defects were found by his
-  BROWSER and by a SURVIVING MUTANT, and what is most likely to bite after deploy
-  is on `OWED.md` and invisible to any review. `CLAUDE.md` Part I §2.5 rule 1a.
-- **:5348** — 2026-08-06 — **KD RULING: THE FIXED REVIEW/FIX PROCESS. Read this
-  BEFORE running or closing any review round — it changes when a packet ships.**
-  Six standing rules: a **SEVERITY GATE** (Critical/High = security, data loss,
-  privacy, money, broken core flows; everything else is Low) where a packet ships
-  on **ZERO Critical/High in a round** and a Low finding **never buys another
-  round** · **diff-only re-reviews** · a **regression test with every
-  Critical/High fix** · a **test audit** (break what each test claims to check;
-  tests that stay green are liars) · **permanent guards** for recurring bug
-  classes · **minimal fix diffs**. **Escape hatch: two consecutive rounds with
-  Criticals in the same subsystem ⇒ stop patching, flag to Kd, that subsystem gets
-  a REDESIGN.** Findings are listed and approved BEFORE any code changes, fix
-  rounds included. **Supersedes the two-round cap (:2866) as the stopping
-  condition** — rounds now end on an outcome, not a count — and **supersedes the
-  VISIBLE/NOT-VISIBLE axis of :5307/:2365**, replacing it with Critical/High vs
-  Low. **NOTHING IS RELAXED: every finding is still FIXED before the packet
-  closes, whatever its severity** — Kd corrected a draft of the entry that said
-  otherwise, and the correction is recorded inside it. **`OWED.md` is UNCHANGED**
-  and stays the authority for every deferral; `BACKLOG.md` is a LOG of Low
-  findings and their fixes, never a second deferral list.
-- **:2365** — 2026-07-29 — **THE STOPPING RULE** (per-card, XP display): a
-  finding blocks a 🔴 tick only if a user could see it on screen. Everything
-  else is fixed but holds nothing. Precedent: PostWorkout, :1678.
-  **⚠️ SUPERSEDED ON SCOPE by :5307 and ON AXIS by :5348 — read both first.** Its closing paragraph
-  ("does NOT apply to any OTHER card … never a general licence to stop
-  reviewing") no longer holds: **Kd ruled the stopping rule STANDING on
-  2026-08-06.** Everything else in :2365 stands, including the VISIBLE /
-  NOT-VISIBLE tagging requirement. Its security/data-loss exception is a KD
-  RULING at :5258 and binds.
-- **:5308** — 2026-08-06 — **KD RULING: THE STOPPING RULE IS STANDING, not
-  per-card.** **⚠️ SUPERSEDED ON AXIS THE SAME DAY by :5348 — read that first.**
-  Its VISIBLE/NOT-VISIBLE test is replaced by Critical/High vs Low. **Its
-  "everything found is still FIXED" half STANDS, word for word** — Kd said so
-  explicitly when correcting a draft that had it reversed. Settles the question
-  :5258 opened. Applies to EVERY card
-  automatically; a finding blocks completion only if a user could see it, EXCEPT
-  security and data-loss findings (:5258), which block regardless.
-  **EVERYTHING FOUND IS STILL FIXED before the card closes, whatever its
-  severity — the rule governs TICKING, never fixing.** Supersedes :2365 ON SCOPE
-  ONLY. The case AGAINST is recorded in the entry and Kd was shown it before
-  ruling: :2365 was per-card because it answered ONE card's measured
-  fact-pattern (eleven rounds of diminishing returns), and generalising hands
-  that leniency to cards that have not earned it — bounded by the fact that a
-  non-visible finding is still fixed, so what generalising costs is the right to
-  hold a card OPEN over one. **What limits review effort is the two-round cap
-  (:2866), not this.** **The lesson: four cards applied a per-card ruling as
-  standing, and the chat that noticed had written it into two review prompts
-  itself — it surfaced only because Kd asked an operator question about the
-  PROCESS. A rule nobody re-reads becomes whatever chats have been doing
-  with it.**
-- **:5259** — 2026-08-06 — **KD RULING amending the stopping rule, and the drift
-  it exposed. This BINDS.** Kd first declined authorship, then reversed it
-  deliberately — "if other chats give more importance to my rule then write as my
-  rule" — having been told that a Kd ruling overrides a chat's fresh judgment and
-  may not be re-litigated on a chat's opinion. The wording is a chat's draft; the
-  RULING is his. **The ruling:
-  security and data-loss findings block a 🔴 tick REGARDLESS of visibility** — a
-  cross-account leak or a silently dropped write is invisible to its victim by
-  construction, so visibility is the wrong test for those two classes; the cap
-  does not close a card over one. Written BEFORE the workout-loop card because
-  that is the first card since the rule existed to touch other people's data.
-  **The drift is the larger finding and is NOT settled**: the per-card rule has
-  been used as standing for four cards, written into both exercise-library
-  review prompts by the chat that then closed the card. **Cost so far, measured:
-  nothing** — every finding was fixed or given an OWED line; the rule only ever
-  decided TICKING. Record-integrity failure, not a quality hole.
-- **:2692** — 2026-07-30 — **THE CAP** (per-card, PostWorkout summary reader):
-  round 3 is the last review round, ruled BEFORE it ran. Zero VISIBLE ⇒ the card
-  closes and ticks; a VISIBLE finding is fixed and the card closes ON that fix.
-  Round 3 exists for ONE reason — round 2 fixed the mutation harness and that fix
-  is unaudited, so every "21 RED" figure rests on it.
-- **:2158** — 2026-07-29 — **THE CAP** (per-card, XP display): round 11 was the
-  last review round; no round 12. Includes the recorded lesson that **eleven
-  rounds was a fault of the CARD's scope, not the code** — a repoint touching
-  more than one screen's payload is more than one card.
-- **:2398** — 2026-07-30 — **this file's READ PATH is split** and this index is
-  the instrument: grounding = this index IN FULL + §1/§2 read in the DECISIONS.md
-  ORIGINAL + the entries the task touches (CLAUDE.md:51-89). Coverage
-  command-verified the same day: 97 headings, 72 cited by exact line, 25 inside
-  declared ranges, **none unmapped**. The index is a POINTER — cite DECISIONS.md,
-  never this file.
-
-Standing rules that live in CLAUDE.md, not here — the no-removal rule, the
-deferral rule (every deferral gets an OWED.md line in the same commit), the
-grounding rule, Part I.5 verification doctrine, Part I.6 session start.
-
-- **:2866** — 2026-08-01 — **Kd RULING: finish the CODE first, buy the server
-  later.** P2.8 splits into a CODE half (every screen off the old backend,
-  verifiable locally — proceeds now) and a DEPLOY half (VPS, secrets, backup
-  drill, the DPDP worker actually running — deferred to the deployment moment).
-  Carries the agreed card ORDER for the rest of the repoint, and a **standing
-  two-round review cap set BEFORE each card runs** rather than after a bad
-  fact-pattern — **the CAP is SUPERSEDED by :5348 (2026-08-06): a packet now ships
-  on ZERO Critical/High findings in a round, not on a round count. Everything else
-  in this entry stands.** **The DPDP Day-14 worker must be live before the first
-  real SIGNUP, not merely before the first deploy.**
-- **:2825** — 2026-07-31 — two false claims about CI and the branch strategy,
-  corrected. **`web-repoint` is a Kd-RULED long-lived branch (:280) that merges at
-  the P2.8 cutover — it is not an oversight, do not propose merging it early.** PR
-  #29 has been open on it since Card 1, so CI has gated every push all along.
-  **Standing lesson: an index entry you skipped is not evidence of absence** — the
-  ruling was at an entry the index named and the chat chose not to open.
-- **:22215** — 2026-08-28 — **KD RULING: A GYM WITHOUT A LIVE PLAN GETS NOTHING.**
-  **Read before planning the trial-expiry card, any console paywall or price
-  screen, or anything touching `COUNTRY_CURRENCY`.** The trial is FORCED and
-  unskippable at gym creation; at its end an unskippable SUBSCRIBE prompt appears
-  and the console is unusable except the pay path. **A lapsed gym's members fall
-  back to the FREE app — arm A, chosen against a locked-out arm put beside it —
-  never locked out** (agrees with Part 3 §4.2). **Canada, the UK and the euro area
-  are billed in US DOLLARS**, settling :21157's gap; the no-fallback-currency rule
-  (:10010) is untouched. Measured in the entry, not quoted: the gym half of the
-  entitlement UNION requires a live subscription, so **a gym that never trialled
-  grants its members nothing** (Kd's first question — no defect); and there is
-  **exactly one `INSERT INTO subscriptions` and no `UPDATE` anywhere**, so a trial
-  never ends and `'trialing'` grants for ever. Build order agreed: expiry job →
-  forced trial prompt → subscribe prompt → real payment. **NOT ruled:** the
-  read-only window's length (§4.2's 14 days stands), second-trial copy, prices
-  above 2100 members. Paddle (:17357) remains unbuilt and unauthorised by this.
 - **:22341** — 2026-08-28 — **TRIALS ACTUALLY END — the first `UPDATE
   subscriptions` in this product's history — AND KD RULES A LAPSED-TRIAL GYM'S
   COUNTRY STAYS FROZEN, overruling the card's own recommendation.** Step 1 of
