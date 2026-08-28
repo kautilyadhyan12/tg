@@ -22693,3 +22693,88 @@ it never looked at, and reading its code cannot reveal an input nobody listed.
 trigger at all, 16 of them Kd's. The limit in §6 stands word for word — **a
 trigger list NARROWS a search and can NEVER CLEAR one** — and the honest summary
 of this addendum is that the floor rose, not that the gap shut.
+
+## 2026-08-28 — KD RULES THE SECOND-GYM ARM OF THE FORCED PROMPT, AND CORRECTS THE SHAPE OF THE WHOLE THING AT A SCREEN: it is a MODAL, not a button
+
+**Read before building the forced trial prompt or the subscribe prompt, before
+putting any trial or plan control on the console Overview, before adding a
+pricing endpoint, and before asking Kd to smoke a screen he has already told you
+is the wrong shape.**
+
+### 1. THE RULING
+
+Asked what a person sees when they open a SECOND gym, having already used their
+one free trial ever, Kd ruled: **"they will be showed subscription option that
+they can take and say that they alreday ahd a free trial"**.
+
+So the prompt has two arms, and both are unskippable:
+- **never trialled** → start the 30-day free trial.
+- **trial already used** → **the real plans at their real prices**, plus a line
+  saying the free trial is spent.
+
+This closes the gap :22215 §6 left open ("the copy is unwritten"). It does NOT
+authorise payment work: Paddle (:17357) stays unbuilt.
+
+### 2. THE CORRECTION, WHICH MATTERS MORE THAN THE RULING
+
+Mid-smoke, shown the console's existing trial BUTTON, he objected:
+
+> *"what i am saying is after creating gym when a gym is clicked a pop up in the
+> middle of the screen is needed for free trial not a button , saying this for
+> million time , are you helicunating tell me i will start a new chat then ?"*
+
+**He was right on both counts and the chat was wrong on the second.** :22215's
+ruling already said *"a prompt the owner cannot skip"*; what exists is a
+dismissible card on Overview. **A BUTTON IS NOT A PROMPT, and treating the ruling
+as satisfied by one is how a Kd ruling gets quietly downgraded to a nicer-looking
+version of what was already there.**
+
+**THE PROCESS FAILURE IS SPECIFIC AND WORTH KEEPING: the chat had built the
+INVISIBLE half (the expiry sweep) and then asked him to browser-smoke the VISIBLE
+half — which is the screen he has been objecting to.** It answered his earlier
+"what's the point, they can share the code without a trial?" with *"you already
+ruled this, it's the next card"* — **technically true, and it reads as deflection
+to a person looking at the wrong screen.** :12832's standing lesson recurring:
+twice on that card the only thing that found the defect was a person looking at
+the product. Here the person looking at the product found that the ruling itself
+had not landed.
+
+**Standing: when Kd says he has said something many times, treat it as a
+measurement of OUR record-keeping, not as impatience — and check the ruling
+against what is ON SCREEN, not against what was built.**
+
+### 3. MEASURED THE SAME SESSION — WHY THIS IS A SERVER CARD TOO
+
+Two things a console cannot know today, both verified rather than assumed:
+
+1. **Whether this owner may still start a trial.** `listOrgsForUser`'s LATERAL
+   serves only `status IN ('trialing','active','past_due')`
+   (`orgs/repo.ts:394-400`), so a gym whose trial ENDED and a gym that never
+   trialled are the same `subscription: null`. The modal cannot pick its arm.
+   Same root cause as the 🔴 false-promise finding at :22341 §7 — **and this card
+   is what fixes that, so the two are one piece of work.**
+2. **There is no pricing endpoint at all.** `grep -rnE '/v1/plans|listPlans|
+   pricing'` over `apps/api/src` returns nothing but LLM cost comments. The
+   subscribe arm has no prices to draw, and the price book it needs is seeded and
+   live (**measured on the dev branch: 5 active USD org plans and 5 INR**).
+
+### 4. WHAT IS STILL UNRESOLVED AND MUST NOT BE INVENTED
+
+**The subscribe arm's button has nowhere to send anybody.** Paddle unbuilt, the
+admin "mark this gym as paid" tool unbuilt, the contact channel owed. **Kd was
+told this in one line before he ruled** and ruled anyway, so the arm ships saying
+we will be in touch — :22215 §5 step 3's own sequencing, not a new decision.
+
+Not ruled here and not to be guessed: whether the modal blocks a STAFF member as
+well as the owner (only an owner can pay), and what a gym sees between the trial
+ending and the sweep running.
+
+### 5. SEQUENCING, HIS QUESTION AND THE ANSWER GIVEN
+
+He asked whether this could be a new chat and what becomes of the outstanding
+smoke and T3. **Both are recorded in `OWED.md` and `HANDOFF.md` and neither
+disappears.** The T3 on `a8b2e98` reviews a FROZEN commit and can run any time;
+**the expiry smoke's steps 6–7 are deliberately staged over the very defect this
+card removes, so that sheet must be re-run AFTER this card, not before** — a
+sheet whose ✅ describes a screen that no longer exists is :14840's stale-step
+shape.

@@ -4938,8 +4938,30 @@ file and is stated so nobody reads these as lower priority than they are.
       currency has no plan strands that gym at signup with a button that 409s.
       **A SECOND GYM'S OWNER HAS ALREADY USED THEIR ONE TRIAL** (`repo.ts`'s
       one-trial-per-owner rule) and must be shown the SUBSCRIBE prompt, not a trial
-      prompt that cannot succeed. Named to Kd and not disputed; the copy is
-      unwritten.
+      prompt that cannot succeed. ~~Named to Kd and not disputed; the copy is
+      unwritten.~~
+      **KD RULED THE SECOND-GYM ARM 2026-08-28, and it is no longer "not
+      disputed", it is DECIDED:** *"they will be showed subscription option that
+      they can take and say that they alreday ahd a free trial"*. So that arm
+      **shows the real plans with real prices** and says the free trial is used.
+      **HE ALSO RESTATED THE SHAPE OF THE WHOLE THING AT A SCREEN, and the
+      restatement is the useful part** — shown the console's existing trial BUTTON
+      during a smoke, he objected: *"what i am saying is after creating gym when a
+      gym is clicked a pop up in the middle of the screen is needed for free trial
+      not a button , saying this for million time"*. **A BUTTON ON THE OVERVIEW IS
+      NOT THIS ITEM. The deliverable is a MODAL over the console that cannot be
+      closed** — no X, no click-outside, no Escape.
+      **MEASURED 2026-08-28 — TWO THINGS THE SERVER CANNOT ANSWER YET, so this is
+      a server+web card and not a web one:** (1) **nothing tells a console whether
+      this owner may still start a trial** — `/v1/orgs/mine` serves only the LIVE
+      statuses, so "never trialled" and "trial ended" are the same `null` (that is
+      also the 🔴 false-promise line above); (2) **there is NO plans or pricing
+      endpoint anywhere in the API** (`grep -rnE '/v1/plans|listPlans|pricing'`
+      over `apps/api/src`: no hits), so the subscribe arm has no prices to draw.
+      **THE SUBSCRIBE ARM'S BUTTON STILL HAS NOWHERE TO SEND ANYBODY** — Paddle is
+      unbuilt (:17357), the admin "mark as paid" tool is unbuilt, and the contact
+      channel is owed. Kd was told this before ruling. Until one exists it says we
+      will be in touch, which is :22215 §5 step 3's own sequencing.
       **TICKS WHEN** all three pieces are live with the sweep, with a fake-clock
       test walking creation → trial → expiry → member entitlements falling back to
       free, and the browser smoke Kd runs on it.

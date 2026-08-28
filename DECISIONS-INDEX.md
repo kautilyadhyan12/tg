@@ -736,6 +736,38 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   forced trial prompt → subscribe prompt → real payment. **NOT ruled:** the
   read-only window's length (§4.2's 14 days stands), second-trial copy, prices
   above 2100 members. Paddle (:17357) remains unbuilt and unauthorised by this.
+- **:22697** — 2026-08-28 — **KD RULES THE SECOND-GYM ARM OF THE FORCED PROMPT,
+  AND CORRECTS THE SHAPE OF THE WHOLE THING AT A SCREEN: IT IS A MODAL, NOT A
+  BUTTON.** **Read before building the forced trial prompt or the subscribe
+  prompt, before putting any trial or plan control on the console Overview,
+  before adding a pricing endpoint, and before asking Kd to smoke a screen he has
+  already said is the wrong shape.** **THE RULING:** a second gym's owner, whose
+  one trial ever is spent, is shown **the real plans at their real prices** plus a
+  line saying the trial is used — closing the copy gap :22215 §6 left open. Both
+  arms are unskippable. **No payment work is authorised; Paddle (:17357) stays
+  unbuilt.**
+  **THE CORRECTION MATTERS MORE THAN THE RULING.** Shown the console's existing
+  trial BUTTON mid-smoke he objected — *"a pop up in the middle of the screen is
+  needed for free trial not a button, saying this for million time"* — and he was
+  right: :22215 already said *"a prompt the owner cannot skip"* and what exists is
+  a dismissible card. **A BUTTON IS NOT A PROMPT, and treating the ruling as
+  satisfied by one is how a Kd ruling gets quietly downgraded to a nicer version
+  of what was already there.** The chat had built the INVISIBLE half (the expiry
+  sweep) and then asked him to smoke the VISIBLE half he has been objecting to,
+  answering his earlier "what's the point?" with *"you already ruled this"* —
+  true, and deflection to a person looking at the wrong screen. **STANDING: when
+  Kd says he has said something many times, that is a measurement of OUR
+  record-keeping — check the ruling against what is ON SCREEN, not against what
+  was built.**
+  **MEASURED, AND IT MAKES THIS A SERVER CARD:** nothing tells a console whether
+  an owner may still trial (`orgs/repo.ts:394-400` serves only live statuses, so
+  "never trialled" and "trial ended" are one `null` — **the same root cause as
+  :22341 §7's false promise, so this card fixes that too**), and **there is NO
+  pricing endpoint anywhere** (grep-verified) while the book is seeded and live
+  (5 USD org plans, 5 INR). **The subscribe arm's button still has nowhere to send
+  anybody** — he was told before ruling, so it says we will be in touch.
+  **Not ruled: whether the modal blocks STAFF as well as the owner, and what a gym
+  sees between the trial ending and the sweep running.**
 - **:22497** — 2026-08-28 — **THIS FILE HIT THE WALL IT WAS BUILT TO PREVENT, AND
   KD RULED THE FIX. Read before changing the grounding rule, before adding a
   section here, before editing `tools/build-decisions-triggers.mjs`, before
