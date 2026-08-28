@@ -79,6 +79,12 @@ const ORG = {
   ],
   subscription: null,
   seatsUsed: 0,
+  /** SPELLED OUT, and T3 round 1's Low-3 fix is why it has to be. An ABSENT
+   *  `ownerTrialUsed` no longer means "an ordinary gym with no plan" — it means
+   *  "this api could not tell us", which the card now answers with a sentence
+   *  rather than silence. A fixture leaving it out would be testing that window
+   *  while claiming to test the ordinary one. */
+  ownerTrialUsed: false,
   isMember: true,
   joinedAt: '2026-08-18T09:00:00.000Z',
 };
@@ -177,7 +183,16 @@ describe('the plan card', () => {
 
     await screen.findByText('Iron House');
     expect(screen.queryByText('Plan')).toBeNull();
-    expect(screen.queryByRole('button', { name: /start your 30-day free trial/i })).toBeNull();
+    expect(screen.queryByText(/places used/)).toBeNull();
+    // THE ONLY TRIAL BUTTON ON SCREEN IS THE PROMPT'S, and asserting WHERE it
+    // lives is the point: this used to assert there was none at all, which
+    // stopped being true the moment the fixture said "never trialled" — and a
+    // bare "no such button" would now pass just as well over a card that had
+    // quietly grown one back.
+    const modal = screen.getByTestId('plan-modal');
+    const trialButtons = screen.getAllByRole('button', { name: /start your 30-day free trial/i });
+    expect(trialButtons).toHaveLength(1);
+    expect(modal.contains(trialButtons[0])).toBe(true);
     // And no banner, because there is no plan for §4.2 to have a state about.
     expect(screen.queryByTestId('console-banner')).toBeNull();
   });

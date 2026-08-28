@@ -31,6 +31,38 @@ const inputStyle = {
   color: '#fff',
 };
 
+/** WHAT COVERS THE NEW GYM'S CODE UNTIL THE CONSOLE KNOWS WHAT THE GYM IS ON.
+ *
+ *  It says one true thing and offers nothing, because there is nothing honest to
+ *  offer yet: the gym exists, and whether its owner may start a trial is a fact
+ *  this screen has asked for and not yet been told. **It claims no outcome** —
+ *  no "starting your trial", no "loading your plan" — since a failed read leaves
+ *  it here indefinitely and a promise would then be false rather than merely
+ *  slow.
+ *
+ *  Same shape and stacking as the prompt it stands in for, so a person sees one
+ *  behaviour: the screen behind is covered, and nothing about the gym is
+ *  actionable until the app can say something true about it. */
+function SettingUpCover() {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(10,9,8,0.94)' }}
+      data-testid="gym-setup-cover"
+    >
+      <div
+        className="w-full max-w-md rounded-2xl p-6 flex items-center gap-3"
+        style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.08)' }}
+      >
+        <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'rgba(255,255,255,0.45)' }} />
+        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
+          Setting up your gym…
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function Field({ label, hint, children }) {
   return (
     <label className="block">
@@ -167,7 +199,19 @@ export default function NewGym() {
             correctly draws nothing there. This one is handed the gym that was
             just created — read from the SHARED STORE by id, never from the
             create response, because that response carries no `ownerTrialUsed`
-            and a prompt that cannot be closed must never be drawn on a guess. */}
+            and a prompt that cannot be closed must never be drawn on a guess.
+
+            **AND UNTIL THAT ROW ARRIVES THE SCREEN IS COVERED ANYWAY — T3 round
+            1, Low-4, which is Kd's own defect in miniature.** `refreshConsoleOrgs()`
+            publishes `loading`, so `createdOrg` is null for the whole round trip
+            and stays null for ever if that read FAILS — and this screen was
+            drawing the join code, with its live Copy button, in exactly that
+            window. Seconds on a slow connection, permanently on a dropped one.
+            **The silence is right for `ownerTrialUsed` and wrong for the COVER:
+            a gym created one second ago demonstrably has no plan**, so nothing
+            has to be known about it to justify hiding a code behind a neutral
+            sentence. */}
+        {createdOrg === null ? <SettingUpCover /> : null}
         <PlanModal org={createdOrg} onSignOut={signOut} signingOut={signingOut} />
         <div>
           <h1 className="text-2xl font-bold" style={{ color: '#fff' }}>

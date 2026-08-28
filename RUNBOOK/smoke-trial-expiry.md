@@ -8,8 +8,10 @@ a second free trial they cannot have.
 **Time:** about 15 minutes. **You need:** the API and the web app running
 locally, and one terminal.
 
-**RUN AND PASSED 11/11 by Kd**, on the bytes this card ships — after a fix he
-found at step 1, now written into that step.
+**RUN AND PASSED 11/11**, on the bytes this card ships — after a fix Kd found at
+step 1, now written into that step. **Kd ran every browser step; the chat ran
+step 7, the one terminal command.** Splitting it that way is the point of the
+next paragraph.
 
 ⚠️ **STEP 7 IS THE CHAT'S TO RUN, NOT KD'S, AND THE PASS IS PER STEP.** The first
 attempt at this sheet was recorded as 11/11 when steps 7–9 had never run: Kd said

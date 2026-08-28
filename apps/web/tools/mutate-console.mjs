@@ -1658,6 +1658,48 @@ const MUTANTS = [
     from: '        <PlanModal org={createdOrg} onSignOut={signOut} signingOut={signingOut} />',
     to: '',
   },
+
+  // ── T3 ROUND 1's FIXES (C103–C106) ────────────────────────────────────────
+  //
+  // Four guarantees the round created, each on its own call site (:15770). The
+  // first two are one feature — focus must MOVE into the dialog and must STAY
+  // there — and a single mutant covering both would not say which half failed.
+  {
+    id: 'C103',
+    target: 'planmodal',
+    suite: PROMPT_SUITE,
+    why: "THE RULING HOLDS FOR A MOUSE AND NOT A KEYBOARD: Tab stops being contained, so focus walks out of the prompt into the rail's links, the phone tab bar and — on the gym-created screen — the join code's live Copy button, every one of them invisible behind a 94%-opaque overlay with the focus ring hidden and Enter still working. It is the smoke sheet's own step 2 made false for anybody not using a mouse",
+    expect: 'CONTAINS THE KEYBOARD',
+    from: '        onKeyDown={keepFocusInside}',
+    to: '',
+  },
+  {
+    id: 'C104',
+    target: 'planmodal',
+    suite: PROMPT_SUITE,
+    why: 'THE OTHER HALF OF THE SAME GUARANTEE, and it fails silently rather than loudly: focus is never MOVED into the dialog, so it stays on whatever the screen behind had — the first Tab then continues from there, through the covered screen, and a screen reader is still reading the page the prompt is supposed to have taken over',
+    expect: 'CONTAINS THE KEYBOARD',
+    from: '    dialogRef.current?.focus();',
+    to: '',
+  },
+  {
+    id: 'C105',
+    target: 'newgym',
+    suite: PROMPT_SUITE,
+    why: "KD'S OWN DEFECT, IN THE WINDOW THE FIX FOR IT LEFT OPEN: the cover over the gym-created screen goes, so the join code and its live Copy button are on screen for the whole round trip while the console asks what this gym is on — and PERMANENTLY if that read fails, since the prompt cannot draw without an answer",
+    expect: 'KEEPS the code covered',
+    from: '        {createdOrg === null ? <SettingUpCover /> : null}',
+    to: '',
+  },
+  {
+    id: 'C106',
+    target: 'trialcard',
+    suite: PROMPT_SUITE,
+    why: "BLOCKED WITH NOTHING ON SCREEN TO EXPLAIN IT: the sentence for an api too old to say whether this owner's trial is spent disappears, so during a web-newer-than-api deploy the prompt refuses to draw (correctly — it cannot be closed) and the card draws nothing either. The owner gets a blank space where a trial button used to be, with no way to start one and nothing saying why",
+    expect: 'SAYS SO in that window',
+    from: "    return typeof org?.ownerTrialUsed !== 'boolean' ? (",
+    to: '    return false ? (',
+  },
 ];
 
 const abort = (msg) => {

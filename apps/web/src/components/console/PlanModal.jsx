@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorCode, errorText, isRetryable } from '../../api/orgsApi';
@@ -106,6 +106,63 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
   const showing = arm === null ? null : trialSpent ? 'subscribe' : arm;
   const gymId = org?.id ?? null;
 
+  /** THE PROMPT HAS TO CONTAIN THE KEYBOARD, NOT ONLY COVER THE SCREEN — T3
+   *  round 1, Low-1, and it is the only finding that touched the ruling itself.
+   *
+   *  The overlay stops a MOUSE (it is `z-50` over a `z-20` rail and tab bar, and
+   *  it is 94% opaque). **It did not stop TAB.** Focus walked straight out of the
+   *  dialog into the rail's Members and Settings links, the phone tab bar, and —
+   *  on the gym-created screen — the join code's live Copy button, all of them
+   *  invisible behind the overlay with the focus ring hidden but Enter still
+   *  working. **That made the smoke sheet's own step 2 ("you should not be able
+   *  to read the join code behind it") false for anybody not using a mouse.**
+   *
+   *  Two lines do it. Focus moves INTO the dialog when it appears, and Tab
+   *  cycles inside it. Nothing here can close the prompt — the trap has no
+   *  escape of its own, which is the point: `Escape` still does nothing, and the
+   *  only ways out remain "Your gyms" and Sign out, both inside the trap.
+   *
+   *  **`inert` on the shell was the other route and was NOT taken:** this
+   *  component is mounted in two places (the console shell and the gym-created
+   *  screen) and would have to reach outward to different siblings in each, so
+   *  the guarantee would live in whatever each call site remembered to mark —
+   *  the shape :1239 records. This keeps it in the component that makes the
+   *  claim. */
+  const dialogRef = useRef(null);
+
+  useEffect(() => {
+    if (showing === null) return;
+    // The dialog itself takes focus (`tabIndex={-1}`) rather than its first
+    // button: landing on "Start your 30-day free trial" would read the button
+    // to a screen reader before the sentence explaining why it is there.
+    dialogRef.current?.focus();
+  }, [showing]);
+
+  const keepFocusInside = (e) => {
+    if (e.key !== 'Tab') return;
+    const root = dialogRef.current;
+    if (root === null) return;
+    const focusable = [...root.querySelectorAll('a[href], button:not([disabled])')];
+    // Nothing to move between — hold focus where it is rather than letting Tab
+    // fall out of the dialog into the screen behind it.
+    if (focusable.length === 0) {
+      e.preventDefault();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    // `document.activeElement` is the dialog itself on the first Tab, which
+    // matches neither end — so the browser's own "move to the next thing inside"
+    // is left alone, and only the two edges are wrapped.
+    if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    } else if (e.shiftKey && (document.activeElement === first || document.activeElement === root)) {
+      e.preventDefault();
+      last.focus();
+    }
+  };
+
   useEffect(() => {
     // The price list is read ONLY by the arm that shows prices. A gym starting
     // its first trial never asks — it has nothing to choose between, and asking
@@ -175,10 +232,17 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
       style={{ background: 'rgba(10,9,8,0.94)' }}
       data-testid="plan-modal"
     >
+      {/* `tabIndex={-1}` so the dialog can hold focus itself, and `onKeyDown`
+          because every key inside it bubbles here — see `keepFocusInside`. The
+          handler ONLY cycles Tab; it closes nothing, and there is deliberately
+          no Escape branch. */}
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        tabIndex={-1}
+        onKeyDown={keepFocusInside}
         className="w-full max-w-md rounded-2xl p-6 max-h-[90vh] overflow-y-auto"
         style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.08)' }}
       >

@@ -23574,3 +23574,136 @@ on re-entry.
 is not passed by the operator saying "all passed" — it is passed when I have run
 it and read the output.** When a sheet interleaves his steps and mine, the pass
 is per step, never per message.
+
+## 2026-08-29 — THE FORCED PROMPT'S WEB HALF, T3 ROUND 1: ZERO Critical/High, THE PACKET SHIPS — six Low, and the fix round's own new mutant caught the fix round's own lying test
+
+**Read before writing a focus trap or any `aria-modal` in this app, before
+asserting that something is "still inside" a container, before drawing a screen
+between creating a gym and its console, and before trusting a jsdom test about
+keyboard behaviour.** Reviews `99687c5` + `3891acc` (:23257).
+
+### 1. THE VERDICT
+
+**Zero Critical/High. Six Low, all fixed in one round.** Kd approved the list
+first (*"fix all"*). **Escape hatch NOT armed, and the reviewer named the reason
+precisely rather than reciting the rule**: this is the SECOND consecutive CLEAN
+round in this subsystem (the server half's round 1 was also zero), which is the
+opposite of the two-Critical-rounds trigger.
+
+The reviewer re-ran the evidence rather than trusting the card's own numbers —
+1322/1322, eslint clean on thirteen files, no new dependency — which is what
+:15927 asks of anybody quoting a PROVE line.
+
+### 2. LOW-1 IS THE ONE THAT TOUCHED THE RULING, AND IT IS THE HALF A MOUSE CANNOT SHOW YOU
+
+**The prompt covered the screen and did not contain the KEYBOARD.** Focus was
+never moved into the dialog and Tab was never cycled, so `aria-modal="true"` was
+a claim the DOM did not back: Tab walked out to the rail's Members and Settings
+links, the phone tab bar, and — on the gym-created screen — **the join code's
+live Copy button**, all of them behind a 94%-opaque overlay with the focus ring
+invisible and Enter still working. **It made the smoke sheet's own step 2 ("you
+should not be able to read the join code behind it") false for anybody not using
+a mouse** — and Kd's smoke could not have found it, because he was using one.
+
+Correctly graded Low: nothing false is drawn, nobody is blocked, and the
+entitlement UNION is the enforcement (:22215 §1) — no gym gains anything by
+tabbing.
+
+**`inert` on the shell was the other route and was NOT taken:** the prompt is
+mounted at TWO call sites and would have had to reach outward to different
+siblings in each, so the guarantee would live in whatever each call site
+remembered to mark — :1239's shape. It stays inside the component that makes the
+claim.
+
+### 3. THE PART TO READ TWICE: THE FIX ROUND SHIPPED A LYING TEST, AND ITS OWN NEW MUTANT CAUGHT IT
+
+The keyboard case first asserted *"after Tab, focus is still inside the dialog"*.
+**jsdom does not implement Tab** — `fireEvent.keyDown` moves no focus — so that
+sentence is true whether the trap exists or not. **C103 came back ALIVE against a
+test written in the same hour for the express purpose of proving what C103
+breaks.**
+
+**Rule 4's category, produced by rule 5's instrument, inside the round that
+created both.** Without the whole-table sweep it would have shipped as a green
+guarantee over a real gap — which is the second time on this card that running
+the WHOLE table found what a subset could not (:23128's standing rule earning
+itself twice).
+
+Re-written to assert what the handler DOES: at each edge focus LANDS on the other
+end, which does not move at all without it. The middle of the cycle is the
+browser's own and is deliberately not asserted. **Standing: an assertion that a
+fixture is "still inside" a container it was already inside is not an
+assertion.**
+
+### 4. THE OTHER FIVE
+
+**Low-2 — a comment gave a FALSE reason for a key that is correct.**
+`ConsoleLayout` claimed `ConsoleBanner` "one line up" would collide with a bare
+`org?.id`. **They are not siblings** — the banner is inside `<main>`, the prompt
+is a sibling OF `<main>` — so no collision was ever possible. The key is still
+needed (per-gym state reset) and is unchanged; the reason is corrected rather
+than deleted (:5748), which is the class this very file already carries.
+
+**Low-3 — a web-newer-than-api deploy left an owner with NOTHING.** The prompt
+refuses to draw on an unknown `ownerTrialUsed` (correct — it cannot be closed)
+and the plan card refuses to draw a plan that does not exist, so between them the
+Overview went blank and no trial could be started, **where before this card the
+button worked regardless**. It heals itself and "blocked from finishing" is still
+what happens inside it, so it now carries a true sentence instead of silence
+(:12660). **Its control asserts a TRAINER sees neither the prompt nor the
+sentence** — without that, a card drawn for everybody would pass the case just as
+well (:7104's PG1). **And the privilege was deliberately NOT re-asked in that
+branch**: the gate above has already returned, and a second copy would be two
+guards where either suffices — C68's exact shape, filed by this card three hours
+earlier.
+
+**Low-4 — the join code was uncovered until `/v1/orgs/mine` answered, and for
+ever if it failed.** Kd's own defect in miniature, in the window his fix left
+open. **The silence is right for `ownerTrialUsed` and wrong for the COVER: a gym
+created one second ago demonstrably has no plan**, so nothing needs to be known
+about it to justify hiding a code. The cover claims no outcome it cannot deliver
+— no "starting your trial" — because a failed read leaves it there indefinitely.
+
+**Low-5 — nothing exercised the stale `ownerTrialUsed` path.**
+`applyStartedTrial` patches one gym deliberately, since the field is a fact about
+a PERSON and writing it across every row would mislabel a manager holding
+`billing.manage` on somebody else's gym. The reviewer said so before proposing a
+fix, which is the difference between a finding and a suggestion. A case now
+drives it: gym B offers the trial, the server refuses, and the prompt turns into
+the price list rather than leaving a dead button.
+
+**Low-6 — the smoke sheet contradicted itself about who runs step 7**, in the one
+file whose purpose is keeping that straight. It now says which steps were whose.
+
+### 5. RULE 4 AND RULE 3
+
+**The reviewer found no test that stays green when its subject breaks** — and
+then the fix round produced one itself (§3), caught by the sweep rather than by
+review. Two instrument notes were raised and explicitly NOT asked to be fixed:
+**C100 kills by a null dereference rather than by the sentence it names** (the
+guarantee is genuinely held by the direct test beside it), and **the Escape
+assertion targeted the backdrop** — that one WAS re-aimed here, because the trap
+now moves focus into the dialog, which makes a dialog-level handler the likely
+future addition. **Rule 3 is N/A — zero Critical/High** — but every one of the
+six carries a test or a mutant anyway.
+
+**A FIXTURE WENT STALE INSIDE THE ROUND, and it is the same shape as the server
+half's:** `trial.render.test.jsx`'s org carried no `ownerTrialUsed`, which
+stopped meaning *"an ordinary gym with no plan"* the moment Low-3 landed and
+started meaning *"this api could not tell us"* — so the file was testing the
+deploy window while claiming to test the ordinary case. Spelled out, with the
+reason. **The same edit exposed a second one**: a case asserting *"there is no
+trial button at all"* was written when nothing drew one, and now asserts the only
+one on screen belongs to the PROMPT — a bare "no such button" would pass over a
+card that had quietly grown one back.
+
+### 6. PROVE — after the fixes
+
+**Web 1327/1327 across 49 files** (+5) · `eslint --max-warnings=0` exit 0 on seven
+files · `vite build` exit 0 · `node --check` on the harness · **WHOLE-TABLE SWEEP
+of 126: 124 RED, 2 ALIVE, 0 never ran** — C103 (fixed, then re-measured RED with
+C104/C105/C106) and **C68, which is not this card's and has its own ⚪ `OWED.md`
+line** · restores sha256-verified after every mutant.
+
+**THE PACKET SHIPS. T3 closed at round 1.** The smoke is done (11/11, :23257 §11
+and §12); nothing new ticks.

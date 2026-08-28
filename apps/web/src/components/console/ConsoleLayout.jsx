@@ -300,13 +300,21 @@ export default function ConsoleLayout({ children }) {
           as normal), null for a gym on a live plan, and null for the api being
           too old to say whether this owner's trial is spent.
 
-          KEYED, AND THE PREFIX IS LOAD-BEARING for the reason the wrapper above
-          records: `ConsoleBanner` one line up already keys on `org?.id ??
-          'no-gym'`, and two siblings holding the same key is React dropping one
-          without a word (:20986's guard caught exactly that on the wrapper's
-          own first draft). It needs a key at all because it holds state — a
-          fetched price list, and the fact that the server has refused a trial —
-          and this shell does not remount between two gyms. */}
+          KEYED BECAUSE IT HOLDS STATE — a fetched price list, and the fact that
+          the server has refused a trial — and this shell does not remount when
+          an owner walks from gym A to gym B. Without the key, gym B's prompt
+          opens holding gym A's prices.
+
+          **THE COLLISION REASON THIS COMMENT USED TO GIVE WAS FALSE** (T3 round
+          1, Low-2), and it is corrected rather than deleted (:5748) because the
+          next reader would take it as evidence. It claimed `ConsoleBanner` "one
+          line up" holds the same key and that a bare `org?.id` would be two
+          siblings sharing one — :20986's duplicate-key trap. **They are not
+          siblings:** the banner is INSIDE `<main>` and this is a sibling OF
+          `<main>`, so a bare `org?.id` could never have collided with it. The
+          prefix stays as plain explicitness — it says what the key is about on
+          a route where there is no gym — and the key itself was always right
+          for the reason above. */}
       <PlanModal
         key={`plan-modal:${org?.id ?? 'no-gym'}`}
         org={org}

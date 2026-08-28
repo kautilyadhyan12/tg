@@ -1048,6 +1048,50 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   sheet interleaves Kd's steps and the chat's, the pass is PER STEP, never per
   message.**
 
+- **:23578** — 2026-08-29 — **THE FORCED PROMPT'S WEB HALF, T3 ROUND 1: ZERO
+  Critical/High, THE PACKET SHIPS** — six Low, all fixed in one round (Kd
+  approved the list first, *"fix all"*), **and the fix round's own new mutant
+  caught the fix round's own lying test.** Reviews `99687c5` + `3891acc`
+  (:23257). Escape hatch NOT armed — **the SECOND consecutive CLEAN round in this
+  subsystem**, the opposite of the trigger.
+  **Read before writing a focus trap or any `aria-modal` in this app, before
+  asserting that something is "still inside" a container, before drawing a screen
+  between creating a gym and its console, and before trusting a jsdom test about
+  keyboard behaviour.**
+  **LOW-1 TOUCHED THE RULING AND A MOUSE CANNOT SHOW IT TO YOU:** the prompt
+  covered the screen but did not contain the KEYBOARD — Tab walked out to the
+  rail, the tab bar and **the join code's live Copy button**, invisible behind a
+  94%-opaque overlay with Enter still working, **making the smoke sheet's own
+  step 2 false for anybody not using a mouse.** Kd's smoke could not have found
+  it. `inert` on the shell was rejected: the prompt has TWO call sites and the
+  guarantee would live in whatever each remembered to mark (:1239).
+  **§3 IS THE PART TO READ TWICE.** The keyboard test first asserted *"after Tab,
+  focus is still inside the dialog"* — **jsdom does not implement Tab**, so it was
+  true with the trap deleted. **C103 came back ALIVE against a test written in the
+  same hour to prove what C103 breaks**: rule 4's category, produced by rule 5's
+  instrument, inside the round that created both, and **the second time on this
+  card that the WHOLE table found what a subset could not.** **Standing: an
+  assertion that a fixture is "still inside" a container it was already inside is
+  not an assertion.**
+  **THE OTHER FIVE:** a comment giving a FALSE collision reason for a correct key
+  (the banner is inside `<main>`, the prompt is a sibling of it — they never
+  could collide) · a web-newer-than-api deploy leaving an owner with NOTHING,
+  now a true sentence, with a TRAINER control and **no re-asked privilege**
+  (C68's shape, filed by this card hours earlier) · the join code uncovered until
+  `/v1/orgs/mine` answered and for ever if it failed — **Kd's own defect in
+  miniature**, fixed with a cover that claims no outcome · the stale
+  `ownerTrialUsed` path nothing drove (the field is deliberately NOT written
+  across rows: it is a fact about a PERSON) · the sheet contradicting itself about
+  who runs step 7.
+  **TWO FIXTURES WENT STALE INSIDE THE ROUND**, the server half's shape again:
+  an org with no `ownerTrialUsed` stopped meaning "ordinary gym" and started
+  meaning "the api could not tell us", and a case asserting *"there is no trial
+  button at all"* now asserts the only one belongs to the PROMPT.
+  **PROVE: web 1327/1327 · eslint clean on seven files · `vite build` exit 0 ·
+  WHOLE-TABLE SWEEP of 126: 124 RED, 2 ALIVE** — C103 (fixed and re-measured RED)
+  and **C68, not this card's, with its own ⚪ `OWED.md` line**. **T3 closed at
+  round 1; the smoke is done 11/11.**
+
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 
 **NOT read every session. Read an entry here when your task touches what it is

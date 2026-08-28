@@ -36,6 +36,87 @@ side a finding falls on, it is Critical/High.
 
 ## Log
 
+### The forced prompt's WEB half (the modal) — T3 round 1 (DECISIONS :23257)
+
+Reviews `99687c5` + `3891acc`. **ZERO Critical/High, SIX Low.** Escape hatch NOT
+armed — the reviewer noted this is the SECOND consecutive clean round in this
+subsystem, not two Critical rounds. Kd approved the list before any code changed
+(*"fix all"*). All six fixed in one round.
+
+- [x] **The prompt covered the screen but did not contain the KEYBOARD.** Focus
+      was never moved into the dialog and Tab was not cycled, so `aria-modal` was
+      a claim the DOM did not back: Tab walked out to the rail's Members and
+      Settings links, the phone tab bar, and — on the gym-created screen — the
+      join code's live **Copy** button, all behind a 94%-opaque overlay with the
+      focus ring invisible and Enter still working. **It made the smoke sheet's
+      own step 2 false for anybody not using a mouse.** Fixed inside the
+      component (focus on mount + Tab cycling) rather than with `inert` on the
+      shell, because the prompt is mounted at TWO call sites and would have had
+      to reach outward to different siblings in each (:1239's shape). Mutants
+      **C103** (the cycle) and **C104** (the initial focus), one per call site
+      — found T3 round 1, fixed this round
+- [x] **A comment gave a FALSE reason for a key that is correct.**
+      `ConsoleLayout` claimed `ConsoleBanner` "one line up" would collide with a
+      bare `org?.id` — :20986's duplicate-key trap. **They are not siblings:** the
+      banner is inside `<main>` and the prompt is a sibling OF `<main>`, so no
+      collision was ever possible. The key is still needed (per-gym state reset)
+      and is unchanged; the justification is corrected rather than deleted
+      (:5748), which is the same class this very file already carries — found T3
+      round 1, fixed this round
+- [x] **A web-newer-than-api deploy left an owner with nothing at all.** The
+      prompt refuses to draw on an unknown `ownerTrialUsed` (correct — it cannot
+      be closed) and the plan card refuses to draw a plan that does not exist, so
+      between them the Overview went blank and no trial could be started, where
+      before this card the button worked regardless. The window heals itself and
+      **"blocked from finishing" is still what happens inside it**, so it now
+      carries a true sentence instead of silence (:12660). Its control asserts a
+      TRAINER sees neither the prompt nor the sentence; mutant **C106** — found
+      T3 round 1, fixed this round
+- [x] **The join code was uncovered until `/v1/orgs/mine` answered, and for ever
+      if it failed.** `refreshConsoleOrgs()` publishes `loading`, so the new
+      gym's row is absent for the whole round trip — and the prompt cannot draw
+      without it. **Kd's own defect in miniature.** The silence is right for
+      `ownerTrialUsed` and wrong for the COVER: a gym created one second ago
+      demonstrably has no plan, so a neutral cover now stands in, claiming no
+      outcome it cannot deliver. Mutant **C105** — found T3 round 1, fixed this
+      round
+- [x] **Nothing exercised the stale `ownerTrialUsed` path.** `applyStartedTrial`
+      patches `subscription` on one gym only — deliberately, since the field is a
+      fact about a PERSON and writing it across every row would mislabel a
+      manager holding `billing.manage` on somebody else's gym — so a failed
+      re-read leaves gym B offering a trial that 409s. It self-heals on the press
+      and no test drove it. Case added to `gymSwitch.render.test.jsx`; the field
+      is deliberately NOT written across rows — found T3 round 1, fixed this round
+- [x] **The smoke sheet contradicted itself about who runs step 7** — "RUN AND
+      PASSED 11/11 by Kd" against "STEP 7 IS THE CHAT'S TO RUN", in the one file
+      whose purpose is keeping exactly that straight. Now says which steps were
+      whose — found T3 round 1, fixed this round
+
+**THE FIX ROUND SHIPPED A LYING TEST AND ITS OWN NEW MUTANT CAUGHT IT — the one
+thing here worth reading twice.** The first version of the keyboard case
+asserted *"after Tab, focus is still inside the dialog"*. **jsdom does not
+implement Tab**, so `fireEvent.keyDown` moves no focus and that sentence is true
+whether the trap exists or not: **C103 came back ALIVE against a test written in
+the same hour to prove exactly what C103 breaks.** Rule 4's category, produced by
+rule 5's instrument, and it would have shipped as a green guarantee over a real
+gap. Re-written to assert what the handler actually DOES — at each edge focus
+LANDS on the other end, which does not move at all without it — and C103/C104
+re-measured RED. **Standing: an assertion that a fixture "is still inside" a
+container it was already inside is not an assertion.**
+
+**Two instrument notes the reviewer raised and did NOT ask to be fixed, recorded
+so they are not re-discovered:** `C100` kills by a null dereference rather than
+by the sentence it names (guarantee 4 is genuinely held by the direct test beside
+it), and the Escape assertion targeted the backdrop — **that one WAS re-aimed
+here**, because the trap now moves focus into the dialog, which makes a
+dialog-level handler the likely future addition.
+
+**One fixture went stale in the same round and it is worth naming:**
+`trial.render.test.jsx`'s org carried no `ownerTrialUsed`, which stopped meaning
+"an ordinary gym with no plan" the moment Low-3 landed and started meaning "this
+api could not tell us" — so the file was testing the deploy window while claiming
+to test the ordinary case. Spelled out in the fixture, with the reason.
+
 ### The forced prompt's SERVER half — T3 round 1, 2026-08-28 (DECISIONS :22921)
 
 Reviews `9d5a327`. **ZERO Critical/High, EIGHT Low.** Escape hatch NOT armed —

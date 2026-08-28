@@ -293,6 +293,52 @@ describe('walking from one gym to another', () => {
     expect(screen.getByText(/already used your one free trial/i)).toBeTruthy();
   });
 
+  it('recovers when gym B’s row still says the trial is unspent', async () => {
+    // T3 round 1, Low-5 — the stale path nothing exercised. `applyStartedTrial`
+    // patches `subscription` on ONE gym, deliberately: `ownerTrialUsed` is a fact
+    // about a PERSON, and writing `true` across every row would mislabel a
+    // manager holding `billing.manage` on somebody else's gym.
+    //
+    // So when the re-read after starting gym A's trial FAILS (rule 2 keeps the
+    // old answer), gym B still reads `ownerTrialUsed: false` and gets the TRIAL
+    // arm — the thing C99 exists to prevent, arriving through the store instead
+    // of through the selector. **It self-heals on the press**, and that is the
+    // whole guarantee here: the server refuses, and the prompt turns into the
+    // price list rather than leaving the owner on a button that cannot work.
+    orgService.getMine.mockResolvedValueOnce({ data: { orgs: [GYM_A, GYM_B], formerOrgs: [] } });
+    orgService.getMine.mockRejectedValue(new Error('network'));
+    orgService.startTrial.mockResolvedValueOnce({
+      data: {
+        outcome: 'started',
+        subscription: { status: 'trialing', trialEndsAt: daysFromNow(30), seatCap: 300 },
+      },
+    });
+
+    renderConsole();
+    fireEvent.click(await screen.findByRole('button', { name: /start your 30-day free trial/i }));
+    await waitFor(() => expect(screen.getByText('Free trial')).toBeTruthy());
+
+    await walkTo('B');
+
+    // Gym B's kept row is stale, so it offers the trial…
+    const button = await screen.findByRole('button', { name: /start your 30-day free trial/i });
+    orgService.startTrial.mockRejectedValue({
+      response: {
+        status: 409,
+        data: {
+          error: 'trial_already_used',
+          message: "You've already used your free trial. It's one per person, not one per gym.",
+        },
+      },
+    });
+    fireEvent.click(button);
+
+    // …and the refusal turns it into the honest arm rather than a dead button.
+    await waitFor(() => expect(screen.getByText(/one per person, not one per gym/i)).toBeTruthy());
+    expect(await screen.findByTestId('plan-list')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /start your 30-day free trial/i })).toBeNull();
+  });
+
   it('does not show gym A’s prices under gym B’s prompt', async () => {
     // THE PROMPT IS THE CONSOLE'S NEWEST STATEFUL PANEL, so it is the newest
     // member of this class: it holds a fetched price list, and the shell it is

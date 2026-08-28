@@ -209,6 +209,59 @@ describe('the forced trial prompt', () => {
     fireEvent.click(modal);
     expect(screen.getByTestId('plan-modal')).toBeTruthy();
     expect(screen.getByRole('button', { name: /start your 30-day free trial/i })).toBeTruthy();
+
+    // AND ON THE DIALOG ITSELF, not only the backdrop — T3 round 1's instrument
+    // note. Focus now moves INTO the dialog, so a real Escape press lands there;
+    // a handler added to this element would have gone undetected by the two
+    // lines above, and it is the likely place somebody adds one.
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape', code: 'Escape' });
+    expect(screen.getByTestId('plan-modal')).toBeTruthy();
+  });
+
+  it('CONTAINS THE KEYBOARD, not just the mouse', async () => {
+    // T3 round 1, Low-1 — the one finding that touched the ruling itself. The
+    // overlay stops a mouse; it did not stop TAB, so focus walked out to the
+    // rail's links and the phone tab bar behind it, invisible under a 94%-opaque
+    // cover but still activatable with Enter.
+    orgService.getMine.mockResolvedValue(mineIs(ORG));
+    renderConsole(Overview);
+
+    const dialog = await screen.findByRole('dialog');
+    // Focus lands in the dialog rather than on whatever the screen behind had.
+    await waitFor(() => expect(document.activeElement).toBe(dialog));
+
+    // ── WHAT THIS CAN AND CANNOT ASSERT, because the first version of this test
+    // was a LIAR and mutant C103 is what caught it ─────────────────────────────
+    //
+    // **jsdom does not implement Tab.** `fireEvent.keyDown` moves no focus, so
+    // "after Tab, focus is still inside the dialog" is true whether the trap
+    // exists or not — it was green with the handler deleted, which is exactly
+    // rule 4's category. What IS observable is the handler's own work: at each
+    // EDGE it calls `preventDefault` and moves focus to the other end. Without
+    // it, focus does not move at all. So both edges are asserted by WHERE focus
+    // lands, never by "still inside".
+    //
+    // The middle of the cycle is the browser's own business and is not asserted
+    // here — in a real browser Tab walks the dialog's own controls in order, and
+    // the two edges are the only places it could escape.
+    const reachable = [...dialog.querySelectorAll('a[href], button:not([disabled])')];
+    expect(reachable.length).toBeGreaterThan(1);
+    const first = reachable[0];
+    const last = reachable[reachable.length - 1];
+    // The shell's own controls are in the document — this is the escape route
+    // being closed, not an absence of anywhere to escape to.
+    expect(screen.getAllByRole('link', { name: 'Your gyms' }).length).toBeGreaterThan(1);
+
+    // Tab off the LAST control wraps to the FIRST instead of leaving for the rail.
+    last.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(document.activeElement).toBe(first);
+
+    // And Shift-Tab off the FIRST wraps back to the LAST rather than reaching the
+    // screen behind.
+    first.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(last);
   });
 
   it('covers the MEMBERS screen too, not only the gym screen', async () => {
@@ -426,11 +479,18 @@ describe('the screen that says the gym is ready', () => {
     expect(screen.getByText('K7QM2X')).toBeTruthy();
   });
 
-  it('draws NOTHING before the console has been told the gym exists', async () => {
+  it('draws no PROMPT before the console has been told the gym exists — but still covers the code', async () => {
+    // Two guarantees that pull in opposite directions, and T3 round 1's Low-4 is
+    // what separated them.
+    //
     // The create response carries no `ownerTrialUsed`, so the prompt is drawn
-    // from the shared store's row instead — and until that read lands there is
-    // no row. A prompt that cannot be closed must never be drawn on a guess, so
-    // the safe direction here is silence.
+    // from the shared store's row and until that read lands there is no row: a
+    // prompt that cannot be closed must never be drawn on a guess.
+    //
+    // **The COVER does not depend on that at all** — a gym created one second
+    // ago demonstrably has no plan — and without it this screen showed the join
+    // code and its live Copy button for the whole round trip, which is Kd's own
+    // defect in miniature.
     orgService.createOrg.mockResolvedValue({
       data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } },
     });
@@ -438,8 +498,25 @@ describe('the screen that says the gym is ready', () => {
     renderNewGym();
     await createGym();
 
-    expect(await screen.findByText(/Iron House is ready/i)).toBeTruthy();
+    expect(await screen.findByTestId('gym-setup-cover')).toBeTruthy();
     expect(screen.queryByTestId('plan-modal')).toBeNull();
+    // It claims no outcome it cannot deliver — the read may never answer.
+    expect(screen.queryByText(/starting your trial|loading your plan/i)).toBeNull();
+  });
+
+  it('KEEPS the code covered when that read fails outright', async () => {
+    // The half that is not merely slow: a failed read leaves `createdOrg` null
+    // for ever, so without the cover the code sat uncovered permanently.
+    orgService.createOrg.mockResolvedValue({
+      data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } },
+    });
+    orgService.getMine.mockRejectedValue(new Error('network'));
+    renderNewGym();
+    await createGym();
+
+    expect(await screen.findByTestId('gym-setup-cover')).toBeTruthy();
+    await waitFor(() => expect(orgService.getMine).toHaveBeenCalled());
+    expect(screen.getByTestId('gym-setup-cover')).toBeTruthy();
   });
 });
 
@@ -559,6 +636,38 @@ describe('who the prompt stops', () => {
     renderConsole(Overview);
 
     await screen.findByText('Iron House');
+    expect(screen.queryByTestId('plan-modal')).toBeNull();
+  });
+
+  it('SAYS SO in that window, rather than leaving the owner a blank screen', async () => {
+    // T3 round 1, Low-3. The prompt refuses to draw on an unknown (correctly —
+    // it cannot be closed) and the plan card refuses to draw a plan that does
+    // not exist, so between them an owner got NOTHING and no way to start a
+    // trial, where before this card the Overview's button worked regardless.
+    // The window heals itself, and "blocked from finishing" is still what
+    // happens inside it, so it gets a true sentence (:12660).
+    const { ownerTrialUsed, ...WITHOUT } = ORG;
+    expect(ownerTrialUsed).toBe(false);
+    orgService.getMine.mockResolvedValue(mineIs(WITHOUT));
+    renderConsole(Overview);
+
+    expect(await screen.findByText(/couldn’t check this gym’s plan|couldn't check this gym's plan/i)).toBeTruthy();
+    // It promises nothing about a trial it cannot confirm they may have.
+    expect(screen.queryByRole('button', { name: /free trial/i })).toBeNull();
+  });
+
+  it('says nothing in that window to somebody who could not act on it anyway', async () => {
+    // The control (:7104's PG1): the sentence above is for whoever can pay. A
+    // trainer meets neither the prompt nor an explanation they can do nothing
+    // with — and without this, a card drawn for everybody would pass the case
+    // above just as well.
+    const { ownerTrialUsed, ...WITHOUT } = TRAINER_ORG;
+    expect(ownerTrialUsed).toBe(false);
+    orgService.getMine.mockResolvedValue(mineIs(WITHOUT));
+    renderConsole(Overview);
+
+    await screen.findByText('Iron House');
+    expect(screen.queryByText(/couldn’t check this gym’s plan|couldn't check this gym's plan/i)).toBeNull();
     expect(screen.queryByTestId('plan-modal')).toBeNull();
   });
 

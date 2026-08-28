@@ -1,6 +1,66 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE FORCED PROMPT'S WEB HALF — T3 ROUND 1 AND ITS FIX ROUND. ZERO
+      Critical/High, SIX Low, THE PACKET SHIPS. DECISIONS :23578.
+      Reviews 99687c5 + 3891acc (:23257). Kd approved the list first ("fix all").
+
+  1. **ESCAPE HATCH NOT ARMED, and the reviewer named why rather than reciting
+     the rule:** this is the SECOND consecutive CLEAN round in this subsystem —
+     the opposite of the two-Critical trigger. It also re-ran the card's own
+     numbers rather than trusting them.
+  2. **LOW-1 TOUCHED THE RULING AND A MOUSE CANNOT SHOW IT TO YOU.** The prompt
+     covered the screen and did not contain the KEYBOARD: Tab walked out to the
+     rail, the phone tab bar and the join code's live Copy button, invisible
+     behind a 94%-opaque overlay with Enter still working — **the smoke sheet's
+     own step 2 made false for anybody not using a mouse, which is why Kd's
+     smoke could not find it.** `inert` on the shell was rejected: two call
+     sites, so the guarantee would live in whatever each remembered (:1239).
+  3. **THE FIX ROUND SHIPPED A LYING TEST AND ITS OWN NEW MUTANT CAUGHT IT.**
+     The keyboard case asserted "after Tab, focus is still inside the dialog" —
+     **jsdom does not implement Tab**, so it was true with the trap deleted, and
+     **C103 came back ALIVE against a test written the same hour to prove what
+     C103 breaks.** Rule 4's category from rule 5's instrument, inside the round
+     that made both, and **the second time on this card the WHOLE table found
+     what a subset could not.** **STANDING: asserting a fixture is "still
+     inside" a container it was already inside is not an assertion.**
+  4. **LOW-3's BRANCH DOES NOT RE-ASK THE PRIVILEGE** — the gate above has
+     already returned, and a second copy is two guards where either suffices:
+     C68's exact shape, which this card had filed hours earlier.
+  5. **LOW-4 IS KD'S OWN DEFECT IN MINIATURE** — the join code sat uncovered for
+     the whole round trip and for ever if the read failed. The silence is right
+     for `ownerTrialUsed` and wrong for the COVER: a gym created a second ago
+     demonstrably has no plan.
+  6. **TWO FIXTURES WENT STALE INSIDE THE ROUND** (the server half's shape): an
+     org with no `ownerTrialUsed` stopped meaning "ordinary gym" and started
+     meaning "the api could not tell us"; and a case asserting "there is no
+     trial button at all" now asserts the only one belongs to the PROMPT.
+
+FILES: apps/web/src/components/console/{PlanModal.jsx,ConsoleLayout.jsx,
+       TrialCard.jsx} · apps/web/src/pages/console/{NewGym.jsx,
+       planPrompt.render.test.jsx,gymSwitch.render.test.jsx,
+       trial.render.test.jsx} · apps/web/tools/mutate-console.mjs ·
+       RUNBOOK/smoke-trial-expiry.md · BACKLOG.md · DECISIONS.md ·
+       DECISIONS-INDEX.md · DECISIONS-TRIGGERS.md
+
+PROVE: web **1327/1327 across 49 files** (+5) · eslint --max-warnings=0 exit 0
+       on seven files · `vite build` exit 0 · node --check on the harness ·
+       check-harnesses 25 · check-decisions-index 230 · check-decisions-triggers
+       638 from 180 of 318 · **WHOLE-TABLE SWEEP of 126: 124 RED, 2 ALIVE, 0
+       never ran** — C103 (fixed, then re-measured RED with C104/C105/C106) and
+       **C68, which is NOT this card's and carries its own ⚪ OWED line** ·
+       restores sha256-verified after every mutant.
+
+OPEN:  C68's redundancy · the read-only console · the contact channel the
+       subscribe arm needs before it can grow a button · the consumer trial's
+       own expiry · the worker's job routing having no test.
+
+NEXT:  **Nothing on this card — T3 is closed at round 1 and the smoke passed
+       11/11.** Kd's API is pointed at the LOCAL database from the smoke;
+       restarting it without that prefix returns him to the shared Neon branch.
+```
+
+```
 TASK: THE FORCED PROMPT REACHES A SCREEN — the modal that cannot be closed, the
       Overview's trial button deleted, and the expiry smoke rewritten.
       DECISIONS :23257. Step 3 of :22215 §5; the visible half of :22697.

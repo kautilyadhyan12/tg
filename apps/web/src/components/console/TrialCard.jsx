@@ -81,7 +81,34 @@ export default function TrialCard({ org }) {
   // prompt is what that owner is looking at, over this whole screen. This used
   // to be where the pre-trial button lived — see the ruling at the top of this
   // file before putting anything back here.
-  if (org?.subscription == null) return null;
+  //
+  // EXCEPT IN ONE WINDOW, WHERE IT WOULD BE SILENCE — T3 round 1, Low-3. If the
+  // api is older than this bundle it sends no `ownerTrialUsed`, the prompt
+  // correctly refuses to draw on an unknown (it cannot be closed, so a guess
+  // there seals somebody out), and this card refuses to draw a plan that does
+  // not exist. Between them an owner would get NOTHING: no plan, no prompt, and
+  // no way to start a trial — where before this card the Overview's button
+  // worked regardless. **The window is a race between two deploys and it heals
+  // itself, and "blocked from finishing" is still what happens inside it**, so
+  // it gets a sentence rather than a blank space (:12660 — removing the sentence
+  // is the quieter defect, not the fix).
+  //
+  // The privilege is NOT re-asked here — the gate above has already returned
+  // null for anybody without it. A second copy would be two guards where either
+  // suffices, so neither could be falsified by a mutant: C68's exact shape,
+  // which this card filed an owed line against three hours earlier.
+  if (org?.subscription == null) {
+    return typeof org?.ownerTrialUsed !== 'boolean' ? (
+      <ConsoleCard>
+        <div className="text-xs uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          Plan
+        </div>
+        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
+          We couldn&apos;t check this gym&apos;s plan just now. Reload the page in a moment.
+        </p>
+      </ConsoleCard>
+    ) : null;
+  }
 
   const trialing = isTrialing(org);
   const endsOn = trialing ? trialEndDateLabel(org.subscription.trialEndsAt) : null;
