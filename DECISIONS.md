@@ -24809,3 +24809,83 @@ neither committed nor destroyed.
 
 **Checks: `check-decisions-index` 235 pointers resolve · triggers rebuilt and
 `--check` clean · `check-harnesses` 25 scripts parse.**
+
+### ADDENDUM, same session — KD ASKED WHETHER THE NEW RULE WOULD MAKE CHATS READ *MORE*, AND THE MEASUREMENT FOUND A LEAK TEN TIMES THE RULE'S OWN COST
+
+**Read before filing ANY new entry's index line, before putting a card record or
+a review round in `DECISIONS-INDEX.md` §1, before quoting an always-read line
+count from that file's own header, and before assuming a split that was made once
+has held.**
+
+**HIS QUESTION WAS THE RIGHT ONE AND I HAD NOT ASKED IT:** *"will it make the
+future chat read more then what previous chats did?"* — asked immediately after
+the ruling above was committed. **The honest answer is yes, in two very different
+sizes.**
+
+**THE RULE'S OWN COST IS ~4 LINES PER ENTRY, AND IT IS REAL.** Before it, 138 of
+323 rulings contributed nothing to `DECISIONS-TRIGGERS.md`; now every entry
+contributes its ~3.6 phrases. **That file is always-read, so making the sentence
+mandatory does make the always-read pile grow faster per entry.** It is the price
+of the entry being findable at all, and it is small.
+
+**THE LEAK IS ~50 LINES PER ENTRY AND NOBODY HAD LOOKED.** Measured on the file
+rather than recalled:
+
+| | always-read lines |
+|---|---|
+| after the 2026-08-28 split | ~1,368 |
+| **before this addendum (two days later)** | **2,217** |
+| after it | **1,708** |
+
+*(1,708 and not the 1,694 the move alone produced: **this entry's own four
+trigger phrases are in that figure**, which is the rule above working as
+designed — a findable entry costs four lines of always-read, and that is the
+trade being made.)*
+
+**`DECISIONS-INDEX.md` §1 went ~680 → 1,310 lines in TWO DAYS — it nearly
+doubled** — because every chat since the split, **including this one, twice, in
+the very session that ruled on writing less**, filed its finished round record
+beside the standing rules instead of in §1B. Ten entries, **523 lines**. The
+read-path header still announced *"~680"*, so the file was under-reporting itself
+by half. **:22497 moved 1,631 lines out on 2026-08-28 and 523 came back by
+2026-08-29** — the disease that entry diagnosed, recurring inside its own
+convalescence, which is the third recorded instance of an instrument regrowing
+the way the thing it indexes grows.
+
+**KD RULED THE MOVE ("Yes").** Finished card records — build entries, T3 rounds,
+smokes — go to §1B. §1 keeps only what constrains future work.
+
+**WHAT MAKES IT PERMANENTLY SAFE IS THE RULING ABOVE**, and this is the part
+worth carrying: :22497 could move 36 entries only because it first PROVED each
+was surfaced by an always-read file, and six of them were hanging on a title in a
+gap list. **With `Read before …` now MANDATORY, every future card record is
+findable from §1B by construction** — so it never needs to enter §1, and this
+particular drift cannot recur without somebody breaking the rule outright.
+
+**THE SAFETY PROOF, RUN BEFORE THE MOVE AND AGAIN AFTER, NOT ASSERTED EITHER
+TIME.** Before: all ten are surfaced by `DECISIONS-TRIGGERS.md` §1, **4 to 7
+phrases each, zero hidden**. After: the generator's harvest came back
+**byte-identical — 670 triggers from 187 of 325 rulings, 138 declaring none** —
+which is the strongest available evidence that nothing was lost, because the
+generator reads index lines and would have dropped phrases had any line moved
+out of an entry it belongs to.
+
+### Round log — not read unless a trigger sends you here
+
+**INSTRUMENT: the same LINE-MULTISET INVARIANT as :22497's move, and it is the
+only reason this is a safe operation.** The script defines an entry BLOCK as
+`[start, nextStart)` so it carries its own trailing blank lines, removes the ten
+blocks and re-inserts them verbatim above §1B's first entry, then **refuses to
+write unless the sorted multiset of every line in the file is identical**:
+`7,133 lines in, 7,133 out, multiset equal`. The diff is **481 insertions and 481
+deletions**. Nothing was shortened, reworded or deleted; only position changed.
+
+**Checks after: `check-decisions-index` 236 pointers resolve, 871 headings ·
+triggers `--check` up to date at 670/187/325 · `check-harnesses` 25 scripts
+parse.** No code, no test, no `src` file.
+
+**Two things left alone under R1.1, both named rather than fixed:** five OLDER
+card records (147 lines) still sit in §1 from before the 2026-08-28 split — they
+predate the convention and moving them is a separate job — and §1B's ordering has
+one pre-existing entry out of sequence (`:22341`, filed at the bottom instead of
+by date).

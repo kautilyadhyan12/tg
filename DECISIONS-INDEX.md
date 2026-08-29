@@ -4,13 +4,22 @@
 
 **EVERY SESSION, WHATEVER THE TASK, READ ALL THREE:**
 
-1. **`DECISIONS-TRIGGERS.md`** — generated, ~630 lines. §1 is *"before you do
-   this, read that"*, harvested verbatim from the rulings' own `Read before …`
-   sentences. §2 lists every ruling that declares no trigger, by pointer and
-   title, so a blank search is visibly *"nothing declared itself"* and never
-   *"nothing binds me"*.
-2. **§1 below — STANDING RULES.** ~680 lines.
-3. **§2 below — OPEN.** The only forward-looking part of this file.
+1. **`DECISIONS-TRIGGERS.md`** — generated, **853 lines** (~630 at the
+   2026-08-28 split). §1 is *"before you do this, read that"*, harvested
+   verbatim from the rulings' own `Read before …` sentences. §2 lists every
+   ruling that declares no trigger, by pointer and title, so a blank search is
+   visibly *"nothing declared itself"* and never *"nothing binds me"*.
+2. **§1 below — STANDING RULES. 797 lines** (~680 at the split).
+3. **§2 below — OPEN. 58 lines.** The only forward-looking part of this file.
+
+**ALWAYS-READ TOTAL: 1,708 lines, MEASURED 2026-08-29 and not estimated.**
+**These three figures are re-measured whenever this file is restructured, and
+the reason is that they had drifted badly**: they read *"~630"* and *"~680"*
+while §1 had reached **1,310** — nearly DOUBLE its post-split size, two days
+after the split. **A header that states a size nobody re-measures is how the
+last two instruments grew past the point of being readable** (:22497). Command:
+`grep -n "^## 1 ·\|^## 1B ·\|^## 2 ·\|^## 3 ·" DECISIONS-INDEX.md` plus
+`wc -l DECISIONS-TRIGGERS.md`.
 
 **THEN open, IN FULL, every `DECISIONS.md` entry those three send you to.** That
 is where the detail lives and it is the only thing you may cite.
@@ -736,43 +745,6 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   forced trial prompt → subscribe prompt → real payment. **NOT ruled:** the
   read-only window's length (§4.2's 14 days stands), second-trial copy, prices
   above 2100 members. Paddle (:17357) remains unbuilt and unauthorised by this.
-- **:22782** — 2026-08-28 — **THE GYM TRIAL EXPIRY SWEEP, T3 ROUND 1: ZERO
-  Critical/High, THE PACKET SHIPS — and the round's real finding is that the
-  SMOKE SHEET'S ONLY COMMAND COULD NOT RUN, while its obvious repair would have
-  ended every trial in Kd's own database.** Reviews `a8b2e98` (:22341). **Escape
-  hatch NOT armed** (round 1, no Critical anywhere; the reviewer said so
-  unprompted). Seven Low, all fixed, in `BACKLOG.md`; Kd approved the list first
-  (*"fix all"*). **Read before running any tool from `apps/api/tools/`, before
-  writing a command into a smoke sheet, before adding a mutant that makes the
-  suite WRITE, before trusting the mass-write detector's green line, and before
-  quoting a test's docstring as evidence of what it covers.**
-  **SIX OF SEVEN ARE FALSE SENTENCES THIS CARD CREATED** — comments true when
-  written and made lies by the commit (*"NOTHING ENDS A TRIAL"*, *"exactly one
-  writer"*, *"no such mutant exists today"*). :13552's pattern, and **L-2 is
-  :5748 verbatim: :22341 §3 corrected the prediction in the ENTRY and left the
-  SOURCE saying the old thing.** **Standing: a card that closes a documented gap
-  should grep for the gap's own description before it ships.**
-  **L-5 — THE MASS-WRITE DETECTOR WAS BLIND TO THE TABLE THIS CARD WRITES AND ITS
-  OWN DOC HAD NAMED THE TRIGGER** (*"the next route that writes rows a caller does
-  not own"* … *"no such mutant exists today"* — O142 became it in the same
-  commit). **Proven both ways on a planted canary: pre-fix, 83 rows watched and
-  "no unattributed changes" while the canary went `trialing` → `expired`;
-  post-fix, 246 rows and `O142 rewrote 1 pre-existing row(s)` naming
-  `sub:f19930aa…`.** `subscriptions` now fingerprinted in the same query.
-  **L-7 — BOTH OBVIOUS REPAIRS OF THE BROKEN SMOKE COMMAND ARE WRONG.**
-  `--env-file=.env` points at the shared Neon branch (`NODE_ENV=development`, so
-  the production refusal will NOT fire) and would end every live gym trial there
-  — **measured: three live gym subscriptions, one Kd's own real trial**; pointing
-  only the SWEEP at local is worse, since the browser writes to Neon and step 5
-  would report `expired: 0` **for no visible reason**. Shipped: the WHOLE smoke
-  runs on local Postgres. **Standing: a command in a smoke sheet is CODE KD WILL
-  RUN and takes the same evidence as code (V1) — this one was never executed
-  before being handed over.**
-  **RULE 4 — ONE GREEN LIAR, and the TEST was fine while its DOCSTRING was the
-  defect**: flip `<=` to `>=` and the NULL-handling test stays GREEN while seven
-  of eight go red. **PROVE after fixes, all LOCAL: 9/9 · tsc exit 0 · eslint clean
-  on three files · sweep a stated SUBSET 6 of 144, 6 RED 0 ALIVE.** **THE SMOKE IS
-  NOW RUNNABLE FOR THE FIRST TIME and is the only gate left.**
 - **:22697** — 2026-08-28 — **KD RULES THE SECOND-GYM ARM OF THE FORCED PROMPT,
   AND CORRECTS THE SHAPE OF THE WHOLE THING AT A SCREEN: IT IS A MODAL, NOT A
   BUTTON.** **Read before building the forced trial prompt or the subscribe
@@ -882,114 +854,337 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   recommendation with its evidence missing.** Caught only because Kd asked a
   second question instead of accepting the first answer.
   `CLAUDE.md`'s AMENDMENT 2026-08-29. No code, no test, no `src` file.
+  **ADDENDUM `:24813`, same session — KD ASKED WHETHER THE RULE WOULD MAKE CHATS
+  READ *MORE*. Yes, by ~4 lines an entry — while a leak TEN TIMES that size sat
+  unlooked-at: §1 nearly DOUBLED (~680 → 1,310) in the two days after :22497's
+  split. KD RULED THE MOVE ("Yes"): ten card records, 523 lines, to §1B;
+  always-read 2,217 → 1,708.** **Read before filing any entry's index line,
+  before putting a card record or a review round in §1, before quoting an
+  always-read count from this file's header, and before assuming a split made
+  once has held.** Full detail, both safety proofs and the invariant at `:24813`
+  — **which is where they belong, and this line was 18 lines long before the rule
+  above was applied to it.**
 
-- **:22921** — 2026-08-28 — **THE FORCED PROMPT'S SERVER HALF: the first price
-  this product has ever served, an owner's spent trial made visible, and Canada,
-  the UK and the euro area finally able to buy anything.** Step 2 of :22215 §5,
-  split at the plan gate the way :22341 was; the MODAL is the next card.
-  **Read before building either unskippable prompt, before adding a pricing
-  endpoint or a second reader of `plans`, before touching `COUNTRY_CURRENCY` or
-  `listOrgPlansForCurrency`, before writing any money string for a screen, and
-  before assuming `subscription: null` means a gym never trialled.**
-  **TWO KD RULINGS, each put to him with a recommendation and its cost:** the
-  prompt **stops only whoever can pay** (a trainer without `billing.manage` uses
-  the console as normal — blocking someone who cannot pay is :22215 §4's brick
-  wall aimed at the wrong person), settling the first of :22697 §4's open
-  questions; and **the Overview's pre-trial BUTTON goes**, the plan card staying
-  for a gym that IS trialling — put as an explicit option because *"a pop up …
-  not a button"* rules the SHAPE and does not by itself authorise deleting a
-  control (:10182's precedent). **The deletion happens in the WEB card.**
-  **SHIPPED, three pieces:** `ownerTrialUsed` on `/v1/orgs/mine` (the arm
-  selector — **widening the subscription LATERAL was the other route and is
-  WRONG**, because `subs_one_live_uq` is PARTIAL over the three live statuses and
-  that is what makes its `LIMIT 1` well-defined: :12731's trap from the other
-  side; it tests `trial_ends_at IS NOT NULL` and **never a status**, staff-only,
-  and **null must never draw the modal**) · **`GET /v1/orgs/:gymId/plans`, the
-  first price ever to leave this server** — gym-scoped so the SERVER reads the
-  currency (R3.1) and the route is tenant-scoped for free, `priceLabel` and
-  **deliberately no minor-unit integer**, no display name because
-  `plans.name_key` has no translation table to resolve · and **`COUNTRY_CURRENCY`
-  → USD for CA/GB/the euro area**, Kd's :22215 §3.5 ruling finally built, with the
-  supported-country ENUM untouched (:10010 is a different question).
-  **NO FLOAT TOUCHES THE MONEY**: the integer goes through `Intl` as a `bigint`
-  and the minor digits are appended as text, because `/100` breaks R6.1 and the
-  ES2023 string overload is untyped under this repo's ES2022 `lib` — which is
-  also why the locale is PINNED to `en-US`. A fixed `maximumFractionDigits: 2`
-  returns `$1,234.5` for 123450, measured.
-  **NO BACKFILL, MEASURED NOT HOPED**: `currency_display` is recomputed only when
-  the country changes, and there are **zero CA/GB/euro-area gyms on either
-  database**. The trap is written into the map's own comment.
-  **AUDIT: seven mutants, and O148 SURVIVED TWICE — once for each half of
-  :11846's pair.** The TEST half (every retired band is INR, and the only exact
-  list was the USD one), then the FILTER half (:21580's C91 verbatim — it still
-  named the USD test after the assertion moved to the rupee one). The C88
-  question was asked first and the guarantee IS observable, unlike :21580's C88.
-  **PROVE, all LOCAL: `orgs.plans` 10/10 (new) · `orgs.routes` 134/134 ·
-  `orgs.trialSweep` 9/9 · `db.migration` 10/10 · shared 51/51 · web 1294/1294 ·
-  tsc exit 0 and PROVEN REAL by planting a type error · eslint clean on seven
-  files · SWEEP a stated SUBSET of 151: O145–O151, 7 RED, 0 ALIVE.**
-  **SMOKE RUN AND PASSED, AND KD'S QUESTION IS WHAT PRODUCED IT**: the report
-  said "no screen, so no smoke", he asked *"do i not need to perform smoke test
-  ?"*, and checking found the currency ON SCREEN in three places. **A card with
-  no new screen is not a card with nothing a user can see.** Round 1 failed on a
-  STALE API PROCESS serving the old map ("set up in CAD") — `smoke-trial-expiry
-  .md`'s own S2 warning (:15927, :20222), incurred by the chat that had read it
-  that session; restarted, verified through the live api first, round 2 PASSED.
-  **NOTHING TICKS BUT THE CURRENCY LINE; T3 UNRUN.**
+## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 
-- **:23128** — 2026-08-28 — **THE FORCED PROMPT'S SERVER HALF, T3 ROUND 1: ZERO
-  Critical/High, THE PACKET SHIPS** — eight Low, one of which would have reddened
-  CI, and two more the FIX ROUND broke in its own instruments. Reviews `9d5a327`
-  (:22921). Escape hatch NOT armed (round 1, no Critical anywhere; the reviewer
-  said so unprompted). Kd approved the list first (*"fix all"*); all eight fixed
-  in one round, logged in `BACKLOG.md`.
-  **Read before scoping any exact-list assertion in a suite that shares a
-  database, before hoisting an expression a mutant anchors on, before adding a
-  `LIMIT` or a trailing clause to a mutated SQL line, and before granting a field
-  on `/v1/orgs/mine` to "any staff".**
-  **LOW-1 IS MINE AND IT WOULD HAVE TURNED CI RED**: the exact USD ladder raced
-  `orgs.routes.test.ts`, which inserts a **USD** fixture plan for its whole run.
-  My comment said *"the USD book is touched by nothing"* — **I checked the OTHER
-  fixture's currency, found CAD, and generalised from one to both.** :18830's
-  Low-1 recurring three days after it was fixed there. Reproduced, scoped to the
-  seeded `org_` prefix, **re-measured in ONE invocation TWICE (146/146, 146/146)**
-  because that entry also says a race passing once is not evidence.
-  **THE FIX ROUND BROKE TWO OF ITS OWN INSTRUMENTS AND BOTH ABORTED RATHER THAN
-  LYING.** Hoisting an expression for Low-8 moved **O105**'s anchor (re-anchored
-  at the SAME call site, :15770 — this is the rot :21580 recorded); **O147** then
-  broke twice, once when a new `LIMIT` pushed its anchor off the end and once when
-  the shortened anchor matched `startGymTrial`'s deeper-indented copy as a
-  SUBSTRING — **the identical trap O148 hit in the same file the same day.** Both
-  fixed :21157's way, by making the line unique IN THE SOURCE. **Standing: adding
-  a `LIMIT`, a trailing clause or a hoisted `const` moves anchors nothing in the
-  diff mentions — run the WHOLE-TABLE sweep after a fix round, never the subset.**
-  **THE OTHER SIX:** a false *"no supported country can reach this"* sentence
-  (the map is read at CREATION, so a pre-ruling Canadian gym still lands there) ·
-  a no-backfill measurement that **went stale inside its own commit and counted
-  the wrong column** (`country`, not `currency_display`; this card's own smoke
-  created the gym it said did not exist — re-measured shared 0, local 1) · an
-  empty-list guard that walks the MAP while the route reads the STORED column
-  (claim corrected; the REFUSAL decision deferred to the modal card with its own
-  `OWED.md` line) · the new route missing from *"every route requires
-  authentication"* (:12227's trigger verbatim) · the formatter's fractional branch
-  having **no observer** — every one of Kd's ten prices is whole, so a mutant
-  forcing `isWhole` true stayed GREEN; given a `$34.99` fixture and **O153**, and
-  the reviewer asked :21580's C88 question FIRST and answered it (observable ⇒ the
-  test was missing, unlike C88) · and no `LIMIT` on the plans read (:10596's L-1),
-  capped at 50 with the mitigation that precedent lacked.
-  **LOW-8 IS THE ONE TO REMEMBER: `ownerTrialUsed` looked consistent beside
-  `subscription` and `seatsUsed`, and that was the WRONG COMPARISON — those are
-  facts about THIS GYM, this is a fact about a PERSON** and follows the owner
-  across gyms the reader has nothing to do with. Narrowed to `billing.manage`
-  (**O152**), with a TRAINER as its test's subject because a trainer is the only
-  caller that can tell the old gate from the new one.
-  **RULE 4: no green liars.** `interval = 'month'` is unobservable by
-  construction and is deliberately left unmutated. **Rule 3 N/A.**
-  **PROVE after the fixes, all LOCAL: `orgs.plans` 12/12 · the racing PAIR
-  146/146 TWICE · trialSweep+migration 20/20 · shared 51/51 · web 1294/1294 · tsc
-  exit 0 · eslint clean on seven files · SWEEP a stated SUBSET of 153: O105 +
-  O145–O153, 10 RED, 0 ALIVE**, nine controls GREEN first, 250 rows fingerprinted
-  with no unattributed changes.
+**NOT read every session. Read an entry here when your task touches what it is
+about** — the same terms §§2–7 have always been on. Nothing was shortened,
+reworded or deleted to put it here; these are the identical lines, filed where
+the read-path rule already sent them.
+
+**WHY THEY MOVED (2026-08-28, Kd-approved).** §1 said *"always relevant"* and had
+become 2,245 lines, of which **1,600+ were finished card records** — T3 rounds,
+PROVE figures, "the packet ships". A chat obeying the grounding rule read all of
+it before doing any work, which is the exact failure the 2026-07-30 amendment
+was written to fix, recurring one level up.
+
+**THE SAFETY PROOF, RUN BEFORE A LINE WAS MOVED AND NOT ASSERTED AFTERWARDS:**
+every one of the 36 entries below is surfaced by a file that IS read every
+session — **every one of them by a trigger phrase in `DECISIONS-TRIGGERS.md`
+§1.** Zero were hidden. It was 30-by-phrase and six-by-title-only when first
+measured; **naming those six by name is what exposed the generator's own defect
+(:22640) — all six declared a trigger in their INDEX LINE, which it was not
+reading.** A title in a gap list is weaker than a trigger, and **138 rulings are
+still in that position**, so this is a floor that rose, not a gap that shut.
+
+**SECOND MOVE, 2026-08-29, KD-APPROVED — AND THAT IT WAS NEEDED WITHIN TWO DAYS
+IS THE FINDING.** The ten newest entries below (`:22782` … `:24559`, **523
+lines**) were filed into §1 by the chats that wrote them, in the two days after
+the split. **§1 went ~680 → 1,310 lines: it nearly DOUBLED**, and the read-path
+header above still said *"~680"*. **Nobody did anything unusual — every chat
+simply filed its own round record beside the rules, which is what §1B exists to
+stop**, so the drift is a property of the habit and not of any one session. Kd
+found it by asking whether the day's new rule would make future chats read MORE.
+**Same instrument as the first move: a LINE-MULTISET INVARIANT that refused to
+write unless every line was identical** (7,133 in, 7,133 out, multiset equal;
+the diff is 481 insertions and 481 deletions). **Same safety proof, run BEFORE
+the move: all ten are surfaced by `DECISIONS-TRIGGERS.md` §1 — 4 to 7 phrases
+each, zero hidden** — and proven again AFTER it, by the harvest coming back
+byte-identical (**670 triggers from 187 of 325 rulings, before and after**).
+**Always-read: 2,217 → 1,708 lines.** Nothing was shortened, reworded or
+deleted. **The rule that makes this permanently safe is :24703, ruled the same
+day: a `Read before …` sentence is now MANDATORY, so every future card record is
+findable from §1B by construction and never needs to sit in §1 at all.**
+
+- **:24559** — 2026-08-29 — **THE READ-ONLY CONSOLE'S WEB HALF, T3 ROUND 2
+  (diff-only): ZERO Critical/High, THE PACKET SHIPS — five Low, NONE of them in
+  `src/`, and four are a smoke sheet that had never been run.** Reviews
+  `dba05fd`. Kd approved the list first (*"go"*); all five in `BACKLOG.md`.
+  **Escape hatch NOT armed** — round 1 had a Critical, this round has none, and
+  the trigger needs two consecutive.
+  **Read before writing a smoke step whose ✅ names a screen you have not opened,
+  before promising an exact row count from a database a smoke does not own,
+  before trusting a review's MAP of where a false sentence lives, before
+  declining a guard on the strength of a "grep-verified" sentence, and before
+  believing an edit landed because the tool said it did.**
+  **THE ROUND FOUND NO DEFECT IN THE CODE** and re-derived round 1's declined
+  handler guards as correct: `JoinCodesPanel` has no `<form>`, every button is
+  `type="button"`, its one `onKeyDown` has no form owner.
+  **LOW-1: round 1's "the only `<form>` in the console" is FALSE** —
+  `NewGym.jsx:262` is a second one — **and the review's own map of where that
+  sentence lives named four places when there are six** (it missed
+  `HANDOFF.md:29` and counted the unfixable commit message). **:23928's Low-1 one
+  round later, in the same subsystem: a correction's MAP is a claim exactly like
+  its figure.** Scope corrected to *"the only `<form>` in a panel this card
+  gates"*; the argument is untouched and no `src` comment needed changing.
+  **LOW-2 TO LOW-5 ARE THE SHEET AND EVERY ONE FAILS ON CORRECT CODE** — a
+  landing screen the app does not draw (:23257 §11's own defect, in the sheet
+  written by the round that recorded it) · an absence-shaped ✅ over a strip that
+  is genuinely there, **:21751's mirror: a step unable to PASS** · a **Confirm**
+  button no queue was drawing, fixed by making it real rather than deleting the
+  claim (`addOrgStaff` requires the email to be a member already, so the cheaper
+  repair is impossible) · and an exact `expired: 1` from a shared local database,
+  **the sentence :23257 §12 already measured as `expired: 2`**, in the one sheet
+  that was not corrected with its sibling. The chat-run step also carried no
+  command at all.
+  **INSTRUMENT: two `Edit` calls reported success and wrote nothing** — the
+  repo's two largest files — caught only by re-grepping. **A tool's success line
+  is not evidence the file changed.** Also flagged, not committed: `CLAUDE.md`
+  carries pre-existing uncommitted changes (R1.1).
+  **PROVE: web 1370/1370 exit 0 · eslint exit 0 on six files · index pointers
+  resolve · triggers `--check` clean. No sweep, no smoke — no `src` file
+  changed.** **The smoke is the only gate left and is runnable end to end for the
+  first time; T3 closed at round 2.**
+
+- **:24376** — 2026-08-29 — **THE READ-ONLY CONSOLE'S WEB HALF, T3 ROUND 1: ONE
+  Critical/High, THE PACKET DOES NOT SHIP — the guard reached every OPENER and
+  stopped there, and the panel's own comment told the reviewer it had not.**
+  Reviews :24141. Five Low, all fixed; Kd approved the list first (*"go"*).
+  **Escape hatch NOT armed** — first Critical in this subsystem after three clean
+  rounds (:23128, :23578, :23928), and the trigger needs two consecutive.
+  **Read before adding a `readOnly` prop to a console panel, before greying out
+  any console control, before writing a comment that says a prop reaches "every"
+  control, before adding a second guard beside one that already works, before
+  writing a smoke step for a console screen a MANAGER is meant to open, and
+  before applying a review's correction to the record.**
+  **THE C/H:** `readOnly` reached Limits / Replace / Remove / New code / Add
+  someone — every control a CLOSED panel draws — while the commit control behind
+  each carried `busy` alone (**Save**, **Replace it**, **Remove it**, **Make the
+  code**, **Add**, plus their fields). **The app walks the path itself**:
+  `consoleOrgs` re-reads on `focus`/`visibilitychange`, rows are keyed on the
+  CODE and panels on `org.id` — neither moves when a plan ends — and step state
+  is local, so a gym lapsing while somebody holds *"Replace it?"* left a live
+  full-colour destructive button under the red strip AND the panel note.
+  :5807's "promise that is not true" beside the sentence contradicting it; the
+  server still refuses (409, all twelve doors), so not data loss.
+  **WHY NOTHING COULD SEE IT: all fourteen existing cases render an
+  ALREADY-lapsed gym, so no assertion could reach a second control — the file
+  tested the STATE and never the TRANSITION**, and C111/C114/C116 had the same
+  hole. **A card whose subject is a state change needs a case that performs it.**
+  **THE HANDLER GUARDS THE REVIEW ASKED FOR ARE DECLINED, with a reason:**
+  `GymDetailsPanel`'s `<form>` is the only one in A PANEL THIS CARD GATES
+  (~~"the only one in the console"~~ — **corrected by round 2, which found
+  `NewGym.jsx`'s create form**), so
+  in these two panels a handler guard would be a second unfalsifiable guard —
+  **Low-5 of this same round, committed by the round fixing it.**
+  **TWO OF THE REVIEW'S OWN CLAIMS WERE WRONG, the second round running
+  (:23928):** the `OWED.md`/smoke "contradiction" does not exist, and *"tick
+  `org.manage` onto the manager"* names **a tick box that does not exist**
+  (:21157's open gap). **The real finding underneath was the sheet's, and it is
+  mine:** four steps sent Kd to a Settings tab a manager does not have.
+  **THE CONSEQUENCE TO CARRY: `GymDetailsPanel`'s and `StaffPanel`'s read-only
+  states are unreachable by every principal the product can create** — Settings
+  needs `staff.manage` (owner-only) or `org.manage` (no box), and a lapsed gym's
+  owner meets `PlanModal`. Their guarantees rest on tests and mutants alone,
+  including C116's ENTER-key door; recorded on :21157's line, whose own
+  "closed by the next card" prediction had gone stale (:21353's shape).
+  **:22029's test applied BOTH ways in one round** — the Overview's path is drawn
+  so the finding stands; the Settings path is not, so it is recorded unverified
+  rather than claimed. Severity and smoke had the same question: *can a user get
+  here?*
+
+- **:24141** — 2026-08-29 — **THE LAPSED GYM'S CONSOLE GOES READ-ONLY (web
+  half): every dead button is greyed with a true sentence, and KD REVERSED HIS
+  OWN RULING ON THE JOIN DOOR ONE MESSAGE AFTER MAKING IT.** The web half of
+  :22215 §5 step 1; server half :23711, its T3 :23928.
+  **Read before greying out any console control, before writing copy about a gym
+  that has stopped paying, before adding a `readOnly` prop to a console panel,
+  before promising a waiting applicant anything, and before re-anchoring a mutant
+  in `mutate-console.mjs` after a prop change.**
+  **KD RULED THE JOIN DOOR SHUT ("i say yes"), THEN STRUCK IT HIMSELF one
+  message later — *"hold their request and tell them the truth."*** He got there
+  by asking what the recommendation had not answered — *"what happens to that
+  user when gym subscribes again"* — and the answer killed it: a refusal saves
+  nobody, since the person must remember to come back and type the code again,
+  and it makes two rules where one belongs (applied the day before the gym
+  lapsed: keeps their place; the day after: lost). **Do not re-propose the
+  refusal.** The build is CARD B, its own `OWED.md` line; **he approved the split
+  and chose A first**. **The half that cannot be built yet was measured and told
+  to him: nothing in this product can put a lapsed gym back on a plan** — one
+  `INSERT INTO subscriptions` (the trial), one `UPDATE` (expiry), and the trial
+  is refused to any owner who has ever had one — so reviving a held application
+  belongs to the payment card and is written onto B's line.
+  **SHIPPED:** `consoleIsReadOnly` = `=== true` and nothing else (**`null` is
+  "we could not ask", never "locked"** — C97's rule; deriving it from
+  `!hasLivePlan` greys a paying gym's console at a trainer, mutant C108) ·
+  §4.2's *"trial expired → grace"* row, **which :21580 recorded as unbuildable**,
+  in words true of BOTH a gym that never subscribed and one whose trial ended
+  (**the spec's "Trial ended — members have moved to the free tier" is false for
+  the first**, and one field answers for both), red, **no CTA** · five panels
+  greying every refused control with the server's own `GYM_NOT_ON_PLAN_MESSAGE`
+  written ONCE · the queue saying *"Nobody can be let in until this gym is on a
+  plan."* and dropping *"confirm the ones you recognise"* · `isRetryable`
+  closing :23928's Low-6, **by CODE and never by status**, with the offline
+  positive control. **GREYED, NEVER HIDDEN** — the code, the roster and the staff
+  list all still draw, and two tests hold that.
+  **THE COPY STOPS SHORT OF RULING 2 ON PURPOSE**: *"they keep their place"* is
+  not true until card B, so two tests assert its ABSENCE.
+  **AUDIT: 13 new mutants, 7 RE-ANCHORED, and my own test was a GREEN LIAR** —
+  the tick-box case took row `[0]`, the OWNER's, whose ticks are read-only for an
+  unrelated reason, and passed with the prop deleted. **C116 then survived TWICE,
+  once for each half of :11846's pair**: the "cannot be saved" case only asserted
+  the BUTTON, which ENTER walks past, and once the observer existed the FILTER
+  still named the old test. **Seven anchors drifted, none in this card's diff,
+  all caught by the whole-table pre-check** — and S15/C81/C82, on their FIFTH
+  move, now anchor ONE PROP LINE each instead of a whole JSX element.
+  ⚠️ **C68 is ALIVE and is not this card's** (:23257 §9, own ⚪ line).
+
+- **:23928** — 2026-08-29 — **THE READ-ONLY CONSOLE'S SERVER HALF, T3 ROUND 1:
+  ZERO Critical/High, THE PACKET SHIPS** — seven Low, six fixed in the round, one
+  deferred to the web half with its own `OWED.md` line. Reviews `4320ac5` +
+  `da7e471` (:23711). Kd approved the list first (*"go"*). **Escape hatch NOT
+  armed — the THIRD consecutive clean round in this subsystem** (:23128, :23578,
+  this), the opposite of the trigger.
+  **Read before correcting a figure a review hands you, before scoping any count
+  over the `plans` table, before adding a thirteenth write door to the orgs
+  module, and before round-tripping a source file through PowerShell on this
+  machine.**
+  **TWO OF THE SEVEN WERE THEMSELVES WRONG, AND THAT IS THE ENTRY'S POINT
+  (:8707 — a correction is a claim).** Low-1's figure is real (fourteen, not
+  fifteen) and its MAP was not: of the four places the review named, one holds a
+  DIFFERENT and CORRECT fifteen (`subscribeGym`'s pre-card call sites, measured at
+  `4320ac5^`), one does not contain the figure at all (`DECISIONS-INDEX.md`), one
+  is an unfixable commit message, and a fifth place it never named
+  (`HANDOFF.md:36`) did hold it. **Applied as handed over it would have replaced a
+  true sentence with a false one.** Low-2 likewise: four of the five re-aimed
+  mutants keep the gate on both sides, O115 deletes the whole call — harmless, and
+  CHECKED (its filter's gym is on a plan, so the RED still isolates the privilege).
+  **THE THREE CODE FINDINGS, EACH MEASURED RED AND RESTORED:** the
+  stranded-country guard counted `plans` unscoped while every ladder above it goes
+  through `seededBook` (:18830's Low-1, third recurrence) — scoped to `org\_%` and
+  given a deterministic CAD observer, RED at
+  `expected [ 'INR', 'CAD', 'USD' ] to not include 'CAD'` · `consoleWrites` was a
+  hand-kept list of twelve whose own comment named the class without guarding it —
+  now pinned in THREE places including a count of `await requireWritablePrivilege(`
+  read out of `service.ts`, RED at `expected 11 to be 12`, **with no redundant
+  "regex still matches" control because the literal already catches zero**
+  (:23257 §9's C88 shape) · **RULE 4, one green liar**: *"every route requires
+  authentication"* stayed GREEN with `app.authenticate` off the NUDGE route —
+  **the FIFTH finding on that one list** — RED at `expected 500 to be 401`, which
+  is :12227's own recorded reason the class is Low. **The five are ENUMERATED in
+  the test because the first draft got the count wrong: the block already held
+  two tallies that disagree** (Low-5 calls itself "the SECOND time", the
+  gym-details comment four lines below calls itself "the third"), left unedited
+  and named — **a count nobody re-derives is a list nobody guards, one level up.**
+  **LOW-5:** :23711 §6(b) named ONE member door into a lapsed gym; the nudge route
+  is a second, writing `member_nudged_at` and badging a queue nobody can clear.
+  **LOW-6 IS THE ONLY DEFERRAL:** `isRetryable` offers *"Try again"* on the
+  permanent 409 — the shown sentence is TRUE so it is not :5807's class, and
+  `trial_already_used` was already in that bucket; the file belongs to the web
+  half, which disables those controls anyway.
+  **§4 — MY INSTRUMENT FAILURE, AND IT WILL RECUR HERE: a PowerShell
+  `Get-Content -Raw`/`Set-Content` round-trip CORRUPTED A FILE'S UTF-8** (ANSI
+  read, UTF-8 write; `-Encoding utf8` also adds a BOM). **The restore-hash
+  mismatch is what surfaced it.** Standing: mutate source through the editing
+  tool, never a PowerShell text round-trip.
+  **PROVE, all LOCAL: the racing PAIR `orgs.plans` + `orgs.routes` in ONE
+  invocation 154/154 TWICE · `orgs.routes` 142 (+1) · tsc exit 0 and PROVEN REAL
+  by planting a type error · eslint clean on both changed files · three measured
+  REDs, each restored to an empty `git status`.** **NO SWEEP and NO SMOKE, both
+  stated rather than skipped:** the round changes no `src` file and draws nothing.
+
+- **:23711** — 2026-08-29 — **THE LAPSED GYM'S CONSOLE GOES READ-ONLY (server
+  half): twelve write doors refuse a gym with no plan, and KD RULED IT STOPS
+  EVERY MEMBER OF STAFF rather than only whoever can pay.** The other half of
+  :22215 §5 step 1, split out of the expiry sweep with his agreement (:22341 §4);
+  the screens are the next card and the 14-day archive the one after.
+  **Read before adding any write route to the orgs module, before gating anything
+  on whether a gym has a live plan, before reaching a lapsed gym through a test
+  fixture, before adding a field to `/v1/orgs/mine`, and before deleting a
+  subscription row to mean "this gym lapsed".**
+  **THE RULING'S REASON IS THE PART TO KEEP: `billing.manage` is a TICK**, so a
+  gate stopping only its holders would be no gate at all — an owner appoints a
+  manager without it and the lapsed gym carries on issuing codes and admitting
+  members through that login (`ROLE_PRIVILEGES.manager` holds `codes.manage`,
+  `members.confirm`, `members.remove`). It differs from :22921 §1's prompt ruling
+  because read-only **seals nobody out**: staff still see everything.
+  **SHIPPED:** `requireWritablePrivilege` on exactly twelve write functions, a
+  typed **409 `gym_not_on_plan`** · `repo.gymHasLivePlan` reading §4.1's three
+  granting statuses, **asking the STATUS and never a date** (:21580 rule (c)), so
+  the 14 days costs this card nothing — read-only and archived BOTH have no live
+  plan · **`consoleReadOnly` on `/v1/orgs/mine`**, staff-only but EVERY staff
+  role, three-state, **`null` = "we could not ask", never "locked"** (C97's rule;
+  it exists precisely because `subscription === null` has three causes and two of
+  them are ignorance). **The subscription LATERAL is NOT widened** (:22921,
+  :12731). **The check ORDER is an information boundary** — privilege first, so a
+  stranger keeps the 404 and never learns which gyms stopped paying (mutant
+  **O158**). **Reads and the pay path are deliberately NOT gated** (**O159**,
+  **O160**). No migration.
+  **AUDIT: seven new (O154–O160), five re-aimed (O59/O70/O79/O100/O115), and
+  O155 SURVIVED — the FILTER half again** (:11846's pair, :21580's C91, :22921's
+  O148): the headline test reached "no plan" by DELETING the row, so a widened
+  status set was structurally invisible. Fixed by splitting the fixture into
+  **`lapseGym` (never subscribed) and `expireGym` (the sweep ran)** — two states,
+  not one. **O79's `expect` filter had NEVER matched a test** ("four staff routes"
+  against a test that says five), so it was inert rather than passing;
+  pre-existing, fixed here only because this card re-aimed it.
+  **THE FIXTURE CHANGED BECAUSE THE PRODUCT DID: 84 of 134 tests went red**, and
+  `makeOrg` now attaches a plan with **`{ plan: null }` as an explicit opt-out**.
+  **PROVE all LOCAL: `orgs.routes` 141/141 · api 651/653 — the two failures
+  PRE-EXISTING and not quoted as green · shared 51/51 · web 1327/1327 unchanged ·
+  tsc PROVEN REAL · two stated SUBSETS of 160: 7 RED and 5 RED, 0 ALIVE.**
+  **No smoke (checked, not asserted — nothing is drawn yet); T3 UNRUN.**
+  **Two findings NOT fixed, each with an `OWED.md` line: `orgs.unit.test.ts` has
+  been RED since the currency card** (it demands CAD/GBP where :22215 §3.5 ruled
+  USD — proven pre-existing at HEAD), **and a lapsed gym cannot confirm anybody**,
+  so applicants wait 14 days for nothing.
+  ⚠️ **Two of its sentences are CORRECTED by :23928** — the `{ plan: null }`
+  opt-out is at FOURTEEN call sites, not fifteen, and O115 does NOT keep
+  `requireWritablePrivilege` on both sides.
+
+- **:23578** — 2026-08-29 — **THE FORCED PROMPT'S WEB HALF, T3 ROUND 1: ZERO
+  Critical/High, THE PACKET SHIPS** — six Low, all fixed in one round (Kd
+  approved the list first, *"fix all"*), **and the fix round's own new mutant
+  caught the fix round's own lying test.** Reviews `99687c5` + `3891acc`
+  (:23257). Escape hatch NOT armed — **the SECOND consecutive CLEAN round in this
+  subsystem**, the opposite of the trigger.
+  **Read before writing a focus trap or any `aria-modal` in this app, before
+  asserting that something is "still inside" a container, before drawing a screen
+  between creating a gym and its console, and before trusting a jsdom test about
+  keyboard behaviour.**
+  **LOW-1 TOUCHED THE RULING AND A MOUSE CANNOT SHOW IT TO YOU:** the prompt
+  covered the screen but did not contain the KEYBOARD — Tab walked out to the
+  rail, the tab bar and **the join code's live Copy button**, invisible behind a
+  94%-opaque overlay with Enter still working, **making the smoke sheet's own
+  step 2 false for anybody not using a mouse.** Kd's smoke could not have found
+  it. `inert` on the shell was rejected: the prompt has TWO call sites and the
+  guarantee would live in whatever each remembered to mark (:1239).
+  **§3 IS THE PART TO READ TWICE.** The keyboard test first asserted *"after Tab,
+  focus is still inside the dialog"* — **jsdom does not implement Tab**, so it was
+  true with the trap deleted. **C103 came back ALIVE against a test written in the
+  same hour to prove what C103 breaks**: rule 4's category, produced by rule 5's
+  instrument, inside the round that created both, and **the second time on this
+  card that the WHOLE table found what a subset could not.** **Standing: an
+  assertion that a fixture is "still inside" a container it was already inside is
+  not an assertion.**
+  **THE OTHER FIVE:** a comment giving a FALSE collision reason for a correct key
+  (the banner is inside `<main>`, the prompt is a sibling of it — they never
+  could collide) · a web-newer-than-api deploy leaving an owner with NOTHING,
+  now a true sentence, with a TRAINER control and **no re-asked privilege**
+  (C68's shape, filed by this card hours earlier) · the join code uncovered until
+  `/v1/orgs/mine` answered and for ever if it failed — **Kd's own defect in
+  miniature**, fixed with a cover that claims no outcome · the stale
+  `ownerTrialUsed` path nothing drove (the field is deliberately NOT written
+  across rows: it is a fact about a PERSON) · the sheet contradicting itself about
+  who runs step 7.
+  **TWO FIXTURES WENT STALE INSIDE THE ROUND**, the server half's shape again:
+  an org with no `ownerTrialUsed` stopped meaning "ordinary gym" and started
+  meaning "the api could not tell us", and a case asserting *"there is no trial
+  button at all"* now asserts the only one belongs to the PROMPT.
+  **PROVE: web 1327/1327 · eslint clean on seven files · `vite build` exit 0 ·
+  WHOLE-TABLE SWEEP of 126: 124 RED, 2 ALIVE** — C103 (fixed and re-measured RED)
+  and **C68, not this card's, with its own ⚪ `OWED.md` line**. **T3 closed at
+  round 1; the smoke is done 11/11.**
 
 - **:23257** — 2026-08-28 — **THE FORCED PROMPT REACHES A SCREEN: a modal that
   cannot be closed, the Overview's trial button deleted on Kd's ruling, and the
@@ -1089,308 +1284,151 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   sheet interleaves Kd's steps and the chat's, the pass is PER STEP, never per
   message.**
 
-- **:23578** — 2026-08-29 — **THE FORCED PROMPT'S WEB HALF, T3 ROUND 1: ZERO
-  Critical/High, THE PACKET SHIPS** — six Low, all fixed in one round (Kd
-  approved the list first, *"fix all"*), **and the fix round's own new mutant
-  caught the fix round's own lying test.** Reviews `99687c5` + `3891acc`
-  (:23257). Escape hatch NOT armed — **the SECOND consecutive CLEAN round in this
-  subsystem**, the opposite of the trigger.
-  **Read before writing a focus trap or any `aria-modal` in this app, before
-  asserting that something is "still inside" a container, before drawing a screen
-  between creating a gym and its console, and before trusting a jsdom test about
-  keyboard behaviour.**
-  **LOW-1 TOUCHED THE RULING AND A MOUSE CANNOT SHOW IT TO YOU:** the prompt
-  covered the screen but did not contain the KEYBOARD — Tab walked out to the
-  rail, the tab bar and **the join code's live Copy button**, invisible behind a
-  94%-opaque overlay with Enter still working, **making the smoke sheet's own
-  step 2 false for anybody not using a mouse.** Kd's smoke could not have found
-  it. `inert` on the shell was rejected: the prompt has TWO call sites and the
-  guarantee would live in whatever each remembered to mark (:1239).
-  **§3 IS THE PART TO READ TWICE.** The keyboard test first asserted *"after Tab,
-  focus is still inside the dialog"* — **jsdom does not implement Tab**, so it was
-  true with the trap deleted. **C103 came back ALIVE against a test written in the
-  same hour to prove what C103 breaks**: rule 4's category, produced by rule 5's
-  instrument, inside the round that created both, and **the second time on this
-  card that the WHOLE table found what a subset could not.** **Standing: an
-  assertion that a fixture is "still inside" a container it was already inside is
-  not an assertion.**
-  **THE OTHER FIVE:** a comment giving a FALSE collision reason for a correct key
-  (the banner is inside `<main>`, the prompt is a sibling of it — they never
-  could collide) · a web-newer-than-api deploy leaving an owner with NOTHING,
-  now a true sentence, with a TRAINER control and **no re-asked privilege**
-  (C68's shape, filed by this card hours earlier) · the join code uncovered until
-  `/v1/orgs/mine` answered and for ever if it failed — **Kd's own defect in
-  miniature**, fixed with a cover that claims no outcome · the stale
-  `ownerTrialUsed` path nothing drove (the field is deliberately NOT written
-  across rows: it is a fact about a PERSON) · the sheet contradicting itself about
-  who runs step 7.
-  **TWO FIXTURES WENT STALE INSIDE THE ROUND**, the server half's shape again:
-  an org with no `ownerTrialUsed` stopped meaning "ordinary gym" and started
-  meaning "the api could not tell us", and a case asserting *"there is no trial
-  button at all"* now asserts the only one belongs to the PROMPT.
-  **PROVE: web 1327/1327 · eslint clean on seven files · `vite build` exit 0 ·
-  WHOLE-TABLE SWEEP of 126: 124 RED, 2 ALIVE** — C103 (fixed and re-measured RED)
-  and **C68, not this card's, with its own ⚪ `OWED.md` line**. **T3 closed at
-  round 1; the smoke is done 11/11.**
+- **:23128** — 2026-08-28 — **THE FORCED PROMPT'S SERVER HALF, T3 ROUND 1: ZERO
+  Critical/High, THE PACKET SHIPS** — eight Low, one of which would have reddened
+  CI, and two more the FIX ROUND broke in its own instruments. Reviews `9d5a327`
+  (:22921). Escape hatch NOT armed (round 1, no Critical anywhere; the reviewer
+  said so unprompted). Kd approved the list first (*"fix all"*); all eight fixed
+  in one round, logged in `BACKLOG.md`.
+  **Read before scoping any exact-list assertion in a suite that shares a
+  database, before hoisting an expression a mutant anchors on, before adding a
+  `LIMIT` or a trailing clause to a mutated SQL line, and before granting a field
+  on `/v1/orgs/mine` to "any staff".**
+  **LOW-1 IS MINE AND IT WOULD HAVE TURNED CI RED**: the exact USD ladder raced
+  `orgs.routes.test.ts`, which inserts a **USD** fixture plan for its whole run.
+  My comment said *"the USD book is touched by nothing"* — **I checked the OTHER
+  fixture's currency, found CAD, and generalised from one to both.** :18830's
+  Low-1 recurring three days after it was fixed there. Reproduced, scoped to the
+  seeded `org_` prefix, **re-measured in ONE invocation TWICE (146/146, 146/146)**
+  because that entry also says a race passing once is not evidence.
+  **THE FIX ROUND BROKE TWO OF ITS OWN INSTRUMENTS AND BOTH ABORTED RATHER THAN
+  LYING.** Hoisting an expression for Low-8 moved **O105**'s anchor (re-anchored
+  at the SAME call site, :15770 — this is the rot :21580 recorded); **O147** then
+  broke twice, once when a new `LIMIT` pushed its anchor off the end and once when
+  the shortened anchor matched `startGymTrial`'s deeper-indented copy as a
+  SUBSTRING — **the identical trap O148 hit in the same file the same day.** Both
+  fixed :21157's way, by making the line unique IN THE SOURCE. **Standing: adding
+  a `LIMIT`, a trailing clause or a hoisted `const` moves anchors nothing in the
+  diff mentions — run the WHOLE-TABLE sweep after a fix round, never the subset.**
+  **THE OTHER SIX:** a false *"no supported country can reach this"* sentence
+  (the map is read at CREATION, so a pre-ruling Canadian gym still lands there) ·
+  a no-backfill measurement that **went stale inside its own commit and counted
+  the wrong column** (`country`, not `currency_display`; this card's own smoke
+  created the gym it said did not exist — re-measured shared 0, local 1) · an
+  empty-list guard that walks the MAP while the route reads the STORED column
+  (claim corrected; the REFUSAL decision deferred to the modal card with its own
+  `OWED.md` line) · the new route missing from *"every route requires
+  authentication"* (:12227's trigger verbatim) · the formatter's fractional branch
+  having **no observer** — every one of Kd's ten prices is whole, so a mutant
+  forcing `isWhole` true stayed GREEN; given a `$34.99` fixture and **O153**, and
+  the reviewer asked :21580's C88 question FIRST and answered it (observable ⇒ the
+  test was missing, unlike C88) · and no `LIMIT` on the plans read (:10596's L-1),
+  capped at 50 with the mitigation that precedent lacked.
+  **LOW-8 IS THE ONE TO REMEMBER: `ownerTrialUsed` looked consistent beside
+  `subscription` and `seatsUsed`, and that was the WRONG COMPARISON — those are
+  facts about THIS GYM, this is a fact about a PERSON** and follows the owner
+  across gyms the reader has nothing to do with. Narrowed to `billing.manage`
+  (**O152**), with a TRAINER as its test's subject because a trainer is the only
+  caller that can tell the old gate from the new one.
+  **RULE 4: no green liars.** `interval = 'month'` is unobservable by
+  construction and is deliberately left unmutated. **Rule 3 N/A.**
+  **PROVE after the fixes, all LOCAL: `orgs.plans` 12/12 · the racing PAIR
+  146/146 TWICE · trialSweep+migration 20/20 · shared 51/51 · web 1294/1294 · tsc
+  exit 0 · eslint clean on seven files · SWEEP a stated SUBSET of 153: O105 +
+  O145–O153, 10 RED, 0 ALIVE**, nine controls GREEN first, 250 rows fingerprinted
+  with no unattributed changes.
 
-- **:23711** — 2026-08-29 — **THE LAPSED GYM'S CONSOLE GOES READ-ONLY (server
-  half): twelve write doors refuse a gym with no plan, and KD RULED IT STOPS
-  EVERY MEMBER OF STAFF rather than only whoever can pay.** The other half of
-  :22215 §5 step 1, split out of the expiry sweep with his agreement (:22341 §4);
-  the screens are the next card and the 14-day archive the one after.
-  **Read before adding any write route to the orgs module, before gating anything
-  on whether a gym has a live plan, before reaching a lapsed gym through a test
-  fixture, before adding a field to `/v1/orgs/mine`, and before deleting a
-  subscription row to mean "this gym lapsed".**
-  **THE RULING'S REASON IS THE PART TO KEEP: `billing.manage` is a TICK**, so a
-  gate stopping only its holders would be no gate at all — an owner appoints a
-  manager without it and the lapsed gym carries on issuing codes and admitting
-  members through that login (`ROLE_PRIVILEGES.manager` holds `codes.manage`,
-  `members.confirm`, `members.remove`). It differs from :22921 §1's prompt ruling
-  because read-only **seals nobody out**: staff still see everything.
-  **SHIPPED:** `requireWritablePrivilege` on exactly twelve write functions, a
-  typed **409 `gym_not_on_plan`** · `repo.gymHasLivePlan` reading §4.1's three
-  granting statuses, **asking the STATUS and never a date** (:21580 rule (c)), so
-  the 14 days costs this card nothing — read-only and archived BOTH have no live
-  plan · **`consoleReadOnly` on `/v1/orgs/mine`**, staff-only but EVERY staff
-  role, three-state, **`null` = "we could not ask", never "locked"** (C97's rule;
-  it exists precisely because `subscription === null` has three causes and two of
-  them are ignorance). **The subscription LATERAL is NOT widened** (:22921,
-  :12731). **The check ORDER is an information boundary** — privilege first, so a
-  stranger keeps the 404 and never learns which gyms stopped paying (mutant
-  **O158**). **Reads and the pay path are deliberately NOT gated** (**O159**,
-  **O160**). No migration.
-  **AUDIT: seven new (O154–O160), five re-aimed (O59/O70/O79/O100/O115), and
-  O155 SURVIVED — the FILTER half again** (:11846's pair, :21580's C91, :22921's
-  O148): the headline test reached "no plan" by DELETING the row, so a widened
-  status set was structurally invisible. Fixed by splitting the fixture into
-  **`lapseGym` (never subscribed) and `expireGym` (the sweep ran)** — two states,
-  not one. **O79's `expect` filter had NEVER matched a test** ("four staff routes"
-  against a test that says five), so it was inert rather than passing;
-  pre-existing, fixed here only because this card re-aimed it.
-  **THE FIXTURE CHANGED BECAUSE THE PRODUCT DID: 84 of 134 tests went red**, and
-  `makeOrg` now attaches a plan with **`{ plan: null }` as an explicit opt-out**.
-  **PROVE all LOCAL: `orgs.routes` 141/141 · api 651/653 — the two failures
-  PRE-EXISTING and not quoted as green · shared 51/51 · web 1327/1327 unchanged ·
-  tsc PROVEN REAL · two stated SUBSETS of 160: 7 RED and 5 RED, 0 ALIVE.**
-  **No smoke (checked, not asserted — nothing is drawn yet); T3 UNRUN.**
-  **Two findings NOT fixed, each with an `OWED.md` line: `orgs.unit.test.ts` has
-  been RED since the currency card** (it demands CAD/GBP where :22215 §3.5 ruled
-  USD — proven pre-existing at HEAD), **and a lapsed gym cannot confirm anybody**,
-  so applicants wait 14 days for nothing.
-  ⚠️ **Two of its sentences are CORRECTED by :23928** — the `{ plan: null }`
-  opt-out is at FOURTEEN call sites, not fifteen, and O115 does NOT keep
-  `requireWritablePrivilege` on both sides.
+- **:22921** — 2026-08-28 — **THE FORCED PROMPT'S SERVER HALF: the first price
+  this product has ever served, an owner's spent trial made visible, and Canada,
+  the UK and the euro area finally able to buy anything.** Step 2 of :22215 §5,
+  split at the plan gate the way :22341 was; the MODAL is the next card.
+  **Read before building either unskippable prompt, before adding a pricing
+  endpoint or a second reader of `plans`, before touching `COUNTRY_CURRENCY` or
+  `listOrgPlansForCurrency`, before writing any money string for a screen, and
+  before assuming `subscription: null` means a gym never trialled.**
+  **TWO KD RULINGS, each put to him with a recommendation and its cost:** the
+  prompt **stops only whoever can pay** (a trainer without `billing.manage` uses
+  the console as normal — blocking someone who cannot pay is :22215 §4's brick
+  wall aimed at the wrong person), settling the first of :22697 §4's open
+  questions; and **the Overview's pre-trial BUTTON goes**, the plan card staying
+  for a gym that IS trialling — put as an explicit option because *"a pop up …
+  not a button"* rules the SHAPE and does not by itself authorise deleting a
+  control (:10182's precedent). **The deletion happens in the WEB card.**
+  **SHIPPED, three pieces:** `ownerTrialUsed` on `/v1/orgs/mine` (the arm
+  selector — **widening the subscription LATERAL was the other route and is
+  WRONG**, because `subs_one_live_uq` is PARTIAL over the three live statuses and
+  that is what makes its `LIMIT 1` well-defined: :12731's trap from the other
+  side; it tests `trial_ends_at IS NOT NULL` and **never a status**, staff-only,
+  and **null must never draw the modal**) · **`GET /v1/orgs/:gymId/plans`, the
+  first price ever to leave this server** — gym-scoped so the SERVER reads the
+  currency (R3.1) and the route is tenant-scoped for free, `priceLabel` and
+  **deliberately no minor-unit integer**, no display name because
+  `plans.name_key` has no translation table to resolve · and **`COUNTRY_CURRENCY`
+  → USD for CA/GB/the euro area**, Kd's :22215 §3.5 ruling finally built, with the
+  supported-country ENUM untouched (:10010 is a different question).
+  **NO FLOAT TOUCHES THE MONEY**: the integer goes through `Intl` as a `bigint`
+  and the minor digits are appended as text, because `/100` breaks R6.1 and the
+  ES2023 string overload is untyped under this repo's ES2022 `lib` — which is
+  also why the locale is PINNED to `en-US`. A fixed `maximumFractionDigits: 2`
+  returns `$1,234.5` for 123450, measured.
+  **NO BACKFILL, MEASURED NOT HOPED**: `currency_display` is recomputed only when
+  the country changes, and there are **zero CA/GB/euro-area gyms on either
+  database**. The trap is written into the map's own comment.
+  **AUDIT: seven mutants, and O148 SURVIVED TWICE — once for each half of
+  :11846's pair.** The TEST half (every retired band is INR, and the only exact
+  list was the USD one), then the FILTER half (:21580's C91 verbatim — it still
+  named the USD test after the assertion moved to the rupee one). The C88
+  question was asked first and the guarantee IS observable, unlike :21580's C88.
+  **PROVE, all LOCAL: `orgs.plans` 10/10 (new) · `orgs.routes` 134/134 ·
+  `orgs.trialSweep` 9/9 · `db.migration` 10/10 · shared 51/51 · web 1294/1294 ·
+  tsc exit 0 and PROVEN REAL by planting a type error · eslint clean on seven
+  files · SWEEP a stated SUBSET of 151: O145–O151, 7 RED, 0 ALIVE.**
+  **SMOKE RUN AND PASSED, AND KD'S QUESTION IS WHAT PRODUCED IT**: the report
+  said "no screen, so no smoke", he asked *"do i not need to perform smoke test
+  ?"*, and checking found the currency ON SCREEN in three places. **A card with
+  no new screen is not a card with nothing a user can see.** Round 1 failed on a
+  STALE API PROCESS serving the old map ("set up in CAD") — `smoke-trial-expiry
+  .md`'s own S2 warning (:15927, :20222), incurred by the chat that had read it
+  that session; restarted, verified through the live api first, round 2 PASSED.
+  **NOTHING TICKS BUT THE CURRENCY LINE; T3 UNRUN.**
 
-- **:23928** — 2026-08-29 — **THE READ-ONLY CONSOLE'S SERVER HALF, T3 ROUND 1:
-  ZERO Critical/High, THE PACKET SHIPS** — seven Low, six fixed in the round, one
-  deferred to the web half with its own `OWED.md` line. Reviews `4320ac5` +
-  `da7e471` (:23711). Kd approved the list first (*"go"*). **Escape hatch NOT
-  armed — the THIRD consecutive clean round in this subsystem** (:23128, :23578,
-  this), the opposite of the trigger.
-  **Read before correcting a figure a review hands you, before scoping any count
-  over the `plans` table, before adding a thirteenth write door to the orgs
-  module, and before round-tripping a source file through PowerShell on this
-  machine.**
-  **TWO OF THE SEVEN WERE THEMSELVES WRONG, AND THAT IS THE ENTRY'S POINT
-  (:8707 — a correction is a claim).** Low-1's figure is real (fourteen, not
-  fifteen) and its MAP was not: of the four places the review named, one holds a
-  DIFFERENT and CORRECT fifteen (`subscribeGym`'s pre-card call sites, measured at
-  `4320ac5^`), one does not contain the figure at all (`DECISIONS-INDEX.md`), one
-  is an unfixable commit message, and a fifth place it never named
-  (`HANDOFF.md:36`) did hold it. **Applied as handed over it would have replaced a
-  true sentence with a false one.** Low-2 likewise: four of the five re-aimed
-  mutants keep the gate on both sides, O115 deletes the whole call — harmless, and
-  CHECKED (its filter's gym is on a plan, so the RED still isolates the privilege).
-  **THE THREE CODE FINDINGS, EACH MEASURED RED AND RESTORED:** the
-  stranded-country guard counted `plans` unscoped while every ladder above it goes
-  through `seededBook` (:18830's Low-1, third recurrence) — scoped to `org\_%` and
-  given a deterministic CAD observer, RED at
-  `expected [ 'INR', 'CAD', 'USD' ] to not include 'CAD'` · `consoleWrites` was a
-  hand-kept list of twelve whose own comment named the class without guarding it —
-  now pinned in THREE places including a count of `await requireWritablePrivilege(`
-  read out of `service.ts`, RED at `expected 11 to be 12`, **with no redundant
-  "regex still matches" control because the literal already catches zero**
-  (:23257 §9's C88 shape) · **RULE 4, one green liar**: *"every route requires
-  authentication"* stayed GREEN with `app.authenticate` off the NUDGE route —
-  **the FIFTH finding on that one list** — RED at `expected 500 to be 401`, which
-  is :12227's own recorded reason the class is Low. **The five are ENUMERATED in
-  the test because the first draft got the count wrong: the block already held
-  two tallies that disagree** (Low-5 calls itself "the SECOND time", the
-  gym-details comment four lines below calls itself "the third"), left unedited
-  and named — **a count nobody re-derives is a list nobody guards, one level up.**
-  **LOW-5:** :23711 §6(b) named ONE member door into a lapsed gym; the nudge route
-  is a second, writing `member_nudged_at` and badging a queue nobody can clear.
-  **LOW-6 IS THE ONLY DEFERRAL:** `isRetryable` offers *"Try again"* on the
-  permanent 409 — the shown sentence is TRUE so it is not :5807's class, and
-  `trial_already_used` was already in that bucket; the file belongs to the web
-  half, which disables those controls anyway.
-  **§4 — MY INSTRUMENT FAILURE, AND IT WILL RECUR HERE: a PowerShell
-  `Get-Content -Raw`/`Set-Content` round-trip CORRUPTED A FILE'S UTF-8** (ANSI
-  read, UTF-8 write; `-Encoding utf8` also adds a BOM). **The restore-hash
-  mismatch is what surfaced it.** Standing: mutate source through the editing
-  tool, never a PowerShell text round-trip.
-  **PROVE, all LOCAL: the racing PAIR `orgs.plans` + `orgs.routes` in ONE
-  invocation 154/154 TWICE · `orgs.routes` 142 (+1) · tsc exit 0 and PROVEN REAL
-  by planting a type error · eslint clean on both changed files · three measured
-  REDs, each restored to an empty `git status`.** **NO SWEEP and NO SMOKE, both
-  stated rather than skipped:** the round changes no `src` file and draws nothing.
-
-- **:24141** — 2026-08-29 — **THE LAPSED GYM'S CONSOLE GOES READ-ONLY (web
-  half): every dead button is greyed with a true sentence, and KD REVERSED HIS
-  OWN RULING ON THE JOIN DOOR ONE MESSAGE AFTER MAKING IT.** The web half of
-  :22215 §5 step 1; server half :23711, its T3 :23928.
-  **Read before greying out any console control, before writing copy about a gym
-  that has stopped paying, before adding a `readOnly` prop to a console panel,
-  before promising a waiting applicant anything, and before re-anchoring a mutant
-  in `mutate-console.mjs` after a prop change.**
-  **KD RULED THE JOIN DOOR SHUT ("i say yes"), THEN STRUCK IT HIMSELF one
-  message later — *"hold their request and tell them the truth."*** He got there
-  by asking what the recommendation had not answered — *"what happens to that
-  user when gym subscribes again"* — and the answer killed it: a refusal saves
-  nobody, since the person must remember to come back and type the code again,
-  and it makes two rules where one belongs (applied the day before the gym
-  lapsed: keeps their place; the day after: lost). **Do not re-propose the
-  refusal.** The build is CARD B, its own `OWED.md` line; **he approved the split
-  and chose A first**. **The half that cannot be built yet was measured and told
-  to him: nothing in this product can put a lapsed gym back on a plan** — one
-  `INSERT INTO subscriptions` (the trial), one `UPDATE` (expiry), and the trial
-  is refused to any owner who has ever had one — so reviving a held application
-  belongs to the payment card and is written onto B's line.
-  **SHIPPED:** `consoleIsReadOnly` = `=== true` and nothing else (**`null` is
-  "we could not ask", never "locked"** — C97's rule; deriving it from
-  `!hasLivePlan` greys a paying gym's console at a trainer, mutant C108) ·
-  §4.2's *"trial expired → grace"* row, **which :21580 recorded as unbuildable**,
-  in words true of BOTH a gym that never subscribed and one whose trial ended
-  (**the spec's "Trial ended — members have moved to the free tier" is false for
-  the first**, and one field answers for both), red, **no CTA** · five panels
-  greying every refused control with the server's own `GYM_NOT_ON_PLAN_MESSAGE`
-  written ONCE · the queue saying *"Nobody can be let in until this gym is on a
-  plan."* and dropping *"confirm the ones you recognise"* · `isRetryable`
-  closing :23928's Low-6, **by CODE and never by status**, with the offline
-  positive control. **GREYED, NEVER HIDDEN** — the code, the roster and the staff
-  list all still draw, and two tests hold that.
-  **THE COPY STOPS SHORT OF RULING 2 ON PURPOSE**: *"they keep their place"* is
-  not true until card B, so two tests assert its ABSENCE.
-  **AUDIT: 13 new mutants, 7 RE-ANCHORED, and my own test was a GREEN LIAR** —
-  the tick-box case took row `[0]`, the OWNER's, whose ticks are read-only for an
-  unrelated reason, and passed with the prop deleted. **C116 then survived TWICE,
-  once for each half of :11846's pair**: the "cannot be saved" case only asserted
-  the BUTTON, which ENTER walks past, and once the observer existed the FILTER
-  still named the old test. **Seven anchors drifted, none in this card's diff,
-  all caught by the whole-table pre-check** — and S15/C81/C82, on their FIFTH
-  move, now anchor ONE PROP LINE each instead of a whole JSX element.
-  ⚠️ **C68 is ALIVE and is not this card's** (:23257 §9, own ⚪ line).
-
-- **:24376** — 2026-08-29 — **THE READ-ONLY CONSOLE'S WEB HALF, T3 ROUND 1: ONE
-  Critical/High, THE PACKET DOES NOT SHIP — the guard reached every OPENER and
-  stopped there, and the panel's own comment told the reviewer it had not.**
-  Reviews :24141. Five Low, all fixed; Kd approved the list first (*"go"*).
-  **Escape hatch NOT armed** — first Critical in this subsystem after three clean
-  rounds (:23128, :23578, :23928), and the trigger needs two consecutive.
-  **Read before adding a `readOnly` prop to a console panel, before greying out
-  any console control, before writing a comment that says a prop reaches "every"
-  control, before adding a second guard beside one that already works, before
-  writing a smoke step for a console screen a MANAGER is meant to open, and
-  before applying a review's correction to the record.**
-  **THE C/H:** `readOnly` reached Limits / Replace / Remove / New code / Add
-  someone — every control a CLOSED panel draws — while the commit control behind
-  each carried `busy` alone (**Save**, **Replace it**, **Remove it**, **Make the
-  code**, **Add**, plus their fields). **The app walks the path itself**:
-  `consoleOrgs` re-reads on `focus`/`visibilitychange`, rows are keyed on the
-  CODE and panels on `org.id` — neither moves when a plan ends — and step state
-  is local, so a gym lapsing while somebody holds *"Replace it?"* left a live
-  full-colour destructive button under the red strip AND the panel note.
-  :5807's "promise that is not true" beside the sentence contradicting it; the
-  server still refuses (409, all twelve doors), so not data loss.
-  **WHY NOTHING COULD SEE IT: all fourteen existing cases render an
-  ALREADY-lapsed gym, so no assertion could reach a second control — the file
-  tested the STATE and never the TRANSITION**, and C111/C114/C116 had the same
-  hole. **A card whose subject is a state change needs a case that performs it.**
-  **THE HANDLER GUARDS THE REVIEW ASKED FOR ARE DECLINED, with a reason:**
-  `GymDetailsPanel`'s `<form>` is the only one in A PANEL THIS CARD GATES
-  (~~"the only one in the console"~~ — **corrected by round 2, which found
-  `NewGym.jsx`'s create form**), so
-  in these two panels a handler guard would be a second unfalsifiable guard —
-  **Low-5 of this same round, committed by the round fixing it.**
-  **TWO OF THE REVIEW'S OWN CLAIMS WERE WRONG, the second round running
-  (:23928):** the `OWED.md`/smoke "contradiction" does not exist, and *"tick
-  `org.manage` onto the manager"* names **a tick box that does not exist**
-  (:21157's open gap). **The real finding underneath was the sheet's, and it is
-  mine:** four steps sent Kd to a Settings tab a manager does not have.
-  **THE CONSEQUENCE TO CARRY: `GymDetailsPanel`'s and `StaffPanel`'s read-only
-  states are unreachable by every principal the product can create** — Settings
-  needs `staff.manage` (owner-only) or `org.manage` (no box), and a lapsed gym's
-  owner meets `PlanModal`. Their guarantees rest on tests and mutants alone,
-  including C116's ENTER-key door; recorded on :21157's line, whose own
-  "closed by the next card" prediction had gone stale (:21353's shape).
-  **:22029's test applied BOTH ways in one round** — the Overview's path is drawn
-  so the finding stands; the Settings path is not, so it is recorded unverified
-  rather than claimed. Severity and smoke had the same question: *can a user get
-  here?*
-
-- **:24559** — 2026-08-29 — **THE READ-ONLY CONSOLE'S WEB HALF, T3 ROUND 2
-  (diff-only): ZERO Critical/High, THE PACKET SHIPS — five Low, NONE of them in
-  `src/`, and four are a smoke sheet that had never been run.** Reviews
-  `dba05fd`. Kd approved the list first (*"go"*); all five in `BACKLOG.md`.
-  **Escape hatch NOT armed** — round 1 had a Critical, this round has none, and
-  the trigger needs two consecutive.
-  **Read before writing a smoke step whose ✅ names a screen you have not opened,
-  before promising an exact row count from a database a smoke does not own,
-  before trusting a review's MAP of where a false sentence lives, before
-  declining a guard on the strength of a "grep-verified" sentence, and before
-  believing an edit landed because the tool said it did.**
-  **THE ROUND FOUND NO DEFECT IN THE CODE** and re-derived round 1's declined
-  handler guards as correct: `JoinCodesPanel` has no `<form>`, every button is
-  `type="button"`, its one `onKeyDown` has no form owner.
-  **LOW-1: round 1's "the only `<form>` in the console" is FALSE** —
-  `NewGym.jsx:262` is a second one — **and the review's own map of where that
-  sentence lives named four places when there are six** (it missed
-  `HANDOFF.md:29` and counted the unfixable commit message). **:23928's Low-1 one
-  round later, in the same subsystem: a correction's MAP is a claim exactly like
-  its figure.** Scope corrected to *"the only `<form>` in a panel this card
-  gates"*; the argument is untouched and no `src` comment needed changing.
-  **LOW-2 TO LOW-5 ARE THE SHEET AND EVERY ONE FAILS ON CORRECT CODE** — a
-  landing screen the app does not draw (:23257 §11's own defect, in the sheet
-  written by the round that recorded it) · an absence-shaped ✅ over a strip that
-  is genuinely there, **:21751's mirror: a step unable to PASS** · a **Confirm**
-  button no queue was drawing, fixed by making it real rather than deleting the
-  claim (`addOrgStaff` requires the email to be a member already, so the cheaper
-  repair is impossible) · and an exact `expired: 1` from a shared local database,
-  **the sentence :23257 §12 already measured as `expired: 2`**, in the one sheet
-  that was not corrected with its sibling. The chat-run step also carried no
-  command at all.
-  **INSTRUMENT: two `Edit` calls reported success and wrote nothing** — the
-  repo's two largest files — caught only by re-grepping. **A tool's success line
-  is not evidence the file changed.** Also flagged, not committed: `CLAUDE.md`
-  carries pre-existing uncommitted changes (R1.1).
-  **PROVE: web 1370/1370 exit 0 · eslint exit 0 on six files · index pointers
-  resolve · triggers `--check` clean. No sweep, no smoke — no `src` file
-  changed.** **The smoke is the only gate left and is runnable end to end for the
-  first time; T3 closed at round 2.**
-
-## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
-
-**NOT read every session. Read an entry here when your task touches what it is
-about** — the same terms §§2–7 have always been on. Nothing was shortened,
-reworded or deleted to put it here; these are the identical lines, filed where
-the read-path rule already sent them.
-
-**WHY THEY MOVED (2026-08-28, Kd-approved).** §1 said *"always relevant"* and had
-become 2,245 lines, of which **1,600+ were finished card records** — T3 rounds,
-PROVE figures, "the packet ships". A chat obeying the grounding rule read all of
-it before doing any work, which is the exact failure the 2026-07-30 amendment
-was written to fix, recurring one level up.
-
-**THE SAFETY PROOF, RUN BEFORE A LINE WAS MOVED AND NOT ASSERTED AFTERWARDS:**
-every one of the 36 entries below is surfaced by a file that IS read every
-session — **every one of them by a trigger phrase in `DECISIONS-TRIGGERS.md`
-§1.** Zero were hidden. It was 30-by-phrase and six-by-title-only when first
-measured; **naming those six by name is what exposed the generator's own defect
-(:22640) — all six declared a trigger in their INDEX LINE, which it was not
-reading.** A title in a gap list is weaker than a trigger, and **138 rulings are
-still in that position**, so this is a floor that rose, not a gap that shut.
-
+- **:22782** — 2026-08-28 — **THE GYM TRIAL EXPIRY SWEEP, T3 ROUND 1: ZERO
+  Critical/High, THE PACKET SHIPS — and the round's real finding is that the
+  SMOKE SHEET'S ONLY COMMAND COULD NOT RUN, while its obvious repair would have
+  ended every trial in Kd's own database.** Reviews `a8b2e98` (:22341). **Escape
+  hatch NOT armed** (round 1, no Critical anywhere; the reviewer said so
+  unprompted). Seven Low, all fixed, in `BACKLOG.md`; Kd approved the list first
+  (*"fix all"*). **Read before running any tool from `apps/api/tools/`, before
+  writing a command into a smoke sheet, before adding a mutant that makes the
+  suite WRITE, before trusting the mass-write detector's green line, and before
+  quoting a test's docstring as evidence of what it covers.**
+  **SIX OF SEVEN ARE FALSE SENTENCES THIS CARD CREATED** — comments true when
+  written and made lies by the commit (*"NOTHING ENDS A TRIAL"*, *"exactly one
+  writer"*, *"no such mutant exists today"*). :13552's pattern, and **L-2 is
+  :5748 verbatim: :22341 §3 corrected the prediction in the ENTRY and left the
+  SOURCE saying the old thing.** **Standing: a card that closes a documented gap
+  should grep for the gap's own description before it ships.**
+  **L-5 — THE MASS-WRITE DETECTOR WAS BLIND TO THE TABLE THIS CARD WRITES AND ITS
+  OWN DOC HAD NAMED THE TRIGGER** (*"the next route that writes rows a caller does
+  not own"* … *"no such mutant exists today"* — O142 became it in the same
+  commit). **Proven both ways on a planted canary: pre-fix, 83 rows watched and
+  "no unattributed changes" while the canary went `trialing` → `expired`;
+  post-fix, 246 rows and `O142 rewrote 1 pre-existing row(s)` naming
+  `sub:f19930aa…`.** `subscriptions` now fingerprinted in the same query.
+  **L-7 — BOTH OBVIOUS REPAIRS OF THE BROKEN SMOKE COMMAND ARE WRONG.**
+  `--env-file=.env` points at the shared Neon branch (`NODE_ENV=development`, so
+  the production refusal will NOT fire) and would end every live gym trial there
+  — **measured: three live gym subscriptions, one Kd's own real trial**; pointing
+  only the SWEEP at local is worse, since the browser writes to Neon and step 5
+  would report `expired: 0` **for no visible reason**. Shipped: the WHOLE smoke
+  runs on local Postgres. **Standing: a command in a smoke sheet is CODE KD WILL
+  RUN and takes the same evidence as code (V1) — this one was never executed
+  before being handed over.**
+  **RULE 4 — ONE GREEN LIAR, and the TEST was fine while its DOCSTRING was the
+  defect**: flip `<=` to `>=` and the NULL-handling test stays GREEN while seven
+  of eight go red. **PROVE after fixes, all LOCAL: 9/9 · tsc exit 0 · eslint clean
+  on three files · sweep a stated SUBSET 6 of 144, 6 RED 0 ALIVE.** **THE SMOKE IS
+  NOW RUNNABLE FOR THE FIRST TIME and is the only gate left.**
 - **:22145** — 2026-08-28 — **THE GYM TRIAL, WEB HALF, T3 ROUND 3 (diff-only):
   ZERO Critical/High — THE PACKET SHIPS.** Reviews `13fec81`. One Low, fixed.
   **The escape-hatch streak is broken** (rounds 1 and 2 both put a Critical in

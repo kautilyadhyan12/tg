@@ -1,6 +1,61 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD RULES THE SECOND MOVE — 523 LINES OF CARD HISTORY OUT OF ALWAYS-READ.
+      DECISIONS :24813 (addendum to :24703, same session). No code, no test,
+      no src file. Ruled by his question, not by a plan.
+
+  1. **HIS QUESTION IS WHAT FOUND IT:** "will it make the future chat read more
+     then what previous chats did?" — asked right after :24703 was committed.
+     **Answer: YES, twice over, in very different sizes.**
+  2. **THE RULE'S OWN COST IS ~4 LINES PER ENTRY AND IS REAL.** Before it, 138
+     of 323 rulings added nothing to DECISIONS-TRIGGERS.md; now every entry adds
+     its ~3.6 phrases, and that file is ALWAYS-READ. It is the price of being
+     findable at all.
+  3. **THE LEAK WAS TEN TIMES THAT AND NOBODY HAD LOOKED. §1 went ~680 → 1,310
+     lines in the TWO DAYS after :22497's split — it nearly DOUBLED** — because
+     every chat since, **this one twice, in the session that ruled on writing
+     less**, filed its finished round record beside the standing rules instead
+     of in §1B. Ten entries, 523 lines. **:22497 moved 1,631 lines out on 08-28
+     and 523 came back by 08-29.**
+  4. **KD RULED THE MOVE ("Yes").** Card records — build entries, T3 rounds,
+     smokes — go to §1B. §1 keeps only what constrains future work.
+     **ALWAYS-READ 2,217 → 1,708 lines.**
+  5. **:24703 IS WHAT MAKES IT PERMANENT.** :22497 could only move 36 entries
+     because it first PROVED each was surfaced by an always-read file, and six
+     hung on a title alone. **With `Read before …` mandatory, every future card
+     record is findable from §1B by construction and never needs §1 at all.**
+  6. **SAFETY PROVEN TWICE, NOT ASSERTED.** Before: all ten carry 4–7 trigger
+     phrases, zero hidden. After: **the harvest came back byte-identical (670
+     from 187 of 325 either side of the move)** — the strongest evidence
+     available, because the generator READS index lines and would have dropped
+     phrases had a line landed outside its entry.
+  7. **THE HEADER HAD BEEN LYING BY HALF:** it said "~630"/"~680" while §1 was
+     1,310. **All three figures are now measured, stated, and carry the command
+     that reproduces them.** A header nobody re-measures is how the last two
+     instruments grew past readable.
+  8. **THE RULE APPLIED TO ITSELF, MID-TASK:** my first index note for this
+     addendum was 18 lines — a case report in the index, the exact disease. Cut
+     to a pointer plus its `Read before` sentence; the detail lives at :24813.
+
+PROVE: LINE-MULTISET INVARIANT — 7,133 lines in, 7,133 out, multiset equal, the
+       script REFUSING to write otherwise; diff 481 insertions / 481 deletions,
+       a pure move. check-decisions-index 236 pointers resolve, 873 headings ·
+       triggers 674 from 188 of 326, --check clean · check-harnesses 25 parse ·
+       always-read re-measured 797 + 58 + 853 = 1,708, matching the header.
+       **No suite run and none owed: no src or test file is touched.**
+
+FILES: DECISIONS.md · DECISIONS-INDEX.md · DECISIONS-TRIGGERS.md · HANDOFF.md.
+       **No src, no test, no harness, no migration, no dependency.**
+
+OPEN:  Nothing deferred. **Left alone under R1.1 and NAMED rather than hidden:
+       five PRE-SPLIT card records (147 lines) still sit in §1** — they predate
+       the convention and moving them is its own job — **and §1B has one
+       pre-existing entry out of date order (:22341).** The read-only console's
+       SMOKE is still the only gate on that card (:24559).
+```
+
+```
 TASK: KD RULING — AN ENTRY IS WRITTEN FOR THE CHAT A TRIGGER SENDS THERE.
       DECISIONS :24703 · CLAUDE.md AMENDMENT 2026-08-29. No code, no test, no
       src file. Ruled in the same session as :24559, out of Kd's two questions.
