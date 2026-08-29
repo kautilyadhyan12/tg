@@ -24442,8 +24442,11 @@ The review's fix was "add `|| readOnly` to those five disabled props, and guard
 `create()`, `save()` and `add()` at the top — the C116 lesson is that the button
 is not the door." **The first half is right and is what shipped. The second is
 declined, with a reason:** C116 exists because `GymDetailsPanel` is a `<form>`
-and ENTER submits past a disabled button. Grep-verified, that is **the only
-`<form>` in the console** — `JoinCodesPanel` and `StaffPanel` have none, so the
+and ENTER submits past a disabled button. ~~Grep-verified, that is **the only
+`<form>` in the console**~~ **— CORRECTED BY T3 ROUND 2 (:24559), with the grep
+the sentence claimed: `pages/console/NewGym.jsx:262` is a second one, the
+create-a-gym form, so the console holds TWO.** The true scope is **the only
+`<form>` in a panel this card gates** — `JoinCodesPanel` and `StaffPanel` have none, so the
 button and its fields are the whole surface. A handler guard there would be a
 second guard neither of which is falsifiable, **which is Low-5 of this same
 round, committed by the round that fixed it.** The panel comment now records the
@@ -24548,5 +24551,261 @@ a file no round has been allowed to touch (R1.1).
 
 **NO SMOKE — stated, not skipped.** The sheet was rewritten this round and is
 still UNRUN; it is now the gate along with T3 round 2. **Its four Settings steps
-were deleted from the run as unperformable** and a new step 9 was added, which is
-the only step that puts a person in front of this round's Critical/High.
+were deleted from the run as unperformable** and a new step was added ~~as step
+9~~ (**step 10 once round 2 renumbered the sheet — :15260, cite a smoke by what
+it DOES, not by its number**), which is the only step that puts a person in front
+of this round's Critical/High.
+
+## 2026-08-29 — THE READ-ONLY CONSOLE'S WEB HALF, T3 ROUND 2 (diff-only): ZERO Critical/High, THE PACKET SHIPS — five Low, none in `src/`, and four of them are a smoke sheet that had never been run
+
+Reviews `dba05fd` (:24141 + its round 1, :24376). **THE PACKET SHIPS** (:5348
+rule 1). Five Low, all fixed here; Kd approved the list first (*"go"*), and all
+five are logged in `BACKLOG.md` — checked by opening the file, not by citing it
+(:15010's L-6). **Escape hatch NOT armed:** round 1 had one Critical, this round
+has none, and :5348's trigger needs two consecutive. That is the opposite
+direction, and the reviewer said so unprompted.
+
+**Read before writing a smoke step whose ✅ names a screen you have not opened,
+before promising an exact row count from a database a smoke does not own, before
+trusting a review's MAP of where a false sentence lives, before declining a guard
+on the strength of a "grep-verified" sentence, and before believing an edit
+landed because the tool said it did.**
+
+### THE ROUND'S SHAPE: no code was wrong, and the sheet was the deliverable
+
+**The diff under review changed nine prop lines and five test cases, and this
+round found nothing wrong with any of them.** It re-derived round 1's
+Critical/High fix by enumerating every commit path in both panels —
+`JoinCodesPanel` has no `<form>`, every button is `type="button"`, and its one
+`onKeyDown` has no form owner — and confirmed that a handler guard in either
+panel would be unobservable. The declined half of round 1's remedy stands.
+
+**What it found instead was in the RECORD and in the SHEET**, which is where this
+card's remaining risk actually was: the sheet is the only gate left, it had never
+been run, and as written it would have cost Kd three failed steps and an
+improvised third account before reaching the one step this round exists for.
+
+### LOW-1 — A "GREP-VERIFIED" SENTENCE THAT A GREP DISPROVES, AND THE REVIEW'S OWN MAP OF IT WAS WRONG
+
+Round 1 declined the handler guards because `GymDetailsPanel` is *"the only
+`<form>` in the console"*. **There are two**: `pages/console/NewGym.jsx:262` is
+the create-a-gym form. The argument survives untouched — neither gated panel has
+one — **so what was false is the SCOPE of the claim, not the conclusion it
+supported**, and it is corrected to *"the only `<form>` in a panel this card
+gates"*.
+
+**THE REVIEW SAID FOUR COPIES; THERE ARE SIX.** It missed `HANDOFF.md:29` and
+counted the commit message, which cannot be edited. **This is :23928's Low-1
+recurring one round later, in the same subsystem, against the entry that recorded
+it** — there a review's four-place map held one correct-but-different figure, one
+place that did not contain the figure at all, and a fifth it never named.
+**Standing, and now twice-proven: a correction's MAP is a claim exactly like its
+figure, and V1 applies to both.** Re-grepped; fixed in `DECISIONS.md`,
+`DECISIONS-INDEX.md`, `BACKLOG.md` and `HANDOFF.md`; the commit message is named
+in `BACKLOG.md` as unfixable rather than left looking overlooked. **The `src/`
+comments were checked and were already correctly scoped**
+(`JoinCodesPanel.jsx:191` says *"this panel has no `<form>`"*), which is why this
+round changes no code.
+
+### LOW-2 TO LOW-5 — THE SHEET, AND EVERY ONE OF THEM FAILS ON CORRECT CODE
+
+That is the property worth naming: **not one of these four would have found a
+defect. Each would have made Kd stop, disbelieve a working screen, and report a
+failure that was the sheet's.** :5041's setup lesson at the other end — a step
+that fails for an innocent reason teaches people to ignore steps.
+
+**Low-2 — step 1 described a screen the app does not draw.** Its ✅ promised *"the
+gym's page showing Free trial and an end date"*. `NewGym.jsx:216-247` draws
+*"<name> is ready"*, *"Your gym is set up in USD."*, the join-code card and a
+**Go to your gym** button — **and the sheet never told him to press it.** :23257
+§11's own defect in miniature, committed by the round that recorded it: *a step
+written from the design rather than from the screen.* Split in two, with the
+trial line and the date moved to the step where the gym's page really shows them
+— cross-checked against `smoke-trial-expiry.md`'s step 4, which has been run.
+
+**Low-3 — an absence-shaped ✅ that cannot be met.** Step 6 promised *"no coloured
+strip at the top"*. The gym is trialling with about a month left and account B is
+STAFF, so `subscription` is sent to them (`repo.ts:59-63` withholds it only from
+non-staff) and `bannerFor` falls through to `trial_info` — **"Free trial — N days
+left."**, with a dismiss ✕. **:21751 is Kd withdrawing a step for being unable to
+fail; this is the mirror, a step unable to pass.** The strip is now named as
+expected, with an instruction not to dismiss it, and *"What a failure looks
+like"* separates it from the RED strip, which at that step would still be the
+real failure.
+
+**Low-4 — step 6 listed a button that is not on the screen.** It called
+**Confirm** pressable, but B was confirmed at step 4, nobody else had applied, and
+`ApplicationsQueue` returns `null` on an empty queue. The same absence made step
+14 unrunnable, and the sheet met it with *"have a third person type the code, or
+skip and say so"* — an improvisation over **the only step that shows this card's
+own new sentence to the people stuck in the queue**. **Fixed by making the button
+REAL rather than by deleting the claim**: a third account applies early and is
+left waiting. The cheaper repair — make B both staff and an unconfirmed applicant
+— was measured and is impossible: `addOrgStaff` requires the email to belong to a
+member already.
+
+**Low-5 — an exact count out of a database the sheet does not own.** Step 8
+promised `expired: 1`. **:23257 §12 is the recorded case of exactly this
+sentence: the real run printed `expired: 2`**, and `smoke-trial-expiry.md:103`
+was corrected for it the day before while this sheet was not. Now *"however many
+gyms this local database has on a live trial"*, with the null-dated carve-out
+named. **The step also carried NO COMMAND** — a chat-run step whose command Kd
+could not read before it ran, which is the readable half of :22782's rule that a
+command in a smoke sheet is code somebody will execute. Printed under the table
+now, with the local database named on the line for the same reason that sheet
+names it.
+
+### Rules 3, 4 and 5
+
+**Rule 3 — N/A and stated rather than skipped:** zero Critical/High, and no `src`
+file changed, so there is nothing for a regression test to pin. Round 1's own
+rule-3 work was re-measured by the reviewer instead: the two ends of the C/H fix
+hand-mutated RED, then C116/C117/C120–C128 over the harness — **11 mutants, 11
+RED, 0 ALIVE, restores sha256 byte-exact**, whole-table anchor pre-check green
+over all 148 rows.
+**Rule 4 — no green liars found.** The load-bearing new helper
+(`theGymLapsesUnderTheScreen()`) would be a lie if the banner were already on
+screen before the lapse; it is not — `bannerFor` returns null for the PAYING
+fixture — so the wait genuinely blocks. Round 1 had already found and fixed the
+file's one real liar (the owner-row tick-box case).
+**Rule 5 — no new guard, so no new mutant.** `mutate-console.mjs` is untouched.
+
+### THE INSTRUMENT FAILURE, AND IT IS NOT THE HARNESS THIS TIME
+
+**Two `Edit` calls reported *"updated successfully"* and changed nothing on
+disk** — `DECISIONS.md` and `DECISIONS-INDEX.md`, the two largest files in the
+repo. Caught only because the fix round re-grepped its own corrections before
+moving on; both landed on a retry. **Standing, and it belongs beside :4267 and
+:5200: a tool's own success line is not evidence the file changed. Verify a write
+the way this repo verifies everything else — read the bytes back.** Every edit in
+this round was confirmed with a `grep` or a `git diff --stat` afterwards.
+
+**THE SMOKE IS THE ONLY GATE LEFT, and it is now runnable end to end for the
+first time.** T3 is closed at round 2.
+
+### Round log — not read unless a trigger sends you here (the 2026-08-29 rule, and this entry is its first subject)
+
+**PROVE, re-run in this round rather than quoted from round 1:** web suite
+**1370/1370 across 50 files, exit 0** · **eslint `--max-warnings=0` exit 0** on
+the six web files round 1 changed · **`check-decisions-index` 235 pointers
+resolve, 865 headings** · **`check-harnesses` 25 scripts parse** · **triggers
+rebuilt, `--check` clean.** No sweep and no smoke: **the round changes no `src`
+file and draws nothing** — stated, not skipped, on :23928's precedent for a
+documentation-only round.
+
+**SEPARATE AND NOT THIS ROUND'S:** `CLAUDE.md` carried uncommitted changes that
+predate this session (its `PROVE` step and R11.2 rewritten for a chat that runs
+its own commands, plus the Appendix header). **Kd ruled them KEPT OUT of the
+commit**; they were saved as a patch and restored to the working tree afterwards,
+so they are neither committed nor destroyed. R1.1 — not this card's file, not in
+the finding list.
+
+## 2026-08-29 — KD RULING: AN ENTRY IS WRITTEN FOR THE CHAT A TRIGGER SENDS THERE. `Read before …` becomes MANDATORY, the round's story moves under a heading nobody must read, and the measurement REVERSED the recommendation I opened with
+
+**Read before writing any `DECISIONS.md` entry, before deciding what a round
+record should contain, before proposing any trim of the record, before quoting
+"we write too much" as an argument for cutting detail, and before recommending a
+process change on the strength of how a thing FEELS to write.**
+
+Kd asked two questions in one message and **they turned out to be one question**:
+*"we should not be writing unnecessary things which will never be used, what is
+your opinion"* and *"are we not moving slower then a snail in developing the
+project?"*. **Every line written into this record is read again by every chat that
+follows it, so the record's SIZE is the project's SPEED.** That link is why the
+answer is a rule about writing rather than a rule about pace.
+
+### THE RULING
+
+Every `DECISIONS.md` entry has **two parts and two different readers**:
+
+1. **A `**Read before …**` sentence is MANDATORY** — it was *"should"* in the
+   2026-08-28 amendment's MAINTENANCE paragraph and is now a requirement — in the
+   entry, in its index line, or both, because the generator reads both. **Written
+   FIRST, before the body**, naming the mistake somebody could repeat. **It is the
+   only part that FINDS a future chat.**
+2. **The body is the detail that chat needs the moment it arrives** — what
+   failed, what was measured, what would bite again. As long as that takes and no
+   longer.
+
+**Everything else — how the round went, how thorough it was, test counts, PROVE
+figures, self-assessment — goes under a closing `### Round log` heading that NO
+grounding rule requires anybody to read.** `CLAUDE.md`'s AMENDMENT 2026-08-29.
+
+**NOTHING IS DELETED, SHORTENED OR SUMMARISED. Kd's 2026-08-28 condition binds
+this amendment exactly as it bound the last one** — *"does not get summarised
+things instead of details"*. **What changes is WHERE a thing sits, never whether
+it exists.** And **his own rulings are not what this trims**: they override a
+chat's fresh judgement, and shortening them is the thing that condition forbade.
+
+### THE MEASUREMENT, AND IT REVERSED WHAT I HAD JUST RECOMMENDED
+
+Asked for my opinion, I answered first and measured second — the wrong order, and
+the reason this section exists. **My opening recommendation was to cut round
+records to "roughly ten lines".** Kd's next question was *"will it affect
+decisions?"*, and answering it honestly required counting rather than
+intuiting.
+
+**Six past lessons changed what this session actually did.** Where each came
+from, checked in `DECISIONS-TRIGGERS.md` rather than recalled:
+
+| The lesson | How it reached me |
+|---|---|
+| a review's MAP of a mistake is a claim (:23928) | *"correcting a figure a review hands you"* |
+| correct a figure in ALL its copies (:20587) | *"correcting a figure in fewer than all of its copies"* |
+| the real run printed `expired: 2` (:23257 §12) | *"writing 'the smoke passed' anywhere"* |
+| an ✅ that cannot fail (:21751) | *"writing any smoke step whose ✅ is 'nothing appears'"* |
+| cite a smoke by what it does, not its number (:15260) | *"citing a smoke by step number"* |
+| the trial-expiry sheet's own corrections (:23257) | *"quoting the trial-expiry smoke sheet"* |
+
+**ALL SIX ARRIVED THROUGH A `Read before …` PHRASE. NOT ONE ARRIVED BY READING A
+ROUND'S BODY.** On its face that is the case for cutting bodies — **and it is the
+opposite.** Once a phrase had sent me to an entry, **the body was exactly what I
+needed**: the phrase told me a trap existed, the body told me `expired: 2` rather
+than 1, which fixture, which line. **A body is the second half of an instrument
+whose first half is the sentence. A body with no sentence above it is
+unreachable; a sentence with no body under it is unusable.** My ten-line
+recommendation would have destroyed the working half and kept the routing.
+Withdrawn on the measurement, before Kd ruled.
+
+### WHAT IT FIXES, AND WHAT IT HONESTLY DOES NOT
+
+**FIXES, and the repo already knew the number: 138 of 323 rulings declare no
+trigger, 16 of them Kd's own** — reachable only through a title in
+`DECISIONS-TRIGGERS.md` §2's gap list. **That count is the measured cost of the
+word "should", and this ruling is what stops it growing.**
+
+**DOES NOT:** it does not shrink the 323 entries already written, so the
+always-read burden falls only as new entries stay small. **And a chat must still
+GUESS which lesson will matter at the moment it writes the sentence — the same
+guess as before, now REQUIRED rather than skippable, and when it guesses wrong
+the detail is still in the body exactly as today.** Do not quote this ruling as
+having made the record self-pruning; it has not.
+
+### THE PROCESS FAILURE THAT PRODUCED IT, AND IT IS MINE
+
+**I gave an opinion on a process question before measuring, and the opinion was
+wrong in the direction that would have cost the most.** S4 and V1 both cover
+this — *"no unsolicited opinions"*, *"no number without a command"* — and neither
+felt like it applied, because the question invited an opinion and my answer
+contained no numbers to verify. **That is the gap worth recording: a
+RECOMMENDATION with no numbers in it is not exempt from V1; it is a recommendation
+with its evidence missing.** What saved it was Kd asking a second question rather
+than accepting the first answer.
+
+### Round log — not read unless a trigger sends you here
+
+No code, no test and no `src` file is touched by this ruling. Changed:
+`CLAUDE.md` (AMENDMENT 2026-08-29, appended after the 2026-08-28 MAINTENANCE
+paragraph, 49 insertions and **zero deletions** — nothing existing was reworded),
+this entry, its index line, and `DECISIONS-TRIGGERS.md` rebuilt.
+
+**The entry directly above (:24559) is this rule's FIRST SUBJECT** — its PROVE
+figures and its `CLAUDE.md` note now sit under a `### Round log` heading, which
+is the whole of what the rule asks for. Nothing in it was deleted or reworded.
+
+**`CLAUDE.md`'s pre-existing uncommitted changes are KEPT OUT on Kd's ruling** —
+saved as a patch and restored to the working tree after the commit, so they are
+neither committed nor destroyed.
+
+**Checks: `check-decisions-index` 235 pointers resolve · triggers rebuilt and
+`--check` clean · `check-harnesses` 25 scripts parse.**

@@ -3546,7 +3546,19 @@ then; none may be hidden or reduced to close the gap.
       ruling contained none of those words, and a settled question went back to
       Kd). **It shrinks by one line every time a ruling is written with a
       `Read before …` sentence**, which `CLAUDE.md`'s maintenance clause now asks
-      for. No deadline; it improves by habit or not at all.
+      for. ~~No deadline; it improves by habit or not at all.~~
+      **2026-08-29 — KD RULED THE SENTENCE MANDATORY (DECISIONS :24703,
+      `CLAUDE.md` AMENDMENT 2026-08-29), so this line stops growing.** *"Should"*
+      became *"must"*, which is what the phrase "improves by habit or not at all"
+      was measuring the cost of. **The figure re-measured the same day: 138 of
+      323, and 138 of 325 after that ruling and its round — the count held flat
+      across two new entries for the first time**, because both carry a sentence.
+      **IT STILL DOES NOT SHRINK THE 138 ALREADY WRITTEN** — the ruling says so
+      itself and this line is the place that stays honest about it. No deadline,
+      because retro-fitting a trigger onto an old ruling means reading it in full
+      to decide what it binds, and a guessed sentence is worse than none: it
+      would send a chat somewhere on a claim nobody checked. **The right moment
+      is when a card touches one of the 138 anyway.**
 - [ ] ⚪ **`db.migration.test.ts`'s "0009 workout_sets CHECKs bite at the DB" is
       79 ms inside vitest's default timeout — it will keep flaking.** Recorded
       2026-08-01 (DECISIONS :3538) by the catalog card, which is NOT its cause:
@@ -4976,11 +4988,25 @@ file and is stated so nobody reads these as lower priority than they are.
       five regression cases and nine mutants (C120–C128). **Five Low also fixed;
       the sentence above is left standing and corrected here rather than edited,
       because it is what a review read and believed** (:5748).
-      **THE SMOKE SHEET CHANGED SHAPE TOO, and it now covers this**: new step 9
-      holds a confirm question open across the lapse, which is the one thing no
-      test, mutant or reviewer had looked at before this round. **Its four
-      Settings steps were removed as UNRUNNABLE** — see the `org.manage` tick-box
-      line below, which is what makes them unreachable.
+      **THE SMOKE SHEET CHANGED SHAPE TOO, and it now covers this**: ~~new step
+      9~~ **step 10 after round 2 renumbered the sheet** holds a confirm question
+      open across the lapse, which is the one thing no test, mutant or reviewer
+      had looked at before this round. **Its four Settings steps were removed as
+      UNRUNNABLE** — see the `org.manage` tick-box line below, which is what
+      makes them unreachable.
+      **T3 ROUND 2 RAN 2026-08-29 (:24559): ZERO Critical/High, THE PACKET SHIPS,
+      T3 IS CLOSED — AND THIS LINE STILL DOES NOT TICK, because the SMOKE IS
+      STILL UNRUN.** That is now the only thing between this line and its tick.
+      Five Low, none in `src/`: round 1's *"the only `<form>` in the console"*
+      is false (`NewGym.jsx:262`) and is corrected in all four editable copies,
+      **and four of the five were the SHEET, every one of them a step that would
+      have failed against CORRECT code** — a landing screen the app does not
+      draw, a "no coloured strip" ✅ over a trial banner that is genuinely there,
+      a **Confirm** button no queue was drawing, and an exact `expired: 1` from a
+      database shared with earlier smokes. **The sheet is runnable end to end for
+      the first time and now needs THREE accounts, not two** — the third only
+      ever types the join code and is left waiting, so the queue step has
+      somebody in it instead of asking Kd to improvise mid-run.
 - [ ] 🟡 **THE LAPSED GYM'S CONSOLE IS NOT ARCHIVED AFTER 14 DAYS — the third
       step of Kd's :22215 §5 step 1, split off at the plan gate on 2026-08-29
       (:23711) and shown to him in one line, not deferred quietly.**

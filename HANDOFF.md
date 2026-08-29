@@ -1,6 +1,128 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: KD RULING — AN ENTRY IS WRITTEN FOR THE CHAT A TRIGGER SENDS THERE.
+      DECISIONS :24703 · CLAUDE.md AMENDMENT 2026-08-29. No code, no test, no
+      src file. Ruled in the same session as :24559, out of Kd's two questions.
+
+  1. **THE RULING: every DECISIONS.md entry has TWO PARTS AND TWO READERS.**
+     (a) A `**Read before …**` sentence is MANDATORY — "should" in the
+     2026-08-28 MAINTENANCE paragraph is now MUST — written FIRST, in the entry
+     or its index line or both. **It is the only part that FINDS a future chat.**
+     (b) The body is the detail that chat needs on arrival. Everything else —
+     how the round went, test counts, PROVE figures, self-assessment — goes
+     under a closing `### Round log` heading **no grounding rule requires
+     anybody to read**.
+  2. **NOTHING IS DELETED, SHORTENED OR SUMMARISED.** Kd's 2026-08-28 condition
+     binds this amendment exactly as it bound the last one. **What changes is
+     WHERE a thing sits, never whether it exists — and HIS OWN RULINGS STAY IN
+     FULL**, since shortening those is the thing that condition forbade.
+  3. **THE MEASUREMENT REVERSED MY OWN OPENING RECOMMENDATION**, which was to
+     cut round records to "ten lines". Six past lessons changed what this
+     session did; **all six reached it through a `Read before …` phrase, NOT
+     ONE by reading a round's body.** That looks like the case for cutting
+     bodies and is the OPPOSITE: the phrase said a trap existed, **the body said
+     `expired: 2` rather than 1.** A body is the second half of an instrument
+     whose first half is the sentence. Withdrawn before Kd ruled.
+  4. **WHAT IT FIXES: 138 of 323 rulings declare no trigger, 16 of them Kd's** —
+     the measured cost of the word "should". **The count held FLAT at 138 across
+     the two entries added after the ruling** (325 rulings now), which is the
+     first evidence it works. **WHAT IT DOES NOT: it does not shrink the 138
+     already written** — retro-fitting means reading each in full, and a guessed
+     trigger is worse than none. Its OWED line carries both halves.
+  5. **THE PROCESS FAILURE IS MINE AND IS RECORDED: I gave a process opinion
+     BEFORE measuring, and it was wrong in the most expensive direction.
+     A RECOMMENDATION WITH NO NUMBERS IN IT IS NOT EXEMPT FROM V1 — it is a
+     recommendation with its evidence missing.** Caught only because Kd asked a
+     second question instead of taking the first answer.
+  6. **:24559 IS THIS RULE'S FIRST SUBJECT** — its PROVE figures and CLAUDE.md
+     note moved under `### Round log`. Nothing deleted or reworded.
+  7. **CLAUDE.md's PRE-EXISTING UNCOMMITTED CHANGES ARE KEPT OUT, KD'S RULING.**
+     Saved as a patch + full backup to the scratchpad, CLAUDE.md restored to
+     HEAD before the amendment was written (so the commit is 49 insertions, ZERO
+     deletions), and the patch re-applied to the working tree afterwards. **They
+     are neither committed nor destroyed** — CLAUDE.md is dirty again by design.
+
+PROVE: check-decisions-index 236 pointers resolve, 871 headings, exit 0 ·
+       triggers rebuilt 670 from 187 of 325, --check clean, exit 0 ·
+       check-harnesses 25 scripts parse, exit 0. **No suite run and none owed:
+       no src or test file is touched** (:23928's precedent).
+
+FILES: CLAUDE.md · DECISIONS.md · DECISIONS-INDEX.md · DECISIONS-TRIGGERS.md ·
+       OWED.md · HANDOFF.md. **No src, no test, no harness, no migration, no
+       dependency.**
+
+OPEN:  Nothing deferred by this ruling. The 138-without-a-trigger line stays
+       open with its trajectory updated. **The read-only console's SMOKE is
+       still the only gate on that card** (:24559) and its OWED line does not
+       tick until Kd runs it.
+```
+
+```
+TASK: READ-ONLY CONSOLE, WEB HALF — T3 ROUND 2 + FIX ROUND. DECISIONS :24559.
+      Diff-only re-review of `dba05fd` (:24141 + its round 1, :24376).
+      ZERO Critical/High — THE PACKET SHIPS, T3 IS CLOSED AT ROUND 2. Five Low,
+      all fixed here, NONE of them in src/. Kd approved the list first ("go").
+      Escape hatch NOT armed: round 1 had a Critical, this round has none, and
+      the trigger needs two consecutive — the opposite direction.
+
+  1. **NO CODE WAS WRONG.** The round re-derived round 1's declined handler
+     guards and they hold: `JoinCodesPanel` has no `<form>`, every button is
+     `type="button"`, its one `onKeyDown` has no form owner — a handler guard
+     in either gated panel would be unobservable. Nothing in src/ changed.
+  2. **LOW-1: "the only `<form>` in the console" IS FALSE** —
+     `pages/console/NewGym.jsx:262` is the create-a-gym form, so there are two.
+     The ARGUMENT survives (neither gated panel has one); the SCOPE was wrong,
+     now "the only `<form>` in a panel this card gates".
+  3. **THE REVIEW SAID FOUR COPIES AND THERE ARE SIX** — it missed HANDOFF.md
+     and counted the unfixable commit message. **:23928's Low-1 one round later
+     in the same subsystem: a correction's MAP is a claim exactly like its
+     figure.** Fixed in DECISIONS.md, DECISIONS-INDEX.md, BACKLOG.md, HANDOFF.md;
+     the commit message is named in BACKLOG.md as unfixable. src/ comments were
+     already correctly scoped, which is why no code moved.
+  4. **LOW-2..LOW-5 ARE THE SMOKE SHEET AND EVERY ONE FAILS ON CORRECT CODE** —
+     a landing screen the app does not draw (:23257 §11's own defect, in the
+     sheet written by the round that recorded it) · a "no coloured strip" ✅ over
+     a trial banner that is genuinely there (**:21751's mirror — a step unable to
+     PASS**) · a **Confirm** button no queue was drawing · an exact `expired: 1`
+     from a database shared with earlier smokes, **the sentence :23257 §12
+     already measured as `expired: 2`**. The chat-run step also carried no
+     command at all.
+  5. **THE SHEET IS RUNNABLE END TO END FOR THE FIRST TIME AND NEEDS THREE
+     ACCOUNTS, NOT TWO.** The third only types the join code and is left
+     waiting, so the queue step has somebody in it instead of asking Kd to
+     improvise mid-run. **Fixed by making the Confirm button REAL, not by
+     deleting the claim** — B cannot be both staff and an unconfirmed applicant,
+     because `addOrgStaff` requires the email to belong to a member already.
+     16 steps, renumbered; **old step 9 is now step 10** and every citation of
+     it was chased (:15260).
+  6. **INSTRUMENT: two `Edit` calls reported "updated successfully" and wrote
+     NOTHING** — DECISIONS.md and DECISIONS-INDEX.md, the two largest files.
+     Caught only by re-grepping; both landed on a retry. **A tool's success line
+     is not evidence the file changed — read the bytes back.** Every write in
+     this round was confirmed with a grep or a `git diff --stat`.
+  7. **NOT COMMITTED, AND FLAGGED TO KD RATHER THAN SWEPT IN: `CLAUDE.md` holds
+     uncommitted changes that predate this session** (its PROVE step and R11.2
+     rewritten for a chat that runs its own commands, plus the Appendix header).
+     Not this card's file, not in the finding list — R1.1.
+
+PROVE: web 1370/1370 across 50 files, exit 0 · eslint --max-warnings=0 exit 0 on
+       the six web files round 1 changed · check-harnesses 25 scripts parse ·
+       check-decisions-index 235 pointers resolve, 865 headings, exit 0 ·
+       triggers rebuilt 663 from 185 of 323, --check clean, exit 0.
+       **NO SWEEP and NO SMOKE — stated, not skipped: the round changes no src
+       file and draws nothing** (:23928's precedent for a documentation round).
+
+FILES: RUNBOOK/smoke-read-only-console.md · DECISIONS.md · DECISIONS-INDEX.md ·
+       DECISIONS-TRIGGERS.md · BACKLOG.md · OWED.md · HANDOFF.md.
+       **NO src file, no test, no harness, no migration, no dependency.**
+
+OPEN:  **THE SMOKE IS THE ONLY GATE LEFT.** The read-only OWED line does not
+       tick until Kd runs it. **C68 is still ALIVE and is not this card's**
+       (:23257 §9, own OWED line). Nothing new is deferred by this round.
+```
+
+```
 TASK: READ-ONLY CONSOLE, WEB HALF — T3 ROUND 1 + FIX ROUND. DECISIONS :24376.
       Reviews the working tree of :24141. ONE Critical/High — THE PACKET DOES
       NOT SHIP THIS ROUND. Five Low, all fixed here. Kd approved the list
@@ -26,8 +148,10 @@ TASK: READ-ONLY CONSOLE, WEB HALF — T3 ROUND 1 + FIX ROUND. DECISIONS :24376.
      performs the change.
   3. **THE HANDLER GUARDS THE REVIEW ASKED FOR ARE DECLINED, on purpose.**
      C116 exists because `GymDetailsPanel` is a `<form>` and ENTER submits past
-     a disabled button. Grep-verified it is the ONLY form in the console, so in
-     these two panels a handler guard would be a second guard neither of which
+     a disabled button. Grep-verified it is the only form in A PANEL THIS CARD
+     GATES (round 2 corrected "the only form in the console" — `NewGym.jsx`'s
+     create form is a second one), so in these two panels a handler guard
+     would be a second guard neither of which
      is falsifiable — **Low-5 of this same round, committed by the round that
      fixed it.** The panel comment records the distinction so nobody "restores"
      it later.
@@ -46,7 +170,8 @@ TASK: READ-ONLY CONSOLE, WEB HALF — T3 ROUND 1 + FIX ROUND. DECISIONS :24376.
      `StaffPanel`'s read-only states — including C116's ENTER door — rest on
      tests and mutants alone. Written onto :21157's existing OWED line, whose
      own "closed by the next card" prediction had gone stale (:21353's shape).
-  7. **THE SMOKE SHEET CHANGED SHAPE AND NOW COVERS THE C/H.** New step 9 holds
+  7. **THE SMOKE SHEET CHANGED SHAPE AND NOW COVERS THE C/H.** New step 9
+     (**step 10 after round 2 renumbered the sheet**) holds
      a confirm question open across the lapse and checks Replace it goes grey
      while Keep it still works. The four Settings steps are removed from the run
      and recorded, with the reason, under "What this sheet does NOT cover".

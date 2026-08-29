@@ -145,6 +145,55 @@ because the generator reads both — **because that sentence is now the thing th
 makes a ruling findable.** An entry without one anywhere is reachable only
 through a title in a gap list, and 138 are in exactly that position.
 
+**AMENDMENT 2026-08-29 — KD RULES THAT AN ENTRY IS WRITTEN FOR THE CHAT A
+TRIGGER SENDS THERE, AND `Read before …` STOPS BEING OPTIONAL.** His question
+was whether we write too much — *"we should not be writing unnecessary things
+which will never be used"* — asked in the same breath as *"are we not moving
+slower then a snail"*, and **the two are ONE question**: every line written here
+is read again by every chat that follows, so the record's size IS the project's
+speed.
+
+**THE MEASUREMENT THAT SETTLED IT, taken on the session that asked, and it
+reversed that session's own first recommendation.** Six past lessons changed what
+that session did. **All six reached it through a `Read before …` phrase in
+`DECISIONS-TRIGGERS.md`. NOT ONE arrived by reading a round's body.** But once a
+phrase had sent it to an entry, **the DETAIL in that body was exactly what it
+needed** — the figure (`expired: 2`, not 1), the fixture, the trap. **So a body is
+not waste; it is the second half of an instrument whose first half is the
+sentence. A body with no sentence above it is unreachable; a sentence with no
+body under it is unusable.** The chat's opening advice — "cut round records to
+ten lines" — would have destroyed the half that was doing the work, and it was
+withdrawn on this measurement before Kd ruled.
+
+**THE RULING — EVERY `DECISIONS.md` ENTRY HAS TWO PARTS AND TWO DIFFERENT
+READERS:**
+
+1. **A `**Read before …**` sentence is MANDATORY** — "should" above is now a
+   requirement — in the entry, its index line, or both (the generator reads
+   both). **Written FIRST, before the body**, naming the mistake somebody could
+   repeat. **It is the only part that FINDS a future chat.**
+2. **The body is the detail that chat needs the moment it arrives** — what
+   failed, what was measured, what would bite again. As long as that takes and no
+   longer.
+
+**Everything else — how the round went, how thorough it was, test counts, PROVE
+figures, self-assessment — goes under a closing `### Round log` heading, which NO
+grounding rule requires any chat to read.** **Nothing is deleted, shortened or
+summarised: Kd's 2026-08-28 condition binds this amendment exactly as it bound
+the last one. What changes is WHERE a thing sits, never whether it exists.**
+
+**WHAT IT FIXES, and the repo already knew: 138 of 323 rulings declare no
+trigger, 16 of them Kd's own.** That number is the measured cost of the word
+"should", and this is the line that stops it growing.
+
+**WHAT IT DOES NOT DO, so nobody quotes it as more:** it does not shrink the 323
+entries already written, and a chat must still GUESS which lesson will matter when
+it writes that sentence. **The guess is unchanged — it is now a REQUIRED guess
+rather than one 138 entries skipped** — and when it guesses wrong, the detail is
+still in the body, exactly as today. **KD'S OWN RULINGS ARE NOT WHAT THIS TRIMS
+and stay in full**: they override a chat's fresh judgement, and shortening them is
+the thing 2026-08-28 forbade.
+
 
 # AI Home Gym — Implementation Playbook for Opus 4.8
 

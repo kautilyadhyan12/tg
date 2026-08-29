@@ -2595,8 +2595,10 @@ round running that it has paid off.
 
 - **"Guard `create()`, `save()` and `add()` at the top — the button is not the
   door."** The C116 lesson applies where there IS another door. Neither panel has
-  a `<form>` (grep-verified: the only one in the console is `GymDetailsPanel`'s,
-  which is exactly why its handler is guarded), so nothing submits on Enter and
+  a `<form>` (grep-verified: the only one in a panel this card gates is
+  `GymDetailsPanel`'s, which is exactly why its handler is guarded — ~~"the only
+  one in the console"~~, **corrected by round 2, which found `NewGym.jsx`'s
+  create form**), so nothing submits on Enter and
   the button plus its fields are the whole surface. A handler guard here would
   make the button's guard unobservable — **the same defect as LOW-5, committed in
   the round that fixed it.**
@@ -2609,3 +2611,74 @@ round running that it has paid off.
   control that does not exist. The sheet's four Settings steps were genuinely
   broken, and the fix is the opposite one: they are removed from the run and
   recorded as unreachable, with the reason.
+
+## THE READ-ONLY CONSOLE'S WEB HALF — T3 ROUND 2 (2026-08-29, DECISIONS :24376)
+
+**ZERO Critical/High, so the packet SHIPS on this round.** Kd approved the list
+first (*"go"*). Five Low, all fixed here, **none of them in `src/`** — the round
+changed no application code. Four of the five are the SMOKE SHEET, which had
+never been run, and the fifth is a "grep-verified" sentence a grep disproves.
+
+- [x] **LOW-1 · A "GREP-VERIFIED" SENTENCE THAT A GREP DISPROVES, IN FIVE
+      PLACES.** Round 1 wrote *"that is the only `<form>` in the console"* to
+      justify declining the handler guards. **There are two**:
+      `apps/web/src/pages/console/NewGym.jsx:262` is the create-a-gym form.
+      **The argument is untouched** — neither panel this card gates has a form,
+      so the button and its fields really are the whole surface — **what was
+      wrong is the SCOPE of the claim**, corrected everywhere to *"the only
+      `<form>` in a panel this card gates"*. :20587's rule (correct a figure in
+      ALL its copies) and :8707's (a correction is a claim, and takes the same
+      evidence as the thing it corrects).
+      **THE REVIEW NAMED FOUR PLACES AND THERE ARE SIX** — it missed
+      `HANDOFF.md:29`, and counted the commit message, which cannot be edited.
+      **That is :23928's Low-1 recurring exactly**: a review's map of where a
+      false sentence lives is itself a claim. Re-grepped rather than trusted;
+      fixed in `DECISIONS.md`, `DECISIONS-INDEX.md`, `BACKLOG.md` and
+      `HANDOFF.md`, and the sixth copy is named here as unfixable rather than
+      left looking missed. The source comments were checked too and are all
+      correctly scoped already (`JoinCodesPanel.jsx:191` says *"this panel has
+      no `<form>`"*), so nothing in `src/` changed.
+- [x] **LOW-2 · STEP 1 DESCRIBED A SCREEN THE APP DOES NOT DRAW.** Its ✅ was
+      *"You land on the gym's page showing Free trial and an end date"*.
+      `NewGym.jsx:216-247` draws *"<name> is ready"*, *"Your gym is set up in
+      USD."*, the join-code card and a **Go to your gym** button — no "Free
+      trial", no date — **and the sheet never told Kd to press that button.**
+      :23257 §11's own defect in miniature, in the sheet written by the round
+      that recorded it: *a step written from the design rather than from the
+      screen.* Split into two steps; the trial line and the date now appear at
+      step 2, where the gym's page actually shows them (confirmed against
+      `smoke-trial-expiry.md`'s step 4, which has been run).
+- [x] **LOW-3 · AN ABSENCE-SHAPED ✅ THAT CANNOT BE MET.** Step 6 promised
+      *"There is no coloured strip at the top"*. The gym is trialling with about
+      a month left and account B is STAFF, so the server sends `subscription` to
+      them (`repo.ts:59-63` — withheld only from non-staff) and `bannerFor`
+      falls through to `trial_info`: a strip reading **"Free trial — N days
+      left."** with a dismiss ✕. :21751's class — Kd withdrew a step himself for
+      being unfailable, and this one is worse because it fails on correct code.
+      The step now names that strip as EXPECTED, says not to dismiss it, and
+      *"What a failure looks like"* distinguishes it from the RED strip, which
+      at that point would still be the real failure.
+- [x] **LOW-4 · STEP 6 LISTED A BUTTON THAT IS NOT ON THE SCREEN.** It asserted
+      **Confirm** was pressable, but B had been confirmed at step 4 and nobody
+      else had applied, and `ApplicationsQueue` returns `null` with an empty
+      queue (`items.length === 0 && pendingCount === 0`) — no section, no
+      button. The same absence made step 14 unrunnable, which the sheet met with
+      *"have a third person type the code, or skip and say so"* — an
+      improvisation mid-run over the one step that shows this card's own new
+      sentence to the people in the queue. **Fixed by making the button real
+      rather than by deleting the claim**: a third account applies at step 4 and
+      is left waiting, so the queue is populated for the whole run. The
+      alternative — make B both staff and an unconfirmed applicant — was
+      measured and is impossible: `addOrgStaff`'s email must already belong to a
+      member of the gym.
+- [x] **LOW-5 · AN EXACT COUNT FROM A DATABASE THE SHEET DOES NOT OWN.** Step 8
+      promised `expired: 1`. The sweep ends every live trial in the local
+      database, and earlier smokes leave trials there — **:23257 §12 is the
+      recorded case: the same promise, and the real run printed `expired: 2`.**
+      `smoke-trial-expiry.md:103` was corrected for this two days ago and the
+      correction was not carried here. Now *"however many gyms this local
+      database has on a live trial"*, with the null-dated carve-out named.
+      **The step also had NO COMMAND AT ALL** — a chat-run step whose command Kd
+      could not read before it ran, which is the readable half of :22782's rule
+      that a command in a smoke sheet is code that will be run. The command is
+      now printed under the table.

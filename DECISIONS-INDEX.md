@@ -842,6 +842,47 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   recorded cost of forgetting it. `turbo run lint` RED is PRE-EXISTING and
   was re-proven on a stashed tree (:21057's global-pnpm shadowing).
 
+- **:24703** — 2026-08-29 — **KD RULING: AN ENTRY IS WRITTEN FOR THE CHAT A
+  TRIGGER SENDS THERE. `Read before …` becomes MANDATORY and the round's story
+  moves under a `### Round log` heading nobody must read.** The direct successor
+  to :22497 above, and it STRENGTHENS that entry's MAINTENANCE paragraph:
+  *"should give the entry a `Read before …` sentence"* becomes **must**.
+  **Read before writing any `DECISIONS.md` entry, before deciding what a round
+  record should contain, before proposing any trim of the record, before quoting
+  "we write too much" as an argument for cutting detail, and before recommending
+  a process change on the strength of how a thing FEELS to write.**
+  **KD ASKED TWO QUESTIONS AND THEY WERE ONE:** *"we should not be writing
+  unnecessary things which will never be used"* and *"are we not moving slower
+  then a snail"* — **every line written here is read again by every chat that
+  follows, so the record's SIZE is the project's SPEED.**
+  **THE RULING: two parts, two readers.** (1) The `**Read before …**` sentence is
+  MANDATORY, written FIRST, in the entry or its index line or both. **It is the
+  only part that FINDS a future chat.** (2) The body is the detail that chat
+  needs on arrival. Everything else — how the round went, test counts, PROVE
+  figures, self-assessment — goes under `### Round log`. **NOTHING IS DELETED,
+  SHORTENED OR SUMMARISED; Kd's 2026-08-28 condition binds this amendment too.
+  What changes is WHERE a thing sits, never whether it exists — and his own
+  rulings stay in full.**
+  **THE MEASUREMENT REVERSED THE CHAT'S OWN OPENING RECOMMENDATION, which was to
+  cut round records to "ten lines".** Six past lessons changed what that session
+  did; **all six reached it through a `Read before …` phrase, NOT ONE by reading
+  a round's body** — which looks like the case for cutting bodies and is the
+  opposite: **the phrase said a trap existed, the body said `expired: 2` rather
+  than 1.** A body is the second half of an instrument whose first half is the
+  sentence; **one without the other is unreachable or unusable.** Withdrawn on
+  the measurement, before Kd ruled.
+  **WHAT IT FIXES: 138 of 323 rulings declare no trigger, 16 of them Kd's** —
+  the measured cost of the word "should". **WHAT IT DOES NOT: it does not shrink
+  the 323 entries already written, and a chat must still GUESS which lesson will
+  matter — now a REQUIRED guess rather than a skippable one.** Do not quote it as
+  having made the record self-pruning.
+  **THE PROCESS FAILURE IS THE CHAT'S AND IS RECORDED: an opinion on a process
+  question given BEFORE measuring, wrong in the most expensive direction.
+  A RECOMMENDATION WITH NO NUMBERS IN IT IS NOT EXEMPT FROM V1 — it is a
+  recommendation with its evidence missing.** Caught only because Kd asked a
+  second question instead of accepting the first answer.
+  `CLAUDE.md`'s AMENDMENT 2026-08-29. No code, no test, no `src` file.
+
 - **:22921** — 2026-08-28 — **THE FORCED PROMPT'S SERVER HALF: the first price
   this product has ever served, an owner's spent trial made visible, and Canada,
   the UK and the euro area finally able to buy anything.** Step 2 of :22215 §5,
@@ -1267,7 +1308,9 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   tested the STATE and never the TRANSITION**, and C111/C114/C116 had the same
   hole. **A card whose subject is a state change needs a case that performs it.**
   **THE HANDLER GUARDS THE REVIEW ASKED FOR ARE DECLINED, with a reason:**
-  `GymDetailsPanel`'s `<form>` is the only one in the console (grep-verified), so
+  `GymDetailsPanel`'s `<form>` is the only one in A PANEL THIS CARD GATES
+  (~~"the only one in the console"~~ — **corrected by round 2, which found
+  `NewGym.jsx`'s create form**), so
   in these two panels a handler guard would be a second unfalsifiable guard —
   **Low-5 of this same round, committed by the round fixing it.**
   **TWO OF THE REVIEW'S OWN CLAIMS WERE WRONG, the second round running
@@ -1285,6 +1328,46 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   so the finding stands; the Settings path is not, so it is recorded unverified
   rather than claimed. Severity and smoke had the same question: *can a user get
   here?*
+
+- **:24559** — 2026-08-29 — **THE READ-ONLY CONSOLE'S WEB HALF, T3 ROUND 2
+  (diff-only): ZERO Critical/High, THE PACKET SHIPS — five Low, NONE of them in
+  `src/`, and four are a smoke sheet that had never been run.** Reviews
+  `dba05fd`. Kd approved the list first (*"go"*); all five in `BACKLOG.md`.
+  **Escape hatch NOT armed** — round 1 had a Critical, this round has none, and
+  the trigger needs two consecutive.
+  **Read before writing a smoke step whose ✅ names a screen you have not opened,
+  before promising an exact row count from a database a smoke does not own,
+  before trusting a review's MAP of where a false sentence lives, before
+  declining a guard on the strength of a "grep-verified" sentence, and before
+  believing an edit landed because the tool said it did.**
+  **THE ROUND FOUND NO DEFECT IN THE CODE** and re-derived round 1's declined
+  handler guards as correct: `JoinCodesPanel` has no `<form>`, every button is
+  `type="button"`, its one `onKeyDown` has no form owner.
+  **LOW-1: round 1's "the only `<form>` in the console" is FALSE** —
+  `NewGym.jsx:262` is a second one — **and the review's own map of where that
+  sentence lives named four places when there are six** (it missed
+  `HANDOFF.md:29` and counted the unfixable commit message). **:23928's Low-1 one
+  round later, in the same subsystem: a correction's MAP is a claim exactly like
+  its figure.** Scope corrected to *"the only `<form>` in a panel this card
+  gates"*; the argument is untouched and no `src` comment needed changing.
+  **LOW-2 TO LOW-5 ARE THE SHEET AND EVERY ONE FAILS ON CORRECT CODE** — a
+  landing screen the app does not draw (:23257 §11's own defect, in the sheet
+  written by the round that recorded it) · an absence-shaped ✅ over a strip that
+  is genuinely there, **:21751's mirror: a step unable to PASS** · a **Confirm**
+  button no queue was drawing, fixed by making it real rather than deleting the
+  claim (`addOrgStaff` requires the email to be a member already, so the cheaper
+  repair is impossible) · and an exact `expired: 1` from a shared local database,
+  **the sentence :23257 §12 already measured as `expired: 2`**, in the one sheet
+  that was not corrected with its sibling. The chat-run step also carried no
+  command at all.
+  **INSTRUMENT: two `Edit` calls reported success and wrote nothing** — the
+  repo's two largest files — caught only by re-grepping. **A tool's success line
+  is not evidence the file changed.** Also flagged, not committed: `CLAUDE.md`
+  carries pre-existing uncommitted changes (R1.1).
+  **PROVE: web 1370/1370 exit 0 · eslint exit 0 on six files · index pointers
+  resolve · triggers `--check` clean. No sweep, no smoke — no `src` file
+  changed.** **The smoke is the only gate left and is runnable end to end for the
+  first time; T3 closed at round 2.**
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 
