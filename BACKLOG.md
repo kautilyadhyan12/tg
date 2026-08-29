@@ -2515,7 +2515,7 @@ line.** Kd approved the list first (*"go"*).
       is the second and reaches the same dead end from the other side, writing
       `member_nudged_at` and badging a queue nobody can clear. Both named now, and
       the open product question widened to cover both. (`OWED.md`.)
-- [ ] **LOW-6 · "TRY AGAIN" ON A REFUSAL THAT TRYING AGAIN CANNOT FIX — DEFERRED,
+- [x] **LOW-6 · "TRY AGAIN" ON A REFUSAL THAT TRYING AGAIN CANNOT FIX — DEFERRED,
       with its own `OWED.md` line in this commit.** `isRetryable` treats everything
       but 403 as retryable, so the permanent 409 `gym_not_on_plan` reaches the
       screen behind a Try again button. **Low and not softened**: the sentence
@@ -2524,6 +2524,13 @@ line.** Kd approved the list first (*"go"*).
       sat in that bucket. Deferred to the read-only console's WEB half, the next
       card, which owns the file and disables these controls anyway.
       (`apps/web/src/api/orgsApi.js`, → `OWED.md`.)
+      **TICKED 2026-08-29 by the read-only console's WEB half**, which added both
+      codes to `PERMANENT_ERROR_CODES` with an offline positive control (C118,
+      C119). **Its own T3 round 1 then corrected one sentence above:**
+      `trial_already_used` did NOT "already sit in that bucket" — nothing has ever
+      routed it through `isRetryable`, and measured across the console neither
+      code can reach that predicate today. The guard is forward-looking, and the
+      source comment now says so.
 - [x] **RULE 4 · ONE GREEN LIAR, THE FIFTH FINDING ON ONE LIST.** *"every route
       requires authentication"* stayed GREEN with `app.authenticate` deleted from
       the NUDGE route — the last route in the module with no line in that list.
@@ -2535,3 +2542,70 @@ line.** Kd approved the list first (*"go"*).
       disagree (:23128's Low-5 comment says "the SECOND time"; the gym-details
       comment four lines below says "the third"). Left unedited (R1.1) and named.
       (`apps/api/test/orgs.routes.test.ts`.)
+
+## THE READ-ONLY CONSOLE'S WEB HALF — T3 ROUND 1 (2026-08-29, DECISIONS :24141)
+
+**ONE Critical/High, so the packet does NOT ship this round.** Kd approved the
+list first (*"go"*). Five Low, all fixed here. **Two of the review's own claims
+were wrong and are NOT applied** — recorded below, because :23928 is the entry
+that made "a correction is a claim" this subsystem's habit and this is the second
+round running that it has paid off.
+
+- [x] **LOW-1 · A COMMENT THAT STOOD IN FOR THE MISSING GUARD, AND BOTH ITS
+      HALVES WERE FALSE.** `JoinCodesPanel`'s header said `readOnly` "is threaded
+      through every control below" while Save, Replace it and Remove it carried
+      `busy` alone, and said `busy` "covers the Cancel/Keep buttons" when those
+      carry no `disabled` at all. **This is the round's Critical/High wearing a
+      comment**: a reviewer reading the file was told the guarantee held. Rewritten
+      to describe the code that now exists, including why Cancel stays live and
+      why no handler guard was added.
+      (`apps/web/src/components/console/JoinCodesPanel.jsx`.)
+- [x] **LOW-2 · A GUARD DESCRIBED AS A REPAIR OF SOMETHING NOBODY HAD MET.**
+      `isRetryable`'s comment said `trial_already_used` "had sat in that same
+      bucket since the trial shipped". It had not: `PlanModal` routes only its
+      plans-READ failure through the predicate and its trial arm sets no retry
+      flag — the comment beside that arm says so. Measured across the console,
+      **neither permanent code can reach `isRetryable` today**; the three callers
+      are two reads and the owner-only Staff screen. Corrected to say it is a
+      bound written for the call site that arrives next.
+      (`apps/web/src/api/orgsApi.js`.)
+- [x] **LOW-3 · A SENTENCE THE SAME DAY'S COMMIT MADE STALE.** `PlanModal` said
+      *"`isRetryable` treats 403 as the one that never changes by pressing
+      again"* — true until the two 409s were added hours earlier. :5748's shape:
+      the entry was corrected and the source was left saying the old thing.
+      (`apps/web/src/components/console/PlanModal.jsx`.)
+- [x] **LOW-4 · A TEST FIXTURE DESCRIBING A PRINCIPAL THE PRODUCT CANNOT
+      CREATE.** *"A manager holds every console power EXCEPT billing"* is false:
+      `ROLE_PRIVILEGES.manager` holds five ticks and neither `staff.manage` (in
+      `OWNER_ONLY_PRIVILEGES`, 409 on a non-owner row) nor `org.manage` (no tick
+      box exists — :21157's gap, still open). The component logic under test is
+      real; the principal is a fixture. Comment corrected to say which cases a
+      browser could reproduce and which rest on the file alone.
+      (`apps/web/src/pages/console/readOnlyConsole.render.test.jsx`.)
+- [x] **LOW-5 · TWO GUARDS, EITHER SUFFICIENT, THEREFORE NEITHER FALSIFIABLE.**
+      `expect(READ_ONLY_QUEUE_NOTE).toBe('…')` followed by `.not.toMatch(/keep|
+      place|…/)` on the same constant: the exact equality already catches anything
+      the matcher would. :12343's J11 — **named by `StaffPanel.jsx` four lines
+      from where this round found it**. The matcher is dropped; the meaningful
+      version lives at the SCREEN in the render test, where it searches everything
+      drawn rather than the constant it was just compared against.
+      (`apps/web/src/pages/console/billingView.test.js`.)
+
+**NOT APPLIED — the review's two wrong claims.**
+
+- **"Guard `create()`, `save()` and `add()` at the top — the button is not the
+  door."** The C116 lesson applies where there IS another door. Neither panel has
+  a `<form>` (grep-verified: the only one in the console is `GymDetailsPanel`'s,
+  which is exactly why its handler is guarded), so nothing submits on Enter and
+  the button plus its fields are the whole surface. A handler guard here would
+  make the button's guard unobservable — **the same defect as LOW-5, committed in
+  the round that fixed it.**
+- **"OWED.md contradicts the kickoff about the smoke."** It does not:
+  `OWED.md` and `HANDOFF.md` both say the smoke is written and UNRUN, which is
+  true. Nothing to correct.
+- **"Tick `org.manage` onto the manager and smoke steps 12–14 run."** **There is
+  no such tick box** — `PRIVILEGE_COPY` offers six values and `org.manage` is not
+  one, the gap :21157 recorded. Applying this would have sent Kd looking for a
+  control that does not exist. The sheet's four Settings steps were genuinely
+  broken, and the fix is the opposite one: they are removed from the run and
+  recorded as unreachable, with the reason.

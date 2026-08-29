@@ -4946,12 +4946,41 @@ file and is stated so nobody reads these as lower priority than they are.
       would be is superseded**: a separate field asks the separate question, for
       :22921's reason (`subs_one_live_uq` is a PARTIAL index over the three live
       statuses, which is what makes that read's `LIMIT 1` well-defined).
-      **WHAT IS LEFT ON THIS LINE IS THE SCREENS:** every control the server now
+      ~~**WHAT IS LEFT ON THIS LINE IS THE SCREENS:** every control the server now
       refuses is still drawn live, so a lapsed gym's staff meet a button whose
       press is a 409 with no sentence saying why. Nothing is deleted to fix that
       — the controls are DISABLED with a true sentence (the no-removal rule), and
       §4.2's "trial expired" banner state, which :21580 recorded as unbuildable
-      because no trial could end, is buildable now.
+      because no trial could end, is buildable now.~~
+      **THE SCREENS ARE BUILT 2026-08-29 (DECISIONS :24141) AND THIS LINE STILL
+      DOES NOT TICK, because the browser has not seen them: the SMOKE is written
+      and UNRUN, and T3 is UNRUN.** Shipped: §4.2's read-only banner (red, no
+      CTA, in words true of BOTH a gym that never subscribed and one whose trial
+      ended — the spec's "Trial ended" copy is false for the first) · five panels
+      greying every control the server refuses, with the server's own sentence
+      written once · the confirm queue saying nobody can be let in · and
+      `isRetryable` no longer offering "Try again" on the permanent 409, which
+      closes the separate 🟡 line below. **Nothing is hidden — the join code, the
+      roster and the staff list all still draw in full, and two tests hold that**
+      (Kd's ruling: read-only "seals nobody out").
+      **The smoke needs TWO ACCOUNTS and that is not incidental**: a gym's OWNER
+      meets the unskippable prompt instead of these screens, so everything on
+      this card is what a MANAGER sees. `RUNBOOK/smoke-read-only-console.md`.
+      **T3 ROUND 1 RAN 2026-08-29 AND THE PACKET DID NOT SHIP: ONE Critical/High.**
+      *"Five panels greying every control the server refuses"*, above, was FALSE
+      when written — the prop reached every OPENER and stopped there, so **Save,
+      Replace it, Remove it and Make the code stayed live** inside a step that was
+      already open when the gym lapsed, under the note saying nothing could be
+      changed. The app walks that path itself: the console re-reads on tab focus
+      and nothing remounts on a plan change. Fixed with the fields beside them,
+      five regression cases and nine mutants (C120–C128). **Five Low also fixed;
+      the sentence above is left standing and corrected here rather than edited,
+      because it is what a review read and believed** (:5748).
+      **THE SMOKE SHEET CHANGED SHAPE TOO, and it now covers this**: new step 9
+      holds a confirm question open across the lapse, which is the one thing no
+      test, mutant or reviewer had looked at before this round. **Its four
+      Settings steps were removed as UNRUNNABLE** — see the `org.manage` tick-box
+      line below, which is what makes them unreachable.
 - [ ] 🟡 **THE LAPSED GYM'S CONSOLE IS NOT ARCHIVED AFTER 14 DAYS — the third
       step of Kd's :22215 §5 step 1, split off at the plan gate on 2026-08-29
       (:23711) and shown to him in one line, not deferred quietly.**
@@ -5019,16 +5048,71 @@ file and is stated so nobody reads these as lower priority than they are.
       by itself after 14 days (`APPLICATION_TTL_DAYS`), so both resolve rather
       than festering, and the applicant's screen says they are waiting — which is
       TRUE, so it is not :5807's class.
-      **TWO SEPARATE THINGS ARE OWED and they are not the same size.** The
+      ~~**TWO SEPARATE THINGS ARE OWED and they are not the same size.** The
       console's own waiting queue should SAY that nobody can be let in until the
       gym is on a plan — that is the web half's job and costs a sentence. Whether
       the join DOOR itself should refuse — **and whether the nudge should, which
       is the same question about the same dead end** — is a product question with
       its own copy and Kd's ruling, and it touches a surface with heavy rulings
-      behind it (:11072, :11385, :12343).
-- [ ] 🟡 **THE CONSOLE OFFERS "TRY AGAIN" ON A REFUSAL THAT TRYING AGAIN CAN
+      behind it (:11072, :11385, :12343).~~
+      **BOTH ARE SETTLED 2026-08-29 (DECISIONS :24141 §1), one built and one
+      ruled.** The console's queue now says *"Nobody can be let in until this gym
+      is on a plan."* — **done, and deliberately no more than that.** And KD
+      RULED the product question, having first ruled the OTHER way and reversed
+      himself a message later: **the join door does NOT refuse — the request is
+      HELD and the waiting person is told the truth.** That build is the next
+      line below; **this one now ticks only when that ships**, because the
+      applicant's own screen is the half that still says nothing.
+- [ ] 🟡 **A PERSON WAITING TO JOIN A LAPSED GYM IS TOLD NOTHING, AND THEIR
+      REQUEST DIES ANYWAY AFTER 14 DAYS — KD RULED THE FIX 2026-08-29 (DECISIONS
+      :24141 §1): *"hold their request and tell them the truth."* This is CARD B
+      of a split he approved, and card A (the console's screens) went first at
+      his choice.**
+      **HE RULED THE OTHER WAY FIRST AND REVERSED HIMSELF ONE MESSAGE LATER, and
+      the reason is the part to keep.** The first ruling was that the join door
+      REFUSES a lapsed gym outright ("i say yes"). He then asked the question the
+      recommendation had never answered — *"what happens to that user when gym
+      subscribes again"* — and the answer killed it: **a refusal saves nobody,
+      because the person has to remember to come back and type the code again and
+      nothing reminds them**, and it creates two rules where one belongs (whoever
+      applied the day BEFORE the gym lapsed keeps their place; whoever applied the
+      day after is lost). **Do not re-propose the refusal.**
+      **WHAT TO BUILD, and it is a SERVER change plus one sentence:**
+      (1) the 14-day expiry HOLDS while the gym has no live plan —
+      `sweep.ts`'s expiry step already has a "held" concept (`heldForNotice`) and
+      this is a second reason, not a new mechanism;
+      (2) the waiting person's own card says the gym cannot take new members
+      right now — a field on `/v1/orgs/applications/mine`, which today carries
+      nothing about the gym's plan;
+      (3) **the nudge** — a waiting person can still chase a lapsed gym once a
+      day. It is the second member door (:23928's Low-5) and belongs here, not on
+      a line of its own.
+      ⚠️ **ONE PIECE CANNOT BE BUILT OR TESTED YET AND IT IS NAMED RATHER THAN
+      DISCOVERED LATER: reviving a held request when the gym pays.** Measured
+      2026-08-29 — **nothing in this product can put a lapsed gym back on a
+      plan**: one `INSERT INTO subscriptions` (the trial) and one `UPDATE`
+      (expiry), and the trial is refused to any owner who has ever had one. So
+      there is no trigger point for it today. **It belongs to the PAYMENT card**
+      and is written here so that card inherits it — a held application whose
+      `expires_at` is already in the past would otherwise be killed by the first
+      sweep after the gym subscribes, which is the exact outcome Kd's ruling
+      exists to prevent.
+      **The copy the console shows today STOPS SHORT of promising any of this**
+      (:24141 §3d), and two tests assert that, so the reassurance cannot be
+      written before the behaviour exists.
+- [x] 🟡 **THE CONSOLE OFFERS "TRY AGAIN" ON A REFUSAL THAT TRYING AGAIN CAN
       NEVER FIX — deferred 2026-08-29 from this card's T3 round 1 (Low-6) to the
       READ-ONLY CONSOLE'S WEB HALF, which is the next card and owns this file.**
+      **DONE 2026-08-29 in that card (DECISIONS :24141 §3f), exactly as this line
+      prescribed — the two permanent 409s are non-retryable beside 403, and the
+      POSITIVE CONTROL it demanded ships with them: the same failure OFFLINE
+      still offers the button.** Listed by CODE and never by status, which the
+      line did not say and which matters: a blanket "409 is permanent" would take
+      the retry away from every race on this module (a paused code, an
+      application somebody else just decided, a seat cap) — the opposite defect,
+      and worse, because that person is stuck looking at a refusal that WOULD
+      have cleared. Mutants **C118** (the retry comes back) and **C119** (offline
+      loses its button) run both directions.
       `isRetryable` in `apps/web/src/api/orgsApi.js` treats everything except 403
       as retryable, so the permanent **409 `gym_not_on_plan`** this card created
       arrives on screen with a Try again button behind it. **Reachable today**: a
@@ -7388,8 +7472,23 @@ file and is stated so nobody reads these as lower priority than they are.
       through a save UNCHANGED and says so on screen — a guard whose own comment
       predicted a billing tick by name. So an owner saving a staff row does not
       silently strip either privilege.
-      Closed by the same web card that draws the trial button, which is the next
-      one; two rows in one array plus their words.
+      ~~Closed by the same web card that draws the trial button, which is the next
+      one; two rows in one array plus their words.~~
+      **THAT PREDICTION WENT STALE AND IS STRUCK (2026-08-29).** The card that
+      drew the trial button shipped (:23257) and closed nothing here — the
+      deferral predicted its own future, which is :21353's recorded shape. It is
+      still two rows in one array plus their words; nothing is owed but the doing.
+      **AND THE COST HAS GROWN, MEASURED BY THE READ-ONLY CONSOLE'S T3 ROUND 1
+      (:24141): this gap now makes two SCREENS unverifiable in a browser.** The
+      Settings tab is drawn for `staff.manage || org.manage`. `staff.manage` is
+      owner-only, `org.manage` cannot be given away — so a manager has no Settings
+      tab, and an owner of a lapsed gym meets `PlanModal` instead of Settings.
+      **Nobody can therefore see `GymDetailsPanel`'s or `StaffPanel`'s read-only
+      state**, including the Enter-key guard C116 exists for. Their smoke steps
+      were written, found unrunnable, and moved into that sheet's *"does NOT
+      cover"* with the reason. Those guarantees rest on tests and mutants alone
+      until this line ticks — **which makes this the cheapest way to buy back a
+      browser check the project currently cannot perform.**
 - [ ] ⚪ **`gitleaks detect` OVER FULL HISTORY EXITS NON-ZERO ON TWO FALSE
       POSITIVES IN `HANDOFF.md`, and they are not in `.gitleaksignore` — measured
       2026-08-27.** Both are the `generic-api-key` rule firing on the prose

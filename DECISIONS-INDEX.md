@@ -1195,6 +1195,97 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   REDs, each restored to an empty `git status`.** **NO SWEEP and NO SMOKE, both
   stated rather than skipped:** the round changes no `src` file and draws nothing.
 
+- **:24141** — 2026-08-29 — **THE LAPSED GYM'S CONSOLE GOES READ-ONLY (web
+  half): every dead button is greyed with a true sentence, and KD REVERSED HIS
+  OWN RULING ON THE JOIN DOOR ONE MESSAGE AFTER MAKING IT.** The web half of
+  :22215 §5 step 1; server half :23711, its T3 :23928.
+  **Read before greying out any console control, before writing copy about a gym
+  that has stopped paying, before adding a `readOnly` prop to a console panel,
+  before promising a waiting applicant anything, and before re-anchoring a mutant
+  in `mutate-console.mjs` after a prop change.**
+  **KD RULED THE JOIN DOOR SHUT ("i say yes"), THEN STRUCK IT HIMSELF one
+  message later — *"hold their request and tell them the truth."*** He got there
+  by asking what the recommendation had not answered — *"what happens to that
+  user when gym subscribes again"* — and the answer killed it: a refusal saves
+  nobody, since the person must remember to come back and type the code again,
+  and it makes two rules where one belongs (applied the day before the gym
+  lapsed: keeps their place; the day after: lost). **Do not re-propose the
+  refusal.** The build is CARD B, its own `OWED.md` line; **he approved the split
+  and chose A first**. **The half that cannot be built yet was measured and told
+  to him: nothing in this product can put a lapsed gym back on a plan** — one
+  `INSERT INTO subscriptions` (the trial), one `UPDATE` (expiry), and the trial
+  is refused to any owner who has ever had one — so reviving a held application
+  belongs to the payment card and is written onto B's line.
+  **SHIPPED:** `consoleIsReadOnly` = `=== true` and nothing else (**`null` is
+  "we could not ask", never "locked"** — C97's rule; deriving it from
+  `!hasLivePlan` greys a paying gym's console at a trainer, mutant C108) ·
+  §4.2's *"trial expired → grace"* row, **which :21580 recorded as unbuildable**,
+  in words true of BOTH a gym that never subscribed and one whose trial ended
+  (**the spec's "Trial ended — members have moved to the free tier" is false for
+  the first**, and one field answers for both), red, **no CTA** · five panels
+  greying every refused control with the server's own `GYM_NOT_ON_PLAN_MESSAGE`
+  written ONCE · the queue saying *"Nobody can be let in until this gym is on a
+  plan."* and dropping *"confirm the ones you recognise"* · `isRetryable`
+  closing :23928's Low-6, **by CODE and never by status**, with the offline
+  positive control. **GREYED, NEVER HIDDEN** — the code, the roster and the staff
+  list all still draw, and two tests hold that.
+  **THE COPY STOPS SHORT OF RULING 2 ON PURPOSE**: *"they keep their place"* is
+  not true until card B, so two tests assert its ABSENCE.
+  **AUDIT: 13 new mutants, 7 RE-ANCHORED, and my own test was a GREEN LIAR** —
+  the tick-box case took row `[0]`, the OWNER's, whose ticks are read-only for an
+  unrelated reason, and passed with the prop deleted. **C116 then survived TWICE,
+  once for each half of :11846's pair**: the "cannot be saved" case only asserted
+  the BUTTON, which ENTER walks past, and once the observer existed the FILTER
+  still named the old test. **Seven anchors drifted, none in this card's diff,
+  all caught by the whole-table pre-check** — and S15/C81/C82, on their FIFTH
+  move, now anchor ONE PROP LINE each instead of a whole JSX element.
+  ⚠️ **C68 is ALIVE and is not this card's** (:23257 §9, own ⚪ line).
+
+- **:24376** — 2026-08-29 — **THE READ-ONLY CONSOLE'S WEB HALF, T3 ROUND 1: ONE
+  Critical/High, THE PACKET DOES NOT SHIP — the guard reached every OPENER and
+  stopped there, and the panel's own comment told the reviewer it had not.**
+  Reviews :24141. Five Low, all fixed; Kd approved the list first (*"go"*).
+  **Escape hatch NOT armed** — first Critical in this subsystem after three clean
+  rounds (:23128, :23578, :23928), and the trigger needs two consecutive.
+  **Read before adding a `readOnly` prop to a console panel, before greying out
+  any console control, before writing a comment that says a prop reaches "every"
+  control, before adding a second guard beside one that already works, before
+  writing a smoke step for a console screen a MANAGER is meant to open, and
+  before applying a review's correction to the record.**
+  **THE C/H:** `readOnly` reached Limits / Replace / Remove / New code / Add
+  someone — every control a CLOSED panel draws — while the commit control behind
+  each carried `busy` alone (**Save**, **Replace it**, **Remove it**, **Make the
+  code**, **Add**, plus their fields). **The app walks the path itself**:
+  `consoleOrgs` re-reads on `focus`/`visibilitychange`, rows are keyed on the
+  CODE and panels on `org.id` — neither moves when a plan ends — and step state
+  is local, so a gym lapsing while somebody holds *"Replace it?"* left a live
+  full-colour destructive button under the red strip AND the panel note.
+  :5807's "promise that is not true" beside the sentence contradicting it; the
+  server still refuses (409, all twelve doors), so not data loss.
+  **WHY NOTHING COULD SEE IT: all fourteen existing cases render an
+  ALREADY-lapsed gym, so no assertion could reach a second control — the file
+  tested the STATE and never the TRANSITION**, and C111/C114/C116 had the same
+  hole. **A card whose subject is a state change needs a case that performs it.**
+  **THE HANDLER GUARDS THE REVIEW ASKED FOR ARE DECLINED, with a reason:**
+  `GymDetailsPanel`'s `<form>` is the only one in the console (grep-verified), so
+  in these two panels a handler guard would be a second unfalsifiable guard —
+  **Low-5 of this same round, committed by the round fixing it.**
+  **TWO OF THE REVIEW'S OWN CLAIMS WERE WRONG, the second round running
+  (:23928):** the `OWED.md`/smoke "contradiction" does not exist, and *"tick
+  `org.manage` onto the manager"* names **a tick box that does not exist**
+  (:21157's open gap). **The real finding underneath was the sheet's, and it is
+  mine:** four steps sent Kd to a Settings tab a manager does not have.
+  **THE CONSEQUENCE TO CARRY: `GymDetailsPanel`'s and `StaffPanel`'s read-only
+  states are unreachable by every principal the product can create** — Settings
+  needs `staff.manage` (owner-only) or `org.manage` (no box), and a lapsed gym's
+  owner meets `PlanModal`. Their guarantees rest on tests and mutants alone,
+  including C116's ENTER-key door; recorded on :21157's line, whose own
+  "closed by the next card" prediction had gone stale (:21353's shape).
+  **:22029's test applied BOTH ways in one round** — the Overview's path is drawn
+  so the finding stands; the Settings path is not, so it is recorded unverified
+  rather than claimed. Severity and smoke had the same question: *can a user get
+  here?*
+
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 
 **NOT read every session. Read an entry here when your task touches what it is

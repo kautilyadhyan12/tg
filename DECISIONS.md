@@ -24137,3 +24137,416 @@ could ever see, and it is deferred precisely to the card that owns that screen.
 
 **THE PACKET SHIPS.** No migration, no dependency, no `src` change. Nothing new
 ticks: :23711's own line still waits on the screens, which are the next card.
+
+## 2026-08-29 — THE LAPSED GYM'S CONSOLE GOES READ-ONLY (web half): every dead button is greyed with a true sentence, and KD REVERSED HIS OWN RULING ON THE JOIN DOOR ONE MESSAGE AFTER MAKING IT — the reversal is the entry's most useful part
+
+**Read before greying out any console control, before writing copy about a gym
+that has stopped paying, before adding a `readOnly` prop to a console panel,
+before promising a waiting applicant anything, and before re-anchoring a mutant
+in `mutate-console.mjs` after a prop change.**
+
+The web half of :22215 §5 step 1, whose server half is :23711 and whose T3 is
+:23928. Kd approved the plan, then two rulings and a card split came out of the
+same conversation.
+
+### 1. KD'S RULINGS — AND HE REVERSED THE FIRST ONE HIMSELF
+
+He asked what stops a lapsed gym's staff from sharing the join code, and was
+shown the measured answer: sharing it gains nobody anything, because Confirm is
+one of the twelve doors :23711 closed, so an applicant joins a queue nobody can
+clear and their request dies after 14 days (`APPLICATION_TTL_DAYS`).
+
+**RULING 1, THEN STRUCK BY HIM: "i say yes" to the join door REFUSING while the
+gym has no plan.** Put to him with a recommendation, because the defect is that
+nobody is TOLD — the applicant waits a fortnight for a yes that cannot come.
+
+**RULING 2, WHICH SUPERSEDES IT: *"hold their request and tell them the
+truth."*** He got there by asking the question the recommendation had not
+answered — ***"what happens to that user when gym subscribes again"*** — and the
+honest answer killed the first ruling: a refusal saves nothing, because the
+person has to remember to come back and type the code again, and nobody reminds
+them. **It also made two rules where one belongs**: somebody who applied the day
+BEFORE the gym lapsed keeps their place, and somebody who applied the day after
+is lost.
+
+**THE PART TO KEEP IS THE SHAPE OF THE ERROR, NOT THE RULING.** The
+recommendation was reasoned, evidenced and put to him properly, and it was still
+wrong — because it answered *"what does a stranger get"* and never asked *"what
+happens to this person next"*. **A gate is not designed until its far side has
+been walked.** :19560's lesson from the other direction: there, an opinion was
+taken for a ruling; here, a ruling was taken before its consequence was traced.
+
+### 2. THE CARD WAS SPLIT, AND THE SPLIT WAS PUT TO HIM RATHER THAN TAKEN
+
+Ruling 2 turned a web-only card into a server-and-web one. Shown two cards in one
+line each, he chose **A first**:
+
+- **A — the console's screens (this entry).** Web only, no server change.
+- **B — the waiting member.** The application stops dying while the gym has no
+  plan, and the person is told why. Needs a server change; **own `OWED.md` line**.
+
+**AND THE HALF OF HIS RULING THAT CANNOT BE BUILT YET WAS MEASURED AND TOLD TO
+HIM, NOT DISCOVERED LATER: nothing in this product can put a lapsed gym back on
+a plan.** Grep-verified this session — **exactly one `INSERT INTO subscriptions`**
+(`orgs/repo.ts:1483`, the trial) and **one `UPDATE`** (`trialSweep.ts:137`,
+`trialing` → `expired`) — and the trial is refused to any owner who has ever had
+one (`repo.ts:1444-1451` matches on `trial_ends_at IS NOT NULL` across every gym
+of the same owner, so a gym's own expired row blocks it). So *"the front desk
+sees them waiting and taps Confirm"* is unreachable until payment exists. The
+piece that revives a held application on the day a gym pays is written onto card
+B's line, tied to the payment card rather than left implicit.
+
+### 3. WHAT SHIPS
+
+**(a) `consoleIsReadOnly(org)` — `org?.consoleReadOnly === true` AND NOTHING
+ELSE.** The field is three-state and `null` means *"we could not ask"* (C97's
+rule, :23711): a plain member, or an api older than this bundle. **Greying out on
+an unknown refuses somebody something the server would have allowed**, and they
+cannot find out which. It is deliberately NOT `!hasLivePlan(org)` — that null has
+three causes, two of them ignorance, so the one-liner greys a trainer's whole
+console out on a gym that is paying perfectly well. Mutants **C107** and **C108**
+run those two errors.
+
+**(b) §4.2's "trial expired → grace" row, which :21580 recorded as UNBUILDABLE**
+because no trial could end. It can now. **The spec's own copy is not used and the
+reason is measured**: *"Trial ended — members have moved to the free tier"* is
+false for a gym that NEVER subscribed, and one field answers for both (it asks
+whether there is a live plan, never how the gym got here). Shipped sentence:
+*"This gym has no plan. Nothing here can be changed, and your members get the
+free app only."* — the last clause being Kd's own ruling (:22215 §3.4: members
+fall back to the free app and are never locked out). **No CTA**, the same
+departure every other state in this file makes: *Reactivate* opens a Billing
+screen that does not exist (:19016's sequencing). Ranked FIRST, and **the
+position is explicitness rather than a tie-break** — the server computes this
+field and `subscription` off ONE lateral, so it cannot collide with the four
+below it; a test drives that both ways so the ranking cannot silently swallow a
+trial banner.
+
+**(c) FIVE PANELS GREY THEIR CONTROLS, AND ONE SENTENCE IS WRITTEN ONCE** —
+`READ_ONLY_NOTE`, **verbatim the server's own `GYM_NOT_ON_PLAN_MESSAGE`**, so
+the screen and the 409 cannot drift apart (`seatLineText`'s precedent). Join
+codes (mint, pause, limits, replace, remove) · the confirm queue (both taps) ·
+the roster's Remove · the staff list (add, role change, remove, tick boxes,
+Save permissions) · the gym's details (Save).
+
+**GREYED, NEVER HIDDEN, AND THE DISTINCTION IS WRITTEN AT TWO CALL SITES.** A
+trainer's missing Remove and a lapsed gym's greyed Remove look alike and are not:
+a trainer never has that power, so drawing nothing tells them nothing false;
+read-only is a temporary fact about the GYM, and a control that vanished would
+leave a manager guessing whether their permissions had changed. The no-removal
+rule at the level of one button.
+
+**AND THE READS ARE UNTOUCHED, WHICH IS WHAT MAKES IT READ-ONLY RATHER THAN
+LOCKED OUT** (Kd, :23711 — it "seals nobody out"): the join code is still on
+screen and still copyable, the roster still lists everybody, the staff list and
+the seat meter are unchanged. Two tests assert exactly that, because a card that
+greys controls is one edit away from hiding them.
+
+**(d) THE QUEUE SAYS WHAT :23928's LOW-5 ASKED FOR, AND STOPS SHORT ON
+PURPOSE.** *"Nobody can be let in until this gym is on a plan."* — and the
+standing *"confirm the ones you recognise"* goes, because it instructs the front
+desk to press a button the server refuses. **The obvious second sentence —
+*"they keep their place"* — is Kd's ruling 2 and is NOT TRUE YET**, so it is not
+written: an application still dies after 14 days until card B ships. **Two tests
+assert its absence**, one on the constant and one at the screen, so the copy has
+to change in the commit that makes it true. Writing the reassurance first would
+be :5807's class exactly.
+
+**(e) THE ONE DOOR THAT IS NOT A BUTTON.** `GymDetailsPanel` is a `<form>`, so
+ENTER submits it whatever the Save button is doing — the file's own comment
+already recorded that hazard for `saving`. `readOnly` is in the submit guard for
+that reason and **C116 is the mutant**; every other control on this card is a
+plain button where disabling IS the fix.
+
+**THE INPUT BOXES STAY LIVE, AS A STATED LIMIT.** Three of the four fields would
+take a `disabled` for free; the country picker is the shared `common/Select`,
+which has no such prop, and a form with three frozen fields and one live one is
+worse than a uniformly editable one under a greyed Save. Giving `Select` a
+disabled state is another card's file and every caller's tests (R1.1). Nothing
+false is on screen meanwhile — no line claims a change will save — and the
+sentence sits ABOVE the boxes so it is read before anybody types.
+
+**(f) `isRetryable` — :23928's LOW-6, DEFERRED TO THIS CARD BY NAME AND CLOSED
+HERE.** The permanent 409s `gym_not_on_plan` and `trial_already_used` no longer
+offer *"Try again"*. **Listed by CODE, never by status**: a blanket "409 is
+permanent" would take the retry away from the races (a paused code, an
+application somebody else just decided, a seat cap) — the opposite defect and a
+worse one, because that person is stuck looking at a refusal that WOULD have
+cleared. **The positive control the OWED line demanded ships with it**: offline
+carries no status AND no body, so a `null` code stays retryable, which is what
+keeps the change a bound rather than a ban (**C119** runs that direction).
+
+### 4. THE AUDIT (rule 4/4a) — THIRTEEN NEW MUTANTS, SEVEN RE-ANCHORED, AND MY OWN TEST PASSED FOR THE WRONG REASON
+
+A web-only card, so no database mutants (4a). Every row sits in 4a's columns: a
+console taken away from a paying gym, and a control that lies about what it will
+do. **Rows run in BOTH directions** — C107/C109/C111–C116/C118 for the lock
+leaking, C108/C110/C119 for it firing over a gym that is paying, unread, or
+merely offline (:7104's PG1, and the second is the worse defect because that gym
+is a customer).
+
+**MY OWN TEST WAS A GREEN LIAR AND ITS OWN FIXTURE IS WHY.** The tick-box case
+took `getAllByRole('button', …)[0]`, which is the OWNER's row — whose ticks are
+permanently read-only for a completely different reason (a gym must keep somebody
+who can hand out the keys). **It passed with the read-only prop deleted.** Both
+tick-box cases are now scoped to the TRAINER's row, and **C117 swaps the two
+locks** to hold the distinction. This is :5348 rule 4 catching the round that
+created it, one file over from :23578's identical finding.
+
+**SEVEN ANCHOR DRIFTS, ALL CAUGHT BY THE WHOLE-TABLE PRE-CHECK BEFORE A BYTE WAS
+WRITTEN, AND NONE OF THEM IN THIS CARD'S DIFF.** `isRetryable` gaining a second
+branch moved **C20** and **S16**; breaking two panel mounts onto their own lines
+for a new prop moved **S15**, **C81** and **C82**; the `ownerRow` rename moved
+**S22**; and `readOnly` joining the submit guard moved **C78**. **This is
+:23128's standing rule earning itself for the third recorded time: a fix moves
+anchors nothing in its diff mentions.** All re-aimed at the SAME call sites
+(:15770), never at whichever line looked closest.
+
+**AND THE RE-ANCHORING WAS MADE HARDER TO REPEAT, WHICH IS THE REUSABLE PART.**
+S15/C81/C82 have now moved FIVE times, and their fourth move went unnoticed for
+two commits (:21580 §3). They anchored on a whole JSX ELEMENT, which changes
+whenever any prop does; they now anchor on **ONE PROP LINE each**, which moves
+only when that prop moves.
+
+**THE HARNESS'S OWN ASCII GUARD CAUGHT TWO OF MY FILTERS** — `§4.2’s` carries a
+curly apostrophe, which would have matched no test and reported the mutant
+ALIVE, i.e. *"this guarantee has no test"*. Both re-written as ASCII substrings.
+
+### 5. WHAT THIS CARD DELIBERATELY DOES NOT DO
+
+- **The 14-day archive** (§4.2's second half) — its own `OWED.md` line, unchanged.
+- **The waiting member's own screen** — card B, Kd's ruling 2.
+- **The nudge** — a waiting person can still chase a lapsed gym once a day. It is
+  the second member door :23928's Low-5 named, it is on card B's line beside the
+  join door, and nothing here changes it.
+- **`common/Select` gaining a disabled state** — §3(e), R1.1.
+
+### 6. PROVE — every figure naming what it ran against
+
+**WEB ONLY. No server file, no migration, no dependency**, so no database and no
+`test:local` in this card.
+
+- **The whole web suite: 1365 passed / 1365, 50 files** (+38 tests, +1 file on
+  :23578's 1327/49). **Not one existing test moved**, which was predicted at the
+  plan gate and is the point: `consoleReadOnly` is absent from every fixture in
+  this repo, and absent is the older-api shape, which greys out nothing.
+- `eslint --max-warnings=0` **exit 0** on all thirteen changed and new files.
+- `vite build` **exit 0**.
+- **WHOLE-TABLE SWEEP of 139: 138 RED, 1 ALIVE, 0 never ran**, restores
+  sha256-verified byte-exact after every mutant, and **every one of the 135
+  controls GREEN and tallying before a byte was mutated**. **The one ALIVE is
+  C68, which is NOT this card's** — `ConsoleStates.jsx`, found by :23257 §9's own
+  whole-table run, product-correct, with its own ⚪ `OWED.md` line and a fix
+  deliberately not taken (R1.1). Confirmed still alive rather than assumed.
+- **THE WHOLE TABLE, NOT A SUBSET, AND IT EARNED ITSELF THREE TIMES.** The first
+  run aborted on C109's non-ASCII filter, the second on C20's drifted anchor, the
+  third on S15's — **none of which appears in this card's diff.** A subset run
+  exercises the pre-check but never RUNS other rows (:23257 §9), so a subset
+  would have shipped seven rotted anchors.
+- **C116 WAS MEASURED ALIVE, FIXED, AND RE-MEASURED RED — twice, for the two
+  halves of :11846's pair.** First the observer was missing; then, written, the
+  mutant's own FILTER still named the old test. The final figure above is the
+  run AFTER both fixes, on the shipping bytes (:5199 — only the final-bytes run
+  is quoted).
+- `node --check` clean on `mutate-console.mjs`; **anchor audit: 138 of 138 rows
+  match their target exactly once** (a throwaway script, not shipped — the
+  harness's own pre-check is the guard that ships).
+- **check-decisions-index 233 pointers · build-decisions-triggers 652 triggers
+  from 183 of 321 rulings · check-harnesses 25 scripts** — all exit 0, and this
+  entry's five `Read before …` phrases verified present in the generated file.
+- **MOJIBAKE SCAN over all 18 touched files: 0 hits in 17 of them.**
+  `DECISIONS.md` reports 101 and **every one is PRE-EXISTING, proven not
+  assumed** — `git show HEAD:DECISIONS.md` carries the same 101, and **0 fall
+  inside this entry.** Run because :23928 §4 records a PowerShell round-trip
+  corrupting a file's UTF-8 on this machine; this entry was appended with `cat`
+  and the source written by the editing tool, per that standing rule.
+
+**THE SMOKE IS WRITTEN AND UNRUN** (`RUNBOOK/smoke-read-only-console.md`, 16
+steps), **and T3 IS UNRUN.** Those are the two gates left, and neither is mine.
+**The sheet needs TWO ACCOUNTS, which is not incidental**: a gym's OWNER meets
+the unskippable prompt instead of these screens, so every control this card greys
+is one only a MANAGER can reach. A sheet written for the owner would have passed
+without testing anything this card does.
+
+**Nothing ticks that the browser has not seen.** :23711's own line stays open on
+the smoke; what ticks here is `isRetryable` (:23928's Low-6, closed exactly as
+its line prescribed, positive control included) and the console half of the
+waiting-queue line.
+
+## 2026-08-29 — THE READ-ONLY CONSOLE'S WEB HALF, T3 ROUND 1: ONE Critical/High, the packet does NOT ship — a guard that reached every OPENER and stopped there, and a comment that told the reviewer otherwise
+
+Reviews the working tree of :24141 (the web half of :22215 §5 step 1; server
+half :23711, its T3 :23928). **The packet does NOT ship this round.** One
+Critical/High, five Low, all fixed here; Kd approved the list first (*"go"*).
+**Escape hatch NOT armed** — this is the FIRST round with a Critical in this
+subsystem, after three consecutive clean ones (:23128, :23578, :23928), so
+:5348's trigger needs a second consecutive round and does not fire.
+
+**Read before adding a `readOnly` prop to a console panel, before greying out any
+console control, before writing a comment that says a prop reaches "every"
+control, before adding a second guard beside one that already works, before
+writing a smoke step for a console screen a MANAGER is meant to open, and before
+applying a review's correction to the record.**
+
+### THE CRITICAL/HIGH: the openers were guarded, the commit controls were not
+
+`readOnly` reached **Limits**, **Replace**, **Remove**, **New code** and **Add
+someone** — every control a CLOSED panel draws — and stopped there. Behind each
+sits the control that actually sends the request, and four carried
+`disabled={busy}` alone: the limits editor's **Save**, the **Replace it** and
+**Remove it** confirmations, and the new-code form's **Make the code**. The
+add-staff form's **Add**, its email box and its role buttons were the same shape,
+and the fields above each button were live too.
+
+**THE PATH IS ONE THE APP WALKS BY ITSELF, which is what makes it Critical/High
+under :5807 rather than theoretical under :22029.** `consoleOrgs` re-reads
+`/v1/orgs/mine` on `focus` and on `visibilitychange` (`consoleOrgs.js:311-312`);
+a code row is keyed on the CODE and the Settings panels on `org.id`, neither of
+which changes when a plan ends; and whether a step is open is local state. So a
+manager who opens *"Replace it?"* on a gym that is paying, switches tabs while
+the expiry sweep runs, and comes back, meets a red strip saying the gym has no
+plan, a panel note saying nothing here can be changed, and **a live full-colour
+destructive button underneath both**. One of those three was false and it was the
+button — :5807's "a promise that is not true", in the same viewport as the
+sentence contradicting it.
+
+**Nothing could be written by pressing it** — `requireWritablePrivilege` guards
+all twelve write doors (:23711; the count was re-read from `service.ts` for this
+round) and answers 409 `gym_not_on_plan`. That is why it is not a data-loss
+finding. It is still Critical/High, and the deciding precedent is this
+subsystem's own: :23257 declined to draw a button for the subscribe arm precisely
+because "a button would either do nothing or promise a message nothing can send".
+
+**WHY EVERY EXISTING TEST WAS STRUCTURALLY BLIND, and this is the reusable
+half.** All fourteen cases in `readOnlyConsole.render.test.jsx` render a gym that
+is ALREADY lapsed. A panel that starts read-only never opens a step, so no
+assertion in the file could reach the second control — **the file tested the
+STATE and never the TRANSITION into it.** The mutation table had the identical
+hole: C111/C114/C116 all point at controls a closed panel draws. **A card whose
+subject is a state change needs at least one case that performs the change**, and
+this one had none.
+
+### LOW-1 IS THE C/H WEARING A COMMENT, AND IT IS WHY THE GAP SURVIVED READING
+
+`JoinCodesPanel`'s header said `readOnly` "is threaded through every control
+below" while three commit controls carried `busy` alone, and said `busy` "covers
+the Cancel/Keep buttons" when those carry no `disabled` at all — **both halves
+false, in the file's own explanation of the guarantee.** Anyone auditing the
+panel was told the thing they were there to check. :22782's class ("a comment
+true when written and made a lie by the commit") arriving in a comment that was
+never true in the first place.
+
+### THE FIX DELIBERATELY DOES NOT GUARD THE HANDLERS, and the review asked for it
+
+The review's fix was "add `|| readOnly` to those five disabled props, and guard
+`create()`, `save()` and `add()` at the top — the C116 lesson is that the button
+is not the door." **The first half is right and is what shipped. The second is
+declined, with a reason:** C116 exists because `GymDetailsPanel` is a `<form>`
+and ENTER submits past a disabled button. Grep-verified, that is **the only
+`<form>` in the console** — `JoinCodesPanel` and `StaffPanel` have none, so the
+button and its fields are the whole surface. A handler guard there would be a
+second guard neither of which is falsifiable, **which is Low-5 of this same
+round, committed by the round that fixed it.** The panel comment now records the
+distinction, so the next chat does not "restore" the missing guard.
+
+### TWO OF THE REVIEW'S OWN CLAIMS WERE WRONG — the second round running (:23928)
+
+1. **"`OWED.md:4956` says the smoke is UNRUN, which contradicts your kickoff."**
+   It does not. `OWED.md` and `HANDOFF.md:51` both say written-and-unrun, which
+   is true. Applying the correction would have introduced the error.
+2. **"Tick `org.manage` onto the manager and smoke steps 12–14 run."** **There is
+   no such tick box.** `PRIVILEGE_COPY` (`staffView.js`) offers six values and
+   `org.manage` is not one — :21157 recorded that gap and nothing has closed it.
+   The review reasoned correctly that `org.manage` is not owner-only and that
+   `ConsoleLayout` draws Settings for `staff.manage || org.manage`, then assumed
+   a screen existed to perform it.
+
+**The finding underneath the wrong remedy was real, and it is mine rather than
+the reviewer's**: the sheet sent Kd to **Settings** as a plain manager at four
+steps, and a manager has no Settings tab. He would have hit a dead end.
+
+### THE CONSEQUENCE WORTH CARRYING: two screens nobody can check in a browser
+
+Settings is drawn for `staff.manage || org.manage`. `staff.manage` is owner-only
+(409 `owner_only_privilege` on any other row); `org.manage` cannot be delegated
+because it has no box. An OWNER holds both — and an owner of a lapsed gym meets
+`PlanModal` instead of the console (:23257). **So `GymDetailsPanel`'s and
+`StaffPanel`'s read-only states are unreachable by every principal the product
+can currently create**, including the ENTER-key door C116 exists for. Their
+guarantees rest on tests and mutants alone, and the smoke sheet now says so in
+its own words instead of sending anybody to look. Written onto :21157's existing
+`OWED.md` line — whose "closed by the next card" prediction had itself gone stale
+(:21353's shape) — rather than a new one, because it is the same gap.
+
+**This is :22029's test applied in both directions inside one round.** That entry
+retired a Critical/High because the app drew no path to it; here the Overview's
+path IS drawn and the finding stands, while the two Settings screens have no path
+and are recorded as unverified rather than claimed. The severity question and the
+smoke question turned out to have the same answer, and it is *"can a user get
+here?"*
+
+### The other four Low
+
+**Low-2** — `isRetryable`'s comment said `trial_already_used` "had sat in that
+same bucket since the trial shipped". It never did: `PlanModal` routes only its
+plans-READ failure through the predicate, and the comment beside its trial arm
+says so. Measured across the console, **neither permanent code can reach
+`isRetryable` today** — the three callers are two reads and the owner-only Staff
+screen. The guard is forward-looking and now says so. **:23928's Low-6 is ticked
+in `BACKLOG.md` with that correction attached**, because that entry is where the
+false claim was first written.
+**Low-3** — `PlanModal` still said `isRetryable` "treats 403 as the one that
+never changes", made stale hours earlier by the two 409s. :5748 verbatim.
+**Low-4** — the render suite's `MANAGER_PRIVILEGES` was commented "a manager
+holds every console power EXCEPT billing"; it holds five ticks, and the two extra
+entries exist only to MOUNT the Settings panels. The component logic is real and
+the principal is a fixture; the comment now says which cases a browser could
+reproduce and which rest on the file alone.
+**Low-5** — `expect(READ_ONLY_QUEUE_NOTE).toBe('…')` followed by a
+`.not.toMatch(…)` over the same constant, which the equality already catches.
+:12343's J11 — **named by `StaffPanel.jsx` four lines from where it was
+committed.** The matcher is dropped; the meaningful version lives at the SCREEN,
+where it searches everything drawn.
+
+### Rules 3, 4 and 5
+
+**Rule 3** — five new cases under *"a step already open when the gym lapses"*,
+each opening the step on a PAYING gym and asserting the commit control LIVE
+first, in the same test, so the assertion cannot be satisfied by a door that is
+simply shut (:7104's PG1) — then dispatching a real `focus` event, so the store
+and its listener wiring are on the path rather than a stand-in for them. **Both
+directions**: every case also asserts **Keep it** / **Cancel** stays pressable,
+because a console that trapped somebody inside a confirmation would be a worse
+screen than the one this card replaced.
+**Rule 4** — no green liars in the diff; Low-5 is the one inert assertion and is
+removed. `AddStaffForm`'s new guard is recorded as unobservable by any user
+today, in the mutant's own `why` and in the test that pins it, so no later chat
+reads it as a browser-verified guarantee.
+**Rule 5** — nine mutants, **C120–C128**, one per new guard, each anchored on a
+prop line plus the line above it that names the action, because nine
+`disabled={busy || readOnly}` sites now exist across these two files and a
+one-line anchor would land on whichever came first (:15770, :23128).
+
+### PROVE — all measured on the shipping bytes, after the fixes
+
+**Web suite 1370/1370 across 50 files** (1365 before; the five new cases are the
+whole difference) · **eslint `--max-warnings=0` exit 0** on the six changed web
+files · **`check-harnesses` 25 scripts parse** · **`vite build` exit 0** (its
+chunk-size notice is pre-existing and unrelated) · **`check-decisions-index` 234
+pointers resolve, 857 headings** · **triggers rebuilt: 658 from 184 of 322
+rulings, `--check` up to date.**
+
+**THE SWEEP IS THE WHOLE TABLE, NOT A SUBSET** (:23128 — a fix round moves
+anchors nothing in the diff mentions, and this round edited nine prop lines):
+**148 mutants · 147 RED · 1 ALIVE · 0 never ran · restore verified byte-exact
+(sha256) after every mutant**, and 140 unmutated controls GREEN first.
+**C120–C128 are all RED.** The one survivor is **C68, which is NOT this card's**
+— :23257 §9 found it, it has its own ⚪ `OWED.md` line, and it survived the
+previous whole-table run too (:23578). Its guard is a redundant pair in
+`ConsoleStates.jsx`, i.e. the same unfalsifiable shape as this round's Low-5, in
+a file no round has been allowed to touch (R1.1).
+
+**NO SMOKE — stated, not skipped.** The sheet was rewritten this round and is
+still UNRUN; it is now the gate along with T3 round 2. **Its four Settings steps
+were deleted from the run as unperformable** and a new step 9 was added, which is
+the only step that puts a person in front of this round's Critical/High.

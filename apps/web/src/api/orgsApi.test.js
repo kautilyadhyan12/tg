@@ -7,7 +7,7 @@
 // with all tests green. These assertions are the thing that would notice.
 import { afterEach, describe, expect, it } from 'vitest';
 import authApi from './authApi';
-import { orgService, errorText, errorCode, errorStatus } from './orgsApi';
+import { orgService, errorText, errorCode, errorStatus, isRetryable } from './orgsApi';
 
 /** Bodies that SATISFY each contract, so the endpoint assertions below are not
  *  quietly measuring the parser instead of the URL. */
@@ -610,5 +610,56 @@ describe('reading a failure', () => {
     // turns into "this is not your gym".
     expect(errorStatus(err)).toBeNull();
     expect(errorCode(err)).toBeNull();
+  });
+});
+
+// ── "Try again" only where trying again could work ──────────────────────────
+//
+// The two 409s below were added 2026-08-29 from :23928's Low-6, which was
+// DEFERRED to this card by name. The read-only console's server half made
+// `gym_not_on_plan` reachable — a manager holding `staff.manage` without
+// `billing.manage` on a lapsed gym meets it — and it arrived under a "Try
+// again" that could never succeed. The sentence shown was always the server's
+// own and TRUE; what was false is the BUTTON's implied promise.
+describe('isRetryable', () => {
+  it('offers no retry on the two refusals that pressing again cannot fix', () => {
+    expect(isRetryable(apiError(409, 'gym_not_on_plan', 'This gym needs a plan…'))).toBe(false);
+    expect(isRetryable(apiError(409, 'trial_already_used', 'You have used your free trial.'))).toBe(
+      false,
+    );
+  });
+
+  it('KEEPS the retry on every OTHER 409, which is the direction that costs more', () => {
+    // A blanket "409 is permanent" would be the easy fix and a worse defect:
+    // these are races and states that move, and a person stuck looking at a
+    // refusal that WOULD have cleared has been told something false by omission.
+    expect(isRetryable(apiError(409, 'code_paused', 'That code has been paused.'))).toBe(true);
+    expect(isRetryable(apiError(409, 'application_conflict', 'Already dealt with.'))).toBe(true);
+    expect(isRetryable(apiError(409, 'seat_cap_reached', 'Your plan covers 3 members.'))).toBe(true);
+    expect(isRetryable(apiError(409, 'currency_locked', "The currency can't change…"))).toBe(true);
+  });
+
+  it('OFFLINE still offers the button — the positive control, and it is the load-bearing one', () => {
+    // THE FIX'S OWN HAZARD, PINNED. A check written against the error CODE
+    // alone would be a ban rather than a bound: offline carries no status AND
+    // no body, so a `null` code must stay retryable — which is exactly what a
+    // dropped connection needs, and is the bound :15010's retryable pair
+    // already depended on.
+    expect(isRetryable(offlineError())).toBe(true);
+    expect(errorCode(offlineError())).toBeNull();
+  });
+
+  it('keeps 403 permanent and 401/404/5xx retryable, unchanged', () => {
+    expect(isRetryable(apiError(403, 'trainer_scope_unavailable', 'Not available yet.'))).toBe(false);
+    expect(isRetryable(apiError(401, 'unauthorized', 'Signed out.'))).toBe(true);
+    expect(isRetryable(apiError(404, 'not_found', 'Gone.'))).toBe(true);
+    expect(isRetryable(apiError(500, 'internal_error', 'Oops.'))).toBe(true);
+  });
+
+  it('treats a body that is not ours as retryable, never as a permanent refusal', () => {
+    // A proxy's HTML error page has no `error` key, so `errorCode` is null and
+    // the answer must be "try again" — the same reasoning as offline.
+    expect(isRetryable({ response: { status: 502, data: '<html>bad gateway</html>' } })).toBe(true);
+    expect(isRetryable(undefined)).toBe(true);
   });
 });

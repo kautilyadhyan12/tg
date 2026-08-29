@@ -1,6 +1,132 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: READ-ONLY CONSOLE, WEB HALF — T3 ROUND 1 + FIX ROUND. DECISIONS :24376.
+      Reviews the working tree of :24141. ONE Critical/High — THE PACKET DOES
+      NOT SHIP THIS ROUND. Five Low, all fixed here. Kd approved the list
+      first ("go"). Escape hatch NOT armed: first Critical in this subsystem
+      after three clean rounds (:23128, :23578, :23928), and the trigger needs
+      two consecutive.
+
+  1. **THE C/H: THE GUARD REACHED EVERY OPENER AND STOPPED THERE.** `readOnly`
+     was on Limits / Replace / Remove / New code / Add someone — every control
+     a CLOSED panel draws — while the control that actually SENDS the request
+     carried `busy` alone: Save, Replace it, Remove it, Make the code, Add,
+     plus the fields above each. **The app walks the path itself**: the console
+     re-reads `/v1/orgs/mine` on focus/visibilitychange, rows are keyed on the
+     CODE and panels on `org.id` (neither moves when a plan ends), and step
+     state is local — so a gym lapsing while somebody holds "Replace it?" drew
+     a live full-colour destructive button under BOTH the red strip and the
+     panel note. Server still refuses (409, twelve doors), so not data loss.
+  2. **WHY NOTHING COULD SEE IT, and this is the reusable half.** All fourteen
+     existing cases render an ALREADY-lapsed gym. A panel that starts read-only
+     never opens a step, so no assertion could reach a second control — **the
+     file tested the STATE and never the TRANSITION.** C111/C114/C116 had the
+     identical hole. A card whose subject is a state change needs a case that
+     performs the change.
+  3. **THE HANDLER GUARDS THE REVIEW ASKED FOR ARE DECLINED, on purpose.**
+     C116 exists because `GymDetailsPanel` is a `<form>` and ENTER submits past
+     a disabled button. Grep-verified it is the ONLY form in the console, so in
+     these two panels a handler guard would be a second guard neither of which
+     is falsifiable — **Low-5 of this same round, committed by the round that
+     fixed it.** The panel comment records the distinction so nobody "restores"
+     it later.
+  4. **TWO OF THE REVIEW'S OWN CLAIMS WERE WRONG — the second round running
+     (:23928).** (a) The claimed OWED-vs-kickoff contradiction about the smoke
+     does not exist; both say written-and-unrun, which is true. (b) "Tick
+     `org.manage` onto the manager and steps 12-14 run" names **a tick box that
+     does not exist** — `PRIVILEGE_COPY` holds six values and that is not one
+     (:21157's open gap).
+  5. **THE REAL FINDING UNDERNEATH (b) IS MINE, NOT THE REVIEWER'S:** the smoke
+     sheet sent Kd to **Settings** as a plain manager at four steps, and a
+     manager has no Settings tab. He would have hit a dead end.
+  6. **CONSEQUENCE TO CARRY: two screens nobody can check in a browser.**
+     Settings needs `staff.manage` (owner-only) or `org.manage` (no box), and a
+     lapsed gym's OWNER meets PlanModal instead. So `GymDetailsPanel`'s and
+     `StaffPanel`'s read-only states — including C116's ENTER door — rest on
+     tests and mutants alone. Written onto :21157's existing OWED line, whose
+     own "closed by the next card" prediction had gone stale (:21353's shape).
+  7. **THE SMOKE SHEET CHANGED SHAPE AND NOW COVERS THE C/H.** New step 9 holds
+     a confirm question open across the lapse and checks Replace it goes grey
+     while Keep it still works. The four Settings steps are removed from the run
+     and recorded, with the reason, under "What this sheet does NOT cover".
+     15 steps, renumbered.
+
+FILES: apps/web/src/components/console/{JoinCodesPanel,StaffPanel,PlanModal}.jsx
+       · apps/web/src/api/orgsApi.js · apps/web/src/pages/console/
+       {billingView.test.js,readOnlyConsole.render.test.jsx} ·
+       apps/web/tools/mutate-console.mjs · RUNBOOK/smoke-read-only-console.md ·
+       DECISIONS.md · DECISIONS-INDEX.md · DECISIONS-TRIGGERS.md · BACKLOG.md ·
+       OWED.md · HANDOFF.md. **NO server file, no migration, no dependency.**
+
+OPEN:  **THE PACKET DOES NOT SHIP: T3 ROUND 2 (diff-only) IS THE NEXT GATE, and
+       the SMOKE IS STILL UNRUN.** The read-only OWED line does not tick.
+       **C68 is ALIVE and is not this card's** — :23257 §9, own OWED line.
+       Nothing new is deferred by this round; the two OWED lines it touches were
+       already open (:21157's tick boxes, gaining a measured new consequence,
+       and the read-only console's own).
+```
+
+```
+TASK: THE LAPSED GYM'S CONSOLE GOES READ-ONLY — WEB HALF (CARD A). DECISIONS :24141.
+      The web half of :22215 §5 step 1; server half :23711, its T3 :23928.
+      Kd approved the plan, then RULED TWICE and APPROVED A SPLIT in the same chat.
+
+  1. **KD RULED THE JOIN DOOR SHUT, THEN STRUCK IT HIMSELF ONE MESSAGE LATER.**
+     "i say yes" to refusing a lapsed gym's applicants → then *"hold their
+     request and tell them the truth."* He got there by asking what the
+     recommendation had not answered — *"what happens to that user when gym
+     subscribes again"* — and the answer killed it: a refusal saves nobody
+     (they must remember to come back and type the code again) and it makes TWO
+     rules where one belongs. **Do not re-propose the refusal.** The build is
+     CARD B, own OWED line. **The shape of the error is the reusable part: the
+     recommendation answered "what does a stranger get" and never asked "what
+     happens to this person next".**
+  2. **THE SPLIT WAS HIS.** A = the console's screens (this card, web only);
+     B = the waiting member (server + a sentence). He chose A first.
+  3. **THE HALF THAT CANNOT BE BUILT YET WAS MEASURED AND TOLD TO HIM:**
+     nothing can put a lapsed gym back on a plan — one INSERT (the trial), one
+     UPDATE (expiry), and the trial is refused to any owner who ever had one.
+     So reviving a held application belongs to the PAYMENT card; on B's line.
+  4. **THE COPY STOPS SHORT OF RULING 2 ON PURPOSE.** *"they keep their place"*
+     is not true until B ships, so it is NOT written and TWO TESTS ASSERT ITS
+     ABSENCE — one on the constant, one at the screen.
+  5. **MY OWN TEST WAS A GREEN LIAR:** the tick-box case took row [0], the
+     OWNER's, whose ticks are read-only for an unrelated reason, and passed with
+     the prop deleted. Both tick cases now scoped to the TRAINER; C117 holds the
+     distinction between the two locks.
+  6. **C116 SURVIVED TWICE, ONCE FOR EACH HALF OF :11846's PAIR.** The TEST was
+     missing (the "cannot be saved" case only asserted the BUTTON, and a <form>
+     submits on ENTER past it), then the FILTER still named the old test. Both
+     fixed; the second is the half this repo keeps recording last.
+  7. **SEVEN ANCHORS DRIFTED, NONE IN THIS CARD'S DIFF, ALL CAUGHT BY THE
+     WHOLE-TABLE PRE-CHECK before a byte was written** — C20/S16 (isRetryable
+     grew a branch), S15/C81/C82 (two panel mounts broken onto their own lines),
+     S22 (the `ownerRow` rename), C78 (`readOnly` joined the submit guard).
+     S15/C81/C82 were on their FIFTH move and now anchor ONE PROP LINE each
+     rather than a whole JSX element.
+
+FILES: apps/web/src/pages/console/{billingView.js,ApplicationsQueue.jsx,
+       Members.jsx,Overview.jsx,Settings.jsx} · apps/web/src/components/console/
+       {ConsoleBanner,JoinCodesPanel,StaffPanel,GymDetailsPanel}.jsx ·
+       apps/web/src/api/orgsApi.js · tests: billingView.test.js,
+       orgsApi.test.js, readOnlyConsole.render.test.jsx (NEW) ·
+       apps/web/tools/mutate-console.mjs · RUNBOOK/smoke-read-only-console.md
+       (NEW) · DECISIONS.md · DECISIONS-INDEX.md · DECISIONS-TRIGGERS.md ·
+       OWED.md · HANDOFF.md. **NO server file, no migration, no dependency.**
+
+OPEN:  **THE SMOKE IS WRITTEN AND UNRUN, AND T3 IS UNRUN — those are the two
+       gates left.** The smoke needs TWO ACCOUNTS and that is not incidental:
+       a gym's OWNER meets the unskippable prompt instead of these screens, so
+       everything this card ships is what a MANAGER sees.
+       **C68 is ALIVE and is not this card's** — :23257 §9 found it, it has its
+       own ⚪ OWED line, and the whole-table sweep confirms it still survives.
+       Ticked this round: the `isRetryable` line (:23928's Low-6) and the
+       console half of the waiting-queue line. The read-only line itself does
+       NOT tick — the browser has not seen it.
+```
+
+```
 TASK: READ-ONLY CONSOLE, SERVER HALF — T3 ROUND 1 + FIX ROUND. DECISIONS :23928.
       Reviews 4320ac5 + da7e471 (:23711). ZERO Critical/High — THE PACKET SHIPS.
       Seven Low: six fixed here, one deferred with its own OWED.md line.

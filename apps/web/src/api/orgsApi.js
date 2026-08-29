@@ -441,14 +441,56 @@ export function errorStatus(err) {
   return typeof status === 'number' ? status : null;
 }
 
+/** THE 409s THAT PRESSING A BUTTON CANNOT FIX.
+ *
+ *  Most 409s on this module are races or states that move — a code that is still
+ *  working, an application somebody else just decided, a role that changed under
+ *  the screen — and every one of those is worth another go. These two are facts
+ *  about the WORLD rather than about the request, and no number of presses moves
+ *  either:
+ *    · `gym_not_on_plan` — the gym has no live plan, and nothing a console can
+ *      do changes that (:23711 created it; there is no pay path to offer);
+ *    · `trial_already_used` — one trial per OWNER, ever (Part 5 §12).
+ *
+ *  **Listed by CODE and not by status**, because a blanket "409 is permanent"
+ *  would take the retry away from the races above, which is the opposite defect
+ *  and a worse one — a person stuck looking at a refusal that WOULD have cleared. */
+const PERMANENT_ERROR_CODES = ['gym_not_on_plan', 'trial_already_used'];
+
 /** Is offering "Try again" honest about this failure?
  *
- *  **Only 403 is permanent, deliberately:** 401 rotates and retries by itself,
- *  404 means the thing vanished and the screen re-resolves, 5xx and offline are
- *  exactly what a retry is FOR, and a contract failure may well be a deploy
- *  mid-flight. A trainer held off the roster (§2.2, a permanent 403 until group
- *  scoping is built) is not going to be let in by pressing a button, and a button
- *  that promises otherwise is a small false thing on screen.
+ *  **403 is permanent, and so are the two 409s above:** 401 rotates and retries
+ *  by itself, 404 means the thing vanished and the screen re-resolves, 5xx and
+ *  offline are exactly what a retry is FOR, and a contract failure may well be a
+ *  deploy mid-flight. A trainer held off the roster (§2.2, a permanent 403 until
+ *  group scoping is built) is not going to be let in by pressing a button, and a
+ *  button that promises otherwise is a small false thing on screen.
+ *
+ *  **THE TWO 409s WERE ADDED 2026-08-29 (OWED.md, from :23928's Low-6).** Both
+ *  are permanent: no amount of pressing puts a gym back on a plan or gives an
+ *  owner a second trial. **The sentence shown is TRUE either way — it is the
+ *  server's own — so what would be false is the BUTTON's implied promise**,
+ *  which is why this was graded Low and still fixed.
+ *
+ *  **THEY ARE A GUARD, NOT A REPAIR OF SOMETHING A USER HAS MET, and the first
+ *  draft of this comment claimed otherwise (T3 round 1, Low-2).** It said
+ *  `trial_already_used` "had sat in that same bucket since the trial shipped".
+ *  It had not: `PlanModal` routes only its plans-READ failure through here, and
+ *  its trial arm sets no retry flag at all — the comment beside that arm says so
+ *  in as many words. Measured across the console, neither code can reach this
+ *  predicate today. Three surfaces call it: two READS (the Overview's codes and
+ *  members, `PlanModal`'s plans), which the server deliberately does not gate
+ *  (:23711), and the Staff screen's two mutations, which live behind
+ *  `staff.manage` — owner-only, and an owner of a lapsed gym meets `PlanModal`
+ *  rather than that screen. **So this bound is written for the call site that
+ *  arrives next, and a later chat must not cite it as a defect that was seen.**
+ *
+ *  **OFFLINE MUST STILL OFFER THE BUTTON, and that is the control this fix ships
+ *  with rather than the guarantee it might have quietly broken.** A request that
+ *  never reached the server carries no status AND no body, so `errorCode` is null
+ *  and the answer stays `true` — the same bound :15010's retryable pair already
+ *  depended on. A check written against the code alone would be a ban rather
+ *  than a bound.
  *
  *  **Lives HERE, beside `errorStatus`, because it was written twice.** It began
  *  as a private helper in `Overview.jsx` and the Staff panel then inlined the
@@ -457,5 +499,7 @@ export function errorStatus(err) {
  *  L-5). Moved rather than re-exported from a page: a component importing a
  *  predicate out of a screen is a dependency nobody wants to maintain. */
 export function isRetryable(err) {
-  return errorStatus(err) !== 403;
+  if (errorStatus(err) === 403) return false;
+  const code = errorCode(err);
+  return code === null || !PERMANENT_ERROR_CODES.includes(code);
 }

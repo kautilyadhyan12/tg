@@ -20,16 +20,22 @@
 // 04:00. Corrected here rather than only where it was noticed (:5748) — a stale
 // reason is worse than none, because the next reader takes it as evidence.
 //
-// **What is still true is that this file never announces an ended trial, for a
-// different reason: by the time one has ended there is nothing here to draw.**
-// The read this file draws from serves only the LIVE statuses
-// (`trialing`/`active`/`past_due`, §4.1's own set), so once the sweep moves the
-// row the gym arrives with `subscription: null` and every function below answers
-// "no plan" — no banner, no meter, no card. **The owner is not told nothing:
-// they meet the unskippable prompt** (`PlanModal`, Kd's ruling :22215/:22697),
-// which is the surface that says the gym needs a plan. §4.2's "trial expired →
-// grace" row and the read-only console are still deferrals with their own
-// `OWED.md` lines.
+// **What is still true is that this file never announces an ended TRIAL**, and
+// the reason is that it cannot tell one from a gym that never subscribed. The
+// read it draws from serves only the LIVE statuses (`trialing`/`active`/
+// `past_due`, §4.1's own set), so once the sweep moves the row the gym arrives
+// with `subscription: null` — the same shape a gym that never had a plan
+// arrives in. So the words below say *"this gym has no plan"*, which is true of
+// both, and never *"your trial ended"*, which is true of one.
+//
+// **AND THE THIRD PARAGRAPH OF THIS BLOCK IS NOW WRONG TOO, so it is corrected
+// rather than stepped over** (:5748, :22782). It said §4.2's "trial expired →
+// grace" row and the read-only console "are still deferrals with their own
+// `OWED.md` lines". The server half shipped 2026-08-29 (:23711) and the screens
+// are this card: `consoleIsReadOnly` below is the state, `bannerFor` draws the
+// row, and five panels grey their controls out on it. **The owner still meets
+// the unskippable prompt** (`PlanModal`, :22215/:22697) rather than the banner —
+// everything this file adds today is what the gym's STAFF see.
 //
 // **AND "an ended plan and a gym that never started one arrive here
 // identically" IS NO LONGER TRUE EITHER.** That identity was :22341 §7's
@@ -68,6 +74,82 @@ export function canManageBilling(privileges) {
 export function hasLivePlan(org) {
   return org?.subscription != null;
 }
+
+/** IS THIS GYM'S CONSOLE READ-ONLY RIGHT NOW — Part 3 §4.2's *"the console stays
+ *  read-only 14 days, then archived"*, and Kd's ruling of 2026-08-29 that it
+ *  stops **every member of staff** rather than only whoever can pay (:23711).
+ *
+ *  **`true` AND NOTHING ELSE, WHICH IS THE ONE LINE TO READ TWICE.**
+ *  `consoleReadOnly` is three-state and `null` means *"we could not ask"* — a
+ *  plain member, or an api older than this bundle — **never "locked"** (C97's
+ *  rule; the shared schema says so in as many words). Greying a control out on
+ *  an unknown is a screen refusing something the server would have allowed, with
+ *  no way for the person to find out which. So an unknown greys out NOTHING —
+ *  safe precisely because **hiding is not the enforcement** (R3.3): a console
+ *  that draws every control still cannot change a thing.
+ *
+ *  **IT IS NOT `!hasLivePlan(org)`.** That null has three causes and two of them
+ *  are ignorance (the field above says so), so deriving the lock from it would
+ *  grey a trainer's whole console out on a gym that is paying perfectly well. */
+export function consoleIsReadOnly(org) {
+  return org?.consoleReadOnly === true;
+}
+
+/** WHAT A GREYED CONTROL SAYS, AND THE ONLY PLACE IT IS WRITTEN.
+ *
+ *  **It is the SERVER's own sentence, verbatim** — `GYM_NOT_ON_PLAN_MESSAGE` in
+ *  `apps/api/src/modules/orgs/service.ts`, the message its 409 carries — for the
+ *  reason every refusal on this console prints the server's words: the screen
+ *  and the door must not come to say different things about one refusal. Five
+ *  panels draw it, so it lives here rather than in five string literals
+ *  (`seatLineText`'s precedent; :14493's Low-2 is what drift costs).
+ *
+ *  **No next step, because the product has none.** Nothing can put a gym back on
+ *  a plan today — there is no payment path and one trial per OWNER ever — so a
+ *  sentence naming one would be a promise with no code behind it (:5807).
+ *
+ *  **It is true for EVERY staff role, which is what Kd's ruling required of it.**
+ *  A trainer reading it cannot subscribe, so it does not tell them to; and it is
+ *  not *"ask your gym's owner"*, because the reader may BE the owner. */
+export const READ_ONLY_NOTE = 'This gym needs a plan before anything here can be changed.';
+
+/** THE WAITING QUEUE'S OWN SENTENCE, and it is a DIFFERENT fact from the note
+ *  above — which is why it is not that one (:23928's Low-5).
+ *
+ *  `READ_ONLY_NOTE` is about the CONTROLS. This is about the PEOPLE: a lapsed
+ *  gym's Confirm answers 409, so applicants sit in a queue nobody can clear, and
+ *  a queue that says nothing is the console half of that dead end.
+ *
+ *  **IT DELIBERATELY STOPS THERE AND PROMISES NOTHING ABOUT THEIR PLACE.** The
+ *  obvious second sentence — *"they keep their place"* — is what Kd ruled on
+ *  2026-08-29, and it is NOT TRUE YET: today an application still dies 14 days
+ *  after it was made whatever the gym's plan is doing (`APPLICATION_TTL_DAYS`).
+ *  Holding it, and telling the waiting person why, is the next card; **writing
+ *  the sentence before the behaviour exists is exactly :5807's class**, so it
+ *  waits for the commit that makes it true. */
+export const READ_ONLY_QUEUE_NOTE = 'Nobody can be let in until this gym is on a plan.';
+
+/** §4.2's *"Trial expired → grace"* row, in words true of BOTH ways a gym
+ *  arrives here.
+ *
+ *  **The spec's own copy is "Trial ended — members have moved to the free tier"
+ *  and it is not used, for two measured reasons.** A gym that NEVER subscribed
+ *  reaches this state too, and for them no trial ended and nobody "moved" — they
+ *  were never on anything else. One console field answers both (`consoleReadOnly`
+ *  asks whether there is a live plan, never how the gym got here), so one
+ *  sentence has to be true of both or the banner is lying to half the gyms that
+ *  see it.
+ *
+ *  **AND NO CTA, which is §4.2's other departure and the same one every other
+ *  state here makes** — *Reactivate* opens a Billing screen that does not exist
+ *  (rule 1 at the top of this file, :19016's sequencing). The sentence is
+ *  complete without a button.
+ *
+ *  The members clause is kept because it is the consequence an owner most needs
+ *  and it is Kd's own ruling: a lapsed gym's members fall back to the FREE app
+ *  and are **never locked out** (:22215 §3.4). */
+export const CONSOLE_READ_ONLY_BANNER =
+  'This gym has no plan. Nothing here can be changed, and your members get the free app only.';
 
 /** Is this gym in its free trial RIGHT NOW?
  *
@@ -194,12 +276,36 @@ export function seatLineText(meter) {
  *  re-derive a different one.
  *
  *  Returns `{ key, tone, text, dismissible }`, or null for §4.2's *"Healthy |
- *  else | no banner"*. `tone` is `'info' | 'warn'`; the screen owns the colours.
+ *  else | no banner"*. `tone` is `'info' | 'warn' | 'danger'`; the screen owns
+ *  the colours.
  *
  *  Every string here is complete without a button — see rule 1 at the top. */
 export function bannerFor(org, now = Date.now()) {
   const sub = org?.subscription;
   const meter = seatMeter(org);
+
+  // §4.2's "Trial expired → grace" row, FIRST — and the position is
+  // explicitness rather than a tie-break, which is worth saying plainly because
+  // every other branch here IS a tie-break.
+  //
+  // It cannot collide with the four below: the server computes this field and
+  // `subscription` off ONE lateral over the same three live statuses (:23711),
+  // so `consoleReadOnly === true` means `subscription === null`, and `past_due`,
+  // both trial branches and the seat meter all need a subscription to fire. It
+  // is first because it is the most serious thing true of this gym, which is
+  // where a reader expects to find it.
+  if (consoleIsReadOnly(org)) {
+    return {
+      key: 'read_only',
+      tone: 'danger',
+      text: CONSOLE_READ_ONLY_BANNER,
+      // §4.2 gives this row no dismissal and it would be wrong to invent one:
+      // the only dismissible state is `trial_info`, where putting the notice
+      // away for a day costs the owner nothing. This one is about something the
+      // gym cannot do until it acts.
+      dismissible: false,
+    };
+  }
 
   if (sub?.status === 'past_due') {
     // TRUE AND NOTHING MORE. §4.2's copy promises "retrying" and offers *Update

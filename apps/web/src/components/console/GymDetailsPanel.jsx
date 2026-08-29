@@ -11,6 +11,7 @@ import {
   sameGymDetails,
   timezoneChoices,
 } from '../../pages/console/gymDetailsView';
+import { READ_ONLY_NOTE } from '../../pages/console/billingView';
 import { refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
 import { orgService, errorText } from '../../api/orgsApi';
 
@@ -56,7 +57,7 @@ function Field({ label, hint, children }) {
   );
 }
 
-export default function GymDetailsPanel({ org, privileges }) {
+export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
   const allowed = canManageOrg(privileges);
 
   // `countryOptions` walks the shared supported list through `Intl` and depends
@@ -171,7 +172,7 @@ export default function GymDetailsPanel({ org, privileges }) {
    *  Derived, the sentence appears the moment the box is emptied and no click is
    *  needed to earn it. */
   const problem = gymDetailsProblem(draft);
-  const canSave = patch !== null && problem === null && !saving;
+  const canSave = patch !== null && problem === null && !saving && !readOnly;
   // A STRING, not "not null": the sentence below claims the country is missing,
   // and a missing FIELD (an api older than this build) is the same situation as
   // a null one — we do not have it. Anything else would print that claim over a
@@ -189,7 +190,15 @@ export default function GymDetailsPanel({ org, privileges }) {
     // save is in flight, but ENTER submits a form without going through the
     // button, so two quick presses sent two requests for one act. Harmless
     // (PATCH, idempotent, and a no-op writes no audit row) and still two.
-    if (problem !== null || patch === null || saving) return;
+    //
+    // **`readOnly` IS IN HERE FOR EXACTLY THAT REASON AND IT IS NOT BELT-AND-
+    // BRACES.** Every other control this card greys out is a plain button, so
+    // disabling it is the whole of the fix; this one is inside a `<form>`, and
+    // pressing Enter in the name box submits it whatever the button is doing.
+    // Without this line a lapsed gym's manager would still fire the request and
+    // meet the server's 409 — the exact defect the card exists to remove, on
+    // the one screen where the door is not the button.
+    if (problem !== null || patch === null || saving || readOnly) return;
     setSaving(true);
     setError(null);
     try {
@@ -241,6 +250,24 @@ export default function GymDetailsPanel({ org, privileges }) {
       summary="Your gym's name, where it is, and the time zone its day ends on."
     >
       <form onSubmit={save} className="flex flex-col gap-5">
+        {/* ABOVE THE BOXES, NOT BESIDE THE BUTTON, so it is read BEFORE somebody
+            types rather than after they have finished and found Save dead.
+            **THE BOXES THEMSELVES STAY LIVE, AND THAT IS A DECIDED LIMIT RATHER
+            THAN AN OVERSIGHT.** Three of the four fields would take a `disabled`
+            for free, but the country picker is the shared `common/Select`, which
+            has no such prop — and a form with three frozen fields and one live
+            one is a worse screen than one that is uniformly editable with a
+            greyed Save and this sentence over it. Giving `Select` a disabled
+            state is another card's file and every caller's test (R1.1); nothing
+            here is false meanwhile, because no line claims a change will save.
+            The SUBMIT is guarded in `save` above, which is what actually stops
+            the request. */}
+        {readOnly ? (
+          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
+            {READ_ONLY_NOTE}
+          </p>
+        ) : null}
+
         <Field label="Gym name">
           <input
             type="text"

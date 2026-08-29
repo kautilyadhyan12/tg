@@ -13,7 +13,7 @@ import {
   memberCountLabel,
   seatIsFree,
 } from './consoleView';
-import { seatLineText, seatMeter } from './billingView';
+import { consoleIsReadOnly, READ_ONLY_NOTE, seatLineText, seatMeter } from './billingView';
 
 // The roster — Part 3 §4.3's Members screen, holding EXACTLY to §2.4's
 // visibility boundary.
@@ -66,7 +66,7 @@ import { seatLineText, seatMeter } from './billingView';
  *  The consequence is stated where the gym reads it, because it is Kd's own
  *  rule: the person loses the gym's features immediately and keeps every
  *  workout they ever did. */
-function RemoveControl({ member, busy, onRemove }) {
+function RemoveControl({ member, busy, readOnly, onRemove }) {
   const [asking, setAsking] = useState(false);
 
   if (!asking) {
@@ -74,7 +74,7 @@ function RemoveControl({ member, busy, onRemove }) {
       <button
         type="button"
         onClick={() => setAsking(true)}
-        disabled={busy}
+        disabled={busy || readOnly}
         className="text-xs rounded-lg px-3 py-1.5 flex-shrink-0 disabled:opacity-40"
         style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
       >
@@ -95,7 +95,7 @@ function RemoveControl({ member, busy, onRemove }) {
             setAsking(false);
             onRemove();
           }}
-          disabled={busy}
+          disabled={busy || readOnly}
           className="text-xs rounded-lg px-3 py-1.5 font-semibold disabled:opacity-40"
           style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
         >
@@ -114,7 +114,7 @@ function RemoveControl({ member, busy, onRemove }) {
   );
 }
 
-function MemberRow({ member, busy, canRemove, onRemove }) {
+function MemberRow({ member, busy, canRemove, readOnly, onRemove }) {
   return (
     <div
       className="rounded-2xl p-4 flex items-center gap-4"
@@ -150,8 +150,13 @@ function MemberRow({ member, busy, canRemove, onRemove }) {
         /* §4.3: "Trainer role: … Remove hidden." A trainer reads this roster in
            full and is refused the removal itself, so the control is not drawn
            for them — same reasoning as the free place above, and the server's
-           403 remains the enforcement (`canRemoveMembers`). */
-        <RemoveControl member={member} busy={busy} onRemove={onRemove} />
+           403 remains the enforcement (`canRemoveMembers`).
+           **A LAPSED GYM IS THE OTHER CASE AND IT GREYS RATHER THAN HIDES.**
+           The two look alike and are not: a trainer never has this power, so
+           drawing nothing tells them nothing false; read-only is a temporary
+           fact about the GYM, and a manager whose Remove button vanished would
+           be left guessing whether their permissions had changed. */
+        <RemoveControl member={member} busy={busy} readOnly={readOnly} onRemove={onRemove} />
       ) : null}
     </div>
   );
@@ -174,6 +179,11 @@ export default function Members() {
   // is false while the org is still loading — the roster cannot be on screen
   // before then anyway.
   const canRemove = canRemoveMembers(viewerPrivileges(org));
+  // Part 3 §4.2's read-only console, off the org row this screen already holds
+  // — no read of its own, and false while the org is still loading, which is
+  // the safe direction: a screen with no roster on it yet has no control to
+  // grey out.
+  const readOnly = consoleIsReadOnly(org);
 
   useEffect(() => {
     if (gymId === null) return undefined;
@@ -324,13 +334,24 @@ export default function Members() {
             {seatLineText(meter)}
           </p>
         ) : null}
+        {/* THE NOTE IS DRAWN WHERE THERE IS A GREYED CONTROL TO EXPLAIN, and on
+            this screen that means somebody who may remove people. A trainer has
+            no Remove button at all (§4.3), so for them this sentence would
+            explain nothing that is on their screen — true, and noise, with
+            §4.2's strip overhead already saying the gym has no plan. The
+            waiting queue below carries its own sentence for its own reason. */}
+        {readOnly && canRemove ? (
+          <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
+            {READ_ONLY_NOTE}
+          </p>
+        ) : null}
       </div>
 
       {/* WAITING TO JOIN, above the roster. It reads its own endpoint and owns
           its own failure: a queue that cannot be read must never take the
           member list down with it, and a trainer — who may read the roster and
           may not confirm — sees no section rather than a refusal. */}
-      <ApplicationsQueue gymId={gymId} onRosterChanged={reloadRoster} />
+      <ApplicationsQueue gymId={gymId} readOnly={readOnly} onRosterChanged={reloadRoster} />
 
       {state.loading ? <ConsoleLoading label="Loading members…" /> : null}
 
@@ -366,6 +387,7 @@ export default function Members() {
               member={m}
               busy={removingId === m.userId}
               canRemove={canRemove}
+              readOnly={readOnly}
               onRemove={() => removeMember(m)}
             />
           ))}

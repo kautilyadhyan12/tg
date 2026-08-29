@@ -5,6 +5,7 @@ import StaffPanel from '../../components/console/StaffPanel';
 import { useConsoleOrg } from './useConsoleOrg';
 import { canManageStaff } from './staffView';
 import { canManageOrg } from './gymDetailsView';
+import { consoleIsReadOnly } from './billingView';
 import { viewerPrivileges } from './consoleView';
 
 // SETTINGS — Part 3 §3.1's sixth nav item, and §4.7 is what belongs on it:
@@ -71,6 +72,11 @@ export default function Settings() {
   const privileges = viewerPrivileges(org);
   const canEditGym = canManageOrg(privileges);
   const canEditStaff = canManageStaff(privileges);
+  // Part 3 §4.2's read-only console. **It gates neither section**, and that
+  // distinction is the whole design: a lapsed gym's staff still SEE everything
+  // (Kd's ruling, :23711 — read-only "seals nobody out"), so the panels are
+  // drawn exactly as before and it is their CONTROLS that go quiet.
+  const readOnly = consoleIsReadOnly(org);
 
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-4">
@@ -116,7 +122,14 @@ export default function Settings() {
           round 3's guarantee and makes each key unique, which is the condition
           that guarantee always depended on. Kd ruled PATCH on the fourth
           firing. */}
-      {canEditGym ? <GymDetailsPanel key={`gym-${org.id}`} org={org} privileges={privileges} /> : null}
+      {canEditGym ? (
+        <GymDetailsPanel
+          key={`gym-${org.id}`}
+          org={org}
+          privileges={privileges}
+          readOnly={readOnly}
+        />
+      ) : null}
 
       {/* KEYED FOR THE SAME REASON, AND IT IS THE CLASS HALF OF THE FIX ABOVE.
           Found by probing for the sibling rather than by the review, which named
@@ -139,7 +152,13 @@ export default function Settings() {
           handed the defect to this panel instead. The prefix removes the
           ordering dependency along with the duplicate. */}
       {canEditStaff ? (
-        <StaffPanel key={`staff-${org.id}`} gymId={org.id} privileges={privileges} orgType={org.orgType} />
+        <StaffPanel
+          key={`staff-${org.id}`}
+          gymId={org.id}
+          privileges={privileges}
+          orgType={org.orgType}
+          readOnly={readOnly}
+        />
       ) : null}
 
       {!canEditGym && !canEditStaff ? (

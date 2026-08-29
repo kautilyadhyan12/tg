@@ -18,10 +18,15 @@ import { bannerFor, bannerIsDismissed, dismissBanner } from '../../pages/console
 // same store and owns the error), and a banner is not the place to report that a
 // read failed. No answer means no strip — the screen below says what happened.
 
-/** The two tones §4.2 distinguishes: amber for a deadline or a wall, plain for
- *  something an owner merely wants to know. Kept here rather than in the view
- *  module because a colour is not a decision about what is true. */
+/** The three tones §4.2 distinguishes: red for something that has already
+ *  happened and is costing the gym now, amber for a deadline or a wall, plain
+ *  for something an owner merely wants to know. Kept here rather than in the
+ *  view module because a colour is not a decision about what is true.
+ *
+ *  `danger` is §4.2's own word for the read-only row (*"red: Trial ended…"*) and
+ *  it borrows `ConsoleFailed`'s red so the console has one red rather than two. */
 const TONES = {
+  danger: { background: 'rgba(239,68,68,0.10)', color: '#ef4444' },
   warn: { background: 'rgba(255,138,31,0.14)', color: '#FF8A1F' },
   info: { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)' },
 };

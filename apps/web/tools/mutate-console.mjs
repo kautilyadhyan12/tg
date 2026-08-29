@@ -62,6 +62,11 @@ const PROMPT_SUITE = 'src/pages/console/planPrompt.render.test.jsx';
  *  is still about the first. Four Critical/High findings have lived on that
  *  journey and nothing watched it until 2026-08-28. */
 const GYM_SWITCH_SUITE = 'src/pages/console/gymSwitch.render.test.jsx';
+/** The lapsed gym's console (Kd, :23711), added 2026-08-29. Its cases are all
+ *  PAIRED — a control greyed on a gym with no plan, and the same control live on
+ *  a gym that is paying — because a lock whose only tested failure is "it did
+ *  not fire" is satisfied by a console permanently shut (:7104's PG1). */
+const READ_ONLY_SUITE = 'src/pages/console/readOnlyConsole.render.test.jsx';
 
 const TARGETS = {
   view: { file: resolve(ROOT, 'apps/web/src/pages/console/consoleView.js') },
@@ -316,8 +321,15 @@ const MUTANTS = [
     suite: RENDER_SUITE,
     why: 'ROUND 2 Low-4 RESTORED: a permanent 403 is offered a Try again that can never succeed',
     expect: 'no retry on a refusal that retrying can never fix',
-    from: "  return errorStatus(err) !== 403;",
-    to: "  return true;",
+    // RE-AIMED 2026-08-29 at the SAME call site (:15770), never at whichever
+    // line looked closest. `isRetryable` was one `return` until the read-only
+    // card gave it a second permanent case, and this row is the 403 half — the
+    // guarantee it has always carried. **The whole-table pre-check caught the
+    // drift before a byte was written**, which is :23128's standing rule
+    // earning itself again: a fix moves anchors that nothing in its diff
+    // mentions. C118/C119 below are the 409 half and anchor the other line.
+    from: "  if (errorStatus(err) === 403) return false;",
+    to: "  if (false) return false;",
   },
   {
     // THE SAME LINE, THE OTHER CALLER. Sharing the predicate means one edit now
@@ -331,8 +343,9 @@ const MUTANTS = [
     suite: SETTINGS_SUITE,
     why: 'ON SCREEN AND FALSE: the Staff panel offers Try again over a permanent 403 and over a half-done removal it cannot finish — a button promising to redo something it does not do',
     expect: 'offers NO Try again over a permanent 403',
-    from: "  return errorStatus(err) !== 403;",
-    to: "  return true;",
+    // Re-aimed with C20 above, same reason and same call site.
+    from: "  if (errorStatus(err) === 403) return false;",
+    to: "  if (false) return false;",
   },
   {
     id: 'C21',
@@ -701,8 +714,16 @@ const MUTANTS = [
     // no mutant behind them for two commits. Round 5 shipped on a SUBSET run,
     // which is why nothing noticed. Re-aimed at the SAME call sites, never at
     // whichever line looked closest (:15770), and each re-measured RED.
-    from: '<StaffPanel key={`staff-${org.id}`} gymId={org.id} privileges={privileges} orgType={org.orgType} />',
-    to: '<StaffPanel key={`staff-${org.id}`} gymId={org.id} privileges={privileges} />',
+    //
+    // RE-ANCHORED A FIFTH TIME 2026-08-29 by the read-only card, which gave both
+    // panels a `readOnly` prop and so broke each mount onto its own lines. The
+    // anchors are now ONE PROP each rather than a whole element, which is the
+    // shape that stops this recurring: a prop line moves only when that prop
+    // moves. **Caught by the whole-table pre-check before a byte was written**,
+    // and re-measured RED rather than assumed — the fourth re-anchor above is
+    // the one that was NOT caught, and it cost two commits of no coverage.
+    from: '          orgType={org.orgType}',
+    to: '          orgType={undefined}',
   },
   {
     // KD FOUND THIS ONE IN A BROWSER, WHICH IS WHY IT IS HERE. The control used
@@ -893,8 +914,14 @@ const MUTANTS = [
     suite: SETTINGS_SUITE,
     why: "AUTHORITY: the owner's own row becomes editable, so a gym's owner can tick away their own access on the one row nothing else on this screen can repair — and the two the server locks (last_owner_locked) would fail on save while the rest would succeed, leaving an owner who cannot read their own roster",
     expect: 'are shown, and cannot be changed from this screen',
-    from: "  const readOnly = person.role === 'owner';",
-    to: '  const readOnly = false;',
+    // RE-ANCHORED 2026-08-29: the read-only card gave `PrivilegesControl` a
+    // second lock (the GYM has no plan) and RENAMED this local from `readOnly`
+    // to `ownerRow`, because two things called read-only in one component — one
+    // about a PERSON, one about the GYM — is a trap. **The guarantee is
+    // unchanged and so is the call site** (:15770); only the name moved.
+    // C117 is the new row that watches the two locks not being confused.
+    from: "  const ownerRow = person.role === 'owner';",
+    to: '  const ownerRow = false;',
   },
 
   // ── C43–C50: THE CONSOLE'S ONE KEPT ANSWER, RE-CHECKED ON FOCUS ──────────
@@ -1342,8 +1369,12 @@ const MUTANTS = [
     suite: SETTINGS_SUITE,
     why: 'TWO REQUESTS FOR ONE ACT (T3 Low-2): the in-flight guard goes and ENTER submits the form without going through the disabled button, so two quick presses send two saves. Harmless in itself — PATCH, idempotent, and a no-op writes no audit row — and still the app asking twice for something a person asked once',
     expect: 'sends ONE request however many times the form is submitted',
-    from: '    if (problem !== null || patch === null || saving) return;',
-    to: '    if (problem !== null || patch === null) return;',
+    // RE-ANCHORED 2026-08-29: the read-only card added `|| readOnly` to this
+    // same guard (C116 is the row that watches THAT half). The mutation is
+    // unchanged — it still deletes `saving` and nothing else, so this row still
+    // measures the in-flight guarantee alone.
+    from: '    if (problem !== null || patch === null || saving || readOnly) return;',
+    to: '    if (problem !== null || patch === null || readOnly) return;',
   },
 
   // ── T3 ROUND 2's TWO FIXES ───────────────────────────────────────────────
@@ -1381,8 +1412,12 @@ const MUTANTS = [
     // RE-ANCHORED 2026-08-27 — round 4's key PREFIX moved this line and nothing
     // re-aimed it; measured matching zero times. See S15's note for the full
     // account: three anchors moved in one commit and all three were missed.
-    from: '      {canEditGym ? <GymDetailsPanel key={`gym-${org.id}`} org={org} privileges={privileges} /> : null}',
-    to: '      {canEditGym ? <GymDetailsPanel org={org} privileges={privileges} /> : null}',
+    // RE-ANCHORED AGAIN 2026-08-29 with S15 and C82 — the read-only card broke
+    // both panel mounts onto their own lines. Anchored on the KEY LINE alone
+    // now, which is the thing this mutant deletes, and `key={undefined}` is how
+    // React reads "no key at all".
+    from: '          key={`gym-${org.id}`}',
+    to: '          key={undefined}',
   },
   {
     // THE CLASS HALF, and it was found by probing for the sibling rather than by
@@ -1396,8 +1431,9 @@ const MUTANTS = [
     // RE-ANCHORED 2026-08-27 for the same reason as S15 and C81 — round 4's key
     // prefix, three anchors, none re-aimed. The prefix is part of the anchor on
     // purpose: it is the very thing this mutant deletes.
-    from: '        <StaffPanel key={`staff-${org.id}`} gymId={org.id} privileges={privileges} orgType={org.orgType} />',
-    to: '        <StaffPanel gymId={org.id} privileges={privileges} orgType={org.orgType} />',
+    // Re-anchored with S15 and C81, 2026-08-29, same cause and same shape.
+    from: '          key={`staff-${org.id}`}',
+    to: '          key={undefined}',
   },
   {
     // ROUND 3's Low-1: the test this mutant belongs to COULD NOT FAIL until this
@@ -1699,6 +1735,247 @@ const MUTANTS = [
     expect: 'SAYS SO in that window',
     from: "    return typeof org?.ownerTrialUsed !== 'boolean' ? (",
     to: '    return false ? (',
+  },
+
+  // ── THE LAPSED GYM'S CONSOLE GOES READ-ONLY (web half), 2026-08-29 ────────
+  //
+  // Kd's ruling (:23711): a gym with no live plan can still SEE everything and
+  // change nothing, and it stops EVERY member of staff. The server has refused
+  // twelve write doors since `4320ac5`; these rows are about the SCREENS, where
+  // the failure until today was a live button whose press is a 409 with no
+  // sentence saying why.
+  //
+  // **EVERY ROW BELOW RUNS IN ONE OF TWO DIRECTIONS AND BOTH ARE REPRESENTED,
+  // because this guard has two opposite failures and only one of them looks
+  // like a bug from the inside** (:7104's PG1):
+  //   · IT LEAKS — a lapsed gym keeps a live control (C107, C109, C111, C113,
+  //     C114, C116)
+  //   · IT FIRES TOO WIDE — a PAYING gym, or one whose state we could not read,
+  //     has its console taken away (C108, C110)
+  // The second is the worse defect, because that gym is a customer.
+  {
+    id: 'C107',
+    target: 'billingview',
+    suite: BILLING_VIEW_SUITE,
+    why: 'LEAK: the lock stops asking for a definite answer and greys out on anything truthy, so `null` — which means "we could not ask", never "locked" (C97\'s rule) — takes a PAYING gym\'s console away during any web-newer-than-api window',
+    expect: 'does NOT lock on false, on null, on a missing field',
+    from: '  return org?.consoleReadOnly === true;',
+    to: '  return org?.consoleReadOnly !== false;',
+  },
+  {
+    id: 'C108',
+    target: 'billingview',
+    suite: BILLING_VIEW_SUITE,
+    why: "FIRES TOO WIDE, the other direction: the lock is derived from the subscription instead of the server's own answer, so a trainer — who is never told about the plan — sees a paying gym's whole console greyed out",
+    expect: 'is NOT derived from the subscription',
+    from: '  return org?.consoleReadOnly === true;',
+    to: '  return !hasLivePlan(org);',
+  },
+  {
+    id: 'C109',
+    target: 'billingview',
+    suite: BILLING_VIEW_SUITE,
+    why: "LEAK: §4.2's read-only row never reaches the banner machine, so a lapsed gym's staff meet greyed controls with nothing at the top of any screen saying the gym has no plan",
+    // ASCII, and the guard above is what caught the first draft of this line:
+    // the test's own name carries `§4.2’s`, whose curly apostrophe would have
+    // matched no test and reported the mutant ALIVE.
+    expect: 'red and undismissable',
+    from: '  if (consoleIsReadOnly(org)) {',
+    to: '  if (false) {',
+  },
+  {
+    id: 'C110',
+    target: 'billingview',
+    suite: BILLING_VIEW_SUITE,
+    why: 'FIRES TOO WIDE: the banner drops its definite-answer test, so a red "this gym has no plan" is drawn over a gym whose state the api was simply too old to report',
+    expect: 'is NOT drawn on a false or an unknown',
+    from: '  if (consoleIsReadOnly(org)) {',
+    to: '  if (org?.consoleReadOnly !== false) {',
+  },
+  {
+    id: 'C111',
+    target: 'codespanel',
+    suite: READ_ONLY_SUITE,
+    why: 'LEAK: a lapsed gym can still mint a join code — a code handed out by a gym whose Confirm answers 409, so whoever types it waits in a queue nobody can clear',
+    expect: 'cannot be minted, paused, replaced or removed',
+    from: '          disabled={busy || readOnly || full === true}',
+    to: '          disabled={busy || full === true}',
+  },
+  {
+    id: 'C112',
+    target: 'codespanel',
+    suite: READ_ONLY_SUITE,
+    why: 'THE SENTENCE GOES: the controls are greyed and nothing beside them says why, which is the "greyed control that states nothing" defect §2.2\'s own rules warn about — the banner is at the top of the page and these buttons are not',
+    expect: 'cannot be minted, paused, replaced or removed',
+    from: '      {readOnly ? (\n        <p className="text-xs mb-3" style={{ color: \'rgba(255,255,255,0.45)\' }}>',
+    to: '      {false ? (\n        <p className="text-xs mb-3" style={{ color: \'rgba(255,255,255,0.45)\' }}>',
+  },
+  {
+    id: 'C113',
+    target: 'queue',
+    suite: READ_ONLY_SUITE,
+    why: "LEAK: the front desk of a lapsed gym is still told to \"confirm the ones you recognise\" and the tap is still live — the console instructing somebody to press a button the server refuses, over people it cannot let in",
+    expect: 'says nobody can be let in',
+    from: "          {readOnly ? null : ' — confirm the ones you recognise.'}",
+    to: "          {' — confirm the ones you recognise.'}",
+  },
+  {
+    id: 'C114',
+    target: 'queue',
+    suite: READ_ONLY_SUITE,
+    why: 'LEAK: Confirm stays live on a lapsed gym, which is the exact 409 this card exists to stop a person walking into',
+    expect: 'greys BOTH taps',
+    from: '          disabled={busy || readOnly}\n          className="rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center gap-2 disabled:opacity-40"',
+    to: '          disabled={busy}\n          className="rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center gap-2 disabled:opacity-40"',
+  },
+  {
+    id: 'C115',
+    target: 'queue',
+    suite: READ_ONLY_SUITE,
+    why: ":23928's Low-5, the one thing this card owes the PEOPLE rather than the staff: the queue stops saying nobody can be let in, so applicants sit in a list the console never explains",
+    expect: 'says nobody can be let in',
+    from: '        {readOnly ? (\n          <p className="text-xs mt-1" style={{ color: \'#ef4444\' }}>',
+    to: '        {false ? (\n          <p className="text-xs mt-1" style={{ color: \'#ef4444\' }}>',
+  },
+  {
+    id: 'C116',
+    target: 'gympanel',
+    suite: READ_ONLY_SUITE,
+    why: "LEAK THROUGH THE ONE DOOR THAT IS NOT A BUTTON: the submit guard goes, so pressing ENTER in the name box of a lapsed gym still fires the PATCH and meets the server's 409 — the greyed Save button is not the door on this screen",
+    // **THIS ROW SURVIVED TWICE, ONCE FOR EACH HALF OF :11846's PAIR, and the
+    // second half is the one this repo keeps recording last** (:21580's C91,
+    // :22921's O148, :23711's O155). First the TEST was missing — the case named
+    // "cannot be saved" only ever asserted the BUTTON is disabled, which a form
+    // submitting on ENTER walks straight past. Then, with the observer written,
+    // this filter still named the OLD test and the mutant came back ALIVE a
+    // second time. Pointed at the case that actually submits the form.
+    expect: 'which the greyed button cannot stop',
+    from: '    if (problem !== null || patch === null || saving || readOnly) return;',
+    to: '    if (problem !== null || patch === null || saving) return;',
+  },
+  {
+    id: 'C117',
+    target: 'staffpanel',
+    suite: READ_ONLY_SUITE,
+    why: "TWO LOCKS CONFUSED IN ONE COMPONENT: the owner-row lock is swapped for the gym's read-only state, so on a PAYING gym the owner's own ticks — which no gym may ever edit, or it can be left with nobody able to hand out the keys — become editable",
+    expect: 'which is a different lock',
+    from: '  const ownerRow = person.role === \'owner\';',
+    to: '  const ownerRow = readOnly;',
+  },
+  {
+    id: 'C118',
+    target: 'api',
+    suite: API_SUITE,
+    why: ':23928\'s Low-6: "Try again" is offered on the permanent 409 a lapsed gym answers, so a manager presses a button that can never succeed however many times they press it',
+    expect: 'offers no retry on the two refusals',
+    from: '  return code === null || !PERMANENT_ERROR_CODES.includes(code);',
+    to: '  return true;',
+  },
+  {
+    id: 'C119',
+    target: 'api',
+    suite: API_SUITE,
+    why: 'THE FIX\'S OWN HAZARD, in the direction that costs more: the retry is taken away from everything but a definite retryable code, so an OFFLINE failure — no status, no body — loses its button and a dropped connection reads as a permanent refusal',
+    expect: 'OFFLINE still offers the button',
+    from: '  return code === null || !PERMANENT_ERROR_CODES.includes(code);',
+    to: '  return code !== null && !PERMANENT_ERROR_CODES.includes(code);',
+  },
+
+  // ── T3 ROUND 1's Critical/High — the commit control behind each opener ──────
+  //
+  // **THE ROWS ABOVE MUTATE THE OPENERS AND WERE STRUCTURALLY BLIND TO THESE.**
+  // C111/C114/C116 all point at a control a CLOSED panel draws, and every test
+  // that observes them renders a gym that is already lapsed — so no row in this
+  // table could see that Save, Replace it, Remove it and Make the code carried
+  // `busy` alone. Their observers are the five cases under "a step already open
+  // when the gym lapses", which open the step while the gym is PAYING and then
+  // drive a real `focus` event, because that is the journey the app itself walks
+  // (`consoleOrgs` re-reads on focus; nothing here remounts on a plan change).
+  //
+  // Each anchor is a PROP LINE plus the one line above it that names the action,
+  // which is what keeps it unique in a file with nine `disabled={busy ||
+  // readOnly}` sites (:15770, :23128 — an anchor that matches twice lands on
+  // whichever comes first).
+  {
+    id: 'C120',
+    target: 'codespanel',
+    suite: READ_ONLY_SUITE,
+    why: 'LEAK: the limits editor Save goes back to `busy` alone, so a gym that lapses while somebody is editing a code keeps a live Save under the note saying nothing can be changed',
+    expect: 'greys the limits editor',
+    from: '              onClick={save}\n              disabled={busy || readOnly}',
+    to: '              onClick={save}\n              disabled={busy}',
+  },
+  {
+    id: 'C121',
+    target: 'codespanel',
+    suite: READ_ONLY_SUITE,
+    why: 'LEAK, and the destructive one: "Replace it" stays live inside an open confirm step, so the press that turns away everybody holding the old code is offered by a console that has just said it can change nothing',
+    expect: 'greys Replace it',
+    from: '                onRotate();\n              }}\n              disabled={busy || readOnly}',
+    to: '                onRotate();\n              }}\n              disabled={busy}',
+  },
+  {
+    id: 'C122',
+    target: 'codespanel',
+    suite: READ_ONLY_SUITE,
+    why: 'LEAK: "Remove it" stays live inside an open confirm step on a lapsed gym',
+    expect: 'greys Remove it',
+    from: '                setConfirmingRemove(false);\n                onRemove();\n              }}\n              disabled={busy || readOnly}',
+    to: '                setConfirmingRemove(false);\n                onRemove();\n              }}\n              disabled={busy}',
+  },
+  {
+    id: 'C123',
+    target: 'codespanel',
+    suite: READ_ONLY_SUITE,
+    why: 'LEAK: "Make the code" stays live inside an open new-code form, minting against a gym the server refuses',
+    expect: 'greys Make the code',
+    from: '              onClick={create}\n              disabled={busy || readOnly}',
+    to: '              onClick={create}\n              disabled={busy}',
+  },
+  {
+    id: 'C124',
+    target: 'codespanel',
+    suite: READ_ONLY_SUITE,
+    why: 'The FIELDS are their own surface: the limits editor keeps live date and maximum boxes on a lapsed gym, so somebody types a change that has nowhere to go',
+    expect: 'greys the limits editor',
+    from: '            disabled={busy || readOnly}\n            idPrefix={`edit-${code.code}`}',
+    to: '            disabled={busy}\n            idPrefix={`edit-${code.code}`}',
+  },
+  {
+    id: 'C125',
+    target: 'codespanel',
+    suite: READ_ONLY_SUITE,
+    why: 'The same surface on the new-code form: live boxes above a button that cannot be pressed',
+    expect: 'greys Make the code',
+    from: '            disabled={busy || readOnly}\n            idPrefix="new-code"',
+    to: '            disabled={busy}\n            idPrefix="new-code"',
+  },
+  {
+    id: 'C126',
+    target: 'staffpanel',
+    suite: READ_ONLY_SUITE,
+    why: 'LEAK: the add-staff form keeps a live Add on a lapsed gym. NOT REACHABLE BY A USER TODAY — the section is gated on `staff.manage`, owner-only, and an owner of a lapsed gym meets PlanModal instead of Settings (:23257) — so this row and its test are the record that the guard exists before the door opens, never evidence that anybody met it',
+    expect: 'greys the add-staff form',
+    from: '          onClick={onAdd}\n          disabled={busy || readOnly}',
+    to: '          onClick={onAdd}\n          disabled={busy}',
+  },
+  {
+    id: 'C127',
+    target: 'staffpanel',
+    suite: READ_ONLY_SUITE,
+    why: 'The add-staff email box stays typeable on a lapsed gym — same unreachability caveat as C126',
+    expect: 'greys the add-staff form',
+    from: '          value={email}\n          disabled={busy || readOnly}',
+    to: '          value={email}\n          disabled={busy}',
+  },
+  {
+    id: 'C128',
+    target: 'staffpanel',
+    suite: READ_ONLY_SUITE,
+    why: 'The add-staff role buttons stay pressable on a lapsed gym — same unreachability caveat as C126',
+    expect: 'greys the add-staff form',
+    from: '              aria-checked={role === choice.value}\n              disabled={busy || readOnly}',
+    to: '              aria-checked={role === choice.value}\n              disabled={busy}',
   },
 ];
 

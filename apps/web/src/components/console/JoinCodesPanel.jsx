@@ -14,6 +14,7 @@ import {
   todayInputValue,
   whyNotUsable,
 } from '../../pages/console/codesView';
+import { READ_ONLY_NOTE } from '../../pages/console/billingView';
 import { orgService, errorText } from '../../api/orgsApi';
 
 // MANAGING JOIN CODES — Part 3 §2.2's "Create / rotate / expire codes" row and
@@ -166,7 +167,33 @@ function RestrictionFields({ endDate, setEndDate, limit, setLimit, disabled, idP
 }
 
 /** One code's row: what it is, whether it works, and what can be done to it. */
-function CodeRow({ code, busy, onPause, onWake, onRotate, onSaveLimits, onRemove }) {
+/** `readOnly` is on every control that CHANGES something — the openers AND the
+ *  commit inside each step they open — rather than folded into `busy`, which
+ *  means only that a request is in flight.
+ *
+ *  **THE COMMIT CONTROLS ARE THE HALF THIS COMMENT ONCE GOT WRONG (T3 round 1,
+ *  C/H-1).** It said the prop reached "every control below" while Save, Replace
+ *  it and Remove it carried `busy` alone — a sentence describing the code
+ *  somebody meant to write, which is how the gap survived being read.
+ *
+ *  **The openers are not enough by themselves, and the path is one the app
+ *  itself walks.** A row is keyed on the CODE, the console re-reads
+ *  `/v1/orgs/mine` whenever the tab regains focus (`consoleOrgs.js`), and
+ *  whether a step is open is local state — so a gym that lapses while somebody
+ *  is holding "Replace it?" re-renders with the note on screen and, before this
+ *  fix, a live full-colour button underneath it.
+ *
+ *  **Cancel and Keep carry no `disabled` at all, deliberately**: backing out of
+ *  a step is not a change, and somebody who opened one on a gym that has just
+ *  lapsed still has to be able to put it down.
+ *
+ *  **No guard is added inside `save` — there is no second door here.** This
+ *  panel has no `<form>`, so nothing submits on Enter and the button is the
+ *  whole surface; `GymDetailsPanel` guards its handler because it IS a form
+ *  (C116). A handler guard here would make the button's guard unfalsifiable,
+ *  which is the two-guards-neither-observable defect this same round is fixing
+ *  in `billingView.test.js`. */
+function CodeRow({ code, busy, readOnly, onPause, onWake, onRotate, onSaveLimits, onRemove }) {
   const [editing, setEditing] = useState(false);
   const [confirmingRotate, setConfirmingRotate] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
@@ -284,7 +311,7 @@ function CodeRow({ code, busy, onPause, onWake, onRotate, onSaveLimits, onRemove
             setEndDate={setEndDate}
             limit={limit}
             setLimit={setLimit}
-            disabled={busy}
+            disabled={busy || readOnly}
             idPrefix={`edit-${code.code}`}
           />
           {fieldError !== null ? (
@@ -296,7 +323,7 @@ function CodeRow({ code, busy, onPause, onWake, onRotate, onSaveLimits, onRemove
             <button
               type="button"
               onClick={save}
-              disabled={busy}
+              disabled={busy || readOnly}
               className="text-xs rounded-lg px-3 py-1.5 font-semibold disabled:opacity-40"
               style={{ background: '#FF8A1F', color: '#0A0908' }}
             >
@@ -331,7 +358,7 @@ function CodeRow({ code, busy, onPause, onWake, onRotate, onSaveLimits, onRemove
                 setConfirmingRotate(false);
                 onRotate();
               }}
-              disabled={busy}
+              disabled={busy || readOnly}
               className="text-xs rounded-lg px-3 py-1.5 font-semibold disabled:opacity-40"
               style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
             >
@@ -364,7 +391,7 @@ function CodeRow({ code, busy, onPause, onWake, onRotate, onSaveLimits, onRemove
                 setConfirmingRemove(false);
                 onRemove();
               }}
-              disabled={busy}
+              disabled={busy || readOnly}
               className="text-xs rounded-lg px-3 py-1.5 font-semibold disabled:opacity-40"
               style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
             >
@@ -386,7 +413,7 @@ function CodeRow({ code, busy, onPause, onWake, onRotate, onSaveLimits, onRemove
             <button
               type="button"
               onClick={onWake}
-              disabled={busy}
+              disabled={busy || readOnly}
               className="text-xs rounded-lg px-3 py-1.5 font-medium disabled:opacity-40"
               style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
             >
@@ -396,7 +423,7 @@ function CodeRow({ code, busy, onPause, onWake, onRotate, onSaveLimits, onRemove
             <button
               type="button"
               onClick={onPause}
-              disabled={busy}
+              disabled={busy || readOnly}
               className="text-xs rounded-lg px-3 py-1.5 disabled:opacity-40"
               style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
             >
@@ -406,7 +433,7 @@ function CodeRow({ code, busy, onPause, onWake, onRotate, onSaveLimits, onRemove
           <button
             type="button"
             onClick={openEditor}
-            disabled={busy}
+            disabled={busy || readOnly}
             className="text-xs rounded-lg px-3 py-1.5 disabled:opacity-40"
             style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
           >
@@ -415,7 +442,7 @@ function CodeRow({ code, busy, onPause, onWake, onRotate, onSaveLimits, onRemove
           <button
             type="button"
             onClick={() => setConfirmingRotate(true)}
-            disabled={busy}
+            disabled={busy || readOnly}
             className="text-xs rounded-lg px-3 py-1.5 flex items-center gap-1.5 disabled:opacity-40"
             style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
           >
@@ -425,12 +452,18 @@ function CodeRow({ code, busy, onPause, onWake, onRotate, onSaveLimits, onRemove
           {/* ONLY ON A CODE THAT CANNOT LET ANYBODY IN. The server refuses the
               rest with a sentence (R3.3 — hiding is not the enforcement), and
               `canRemoveCode` is the same rule so the console does not draw a
-              button it knows will be refused. */}
+              button it knows will be refused.
+              **A LAPSED GYM DOES NOT TAKE THIS BUTTON AWAY, it greys it** — the
+              difference is deliberate and it is the no-removal rule at the level
+              of one control. `removable` is a fact about the CODE and is false
+              for most codes most of the time, so drawing nothing says nothing
+              odd; read-only is a temporary fact about the GYM, and a control
+              that vanished would leave a staffer wondering what they had lost. */}
           {removable ? (
             <button
               type="button"
               onClick={() => setConfirmingRemove(true)}
-              disabled={busy}
+              disabled={busy || readOnly}
               className="text-xs rounded-lg px-3 py-1.5 flex items-center gap-1.5 disabled:opacity-40"
               style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
             >
@@ -444,7 +477,7 @@ function CodeRow({ code, busy, onPause, onWake, onRotate, onSaveLimits, onRemove
   );
 }
 
-export default function JoinCodesPanel({ gymId, codes, privileges, onChanged }) {
+export default function JoinCodesPanel({ gymId, codes, privileges, readOnly = false, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -519,12 +552,26 @@ export default function JoinCodesPanel({ gymId, codes, privileges, onChanged }) 
         </div>
       ) : null}
 
+      {/* THE SENTENCE SITS WITH THE CONTROLS, not only in the banner overhead.
+          §4.2's strip says the gym has no plan once, at the top of the page; a
+          staffer scrolled down to a row of greyed buttons is looking at a
+          control that states nothing, which is the defect this console keeps
+          being audited for. One line per PANEL rather than one per code row —
+          five identical sentences down a list is noise, and the buttons they
+          would explain are all the same buttons. */}
+      {readOnly ? (
+        <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          {READ_ONLY_NOTE}
+        </p>
+      ) : null}
+
       <div className="flex flex-col gap-3">
         {list.map((code) => (
           <CodeRow
             key={code.code}
             code={code}
             busy={busy}
+            readOnly={readOnly}
             onPause={() => run(() => orgService.updateCode(gymId, code.code, { paused: true }))}
             onWake={() => run(() => orgService.updateCode(gymId, code.code, { paused: false }))}
             onRotate={() => run(() => orgService.rotateCode(gymId, code.code))}
@@ -541,7 +588,7 @@ export default function JoinCodesPanel({ gymId, codes, privileges, onChanged }) 
             setEndDate={setEndDate}
             limit={limit}
             setLimit={setLimit}
-            disabled={busy}
+            disabled={busy || readOnly}
             idPrefix="new-code"
           />
           {fieldError !== null ? (
@@ -553,7 +600,7 @@ export default function JoinCodesPanel({ gymId, codes, privileges, onChanged }) 
             <button
               type="button"
               onClick={create}
-              disabled={busy}
+              disabled={busy || readOnly}
               className="text-xs rounded-lg px-3 py-1.5 font-semibold disabled:opacity-40"
               style={{ background: '#FF8A1F', color: '#0A0908' }}
             >
@@ -579,7 +626,7 @@ export default function JoinCodesPanel({ gymId, codes, privileges, onChanged }) 
           // `full` is `null` when the list could not be read, and null is NOT
           // "full" — a reader that does not know how many codes exist must not
           // take the button away. The server refuses at 409 either way.
-          disabled={busy || full === true}
+          disabled={busy || readOnly || full === true}
           className="mt-3 text-xs rounded-lg px-3 py-1.5 flex items-center gap-1.5 disabled:opacity-40"
           style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
         >

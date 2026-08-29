@@ -285,8 +285,13 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
                 </p>
                 {/* A failed READ is worth retrying — unlike the trial's two
                     permanent refusals, which is why only this side has a Try
-                    again. `isRetryable` treats 403 as the one that never
-                    changes by pressing again. */}
+                    again. `isRetryable` withholds the button on a 403 and on
+                    the two permanent 409 codes, `gym_not_on_plan` and
+                    `trial_already_used` (T3 round 1, Low-3: this said "403 as
+                    the one", which the 409s stopped being true of on the day
+                    they were added). Neither 409 can arrive on THIS path — it
+                    is a plans read — so what the predicate does here is let a
+                    genuine failure through. */}
                 {plans.retryable ? (
                   <button
                     type="button"

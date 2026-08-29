@@ -16,6 +16,7 @@ import {
   unknownPrivileges,
   unknownPrivilegesNote,
 } from '../../pages/console/staffView';
+import { READ_ONLY_NOTE } from '../../pages/console/billingView';
 import { orgService, errorText, isRetryable } from '../../api/orgsApi';
 
 // WHO RUNS THIS GYM — Part 3 §4.7's Staff surface, on §3.1's Settings screen.
@@ -47,8 +48,23 @@ import { orgService, errorText, isRetryable } from '../../api/orgsApi';
  *  lookup across all accounts would answer "does this address have an account"
  *  for anything an owner cares to type. The server scopes it to this gym's own
  *  roster and its refusal names the fix, so the sentence below says the same
- *  thing BEFORE the refusal rather than after it. */
-function AddStaffForm({ email, setEmail, role, setRole, fieldError, busy, onAdd, onCancel, orgType }) {
+ *  thing BEFORE the refusal rather than after it.
+ *
+ *  **`readOnly` REACHES THE FIELDS AND THE ADD BUTTON, not only the "Add
+ *  someone" opener that mounts this form (T3 round 1, C/H-1's second half).**
+ *  The opener was guarded and these were not, so a gym lapsing while the form
+ *  was open left a live Add under the panel's own "needs a plan" note. Cancel
+ *  stays pressable on purpose — putting the form down is not a change.
+ *
+ *  **NO USER CAN REACH THAT STATE TODAY, AND IT IS FIXED ANYWAY.** This whole
+ *  section is gated on `staff.manage`, which `OWNER_ONLY_PRIVILEGES` keeps to
+ *  the owner's row — and an owner of a gym with no plan meets `PlanModal`
+ *  instead of these screens (:23257). So the guarantee below rests on tests and
+ *  mutants, never on a browser, and it must not be cited as something a person
+ *  has been observed to see. **It stops being unreachable the day a second owner
+ *  or delegated staff management ships, and both have live `OWED.md` lines** —
+ *  the same reason `canManageStaff` was fixed before it started lying. */
+function AddStaffForm({ email, setEmail, role, setRole, fieldError, busy, readOnly, onAdd, onCancel, orgType }) {
   const choices = staffRoleChoices(orgType);
   return (
     <div
@@ -61,7 +77,7 @@ function AddStaffForm({ email, setEmail, role, setRole, fieldError, busy, onAdd,
           id="staff-email"
           type="email"
           value={email}
-          disabled={busy}
+          disabled={busy || readOnly}
           placeholder="name@example.com"
           onChange={(e) => setEmail(e.target.value)}
           className="w-full mt-1 rounded-xl px-3 py-2 text-sm disabled:opacity-40"
@@ -82,7 +98,7 @@ function AddStaffForm({ email, setEmail, role, setRole, fieldError, busy, onAdd,
               type="button"
               role="radio"
               aria-checked={role === choice.value}
-              disabled={busy}
+              disabled={busy || readOnly}
               onClick={() => setRole(choice.value)}
               className="text-left rounded-xl px-3 py-2.5 disabled:opacity-40"
               style={{
@@ -122,7 +138,7 @@ function AddStaffForm({ email, setEmail, role, setRole, fieldError, busy, onAdd,
         <button
           type="button"
           onClick={onAdd}
-          disabled={busy}
+          disabled={busy || readOnly}
           className="rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-2 disabled:opacity-40"
           style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
         >
@@ -159,7 +175,7 @@ function AddStaffForm({ email, setEmail, role, setRole, fieldError, busy, onAdd,
  *  Both consequences are printed where the choice is made, because they are the
  *  two things an owner is actually deciding between — and the workouts clause is
  *  there because it is the fear the sentence has to answer. */
-function RemoveControl({ person, busy, onRemove }) {
+function RemoveControl({ person, busy, readOnly, onRemove }) {
   // THREE STAGES, AND THE THIRD IS KD'S (2026-08-22, from his own smoke).
   //   null            — the Remove button
   //   'choosing'      — which of the two outcomes
@@ -184,7 +200,7 @@ function RemoveControl({ person, busy, onRemove }) {
       <button
         type="button"
         onClick={() => setStage('choosing')}
-        disabled={busy}
+        disabled={busy || readOnly}
         className="text-xs rounded-lg px-3 py-1.5 flex items-center gap-1.5 disabled:opacity-40"
         style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
       >
@@ -253,7 +269,7 @@ function RemoveControl({ person, busy, onRemove }) {
             setStage(null);
             onRemove(alsoRemoveFromGym);
           }}
-          disabled={busy}
+          disabled={busy || readOnly}
           className="text-xs rounded-lg px-3 py-1.5 font-semibold disabled:opacity-40"
           style={
             alsoRemoveFromGym
@@ -308,7 +324,17 @@ function RemoveControl({ person, busy, onRemove }) {
  *  leftover from before that fix; re-adding it is refused anyway. Unknown ticks
  *  are carried through precisely because the opposite is true of them — nothing
  *  refuses those, so dropping one would be a loss nobody chose. */
-function PrivilegesControl({ person, busy, onSave }) {
+/** `readOnly` (the gym has no plan) and `ownerRow` (this row is the owner's) are
+ *  two different locks and this component now holds both, so **the local one was
+ *  RENAMED rather than the prop bent to fit**: it used to be called `readOnly`
+ *  too, and two things called read-only in one component, one of them about a
+ *  PERSON and one about the GYM, is a trap for whoever edits it next.
+ *
+ *  They also say different things on screen, which is why neither can stand in
+ *  for the other: `ownerRow` is permanent and explains itself (*"a gym has to
+ *  keep somebody who can hand out the keys"*), while `readOnly` is the gym's
+ *  temporary state and is explained once at the top of the panel. */
+function PrivilegesControl({ person, busy, readOnly, onSave }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(null);
 
@@ -319,7 +345,7 @@ function PrivilegesControl({ person, busy, onSave }) {
   // off — but "you" is about identity, and the server already answers it with
   // `isYou`. With a second owner (OWED.md keeps that live) the old code told one
   // owner that another owner's row was their own.
-  const readOnly = person.role === 'owner';
+  const ownerRow = person.role === 'owner';
   const isSelf = person.isYou === true;
   const choices = privilegeChoices(person.role);
   const extraNote = unknownPrivilegesNote(person);
@@ -357,14 +383,18 @@ function PrivilegesControl({ person, busy, onSave }) {
   }
 
   const toggle = (value) => {
-    if (readOnly) return;
+    if (ownerRow) return;
     setDraft((prev) => {
       const base = prev ?? current;
       return base.includes(value) ? base.filter((v) => v !== value) : [...base, value];
     });
   };
 
-  const dirty = !readOnly && privilegesDiffer(current, ticked);
+  // `readOnly` is NOT folded in here, and that is deliberate: `dirty` means
+  // "these ticks differ from the stored set", which stays true of a lapsed gym.
+  // The SAVE button is what read-only takes away — mixing the two would make an
+  // edited-but-unsaveable panel claim nothing had been touched.
+  const dirty = !ownerRow && privilegesDiffer(current, ticked);
 
   return (
     <div
@@ -379,7 +409,7 @@ function PrivilegesControl({ person, busy, onSave }) {
             <input
               type="checkbox"
               checked={on}
-              disabled={busy || readOnly}
+              disabled={busy || ownerRow || readOnly}
               onChange={() => toggle(choice.value)}
               className="mt-0.5"
             />
@@ -401,7 +431,7 @@ function PrivilegesControl({ person, busy, onSave }) {
         </p>
       ) : null}
 
-      {readOnly ? (
+      {ownerRow ? (
         <>
           <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
             {isSelf ? 'This is what you can do.' : 'This is what the owner can do.'} It can&apos;t be
@@ -420,7 +450,7 @@ function PrivilegesControl({ person, busy, onSave }) {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            disabled={busy || !dirty}
+            disabled={busy || readOnly || !dirty}
             onClick={async () => {
               const saved = await onSave([...ticked, ...unknownPrivileges(person)]);
               if (saved) closeIt();
@@ -454,7 +484,7 @@ function PrivilegesControl({ person, busy, onSave }) {
  *  The wording is fixed by T3 round 1's Low-6 and is not free to reword: "your
  *  changes will be lost" is only half true, because the defaults BECOME the set
  *  in both directions. `roleChangeWarning` owns the sentence. */
-function RoleChangeControl({ person, nextRole, busy, onConfirm }) {
+function RoleChangeControl({ person, nextRole, busy, readOnly, onConfirm }) {
   const [asking, setAsking] = useState(false);
 
   if (!asking) {
@@ -462,7 +492,7 @@ function RoleChangeControl({ person, nextRole, busy, onConfirm }) {
       <button
         type="button"
         onClick={() => setAsking(true)}
-        disabled={busy}
+        disabled={busy || readOnly}
         className="text-xs rounded-lg px-3 py-1.5 self-start disabled:opacity-40"
         style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
       >
@@ -483,7 +513,7 @@ function RoleChangeControl({ person, nextRole, busy, onConfirm }) {
             setAsking(false);
             onConfirm();
           }}
-          disabled={busy}
+          disabled={busy || readOnly}
           className="text-xs rounded-lg px-3 py-1.5 font-semibold disabled:opacity-40"
           style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
         >
@@ -502,7 +532,7 @@ function RoleChangeControl({ person, nextRole, busy, onConfirm }) {
   );
 }
 
-function StaffRow({ person, busy, onChangeRole, onRemove, onSavePrivileges }) {
+function StaffRow({ person, busy, readOnly, onChangeRole, onRemove, onSavePrivileges }) {
   const changeable = canChangeStaff(person);
   const nextRole = otherStaffRole(person.role);
   // Absent rather than an em dash: `users.email` is nullable by design (an
@@ -540,10 +570,11 @@ function StaffRow({ person, busy, onChangeRole, onRemove, onSavePrivileges }) {
                 person={person}
                 nextRole={nextRole}
                 busy={busy}
+                readOnly={readOnly}
                 onConfirm={onChangeRole}
               />
             ) : null}
-            <RemoveControl person={person} busy={busy} onRemove={onRemove} />
+            <RemoveControl person={person} busy={busy} readOnly={readOnly} onRemove={onRemove} />
           </div>
         ) : (
           /* THE OWNER'S ROW GETS THE REASON, NOT TWO DEAD BUTTONS. Both mutations
@@ -565,12 +596,17 @@ function StaffRow({ person, busy, onChangeRole, onRemove, onSavePrivileges }) {
           the owner's — read-only there. Kd's ruling is per-STAFF-MEMBER, so a
           screen that put them anywhere else would be describing a different
           feature. */}
-      <PrivilegesControl person={person} busy={busy} onSave={onSavePrivileges} />
+      <PrivilegesControl
+        person={person}
+        busy={busy}
+        readOnly={readOnly}
+        onSave={onSavePrivileges}
+      />
     </div>
   );
 }
 
-export default function StaffPanel({ gymId, privileges, orgType }) {
+export default function StaffPanel({ gymId, privileges, orgType, readOnly = false }) {
   const allowed = canManageStaff(privileges);
 
   const [state, setState] = useState({ loading: true, error: null, staff: [] });
@@ -836,6 +872,12 @@ export default function StaffPanel({ gymId, privileges, orgType }) {
         </div>
       ) : null}
 
+      {readOnly ? (
+        <p className="mb-3 text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          {READ_ONLY_NOTE}
+        </p>
+      ) : null}
+
       {!state.loading && state.error === null ? (
         <div className="flex flex-col gap-3">
           {state.staff.map((person) => (
@@ -843,6 +885,7 @@ export default function StaffPanel({ gymId, privileges, orgType }) {
               key={person.userId}
               person={person}
               busy={busyId === person.userId}
+              readOnly={readOnly}
               onChangeRole={() => changeRole(person)}
               onRemove={(alsoRemoveFromGym) => removePerson(person, alsoRemoveFromGym)}
               onSavePrivileges={(privileges) => savePrivileges(person, privileges)}
@@ -858,6 +901,7 @@ export default function StaffPanel({ gymId, privileges, orgType }) {
               setRole={setRole}
               fieldError={fieldError}
               busy={busyId === 'add'}
+              readOnly={readOnly}
               onAdd={add}
               onCancel={() => {
                 setAdding(false);
@@ -869,7 +913,8 @@ export default function StaffPanel({ gymId, privileges, orgType }) {
             <button
               type="button"
               onClick={() => setAdding(true)}
-              className="self-start rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2"
+              disabled={readOnly}
+              className="self-start rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2 disabled:opacity-40"
               style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
             >
               <Plus className="w-4 h-4" />

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { orgService, errorText, errorStatus } from '../../api/orgsApi';
+import { READ_ONLY_QUEUE_NOTE } from './billingView';
 import {
   expiresInLabel,
   nudgedLabel,
@@ -42,7 +43,7 @@ import {
 // failure DOES show, with a retry, because "we couldn't check" and "you may not
 // see this" are different sentences and only one of them is about a connection.
 
-function ApplicantRow({ applicant, busy, onConfirm, onReject }) {
+function ApplicantRow({ applicant, busy, readOnly, onConfirm, onReject }) {
   // THE CLOCK, ON THE ROW. Every piece of it is derived from a field the SERVER
   // sent; the screen works nothing out for itself, so it cannot quote a
   // deadline the sweep disagrees with.
@@ -98,17 +99,24 @@ function ApplicantRow({ applicant, busy, onConfirm, onReject }) {
         <button
           type="button"
           onClick={onConfirm}
-          disabled={busy}
+          disabled={busy || readOnly}
           className="rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center gap-2 disabled:opacity-40"
           style={{ background: '#FF8A1F', color: '#0A0908' }}
         >
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
           Confirm
         </button>
+        {/* REFUSING IS GREYED TOO, AND THAT IS NOT AN OVERSIGHT. Both taps are
+            among the twelve doors the server closed (:23711) — `members.confirm`
+            gates confirm AND reject — so a live "Not this person" would be the
+            same 409 wearing a kinder label. It is also the right product answer:
+            a gym that cannot let anybody in should not be tidying its queue
+            either, because the person it turns away now cannot re-apply into a
+            gym that is still lapsed. */}
         <button
           type="button"
           onClick={onReject}
-          disabled={busy}
+          disabled={busy || readOnly}
           className="rounded-xl px-4 py-2.5 text-sm font-medium disabled:opacity-40"
           style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)' }}
         >
@@ -119,7 +127,7 @@ function ApplicantRow({ applicant, busy, onConfirm, onReject }) {
   );
 }
 
-export default function ApplicationsQueue({ gymId, onRosterChanged }) {
+export default function ApplicationsQueue({ gymId, readOnly = false, onRosterChanged }) {
   const [state, setState] = useState({
     loading: true,
     error: null,
@@ -249,9 +257,26 @@ export default function ApplicationsQueue({ gymId, onRosterChanged }) {
         <h2 className="text-sm font-semibold" style={{ color: '#fff' }}>
           Waiting to join
         </h2>
+        {/* THE INSTRUCTION IS WHAT GOES, and the COUNT is what stays. "Confirm
+            the ones you recognise" over a queue whose Confirm answers 409 is the
+            console telling somebody to press a dead button — so on a lapsed gym
+            the count is stated plainly and the reason takes the next line, as
+            its own sentence rather than spliced into this one. */}
         <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          {waitingCountLabel(state.pendingCount)} — confirm the ones you recognise.
+          {waitingCountLabel(state.pendingCount)}
+          {readOnly ? null : ' — confirm the ones you recognise.'}
         </p>
+        {/* THE ONE THING THIS CARD OWES THE PEOPLE IN THE LIST (:23928's Low-5).
+            A lapsed gym's queue is a dead end — they applied, nobody can let
+            them in, and until today the console said nothing about it. It is
+            drawn only where there IS a queue, because with nobody waiting there
+            is nobody for the sentence to be about and §4.2's strip overhead
+            already says the gym has no plan. */}
+        {readOnly ? (
+          <p className="text-xs mt-1" style={{ color: '#ef4444' }}>
+            {READ_ONLY_QUEUE_NOTE}
+          </p>
+        ) : null}
       </div>
 
       {actionError !== null ? <ConsoleFailed message={actionError} onRetry={refresh} /> : null}
@@ -261,6 +286,7 @@ export default function ApplicationsQueue({ gymId, onRosterChanged }) {
           key={a.id}
           applicant={a}
           busy={busyId === a.id}
+          readOnly={readOnly}
           onConfirm={() => decide(a.id, () => orgService.confirmApplication(gymId, a.id), true)}
           onReject={() => decide(a.id, () => orgService.rejectApplication(gymId, a.id), false)}
         />

@@ -14,11 +14,15 @@
 //      and every one of them must produce no meter rather than "0 of 0".
 import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest';
 import {
+  CONSOLE_READ_ONLY_BANNER,
+  READ_ONLY_NOTE,
+  READ_ONLY_QUEUE_NOTE,
   SEAT_PRESSURE_RATIO,
   TRIAL_URGENT_DAYS,
   bannerFor,
   bannerIsDismissed,
   canManageBilling,
+  consoleIsReadOnly,
   dismissBanner,
   hasLivePlan,
   isTrialing,
@@ -309,9 +313,123 @@ describe('seatLineText', () => {
   });
 });
 
+describe('consoleIsReadOnly', () => {
+  // THE THREE STATES, AND TWO OF THEM MEAN THE SAME THING ON SCREEN. The field
+  // is `true` / `false` / `null`, and `null` is "we could not ask" — an api
+  // older than this bundle, or a plain member — never "locked" (C97's rule,
+  // :23711). Greying a console out on an unknown refuses somebody something the
+  // server would have allowed, and they have no way to find out which.
+  it('locks only on a definite true', () => {
+    expect(consoleIsReadOnly(gym({ consoleReadOnly: true }))).toBe(true);
+  });
+
+  it('does NOT lock on false, on null, on a missing field, or on no org at all', () => {
+    expect(consoleIsReadOnly(gym({ consoleReadOnly: false }))).toBe(false);
+    expect(consoleIsReadOnly(gym({ consoleReadOnly: null }))).toBe(false);
+    // The whole fixture set in this repo predates the field, which is exactly
+    // the older-api shape — so this case is not hypothetical, it is what every
+    // other test in the console suite is passing in today.
+    expect(consoleIsReadOnly(gym())).toBe(false);
+    expect(consoleIsReadOnly(null)).toBe(false);
+    expect(consoleIsReadOnly(undefined)).toBe(false);
+  });
+
+  it('is NOT derived from the subscription, in either direction', () => {
+    // The tempting one-liner is `!hasLivePlan(org)`, and it is wrong twice.
+    // A gym with no subscription whose caller was not told greys nothing:
+    expect(hasLivePlan(gym({ subscription: null }))).toBe(false);
+    expect(consoleIsReadOnly(gym({ subscription: null }))).toBe(false);
+    // And the field is what decides, not the absence of the row — this is the
+    // shape a lapsed gym's STAFF actually receive.
+    expect(consoleIsReadOnly(gym({ subscription: null, consoleReadOnly: true }))).toBe(true);
+  });
+});
+
+describe('the read-only sentences', () => {
+  // THE WORDS ARE PINNED, and the reason is that all three are drawn at a gym
+  // owner and two of them are the SERVER's own. `READ_ONLY_NOTE` is verbatim
+  // `GYM_NOT_ON_PLAN_MESSAGE` from `apps/api/src/modules/orgs/service.ts` — if
+  // somebody reworks one side, the screen and the 409 start saying different
+  // things about one refusal, which is what this repo keeps auditing for.
+  it('says what the server says, word for word', () => {
+    expect(READ_ONLY_NOTE).toBe('This gym needs a plan before anything here can be changed.');
+  });
+
+  it('never blames the reader and never promises a next step', () => {
+    // "Ask your gym's owner" is wrong because the reader may BE the owner; a
+    // CTA is wrong because nothing in the product can put a gym back on a plan
+    // (no payment, one trial per owner ever), so it would be a promise with no
+    // code behind it (:5807).
+    for (const sentence of [READ_ONLY_NOTE, READ_ONLY_QUEUE_NOTE, CONSOLE_READ_ONLY_BANNER]) {
+      expect(sentence).not.toMatch(/ask your|contact|reactivate|subscribe|upgrade|pay/i);
+    }
+  });
+
+  it('never says a TRIAL ended, because half the gyms reading it never had one', () => {
+    // §4.2's own copy is "Trial ended — members have moved to the free tier",
+    // and it cannot be used: a gym that never subscribed reaches this state too,
+    // and one field answers for both (`consoleReadOnly` asks whether there is a
+    // live plan, never how the gym got here).
+    for (const sentence of [READ_ONLY_NOTE, READ_ONLY_QUEUE_NOTE, CONSOLE_READ_ONLY_BANNER]) {
+      expect(sentence).not.toMatch(/trial|expired|ended|moved/i);
+    }
+  });
+
+  it('does NOT promise the waiting people keep their place — that is not true yet', () => {
+    // Kd ruled on 2026-08-29 that a lapsed gym HOLDS its applications and tells
+    // the waiting person why. That is the next card. Until it ships an
+    // application still dies 14 days after it was made whatever the gym's plan
+    // is doing, so the sentence here stops at what is true today. **Writing the
+    // reassurance before the behaviour exists is exactly :5807's class**, and
+    // this assertion is what makes the copy change when the behaviour does.
+    //
+    // **ONE ASSERTION, NOT TWO (T3 round 1, Low-5).** A `.not.toMatch(/keep|
+    // place|hold|…/)` stood here under the exact equality above it, and could
+    // never fail on its own: any change that would trip the matcher has already
+    // tripped `toBe`. Two guards, either one sufficient, therefore neither
+    // falsifiable — :12343's J11, which `StaffPanel.jsx` names four lines from
+    // where this round found it. The exact string IS the pin.
+    //
+    // The independently meaningful version of that matcher is at the SCREEN, in
+    // `readOnlyConsole.render.test.jsx`, where it searches everything rendered
+    // rather than the constant it was just compared against — so a reassurance
+    // added anywhere else on that panel still goes red.
+    expect(READ_ONLY_QUEUE_NOTE).toBe('Nobody can be let in until this gym is on a plan.');
+  });
+});
+
 describe('bannerFor', () => {
-  it('draws nothing for a gym on no plan', () => {
+  it('draws nothing for a gym on no plan whose caller was not told', () => {
+    // `consoleReadOnly` absent is the older-api / plain-member shape, and the
+    // honest banner for a state we cannot read is no banner.
     expect(bannerFor(gym(), NOW)).toBeNull();
+  });
+
+  it('draws §4.2’s read-only row for a gym with no plan, red and undismissable', () => {
+    const b = bannerFor(gym({ consoleReadOnly: true }), NOW);
+    expect(b?.key).toBe('read_only');
+    expect(b?.tone).toBe('danger');
+    expect(b?.dismissible).toBe(false);
+    expect(b?.text).toBe(CONSOLE_READ_ONLY_BANNER);
+    // Kd's ruling (:22215 §3.4): a lapsed gym's members fall back to the FREE
+    // app and are never locked out. The banner has to say the consequence,
+    // because that is the thing an owner most needs to know.
+    expect(b?.text).toMatch(/free app/i);
+  });
+
+  it('is NOT drawn on a false or an unknown, which is the direction that seals people out', () => {
+    expect(bannerFor(gym({ consoleReadOnly: false }), NOW)).toBeNull();
+    expect(bannerFor(gym({ consoleReadOnly: null }), NOW)).toBeNull();
+  });
+
+  it('leaves a TRIALLING gym’s own banner alone — the read-only row is ranked first', () => {
+    // The ranking is only observable if something else would otherwise have
+    // fired, so this is the control for putting `read_only` at the top of the
+    // machine: the same gym, one field apart, produces two different banners
+    // and the trial one is NOT swallowed.
+    expect(bannerFor(trialing(27), NOW)?.key).toBe('trial_info');
+    expect(bannerFor(trialing(2), NOW)?.key).toBe('trial_urgent');
+    expect(bannerFor(trialing(27, { consoleReadOnly: false }), NOW)?.key).toBe('trial_info');
   });
 
   it('draws nothing for a healthy paying gym', () => {

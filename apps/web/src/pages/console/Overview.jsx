@@ -8,6 +8,7 @@ import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/con
 import { orgService, errorText, isRetryable } from '../../api/orgsApi';
 import { useAuth } from '../../context/AuthContext';
 import { useConsoleOrg } from './useConsoleOrg';
+import { consoleIsReadOnly } from './billingView';
 import {
   codeToShow,
   joinedCount,
@@ -277,6 +278,11 @@ export default function Overview() {
           gymId={org.id}
           codes={codes.list}
           privileges={viewerPrivileges(org)}
+          // Part 3 §4.2's read-only console. The codes are still SHOWN and still
+          // copyable — read-only is about changing things, and a gym that cannot
+          // mint a code can still read the one it has (:23711: it "seals nobody
+          // out"). What goes quiet is minting, pausing, replacing and removing.
+          readOnly={consoleIsReadOnly(org)}
           onChanged={reloadCodes}
         />
       ) : null}
