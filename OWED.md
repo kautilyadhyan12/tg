@@ -5007,18 +5007,45 @@ file and is stated so nobody reads these as lower priority than they are.
 - [ ] ⚪ **A LAPSED GYM CANNOT CONFIRM ANYBODY, SO PEOPLE CAN STILL APPLY TO IT
       AND WAIT FOR NOTHING — recorded 2026-08-29 (:23711 §6b) as a consequence
       the read-only card CREATES, rather than found later.**
-      `POST /v1/orgs/join` is a MEMBER door and is deliberately not gated by the
-      read-only rule, so somebody typing a lapsed gym's code still joins a queue
-      whose confirm button now answers 409. The application expires by itself
-      after 14 days (`APPLICATION_TTL_DAYS`), so it resolves rather than
-      festering, and the applicant's screen says they are waiting — which is
+      **THERE ARE TWO MEMBER DOORS, NOT ONE** — corrected 2026-08-29 by this
+      card's T3 round 1 (Low-5), which found the line naming only the first.
+      **(i) `POST /v1/orgs/join`** is a MEMBER door and is deliberately not gated
+      by the read-only rule, so somebody typing a lapsed gym's code still joins a
+      queue whose confirm button now answers 409. **(ii) `POST
+      /v1/orgs/applications/:applicationId/nudge`** is the second and reaches the
+      same dead end from the other side: the waiting person can still chase the
+      gym once a day, it writes `member_nudged_at`, and the console's queue then
+      shows a "reminded" badge on a row nobody can clear. The application expires
+      by itself after 14 days (`APPLICATION_TTL_DAYS`), so both resolve rather
+      than festering, and the applicant's screen says they are waiting — which is
       TRUE, so it is not :5807's class.
       **TWO SEPARATE THINGS ARE OWED and they are not the same size.** The
       console's own waiting queue should SAY that nobody can be let in until the
       gym is on a plan — that is the web half's job and costs a sentence. Whether
-      the join DOOR itself should refuse is a product question with its own copy
-      and Kd's ruling, and it touches a surface with heavy rulings behind it
-      (:11072, :11385, :12343).
+      the join DOOR itself should refuse — **and whether the nudge should, which
+      is the same question about the same dead end** — is a product question with
+      its own copy and Kd's ruling, and it touches a surface with heavy rulings
+      behind it (:11072, :11385, :12343).
+- [ ] 🟡 **THE CONSOLE OFFERS "TRY AGAIN" ON A REFUSAL THAT TRYING AGAIN CAN
+      NEVER FIX — deferred 2026-08-29 from this card's T3 round 1 (Low-6) to the
+      READ-ONLY CONSOLE'S WEB HALF, which is the next card and owns this file.**
+      `isRetryable` in `apps/web/src/api/orgsApi.js` treats everything except 403
+      as retryable, so the permanent **409 `gym_not_on_plan`** this card created
+      arrives on screen with a Try again button behind it. **Reachable today**: a
+      manager holding `staff.manage` without `billing.manage` on a lapsed gym
+      sees it (the owner meets the unclosable plan prompt instead).
+      **Graded Low deliberately and NOT softened**: the sentence shown is the
+      server's own and is TRUE (*"This gym needs a plan before anything here can
+      be changed."*), so it is not :5807's class — what is false is the BUTTON's
+      implied promise. **409 `trial_already_used` already sat in that same bucket
+      before this card**, so the shape is pre-existing and this adds one member to
+      it; the fix belongs with the card that disables these controls anyway,
+      alongside a third copy of the rule being avoided (:15010's L-5 moved it here
+      precisely so there would be one place to change).
+      **The fix, so the next card does not re-derive it:** make the permanent 409s
+      non-retryable beside 403, and give it a POSITIVE CONTROL — the same failure
+      offline must still offer the button, which is what :15010's own retryable
+      pair carries and what keeps the gate a bound rather than a ban.
 - [ ] ⚪ **A CONSUMER TRIAL WILL NEVER END, FOR THE SAME REASON A GYM'S ONE DID
       NOT — recorded 2026-08-28 (:22341) so the class is visible rather than
       re-created.** `trialSweep.ts` filters `owner_type = 'gym'` deliberately:

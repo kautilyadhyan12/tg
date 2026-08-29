@@ -2466,3 +2466,72 @@ do not"). None of them changes what the sweep does.
       pressing enter. Local verified able to host it (15 migrations, USD and INR
       books, 300-cap band) and the corrected command run to exit 0.
       (`RUNBOOK/smoke-trial-expiry.md`.)
+
+## THE READ-ONLY CONSOLE'S SERVER HALF — T3 ROUND 1 (2026-08-29, DECISIONS :23928)
+
+Reviews `4320ac5` + `da7e471`. Zero Critical/High, so the packet ships (:5348
+rule 1). **Seven Low: six fixed in the round, one deferred with its own `OWED.md`
+line.** Kd approved the list first (*"go"*).
+
+- [x] **LOW-1 · A COUNT NOBODY COUNTED, AND A CORRECTION THAT NEEDED CORRECTING.**
+      *"`{ plan: null }` is an explicit opt-out at fifteen call sites"* — the grep
+      returns sixteen lines, two of them prose, so it is **FOURTEEN**. **The
+      review's map of the copies was itself wrong** and was measured before being
+      applied: `DECISIONS.md:23859`'s fifteen is a DIFFERENT figure and is CORRECT
+      (`subscribeGym`'s call sites at `4320ac5^`), `DECISIONS-INDEX.md` never held
+      the figure, and `HANDOFF.md:36` — which the review did not name — did.
+      Fixed in the two places that were wrong; the third is the commit message of
+      `4320ac5` and is recorded rather than rewritten. (`DECISIONS.md:23856`,
+      `HANDOFF.md:36`.)
+- [x] **LOW-2 · "EACH KEEPING THE GATE ON BOTH SIDES" IS TRUE OF FOUR OF FIVE.**
+      O59, O70, O79 and O100 change the privilege string; **O115 deletes the whole
+      `requireWritablePrivilege` call**, taking the privilege check and the new
+      plan gate together. Harmless and checked rather than assumed: its filter's
+      gym is on a plan, so the gate would have passed anyway and the RED still
+      isolates the privilege. Corrected in place. (`DECISIONS.md:23831`.)
+- [x] **LOW-3 · THE STRANDED-COUNTRY GUARD COUNTED PLANS IT DOES NOT OWN.**
+      :18830's Low-1, third recurrence. The permanent guard counted `plans`
+      unscoped while every exact ladder above it goes through `seededBook`'s
+      `org_` filter, and this card added a third foreign row (`zz_orgs_live`,
+      INR). Latent today — India has a real book — and the failure it opens is the
+      guard going green over a genuinely stranded country, which is the one defect
+      it exists to catch. Scoped to `code LIKE 'org\_%'` (`db.migration.test.ts:268`'s
+      idiom) **and given a deterministic observer**: a `zz_plans_foreign` CAD row
+      in the file's own `beforeAll`, CAD because no supported country maps to it
+      (:22215 §3.5). Measured RED with the scoping deleted:
+      `expected [ 'INR', 'CAD', 'USD' ] to not include 'CAD'`.
+      (`apps/api/test/orgs.plans.test.ts`.)
+- [x] **LOW-4 · A LIST OF TWELVE WITH NO OBSERVER, WHOSE OWN COMMENT NAMED THE
+      CLASS.** `consoleWrites` is hand-maintained and nothing pinned it to the
+      module, so a thirteenth write route added ungated was invisible to the whole
+      suite — the same shape that has cost this file FOUR findings on its sibling
+      auth list. Pinned in THREE places: `CONSOLE_WRITE_COUNT`, the list's length,
+      and a count of `await requireWritablePrivilege(` read out of `service.ts`
+      with comments stripped first. Measured RED with one gate call deleted:
+      `the gate's call sites in service.ts: expected 11 to be 12`.
+      (`apps/api/test/orgs.routes.test.ts`.)
+- [x] **LOW-5 · THE OWED LINE NAMED ONE MEMBER DOOR AND THERE ARE TWO.**
+      `POST /v1/orgs/join` was named; `POST /v1/orgs/applications/:applicationId/nudge`
+      is the second and reaches the same dead end from the other side, writing
+      `member_nudged_at` and badging a queue nobody can clear. Both named now, and
+      the open product question widened to cover both. (`OWED.md`.)
+- [ ] **LOW-6 · "TRY AGAIN" ON A REFUSAL THAT TRYING AGAIN CANNOT FIX — DEFERRED,
+      with its own `OWED.md` line in this commit.** `isRetryable` treats everything
+      but 403 as retryable, so the permanent 409 `gym_not_on_plan` reaches the
+      screen behind a Try again button. **Low and not softened**: the sentence
+      shown is the server's own and is TRUE, so it is not :5807's class — the
+      false thing is the BUTTON's promise — and `409 trial_already_used` already
+      sat in that bucket. Deferred to the read-only console's WEB half, the next
+      card, which owns the file and disables these controls anyway.
+      (`apps/web/src/api/orgsApi.js`, → `OWED.md`.)
+- [x] **RULE 4 · ONE GREEN LIAR, THE FIFTH FINDING ON ONE LIST.** *"every route
+      requires authentication"* stayed GREEN with `app.authenticate` deleted from
+      the NUDGE route — the last route in the module with no line in that list.
+      Grep-verified first that no test in `apps/api/test` asserted a 401 on it.
+      Fixed; measured RED at `expected 500 to be 401`, which is :12227's own
+      recorded reason this class is Low and not Critical.
+      **The five are ENUMERATED in the test rather than counted again, because
+      the first draft got it wrong**: the block already held two tallies that
+      disagree (:23128's Low-5 comment says "the SECOND time"; the gym-details
+      comment four lines below says "the third"). Left unedited (R1.1) and named.
+      (`apps/api/test/orgs.routes.test.ts`.)

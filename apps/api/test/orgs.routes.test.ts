@@ -24,6 +24,7 @@
 //      that first read there is nothing to bust and the assertion is satisfied
 //      by a cold cache.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
@@ -440,6 +441,21 @@ d("orgs routes (real Postgres)", () => {
     const someApplication = "22222222-2222-2222-2222-222222222222";
     expect((await get("/v1/orgs/applications/mine")).statusCode).toBe(401);
     expect((await get(`/v1/orgs/${someGym}/applications`)).statusCode).toBe(401);
+    // ADDED BY THE READ-ONLY CARD'S T3 ROUND 1 (rule 4). The NUDGE route was the
+    // last one in the module with no line here, and the only one the
+    // waiting-room card's own additions above missed. Measured the way the rule
+    // asks: with `app.authenticate` deleted from the nudge route this test
+    // stayed GREEN, and no test anywhere in `apps/api/test` asserted a 401 on it.
+    //
+    // **THE FIFTH FINDING ON THIS ONE LIST**, enumerated so the number is
+    // checkable rather than repeated: :12227's L-1 · the removal card's L-2 ·
+    // the gym-details card · :23128's Low-5 · this. NB the two tallies already in
+    // this block DISAGREE — Low-5's comment above calls itself "the SECOND time"
+    // while the gym-details comment below calls itself "the third" — which is
+    // left alone (R1.1) and is itself the shape: a count nobody re-derives.
+    expect(
+      (await post(`/v1/orgs/applications/${someApplication}/nudge`, {})).statusCode,
+    ).toBe(401);
     expect(
       (await post(`/v1/orgs/${someGym}/applications/${someApplication}/confirm`, {})).statusCode,
     ).toBe(401);
@@ -5972,11 +5988,24 @@ d("orgs routes (real Postgres)", () => {
     return { owner, member, waiting, org, pendingId, gymId: org.org.id, joinCode: org.joinCode.code };
   };
 
+  /** HOW MANY WRITE DOORS THE CONSOLE HAS. One number, pinned in THREE places —
+   *  this constant, the length of the list below, and the count of
+   *  `requireWritablePrivilege` call sites in the module itself (the test right
+   *  after the list). A thirteenth write route added without a line below now
+   *  fails there instead of going unnoticed. */
+  const CONSOLE_WRITE_COUNT = 12;
+
   /** EVERY WRITE THE CONSOLE HAS, as `{ name, run }`. Written out rather than
    *  derived, for the reason the "every route requires authentication" test at the
    *  top of this file was twice caught trailing the module (:12227's L-1, then
    *  :23128's Low-5): a list is a CLAIM, and a route added without a line here is
-   *  a route nobody notices going ungated. */
+   *  a route nobody notices going ungated.
+   *
+   *  **AND A CLAIM NEEDS AN OBSERVER — T3 round 1's Low-4.** The comment above
+   *  named the class this list belongs to and then did not guard against it. The
+   *  sibling auth list it cites has now cost this file FOUR recorded findings
+   *  before this one, which is how much a naming without a guard is worth.
+   *  `CONSOLE_WRITE_COUNT` and the source count below are what close it here. */
   const consoleWrites = (
     g: Awaited<ReturnType<typeof lapsableGym>>,
     cookies: Record<string, string>,
@@ -5999,12 +6028,47 @@ d("orgs routes (real Postgres)", () => {
     ];
   };
 
+  /** THE LIST ABOVE IS PINNED TO THE MODULE, NOT TO SOMEBODY'S MEMORY (T3 round
+   *  1, Low-4). It reads `service.ts` and counts the gate's CALL SITES, in the
+   *  established pattern of `workouts.summary.test.ts:395` — the module that
+   *  declares them, not `printRoutes()`, whose nested output has to be rebuilt
+   *  from indentation.
+   *
+   *  **Comments are stripped first** (`joinGym.render.test.jsx:322`'s round-2
+   *  lesson): `service.ts` already MENTIONS `requireWritablePrivilege` in a
+   *  comment, and a commented-out call must not count as a door.
+   *
+   *  **NO SEPARATE "the regex still matches something" CONTROL, and that is
+   *  deliberate.** :22145's L-1 needed one because it asserted *at least* five;
+   *  this asserts against a LITERAL, so a pattern that stopped matching gives 0
+   *  and fails here. A second assertion satisfied by the same failure would be a
+   *  redundant pair in which neither half is falsifiable — :23257 §9's C88 shape,
+   *  and the reason that mutant survived a whole-table sweep.
+   *
+   *  **The honest limit, stated rather than implied:** this recognises
+   *  `await requireWritablePrivilege(`. A door gated some other way — a different
+   *  helper, or the call assigned rather than awaited — is not seen. What it
+   *  covers is the next door added in the style all twelve use today. */
+  it("the twelve are the module's twelve", () => {
+    const src = readFileSync(new URL("../src/modules/orgs/service.ts", import.meta.url), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|\s)\/\/.*$/gm, "$1");
+    const gated = src.match(/await requireWritablePrivilege\(/g) ?? [];
+
+    expect(gated.length, "the gate's call sites in service.ts").toBe(CONSOLE_WRITE_COUNT);
+  });
+
   it("a gym with no plan refuses every console write, for the OWNER", { timeout: 120_000 }, async () => {
     const g = await lapsableGym("owner");
     // THE TRIAL ENDS THE WAY THE SWEEP ENDS IT — an `expired` row, not a deleted
     // one. Mutant O155 is why: reached by deleting the row, this test could not
     // see the gate's status set widen to admit `expired`.
     await expireGym(g.gymId);
+
+    // THE THIRD PIN (T3 round 1, Low-4): the list, the constant and the module's
+    // own call-site count are one number. Asserted where a gym already exists so
+    // it costs nothing.
+    expect(consoleWrites(g, g.owner.cookies).length).toBe(CONSOLE_WRITE_COUNT);
 
     for (const w of consoleWrites(g, g.owner.cookies)) {
       const res = await w.run();

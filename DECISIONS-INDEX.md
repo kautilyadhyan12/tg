@@ -1137,6 +1137,63 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   been RED since the currency card** (it demands CAD/GBP where :22215 §3.5 ruled
   USD — proven pre-existing at HEAD), **and a lapsed gym cannot confirm anybody**,
   so applicants wait 14 days for nothing.
+  ⚠️ **Two of its sentences are CORRECTED by :23928** — the `{ plan: null }`
+  opt-out is at FOURTEEN call sites, not fifteen, and O115 does NOT keep
+  `requireWritablePrivilege` on both sides.
+
+- **:23928** — 2026-08-29 — **THE READ-ONLY CONSOLE'S SERVER HALF, T3 ROUND 1:
+  ZERO Critical/High, THE PACKET SHIPS** — seven Low, six fixed in the round, one
+  deferred to the web half with its own `OWED.md` line. Reviews `4320ac5` +
+  `da7e471` (:23711). Kd approved the list first (*"go"*). **Escape hatch NOT
+  armed — the THIRD consecutive clean round in this subsystem** (:23128, :23578,
+  this), the opposite of the trigger.
+  **Read before correcting a figure a review hands you, before scoping any count
+  over the `plans` table, before adding a thirteenth write door to the orgs
+  module, and before round-tripping a source file through PowerShell on this
+  machine.**
+  **TWO OF THE SEVEN WERE THEMSELVES WRONG, AND THAT IS THE ENTRY'S POINT
+  (:8707 — a correction is a claim).** Low-1's figure is real (fourteen, not
+  fifteen) and its MAP was not: of the four places the review named, one holds a
+  DIFFERENT and CORRECT fifteen (`subscribeGym`'s pre-card call sites, measured at
+  `4320ac5^`), one does not contain the figure at all (`DECISIONS-INDEX.md`), one
+  is an unfixable commit message, and a fifth place it never named
+  (`HANDOFF.md:36`) did hold it. **Applied as handed over it would have replaced a
+  true sentence with a false one.** Low-2 likewise: four of the five re-aimed
+  mutants keep the gate on both sides, O115 deletes the whole call — harmless, and
+  CHECKED (its filter's gym is on a plan, so the RED still isolates the privilege).
+  **THE THREE CODE FINDINGS, EACH MEASURED RED AND RESTORED:** the
+  stranded-country guard counted `plans` unscoped while every ladder above it goes
+  through `seededBook` (:18830's Low-1, third recurrence) — scoped to `org\_%` and
+  given a deterministic CAD observer, RED at
+  `expected [ 'INR', 'CAD', 'USD' ] to not include 'CAD'` · `consoleWrites` was a
+  hand-kept list of twelve whose own comment named the class without guarding it —
+  now pinned in THREE places including a count of `await requireWritablePrivilege(`
+  read out of `service.ts`, RED at `expected 11 to be 12`, **with no redundant
+  "regex still matches" control because the literal already catches zero**
+  (:23257 §9's C88 shape) · **RULE 4, one green liar**: *"every route requires
+  authentication"* stayed GREEN with `app.authenticate` off the NUDGE route —
+  **the FIFTH finding on that one list** — RED at `expected 500 to be 401`, which
+  is :12227's own recorded reason the class is Low. **The five are ENUMERATED in
+  the test because the first draft got the count wrong: the block already held
+  two tallies that disagree** (Low-5 calls itself "the SECOND time", the
+  gym-details comment four lines below calls itself "the third"), left unedited
+  and named — **a count nobody re-derives is a list nobody guards, one level up.**
+  **LOW-5:** :23711 §6(b) named ONE member door into a lapsed gym; the nudge route
+  is a second, writing `member_nudged_at` and badging a queue nobody can clear.
+  **LOW-6 IS THE ONLY DEFERRAL:** `isRetryable` offers *"Try again"* on the
+  permanent 409 — the shown sentence is TRUE so it is not :5807's class, and
+  `trial_already_used` was already in that bucket; the file belongs to the web
+  half, which disables those controls anyway.
+  **§4 — MY INSTRUMENT FAILURE, AND IT WILL RECUR HERE: a PowerShell
+  `Get-Content -Raw`/`Set-Content` round-trip CORRUPTED A FILE'S UTF-8** (ANSI
+  read, UTF-8 write; `-Encoding utf8` also adds a BOM). **The restore-hash
+  mismatch is what surfaced it.** Standing: mutate source through the editing
+  tool, never a PowerShell text round-trip.
+  **PROVE, all LOCAL: the racing PAIR `orgs.plans` + `orgs.routes` in ONE
+  invocation 154/154 TWICE · `orgs.routes` 142 (+1) · tsc exit 0 and PROVEN REAL
+  by planting a type error · eslint clean on both changed files · three measured
+  REDs, each restored to an empty `git status`.** **NO SWEEP and NO SMOKE, both
+  stated rather than skipped:** the round changes no `src` file and draws nothing.
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 

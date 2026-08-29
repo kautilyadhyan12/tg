@@ -1,6 +1,81 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: READ-ONLY CONSOLE, SERVER HALF — T3 ROUND 1 + FIX ROUND. DECISIONS :23928.
+      Reviews 4320ac5 + da7e471 (:23711). ZERO Critical/High — THE PACKET SHIPS.
+      Seven Low: six fixed here, one deferred with its own OWED.md line.
+      Kd approved the list first ("go"). Escape hatch NOT armed — the THIRD
+      consecutive clean round in this subsystem (:23128, :23578, this).
+
+  1. **TWO OF THE SEVEN FINDINGS WERE THEMSELVES WRONG, and that is the round's
+     point (:8707 — a correction is a claim).** Low-1's figure is real (the
+     `{ plan: null }` opt-out is at FOURTEEN call sites, not fifteen) and its MAP
+     was not: of four places named, one holds a DIFFERENT and CORRECT fifteen
+     (`subscribeGym`'s pre-card call sites, measured at 4320ac5^), one never held
+     the figure (DECISIONS-INDEX.md), one is an unfixable commit message — and a
+     fifth it never named (HANDOFF.md:36) did hold it. **Applied as handed over
+     it would have replaced a TRUE sentence with a false one.**
+  2. **Low-2: "each keeping the gate on BOTH sides" is true of FOUR of five.**
+     O115 deletes the whole `requireWritablePrivilege` call. Harmless and CHECKED
+     — its filter's gym is on a plan, so the RED still isolates the privilege.
+  3. **Low-3: the stranded-country guard counted `plans` UNSCOPED** while every
+     ladder above it goes through `seededBook`'s `org_` filter (:18830's Low-1,
+     third recurrence), and this card added a third foreign row (`zz_orgs_live`).
+     Latent, not live. Scoped to `org\_%` + a deterministic CAD observer.
+  4. **Low-4: `consoleWrites` was a hand-kept list of twelve whose own comment
+     named the class without guarding it.** Now pinned in THREE places, one of
+     them a count of `await requireWritablePrivilege(` read out of service.ts.
+     **No redundant "regex still matches" control** — the literal already catches
+     zero, and a redundant pair is :23257 §9's C88 shape.
+  5. **RULE 4 — ONE GREEN LIAR:** "every route requires authentication" stayed
+     GREEN with `app.authenticate` off the NUDGE route. **The FIFTH finding on
+     that one list, ENUMERATED in the test because my first draft miscounted** —
+     the block already held two tallies that disagree (:23128's Low-5 says "the
+     SECOND time", the gym-details comment says "the third"). Low-5 widened the
+     OWED line that named only ONE member door into a lapsed gym; the nudge is
+     the second.
+  6. **THE ONE DEFERRAL (Low-6), with its OWED.md line in this commit:**
+     `isRetryable` offers "Try again" on the permanent 409. Shown sentence is
+     TRUE so it is not :5807's class; the file belongs to the WEB half, the next
+     card, which disables those controls anyway.
+  7. **MY INSTRUMENT FAILURE, and it will recur on this machine:** a PowerShell
+     `Get-Content -Raw`/`Set-Content` round-trip CORRUPTED a file's UTF-8 (ANSI
+     read, UTF-8 write; `-Encoding utf8` also adds a BOM). **The restore-hash
+     mismatch is what surfaced it.** Recovered with `git checkout --`, re-applied
+     through the editing tool, mojibake scan run over all five changed files: 0.
+     STANDING: mutate source through the editing tool, never a PS text round-trip.
+
+FILES: apps/api/test/{orgs.routes.test.ts,orgs.plans.test.ts} · DECISIONS.md ·
+       DECISIONS-INDEX.md · DECISIONS-TRIGGERS.md · OWED.md · BACKLOG.md ·
+       HANDOFF.md. **NO src file changed in this round.**
+
+PROVE: all LOCAL (localhost:5433, test:local) — the racing PAIR `orgs.plans` +
+       `orgs.routes` in ONE invocation **154/154, TWICE** (12 + 142; routes +1 on
+       :23711's 141) · tsc exit 0 **and PROVEN REAL by planting a type error** ·
+       eslint --max-warnings=0 exit 0 on both changed files · **three measured
+       REDs**, each restored to an empty `git status` under apps/api/src:
+       `expected [ 'INR', 'CAD', 'USD' ] to not include 'CAD'` ·
+       `expected 11 to be 12` · `expected 500 to be 401`.
+       **NO SWEEP** — the round changes no src file, so there is no new call site
+       for a mutant to be a claim about (:15770); the three reds are the
+       observers. **NO SMOKE** — checked, not asserted: nothing is drawn and no
+       apps/web file is touched.
+
+OPEN:  Nothing new ticks in THIS round: :23711's own line waits on the screens,
+       which are the NEXT CARD (the read-only console's web half — it also owns
+       the Low-6 deferral). **`orgs.unit` is GREEN 22/22 and its 🔴 OWED line was
+       already ticked by `da7e471`; a draft of this block said it was still red,
+       carried forward from :23711 §6(a) instead of read after the commit that
+       closed it (V4). Caught by the full-suite run.**
+       **Full api suite, LOCAL: 651/654 — the three failures are
+       `catalog.seed.test.ts`, the documented :13746 shared-database flake,
+       PROVEN not assumed (7/7 alone; grep confirms it never reads `plans`).**
+       **`turbo run lint` and `check-harnesses` are RED at HEAD too** — global
+       pnpm shadowing (:21057) and WSL `/bin/bash` missing; proven pre-existing on
+       a stashed tree. The three record guards and direct eslint all pass.
+```
+
+```
 TASK: THE LAPSED GYM'S CONSOLE GOES READ-ONLY — SERVER HALF. DECISIONS :23711.
       The other half of :22215 §5 step 1, split off the sweep card at :22341 §4.
 
@@ -33,7 +108,8 @@ TASK: THE LAPSED GYM'S CONSOLE GOES READ-ONLY — SERVER HALF. DECISIONS :23711.
      pre-existing; fixed only because this card re-aimed that row.
   6. **THE FIXTURE CHANGED BECAUSE THE PRODUCT DID: 84 of 134 tests went red.**
      `makeOrg` now attaches a plan; `{ plan: null }` is an explicit opt-out at
-     fifteen call sites (:23578's stale-fixture lesson).
+     FOURTEEN call sites (:23578's stale-fixture lesson). **Corrected from
+     "fifteen" by T3 round 1's Low-1 — the figure was never counted.**
 
 FILES: packages/shared/src/orgs.ts · apps/api/src/modules/orgs/{repo.ts,
        service.ts} · apps/api/test/{orgs.routes.test.ts,orgs.sweep.test.ts} ·

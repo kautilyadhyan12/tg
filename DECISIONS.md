@@ -23828,9 +23828,15 @@ Re-measured RED.
 
 **FIVE EXISTING MUTANTS DRIFTED ONTO THE RENAMED GATE AND THE WHOLE-TABLE
 PRE-CHECK CAUGHT ALL OF THEM BEFORE A BYTE WAS WRITTEN** — O59, O70, O79, O100,
-O115. Re-aimed at the SAME call sites (:15770), each keeping
-`requireWritablePrivilege` on BOTH sides so the row still mutates the PRIVILEGE
-alone and not the new gate as well, and **each re-measured RED**. This is
+O115. Re-aimed at the SAME call sites (:15770), **FOUR of the five keeping
+`requireWritablePrivilege` on BOTH sides** so the row still mutates the PRIVILEGE
+alone and not the new gate as well, and **each re-measured RED**. ~~each keeping
+`requireWritablePrivilege` on BOTH sides~~ — **corrected by this card's T3 round
+1, Low-2: O115 is the exception and deletes the whole call**, taking the privilege
+check and the new gate together. **Harmless, and CHECKED rather than assumed:**
+its filter is *"refuses everybody who is not this gym's owner"*, whose gym is
+created by `makeOrg` with no `{ plan: null }` and is therefore ON a plan — so the
+gate would have passed anyway and the RED still isolates the privilege. This is
 :23128's standing rule earning itself again: a rename moves anchors nothing in
 the diff mentions.
 
@@ -23853,11 +23859,20 @@ every one went through `joinAsMember`, which CONFIRMS.
 **The fixture that changed is the one that creates the gym, because "a gym
 exists" and "a gym is on a plan" are now one step in the app** — a real gym meets
 an unskippable prompt that starts its trial (:22215 §3.2). `makeOrg` attaches a
-plan; **`{ plan: null }` is an explicit opt-out at fifteen call sites**, written
+plan; **`{ plan: null }` is an explicit opt-out at ~~fifteen~~ FOURTEEN call
+sites** (corrected by this card's T3 round 1, Low-1 — the figure was never
+counted; `grep -c` returns sixteen lines, two of which are prose), written
 at the call site rather than left implicit, because :23578's lesson is a fixture
 that quietly stops meaning what a test thinks it means. `subscribeGym` REPLACES
 rather than adds, which is what keeps its fifteen existing call sites working
-against `subs_one_live_uq`.
+against `subs_one_live_uq`. **That second fifteen is a DIFFERENT number and it is
+CORRECT** — measured at `4320ac5^`, `subscribeGym(` had exactly fifteen call
+sites before this card — and the review took it for a second copy of the first.
+**A correction is a claim (:8707), so the copies were counted rather than
+swept: two were wrong (here and `HANDOFF.md`), one was right (the line above),
+one named by the review does not contain the figure at all
+(`DECISIONS-INDEX.md`), and one cannot be fixed because it is the commit message
+of `4320ac5`.**
 
 **Three tests needed BOTH states and now walk the real journey**: build the
 roster while the plan is live, lapse, then assert — which is the order a gym
@@ -23909,3 +23924,216 @@ that resolves itself rather than a false sentence — the applicant's screen say
 they are waiting, and they are. **The console's own queue is where this should be
 said out loud**, which is the web half's job, and whether the join door itself
 should refuse is a separate question with its own copy. Own line.
+
+## 2026-08-29 — THE READ-ONLY CONSOLE'S SERVER HALF, T3 ROUND 1: ZERO Critical/High, THE PACKET SHIPS — and two of the review's own seven findings were WRONG in a way that would have put a fresh error into the record
+
+Reviews `4320ac5` + `da7e471` (:23711). **Zero Critical/High, so the packet SHIPS**
+on :5348 rule 1. Seven findings, all Low: **six fixed in this round, one deferred
+to the web half with its own `OWED.md` line.** Kd approved the list before a byte
+was written (*"go"*). Logged in `BACKLOG.md`.
+
+**Escape hatch NOT armed, and not by recitation: this is the THIRD consecutive
+round in this subsystem with zero Critical/High** — :23128 (the prompt's server
+half), :23578 (its web half), and this one. The trigger wants Criticals two
+rounds running; this is its opposite.
+
+**Read before correcting a figure a review hands you, before scoping any count
+over the `plans` table, before adding a thirteenth write door to the orgs module,
+and before round-tripping a source file through PowerShell on this machine.**
+
+### 1. THE PART THAT MATTERS MOST: A CORRECTION IS A CLAIM, AND TWO OF THESE WERE WRONG
+
+**:8707's standing lesson is that a correction takes the same evidence as the
+thing it corrects, and V1 does not relax because you are fixing something.** Two
+of the seven were checked before being acted on, and both moved.
+
+**LOW-1 — the wrong count is real, and the review's map of it is not.** The claim
+*"`{ plan: null }` is an explicit opt-out at fifteen call sites"* was never
+counted: a grep for `plan: null` over `orgs.routes.test.ts` returns **sixteen**
+lines, two of which are prose (`:79`, `:256`), so the figure is **FOURTEEN**. The
+review named four places holding it. Measured, there are three, and they are not
+the four:
+
+| Where the review said | What is actually there |
+|---|---|
+| `DECISIONS.md:23856` | **WRONG — fixed.** The `plan: null` count. |
+| `DECISIONS.md:23859` | **RIGHT, and left alone.** A DIFFERENT number: `subscribeGym`'s pre-card call sites. Measured at `4320ac5^`, that grep returns **15**. The review read it as a second copy of the first. |
+| `DECISIONS-INDEX.md:1131` | **Does not contain the figure.** A grep for `fifteen` over that file returns one hit, at `:5154`, about a different session entirely. |
+| the commit message of `4320ac5` | **Confirmed present and NOT fixable** — history. Recorded instead. |
+| *(not named by the review)* | `HANDOFF.md:36` — **WRONG — fixed.** |
+
+**So "correct it in all its copies" (:20587) had to be preceded by finding out
+which copies there are.** Applied as handed over, one TRUE sentence would have
+been replaced by a false one and one edit would have gone to a file that never
+held the claim. **The review was right that the figure was never measured; it had
+not measured it either.**
+
+**LOW-2 — the sentence is false, and the exception is harmless for a reason that
+was checked rather than argued.** :23711 §3 says the five re-aimed mutants each
+kept `requireWritablePrivilege` **on BOTH sides**, so each still mutates the
+privilege alone and not the new gate as well. **O59, O70, O79 and O100 do; O115
+deletes the whole call**, taking the privilege check and the plan gate together.
+**Checked, not assumed:** O115's filter is *"refuses everybody who is not this
+gym's owner"*, whose gym comes from `makeOrg` with no `{ plan: null }` and is
+therefore ON a plan — so the gate would have passed anyway and the RED still
+isolates the privilege. Corrected to "four of the five", naming O115.
+
+### 2. THE THREE CODE FINDINGS, EACH MEASURED RED
+
+**LOW-3 — the stranded-country guard counted plans it does not own, and it is
+:18830's Low-1 for the third time.** `orgs.plans.test.ts`'s permanent guard — the
+one that exists because Canada, the UK and the euro area were creatable and
+untrialable for eleven days until Kd noticed — counted `plans` **unscoped**, while
+every exact ladder 200 lines above it goes through `seededBook`'s `org_` filter
+precisely because nine files seed against one shared database (:13746). This card
+added a **third** foreign row to that table (`zz_orgs_live`, INR). **Latent, not
+live** — India has a real book — but what it opens is the guard going green over a
+genuinely stranded country because somebody else's fixture supplied its currency,
+which is the one defect the guard exists to catch.
+
+Fixed with `AND code LIKE 'org\_%'`, the idiom `db.migration.test.ts:268` already
+uses. **And given its own OBSERVER, which is the half that makes it a fix rather
+than a tidy-up:** a `zz_plans_foreign` CAD row is now inserted by the file's own
+`beforeAll` — **CAD because no supported country maps to it since :22215 §3.5, so
+it can never accidentally un-strand anybody** — and the test asserts CAD never
+reaches the book. **Deterministic rather than dependent on a sibling suite
+running.** Measured with the scoping line deleted:
+`expected [ 'INR', 'CAD', 'USD' ] to not include 'CAD'`. Restored, re-run green.
+
+**LOW-4 — the list of twelve write doors was a claim with no observer, and its
+own comment said so.** `consoleWrites` is hand-maintained and its docstring names
+the class it belongs to (*"a list is a CLAIM, and a route added without a line
+here is a route nobody notices going ungated"*) **without guarding against it** —
+the same shape that has now cost this file **four** recorded findings on its
+sibling auth list before the fifth below.
+
+Fixed by pinning **one number in three places**: `CONSOLE_WRITE_COUNT`, the
+length of the list, and the count of `await requireWritablePrivilege(` call sites
+read out of `service.ts` itself — the `workouts.summary.test.ts:395` pattern, the
+module that declares them rather than `printRoutes()`. **Comments stripped first**
+(`joinGym.render.test.jsx:322`), because `service.ts` already mentions the helper
+in a comment. Measured with one gate call deleted from `removeOrgStaff`:
+`the gate's call sites in service.ts: expected 11 to be 12`. Restored.
+
+**NO SEPARATE "the regex still matches" CONTROL, and that is deliberate.**
+:22145's L-1 needed one because it asserted *at least* five; this asserts against
+a literal, so a pattern that stopped matching gives 0 and fails on its own. A
+second assertion satisfied by the same failure would be a redundant pair in which
+neither half is falsifiable — **:23257 §9's C88 shape, and the reason that mutant
+survived a whole-table sweep.** The honest limit is written into the test: it sees
+`await requireWritablePrivilege(`, so it covers the next door added in the style
+all twelve use today, and not a door gated some other way.
+
+**RULE 4 — ONE GREEN LIAR, AND IT IS THE FIFTH FINDING ON ONE LIST.**
+*"every route requires authentication"* stays GREEN with `app.authenticate`
+deleted from `POST /v1/orgs/applications/:applicationId/nudge` — the last route in
+the module with no line in that list, and the only one the waiting-room card's own
+additions missed. Grep-verified first that no test anywhere in `apps/api/test`
+asserted a 401 on it. Fixed with the assertion; **measured RED: `expected 500 to
+be 401`** — which is :12227's recorded reason this class is Low and not Critical,
+reproduced exactly: every handler calls `requireUserId`, so a missing guard is a
+500, not an open door.
+
+**THE COUNT IS ENUMERATED IN THE TEST RATHER THAN ASSERTED, because I got it
+wrong first and the file is why.** The five are :12227's L-1 · the removal card's
+L-2 · the gym-details card · :23128's Low-5 · this. **The block already contained
+TWO TALLIES THAT DISAGREE** — Low-5's comment calls itself *"the SECOND time"*,
+the gym-details comment four lines below calls itself *"the third"* — and my
+first draft inherited the lower one. Left unedited (R1.1, another card's prose)
+and named here, because **a count nobody re-derives is the same defect as a list
+nobody guards, one level up**: :20587's lesson arriving in the round that is
+already about a miscount.
+
+### 3. LOW-5 AND LOW-6 — THE RECORD AND THE ONE DEFERRAL
+
+**LOW-5:** :23711 §6(b)'s `OWED.md` line named `POST /v1/orgs/join` as the member
+door into a lapsed gym. **There are two.** `POST
+/v1/orgs/applications/:applicationId/nudge` reaches the same dead end from the
+other side — the waiting person chases the gym once a day, it writes
+`member_nudged_at`, and the console's queue shows a "reminded" badge on a row
+nobody can clear. Both are named on the line now, and the open product question
+is widened to cover both doors rather than one.
+
+**LOW-6 IS THE ONLY DEFERRAL, and it has its own `OWED.md` line in this commit.**
+`isRetryable` treats everything but 403 as retryable, so this card's permanent
+**409 `gym_not_on_plan`** arrives on the web with a *"Try again"* that can never
+succeed. Reachable by a manager holding `staff.manage` without `billing.manage`
+on a lapsed gym; the owner meets the unclosable plan prompt instead. **Graded Low
+deliberately and not softened to duck a round: the sentence shown is the server's
+own and is TRUE**, so it is not :5807's class — what is false is the BUTTON's
+implied promise — and `409 trial_already_used` already sat in that bucket before
+this card. **Deferred because the file belongs to the web half**, the very next
+card, which disables these controls anyway; fixing it here would put a web diff
+in a server card's fix round (R1.1) and would owe the web suite and a smoke. The
+fix and its required positive control — the same failure OFFLINE must still offer
+the button, which is what :15010's own retryable pair carries — are written onto
+the line so the next card does not re-derive them.
+
+### 4. MY OWN INSTRUMENT FAILURE, AND IT WILL RECUR ON THIS MACHINE
+
+**Measuring Low-3's fix, I applied the mutant with PowerShell
+(`Get-Content -Raw` … `Set-Content`) and it CORRUPTED THE FILE'S UTF-8** — every
+em dash, `§` and `₹` in a 723-line file became mojibake, because Windows
+PowerShell 5.1 reads with the ANSI codepage and writes UTF-8. `Set-Content
+-Encoding utf8` also adds a BOM. The restore hash therefore did not match, **which
+is the guard working: the mismatch is what surfaced it, not a reading of the
+diff.** Recovered with `git checkout --`, the edits re-applied through the editing
+tool, and a mojibake scan then run over every changed file — 0 hits in all five.
+
+**STANDING: on this machine, mutate a source file through the editing tool, never
+through a PowerShell text round-trip.** The two later measurements in this round
+were done that way and both restored to an empty `git status`. Same family as
+:13336 (I broke the instrument that proves the app) and :15770 (a killed sweep
+leaving a file behind) — **a harness that edits files is a hazard in whatever
+language it is written in, and the restore check is what makes it survivable.**
+
+### 5. PROVE — every figure naming what it ran against
+
+**ALL LOCAL** (`localhost:5433`, `test:local` — :13659):
+
+- **`orgs.plans` + `orgs.routes` in ONE invocation: 154/154** (12 + 142), **on
+  the FINAL bytes** — and 154/154 twice more before the comment corrections, so
+  three passes in all. One invocation because they share the `plans` table and
+  this round's Low-3 is about exactly that; **repeated because a race that passes
+  once is not evidence** (:18830, :23128). Only the final-bytes run is quoted as
+  the result (:5199).
+- **THE WHOLE api SUITE, LOCAL: 651 passed / 654** — and the three failures are
+  `catalog.seed.test.ts`, **the documented shared-database flake (:13746), proven
+  rather than assumed: run alone it is 7/7, and grep confirms the file never
+  reads the `plans` table this round writes a fixture row into.** 654 is 653 (:23711)
+  plus this round's one new test. **NOT quoted as green.** Note `orgs.unit` now
+  PASSES inside the full run — `da7e471` fixed it — so :23711's "651/653 with two
+  pre-existing failures" and this "651/654 with three" are different files
+  failing, not the same ones.
+- `orgs.routes` is **142** (+1 on :23711's 141): one new test. Low-1, Low-2 and
+  Low-5 touch no code; the nudge assertion and the list-length pin were added to
+  tests that already existed.
+- `tsc --noEmit` on api **exit 0, and PROVEN REAL by planting a type error**
+  (TS2322 + TS2339, restored, re-run clean).
+- `eslint --max-warnings=0` **exit 0** on both changed test files.
+- **THREE MEASURED REDS, each restored to an empty `git status` under
+  `apps/api/src`:** the scoping deleted →
+  `expected [ 'INR', 'CAD', 'USD' ] to not include 'CAD'` · one gate call deleted
+  → `expected 11 to be 12` · `app.authenticate` deleted from the nudge route →
+  `expected 500 to be 401`.
+- **NO MUTATION SWEEP, and that is a statement rather than an omission:** this
+  round changes **no `src` file at all** — the six fixes are tests and documents —
+  so there is no new call site for a mutant to be a claim about (:15770). The
+  three reds above are the observers, each measured against the real code.
+- **`orgs.unit` is GREEN, 22/22 — and a draft of this entry said it was still
+  RED, which is worth leaving on the record.** :23711 §6(a) found it red and
+  deferred it; `da7e471` — the SECOND commit under review here — fixed it on Kd's
+  say-so and ticked its 🔴 `OWED.md` line in the same commit. **I carried §6(a)'s
+  sentence forward from the card I was reviewing instead of reading the state
+  after the commit that closed it** — V4, on the very finding the reviewer had
+  already told me was fixed. Caught by the full-suite run rather than by
+  re-reading, which is the only reason it is a corrected sentence and not a
+  shipped one.
+
+**NO SMOKE — checked, not asserted** (:22921 §7 is the recorded cost of asserting
+it): this round draws nothing, changes no sentence any screen renders, and touches
+no `apps/web` file. The `OWED.md` deferral above is the one thing in it a user
+could ever see, and it is deferred precisely to the card that owns that screen.
+
+**THE PACKET SHIPS.** No migration, no dependency, no `src` change. Nothing new
+ticks: :23711's own line still waits on the screens, which are the next card.

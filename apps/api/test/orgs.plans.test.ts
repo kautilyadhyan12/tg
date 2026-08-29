@@ -127,6 +127,17 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
    *  reason. */
   const FRACTIONAL_PLAN = "zz_plans_frac";
 
+  /** A FOREIGN FIXTURE PLAN THAT MUST NEVER COUNT AS PRICES — added by T3 round
+   *  1's Low-3 on the read-only card, purely so the stranded-country guard below
+   *  has something to be scoped AGAINST.
+   *
+   *  **CAD is chosen because no supported country maps to it.** Kd's ruling
+   *  (:22215 §3.5) put Canada, the UK and the euro area on US dollars, so this
+   *  row cannot accidentally un-strand anybody — it can only be seen by a guard
+   *  that has stopped scoping to the seeded book, which is exactly the failure it
+   *  is here to detect. `trial_days = 0` for `FRACTIONAL_PLAN`'s reason. */
+  const FOREIGN_PLAN = "zz_plans_foreign";
+
   beforeAll(async () => {
     await cleanup();
     await sql`
@@ -135,12 +146,18 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       VALUES (${FRACTIONAL_PLAN}, 'org', ${"plan." + FRACTIONAL_PLAN}, 3499, 'USD', 'month',
               42, 0, 10, '{}'::jsonb, '{}'::jsonb)
       ON CONFLICT (code) DO UPDATE SET active = true, price_minor = 3499`;
+    await sql`
+      INSERT INTO plans (code, audience, name_key, price_minor, currency, interval,
+                         seat_cap, trial_days, rank, entitlements, member_entitlements)
+      VALUES (${FOREIGN_PLAN}, 'org', ${"plan." + FOREIGN_PLAN}, 3500, 'CAD', 'month',
+              42, 0, 10, '{}'::jsonb, '{}'::jsonb)
+      ON CONFLICT (code) DO UPDATE SET active = true`;
     app = await buildApp(loadConfig(baseEnv));
   }, HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanup();
-    await sql`DELETE FROM plans WHERE code = ${FRACTIONAL_PLAN}`;
+    await sql`DELETE FROM plans WHERE code IN (${FRACTIONAL_PLAN}, ${FOREIGN_PLAN})`;
     await app?.close();
     await sql.end();
   }, HOOK_TIMEOUT_MS);
@@ -452,7 +469,21 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
    *  This walks the SUPPORTED LIST rather than the countries anybody remembered,
    *  so the next country added without prices fails here instead of in front of
    *  its owner. It reads the table directly: the subject is the BOOK, not a
-   *  route, and there is no gym to authenticate as. */
+   *  route, and there is no gym to authenticate as.
+   *
+   *  **SCOPED TO THE SEEDED BOOK — T3 round 1's Low-3 on the read-only card, and
+   *  it was latent rather than live.** The count was unscoped while every exact
+   *  ladder 200 lines above it goes through `seededBook`'s `org_` filter, for the
+   *  reason :18830's Low-1 records: nine files seed against one shared database
+   *  and this suite is one of two that assert global shape. A sibling's fixture
+   *  plan in the right currency would have answered for the real book — and the
+   *  read-only card added a third such row (`zz_orgs_live`, INR). Nothing is
+   *  masked TODAY, because India has a real book; what the scoping removes is the
+   *  day a supported country maps to a currency the seed lacks and somebody
+   *  else's `zz_` row makes this guard go green over it. **That is precisely the
+   *  defect this guard exists to catch, so it must not be reachable through the
+   *  guard itself.** The `org_` prefix being load-bearing is :18830's stated
+   *  consequence, and this is a third reader of it. */
   it(
     "no supported country can be created into an empty price book",
     async () => {
@@ -460,6 +491,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
         SELECT currency, count(*)::int AS n
         FROM plans
         WHERE audience = 'org' AND active = true AND interval = 'month'
+          AND code LIKE 'org\_%'
         GROUP BY currency`;
       const byCurrency = new Map(rows.map((r) => [r.currency, r.n]));
 
@@ -476,6 +508,14 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       // real one and the lookup can actually fail. Both halves checked.
       expect(SUPPORTED_COUNTRIES.length).toBeGreaterThan(20);
       expect(currencyForCountry("ZZ")).toBeNull();
+
+      // AND THE SCOPING'S OWN OBSERVER, which is the half the finding was about.
+      // `FOREIGN_PLAN` is an active monthly org plan in CAD, inserted by this
+      // file's own `beforeAll`, so this is deterministic rather than dependent on
+      // a sibling suite happening to be running. MEASURED, not assumed: with the
+      // `code LIKE` line above deleted it fails with
+      // `expected [ 'INR', 'CAD', 'USD' ] to not include 'CAD'`.
+      expect([...byCurrency.keys()], "a fixture currency reached the book").not.toContain("CAD");
     },
     TEST_TIMEOUT_MS,
   );
