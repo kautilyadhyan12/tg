@@ -25322,3 +25322,127 @@ the harnesses do not point at. Both `OWED.md` lines say so and name each other.
   being stopped deliberately, because this card was about to change files it
   tests and only a final-bytes run is quotable (:5199). :12878's own precedent
   for a control that aborts once and passes on the re-run.
+
+## 2026-08-30 — THE HELD-APPLICATION SMOKE PASSES 13/13 — and the run found that its own key step proved LESS than it claimed, because two different guards were holding the same row
+
+**Read before quoting a sweep result as evidence that ONE of its conditions
+works, before writing a literal `heldNoPlan`/`expired` count into any smoke
+sheet, before reading "both controls are greyed out" as observed, and before
+ticking `OWED.md`'s held-application line — this run does NOT tick it.**
+
+Run 2026-08-30 by Kd at the browser on `1b1de15` (:25092), every `src` file
+byte-identical to HEAD; `git status` carried only the unrelated ` M CLAUDE.md`
+that has been out since :24893. `RUNBOOK/smoke-held-application.md`, 13 steps,
+**all 13 passed.** **The `OWED.md` line does NOT tick: T3 is unrun, and a passing
+smoke is not a review (:14147, :14840).**
+
+### 1. THE FINDING, AND IT IS ABOUT EVIDENCE RATHER THAN ABOUT THE CARD
+
+**Step 9 — the step the whole sheet builds to — did not prove what it said it
+proved, and the sheet's own ✅ invited the wrong reading.** It ran one sweep at
+`--now=2026-10-05` and offered `expired: 0` as proof that the expiry now holds
+for a gym with no live plan.
+
+**C's request survived that run for TWO independent reasons.** The gym has no
+live plan — this card's rule — **and** the very same run had just sent that gym
+its FIRST reminder (`remindedFirst: 3`), while the expiry refuses to delete
+anything until the gym has been on notice for `EXPIRY_NOTICE_DAYS` (2). So the
+row was held by the notice guard as well, and **would have been held there
+WITHOUT this card at all.** Reading that `expired: 0` as evidence of the plan
+gate is reading a result the other guard produced.
+
+**FIXED BY A SECOND RUN, five days on, and it is now in the sheet**
+(`--now=2026-10-10`): `remindedFirst` falls to **0** — the notice excuse is
+visibly spent — the reminder is five days old, the deadline is nearly a month
+past, and **the gym's lapse is the only thing left between that request and
+deletion.** `expired: 0`, `heldNoPlan: 3`.
+
+**THE GENERALISATION IS THE PART TO KEEP: a sweep result is the output of every
+condition in its WHERE at once, so a single run can never attribute a survival
+to one of them.** To use a sweep as evidence for a specific guard, the run must
+be arranged so that guard is the ONLY one that could have produced the outcome —
+otherwise the step passes on a database where the new code was never reached.
+This is :22782 §5's green liar in a different instrument: there a test's fixture
+gave a mutation no observable subject, here a smoke step's fixture gave a rule
+no observable subject. **The tell was available in the sheet's own output line:
+`remindedFirst: 3` printed directly beside the `expired: 0` being quoted.**
+
+### 2. A LITERAL COUNT IN A SMOKE SHEET, FOR THE THIRD TIME
+
+Step 9's ✅ promised **`heldNoPlan: 1`**. It read **3** — this local database
+already held two other people waiting at two other lapsed gyms (`gym5 gym`,
+`gymbest`), both past their deadline, both correctly held. **Caught before Kd
+reached the step, by reading the rows at setup rather than after a false
+failure** (:15927's five sheet defects, same method).
+
+**This is the THIRD recurrence of one shape** — :23535 (`expired: 2`, not the
+sheet's 1), :24559 Low-5 and :24893 §2 (fixed for the trial sweep's `expired:`,
+in a sheet written the day before this one). **A count over a SHARED database is
+never a constant, and every sheet that has ever written one has been wrong.**
+Corrected to "one for each person waiting at a gym with no plan — C is one of
+them", with the reason on the row so nobody restores a number.
+
+**The two strangers are not noise; they are the better fixture.** Both would have
+died before this card and both are alive, which is the rule holding on rows this
+run did not create.
+
+### 3. "BOTH GREYED OUT" IS SATISFIED BY "BOTH MISSING" — :24893 §1's ONE QUESTION, EARNING ITSELF
+
+Step 11's ✅ asks that **Confirm** and **Not this person** be greyed out on the
+manager's Members screen. **A row that is not rendered at all satisfies that
+sentence to a fair reader**, and means something entirely different. Kd's report
+was "all passed men"; asked which it was, with both branches named and neither
+treated as the bad answer, he confirmed **C listed as waiting with both controls
+present and greyed**. **:15927's struck step 7 is this exact shape and cost a
+live bug** ("gone or refused", where the defect satisfied "refused"); this is
+again the cheap version, one question.
+
+### 4. WHAT THIS PASS DOES NOT COVER
+
+Unchanged from the sheet's own list, repeated because a tick invites over-reading
+(:5200, :14840): **reviving a held request when the gym pays** (nothing in the
+product can put a gym back on a plan — the payment card's line) · **the hold
+letting go**, pinned by `orgs.sweep.test.ts` and by no browser · **a gym that
+never subscribed at all** (every gym here trials first) · **the owner's own
+view**, who meets the unskippable prompt (Card A's sheet, step 16).
+
+### Round log
+
+**Setup, mine.** Docker Desktop started by the chat; `postgres`/`redis` already
+running. **Pre-flight on the local database BEFORE Kd touched anything** —
+:15927/:20222's trap, which did not fire: **15 of 15 migrations applied against
+the journal's 15 · 47 public tables · all five USD org plans present**
+(`org_b1_us_m` … `org_b5_us_m`, caps 300–2100). API on `localhost:3000` against
+`postgres://aihg:aihg@localhost:5433/aihg` — never `--env-file=.env`, S3's named
+wrong repair (:22782 §4) — health 200 from a process started after the last
+source change; `vite` on 5173.
+
+**Steps corroborated from rows rather than from the report** (:20222): gym
+`account`, `US`/`USD`, subscription `trialing` on `org_b1_us_m` (the $35/300-seat
+band :21157 specifies) ending 2026-09-29 · B a confirmed member AND a `manager`
+carrying the five-privilege manager set · C `pending`, expires 2026-09-13 · after
+step 8, `member_nudged_at` stamped 2026-08-30T15:29:00.854Z · step 8b created
+nothing, exactly as `JoinGymPanel` says it should. Steps 6, 7, 8b, 10, 11 and 12
+are screen-only; 11 was confirmed by the question in §3.
+
+**`expired: 1` PREDICTED FROM THE ROWS BEFORE THE COMMAND RAN** (:23535's
+method, :24893 §2's): three live gym plans existed — `account` (trialing, real
+end date) → expires; `P24 Gym` (trialing, `trial_ends_at` NULL) → deliberately
+unswept (:22782's NULL guarantee); `P25b Gym` (`active`, not `trialing`) → out of
+the statement's reach. Printed `expired: 1`; both others verified unchanged
+afterwards.
+
+**Step 9 predicted the same way and matched exactly**: 3 pending applications,
+all due at the as-of date, none on a plan, none previously notified ⇒
+`remindedFirst: 3, remindedAgain: 0, expired: 0, heldForNotice: 0,
+heldNoPlan: 3`. Verbatim, run 1:
+`{"remindedFirst":3,"remindedAgain":0,"expired":0,"heldForNotice":0,"heldNoPlan":3,"asOf":"2026-10-05T10:00:00.000Z","elapsedMs":95,"expiryNoticeDays":2,"reminderFirstDays":2,"reminderRepeatDays":7}`
+Run 2 (§1's fix):
+`{"remindedFirst":0,"remindedAgain":0,"expired":0,"heldForNotice":0,"heldNoPlan":3,"asOf":"2026-10-10T10:00:00.000Z","elapsedMs":51,...}`
+
+**Final state read back**: C still `pending` on a gym whose subscription is
+`expired`, deadline nearly a month past, `gym_notified_at` 2026-10-05. Whole
+table: 3 confirmed, 3 pending, **nothing expired anywhere**.
+
+**No suite was run and none is owed** — no `src`, test, harness or migration file
+is touched by this commit.

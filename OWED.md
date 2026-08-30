@@ -5208,9 +5208,24 @@ file and is stated so nobody reads these as lower priority than they are.
       **The console's queue sentence gained its second half in the same commit**,
       exactly as :24141 §3d required — the two tests that asserted its absence
       flipped with the code.
-      **This line ticks when `RUNBOOK/smoke-held-application.md` passes**, which
-      is written and UNRUN; T3 is also unrun. Nothing ticks that the browser has
-      not seen.
+      ~~**This line ticks when `RUNBOOK/smoke-held-application.md` passes**, which
+      is written and UNRUN; T3 is also unrun.~~ **THE SMOKE PASSED 13/13 on
+      2026-08-30 (DECISIONS :25326), run by Kd on `1b1de15`. THE LINE STILL DOES
+      NOT TICK: T3 IS UNRUN, and a passing smoke is not a review** (:14147,
+      :14840). That is the only gate left on this card.
+      **THE RUN FOUND TWO DEFECTS IN THE SHEET, BOTH FIXED IN THE SAME COMMIT,
+      and the first is worth more than the smoke.** (1) **Step 9 proved less than
+      it claimed**: it offered one sweep's `expired: 0` as evidence of the new
+      plan gate, while the SAME run had just sent that gym its first reminder and
+      the expiry refuses to delete inside `EXPIRY_NOTICE_DAYS` — **so the request
+      would have survived without this card at all.** A second run five days on
+      now isolates the plan gate. **Standing: a sweep result is the output of
+      every condition in its WHERE at once, so a single run can never attribute a
+      survival to one of them.** (2) Step 9's literal **`heldNoPlan: 1`** read
+      **3** — two older waiting people on two other lapsed gyms, correctly held —
+      **the third recurrence** of a literal count over a shared database (:23535,
+      :24559 Low-5, :24893 §2). Nothing ticks that the browser has not seen, and
+      nothing ticks that a review has not seen either.
 - [x] 🟡 **THE CONSOLE OFFERS "TRY AGAIN" ON A REFUSAL THAT TRYING AGAIN CAN
       NEVER FIX — deferred 2026-08-29 from this card's T3 round 1 (Low-6) to the
       READ-ONLY CONSOLE'S WEB HALF, which is the next card and owns this file.**

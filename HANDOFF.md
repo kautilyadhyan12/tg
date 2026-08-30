@@ -1,6 +1,102 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE HELD-APPLICATION SMOKE PASSES 13/13 — and the run found that its own
+      key step proved LESS than it claimed. DECISIONS :25326. Run by Kd at the
+      browser, 2026-08-30, on `1b1de15`. No src, no test, no migration touched.
+
+  1. **THE CARD'S LAST GATE IS NOT CLOSED — T3 IS STILL UNRUN.** The smoke was
+     one of two gates; `OWED.md`'s line explicitly does NOT tick on a smoke
+     alone (:14147, :14840). The T3 prompt is at the bottom of this block.
+  2. **THE FINDING IS ABOUT EVIDENCE, NOT THE CARD.** Step 9 offered ONE sweep's
+     `expired: 0` as proof the expiry now holds for a gym with no live plan.
+     **C's row survived that run for TWO reasons**: no live plan (this card) AND
+     the same run having just sent that gym its FIRST reminder, inside
+     `EXPIRY_NOTICE_DAYS` (2). **It would have survived without this card.**
+     Fixed with a SECOND run five days on (`remindedFirst` 3 → 0), where the
+     gym's lapse is the only thing left. **The tell printed beside the number
+     being quoted.**
+  3. **GENERALISATION: a sweep result is the output of every condition in its
+     WHERE at once, so one run can never attribute a survival to one of them.**
+     :22782 §5's green liar in a different instrument.
+  4. **A LITERAL COUNT IN A SHEET, THIRD RECURRENCE.** Step 9 promised
+     `heldNoPlan: 1`; it read **3** — two older waiting people on two other
+     lapsed gyms, both correctly held, both better fixture than C alone.
+     :23535, :24559 Low-5, :24893 §2. Caught at setup, before Kd reached it.
+  5. **"BOTH GREYED OUT" IS SATISFIED BY "BOTH MISSING".** Step 11 confirmed by
+     one question with both branches named — C listed, both controls present and
+     greyed. :24893 §1's method; :15927's struck step 7 is the version that cost
+     a live bug.
+  6. **THE :15927/:20222 MIGRATION TRAP DID NOT FIRE** — 15/15 applied, 47
+     tables, five USD gym plans, all checked before Kd touched anything.
+
+PROVE: **13/13 steps passed** · pre-flight 15 of 15 migrations vs journal's 15,
+       47 public tables, 5 USD org plans · rows corroborating steps 1-4 and 8
+       (gym `account` US/USD trialing on `org_b1_us_m` ending 2026-09-29; B a
+       confirmed member AND `manager` with the five-privilege set; C `pending`
+       expiring 2026-09-13; `member_nudged_at` stamped; step 8b created nothing)
+       · **`expired: 1` PREDICTED FROM THE ROWS BEFORE STEP 5 RAN** and printed,
+       `P24 Gym` (NULL end date) and `P25b Gym` (`active`) both untouched ·
+       **step 9 predicted and matched exactly: `remindedFirst:3, expired:0,
+       heldForNotice:0, heldNoPlan:3`**, second run `remindedFirst:0, expired:0,
+       heldNoPlan:3` · final rows: C still `pending` on an `expired` gym,
+       deadline nearly a month past; whole table 3 confirmed / 3 pending,
+       **nothing expired anywhere** · triggers rebuilt 692 from 192 of 330,
+       --check clean · check-decisions-index 240 pointers, 899 headings.
+       **No suite run and none owed — no src or test file is touched.**
+
+FILES: RUNBOOK/smoke-held-application.md · DECISIONS.md · DECISIONS-INDEX.md ·
+       DECISIONS-TRIGGERS.md (generated) · OWED.md · HANDOFF.md.
+
+OPEN:  **T3 ON `1b1de15` IS THE ONLY GATE LEFT, and it must run in a FRESH
+       CHAT — a subagent is not a T3.** Prompt below.
+       `CLAUDE.md`'s pre-existing uncommitted edit is still out, as before.
+       Carried unchanged from :25092 and NOT touched here: the
+       `check-harnesses.mjs` anchor-verification guard, the five multi-match
+       anchors, `JoinGymPanel`'s stale file header, the 14-day archive, and
+       reviving a held request when the gym pays (the payment card).
+
+T3 PROMPT — paste into a FRESH chat, with the diff of `1b1de15`:
+
+You are reviewing, not fixing. Audit this diff strictly against CLAUDE.md Part II
+R0-R11 and DECISIONS :25092, :24141 §1, :23711. The diff is commit `1b1de15` on
+branch `web-repoint` (`git show 1b1de15`). Output only: (1) violations as
+rule# · file:line · one-line fix; (2) a security pass — authn/authz/tenancy,
+input parsing, idempotency, secrets/log leaks, SQL safety; (3) anything that
+would fail the phase's Done gate. No praise, no restating the diff.
+
+TAG EVERY FINDING **Critical/High** or **Low** (CLAUDE.md Part I §2.5,
+DECISIONS :5348, and :5807's amendment — what a user can SEE and is FALSE is
+Critical/High). Justify a Critical/High tag by naming the concrete failure.
+Zero Critical/High ⇒ the packet SHIPS. A Low finding buys no further round — but
+it is STILL FIXED and logged in BACKLOG.md; report it at full severity, never
+soften it to duck a round.
+
+Also report: any existing test that stays GREEN when the thing it claims to check
+is broken (rule 4 — list them, do not fix them), and whether each Critical/High
+fix would carry a test that fails without it (rule 3). If Criticals appear in the
+SAME subsystem two rounds running, say so and STOP — that is Kd's redesign
+trigger, not a cue for another patch.
+
+SPECIFIC THINGS THIS CARD EARNED A LOOK AT, none of them leading questions:
+  - `gymOnPlan` in `sweep.ts` is a FOURTH reader of §4.1's three live statuses
+    (`trialing`,`active`,`past_due`), held to the other three by a TEST and not
+    by shared SQL (R3.8). Is that test actually driving one gym across the
+    transition, or asserting a fixture?
+  - The CHASE is deliberately NOT gated on the plan (:25092 §3). Confirm that
+    gating it would build a second hidden hold, and that O165 pins it.
+  - `orgCanConfirm` is three-state (`.default(null)`) and ONLY an explicit
+    `false` means no. Check every reader honours that, including an older API.
+  - The applicant response must carry NO status/plan/subscription vocabulary —
+    an applicant is not staff of that gym (:23711 §2(a), :25092 §1d).
+  - `heldNoPlan` vs `heldForNotice`: two numbers out of ONE pass. Can they drift?
+  - **The smoke found that one sweep run cannot attribute a survival to one
+    condition (:25326 §1). Does any TEST in this diff make the same mistake —
+    asserting a row survived, in a fixture where a second guard would also have
+    held it?** That is the highest-value question on this list.
+```
+
+```
 TASK: A PERSON WAITING TO JOIN A LAPSED GYM IS TOLD THE TRUTH AND THEIR REQUEST
       STOPS DYING — Card B of Kd's 2026-08-29 split (:24141 §1), built after
       Card A shipped and smoked. DECISIONS :25092.

@@ -906,6 +906,26 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:25326** — 2026-08-30 — **THE HELD-APPLICATION SMOKE PASSES 13/13 — and its
+  key step proved LESS than it claimed, because TWO guards were holding the same
+  row.** Run by Kd on `1b1de15`, `src` byte-identical to HEAD. **Read before
+  quoting a sweep result as evidence that ONE of its conditions works, before
+  writing a literal `heldNoPlan`/`expired` count into any smoke sheet, before
+  reading "both controls are greyed out" as observed, and before ticking
+  `OWED.md`'s held-application line — this run does NOT tick it, T3 is unrun.**
+  Step 9's single sweep offered `expired: 0` as proof of the new plan gate, but
+  the same run had just sent that gym its FIRST reminder and the expiry refuses
+  to delete inside `EXPIRY_NOTICE_DAYS` (2) — **so the row would have survived
+  WITHOUT this card, and the tell printed on the same line (`remindedFirst: 3`).**
+  Fixed by a SECOND run five days on, where `remindedFirst` falls to 0 and the
+  gym's lapse is the only thing left. **Generalisation: a sweep result is the
+  output of every condition in its WHERE at once, so one run can never attribute
+  a survival to one of them.** Also: the sheet's literal `heldNoPlan: 1` read
+  **3** on a shared database — **the THIRD recurrence** of :23535 / :24559 Low-5 /
+  :24893 §2 — and step 11's *"both greyed out"* was confirmed by one question
+  because it is equally satisfied by *"both missing"* (:24893 §1, :15927's struck
+  step 7).
+
 - **:25092** — 2026-08-30 — **A PERSON WAITING TO JOIN A LAPSED GYM IS TOLD THE
   TRUTH AND THEIR REQUEST STOPS DYING** — Card B of Kd's 2026-08-29 split
   (:24141 §1, *"hold their request and tell them the truth"*). The expiry holds

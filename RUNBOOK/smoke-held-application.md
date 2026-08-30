@@ -20,7 +20,12 @@ over in one block. **The run is three blocks: steps 1–4, stop and say so · st
 did not say it once read as a refusal when the runner asked for everything at
 once (:24893 §5).
 
-**Status: NOT YET RUN.**
+**Status: PASSED 13/13, 2026-08-30, run by Kd on `1b1de15` with every `src` file
+byte-identical to HEAD.** DECISIONS :25326. **Two defects in THIS SHEET were found
+by running it and are fixed above** — step 9's `heldNoPlan: 1` was a literal on a
+shared database (it read **3**), and step 9's single run proved less than it
+claimed. **`OWED.md`'s line does NOT tick on this: T3 is still unrun, and a
+passing smoke is not a review** (:14147).
 
 ---
 
@@ -85,7 +90,7 @@ you need brand-new accounts anyway.
 | 7 | Still as C, read the whole card once more. | **Nothing on it mentions a plan, a subscription, money, or the gym having lapsed** — C is not staff of that gym and must not learn its billing state. And nothing promises C will be let in later. |
 | 8 | Still as C: press **Remind them**. | It still works. The confirmation reads **"The gym can see you're still waiting. You can do this again …"**. This is deliberate — it is the one thing C can still do. |
 | 8b | Still as C, type **`localhost:5173/org/join`** straight into the address bar — **not** Settings → Gym. Type the same join code again and press **Ask to join**. | **This is the OTHER screen, and it is the one most people actually arrive on:** the QR code and the poster both land on this address, and it draws the code box **and nothing else** — the card from step 6 is not on this page, so anything wrong here is wrong with nothing to correct it. It says **"You've asked to join &lt;gym&gt;."** and then the same held sentence: **"&lt;gym&gt; can't take new members right now. Your request is being held — it won't run out while that's the case."** It must **NOT** say *"ask them now — it takes one tap"*, and must **NOT** say *"Nothing is on hold"*. |
-| 9 | **(The chat runs this, not you.)** Jump twenty days past C's deadline and sweep the waiting room — the command is under this table. | It prints `sweep finished` with **`expired: 0`** and **`heldNoPlan: 1`**. Before this card that line would have read `expired: 1` and C's request would be gone. |
+| 9 | **(The chat runs this, not you.)** Jump twenty days past C's deadline and sweep the waiting room — **TWICE**, and the second run is the one that proves the card. Both commands are under this table. | Each prints `sweep finished` with **`expired: 0`**, and **`heldNoPlan:` one for each person waiting at a gym with no plan — C is one of them.** ⚠️ **It is NOT necessarily 1**: this database is shared between smokes and older runs leave their own waiting people behind, each on a gym that has also lapsed. A literal `1` fails for an innocent reason the moment a second one exists (:24559 Low-5, :24893 §2). |
 | 10 | Back in **C's window**, press **F5**. | **C is still waiting.** The same held card from step 6 — not "your request to &lt;gym&gt; expired before anyone confirmed it". This is the card's whole point: twenty days past the deadline and the request is still alive. |
 | 11 | As **account B** (the manager), open the console → **Members**, and look at the **Waiting to join** section. | It says how many are waiting, then **"Nobody can be let in until this gym is on a plan. The people waiting keep their place."** — the second sentence is new in this card. **Confirm** and **Not this person** are both greyed out. |
 | 12 | Still as B, read that section once more. | It does **not** say the gym will confirm these people once it is back, or anything like it. Nothing in the product can put a gym back on a plan yet, so that would be a promise with no code behind it. |
@@ -97,12 +102,31 @@ from whenever you run it**:
 cd apps/api && DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg' node --import tsx tools/trial-sweep.ts --now=2026-10-05T10:00:00Z
 ```
 
-**The command for step 9**, same idea, with a date about **35 days from whenever
+**The commands for step 9**, same idea, with a date about **35 days from whenever
 you run it** — it must be past C's 14-day deadline:
 
 ```
 cd apps/api && DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg' node --import tsx tools/orgs-sweep.ts --now=2026-10-05T10:00:00Z
 ```
+
+**THEN RUN IT AGAIN, five days further on. THE SECOND RUN IS THE ONE THAT PROVES
+THE CARD, and the first one on its own does not** — found by running it, 2026-08-30:
+
+```
+cd apps/api && DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg' node --import tsx tools/orgs-sweep.ts --now=2026-10-10T10:00:00Z
+```
+
+**Why, in one paragraph, because a step that proves less than it claims is worse
+than no step.** C's request survives the FIRST run for TWO independent reasons,
+not one. The gym has no live plan — this card's rule — **and** the same run has
+just sent that gym its first reminder, and the expiry refuses to delete anything
+until the gym has been on notice for `EXPIRY_NOTICE_DAYS` (2). So the first run
+would have held C's request even WITHOUT this card, and reading `expired: 0`
+there as proof of the plan gate is reading a result the notice guard produced.
+The second run, past that window, removes the other reason: the reminder is five
+days old, the deadline is nearly a month past, and **the gym's lapse is the only
+thing left standing between that request and deletion.** `remindedFirst` drops to
+`0` on the second run, which is how you can see the notice excuse is spent.
 
 *(The database is named on both lines on purpose: it is the one place where the
 database the run will change is written down where it can be read before pressing
