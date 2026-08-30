@@ -2682,3 +2682,31 @@ never been run, and the fifth is a "grep-verified" sentence a grep disproves.
       could not read before it ran, which is the readable half of :22782's rule
       that a command in a smoke sheet is code that will be run. The command is
       now printed under the table.
+
+## THE HELD APPLICATION (Card B) — T3 ROUND 1 (2026-08-30, DECISIONS :25450)
+
+Round 1 found **ONE Critical/High** (the applicant countdown left on the lapsed
+gym's own queue — fixed in the round, not logged here, because a Critical/High
+appears in neither file: it is fixed or it holds the packet) and **one Low**.
+
+- [ ] ⚪ **LOW-1 · THE TWO HELD NUMBERS CAN DISAGREE WITH WHAT THE SWEEP
+      ACTUALLY DID.** `sweep.ts` counts `due` / `due_on_plan` at :255 outside any
+      transaction, and the expiry re-evaluates `${gymOnPlan}` at :334 inside its
+      own. A subscription committing between the two statements makes a row that
+      was counted into `heldNoPlan` actually expire — so `heldForNotice`
+      (`dueOnPlan - expired`) can go **negative**, and `heldNoPlan` reports a row
+      that is gone. **Log-only; no user sees it and no row is harmed.**
+      **UNREACHABLE TODAY AND THAT IS MEASURED, not assumed**: there is exactly
+      one `INSERT INTO subscriptions` (the trial, refused to any owner who has
+      ever had one) and one `UPDATE` (the expiry), so nothing can put a lapsed
+      gym back on a plan mid-sweep. **IT ARRIVES WITH THE PAYMENT CARD**, which
+      is the commit that makes it reachable.
+      **DEFERRED RATHER THAN FIXED, deliberately, and it has its own `OWED.md`
+      line** (the deferral rule) **named on the payment card's line so it cannot
+      be lost.** The honest fix is to take BOTH readings inside the expiry's
+      transaction — not a clamp, which would hide the drift rather than remove
+      it — and that changes transaction boundaries in a server file this round's
+      Critical/High does not touch. **Kd approved a fix round whose stated scope
+      was "log the minor finding"** (2026-08-30), and widening an approved plan
+      mid-round is the drift R1.1/S4 exist to stop. Reported to him in the round
+      summary so he can overrule.

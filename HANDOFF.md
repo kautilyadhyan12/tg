@@ -1,6 +1,68 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE HELD APPLICATION, T3 ROUND 1 + FIX ROUND. ONE Critical/High — THE
+      PACKET DOES NOT SHIP THIS ROUND. DECISIONS :25450. Reviews `1b1de15`
+      (:25092) in a fresh chat; fixes committed here.
+
+  1. **C/H-1 — THE THIRD APPLICANT-DEADLINE SURFACE.** `ApplicantRow` rendered
+     `expiresInLabel` regardless of `readOnly`, so a lapsed gym's queue said
+     "Expires in 11 days" / "Due to expire" ONE LINE UNDER the sentence this
+     same card added — "The people waiting keep their place." :5807's class.
+     `readOnly` was already on the component driving both greyed taps, and it
+     is `consoleReadOnly` = `!gymHasLivePlan`, the same rule the expiry reads.
+  2. **THE CLAIM IS THE FINDING, NOT THE BUG.** :25092 §1(c) said the false
+     sentences are "replaced wherever they appear" — a stated limit nobody
+     sourced, **which is the exact lesson :25092 §2 recorded about ITSELF** one
+     component earlier. `grep -rn expiresInLabel` = three call sites; one fixed.
+     **Copy that changes because a STATE changed is found by enumerating the
+     surfaces, never by recalling them.**
+  3. **THE SMOKE COULD NOT HAVE CAUGHT IT.** Step 11's ✅ named the sentence and
+     the two greyed buttons and never the line between them — while step 6 asks
+     exactly that of the applicant's own card. Sheet fixed, both directions.
+     **A RE-SMOKE OF STEP 11 ALONE IS OWED** (not the whole sheet).
+  4. **`waiting` IS KEPT DELIBERATELY** — true whatever the plan is doing, and a
+     fix blanking the whole line would pass the absence test while destroying
+     something true. Second assertion pins it.
+  5. **THE LOW IS DEFERRED, NOT FIXED, AND THAT WAS THE APPROVED SCOPE.** The
+     sweep counts `due`/`due_on_plan` outside a transaction while the expiry
+     re-reads `gymOnPlan` inside its own → `heldForNotice` can go negative once
+     payments exist. Log-only, unreachable today. `OWED.md` line + a pointer on
+     Paddle's line + `BACKLOG.md`. **The fix is NOT a clamp.**
+  6. **REVIEW VERIFIED BEFORE ACTED ON** (:23928): every claim checked against
+     source. All five of the card's own review questions came back clean —
+     including that no test in the diff makes :25326 §1's mistake.
+
+PROVE: web **1385/1385, 50 files, exit 0** (+2 vs :25092's 1383, exactly the two
+       new tests) · **RULE 3 PROVEN BY CAUSING IT** — reverting the fix takes the
+       lapsed-gym test RED exit 1 while the paying-gym control stays GREEN, the
+       correct split; restore sha256-identical · **C131 RED, control GREEN first
+       through the same path, restore byte-exact** (`MUTATE_ONLY=C131`, a stated
+       SUBSET of 151, harness printed "NOT A FULL SWEEP") · eslint
+       --max-warnings=0 exit 0 on both changed files · `node --check` clean on
+       the harness · triggers rebuilt 696 from 193 of 331, --check clean ·
+       check-decisions-index 241 pointers, 905 headings.
+       **No api file touched, so no api suite owed.**
+
+FILES: apps/web/src/pages/console/ApplicationsQueue.jsx ·
+       apps/web/src/pages/console/readOnlyConsole.render.test.jsx ·
+       apps/web/tools/mutate-console.mjs · RUNBOOK/smoke-held-application.md ·
+       DECISIONS.md · DECISIONS-INDEX.md · DECISIONS-TRIGGERS.md (generated) ·
+       OWED.md · BACKLOG.md · HANDOFF.md. **No migration, no api change.**
+
+OPEN:  **ROUND 2 IS DIFF-ONLY** (:5348 rule 2) — the countdown fix, its two
+       tests, C131, and step 11. Nothing else.
+       **THEN the step-11 re-smoke**, and only then does `OWED.md`'s
+       held-application line tick.
+       **ESCAPE HATCH NOT ARMED but one Critical of this shape away**: :24559
+       (previous round, this subsystem) found zero, and C/H-1 is :24376's shape —
+       a true sentence on the read-only console with something false beside it.
+       `CLAUDE.md`'s pre-existing uncommitted edit is still out, as before.
+       Carried unchanged: `check-harnesses.mjs`'s anchor guard, the five
+       multi-match anchors, `JoinGymPanel`'s stale header, the 14-day archive.
+```
+
+```
 TASK: THE HELD-APPLICATION SMOKE PASSES 13/13 — and the run found that its own
       key step proved LESS than it claimed. DECISIONS :25326. Run by Kd at the
       browser, 2026-08-30, on `1b1de15`. No src, no test, no migration touched.

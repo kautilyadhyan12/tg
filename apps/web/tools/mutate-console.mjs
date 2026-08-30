@@ -2010,6 +2010,15 @@ const MUTANTS = [
     // through quoting rather than through a newline.
     to: "The people waiting keep their place, and we will confirm them once you are back.';",
   },
+  {
+    id: 'C131',
+    target: 'queue',
+    suite: READ_ONLY_SUITE,
+    why: "T3 ROUND 1's Critical/High ON THE HELD-APPLICATION CARD, MADE PERMANENT: the applicant countdown returns to the lapsed gym's own queue. `Expires in 11 days` and `Due to expire` are both FALSE once the expiry's `gymOnPlan` guard holds the row, and they render ONE LINE under `READ_ONLY_QUEUE_NOTE` — 'The people waiting keep their place.' — contradicting it in the same viewport (:5807). The card removed this countdown from the applicant's OWN screen and left it here, so the guard belongs on the surface that was missed, not only on the one that was fixed",
+    expect: 'drops every applicant countdown on a lapsed gym, in BOTH directions',
+    from: 'const expiring = readOnly ? null : expiresInLabel(applicant.expiresAt);',
+    to: 'const expiring = expiresInLabel(applicant.expiresAt);',
+  },
 ];
 
 const abort = (msg) => {

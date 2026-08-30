@@ -5629,6 +5629,15 @@ file and is stated so nobody reads these as lower priority than they are.
       US sales tax and EU VAT are theirs, and the webhook is a truth-feed
       exception in the shape of Part 5 §0's RevenueCat carve-out (**still
       deduped, R3.4**).
+      ⚠️ **TWO THINGS ELSEWHERE BECOME REACHABLE THE DAY THIS SHIPS, and both are
+      written down so this card inherits them rather than discovering them:**
+      (1) **a held join request whose `expires_at` is already in the past is
+      killed by the first sweep after the gym subscribes** — the outcome Kd's
+      2026-08-29 ruling exists to prevent (the held-application line above);
+      (2) **the sweep's `heldNoPlan` / `heldForNotice` counters can drift**,
+      because the due count and the expiry read `gymOnPlan` in different
+      transactions and a subscription committing between them is only possible
+      once this exists (its own ⚪ line, DECISIONS :25450).
       **Facts a builder needs and must not re-derive:** payout is MONTHLY
       (balance converts on the 1st, sent by the 15th, ~3 working days) so money
       arrives ~2½–6½ weeks after a gym pays, a ONE-TIME offset · **$100 minimum
@@ -8228,3 +8237,28 @@ file and is stated so nobody reads these as lower priority than they are.
       something else — a drive-by under R1.1. Close it either by having that test
       silence only its own expected message, or by giving the guard a channel a
       spy cannot replace.
+
+- [ ] ⚪ **THE SWEEP'S TWO HELD NUMBERS CAN DISAGREE WITH WHAT IT ACTUALLY DID —
+      deferred 2026-08-30 from the held-application card's T3 round 1 (Low-1),
+      DECISIONS :25450.** **Read before building the payment card, and before
+      moving anything in `sweep.ts` between the due count and the expiry.**
+      `sweepJoinApplications` counts `due` / `due_on_plan` OUTSIDE any
+      transaction and the expiry re-evaluates the same `gymOnPlan` condition
+      INSIDE its own, so a subscription committing between the two makes a row
+      counted into `heldNoPlan` actually expire: `heldForNotice`
+      (`dueOnPlan - expired`) can go **NEGATIVE** and `heldNoPlan` reports a row
+      that is gone. **Log-only — no user sees it, no row is harmed, and nothing
+      is deleted that should not be.**
+      **UNREACHABLE TODAY, MEASURED NOT ASSUMED:** one `INSERT INTO
+      subscriptions` (the trial, refused to any owner who has ever had one) and
+      one `UPDATE` (the expiry), so nothing can put a lapsed gym back on a plan
+      at all, let alone mid-sweep. **THE PAYMENT CARD IS THE COMMIT THAT MAKES
+      IT REACHABLE**, which is why it is written here and named on Paddle's line
+      rather than left in `BACKLOG.md` alone.
+      **THE FIX IS NOT A CLAMP.** Clamping `heldForNotice` at zero hides the
+      drift and leaves `heldNoPlan` overstating; the honest fix is to take BOTH
+      readings inside the expiry's transaction, so one snapshot answers both.
+      **Deferred rather than fixed because Kd approved a fix round whose stated
+      scope was "log the minor finding"** and widening an approved plan mid-round
+      is the drift R1.1/S4 exist to stop — he was told in the round summary and
+      can overrule.

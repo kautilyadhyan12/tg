@@ -48,7 +48,27 @@ function ApplicantRow({ applicant, busy, readOnly, onConfirm, onReject }) {
   // sent; the screen works nothing out for itself, so it cannot quote a
   // deadline the sweep disagrees with.
   const waiting = waitingForLabel(applicant.appliedAt);
-  const expiring = expiresInLabel(applicant.expiresAt);
+  // **AND THE DEADLINE GOES WHEN THE GYM HAS NO PLAN, because the sweep no
+  // longer acts on it** (:25092 §1(a); the expiry's `gymOnPlan` guard). `Expires
+  // in 11 days` and `Due to expire` are both FALSE for a held row, and they sat
+  // one line under `READ_ONLY_QUEUE_NOTE` — *"The people waiting keep their
+  // place."* — contradicting it in the same viewport. :5807's class, found by
+  // T3 round 1 on this card.
+  //
+  // **`readOnly` IS THE RIGHT QUESTION AND NOT AN APPROXIMATION OF ONE**: it is
+  // `consoleIsReadOnly(org)`, i.e. the server's own `consoleReadOnly`, which is
+  // `!gymHasLivePlan` over §4.1's three live statuses — the SAME rule the
+  // expiry's guard reads. So it is true exactly when the sweep is holding the
+  // row, and it is already on this component driving both greyed taps.
+  //
+  // **`waiting` STAYS.** How long somebody has been waiting is true whatever the
+  // gym's plan is doing, and on a held row it is the only honest clock left —
+  // the mirror of `GymMembershipCard`'s waiting card, which drops the countdown
+  // and keeps the headline. This is the THIRD applicant-deadline surface; the
+  // card's own claim that the countdown "is replaced wherever it appears" was a
+  // stated limit nobody sourced, which is :25092 §2's recorded lesson repeating
+  // inside the commit that recorded it.
+  const expiring = readOnly ? null : expiresInLabel(applicant.expiresAt);
   const nudged = nudgedLabel(applicant.nudgedAt);
   // "NEEDS A DECISION" IS THE `gymNotifiedAt` COLUMN AND NOTHING ELSE — the
   // same fact the expiry statement reads before it may touch this row. A mark

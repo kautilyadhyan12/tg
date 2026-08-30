@@ -906,6 +906,27 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:25450** — 2026-08-30 — **THE HELD APPLICATION, T3 ROUND 1: ONE
+  Critical/High, THE PACKET DOES NOT SHIP.** **Read before drawing a deadline,
+  countdown or expiry date on ANY surface, before claiming a copy change is
+  applied "wherever it appears", before deciding that a fix round may widen past
+  its approved scope, and before reading the held-application smoke's step 11 as
+  having checked that row.** The card removed a false countdown from the
+  applicant's own screen and left the identical one on the gym's waiting queue,
+  **one line under the sentence the same commit added** — *"The people waiting
+  keep their place."* :5807's class. **The reusable part is the CLAIM, not the
+  bug**: :25092 §1(c) said the false sentences are *"replaced wherever they
+  appear"*, a stated limit nobody sourced — **the exact lesson :25092 §2 recorded
+  about itself, repeated one component further out.** `grep -rn expiresInLabel`
+  returns three call sites; the card fixed one. Fixed with `readOnly ? null :
+  …`, two tests (both `expiresInLabel` branches, plus a paying-gym positive
+  control), and permanent mutant **C131**. **The smoke could not have caught it:
+  step 11's ✅ named the sentence and the greyed buttons and never the line
+  between them, while step 6 asks exactly that question of the other screen.**
+  One Low deferred with its own `OWED.md` line (the sweep's two held counters can
+  drift once payments exist). **Escape hatch not armed — but the next
+  Critical of this shape arms it.** A re-smoke of step 11 alone is owed.
+
 - **:25326** — 2026-08-30 — **THE HELD-APPLICATION SMOKE PASSES 13/13 — and its
   key step proved LESS than it claimed, because TWO guards were holding the same
   row.** Run by Kd on `1b1de15`, `src` byte-identical to HEAD. **Read before

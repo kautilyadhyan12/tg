@@ -154,6 +154,31 @@ const APPLICANT = {
   gymNotifiedAt: null,
 };
 
+/** A second waiting person whose deadline is already BEHIND us, so
+ *  `expiresInLabel` returns its other branch — `Due to expire` rather than
+ *  `Expires in N days`.
+ *
+ *  **It is a FIXED PAST DATE on purpose.** The suite runs on the real clock (no
+ *  fake timers anywhere in this file), so "past" has to be past for good; a date
+ *  computed from `Date.now()` would make the fixture and its subject share a
+ *  source, which proves only that the source is self-consistent (:3610's
+ *  standing lesson). This is also the state Kd's own smoke left the database in
+ *  — C pending with the deadline nearly a month gone (:25326 round log). */
+const OVERDUE_APPLICANT = {
+  id: 'app-2',
+  displayName: 'Sunil Menon',
+  appliedAt: '2026-07-01T09:00:00.000Z',
+  expiresAt: '2026-07-15T09:00:00.000Z',
+  nudgedAt: null,
+  gymNotifiedAt: null,
+};
+
+/** Every string `expiresInLabel` can produce, so an assertion about the
+ *  countdown cannot pass merely because today's date took a different branch.
+ *  `joinClock.js:176-184` — `Due to expire`, `Expires today`, `Expires
+ *  tomorrow`, `Expires in N days`. */
+const ANY_COUNTDOWN = /due to expire|expires (today|tomorrow|in \d+ days?)/i;
+
 const MEMBER = {
   userId: MEMBER_ID,
   displayName: 'Rahul Das',
@@ -390,6 +415,53 @@ describe('the waiting queue', () => {
     expect(screen.getByRole('button', { name: /not this person/i }).disabled).toBe(false);
     expect(screen.getByText(/confirm the ones you recognise/i)).toBeTruthy();
     expect(screen.queryByText(READ_ONLY_QUEUE_NOTE)).toBeNull();
+  });
+
+  it('drops every applicant countdown on a lapsed gym, in BOTH directions', async () => {
+    // T3 ROUND 1 ON THIS CARD, C/H-1. The card removed the false countdown from
+    // the waiting person's OWN screen (`GymMembershipCard`) and left the
+    // identical one here, on the gym's queue, directly under the sentence this
+    // same commit added — *"The people waiting keep their place."* Both cannot
+    // be true: the expiry's `gymOnPlan` guard means the row is held for as long
+    // as the gym is off a plan, so no deadline applies to it (:25092 §1(a)).
+    //
+    // **BOTH BRANCHES OF `expiresInLabel` ARE ON SCREEN AT ONCE**, because the
+    // defect was one expression covering them both and a fixture with only a
+    // future date would leave `Due to expire` unobserved — which is the row Kd's
+    // smoke actually produced.
+    orgService.getMine.mockResolvedValue(mineIs(LAPSED));
+    orgService.getApplications.mockResolvedValue({
+      data: { items: [APPLICANT, OVERDUE_APPLICANT], nextCursor: null, pendingCount: 2 },
+    });
+    renderConsole(Members, '/console/iron-house/members');
+
+    // Both people are still listed — the hold keeps their place, it does not
+    // hide them. The countdown is the only thing that goes.
+    expect(await screen.findByText('Priya Sharma')).toBeTruthy();
+    expect(screen.getByText('Sunil Menon')).toBeTruthy();
+    expect(screen.queryByText(ANY_COUNTDOWN)).toBeNull();
+    // **AND THE HONEST CLOCK STAYS.** How long somebody has been waiting is true
+    // whatever the plan is doing, so a fix that blanked the whole line would
+    // pass the assertion above while destroying something true — this is what
+    // separates "the deadline went" from "the line went".
+    expect(screen.getAllByText(/waiting \d+ days?/i).length).toBe(2);
+  });
+
+  it('keeps the countdown on a PAYING gym — the positive control for the fix above', async () => {
+    // Without this, a component that never printed a deadline at all would
+    // satisfy the test above completely (:7104's PG1 — a guard has two failure
+    // directions and a door that is simply shut passes the half you checked).
+    orgService.getMine.mockResolvedValue(mineIs(PAYING));
+    orgService.getApplications.mockResolvedValue({
+      data: { items: [APPLICANT, OVERDUE_APPLICANT], nextCursor: null, pendingCount: 2 },
+    });
+    renderConsole(Members, '/console/iron-house/members');
+
+    await screen.findByText('Priya Sharma');
+    // The overdue row's branch is pinned by name, since it is the one a date
+    // change can never move.
+    expect(screen.getByText(/due to expire/i)).toBeTruthy();
+    expect(screen.getAllByText(ANY_COUNTDOWN).length).toBe(2);
   });
 
   it('tells the front desk the waiting people keep their place, and promises nothing beyond it', async () => {

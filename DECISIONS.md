@@ -25446,3 +25446,120 @@ table: 3 confirmed, 3 pending, **nothing expired anywhere**.
 
 **No suite was run and none is owed** — no `src`, test, harness or migration file
 is touched by this commit.
+
+## 2026-08-30 — THE HELD APPLICATION, T3 ROUND 1: ONE Critical/High, THE PACKET DOES NOT SHIP — the card removed a false countdown from one screen and left the identical one on the other, directly under the sentence that contradicts it
+
+**Read before drawing a deadline, countdown or expiry date on ANY surface,
+before claiming a copy change is applied "wherever it appears", before deciding
+that a fix round may widen past its approved scope, and before reading the
+held-application smoke's step 11 as having checked that row.**
+
+Reviews `1b1de15` (:25092) in a fresh chat. **ONE Critical/High ⇒ the packet
+does NOT ship this round** (:5348 rule 1). One Low, deferred with its own
+`OWED.md` line. **Escape hatch NOT armed** — the previous round in this
+subsystem (:24559) found zero — **but the next one of this shape arms it, and
+that is said here so the next chat does not have to work it out.**
+
+### 1. C/H-1 — THE THIRD APPLICANT-DEADLINE SURFACE, AND THE CARD'S OWN CLAIM THAT THERE WERE TWO
+
+`ApplicationsQueue.jsx`'s `ApplicantRow` rendered `expiresInLabel` **regardless
+of `readOnly`**, so on a lapsed gym every waiting person's row read *"Expires in
+11 days"* — or *"Due to expire"* once the date had passed — **one line under
+`READ_ONLY_QUEUE_NOTE`, which this same commit had just extended to say "The
+people waiting keep their place."** Both cannot be true: the expiry's new
+`gymOnPlan` guard holds that row for as long as the gym is off a plan, so no
+deadline applies to it. :5807's class exactly — on screen and FALSE.
+
+**`readOnly` WAS ALREADY ON THAT COMPONENT, driving both greyed taps.** It is
+`consoleIsReadOnly(org)`, i.e. the server's own `consoleReadOnly`, which is
+`!gymHasLivePlan` over §4.1's three live statuses — **the same rule the expiry
+reads**. So the screen already knew, and the fix is one conditional.
+
+**THE PART TO KEEP IS NOT THE BUG, IT IS THE CLAIM.** :25092 §1(c) states the
+two false sentences are *"replaced wherever they appear"*. **That was a stated
+limit and it was never sourced — which is the EXACT lesson :25092 §2 recorded
+about itself in the same commit**, where the approved plan said one applicant
+screen and there were two. **The card wrote down the lesson and then repeated
+it, one component further out.** Copy that changes because a STATE changed must
+be found by enumerating the surfaces that render it, never by recalling them:
+`grep -rn expiresInLabel` returns three call sites and the card fixed one.
+
+**`waiting` IS KEPT ON PURPOSE.** How long somebody has been waiting is true
+whatever the plan is doing, and on a held row it is the only honest clock left —
+the mirror of `GymMembershipCard`, which drops the countdown and keeps the
+headline. A fix that blanked the whole line would have passed the absence test
+while destroying something true, so a second assertion pins it.
+
+### 2. THE SMOKE COULD NOT HAVE CAUGHT IT, AND THE SHEET IS WHY
+
+**Step 11's ✅ named the new sentence and the two greyed buttons and never the
+line between them** — while step 6 asserts, for the applicant's own card, that
+*"The 'Expires in 13 days' line has gone completely."* **The same question, asked
+on one screen and not the other.** Kd ran the sheet on the shipping bytes and
+reported it passing, correctly: nothing in the sheet pointed at that row. Step 11
+now names it, in both directions.
+
+**This is :25326 §1's finding arriving from the other side.** That entry recorded
+a step proving less than it claimed because a second guard produced its result;
+this is a step proving less than it claimed because its ✅ never mentioned the
+thing that was wrong. **A smoke sheet is only as good as the smallest thing it
+tells the runner to look at.**
+
+### 3. THE LOW, AND WHY IT IS DEFERRED RATHER THAN FIXED
+
+`sweep.ts` counts `due` / `due_on_plan` outside any transaction while the expiry
+re-evaluates `gymOnPlan` inside its own, so a subscription committing between
+them makes a row counted into `heldNoPlan` actually expire — `heldForNotice` can
+go negative and `heldNoPlan` reports a row that is gone. **Log-only, and
+UNREACHABLE today** (one INSERT, one UPDATE, nothing can restore a plan).
+
+**Deferred, with an `OWED.md` line AND a pointer on Paddle's line**, because the
+honest fix moves transaction boundaries in a server file this round's C/H does
+not touch, and **Kd approved a fix round whose stated scope was "log the minor
+finding"**. Widening an approved plan mid-round is the drift R1.1/S4 exist to
+stop, so it was reported to him rather than done quietly. **The fix is NOT a
+clamp** — that hides the drift and leaves `heldNoPlan` overstating.
+
+### 4. WHAT THE REVIEW CONFIRMED RATHER THAN FOUND, and it is worth as much
+
+Checked against the source rather than taken on the reviewer's word (:23928 —
+two of that round's seven findings were wrong): `gymOnPlan`'s test **drives one
+gym across the transition in both directions** on both surfaces, rather than
+asserting a fixture · gating the chase **would** build a second hidden hold, and
+O165 pins it · every reader of `orgCanConfirm` tests `=== false`, so an older API
+sending nothing is "we could not ask" and never "no" · the applicant response
+carries no status, plan or subscription vocabulary · **and no test in the diff
+makes :25326 §1's mistake** — every hold test chases before lapsing the gym, so
+the notice guard is spent and the plan is the only thing left.
+
+### Round log
+
+**THE FIX:** `ApplicationsQueue.jsx:51` — `readOnly ? null : expiresInLabel(…)`.
+One expression; `.filter(Boolean)` at :90 already drops it.
+
+**RULE 3 — the test fails without the fix, proven by causing it.** Two new tests
+in `readOnlyConsole.render.test.jsx`: *"drops every applicant countdown on a
+lapsed gym, in BOTH directions"* (two applicants, one deadline ahead and one
+behind, so the `Due to expire` branch is observed too — it is the row Kd's own
+smoke produced) and *"keeps the countdown on a PAYING gym"*, the positive control
+without which a component that printed no deadline at all would satisfy the
+first (:7104's PG1). Reverting the fix takes the first **RED, exit 1**, on the
+`ANY_COUNTDOWN` assertion, while the control stays green — the correct split.
+Restore verified **sha256-identical**.
+
+**RULE 5 — the permanent guard.** `mutate-console.mjs` gains **C131** on the
+`queue` target, restoring the unconditional label. **RED, control GREEN first
+through the same path, restore byte-exact** (`MUTATE_ONLY=C131`, a stated subset
+of 151, printed by the harness as not a full sweep).
+
+**PROVE:** web suite **1385 passed / 1385, 50 files, exit 0** — +2 against
+:25092's 1383, exactly the two new tests · `eslint --max-warnings=0` exit 0 on
+both changed files · `node --check` clean on the harness · C131 RED / 0 alive.
+**No api file is touched, so no api suite is owed.**
+
+**THE SHEET:** step 11 gains the countdown clause. **A RE-SMOKE OF THAT ONE STEP
+IS OWED** — the fix changes a screen Kd already signed off, and the run that
+signed it off could not see this row. Not the whole sheet; one screen.
+
+**ROUND 2 IS DIFF-ONLY** (:5348 rule 2): the countdown fix, its two tests, C131,
+and step 11.
