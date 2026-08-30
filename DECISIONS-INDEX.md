@@ -906,6 +906,15 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:24893** — 2026-08-30 — **THE READ-ONLY CONSOLE'S SMOKE PASSES 16/16 on
+  `206ae2c`, closing the card's last gate** — and the reusable finding is the
+  sheet's own step 8→9→10 handshake, which no sheet warns the operator about.
+  **Read before handing Kd a smoke sheet "all at once" without checking whether
+  it interleaves his steps with yours, before accepting a ✅ that a DIFFERENT
+  path to the same screen would also satisfy, before promising a sweep's row
+  count from a sheet rather than from the database, and before reading this pass
+  as covering the two Settings panels or the waiting member's own screen.**
+
 - **:24559** — 2026-08-29 — **THE READ-ONLY CONSOLE'S WEB HALF, T3 ROUND 2
   (diff-only): ZERO Critical/High, THE PACKET SHIPS — five Low, NONE of them in
   `src/`, and four are a smoke sheet that had never been run.** Reviews

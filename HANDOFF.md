@@ -1,6 +1,56 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: THE READ-ONLY CONSOLE'S SMOKE PASSES 16/16 — the card's last gate falls.
+      DECISIONS :24893. Run by Kd at the browser, 2026-08-30, on `206ae2c`.
+      No src, no test, no migration touched.
+
+  1. **THE CARD IS DONE.** Server half :23711, web half :24141, T3 rounds
+     :24376 and :24559 were all shipped; the SMOKE was the only thing left
+     (:24559 said so in as many words). `OWED.md`'s read-only-console line
+     TICKS on this run.
+  2. **STEP 10 IS THE WHOLE OF IT** — a manager holding the "Replace ‹code›?"
+     question open when the gym lapses. Replace it went grey, Keep it stayed
+     pressable. That is exactly what T3 round 1 found LIVE and fixed.
+  3. **IT WAS CONFIRMED ON THE PATH THAT MATTERS, AND ONLY BECAUSE I ASKED.**
+     A plain F5 produces the same red strip from a fresh page load. Kd's
+     report was "all passed"; asked which path, with both branches named, he
+     confirmed tab-focus. **A ✅ two paths can satisfy is not observed until
+     you know which one ran.**
+  4. **`expired: 1` WAS PREDICTED FROM THE ROWS BEFORE THE COMMAND RAN**
+     (:23535's method): two trialing gyms, one null-dated and so deliberately
+     unswept. Printed `expired: 1`; `gymbest` → expired, `P24 Gym` → trialing.
+  5. **THE NEW FINDING IS THE SHEET'S SHAPE.** Kd asked for the steps in one
+     block; step 9 is MINE and must run while he is parked mid-step-8, so it
+     cannot be granted in full. **No sheet warns the operator of its own
+     handshakes.** Warning added to this sheet's header; `smoke-trial-expiry.md`
+     is the other sheet with a chat-run step and does not carry one either.
+  6. **:15927/:20222's MIGRATION TRAP DID NOT FIRE** — 15/15 applied, 47
+     tables, five USD gym plans, all checked before Kd touched anything. That
+     is :22782's move onto local Postgres working. **The Neon dev branch is
+     untouched by this run and its own line stands.**
+
+PROVE: SWEEP OUTPUT VERBATIM `{"expired":1,...,"elapsedMs":297}` and the two
+       subscription rows read back after it · migrations 15 applied vs 15 in the
+       journal, 47 public tables · gym/member/staff/application rows read to
+       corroborate steps 1–7 rather than taking the report · health 200 from a
+       process started after the last source change · triggers rebuilt 678 from
+       189 of 327, --check clean · check-decisions-index 237 pointers, 880
+       headings. **No suite run and none owed — no src or test file is touched.**
+
+FILES: RUNBOOK/smoke-read-only-console.md · DECISIONS.md · DECISIONS-INDEX.md ·
+       DECISIONS-TRIGGERS.md (generated) · OWED.md · HANDOFF.md.
+
+OPEN:  **Left alone deliberately and NAMED rather than hidden: `CLAUDE.md` has an
+       uncommitted edit in the working tree** (PROVE/R11.2/Appendix rewritten for
+       Claude Code running its own commands) — not mine, not this card's, not
+       committed here. **Not covered by this pass**, each with its own line: the
+       two Settings panels' read-only state (unreachable — the `org.manage`
+       tick-box line), the waiting member's own screen (Kd's 2026-08-29 ruling,
+       the next card), the 14-day archive, and the never-subscribed path.
+```
+
+```
 TASK: KD RULES THE SECOND MOVE — 523 LINES OF CARD HISTORY OUT OF ALWAYS-READ.
       DECISIONS :24813 (addendum to :24703, same session). No code, no test,
       no src file. Ruled by his question, not by a plan.

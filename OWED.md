@@ -4925,9 +4925,23 @@ file and is stated so nobody reads these as lower priority than they are.
       tested"*). Now genuinely run: `expired: 2` against a database read first,
       the null-dated trial correctly untouched, and steps 10–11 confirmed at the
       screen.
-- [ ] 🟡 **THE LAPSED GYM'S CONSOLE IS NOT READ-ONLY — the OTHER HALF of Kd's
+- [x] 🟡 **THE LAPSED GYM'S CONSOLE IS NOT READ-ONLY — the OTHER HALF of Kd's
       :22215 step 1, split out of the sweep card on 2026-08-28 (:22341) and
-      SPLIT WITH HIS APPROVAL, not deferred quietly.** He was shown the split in
+      SPLIT WITH HIS APPROVAL, not deferred quietly.**
+      **DONE 2026-08-30 — THE SMOKE PASSED 16/16 (DECISIONS :24893), which was
+      the only thing left on this line.** Server half :23711, web half :24141,
+      T3 rounds :24376 and :24559, all already shipped. Run on `206ae2c` with
+      every `src` file byte-identical to HEAD; step 10 — the manager holding a
+      confirm question open across the lapse, which is what round 1 found live —
+      passed on the tab-focus path, confirmed by question rather than taken from
+      the run's global "all passed".
+      **WHAT THIS TICK DOES NOT COVER, and each is its own line elsewhere:** the
+      two Settings panels in their read-only state (nobody can reach them — the
+      `org.manage` tick-box line), the waiting member's own screen (Kd's
+      2026-08-29 ruling that a lapsed gym HOLDS their place, the next card), the
+      14-day archive, and a gym that never subscribed at all (one server field
+      answers for both and the tests cover both, but the run walked the
+      trial-ENDED path only). He was shown the split in
       one line ("it touches every console screen — too much for one safe chunk")
       and chose the job alone.
       **What ships today:** a gym whose trial has ended keeps its whole console —

@@ -17,9 +17,21 @@ locally, one terminal, and **three email addresses** (the second and third can b
 anything — they never receive mail). The third one exists only so that somebody
 is still waiting to join at step 15; that window can be closed straight after.
 
-**Status: WRITTEN, NOT YET RUN.** Every ✅ below was re-checked against the code
-that draws it in T3 round 2, after round 1's version promised four things the
-screen does not do. That is not the same as somebody having run it.
+**THERE IS EXACTLY ONE UNAVOIDABLE PAUSE, AND IT IS BETWEEN STEPS 8 AND 10.**
+Step 9 is a command only the chat can run, and it has to run **while you are
+parked mid-way through step 8** with a question box open on screen — that is the
+whole case this sheet exists to catch. So the run is two blocks with one
+handshake: **steps 1–8, stop and say so, then steps 10–16.** Everything else can
+be handed over at once. This is stated here because it was not, and a runner who
+asked for the steps in one go met the pause as an apparent refusal (:24893 §3).
+
+**Status: PASSED 16/16 on 2026-08-30**, on `206ae2c`, every `src` file
+byte-identical to HEAD. Full record at `DECISIONS.md:24893`. **Steps 8 and 10
+were each confirmed by a follow-up question rather than by the run's global "all
+passed"** — step 10's ✅ is reachable by a plain F5 as well as by the tab-focus
+path the card fixed, and only the second one is evidence. **Read §5 of that entry
+before citing this pass**: the two Settings panels, the waiting member's own
+screen, and the never-subscribed path are all outside it.
 
 ---
 
@@ -84,7 +96,7 @@ you need brand-new accounts anyway.
 | 7 | As **account B**, open the console. Look at the gym's page and Members. | Everything works normally: **New code**, **Switch off**, **Replace**, **Confirm** and **Remove** are all pressable. There **is** a pale strip at the top reading **"Free trial — <number> days left."** with an **✕** on the right — **leave it alone, do not press the ✕.** There is **no pop-up**. This is the "before" picture — write down that it looked normal. (**B has no Settings tab, and that is correct** — see *What this sheet does NOT cover*.) |
 | 8 | Still as B, on the gym's page: press **Replace** beside the join code to open the question *"Replace <your code>?"*. **Leave it open**, switch to another browser tab, and come back to it in a moment at step 10. | The question is on screen with **Replace it** and **Keep it** underneath, both pressable. |
 | 9 | **(The chat runs this, not you.)** Jump time forward past the trial's end — the command is under this table. | It prints `trial expiry finished` and **`expired:` however many gyms this local database has on a live trial**. One if this gym is the only one; more if earlier smokes left trials behind. A trial with no end date is deliberately not swept. |
-| 10 | Switch back to **B's tab** — just click into it, **do not press F5**. | **This is the step this round was added for.** The red strip appears, the note *"This gym needs a plan before anything here can be changed."* appears above the codes, **Replace it goes grey**, and **Keep it still works** so you can back out. Before the fix, **Replace it stayed live and full-colour under both of those sentences**. |
+| 10 | Switch back to **B's tab** — just click into it, **do not press F5**. | **This is the step this round was added for.** The red strip appears, the note *"This gym needs a plan before anything here can be changed."* appears above the codes, **Replace it goes grey**, and **Keep it still works** so you can back out. Before the fix, **Replace it stayed live and full-colour under both of those sentences**. **Say explicitly that you clicked into the tab and did not refresh** — a plain F5 produces the same red strip from a fresh page load and proves nothing about the live re-read this step is for. |
 | 11 | Press **Keep it** to close the question, then press **F5**. | **A red strip across the top of every console screen**: *"This gym has no plan. Nothing here can be changed, and your members get the free app only."* There is **no button** in the strip and **no pop-up** — B is not sealed out. |
 | 12 | Still as B, on the gym's page: try **New code**, **Switch off**, **Limits**, **Replace**. | **All greyed out and unpressable**, with the line *"This gym needs a plan before anything here can be changed."* under the "Join codes" heading. |
 | 13 | Still on the gym's page: read the join code, and press **Copy**. | **The code is still fully visible and Copy still works.** Nothing has been hidden — this is the difference between read-only and locked out. |

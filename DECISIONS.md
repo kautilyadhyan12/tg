@@ -24889,3 +24889,118 @@ card records (147 lines) still sit in §1 from before the 2026-08-28 split — t
 predate the convention and moving them is a separate job — and §1B's ordering has
 one pre-existing entry out of sequence (`:22341`, filed at the bottom instead of
 by date).
+
+## 2026-08-30 — THE READ-ONLY CONSOLE'S SMOKE PASSES 16/16, ON THE SHIPPING BYTES — the last gate on the card, and the sheet's own step 8→9→10 handshake is the thing to fix before the next one
+
+**Read before handing Kd a smoke sheet "all at once" without checking whether it
+interleaves his steps with yours, before accepting a ✅ that a DIFFERENT path to
+the same screen would also satisfy, before promising a sweep's row count from a
+sheet rather than from the database, and before reading this pass as covering the
+two Settings panels or the waiting member's own screen.**
+
+Run 2026-08-30 on `206ae2c`, every `src` file byte-identical to HEAD (`git status`
+carried one unrelated ` M CLAUDE.md`, a playbook edit that touches no code).
+`RUNBOOK/smoke-read-only-console.md`, 16 steps, **all 16 passed.** This closes
+`OWED.md`'s read-only-console line — T3 rounds 1 (:24376) and 2 (:24559) were
+already shipped, and the sheet was the only thing left.
+
+### 1 · WHAT THE RUN PROVED, and step 10 is the whole of it
+
+**Step 10 is the step this card's round 1 exists for**: a manager with the
+*"Replace ‹code›?"* question already open when the gym lapses. Before :24376's
+fix, **Replace it stayed live and full-colour** under both warning sentences. It
+went grey, and **Keep it stayed pressable**, so the way out of the question was
+never removed.
+
+**It was confirmed on the path that matters, and the confirmation had to be
+ASKED FOR.** Kd's report was *"all passed"*. The red strip appears on a plain F5
+too — from a fresh page load, which proves nothing about the live re-read the fix
+lives in — so the ✅ as written is satisfiable by a screen that never exercised
+the defect. Asked which it was, with both branches named and neither treated as
+the bad answer, he confirmed the tab-focus path. **Standing: when a ✅ can be met
+by two paths and only one of them is the card, the step has not been observed
+until you know which path ran.** :15927's struck step 7 is the same shape and cost
+a live bug; this is the cheap version, one question.
+
+### 2 · THE `expired:` COUNT WAS PREDICTED FROM THE ROWS, NOT FROM THE SHEET
+
+The database held **two** gyms on a live trial: the new one (ends 2026-09-29) and
+an older null-dated one. The null-dated row is deliberately not swept
+(:22782), so the expected answer was **`expired: 1`** — read out of
+`subscriptions` before the command ran, in :23535's method — and `expired: 1` is
+what it printed, with the null-dated row still `trialing` afterwards.
+
+**Note what this does NOT prove.** The sheet's pre-:24559 text promised a literal
+`expired: 1` and would have been RIGHT here, by luck. Low-5's fix earned itself
+anyway: the correct ✅ is a range because the count is a property of a shared
+database, and a step that is right by luck teaches nobody anything.
+
+### 3 · THE FINDING IS IN THE SHEET'S SHAPE, AND IT IS NEW
+
+Kd asked, in as many words, *"give others steps no need to give one by one"* —
+and **the sheet cannot fully honour that, because step 9 is MINE and must run
+while he is parked mid-way through step 8.** Steps 2–8 and 10–16 went out as two
+blocks; the handshake in between is not negotiable and is not overhead.
+
+**Nothing in the sheet says so before he starts.** He met the pause as an
+apparent refusal to do what he asked, and it cost an exchange to explain. **A
+smoke sheet that interleaves the operator's steps with the chat's must say at the
+TOP how many handshakes there are and where** — the operator is entitled to know
+the shape of the next 25 minutes before minute one. Added to this sheet; the
+general point belongs to any sheet with a `(The chat runs this, not you.)` row,
+of which `smoke-trial-expiry.md` is the other.
+
+**This is :23535's rule read from the operator's side.** That entry fixed the
+chat's error — reading "all passed" as covering steps only the chat can run. It
+did not notice that the same interleave is an unsignposted surprise for the
+person following the sheet.
+
+### 4 · THE MIGRATION TRAP DID NOT FIRE, AND THAT IS THE FIX WORKING
+
+:15927 and :20222 are both the same defect — the one database a browser reads is
+migrated by hand and by nothing else — and both stopped a smoke dead. **Checked
+before Kd touched anything: 15 of 15 migrations applied, 47 tables, the five USD
+gym plans present.** It held because :22782's round moved this sheet onto local
+Postgres, which the suite migrates. **Not evidence the underlying gap is closed:
+the Neon dev branch is untouched by this run and its own `OWED.md` line stands.**
+
+### 5 · WHAT THIS PASS DOES NOT COVER
+
+Unchanged from the sheet's own list, repeated because a tick invites over-reading
+(:5200, :14840). **The two Settings panels** — `GymDetailsPanel` and `StaffPanel`
+in their read-only state, including the Enter-key door C116 exists for — **were
+not seen by anybody**, because a manager has no Settings tab and an owner meets
+the unskippable prompt; they rest on tests and mutants alone, and their own
+`OWED.md` line is the `org.manage` tick box. **The waiting member's own screen**
+was not looked at (Kd's 2026-08-29 ruling that a lapsed gym should HOLD their
+place is the next card). **The 14-day archive** is unbuilt, its own line. And the
+run walked the trial-ENDED path only, never a gym that never subscribed — one
+server field answers for both and the tests cover both.
+
+### Round log
+
+Setup by me: compose `up -d postgres redis` (already running), migration and
+plan-row check, API on `localhost:3000` against
+`postgres://aihg:aihg@localhost:5433/aihg` — never `--env-file=.env`, which is
+S3's named wrong repair — and `vite` on `5173`. Health 200 from a process started
+after the last source change.
+
+Steps corroborated from rows rather than from the report, before step 9:
+gym `gymbest`, country `US`, `currency_display` `USD`, subscription `trialing` on
+`org_b1_us_m` (the $35/300-seat band, i.e. the lowest-capped active monthly USD
+plan :21157 specifies) with `trial_ends_at` 2026-09-29 · one confirmed member who
+is also a `manager` carrying the five-privilege manager set · one application
+still `pending`, which is what makes step 15 runnable at all. Steps 7, 8 and 10–16
+are screen-only and have no rows; 8 and 10 were each confirmed by one question.
+
+Sweep output, verbatim: `{"expired":1,"event":"orgs.trial_sweep.finished"}` then
+`{"expired":1,"asOf":"2026-10-05T10:00:00.000Z","elapsedMs":297}`. State after:
+`gymbest` → `expired`, `P24 Gym` → still `trialing`.
+
+Three questions were put to Kd across the run and **all three came back
+confirming the report** — the doubt-naming changed no verdict this time. Recorded
+because the opposite is on record twice (:20222, :23535) and one run's worth of
+evidence in the other direction is not a reason to stop asking.
+
+No suite was run and none is owed: **no `src`, test, harness or migration file is
+touched by this commit.**
