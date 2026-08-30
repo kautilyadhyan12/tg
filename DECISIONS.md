@@ -25004,3 +25004,87 @@ evidence in the other direction is not a reason to stop asking.
 
 No suite was run and none is owed: **no `src`, test, harness or migration file is
 touched by this commit.**
+
+## 2026-08-30 — CI HAD BEEN RED FOR SEVEN PUSHES ON ONE TEST THAT ONLY PASSES ON A DATABASE WITH HISTORY — and six write-ups over those two days never mentioned the gate was down
+
+**Read before asserting that a seeded row EXISTS (as opposed to asserting its
+state), before quoting a CI verdict without saying which branch you filtered to,
+and before writing a PROVE section without looking at what CI said about the last
+push.**
+
+### 1 · THE DEFECT: a control that measured the developer's database, not the code
+
+`orgs.plans.test.ts`'s INR case proves *"a retired band is never quoted to a
+buyer"*, and guards that absence with a control — the five pre-:18488 codes must
+EXIST and be `active = false`, so the absence cannot be satisfied by rows that
+were simply deleted (:15093's O92 shape). **The control reads rows `seed.ts`
+never creates.** The seed RETIRES those codes with an `UPDATE … SET active =
+false` and has no INSERT for them, so on a database seeded from empty they have
+never existed. **Measured on a database built fresh this session: 0 of the six
+codes present**, against a control asserting 5. CI's own message was `expected []
+to have a length of 5`.
+
+**It passed here and failed there for one reason: this machine's database predates
+2026-08-24, so it still holds the rows.** A test whose premise is a property of
+the developer's accumulated data is a false RED on every clean checkout — and the
+same shape would mislead a real deployment, which is also a fresh database.
+
+**IT ALSO HID A GENUINE GAP.** On a fresh database no inactive plan row exists at
+all, so `active = true` had **no observer there** — mutant O148 would have
+survived for want of a subject, which is the very hole the control was added to
+close.
+
+### 2 · THE FIX: the suite owns the row it reasons about
+
+A third fixture plan, `zz_plans_retired` — INR so it sits in the book this case
+reads, `zz_` so `seededBook` keeps it out of the exact ladders, inserted
+`active = false` in `beforeAll` and deleted in `afterAll`, following
+`FRACTIONAL_PLAN` and `FOREIGN_PLAN` already in the file rather than inventing a
+second pattern. The legacy five-code absence check is KEPT and now carries a
+sentence saying it is vacuous on a fresh database, because leaving a true-sounding
+comment over a newly-toothless assertion is :13552's recorded trap.
+
+**Pinned both ways on BOTH database shapes** (rule 4): deleting `active = true`
+from `listOrgPlansForCurrency` goes RED with exit 1 on this machine's database
+AND on a fresh one — the second is the load-bearing run, since it is the case that
+had no observer before. Restored sha256-identical, `git status` clean.
+
+### 3 · THE PROCESS FAILURE IS LARGER THAN THE TEST, AND IT IS OURS
+
+**Seven pushes landed on `web-repoint` with CI red — 2026-08-28 through today —
+and six `DECISIONS.md` entries written across those two days say nothing about
+it.** Every one carries a PROVE section listing locally-run suites. **:2825 states
+that PR #29 "has gated every push all along"; that stopped being true on
+2026-08-28 and no entry noticed**, including this session's own smoke commit,
+which pushed onto a red gate and reported success without looking.
+
+**A permanently-red gate is worse than no gate**: the next real breakage is
+indistinguishable from the noise, and Kd had been receiving a failure email for
+every push in the meantime.
+
+**MY OWN ERROR, AND IT IS THE ONE TO KEEP.** Asked what the emails meant, I
+filtered the run history to `web-repoint`, found six failures, and told Kd it had
+been "two days, not months". **He said twice that the emails long predate that,
+and he was right: his inbox is not branch-scoped.** The unfiltered history shows
+**17 failures since 2026-07-06 — 10 in July on early build branches, all fixed at
+the time, then the 7 now.** **A filter is a hypothesis about scope exactly as a
+grep is a hypothesis about vocabulary** (:19256), and I reported the narrow answer
+as the whole one to the person who could see the whole one.
+
+**STANDING, and it is small enough to actually do: after any push, read the run's
+verdict and report it. Never write "pushed" as if it were "green".**
+
+### Round log
+
+`gh` IS installed and authenticated on this machine (`/c/Program Files/GitHub
+CLI/gh`) — a stale note said otherwise and cost this session a round of guessing
+before the logs were simply read. Repo totals from the API, not `gh run list`
+alone, after that lesson: 230 runs, 16 failures, one workflow file.
+
+PROVE, LOCAL: `orgs.plans` 12/12 exit 0 on the dev database and 12/12 exit 0 on a
+database created, migrated and seeded from empty this session (15 plans, 58
+exercises, 0 legacy retired codes) · **the whole api suite 654/654 exit 0 on that
+fresh database**, which is the configuration CI runs and where it had been
+653/654 · mutant RED with exit 1 on both databases · tsc exit 0 · eslint clean on
+both touched files · repo.ts restored sha256-identical and unmodified in `git
+status`. Throwaway database dropped.

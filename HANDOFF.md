@@ -1,6 +1,50 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: CI GOES GREEN AGAIN — one test that only passed on a database with
+      history, red for seven pushes. DECISIONS :25008. One test file; no app
+      code, no migration.
+
+  1. **THE TEST MEASURED THE DEVELOPER'S DATABASE, NOT THE CODE.** Its control
+     asserted the five pre-:18488 plan codes EXIST and are inactive — but
+     `seed.ts` retires them with an UPDATE and never INSERTs them, so a
+     database seeded from empty has never had them. **Measured on a fresh one:
+     0 of 6 present** against a control expecting 5.
+  2. **IT ALSO HID A REAL GAP:** on a fresh database no inactive plan exists at
+     all, so `active = true` had NO observer there — O148 would have survived.
+  3. **FIX: the suite owns its retired row** (`zz_plans_retired`, INR,
+     inactive, `beforeAll`/`afterAll`), following the two fixture plans already
+     in the file. Legacy check KEPT, now labelled vacuous on a fresh database.
+  4. **PINNED ON BOTH DATABASE SHAPES:** deleting `active = true` goes RED
+     exit 1 on the dev database AND on a fresh one — the second is the
+     load-bearing run.
+  5. **THE PROCESS FAILURE IS BIGGER THAN THE TEST.** Seven pushes landed with
+     CI red; six DECISIONS entries across those two days, each with a PROVE
+     section, never mention it. :2825 claims PR #29 "has gated every push all
+     along" — untrue since 2026-08-28. **Standing: after a push, read the run's
+     verdict and report it. "Pushed" is not "green".**
+  6. **MY ERROR, RECORDED:** I filtered the history to `web-repoint` and told
+     Kd "two days, not months". He said twice the emails predate that and was
+     RIGHT — 17 failures since 2026-07-06, 10 of them in July on early
+     branches. **A filter is a hypothesis about scope** (:19256's shape).
+  7. `gh` IS installed and authenticated here; a stale note said otherwise.
+
+PROVE: `orgs.plans` 12/12 exit 0 on the dev database AND 12/12 on a database
+       created, migrated and seeded from empty this session · **the whole api
+       suite 654/654 exit 0 on that fresh database — the configuration CI runs,
+       where it had been 653/654** · mutant RED exit 1 on both · tsc exit 0 ·
+       eslint clean · repo.ts restored sha256-identical, `git status` clean ·
+       triggers 681 from 190 of 328, --check clean · index 238 pointers.
+
+FILES: apps/api/test/orgs.plans.test.ts · DECISIONS.md · DECISIONS-INDEX.md ·
+       DECISIONS-TRIGGERS.md (generated) · HANDOFF.md. **No app code.**
+
+OPEN:  Nothing deferred. `CLAUDE.md`'s pre-existing uncommitted edit is still
+       out, as before. **Next card is unchanged: the person waiting to join a
+       lapsed gym** (`OWED.md`, Kd's ruling of 2026-08-29).
+```
+
+```
 TASK: THE READ-ONLY CONSOLE'S SMOKE PASSES 16/16 — the card's last gate falls.
       DECISIONS :24893. Run by Kd at the browser, 2026-08-30, on `206ae2c`.
       No src, no test, no migration touched.

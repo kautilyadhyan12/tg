@@ -138,6 +138,27 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
    *  is here to detect. `trial_days = 0` for `FRACTIONAL_PLAN`'s reason. */
   const FOREIGN_PLAN = "zz_plans_foreign";
 
+  /** A RETIRED ROW THIS SUITE OWNS — and it exists because the control it
+   *  replaces only worked on a database with HISTORY.
+   *
+   *  The `active = true` filter needs an INACTIVE row to be observable at all.
+   *  The old control read the six pre-:18488 codes (`org_starter` and friends)
+   *  straight out of `plans` and asserted they were present and switched off —
+   *  **but `seed.ts` RETIRES those codes with an UPDATE and never INSERTs them**,
+   *  so on a database seeded from empty they have never existed, the read returns
+   *  `[]`, and the control fails on correct code. It passed on this machine
+   *  (seeded before 2026-08-24, rows present) and failed on every fresh one.
+   *  **CI is a fresh database every run and had been red on this single
+   *  assertion since 2026-08-28.**
+   *
+   *  Owning the row fixes both halves: it works on any database, and it restores
+   *  the guarantee on a FRESH one, where no inactive plan exists and mutant O148
+   *  would otherwise survive for want of a subject. **INR so it sits in the book
+   *  this test reads; `zz_` so `seededBook` keeps it out of the exact ladders;
+   *  `trial_days = 0` for `FRACTIONAL_PLAN`'s reason; ₹999 because that is a real
+   *  retired price, so a leak quotes something recognisably wrong.** */
+  const RETIRED_PLAN = "zz_plans_retired";
+
   beforeAll(async () => {
     await cleanup();
     await sql`
@@ -152,12 +173,22 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       VALUES (${FOREIGN_PLAN}, 'org', ${"plan." + FOREIGN_PLAN}, 3500, 'CAD', 'month',
               42, 0, 10, '{}'::jsonb, '{}'::jsonb)
       ON CONFLICT (code) DO UPDATE SET active = true`;
+    // active = false in BOTH halves: this row is only useful switched off, and a
+    // re-run that found it left over must not resurrect it (the two above set
+    // active = true on conflict for the opposite reason).
+    await sql`
+      INSERT INTO plans (code, audience, name_key, price_minor, currency, interval,
+                         seat_cap, trial_days, rank, entitlements, member_entitlements,
+                         active)
+      VALUES (${RETIRED_PLAN}, 'org', ${"plan." + RETIRED_PLAN}, 99900, 'INR', 'month',
+              42, 0, 10, '{}'::jsonb, '{}'::jsonb, false)
+      ON CONFLICT (code) DO UPDATE SET active = false, price_minor = 99900`;
     app = await buildApp(loadConfig(baseEnv));
   }, HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanup();
-    await sql`DELETE FROM plans WHERE code IN (${FRACTIONAL_PLAN}, ${FOREIGN_PLAN})`;
+    await sql`DELETE FROM plans WHERE code IN (${FRACTIONAL_PLAN}, ${FOREIGN_PLAN}, ${RETIRED_PLAN})`;
     await app?.close();
     await sql.end();
   }, HOOK_TIMEOUT_MS);
@@ -350,7 +381,15 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
        *  not laziness: `db.migration.test.ts` reactivates exactly that row
        *  mid-run to prove the seed retires it again, and four suites share one
        *  database. Naming it here would be a race against a sibling. The other
-       *  five retired rows are touched by nothing. */
+       *  five retired rows are touched by nothing.
+       *
+       *  **THIS LIST IS VACUOUS ON A FRESH DATABASE** — the five codes are never
+       *  inserted there (`seed.ts` only UPDATEs them), so it asserts an absence
+       *  that is trivially true. It is kept because it still bites on a database
+       *  that HAS them, which is every developer machine seeded before
+       *  2026-08-24. **The control below is what carries the guarantee
+       *  everywhere**, and the sentence above about the guarantee being
+       *  observable was true only of a database with history. */
       const retired = [
         "org_starter",
         "org_standard",
@@ -361,13 +400,19 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       const offered = new Set(plans.map((p) => p.code));
       expect(retired.filter((c) => offered.has(c)), "retired bands on sale").toEqual([]);
 
-      // THE CONTROL — the five codes above must still EXIST and be inactive, or
-      // the assertion is satisfied by rows that were simply deleted and proves
-      // nothing about the filter (:15093's O92 shape).
-      const rows = await sql<{ code: string; active: boolean }[]>`
-        SELECT code, active FROM plans WHERE code = ANY(${retired})`;
-      expect(rows).toHaveLength(retired.length);
-      for (const r of rows) expect(r.active, `${r.code} must be a retired row`).toBe(false);
+      /** THE CONTROL — without it the assertion above is satisfied by rows that
+       *  simply do not exist, and proves nothing about the filter (:15093's O92
+       *  shape). It is `RETIRED_PLAN` and not the six seeded codes **because
+       *  those are absent on a fresh database**: `seed.ts` retires them with an
+       *  UPDATE and never inserts them, so the previous version of this control
+       *  asserted five rows, got `[]`, and had CI red from 2026-08-28 on correct
+       *  code. This row is inserted inactive by `beforeAll`, so the guarantee is
+       *  observable on every database rather than only on one with history. */
+      const control = await sql<{ active: boolean }[]>`
+        SELECT active FROM plans WHERE code = ${RETIRED_PLAN}`;
+      expect(control, "the suite's own retired row must exist").toHaveLength(1);
+      expect(control[0]?.active, "and must be switched off").toBe(false);
+      expect(offered.has(RETIRED_PLAN), "a switched-off plan was quoted").toBe(false);
     },
     TEST_TIMEOUT_MS,
   );

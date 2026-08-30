@@ -906,6 +906,15 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:25008** — 2026-08-30 — **CI HAD BEEN RED FOR SEVEN PUSHES ON ONE TEST THAT
+  ONLY PASSES ON A DATABASE WITH HISTORY, and six write-ups never mentioned the
+  gate was down.** The control asserted five plan rows `seed.ts` retires but
+  never inserts, so it failed on every fresh database and passed on this machine
+  alone. **Read before asserting that a seeded row EXISTS (as opposed to
+  asserting its state), before quoting a CI verdict without saying which branch
+  you filtered to, and before writing a PROVE section without looking at what CI
+  said about the last push.**
+
 - **:24893** — 2026-08-30 — **THE READ-ONLY CONSOLE'S SMOKE PASSES 16/16 on
   `206ae2c`, closing the card's last gate** — and the reusable finding is the
   sheet's own step 8→9→10 handshake, which no sheet warns the operator about.
