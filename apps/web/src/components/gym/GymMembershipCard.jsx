@@ -26,14 +26,29 @@ import { gymStatusRows, nudgeState } from './gymMembershipView';
 // something actually acts on, and the `expired` arm below is finally reachable.
 // Before this card that arm existed and no path in the product could produce
 // it.
+//
+// **AND AS OF 2026-08-30 THAT COUNTDOWN HAS ONE STATE IN WHICH IT IS NOT REAL,
+// which is why `expiresAt` is no longer enough on its own to draw it.** Kd
+// ruled (:24141 §1) that a request to a gym with no live plan is HELD rather
+// than expiring, so for those rows the sweep never acts on the date and the
+// card must not quote it. `orgCanConfirm` is the field that says which state
+// this is, and `WaitingRow` below is where both sentences change.
 
 // THE WAITING ROW, and it is the only one with a control on it (:11385).
 //
 // THREE THINGS IT SAYS AND ONE IT MUST NOT. It names the gym, says when the
-// request runs out, and offers "Remind them" — and it NEVER claims a message
+// request runs out (or that it is being HELD, and then says nothing about when
+// — see `held` below), and offers "Remind them" — and it NEVER claims a message
 // was sent anywhere, because none is. There is no email in this product and no
 // web push, so the reminder arrives as a mark on the front desk's own queue,
 // and the confirmation sentence says exactly that.
+//
+// **"REMIND THEM" STAYS ON A HELD ROW, AND THAT IS THE RULING RATHER THAN AN
+// OVERSIGHT.** It is the one thing this person can still do; the mark really
+// does land on the gym's queue, which is READ-only and not unreadable; and Kd
+// ruled the join door does not refuse a lapsed gym (:24141 §1) — the nudge is
+// the same question about the same dead end, so it gets the same answer.
+// Nothing it says is false: the gym CAN see they are still waiting.
 //
 // THE ONCE-A-DAY RULE IS THE SERVER'S. `nudgeState` decides whether the button
 // looks available, and a wrong answer here costs a refused tap and a truthful
@@ -43,6 +58,13 @@ function WaitingRow({ row }) {
   const [state, setState] = useState({ busy: false, sent: null, error: null });
   const expiring = expiresInLabel(row.expiresAt);
   const { ready } = nudgeState(row);
+  // THE GYM HAS NO PLAN, SO NOBODY THERE CAN LET THIS PERSON IN (Kd's ruling of
+  // 2026-08-29, :24141 §1). Two sentences on this card become FALSE in that
+  // state and both are replaced below: "one tap at the front desk" describes a
+  // tap the server refuses with a 409, and the countdown counts toward a
+  // deadline the sweep no longer acts on. Either one left standing is :5807's
+  // class — on screen and wrong.
+  const held = row.orgCanConfirm === false;
   // A tap is refused while one is in flight, while today's is already spent,
   // and once this one lands. The sent state does not clear: re-offering the
   // button under "we've let them know" would invite a tap the server refuses.
@@ -78,15 +100,30 @@ function WaitingRow({ row }) {
         <p className="text-sm font-semibold" style={{ color: '#fff' }}>
           Waiting for {row.orgName} to confirm you
         </p>
+        {/* WHY THE HELD SENTENCE SAYS NOTHING ABOUT A PLAN OR A PAYMENT: the
+            person reading this is not staff of that gym, and the app must not
+            tell a stranger holding a code which gyms have stopped paying —
+            the boundary :23711 §2(a) ordered the gate's checks around, and the
+            reason `consoleReadOnly` is staff-only. It says what is true and
+            theirs to know: nobody can let them in yet, and their place is safe.
+
+            AND IT STOPS THERE. It does not say the gym will confirm them when
+            it is back — nothing in the product can put a gym back on a plan
+            (measured 2026-08-29), so a held request whose deadline has already
+            passed still needs the payment card to survive its first sweep after
+            the gym subscribes. That is on `OWED.md`, and promising it here
+            before it works is the same defect Card A refused to ship. */}
         <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.55)' }}>
-          Someone at the gym confirms new members from their side — one tap at the front desk.
-          Everything in the app keeps working meanwhile.
+          {held
+            ? `${row.orgName} can't take new members right now. Your request is being held — it won't run out while that's the case.`
+            : 'Someone at the gym confirms new members from their side — one tap at the front desk. Everything in the app keeps working meanwhile.'}
         </p>
         {/* The deadline comes off the server's own `expiresAt`, read through
             the SAME helper the gym's queue uses, so the two screens cannot
             quote different dates for one request. Absent rather than guessed
-            when the field is missing or unreadable. */}
-        {expiring !== null ? (
+            when the field is missing or unreadable — and absent while the
+            request is HELD, because then the date is not a deadline at all. */}
+        {!held && expiring !== null ? (
           <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
             {expiring} — if that happens, just enter the code again.
           </p>

@@ -46,6 +46,11 @@ const appRow = (kind, o, extra = {}) => ({
   applicationId: `app-${o.id}-${kind === 'waiting' ? 'pending' : 'rejected'}`,
   expiresAt: '2026-09-02T09:00:00.000Z',
   nudgedAt: null,
+  // The gym can act on the request unless the server says otherwise — see the
+  // three-state cases at the bottom of this describe. `true` is the DEFAULT
+  // here because it is what every api answer except an explicit `false`
+  // produces, including no answer at all.
+  orgCanConfirm: true,
   ...extra,
 });
 
@@ -210,6 +215,47 @@ describe('gymStatusRows', () => {
     // `orgId` could not call the endpoint at all.
     expect(row.applicationId).toBe('app-gym-1-pending');
     expect(row.expiresAt).toBe('2026-09-02T09:00:00.000Z');
+  });
+
+  // ── can the gym act on it? (Kd 2026-08-29, :24141 §1) ────────────────────
+  //
+  // THREE STATES AND ONLY ONE OF THEM MEANS NO. The server sends true or false;
+  // an api older than this bundle sends nothing and the shared schema defaults
+  // it to null. `null` is "we could not ask", never "no" — the same rule
+  // `consoleReadOnly` follows, and safe for the same reason: the SERVER is the
+  // enforcement, so the hold and the 409 are real whatever this field says.
+  it('carries an explicit NO from the server onto the waiting row', () => {
+    const held = { ...application('pending', IRON), orgCanConfirm: false };
+    expect(gymStatusRows({ applications: [held], orgs: [] })).toEqual([
+      appRow('waiting', IRON, { orgCanConfirm: false }),
+    ]);
+  });
+
+  it('treats a MISSING answer as yes — an older api must not invent a held state', () => {
+    // The whole `application()` helper omits the field, which is exactly the
+    // shape an api deployed before this card returns. Drawing "your request is
+    // being held" off a field nobody answered would tell a person waiting on a
+    // perfectly healthy gym that it has stopped taking members.
+    const [row] = gymStatusRows({ applications: [application('pending', IRON)], orgs: [] });
+    expect(row.orgCanConfirm).toBe(true);
+  });
+
+  it('treats an explicit null and an unreadable value as yes too', () => {
+    for (const value of [null, undefined, 'no', 0]) {
+      const app = { ...application('pending', IRON), orgCanConfirm: value };
+      const [row] = gymStatusRows({ applications: [app], orgs: [] });
+      expect(row.orgCanConfirm, `orgCanConfirm: ${JSON.stringify(value)}`).toBe(true);
+    }
+  });
+
+  it('answers for a REFUSED row too, because that row comes through the same loop', () => {
+    // Not a state the card draws a held sentence in — only `waiting` reads the
+    // field — but the row shape is uniform, and :12343's Low-5 is the recorded
+    // cost of a comment claiming a field is "undefined on every other kind".
+    const refused = { ...application('rejected', IRON), orgCanConfirm: false };
+    expect(gymStatusRows({ applications: [refused], orgs: [] })).toEqual([
+      appRow('refused', IRON, { orgCanConfirm: false }),
+    ]);
   });
 });
 

@@ -906,6 +906,21 @@ deleted. **The rule that makes this permanently safe is :24703, ruled the same
 day: a `Read before …` sentence is now MANDATORY, so every future card record is
 findable from §1B by construction and never needs to sit in §1 at all.**
 
+- **:25092** — 2026-08-30 — **A PERSON WAITING TO JOIN A LAPSED GYM IS TOLD THE
+  TRUTH AND THEIR REQUEST STOPS DYING** — Card B of Kd's 2026-08-29 split
+  (:24141 §1, *"hold their request and tell them the truth"*). The expiry holds
+  while the gym has no live plan, the waiting person is told on BOTH applicant
+  screens, and the nudge stays open because Kd ruled the join door does not
+  refuse. **Read before touching `modules/orgs/sweep.ts`'s expiry, before adding
+  a field any APPLICANT-facing surface needs, before writing copy for somebody
+  waiting at a gym's door, before gating the CHASE on anything, before assuming
+  `/org/join` draws anything but `JoinGymPanel`, and before believing a mutation
+  harness nobody has run since the file it points at was refactored.** Two
+  instruments were lying: **the approved plan's stated limit** (the join screen
+  "did not need it" — true of Settings → Gym, false of `/org/join`, which draws
+  the panel alone), and **`mutate-join-door.mjs`, which had ABORTED on four dead
+  anchors since 2026-08-20 and produced no verdict at all for ten days**.
+
 - **:25008** — 2026-08-30 — **CI HAD BEEN RED FOR SEVEN PUSHES ON ONE TEST THAT
   ONLY PASSES ON A DATABASE WITH HISTORY, and six write-ups never mentioned the
   gate was down.** The control asserted five plan rows `seed.ts` retires but

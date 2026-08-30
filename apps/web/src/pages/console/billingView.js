@@ -120,14 +120,25 @@ export const READ_ONLY_NOTE = 'This gym needs a plan before anything here can be
  *  gym's Confirm answers 409, so applicants sit in a queue nobody can clear, and
  *  a queue that says nothing is the console half of that dead end.
  *
- *  **IT DELIBERATELY STOPS THERE AND PROMISES NOTHING ABOUT THEIR PLACE.** The
- *  obvious second sentence — *"they keep their place"* — is what Kd ruled on
- *  2026-08-29, and it is NOT TRUE YET: today an application still dies 14 days
- *  after it was made whatever the gym's plan is doing (`APPLICATION_TTL_DAYS`).
- *  Holding it, and telling the waiting person why, is the next card; **writing
- *  the sentence before the behaviour exists is exactly :5807's class**, so it
- *  waits for the commit that makes it true. */
-export const READ_ONLY_QUEUE_NOTE = 'Nobody can be let in until this gym is on a plan.';
+ *  **THE SECOND SENTENCE ARRIVED 2026-08-30, IN THE COMMIT THAT MADE IT TRUE.**
+ *  Card A shipped this constant with one sentence and wrote down why the
+ *  obvious second one — *"they keep their place"* — was missing: Kd had ruled it
+ *  on 2026-08-29, and it was NOT TRUE YET, because an application still died 14
+ *  days after it was made whatever the gym's plan was doing
+ *  (`APPLICATION_TTL_DAYS`). **Writing a reassurance before the behaviour exists
+ *  is exactly :5807's class**, so two tests held it out — one on this constant
+ *  and one at the screen — precisely so that the copy could not change until the
+ *  code did. It now has: `sweep.ts`'s expiry holds while the gym has no live
+ *  plan, and the waiting person's own card says so.
+ *
+ *  **AND IT STILL STOPS SHORT OF THE THING THAT IS NOT BUILT.** It does not say
+ *  the waiting people will be let in when the gym comes back: nothing in this
+ *  product can put a lapsed gym back on a plan, so a held request whose deadline
+ *  has already passed needs the PAYMENT card to survive the first sweep after
+ *  the gym subscribes (`OWED.md`). "They keep their place" is true today;
+ *  "we'll confirm them for you later" would be the same defect one card on. */
+export const READ_ONLY_QUEUE_NOTE =
+  'Nobody can be let in until this gym is on a plan. The people waiting keep their place.';
 
 /** §4.2's *"Trial expired → grace"* row, in words true of BOTH ways a gym
  *  arrives here.

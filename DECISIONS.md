@@ -25088,3 +25088,237 @@ fresh database**, which is the configuration CI runs and where it had been
 653/654 · mutant RED with exit 1 on both databases · tsc exit 0 · eslint clean on
 both touched files · repo.ts restored sha256-identical and unmodified in `git
 status`. Throwaway database dropped.
+
+## 2026-08-30 — A PERSON WAITING TO JOIN A LAPSED GYM IS TOLD THE TRUTH AND THEIR REQUEST STOPS DYING — and two instruments turned out to be lying: my own plan about which screen says it, and a mutation table that had been aborting for ten days
+
+**Read before touching `modules/orgs/sweep.ts`'s expiry, before adding a field
+any APPLICANT-facing surface needs, before writing copy for somebody waiting at a
+gym's door, before gating the CHASE on anything, before assuming `/org/join`
+draws anything but `JoinGymPanel`, and before believing a mutation harness nobody
+has run since the file it points at was refactored.**
+
+Card B of the split Kd approved at :24141 §2, built after Card A shipped and
+smoked (:24893). Its `OWED.md` line carried the design; this entry records what
+changed and the two things the round found that neither the line nor the approved
+plan predicted.
+
+### 1. WHAT SHIPS, AND THE RULING IT CARRIES OUT
+
+Kd, 2026-08-29: ***"hold their request and tell them the truth."*** He ruled the
+opposite first — the join door REFUSING a lapsed gym — and reversed himself one
+message later on his own question, ***"what happens to that user when gym
+subscribes again"***. **Do not re-propose the refusal**; the reasoning is at
+:24141 §1 and on the `OWED.md` line.
+
+**(a) THE EXPIRY HOLDS WHILE THE GYM HAS NO LIVE PLAN.** One condition on the
+statement that destroys something, composed once as `gymOnPlan` and interpolated
+into the two statements that must agree about it — the expiry and the due count —
+for the reason `inScope` is written that way: two hand-written copies of one
+condition are two things that drift (:14493's Low-2). It is a FOURTH reader of
+§4.1's three live statuses and, like the third, what holds it to the others is a
+TEST driving one gym across the transition rather than a shared SQL fragment,
+which R3.8 rules out.
+
+**(b) `heldNoPlan` IS A SEPARATE NUMBER FROM `heldForNotice`, and that is not
+tidiness.** `heldForNotice` means *"the chase step is not doing its job"* — a
+number an operator acts on. A lapsed gym's held rows would have landed in it
+while the chase step was working perfectly, making both numbers unreadable. So
+the due count returns `due` and `due_on_plan` from one pass, and the two figures
+are each measured rather than re-derived from a second copy of a WHERE (the rule
+`heldForNotice` already carried).
+
+**(c) `orgCanConfirm` ON `orgApplicationSchema` — THE SHAPE BOTH APPLICANT
+SCREENS SHARE.** Three-state, `.default(null)`. Two sentences were FALSE for
+these gyms and both are replaced wherever they appear: *"one tap at the front
+desk"* describes a tap :23711's gate refuses with a 409, and the countdown counts
+toward a deadline the sweep no longer acts on. Shipped sentence, identical on both
+screens: ***"&lt;gym&gt; can't take new members right now. Your request is being
+held — it won't run out while that's the case."***
+
+**(d) THE COPY NAMES THE EFFECT AND NEVER THE CAUSE, AND IT IS AN INFORMATION
+BOUNDARY RATHER THAN A WORDING PREFERENCE.** These responses go to somebody who
+is NOT staff of that gym. :23711 §2(a) ordered the console gate's two checks
+precisely so a signed-in stranger holding a uuid cannot learn which gyms have
+stopped paying, and `consoleReadOnly` on `/v1/orgs/mine` is staff-only for the
+same reason. So the field answers only the question that is theirs to ask, and
+the sentence stops there too. A route test asserts the response carries no
+status, plan or subscription vocabulary at all. **The name generalises with the
+copy**: a later reason a gym cannot confirm (a seat cap) is the same answer and
+the same sentence.
+
+**(e) THE NUDGE STAYS OPEN, AND THAT IS THE RULING RATHER THAN AN OMISSION.**
+The `OWED.md` line lists it as the third thing to build and calls it *"the same
+question about the same dead end"* as the join door. Kd answered that question:
+the door does not refuse. So the nudge does not either. It is the one thing this
+person can still do, and nothing it says is false — the mark really does land on
+a queue a lapsed gym's staff can still read, because the console is read-only and
+not unreadable (Kd, :23711 — it "seals nobody out").
+
+**(f) THE CONSOLE'S QUEUE SENTENCE GAINED ITS SECOND HALF, IN THE COMMIT THAT
+MADE IT TRUE.** Card A shipped `READ_ONLY_QUEUE_NOTE` as one sentence and wrote
+down why the obvious second one was missing, with **two tests asserting its
+absence** — one on the constant, one at the screen — *"so the copy has to change
+in the commit that makes it true"* (:24141 §3d). It has. Both flipped here, and
+the screen-level one kept its negative half pointed at the next untrue thing: the
+console still must not promise it will confirm these people later.
+
+### 2. THE GAP IN MY OWN APPROVED PLAN, AND IT IS THE MORE USEFUL HALF OF THIS ENTRY
+
+**The plan Kd approved said the waiting person is told on their dashboard card,
+and named a stated limit: the join screen would not need it, because "the card
+directly above re-reads and says it". THAT SENTENCE IS TRUE OF SETTINGS → GYM AND
+FALSE OF `/org/join`, WHICH IS THE ROUTE MOST PEOPLE ARRIVE ON.**
+
+`pages/JoinGym.jsx` renders `<JoinGymPanel />` **and nothing else** — no
+`GymMembershipCard`. So the QR code and the poster both land on a screen that
+said *"If you're standing at the front desk, ask them now — it takes one tap"* to
+somebody whose tap the server answers 409, **with no second screen to correct
+it**. That is :5807's class exactly — on screen and wrong — and it is the very
+defect this card exists to remove, one component over.
+
+**Found by checking the assumption rather than by a test, a review or a smoke: no
+instrument in this repo could have caught it**, because the panel's own tests
+passed (they assert the sentence that was there) and the card's own tests passed
+(they cover the card). **A stated limit is a claim (V3), and this one was never
+sourced — it was written from a memory of Settings → Gym, which does hold both
+components.**
+
+**THE FIX MOVED THE FIELD DOWN A LEVEL, WHICH IS WHY IT IS WORTH RECORDING.** It
+was on `myOrgApplicationSchema` — the waiting LIST alone. It now sits on
+`orgApplicationSchema`, the shape the join door's two waiting arms and the list
+all share, so one definition serves every applicant-facing surface and a third
+one cannot be added without it. `applyByCode` answers through `gymHasLivePlan`
+inside its existing transaction — the caller its signature was widened for —
+while the list keeps an inline `EXISTS`, because the list asks about every row it
+returns at once and would otherwise need a query per application.
+`service.toApplication` takes `orgCanConfirm` as a **required second argument**
+for the same reason: a future third caller cannot compile without answering the
+question.
+
+### 3. THE CHASE IS DELIBERATELY NOT GATED, AND A TEST PINS WHY
+
+The obvious symmetry — hold the reminder too, since nobody can act on it — builds
+a SECOND, HIDDEN hold that OUTLIVES the gym paying up. A row never chased can
+never expire (`gym_notified_at IS NOT NULL`, and the notice comparison), so
+skipping lapsed gyms in the chase would release the row on the plan and then
+block it on a missing flag. **The hold belongs on the statement that DESTROYS
+something.** Mutant **O165** runs the tidier version; "keeps CHASING a lapsed
+gym" is the test that fails.
+
+### 4. WHAT CANNOT BE BUILT, NAMED AT PLAN TIME RATHER THAN DISCOVERED
+
+**Reviving a held request on the day a gym pays.** Nothing in this product can put
+a lapsed gym back on a plan (measured 2026-08-29, unchanged), so there is no
+trigger point. It stays on the payment card's `OWED.md` line — **and this card
+makes that line matter more, not less**: a held request whose `expires_at` is
+already in the past is exactly what the first sweep after the gym subscribes would
+kill. Tests and mutants hold the copy short of promising it on all three surfaces.
+
+### 5. THE FINDING THE CARD DID NOT GO LOOKING FOR: A MUTATION TABLE THAT HAD BEEN ABORTING FOR TEN DAYS
+
+The card's own sweep would not start. `mutate-join-door.mjs` **aborted on J6 —
+and J10, J14 and J17 were dead behind it**, all four left behind by ordinary
+refactors in the files they point at: `removed: 0` joining `RANK` with Kd's
+removal ruling (:12660, `8b19775`), the read-only card splitting *"confirm the
+ones you recognise"* onto its own conditional (:24141 §3d), an applicant's name
+wrapped in a truncating span, and `member.complimentary` becoming
+`seatIsFree(member)` (:14956).
+
+**PROVEN PRE-EXISTING RATHER THAN ASSUMED, in a throwaway worktree at `HEAD`** —
+because "not mine" is a claim (:8707). All four are dead at `HEAD`. **Two rows
+WERE moved by this card's own diff and are separate: O56** (the plan gate landing
+between the notice condition and `RETURNING`) **and O27** (both waiting arms
+becoming multi-line objects) — :23128's standing rule earning itself twice in one
+card.
+
+**THE PART TO KEEP IS WHAT IT COST: this harness ABORTS on the first dead anchor,
+before a byte is written, so it produced NO VERDICT AT ALL between 2026-08-20 and
+today.** Cards shipped past a table that was saying nothing. **An abort reads as a
+broken tool rather than as an unguarded guarantee**, which is why ten days of it
+went unreported — :23711 §3's O79 one level up, where a single row was inert
+inside a subset and here the whole table was.
+
+**AND THE AUDIT THAT FOUND IT WAS WRONG FIRST, WHICH IS WORTH MORE THAN THE FIX.**
+A throwaway script reported **66 dead anchors in `mutate-orgs.mjs`** — a number
+that should have been disbelieved on sight, and was, because that harness had run
+three days earlier. The script ignored `withEolOf`: `orgs/repo.ts`,
+`users/repo.ts`, `seed.ts` and `shared/orgs.ts` are CRLF while the sweep files are
+LF, and the harness converts anchors to the file's own endings on purpose
+(:4267's class fix, recorded at :10866). **A measurement that contradicts a recent
+green run is a bug in the instrument until proven otherwise** — :13746's and
+:9509's habit, arriving in a tool written to check tools.
+
+**FIVE ANCHORS MATCH THEIR TARGET TWICE** (O17, O29, O89, O103, O104), also
+pre-existing at `HEAD`. **The pre-check asks "does this match?" and never "does it
+match ONCE?"**, while the mutation is `String.replace`, which takes the first hit.
+Left alone (R1.1) with its own `OWED.md` line: not a false verdict, and not
+claimed as one — only a thing the harness cannot tell. **The same audit caught me
+about to ADD a sixth** (J33, whose two paragraphs both read
+`{result.application?.orgCanConfirm === false ? (`); **fixed in the SOURCE by
+hoisting the question into a named `held` const** — :17676's precedent, and better
+code besides.
+
+**THE GUARD IS RECOMMENDED AND NOT BUILT HERE (R1.1).**
+`apps/api/scripts/check-harnesses.mjs` already walks every harness on the ROOT
+lint and today only `node --check`s them; teaching it to verify each row's anchor
+would have gone red on the first lint after `8b19775` rather than ten days later.
+It also disposes of the objection that kept `OWED.md`'s ⚪ line ⚪ for a month — a
+check that only reads anchors cannot go red on an innocent refactor of anything
+the harnesses do not point at. Both `OWED.md` lines say so and name each other.
+
+### 6. WHAT THIS CARD DELIBERATELY DOES NOT DO
+
+- **The revival on payment** — §4, the payment card's line.
+- **The 14-day archive** (§4.2's second half) — its own line, unchanged. **Its
+  card inherits a question this one creates and cannot answer: an archived gym is
+  terminal, so a request held against one is held for ever.**
+- **The five multi-match anchors and the harness guard** — §5.
+- **`JoinGymPanel`'s file header still lists "that the request EXPIRES" among the
+  things its copy may not say**, which the clock made stale on 2026-08-20. Not
+  this card's prose and not touched (R1.1); reported in one line.
+
+### Round log
+
+**PROVE — every figure naming what it ran against.**
+
+- **Web suite 1383 passed / 1383, 50 files, exit 0.** +13 tests, counted per file
+  against `HEAD` rather than inferred (`git show HEAD:f | grep -c` per file).
+- **`orgs.routes` 145/145** and **`orgs.sweep` 23/23**, exit 0, **LOCAL**
+  (`localhost:5433`, `test:local` — :13659). +2/+3 and +5.
+- **Full api suite: 659 passed / 662, LOCAL** — the three failures are
+  `catalog.seed.test.ts` and are the PRE-EXISTING shared-database race CLAUDE.md's
+  Appendix and `OWED.md` both name. **Proven, not asserted: that file passes 7/7
+  run alone.** Not quoted as green.
+- `tsc --noEmit` exit 0 on api and shared · `eslint --max-warnings=0` exit 0 on
+  every changed file · `vite build` exit 0 · `node --check` clean on all three
+  edited harnesses.
+- **Anchor audit, whole tables:** `mutate-join-door` 34 rows, 0 dead, 0 multi;
+  `mutate-console` 150 rows, 0 dead, 0 multi; `mutate-orgs` 167 rows, 0 dead,
+  **5 multi (pre-existing, §5)**.
+- **SWEEPS, each naming its scope and its database.**
+  · **`mutate-join-door` WHOLE TABLE, 34 mutants: 34 RED, 0 ALIVE, 0 never ran**,
+    restores sha256-verified after every mutant. Whole-table on purpose — it is
+    the table that had been aborting, and a subset would have exercised the
+    pre-check without RUNNING the four resurrected rows (:23257 §9).
+  · **`mutate-orgs` a stated SUBSET of 167 (O27, O56, O161–O167): 9 RED, 0
+    ALIVE, 0 never ran**, `Database: localhost:5433` printed by the harness
+    (:13659), 290 gym + subscription rows fingerprinted for mass-write
+    detection.
+  · **`mutate-console` a stated SUBSET of 150 (C129, C130): 2 RED, 0 ALIVE.**
+    Proportionate under :5857 rule 4a — this card's console change is ONE
+    constant — and the rot risk a whole-table run guards against was measured
+    directly instead, by the anchor audit above.
+- **C130 ABORTED ON ITS FIRST RUN AND THE ABORT WAS MINE.** Its replacement text
+  contained `we'll`, whose apostrophe closes the single-quoted constant, so the
+  file stopped parsing, vitest emitted no tally and the harness refused to call
+  it anything — **exactly what that guard is for.** :21157's class (`node
+  --check` catching a raw newline in a mutant string) arriving through quoting.
+  Rewritten without the apostrophe and **proven by applying the mutation to a
+  copy and `node --check`ing it BEFORE spending another run on it.**
+- **A CONSOLE-SWEEP CONTROL WENT RED ONCE AND IS RECORDED AS TRANSIENT, NOT
+  HIDDEN:** *"keeps the rows already on screen when the NEXT page fails"* aborted
+  the first run at ~36 controls; it passes alone (1/1) and the full web suite was
+  green either side of it. The re-run reached 115 controls with no abort before
+  being stopped deliberately, because this card was about to change files it
+  tests and only a final-bytes run is quotable (:5199). :12878's own precedent
+  for a control that aborts once and passes on the re-run.

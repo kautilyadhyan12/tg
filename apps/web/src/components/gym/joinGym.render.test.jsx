@@ -130,6 +130,75 @@ describe('the join panel', () => {
     expect(orgService.join).toHaveBeenCalledWith({ code: 'K7QM2X' });
     // The sheet comes back NAMED once the gym is known.
     expect(screen.getByText(/what iron house can see/i)).toBeTruthy();
+    // The ordinary answer keeps the front-desk sentence — the positive control
+    // for the held case below (:7104's PG1).
+    expect(screen.getByText(/ask them now/i)).toBeTruthy();
+  });
+
+  // ── APPLYING TO A GYM THAT CANNOT CONFIRM ANYBODY (Kd, :24141 §1) ─────────
+  //
+  // **`/org/join` DRAWS THIS PANEL AND NOTHING ELSE** — it is where the QR and
+  // the poster land, and the dashboard's gym card is not on that route. So a
+  // sentence that is wrong here is wrong with no second screen to correct it,
+  // which is why the field reaches the JOIN DOOR's answer and not only the
+  // waiting list.
+  it('tells somebody applying to a gym with no plan that their request is HELD', async () => {
+    orgService.join.mockReturnValue(
+      ok({
+        outcome: 'pending',
+        org: ORG,
+        application: { ...APPLICATION, orgCanConfirm: false },
+      }),
+    );
+    draw(<JoinGymPanel />);
+    fireEvent.change(screen.getByLabelText(/your gym's code/i), { target: { value: 'k7qm2x' } });
+    fireEvent.click(screen.getByRole('button', { name: /ask to join/i }));
+
+    await waitFor(() => expect(screen.getByText(/you've asked to join iron house/i)).toBeTruthy());
+    expect(screen.getByText(/can't take new members right now/i)).toBeTruthy();
+    expect(screen.getByText(/being held/i)).toBeTruthy();
+    // The tap this describes answers 409 for such a gym (:23711).
+    expect(document.body.textContent).not.toMatch(/ask them now/i);
+    // And "Nothing is on hold" cannot sit under "your request is being held".
+    expect(document.body.textContent).not.toMatch(/nothing is on hold/i);
+  });
+
+  it('says nothing about a plan, and promises no later confirmation, on that screen', async () => {
+    // An applicant is not staff of this gym. :23711 §2(a) ordered the server's
+    // own checks so a stranger holding a uuid cannot learn which gyms have
+    // stopped paying, and the copy sits inside the same boundary. Nothing can
+    // put a lapsed gym back on a plan yet either, so a promise to confirm them
+    // later would be :5807's class.
+    orgService.join.mockReturnValue(
+      ok({
+        outcome: 'pending',
+        org: ORG,
+        application: { ...APPLICATION, orgCanConfirm: false },
+      }),
+    );
+    draw(<JoinGymPanel />);
+    fireEvent.change(screen.getByLabelText(/your gym's code/i), { target: { value: 'k7qm2x' } });
+    fireEvent.click(screen.getByRole('button', { name: /ask to join/i }));
+
+    await screen.findByText(/being held/i);
+    const text = document.body.textContent ?? '';
+    expect(text).not.toMatch(/plan|subscription|paying|payment|billing|lapsed/i);
+    expect(text).not.toMatch(/when they|once they|we'll let you|will be confirmed|as soon as/i);
+  });
+
+  it('treats a MISSING answer as the ordinary screen — an older api invents no held state', async () => {
+    // The `APPLICATION` fixture omits the field, which is the shape an api
+    // deployed before this card returns. `null` means "we could not ask", never
+    // "no" — and drawing the held sentence off it would tell somebody waiting on
+    // a perfectly healthy gym that it has stopped taking members.
+    orgService.join.mockReturnValue(ok({ outcome: 'pending', org: ORG, application: APPLICATION }));
+    draw(<JoinGymPanel />);
+    fireEvent.change(screen.getByLabelText(/your gym's code/i), { target: { value: 'k7qm2x' } });
+    fireEvent.click(screen.getByRole('button', { name: /ask to join/i }));
+
+    await screen.findByText(/you've asked to join iron house/i);
+    expect(screen.getByText(/ask them now/i)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/being held/i);
   });
 
   it('PROMISES NO EMAIL, and leaves the countdown to the card that owns it', async () => {
@@ -636,5 +705,95 @@ describe('the gym card on the dashboard', () => {
     expect(document.body.textContent).not.toMatch(/didn't confirm/i);
     // Asking again is the whole point of a free re-apply.
     expect(screen.getByRole('link', { name: /try again/i }).getAttribute('href')).toBe('/org/join');
+  });
+});
+
+// ── WAITING ON A GYM THAT HAS NO PLAN (Kd 2026-08-29, :24141 §1) ────────────
+//
+// Two sentences on the ordinary waiting card are FALSE in this state and both
+// are :5807's class — on screen and wrong. "One tap at the front desk"
+// describes a tap :23711's gate refuses with a 409, and the countdown counts
+// toward a deadline the sweep no longer acts on now that the request is held.
+describe('the gym card when the gym cannot take members', () => {
+  const HELD = { ...APPLICATION, orgCanConfirm: false, org: ORG };
+
+  it('says the request is being HELD, and stops promising a tap at the front desk', async () => {
+    standAt(NOW);
+    orgService.getMyApplications.mockReturnValue(ok({ applications: [HELD] }));
+    orgService.getMine.mockReturnValue(ok({ orgs: [] }));
+    draw(<GymMembershipCard />);
+
+    // The headline is unchanged — they ARE still waiting, and that is true.
+    expect(await screen.findByText(/waiting for iron house to confirm you/i)).toBeTruthy();
+    expect(screen.getByText(/can't take new members right now/i)).toBeTruthy();
+    expect(screen.getByText(/being held/i)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/one tap at the front desk/i);
+  });
+
+  it('does NOT count down to a deadline that will not arrive', async () => {
+    // The sibling test three describes up asserts "expires in 13 days" off this
+    // very fixture and clock. Same date, same instant, held — and the sentence
+    // must be gone, because the sweep will not act on it.
+    standAt(NOW);
+    orgService.getMyApplications.mockReturnValue(ok({ applications: [HELD] }));
+    orgService.getMine.mockReturnValue(ok({ orgs: [] }));
+    draw(<GymMembershipCard />);
+
+    await screen.findByText(/being held/i);
+    expect(document.body.textContent).not.toMatch(/expires in/i);
+    expect(document.body.textContent).not.toMatch(/enter the code again/i);
+  });
+
+  it('KEEPS "Remind them" — it is the one thing this person can still do', async () => {
+    // Kd ruled the join door does NOT refuse a lapsed gym, having ruled the
+    // opposite one message earlier and reversed himself: a refusal saves nobody
+    // because nothing brings them back. The nudge is the same question about the
+    // same dead end, so it gets the same answer — and it says nothing false, the
+    // mark really does land on a queue the gym can still read.
+    standAt(NOW);
+    orgService.getMyApplications.mockReturnValue(ok({ applications: [HELD] }));
+    orgService.getMine.mockReturnValue(ok({ orgs: [] }));
+    draw(<GymMembershipCard />);
+
+    const button = await screen.findByRole('button', { name: /remind them/i });
+    expect(button.disabled).toBe(false);
+  });
+
+  it('promises nothing about being let in later — nothing can un-lapse a gym yet', async () => {
+    // The line the copy must not cross, and the reason it is a test rather than
+    // a comment: a held request whose deadline has already passed still needs
+    // the PAYMENT card to survive the first sweep after the gym subscribes
+    // (`OWED.md`). Telling this person they will be confirmed when the gym is
+    // back is a promise with no code behind it.
+    standAt(NOW);
+    orgService.getMyApplications.mockReturnValue(ok({ applications: [HELD] }));
+    orgService.getMine.mockReturnValue(ok({ orgs: [] }));
+    draw(<GymMembershipCard />);
+
+    await screen.findByText(/being held/i);
+    const text = document.body.textContent ?? '';
+    expect(text).not.toMatch(/when they|once they|we'll let you|will be confirmed|as soon as/i);
+    // And it never explains WHY in terms of the gym's money. An applicant is not
+    // staff of this gym; :23711 §2(a) ordered the server's own checks so that a
+    // stranger cannot learn which gyms have stopped paying, and the sentence on
+    // this card is inside the same boundary.
+    expect(text).not.toMatch(/plan|subscription|paying|payment|billing|lapsed|expired/i);
+  });
+
+  it('is the ordinary card again on a gym that IS on a plan — the positive control', async () => {
+    // The direction that matters more, and the one :7104's PG1 keeps naming: a
+    // held sentence shown to somebody waiting on a healthy gym is the same
+    // defect pointing the other way, and this fixture is the ordinary api
+    // answer.
+    standAt(NOW);
+    orgService.getMyApplications.mockReturnValue(
+      ok({ applications: [{ ...APPLICATION, orgCanConfirm: true, org: ORG }] }),
+    );
+    orgService.getMine.mockReturnValue(ok({ orgs: [] }));
+    draw(<GymMembershipCard />);
+
+    expect(await screen.findByText(/one tap at the front desk/i)).toBeTruthy();
+    expect(screen.getByText(/expires in 13 days/i)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/being held/i);
   });
 });

@@ -262,6 +262,44 @@ d("join-application sweep + nudge (real Postgres)", () => {
     return created;
   };
 
+  /** TAKE A GYM OFF ITS PLAN — the state Kd's hold ruling is about (:24141 §1).
+   *
+   *  **THE TWO WAYS A GYM LAPSES ARE NOT ONE STATE, AND A MUTANT PROVED IT ON
+   *  THE SERVER HALF.** This one deletes the row, so the gym looks like one that
+   *  never subscribed at all. `expireGym` below leaves the row and moves it to
+   *  `expired`, which is what the 04:00 trial sweep does.
+   *
+   *  The difference is not cosmetic: with NO ROW, `EXISTS` is false whatever
+   *  statuses the query lists, so a test that reaches "no plan" this way cannot
+   *  see the status set widen — which is exactly how O155 survived
+   *  (:23711 §3). **The headline hold test below uses `expireGym`** and asserts
+   *  this one as well. */
+  const lapseGym = async (gymId: string) => {
+    await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gymId}`;
+  };
+
+  /** END A GYM'S PLAN THE WAY THE TRIAL SWEEP ENDS IT — the row stays and its
+   *  status becomes `expired`. See `lapseGym` above for why both exist. */
+  const expireGym = async (gymId: string) => {
+    const updated = await sql`
+      UPDATE subscriptions SET status = 'expired'
+      WHERE owner_type = 'gym' AND owner_id = ${gymId} RETURNING id`;
+    // A silent no-op would leave the gym on a LIVE plan while the test believed
+    // it had lapsed — which reads as the hold failing rather than as the fixture
+    // failing, and is the more expensive of the two to debug.
+    expect(updated.length, "expireGym found no subscription to expire").toBe(1);
+  };
+
+  /** PUT IT BACK ON ONE. The other direction of every guard below (:7104's PG1):
+   *  a hold that never lets go is not a safer hold, it is an application that
+   *  can never resolve. */
+  const restorePlan = async (gymId: string) => {
+    await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gymId}`;
+    await sql`
+      INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider)
+      VALUES ('gym', ${gymId}, (SELECT id FROM plans WHERE code = 'org_b1_in_m'), 'trialing', 'pilot')`;
+  };
+
   const applyWithCode = async (cookies: Record<string, string>, code: string) => {
     const res = await post("/v1/orgs/join", { code }, cookies);
     expect(res.statusCode).toBe(200);
@@ -519,6 +557,112 @@ d("join-application sweep + nudge (real Postgres)", () => {
     const result = await sweepAtInstant(new Date());
     expect(result.expired).toBe(0);
     expect(result.heldForNotice).toBe(1);
+    expect((await readRow(applicationId)).status).toBe("pending");
+  });
+
+  // ── THE GYM HAS NO PLAN (Kd 2026-08-29, :24141 §1) ───────────────────────
+  //
+  // A lapsed gym's Confirm answers 409 (:23711's twelve doors), so without this
+  // the clock ran out on a request nobody there was ALLOWED to act on. Kd ruled
+  // the join door does NOT refuse — he ruled the refusal first and reversed
+  // himself one message later, because a refusal saves nobody: the person has to
+  // remember to come back and type the code in again, and nothing reminds them.
+  // So the request is HELD and the waiting person is told the truth.
+
+  test("HOLDS an overdue application while the gym has no live plan — the trial-over state", async () => {
+    // **`expireGym`, NOT `lapseGym`, AND THAT IS THE POINT.** The row stays and
+    // says `expired`, which is the state the 04:00 trial sweep leaves behind and
+    // the one Kd's ruling is actually about. Reaching "no plan" by DELETING the
+    // row makes a widened status set structurally invisible — with no row at all
+    // `EXISTS` is false whatever statuses are listed — which is exactly how O155
+    // survived the server half. The delete-the-row path is asserted below.
+    const { org, applicationId, sweep } = await waitingGym();
+
+    // Chase it while the gym is still trialing, so the notice guard is satisfied
+    // and the ONLY thing left standing between this row and deletion is the
+    // plan. Otherwise a green test proves nothing about the new condition.
+    await sweep(GYM_REMINDER_FIRST_DAYS);
+    await expireGym(org.org.id);
+
+    const held = await sweep(orgRepo.APPLICATION_TTL_DAYS);
+    expect(held.expired).toBe(0);
+    expect(held.heldNoPlan).toBe(1);
+    // And NOT counted as waiting for notice: that number means "the chase step
+    // is not doing its job", and the chase step did its job perfectly here.
+    expect(held.heldForNotice).toBe(0);
+    expect((await readRow(applicationId)).status).toBe("pending");
+
+    // Still held a fortnight after the deadline. There is no second clock.
+    const muchLater = await sweep(orgRepo.APPLICATION_TTL_DAYS * 2);
+    expect(muchLater.expired).toBe(0);
+    expect(muchLater.heldNoPlan).toBe(1);
+    expect((await readRow(applicationId)).status).toBe("pending");
+  });
+
+  test("HOLDS it for a gym that never subscribed at all — the other way a gym lapses", async () => {
+    const { org, applicationId, sweep } = await waitingGym();
+    await sweep(GYM_REMINDER_FIRST_DAYS);
+    await lapseGym(org.org.id);
+
+    const held = await sweep(orgRepo.APPLICATION_TTL_DAYS);
+    expect(held.expired).toBe(0);
+    expect(held.heldNoPlan).toBe(1);
+    expect((await readRow(applicationId)).status).toBe("pending");
+  });
+
+  test("lets it go the moment the gym is back on a plan — the hold is not a second grave", async () => {
+    // **THE DIRECTION THAT MATTERS MORE** (:7104's PG1). A hold that never
+    // releases is not a safer hold: it is an application that can never resolve,
+    // and the row would sit pending for ever with the gym paying perfectly well.
+    const { org, applicationId, sweep } = await waitingGym();
+    await sweep(GYM_REMINDER_FIRST_DAYS);
+    await expireGym(org.org.id);
+    expect((await sweep(orgRepo.APPLICATION_TTL_DAYS)).expired).toBe(0);
+
+    await restorePlan(org.org.id);
+    const released = await sweep(orgRepo.APPLICATION_TTL_DAYS);
+    expect(released.expired).toBe(1);
+    expect(released.heldNoPlan).toBe(0);
+    expect((await readRow(applicationId)).status).toBe("expired");
+  });
+
+  test("keeps CHASING a lapsed gym — the flag is a precondition of the expiry, not a consequence", async () => {
+    // The chase is deliberately NOT gated on the plan (R1.1 and the statement's
+    // own comment). Two reasons, and this test pins the second: a row that was
+    // never chased can never die, so skipping lapsed gyms here would swap one
+    // hold for a hidden second one that OUTLIVES the gym paying up — the row
+    // would be released by the plan and then blocked by a missing flag.
+    const { org, applicationId, sweep } = await waitingGym();
+    await expireGym(org.org.id);
+
+    const chased = await sweep(GYM_REMINDER_FIRST_DAYS);
+    expect(chased.remindedFirst).toBe(1);
+    expect((await readRow(applicationId)).gym_notified_at).not.toBeNull();
+
+    // Held while lapsed, and gone on the first sweep after the plan is back —
+    // which it could not be if the chase had been skipped.
+    expect((await sweep(orgRepo.APPLICATION_TTL_DAYS)).heldNoPlan).toBe(1);
+    await restorePlan(org.org.id);
+    expect((await sweep(orgRepo.APPLICATION_TTL_DAYS)).expired).toBe(1);
+  });
+
+  test("counts a due row as held for ONE reason at a time — the two numbers cannot both claim it", async () => {
+    // `heldForNotice` and `heldNoPlan` are read by a human deciding whether
+    // something is broken: the first means the chase step is failing, the second
+    // is expected and harmless. A row landing in both, or in neither, makes both
+    // numbers unreadable — and the arithmetic that produces them (due, then due
+    // ON PLAN, then expired) is the thing this pins.
+    const { org, applicationId, sweep } = await waitingGym();
+    await lapseGym(org.org.id);
+
+    // Overdue, unchased going in, and on no plan. The chase fires in this same
+    // run, so the notice guard would hold it too — TWO reasons, one row — and
+    // the plan reason takes it, because `heldForNotice` is measured over the
+    // rows whose gym could have acted at all. That precedence is the assertion.
+    const both = await sweep(orgRepo.APPLICATION_TTL_DAYS + 1);
+    expect(both.expired).toBe(0);
+    expect(both.heldNoPlan).toBe(1);
+    expect(both.heldForNotice).toBe(0);
     expect((await readRow(applicationId)).status).toBe("pending");
   });
 

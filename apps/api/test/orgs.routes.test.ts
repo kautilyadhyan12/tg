@@ -829,6 +829,120 @@ d("orgs routes (real Postgres)", () => {
     expect(afterRow?.decidedAt).not.toBeNull();
   });
 
+  it("tells the applicant whether their gym can act on the request — both ways, and by STATUS not by row", { timeout: 30_000 }, async () => {
+    // Kd 2026-08-29 (:24141 §1): a lapsed gym HOLDS the request and the waiting
+    // person is told the truth. This is the field the card reads to stop
+    // promising "one tap at the front desk" about a tap `requireWritablePrivilege`
+    // refuses with a 409.
+    const owner = await makeUser("appconfirm-owner");
+    const member = await makeUser("appconfirm-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test App Can Confirm");
+    const applicationId = await applyWithCode(member.cookies, org.joinCode.code);
+
+    const read = async () => {
+      const res = await get("/v1/orgs/applications/mine", { cookies: member.cookies });
+      expect(res.statusCode).toBe(200);
+      return (
+        JSON.parse(res.body) as { applications: { id: string; orgCanConfirm: boolean }[] }
+      ).applications.find((a) => a.id === applicationId);
+    };
+
+    // On a plan: the ordinary answer, and the direction that would be the worse
+    // defect if it broke — a held sentence shown to somebody waiting on a gym
+    // that is paying perfectly well (:7104's PG1).
+    expect((await read())?.orgCanConfirm).toBe(true);
+
+    // **THE TRIAL-OVER STATE, WHICH IS THE ONE THE RULING IS ABOUT.** The row
+    // stays and says `expired`. Reaching "no plan" by DELETING the row makes a
+    // widened status set invisible — `EXISTS` is false with no row whatever the
+    // query lists — and that is precisely how O155 survived on the server half.
+    await expireGym(org.org.id);
+    expect((await read())?.orgCanConfirm).toBe(false);
+
+    // The other way a gym lapses: it never subscribed at all.
+    await lapseGym(org.org.id);
+    expect((await read())?.orgCanConfirm).toBe(false);
+
+    // And it lets go again, so the field is a fact about today rather than a
+    // one-way flag.
+    await subscribeGym(org.org.id, "org_b1_in_m");
+    expect((await read())?.orgCanConfirm).toBe(true);
+  });
+
+  it("carries the same answer on the JOIN DOOR itself, on both waiting arms", { timeout: 30_000 }, async () => {
+    // **`/org/join` DRAWS THE PANEL AND NOTHING ELSE** — it is where the QR and
+    // the poster land, and the dashboard's gym card is not on that route. The
+    // first version of this card gave `orgCanConfirm` to the waiting LIST alone,
+    // which left the screen most people arrive on saying "ask them now, it takes
+    // one tap" about a tap `requireWritablePrivilege` refuses (:23711).
+    const owner = await makeUser("joinconfirm-owner");
+    const member = await makeUser("joinconfirm-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test Join Can Confirm");
+
+    // The trial-over state, for O155's reason: with the row DELETED `EXISTS` is
+    // false whatever statuses are listed, so that fixture cannot see a widened
+    // set. This one can.
+    await expireGym(org.org.id);
+
+    const first = await post("/v1/orgs/join", { code: org.joinCode.code }, {
+      cookies: member.cookies,
+    });
+    expect(first.statusCode).toBe(200);
+    const firstBody = JSON.parse(first.body) as {
+      outcome: string;
+      application: { orgCanConfirm: boolean };
+    };
+    expect(firstBody.outcome).toBe("pending");
+    expect(firstBody.application.orgCanConfirm).toBe(false);
+
+    // The SECOND tap returns the same row through a different branch
+    // (`already_pending`, the ON CONFLICT path), which is its own return
+    // statement and therefore its own chance to forget the field.
+    const again = await post("/v1/orgs/join", { code: org.joinCode.code }, {
+      cookies: member.cookies,
+    });
+    expect(again.statusCode).toBe(200);
+    const againBody = JSON.parse(again.body) as {
+      outcome: string;
+      application: { orgCanConfirm: boolean };
+    };
+    expect(againBody.outcome).toBe("already_pending");
+    expect(againBody.application.orgCanConfirm).toBe(false);
+
+    // And the ordinary direction, which is the worse defect if it breaks: a gym
+    // that is paying perfectly well must not be described as unable to confirm.
+    await subscribeGym(org.org.id, "org_b1_in_m");
+    const healthy = await post("/v1/orgs/join", { code: org.joinCode.code }, {
+      cookies: member.cookies,
+    });
+    const healthyBody = JSON.parse(healthy.body) as {
+      outcome: string;
+      application: { orgCanConfirm: boolean };
+    };
+    expect(healthyBody.outcome).toBe("already_pending");
+    expect(healthyBody.application.orgCanConfirm).toBe(true);
+  });
+
+  it("never tells the applicant WHY — a stranger must not learn which gyms have stopped paying", { timeout: 30_000 }, async () => {
+    // :23711 §2(a) ordered the console gate's two checks so that a signed-in
+    // stranger holding a uuid cannot discover a gym's billing state. This
+    // response goes to somebody who is NOT staff of that gym, so it carries the
+    // EFFECT and nothing else: no status, no plan, no dates about a
+    // subscription. `consoleReadOnly` — the staff-only version of this fact —
+    // must not appear here either.
+    const owner = await makeUser("appconfirm2-owner");
+    const member = await makeUser("appconfirm2-member");
+    const org = await makeOrg(owner.cookies, "Orgs Test App No Why");
+    await applyWithCode(member.cookies, org.joinCode.code);
+    await expireGym(org.org.id);
+
+    const res = await get("/v1/orgs/applications/mine", { cookies: member.cookies });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).not.toMatch(/consoleReadOnly|subscription|planId|trialEndsAt|seatCap/i);
+    // The status vocabulary itself, in case a future widening carries it over.
+    expect(res.body).not.toMatch(/"(trialing|past_due|canceled)"/);
+  });
+
   it("drops a CONFIRMED application from the applicant's list — /mine owns that fact", { timeout: 30_000 }, async () => {
     const owner = await makeUser("mineapp2-owner");
     const member = await makeUser("mineapp2-member");

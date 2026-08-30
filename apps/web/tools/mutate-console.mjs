@@ -1977,6 +1977,39 @@ const MUTANTS = [
     from: '              aria-checked={role === choice.value}\n              disabled={busy || readOnly}',
     to: '              aria-checked={role === choice.value}\n              disabled={busy}',
   },
+
+  // ── THE WAITING QUEUE'S SENTENCE (Kd 2026-08-29, :24141 §1) ───────────────
+  //
+  // **THIS CONSTANT HAD NO MUTANT UNTIL 2026-08-30, AND THAT WAS RIGHT AT THE
+  // TIME.** Card A shipped it as one sentence whose second half was deliberately
+  // MISSING, guarded by two tests asserting an absence — and an absence has no
+  // behaviour to mutate. The hold is built now, so the sentence makes a PROMISE,
+  // and a promise is a thing that can be deleted or overreached. Both directions
+  // below.
+  {
+    id: 'C129',
+    target: 'billingview',
+    suite: BILLING_VIEW_SUITE,
+    why: "KD'S RULING VANISHES FROM THE CONSOLE: the queue tells a front desk that nobody can be let in and stops there, so the manager of a lapsed gym has no way to know the people waiting are being held rather than quietly timing out. It is the half of the ruling this screen owns, and deleting it leaves the other half saying it alone",
+    expect: 'promises the waiting people keep their place',
+    from: "  'Nobody can be let in until this gym is on a plan. The people waiting keep their place.';",
+    to: "  'Nobody can be let in until this gym is on a plan.';",
+  },
+  {
+    id: 'C130',
+    target: 'billingview',
+    suite: BILLING_VIEW_SUITE,
+    why: "A PROMISE ONE CARD EARLY: the sentence grows into 'we will confirm them once you are back'. Nothing in this product can put a lapsed gym back on a plan, and a held request whose deadline has already passed needs the PAYMENT card to survive the first sweep after one does — so the console would be promising a front desk an outcome no code produces (:5807), which is exactly what Card A refused to write before the behaviour existed",
+    expect: 'does NOT promise the gym will confirm them later',
+    from: "The people waiting keep their place.';",
+    // **THE REPLACEMENT CARRIES NO APOSTROPHE, AND THAT IS NOT STYLE.** The
+    // constant is a SINGLE-QUOTED JS string, so a `we'll` in the replacement
+    // closes it early, the file stops parsing, vitest emits no tally and the
+    // harness ABORTS — which is what happened on this row's first run. :21157's
+    // class (`node --check` catching a raw newline in a mutant string), arriving
+    // through quoting rather than through a newline.
+    to: "The people waiting keep their place, and we will confirm them once you are back.';",
+  },
 ];
 
 const abort = (msg) => {

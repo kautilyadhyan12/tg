@@ -417,7 +417,14 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
   });
 }
 
-function toApplication(app: repo.ApplicationRow): OrgApplication {
+/** `orgCanConfirm` is a REQUIRED second argument rather than an optional one
+ *  defaulting to null, and that is the guard: this function has two callers —
+ *  the join door and the waiting list — and the first version of this card gave
+ *  the field to only one of them, leaving `/org/join` promising a tap the server
+ *  refuses. A required parameter makes a third caller impossible to write
+ *  without answering the question. `null` stays reserved for an api too old to
+ *  send the field at all (:23711's C97 rule), which no path here can produce. */
+function toApplication(app: repo.ApplicationRow, orgCanConfirm: boolean): OrgApplication {
   return {
     id: app.id,
     status: app.status,
@@ -425,6 +432,7 @@ function toApplication(app: repo.ApplicationRow): OrgApplication {
     expiresAt: app.expiresAt.toISOString(),
     decidedAt: app.decidedAt === null ? null : app.decidedAt.toISOString(),
     nudgedAt: app.nudgedAt === null ? null : app.nudgedAt.toISOString(),
+    orgCanConfirm,
   };
 }
 
@@ -457,7 +465,7 @@ export async function applyToOrg(
       return joinOrgResponseSchema.parse({
         outcome: outcome.kind,
         org: toOrgSummary(outcome.org),
-        application: toApplication(outcome.application),
+        application: toApplication(outcome.application, outcome.orgCanConfirm),
       });
     case "already_member": {
       await bustEntitlements(deps.redis, userId);
@@ -505,7 +513,7 @@ export async function listMyApplications(
   const rows = await repo.listApplicationsForUser(deps.sql, userId);
   return myOrgApplicationsResponseSchema.parse({
     applications: rows.map((r) => ({
-      ...toApplication(r.application),
+      ...toApplication(r.application, r.orgCanConfirm),
       org: toOrgSummary(r.org),
     })),
   });

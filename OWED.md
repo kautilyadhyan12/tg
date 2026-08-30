@@ -3923,15 +3923,50 @@ then; none may be hidden or reduced to close the gap.
       state in `apps/web/tools/mock-ml-backend.mjs` plus smoke steps — deferred
       because it only pays off with a RE-RUN smoke, which is Kd's call, not a
       chat's.
-- [ ] ⚪ **The mutation harness is not run by CI, so its table decays.**
+- [ ] 🟡 **The mutation harnesses are not run by CI, so their tables decay — AND
+      ON 2026-08-30 THIS STOPPED BEING A PREDICTION AND BECAME A MEASUREMENT.**
       `apps/web/tools/mutate-postworkout-summary.sh` is a point-in-time
       measurement: it was green at `HEAD` on 2026-07-30 and nothing re-checks it
       when the files it mutates change. Raised by T3 round 3 as the general form of
       its own F1 — the same reasoning that says "prove a test RAN" says "prove the
       table is still true". Recorded rather than wired into CI, because the sed
       anchors are literal source strings and a CI job that goes red on an innocent
-      refactor teaches people to ignore it. Its header says so; revisit if a second
-      harness ever appears.
+      refactor teaches people to ignore it. ~~Its header says so; revisit if a
+      second harness ever appears.~~ **There are 17 (:13432's Low-4), and the
+      revisit is overdue.**
+      **WHAT ACTUALLY HAPPENED, measured on the held-application card
+      (DECISIONS :25092): `mutate-join-door.mjs` had FOUR dead anchors and had
+      been ABORTING — producing no verdict at all — since 2026-08-20.** Ten days
+      and several cards shipped past a table that was saying nothing, and nobody
+      noticed, **because the abort reads as a broken tool rather than as an
+      unguarded guarantee.** All four were ordinary refactor drift in the files
+      they point at (`removed: 0` joining `RANK`, the queue's instruction moving
+      onto its own conditional, a name wrapped in a span, `member.complimentary`
+      becoming `seatIsFree(member)`). Re-aimed at the same call sites and the
+      whole table now runs.
+      **THE GUARD THAT WOULD HAVE CAUGHT IT IS SMALL AND ALREADY HAS A HOME:
+      `apps/api/scripts/check-harnesses.mjs` walks every harness on the ROOT lint
+      and today only `node --check`s them.** Teaching it to verify each row's
+      anchor against its target would have gone red on the first lint after
+      `8b19775` rather than ten days later, and it cannot go red on an innocent
+      refactor of anything the harnesses do not point at — which is the objection
+      that kept this line ⚪ for a month. **Recommended as its own small card; not
+      taken on the held-application card (R1.1).**
+- [ ] ⚪ **`mutate-orgs.mjs` has FIVE anchors that match their target TWICE, and
+      the harness's pre-check cannot see it — found 2026-08-30 (DECISIONS
+      :25092), pre-existing, proven at `HEAD` in a throwaway worktree.**
+      O17, O29, O89, O103 and O104. **The pre-check asks "does this anchor
+      match?" and never "does it match ONCE?"**, while the mutation itself is
+      `String.replace(from, to)` — which takes the FIRST hit. So each of these
+      five may be mutating a line the row does not name, and its RED would then be
+      evidence about a guarantee nobody chose. **Not a false verdict yet and not
+      claimed as one: nothing here says the first hit is the wrong one, only that
+      the harness cannot tell.**
+      Left alone deliberately (R1.1) — the card that found it was the held
+      application, the rows do not block a run, and re-aiming five anchors is a
+      change to the instrument every other card's evidence rests on. **The fix is
+      the same one line as the line above** (a match-count check in the walk),
+      which is why they are neighbours here.
 - [ ] ⚪❓ **Should `readSummaryView` DROP unreadable list elements rather than
       preserve them as null? — needs a Kd ruling.** Raised by T3 round 2 (F5),
       2026-07-30. Today an all-unreadable `personal_records` renders N trophy rows
@@ -5086,8 +5121,17 @@ file and is stated so nobody reads these as lower priority than they are.
       gym once a day, it writes `member_nudged_at`, and the console's queue then
       shows a "reminded" badge on a row nobody can clear. The application expires
       by itself after 14 days (`APPLICATION_TTL_DAYS`), so both resolve rather
-      than festering, and the applicant's screen says they are waiting — which is
-      TRUE, so it is not :5807's class.
+      than festering, ~~and the applicant's screen says they are waiting — which
+      is TRUE, so it is not :5807's class.~~
+      **THAT LAST GRADING WAS WRONG AND IS CORRECTED 2026-08-30 (DECISIONS
+      :25092).** The applicant's screens did not merely say "you are waiting":
+      the dashboard card said *"one tap at the front desk"* and counted down to a
+      deadline, and `/org/join` said *"ask them now — it takes one tap"*. **A tap
+      the server answers 409 and a deadline nothing acts on are both :5807's
+      class**, on two screens, for ten days. The grading held only for the words
+      the line quoted, not for the words on screen — **which is the reusable
+      part: a severity call made from a summary of a screen is a call about the
+      summary.** All three sentences are fixed on the card below.
       ~~**TWO SEPARATE THINGS ARE OWED and they are not the same size.** The
       console's own waiting queue should SAY that nobody can be let in until the
       gym is on a plan — that is the web half's job and costs a sentence. Whether
@@ -5137,9 +5181,36 @@ file and is stated so nobody reads these as lower priority than they are.
       `expires_at` is already in the past would otherwise be killed by the first
       sweep after the gym subscribes, which is the exact outcome Kd's ruling
       exists to prevent.
-      **The copy the console shows today STOPS SHORT of promising any of this**
+      ~~**The copy the console shows today STOPS SHORT of promising any of this**
       (:24141 §3d), and two tests assert that, so the reassurance cannot be
-      written before the behaviour exists.
+      written before the behaviour exists.~~
+      **BUILT 2026-08-30 (DECISIONS :25092) AND WAITING ONLY ON ITS SMOKE.** All
+      three pieces ship: the expiry holds while the gym has no live plan
+      (`sweep.ts`, with `heldNoPlan` reported separately from `heldForNotice` so
+      the two reasons a row survives cannot be confused); the waiting person is
+      told the gym cannot take new members right now and their request is being
+      held, and stops being counted down to a deadline nothing will act on; and
+      **the nudge STAYS OPEN, which is the ruling rather than an omission** — Kd
+      ruled the join door does not refuse, and this line's own text calls the
+      nudge "the same question about the same dead end", so it gets the same
+      answer.
+      **IT REACHED TWO SCREENS AND THE APPROVED PLAN ONLY NAMED ONE — the second
+      is the one most people arrive on.** `orgCanConfirm` was first put on
+      `/v1/orgs/applications/mine` alone, i.e. the dashboard card, on a stated
+      assumption that the join screen needed nothing because "the card directly
+      above re-reads and says it". **That is true of Settings → Gym and FALSE of
+      `/org/join`, which renders `JoinGymPanel` and nothing else** — so the QR
+      and poster route still said *"ask them now — it takes one tap"* about a tap
+      the server answers 409, with no second screen to correct it (:5807's class).
+      The field now sits on `orgApplicationSchema`, the shape the join door's two
+      waiting arms and the list all share, so a third applicant surface cannot be
+      added without it.
+      **The console's queue sentence gained its second half in the same commit**,
+      exactly as :24141 §3d required — the two tests that asserted its absence
+      flipped with the code.
+      **This line ticks when `RUNBOOK/smoke-held-application.md` passes**, which
+      is written and UNRUN; T3 is also unrun. Nothing ticks that the browser has
+      not seen.
 - [x] 🟡 **THE CONSOLE OFFERS "TRY AGAIN" ON A REFUSAL THAT TRYING AGAIN CAN
       NEVER FIX — deferred 2026-08-29 from this card's T3 round 1 (Low-6) to the
       READ-ONLY CONSOLE'S WEB HALF, which is the next card and owns this file.**

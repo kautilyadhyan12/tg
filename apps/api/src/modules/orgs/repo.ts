@@ -888,8 +888,12 @@ export async function getStaffAuthority(
 }
 
 export type ApplyOutcome =
-  | { kind: "pending"; org: OrgRow; application: ApplicationRow }
-  | { kind: "already_pending"; org: OrgRow; application: ApplicationRow }
+  // `orgCanConfirm` rides BESIDE `ApplicationRow` on both waiting arms rather
+  // than inside it: it is a fact about the GYM, and `ApplicationRow` is the
+  // shape the confirm/reject paths hand around too. Same placement as
+  // `listApplicationsForUser`'s, and for the same reason.
+  | { kind: "pending"; org: OrgRow; application: ApplicationRow; orgCanConfirm: boolean }
+  | { kind: "already_pending"; org: OrgRow; application: ApplicationRow; orgCanConfirm: boolean }
   | { kind: "already_member"; org: OrgRow; membership: MembershipRow }
   | { kind: "no_such_code" }
   | { kind: "code_unusable"; reason: "paused" | "expired" | "exhausted" }
@@ -1012,7 +1016,19 @@ export async function applyByCode(
         // fabricated reply (the `gym_members` branch's own precedent).
         throw new Error("gym_join_applications conflict with no pending row to return");
       }
-      return { kind: "already_pending", org, application: toApplicationRow(existing) };
+      return {
+        kind: "already_pending",
+        org,
+        application: toApplicationRow(existing),
+        // **`gymHasLivePlan` HERE, AND AN INLINE `EXISTS` IN
+        // `listApplicationsForUser` — the difference is deliberate.** This path
+        // asks about ONE gym and is already inside a transaction, which is the
+        // caller that function's signature was widened for; the list asks about
+        // every row it returns at once and would need a query per application.
+        // Both read §4.1's three live statuses and a test drives one gym across
+        // the transition on each surface.
+        orgCanConfirm: await gymHasLivePlan(tx, org.id),
+      };
     }
 
     // Part 3 §3.3: every mutating call writes `audit_log`. Applying is a
@@ -1027,7 +1043,12 @@ export async function applyByCode(
       meta: { codeLabel: code.label },
     });
 
-    return { kind: "pending", org, application: toApplicationRow(newRow) };
+    return {
+      kind: "pending",
+      org,
+      application: toApplicationRow(newRow),
+      orgCanConfirm: await gymHasLivePlan(tx, org.id),
+    };
   });
 }
 
@@ -1820,7 +1841,7 @@ export const MY_APPLICATIONS_LIMIT = 50;
 export async function listApplicationsForUser(
   sql: Sql,
   userId: string,
-): Promise<{ org: OrgRow; application: ApplicationRow }[]> {
+): Promise<{ org: OrgRow; application: ApplicationRow; orgCanConfirm: boolean }[]> {
   // Every column is aliased explicitly. The two tables BOTH carry `id` and
   // `status`, and an unaliased join would hand one of each to the row object —
   // silently parsing a gym's 'active' as an application status, or worse the
@@ -1842,12 +1863,34 @@ export async function listApplicationsForUser(
     locale: string;
     currency_display: string;
     org_status: string;
+    org_can_confirm: boolean;
   }
+  // **`org_can_confirm` — CAN THIS GYM ACT ON THIS REQUEST RIGHT NOW?** False
+  // while the gym has no live plan, because Confirm answers 409 for it
+  // (:23711's twelve doors). The waiting person's card needs it to stop saying
+  // "one tap at the front desk" about a tap the server refuses (:5807).
+  //
+  // **IT NAMES THE EFFECT AND NEVER THE CAUSE, AND THAT IS AN INFORMATION
+  // BOUNDARY, NOT A WORDING PREFERENCE.** An applicant is not staff of this gym
+  // — `consoleReadOnly` on `/v1/orgs/mine` is staff-only for exactly this
+  // reason, and :23711 §2(a) ordered the gate's two checks so that a signed-in
+  // stranger holding a uuid cannot learn which gyms have stopped paying. This
+  // field is served to a stranger by design, so it answers only the question
+  // that is theirs to ask — whether their own request can be acted on — and the
+  // screen's sentence stops there too.
+  //
+  // A FIFTH READER of §4.1's three live statuses, held to the other four by a
+  // test that drives one gym across the transition (`gymHasLivePlan`'s note).
   const rows = await sql<RawMyApplication[]>`
     SELECT a.id AS app_id, a.status AS app_status, a.applied_at, a.expires_at,
            a.decided_at, a.member_nudged_at,
            g.id AS org_id, g.slug, g.name, g.city, g.country, g.org_type,
-           g.timezone, g.locale, g.currency_display, g.status AS org_status
+           g.timezone, g.locale, g.currency_display, g.status AS org_status,
+           EXISTS (
+             SELECT 1 FROM subscriptions s
+             WHERE s.owner_type = 'gym' AND s.owner_id = g.id
+               AND s.status IN ('trialing','active','past_due')
+           ) AS org_can_confirm
     FROM gym_join_applications a
     JOIN gyms g ON g.id = a.gym_id
     WHERE a.user_id = ${userId}
@@ -1887,6 +1930,11 @@ export async function listApplicationsForUser(
       decided_at: r.decided_at,
       member_nudged_at: r.member_nudged_at,
     }),
+    // Beside `ApplicationRow` rather than inside it: `ApplicationRow` is also
+    // what the JOIN DOOR returns (`applyByCode`), and a fact about the gym's
+    // plan has no business riding on that shape. This is the applicant LIST's
+    // own answer.
+    orgCanConfirm: r.org_can_confirm,
   }));
 }
 

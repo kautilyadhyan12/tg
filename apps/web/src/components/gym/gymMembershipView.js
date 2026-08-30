@@ -104,6 +104,15 @@ export function gymStatusRows({ applications, orgs, formerOrgs } = {}) {
       applicationId: typeof app?.id === 'string' ? app.id : null,
       expiresAt: typeof app?.expiresAt === 'string' ? app.expiresAt : null,
       nudgedAt: typeof app?.nudgedAt === 'string' ? app.nudgedAt : null,
+      // CAN THE GYM ACT ON THIS REQUEST RIGHT NOW? (Kd 2026-08-29, :24141 §1.)
+      //
+      // **ONLY AN EXPLICIT `false` MEANS NO.** The server sends true/false; an
+      // api older than this bundle sends nothing and the shared schema defaults
+      // it to null, which means "we could not ask" and never "no" — the same
+      // three-state rule `consoleReadOnly` follows. Anything this code cannot
+      // read is treated the same way, so an unreadable value can only ever cost
+      // the extra sentence, never invent one.
+      orgCanConfirm: app?.orgCanConfirm === false ? false : true,
     });
   }
 

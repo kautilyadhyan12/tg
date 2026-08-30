@@ -375,26 +375,40 @@ describe('the read-only sentences', () => {
     }
   });
 
-  it('does NOT promise the waiting people keep their place — that is not true yet', () => {
+  it('promises the waiting people keep their place — and stops short of confirming them', () => {
     // Kd ruled on 2026-08-29 that a lapsed gym HOLDS its applications and tells
-    // the waiting person why. That is the next card. Until it ships an
-    // application still dies 14 days after it was made whatever the gym's plan
-    // is doing, so the sentence here stops at what is true today. **Writing the
-    // reassurance before the behaviour exists is exactly :5807's class**, and
-    // this assertion is what makes the copy change when the behaviour does.
+    // the waiting person why. Card A shipped the first sentence alone and this
+    // test asserted the second one's ABSENCE, so that the copy could not change
+    // until the behaviour did. **It has: `sweep.ts`'s expiry now holds while the
+    // gym has no live plan.** The assertion flips with the code, in the same
+    // commit, which is the whole reason it was written this way round.
     //
     // **ONE ASSERTION, NOT TWO (T3 round 1, Low-5).** A `.not.toMatch(/keep|
-    // place|hold|…/)` stood here under the exact equality above it, and could
+    // place|hold|…/)` stood here under the exact equality below, and could
     // never fail on its own: any change that would trip the matcher has already
     // tripped `toBe`. Two guards, either one sufficient, therefore neither
-    // falsifiable — :12343's J11, which `StaffPanel.jsx` names four lines from
-    // where this round found it. The exact string IS the pin.
+    // falsifiable — :12343's J11. The exact string IS the pin.
+    expect(READ_ONLY_QUEUE_NOTE).toBe(
+      'Nobody can be let in until this gym is on a plan. The people waiting keep their place.',
+    );
+  });
+
+  it('does NOT promise the gym will confirm them later — nothing can un-lapse a gym yet', () => {
+    // The line the copy must still not cross, and it is the SAME defect class
+    // one card further on. Holding a request is built; RE-STARTING one whose
+    // deadline has already passed, on the day a gym pays, is not — nothing in
+    // this product can put a lapsed gym back on a plan (measured 2026-08-29),
+    // so there is no trigger point for it and it sits on the payment card's
+    // `OWED.md` line. A sentence here saying "we'll let them in when you're
+    // back" would be :5807's class exactly, which is what the assertion above
+    // was protecting against before the hold existed.
     //
-    // The independently meaningful version of that matcher is at the SCREEN, in
-    // `readOnlyConsole.render.test.jsx`, where it searches everything rendered
-    // rather than the constant it was just compared against — so a reassurance
-    // added anywhere else on that panel still goes red.
-    expect(READ_ONLY_QUEUE_NOTE).toBe('Nobody can be let in until this gym is on a plan.');
+    // Independently falsifiable, unlike the pair Low-5 collapsed: this matcher
+    // names words the exact string above does NOT contain, so it can go red on
+    // a change that leaves that equality passing only if somebody edits both —
+    // and it is the screen-level version in `readOnlyConsole.render.test.jsx`
+    // that catches a reassurance added anywhere ELSE on the panel.
+    expect(READ_ONLY_QUEUE_NOTE).not.toMatch(/confirm|when you|once you|back on|reactivat/i);
   });
 });
 

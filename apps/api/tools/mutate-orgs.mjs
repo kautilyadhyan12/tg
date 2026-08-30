@@ -460,9 +460,14 @@ const MUTANTS = [
     id: 'O27',
     target: 'repo',
     why: 'THE RULING ITSELF, INVERTED: typing a code goes back to creating a MEMBERSHIP, so a stranger holding a leaked code is inside the gym before anybody has looked at them',
+    // **RE-AIMED 2026-08-30, by this card's own diff** — the held-request card
+    // gave both waiting arms an `orgCanConfirm`, so the one-line return became a
+    // multi-line object and this anchor stopped matching. :23128's standing rule
+    // yet again: a fix moves anchors nothing in its diff mentions. Same call
+    // site, same insertion point, and the mutant still says exactly what it said.
     expect: 'typing a code APPLIES',
-    from: '    return { kind: "pending", org, application: toApplicationRow(newRow) };',
-    to: '    await tx`INSERT INTO gym_members (gym_id, user_id, code_id, complimentary) VALUES (${org.id}, ${input.userId}, ${code.id}, false)`;\n    return { kind: "pending", org, application: toApplicationRow(newRow) };',
+    from: '    return {\n      kind: "pending",',
+    to: '    await tx`INSERT INTO gym_members (gym_id, user_id, code_id, complimentary) VALUES (${org.id}, ${input.userId}, ${code.id}, false)`;\n    return {\n      kind: "pending",',
   },
   {
     id: 'O28',
@@ -769,8 +774,19 @@ const MUTANTS = [
     // about, and a flag raised a minute before the deadline licences deletion on
     // the very next run.
     why: "C/H-1 REGRESSION: the notice subtraction goes, so the guard asks only WHETHER the gym was warned instead of HOW LONG AGO — measured at 31 minutes' notice against a promise of two days",
-    from: "        AND gym_notified_at <= ${now}::timestamptz - (${EXPIRY_NOTICE_DAYS} * INTERVAL '1 day')\n      RETURNING id, gym_id",
-    to: '        AND gym_notified_at <= ${now}\n      RETURNING id, gym_id',
+    // **RE-AIMED AGAIN 2026-08-30, and by the card's own diff.** The hold ruling
+    // (:24141 §1) added `AND ${gymOnPlan}` between this condition and
+    // `RETURNING`, so the two-line anchor stopped matching and the whole-table
+    // pre-check aborted — :23128's standing rule earning itself once more: a fix
+    // moves anchors nothing in its diff mentions.
+    //
+    // Now ONE LINE, which is the durable shape (:24141 re-anchored S15/C81/C82
+    // the same way, and :17676's CRLF hazard is the other argument against
+    // two-line anchors). It moves only when the notice condition itself moves.
+    // Unique because the repeat chase's own `gym_notified_at <=` line carries
+    // `GYM_REMINDER_REPEAT_DAYS` rather than `EXPIRY_NOTICE_DAYS`.
+    from: "        AND gym_notified_at <= ${now}::timestamptz - (${EXPIRY_NOTICE_DAYS} * INTERVAL '1 day')",
+    to: '        AND gym_notified_at <= ${now}',
     expect: "gives the ratified TWO DAYS' notice",
   },
   {
@@ -1966,6 +1982,79 @@ const MUTANTS = [
     expect: 'READS and the pay path keep working',
     from: '  await requirePrivilege(deps, gymId, userId, "billing.manage");',
     to: '  await requireWritablePrivilege(deps, gymId, userId, "billing.manage");',
+  },
+
+  // ── THE HELD REQUEST (Kd 2026-08-29, :24141 §1) ──────────────────────────
+  //
+  // 4a's DATA-LOSS column without argument: what these rows break is the thing
+  // that stops a person's request being deleted while nobody at the gym was
+  // ALLOWED to act on it. This card changes SERVER behaviour, so database
+  // mutants are in scope.
+  //
+  // **PAIRED IN BOTH DIRECTIONS.** O161/O162/O166/O167 run the lock LEAKING;
+  // O163/O164/O165 run it firing too widely or reporting itself wrongly. A hold
+  // that never releases is not a safer hold — it is an application that can
+  // never resolve on a gym that is paying (:7104's PG1).
+  {
+    id: 'O161',
+    target: 'sweep',
+    suite: SWEEP_SUITE,
+    why: "THE HOLD DELETED: the expiry stops asking whether the gym has a plan, so a lapsed gym's applications die on day 14 exactly as before — the person waited a fortnight for a yes that could not come, which is the defect Kd's ruling exists to remove",
+    expect: 'HOLDS an overdue application while the gym has no live plan',
+    from: '\n        AND ${gymOnPlan}',
+    to: '',
+  },
+  {
+    id: 'O162',
+    target: 'sweep',
+    suite: SWEEP_SUITE,
+    why: "THE STATUS SET WIDENED TO THE ENDED ONES, so an `expired` subscription counts as live and the gym whose TRIAL just ran out — the commonest way to reach this state, and the one the ruling is about — goes on deleting requests. **This is O155's shape and it is why the headline test uses `expireGym` rather than `lapseGym`**: with no row at all `EXISTS` is false whatever statuses are listed, so a test that lapses by DELETING cannot see this mutation",
+    expect: 'HOLDS an overdue application while the gym has no live plan',
+    from: "      AND s.status IN ('trialing','active','past_due')",
+    to: "      AND s.status IN ('trialing','active','past_due','expired')",
+  },
+  {
+    id: 'O163',
+    target: 'sweep',
+    suite: SWEEP_SUITE,
+    why: 'THE HOLD BECOMES INVISIBLE TO OPS: `heldNoPlan` always reports zero, so the one number that says "these requests are alive and waiting on a plan" reads as though nothing is being held at all. The rows are still safe; nobody can see that they are',
+    expect: 'HOLDS an overdue application while the gym has no live plan',
+    from: '    heldNoPlan: due - dueOnPlan,',
+    to: '    heldNoPlan: 0,',
+  },
+  {
+    id: 'O164',
+    target: 'sweep',
+    suite: SWEEP_SUITE,
+    why: 'THE TWO REASONS COLLAPSE BACK INTO ONE: `heldForNotice` counts every due row again, so a lapsed gym\'s held requests are reported as "the chase step is not doing its job". That number exists to be acted on — a non-zero one means an operator goes hunting a broken worker that is working perfectly',
+    expect: 'counts a due row as held for ONE reason at a time',
+    from: '    heldForNotice: dueOnPlan - expiredRows.length,',
+    to: '    heldForNotice: due - expiredRows.length,',
+  },
+  {
+    id: 'O165',
+    target: 'sweep',
+    suite: SWEEP_SUITE,
+    why: "THE CHASE GATED TOO, WHICH LOOKS TIDIER AND BUILDS A SECOND HIDDEN HOLD: a lapsed gym's applications are never flagged, and an unflagged row can never expire — so it survives the gym paying up, then sits pending for a further two days minimum, and for ever if it is never chased again. The hold belongs on the statement that DESTROYS something, and this is the row that says so",
+    expect: 'keeps CHASING a lapsed gym',
+    from: "      AND applied_at <= ${now}::timestamptz - (${GYM_REMINDER_FIRST_DAYS} * INTERVAL '1 day')",
+    to: "      AND applied_at <= ${now}::timestamptz - (${GYM_REMINDER_FIRST_DAYS} * INTERVAL '1 day')\n      AND ${gymOnPlan}",
+  },
+  {
+    id: 'O166',
+    target: 'repo',
+    why: "THE APPLICANT IS TOLD THE WRONG THING BY THE SAME WIDENING AS O162, one file over: a gym whose trial ended reads as able to confirm, so the waiting card goes on saying 'one tap at the front desk' about a tap that answers 409. The reader and the sweep's gate are separate copies of §4.1's three statuses and this is the row that stops them drifting apart",
+    expect: 'tells the applicant whether their gym can act on the request',
+    from: "               AND s.status IN ('trialing','active','past_due')",
+    to: "               AND s.status IN ('trialing','active','past_due','expired')",
+  },
+  {
+    id: 'O167',
+    target: 'repo',
+    why: "THE FIELD STOPS ASKING ANYTHING: `EXISTS(...) IS NOT NULL` is true for every gym, so every applicant is told their gym can confirm them. It is O166's defect without the subtlety — the whole answer, not one status — and it is the one a careless edit to this SELECT actually produces",
+    expect: 'tells the applicant whether their gym can act on the request',
+    from: '           ) AS org_can_confirm',
+    to: '           ) IS NOT NULL AS org_can_confirm',
   },
 ];
 

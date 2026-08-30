@@ -936,6 +936,38 @@ export const orgApplicationSchema = z.object({
    *  one button; a required one costs the sentence that says which gym you are
    *  waiting on. R4.4's expand-then-contract, applied to a response. */
   nudgedAt: z.string().nullable().default(null),
+  /** **CAN THIS GYM ACT ON THIS REQUEST RIGHT NOW?** False while the gym has no
+   *  live plan: Confirm answers 409 for it (:23711), and since Kd's ruling of
+   *  2026-08-29 (:24141 §1) the request is HELD rather than expiring under them.
+   *  Every applicant-facing surface needs both facts — it must stop promising
+   *  "one tap at the front desk", and it must stop counting down to a deadline
+   *  that will not arrive.
+   *
+   *  **IT LIVES HERE, ON THE SHAPE BOTH SURFACES SHARE, AND THAT IS THE POINT.**
+   *  The join door's answer and the waiting list are two screens telling one
+   *  person the same thing, and the first version of this card put the field on
+   *  the LIST alone — leaving `/org/join` (the QR and poster route, where most
+   *  people arrive) still saying "ask them now, it takes one tap" about a tap
+   *  the server refuses. Two definitions of one fact is how one of them stays
+   *  wrong.
+   *
+   *  **IT ANSWERS THE EFFECT AND NEVER THE CAUSE, DELIBERATELY.** This is served
+   *  to somebody who is NOT staff of that gym, so it must not tell them which
+   *  gyms have stopped paying — the boundary :23711 §2(a) built the gate's check
+   *  order around, and the reason `consoleReadOnly` on `/v1/orgs/mine` is
+   *  staff-only. What is theirs to ask is whether their own request can be acted
+   *  on. The name generalises with the copy: a later reason a gym cannot confirm
+   *  (a seat cap, say) is the same answer and the same sentence.
+   *
+   *  **`.default(null)` for the `formerOrgs` reason** (:12660, :12878), and
+   *  three-state for `consoleReadOnly`'s (C97, :23711): `orgsApi.js` treats a
+   *  contract mismatch as a hard failure and the gym card treats a failed read as
+   *  SILENCE, so a REQUIRED field would make the whole card vanish during any
+   *  window where the web bundle is newer than the API. **`null` means "we could
+   *  not ask", never "no"** — an older API renders exactly today's copy, which is
+   *  safe because the SERVER is the enforcement: the hold and the 409 are real
+   *  whatever this field manages to say. */
+  orgCanConfirm: z.boolean().nullable().default(null),
 });
 export type OrgApplication = z.infer<typeof orgApplicationSchema>;
 

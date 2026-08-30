@@ -392,17 +392,29 @@ describe('the waiting queue', () => {
     expect(screen.queryByText(READ_ONLY_QUEUE_NOTE)).toBeNull();
   });
 
-  it('promises nothing about the waiting people keeping their place', async () => {
+  it('tells the front desk the waiting people keep their place, and promises nothing beyond it', async () => {
     // Kd ruled on 2026-08-29 that a lapsed gym HOLDS its applications and tells
-    // the waiting person why — and that is the NEXT card. Today an application
-    // still dies 14 days after it was made, so a reassurance here would be a
-    // sentence the product cannot keep (:5807). This assertion is what makes
-    // the copy change in the commit that makes it true.
+    // the waiting person why. Card A shipped this panel asserting the ABSENCE of
+    // that reassurance, because an application still died 14 days after it was
+    // made whatever the gym's plan was doing. **The hold is built now**, so the
+    // sentence is here — and this test flipped in the commit that built it,
+    // which is what it existed for.
+    //
+    // **THE NEGATIVE HALF SURVIVES AND MOVED ON TO THE NEXT UNTRUE THING.**
+    // Nothing can put a lapsed gym back on a plan yet, so a held request whose
+    // deadline has passed still needs the payment card to survive the first
+    // sweep after the gym subscribes (`OWED.md`). Copy promising the gym will
+    // confirm these people later is :5807's class, and this searches everything
+    // the panel renders rather than the constant — so a reassurance added
+    // anywhere else on the screen still goes red.
     orgService.getMine.mockResolvedValue(mineIs(LAPSED));
     renderConsole(Members, '/console/iron-house/members');
 
     await screen.findByText(READ_ONLY_QUEUE_NOTE);
-    expect(screen.queryByText(/keep their place|when the gym|once the gym|still be waiting/i)).toBeNull();
+    expect(screen.getByText(/keep their place/i)).toBeTruthy();
+    expect(
+      screen.queryByText(/when the gym|once the gym|we'll confirm|will be confirmed|reactivat/i),
+    ).toBeNull();
   });
 });
 

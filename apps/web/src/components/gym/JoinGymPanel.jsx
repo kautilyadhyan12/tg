@@ -133,6 +133,14 @@ export default function JoinGymPanel({ initialCode = '', onApplied }) {
     // reading it the fact is identical — they are waiting — and telling them
     // "you had already asked" is the app being pedantic about its own
     // bookkeeping. The second tap costs them nothing and creates nothing.
+    //
+    // THE GYM HAS NO PLAN, SO NOBODY THERE CAN LET THIS PERSON IN (Kd, :24141
+    // §1). Read ONCE and named, rather than repeated at each of the two
+    // paragraphs it changes — the same shape `GymMembershipCard`'s waiting row
+    // uses. **ONLY AN EXPLICIT `false` MEANS NO**: an api older than this bundle
+    // sends nothing and the shared schema defaults it to null, which is "we
+    // could not ask" and never "no" (C97's rule, :23711).
+    const held = result.application?.orgCanConfirm === false;
     return (
       <div className="flex flex-col gap-4">
         <div
@@ -144,15 +152,58 @@ export default function JoinGymPanel({ initialCode = '', onApplied }) {
             <p className="text-sm font-semibold" style={{ color: '#fff' }}>
               You&apos;ve asked to join {result.org.name}.
             </p>
-            <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
-              Someone at the gym confirms new members from their side. If you&apos;re standing at
-              the front desk, ask them now — it takes one tap.
-            </p>
-            <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
-              Keep using the app in the meantime. Nothing is on hold: your workouts, streak and
-              everything free stay exactly as they are, and your gym&apos;s extras switch on the
-              moment they confirm you.
-            </p>
+            {/* **THIS SCREEN IS WHERE MOST PEOPLE ARRIVE — the QR and the
+                poster both land on `/org/join`, which draws this panel and
+                NOTHING ELSE.** The dashboard's gym card, which says the same
+                things, is not on this route, so a sentence that is wrong here
+                is wrong with no second screen to correct it.
+
+                "Ask them now — it takes one tap" is exactly that sentence for a
+                gym with no live plan: the tap answers 409 (:23711's twelve
+                doors). Kd ruled the door does not REFUSE such a gym — the
+                request is held and the person is told the truth (:24141 §1) —
+                and being told the truth has to happen at the moment they ask,
+                not only later on another screen. Same wording as
+                `GymMembershipCard`'s waiting row, deliberately: two screens
+                telling one person the same thing must not phrase it twice.
+
+                It names the EFFECT and never the cause. An applicant is not
+                staff of this gym, and :23711 §2(a) ordered the server's own
+                checks so that a stranger cannot learn which gyms have stopped
+                paying. */}
+            {held ? (
+              <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                {result.org.name} can&apos;t take new members right now. Your request is being
+                held — it won&apos;t run out while that&apos;s the case.
+              </p>
+            ) : (
+              <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                Someone at the gym confirms new members from their side. If you&apos;re standing at
+                the front desk, ask them now — it takes one tap.
+              </p>
+            )}
+            {/* THE THIRD SENTENCE HAD TO SPLIT TOO, AND NOT FOR TIDINESS.
+                "Nothing is on hold" sits directly under "your request is being
+                held" and contradicts it in the reader's own words — one of them
+                is about their app and the other about their request, which is a
+                distinction nobody reads a card carefully enough to make. The
+                held version also drops "your gym's extras switch on the moment
+                they confirm you": true in the end, but it dangles a reward off
+                an event that cannot happen yet, and this card's whole subject is
+                not doing that. What survives is the part that matters to them
+                and is true in both states — they keep everything they have. */}
+            {held ? (
+              <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                Keep using the app in the meantime — your workouts, streak and everything free
+                stay exactly as they are.
+              </p>
+            ) : (
+              <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                Keep using the app in the meantime. Nothing is on hold: your workouts, streak and
+                everything free stay exactly as they are, and your gym&apos;s extras switch on the
+                moment they confirm you.
+              </p>
+            )}
           </div>
         </div>
 

@@ -29,6 +29,20 @@
 // says out loud what the comparison implies — but it is not the enforcement,
 // and this file will not claim otherwise again.
 //
+// **AND A SECOND REASON TO HOLD ARRIVED 2026-08-29: THE GYM HAS NO PLAN.** Kd
+// ruled that a request to a gym that has stopped paying is HELD and the waiting
+// person is told the truth, rather than the join door refusing them
+// (:24141 §1 — he ruled the refusal FIRST and reversed it one message later,
+// because a refusal saves nobody: the person has to remember to come back and
+// type the code again, and nothing reminds them). A lapsed gym's Confirm answers
+// 409 (:23711), so without this the clock runs out on a request nobody was
+// ALLOWED to act on — the "we quietly threw your members away" outcome again,
+// reached from the gym's billing rather than from a dead worker.
+//
+// It is the same shape as the notice guard and lives in the same statement: a
+// condition on the expiry, never a new mechanism. The CHASE is deliberately left
+// alone — see the statements themselves.
+//
 // **AND A CHASE IN THE SAME RUN MUST NOT LICENCE THE EXPIRY.** Enforcing only
 // "was it ever chased" has a hole with the shape this repo keeps finding: if
 // the worker is down for the whole fortnight, run 1 would stamp the chase and
@@ -118,12 +132,23 @@ export interface SweepResult {
    *  the gym has not been chased about them or was chased too recently.
    *
    *  Reported rather than hidden, and it is NOT computed from a second copy of
-   *  the expiry's WHERE — it is (everything due) minus (everything expired),
-   *  both measured in this run. A hand-written copy of the condition it is
-   *  meant to describe is precisely the guard :12227 caught testing a duplicate
-   *  of the thing it guarded. A number that stays high across runs means the
-   *  chase step is not doing its job, which is worth being able to see. */
+   *  the expiry's WHERE — it is (everything due, on a plan) minus (everything
+   *  expired), both measured in this run. A hand-written copy of the condition
+   *  it is meant to describe is precisely the guard :12227 caught testing a
+   *  duplicate of the thing it guarded. A number that stays high across runs
+   *  means the chase step is not doing its job, which is worth being able to
+   *  see. */
   heldForNotice: number;
+  /** Pending applications past their deadline that were left alone because
+   *  their GYM HAS NO LIVE PLAN (Kd 2026-08-29, :24141 §1).
+   *
+   *  **It is a SEPARATE number and that is the whole point of it.** These rows
+   *  would otherwise land in `heldForNotice`, whose meaning is "the chase step
+   *  is not doing its job" — and it is doing its job perfectly on a lapsed gym.
+   *  One number covering two unrelated causes is a number nobody can act on, and
+   *  this one has the opposite reading: it is EXPECTED to be non-zero and to
+   *  stay non-zero for as long as the gym is off a plan. */
+  heldNoPlan: number;
 }
 
 interface Row {
@@ -147,12 +172,46 @@ export async function sweepJoinApplications(
   const scope = opts.gymIds ?? null;
   const inScope = deps.sql`(${scope}::uuid[] IS NULL OR gym_id = ANY(${scope}::uuid[]))`;
 
+  // **DOES THIS APPLICATION'S GYM HAVE A LIVE PLAN?** Composed ONCE and
+  // interpolated into the two statements that must agree about it, for exactly
+  // the reason `inScope` above is: the expiry decides which rows die and the
+  // count decides how they are REPORTED, and two hand-written copies of one
+  // condition are two things that drift (:14493's Low-2).
+  //
+  // **THE STATUS SET IS §4.1's THREE AND IT ASKS THE STATUS, NEVER A DATE**
+  // (:21580 rule (c)) — the same rule `repo.gymHasLivePlan`,
+  // `listOrgsForUser`'s lateral and `entitlements/repo.ts` already share. This
+  // is a FOURTH reader of it and, like the third, what holds it to the others is
+  // a TEST driving one gym across the transition rather than a shared SQL
+  // fragment, which R3.8 rules out.
+  //
+  // **THE TWO WAYS A GYM LAPSES ARE NOT ONE STATE and this covers both** — the
+  // row deleted (never subscribed) and the row saying `expired` (the 04:00 trial
+  // sweep ran). `EXISTS` is false for the first whatever statuses are listed,
+  // which is exactly why O155 survived on the server half: a test that reaches
+  // "no plan" by DELETING the row cannot see the status set widen. This card's
+  // headline test uses the `expired` fixture for that reason.
+  const gymOnPlan = deps.sql`EXISTS (
+    SELECT 1 FROM subscriptions s
+    WHERE s.owner_type = 'gym' AND s.owner_id = gym_join_applications.gym_id
+      AND s.status IN ('trialing','active','past_due')
+  )`;
+
   // ── 1. CHASE ──────────────────────────────────────────────────────────────
   // Two statements rather than one with a CASE, because they answer different
   // questions and a single UPDATE ... RETURNING hands back the NEW timestamp
   // with no way left to tell a first chase from a repeat. Counting them apart
   // is what makes "the gym was told at least once" checkable at a glance rather
   // than inferred.
+  //
+  // **NEITHER CHASE ASKS ABOUT THE GYM'S PLAN, DELIBERATELY (R1.1).** A lapsed
+  // gym still has people waiting at its door and is still owed the flag that
+  // says so — the console's queue is READ-only, not unreadable (:23711 §2, Kd:
+  // it "seals nobody out"), so the mark is visible to exactly the staff who
+  // might go and fix the plan. And the flag is a PRECONDITION of the expiry: a
+  // row never chased can never die, so skipping lapsed gyms here would replace
+  // one indefinite hold with a second, hidden one that survives the gym paying
+  // up. The hold belongs on the statement that DESTROYS something.
   const firstChase = await deps.sql<Row[]>`
     UPDATE gym_join_applications
     SET gym_notified_at = ${now}
@@ -187,10 +246,19 @@ export async function sweepJoinApplications(
   // longer pending and the number could never be recovered. The chase step
   // above touches neither `status` nor `expires_at`, so this reading is stable
   // across it.
-  const dueRows = await deps.sql<{ n: number }[]>`
-    SELECT count(*)::int AS n FROM gym_join_applications
+  //
+  // **TWO NUMBERS OUT OF ONE PASS, so the two reasons a due row survives can be
+  // told apart.** `due` is everything past its deadline; `due_on_plan` is the
+  // subset whose gym could actually have acted on it. The difference is
+  // `heldNoPlan` and the remainder after the expiry is `heldForNotice` — each
+  // measured, neither re-derived from a second copy of a WHERE.
+  const dueRows = await deps.sql<{ due: number; due_on_plan: number }[]>`
+    SELECT count(*)::int AS due,
+           count(*) FILTER (WHERE ${gymOnPlan})::int AS due_on_plan
+    FROM gym_join_applications
     WHERE status = 'pending' AND ${inScope} AND expires_at <= ${now}`;
-  const due = dueRows[0]?.n ?? 0;
+  const due = dueRows[0]?.due ?? 0;
+  const dueOnPlan = dueRows[0]?.due_on_plan ?? 0;
 
   // ── 2. EXPIRE ─────────────────────────────────────────────────────────────
   // `decided_at` is deliberately LEFT NULL. Nobody decided — that is the whole
@@ -263,6 +331,7 @@ export async function sweepJoinApplications(
         AND expires_at <= ${now}
         AND gym_notified_at IS NOT NULL
         AND gym_notified_at <= ${now}::timestamptz - (${EXPIRY_NOTICE_DAYS} * INTERVAL '1 day')
+        AND ${gymOnPlan}
       RETURNING id, gym_id`;
     for (const row of rows) {
       await writeAudit(tx, {
@@ -281,7 +350,8 @@ export async function sweepJoinApplications(
     remindedFirst: firstChase.length,
     remindedAgain: repeatChase.length,
     expired: expiredRows.length,
-    heldForNotice: due - expiredRows.length,
+    heldForNotice: dueOnPlan - expiredRows.length,
+    heldNoPlan: due - dueOnPlan,
   };
   // R8.3: every background job says what it did.
   deps.log.info({ ...result, event: "orgs.sweep.finished" }, "join-application sweep finished");

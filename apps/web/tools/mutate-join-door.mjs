@@ -34,6 +34,33 @@
  * Deliberately NOT mutated, per the same rule: wording, layout, icon choices,
  * the panel's uppercase-as-you-type cosmetic, and comments.
  *
+ * **FOUR ANCHORS IN THIS TABLE HAD ROTTED AND THE WHOLE HARNESS WAS ABORTING —
+ * found 2026-08-30, fixed then, and worth reading before adding a row.** J6,
+ * J10, J14 and J17 had all been left behind by ordinary refactors in the files
+ * they point at: `removed: 0` joining `RANK` with Kd's removal ruling (:12660),
+ * the read-only card splitting "confirm the ones you recognise" onto its own
+ * conditional (:24141 §3d), the applicant's name being wrapped in a truncating
+ * span, and `member.complimentary` becoming `seatIsFree(member)` (:14956).
+ *
+ * **THE PART THAT MATTERS IS WHAT THAT COST: this harness ABORTS on the first
+ * dead anchor, before a byte is written — so it has produced NO VERDICT AT ALL
+ * since 2026-08-20.** Every card since that touched these files shipped without
+ * this table saying anything, and nothing reported it, because an abort looks
+ * like a broken tool rather than an unguarded guarantee. It is :23711 §3's O79
+ * one level up: there a single row was inert inside a subset, here the whole
+ * table was.
+ *
+ * The re-aims are at the SAME call sites (:15770), never at whichever line
+ * looked closest, and each is noted at its row. Three of the four are now
+ * ONE-LINE anchors, which is the shape that survives a prop or a wrapper moving
+ * (:24141's S15/C81/C82, :17676's CRLF hazard).
+ *
+ * **The pre-check below asks "does this match?", never "does this match ONCE?"**
+ * — `String.replace` takes the first hit, so a two-match anchor silently mutates
+ * a line the row does not name. This table was checked for that on 2026-08-30
+ * (31 rows, 0 multi-match); `mutate-orgs.mjs` has five and its own `OWED.md`
+ * line.
+ *
  * The class fixes are inherited, not relearned (:4855, :5199, :5748, :6277,
  * :9509): anchors that match nothing ABORT · a target outside TARGETS ABORTS ·
  * a run with no test tally ABORTS · an unmutated CONTROL must report GREEN
@@ -124,9 +151,14 @@ const MUTANTS = [
     target: 'gymview',
     suite: GYM_VIEW_SUITE,
     why: 'ON SCREEN AND FALSE: a refusal from last Tuesday outranks the membership that followed it, so a person training at the gym is told the gym did not confirm them',
+    // RE-AIMED 2026-08-30. `removed: 0` joined RANK with Kd's removal ruling
+    // (:12660, commit 8b19775) and this anchor was never moved — see the note on
+    // the four dead rows at the head of this file. Same call site, ranks
+    // unchanged; `removed` is carried through both sides so the mutation is
+    // still only about the three it names.
     expect: 'MEMBERSHIP OUTRANKS A STALE REFUSAL',
-    from: 'const RANK = { member: 3, waiting: 2, refused: 1, expired: 1 };',
-    to: 'const RANK = { member: 1, waiting: 2, refused: 3, expired: 3 };',
+    from: 'const RANK = { member: 3, waiting: 2, refused: 1, expired: 1, removed: 0 };',
+    to: 'const RANK = { member: 1, waiting: 2, refused: 3, expired: 3, removed: 0 };',
   },
   {
     id: 'J7',
@@ -160,9 +192,14 @@ const MUTANTS = [
     target: 'queue',
     suite: CONSOLE_SUITE,
     why: 'A WRONG NUMBER IN FRONT OF A GYM OWNER: the count is taken off this PAGE instead of the server\'s exact figure, so 90 people waiting reads as "1 person waiting"',
+    // RE-AIMED 2026-08-30. The read-only card (:24141 §3d) split "confirm the
+    // ones you recognise" onto its own conditional, because it instructs a front
+    // desk to press a button a lapsed gym's server refuses — so this anchor's
+    // second half went. Same call site, and now ONE line, which moves only when
+    // the count itself does.
     expect: 'exact count, never this page',
-    from: '          {waitingCountLabel(state.pendingCount)} — confirm the ones you recognise.',
-    to: '          {waitingCountLabel(state.items.length)} — confirm the ones you recognise.',
+    from: '          {waitingCountLabel(state.pendingCount)}',
+    to: '          {waitingCountLabel(state.items.length)}',
   },
   {
     id: 'J11',
@@ -211,9 +248,12 @@ const MUTANTS = [
     target: 'queue',
     suite: CONSOLE_SUITE,
     why: 'PRIVACY, Part 3 §2.4: a field the endpoint does not send reaches an applicant row — and a person who is only WAITING is even less the gym\'s business than a member',
+    // RE-AIMED 2026-08-30. The name was wrapped in a truncating span when the
+    // queue gained its clock columns; the anchor kept the bare expression. Same
+    // call site.
     expect: "shows an applicant's four facts",
-    from: '          {applicant.displayName}',
-    to: '          {applicant.displayName} {applicant.email}',
+    from: '          <span className="truncate">{applicant.displayName}</span>',
+    to: '          <span className="truncate">{applicant.displayName} {applicant.email}</span>',
   },
   {
     id: 'J15',
@@ -243,9 +283,13 @@ const MUTANTS = [
     target: 'members',
     suite: CONSOLE_SUITE,
     why: "A CONTROL THE SERVER WILL REFUSE: Remove is drawn beside the owner's own complimentary seat, where the server answers 409 — a live refusal wearing a working button's clothes",
+    // RE-AIMED 2026-08-30. The guard became `seatIsFree(member)` at :14956/:15093
+    // — Kd's own finding that anybody holding the keys costs the gym nothing and
+    // looked on this screen exactly like somebody who does — and the anchor still
+    // named the raw flag. Same call site, same branch.
     expect: 'offers NO remove control beside the owner',
-    from: '      {member.complimentary ? (',
-    to: '      {member.complimentary && false ? (',
+    from: '      {seatIsFree(member) ? (',
+    to: '      {seatIsFree(member) && false ? (',
   },
   {
     id: 'J18',
@@ -309,6 +353,110 @@ const MUTANTS = [
     expect: 'puts the number waiting where an owner cannot miss it',
     from: '          ? (waitingOutcome.value.data?.pendingCount ?? null)',
     to: '          ? (waitingOutcome.value.data?.items?.length ?? null)',
+  },
+
+  // ── WAITING ON A GYM WITH NO PLAN (Kd 2026-08-29, :24141 §1) ──────────────
+  //
+  // Every row here is 4a's "a number or a state a user can see, and it is
+  // wrong": a person told to walk up to a front desk that cannot let them in, a
+  // countdown to a deadline nothing will act on, or the mirror image — a held
+  // sentence shown to somebody waiting on a gym that is paying perfectly well.
+  // **PAIRED IN BOTH DIRECTIONS ON PURPOSE** (:7104's PG1), and the second
+  // direction is the worse defect, because that gym is a customer.
+  {
+    id: 'J25',
+    target: 'gymview',
+    suite: GYM_VIEW_SUITE,
+    why: "THE THREE-STATE RULE INVERTED: only an explicit `true` counts as yes, so an api older than this bundle — which sends NOTHING, and whose field the shared schema defaults to null — reads as a held gym. Every person waiting on a healthy gym during a web-newer-than-api window is told it has stopped taking members. `null` means 'we could not ask', never 'no' (C97, :23711)",
+    expect: 'treats a MISSING answer as yes',
+    from: '      orgCanConfirm: app?.orgCanConfirm === false ? false : true,',
+    to: '      orgCanConfirm: app?.orgCanConfirm === true ? true : false,',
+  },
+  {
+    id: 'J26',
+    target: 'gymview',
+    suite: GYM_VIEW_SUITE,
+    why: "THE SERVER'S ANSWER NEVER REACHES THE ROW: the field is dropped in the mapper, so `held` is false for every application and the card goes on promising a tap at the front desk that answers 409. The lock is deleted at its source rather than at the screen",
+    expect: 'carries an explicit NO from the server onto the waiting row',
+    from: '      orgCanConfirm: app?.orgCanConfirm === false ? false : true,',
+    to: '',
+  },
+  {
+    id: 'J27',
+    target: 'card',
+    suite: GYM_RENDER_SUITE,
+    why: 'ON SCREEN AND FALSE: the held state never fires, so a person waiting on a gym that cannot confirm anybody is told "one tap at the front desk" — a tap the server refuses (:23711) — and is counted down to a deadline the sweep no longer acts on',
+    expect: 'says the request is being HELD',
+    from: '  const held = row.orgCanConfirm === false;',
+    to: '  const held = false;',
+  },
+  {
+    id: 'J28',
+    target: 'card',
+    suite: GYM_RENDER_SUITE,
+    why: 'THE OTHER DIRECTION, AND THE WORSE ONE: the held state fires for EVERYBODY, so somebody waiting on a gym that is paying perfectly well is told it cannot take new members and their countdown disappears. A lock whose only tested failure is "it did not fire" is satisfied by one permanently shut',
+    expect: 'is the ordinary card again on a gym that IS on a plan',
+    from: '  const held = row.orgCanConfirm === false;',
+    to: '  const held = true;',
+  },
+  {
+    id: 'J29',
+    target: 'card',
+    suite: GYM_RENDER_SUITE,
+    why: 'A DEADLINE THAT WILL NOT ARRIVE: the countdown comes back on a held row, so the screen says "Expires in 11 days" about a request the sweep is deliberately holding — and tells them to enter the code again after a date that will pass with nothing happening',
+    expect: 'does NOT count down to a deadline that will not arrive',
+    from: '        {!held && expiring !== null ? (',
+    to: '        {expiring !== null ? (',
+  },
+  {
+    id: 'J30',
+    target: 'card',
+    suite: GYM_RENDER_SUITE,
+    why: "A PROMISE WITH NO CODE BEHIND IT: the held sentence grows the reassurance nobody can keep. Nothing in this product can put a lapsed gym back on a plan, and a held request whose deadline has passed still needs the PAYMENT card to survive the first sweep after one does — so 'they'll confirm you once they're back' is :5807's class, one card early",
+    expect: 'promises nothing about being let in later',
+    from: "it won't run out while that's the case.",
+    to: "it won't run out, and they'll confirm you once they're back.",
+  },
+  {
+    id: 'J31',
+    target: 'card',
+    suite: GYM_RENDER_SUITE,
+    why: "KD'S RULING DELETED AT THE SCREEN: the reminder button disappears on a held row, which is the refusal he ruled FIRST and then reversed himself on one message later — it strands the person with no action at all, and the mark really does land on a queue the gym can still read",
+    expect: 'it is the one thing this person can still do',
+    from: '        {state.sent === null && row.applicationId !== null ? (',
+    to: '        {state.sent === null && row.applicationId !== null && !held ? (',
+  },
+  {
+    id: 'J32',
+    target: 'panel',
+    suite: GYM_RENDER_SUITE,
+    why: "ON SCREEN AND FALSE ON THE ROUTE MOST PEOPLE ARRIVE ON: the join screen goes back to 'ask them now — it takes one tap' for a gym whose Confirm answers 409. `/org/join` draws this panel and NOTHING else — the dashboard card that says the same thing is not on that route — so this sentence is wrong with no second screen to correct it. It is the defect the card was HALF-fixing until the join door was checked",
+    expect: 'tells somebody applying to a gym with no plan that their request is HELD',
+    from: "            {held ? (\n              <p className=\"text-sm mt-1\" style={{ color: 'rgba(255,255,255,0.75)' }}>",
+    to: "            {false ? (\n              <p className=\"text-sm mt-1\" style={{ color: 'rgba(255,255,255,0.75)' }}>",
+  },
+  {
+    id: 'J33',
+    target: 'panel',
+    suite: GYM_RENDER_SUITE,
+    why: "THE OTHER DIRECTION, AND THE WORSE ONE: the held sentence fires for EVERY applicant, so somebody joining a gym that is paying perfectly well is told it cannot take new members. `null` — which is what an api older than this bundle sends — must read as YES, never as no (C97's rule, :23711)",
+    // Anchored on the HOISTED CONST, which is the one place the question is
+    // asked. Both paragraphs then read `{held ? (`, so an anchor on either of
+    // them matches twice and `String.replace` would silently take the first —
+    // the multi-match hazard this card filed an `OWED.md` line about. Hoisting
+    // was the fix in the SOURCE (:17676's precedent), not a workaround here.
+    expect: 'treats a MISSING answer as the ordinary screen',
+    from: '    const held = result.application?.orgCanConfirm === false;',
+    to: '    const held = result.application?.orgCanConfirm !== true;',
+  },
+  {
+    id: 'J34',
+    target: 'panel',
+    suite: GYM_RENDER_SUITE,
+    why: "A CONTRADICTION IN THE READER'S OWN WORDS: 'Nothing is on hold' comes back directly under 'your request is being held'. One is about their app and the other about their request, and nobody reads a confirmation card carefully enough to make that distinction — it also re-dangles 'your gym's extras switch on the moment they confirm you' off an event that cannot happen yet",
+    expect: 'tells somebody applying to a gym with no plan that their request is HELD',
+    from: "            {held ? (\n              <p className=\"text-sm mt-2\" style={{ color: 'rgba(255,255,255,0.55)' }}>",
+    to: "            {false ? (\n              <p className=\"text-sm mt-2\" style={{ color: 'rgba(255,255,255,0.55)' }}>",
   },
 ];
 

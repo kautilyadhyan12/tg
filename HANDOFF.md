@@ -1,6 +1,84 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: A PERSON WAITING TO JOIN A LAPSED GYM IS TOLD THE TRUTH AND THEIR REQUEST
+      STOPS DYING — Card B of Kd's 2026-08-29 split (:24141 §1), built after
+      Card A shipped and smoked. DECISIONS :25092.
+
+  1. **THE THREE PIECES THE `OWED.md` LINE ASKED FOR ALL SHIP.** The expiry
+     HOLDS while the gym has no live plan (one condition on the statement that
+     destroys something, composed once and interpolated into the expiry and the
+     due count); the waiting person is told **"<gym> can't take new members
+     right now. Your request is being held — it won't run out while that's the
+     case."**; and **the NUDGE STAYS OPEN, which is the ruling** — Kd ruled the
+     join door does not refuse, and the line itself calls the nudge "the same
+     question about the same dead end".
+  2. **THE APPROVED PLAN NAMED ONE SCREEN AND THERE ARE TWO.** It said the join
+     screen needed nothing because "the card directly above re-reads and says
+     it". **True of Settings → Gym, FALSE of `/org/join`, which renders
+     `JoinGymPanel` and NOTHING else** — the QR/poster route still said "ask
+     them now — it takes one tap" about a tap the server 409s. **A stated limit
+     is a claim (V3) and that one was never sourced.** Fixed by moving
+     `orgCanConfirm` down onto `orgApplicationSchema`, the shape the join door's
+     two waiting arms and the list all share.
+  3. **`heldNoPlan` IS A SEPARATE NUMBER FROM `heldForNotice` ON PURPOSE.** The
+     latter means "the chase step is not doing its job"; a lapsed gym's held rows
+     would have made both unreadable.
+  4. **THE CHASE IS DELIBERATELY NOT GATED.** A row never chased can never
+     expire, so holding the reminder too builds a second hidden hold that
+     OUTLIVES the gym paying up. O165 runs the tidier version.
+  5. **`mutate-join-door.mjs` HAD BEEN ABORTING SINCE 2026-08-20 — four dead
+     anchors, no verdict at all for ten days.** Proven pre-existing at HEAD in a
+     throwaway worktree. An abort reads as a broken tool rather than an unguarded
+     guarantee, which is why nobody reported it. Re-aimed at the same call sites.
+     **Two more rows (O56, O27) were moved by THIS card's diff** — :23128 twice
+     in one card.
+  6. **MY FIRST AUDIT OF THAT WAS WRONG AND SAID 66 DEAD.** It ignored
+     `withEolOf`: four api targets are CRLF. A number contradicting a recent
+     green run is a bug in the instrument until proven otherwise.
+  7. **CONSOLE-SWEEP CONTROL WENT RED ONCE AND IS RECORDED AS TRANSIENT**, not
+     hidden — passes alone, and the re-run reached 115 controls clean before
+     being stopped deliberately so the final-bytes run would be the quotable one.
+
+PROVE: web **1383/1383, 50 files, exit 0** (+13, counted per file vs HEAD) ·
+       `orgs.routes` **145/145** and `orgs.sweep` **23/23**, LOCAL
+       (`localhost:5433`) · full api **659/662 LOCAL, the 3 being the
+       PRE-EXISTING `catalog.seed` shared-database race — proven, that file
+       passes 7/7 alone — and NOT quoted as green** · tsc exit 0 api+shared ·
+       eslint clean on every changed file · `vite build` exit 0 · `node --check`
+       clean on 3 harnesses · anchor audit whole-table: join-door 34/34 unique,
+       console 150 0-dead-0-multi, orgs 167 0-dead **5 multi (pre-existing, own
+       OWED line)** · **api SWEEP a stated SUBSET of 167 (O27,O56,O161–O167): 9
+       RED, 0 ALIVE, 0 never ran**, localhost:5433, 290 rows fingerprinted ·
+       **join-door WHOLE TABLE 34: 34 RED, 0 ALIVE, 0 never ran** ·
+       **console a stated SUBSET of 150 (C129,C130): 2 RED, 0 ALIVE** — its first
+       run ABORTED on MY OWN mutant text (`we'll` closed the single-quoted
+       constant, no tally, :21157's class); rewritten and proven by applying it
+       to a copy and `node --check`ing before re-running
+
+FILES: apps/api/src/modules/orgs/{sweep,repo,service}.ts ·
+       packages/shared/src/orgs.ts · apps/web/src/components/gym/
+       {GymMembershipCard.jsx,gymMembershipView.js,JoinGymPanel.jsx} ·
+       apps/web/src/pages/console/billingView.js · 6 test files ·
+       3 mutation harnesses · RUNBOOK/smoke-held-application.md (NEW) ·
+       DECISIONS.md · DECISIONS-INDEX.md · DECISIONS-TRIGGERS.md (generated) ·
+       OWED.md · HANDOFF.md. **No migration.**
+
+OPEN:  **SMOKE UNRUN and T3 UNRUN — the two gates left, neither mine.** The
+       `OWED.md` line does not tick until the browser has seen it.
+       **Recommended and NOT built (R1.1): teach
+       `apps/api/scripts/check-harnesses.mjs` to verify each mutant's ANCHOR, not
+       just that the file parses** — it already walks every harness on the ROOT
+       lint, and it would have caught finding 5 on the first lint after
+       `8b19775` rather than ten days later. Own `OWED.md` line, beside the five
+       multi-match anchors it also fixes.
+       `CLAUDE.md`'s pre-existing uncommitted edit is still out, as before.
+       `JoinGymPanel`'s file header still lists "that the request EXPIRES" among
+       things its copy may not say — stale since the clock shipped 2026-08-20,
+       not this card's prose, untouched (R1.1).
+```
+
+```
 TASK: CI GOES GREEN AGAIN — one test that only passed on a database with
       history, red for seven pushes. DECISIONS :25008. One test file; no app
       code, no migration.
