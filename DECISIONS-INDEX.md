@@ -864,6 +864,27 @@ grounding rule, Part I.5 verification doctrine, Part I.6 session start.
   once has held.** Full detail, both safety proofs and the invariant at `:24813`
   — **which is where they belong, and this line was 18 lines long before the rule
   above was applied to it.**
+- **:25771** — 2026-08-31 — **KD RULES THAT A GYM WITH NO PLAN IS CLOSED AFTER
+  FOUR MONTHS, NOT Part 3 §4.2's FOURTEEN DAYS** — *"i think after 4 months of
+  inactivity shut down the gym"* — **and the four months count from the day the
+  PLAN ENDED, which is a recommendation he approved rather than a paraphrase of
+  what he said.** :22215 §6 required that the fourteen days not be moved without
+  asking; this is the asking and the answer. **Read before quoting the read-only
+  window's length, before touching `modules/orgs/archiveSweep.ts`, before writing
+  anything that sets `gyms.status`, before adding a reader of
+  `subscriptions.ended_at`, before building the payment card's "they paid, switch
+  them back on" step, and before assuming an archived gym is unreachable from the
+  console.** Two measurements moved the trigger off *"inactivity"*: nothing in
+  this product records when a gym was last active (`org_daily_stats` has no
+  writer and no reader), and an inactivity rule can close a gym that is PAYING
+  but quiet. **Nothing is deleted by a closure and nothing is hidden** — the
+  console still draws in full, read-only; what stops is that nobody new can join.
+  **THE WAY BACK IS A COMMAND, NOT A PAYMENT, and Kd ruled knowing it:** nothing
+  in this product can put a gym back on a plan (two `subscriptions` writers,
+  re-measured), so `tools/gym-restore.ts` is the restore half and the automatic
+  one stays on the payment card's line. **`archived_at` deliberately SURVIVES a
+  restore** — it is what stops the next night's run closing the gym straight back
+  down. Card record, both tools' runs and the full PROVE at `:25771`.
 
 ## 1B · CARD HISTORY — the rounds, smokes and audits behind the rules above.
 

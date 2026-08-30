@@ -697,6 +697,21 @@ async function requirePrivilege(
  *  wording and is not used: the person reading it may BE the owner. */
 const GYM_NOT_ON_PLAN_MESSAGE = "This gym needs a plan before anything here can be changed.";
 
+/** WHAT A CLOSED GYM'S STAFF ARE TOLD — Part 3 §4.2's archived state, which
+ *  `archiveSweep.ts` finally writes (Kd's four months, 2026-08-31).
+ *
+ *  **It is `startGymTrial`'s existing sentence, hoisted rather than re-worded**,
+ *  so the two doors that refuse a closed gym to its own STAFF say one thing.
+ *  The applicant-facing pair (`applyByCode`, `confirmApplication`) keep *"That
+ *  gym is no longer active"* on purpose: a different audience, who is not staff
+ *  of this gym and is owed the effect rather than our vocabulary (:25092 §1(d)'s
+ *  boundary).
+ *
+ *  Complete without a button, like every other refusal on this console: a closed
+ *  gym is re-opened by an operator (`tools/gym-restore.ts`) or by paying, and
+ *  neither is a link this app can offer yet (:5807). */
+const GYM_ARCHIVED_MESSAGE = "This gym is archived.";
+
 /** AUTHORISE A WRITE — the privilege check above, plus Part 3 §4.2's read-only
  *  console.
  *
@@ -741,6 +756,34 @@ async function requireWritablePrivilege(
   const authorised = await requirePrivilege(deps, gymId, userId, privilege);
   if (!(await repo.gymHasLivePlan(deps.sql, gymId))) {
     throw new OrgsError(409, "gym_not_on_plan", GYM_NOT_ON_PLAN_MESSAGE);
+  }
+  // **A CLOSED GYM CANNOT BE CHANGED EVEN IF A PLAN SAYS OTHERWISE** — Kd's
+  // ruling of 2026-08-31 that a lapsed gym is archived after four months, and
+  // the state `archiveSweep.ts` writes.
+  //
+  // **IT IS SECOND, AND THE ORDER IS THE ONLY REASON THIS IS INVISIBLE TODAY.**
+  // Every gym the sweep can close has no live plan, so the check above answers
+  // first and staff of a closed gym keep reading the sentence their own screen
+  // is already showing them (`READ_ONLY_NOTE`, drawn from this module's
+  // `GYM_NOT_ON_PLAN_MESSAGE`). Reversed, one refusal would have two different
+  // sentences depending on which door produced it — the drift `billingView.js`
+  // warns about, bought for nothing.
+  //
+  // **SO IT IS UNREACHABLE TODAY AND IS WRITTEN ANYWAY, deliberately.** The
+  // combination it refuses — archived AND on a live plan — is one no current
+  // writer can produce, and it is exactly what :19016's first admin slice
+  // produces the day it ships: *"i will have the power of removing them or
+  // pausing their use if i find them to be fraud"* writes `archived` to a gym
+  // that may still be paying. Without this line that gym would keep a fully
+  // working console, because every other gate in this module asks about the
+  // PLAN and not about the gym. The `past_due` banner sets the precedent for
+  // writing the unreachable state now: the alternative on the day it becomes
+  // reachable is silence, and Kd ruled on silence at :12660.
+  //
+  // The 409 code and sentence are `startGymTrial`'s own, not a third variant —
+  // one state, one word for it.
+  if (authorised.org.status !== "active") {
+    throw new OrgsError(409, "org_archived", GYM_ARCHIVED_MESSAGE);
   }
   return authorised;
 }
@@ -859,7 +902,7 @@ export async function startOrgTrial(
         "We're not open for business in your country yet, so there's no plan to start.",
       );
     case "org_archived":
-      throw new OrgsError(409, "org_archived", "This gym is archived.");
+      throw new OrgsError(409, "org_archived", GYM_ARCHIVED_MESSAGE);
     case "not_found":
       // Unreachable in practice — `requirePrivilege` has already read the org and
       // 404'd a stranger — but a gym archived or deleted between that read and

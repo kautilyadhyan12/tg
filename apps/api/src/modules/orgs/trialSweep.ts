@@ -6,8 +6,23 @@
 // that gym kept gym-tier entitlements, free, for ever.
 //
 // **WHAT THIS DOES, IN ONE SENTENCE:** a gym subscription still marked
-// `trialing` whose `trial_ends_at` has passed becomes `expired`, and an audit
-// row records that a machine did it.
+// `trialing` whose `trial_ends_at` has passed becomes `expired`, is STAMPED with
+// the moment it stopped being live, and an audit row records that a machine did
+// it.
+//
+// **THE STAMP IS `ended_at` AND IT STARTS THE ARCHIVE CLOCK** (Kd ruling
+// 2026-08-31: a gym with no plan is archived four months later, replacing Part 3
+// §4.2's fourteen days). `archiveSweep.ts` is its only reader. It is written
+// from the SAME injected `now` as the comparison above it, so the row's own
+// record of when it ended agrees with the instant this run decided it had —
+// and `tools/trial-sweep.ts --now` therefore stamps the date an operator is
+// standing at, which is what lets a smoke walk both sweeps in three minutes
+// instead of five months.
+//
+// **IT IS A RECORD OF WHEN, NEVER OF WHETHER.** Every live/not-live decision in
+// this product asks the STATUS (:23711 §2(b)); a row can carry `expired` with a
+// NULL stamp, because rows that expired before migration `0016` have no honest
+// value to backfill. The archive sweep's comparison filters those out by itself.
 //
 // **WHAT IT DELIBERATELY DOES NOT DO, because each is somebody else's card:**
 //
@@ -135,7 +150,7 @@ export async function expireLapsedGymTrials(
   const expiredRows = await deps.sql.begin(async (tx) => {
     const rows = await tx<Row[]>`
       UPDATE subscriptions
-      SET status = 'expired'
+      SET status = 'expired', ended_at = ${now}
       WHERE owner_type = 'gym'
         AND status = 'trialing'
         AND (${scope}::uuid[] IS NULL OR owner_id = ANY(${scope}::uuid[]))

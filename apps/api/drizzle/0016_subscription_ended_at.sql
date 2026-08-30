@@ -1,0 +1,62 @@
+-- A LAPSED GYM IS ARCHIVED FOUR MONTHS AFTER ITS PLAN ENDS (Kd ruling
+-- 2026-08-31). Expand-only, forward-only. One statement, one column, no
+-- backfill, no lock worth naming.
+--
+-- Reviewed as SQL by Kd before anything else was written (T5, R4.4).
+--
+-- **HAND-WRITTEN, AND NOT BY PREFERENCE.** `drizzle-kit generate` was run first
+-- and produced a migration that ALSO re-emitted `gyms.country`,
+-- `gyms_country_check`, `gym_staff_privileges_check` and
+-- `subscriptions_provider_check` — the whole of `0014` and `0015`. The snapshots
+-- in `drizzle/meta/` stop at `0012_snapshot.json`, so the generator diffs today's
+-- schema against a schema three migrations old and re-emits everything since.
+-- Applying that would have died on an already-existing column (42701). `0014` and
+-- `0015` were hand-written for the same reason and left no snapshot either; this
+-- follows them rather than quietly changing how migrations are made here. The
+-- stale-snapshot debt is real, is nobody's card, and now has its own `OWED.md`
+-- line — it was tracked NOWHERE before today (grep-verified).
+--
+-- 1 · WHEN DID THIS SUBSCRIPTION STOP BEING LIVE.
+--
+--    Kd ruled on 2026-08-31 that a gym with no plan is archived after FOUR
+--    MONTHS, replacing Part 3 §4.2's *"the console stays read-only 14 days, then
+--    archived"*. His words: *"i think after 4 months of inactivity shut down the
+--    gym"*. The recommendation he approved counts those four months from the day
+--    the gym's PLAN ENDED rather than from inactivity, because nothing in the
+--    product records when a gym was last active (`org_daily_stats` exists and has
+--    no writer — measured) and an inactivity rule could close a gym that is
+--    paying but quiet.
+--
+--    So the clock needs a starting instant, and the product has been throwing it
+--    away. Every other date on this row answers a different question:
+--
+--      · `trial_ends_at` is when a trial was DUE to end. The nightly job acts on
+--        it up to 24 hours later, and NOTHING EVER CLEARS IT — a gym that
+--        converts to paying and lapses a year later still carries the date its
+--        trial ended. An archive clock keyed on that column would close such a
+--        gym the same night it stopped paying. This is `gymHasLivePlan`'s own
+--        recorded warning (:21580 rule (c), quoted in `repo.ts`) arriving in a
+--        different reader, and it is why the column is not reused.
+--      · `current_period_end` is what a paid plan was PAID UP TO, is written by
+--        nothing today, and is a promise about the future rather than a record of
+--        the past.
+--      · `audit_log` does hold the instant (`org.trial_expired`), and reading
+--        product behaviour out of an ops table would make a retention policy a
+--        behaviour change. Not used.
+--
+--    NULLABLE AND DELIBERATELY NOT BACKFILLED (R4.4 expand-then-contract).
+--    Nothing honest can be written onto rows that expired before this column
+--    existed. A NULL means "we do not know when this ended" and the archive
+--    sweep's comparison excludes it by itself, so those gyms keep their console
+--    until somebody acts — the safe direction for a state that closes a gym.
+--
+--    WRITTEN BY WHATEVER MOVES A ROW OUT OF §4.1's LIVE SET. Today that is
+--    exactly one statement (`trialSweep.ts`); dunning and cancellation write it
+--    too when Part 5 §8 lands. It is a record of WHEN and never of WHETHER — the
+--    status is what every live/not-live decision asks (:23711 §2(b)).
+--
+--    NO INDEX. The archive sweep reads it inside a correlated subquery already
+--    keyed by `(owner_type, owner_id)`, which `subs_one_live_uq` and the table's
+--    own scan cost cover at this size; adding one before a row exists would be
+--    guessing at a plan. `subscriptions_status_period_idx` is untouched.
+ALTER TABLE "subscriptions" ADD COLUMN "ended_at" timestamp with time zone;

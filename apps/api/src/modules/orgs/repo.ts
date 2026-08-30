@@ -1248,6 +1248,119 @@ export async function gymHasLivePlan(sql: SqlOrTx, gymId: string): Promise<boole
   return rows[0]?.live ?? false;
 }
 
+/** A GYM'S ID FROM THE NAME IN THE CONSOLE'S ADDRESS BAR.
+ *
+ *  **It exists because the restore command was otherwise unusable, and that was
+ *  found by checking rather than assumed.** `tools/gym-restore.ts` takes the gym
+ *  to re-open, and its first draft said *"the same uuid the console's URL
+ *  carries"* — the console's routes are `/console/:orgSlug` (`App.jsx`), so the
+ *  URL carries a SLUG and the uuid appears on no screen at all. An operator
+ *  instruction naming a value nobody can obtain is :5807's class arriving in a
+ *  runbook, and the tool now takes either.
+ *
+ *  No tenancy axis, deliberately: it answers "which gym is this" for a command
+ *  line with no signed-in user, and returns an id and nothing else. Any ROUTE
+ *  that ever wants a slug lookup owes its own authorisation — this is not it. */
+export async function getOrgIdBySlug(sql: SqlOrTx, slug: string): Promise<string | null> {
+  const rows = await sql<{ id: string }[]>`SELECT id FROM gyms WHERE slug = ${slug}`;
+  return rows[0]?.id ?? null;
+}
+
+export type RestoreGymOutcome =
+  | { kind: "restored"; org: OrgRow }
+  | { kind: "not_archived"; org: OrgRow }
+  | { kind: "not_found" };
+
+/** RE-OPEN A CLOSED GYM — the other half of `archiveSweep.ts`, and today the
+ *  ONLY way back from `archived`.
+ *
+ *  **IT EXISTS BECAUSE THE AUTOMATIC WAY BACK CANNOT BE BUILT YET, and Kd was
+ *  told that before he ruled the four months.** Part 3 §4.2 says an archived gym
+ *  is *"restorable by reactivating"* — i.e. by paying — and nothing in this
+ *  product can put a gym back on a plan: `subscriptions` has exactly two writers
+ *  in `apps/api/src`, the INSERT in `startGymTrial` and the UPDATE in
+ *  `trialSweep.ts` (re-measured 2026-08-31). So the trigger for the automatic
+ *  half belongs to the payment card and is on its `OWED.md` line; this is the
+ *  operator's hand in the meantime, driven by `tools/gym-restore.ts`.
+ *
+ *  **IT RESTORES THE STATUS AND NOT THE PLAN, and the difference is not a
+ *  shortcut.** A re-opened gym has no live subscription, so its console is still
+ *  read-only (:23711) and its members are still on the free app. What it undoes
+ *  is the closure: people can type its join code again, its waiting queue can be
+ *  cleared again the moment it is on a plan, and it can start a trial if it never
+ *  spent one. Anything more would mean writing a subscription row nobody paid
+ *  for, which is R3.1.
+ *
+ *  **`archived_at` IS DELIBERATELY LEFT SET, and this is the line to read
+ *  twice.** It is what `archiveSweep.ts` reads as "this gym has been closed
+ *  before", so leaving it is what stops the next nightly run closing this gym
+ *  straight back down — the plan ended five months ago and that fact does not
+ *  change by re-opening. The pair is unambiguous: `status` says whether the gym
+ *  is closed NOW, `archived_at` says when it was last closed. Clearing it would
+ *  make the restore last exactly one night.
+ *
+ *  Tenancy is not this function's axis — it is an OPERATOR action with no
+ *  console route and no privilege, so the caller is a command line and the
+ *  actor is null. If it ever gains a route, the route owes the authz.
+ *  `FOR UPDATE` on the row, because this is a check-then-act on the column two
+ *  sweeps write. */
+export async function restoreGym(
+  sql: Sql,
+  input: { gymId: string; actorUserId: string | null; via: string },
+): Promise<RestoreGymOutcome> {
+  return await sql.begin(async (tx) => {
+    const rows = await tx<RawOrg[]>`
+      SELECT id, slug, name, city, country, org_type, timezone, locale,
+             currency_display, status
+      FROM gyms WHERE id = ${input.gymId}
+      -- THE LOCK IS ON ITS OWN LINE ON PURPOSE, and not for taste. NO BACKTICKS
+      -- IN HERE: one ends the literal, and I incurred that slip twice in this
+      -- card alone. Written as one line this SELECT is byte-identical to
+      -- claimSeat's, whose lock is what mutant O1 deletes to prove the seat race
+      -- is guarded — and an anchor
+      -- matching twice mutates whichever line comes first, silently testing the
+      -- wrong guarantee (:10726's shape; :15770 forbids re-aiming the mutant at
+      -- whichever line wins). The harness's pre-check ABORTED on exactly this
+      -- while this function was being written, before a byte was mutated, and
+      -- the remedy is :21157 §5's: make the new text unique in the SOURCE and
+      -- leave the existing mutant untouched.
+      FOR UPDATE`;
+    const raw = rows[0];
+    if (raw === undefined) return { kind: "not_found" };
+    const org = toOrgRow(raw);
+    // Not an error and not silently "restored" either: the caller asked for a
+    // state that already holds, and telling them which is what stops an
+    // operator re-running this and believing they fixed something.
+    if (org.status !== "archived") return { kind: "not_archived", org };
+
+    const updated = await tx<RawOrg[]>`
+      UPDATE gyms SET status = 'active'
+      WHERE id = ${input.gymId} AND status = 'archived'
+      RETURNING id, slug, name, city, country, org_type, timezone, locale,
+                currency_display, status`;
+    const updatedRaw = updated[0];
+    if (updatedRaw === undefined) {
+      // Unreachable under the `FOR UPDATE` above, which is exactly why it is
+      // loud rather than a fabricated success (`applyByCode`'s precedent).
+      throw new Error("gym row vanished between its lock and its restore");
+    }
+
+    // Part 3 §3.3, and the row that answers "who let this gym back in" —
+    // `via` names the surface because the admin panel will be a second caller
+    // and a hardcoded string here would then be a lie (:19016's first slice).
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.restored",
+      targetType: "gym",
+      targetId: input.gymId,
+      meta: { via: input.via },
+    });
+
+    return { kind: "restored", org: toOrgRow(updatedRaw) };
+  });
+}
+
 export interface GymSubscriptionRow {
   status: OrgSubscriptionStatus;
   trialEndsAt: Date | null;

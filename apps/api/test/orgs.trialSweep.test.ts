@@ -235,10 +235,21 @@ d("gym trial expiry sweep (real Postgres)", () => {
     expect(started.statusCode).toBe(200);
     expect(await readStatus(org.org.id)).toBe("trialing");
 
-    const result = await sweepAt(new Date(Date.now() + 31 * DAY_MS), [org.org.id]);
+    const endedAt = new Date(Date.now() + 31 * DAY_MS);
+    const result = await sweepAt(endedAt, [org.org.id]);
 
     expect(result.expired).toBe(1);
     expect(await readStatus(org.org.id)).toBe("expired");
+
+    // **AND THE MOMENT IT ENDED IS WRITTEN DOWN** — migration `0016`, and the
+    // start of the four-month archive clock Kd ruled on 2026-08-31. Asserted as
+    // an EXACT instant, not merely "not null": the stamp must be the run's own
+    // injected clock and not `now()`, or `tools/trial-sweep.ts --now` would end a
+    // trial at one instant and date it at another, and the archive sweep it
+    // feeds would then be four months out during every smoke.
+    const stamped = await sql<{ ended_at: Date | null }[]>`
+      SELECT ended_at FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${org.org.id}`;
+    expect(stamped[0]?.ended_at?.getTime()).toBe(endedAt.getTime());
   });
 
   /** THE OTHER DIRECTION, and it is not optional: a sweep that ends every trial

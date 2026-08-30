@@ -52,6 +52,33 @@ export const subscriptions = pgTable(
       .references(() => plans.id),
     status: text("status").notNull(),
     trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+    /** WHEN THIS SUBSCRIPTION STOPPED BEING LIVE — the moment the row left
+     *  §4.1's granting set, written by whatever moved it (`trialSweep.ts` today;
+     *  dunning and cancellation when Part 5 §8 lands).
+     *
+     *  **IT EXISTS BECAUSE THE PRODUCT WAS THROWING THAT MOMENT AWAY, and one
+     *  thing needs it: Kd's ruling of 2026-08-31 that a gym is ARCHIVED four
+     *  months after its plan ends.** A clock has to start somewhere and every
+     *  date already on this row answers a different question. `trial_ends_at` is
+     *  when a trial was DUE to end — the nightly job acts on it up to 24 hours
+     *  later, and nothing ever clears it, so a gym that converts to paying and
+     *  lapses a year later still carries a date from its trial. An archive clock
+     *  keyed on it would close that gym the same night it stopped paying, which
+     *  is `gymHasLivePlan`'s recorded warning (:21580 rule (c)) arriving in a
+     *  different reader.
+     *
+     *  **NULLABLE, AND NOT BACKFILLED (R4.4 expand-then-contract).** Nothing
+     *  honest can be written onto the rows that expired before this column
+     *  existed: the only record of when they moved is an `audit_log` row, and
+     *  an ops table is not a place product behaviour should read from. A NULL
+     *  here means "we do not know when this ended", and the archive sweep's
+     *  comparison filters it out by itself — so those gyms keep their console
+     *  until somebody acts, which is the safe direction.
+     *
+     *  It is NOT `status`'s twin and must not be read as one: a row can be
+     *  `expired` with a NULL here (pre-migration), and the STATUS is what every
+     *  live/not-live decision asks (:23711 §2(b)). This answers only "when". */
+    endedAt: timestamp("ended_at", { withTimezone: true }),
     currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
     cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
     provider: text("provider").notNull(),

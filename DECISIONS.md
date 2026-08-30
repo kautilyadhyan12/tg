@@ -25767,3 +25767,244 @@ steps stand on their 2026-08-30 run against `1b1de15` (:25326), not against the
 shipping bytes; §1 is the argument that the diff could not reach them, and it is
 an argument, not a second run. The applicant's OWN screen (step 6) was never
 touched by either round.
+
+## 2026-08-31 — KD RULES FOUR MONTHS INSTEAD OF THE SPEC'S FOURTEEN DAYS, AND THE WRITER THAT CLOSES A LAPSED GYM FINALLY EXISTS — counted from the day the plan ENDED, which the product had been throwing away
+
+**Read before touching `modules/orgs/archiveSweep.ts`, before writing anything
+that sets `gyms.status`, before quoting the read-only window's length, before
+adding a reader of `subscriptions.ended_at`, before building the payment card's
+"they paid, switch them back on" step, and before assuming an archived gym is
+unreachable from the console.**
+
+The third and last piece of Kd's :22215 §5 step 1, split off at :23711's plan
+gate and carried on its own `OWED.md` line since. Steps one (the trial actually
+ends, :22341) and two (the console goes read-only, :23711/:24141) shipped and
+smoked; nothing had ever set `archived`.
+
+### 1. KD'S RULING — FOUR MONTHS, AND IT REPLACES A SPEC NUMBER
+
+Part 3 §4.2 says *"the console stays read-only 14 days, then archived (restorable
+by reactivating)"*. :22215 §6 recorded that the fourteen days had NOT been
+re-ratified and must not be moved without asking. It was asked, at the plan gate,
+and he answered: ***"not 14 days i think after 4 months of inactivity shut down
+the gym what do you think ?"***
+
+**HE ASKED FOR A RECOMMENDATION AND GOT ONE RATHER THAN A DIFF, which is
+:19560's recorded lesson being obeyed for once instead of learned again.** That
+entry records the failure shape exactly — he stated a preference mid-flow, a chat
+started implementing it, and he stopped it: *"wait men i just said an opinion i
+need your recommendation as well"*. So the four months was measured before it was
+built, and the recommendation CHANGED one half of what he said:
+
+- **The longer window was agreed and costs nothing.** A gym with no plan is
+  already frozen from the day it lapses (:23711), and its members already fell to
+  the free app that same day (:22341). The closure adds only that nobody new can
+  join. So a longer window protects a gym that is merely late paying and gives up
+  almost nothing.
+- **The clock counts from the plan ENDING, not from INACTIVITY**, and two
+  measurements decided it. Nothing in this product records when a gym was last
+  active — `org_daily_stats` exists in the schema with **no writer and no reader**
+  outside it (grep-verified) — so an inactivity rule would have to build that
+  first. And an inactivity rule can reach a gym that is PAYING but quiet, which
+  is closing a paying customer's account. The date a plan ended needs no new
+  machinery and cannot reach a paying gym at all.
+
+**HE WAS ALSO TOLD, BEFORE HE RULED, THAT THE CLOSURE HAS NO AUTOMATIC WAY
+BACK** — his own next question was *"should we keep it what if the gym wants t
+join after 4 months"* — and the answer he approved is §4 below.
+
+### 2. WHERE THE FOUR MONTHS COUNT FROM, AND WHY IT NEEDED A COLUMN
+
+**A clock needs a starting instant and the product was discarding it.** Migration
+`0016` adds `subscriptions.ended_at`, written by `trialSweep.ts` in the same
+statement that moves a row out of §4.1's live set, from the SAME injected clock
+the comparison uses.
+
+**THE THREE DATES ALREADY ON THE ROW WERE EACH CONSIDERED AND EACH REJECTED, and
+the first one is the trap:**
+
+- **`trial_ends_at`** is when a trial was DUE to end, and **nothing ever clears
+  it**. A gym that converts to paying and lapses a year later still carries the
+  date its trial ended, so an archive clock keyed on that column closes that gym
+  **the same night it stops paying**. This is `gymHasLivePlan`'s own recorded
+  warning (:21580 rule (c), :23711 §2(b) — *"it asks the STATUS and never a
+  date"*) arriving in a different reader. **Part 3 §4.2's own banner row says
+  *"0–14 days past"*, which reads like an argument FOR that column** — it is the
+  reading a future chat will reach for, and it is wrong for this reason.
+- **`current_period_end`** is what a paid plan was paid up to, has no writer, and
+  is a promise about the future rather than a record of the past.
+- **The `audit_log` row** (`org.trial_expired`) does hold the instant, and using
+  it would make product behaviour depend on an ops table — a retention policy
+  would become a behaviour change.
+
+**NULLABLE AND NOT BACKFILLED** (R4.4). Nothing honest can be written onto rows
+that expired before the column existed, so those gyms keep their console until
+somebody acts — the safe direction for a state with no automatic way back. Read
+back from the database after migrating (:20222): **189 rows, 0 stamped.**
+
+### 3. WHAT THE SWEEP ACTUALLY ASKS, AND THE THREE CONDITIONS THAT ARE LOAD-BEARING
+
+`archiveLapsedGyms` sets `gyms.status = 'archived'` and `archived_at`, with its
+`audit_log` row **in one transaction** (:13075's C/H-2, built in from the first
+commit here as it was in `trialSweep.ts`). Registered as a fourth
+`upsertJobScheduler` on the `rollups` queue at `30 4 * * *`;
+`tools/archive-sweep.ts` runs it by hand with `--now`.
+
+1. **NOT EXISTS a live plan.** §4.1's three granting statuses, the set five other
+   readers share. **Deleting it closes a PAYING gym four months after its trial —
+   which is every gym that ever converts**, and it is the worst thing in this
+   card's blast radius. Mutant **O168**.
+2. **`max(ended_at) <= now - 4 months`, and `max` is not tidiness.** A gym that
+   trialled in January, paid from February and lapsed LAST WEEK has two ended rows
+   on file; an `EXISTS ... ended_at <= threshold` reads the January one and closes
+   it six days after it stops paying. Mutant **O169**, and the only fixture that
+   can tell the two statements apart is the one written for it.
+3. **`archived_at IS NULL` is what makes a re-opening survive**, and this was
+   found by design rather than by a review. Without it, restoring a gym whose plan
+   ended five months ago lasts exactly one night — the next run sees a lapsed gym
+   and closes it again. So **`archived_at` means "the last time this gym was
+   closed" and deliberately SURVIVES the restore**, while `status` means "is it
+   closed now". An operator's hand overrides the machine, which is the right
+   direction when the machine can only close and the hand can only open. Mutants
+   **O172** (the condition) and **O176** (the restore clearing the column).
+
+**A GYM THAT NEVER SUBSCRIBED IS NEVER CLOSED BY THIS**, and rows that expired
+before `0016` are not either: `max()` of nothing is NULL, a NULL comparison is
+not true, and both fall out of the shape of the question rather than a special
+case. The first is a genuine decision — the state §4.2 describes is a plan
+ENDING — and it has its own `OWED.md` line rather than being inferred here.
+
+### 4. THE RESTORE HALF: WHAT COULD BE BUILT, AND WHAT COULD NOT
+
+**Nothing in this product can put a gym back on a plan.** Re-measured this
+session rather than quoted from :25092 §4: `INSERT INTO subscriptions|UPDATE
+subscriptions` over `apps/api/src` returns **exactly two hits** — the INSERT in
+`startGymTrial` and the UPDATE in `trialSweep.ts`. So *"restorable by
+reactivating"* has no trigger, and saying so at the plan gate is what let Kd rule
+knowing it.
+
+What ships instead is `repo.restoreGym` + **`tools/gym-restore.ts`**: one named
+gym, `archived` → `active`, an `org.restored` audit row naming its surface via a
+`via` parameter (so the admin panel's row will be distinguishable). **It restores
+the STATUS and not the PLAN** — the console stays read-only, the members stay on
+free — because writing a subscription row nobody paid for is R3.1. Refused in
+production? **No, and the asymmetry is deliberate**: the sweep's `--now` can close
+every lapsed gym in a database, while this opens exactly one, and opening is the
+direction nothing is lost in.
+
+**THE ARGUMENT IT TAKES WAS WRONG IN THE FIRST DRAFT AND THE FIX IS THE PART TO
+KEEP.** The tool's usage line read *"the same uuid the console's URL carries"* —
+and the console's routes are `/console/:orgSlug`, so **the URL carries a name and
+the uuid appears on no screen in the product.** An operator instruction naming a
+value nobody can obtain is :5807's class arriving in a runbook. It now takes
+either, via `repo.getOrgIdBySlug`.
+
+### 5. A CLOSED GYM CANNOT BE CHANGED EVEN WHILE IT IS ON A PLAN — unreachable today, and written anyway
+
+`requireWritablePrivilege` gains a second refusal: `org_archived` when the gym is
+not `active`. **It is SECOND, after the plan check, and the order is the only
+reason this is invisible today** — every gym this sweep closes has no live plan,
+so staff keep reading the sentence their own screen already shows them
+(`READ_ONLY_NOTE`). Reversed, one refusal would carry two different sentences
+depending on which door produced it.
+
+**The combination it refuses — archived AND paying — is exactly what :19016's
+first admin slice produces the day it ships** (*"i will have the power of removing
+them or pausing their use if i find them to be fraud"* writes `archived` to a gym
+that may still be paying). Without this line that gym keeps a fully working
+console, because **every other gate in this module asks about the PLAN and not
+about the GYM**. The `past_due` banner is the precedent for writing an
+unreachable state now; the alternative on the day it becomes reachable is
+silence, and Kd ruled on silence at :12660. Mutant **O174**.
+
+### 6. WHAT THIS CARD DELIBERATELY DOES NOT DO
+
+- **No web change, and that was checked rather than assumed.** An archived gym
+  draws exactly as a lapsed one does: the console's banner (*"This gym has no
+  plan…"*) stays TRUE, and `orgSummarySchema` carries `status` but **no web file
+  reads `org.status`** (grep-verified — every `.status` hit in the console is
+  `snapshot.status` or `subscription.status`). Nothing on any screen becomes
+  false, so nothing is edited. The one user-visible change is the join door's
+  existing refusal, *"That gym is no longer active."*, now reachable.
+- **Held join requests stay held.** :25092 §6 handed this card the question —
+  *"an archived gym is terminal, so a request held against one is held for ever"*
+  — and the answer is that it is no longer terminal (§4), so holding stays
+  consistent with Kd's *"hold their request and tell them the truth"*. Nothing is
+  destroyed, and the applicant's sentence stays true. Own `OWED.md` line, because
+  a gym that is never re-opened leaves somebody waiting indefinitely.
+- **The automatic re-opening on payment** — §4, the payment card's line.
+
+### Round log
+
+**PROVE — every figure naming what it ran against. ALL LOCAL** (`localhost:5433`,
+`test:local` — :13659):
+
+- `orgs.archiveSweep` **13/13 exit 0** in 16.3 s (new file) · with
+  `orgs.trialSweep` **22/22 exit 0** · full api suite **676/676 across 47 files,
+  exit 0, on two separate runs** — quoted as the runs they were, never as the
+  suite's guaranteed state (CLAUDE.md Appendix, :13746).
+- ⚠️ **A THIRD FULL RUN EXITED 1 AND I CANNOT SAY WHICH TEST FAILED, because I
+  piped it through `tail -6` and threw the evidence away.** That is my error and
+  it is recorded rather than smoothed over: the summary line survived, the
+  failure did not. What is known: the two suites that assert exact GLOBAL counts
+  (`catalog.seed`, `db.migration`) pass **18/18 alone**, the run took 470 s
+  against 222 s for the passing ones, and the documented pre-existing flake has
+  exactly this shape — nine files calling `seed()` against one shared database,
+  which Neon's latency used to hide (:13746). **That is a HYPOTHESIS and is
+  written as one.** The two runs either side of it were clean, and a later run
+  was clean while I was concurrently running two other suites against the same
+  database — which is itself a contamination I caused and should not have.
+  **Standing: capture a suite's whole output or you cannot investigate its
+  failure** (:13075's "read the EXIT CODE" lesson, arriving from the other side:
+  the exit code was read, and the reason had been discarded).
+- `tsc --noEmit` exit 0 on api **and PROVEN REAL by planting a type error**
+  (TS2322 raised, file restored, 0 CR bytes, re-run clean).
+- `eslint --max-warnings=0` exit 0 on every changed file · `node --check` on the
+  harness · `check-harnesses` **25 scripts**.
+- **SWEEP, a stated SUBSET of 176: O168–O176, 9 RED, 0 ALIVE, 0 never ran**,
+  every control GREEN and tallying first, restores sha256-verified after every
+  mutant, **295 gym + subscription rows fingerprinted, no unattributed changes**.
+- **BOTH TOOLS RUN, not merely written** (:22782's L-7): the plain sweep, the
+  year guard, the production refusal, both restore refusals with their real exit
+  codes (1), and a full close → audit row → re-open → sweep-again-changes-nothing
+  round trip on a throwaway gym, deleted afterwards.
+- **gitleaks: this card's own changes scanned CLEAN** (139 KB piped, exit 0).
+  The full-history scan reports **3 leaks and NONE are mine** — all three are the
+  documented `generic-api-key` false positives already carrying an `OWED.md`
+  line: the rule fires on the prose *"kcalPointForSetsV3"* in two `HANDOFF.md`
+  blocks from 2026-08-11, and on the OWED line that describes them. The five
+  commits since the last pushed one scan clean (`--log-opts e8aff34..HEAD`).
+
+**TWO THINGS THE HARNESS AND THE COMPILER CAUGHT BEFORE A BYTE SHIPPED, and both
+are recorded traps recurring:**
+
+1. **THE BACKTICK, TWICE IN ONE CARD.** Markdown backticks inside SQL comments in
+   a tagged template ended the literal and turned the query into a run of parse
+   errors — exactly what `listOrgsForUser` warns about in its own text (:12227,
+   then twice inside that template). Caught by `tsc` both times, as it was there.
+2. **AN ANCHOR COLLISION.** `restoreGym`'s SELECT was byte-identical to
+   `claimSeat`'s, so mutant **O1**'s anchor matched twice and the pre-check
+   ABORTED before writing anything. Fixed by making the NEW text unique in the
+   source (:21157 §5's precedent), never by re-aiming O1 at whichever line comes
+   first (:15770).
+
+**THE GUARD WAS WIDENED IN THE COMMIT THAT ADDED ITS WRITER**, which is :22782's
+L-5 stated as a rule and obeyed rather than re-learned: the mass-write detector
+fingerprinted gym `name|city|country|currency|timezone` and was structurally
+blind to a gym being **CLOSED** — the most damaging thing a row in that table can
+say. `gyms.status`, `gyms.archived_at` and `subscriptions.ended_at` joined the
+watch here. **O173 declares `writesRows` and the detector reported it moved no
+PRE-EXISTING row — both true**, and the reason is written into the row: the rows
+it can reach carry `ended_at`, a column three hours old, whose only writers create
+their gyms inside the run.
+
+**A DEBT FOUND ON THE WAY IN AND TRACKED NOWHERE BEFORE TODAY:
+`drizzle-kit generate` cannot be used in this repo.** The snapshots in
+`drizzle/meta/` stop at `0012_snapshot.json`, so it diffs against a schema three
+migrations old and re-emits the whole of `0014` and `0015` alongside the new
+column — an unusable migration that dies on 42701 if anybody applies it. `0014`
+and `0015` were hand-written for the same reason and left no snapshot either;
+`0016` follows them. Own `OWED.md` line.
+
+**NOTHING TICKS: the smoke (`RUNBOOK/smoke-gym-archive.md`, 9 steps) is UNRUN and
+T3 is UNRUN.**

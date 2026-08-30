@@ -6264,6 +6264,46 @@ d("orgs routes (real Postgres)", () => {
     ).toBe(201);
   });
 
+  /** A CLOSED GYM CANNOT BE CHANGED EVEN WHILE IT IS ON A PLAN — Kd's ruling of
+   *  2026-08-31 that a lapsed gym is archived after four months, and the state
+   *  `archiveSweep.ts` writes.
+   *
+   *  **THE FIXTURE IS ONE NO CURRENT WRITER CAN PRODUCE, and that is the point
+   *  rather than a flaw.** Every gym the sweep closes has no live plan, so the
+   *  plan check answers first and this guard never speaks. The combination below
+   *  — archived AND paying — is exactly what :19016's first admin slice produces
+   *  the day it ships (*"the power of removing them or pausing their use if i
+   *  find them to be fraud"* writes `archived` to a gym that may still be
+   *  paying), and without the guard that gym would keep a fully working console,
+   *  because every other gate in this module asks about the PLAN and not about
+   *  the gym.
+   *
+   *  **THE CONTROL IS THE FIRST HALF AND IS NOT OPTIONAL** (:7104's PG1): the
+   *  same write on the same gym succeeds while it is open, so what this measures
+   *  is the closure and not a door that was shut anyway. */
+  it("a CLOSED gym refuses a console write even while it is on a plan", { timeout: 90_000 }, async () => {
+    const g = await lapsableGym("closed");
+
+    // ── OPEN and paying: the write lands.
+    const allowed = await post(`/v1/orgs/${g.gymId}/codes`, {}, { cookies: g.owner.cookies });
+    expect(allowed.statusCode, "an open gym on a plan may create a code").toBe(201);
+
+    // ── Closed the way the sweep closes it, with the plan left untouched.
+    await sql`UPDATE gyms SET status = 'archived', archived_at = now() WHERE id = ${g.gymId}`;
+    const live = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM subscriptions
+      WHERE owner_type = 'gym' AND owner_id = ${g.gymId}
+        AND status IN ('trialing','active','past_due')`;
+    expect(live[0]?.n, "the premise: this gym is closed AND still on a live plan").toBe(1);
+
+    const refused = await post(`/v1/orgs/${g.gymId}/codes`, {}, { cookies: g.owner.cookies });
+    expect(refused.statusCode, "a closed gym refuses the write it just allowed").toBe(409);
+    expect(
+      (JSON.parse(refused.body) as { error: string }).error,
+      "and it cites the closure, not the plan — the plan is fine",
+    ).toBe("org_archived");
+  });
+
   it("READS and the pay path keep working on a gym with no plan — it is read-ONLY", { timeout: 90_000 }, async () => {
     const g = await lapsableGym("reads");
     await lapseGym(g.gymId);

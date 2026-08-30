@@ -76,6 +76,15 @@ const TARGETS = {
   // break is the thing that stops that. Rows aimed here carry
   // `suite: TRIAL_SWEEP_SUITE`.
   trialSweep: { file: resolve(ROOT, 'apps/api/src/modules/orgs/trialSweep.ts') },
+  // A GYM WITH NO PLAN IS CLOSED FOUR MONTHS LATER (Kd ruling 2026-08-31,
+  // replacing Part 3 §4.2's fourteen days). Its own file and its own suite for
+  // the reason both sweeps above have one: every guarantee here is about TIME
+  // and needs the injected clock the routes suite never touches. It sits in rule
+  // 4a's expensive columns without argument — the worst thing in its blast
+  // radius is closing a gym that is PAYING, and closing a gym is the most
+  // damaging single thing any row in `gyms` can say. Rows aimed here carry
+  // `suite: ARCHIVE_SWEEP_SUITE`.
+  archiveSweep: { file: resolve(ROOT, 'apps/api/src/modules/orgs/archiveSweep.ts') },
   // THE PRICE BOOK. It is not in `modules/orgs`, but it is where a gym's price
   // AND its member limit actually come from — `seatCapFor` reads
   // `plans.seat_cap` through the gym's live subscription, so the same number
@@ -97,6 +106,14 @@ const SWEEP_SUITE = 'test/orgs.sweep.test.ts';
  *  the routes suite, which never moves a clock, and report a RED that has
  *  nothing to do with the mutation (:4718 F2). */
 const TRIAL_SWEEP_SUITE = 'test/orgs.trialSweep.test.ts';
+
+/** The archive sweep's guarantees live in their own suite, for the same reason
+ *  and with the same failure mode as the two above: a row that forgot this would
+ *  run the routes suite, which never moves a clock four months, and report a RED
+ *  that has nothing to do with the mutation (:4718 F2). The one archive row that
+ *  does NOT name it is O174, which is aimed at the console write gate in
+ *  `service.ts` and is therefore genuinely the routes suite's. */
+const ARCHIVE_SWEEP_SUITE = 'test/orgs.archiveSweep.test.ts';
 
 /** The price list and the trial-arm selector have their own suite, for the same
  *  reason and with the same failure mode as the two above: a row that forgot
@@ -2056,6 +2073,124 @@ const MUTANTS = [
     from: '           ) AS org_can_confirm',
     to: '           ) IS NOT NULL AS org_can_confirm',
   },
+
+  // ── THE FOUR-MONTH CLOSURE (Kd ruling 2026-08-31) ─────────────────────────
+  //
+  // 4a's expensive columns, and the argument is short: the worst outcome in this
+  // card's blast radius is a PAYING gym closed, and the second worst is a gym
+  // closed with no record of why. This card changes SERVER behaviour, so
+  // database mutants are in scope.
+  //
+  // **PAIRED IN BOTH DIRECTIONS, because a job that closes nothing passes every
+  // test that only checks something stayed open** (:7104's PG1). O168/O169/O171
+  // run the closure firing too WIDELY or too EARLY; O170 runs it inverted;
+  // O172/O176 run it undoing an operator's own hand.
+  //
+  // Deliberately NOT mutated, per the same rule: the refusal wording, and the
+  // `g.status = 'active'` restatement — the file says in as many words that
+  // `archived_at IS NULL` is the condition doing the work, so a mutation of the
+  // restatement has NO OBSERVABLE SUBJECT and would come back ALIVE for a true
+  // reason (:12343's shape, and the same call `trialSweep.ts` made about
+  // `owner_type = 'gym'`).
+  {
+    id: 'O168',
+    target: 'archiveSweep',
+    suite: ARCHIVE_SWEEP_SUITE,
+    why: "MONEY, AND IT IS THE WORST THING THIS CARD COULD DO: the job stops asking whether the gym is on a plan, so a gym that trialled, converted and has been PAYING ever since is closed four months after its trial ended — its join code stops working and nobody can be confirmed into it, while the invoices keep coming. Every gym that converts from a trial carries that old `ended_at` for ever, so this is not an edge case, it is all of them",
+    expect: 'a gym that is on a plan is never closed',
+    from: '        AND NOT EXISTS (\n          SELECT 1 FROM subscriptions s\n          WHERE s.owner_type = \'gym\' AND s.owner_id = g.id\n            AND s.status IN (\'trialing\',\'active\',\'past_due\'))\n',
+    to: '',
+  },
+  {
+    id: 'O169',
+    target: 'archiveSweep',
+    suite: ARCHIVE_SWEEP_SUITE,
+    why: "THE OLDEST ENDING INSTEAD OF THE NEWEST: a gym that trialled last year, paid for months and lapsed LAST WEEK is closed immediately, because the trial's date is the one being measured. It is the difference between `max` and `min` and it is invisible on any gym with only one ended row — which is every fixture except the one written for this",
+    expect: 'not closed for a trial that ended a year ago',
+    from: '          SELECT max(s2.ended_at) FROM subscriptions s2',
+    to: '          SELECT min(s2.ended_at) FROM subscriptions s2',
+  },
+  {
+    id: 'O170',
+    target: 'archiveSweep',
+    suite: ARCHIVE_SWEEP_SUITE,
+    why: 'THE COMPARISON INVERTED: a gym is closed the DAY its plan ends and a gym that has been gone for a year is never closed — the promise broken in both directions at once, which is O141 on the trial sweep arriving at its sibling',
+    expect: 'the window is four months, to the minute',
+    from: '        ) <= ${now}::timestamptz',
+    to: '        ) >= ${now}::timestamptz',
+  },
+  {
+    id: 'O171',
+    target: 'archiveSweep',
+    suite: ARCHIVE_SWEEP_SUITE,
+    why: "KD'S NUMBER MOVED: four months becomes one, so a gym that stopped paying in April is closed in May. He ruled the four on 2026-08-31 against the spec's fourteen days, and :22215 §6 requires that it not be shortened or lengthened without asking — this is the row that makes an edit to it visible",
+    expect: 'the window is four months, to the minute',
+    from: 'export const ARCHIVE_AFTER_MONTHS = 4;',
+    to: 'export const ARCHIVE_AFTER_MONTHS = 1;',
+  },
+  {
+    id: 'O172',
+    target: 'archiveSweep',
+    suite: ARCHIVE_SWEEP_SUITE,
+    why: "THE OPERATOR IS OVERRULED BY THE MACHINE: the sweep stops asking whether this gym has been closed before, so a gym re-opened by hand is closed again the very next night — the plan still ended five months ago. Today `tools/gym-restore.ts` is the ONLY way back from `archived` (nothing in the product can put a gym on a plan), so a restore that lasts one night is no way back at all",
+    expect: 'not closed again the next night',
+    from: '        AND g.archived_at IS NULL\n',
+    to: '',
+  },
+  {
+    id: 'O173',
+    target: 'archiveSweep',
+    suite: ARCHIVE_SWEEP_SUITE,
+    // DECLARED, AND THE GUARD WAS WIDENED IN THIS SAME COMMIT TO SEE IT: while
+    // this row is live the suite closes every gym in the database that has ever
+    // lapsed, and until 2026-08-31 the fingerprint did not watch `gyms.status`
+    // at all — it would have printed "no unattributed changes" over exactly
+    // that. :22782's L-5, on schedule.
+    //
+    // **MEASURED, AND THE HARNESS SAID SO ITSELF: this row moves rows it does
+    // not own, and NOT rows that existed before the run** — so the first sweep
+    // after it was written printed *"O173 declares writesRows and moved no
+    // row"*. Both halves are true and the claim stays. The rows it can reach are
+    // the ones carrying `ended_at`, and that column is three hours old: only
+    // this suite and `orgs.trialSweep.test.ts` write it, both create their gyms
+    // inside the run and delete them after, and four suites share one database —
+    // so an unscoped run at a future clock closes the trial sweep's gyms
+    // mid-assertion while the fingerprint, taken BEFORE either suite started,
+    // has never heard of them. The declaration describes the blast radius
+    // honestly; the detector reports only the pre-existing part of it, which is
+    // its documented limit and not a disagreement.
+    writesRows: true,
+    why: "A TABLE-WIDE JOB LOSES ITS BOUNDS: the scope predicate goes, so a run aimed at one gym closes every lapsed gym in the database. It is also what makes this suite's own counts meaningless — four suites share one database, and a sweep at a future clock reaches all of them",
+    expect: 'closes only the gyms it was given',
+    from: '        AND (${scope}::uuid[] IS NULL OR g.id = ANY(${scope}::uuid[]))\n',
+    to: '',
+  },
+  {
+    id: 'O174',
+    target: 'service',
+    why: "A CLOSED GYM STAYS WRITABLE: the console's write gate stops asking whether the gym is closed and asks only about the plan, so the day :19016's admin panel suspends a fraudulent gym that is still paying, that gym carries on issuing join codes and admitting members through every one of its twelve write doors. Every other gate in this module asks about the PLAN and not about the GYM, which is why this line is the only thing standing there",
+    expect: 'a CLOSED gym refuses a console write',
+    from: '  if (authorised.org.status !== "active") {\n    throw new OrgsError(409, "org_archived", GYM_ARCHIVED_MESSAGE);\n  }\n',
+    to: '',
+  },
+  {
+    id: 'O175',
+    target: 'archiveSweep',
+    suite: ARCHIVE_SWEEP_SUITE,
+    why: "SAVES: the UPDATE moves back onto the pool and out of the transaction, so a failure between the closure and its audit leaves gyms already closed with NO audit row ever written — and that row is the only thing that will ever explain to an owner why their gym shut, and the only record `tools/gym-restore.ts` is answering. :13075's C/H-2 aimed at a third sweep before it can be shipped a third time",
+    expect: 'rolls the closure back',
+    from: '    const rows = await tx<Row[]>`',
+    to: '    const rows = await deps.sql<Row[]>`',
+  },
+  {
+    id: 'O176',
+    target: 'repo',
+    suite: ARCHIVE_SWEEP_SUITE,
+    why: "THE RESTORE ERASES ITS OWN MEMORY: re-opening a gym clears `archived_at` as well as the status, which looks tidier and makes the restore last exactly one night — the next run sees a gym with no live plan, a plan that ended five months ago and no record of having been closed, and closes it again. It is O172's defect reached from the other file, and it is why that column deliberately survives the restore",
+    expect: 'not closed again the next night',
+    from: "      UPDATE gyms SET status = 'active'",
+    to: "      UPDATE gyms SET status = 'active', archived_at = NULL",
+  },
 ];
 
 /** ANCHORS ARE CONVERTED TO THE FILE'S OWN LINE ENDINGS, and the file is never
@@ -2481,18 +2616,31 @@ const gymFingerprint = () => {
   // The two tables are fingerprinted in ONE query and one round trip, keyed by a
   // prefixed id so a collision between a gym id and a subscription id is
   // impossible and the report can name which table moved.
+  // **`gyms.status`/`archived_at` AND `subscriptions.ended_at` JOINED THE WATCH
+  // ON 2026-08-31, IN THE COMMIT THAT ADDED THEIR WRITER — which is the whole of
+  // L-5's lesson from the trial sweep three days earlier.** That round found this
+  // guard printing *"gym rows verified"* over a mutant rewriting `subscriptions`,
+  // and recorded the remedy in as many words: *"widen the guard in the commit
+  // that adds the writer, not … a better sentence about the limit."* The archive
+  // sweep writes `gyms.status` and `gyms.archived_at`, and a fingerprint of
+  // name/city/country/currency/timezone is blind to a gym being CLOSED — the most
+  // damaging thing any row in this table can say. O173 deletes that sweep's scope
+  // predicate on purpose, so it is the trigger firing again, on schedule.
   const sql =
     'SELECT \'gym:\' || id::text AS id, coalesce(name,\'\') || \'|\' || ' +
     'coalesce(city,\'\') || \'|\' || coalesce(country,\'\') || \'|\' || ' +
-    'coalesce(currency_display,\'\') || \'|\' || coalesce(timezone,\'\') AS f ' +
+    'coalesce(currency_display,\'\') || \'|\' || coalesce(timezone,\'\') || \'|\' || ' +
+    'coalesce(status,\'\') || \'|\' || coalesce(archived_at::text,\'\') AS f ' +
     'FROM gyms ' +
     'UNION ALL ' +
-    // status and trial_ends_at are the two columns the sweep writes and reads;
-    // plan_id is here because a future writer moving a gym between bands is the
-    // same class of damage and costs nothing to watch.
+    // status and trial_ends_at are the two columns the trial sweep writes and
+    // reads; ended_at is the one it stamps and the archive sweep reads; plan_id
+    // is here because a future writer moving a gym between bands is the same
+    // class of damage and costs nothing to watch.
     'SELECT \'sub:\' || id::text AS id, coalesce(status,\'\') || \'|\' || ' +
     'coalesce(plan_id::text,\'\') || \'|\' || ' +
-    'coalesce(trial_ends_at::text,\'\') AS f FROM subscriptions';
+    'coalesce(trial_ends_at::text,\'\') || \'|\' || ' +
+    'coalesce(ended_at::text,\'\') AS f FROM subscriptions';
   // Plain `node` with cwd = apps/api, NOT `pnpm exec tsx`: measured 2026-08-26,
   // `pnpm --filter api exec tsx` reports "Command tsx not found" from the repo
   // root, and the first version of this probe therefore returned null on every

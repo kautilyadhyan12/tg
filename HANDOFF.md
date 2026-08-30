@@ -1,6 +1,86 @@
 # HANDOFF log (append-only; latest block goes under the next task's T1 prompt)
 
 ```
+TASK: A LAPSED GYM IS CLOSED FOUR MONTHS AFTER ITS PLAN ENDS — KD'S RULING
+      REPLACES THE SPEC'S 14 DAYS, AND THE WRITER FINALLY EXISTS.
+      DECISIONS :25771. The third and last piece of :22215 §5 step 1.
+
+  1. **KD RULED FOUR MONTHS AT THE PLAN GATE** — *"i think after 4 months of
+     inactivity shut down the gym what do you think ?"* — which is :22215 §6's
+     "do not shorten or lengthen the 14 days without asking" being asked. **He
+     asked for a recommendation and got one rather than a diff** (:19560's
+     recorded failure NOT repeated), and it changed half of what he said: the
+     clock counts from the PLAN ENDING, not from inactivity, because nothing
+     records gym activity (`org_daily_stats` has no writer) and an inactivity
+     rule can close a gym that is PAYING but quiet.
+  2. **THE CLOCK HAD NO STARTING INSTANT AND THE PRODUCT WAS DISCARDING IT.**
+     Migration `0016` adds `subscriptions.ended_at`, stamped by `trialSweep.ts`
+     from its own injected clock. **`trial_ends_at` is the trap and §4.2's own
+     "0–14 days past" reads like an argument for it**: nothing ever clears that
+     column, so a converted gym would be closed the night it stops paying
+     (:21580 rule (c) in a different reader).
+  3. **THREE LOAD-BEARING CONDITIONS, each mutated:** no live plan (O168 — its
+     deletion closes every gym that ever converts) · `max(ended_at)`, never any
+     ending (O169) · `archived_at IS NULL`, which is what makes a hand-restore
+     survive the next night's run (O172, and O176 for the restore clearing it).
+  4. **NOTHING IS DELETED OR HIDDEN.** The console still draws in full,
+     read-only, with its existing true banner; no web file reads `org.status`
+     (grep-verified), so no screen changes. The one visible change is the join
+     door's existing *"That gym is no longer active."* becoming reachable.
+  5. **THE RESTORE HALF IS A COMMAND, NOT A PAYMENT, and Kd ruled knowing it**
+     (his own question: *"what if the gym wants t join after 4 months"*).
+     `tools/gym-restore.ts` + `repo.restoreGym`. Its first draft asked for a
+     uuid the console shows nowhere — the URL carries a SLUG — so it takes
+     either, via `repo.getOrgIdBySlug`.
+
+PROVE: **ALL LOCAL** (`localhost:5433`, `test:local`): `orgs.archiveSweep`
+       **13/13 exit 0** (new) · with `orgs.trialSweep` **22/22** · full api suite
+       **676/676 across 47 files, exit 0, on TWO runs** (quoted as the runs they
+       were, not as the suite's state — :13746). ⚠️ **A THIRD RUN EXITED 1 AND
+       ITS FAILURE IS UNKNOWN because I piped it through `tail -6` and discarded
+       the evidence** — my error, recorded at :25771's round log with what IS
+       known (both global-count suites pass 18/18 alone; the run took 470 s vs
+       222 s) and with the flake hypothesis marked as a hypothesis ·
+       `tsc` exit 0 **and PROVEN REAL by planting TS2322** ·
+       eslint clean on every changed file · `node --check` + `check-harnesses`
+       **25 scripts** · `check-decisions-index` **244 pointers, 924 headings** ·
+       triggers rebuilt **711 from 196 of 334** · **SWEEP a stated SUBSET of 176:
+       O168–O176, 9 RED, 0 ALIVE, 0 never ran**, controls GREEN first, restores
+       sha256-verified, **295 gym + subscription rows fingerprinted** ·
+       **BOTH TOOLS RUN, including both guards and a full close → re-open →
+       sweep-again round trip on a throwaway gym, deleted after.**
+       **gitleaks: this card's changes CLEAN (piped, exit 0) and the five commits
+       since `e8aff34` CLEAN. The full-history scan's 3 leaks are the documented
+       `kcalPointForSetsV3` false positives with their own `OWED.md` line — none
+       are this card's.**
+
+FILES: apps/api/drizzle/0016_subscription_ended_at.sql + meta/_journal.json ·
+       db/schema/money.ts · modules/orgs/archiveSweep.ts (new) · trialSweep.ts ·
+       repo.ts · service.ts · worker.ts · tools/archive-sweep.ts (new) ·
+       tools/gym-restore.ts (new) · tools/mutate-orgs.mjs ·
+       test/orgs.archiveSweep.test.ts (new) · test/orgs.trialSweep.test.ts ·
+       test/orgs.routes.test.ts · RUNBOOK/smoke-gym-archive.md (new) ·
+       DECISIONS.md · DECISIONS-INDEX.md · DECISIONS-TRIGGERS.md (generated) ·
+       OWED.md · HANDOFF.md. **No web file at all.**
+
+OPEN:  **THE SMOKE (9 steps, `RUNBOOK/smoke-gym-archive.md`) IS UNRUN AND T3 IS
+       UNRUN** — the only two things between this card and its tick.
+       Three new `OWED.md` lines: a gym that never subscribed is never closed
+       (⚪, Kd's to rule when the admin panel lists gyms) · a held request against
+       a gym never re-opened waits indefinitely (⚪, :25092 §6's far end) ·
+       **`drizzle-kit generate` is unusable in this repo** (⚪, tracked NOWHERE
+       before today: the snapshots stop at `0012` so it re-emits `0014` and
+       `0015`; `0016` is hand-written like its three predecessors).
+       The payment card's line now inherits TWO things, not one: revive held
+       requests AND re-open the gym — **and it must not re-open one Kd
+       suspended**, since :19016's admin slice writes the same `archived`.
+       **CI HAS NOT SEEN ANY OF THIS.** The last pushed commit is still
+       `e8aff34`; `1b1de15`, `453495e`, `14487cf`, `c49251f`, `a501198` and this
+       one are LOCAL. Pushing is Kd's call and has not been asked for.
+       `CLAUDE.md`'s pre-existing uncommitted edit is still out, as before.
+```
+
+```
 TASK: THE STEP-11 RE-SMOKE PASSES ON THE SHIPPING BYTES — THE HELD-APPLICATION
       CARD IS DONE AND ITS `OWED.md` LINE TICKS. DECISIONS :25707. Run by Kd at
       the browser, 2026-08-30. No src, test, harness or migration file touched.

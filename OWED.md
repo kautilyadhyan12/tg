@@ -5056,23 +5056,78 @@ file and is stated so nobody reads these as lower priority than they are.
       the first time and now needs THREE accounts, not two** — the third only
       ever types the join code and is left waiting, so the queue step has
       somebody in it instead of asking Kd to improvise mid-run.
-- [ ] 🟡 **THE LAPSED GYM'S CONSOLE IS NOT ARCHIVED AFTER 14 DAYS — the third
+- [ ] 🟡 **THE LAPSED GYM IS CLOSED FOUR MONTHS AFTER ITS PLAN ENDS — the third
       step of Kd's :22215 §5 step 1, split off at the plan gate on 2026-08-29
       (:23711) and shown to him in one line, not deferred quietly.**
-      Part 3 §4.2: *"the console stays read-only 14 days, then archived
-      (restorable by reactivating)"*. **The 14 days is the SPEC's number and was
-      NOT re-ratified** (:22215 §6) — do not shorten or lengthen it without
-      asking.
-      **NOTHING IS BLOCKED BY ITS ABSENCE, and that is why it could be split:**
-      read-only and archived BOTH mean "no live plan", so the write gate built at
-      :23711 already refuses both, and `gyms.status` already permits
-      `'active','archived'` since `0001_init` with `org_archived` refusals
-      already wired in three places. **What is missing is the WRITER** — nothing
-      in the product ever sets `archived` — and the restore half.
-      **The dependency to settle first: 14 days from WHAT.** There is no
-      `expired_at` column; `trial_ends_at` is the only date on the row, and it is
-      the trial's end rather than the sweep's run. Whoever builds this decides
-      that with a ruling or a column, and must not infer it.
+      **BUILT 2026-08-31 (DECISIONS :25771) AND THIS LINE DOES NOT TICK: the
+      SMOKE is written and UNRUN, and T3 is UNRUN.** Those two are all that is
+      left on it.
+      **KD RULED FOUR MONTHS, NOT THE SPEC'S FOURTEEN DAYS** — *"i think after 4
+      months of inactivity shut down the gym"* — which is :22215 §6's *"do not
+      shorten or lengthen it without asking"* being asked and answered. Part 3
+      §4.2's fourteen days is superseded. **The four months count from the day the
+      PLAN ENDED, and that half is a recommendation he approved rather than a
+      paraphrase of what he said**: nothing in this product records when a gym was
+      last active (`org_daily_stats` has no writer and no reader), and an
+      inactivity rule can close a gym that is PAYING but quiet.
+      **SHIPPED:** migration `0016` (`subscriptions.ended_at`, stamped by the
+      trial sweep — the clock had no starting instant and the product was
+      discarding it) · `modules/orgs/archiveSweep.ts` + a fourth nightly job at
+      `30 4 * * *` · `tools/archive-sweep.ts` · `repo.restoreGym` +
+      `tools/gym-restore.ts` · a second console refusal so a CLOSED gym cannot be
+      written even while on a plan (unreachable until the admin panel's suspend
+      button, which is exactly what makes it worth having) · nine mutants
+      O168–O176, all RED · the mass-write guard widened to watch `gyms.status`.
+      **NOTHING IS DELETED AND NOTHING IS HIDDEN by a closure**: the console still
+      draws in full, read-only, and the members moved to the free app four months
+      earlier when the plan ended. What stops is that nobody new can join —
+      `applyByCode` answers *"That gym is no longer active."*
+      **THE AUTOMATIC WAY BACK IS NOT BUILT AND CANNOT BE** — see the payment
+      card's line below; `tools/gym-restore.ts` is the hand operation until then,
+      and Kd ruled the four months knowing it.
+- [ ] ⚪ **A GYM THAT NEVER SUBSCRIBED AT ALL IS NEVER CLOSED — a decision made
+      at :25771 §3, not an oversight, and Kd has not ruled on it.**
+      The archive sweep counts four months from the day a plan ENDED, so a gym
+      whose owner created it and never started the trial has no clock and is never
+      closed. That is the safe direction and it matches §4.2, whose state is a
+      plan ENDING. **What it leaves:** a gym created, abandoned before the forced
+      trial prompt was answered, sitting `active` for ever with a join code that
+      still admits people into a gym on no plan (they land in a queue nobody can
+      clear — the held-request behaviour, which is correct). Bounded today: the
+      forced prompt (:23257) means a real owner meets the trial before anything
+      else. **Put to Kd as a question when the admin panel's gym list exists**,
+      which is where he would see such gyms.
+- [ ] ⚪ **A HELD JOIN REQUEST AGAINST A GYM THAT IS NEVER RE-OPENED WAITS FOR
+      EVER — :25092 §6 handed this to the archive card and :25771 §6 answers half
+      of it.**
+      Kd ruled *"hold their request and tell them the truth"* (:24141 §1) and the
+      expiry holds while the gym has no plan (:25092). Closing the gym does not
+      change that: the request is still held and the applicant's sentence is still
+      true. **What is unresolved is the far end** — a gym closed and never
+      re-opened leaves that person waiting indefinitely, and no screen ever tells
+      them the gym is gone. The archive was terminal when :25092 raised this; it
+      is not any more (`tools/gym-restore.ts`), which is why this is ⚪ rather than
+      🟡. **The honest options, none of them ruled:** expire held requests when the
+      gym closes (destroys something, against the spirit of the hold), or tell the
+      applicant the gym has closed (new copy, Kd's to write).
+- [ ] ⚪ **`drizzle-kit generate` CANNOT BE USED IN THIS REPO, and it was tracked
+      NOWHERE before 2026-08-31** (grep-verified before writing this line).
+      The snapshots in `apps/api/drizzle/meta/` stop at `0012_snapshot.json`, so
+      the generator diffs today's schema against a schema three migrations old and
+      re-emits the whole of `0014` and `0015` alongside whatever is new. **Run on
+      2026-08-31 it produced a migration containing `ALTER TABLE gyms ADD COLUMN
+      country`, both CHECK-constraint rebuilds and the new column together** —
+      unusable, and it dies on 42701 if applied. It also names the file by the
+      journal's 0-based `idx`, so it collided with the existing `0015`.
+      **`0013`, `0014`, `0015` and `0016` were all hand-written for this reason**
+      and none left a snapshot, so the debt compounds by one migration each time.
+      **The fix is one command's worth of work and nobody has scheduled it:**
+      regenerate the snapshot chain from the current schema, or accept
+      hand-written migrations permanently and say so in `CLAUDE.md`'s T5 template,
+      which today tells a chat to use the generator. **Do NOT "fix" it by
+      regenerating an applied migration** — that desynchronises
+      `drizzle.__drizzle_migrations` and the next `drizzle-kit migrate` re-runs it
+      and dies on 42710, CI included (:3332).
 - [x] 🔴 **`orgs.unit.test.ts` HAS BEEN RED SINCE THE CURRENCY CARD, AND CI WITH
       IT — found 2026-08-29 (:23711 §6a) by a card that had nothing to do with
       it.** **DONE 2026-08-29 on Kd's say-so** (*"yes"*), in its own commit —
@@ -5199,6 +5254,21 @@ file and is stated so nobody reads these as lower priority than they are.
       `expires_at` is already in the past would otherwise be killed by the first
       sweep after the gym subscribes, which is the exact outcome Kd's ruling
       exists to prevent.
+      **AND A SECOND THING THE PAYMENT CARD NOW INHERITS, added 2026-08-31 with
+      the archive writer (:25771 §4): PAYING MUST ALSO RE-OPEN A CLOSED GYM.**
+      Four months after its plan ends a gym becomes `archived`, and the only way
+      back today is `tools/gym-restore.ts` by hand. The step is one call to
+      `repo.restoreGym` in whatever handles a successful payment, and it must run
+      BEFORE the held-request revival above — a closed gym refuses `confirm` on a
+      different condition from a planless one, so reviving the requests without
+      re-opening the gym would hand the front desk a queue it still cannot clear.
+      ⚠️ **AND IT MUST NOT RE-OPEN A GYM KD SUSPENDED**: :19016's first admin
+      slice writes the SAME `archived` status for fraud, so "they paid, switch
+      them back on" needs to tell the two apart before it fires. The `audit_log`
+      row distinguishes them today (`org.archived` with `via: archive_sweep`
+      versus whatever the admin panel writes) and that is a thin instrument —
+      whoever builds either half should give the reason a column instead. Named
+      here rather than discovered by a re-opened fraudulent gym.
       ~~**The copy the console shows today STOPS SHORT of promising any of this**
       (:24141 §3d), and two tests assert that, so the reassurance cannot be
       written before the behaviour exists.~~

@@ -23,6 +23,7 @@ import { Redis } from "ioredis";
 import pino from "pino";
 import postgres from "postgres";
 import { loadConfig } from "./config.js";
+import { archiveLapsedGyms } from "./modules/orgs/archiveSweep.js";
 import { sweepJoinApplications } from "./modules/orgs/sweep.js";
 import { expireLapsedGymTrials } from "./modules/orgs/trialSweep.js";
 import { purgeDueUsers } from "./modules/privacy/purge.js";
@@ -54,6 +55,7 @@ export const ROLLUPS_QUEUE = "rollups";
 export const DPDP_PURGE_JOB = "dpdp.purge";
 export const ORGS_SWEEP_JOB = "orgs.join_sweep";
 export const ORGS_TRIAL_SWEEP_JOB = "orgs.trial_expiry";
+export const ORGS_ARCHIVE_JOB = "orgs.archive";
 
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const sql = postgres(config.DATABASE_URL, { prepare: false, max: 2 });
@@ -151,6 +153,40 @@ try {
   process.exit(1);
 }
 
+// A gym with no plan is closed four months later (Kd ruling 2026-08-31,
+// replacing Part 3 §4.2's fourteen days). 04:30 UTC — a fourth distinct minute
+// for the fourth schedule, for the reason the three blocks above already give.
+//
+// **IT RUNS AFTER THE TRIAL EXPIRY AND DOES NOT DEPEND ON DOING SO.** The two
+// are four months apart in the data, so the order of one night's runs cannot
+// change an outcome; the half hour is the same operational courtesy as the
+// others (a slow job must not look like a late one in the logs).
+//
+// A DAILY CADENCE AGAINST A FOUR-MONTH CLOCK, said out loud: a gym therefore
+// keeps its console for up to 24 hours past the four months. On four months that
+// is under 1%, it errs in the generous direction (nobody is closed EARLY), and
+// running it more often would buy precision nobody asked for.
+try {
+  await queue.upsertJobScheduler(
+    ORGS_ARCHIVE_JOB,
+    { pattern: "30 4 * * *" },
+    {
+      name: ORGS_ARCHIVE_JOB,
+      opts: {
+        // R3.5: the statement is set-based and its WHERE excludes the state it
+        // produces, so a retry is a no-op.
+        attempts: 3,
+        backoff: { type: "exponential", delay: 60_000 },
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 200 },
+      },
+    },
+  );
+} catch (err) {
+  log.fatal({ err }, "failed to register the gym archive schedule");
+  process.exit(1);
+}
+
 const worker = new Worker(
   ROLLUPS_QUEUE,
   async (job) => {
@@ -169,7 +205,8 @@ const worker = new Worker(
     if (
       job.name !== DPDP_PURGE_JOB &&
       job.name !== ORGS_SWEEP_JOB &&
-      job.name !== ORGS_TRIAL_SWEEP_JOB
+      job.name !== ORGS_TRIAL_SWEEP_JOB &&
+      job.name !== ORGS_ARCHIVE_JOB
     ) {
       throw new Error(`unknown job on ${ROLLUPS_QUEUE}: ${job.name}`);
     }
@@ -202,6 +239,17 @@ const worker = new Worker(
       const ended = await expireLapsedGymTrials({ sql, log });
       log.info(
         { ...ended, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
+        "job finished",
+      );
+      return;
+    }
+
+    // Returns here for the same reason as its two siblings: the closure and its
+    // audit rows are one transaction, so the run either applied or raised.
+    if (job.name === ORGS_ARCHIVE_JOB) {
+      const closed = await archiveLapsedGyms({ sql, log });
+      log.info(
+        { ...closed, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
         "job finished",
       );
       return;
